@@ -123,10 +123,83 @@ function cleanup() {
   db.prepare('DELETE FROM store_products WHERE id IN (?, ?)').run(P_OK, P_OUT);
   db.prepare(`DELETE FROM store_products WHERE id IN (${FILLER.map(() => '?').join(',')})`).run(...FILLER);
   db.prepare('DELETE FROM retail_stores WHERE id = ?').run(LOC);
+  restoreShownTypes();
+}
+
+/* §230 LEFT THIS SUITE TESTING SIX RENDERERS THAT NO LONGER RAN.
+   The counter menu draws an ALLOW-LIST of eight block types, seeded in
+   lib/qr-menu-block-defaults.js from Quinoa Salad's own arrangement. The
+   fixture below carries fifteen, on purpose: this suite exists to prove that
+   each renderer draws what the office wrote, and six of them -- the storage
+   cards, the pull quote, the recipe steps, the pairings row, the questions
+   and the image band -- stopped being reachable the moment that list landed.
+   Nine checks went red on main and stayed red, because this suite is in the
+   SLOW shard and the slow shard is not run.
+
+   THE ALLOW-LIST IS NOT THIS SUITE'S SUBJECT. scripts/test_qr_menu_block_defaults.js
+   owns it and asserts it twenty ways -- the seed, the malformed row, the
+   deliberate empty list, the absent table, and the three states of the
+   per-block switch. Repairing the checks below by asserting the SHORTER list
+   would have deleted the only coverage those six renderers have while adding
+   nothing that suite does not already say.
+
+   SO THE FIXTURE OPENS THE LIST and the suite goes back to testing renderers.
+   The one check that is about the list -- a type switched off for the counter
+   menu -- is about the per-block hide_qr switch, which is a different
+   mechanism and still the office's; it needs the type allowed before it can
+   prove the switch hid ONE of two quotes rather than the allow-list hiding
+   both.
+
+   ANY REAL ROW IS PUT BACK. This key is not fixture-scoped the way a store id
+   is: deleting it blind would silently reset a tenant's own choice on whatever
+   database this suite is pointed at. The prior value is captured on the way in
+   and restored on the way out, including the case where there was no row. */
+const SHOWN_KEY = require(path.join(ROOT, 'lib', 'qr-menu-block-defaults.js')).CONFIG_KEY;
+const ALL_BLOCK_TYPES = [
+  'spec_strip', 'hero_intro', 'why', 'ingredients_chips', 'ingredients_line',
+  'allergen_card', 'how_to_use', 'storage_box', 'notes_callout', 'big_stat',
+  'pull_quote', 'image_band', 'recipe_steps', 'pairings', 'faq',
+  'nutrition_facts',
+];
+// undefined = never captured, null = there was no row.
+let priorShownTypes;
+
+function openShownTypes() {
+  try {
+    const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(SHOWN_KEY);
+    priorShownTypes = row ? row.value_json : null;
+    db.prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json,
+                                      updated_at = CURRENT_TIMESTAMP`
+    ).run(SHOWN_KEY, JSON.stringify(ALL_BLOCK_TYPES));
+  } catch (e) {
+    // No storefront_config on this handle: readShownTypes falls back to the
+    // seed and the six renderers stay unreachable. Say so rather than failing
+    // eight checks with a message about a missing quote.
+    console.log('  · NOTE — no storefront_config on this database; the §230 ' +
+                'allow-list cannot be opened and six renderers will not draw');
+    priorShownTypes = undefined;
+  }
+}
+
+function restoreShownTypes() {
+  if (priorShownTypes === undefined) return;
+  try {
+    if (priorShownTypes === null) {
+      db.prepare('DELETE FROM storefront_config WHERE key = ?').run(SHOWN_KEY);
+    } else {
+      db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?')
+        .run(priorShownTypes, SHOWN_KEY);
+    }
+  } catch (e) { /* nothing to put back */ }
+  priorShownTypes = undefined;
 }
 
 function seed() {
   cleanup();
+  openShownTypes();
   db.prepare(`INSERT INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order)
               VALUES (?, '__test_menu_render', 'Render fixture shop', '测试渲染门店', 1, 96)`).run(LOC);
   const prod = db.prepare(`INSERT INTO store_products
@@ -1061,13 +1134,14 @@ function boxOf(text) {
          TWO LATER DECISIONS MOVED THIS LIST, and both are recorded here
          because a bare array tells the next reader nothing about why.
 
-         §230 SHORTENED IT. The counter menu draws an allow-list of eight
-         types, so `storage`, `quote`, `recipe`, `pairings`, `faq` and `notes`
-         are correctly absent — the fixture still carries all thirteen and
-         this page is no longer allowed to draw six of them. This assertion
-         was left behind when that landed and has been failing since; it is
-         repaired here rather than in its own commit only because the change
-         below cannot be made to the same array without also making this one.
+         §230 SHORTENED IT, AND THE FIXTURE NOW OPENS IT BACK UP. The counter
+         menu draws an allow-list of eight types, which left six of the
+         fixture's renderers unreachable and this assertion red on main for as
+         long as nobody ran the slow shard. seed() now stores the full list for
+         the fixture's tenant and puts the prior row back afterwards, so all
+         thirteen draw and this suite is testing renderers again — see the note
+         over openShownTypes(). The allow-list itself is
+         scripts/test_qr_menu_block_defaults.js's subject, not this one's.
 
          §232 PUT `allergens` AT THE FRONT. The allergen card is hoisted out
          of the flow into the head, which is the ONE exception to §132's rule
@@ -1075,7 +1149,8 @@ function boxOf(text) {
          customer with an allergy is looking for one fact, not reading a page.
          Everything after it is still in the order the office laid out. */
       assert.deepStrictEqual(order,
-        ['allergens', 'spec', 'hero', 'why', 'stat', 'ingredients', 'how'],
+        ['allergens', 'spec', 'hero', 'why', 'stat', 'ingredients', 'how',
+         'storage', 'quote', 'recipe', 'pairings', 'faq', 'notes'],
         `the page re-ordered the office's blocks: ${JSON.stringify(order)}`);
     });
 
