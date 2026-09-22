@@ -725,6 +725,36 @@ img{display:block;max-width:100%}
    same check whose own header records six CI failures nobody could explain.
    Stated in px rather than a ratio so it cannot drift back. */
 #dsheetB .dt-nm{font-size:26px;line-height:28px}
+/* §232 — THE ALLERGEN CARD RIDES UNDER THE NAME, AND DRAWS ONCE.
+   §120 chose its layout so the answer to "can I eat this" was on screen
+   without scrolling, and recorded that as the reason for shrinking the
+   photo. §129 made this a page with a full-bleed photo at the top, and the
+   answer went wherever the office happened to put the block -- on a product
+   carrying nine blocks that is four screens down, behind the marketing.
+   §132 then made block order the office's, which is right for everything
+   the office is choosing between and wrong for this one card: a customer
+   with an allergy is not reading the page, they are looking for one fact.
+
+   THE CARD MOVES, IT IS NOT COPIED. Ash, asked directly whether to echo a
+   summary here and keep the full card in place: "I don't want it to be
+   twice at a page." So the card is lifted out of the block flow and drawn
+   here, and nothing draws in the place it left.
+
+   THE CARD ITSELF, NOT A LINE OF ITS OWN. A compact summary was mocked up
+   first and is not what ships: .acard carries the contains / may-contain
+   split, the none-declared state, the chip centring, the CJK bracket trim
+   and the .chipset specificity fix, each of them measured and each with a
+   test behind it. Rebuilding those on a new element to save a hundred
+   pixels would re-open every one of them for nothing a customer can see.
+
+   THE RULE UNDER IT IS THE FIRST SECTION'S. .pb-h draws an ink rule at the
+   top of every headed band (see §232 on .pb), so the band after this head
+   would draw a second one a few pixels below -- .pb.first is what stops
+   that, applied by the caller because only the caller knows the card is up
+   here. */
+#dsheetB .dt-hd.alg{padding-bottom:15px;border-bottom:2px solid var(--ink)}
+#dsheetB .dt-hd.alg .acard{margin-top:15px}
+.pb.first .pb-h,.pb.first .pb-why-h{border-top:0;padding-top:0}
 
 /* The office's own paragraph. No heading over it — it names itself, and a
    label invented to sit above it would be a composed string for nothing. The
@@ -777,9 +807,28 @@ img{display:block;max-width:100%}
    styles(). Every class listed is a block's FIRST element by construction (one()
    emits head() first where a block has a head), so a descendant selector picks
    the same element the combinator would have. */
+/* §232 — THE HEADING CARRIES THE RULE, AND THE GAP NO LONGER DOES.
+   The paragraph above is what #775 built and the fault it left: with a
+   hairline between EVERY pair of bands, a product carrying nine of them
+   draws nine sections at one weight and reads as a fence rather than as a
+   page. Ash, from a rendered comparison of four layouts against the live
+   Quinoa Salad: option B.
+
+   SO THE RULE MOVES ONTO .pb-h AND .pb-why-h, as this sheet's own 2px ink
+   rather than the 1px hairline, and the gap keeps only its air. A block
+   with a heading now starts a section on a real edge; a block without one
+   -- the office's paragraph, the note, the lime slab, the pull quote, the
+   photo band -- is quiet matter between sections and gets air alone. The
+   hierarchy is the component's own and was already sitting in the markup
+   unused: head() is emitted for exactly the blocks that name themselves.
+
+   IT ALSO ENDS A SMALLER THING NOBODY FILED. .pb-stat, .pb-qt and .pb-band
+   bleed to the screen edge through .sheet-b's 14px padding, so the hairline
+   above one of them stopped 14px short of the thing it was dividing, at
+   both ends. A rule that does not reach what it divides reads as a crack.
+   No heading, no rule, and the crack is gone with it. */
 .pb{margin-top:calc(20 * var(--u))}
-.pb + .pb{margin-top:calc(26 * var(--u));padding-top:calc(26 * var(--u));
-  border-top:1px solid rgba(0,0,0,.08)}
+.pb + .pb{margin-top:calc(26 * var(--u))}
 .pb .pb-spec,.pb .dt-p,.pb .pb-why-h,.pb .pb-h,.pb .acard,.pb .pb-note,
 .pb .pb-stat,.pb .pb-qt,.pb .pb-band,.pb .nut{margin-top:0}
 /* margin-top and margin-bottom as LONGHANDS, never the margin shorthand: the
@@ -787,9 +836,14 @@ img{display:block;max-width:100%}
    through .sheet-b's padding, and a shorthand here would take it back. */
 .pb .pb-stat,.pb .pb-qt{margin-bottom:0}
 
-/* The heading two-thirds of these blocks share. */
+/* The heading two-thirds of these blocks share.
+   §232: it opens its section on the ink rule. padding-top rather than a
+   margin, so the rule sits at the band's top edge and the air belongs to
+   the heading under it -- a margin here would collapse against .pb's own
+   and put the rule in the middle of the gap. */
 .pb-h{display:flex;justify-content:space-between;align-items:flex-end;
-  margin:calc(26 * var(--u)) 0 calc(19 * var(--u));gap:calc(10 * var(--u))}
+  margin:calc(26 * var(--u)) 0 calc(19 * var(--u));gap:calc(10 * var(--u));
+  border-top:2px solid var(--ink);padding-top:calc(15 * var(--u))}
 .pb-h-l{font-family:var(--f-bear);font-size:calc(27 * var(--u));line-height:1;overflow-wrap:anywhere}
 .pb-h-r{flex:none;font-family:var(--f-bear);font-size:calc(10 * var(--u));letter-spacing:.22em;
   text-transform:uppercase;color:var(--olive);padding-bottom:calc(3 * var(--u))}
@@ -820,7 +874,8 @@ img{display:block;max-width:100%}
    Whole-pixel line-height for the reason .dt-k states at length. */
 .pb-why-h{font-family:var(--f-bear);font-size:calc(11.4 * var(--u));line-height:calc(15 * var(--u));
   letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
-  margin:calc(21 * var(--u)) 0 calc(15 * var(--u));overflow-wrap:anywhere}
+  margin:calc(21 * var(--u)) 0 calc(15 * var(--u));overflow-wrap:anywhere;
+  border-top:2px solid var(--ink);padding-top:calc(15 * var(--u))}
 /* THE NUMERAL IS CENTRED ON THE CLAIM, NOT SAT ON ITS BASELINE. Baseline is
    the component's own alignment and it is correct to the letter: measured on
    the rendered page the two baselines land on the same pixel. It still reads
@@ -838,7 +893,12 @@ img{display:block;max-width:100%}
    carries the same change on the same block. */
 .pb-why-r{display:grid;grid-template-columns:calc(37 * var(--u)) 1fr;gap:calc(14 * var(--u));align-items:center;
   padding:calc(14 * var(--u)) 0;border-top:1px solid rgba(0,0,0,.08)}
-.pb-why-r.first{border-top:2px solid var(--ink)}
+/* §232 — A HAIRLINE NOW, BECAUSE THE HEADING ABOVE IT DRAWS THE INK RULE.
+   The component's weighting was "the list starts at a real edge", and it
+   still does -- the edge simply moved up to .pb-why-h, fifteen pixels
+   above. Left at 2px this drew a second ink rule a heading's height under
+   the first, which is the fence this section exists to end, in miniature. */
+.pb-why-r.first{border-top:1px solid rgba(0,0,0,.08)}
 .pb-why-n{font-family:var(--f-bear);font-size:calc(33 * var(--u));line-height:calc(28 * var(--u))}
 /* THE CLAIM IS THE COMPONENT'S f-toni, WHICH IS f-bear HERE -- the substitution
    this sheet makes everywhere else and had missed only here, so the claim fell
@@ -939,7 +999,8 @@ img{display:block;max-width:100%}
    office gave one. */
 .pb-step{display:grid;grid-template-columns:calc(37 * var(--u)) 1fr;gap:calc(14 * var(--u));padding:calc(14 * var(--u)) 0;
   border-top:1px solid rgba(0,0,0,.08)}
-.pb-step.first{border-top:2px solid var(--ink)}
+/* §232, and see .pb-why-r.first: the ink edge is .pb-h's now. */
+.pb-step.first{border-top:1px solid rgba(0,0,0,.08)}
 .pb-step-n{font-family:var(--f-bear);font-size:calc(29 * var(--u));line-height:calc(26 * var(--u));color:var(--olive)}
 .pb-step-b{display:flex;flex-direction:column;align-items:flex-start;gap:calc(7 * var(--u));min-width:0}
 .pb-step-t{font-size:calc(14.5 * var(--u));line-height:calc(22 * var(--u));overflow-wrap:anywhere}
@@ -968,7 +1029,9 @@ img{display:block;max-width:100%}
 /* +6 · QUESTIONS — real details/summary, so it opens with no script at all and
    answers a keyboard. The component's accordion needs a tap handler; this does
    not, and a customer with JavaScript off can still read every answer. */
-.pb-faq{border-top:2px solid var(--ink)}
+/* §232, and see .pb-why-r.first: the ink edge is .pb-h's now, so the first
+   question opens on the same hairline every later one does. */
+.pb-faq{border-top:1px solid rgba(0,0,0,.08)}
 .pb-faq+.pb-faq{border-top:1px solid rgba(0,0,0,.08)}
 .pb-faq summary{display:flex;justify-content:space-between;align-items:center;
   gap:calc(12 * var(--u));padding:calc(15 * var(--u)) 0;cursor:pointer;list-style:none}
@@ -3234,6 +3297,25 @@ function detailBody(it, code, listed, sig, qrShown) {
       `</div>`
     : '';
 
+  /* §232 — THE ALLERGEN CARD IS PULLED OUT OF THE FLOW AND DRAWN IN THE
+     HEAD. one() still renders it, so there is one allergen card renderer and
+     it is the same one: what changes is only where its output is placed.
+     Filtered BY INDEX rather than by type, so an office that deliberately
+     wrote a second card keeps it where they put it -- only the first is
+     hoisted, and "hoist the first" is a rule a reader can check. */
+  const algAt = blocks.findIndex(b => b.type === 'allergen_card');
+  const algHtml = algAt === -1 ? '' : one(blocks[algAt]);
+  /* EMPTY BLOCKS ARE DROPPED HERE rather than wrapped and left blank: one()
+     returns '' for a type it does not draw and for a pairings block whose
+     products this shop no longer lists, and a band around nothing draws a
+     rule and 26u of air around it -- the blank section a customer reads as
+     something missing. band() did this already; doing it before the map is
+     what lets .first land on the first band that actually exists. */
+  const bodyBands = blocks
+    .filter((b, i) => i !== algAt)
+    .map(b => one(b))
+    .filter(Boolean);
+
   return `<div class="dt-top">` +
       (it.has_photo
         ? `<button type="button" class="dt-ph" data-big="${it.store_product_id}"` +
@@ -3242,7 +3324,8 @@ function detailBody(it, code, listed, sig, qrShown) {
           `?v=${encodeURIComponent(it.updated_at || '')}&w=${HERO_W}" alt="" loading="lazy" decoding="async">` +
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
-      `<div class="dt-hd"><div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
+      `<div class="dt-hd${algHtml ? ' alg' : ''}">` +
+        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div>${algHtml}</div>` +
     `</div>` +
     /* EACH BLOCK IN ITS OWN BAND. The wrapper is what .pb spaces and
        rules against its neighbour; see the CSS for why the blocks could not
@@ -3251,7 +3334,10 @@ function detailBody(it, code, listed, sig, qrShown) {
        this shop no longer lists, and wrapping that would draw a rule and 52u of
        air around nothing — the blank band being exactly what a customer would
        read as a missing section. */
-    blocks.map(b => band(one(b))).join('') +
+    /* EACH BLOCK IN ITS OWN BAND, and the first one skips the ink rule its
+       heading would draw when the head above it has already drawn one. */
+    bodyBands.map((h, i) =>
+      `<div class="pb${i === 0 && algHtml ? ' first' : ''}">${h}</div>`).join('') +
     /* THE NUTRITION COLUMN COMES LAST, AND ONLY WHEN NO BLOCK ALREADY SAID IT.
        retail_products.nutrition is a separate column from the nutrition_facts
        block and most products use one or the other; a product carrying both
