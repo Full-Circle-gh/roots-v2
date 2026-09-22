@@ -100,6 +100,12 @@
   /* Embedded in the retail-admin pop-up → the parent's corner × already
      closes it, so this in-panel "Close" is standalone-only. */
   html.embedded .backbtn{ display:none; }
+  /* Language moved to the retail-admin account dropdown (2026-09-22) — the same
+     menu Profile itself opens from, beside Appearance. Hidden HERE rather than
+     deleted because this page is also served standalone at /backend/account,
+     outside that shell, where the globe is the only language control there is.
+     Embedded, it would be a second copy of a control one click away. */
+  html.embedded .langrow{ display:none; }
 
   /* pane */
   .pane{ flex:1; min-width:0; overflow-y:auto; padding:30px 30px 34px; }
@@ -342,7 +348,12 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
              shows on the standalone /backend/account route (hidden via
              html.embedded .backbtn below). Language row dropped its text label
              2026-07-16 — the globe icon + CURRENTLY ACTIVE language value read
-             clearly on their own. -->
+             clearly on their own. It now shows ONLY standalone (html.embedded
+             .langrow above): inside the retail-admin pop-up the language row
+             lives in the account dropdown instead, beside Appearance. The
+             handler below stays as it is — standalone still needs it, and its
+             fc-lang post to the parent is harmless when the row cannot be
+             clicked. -->
         <button type="button" id="langToggle" class="langrow" aria-label="Language">
           <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>
           <span class="cur" id="langCur">EN</span>

@@ -2347,15 +2347,21 @@ function acctRenderMeta() {
   const nameEl = $('#acctName');
   if (nameEl) nameEl.textContent = u.displayName || u.username || '—';
 }
-// Refresh the right-hand value chip on the in-menu Appearance row so it
-// reflects the live theme. Guarded — the row may not exist on every surface
-// that reuses this script.
+// Refresh the right-hand value chips on the in-menu Appearance / Language rows
+// so they reflect the live theme and language. Guarded — neither row need exist
+// on every surface that reuses this script.
 function acctSyncPrefs() {
   const themeVal = $('#acctThemeVal');
   if (themeVal) {
     const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
     themeVal.textContent = dark ? cuT('Dark', '深色') : cuT('Light', '浅色');
   }
+  // Language chip names the language that is ACTIVE, each in its own script —
+  // NOT cuT()'d, because "English" translated into Chinese would tell somebody
+  // reading Chinese that the screen is in English. Mirrors the phone back
+  // office's Preferences row (m.html).
+  const langVal = $('#acctLangVal');
+  if (langVal && window.cuLang) langVal.textContent = cuLang() === 'cn' ? '中文' : 'English';
   // New-order sound moved to Profile → Notifications; no chip here anymore.
 }
 function initAcctMenu(u) {
@@ -2416,6 +2422,13 @@ function initAcctMenu(u) {
   // value chip updates in place via acctSyncPrefs().
   const themeRow = $('#acctTheme');
   if (themeRow) themeRow.addEventListener('click', () => { if (window.cuToggleTheme) cuToggleTheme(); acctSyncPrefs(); });
+  // Language row (2026-09-22) — moved up from Profile's rail foot. cuToggleLang
+  // repaints the shell and the onLangChange subscription above re-runs
+  // acctSyncPrefs, so the chip follows without a second call here; the
+  // initProfileModal listener pushes fc-lang into the Profile iframe, which is
+  // what keeps an open pop-up in step. Stays open on click, like theme.
+  const langRow = $('#acctLang');
+  if (langRow) langRow.addEventListener('click', () => { if (window.cuToggleLang) cuToggleLang(); acctSyncPrefs(); });
   // New-order sound now lives in Profile → Notifications (not the avatar menu).
 
   const signout = $('#acctSignout');
