@@ -30686,23 +30686,62 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   // accept a candidate, reject one) and "a courier already has it" is a correct
   // and complete refusal for all four. Only this one promises a MOVE it did not
   // make. Widening the change to them would be a bigger claim than the bug.
+  //
+  // ── AND A THIRD CASE, WHICH IS THE ONE THAT ACTUALLY HAPPENS ──────────────
+  // Between "cancelled" and "live" sits STALE: a copy the platform has stopped
+  // reporting on, which the drawer has been flagging for ten minutes with
+  // "Not updating — the rider may have cancelled", but which the daemon has not
+  // yet concluded on (or cannot: its sweep needs a complete list read, and the
+  // stores it polls are configured).
+  //
+  // Refusing that outright was wrong, and TC000823 showed it twice in one hour.
+  // The operator opened an order whose card said the rider was probably gone,
+  // pressed the control the card's own warning points at, and was told "a
+  // courier is already on this one" — the one thing the screen had just spent a
+  // paragraph doubting.
+  //
+  // But it must not RE-QUEUE either, and that is the whole shape of this branch.
+  // Staleness is a guess. If the rider is in fact on the road and the daemon has
+  // merely stopped polling (dropped session, proxy down), clearing the id and
+  // pushing again buys a SECOND delivery for one order — the exact hazard
+  // MANUAL_RETRY_SQL's compare-and-swap exists to prevent, and it costs real
+  // money rather than a wrong word on a screen.
+  //
+  // So the two halves are separated. The DATE moves: it is our own record and
+  // the customer's expectation, it is what the operator asked for, and it is
+  // safe whatever the rider turns out to be doing. The QUEUE does not: a new
+  // rider is not called on a guess. The response says exactly that, and the
+  // client's wording sends the operator to cancel the old copy by hand.
+  const STALE_COPY_MS = 10 * 60 * 1000;   // matches the drawer's COURIER_STALE_MS
   let cancelledCopy = null;
+  let staleCopy = false;
   if (q.qingyun_order_id) {
     let job = null;
     try {
-      job = tdb().prepare('SELECT cancelled_at FROM delivery_jobs WHERE qingyun_order_id = ?')
+      job = tdb().prepare('SELECT cancelled_at, updated_at FROM delivery_jobs WHERE qingyun_order_id = ?')
         .get(String(q.qingyun_order_id));
     } catch (_) { job = null; }        // pre-migration — fail safe, treat as live
-    if (!job || !job.cancelled_at) {
-      // A live copy. Reported as its own outcome, never as a move: the response
-      // now says which of the two writes happened, so the client cannot read it
-      // as success at the thing it asked for.
-      return res.json({
-        success: true, already_created: true, requeued: false, moved: false,
-        qingyun_order_id: String(q.qingyun_order_id),
-      });
+    if (job && job.cancelled_at) {
+      cancelledCopy = String(q.qingyun_order_id);
+    } else {
+      // Naive-UTC tolerant, same normalisation as the drawer's courierAgeMs and
+      // lib/qingyun-cancel's parseStamp: SQLite hands back a zoneless stamp and a
+      // bare new Date() reads it as LOCAL, which on the Beijing host makes every
+      // fresh row look eight hours old — and would call a live rider stale.
+      const raw = job && job.updated_at ? String(job.updated_at) : '';
+      const hasZone = /[zZ]|[+-]\d\d:?\d\d$/.test(raw);
+      const seen = raw ? new Date(hasZone ? raw : raw.replace(' ', 'T') + 'Z').getTime() : NaN;
+      staleCopy = !!job && isFinite(seen) && (Date.now() - seen) > STALE_COPY_MS;
+      if (!staleCopy) {
+        // A copy the platform is still reporting on — a rider really is holding
+        // this order. Refused outright, and reported as its own outcome rather
+        // than as a move it did not make.
+        return res.json({
+          success: true, already_created: true, requeued: false, moved: false,
+          qingyun_order_id: String(q.qingyun_order_id),
+        });
+      }
     }
-    cancelledCopy = String(q.qingyun_order_id);
   }
 
   const o = tdb().prepare(
@@ -30743,6 +30782,10 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
       // other row takes the ordinary manual-retry statement, whose own guard
       // (qingyun_order_id IS NULL) is untouched. Both return 0 rows rather than
       // throwing when another writer got there first, and that is reported.
+      // A stale copy moves the date and STOPS. Re-queueing on a guess could buy a
+      // second rider for one order; the operator cancels the old copy by hand and
+      // presses "Call another courier" when they have.
+      if (staleCopy) return false;
       return cancelledCopy
         ? tx.prepare(qingyunQueue.REQUEUE_AFTER_CANCEL_SQL).run(id, cancelledCopy).changes > 0
         : tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;       // ← then the queue
@@ -30753,13 +30796,14 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
-    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy }, req.ip);
+    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy, stale_copy: staleCopy }, req.ip);
   // `moved` is the date write, which always happens once we get here; `requeued`
   // is the queue, which can legitimately be false (another writer won the swap).
   // The client words its toast off BOTH — see qpDoReschedule — because "moved to
   // today" over a row that was not re-queued is the half-truth this endpoint has
   // been telling.
-  res.json({ success: true, moved: true, requeued, after_cancel: !!cancelledCopy, from: wasDate, to: date });
+  res.json({ success: true, moved: true, requeued, after_cancel: !!cancelledCopy,
+             stale_copy: staleCopy, from: wasDate, to: date });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's

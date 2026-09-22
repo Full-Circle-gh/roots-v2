@@ -70,10 +70,36 @@ const ENDPOINT = slice(RETAIL_JS, "router.post('/api/retail-admin/orders/:id/qin
 // ── Part A · the endpoint's decision ─────────────────────────────────────────
 console.log('\nA · which copies stop the endpoint, and which go through\n');
 
-it('a live courier copy still stops it', () => {
-  assert.ok(/if \(!job \|\| !job\.cancelled_at\)/.test(ENDPOINT),
-    'the live-copy branch is gone — a rider on the road could be re-queued under a new date');
+it('a FRESH courier copy still stops it outright', () => {
+  // Narrowed since this was written: the refusal now applies only to a copy the
+  // platform is still reporting on. A stale one moves the date (see below).
+  assert.ok(/if \(!staleCopy\) \{/.test(ENDPOINT),
+    'the live-copy refusal is gone — a rider on the road could be re-queued under a new date');
   assert.ok(/already_created: true/.test(ENDPOINT), 'the live-copy outcome lost its name');
+});
+
+it('a STALE copy moves the date but never re-queues', () => {
+  // TC000823: the card had been saying "the rider may have cancelled" for hours,
+  // and pressing the control the warning points at answered "a courier is
+  // already on this one" — the one thing the screen was doubting.
+  //
+  // The two halves are separated deliberately. The date is safe to move whatever
+  // the rider turns out to be doing. Re-queueing is not: staleness is a guess,
+  // and on a guess it could buy a second delivery for one order.
+  assert.ok(/const STALE_COPY_MS = 10 \* 60 \* 1000;/.test(ENDPOINT),
+    'the endpoint has no notion of a stale copy');
+  assert.ok(/if \(staleCopy\) return false;/.test(ENDPOINT),
+    'a stale copy re-queues, which can buy a second rider on a guess');
+  assert.ok(/stale_copy: staleCopy/.test(ENDPOINT), 'the client is not told which case it got');
+});
+
+it('staleness is measured on a zoneless stamp read as UTC', () => {
+  // The trap every clock in this system shares: SQLite hands back a zoneless
+  // stamp, and a bare new Date() reads it as LOCAL — on the Beijing host that
+  // makes a row written seconds ago look eight hours old, and would call a
+  // genuinely live rider stale.
+  assert.ok(/hasZone \? raw : raw\.replace\(' ', 'T'\) \+ 'Z'/.test(ENDPOINT),
+    'a fresh copy would read as stale on the production host');
 });
 
 it('the live-copy answer can no longer be read as a move', () => {
@@ -92,7 +118,7 @@ it('a cancelled copy is recognised and carried to the write', () => {
 
 it('it reads the daemon\'s conclusion, never its own', () => {
   // Whether a delivery is cancelled is settled in one place, under two guards.
-  assert.ok(/SELECT cancelled_at FROM delivery_jobs WHERE qingyun_order_id = \?/.test(ENDPOINT),
+  assert.ok(/SELECT cancelled_at, updated_at FROM delivery_jobs WHERE qingyun_order_id = \?/.test(ENDPOINT),
     'the endpoint decides cancelledness for itself instead of reading delivery_jobs');
 });
 
@@ -204,6 +230,13 @@ it('a live copy gets its own sentence, in both languages', () => {
   assert.ok(/已呼叫运力。请先在青云 App 取消该单。/.test(CLIENT), 'its Chinese is missing');
 });
 
+it('the stale-copy outcome is a success with a second step, not a failure', () => {
+  assert.ok(/j\.stale_copy/.test(CLIENT), 'the client does not recognise the stale-copy outcome');
+  assert.ok(/The old courier order may still be live — cancel it in the Qingyun app/.test(CLIENT),
+    'it does not tell the operator what is left to do');
+  assert.ok(/运单可能仍在,请先在青云 App 取消该单,再叫一家运力。/.test(CLIENT), 'its Chinese is missing');
+});
+
 it('a date that moved without a requeue says BOTH halves', () => {
   // The customer HAS been told the new day, so this is not a no-op to retry
   // blindly; and no rider is queued, which is the part still owed.
@@ -216,19 +249,22 @@ it('a date that moved without a requeue says BOTH halves', () => {
   assert.ok(/已改期至\$\{whenCn\},但未重新排队 — 请核实运力。/.test(CLIENT), 'its Chinese is missing');
 });
 
-it('none of the three is vacuous — they are three different strings', () => {
+it('none of the four is vacuous — they are four different strings', () => {
   const said = ['Moved to today — it goes back in the queue now',
                 'A courier is already on this one — cancel it in the Qingyun app first',
-                'Moved to ${when}, but it was not re-queued — check the courier'];
-  assert.strictEqual(new Set(said).size, 3);
+                'Moved to ${when}, but it was not re-queued — check the courier',
+                'Moved to ${when}. The old courier order may still be live'];
+  assert.strictEqual(new Set(said).size, 4);
   for (const t of said) assert.ok(CLIENT.includes(t), `missing: ${t}`);
 });
 
-it('only the success one is styled as a success', () => {
+it('exactly the two outcomes that moved the day are styled as successes', () => {
   const ok = CLIENT.indexOf("'success'");
   assert.ok(ok > 0, 'no success toast at all');
-  assert.strictEqual((CLIENT.match(/'success'\)/g) || []).length, 1,
-    'more than one outcome is styled as a success');
+  // TWO are successes now: the plain re-queue, and the stale-copy move that asks
+  // for a second step. Both moved the day, which is what was asked for.
+  assert.strictEqual((CLIENT.match(/'success'\)/g) || []).length, 2,
+    'the stale-copy move is not styled as the success it is');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
