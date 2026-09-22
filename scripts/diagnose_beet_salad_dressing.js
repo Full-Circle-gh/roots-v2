@@ -320,5 +320,113 @@ if (!hasTable('retail_product_options') || !hasTable('retail_order_items')) {
   }
 }
 
+
+// ===========================================================================
+rule('5 . THE HONEST NUMBER  (section 4 corrected)');
+// SECTION 4 OVERCOUNTS AND MUST NOT BE READ AS A LEAK. It counts every paid
+// line whose product carries a required question today, including two whole
+// classes of line where answering nothing was CORRECT at the time:
+//
+//   * the line was placed BEFORE the question was created. The option snapshot
+//     is taken at order time; an option added afterwards cannot appear on an
+//     older line and its absence is not a failure. TC000829 is exactly this.
+//   * the line came from a marketplace daemon (meituan / eleme / gzgrocery).
+//     Those orders are imported from someone else's basket; our questions were
+//     never put to that buyer, so there was no answer to record.
+//
+// What is left is the only figure that says whether the missing server-side
+// check on /api/retail/orders has actually cost anything: a line placed after
+// its question existed, on a channel that goes through our own checkout.
+const OWN_CHANNELS = ['wechat', 'web', 'pickup', 'wechat_chat', 'manual'];
+if (!hasTable('retail_product_options') || !hasTable('retail_order_items')
+    || !has('retail_product_options', 'created_at')) {
+  out('  tables or created_at missing; cannot correct the count.');
+} else {
+  const reqOpts = db.prepare(
+    `SELECT id, product_id, question_en, type, is_required, min_choices, created_at
+       FROM retail_product_options
+      WHERE type IN ('single','multi') AND (is_required = 1 OR min_choices > 0)`).all();
+  const live = reqOpts.filter(o => db.prepare(
+    `SELECT COUNT(*) n FROM retail_product_option_choices WHERE option_id = ?`).get(o.id).n > 0);
+  const byProduct = new Map();
+  for (const o of live) {
+    if (!byProduct.has(o.product_id)) byProduct.set(o.product_id, []);
+    byProduct.get(o.product_id).push(o);
+  }
+  const pids = [...byProduct.keys()];
+  if (!pids.length) {
+    out('  nothing required is configured.');
+  } else {
+    const ph = pids.map(() => '?').join(',');
+    const ordCols = cols('retail_orders');
+    const chanSel = ordCols.indexOf('channel') >= 0 ? 'o.channel' : `'?'`;
+    const rows = db.prepare(
+      `SELECT oi.id, oi.product_id, oi.sku, oi.name_en, oi.options_json,
+              o.order_no, o.status, o.placed_at, ${chanSel} AS channel
+         FROM retail_order_items oi
+         JOIN retail_orders o ON o.id = oi.order_id
+        WHERE oi.product_id IN (${ph})
+          AND o.status NOT IN ('cancelled','pending_payment')
+        ORDER BY o.placed_at DESC`).all(...pids);
+
+    let predate = 0, marketplace = 0;
+    const realMisses = [];
+    for (const r of rows) {
+      const answered = new Set();
+      try {
+        for (const a of (JSON.parse(r.options_json || '[]') || [])) {
+          if (a && a.option_id != null) answered.add(Number(a.option_id));
+        }
+      } catch { /* unparseable counts as answering nothing */ }
+      // Only questions that ALREADY EXISTED when this line was placed can have
+      // been skipped; the rest were not askable yet.
+      const askable = (byProduct.get(r.product_id) || [])
+        .filter(o => String(o.created_at || '') <= String(r.placed_at || ''));
+      const unmetAll = (byProduct.get(r.product_id) || []).filter(o => !answered.has(o.id));
+      if (!unmetAll.length) continue;
+      const unmet = askable.filter(o => !answered.has(o.id));
+      if (!unmet.length) { predate++; continue; }
+      if (OWN_CHANNELS.indexOf(String(r.channel || '')) < 0) { marketplace++; continue; }
+      realMisses.push({ ...r, unmet });
+    }
+    out('  excluded - line predates every question it "missed":  ' + String(predate).padStart(5));
+    out('  excluded - marketplace channel (daemon-imported):     ' + String(marketplace).padStart(5));
+    out('  REAL MISSES - our checkout, question already existed: ' + String(realMisses.length).padStart(5));
+
+    if (realMisses.length) {
+      sub('real misses by channel');
+      const perChan = new Map();
+      for (const m of realMisses) perChan.set(m.channel, (perChan.get(m.channel) || 0) + 1);
+      for (const [k, n] of [...perChan.entries()].sort((a, b) => b[1] - a[1])) {
+        out('  ' + String(n).padStart(5) + '  ' + k);
+      }
+      sub('real misses by product');
+      const perProd = new Map();
+      for (const m of realMisses) {
+        const k = m.product_id + ' | ' + (m.sku || '') + ' | ' + (m.name_en || '');
+        perProd.set(k, (perProd.get(k) || 0) + 1);
+      }
+      for (const [k, n] of [...perProd.entries()].sort((a, b) => b[1] - a[1])) {
+        out('  ' + String(n).padStart(5) + '  ' + k);
+      }
+      sub('every real miss, newest first (max 60)');
+      for (const m of realMisses.slice(0, 60)) {
+        out('  ' + String(m.placed_at || '').slice(0, 19).padEnd(20)
+            + String(m.order_no || '').padEnd(18)
+            + String(m.channel || '?').padEnd(12)
+            + String(m.sku || '').padEnd(10)
+            + String(m.name_en || '').padEnd(32)
+            + ' missing: ' + m.unmet.map(u => '#' + u.id + ' "' + (u.question_en || '') + '"').join(', '));
+      }
+    } else {
+      out();
+      out('  NONE. Every unanswered line is explained by one of the two exclusions');
+      out('  above, so the missing required-check on /api/retail/orders is a hole');
+      out('  that has not yet been fallen through - a fix to make, not damage to');
+      out('  repair.');
+    }
+  }
+}
+
 out();
 out('done.');
