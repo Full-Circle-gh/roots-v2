@@ -94,29 +94,80 @@ const listedIds = new Set(db.prepare(`
 console.log(`active products: ${all.length} · listed on an active shop menu: ${listedIds.size}`);
 
 /* ── 1 · QUINOA SALAD, THE PATTERN ITSELF ──────────────────────────────── */
+/* THE PATTERN COMES FROM ONE PRODUCT, AND THE FIRST VERSION OF THIS SECTION
+   GOT THAT WRONG — which matters more than the bug, because a diagnostic that
+   is loose about WHICH product is the reference cannot check the rule built
+   from it. It matched every product whose name contains "quinoa" — #127 Mix
+   Color Quinoa, #161 Ready-to-Eat Mix Quinoa, #175 Savory Quinoa Patties,
+   #196 Quinoa Salad — and UNIONED their visible types. #127 carries a
+   `recipe_steps` block that #196 does not, so the derived allow-list came back
+   with nine types where the shipped seed has eight, and section 2b then scored
+   `recipe_steps` as "kept by both readings" when the rule actually drops it.
+
+   Ash named ONE product. The reference is #196 "Quinoa Salad". The others are
+   printed for context and contribute nothing. */
 rule('1 · Quinoa Salad — every block in order, as the QR menu sees it');
-const quinoa = all.filter(r => /quinoa/i.test(r.name_en || '') || /藜麦/.test(r.name_cn || ''));
-if (!quinoa.length) console.log('  NO PRODUCT MATCHES "quinoa" — the rule cannot be read off anything.');
 
-const patternTypes = new Set();   // types Quinoa Salad SHOWS
-const hiddenTypes = new Set();    // types Quinoa Salad HIDES
+const REFERENCE_NAME = 'quinoa salad';
+const quinoaish = all.filter(r => /quinoa/i.test(r.name_en || '') || /藜麦/.test(r.name_cn || ''));
+// Exact name first; a product merely containing the words is NOT the reference.
+const reference = quinoaish.find(r => String(r.name_en || '').trim().toLowerCase() === REFERENCE_NAME);
 
-for (const q of quinoa) {
+const patternTypes = new Set();   // types the REFERENCE shows
+const hiddenTypes = new Set();    // types the REFERENCE has switched off
+
+for (const q of quinoaish) {
+  const isRef = reference && q.id === reference.id;
   const bs = blocksOf(q.blocks);
-  console.log(`\n  #${q.id} · ${q.name}   (listed: ${listedIds.has(q.id) ? 'yes' : 'no'}, updated ${q.updated_at || '?'})`);
+  console.log(`\n  #${q.id} · ${q.name}   (listed: ${listedIds.has(q.id) ? 'yes' : 'no'}, updated ${q.updated_at || '?'})` +
+              (isRef ? '   ← THE REFERENCE' : '   (context only — contributes nothing)'));
   if (bs === null) { console.log('    (description_blocks is not valid JSON)'); continue; }
   if (!bs.length) { console.log('    (no description_blocks at all)'); continue; }
   bs.forEach((b, i) => {
     const t = (b && b.type) || '(untyped)';
     const hidden = off(b);
     console.log(`    ${String(i + 1).padStart(2)}. [${hidden ? 'OFF' : 'ON '}] ${t}`);
+    if (!isRef) return;
     if (hidden) hiddenTypes.add(t); else patternTypes.add(t);
   });
 }
-console.log('\n  pattern read off Quinoa Salad:');
+
+if (!reference) {
+  console.log(`\n  NO PRODUCT IS NAMED EXACTLY "${REFERENCE_NAME}" — the rule cannot be read off anything, ` +
+              'and every number below that depends on it is meaningless.');
+}
+console.log('\n  pattern read off the reference product alone:');
 console.log('    SHOWS: ' + ([...patternTypes].join(', ') || '(none)'));
 console.log('    HIDES: ' + ([...hiddenTypes].join(', ') || '(none)'));
 console.log('    NOT PRESENT (so the pattern says nothing about them): see section 2.');
+
+/* ── 1b · DOES THE SHIPPED SEED STILL MATCH THE LIVE PRODUCT? ────────────
+   The seed in lib/qr-menu-block-defaults.js was copied off this product by
+   hand on 2026-09-22. The office can edit the product any day. This is the
+   only place the two can be compared against the live database, so it is
+   compared here rather than asserted in a unit test against a fixture. */
+rule('1b · the shipped seed against the live product');
+let SEED = null;
+try {
+  SEED = require(`${HOME}/lib/qr-menu-block-defaults`).SEED_SHOWN;
+} catch (e) {
+  console.log('  (could not load lib/qr-menu-block-defaults: ' + e.message + ')');
+}
+if (SEED) {
+  const live = [...patternTypes];
+  const missing = live.filter(t => SEED.indexOf(t) < 0);
+  const extra = [...SEED].filter(t => live.indexOf(t) < 0);
+  console.log('  shipped seed: ' + SEED.join(', '));
+  console.log('  live product: ' + (live.join(', ') || '(none)'));
+  if (!missing.length && !extra.length) {
+    console.log('\n  MATCH — the rule still says what the product says.');
+  } else {
+    console.log('\n  THEY HAVE DRIFTED:');
+    if (missing.length) console.log('    the product now shows, and the seed does not allow: ' + missing.join(', '));
+    if (extra.length) console.log('    the seed allows, and the product no longer shows: ' + extra.join(', '));
+    console.log('    Somebody edited the product after the seed was taken. Decide which is right.');
+  }
+}
 
 /* ── 2 · EVERY TYPE IN THE CATALOGUE ───────────────────────────────────── */
 rule('2 · every block type: how often it is carried, how often switched off');
@@ -155,8 +206,12 @@ console.log(`
   This section is the difference between the two readings, which is the only
   number that says what the correction actually cost or bought.
 `);
-const ALLOW = [...patternTypes].filter(t => !hiddenTypes.has(t));
-console.log('  allow-list read off Quinoa Salad: ' + (ALLOW.join(', ') || '(none)'));
+/* MEASURED AGAINST THE SHIPPED SEED, not against a list re-derived here. The
+   first version re-derived it and got a different answer (see section 1), so
+   this section scored the rule against a rule nobody ships. */
+const ALLOW = SEED ? [...SEED] : [...patternTypes].filter(t => !hiddenTypes.has(t));
+console.log('  allow-list in force: ' + (ALLOW.join(', ') || '(none)') +
+            (SEED ? '   (the shipped seed)' : '   (re-derived — lib could not be loaded)'));
 
 let lostListed = 0, lostAll = 0;
 const perType = new Map();
