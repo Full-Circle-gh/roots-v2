@@ -1799,8 +1799,23 @@ function coErrMsg(code){
   pickup_too_soon:state.lang==='cn'?'请选择更晚的取货时间，让我们有时间备货':'Pick a later pickup time so we can pack it',
   pickup_time_outside_hours:state.lang==='cn'?'请选择营业时间内的取货时间':'Pick a time within opening hours',
   pickup_time_required:state.lang==='cn'?'请选择取货时间':'Choose a pickup time',
-  no_zone_match:state.lang==='cn'?'该地址暂不支持配送':'We don’t deliver to this address yet'};
+  no_zone_match:state.lang==='cn'?'该地址暂不支持配送':'We don’t deliver to this address yet',
+  // A line whose questions are unanswered. The server refuses these now (§229);
+  // without a word here the shopper met "Order failed: choice_required" — a raw
+  // code with no item named and nowhere to go. The cart survives in this
+  // browser, so a line added before its product gained a question carries no
+  // answer and can only be fixed on the product page; CO_OPTION_CODES below
+  // sends them there. 请选择 is this map's own word two lines up.
+  choice_required:state.lang==='cn'?'请选择商品选项':'Choose this item’s options',
+  too_few_answers:state.lang==='cn'?'请选择商品选项':'Choose this item’s options',
+  too_many_answers:state.lang==='cn'?'请选择商品选项':'Choose this item’s options',
+  bad_choice:state.lang==='cn'?'请选择商品选项':'Choose this item’s options',
+  choice_wrong_product:state.lang==='cn'?'请选择商品选项':'Choose this item’s options',
+  too_many_choices:state.lang==='cn'?'请选择商品选项':'Choose this item’s options'};
   return (state.lang==='cn'?'下单失败：':'Order failed: ')+(map[code]||code||'error');}
+// The refusals whose only remedy is re-picking on the product page. Listed once
+// so the message map and the jump below cannot drift apart about which is which.
+const CO_OPTION_CODES=['choice_required','too_few_answers','too_many_answers','bad_choice','choice_wrong_product','too_many_choices'];
 
 // Checkout styling — mirrors the mini-app checkout (flat hairline sections on
 // oat, big "Where & how." header, receipt with thumbs, ink Place-Order sticky
@@ -3172,6 +3187,12 @@ async function coPlace(){
   // Balance moved between quote and submit — re-quote so the toggle + total resync.
   if(j.error==='insufficient_balance') coQuote();
   coMsg(coErrMsg(j.error));
+  // Unanswered questions have exactly one fix and it is not on this screen, so
+  // take them to it rather than leaving the message to be acted on. The message
+  // is written first and the hop is delayed so it is read on the way out.
+  if(CO_OPTION_CODES.indexOf(j.error)>=0&&j.product_id){
+    setTimeout(()=>{location.hash='#/product/'+j.product_id;},1200);
+  }
 }
 function coFallback(){
   const m=$('#coMsg'); if(!m)return;
