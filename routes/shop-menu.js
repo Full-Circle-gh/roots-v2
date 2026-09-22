@@ -65,7 +65,8 @@ const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { isShopCode } = require('../lib/shop-code');
 const { getCategoryTree } = require('../lib/category-tree');
-const { themeToCssVars, sanitizeTheme } = require('../lib/brand-theme');
+const { themeToCssVars, sanitizeTheme,
+        DIGIT_SUBSTITUTE, DIGIT_RANGE } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
 // §183 — what a product asks and whether an answer is allowed, shared with the
 // counter till. Both rule sets used to live in this file: which choices a
@@ -237,8 +238,10 @@ const FACE_FORMAT = { otf: 'opentype', ttf: 'truetype', woff: 'woff', woff2: 'wo
 // mistake. app.wxss states the problem and this is the same remedy: map the
 // digits, the currency signs and the ampersand to the substitute by
 // unicode-range. A family that is not here simply sets its own digits.
-const DIGIT_SUBSTITUTE = { 'Bear Serif': 'Lilita One' };
-const DIGIT_RANGE = 'U+0024-0026, U+0030-0039, U+00A5';
+//
+// THE MAP MOVED TO lib/brand-theme.js and is imported rather than restated:
+// themeToCssVars needs it to build --f-num (the face a figure and its unit
+// share) and two copies of a font rule are two chances to drift.
 
 // @font-face rules for the two families THIS TENANT's theme names — an
 // installed library face, or the tenant's own https upload. Nothing else is
@@ -262,9 +265,21 @@ function fontFaces(fonts) {
     // full face below it covers everything the range does not claim.
     const sub = DIGIT_SUBSTITUTE[fam];
     if (sub && INSTALLED_FACES[sub]) {
-      out.push(`@font-face{font-family:'${fam}';src:url('/assets/fonts/${INSTALLED_FACES[sub]}')` +
-        ` format('${FACE_FORMAT[INSTALLED_FACES[sub].split('.').pop()]}');` +
+      const subUrl = '/assets/fonts/' + INSTALLED_FACES[sub];
+      const subFmt = ` format('${FACE_FORMAT[INSTALLED_FACES[sub].split('.').pop()]}')`;
+      out.push(`@font-face{font-family:'${fam}';src:url('${subUrl}')${subFmt};` +
         `unicode-range:${DIGIT_RANGE};font-display:swap;}`);
+      /* AND UNDER ITS OWN NAME, WHICH IT DID NOT HAVE. The rule above hides
+         the substitute inside the display family, which is right for a run of
+         prose carrying a number in it. --f-num has to NAME the face to put a
+         unit in it, and a family nothing declares resolves to nothing and
+         falls through to the next stack entry -- so the fix would have been
+         invisible and the page would have looked untouched. Same file, same
+         bytes, one more line: the browser fetches it once. */
+      if (!seen.has(sub)) {
+        seen.add(sub);
+        out.push(`@font-face{font-family:'${sub}';src:url('${subUrl}')${subFmt};font-display:swap;}`);
+      }
     }
     out.push(`@font-face{font-family:'${fam}';src:url('${url}')${fmt};font-display:swap;}`);
   }
@@ -1273,7 +1288,22 @@ img{display:block;max-width:100%}
 .nr:last-child{border-bottom:0}
 .nr-l{font-family:var(--f-bear);font-size:calc(16.1 * var(--u));letter-spacing:.01em;
   text-transform:uppercase}
-.nr-r{font-family:var(--f-bear);font-size:calc(23.9 * var(--u));line-height:1;
+/* THE VALUE IS ONE RUN OF FIGURE, SO IT IS ONE FACE. A value like "18.4 g" is
+   a single text node. Where a display family's digits are served from a
+   substitute by unicode-range -- see DIGIT_SUBSTITUTE in lib/brand-theme.js --
+   the range covers the numerals and stops, so a unit sitting in the same run
+   came from the display face and read a shade lighter than the number it
+   belongs to. --f-num names the substitute outright, so the figure, the
+   decimal point and the unit are drawn by one face. A family with no
+   substitute resolves --f-num to exactly --f-bear and nothing moves.
+
+   NO FAMILY NAME IS WRITTEN HERE, and that is not tidiness: every byte of
+   this stylesheet is served to every tenant, comments included, so a face
+   named in a comment is one shop's font shipped on another shop's page.
+   scripts/test_shop_menu.js fails the build on it and caught this comment
+   twice -- once for the two family names, once for the house name in the
+   sentence explaining the first. */
+.nr-r{font-family:var(--f-num);font-size:calc(23.9 * var(--u));line-height:1;
   font-variant-numeric:tabular-nums;white-space:nowrap}
 .nr.p .nr-l{font-weight:600}
 .nr.c{padding:calc(5.2 * var(--u)) 0 calc(5.2 * var(--u)) calc(23 * var(--u));border-bottom:1px dashed rgba(0,0,0,.12)}
