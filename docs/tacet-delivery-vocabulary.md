@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.161 · 2026-09-22 · §222 MAKES THE REFUND APPROVE BUTTON STATE ITS CONSEQUENCE — FIVE COMPOSED STRINGS, AND THE REASON THEY COULD NOT BE LIFTED.** A full refund cancels the order's same-city delivery, and the dialog named that nowhere. The sentences are new because nothing in the tree described a consequence before it happened — every live pair reports what already did. See *What Approve will do (§222)*.
+
 **v1.160 · 2026-09-22 · §221 LETS A DELIVERY BE BOOKED FOR A LATER DAY — THREE COMPOSED STRINGS, EVERY FRAGMENT LIFTED.** The drain can hold a future-dated row until its day, so the picker offers a week instead of only today and the control appears on a live order. See *Booking a day that has not come yet (§221)*.
 
 **v1.159 · 2026-09-22 · §220 GIVES THE RESCHEDULE BUTTON THREE ANSWERS INSTEAD OF ONE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS.** The button printed one sentence — *Moved to today — it goes back in the queue now* — for three different outcomes, including the one where it had done nothing at all. The other two now have their own wording, built from pairs already shipping in the same drawer. See *Three answers from the reschedule button (§220)*.
@@ -8429,3 +8431,25 @@ and the waybill number the operator pastes in is data. The rule itself lives in
 - `等待配送 (Delivery scheduled)` — live, the customer-facing `scheduled` stage. **Rejected**: it is the shopper's word for their own order's state, not an answer to an operator who has just pressed a button, and reusing it here would make the toast read like a status rather than a confirmation.
 
 **The partial-outcome toast was not re-composed.** §219's `已改期至今天，但未重新排队 — 请核实运力。` keeps its frame; `今天` became the chosen day. Same string, different data.
+
+## What Approve will do (§222)
+
+**Five strings composed, by Claude, 2026-09-22.** More than any change should mint, and the reason is worth stating rather than apologising for: **every delivery pair in this file reports something that HAS happened** — 已送达, 已取消, 已改期至今天, 骑手前往取货. Nothing in the tree describes what a button is ABOUT to do, so there was no live sentence of that shape to copy. The nouns and verbs are all live; the sentences are not.
+
+| slot | shipped |
+|---|---|
+| subtitle | `Lock in the amount. What each mode does is spelled out above the button. · 确认退款金额。各模式的具体影响见按钮上方说明。` |
+| full refund | `Full refund: the order is marked refunded, its same-city delivery is cancelled, and stock, points and referral credit are reversed. The customer is told. · 全额退款：订单将标记为已退款，同城配送将被取消，库存、积分与推荐奖励一并退回。系统会通知顾客。` |
+| partial refund | `Partial refund: the order keeps its status and its delivery. Stock reverses for the selected items only. The customer is told. · 部分退款：订单状态与配送均不变，仅退回所选商品的库存。系统会通知顾客。` |
+| a rider is on it | `A rider is on this order right now — approving cancels that delivery. · 当前已有骑手接单 — 批准后该配送会被取消。` |
+| the day is not the money | `Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead. · 退款不会更改配送日期。如顾客只是想改天收货，请拒绝此申请并改期。` |
+
+**Every term inside them is live**: `已退款`, `同城配送`, `库存`, `积分`, `顾客`, `骑手`, `配送日期`, `改期`, `部分退款`, `全额` (from the dialog's own mode labels 全额 / 部分金额 / 按商品). What was assembled is the sentences.
+
+**Live candidates rejected.**
+
+- The old subtitle, `Lock in the amount. Full = order.status flips to refunded + inventory + points reverse…` — English-only, in the language of the columns it writes, and **incomplete**: it never mentioned the courier, which is the one consequence an operator cannot undo. Replaced rather than extended.
+- `已取消 (Cancelled)` on its own for the courier clause — **rejected for the same reason as §218**: on a refund dialog it would read as the ORDER being cancelled, which is a different and larger claim than the delivery being pulled. `同城配送将被取消` names what is actually cancelled.
+- `确定要退款吗？ (Are you sure?)` — the shape a confirm usually takes here. **Rejected outright**: a question adds a tap and tells the operator nothing they did not already know. The point is not to ask again, it is to say what will happen.
+
+**The last line is the one the change exists for.** A customer with no other way to ask for a different delivery day files a refund asking for one (live order TC000823, 2026-09-22: *"I wnat to get it tomorrow"*), and the button that reads like agreement spends money while moving the date by nothing. It shows in every mode, because the mode is not what makes it true.
