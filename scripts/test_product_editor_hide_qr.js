@@ -94,7 +94,7 @@ section('One writer owns the flag');
 check('every write to hide_qr happens inside paSetHideQr', () => {
   const owner = fnBody(SRC, 'paSetHideQr');
   assert.ok(owner, 'paSetHideQr is gone — the flag has no single owner any more');
-  /* §229 CHANGED WHAT THE OWNER WRITES, not that it owns it. The flag was
+  /* §230 CHANGED WHAT THE OWNER WRITES, not that it owns it. The flag was
      set to a literal true; it is now set to the boolean it was handed, and
      only where that disagrees with the tenant's allow-list — so the assertion
      is that it both writes a value and deletes, not that it writes `true`. */
@@ -113,7 +113,7 @@ check('every write to hide_qr happens inside paSetHideQr', () => {
     'two opinions about one flag is how the first bug happened');
 });
 
-/* ── §229 · THE THIRD STATE ─────────────────────────────────────────────────
+/* ── §230 · THE THIRD STATE ─────────────────────────────────────────────────
    An absent flag no longer means "shows". It means "ask the tenant's
    allow-list", and the editor must resolve it the same way the counter menu
    does or the eye describes a page that is not being drawn. */
@@ -206,7 +206,7 @@ check('an absent flag is left absent — nothing is written by default', () => {
     'a non-boolean hide_qr is persisted instead of deleted — every product would carry a field nobody set');
 });
 check('...and a deliberate FALSE survives the save', () => {
-  /* §229. Before the default existed, a false was deleted on the way out
+  /* §230. Before the default existed, a false was deleted on the way out
      because it said nothing an absent flag did not. It now says the opposite
      of the default — this block shows although its type is hidden — and
      deleting it would re-hide the block on the next save, silently, on the

@@ -318,7 +318,7 @@ check('hide_qr: false is not hiding — only a true hides', () => {
   assert.strictEqual(R.pageBlocks(off).length, 1);
 });
 
-/* ── §229 · THE TENANT'S ALLOW-LIST, AND THE THIRD STATE IT NEEDED ─────────
+/* ── §230 · THE TENANT'S ALLOW-LIST, AND THE THIRD STATE IT NEEDED ─────────
    Ash: the blocks Quinoa Salad shows are the blocks every product shows. A
    rule like that can only exist if "nobody has said" is distinguishable from
    "somebody said show it", so the flag went from a boolean to three states.
@@ -354,7 +354,7 @@ check('A TYPE NOBODY LISTED IS ALSO OFF — the block-list reading would show it
   assert.strictEqual(R.pageBlocks(quote, ALLOW.concat('pull_quote')).length, 1,
     'and listing it did not bring it back');
 });
-check('NO LIST MEANS NO RULE — the pre-§229 reading, exactly', () => {
+check('NO LIST MEANS NO RULE — the pre-§230 reading, exactly', () => {
   assert.strictEqual(R.pageBlocks(DEFAULTED).length, 3,
     'a caller that passes nothing now hides blocks it never asked to hide');
   assert.strictEqual(R.pageBlocks(DEFAULTED, null).length, 3,

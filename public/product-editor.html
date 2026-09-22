@@ -2289,7 +2289,7 @@ function paInspToggle(btn) {
 // The web storefront (public/shop.html) is deliberately NOT here. It renders
 // the same stack as the mini app and nobody has asked for it to differ; a third
 // switch nobody uses is a third thing to keep correct.
-/* §229 — THE TENANT'S ALLOW-LIST, AND THE THREE STATES IT CREATED.
+/* §230 — THE TENANT'S ALLOW-LIST, AND THE THREE STATES IT CREATED.
    The QR menu now carries a per-TYPE rule (lib/qr-menu-block-defaults.js):
    the types it MAY draw. A block the office has never touched draws only if
    its type is on that list, rather than always drawing. So the editor can no
@@ -2308,7 +2308,7 @@ function paInspToggle(btn) {
 
    NULL UNTIL IT LANDS, and null is not an empty list. An empty list means
    "nothing draws" and would paint every eye shut on first render; null means
-   "no list in force yet" and paints the pre-§229 behaviour — every block
+   "no list in force yet" and paints the pre-§230 behaviour — every block
    shown — repainting when the config resolves. Guessing either way would be
    wrong invisibly; this is wrong visibly, for one paint, and self-corrects. */
 let PA_QR_SHOWN_TYPES = null;
@@ -2377,13 +2377,13 @@ function paSetHideQr(id, hidden, fromRow) {
   paBlocksSyncFromDOM();
   const b = (window._paBlocks || []).find(x => x.id === id);
   if (!b) return;
-  /* §229 — A FLAG IS STORED ONLY WHERE IT DISAGREES WITH THE DEFAULT.
+  /* §230 — A FLAG IS STORED ONLY WHERE IT DISAGREES WITH THE DEFAULT.
      Landing on the default's own answer DELETES the flag rather than writing
      it, so the block goes back to following the rule. That matters the next
      time the default changes: a product carrying an explicit false would sit
      out a catalogue-wide change nobody realised it was exempt from, and the
      office would have no way to see why from the editor. The inverse is also
-     why a `false` is now written at all — before §229 it was deleted, and a
+     why a `false` is now written at all — before §230 it was deleted, and a
      block switched ON against a hiding default had nowhere to say so. */
   if (hidden === !paQrTypeShownByDefault(b.type)) delete b.hide_qr;
   else b.hide_qr = !!hidden;
@@ -2546,7 +2546,7 @@ async function peBoot() {
     //    "designer doesn't save / refresh wipes changes".
     //  • the LIST (/products) — needed only to populate the product switcher.
     // cache: 'no-store' so a refresh always reflects the just-saved copy.
-    /* §229 — THE QR MENU'S DEFAULT RIDES ALONG, in the same Promise.all, so
+    /* §230 — THE QR MENU'S DEFAULT RIDES ALONG, in the same Promise.all, so
        the first paint of the block list already knows which types are hidden.
        Loaded after the two product reads in the array only so a failure of
        ITS request cannot reject the pair: paLoadQrDefaults swallows its own
@@ -4449,7 +4449,7 @@ function paBlocksCollect() {
        the block, and an absent flag is what "follow the QR menu default"
        looks like on disk.
 
-       §229 KEEPS A FALSE, which the previous line deleted. A false is now a
+       §230 KEEPS A FALSE, which the previous line deleted. A false is now a
        deliberate answer — this block shows although its type is hidden by
        default — and deleting it would silently re-hide the block on the next
        save. Only paSetHideQr writes one, and only where it disagrees with the

@@ -2917,7 +2917,7 @@ function detailBody(it, code, listed, sig, qrShown) {
      prose-then-ingredients-then-allergens template, and it is now whatever the
      office laid out in the editor, which is what "same as the mini app" means
      before any single block is drawn. */
-  /* §229 — THE TENANT'S ALLOW-LIST TRAVELS IN, it is not read here. Every
+  /* §230 — THE TENANT'S ALLOW-LIST TRAVELS IN, it is not read here. Every
      product on this page resolves against the same list and it costs one row,
      so it is read once for the request beside the signature rather than once
      per product — and a reader that fetched it itself could not be called from
@@ -3417,7 +3417,7 @@ router.get('/s/:shopCode', (req, res) => {
      signed by the same shop, and a per-card lookup would put one identical
      query behind every tile on the page. */
   const sig = menuSignature(req);
-  /* §229 — THE BLOCK TYPES THIS TENANT'S COUNTER MENU MAY DRAW, read here for
+  /* §230 — THE BLOCK TYPES THIS TENANT'S COUNTER MENU MAY DRAW, read here for
      the same reason as the signature: one row, identical for every product on
      the page. It is an ALLOW-LIST: a type absent from it does not draw unless
      the block itself says so. Absent config means the seed in
