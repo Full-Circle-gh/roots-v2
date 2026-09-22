@@ -807,7 +807,11 @@
 .pb-nrow { display: flex; justify-content: space-between; align-items: baseline; padding: 16rpx 0; border-bottom: 2rpx solid rgba(26,26,23,0.12); }
 .pb-nrow:last-child { border-bottom: 0; }
 .pb-nrow-l { font-family: var(--f-bear); font-size: calc(27rpx * var(--font-scale)); letter-spacing: 0.01em; color: var(--ink); }
-.pb-nrow-r { font-family: var(--f-bear); font-size: calc(40rpx * var(--font-scale)); line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink); }
+/* --f-num, NOT --f-bear: the value is one run -- "18.4 g" is a single text
+   node -- and under --f-bear the digits came from Lilita One by unicode-range
+   while the unit stayed Bear Serif, so the g read lighter than the number.
+   See the token in app.wxss. */
+.pb-nrow-r { font-family: var(--f-num); font-size: calc(40rpx * var(--font-scale)); line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink); }
 .pb-nrow.bold .pb-nrow-l { font-weight: 700; }
 .pb-nrow.child { padding: 10rpx 0 10rpx 44rpx; border-bottom: 2rpx dashed rgba(26,26,23,0.12); }
 .pb-nrow.child .pb-nrow-l { font-family: var(--f-aleo); font-style: italic; font-size: calc(25rpx * var(--font-scale)); color: rgba(26,26,23,0.6); position: relative; }
