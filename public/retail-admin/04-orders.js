@@ -5517,6 +5517,16 @@ async function qpDoReschedule(orderId, iso, btn) {
           ? cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队')
           : cuT(`Moved to ${iso} — the rider is called that morning`,
                 `已改期至 ${iso} — 当天呼叫骑手`), 'success');
+      } else if (j.stale_copy) {
+        // The commonest case on a frozen order, and it is a SUCCESS with a second
+        // step, not a failure. The day has moved — which is what was asked for —
+        // and no rider was called, because the old copy has merely stopped
+        // reporting and might still be live. Re-queueing on that guess could buy a
+        // second delivery for one order, so the operator finishes it by hand.
+        // Every fragment here is live: the frame from the toast above, and the
+        // instruction from the ship-from line and the compare button.
+        toast(cuT(`Moved to ${when}. The old courier order may still be live — cancel it in the Qingyun app, then call another courier.`,
+                  `已改期至${whenCn}。运单可能仍在,请先在青云 App 取消该单,再叫一家运力。`), 'success');
       } else {
         // The date moved but the queue row did not take the swap — another writer
         // reached it first (a drain completing, a retry). Say both halves: the

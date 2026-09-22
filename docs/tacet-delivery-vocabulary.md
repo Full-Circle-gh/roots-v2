@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.162 · 2026-09-22 · §223 LETS A STALE COURIER COPY MOVE THE DAY — ONE COMPOSED STRING, EVERY FRAGMENT LIFTED.** A copy the platform has stopped reporting on is neither proven cancelled nor demonstrably live. The date moves; the rider does not get re-called on a guess; one sentence says both and names the step left. See *Moved, but the old order may still be live (§223)*.
+
 **v1.161 · 2026-09-22 · §222 MAKES THE REFUND APPROVE BUTTON STATE ITS CONSEQUENCE — FIVE COMPOSED STRINGS, AND THE REASON THEY COULD NOT BE LIFTED.** A full refund cancels the order's same-city delivery, and the dialog named that nowhere. The sentences are new because nothing in the tree described a consequence before it happened — every live pair reports what already did. See *What Approve will do (§222)*.
 
 **v1.160 · 2026-09-22 · §221 LETS A DELIVERY BE BOOKED FOR A LATER DAY — THREE COMPOSED STRINGS, EVERY FRAGMENT LIFTED.** The drain can hold a future-dated row until its day, so the picker offers a week instead of only today and the control appears on a live order. See *Booking a day that has not come yet (§221)*.
@@ -8453,3 +8455,18 @@ and the waybill number the operator pastes in is data. The rule itself lives in
 - `确定要退款吗？ (Are you sure?)` — the shape a confirm usually takes here. **Rejected outright**: a question adds a tap and tells the operator nothing they did not already know. The point is not to ask again, it is to say what will happen.
 
 **The last line is the one the change exists for.** A customer with no other way to ask for a different delivery day files a refund asking for one (live order TC000823, 2026-09-22: *"I wnat to get it tomorrow"*), and the button that reads like agreement spends money while moving the date by nothing. It shows in every mode, because the mode is not what makes it true.
+
+## Moved, but the old order may still be live (§223)
+
+**One string composed, by Claude, 2026-09-22.** Every fragment is live and the day is data.
+
+| shipped | built from |
+|---|---|
+| `Moved to ${day}. The old courier order may still be live — cancel it in the Qingyun app, then call another courier. · 已改期至${day}。运单可能仍在，请先在青云 App 取消该单，再叫一家运力。` | `已改期至` from §220's success toast; `可能` from the live stale warning `骑手可能已取消`; `运单` from `运单号`; `请先在青云 App 取消该单` verbatim from the ship-from lock; `再叫一家运力` verbatim from the dispatch button |
+
+**It is styled as a SUCCESS, which is the decision worth recording.** The operator asked for the day to move and the day moved. What did not happen — a new rider — did not happen on purpose, and the sentence says what finishes it. Dressing that as an error would teach people to distrust a control that did its job.
+
+**Live candidates rejected.**
+
+- `已呼叫运力。请先在青云 App 取消该单。` (§220's live-copy refusal) — **rejected**: it is a refusal, and this is not one. Reusing it would say the move failed when the move succeeded.
+- `但未重新排队 — 请核实运力。` (§220's partial outcome) — **rejected**: that sentence is for a queue write that LOST a race and needs checking. Here nothing was attempted, deliberately, and the operator needs an instruction rather than a check.
