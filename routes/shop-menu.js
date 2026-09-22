@@ -856,8 +856,13 @@ img{display:block;max-width:100%}
    margin, so the rule sits at the band's top edge and the air belongs to
    the heading under it -- a margin here would collapse against .pb's own
    and put the rule in the middle of the gap. */
+/* §240: the 19u under the heading was the component's 36rpx at this page's
+   x .52; the component went to 48rpx, so this went to 25u. Same for
+   .pb-why-r's padding, 14 to 18u (34 x .52). The air belongs INSIDE the
+   blocks -- .pb + .pb's 26u between them is untouched and was never the
+   crowded part. */
 .pb-h{display:flex;justify-content:space-between;align-items:flex-end;
-  margin:calc(26 * var(--u)) 0 calc(19 * var(--u));gap:calc(10 * var(--u));
+  margin:calc(26 * var(--u)) 0 calc(25 * var(--u));gap:calc(10 * var(--u));
   border-top:2px solid var(--ink);padding-top:calc(15 * var(--u))}
 .pb-h-l{font-family:var(--f-bear);font-size:calc(27 * var(--u));line-height:1;overflow-wrap:anywhere}
 .pb-h-r{flex:none;font-family:var(--f-bear);font-size:calc(10 * var(--u));letter-spacing:.22em;
@@ -907,7 +912,7 @@ img{display:block;max-width:100%}
    rail is no longer a straight column. miniapp/components/product-blocks/product-blocks.wxss
    carries the same change on the same block. */
 .pb-why-r{display:grid;grid-template-columns:calc(37 * var(--u)) 1fr;gap:calc(14 * var(--u));align-items:center;
-  padding:calc(14 * var(--u)) 0;border-top:1px solid rgba(0,0,0,.08)}
+  padding:calc(18 * var(--u)) 0;border-top:1px solid rgba(0,0,0,.08)}
 /* §232 — A HAIRLINE NOW, BECAUSE THE HEADING ABOVE IT DRAWS THE INK RULE.
    The component's weighting was "the list starts at a real edge", and it
    still does -- the edge simply moved up to .pb-why-h, fifteen pixels
@@ -1169,7 +1174,13 @@ img{display:block;max-width:100%}
    what the product is mostly made of before reading the list.
 
    THE GAP AND THE PADDING ARE THE COMPONENT'S, AND THEY WERE NOT.
-   Converted at this page's own rpx x .52, the component's chip is 16rpx of gap
+   §240: THE COMPONENT'S GAP MOVED TO 26rpx AND THIS PAGE FOLLOWED IT, 8 to 14u
+   (26 x .52 = 13.5, and a whole number for the reason .dt-k gives). The rest
+   of this note records the earlier catch-up and its numbers still read true
+   for the padding, which §239 did not move. The history below is why the
+   follow is automatic rather than a judgement: this page has now drawn the
+   clump twice, both times reported by Ash from a phone against the same salad.
+   Converted at this page's own rpx x .52, the component's chip was 16rpx of gap
    and 18rpx by 26rpx of padding: 8.3u, 9.4u, 13.5u. This page had 6u, 5u and
    11u — about a third under, on every axis at once — so a salad carrying eleven
    ingredients drew five rows of chips with six pixels between them and read as
@@ -1179,7 +1190,7 @@ img{display:block;max-width:100%}
    component while keeping every chip on an integer. The padding stays
    symmetrical top and bottom, which is what the render suite measures — it
    checks where the chip's INK sits inside its pill, and that is unmoved. */
-.ichips{display:flex;flex-wrap:wrap;gap:calc(8 * var(--u))}
+.ichips{display:flex;flex-wrap:wrap;gap:calc(14 * var(--u))}
 .ichip{border:1.5px solid var(--ink);border-radius:999px;padding:calc(7 * var(--u)) calc(13 * var(--u));
   font-size:calc(12.5 * var(--u));line-height:calc(17 * var(--u))}
 .ichip.lead{background:var(--ink);color:var(--oat);border-color:var(--ink)}
