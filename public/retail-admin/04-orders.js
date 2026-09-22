@@ -2377,7 +2377,7 @@ function shipByUrgency(p, actionable) {
     r.color = actionable ? 'var(--warn)' : 'var(--text-3)';
     return r;
   }
-  const danger = 'var(--danger)', warn = 'var(--warn)', plain = 'var(--text-1)';
+  const danger = 'var(--td-brick-ink)', warn = 'var(--warn)', plain = 'var(--text-1)';
   // Age basis (ASAP orders, no promised date): urgency = how long the order has
   // waited unshipped. amber once it's been a couple of days, red once it's stale.
   // Thresholds are in whole days — tune the two constants here (no Settings field
@@ -3474,7 +3474,7 @@ function renderTrackingCell(o) {
     ? `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:${dl.tone === 'urgent' ? 700 : 600}; color:${dl.color};">${deliveryIcon(dl.icon, 11)}<span>${cuT(dl.en, dl.cn)}</span></div>`
     : '';
   const airDelayBadge = o.air_delivery_delayed
-    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--danger); margin-top:3px;">⚠ ${cuT('DELIVERY DELAYED · contact customer', '配送延误 · 联系客户')}</div>`
+    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT('DELIVERY DELAYED · contact customer', '配送延误 · 联系客户')}</div>`
     : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
           <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${airDelayBadge}`;
@@ -4401,7 +4401,7 @@ function renderLocalEtaCard(o, s, hoisted) {
           <div>
             <div style="font-size:12px; color:var(--text-3);">ETA · 预计送达</div>
             <div style="font-family: var(--f-mono); font-weight:600; font-size:15px;">${escapeHtml(pretty)}${etaLapsed
-              ? ` <b style="color:var(--danger); font-family:var(--f-sans); font-size:11px; letter-spacing:.04em;">${cuT('OVERDUE', '已逾期')}</b>`
+              ? ` <b style="color:var(--td-brick-ink); font-family:var(--f-sans); font-size:11px; letter-spacing:.04em;">${cuT('OVERDUE', '已逾期')}</b>`
               : ''}</div>
           </div>
           <div style="flex:1; min-width:120px; text-align:right;">
@@ -4434,15 +4434,31 @@ function renderLocalEtaCard(o, s, hoisted) {
 // a rider can be assigned and moving well before they've actually collected the
 // parcel, so "On the way" must wait for the pickup, not just the assignment.
 // These mirror what the customer already sees in the mini-app.
+// Dots are TOKENS, not hex. The four here were `#9A6E2A`, `#4A72B0`, `#5C7A4E`,
+// `#5C7A4E` — three of which are off the Tacet palette and one of which
+// (`#4A72B0`) is a blue that appears nowhere in it at all. None had a dark-mode
+// value, so every one of them sat unchanged on a dark surface.
+//
+// The mapping follows docs/tacet-design-system.md §1 rather than the old hexes:
+//   awaiting_dispatch  Amber — a wait that may need somebody to act
+//   heading_to_pickup  neutral text — in progress, and NOT Dusk: Dusk means
+//                      "Tacet did this for you", and a rider a human dispatched
+//                      is not an automation state. That rule is the system's own
+//                      most important one, so the blue is replaced with a grey
+//                      rather than with the nearest-looking brand colour.
+//   in_transit         Sage — on track
+//   delivered          Sage — the all-clear the token is reserved for
+// in_transit and delivered share a colour exactly as they did before (both were
+// `#5C7A4E`); the labels are what tell them apart, and always were.
 const COURIER_STAGE = {
-  awaiting_dispatch: { en: 'Finding a rider', cn: '正在找骑手',   dot: '#9A6E2A' },
-  heading_to_pickup: { en: 'Rider coming',    cn: '骑手前往取货', dot: '#4A72B0' },
-  in_transit:        { en: 'On the way',      cn: '配送中',       dot: '#5C7A4E' },
-  delivered:         { en: 'Delivered',       cn: '已送达',       dot: '#5C7A4E' },
+  awaiting_dispatch: { en: 'Finding a rider', cn: '正在找骑手',   dot: 'var(--td-amber-ink)' },
+  heading_to_pickup: { en: 'Rider coming',    cn: '骑手前往取货', dot: 'var(--text-2)' },
+  in_transit:        { en: 'On the way',      cn: '配送中',       dot: 'var(--td-sage-ink)' },
+  delivered:         { en: 'Delivered',       cn: '已送达',       dot: 'var(--td-sage-ink)' },
   // No cancel signal exists on the platform; the daemon reads it by elimination
   // (lib/qingyun-cancel.js). Before this stage the row simply froze wherever it
   // stood and the card went on saying "Rider coming" under a rider who had gone.
-  cancelled:         { en: 'Rider cancelled',  cn: '骑手已取消',   dot: 'var(--danger)' },
+  cancelled:         { en: 'Rider cancelled',  cn: '骑手已取消',   dot: 'var(--td-brick-ink)' },
 };
 
 // SQLite hands naive UTC ("YYYY-MM-DD HH:MM:SS", no zone); a bare new Date()
@@ -4524,7 +4540,7 @@ function renderCourierStatusCard(o, c, meta, stale, delivered) {
   if (c.stage === 'cancelled') {
     const when = courierAgo(c.cancelled_at || c.updated_at);
     return `
-      <div style="padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:8px; border-left:3px solid var(--danger);">
+      <div style="padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:8px; border-left:3px solid var(--td-brick-ink);">
         <div style="display:flex; align-items:center; gap:7px;">
           <span style="background:${meta.dot}; width:8px; height:8px; border-radius:50%; flex:none;"></span>
           <b style="font-size:13px;">${cuT(meta.en, meta.cn)}</b>
@@ -4567,9 +4583,9 @@ function renderCourierStatusCard(o, c, meta, stale, delivered) {
   const etaLine = bits.length ? `<div class="muted" style="font-size:11px; margin-top:5px;">${bits.join(' · ')}</div>` : '';
   const carrier = c.carrier ? `<span class="muted" style="font-size:11px; margin-left:auto;" data-no-i18n>${escapeHtml(c.carrier)}</span>` : '';
   // Stale → amber warning + amber dot; otherwise the stage's own colour.
-  const dot = stale ? '#9A6E2A' : meta.dot;
+  const dot = stale ? 'var(--td-amber-ink)' : meta.dot;
   const staleLine = stale
-    ? `<div style="display:flex; align-items:flex-start; gap:5px; font-size:11px; font-weight:600; margin-top:7px; color:#9A6E2A;">${deliveryIcon('alert', 12)}<span>${cuT(
+    ? `<div style="display:flex; align-items:flex-start; gap:5px; font-size:11px; font-weight:600; margin-top:7px; color:var(--td-amber-ink);">${deliveryIcon('alert', 12)}<span>${cuT(
         "Not updating — the rider may have cancelled. Check the courier or call another.",
         '状态未更新 — 骑手可能已取消,请核实或另叫一位。')}</span></div>`
     : '';
@@ -5751,7 +5767,7 @@ async function qyLoadShipFrom(orderId, btn) {
       `<button class="btn btn-primary btn-sm" onclick="qySetShipFrom(${orderId}, this)" style="margin-top:6px;">${cuT('Ship from here', '改为此门店取货')}</button>`;
   } catch (e) {
     reset();
-    box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Load failed', '加载失败')}</div>`;
+    box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--td-brick-ink)">${cuT('Load failed', '加载失败')}</div>`;
   }
 }
 
@@ -5813,7 +5829,7 @@ async function qyLoadCarriers(orderId, btn) {
     const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/carriers`);
     const j = await r.json();
     if (btn) { btn.disabled = false; btn.textContent = cuT('Refresh prices', '刷新比价'); }
-    if (!j.success) { box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Could not load couriers — is the store connected to Qingyun?', '无法获取运力 — 门店是否已连接青云?')}</div>`; return; }
+    if (!j.success) { box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--td-brick-ink)">${cuT('Could not load couriers — is the store connected to Qingyun?', '无法获取运力 — 门店是否已连接青云?')}</div>`; return; }
     if (!j.data.available) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT("Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order.", '订单尚未进入青云。请开启自动发送,或此单非同城配送。')}</div>`; return; }
     const carriers = (j.data.carriers || []).filter(c => c.enabled);
     if (!carriers.length) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('No couriers available right now.', '当前暂无可用运力。')}</div>`; return; }
@@ -5831,7 +5847,7 @@ async function qyLoadCarriers(orderId, btn) {
       `<button class="btn btn-primary btn-sm" onclick="qyDispatch(${orderId}, this)" style="margin-top:6px;">${cuT('Dispatch courier', '发起配送')}</button>`;
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = cuT('Compare couriers', '查看运力比价'); }
-    if (box) box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Load failed', '加载失败')}</div>`;
+    if (box) box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--td-brick-ink)">${cuT('Load failed', '加载失败')}</div>`;
   }
 }
 
@@ -8291,7 +8307,7 @@ function pickReplacementLines(lines) {
             <input type="number" min="0" step="0.01" value="" data-shipping inputmode="decimal"
                    placeholder="0.00" style="width:100%; margin-top:4px;">
           </label>
-          <div class="dcr-err" style="display:none; color:var(--danger); font-size:12px; margin-top:8px;"></div>
+          <div class="dcr-err" style="display:none; color:var(--td-brick-ink); font-size:12px; margin-top:8px;"></div>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px; padding:0 18px 18px;">
           <button class="btn btn-primary" data-send>${cuT('Send replacement', '补发')}</button>
@@ -8439,7 +8455,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
     } else if (s.tracking_kd100_subscribed) {
       kdBadge = `<span class="muted" style="font-size:11px; color: #5C7A4E;">● ${cuT('kd100 live sync on', '快递100实时同步中')}</span>`;
     } else if (s.tracking_last_error) {
-      kdBadge = `<span style="font-size:11px; color: var(--danger);">⚠ ${escapeHtml(s.tracking_last_error)}</span>
+      kdBadge = `<span style="font-size:11px; color: var(--td-brick-ink);">⚠ ${escapeHtml(s.tracking_last_error)}</span>
         <button class="btn btn-sm" onclick="resubscribeTracking(${o.id}, ${sid})" style="margin-left:6px;">${cuT('Retry sync', '重试同步')}</button>`;
     } else {
       kdBadge = `<span class="muted" style="font-size:11px;">${cuT('manual entry only', '仅手动录入')}</span>`;
@@ -8593,7 +8609,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
               <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
               <input type="text" id="trk-number-${sid}" value="${escapeHtml(t.number)}" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
               <button class="btn btn-primary btn-sm" onclick="saveTracking(${o.id}, ${sid})">${cuT('Update', '更新')}</button>
-              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--danger);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">${cuT('Cancel JD pickup', '取消揽收')}</button>` : ''}
+              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--td-brick-ink);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">${cuT('Cancel JD pickup', '取消揽收')}</button>` : ''}
               <button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">${cuT('Clear', '清除')}</button>
             </div>
             ${t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">${cuT('"Cancel JD pickup" calls off the courier with JD. "Clear" only removes the number locally (courier still comes).', '"取消揽收"会向京东取消上门;"清除"仅在本地移除运单号(快递仍会上门)。')}</div>` : ''}
@@ -9095,7 +9111,7 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
                   ? `<span class="pack-badge land" style="margin-left:8px; margin-right:0;">${cuT('Land only', '仅陆运')}</span>`
                   : ''}
                 <span class="muted" style="display:block; font-size:11px; margin-top:1px;">${s.sub}</span>${blocked
-                  ? `<span style="display:block; font-size:11px; margin-top:3px; color:var(--danger);">${escapeHtml(cuT('Land shipping only — airline rejected', '仅陆运 — 航空拒运'))}: ${escapeHtml(noAirNames.join(', '))}</span>`
+                  ? `<span style="display:block; font-size:11px; margin-top:3px; color:var(--td-brick-ink);">${escapeHtml(cuT('Land shipping only — airline rejected', '仅陆运 — 航空拒运'))}: ${escapeHtml(noAirNames.join(', '))}</span>`
                   : ''}
               </span>
             </label>`;
@@ -9523,16 +9539,31 @@ function rejectRefund(id) {
 // States (refund_status): pending → reviewing → approved → paid
 //                              ↘ rejected   ↘ withdrawn
 function refundStepBadge(state) {
+  // TOKENS, not hex. Four of these seven rows were off the Tacet palette
+  // entirely — `#7494ff` is a blue the palette does not contain, `#f2ca6c` and
+  // `#5fc28e` are an amber and a green that are not its amber and green — and
+  // none of them carried a dark-mode value.
+  //
+  // THE PALETTE DOES NOT HAVE SIX STATUS COLOURS, AND THAT IS DELIBERATE. That
+  // is why a blue and a green got invented here. The fix is not to find four
+  // more brand colours, it is to notice the badge already carries a STEP NUMBER:
+  // "1. Requested" and "2. Reviewing" are both open and both amber, and the
+  // numeral is what tells them apart; "3. Approved" and "4. Paid" are both
+  // settled and both sage, likewise. Colour carries the posture, the number
+  // carries the position.
+  //
+  // `paying` keeps Dusk and was already correct: the gateway is moving the money
+  // on its own, which is exactly the one thing Dusk is reserved to mean.
   const map = {
-    pending:    { label: '1. Requested · 已申请',     color: '#f2ca6c', bg: 'rgba(242,202,108,.14)' },
-    reviewing:  { label: '2. Reviewing · 处理中',     color: '#7494ff', bg: 'rgba(116,148,255,.14)' },
-    approved:   { label: '3. Approved · 已批准',     color: '#5fc28e', bg: 'rgba(95,194,142,.14)' },
+    pending:    { label: '1. Requested · 已申请',     color: 'var(--td-amber-ink)', bg: 'var(--td-amber-tint)' },
+    reviewing:  { label: '2. Reviewing · 处理中',     color: 'var(--td-amber-ink)', bg: 'var(--td-amber-tint)' },
+    approved:   { label: '3. Approved · 已批准',     color: 'var(--td-sage-ink)',  bg: 'var(--td-sage-tint)' },
     // Shares step 4 with Paid — the payout is claimed and money is moving through
     // the gateway. Dusk tint + a breathing dot = the system is acting; it settles
     // into the sage-tint '4. Paid' on its own once the gateway confirms.
     paying:     { label: '4. Paying · 退款中',        color: 'var(--td-dusk)', bg: 'var(--td-dusk-tint)', dot: true },
-    paid:       { label: '4. Paid · 已退款',          color: '#5fc28e', bg: 'rgba(95,194,142,.18)' },
-    rejected:   { label: '✗ Rejected · 已拒绝',       color: 'var(--danger)', bg: 'rgba(232,85,106,.1)' },
+    paid:       { label: '4. Paid · 已退款',          color: 'var(--td-sage-ink)',  bg: 'var(--td-sage-tint)' },
+    rejected:   { label: '✗ Rejected · 已拒绝',       color: 'var(--td-brick-ink)', bg: 'var(--td-brick-tint)' },
     withdrawn:  { label: '↺ Withdrawn · 已撤回',      color: 'var(--text-3)', bg: 'var(--bg-elev-1)' },
   };
   const m = map[state];
@@ -9567,20 +9598,27 @@ function renderRefundPanel(o) {
   // one thing in the tag and a different thing in the body. Earlier this
   // was hardcoded amber for everything except terminal-non-paid (rejected /
   // withdrawn), which made an approved request still read as "needs work".
-  const headerBg = state === 'pending'    ? 'rgba(242,202,108,.10)'  // amber
-                 : state === 'reviewing'  ? 'rgba(116,148,255,.10)'  // blue
-                 : state === 'approved'   ? 'rgba(95,194,142,.10)'   // green
+  // The band takes the SAME tokens as the badge above it, which is the whole
+  // point of the pairing: the tag and the body of the panel cannot say two
+  // different things about one state. It previously carried its own set of raw
+  // hexes — including the pink `rgba(232,85,106,…)` that is neither Brick nor
+  // anywhere in the Tacet palette, and the blue `#7494ff` that nothing in the
+  // system contains. See refundStepBadge above for why two states share amber
+  // and two share sage.
+  const headerBg = state === 'pending'    ? 'var(--td-amber-tint)'
+                 : state === 'reviewing'  ? 'var(--td-amber-tint)'
+                 : state === 'approved'   ? 'var(--td-sage-tint)'
                  : state === 'paying'     ? 'var(--td-dusk-tint)'    // dusk — system acting
-                 : state === 'paid'       ? 'rgba(95,194,142,.14)'   // green, slightly stronger
-                 : state === 'rejected'   ? 'rgba(232,85,106,.08)'   // red, subtle
+                 : state === 'paid'       ? 'var(--td-sage-tint)'
+                 : state === 'rejected'   ? 'var(--td-brick-tint)'
                  : state === 'withdrawn'  ? 'var(--bg-elev-1)'       // theme-neutral
                  : 'var(--bg-elev-1)';
-  const headerBorder = state === 'paid' ? '#5fc28e' :
+  const headerBorder = state === 'paid' ? 'var(--td-sage-ink)' :
                        state === 'paying' ? 'var(--td-dusk)' :
-                       state === 'approved' ? '#5fc28e' :
-                       state === 'reviewing' ? '#7494ff' :
-                       state === 'rejected' ? 'var(--danger)' :
-                       state === 'withdrawn' ? 'var(--text-3)' : '#f2ca6c';
+                       state === 'approved' ? 'var(--td-sage-ink)' :
+                       state === 'reviewing' ? 'var(--td-amber-ink)' :
+                       state === 'rejected' ? 'var(--td-brick-ink)' :
+                       state === 'withdrawn' ? 'var(--text-3)' : 'var(--td-amber-ink)';
 
   /* Action buttons appropriate to current state.
 
@@ -10029,7 +10067,7 @@ function openRefundApproveDialog(orderId) {
       'Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead.',
       '退款不会更改配送日期。如顾客只是想改天收货,请拒绝此申请并改期。')}</span>`);
     box.innerHTML = lines.map(l => `<div style="margin-top:4px;">${l}</div>`).join('');
-    box.style.borderLeftColor = full ? 'var(--danger)' : 'var(--line-soft)';
+    box.style.borderLeftColor = full ? 'var(--td-brick-ink)' : 'var(--line-soft)';
   };
   bg.querySelectorAll('input[name="rf-mode"], #rf-amt, .rf-line-chk, .rf-line-qty')
     .forEach(el => el.addEventListener('input', renderConsequence));
