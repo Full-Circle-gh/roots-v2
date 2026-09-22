@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.157 · 2026-09-22 · §220 MAKES THE REFUND APPROVE BUTTON STATE ITS CONSEQUENCE — FIVE COMPOSED STRINGS, AND THE REASON THEY COULD NOT BE LIFTED.** A full refund cancels the order's same-city delivery, and the dialog named that nowhere. The sentences are new because nothing in the tree described a consequence before it happened — every live pair reports what already did. See *What Approve will do (§220)*.
+**v1.159 · 2026-09-22 · §220 MAKES THE REFUND APPROVE BUTTON STATE ITS CONSEQUENCE — FIVE COMPOSED STRINGS, AND THE REASON THEY COULD NOT BE LIFTED.** A full refund cancels the order's same-city delivery, and the dialog named that nowhere. The sentences are new because nothing in the tree described a consequence before it happened — every live pair reports what already did. See *What Approve will do (§220)*.
 
 **v1.156 · 2026-09-21 · §215 PUTS A SHOP'S STOCK REQUEST ON HOME — ONE COMPOSED STRING, COMPOSED ONLY BECAUSE THE LIVE PAIR WOULD HAVE COLLIDED.** A request one shop raises against another announced itself with a push and then a 6px dot; it is a row in Home's *Needs you* list now. `Stock requests · 补货申请` is live (the back office, and the phone's own notification log) and was rejected: this app already carries `Your stock requests · 我的补货申请` for the ASKER's list, and the new row is its mirror image — what other shops have asked of me. Everything else on the row is live or is data. See *The row that says another shop is waiting (§215)*.
 
