@@ -1,0 +1,1351 @@
+[
+ {
+  "sku": "2-140",
+  "name": "Masala Chai Latte",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy,5 spice",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 2
+ },
+ {
+  "sku": "2-170",
+  "name": "Carrot-Ginger Juice",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 3
+ },
+ {
+  "sku": "2-180",
+  "name": "Celerybration Juice",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 4
+ },
+ {
+  "sku": "2-160",
+  "name": "Green Glow Juice",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 5
+ },
+ {
+  "sku": "2-70",
+  "name": "Lemongrass Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 6
+ },
+ {
+  "sku": "2-60",
+  "name": "Lemongrass Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 7
+ },
+ {
+  "sku": "2-120",
+  "name": "Mango Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 8
+ },
+ {
+  "sku": "2-130",
+  "name": "Mango Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 9
+ },
+ {
+  "sku": "2-80",
+  "name": "Passion Fruit Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 10
+ },
+ {
+  "sku": "2-90",
+  "name": "Passion Fruit Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 11
+ },
+ {
+  "sku": "2-100",
+  "name": "Mix Berries Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 12
+ },
+ {
+  "sku": "2-110",
+  "name": "Mix Berries Kombucha",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 13
+ },
+ {
+  "sku": "4-360",
+  "name": "Calm Buckwheat Granola (No Sugar)",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 14
+ },
+ {
+  "sku": "4-240",
+  "name": "Crunchy Granola",
+  "free_of": [
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "soy, 5 spice",
+  "raw_cn": "大豆、五辛",
+  "row": 15
+ },
+ {
+  "sku": "2-290",
+  "name": "Jumbo Medjool Dates",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 16
+ },
+ {
+  "sku": "2-291",
+  "name": "Deri Dates",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 17
+ },
+ {
+  "sku": "2-280",
+  "name": "Nour Dates",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 18
+ },
+ {
+  "sku": "2-270",
+  "name": "Dried Pineapple Rings",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 19
+ },
+ {
+  "sku": "2-260",
+  "name": "Dried Sweet Banana",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 20
+ },
+ {
+  "sku": "2-250",
+  "name": "Dried Baby Banana",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 21
+ },
+ {
+  "sku": "4-210",
+  "name": "Dried Sweet Mango",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 22
+ },
+ {
+  "sku": "2-230",
+  "name": "Dried Dragon Fruit",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 23
+ },
+ {
+  "sku": "2-220",
+  "name": "Sun-Dried Apricots",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 24
+ },
+ {
+  "sku": "4-350",
+  "name": "Soft Dried Apples",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 25
+ },
+ {
+  "sku": "4-320",
+  "name": "Whole Dried Blueberries (No Sugar)",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 26
+ },
+ {
+  "sku": "2-210",
+  "name": "Crunchy Jujube Crisps",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 27
+ },
+ {
+  "sku": "2-480",
+  "name": "Jackfruit Chips",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 28
+ },
+ {
+  "sku": "1-100",
+  "name": "Blueberry Chia Jam",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 29
+ },
+ {
+  "sku": "1-110",
+  "name": "Strawberry-Lemon Chia Jam",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 30
+ },
+ {
+  "sku": "1-60",
+  "name": "Cherry Ginger Jam",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 31
+ },
+ {
+  "sku": "2-450",
+  "name": "Hazelnut-Chocolate Spread",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 32
+ },
+ {
+  "sku": "2-420",
+  "name": "Maple Cinnamon Almond Butter",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 33
+ },
+ {
+  "sku": "2-430",
+  "name": "Maple Cinnamon Almond Butter",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 34
+ },
+ {
+  "sku": "4-670",
+  "name": "Peanut Butter (100% Peanuts)",
+  "free_of": [
+   "gluten",
+   "5 spice",
+   "soy"
+  ],
+  "raw_en": "gluten, 5 spice,soy",
+  "raw_cn": "麸质、五辛、大豆",
+  "row": 35
+ },
+ {
+  "sku": "4-680",
+  "name": "Peanut Butter (100% Peanuts)",
+  "free_of": [
+   "gluten",
+   "5 spice",
+   "soy"
+  ],
+  "raw_en": "gluten, 5 spice,soy",
+  "raw_cn": "麸质、五辛、大豆",
+  "row": 36
+ },
+ {
+  "sku": "2-440",
+  "name": "Roasted Hazelnut Butter",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 37
+ },
+ {
+  "sku": "2-470",
+  "name": "Creamy Cashew Butter",
+  "free_of": [
+   "gluten",
+   "5 spice",
+   "soy"
+  ],
+  "raw_en": "gluten, 5 spice,soy",
+  "raw_cn": "麸质、五辛、大豆",
+  "row": 38
+ },
+ {
+  "sku": "2-410",
+  "name": "Almond Butter",
+  "free_of": [
+   "gluten",
+   "5 spice",
+   "soy"
+  ],
+  "raw_en": "gluten, 5 spice,soy",
+  "raw_cn": "麸质、五辛、大豆",
+  "row": 39
+ },
+ {
+  "sku": "2-400",
+  "name": "Almond Butter",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 40
+ },
+ {
+  "sku": "4-690",
+  "name": "Crunchy Peanut Butter",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 41
+ },
+ {
+  "sku": "2-320",
+  "name": "Walnuts",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 42
+ },
+ {
+  "sku": "4-310",
+  "name": "Parmesnuts (Parmesan）",
+  "free_of": [
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "soy, gluten",
+  "raw_cn": "大豆、麸质",
+  "row": 43
+ },
+ {
+  "sku": "1-220",
+  "name": "Pickled Onions",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy, gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 44
+ },
+ {
+  "sku": "1-250",
+  "name": "Kalamata & Green Olive Mix",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy, gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 45
+ },
+ {
+  "sku": "4-100",
+  "name": "Fermented Tofu （Oil Free）",
+  "free_of": [
+   "nuts",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, gluten, 5 spice",
+  "raw_cn": "坚果、麸质、五辛",
+  "row": 46
+ },
+ {
+  "sku": "1-240",
+  "name": "Harissa Chilli Paste",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy, gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 47
+ },
+ {
+  "sku": "1-225",
+  "name": "Zhoug — Green Chilli Dip",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy,gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 48
+ },
+ {
+  "sku": "1-80",
+  "name": "Olive 'n' Cream",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy, gluten,",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 49
+ },
+ {
+  "sku": "1-30",
+  "name": "Tzatziki",
+  "free_of": [
+   "gluten",
+   "soy"
+  ],
+  "raw_en": "gluten, soy, ",
+  "raw_cn": "麸质、大豆",
+  "row": 50
+ },
+ {
+  "sku": "1-90",
+  "name": "Classic Cashew Sour Cream",
+  "free_of": [
+   "gluten",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "gluten, soy, 5 spice",
+  "raw_cn": "麸质、大豆、五辛",
+  "row": 51
+ },
+ {
+  "sku": "1-40",
+  "name": "Za'atar Labneh",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 52
+ },
+ {
+  "sku": "1-50",
+  "name": "Chickpea Salad",
+  "free_of": [
+   "gluten"
+  ],
+  "raw_en": "gluten",
+  "raw_cn": "麸质",
+  "row": 53
+ },
+ {
+  "sku": "1-20",
+  "name": "Arugula-Basil Pesto",
+  "free_of": [
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "soy,gluten",
+  "raw_cn": "大豆、麸质",
+  "row": 54
+ },
+ {
+  "sku": "1-70",
+  "name": "Garlic Dill Sour Cream",
+  "free_of": [
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "soy, gluten",
+  "raw_cn": "大豆、麸质",
+  "row": 55
+ },
+ {
+  "sku": "1-15",
+  "name": "Baked Camembert Roasted Garlic Spread",
+  "free_of": [
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "soy, gluten",
+  "raw_cn": "大豆、麸质",
+  "row": 56
+ },
+ {
+  "sku": "1-210",
+  "name": "Strawberry Coconut Parfait",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": " soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 57
+ },
+ {
+  "sku": "1-140",
+  "name": "Probiotic Coconut Yogurt - Plain Flavor",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": " soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 58
+ },
+ {
+  "sku": "1-10",
+  "name": "Hummus Asli",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": " nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 59
+ },
+ {
+  "sku": "1-160",
+  "name": "Probiotic Coconut Yogurt - Vanilla Flavor",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": " soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 60
+ },
+ {
+  "sku": "1-190",
+  "name": "Probiotic Coconut Yogurt - Peach Flavor",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": ", soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 61
+ },
+ {
+  "sku": "1-130",
+  "name": "Probiotic Coconut Yogurt - Plain Flavor",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": ", soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 62
+ },
+ {
+  "sku": "1-150",
+  "name": "Probiotic Coconut Yogurt - Vanilla Flavor",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": ", soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 63
+ },
+ {
+  "sku": "1-180",
+  "name": "Probiotic Coconut Yogurt -Peach Flavor",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": ", soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 64
+ },
+ {
+  "sku": "1-290",
+  "name": "Ready-to-Eat Mix Quinoa",
+  "free_of": [
+   "gluten",
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "gluten,nuts,soy,5spice",
+  "raw_cn": "麸质、坚果、大豆、五辛",
+  "row": 65
+ },
+ {
+  "sku": "1-280",
+  "name": "Ready-to-Eat Brown Rice",
+  "free_of": [
+   "gluten",
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "gluten,nuts,soy,5spice",
+  "raw_cn": "麸质、坚果、大豆、五辛",
+  "row": 66
+ },
+ {
+  "sku": "1-120",
+  "name": "Apple Pie Overnight Oats",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts,soy,5spice",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 67
+ },
+ {
+  "sku": "1-320",
+  "name": "Thai Buckwheat Noodle Salad",
+  "free_of": [],
+  "raw_en": null,
+  "raw_cn": null,
+  "row": 68
+ },
+ {
+  "sku": "1-310",
+  "name": "Beet Salad",
+  "free_of": [
+   "gluten"
+  ],
+  "raw_en": "gluten",
+  "raw_cn": "麸质",
+  "row": 69
+ },
+ {
+  "sku": "1-330",
+  "name": "Tabbouleh Bowl",
+  "free_of": [
+   "nuts",
+   "soy"
+  ],
+  "raw_en": ",nuts,soy",
+  "raw_cn": "坚果、大豆",
+  "row": 70
+ },
+ {
+  "sku": "1-300",
+  "name": "Quinoa Salad",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, 5 spice,",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 71
+ },
+ {
+  "sku": "1-400",
+  "name": "Nourish Beans ＆ Veggie Soup",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts,soy,gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 72
+ },
+ {
+  "sku": "1-460",
+  "name": "Red Lentil Soup",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts,soy,gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 73
+ },
+ {
+  "sku": "1-360",
+  "name": "Herbal Nourish Soup",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": " nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 74
+ },
+ {
+  "sku": "1-370",
+  "name": "Roasted Pumpkin Soup",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy, gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 75
+ },
+ {
+  "sku": "1-380",
+  "name": "Sweet Potato & Cauliflower Curry",
+  "free_of": [
+   "gluten",
+   "soy"
+  ],
+  "raw_en": "gluten,soy",
+  "raw_cn": "麸质、大豆",
+  "row": 76
+ },
+ {
+  "sku": "1-410",
+  "name": "Tofu Banh Mi Wrap",
+  "free_of": [
+   "5 spice"
+  ],
+  "raw_en": "5 spice ",
+  "raw_cn": "五辛",
+  "row": 77
+ },
+ {
+  "sku": "1-430",
+  "name": "Shawarma Wrap",
+  "free_of": [
+   "nuts"
+  ],
+  "raw_en": "nuts,",
+  "raw_cn": "坚果",
+  "row": 78
+ },
+ {
+  "sku": "1-420",
+  "name": "Falafel Wrap",
+  "free_of": [
+   "nuts",
+   "soy"
+  ],
+  "raw_en": "nuts,soy",
+  "raw_cn": "坚果、大豆",
+  "row": 79
+ },
+ {
+  "sku": "1-440",
+  "name": "Pesto 'Chicken' Wrap",
+  "free_of": [],
+  "raw_en": null,
+  "raw_cn": null,
+  "row": 80
+ },
+ {
+  "sku": "1-226",
+  "name": "Cashew Camembert",
+  "free_of": [
+   "gluten"
+  ],
+  "raw_en": "gluten",
+  "raw_cn": "麸质",
+  "row": 81
+ },
+ {
+  "sku": "3-30",
+  "name": "Choco-Hazel Bars",
+  "free_of": [],
+  "raw_en": null,
+  "raw_cn": null,
+  "row": 82
+ },
+ {
+  "sku": "1-211",
+  "name": "Medjool Boat",
+  "free_of": [
+   "gluten",
+   "5 spice",
+   "soy"
+  ],
+  "raw_en": "gluten, 5 spice,soy",
+  "raw_cn": "麸质、五辛、大豆",
+  "row": 83
+ },
+ {
+  "sku": "3-200",
+  "name": "Sunny Lemon Bars",
+  "free_of": [
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "soy,5 spice",
+  "raw_cn": "大豆、五辛",
+  "row": 84
+ },
+ {
+  "sku": "3-20",
+  "name": "Choco Hemp Protein Bites",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5 spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 85
+ },
+ {
+  "sku": "3-190",
+  "name": "Snackers (Peanut-Caramel Bar)",
+  "free_of": [
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "spy, 5 spice ",
+  "raw_cn": "大豆、五辛",
+  "row": 86
+ },
+ {
+  "sku": "3-10",
+  "name": "Mango Protein Bites",
+  "free_of": [
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "soy, gluten, 5spice",
+  "raw_cn": "大豆、麸质、五辛",
+  "row": 87
+ },
+ {
+  "sku": "1-270",
+  "name": "Energy Cubes",
+  "free_of": [
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "soy, 5 spice",
+  "raw_cn": "大豆、五辛",
+  "row": 88
+ },
+ {
+  "sku": "1-260",
+  "name": "Energy Cubes",
+  "free_of": [
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "soy, 5 spice",
+  "raw_cn": "大豆、五辛",
+  "row": 89
+ },
+ {
+  "sku": "4-270",
+  "name": "Whole-Wheat Crisp Crackers",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, 5 spice",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 90
+ },
+ {
+  "sku": "4-250",
+  "name": "Tortilla Chips",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 91
+ },
+ {
+  "sku": "4-545",
+  "name": "BioCurcumin+ (Organic)",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 92
+ },
+ {
+  "sku": "4-500",
+  "name": "Powerhouse Greens Blend",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 93
+ },
+ {
+  "sku": "4-460",
+  "name": "Organic Turmeric Powder",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 94
+ },
+ {
+  "sku": "4-470",
+  "name": "Organic Spirulina Powder",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 95
+ },
+ {
+  "sku": "4-410",
+  "name": "Organic Beetroot Powder",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 96
+ },
+ {
+  "sku": "4-490",
+  "name": "Organic Pea Protein",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 97
+ },
+ {
+  "sku": "4-620",
+  "name": "Organic Soy Protein",
+  "free_of": [
+   "nuts",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, gluten, 5 spice",
+  "raw_cn": "坚果、麸质、五辛",
+  "row": 98
+ },
+ {
+  "sku": "4-480",
+  "name": "Organic Hemp Protein",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 99
+ },
+ {
+  "sku": "4-381",
+  "name": "Pure Creatine Monohydrate (Unflavoured)",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 100
+ },
+ {
+  "sku": "S(1-30)",
+  "name": "Tzatziki",
+  "free_of": [
+   "gluten"
+  ],
+  "raw_en": "gluten",
+  "raw_cn": "麸质",
+  "row": 101
+ },
+ {
+  "sku": "S(1-220)",
+  "name": "Pickled Onions",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy, gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 102
+ },
+ {
+  "sku": "S(4-360)",
+  "name": "Calm Buckwheat Granola (No Sugar)",
+  "free_of": [
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "soy, gluten",
+  "raw_cn": "大豆、麸质",
+  "row": 103
+ },
+ {
+  "sku": "S(3-250)",
+  "name": "Hearty Rye & Whole Wheat Bread",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, 5 spice",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 104
+ },
+ {
+  "sku": "S(1-240)",
+  "name": "Harissa Chilli Paste",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten"
+  ],
+  "raw_en": "nuts, soy, gluten",
+  "raw_cn": "坚果、大豆、麸质",
+  "row": 105
+ },
+ {
+  "sku": "S(4-240)",
+  "name": "Crunchy Granola",
+  "free_of": [
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "soy, 5 spice",
+  "raw_cn": "大豆、五辛",
+  "row": 106
+ },
+ {
+  "sku": "S(3-251)",
+  "name": "Whole-Wheat Pita",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, 5 spice",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 107
+ },
+ {
+  "sku": "4-230",
+  "name": "California Raisins (No Sugar)",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 108
+ },
+ {
+  "sku": "4-220",
+  "name": "Whole Cranberries (No Sugar)",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 109
+ },
+ {
+  "sku": "3-250",
+  "name": "Hearty Rye & Whole Wheat Bread",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, 5 spice",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 110
+ },
+ {
+  "sku": "S(3-252)",
+  "name": "GF Buckwheat Bread",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 111
+ },
+ {
+  "sku": "3-252",
+  "name": "GF Buckwheat Bread",
+  "free_of": [
+   "nuts",
+   "soy",
+   "gluten",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, gluten, 5 spice",
+  "raw_cn": "坚果、大豆、麸质、五辛",
+  "row": 112
+ },
+ {
+  "sku": "3-251",
+  "name": "Whole-Wheat Pita",
+  "free_of": [
+   "nuts",
+   "soy",
+   "5 spice"
+  ],
+  "raw_en": "nuts, soy, 5 spice",
+  "raw_cn": "坚果、大豆、五辛",
+  "row": 113
+ }
+]
