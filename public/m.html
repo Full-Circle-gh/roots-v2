@@ -17000,7 +17000,13 @@ const M_COURIER_STAGE={
   /* Read by elimination on the server (lib/qingyun-cancel.js), not reported by the
      platform. Named here so the phone cannot go on showing a rider the desktop
      has already stopped showing. */
-  cancelled:{en:'Rider cancelled',zh:'骑手已取消',dot:'var(--danger)'},
+  /* --brick-ink, NOT --danger. Every sibling above uses the -ink family because
+     it carries a DARK-MODE value (#B4533E light, #DE8B77 dark); --danger resolves
+     to --brick, which is the light value in both themes. The note above these
+     tokens says why the family exists: "amber warning and every success pill went
+     nearly invisible the moment the phone switched to dark". A dark-brick dot on
+     a dark surface is that same bug, reintroduced on the one stage added since. */
+  cancelled:{en:'Rider cancelled',zh:'骑手已取消',dot:'var(--brick-ink)'},
 };
 /* _date already fixes the zoneless-UTC trap this file names at length above —
    the desktop's courierAgeMs exists for exactly that bug, and reusing _date
