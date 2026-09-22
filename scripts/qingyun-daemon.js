@@ -1081,6 +1081,21 @@ ${ono}: the courier is gone — no rider is on this order. Call another if it st
         }
       }
       if (sweep.cancelled.length) log(storeCode, `recorded ${sweep.cancelled.length} cancelled delivery(ies)`);
+      // A SKIPPED SWEEP IS NOT A QUIET SWEEP ANY MORE. It refuses to conclude
+      // anything from an incomplete list, which is correct — but when that
+      // precondition can never be met the whole check is off and nothing says so.
+      // TC000823 read "Rider coming" for four hours because one busy tab filled
+      // its single page on every poll; the conclusion was not wrong, its
+      // precondition was unreachable, and the only trace was its absence.
+      // Logged and recorded so the next time it is a line to read rather than a
+      // silence to infer.
+      if (sweep.skipped) {
+        log(storeCode, `cancel sweep skipped (${sweep.skipped}) — ${sweep.missing.length} job(s) currently unseen`);
+        logSync(storeCode, 'cancel', 'error', { skipped: sweep.skipped, unseen: sweep.missing.length },
+          `cancel check could not run: ${sweep.skipped}`);
+      } else if (sweep.missing.length) {
+        log(storeCode, `${sweep.missing.length} tracked job(s) missing from the platform, within the grace window`);
+      }
     } catch (e) { log(storeCode, `cancel sweep error: ${e.message}`); }
   } catch (err) {
     log(storeCode, `pollStore error: ${err.message}`);
