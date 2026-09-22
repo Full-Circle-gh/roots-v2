@@ -3370,6 +3370,48 @@ Page({
         this.autoRemoveLocalOnly((e.body && e.body.products) || []);
         return;
       }
+      // A LINE WHOSE QUESTIONS ARE NOT ANSWERED. The server refuses these now
+      // (it did not until §229, which is how an order reached the kitchen with
+      // no dressing on it), and WITHOUT this block the customer met the generic
+      // toast at the bottom of this catch: "出错：choice_required". A raw code,
+      // no item named, no way forward — a lost basket rather than one extra tap.
+      //
+      // THE CUSTOMER MOST LIKELY TO SEE IT DID NOTHING WRONG. The cart lives in
+      // the handset's storage, so a line added before its product gained a
+      // question carries no answer and cannot grow one; the product page is the
+      // only place the pick can be made. So name the item and offer to open it
+      // rather than explaining the problem and leaving them on this screen.
+      //
+      // The other codes in this set are a stale or tampered payload rather than
+      // an honest gap, but the remedy is the same one — re-pick on the product
+      // page — so they are not told apart in front of the customer.
+      if (['choice_required', 'too_few_answers', 'too_many_answers',
+           'bad_choice', 'choice_wrong_product', 'too_many_choices'].includes(e?.message)) {
+        this.setData({ placing: false });
+        const cn = this.data.lang === 'cn';
+        const badId = e?.body?.product_id;
+        const line = badId ? (this.data.items || []).find(it => it.product_id === badId) : null;
+        const name = line ? (cn ? line.name_cn : line.name_en) : '';
+        // 请选择 / Please choose are the product sheet's own words for this, so
+        // the refusal at checkout reads as the same request the picker makes.
+        const title = name
+          ? (cn ? '「' + name + '」请选择' : 'Please choose: ' + name)
+          : (cn ? '请选择' : 'Please choose');
+        if (badId) {
+          wx.showModal({
+            title,
+            // 选规格 is live on this screen already (the substitute-picker CTA).
+            confirmText: cn ? '选规格' : 'Pick',
+            cancelText: cn ? '取消' : 'Cancel',
+            success: (r) => {
+              if (r.confirm) wx.navigateTo({ url: '/pages/product/product?id=' + badId });
+            },
+          });
+        } else {
+          wx.showToast({ title, icon: 'none', duration: 2400 });
+        }
+        return;
+      }
       // Balance changed between quote and submit (e.g. another order spent it).
       // Re-quote so the toggle subtitle + total reflect the real balance.
       if (e?.message === 'insufficient_balance') this.refreshQuote();
