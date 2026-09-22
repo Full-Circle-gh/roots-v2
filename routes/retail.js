@@ -8269,9 +8269,20 @@ function autoDeliverLocalEtaForTenant() {
           AND NOT EXISTS (
                 SELECT 1 FROM delivery_jobs j
                  WHERE j.retail_order_id = o.id
-                   AND j.order_status IS NOT NULL
-                   AND j.order_status < 50
-                   AND j.updated_at > datetime('now','-30 minutes'))`
+                   AND ( ( j.order_status IS NOT NULL
+                           AND j.order_status < 50
+                           AND j.updated_at > datetime('now','-30 minutes') )
+                         -- A CANCELLED delivery blocks the timer outright, with no
+                         -- freshness window. The window above asks "is a rider being
+                         -- tracked right now?", and the honest answer for a cancelled
+                         -- job is no — which would hand the order straight to the ETA
+                         -- fallback and mark it Delivered off a clock, over a parcel
+                         -- still sitting in the shop because the rider was cancelled.
+                         -- The fallback exists for orders that WENT OUT untracked;
+                         -- this one demonstrably did not. It stays blocked until a new
+                         -- delivery is created (a new row, cancelled_at NULL) or staff
+                         -- close the order by hand.
+                         OR j.cancelled_at IS NOT NULL )`
     ).all();
   } catch (e) {
     if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
@@ -8396,6 +8407,11 @@ function autoDispatchQingyunForTenant() {
         WHERE o.status IN (${AUTO_DISPATCH_FROM_SQL})
           AND j.order_status IS NOT NULL
           AND j.order_status < 50
+          -- A cancelled delivery's enum is frozen at whatever it held when the
+          -- platform stopped returning it, so a rider who cancelled after pickup
+          -- leaves a row that reads 配送中 for ever. Flipping the order to
+          -- "dispatched" off that tells the customer their parcel is on its way.
+          AND j.cancelled_at IS NULL
           AND ( j.order_status >= 40
                 OR (j.order_status >= 30 AND COALESCE(j.delivery_status, 0) >= 30) )`
     ).all();
@@ -8482,6 +8498,7 @@ function autoDeliverQingyunForTenant() {
          FROM retail_orders o
          JOIN delivery_jobs j ON j.retail_order_id = o.id
         WHERE o.status IN (${AUTO_DELIVER_FROM_SQL})
+          AND j.cancelled_at IS NULL
           AND j.order_status >= 50`
     ).all();
   } catch (e) {
@@ -13963,6 +13980,12 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
 // means exactly heading_to_pickup — a rider is travelling to the store. It is never
 // used for awaiting_dispatch (no rider yet)."
 function deliveryJobStage(job) {
+  // Read by elimination, and it OUTRANKS every raw enum below. A cancelled job's
+  // order_status is whatever it happened to hold when the platform stopped
+  // returning it — 30 配送中 on a rider who cancelled mid-run — so trusting the
+  // enum here is exactly the frozen "Rider coming" this column exists to end.
+  // See lib/qingyun-cancel.js for how the conclusion is reached.
+  if (job.cancelled_at) return 'cancelled';
   const os = job.order_status;
   const dispatched = !!(job.delivery_id || job.carrier_name || job.rider_name
     || (job.delivery_status != null && Number(job.delivery_status) > 0));
@@ -14042,6 +14065,20 @@ function buildDeliveryTrackData(job, slotLabel, scheduledFor, lang) {
   // Coarse stage from the delivery_jobs row — see deliveryJobStage (shared with
   // the admin drawer so staff + customer always read the same stage).
   const stage = deliveryJobStage(job);
+  // A cancelled delivery has NO live tracking to serve, and this payload is the
+  // map feed for both the shopper's order page and the admin drawer's map. Every
+  // position on a cancelled job is a frozen last-known fix of a rider who is no
+  // longer carrying anything, so serving it would draw a stationary scooter on
+  // the customer's map for as long as the row exists.
+  //
+  // The SHOPPER is told nothing beyond this, deliberately. They have no action to
+  // take: a cancel is nearly always the shop's own decision (short stock, a moved
+  // day, a bad address) and a new rider may be called minutes later, so a customer-
+  // facing "delivery cancelled" would raise a support call about a state that is
+  // about to stop being true. Their order simply stops claiming a rider and reads
+  // its own status again. STAFF are told plainly — see the drawer's courier card,
+  // which reads o.courier.stage and is where the cancel is actionable.
+  if (stage === 'cancelled') return { tracking: false };
   const coord = (lat, lng) => (lat != null && lng != null) ? { lat: lat / 1e6, lng: lng / 1e6 } : null;
 
   let route = [];
@@ -27298,10 +27335,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           stage,
           carrier: j.carrier_name || null,
           rider_name: j.rider_name || null,
-          // Suppress ETA/distance pre-dispatch (a 'scheduled' row's numbers are noise).
-          eta_seconds:     stage === 'scheduled' ? null : (j.eta_seconds ?? null),
-          rider_to_cust_m: stage === 'scheduled' ? null : (j.rider_to_cust_m ?? null),
+          // Suppress ETA/distance pre-dispatch (a 'scheduled' row's numbers are noise)
+          // and post-cancel (a gone rider's last real numbers read as live ones).
+          eta_seconds:     (stage === 'scheduled' || stage === 'cancelled') ? null : (j.eta_seconds ?? null),
+          rider_to_cust_m: (stage === 'scheduled' || stage === 'cancelled') ? null : (j.rider_to_cust_m ?? null),
           expected_delivery_at: j.expected_delivery_at || null,
+          cancelled_at: j.cancelled_at || null,
           updated_at: j.updated_at,
         });
       }
@@ -27771,7 +27810,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     if (job) {
       const stage = deliveryJobStage(job);
       o.courier = {
-        stage,                                            // scheduled | awaiting_dispatch | in_transit | delivered
+        stage,                          // scheduled | awaiting_dispatch | heading_to_pickup | in_transit | delivered | cancelled
         carrier: job.carrier_name || null,
         // Same shape, same reason as buildDeliveryTrackData's rider above: a
         // nameless rider still carries a number the customer can call.
@@ -27779,10 +27818,15 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
           ? { name: job.rider_name || null, phone: job.rider_phone || null }
           : null,
         // No ETA/distance before a rider is on it — suppress for the pre-dispatch
-        // preview so we never show a bogus "~N min".
-        eta_seconds:     stage === 'scheduled' ? null : (job.eta_seconds ?? null),
-        rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? null),
+        // preview so we never show a bogus "~N min". A CANCELLED job is suppressed
+        // for the mirror-image reason: its numbers are a real reading of a rider
+        // who has since gone, which is worse than a bogus one for looking true.
+        eta_seconds:     (stage === 'scheduled' || stage === 'cancelled') ? null : (job.eta_seconds ?? null),
+        rider_to_cust_m: (stage === 'scheduled' || stage === 'cancelled') ? null : (job.rider_to_cust_m ?? null),
         expected_delivery_at: job.expected_delivery_at || null,
+        // When the daemon concluded the delivery was gone. The card prints it, so
+        // staff can tell a cancel from a minute ago from one from this morning.
+        cancelled_at: job.cancelled_at || null,
         updated_at: job.updated_at,
       };
     }
@@ -29636,6 +29680,13 @@ function _qingyunCourierCommitted(qyOrderId) {
   try {
     const job = tdb().prepare('SELECT * FROM delivery_jobs WHERE qingyun_order_id = ?').get(String(qyOrderId));
     if (!job || job.order_status == null) return null;
+    // A cancelled delivery holds nothing, whatever enum it froze on. This is the
+    // same argument the header above makes for a rider who drops an order back to
+    // 待配送, one step further: there, the platform itself reverted the status; here
+    // the order left the platform's lists entirely and the status never moved. A
+    // job frozen at 30 配送中 would otherwise block re-dispatch for good — the
+    // order could never be given to another courier from this screen again.
+    if (job.cancelled_at) return null;
     if (Number(job.order_status) < 30) return null;      // 待配送 — nobody sent for it
     return deliveryJobStage(job);
   } catch (_) { return null; }                            // table missing pre-migration
@@ -29791,7 +29842,12 @@ function _qingyunMoveBlockedBy(qyOrderId) {
     const job = tdb().prepare('SELECT * FROM delivery_jobs WHERE qingyun_order_id = ?').get(String(qyOrderId));
     if (!job) return null;                        // not tracked yet — nothing dispatched
     const stage = deliveryJobStage(job);
-    return stage === 'scheduled' ? null : stage;
+    // 'cancelled' joins 'scheduled' as a stage that blocks nothing: both mean no
+    // courier is holding this order. Without it the drawer's ship-from line reads
+    // "A courier is already on this one. To collect it somewhere else, cancel it
+    // in the Qingyun app first." over a delivery that was cancelled in the Qingyun
+    // app — telling staff to do the thing they have already done.
+    return (stage === 'scheduled' || stage === 'cancelled') ? null : stage;
   } catch (_) { return null; }
 }
 

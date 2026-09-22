@@ -38,6 +38,7 @@ catch {
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getQingyunBrowser, closeAllQingyun, resolveCdpUrl } = require('../lib/qingyun-browser');
+const { applyVanishSweep } = require('../lib/qingyun-cancel');
 const { alertPlatform, alertMerchant, alertBoth, alertEnabled } = require('../lib/ops-alert');
 // ── Whose problem is it? (audit P-01) ─────────────────────────────────────
 // Every alert below now says who is meant to ACT on it: alertMerchant for this
@@ -75,6 +76,17 @@ const STORES = (process.env.QINGYUN_STORES || 'tianhe')
 
 const POLL_MS = Number(process.env.QINGYUN_POLL_MS || 25_000); // ~25s (jittered)
 const DELIVERED_STATUS = 50; // orderStatus once 已送达
+
+// ── How long an order may be missing before we call it cancelled ─────────────
+// Qingyun gives us no cancel signal, so a cancel is read by ELIMINATION (see the
+// delivery_jobs columns in database.js): a tracked job absent from a poll that
+// saw the platform's WHOLE list. The grace window exists because "absent from
+// one poll" has innocent explanations — a list that raced a write, a tab that
+// re-ordered mid-read — and the cost of being wrong is asymmetric: a cancel we
+// call late costs minutes; a cancel we call on a live rider takes the map and
+// the rider's phone number off the drawer while they are on the road. Three
+// polls at ~25s is the floor; the window is what actually decides.
+const CANCEL_GRACE_MS = Number(process.env.QINGYUN_CANCEL_GRACE_MS || 3 * 60_000);
 
 // ── When ops alerts may page ──────────────────────────────────────────────────
 // Tracking itself stays on round the clock, on purpose: a rider dispatched at
@@ -936,7 +948,8 @@ async function pollStore(storeCode) {
     if (wasDown) alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 重新登录成功，配送跟踪继续\nQingyun ${storeCode} logged back in — tracking resumed`);
     noteVerifyResult(storeCode, false);
 
-    const { ok, bootstrap, orders, reason } = await br.getActiveDeliveries();
+    const active = await br.getActiveDeliveries();
+    const { ok, bootstrap, orders, reason } = active;
     if (br.verificationRequired) { noteVerifyResult(storeCode, true); return; }
     if (bootstrap) {
       // EVERY order/list tab call failed and the self-heal drive (re-arm capture →
@@ -967,6 +980,12 @@ async function pollStore(storeCode) {
     }
     bootstrapSince[storeCode] = 0;
     if (!ok) return;
+
+    // What this poll actually SAW, and whether it saw everything. Both travel to
+    // the cancel sweep below, which reads an absence from a complete list as a
+    // cancel and must do nothing at all when the list was partial or paged out.
+    const seenIds = new Set(active.seen || []);
+    let listComplete = active.complete === true;
 
     let tracked = 0;
     for (const d of orders) {
@@ -1011,7 +1030,41 @@ async function pollStore(storeCode) {
         reconciled++;
       }
       if (reconciled) { logSync(storeCode, 'complete', 'ok', { reconciled }); log(storeCode, `reconciled ${reconciled} delivered order(s)`); }
-    } catch (e) { log(storeCode, `completion reconcile error: ${e.message}`); }
+      for (const d of done) if (d.qingyunOrderId) seenIds.add(String(d.qingyunOrderId));
+      // A 完成 tab that filled its page may have pushed a fresh drop-off out of
+      // view, and this sweep reads an absence as a cancel — so an incomplete
+      // completed read disqualifies the whole observation, not just its own half.
+      if (done.complete === false) listComplete = false;
+    } catch (e) {
+      log(storeCode, `completion reconcile error: ${e.message}`);
+      // The completed tab is where a just-delivered order lives. Without it, an
+      // order that landed between polls is absent from everything we managed to
+      // read, and the sweep would conclude a cancel over a finished delivery.
+      listComplete = false;
+    }
+
+    // ── Cancelled? Nothing on the platform says so, so it is read by elimination ──
+    // See lib/qingyun-cancel.js for why this needs a complete list and a grace
+    // window, and why it deliberately does NOT call another rider by itself.
+    try {
+      const sweep = applyVanishSweep(db, {
+        storeCode, seen: seenIds, complete: listComplete, graceMs: CANCEL_GRACE_MS,
+      });
+      for (const job of sweep.cancelled) {
+        const ono = job.retail_order_id
+          ? (db.prepare('SELECT order_no FROM retail_orders WHERE id = ?').get(job.retail_order_id) || {}).order_no
+          : null;
+        log(storeCode, `delivery ${job.qingyun_order_id}${ono ? ` (${ono})` : ''} is gone from every list — recording it as cancelled`);
+        logSync(storeCode, 'cancel', 'ok', { qingyun_order_id: job.qingyun_order_id, retail_order_id: job.retail_order_id, order_no: ono || null });
+        // Worth a page: an order whose rider is gone has nobody coming for it, and
+        // nothing re-queues it on its own (by design — see lib/qingyun-cancel.js).
+        if (ono && alertsAllowed(storeCode)) {
+          alertMerchant(ACCOUNT, `⚠️ ${ono} 的配送已取消，暂无骑手接单 — 如仍需配送请另叫一位
+${ono}: the courier is gone — no rider is on this order. Call another if it still needs to go.`);
+        }
+      }
+      if (sweep.cancelled.length) log(storeCode, `recorded ${sweep.cancelled.length} cancelled delivery(ies)`);
+    } catch (e) { log(storeCode, `cancel sweep error: ${e.message}`); }
   } catch (err) {
     log(storeCode, `pollStore error: ${err.message}`);
     logSync(storeCode, 'poll', 'error', null, err.message);

@@ -1001,6 +1001,9 @@ function dashOnroadRender() {
     // customer, so must not share that copy (see routes/retail.js deliveryJobStage).
     if (c && c.stage === 'heading_to_pickup') return { txt: cuT('Rider coming', '骑手前往取货'), soon: false };
     if (c && c.stage === 'awaiting_dispatch') return { txt: cuT('Finding a rider', '正在找骑手'), soon: false };
+    // Nobody is carrying this one. Falling through to "Out for delivery" would put
+    // a cancelled delivery on the live board looking like a run in progress.
+    if (c && c.stage === 'cancelled') return { txt: cuT('Rider cancelled', '骑手已取消'), soon: false };
     return { txt: cuT('Out for delivery', '配送中'), soon: false };
   };
   host.innerHTML = rows.slice(0, 5).map((o, i) => {
@@ -1051,6 +1054,9 @@ function dashReadyRender() {
     const cstage = o.courier && o.courier.stage;
     const st = cstage === 'heading_to_pickup' ? { txt: cuT('Rider coming', '骑手前往取货'), soon: true }
              : cstage === 'awaiting_dispatch' ? { txt: cuT('Finding a rider', '正在找骑手'), soon: false }
+             // Named rather than left to read "Packing": a cancelled delivery is
+             // not work in progress, it is work waiting on somebody to act.
+             : cstage === 'cancelled' ? { txt: cuT('Rider cancelled', '骑手已取消'), soon: true }
              : { txt: cuT('Packing', '打包中'), soon: false };
     const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
     return `<div class="bx-in-row${cls}">

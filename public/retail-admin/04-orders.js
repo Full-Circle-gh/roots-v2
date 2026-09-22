@@ -4439,6 +4439,10 @@ const COURIER_STAGE = {
   heading_to_pickup: { en: 'Rider coming',    cn: '骑手前往取货', dot: '#4A72B0' },
   in_transit:        { en: 'On the way',      cn: '配送中',       dot: '#5C7A4E' },
   delivered:         { en: 'Delivered',       cn: '已送达',       dot: '#5C7A4E' },
+  // No cancel signal exists on the platform; the daemon reads it by elimination
+  // (lib/qingyun-cancel.js). Before this stage the row simply froze wherever it
+  // stood and the card went on saying "Rider coming" under a rider who had gone.
+  cancelled:         { en: 'Rider cancelled',  cn: '骑手已取消',   dot: 'var(--danger)' },
 };
 
 // SQLite hands naive UTC ("YYYY-MM-DD HH:MM:SS", no zone); a bare new Date()
@@ -4491,6 +4495,10 @@ function orderStatusPill(o) {
     // still marked 'preparing' — staff can dispatch a rider before clicking
     // "Mark dispatched", so the courier job can outrun our own status) and
     // Meituan's "Rider coming" mirrors.
+    // A cancelled courier says nothing about where the ORDER is — the parcel is
+    // wherever the shop left it. Fall through to the order's own status rather
+    // than let a gone rider drive the header.
+    if (c.stage === 'cancelled') return { cls: 'st-' + o.status, label: humanStatus(o.status, o.fulfillment_type) };
     if (o.status === 'dispatched' || o.status === 'rider_pickup' || o.status === 'preparing') {
       if (c.stage === 'awaiting_dispatch') return { cls: 'st-preparing',    label: cuT('Finding a rider', '正在找骑手') };
       if (c.stage === 'heading_to_pickup') return { cls: 'st-rider_pickup', label: cuT('Rider coming', '骑手前往取货') };
@@ -4505,6 +4513,33 @@ function orderStatusPill(o) {
 // `stale` = an "on the way" order whose row has frozen (likely a rider cancel /
 // drop); we warn instead of trusting the last-seen rider position.
 function renderCourierStatusCard(o, c, meta, stale, delivered) {
+  // ── Cancelled: say it, and stop showing the run that no longer exists ──────
+  // Everything below this block describes a rider who is carrying the parcel —
+  // their name, their number, how far away they are, where they are on a map.
+  // On a cancelled job every one of those is a real reading of a moment that has
+  // passed, which is worse than a missing one for looking current. The rider's
+  // number is dropped too: they cancelled, so phoning them is not the next step.
+  // The next step is the "Call another courier" button, which renderQyDispatch
+  // keeps on screen for exactly this stage.
+  if (c.stage === 'cancelled') {
+    const when = courierAgo(c.cancelled_at || c.updated_at);
+    return `
+      <div style="padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:8px; border-left:3px solid var(--danger);">
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="background:${meta.dot}; width:8px; height:8px; border-radius:50%; flex:none;"></span>
+          <b style="font-size:13px;">${cuT(meta.en, meta.cn)}</b>
+          ${c.carrier ? `<span class="muted" style="font-size:11px; margin-left:auto;" data-no-i18n>${escapeHtml(c.carrier)}</span>` : ''}
+        </div>
+        <div style="font-size:11.5px; margin-top:6px; line-height:1.55;">${cuT(
+          'No rider is on this order. Call another courier if it still needs to go.',
+          '此订单目前无人接单。如仍需配送,请另叫一位。')}</div>
+        ${'' /* The time alone, with no label. A labelled "Cancelled <ago>" would have
+               needed a new Chinese pair minted for the label, and it sits directly
+               under a line that already says "Rider cancelled" — so the numeral
+               carries itself. courierAgo is the drawer's own renderer. */}
+        ${when ? `<div class="muted" style="font-size:10px; margin-top:6px;">${when}</div>` : ''}
+      </div>`;
+  }
   // Name and number are independent — Qingyun can hand back either alone. Built
   // as parts so a nameless rider shows the number without a leading separator,
   // and a named rider with no number still shows who is carrying the order.
@@ -4751,7 +4786,12 @@ function renderQyDispatch(o) {
   // A live "on the way" (or "coming to pick up") order whose row has frozen
   // (>10 min) is a likely cancel/drop — warn on the card and reopen the dispatch
   // button so staff can re-book.
-  const stale = !delivered && !!(c && (c.stage === 'in_transit' || c.stage === 'heading_to_pickup')
+  // The stale warning is a GUESS about a frozen row, and it exists only for the
+  // case we cannot prove. Once the daemon has concluded a cancel there is nothing
+  // left to guess at, so a cancelled job is never also "stale" — two hedged
+  // messages about one fact is how a card stops being read at all.
+  const cancelled = !!(c && c.stage === 'cancelled');
+  const stale = !delivered && !cancelled && !!(c && (c.stage === 'in_transit' || c.stage === 'heading_to_pickup')
     && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
   const card = meta ? renderCourierStatusCard(o, c, meta, stale, delivered) : '';
   // Keep the compare/dispatch button while there's no rider yet (still looking,
@@ -4759,8 +4799,8 @@ function renderQyDispatch(o) {
   // is genuinely on the way — re-comparing mid-run is pointless. When finding a
   // rider or recovering from a stall, the button offers to call another courier.
   const finding = c && c.stage === 'awaiting_dispatch';
-  const showCompare = !c || c.stage === 'scheduled' || finding || stale;
-  const relabel = finding || stale;
+  const showCompare = !c || c.stage === 'scheduled' || finding || stale || cancelled;
+  const relabel = finding || stale || cancelled;
   const compareBtn = showCompare
     ? `<button class="btn btn-sm" id="qy-get-${o.id}" onclick="qyLoadCarriers(${o.id}, this)">${cuT(relabel ? 'Call another courier' : 'Compare couriers', relabel ? '再叫一家运力' : '查看运力比价')}</button>`
     : '';
