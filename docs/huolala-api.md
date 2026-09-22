@@ -216,6 +216,22 @@ with `order_display_id`, `order_time`, `create_time`, `total_price_fen`,
 **No driver info and no driver position in the list** — `u-order-detail` is the
 only source for those.
 
+### VENDOR RULING 2026-09-22: it returns API-placed orders ONLY
+
+The portal's own wording — 用户可查询账户下历史订单列表(3个月内) — reads as though
+it returns everything the account booked. **It does not.** Asked directly, 货拉拉
+市场中心 (罗莺 Norah Luo, `norah.luo@huolala.cn`) answered:
+
+> 已收到贵司的咨询邮件，但贵司需求无法满足，因开放平台接口不支持查询非api接口
+> 形式下单的订单，请知悉。
+
+*"Your requirement cannot be met, because the open platform API does not support
+querying orders not placed through the API."*
+
+**This forecloses reading orders that staff book by hand in the 货拉拉 app.**
+Any design that wants order status or driver position must place the order
+through `u-order-request` itself. There is no read-only integration.
+
 Doc types are unreliable here: `lat`/`lon` are declared `string` but the examples
 are numbers; `order_status` is declared `array` but the example sends `"0"`.
 Parse defensively.
