@@ -5028,13 +5028,22 @@
 
   /* How To Use */
   .pa-prev-how { padding: 22px 22px 22px; }
+  /* Wrapping flex, not a grid: the gutter is this box's background showing
+     through, so a cell nobody filled reads as a grey slab. Tiles grow into
+     the last row; cols-N sets how many fit before it wraps. */
   .pa-prev-how-grid {
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     gap: 1px;
     background: rgba(26, 26, 23, 0.12);
     border: 1px solid rgba(26, 26, 23, 0.12);
   }
+  .pa-prev-how-grid.cols-1 .pa-prev-how-tile { flex-basis: 100%; }
+  .pa-prev-how-grid.cols-2 .pa-prev-how-tile { flex-basis: calc(50% - 2px); }
+  .pa-prev-how-grid.cols-3 .pa-prev-how-tile { flex-basis: calc(33.333% - 2px); }
+  .pa-prev-how-grid.cols-4 .pa-prev-how-tile { flex-basis: calc(25% - 2px); }
   .pa-prev-how-tile {
+    flex: 1 1 calc(33.333% - 2px); min-width: 0;
     background: #F2E7DF; padding: 14px 6px 12px;
     text-align: center;
     display: flex; flex-direction: column; gap: 5px; align-items: center;

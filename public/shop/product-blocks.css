@@ -331,15 +331,28 @@
 .shop-product-blocks .spb-how {
   padding: calc(60 * var(--u)) calc(44 * var(--u)) calc(60 * var(--u));
 }
+/* FLEX, NOT GRID, SO THE LAST ROW IS NEVER SHORT. The gutter here is the
+   container's own background showing through the gaps, so an unfilled cell is
+   not a gap — it is a grey slab where a tile should be. A wrapping flex row
+   with flex-grow on the tile has no cells to leave empty: whatever lands on
+   the last row stretches to fill it. The basis sets how many fit per row
+   before it wraps; the renderer picks that number (4 -> 2+2, 5 -> 3+2). */
 .shop-product-blocks .spb-how-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: calc(2 * var(--u));
   background: var(--ink-12);
   border: calc(2 * var(--u)) solid var(--ink-12);
 }
-.shop-product-blocks .spb-how-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.shop-product-blocks .spb-how-grid.cols-1 .spb-how-tile { flex-basis: 100%; }
+.shop-product-blocks .spb-how-grid.cols-2 .spb-how-tile { flex-basis: calc(50% - 4 * var(--u)); }
+.shop-product-blocks .spb-how-grid.cols-3 .spb-how-tile { flex-basis: calc(33.333% - 4 * var(--u)); }
+.shop-product-blocks .spb-how-grid.cols-4 .spb-how-tile { flex-basis: calc(25% - 4 * var(--u)); }
 .shop-product-blocks .spb-how-tile {
+  flex: 1 1 calc(33.333% - 4 * var(--u));
+  /* Without this a flex item refuses to shrink below its longest word, which
+     overrides the basis above and quietly re-wraps the row. */
+  min-width: 0;
   background: var(--oat);
   padding: calc(36 * var(--u)) calc(12 * var(--u)) calc(32 * var(--u));
   text-align: center;
@@ -355,6 +368,7 @@
   line-height: 1;
 }
 .shop-product-blocks .spb-how-lbl {
+  overflow-wrap: break-word;
   font-family: var(--f-toni);
   font-size: calc(24 * var(--u) * var(--font-scale));
   letter-spacing: 0.14em;
@@ -362,6 +376,7 @@
   color: var(--pa-fg, var(--ink));
 }
 .shop-product-blocks .spb-how-sub {
+  overflow-wrap: break-word;
   font-family: var(--f-aleo);
   font-style: italic;
   font-size: calc(24 * var(--u) * var(--font-scale));
