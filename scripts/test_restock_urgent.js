@@ -93,9 +93,38 @@ const ask = (purpose, name) => call('POST', '/api/restock', {
 // inside one second, so the tie-break the route carries (id DESC) would decide
 // the order rather than the clock. Age each row explicitly instead: the point
 // being proved is that urgency beats the clock, which needs the clock to differ.
-function age(id, minutesAgo) {
-  h.db.prepare(`UPDATE restock_orders SET created_at = datetime('now', ?) WHERE id = ?`)
-    .run(`-${minutesAgo} minutes`, id);
+//
+// AND THE AGED STAMP IS HELD INSIDE TODAY'S SHOP DAY, WHICH IS NOT FUSSINESS.
+// `GET /api/restock?tab=active` runs the daily sweep on its way past, and that
+// sweep archives any open, unpaired request whose created_at falls on an
+// EARLIER SHOP DAY — Guangzhou's midnight, not the runner's. The rows below are
+// unpaired by design (that is the legacy shape §198 deliberately kept
+// sweeping), so between 00:00 and 01:30 Guangzhou a row "90 minutes ago" was
+// already yesterday, was swept before the list was read, and this suite
+// reported an ordering defect that did not exist. It ran red every night for
+// ninety minutes and green every day, which is the worst way for a check to
+// behave: nobody who saw it failing could reproduce it, and nobody who could
+// reproduce it was looking.
+//
+// `rank` is what keeps the clamped stamps distinct and in the right order. When
+// the window between shop midnight and now is shorter than the ages asked for,
+// every row lands on the same clamp, and three identical stamps would hand the
+// ordering back to the id tie-break this helper exists to defeat. Ranks run
+// 1, 2, 3 from OLDEST to newest, so the sequence is monotonic whether every row
+// clamps, none does, or some do.
+const { sqlDayShiftForShop } = require(path.join(h.REPO, 'lib/business-date'));
+function shopDayStartUtc() {
+  // The shift takes UTC to shop-local; its opposite takes the shop's midnight
+  // back to the UTC stamp the column actually stores.
+  const fwd = sqlDayShiftForShop(h.db);
+  const back = fwd.startsWith('-') ? `+${fwd.slice(1)}` : `-${fwd.slice(1)}`;
+  return h.db.prepare("SELECT datetime(date('now', ?) || ' 00:00:00', ?) AS t").get(fwd, back).t;
+}
+function age(id, minutesAgo, rank) {
+  h.db.prepare(`UPDATE restock_orders
+       SET created_at = max(datetime('now', ?), datetime(?, ?))
+     WHERE id = ?`)
+    .run(`-${minutesAgo} minutes`, shopDayStartUtc(), `+${rank} seconds`, id);
 }
 const numbers = (rows) => (rows || []).map(r => r.rs_number);
 
@@ -127,9 +156,9 @@ const numbers = (rows) => (rows || []).map(r => r.rs_number);
   const oldUrgent = (await ask('urgent', 'Hummus')).body.id;   // asked first
   const newRoutine = (await ask('order', 'Hummus')).body.id;   // asked later
   const newerUrgent = (await ask('urgent', 'Hummus')).body.id; // asked last
-  age(oldUrgent, 60);
-  age(newRoutine, 30);
-  age(newerUrgent, 5);
+  age(oldUrgent, 60, 1);
+  age(newRoutine, 30, 2);
+  age(newerUrgent, 5, 3);
 
   const rsOf = (id) => h.db.prepare('SELECT rs_number FROM restock_orders WHERE id = ?').get(id).rs_number;
   const list = await call('GET', '/api/restock?to_role=kitchen&tab=active');
@@ -152,14 +181,25 @@ const numbers = (rows) => (rows || []).map(r => r.rs_number);
      identically for every one of them, so their order must be the order they
      had before this change existed: created_at DESC, id DESC. */
   h.db.prepare('DELETE FROM restock_orders').run();
-  const mk = (n, minutesAgo) => {
+  const mk = (n, minutesAgo, rank) => {
     const r = h.db.prepare(`INSERT INTO restock_orders
       (rs_number, date, status, from_role, to_role, purpose, created_by)
       VALUES (?, date('now'), 'sent', 'store', 'warehouse', NULL, 7)`).run(n);
-    age(r.lastInsertRowid, minutesAgo);
+    age(r.lastInsertRowid, minutesAgo, rank);
     return n;
   };
-  mk('RS-A', 90); mk('RS-B', 45); mk('RS-C', 10);
+  mk('RS-A', 90, 1); mk('RS-B', 45, 2); mk('RS-C', 10, 3);
+
+  /* THE GUARD THAT WOULD HAVE CAUGHT THE NIGHTLY RED, and it needs no fake
+     clock to do it: after aging, no fixture row may be dated to an earlier SHOP
+     day, because the sweep this endpoint runs on its way past would archive it
+     before the list was ever read. True at every hour; it was false between
+     00:00 and 01:30 Guangzhou, which is exactly when this suite used to fail. */
+  const shift = sqlDayShiftForShop(h.db);
+  const strayed = h.db.prepare(
+    "SELECT COUNT(*) AS n FROM restock_orders WHERE date(created_at, ?) < date('now', ?)"
+  ).get(shift, shift).n;
+  eq(strayed, 0, 'every aged fixture row is still dated to TODAY in the shop\u2019s own day');
 
   const transfers = await call('GET', '/api/restock?to_role=warehouse&tab=active');
   eq(numbers(transfers.body.data).join(','), 'RS-C,RS-B,RS-A',
