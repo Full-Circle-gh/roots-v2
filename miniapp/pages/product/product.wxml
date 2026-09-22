@@ -268,7 +268,7 @@
           </view>
           <view wx:for="{{nutritionRows}}" wx:key="label" class="nrow {{item.kind === 'parent' ? 'bold' : ''}} {{item.kind === 'child' ? 'child' : ''}}">
             <text class="nrow-l">{{item.label}}</text>
-            <text class="nrow-r f-gothic">{{item.value}}</text>
+            <text class="nrow-r f-bear">{{item.value}}</text>
           </view>
         </view>
       </view>
