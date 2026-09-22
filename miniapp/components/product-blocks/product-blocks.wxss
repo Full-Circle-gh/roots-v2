@@ -388,22 +388,33 @@
 }
 
 /* ───────── 06 · HOW TO USE GRID ─────────
-   3-col (6 tiles) or 4-col (8 tiles) grid. 2rpx ink-12 gutter — feels
-   like a riso plate. Each tile: emoji icon + caps label, optional sub. */
+   2rpx ink-12 gutter — feels like a riso plate. Each tile: emoji icon +
+   caps label, optional sub.
+
+   A WRAPPING FLEX ROW, NOT A GRID, because the gutter is this container's
+   background showing through the gaps: a cell nobody filled is not a gap but
+   a grey slab, which is what four tiles in a 3-col grid drew. Tiles grow, so
+   whatever lands on the last row fills it. cols-N sets how many fit before it
+   wraps and the .js picks N (4 -> 2+2, 5 -> 3+2). */
 .pb-how {
   padding: 60rpx 44rpx 60rpx;
 }
 .pb-how-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 2rpx;
   background: var(--ink-12);
   border: 2rpx solid var(--ink-12);
 }
-.pb-how-grid.cols-4 {
-  grid-template-columns: repeat(4, 1fr);
-}
+.pb-how-grid.cols-1 .pb-how-tile { flex-basis: 100%; }
+.pb-how-grid.cols-2 .pb-how-tile { flex-basis: calc(50% - 4rpx); }
+.pb-how-grid.cols-3 .pb-how-tile { flex-basis: calc(33.333% - 4rpx); }
+.pb-how-grid.cols-4 .pb-how-tile { flex-basis: calc(25% - 4rpx); }
 .pb-how-tile {
+  flex: 1 1 calc(33.333% - 4rpx);
+  /* A flex item refuses to shrink below its longest word, which would
+     override the basis above and quietly re-wrap the row. */
+  min-width: 0;
   background: var(--oat);
   padding: 36rpx 12rpx 32rpx;
   text-align: center;
@@ -414,6 +425,8 @@
   min-height: 152rpx;
   justify-content: center;
 }
+.pb-how-lbl,
+.pb-how-sub { overflow-wrap: break-word; }
 .pb-how-ic {
   font-size: 48rpx;
   line-height: 1;
@@ -836,8 +849,9 @@
 .pb-tpl-quiet_minimal .pb-ing-line-pct { font-family: monospace !important; font-size: 24rpx !important; color: var(--pa-accent, var(--ink-60)) !important; }
 
 /* how to use — clean two-column hairline list, no boxes/icons */
-.pb-tpl-quiet_minimal .pb-how-grid { grid-template-columns: 1fr 1fr !important; gap: 0 48rpx !important; background: none !important; border: none !important; }
-.pb-tpl-quiet_minimal .pb-how-grid.cols-4 { grid-template-columns: 1fr 1fr !important; }
+.pb-tpl-quiet_minimal .pb-how-grid { gap: 0 48rpx !important; background: none !important; border: none !important; }
+/* Two across whatever the tile count chose — this template is a quiet list, not a plate. */
+.pb-tpl-quiet_minimal .pb-how-grid .pb-how-tile { flex-basis: calc(50% - 48rpx) !important; }
 .pb-tpl-quiet_minimal .pb-how-tile { background: none !important; text-align: left; align-items: flex-start; justify-content: flex-start; min-height: 0 !important; padding: 26rpx 0 !important; gap: 8rpx !important; border-top: 2rpx solid var(--ink-12); }
 .pb-tpl-quiet_minimal .pb-how-ic { display: none !important; }
 .pb-tpl-quiet_minimal .pb-how-lbl { font-family: var(--f-aleo) !important; font-size: 28rpx !important; letter-spacing: 0 !important; text-transform: none !important; }

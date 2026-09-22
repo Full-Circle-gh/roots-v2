@@ -105,7 +105,7 @@
         <view class="pb-section-head">
           <text class="pb-section-h3">{{item.head}}</text>
         </view>
-        <view class="pb-how-grid {{item.cols === 4 ? 'cols-4' : ''}}">
+        <view class="pb-how-grid cols-{{item.cols}}">
           <view wx:for="{{item.tiles}}" wx:for-item="t" wx:key="lbl" class="pb-how-tile">
             <text wx:if="{{t.icon}}" class="pb-how-ic">{{t.icon}}</text>
             <text wx:if="{{t.lbl}}" class="pb-how-lbl">{{t.lbl}}</text>

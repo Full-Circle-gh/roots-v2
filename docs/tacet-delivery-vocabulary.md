@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.163 · 2026-09-22 · §231 LETS THE HOW-TO-USE GRID TAKE ANY TILE COUNT — ONE COMPOSED STRING, BOTH WORDS LIVE.** The editor told the office *"6 tiles (3-col grid) or 8 tiles (4-col grid) — never 5 or 7"*, which is why a four-moment product looked like the author's mistake rather than the grid's. The rule is gone and the helper says so. `任意` and `数量` are each live many times over; what is composed is the PAIR, and everything beside it is a numeral. See *Any number of usage tiles (§231)*.
+
 **v1.162 · 2026-09-22 · §223 LETS A STALE COURIER COPY MOVE THE DAY — ONE COMPOSED STRING, EVERY FRAGMENT LIFTED.** A copy the platform has stopped reporting on is neither proven cancelled nor demonstrably live. The date moves; the rider does not get re-called on a guess; one sentence says both and names the step left. See *Moved, but the old order may still be live (§223)*.
 
 **v1.161 · 2026-09-22 · §222 MAKES THE REFUND APPROVE BUTTON STATE ITS CONSEQUENCE — FIVE COMPOSED STRINGS, AND THE REASON THEY COULD NOT BE LIFTED.** A full refund cancels the order's same-city delivery, and the dialog named that nowhere. The sentences are new because nothing in the tree described a consequence before it happened — every live pair reports what already did. See *What Approve will do (§222)*.
@@ -8470,3 +8472,27 @@ and the waybill number the operator pastes in is data. The rule itself lives in
 
 - `已呼叫运力。请先在青云 App 取消该单。` (§220's live-copy refusal) — **rejected**: it is a refusal, and this is not one. Reusing it would say the move failed when the move succeeded.
 - `但未重新排队 — 请核实运力。` (§220's partial outcome) — **rejected**: that sentence is for a queue write that LOST a race and needs checking. Here nothing was attempted, deliberately, and the operator needs an instruction rather than a check.
+
+## Any number of usage tiles (§231)
+
+**One string composed, by Claude, 2026-09-22.** Both words are live; the pair is
+not, and the rest of the line is arithmetic.
+
+| shipped | built from |
+|---|---|
+| `Any number of tiles — the rows even themselves out and the last one always fills (4 → 2+2, 5 → 3+2, 9 → 3+3+3). Each tile: emoji + caps label + optional italic sub-line. · 任意数量 — 4 → 2+2,5 → 3+2,9 → 3+3+3。` | `任意` from `任意订单立减`, `任意评分`, `任意字段留空则使用默认文案。` and a dozen more; `数量` from `低库存提醒数量`, `会员数量`, `预订可售数量`. The examples are numerals and need no words. |
+
+**The Chinese is SHORTER than the English on purpose, and it was already.** The
+line it replaces — `6 块 (3 列) 或 8 块 (4 列)。` — did not translate the
+sentence about what a tile contains either. This is an editor helper under a
+field the office is already looking at, not a customer-facing sentence, and the
+numerals carry the whole rule.
+
+**Live candidates rejected.**
+
+- `任意` alone, with the counts doing the rest — **rejected**: on a field that
+  takes a LIST, `任意` unqualified reads as *any one of them*, which is the
+  opposite instruction. `数量` is what makes it about how many.
+- `不限` (live in the delivery rules as *no limit*) — **rejected**: it describes
+  a cap that was lifted. Nothing here was ever capped; six and eight were a
+  recommendation the grid could not keep.

@@ -421,5 +421,96 @@ check('...and says no when the office wrote no nutrition block at all', () => {
   assert.strictEqual(R.hasNutritionBlock('{oops'), false);
 });
 
+/* ── HOW TO USE: THE LAST ROW IS NEVER SHORT ──────────────────────────────
+   The office types as many usage tiles as the product has moments, and four
+   and five are as common as six. The old rule — four across at eight tiles or
+   more, three otherwise — drew four tiles as a row of three and a row of one,
+   and because the grid's gutter IS its background showing through, the two
+   cells nobody filled read as a grey slab on the live sheet (Arugula-Basil
+   Pesto, 2026-09-22).
+
+   ONE RULE, FIVE COPIES. lib/product-blocks-read.js owns it; the shop sheet,
+   the editor's preview and the mini app carry their own copies because none of
+   them can require this one, and each stylesheet has to grow the tile into
+   whatever the last row leaves. Nothing but this test notices when one of the
+   five moves. */
+section('How to use fills its last row, whatever the tile count');
+
+const SHOP_JS   = fs.readFileSync(path.join(ROOT, 'public/shop/product-blocks.js'), 'utf8');
+const SHOP_CSS  = fs.readFileSync(path.join(ROOT, 'public/shop/product-blocks.css'), 'utf8');
+const EDITOR    = fs.readFileSync(path.join(ROOT, 'public/product-editor.html'), 'utf8');
+const ADMIN_CSS = fs.readFileSync(path.join(ROOT, 'public/retail-admin.css'), 'utf8');
+const MENU      = fs.readFileSync(path.join(ROOT, 'routes/shop-menu.js'), 'utf8');
+const WXSS      = fs.readFileSync(
+  path.join(ROOT, 'miniapp/components/product-blocks/product-blocks.wxss'), 'utf8');
+const WXML      = fs.readFileSync(
+  path.join(ROOT, 'miniapp/components/product-blocks/product-blocks.wxml'), 'utf8');
+
+check('the count picks the row width that divides most evenly', () => {
+  const want = { 1: 1, 2: 2, 3: 3, 4: 2, 5: 3, 6: 3, 7: 4, 8: 4, 9: 3, 10: 4, 11: 4, 12: 4 };
+  for (const [n, cols] of Object.entries(want)) {
+    assert.strictEqual(R.howToUseCols(Number(n)), cols,
+      `${n} tiles should run ${cols} across`);
+  }
+});
+check('four tiles are 2 + 2, not 3 + 1 — the case that shipped the grey slab', () => {
+  const tiles = ['Spread on bread', 'Toss with pasta', 'Finish vegetables', 'Dress a bowl']
+    .map(label_en => ({ label_en }));
+  const [b] = R.pageBlocks([{ type: 'how_to_use', tiles }]);
+  assert.strictEqual(b.cols, 2, 'four tiles still ask for a three-wide row');
+  assert.strictEqual(b.tiles.length, 4, 'a tile was dropped on the way');
+});
+check('nothing is padded, dropped or reordered to make a row fit', () => {
+  const tiles = Array.from({ length: 5 }, (_, i) => ({ label_en: 'Moment ' + (i + 1) }));
+  const [b] = R.pageBlocks([{ type: 'how_to_use', tiles }]);
+  assert.strictEqual(b.cols, 3, 'five tiles should be 3 + 2');
+  assert.deepStrictEqual(b.tiles.map(t => t.lbl.en),
+    ['Moment 1', 'Moment 2', 'Moment 3', 'Moment 4', 'Moment 5']);
+});
+check('no renderer still carries the "eight or more" rule', () => {
+  for (const [name, src] of [['the shop sheet', SHOP_JS], ['the editor preview', EDITOR],
+                             ['the mini app', MINI], ['the reader', String(R.howToUseCols)]]) {
+    assert.ok(!/>=\s*8\s*\?\s*4\s*:\s*3/.test(src),
+      `${name} still picks its columns the old way — four tiles will draw a hole`);
+  }
+});
+check('every copy of the rule agrees on the two counts that broke', () => {
+  for (const [name, src] of [['the shop sheet', SHOP_JS], ['the editor preview', EDITOR],
+                             ['the mini app', MINI]]) {
+    assert.ok(/===\s*4\s*(\?|\))\s*(return\s*)?2/.test(src),
+      `${name} no longer runs four tiles two across`);
+    assert.ok(/===\s*9\s*(\?|\))\s*(return\s*)?3/.test(src),
+      `${name} no longer runs nine tiles three across`);
+  }
+});
+check('the width reaches the markup in all four renderers', () => {
+  assert.ok(SHOP_JS.includes("'<div class=\"spb-how-grid cols-' + cols +"),
+    'the shop sheet drops the width on the floor');
+  assert.ok(EDITOR.includes('pa-prev-how-grid cols-${cols}'),
+    'the editor preview drops the width on the floor');
+  assert.ok(MENU.includes('`<div class="pb-how c${b.cols'),
+    'the QR menu drops the width on the floor');
+  assert.ok(WXML.includes('pb-how-grid cols-{{item.cols}}'),
+    'the mini app drops the width on the floor');
+});
+check('the tile grows into the last row in every stylesheet', () => {
+  const sheets = [['the shop sheet', SHOP_CSS, 'spb-how-grid', 'cols-'],
+                  ['the QR menu', MENU, 'pb-how{', 'c'],
+                  ['the editor preview', EDITOR, 'pa-prev-how-grid', 'cols-'],
+                  ['the back office', ADMIN_CSS, 'pa-prev-how-grid', 'cols-'],
+                  ['the mini app', WXSS, 'pb-how-grid', 'cols-']];
+  for (const [name, src, sel, prefix] of sheets) {
+    const at = src.indexOf(sel);
+    assert.ok(at > -1, `${name} no longer styles the how-to-use grid`);
+    const rule = src.slice(at, at + 400);
+    assert.ok(/display:\s*flex/.test(rule) && /flex-wrap:\s*wrap/.test(rule),
+      `${name} is back on a fixed grid — an unfilled cell will show as a slab`);
+    for (const n of [1, 2, 3, 4]) {
+      assert.ok(src.includes(prefix + n),
+        `${name} has no width for ${n} across`);
+    }
+  }
+});
+
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
 process.exit(fail ? 1 : 0);

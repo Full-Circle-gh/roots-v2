@@ -237,9 +237,24 @@ function _resolveBlock(b, L) {
       }))
       .filter(it => it.lbl || it.icon);
     if (!tiles.length) return { type: '_skip' };
-    // Per design rule "6 or 8 tiles, never 5 or 7" — favour 4-col when 8,
-    // 3-col otherwise. Office authors any count; we just pick the grid.
-    const cols = tiles.length >= 8 ? 4 : 3;
+    // HOW MANY ACROSS. The office authors any count, and four and five are as
+    // common as six, so the old "4-col at 8, 3-col otherwise" rule drew four
+    // tiles as a row of three and a row of one — and since the grid's gutter
+    // IS its background showing through, the two empty cells read as a grey
+    // slab. The tile now grows into whatever the last row leaves (see .wxss),
+    // so this only picks the width that divides most evenly: 4 -> 2+2,
+    // 5 -> 3+2, 7 -> 4+3, 9 -> 3+3+3.
+    //
+    // Same rule as howToUseCols() in lib/product-blocks-read.js, which a
+    // WeChat bundle cannot require. Change both, plus the shop sheet and the
+    // editor preview.
+    const n = tiles.length;
+    const cols = n <= 3 ? Math.max(1, n)
+      : n === 4 ? 2
+      : n <= 6 ? 3
+      : n <= 8 ? 4
+      : n === 9 ? 3
+      : 4;
     return {
       type: t,
       head:  L === 'cn' ? '用法' : 'How to use',

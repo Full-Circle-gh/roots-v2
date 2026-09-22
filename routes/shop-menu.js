@@ -842,11 +842,19 @@ img{display:block;max-width:100%}
   overflow-wrap:anywhere}
 
 /* 06 · HOW TO USE — a tile grid whose gridlines ARE the background showing
-   through a 1px gap, which is how the component draws it too. */
-.pb-how{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+   through a 1px gap, which is how the component draws it too. Because the
+   gridlines are the background, an unfilled cell is not a gap but a grey slab,
+   so this wraps a flex row instead of a grid: the tiles on the last row grow
+   to fill it however many there are. c1..c4 set how many fit before it wraps;
+   blockRead.howToUseCols picks that number: four tiles run 2 + 2, five run
+   3 + 2. (No angle brackets in here, ever — see the colophon suite.) */
+.pb-how{display:flex;flex-wrap:wrap;gap:1px;
   background:rgba(0,0,0,.08);border:1px solid rgba(0,0,0,.08)}
-.pb-how.c4{grid-template-columns:repeat(4,1fr)}
-.pb-how-t{background:var(--oat);padding:calc(19 * var(--u)) calc(6 * var(--u)) calc(17 * var(--u));text-align:center;
+.pb-how.c1 .pb-how-t{flex-basis:100%}
+.pb-how.c2 .pb-how-t{flex-basis:calc(50% - 2px)}
+.pb-how.c3 .pb-how-t{flex-basis:calc(33.333% - 2px)}
+.pb-how.c4 .pb-how-t{flex-basis:calc(25% - 2px)}
+.pb-how-t{flex:1 1 calc(33.333% - 2px);background:var(--oat);padding:calc(19 * var(--u)) calc(6 * var(--u)) calc(17 * var(--u));text-align:center;
   display:flex;flex-direction:column;gap:calc(8 * var(--u));align-items:center;
   justify-content:center;min-height:calc(79 * var(--u));min-width:0}
 .pb-how-i{font-size:calc(25 * var(--u));line-height:calc(25 * var(--u))}
@@ -3051,7 +3059,7 @@ function detailBody(it, code, listed, sig, qrShown) {
     if (b.type === 'allergen_card') return algCard(b.card);
     if (b.type === 'how_to_use') {
       return head(b.head) +
-        `<div class="pb-how${b.cols === 4 ? ' c4' : ''}">` + b.tiles.map(t =>
+        `<div class="pb-how c${b.cols || 3}">` + b.tiles.map(t =>
           `<div class="pb-how-t">` +
           (t.icon ? `<div class="pb-how-i">${esc(t.icon)}</div>` : '') +
           ((t.lbl.en || t.lbl.cn) ? `<div class="pb-how-l">${p2(t.lbl)}</div>` : '') +

@@ -1364,10 +1364,17 @@
   .pa-prev-allergen-empty { font-family: 'Aleo', serif; font-style: italic; font-size: 13px; color: rgba(26, 26, 23, 0.6); }
   /* 06 · HOW TO USE GRID */
   .pa-prev-how { padding: 30px 22px 30px; }
-  .pa-prev-how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(26, 26, 23, 0.12); border: 1px solid rgba(26, 26, 23, 0.12); }
-  .pa-prev-how-tile { background: #F2E7DF; padding: 18px 6px 16px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; min-height: 76px; justify-content: center; }
+  /* Wrapping flex, not a grid: the gutter is this box's background showing
+     through, so an unfilled cell reads as a grey slab. Tiles grow into the
+     last row; cols-N sets how many fit before it wraps. */
+  .pa-prev-how-grid { display: flex; flex-wrap: wrap; gap: 1px; background: rgba(26, 26, 23, 0.12); border: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-how-grid.cols-1 .pa-prev-how-tile { flex-basis: 100%; }
+  .pa-prev-how-grid.cols-2 .pa-prev-how-tile { flex-basis: calc(50% - 2px); }
+  .pa-prev-how-grid.cols-3 .pa-prev-how-tile { flex-basis: calc(33.333% - 2px); }
+  .pa-prev-how-grid.cols-4 .pa-prev-how-tile { flex-basis: calc(25% - 2px); }
+  .pa-prev-how-tile { flex: 1 1 calc(33.333% - 2px); min-width: 0; background: #F2E7DF; padding: 18px 6px 16px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; min-height: 76px; justify-content: center; }
   .pa-prev-how-ic { font-size: 24px; line-height: 1; }
-  .pa-prev-how-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pa-fg, #1a1a17); }
+  .pa-prev-how-lbl { overflow-wrap: break-word; font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pa-fg, #1a1a17); }
   .pa-prev-how-sub { font-family: 'Aleo', serif; font-style: italic; font-size: 11px; color: rgba(26, 26, 23, 0.6); margin-top: -4px; }
   /* 07 · STORAGE BOX */
   .pa-prev-storage { padding: 30px 22px 30px; }
@@ -1513,7 +1520,8 @@
   .pa-tpl-quiet_minimal .pa-prev-ing-line-pct { font-family: ui-monospace, monospace !important; font-size: 12px !important; color: var(--pa-accent, rgba(26,26,23,.5)) !important; }
 
   /* how to use — clean two-column hairline list, no boxes/icons */
-  .pa-tpl-quiet_minimal .pa-prev-how-grid { grid-template-columns: 1fr 1fr !important; gap: 0 24px !important; background: none !important; border: none !important; }
+  .pa-tpl-quiet_minimal .pa-prev-how-grid { gap: 0 24px !important; background: none !important; border: none !important; }
+  .pa-tpl-quiet_minimal .pa-prev-how-grid .pa-prev-how-tile { flex-basis: calc(50% - 24px) !important; }
   .pa-tpl-quiet_minimal .pa-prev-how-tile { background: none !important; text-align: left; align-items: flex-start; justify-content: flex-start; min-height: 0 !important; padding: 13px 0 !important; gap: 4px !important; border-top: 1px solid rgba(26,26,23,.14); }
   .pa-tpl-quiet_minimal .pa-prev-how-ic { display: none !important; }
   .pa-tpl-quiet_minimal .pa-prev-how-lbl { font-family: 'Aleo',serif !important; font-size: 14px !important; letter-spacing: 0 !important; text-transform: none !important; }
@@ -5295,7 +5303,7 @@ function _paBlockEditorBody(b) {
   if (b.type === 'how_to_use') {
     const tiles = Array.isArray(b.tiles) ? b.tiles : [];
     return `
-      <div class="helper" style="margin:-4px 0 14px">6 tiles (3-col grid) or 8 tiles (4-col grid) — never 5 or 7. Each tile: emoji + caps label + optional italic sub-line. · 6 块 (3 列) 或 8 块 (4 列)。</div>
+      <div class="helper" style="margin:-4px 0 14px">Any number of tiles — the rows even themselves out and the last one always fills (4 → 2+2, 5 → 3+2, 9 → 3+3+3). Each tile: emoji + caps label + optional italic sub-line. · 任意数量 — 4 → 2+2,5 → 3+2,9 → 3+3+3。</div>
       ${tiles.map((tl, i) => `
         <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -5678,10 +5686,14 @@ function _paPreviewBlockHtml(b) {
   if (b.type === 'how_to_use') {
     const tiles = (b.tiles || []).map(t => ({ icon: t.icon || '', lbl: pickT(t.label_en, t.label_cn), sub: pickT(t.sub_en, t.sub_cn) })).filter(t => t.lbl || t.icon);
     if (!tiles.length) return '';
-    const cols = tiles.length >= 8 ? 4 : 3;
+    // Same rule as howToUseCols() in lib/product-blocks-read.js: pick the row
+    // width that divides most evenly (4 -> 2+2, 5 -> 3+2, 9 -> 3+3+3). The
+    // tiles grow into the last row, so no count leaves an empty cell.
+    const n = tiles.length;
+    const cols = n <= 3 ? Math.max(1, n) : n === 4 ? 2 : n <= 6 ? 3 : n <= 8 ? 4 : n === 9 ? 3 : 4;
     return `<div class="pa-prev-block pa-prev-how">
       <div class="pa-prev-section-head"><span class="pa-prev-section-h3">${T('How to use', '用法')}</span><span class="pa-prev-section-tag">${tiles.length}${T(' moments', ' 种用法')}</span></div>
-      <div class="pa-prev-how-grid" style="grid-template-columns:repeat(${cols},1fr)">${tiles.map(t => `<div class="pa-prev-how-tile">${t.icon ? `<span class="pa-prev-how-ic">${esc(t.icon)}</span>` : ''}${t.lbl ? `<span class="pa-prev-how-lbl">${esc(t.lbl)}</span>` : ''}${t.sub ? `<span class="pa-prev-how-sub">${esc(t.sub)}</span>` : ''}</div>`).join('')}</div>
+      <div class="pa-prev-how-grid cols-${cols}">${tiles.map(t => `<div class="pa-prev-how-tile">${t.icon ? `<span class="pa-prev-how-ic">${esc(t.icon)}</span>` : ''}${t.lbl ? `<span class="pa-prev-how-lbl">${esc(t.lbl)}</span>` : ''}${t.sub ? `<span class="pa-prev-how-sub">${esc(t.sub)}</span>` : ''}</div>`).join('')}</div>
     </div>`;
   }
   if (b.type === 'storage_box') {

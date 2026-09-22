@@ -266,6 +266,25 @@
     '</div>';
   }
 
+  // How many tiles across the how-to-use grid runs. The last row stretches to
+  // fill itself (see the CSS), so the count only has to pick the width that
+  // divides most evenly: 4 -> 2+2, 5 -> 3+2, 7 -> 4+3, 9 -> 3+3+3. The old
+  // rule — four across at eight or more, three otherwise — left four tiles as
+  // a row of three and a row of one, and the two empty cells showed the
+  // grid's own gutter colour as a grey slab.
+  //
+  // Same rule as howToUseCols() in lib/product-blocks-read.js, which this file
+  // cannot require. Change both, plus the mini app and the editor preview.
+  function howToUseCols(n) {
+    var count = Math.max(0, Number(n) || 0);
+    if (count <= 3) return Math.max(1, count);
+    if (count === 4) return 2;
+    if (count <= 6) return 3;
+    if (count <= 8) return 4;
+    if (count === 9) return 3;
+    return 4;
+  }
+
   function rHowToUse(b, L) {
     var tiles = (Array.isArray(b.tiles) ? b.tiles : []).map(function (it) {
       return {
@@ -275,7 +294,7 @@
       };
     }).filter(function (it) { return it.lbl || it.icon; });
     if (!tiles.length) return '';
-    var cols = tiles.length >= 8 ? 4 : 3;
+    var cols = howToUseCols(tiles.length);
     var head = L === 'cn' ? '用法' : 'How to use';
     var grid = tiles.map(function (t) {
       return '<div class="spb-how-tile">' +
@@ -286,7 +305,7 @@
     }).join('');
     return '<div class="spb-how">' +
       '<div class="spb-section-head"><span class="spb-section-h3">' + escapeHtml(head) + '</span></div>' +
-      '<div class="spb-how-grid' + (cols === 4 ? ' cols-4' : '') + '">' + grid + '</div>' +
+      '<div class="spb-how-grid cols-' + cols + '">' + grid + '</div>' +
       '</div>';
   }
 
