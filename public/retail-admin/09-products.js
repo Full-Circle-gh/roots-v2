@@ -4437,6 +4437,16 @@ function bpModeBody() {
 // them. Stored in retail_product_options + _choices, saved via body.options on
 // the main Save (replace-all). OPT mirrors the server shape (minus ids).
 let OPT_ID = null, OPT = [], OPT_OPEN = false, OPT_PICK = null;   // OPT_PICK = {oi,ci} choosing a stock product
+// HAS THE SERVER'S ANSWER ACTUALLY ARRIVED? OPT starts EMPTY and is filled by an
+// async fetch, while the editor AUTOSAVES on a debounce — so for as long as this
+// is false, `OPT = []` means "not read yet", NOT "this product asks nothing".
+// Sending it as the latter is what deleted live questions off 39 products: the
+// server's save is replace-all, so an empty array destroyed every option row and
+// put nothing back, leaving the product asking nothing until somebody noticed and
+// retyped them. Beet Salad lost its dressing that way seven times.
+// OPT_LOADED_N is how many the load actually returned, which is what tells a
+// deliberate "I removed the last one" from a product that never had any.
+let OPT_LOADED = false, OPT_LOADED_N = 0, OPT_LOAD_FAILED = false;
 // Drag-to-reorder. OPT_DRAG = { kind:'choice'|'block', oi, ci } for the row being
 // dragged. Choices reorder within their own option only; whole option blocks
 // reorder against each other. Monochrome grip glyph (no emoji, per UI rule).
@@ -4495,6 +4505,10 @@ function optDrop(ev, kind, oi, ci) {
 function optLoad(id) {
   const box = document.getElementById('pd-options'); if (!box) return;
   OPT_ID = id; OPT = []; OPT_OPEN = false; OPT_PICK = null;
+  // Reset with the list, NOT after the fetch: every line between here and the
+  // response is a window in which an autosave could fire, and during it this
+  // product's options must be untouchable rather than empty.
+  OPT_LOADED = false; OPT_LOADED_N = 0; OPT_LOAD_FAILED = false;
   OPT_COST_FLOOR = 0;
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Options (customer chooses)', '选项(顾客选择)')}</div>` +
@@ -4530,18 +4544,40 @@ function optLoad(id) {
         })),
       }));
       OPT_OPEN = OPT.length > 0;
+      // ONLY NOW may a save speak about this product's options. Keyed on the
+      // payload really parsing, not on `opts` being an array — a failed or
+      // malformed response also yields [] above, and treating that as "asks
+      // nothing" is the whole bug this flag exists to stop.
+      OPT_LOADED = !!(j && j.success && j.data);
+      OPT_LOADED_N = OPT.length;
+      if (!OPT_LOADED) OPT_LOAD_FAILED = true;
       optRender();
     })
-    .catch(() => {});
+    .catch(() => {
+      if (OPT_ID !== id) return;      // operator switched products mid-fetch
+      // OPT_LOADED stays false, so saving leaves the options alone. Say so
+      // rather than showing "None", which is a claim about the product.
+      OPT_LOAD_FAILED = true;
+      optRender();
+    });
 }
-function optToggle() { OPT_OPEN = !OPT_OPEN; optRender(); }
+// Opening the editor on options that were never read would invite edits this
+// save cannot send. Keep it shut until the load lands.
+function optToggle() { if (!OPT_LOADED) return; OPT_OPEN = !OPT_OPEN; optRender(); }
 function optRender() {
   const box = document.getElementById('pd-options'); if (!box || OPT_ID == null) return;
   const nChoices = OPT.reduce((n, o) => n + (o.type === 'text' ? 0 : o.choices.length), 0);
-  const summary = OPT.length
-    ? cuT(OPT.length + (OPT.length === 1 ? ' option' : ' options') + (nChoices ? ' · ' + nChoices + ' choices' : ''),
-          OPT.length + ' 个选项' + (nChoices ? ' · ' + nChoices + ' 项' : ''))
-    : cuT('None · tap to add a choice', '无 · 点击添加选项');
+  // "None" is a statement about the product and must not be made before the
+  // server has answered — that sentence, shown over options that simply had not
+  // arrived, is the visible half of the bug that deleted them.
+  const summary = !OPT_LOADED
+    ? (OPT_LOAD_FAILED
+        ? cuT('Could not load. Close and try again.', '加载失败，请关闭后重试。')
+        : cuT('Loading…', '加载中…'))
+    : OPT.length
+      ? cuT(OPT.length + (OPT.length === 1 ? ' option' : ' options') + (nChoices ? ' · ' + nChoices + ' choices' : ''),
+            OPT.length + ' 个选项' + (nChoices ? ' · ' + nChoices + ' 项' : ''))
+      : cuT('None · tap to add a choice', '无 · 点击添加选项');
   const toggle = `<button type="button" class="pd-var-toggle" onclick="optToggle()" aria-expanded="${OPT_OPEN ? 'true' : 'false'}">` +
     `<span class="pd-var-caret">${OPT_OPEN ? '▾' : '▸'}</span>` +
     `<span class="pd-var-head" style="margin:0">${cuT('Options (customer chooses)', '选项(顾客选择)')}</span>` +
@@ -5822,7 +5858,17 @@ function pdCollectBody() {
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
   if (id && BP_ID === Number(id)) { body.bundle_items = bpBody(); body.bundle_mode = bpModeBody(); }  // THIS-is-a-bundle recipe + stock mode (null clears)
-  if (id && OPT_ID === Number(id)) body.options = optBody();  // customer-choice options ([] clears)
+  // Customer-choice options. OPT_LOADED — not OPT_ID — is the gate: OPT_ID is set
+  // the instant the product opens, while OPT is filled by a fetch that lands
+  // later, and the autosave debounce fires in between. Sending the empty list
+  // from that window told a replace-all save to delete every question.
+  // options_clear is the ONLY way an empty list removes anything, and it is sent
+  // solely when the load came back with options and the operator then took them
+  // all away. Silence leaves them standing.
+  if (id && OPT_ID === Number(id) && OPT_LOADED) {
+    body.options = optBody();
+    if (!body.options.length && OPT_LOADED_N > 0) body.options_clear = true;
+  }
   return { id, body };
 }
 

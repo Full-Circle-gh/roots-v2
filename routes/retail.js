@@ -1745,7 +1745,7 @@ function backfillOptionQuestions(items) {
 // one transaction). Editor sends the full list every save, so this is the whole
 // truth — an empty/missing array clears them. Choice price_delta is the only way
 // an option touches the bill; stock is never involved.
-async function saveProductOptions(productId, input) {
+async function saveProductOptions(productId, input, { allowClear = false } = {}) {
   const TYPES = ['single', 'multi', 'text'];
   const clean = (Array.isArray(input) ? input : []).slice(0, 12).map(o => {
     const type = TYPES.includes(o && o.type) ? o.type : 'single';
@@ -1789,6 +1789,33 @@ async function saveProductOptions(productId, input) {
     // in the DB survives an unrelated save instead of being silently deleted.
     // Build the input on both clients before offering it again.
     .filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
+
+  // SILENCE IS NOT A DELETION, AND THIS GUARD IS THE WHOLE REASON THE RULE IS
+  // STATED HERE RATHER THAN AT EACH CALLER. The write below is replace-all, so
+  // an empty list does not mean "change nothing" — it deletes every question the
+  // product asks and puts nothing back, and the product then asks nothing until
+  // a human notices and retypes them. That is not hypothetical: 134 of the 157
+  // option rows customers have ever answered on a real order no longer exist,
+  // across 39 products. Beet Salad's "Choose Dressing" was destroyed and rebuilt
+  // SEVEN times; Tabbouleh Bowl lost its paid extras for five weeks and 43 paid
+  // lines went out in that window with nobody offered them.
+  //
+  // The admin editor supplied the empty list by accident — `OPT` starts empty and
+  // is filled by an async fetch while the editor autosaves on a debounce — but
+  // fixing only the editor leaves the same loaded gun for every other caller, so
+  // the refusal lives at the door instead.
+  //
+  // CLEARING IS STILL POSSIBLE AND STILL MEANS SOMETHING: it just has to be said
+  // out loud, with options_clear. An operator who removes the last question is
+  // making a statement; a payload that merely fails to mention options is not.
+  // A product with no options to begin with falls straight through — there is
+  // nothing to protect and a create must not be made to ask permission.
+  if (!clean.length && !allowClear) {
+    const existing = tdb().prepare(
+      'SELECT COUNT(*) AS n FROM retail_product_options WHERE product_id = ?'
+    ).get(productId);
+    if (existing && existing.n > 0) return;
+  }
 
   // Replace-all, so the DELETEs and the re-INSERTs must be one unit: a failure
   // between them would leave the product with NO options at all. Every statement
@@ -23978,7 +24005,10 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
 
   // Persist customer-choice options (replace-all). Retail-owned like price/photos,
   // so allowed even when core catalog fields are locked.
-  if (hasOptions) await saveProductOptions(id, body.options);
+  // `options_clear` is the caller saying it MEANS the empty list. Without it an
+  // empty `options` leaves the product's existing questions standing, because a
+  // save that simply did not carry them is not a decision to delete them.
+  if (hasOptions) await saveProductOptions(id, body.options, { allowClear: body.options_clear === true });
 
   // Checkpoint the saved state into version history (best-effort, post-save).
   recordProductVersion(tdb(), id, req.user && req.user.username);
@@ -40358,3 +40388,11 @@ module.exports.wechatJsapiPrepare    = wechatJsapiPrepare;
 module.exports.buildWxPayParams      = buildWxRequestPaymentParams;
 module.exports.wxOutTradeNo          = wxOutTradeNo;
 module.exports.payDescription        = payDescription;
+// The replace-all writer for a product's customer-choice questions, exported so
+// its refusal can be tested against a REAL database rather than a reimplementation
+// of it. What needs holding is not that it saves — it is that it DECLINES to,
+// when handed an empty list for a product that currently has questions and no
+// explicit options_clear. That refusal is the only thing standing between an
+// accidental empty payload and the silent deletion of every question a product
+// asks, which is how 134 live option rows were destroyed across 39 products.
+module.exports.saveProductOptions    = saveProductOptions;
