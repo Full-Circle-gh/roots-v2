@@ -11,6 +11,8 @@
 <style>
   @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
   @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  <!-- and under its own name, so --f-num names a face that exists (§234) -->
+  @font-face { font-family:'Lilita One'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); font-display:swap; }
   @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
   @font-face { font-family:'League Gothic'; src:url('/assets/fonts/LeagueGothic.ttf') format('truetype'); font-display:swap; }
   @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW5.ttf') format('truetype'); font-weight:500; font-display:swap; }
@@ -23,6 +25,8 @@
     --sky:#B2CFED; --pea:#7BBD3B; --lotus:#EEB8E4; --pink:#F4B8CB; --citrus:#E7E74C;
     --accent:#365329;
     --f-bear:'Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    /* the face a figure and its unit share — §234, kept in sync with shop.html */
+    --f-num:'Lilita One','Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
     --f-toni:'Toni Grotesk','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif;
     --f-gothic:'League Gothic','DF Yuan','PingFang SC','Hiragino Sans GB','Bebas Neue',sans-serif;
     --f-aleo:'Aleo','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
