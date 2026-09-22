@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.158 · 2026-09-22 · §219 GIVES THE RESCHEDULE BUTTON THREE ANSWERS INSTEAD OF ONE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS.** The button printed one sentence — *Moved to today — it goes back in the queue now* — for three different outcomes, including the one where it had done nothing at all. The other two now have their own wording, built from pairs already shipping in the same drawer. See *Three answers from the reschedule button (§219)*.
+
 **v1.157 · 2026-09-22 · §218 GIVES THE COURIER CARD A CANCELLED STAGE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS, NEITHER INVENTED.** 青云聚信 reports no cancel, so a cancelled rider left the row frozen and the drawer read `Rider coming · 骑手前往取货` under a rider who had gone. The stage label and the one line of body beneath it are declared below with the live candidates each was built from and what was rejected. See *The stage for a rider who is gone (§218)*.
 
 **v1.156 · 2026-09-21 · §215 PUTS A SHOP'S STOCK REQUEST ON HOME — ONE COMPOSED STRING, COMPOSED ONLY BECAUSE THE LIVE PAIR WOULD HAVE COLLIDED.** A request one shop raises against another announced itself with a push and then a 6px dot; it is a row in Home's *Needs you* list now. `Stock requests · 补货申请` is live (the back office, and the phone's own notification log) and was rejected: this app already carries `Your stock requests · 我的补货申请` for the ASKER's list, and the new row is its mirror image — what other shops have asked of me. Everything else on the row is live or is data. See *The row that says another shop is waiting (§215)*.
@@ -8352,3 +8354,19 @@ says needs no label. The row gained one word.
 - `无骑手 (no rider)` — considered for the body and **rejected as an invention**: nothing in the tree carries it. `无人接单` is live and says the same thing in words the operator has already read on the expired-date surface.
 
 **A numeral needed no label, and that was a correction.** The card's third line is the cancel time rendered by the existing `courierAgo`. It was first written as `Cancelled · 取消于 <ago>`, matching the live `Updated · 更新于 <ago>` a few lines below it — **but `取消于` is live nowhere in the tree**, so that label would have been a third composed string minted to say something the line above already says. It is dropped: the time prints bare, under `Rider cancelled · 骑手已取消`, and reads as the cancel's own clock. Two composed strings, not three.
+
+## Three answers from the reschedule button (§219)
+
+**Two strings composed, by Claude, 2026-09-22.** The existing success wording is unchanged and keeps its meaning; what is new is the two outcomes it used to be printed over.
+
+| outcome | shipped | built from |
+|---|---|---|
+| a live courier has it | `A courier is already on this one — cancel it in the Qingyun app first · 已呼叫运力。请先在青云 App 取消该单。` | the ship-from line's live pair `A courier is already on this one. To collect it somewhere else, cancel it in the Qingyun app first. · 已呼叫运力。如需改到其他门店取货，请先在青云 App 取消该单。`, with only its middle clause (about collecting somewhere else) dropped — both remaining halves are verbatim |
+| the date moved, the queue did not take it | `Moved to today, but it was not re-queued — check the courier · 已改期至今天，但未重新排队 — 请核实运力。` | `已改期至今天` verbatim from the success toast beside it, and `请核实` from the live courier-card line `状态未更新 — 骑手可能已取消，请核实或另叫一位。` |
+
+**Why the second one names both halves.** The customer HAS been told the new day by the time this can happen, so it is not a no-op to press again; and no rider is queued, which is the part still owed. A sentence that said only one of those would send the operator to the wrong next action either way.
+
+**Live candidates rejected.**
+
+- `改期失败 (Could not move it)` — live, the endpoint's own failure toast. **Rejected for both**: nothing failed in either case. The first is a correct refusal and the second is a partial success, and calling either a failure invites a retry that cannot help.
+- `已改期至今天 — 已重新排队` — the success pair, and the string the whole change exists to stop over-printing. Kept exactly as it is, now reachable only when the queue actually took the row.
