@@ -5425,7 +5425,29 @@ async function qpDoReschedule(orderId, iso, btn) {
     });
     const j = await r.json();
     if (j.success) {
-      toast(cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队'), 'success');
+      // THREE outcomes, and this used to print the first one for all of them.
+      // `success` alone is not the answer to "did it move": the endpoint returns
+      // it for a live courier copy too, where it deliberately changes nothing.
+      // On live order TC000823 (2026-09-22) that read "Moved to today — it goes
+      // back in the queue now" over a request that had done precisely nothing.
+      if (j.already_created) {
+        // A rider genuinely has this one. Nothing to re-queue, and the date is
+        // deliberately NOT moved under a courier already on the road.
+        // Both halves lifted verbatim from the ship-from line's live pair, which
+        // says this same thing about a different action — only its middle clause
+        // (about collecting somewhere else) is dropped.
+        toast(cuT('A courier is already on this one — cancel it in the Qingyun app first',
+                  '已呼叫运力。请先在青云 App 取消该单。'), 'err');
+      } else if (j.requeued) {
+        toast(cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队'), 'success');
+      } else {
+        // The date moved but the queue row did not take the swap — another writer
+        // reached it first (a drain completing, a retry). Say both halves: the
+        // customer HAS been told the new day, so this is not a no-op to retry
+        // blindly, and no rider has been queued, which is the part still owed.
+        toast(cuT('Moved to today, but it was not re-queued — check the courier',
+                  '已改期至今天,但未重新排队 — 请核实运力。'), 'err');
+      }
       openOrder(orderId, { instant: true });
       return;
     }

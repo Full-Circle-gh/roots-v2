@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.159 · 2026-09-22 · §220 GIVES THE RESCHEDULE BUTTON THREE ANSWERS INSTEAD OF ONE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS.** The button printed one sentence — *Moved to today — it goes back in the queue now* — for three different outcomes, including the one where it had done nothing at all. The other two now have their own wording, built from pairs already shipping in the same drawer. See *Three answers from the reschedule button (§220)*.
+
 **v1.158 · 2026-09-22 · §219 GIVES THE COURIER CARD A CANCELLED STAGE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS, NEITHER INVENTED.** 青云聚信 reports no cancel, so a cancelled rider left the row frozen and the drawer read `Rider coming · 骑手前往取货` under a rider who had gone. The stage label and the one line of body beneath it are declared below with the live candidates each was built from and what was rejected. See *The stage for a rider who is gone (§219)*.
 
 **v1.157 · 2026-09-22 · §218 SAYS CHENGDU AIR IS SF’S LANE — THREE COMPOSED STRINGS, EVERY WORD LIFTED AND ONE SENTENCE COPIED WHOLE.** The air half of an order into Chengdu can only be bought from SF Express, and the drawer says so on the parcel and asks again at the JD label. `顺丰速运` is live in `lib/tracking.js`’s carrier registry, `空运` and `仅限` are live on this very screen, and the confirm’s second sentence — `仍要生成空运运单吗?` — is copied verbatim off the airline-rejection question sitting a few lines above it. What is composed is the CLAUSE that names the rule, and the two frames it sits in. Rejected: `仅空运`, which is live on this screen meaning the OPPOSITE thing. See *Chengdu air belongs to SF (§218)*.
@@ -8387,3 +8389,19 @@ and the waybill number the operator pastes in is data. The rule itself lives in
 - `无骑手 (no rider)` — considered for the body and **rejected as an invention**: nothing in the tree carries it. `无人接单` is live and says the same thing in words the operator has already read on the expired-date surface.
 
 **A numeral needed no label, and that was a correction.** The card's third line is the cancel time rendered by the existing `courierAgo`. It was first written as `Cancelled · 取消于 <ago>`, matching the live `Updated · 更新于 <ago>` a few lines below it — **but `取消于` is live nowhere in the tree**, so that label would have been a third composed string minted to say something the line above already says. It is dropped: the time prints bare, under `Rider cancelled · 骑手已取消`, and reads as the cancel's own clock. Two composed strings, not three.
+
+## Three answers from the reschedule button (§220)
+
+**Two strings composed, by Claude, 2026-09-22.** The existing success wording is unchanged and keeps its meaning; what is new is the two outcomes it used to be printed over.
+
+| outcome | shipped | built from |
+|---|---|---|
+| a live courier has it | `A courier is already on this one — cancel it in the Qingyun app first · 已呼叫运力。请先在青云 App 取消该单。` | the ship-from line's live pair `A courier is already on this one. To collect it somewhere else, cancel it in the Qingyun app first. · 已呼叫运力。如需改到其他门店取货，请先在青云 App 取消该单。`, with only its middle clause (about collecting somewhere else) dropped — both remaining halves are verbatim |
+| the date moved, the queue did not take it | `Moved to today, but it was not re-queued — check the courier · 已改期至今天，但未重新排队 — 请核实运力。` | `已改期至今天` verbatim from the success toast beside it, and `请核实` from the live courier-card line `状态未更新 — 骑手可能已取消，请核实或另叫一位。` |
+
+**Why the second one names both halves.** The customer HAS been told the new day by the time this can happen, so it is not a no-op to press again; and no rider is queued, which is the part still owed. A sentence that said only one of those would send the operator to the wrong next action either way.
+
+**Live candidates rejected.**
+
+- `改期失败 (Could not move it)` — live, the endpoint's own failure toast. **Rejected for both**: nothing failed in either case. The first is a correct refusal and the second is a partial success, and calling either a failure invites a retry that cannot help.
+- `已改期至今天 — 已重新排队` — the success pair, and the string the whole change exists to stop over-printing. Kept exactly as it is, now reachable only when the queue actually took the row.

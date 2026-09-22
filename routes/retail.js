@@ -30659,8 +30659,47 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
 
   const q = _qingyunPushRow(id);
   if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+
+  // ── A copy already on the platform: which kind? ───────────────────────────
+  // This used to be one branch — any qingyun_order_id at all returned
+  // `already_created` and stopped, BEFORE the date write and the queue write
+  // below. That is right for a LIVE copy (a rider has it; there is nothing to
+  // re-queue) and wrong for a CANCELLED one, where the id points at a delivery
+  // that no longer exists.
+  //
+  // The wrong half was worse than silent. The client checked only `success`, so
+  // staff pressing "Reschedule delivery" on an order whose rider had been
+  // cancelled read "Moved to today — it goes back in the queue now" over an
+  // endpoint that had changed nothing at all: no date, no queue row, no rider.
+  // Reported on live order TC000823, 2026-09-22. It is the same no-op-with-a-
+  // caption this surface was built to remove, one branch further in.
+  //
+  // Whether the copy is cancelled is NOT this endpoint's judgement to make: it
+  // reads the daemon's conclusion (delivery_jobs.cancelled_at), which is reached
+  // under its own two guards — see lib/qingyun-cancel.js.
+  //
+  // The four sibling endpoints above carry the same early return. Theirs is left
+  // alone deliberately: each answers a different question (retry, place a point,
+  // accept a candidate, reject one) and "a courier already has it" is a correct
+  // and complete refusal for all four. Only this one promises a MOVE it did not
+  // make. Widening the change to them would be a bigger claim than the bug.
+  let cancelledCopy = null;
   if (q.qingyun_order_id) {
-    return res.json({ success: true, already_created: true, qingyun_order_id: String(q.qingyun_order_id) });
+    let job = null;
+    try {
+      job = tdb().prepare('SELECT cancelled_at FROM delivery_jobs WHERE qingyun_order_id = ?')
+        .get(String(q.qingyun_order_id));
+    } catch (_) { job = null; }        // pre-migration — fail safe, treat as live
+    if (!job || !job.cancelled_at) {
+      // A live copy. Reported as its own outcome, never as a move: the response
+      // now says which of the two writes happened, so the client cannot read it
+      // as success at the thing it asked for.
+      return res.json({
+        success: true, already_created: true, requeued: false, moved: false,
+        qingyun_order_id: String(q.qingyun_order_id),
+      });
+    }
+    cancelledCopy = String(q.qingyun_order_id);
   }
 
   const o = tdb().prepare(
@@ -30688,7 +30727,13 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
                 seen_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(date, date, kind, id);                     // ← the date, FIRST
-      return tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;   // ← then the queue
+      // A cancelled copy takes the compare-and-swap that clears its dead id; every
+      // other row takes the ordinary manual-retry statement, whose own guard
+      // (qingyun_order_id IS NULL) is untouched. Both return 0 rows rather than
+      // throwing when another writer got there first, and that is reported.
+      return cancelledCopy
+        ? tx.prepare(qingyunQueue.REQUEUE_AFTER_CANCEL_SQL).run(id, cancelledCopy).changes > 0
+        : tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;       // ← then the queue
     });
   } catch (e) {
     console.error('[qingyun reschedule]', e.message);
@@ -30696,8 +30741,13 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
-    { from: wasDate, to: date, requeued }, req.ip);
-  res.json({ success: true, requeued, from: wasDate, to: date });
+    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy }, req.ip);
+  // `moved` is the date write, which always happens once we get here; `requeued`
+  // is the queue, which can legitimately be false (another writer won the swap).
+  // The client words its toast off BOTH — see qpDoReschedule — because "moved to
+  // today" over a row that was not re-queued is the half-truth this endpoint has
+  // been telling.
+  res.json({ success: true, moved: true, requeued, after_cancel: !!cancelledCopy, from: wasDate, to: date });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's
