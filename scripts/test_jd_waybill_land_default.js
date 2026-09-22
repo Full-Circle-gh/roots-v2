@@ -158,9 +158,21 @@ function main() {
       'the client predicate is not prefix-matching — 广西壮族自治区 will miss');
   });
 
-  it('the label dialog offers BOTH fresh services for these provinces', () => {
+  // THE WHOLE FUNCTION, not a fixed character count. This used to slice the
+  // first 2400 characters, and on 2026-09-22 §218 added a comment block above
+  // `preset` that pushed it out of the window — a green rule reported as a
+  // broken one, which is the worse of the two failures. The closing brace at
+  // column 0 is the real end and does not move when the body grows.
+  const jdLabelBody = (() => {
     const i = CLIENT_SRC.indexOf('function createJdLabel');
-    const body = CLIENT_SRC.slice(i, i + 2400);
+    assert.notStrictEqual(i, -1, 'createJdLabel is gone from 04-orders.js');
+    const j = CLIENT_SRC.indexOf('\n}\n', i);
+    assert.notStrictEqual(j, -1, 'createJdLabel has no closing brace');
+    return CLIENT_SRC.slice(i, j);
+  })();
+
+  it('the label dialog offers BOTH fresh services for these provinces', () => {
+    const body = jdLabelBody;
     assert.ok(/landDefault\s*\?\s*'LL-HD-M'/.test(body),
       'ground is not pre-selected for the land-default provinces');
     assert.ok(/landDefault[\s\S]{0,200}LL-HD-M[\s\S]{0,80}LL-SD-M/.test(body),
@@ -168,8 +180,7 @@ function main() {
   });
 
   it('the parcel mode is never rewritten by the label dialog', () => {
-    const i = CLIENT_SRC.indexOf('function createJdLabel');
-    const body = CLIENT_SRC.slice(i, i + 2400);
+    const body = jdLabelBody;
     assert.ok(!/\bmode\s*=[^=]/.test(body),
       'createJdLabel assigns to mode — the waybill must not change the parcel plan');
   });
