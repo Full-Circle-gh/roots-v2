@@ -176,12 +176,20 @@
   text-transform: uppercase;
   color: var(--ink-60);
 }
+/* ── THE AIR GOES INSIDE THE BLOCKS, NOT BETWEEN THEM ───────────────────
+   §239. The block padding (44rpx / 60rpx, 104rpx across the ink rule) was
+   already the widest spacing on the sheet and is UNTOUCHED. What read as
+   cramped was inside: why-row 28 -> 34rpx, section head 36 -> 48rpx, chip
+   rows 16 -> 26rpx (eight pixels on a phone made fourteen chips one
+   clump). quiet_minimal's two overrides restated the base values rather
+   than tightening on purpose, so they move with it. The web storefront
+   carries the same three; §235 is why they move together. */
 .pb-why-row {
   display: grid;
   grid-template-columns: 72rpx 1fr;
   gap: 28rpx;
   align-items: center;
-  padding: 28rpx 0;
+  padding: 34rpx 0;
   border-top: 2rpx solid var(--ink-12);
 }
 .pb-why-row.first { border-top: 2rpx solid var(--ink); }
@@ -205,7 +213,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 36rpx;
+  margin-bottom: 48rpx;
 }
 .pb-section-h3 {
   font-family: var(--f-bear);
@@ -233,7 +241,7 @@
 .pb-ing-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 16rpx;
+  gap: 26rpx;
   align-items: flex-start;
 }
 .pb-chip {
@@ -840,7 +848,7 @@
 .pb-nrow.child .pb-nrow-r { font-size: calc(32rpx * var(--font-scale)); }
 
 /* shared quiet section label · mono caps + trailing hairline */
-.pb-tpl-quiet_minimal .pb-section-head { justify-content: flex-start; align-items: baseline; gap: 20rpx; margin-bottom: 36rpx; }
+.pb-tpl-quiet_minimal .pb-section-head { justify-content: flex-start; align-items: baseline; gap: 20rpx; margin-bottom: 48rpx; }
 .pb-tpl-quiet_minimal .pb-section-h3 { font-family: monospace !important; font-weight: 400 !important; font-size: 21rpx !important; line-height: 1.4 !important; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-60) !important; }
 .pb-tpl-quiet_minimal .pb-section-tag { display: none !important; }
 .pb-tpl-quiet_minimal .pb-section-head::after { content: ''; flex: 1; height: 2rpx; background: var(--ink-12); }
@@ -865,7 +873,7 @@
 /* align-items back to baseline: the base row centres a big display numeral on
    the claim, and this template's numeral is 22rpx mono with its own 4rpx
    padding-top — nothing to centre. */
-.pb-tpl-quiet_minimal .pb-why-row { grid-template-columns: 48rpx 1fr !important; gap: 32rpx !important; padding: 28rpx 0 !important; border-top: 2rpx solid var(--ink-12) !important; align-items: baseline !important; }
+.pb-tpl-quiet_minimal .pb-why-row { grid-template-columns: 48rpx 1fr !important; gap: 32rpx !important; padding: 34rpx 0 !important; border-top: 2rpx solid var(--ink-12) !important; align-items: baseline !important; }
 .pb-tpl-quiet_minimal .pb-why-row.first { border-top: none !important; }
 .pb-tpl-quiet_minimal .pb-why-n { font-family: monospace !important; font-size: 22rpx !important; line-height: 1.5 !important; color: var(--pa-accent, var(--olive)) !important; padding-top: 4rpx; }
 .pb-tpl-quiet_minimal .pb-why-claim { font-family: var(--f-aleo) !important; font-weight: 400 !important; font-size: 28rpx !important; line-height: 1.55 !important; }
