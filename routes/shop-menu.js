@@ -959,7 +959,23 @@ img{display:block;max-width:100%}
 .pb-store-n{font-family:var(--f-bear);font-size:calc(50 * var(--u));line-height:calc(48 * var(--u));margin-top:auto;
   overflow-wrap:break-word;word-break:break-word}
 .pb-store-n.long{font-size:calc(24 * var(--u));line-height:calc(27 * var(--u))}
-.pb-store-u{font-family:var(--f-bear);font-size:calc(12.5 * var(--u));line-height:calc(19 * var(--u));
+/* THE UNIT MATCHES THE FIGURE ABOVE IT, which is the same rule as the
+   nutrition value and the second half of it. The figure wears the display
+   family, whose digits come from a substitute by unicode-range; the unit is
+   letters and a degree sign, none of which that range claims, so it came from
+   the display face and stood a shade lighter than the numerals it labels. On
+   this card the two are stacked rather than in one run, which is why it was
+   not the same line -- it is the same fault. --f-num draws the unit in the
+   face the figure's digits are already drawn in.
+
+   THE FIGURE ITSELF IS NOT MOVED. It can hold a PHRASE rather than a number
+   (see .pb-store-n.long, which the office reaches by writing words), and a
+   phrase is not a run of figure -- the rule is that an ALL-FIGURE run wears
+   this face. So the en dash in a range like 0-4 still comes from the display
+   family. That is one character inside the number and it is not what was
+   reported; moving it means deciding what .long should wear, which is a
+   question about the card rather than about the unit. */
+.pb-store-u{font-family:var(--f-num);font-size:calc(12.5 * var(--u));line-height:calc(19 * var(--u));
   letter-spacing:.16em;text-transform:uppercase;overflow-wrap:anywhere}
 .pb-store-note{margin-top:calc(12 * var(--u));font-style:italic;font-size:calc(12.5 * var(--u));line-height:calc(18 * var(--u));
   color:var(--olive);text-align:right;overflow-wrap:anywhere}

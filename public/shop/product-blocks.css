@@ -473,8 +473,11 @@
   font-size: calc(46 * var(--u) * var(--font-scale));
   line-height: 1.1;
 }
+/* --f-num: the unit wears the face the figure's digits come from. Same rule
+   as .spb-nrow-r, stacked instead of inline. The figure stays --f-bear
+   because .long lets it hold a phrase. */
 .shop-product-blocks .spb-storage-unit {
-  font-family: var(--f-bear);
+  font-family: var(--f-num);
   font-size: calc(24 * var(--u) * var(--font-scale));
   letter-spacing: 0.16em;
   line-height: 1.5;
