@@ -238,11 +238,78 @@ means implementing quoting too.
 The portal's lat/lon example values are **swapped** (shows lon≈22.6, lat≈114.0
 for Shenzhen; the truth is lat≈22, lon≈114).
 
+## 用户授权 — how `access_token` is obtained
+
+Standard OAuth 2.0 authorization-code flow. Every order endpoint
+(`u-order-detail`, `u-order-list`, `u-order-request`) is marked 需用户授权 and
+will not work without a token.
+
+Prerequisites the portal states: a registered developer account, and an app in
+已上线 state holding an `app_key` / `app_secret`.
+
+### The flow
+
+1. **Send the account owner to Huolala's consent page** (GET, in a browser):
+   `https://open.huolala.cn/#/oauth/authorize?response_type=code&client_id=<app_key>&redirect_uri=<our callback>&isSandbox=false`
+   All four params are required. `isSandbox=true` for the sandbox, where the SMS
+   code is always `6666`.
+2. **They log in** with phone number + SMS code and approve. The page carries a
+   创建账户（当账户不存在时） checkbox that will create an account if none exists.
+3. **Huolala redirects** to `redirect_uri?code=<CODE>`.
+4. **Exchange the code** (GET):
+   `https://open.huolala.cn/oauth/token?grant_type=authorization_code&client_id=<app_key>&code=<CODE>&isSandbox=false`
+
+Response `data`: `auth_mobile` (the authorising phone number), `access_token`,
+`refresh_token`, `auth_end_time` (e.g. `2020-06-07 15:35:08` — a date-time string
+with **no timezone**; assume Beijing).
+
+### Lifetime and refresh
+
+- **`access_token` lasts 3 months.** The exact moment is `auth_end_time`.
+- **`refresh_token` is not guaranteed.** The portal qualifies it: 对于具有
+  "获取Refresh_token权限"的应用. Only apps granted refresh permission receive one.
+- Refresh (GET):
+  `https://open.huolala.cn/oauth/token?grant_type=refresh_token&client_id=<app_key>&refresh_token=<token>`
+- **The refresh must happen while the access_token is still valid.** Once it
+  expires there is no refresh path — a human logs in again.
+- **Both tokens rotate on every refresh.** The call returns a new `access_token`
+  AND a new `refresh_token`; the old pair stops working.
+
+### Operational rules this forces on us
+
+1. **Confirm refresh permission before building** — email `openapi@huolala.cn`.
+   Without it, someone re-authorises by hand every three months, and that needs
+   an alarm or it will simply stop working one morning with no warning.
+2. **Save both tokens in a single write.** They rotate together; a crash between
+   writing one and the other locks the account out until a human re-authorises.
+3. **Refresh early — weekly, not on the last day.** A three-month window means a
+   missed refresh is invisible for months and then terminal.
+4. **Alert on a failed refresh.** Silence here is indistinguishable from health.
+
+### Tokens are per account, per app — the load-bearing constraint
+
+A token belongs to one Huolala login (`auth_mobile`) and one `app_key`. Sandbox
+and production tokens are separate.
+
+**Consequence: `u-order-list` only ever returns orders booked by the account that
+authorised.** A van booked on a staff member's personal Huolala account is
+invisible to us. Any design that reads orders rather than placing them requires
+the booking to happen on one known company account.
+
+### Doc defects noted at transcription
+
+- `app_secret` is never used in the token calls — the code exchange sends only
+  `client_id` + `code`. So `redirect_uri` must be HTTPS and the code exchanged
+  immediately.
+- The sandbox host is described two ways: the refresh table says
+  `open-pre.huolala.cn/oauth/token`, the surrounding text says
+  `open.huolala.cn` with `isSandbox=true`. Test both.
+- The refresh section points at a "第七步" and an `expire_in` field. Neither
+  exists; only `auth_end_time` does.
+
+
 ## Not yet transcribed
 
-- **用户授权 (authorization) flow** — the `授权方式-authorziation_code` page
-  (Huolala's spelling). Needed: every order endpoint requires `access_token`.
-  Unknown: token lifetime, refresh mechanism, who authorises and how often.
 - **估价 `u-price-multiCalculate`** — required before 下单.
 - **企业版 endpoints and its separate callback page**, if our account is 企业版.
 
