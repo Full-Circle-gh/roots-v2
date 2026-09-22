@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.160 · 2026-09-22 · §221 LETS A DELIVERY BE BOOKED FOR A LATER DAY — THREE COMPOSED STRINGS, EVERY FRAGMENT LIFTED.** The drain can hold a future-dated row until its day, so the picker offers a week instead of only today and the control appears on a live order. See *Booking a day that has not come yet (§221)*.
+
 **v1.158 · 2026-09-22 · §219 GIVES THE RESCHEDULE BUTTON THREE ANSWERS INSTEAD OF ONE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS.** The button printed one sentence — *Moved to today — it goes back in the queue now* — for three different outcomes, including the one where it had done nothing at all. The other two now have their own wording, built from pairs already shipping in the same drawer. See *Three answers from the reschedule button (§219)*.
 
 **v1.157 · 2026-09-22 · §218 GIVES THE COURIER CARD A CANCELLED STAGE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS, NEITHER INVENTED.** 青云聚信 reports no cancel, so a cancelled rider left the row frozen and the drawer read `Rider coming · 骑手前往取货` under a rider who had gone. The stage label and the one line of body beneath it are declared below with the live candidates each was built from and what was rejected. See *The stage for a rider who is gone (§218)*.
@@ -8370,3 +8372,25 @@ says needs no label. The row gained one word.
 
 - `改期失败 (Could not move it)` — live, the endpoint's own failure toast. **Rejected for both**: nothing failed in either case. The first is a correct refusal and the second is a partial success, and calling either a failure invites a retry that cannot help.
 - `已改期至今天 — 已重新排队` — the success pair, and the string the whole change exists to stop over-printing. Kept exactly as it is, now reachable only when the queue actually took the row.
+
+## Booking a day that has not come yet (§221)
+
+**Three strings composed, by Claude, 2026-09-22.** Every fragment is live; what is assembled is the sentences. The day itself is always DATA — an ISO date substituted into a frame — so no string was minted to name a day.
+
+| slot | shipped | built from |
+|---|---|---|
+| the control | `Change delivery day · 更改配送日期` | `更改` (81 live uses) and `配送日期`, live in the expired surface's own `配送日期已过` |
+| the picker's hint | `The rider is called on the morning of the day you pick. Nothing is dispatched before then. · 所选日期当天才会呼叫骑手，在此之前不会发单。` | `当天` (18), `呼叫` (11, incl. the live `已呼叫运力`), `骑手` and `发单` (18, incl. the live `重新发单`) |
+| moved to a later day | `Moved to ${date} — the rider is called that morning · 已改期至 ${date} — 当天呼叫骑手` | the live success pair `已改期至今天 — 已重新排队`, with `今天` replaced by the chosen day and the trailing clause rebuilt from the fragments above |
+
+**Why the trailing clause had to change rather than the date alone.** The live pair ends `已重新排队` — *it has gone back in the queue*, which is what an operator is waiting to read and is true for today. For a later day it is a half-truth wearing a tick: the row IS queued and nobody is dispatched for days. Saying "re-queued" over a delivery that will not move until Friday is the same over-promise §219 spent a whole change unpicking, so the day's own sentence says when the rider is called.
+
+**Today keeps its original wording, unchanged.** Two sentences for two genuinely different facts, not one hedged sentence covering both.
+
+**Live candidates rejected.**
+
+- `改期配送 (Reschedule delivery)` — live, the expired surface's own button. **Rejected for the new control**: that button appears after the day has gone and means *put this back in the queue*. This one appears on a live order and means *pick a different day*, which is a choice rather than a recovery. `更改配送日期` says which.
+- `已重新排队 (re-queued)` — live, and kept for today. Rejected for a later day, above.
+- `等待配送 (Delivery scheduled)` — live, the customer-facing `scheduled` stage. **Rejected**: it is the shopper's word for their own order's state, not an answer to an operator who has just pressed a button, and reusing it here would make the toast read like a status rather than a confirmation.
+
+**The partial-outcome toast was not re-composed.** §219's `已改期至今天，但未重新排队 — 请核实运力。` keeps its frame; `今天` became the chosen day. Same string, different data.

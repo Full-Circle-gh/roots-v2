@@ -30624,12 +30624,15 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   const date = String(req.body?.date || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'bad_date' });
   const today = inventory.gzDateStr(new Date().toISOString());
-  if (date !== today) {
+  // A PAST day is still refused, and always will be: a date that has gone never
+  // becomes today, so a row parked on it would wait for ever. Today and any
+  // future day are both accepted now — the drain holds a future-dated row until
+  // its Guangzhou day instead of retiring it (lib/inventory qingyunPushDisposition),
+  // which is what used to make any day but today impossible to honour.
+  if (date < today) {
     return res.status(400).json({
-      success: false, error: 'today_only',
-      // Said plainly so the caller does not read this as a bug to retry: the
-      // delivery for another day has to be created by hand in Qingyun.
-      detail: 'Only today can be re-queued. A later day has to be dispatched by hand.',
+      success: false, error: 'date_passed',
+      detail: 'That day has gone. Pick today or a later day.',
     });
   }
 
@@ -30687,9 +30690,18 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
   const wasDate = inventory.gzDateStr(o.scheduled_for) || null;
 
-  // Same-day work, so it takes the slot kind that says so — which is what
-  // makes isQingyunSameCityToday accept it unconditionally on the next poll.
-  const kind = 'today';
+  // THE SLOT KIND IS NOT ALWAYS 'today' ANY MORE, AND GETTING THIS WRONG SHIPS
+  // THE ORDER EARLY. 'today' makes qingyunPushDisposition return 'push'
+  // unconditionally — it never looks at scheduled_for for that kind — so a
+  // future-dated order carrying kind 'today' would be dispatched on this poll,
+  // today, whatever date the operator picked. The customer-side reschedule
+  // carries a note about this exact trap ("a paid ship-district order could be
+  // rescheduled with kind 'today' and walk into the rider queue"); it applies
+  // here for a second reason now.
+  //
+  // A later day takes a null kind, which is the "scheduled / legacy" path: the
+  // disposition then compares scheduled_for against today and parks the row.
+  const kind = date === today ? 'today' : null;
   // NO NETWORK CALL HERE EITHER, for the same reason as confirm-point above:
   // the requeue only marks the row, and the drain does the remote work on its
   // own poll. An await on Qingyun inside this block would hold the shared handle
