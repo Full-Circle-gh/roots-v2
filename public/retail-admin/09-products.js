@@ -5602,8 +5602,15 @@ let _pdFreeOfExtra = [];
 // nothing in the catalogue can tell them apart. Folding happens on READ only:
 // the box ticks, and the next save writes the checkbox's own spelling. Nothing
 // sweeps the catalogue, so a product nobody opens keeps saying what it says.
-const _PD_FREE_OF_ALIAS = { '5spice': '5 spice', '5-spice': '5 spice',
-                            'animal product': 'animal products', 'eggs': 'egg' };
+// One claim, several spellings. Folded on READ so the box ticks and the next
+// save writes the canonical form; never swept, because a sweep rewrites
+// products nobody opened.
+//
+// The 'animal product' and 'eggs' folds were removed on 2026-09-22 with the
+// flags they pointed at. A fold onto an id that is no longer a checkbox does
+// not tick anything — the value falls through to the free-text tail — so the
+// fold would have been dead weight that read like a live rule.
+const _PD_FREE_OF_ALIAS = { '5spice': '5 spice', '5-spice': '5 spice' };
 function pdFreeOfSet(str) {
   const group = document.getElementById('pd-free-of'); if (!group) return;
   const boxes = [...group.querySelectorAll('input[data-freeof-id]')];
@@ -6147,13 +6154,20 @@ async function pdDelete() {
 // ════════════════════════════════════════════════════════════════════════════
 let _pw = null;
 const PW_STEPS = ['what', 'price', 'details', 'extras', 'review'];
-// §147 · The last three were being typed by hand into the free-text escape
-// hatch — `animal products` on 75 products, `dairy` on 15, `egg` on 14. The
-// shop is fully vegan so all three are true of every product; they are OFFERED
-// rather than assumed, because which of them a page spells out is an editorial
-// choice the office is already making one product at a time.
-const PW_FREE_OF = [['nuts', 'Nuts', '无坚果'], ['soy', 'Soy', '无大豆'], ['gluten', 'Gluten', '无麸质'], ['5 spice', '5 Spice', '无五香'],
-                    ['animal products', 'Animal products', '无动物成分'], ['dairy', 'Dairy', '无乳制品'], ['egg', 'Egg', '无蛋']];
+// FOUR FLAGS, AND THE LIST IS CLOSED. Ash, 2026-09-22: "nuts, soy, gluten,
+// 5 spice. - those are the one that needed. nothing else, everywhere".
+// §147 added `animal products`, `dairy` and `egg` here because the office was
+// typing them by hand into the free-text escape hatch — 75, 15 and 14 times —
+// and the argument was that the shop is fully vegan so all three are true of
+// every product. All three were removed on 2026-09-22 together with the values
+// that used them, in the same change (scripts/oneoff_free_of_from_sheet.js):
+// true of every product is exactly what makes a flag say nothing.
+//
+// Adding a fifth is a decision, not an edit: it has to be offered HERE and in
+// the details panel's markup in public/retail-admin.html, or a product can be given it in the wizard and
+// silently lose it on the next save — which is what test_free_of_options.js
+// exists to catch.
+const PW_FREE_OF = [['nuts', 'Nuts', '无坚果'], ['soy', 'Soy', '无大豆'], ['gluten', 'Gluten', '无麸质'], ['5 spice', '5 Spice', '无五香']];
 const PW_FACTS = [['origin', 'Where it’s from', '产地', 'e.g. Peru'],
                   ['ingredients', 'What’s in it', '配料', 'e.g. 100% cacao'],
                   ['storage', 'How to store it', '储存方式', 'e.g. Cool, dry place'],
