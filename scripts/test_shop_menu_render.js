@@ -820,36 +820,45 @@ function boxOf(text) {
         // this sheet outweighed the language switch. Scoping to make a test
         // pass, without asking why the other language was there, is what let
         // that reach a customer's phone.
+        // §234 — MAY-CONTAIN IS A LINE, NOT CHIPS. A box is a shape for a
+        // token and that field carries a whole sentence on some products, so
+        // it is set as text; .aline is where it lands, per language.
         const rows = Array.from(card.querySelectorAll('.arow')).map(r => ({
           label: r.querySelector('.alab').innerText.trim(),
           chips: Array.from(r.querySelectorAll('.l-en .achip')).map(c => c.textContent.trim()),
           cn: Array.from(r.querySelectorAll('.l-cn .achip')).map(c => c.textContent.trim()),
-          kinds: Array.from(r.querySelectorAll('.l-en .achip')).map(c => c.className.includes('has') ? 'has' : 'may'),
+          kinds: Array.from(r.querySelectorAll('.l-en .achip')).map(c => c.className.includes('has') ? 'has' : 'free'),
+          line: (r.querySelector('.aline .l-en') || {}).textContent,
+          lineCn: (r.querySelector('.aline .l-cn') || {}).textContent,
         }));
-        const has = card.querySelector('.l-en .achip.has'), may = card.querySelector('.l-en .achip.may');
+        const has = card.querySelector('.l-en .achip.has');
+        const free = card.querySelector('.l-en .achip.free');
         return { title: card.querySelector('.atitle').innerText.trim(), rows,
                  hasBg: has && getComputedStyle(has).backgroundColor,
-                 mayBg: may && getComputedStyle(may).backgroundColor,
-                 mayBorder: may && getComputedStyle(may).borderTopStyle };
+                 freeBg: free && getComputedStyle(free).backgroundColor,
+                 hasRadius: has && getComputedStyle(has).borderTopLeftRadius };
       });
       assert.ok(m, 'the allergen card is missing');
       assert.ok(/Allergen/i.test(m.title), `the card is not titled: ${m.title}`);
       assert.strictEqual(m.rows.length, 2, `contains and may-contain are two rows: ${JSON.stringify(m.rows)}`);
       assert.deepStrictEqual(m.rows[0].chips, ['Gluten (oats)']);
-      assert.deepStrictEqual(m.rows[1].chips, ['Soy', 'Nuts', 'Gluten']);
       assert.deepStrictEqual(m.rows[0].kinds, ['has'], 'the contains row is not marked as contains');
-      assert.deepStrictEqual(m.rows[1].kinds, ['may', 'may', 'may'], 'a may-contain chip reads as contains');
+      assert.strictEqual(m.rows[1].line, 'Soy, Nuts, Gluten',
+        'the may-contain row is not the sentence it should be');
       // And the Chinese half is really there, split on its own separators —
-      // the office types 大豆、坚果、麸质 with CJK commas, not ASCII ones.
+      // the office types 大豆、坚果、麸质 with CJK commas, not ASCII ones — and
+      // rejoined with the CJK comma rather than an ASCII one.
       assert.deepStrictEqual(m.rows[0].cn, ['麸质（燕麦）']);
-      assert.deepStrictEqual(m.rows[1].cn, ['大豆', '坚果', '麸质'],
-        'the Chinese list was not split on its own separators');
-      // They must not merge visually — that is the whole reason the card exists.
-      assert.notStrictEqual(m.hasBg, m.mayBg, 'the two allergen kinds look identical');
-      assert.strictEqual(m.mayBorder, 'dashed');
+      assert.strictEqual(m.rows[1].lineCn, '大豆、坚果、麸质',
+        'the Chinese list was not split, or was rejoined with the wrong comma');
+      // §234 — ONE SHAPE, AND THE FILL IS THE DIFFERENCE. A square box, and
+      // what is in the food is filled where what is not is the outline.
+      assert.strictEqual(m.hasRadius, '0px', 'the chip is a pill again');
+      if (m.freeBg) assert.notStrictEqual(m.hasBg, m.freeBg,
+        'contains and free-of are filled the same');
     });
 
-    await check('the allergen chips centre on the card, not on what the label left over', async () => {
+    await check('§234 — the label and its values share one left edge', async () => {
       // Reported from a phone: a single "Gluten (oats)" chip floated in the gap
       // between a short label and the middle of the card, aligned to nothing.
       const m = await page.evaluate(() => {
@@ -870,31 +879,37 @@ function boxOf(text) {
           const left = Math.min(...boxes.map(b => b.left));
           const right = Math.max(...boxes.map(b => b.right));
           const lab = r.querySelector('.alab').getBoundingClientRect();
+          // §234 — the axis is the card's left edge, not its middle. Centred,
+          // the three statements shared no edge and the eye crossed the card
+          // six times to read three facts. `mid` is kept only to report by how
+          // far a row would have been off it, when one regresses.
           return { off: ((left + right) / 2) - mid, n: chips.length,
-                   // The label centres on the same line, and sits ABOVE its
-                   // chips rather than beside them — which is what stops a long
-                   // chip from ever being squeezed by a long label.
-                   labOff: ((lab.left + lab.right) / 2) - mid,
-                   above: lab.bottom <= left * 0 + boxes[0].top + 1 };
+                   left, labLeft: lab.left,
+                   // The label still sits ABOVE its values rather than beside
+                   // them — which is what stops a long value from ever being
+                   // squeezed by a long label.
+                   above: lab.bottom <= boxes[0].top + 1 };
         }).filter(Boolean);
       });
       assert.ok(m.length >= 2, `the allergen card has too few rows to measure: ${m.length}`);
       for (const r of m) {
-        assert.ok(Math.abs(r.off) <= 2,
-          `a row of ${r.n} chip(s) sits ${r.off}px off the card's middle`);
-        assert.ok(Math.abs(r.labOff) <= 2, `its label sits ${r.labOff}px off the middle`);
-        assert.strictEqual(r.above, true, 'the label is still beside its chips, not above them');
+        assert.ok(Math.abs(r.left - r.labLeft) <= 1,
+          `a row of ${r.n} value(s) starts ${r.left - r.labLeft}px off its own label`);
+        assert.strictEqual(r.above, true, 'the label is still beside its values, not above them');
       }
+      const edges = m.map(r => r.labLeft);
+      assert.ok(Math.max(...edges) - Math.min(...edges) <= 1,
+        `the rows do not share one left edge: ${JSON.stringify(edges)}`);
     });
 
-    await check('A CHIP\'S TEXT SITS IN THE MIDDLE OF ITS PILL — measured in pixels, both languages', async () => {
+    await check('A CHIP\'S TEXT SITS IN THE MIDDLE OF ITS BOX — measured in pixels, both languages', async () => {
       // Reported from a phone three times, and it was three different faults:
       // the ROW sitting off the card's middle, then the TEXT sitting left of
-      // its pill, then the text sitting high in it. None of them is visible to
+      // its box, then the text sitting high in it. None of them is visible to
       // a box measurement — every box here centres to within a hundredth of a
-      // pixel — so this check screenshots the pill and finds the ink.
+      // pixel — so this check screenshots the chip and finds the ink.
       //
-      // The filled chip: oat ink on an ink-coloured pill is the one pair a
+      // The filled chip: oat ink on an ink-coloured box is the one pair a
       // threshold can separate, and it is also the only chip that draws its own
       // background, which is what makes an imbalance visible at all.
       //
@@ -914,9 +929,11 @@ function boxOf(text) {
           if (lang === 'cn') await hi.click('[data-lang="cn"]');
           await hi.click('.it:not(.out)[data-open]');
           const sel = `#dsheetB .l-${lang} .achip.has`;
-          // The pill's rounded ends let the ground behind it show through, so
-          // that ground is repainted to a value that is neither the ink nor the
-          // oat before anything is counted.
+          // The ground behind the chip is repainted to a value that is
+          // neither the ink nor the oat before anything is counted. §234 made
+          // the chip square, so nothing shows through its corners any more —
+          // the repaint stays because the measurement below still reads every
+          // pixel of the screenshot, corners included.
           await hi.evaluate((q) => {
             document.body.style.background = '#808080';
             document.querySelector('#dsheetB .acard').style.background = '#808080';
@@ -989,11 +1006,11 @@ function boxOf(text) {
             + `）is ${face.bracket}px vs 麦 ${face.ideograph}px = ${face.ratio}× `
             + `— ${face.ratio > 0.9 ? 'full-width, so the trim is right for this face'
               : 'NOT full-width, so the .67em trim removes a gap this face never reserved'}]`;
-          assert.ok(Math.abs(dx) <= 0.75, `"${text}" sits ${dx}px off the middle of its pill, across ${why}`);
-          assert.ok(Math.abs(dy) <= 0.75, `"${text}" sits ${dy}px off the middle of its pill, down ${why}`);
+          assert.ok(Math.abs(dx) <= 0.75, `"${text}" sits ${dx}px off the middle of its box, across ${why}`);
+          assert.ok(Math.abs(dy) <= 0.75, `"${text}" sits ${dy}px off the middle of its box, down ${why}`);
           // And nothing has been trimmed so far that the ink touches the edge.
           assert.ok(l / S >= 2 && (info.width - r) / S >= 2,
-            `"${text}" is on the pill's edge: ${l / S} / ${(info.width - r) / S}`);
+            `"${text}" is on the box's edge: ${l / S} / ${(info.width - r) / S}`);
           await hi.close();
         }
       } finally {

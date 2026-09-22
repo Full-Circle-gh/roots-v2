@@ -444,6 +444,7 @@ const ADMIN_CSS = fs.readFileSync(path.join(ROOT, 'public/retail-admin.css'), 'u
 const MENU      = fs.readFileSync(path.join(ROOT, 'routes/shop-menu.js'), 'utf8');
 const SHOP_HTML = fs.readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
 const MINI_PAGE = fs.readFileSync(path.join(ROOT, 'miniapp/pages/product/product.wxml'), 'utf8');
+const MINI_SHOP = fs.readFileSync(path.join(ROOT, 'miniapp/pages/shop/shop.js'), 'utf8');
 const WXSS      = fs.readFileSync(
   path.join(ROOT, 'miniapp/components/product-blocks/product-blocks.wxss'), 'utf8');
 const WXML      = fs.readFileSync(
@@ -613,6 +614,159 @@ check('the mini app is handed the column by its product page', () => {
     'the mini app renders blocks without the column');
   assert.ok(/pb-al-chip-free/.test(WXML) && /pb-al-chip-free/.test(WXSS),
     'the mini app has no free-of chip');
+});
+
+/* ── §234: ONE SHAPE, AND THE FILL IS THE DIFFERENCE ──────────────────────
+   Ash, on the dietary badge row under a product's name — squared outline
+   boxes, caps, one shape repeated: "what about this style". The allergen card
+   carried three shapes at once (a filled pill, a dashed pill, a solid green
+   one) and centred all of them, so three statements shared no edge.
+
+   THE CARD IS NOW THAT BADGE: a square box, and the FILL says whether the
+   thing is in the food or not. Two states, no third colour. May-contain
+   leaves the boxes entirely — it holds a 90-character facility warning on
+   some products, and a box around a sentence is a box with a paragraph in it.
+
+   THE SAME THREE RENDERERS AS EVER, none of which can require the others. */
+section('The allergen card is one shape, and the fill is the difference');
+
+const PRODUCT_PAGE_JS = fs.readFileSync(
+  path.join(ROOT, 'miniapp/pages/product/product.js'), 'utf8');
+const ADMIN_HTML = fs.readFileSync(path.join(ROOT, 'public/retail-admin.html'), 'utf8');
+
+check('no renderer still draws a pill', () => {
+  // The selector is named per file rather than guessed: the editor also has a
+  // `.pa-allergen-chip` — the picker the office ticks allergens from, a
+  // different control on a different screen that keeps its own look.
+  for (const [name, src, sel] of [['the shop sheet', SHOP_CSS, '.spb-al-chip {'],
+                                  ['the mini app', WXSS, '.pb-al-chip {'],
+                                  ['the editor preview', EDITOR, '.pa-prev-allergen-chip {'],
+                                  ['the back office', ADMIN_CSS, '.pa-prev-allergen-chip {']]) {
+    const at = src.indexOf(sel);
+    assert.ok(at > -1, `${name} no longer styles the allergen chip`);
+    const rule = src.slice(at, at + 420);
+    assert.ok(/border-radius:\s*0/.test(rule),
+      `${name} still rounds the allergen chip — the card is back to pills`);
+    assert.ok(/text-transform:\s*uppercase/.test(rule) && /letter-spacing/.test(rule),
+      `${name} lost the badge's caps`);
+  }
+  assert.ok(/\.achip\{[^}]*border-radius:0/.test(MENU.replace(/\s+/g, '')),
+    'the QR menu still rounds the allergen chip');
+});
+check('the two states are a fill and an outline, and nothing else', () => {
+  for (const [name, src] of [['the QR menu', MENU], ['the shop sheet', SHOP_CSS],
+                             ['the mini app', WXSS], ['the editor preview', EDITOR],
+                             ['the back office', ADMIN_CSS]]) {
+    assert.ok(!/chip-soft|chip\.soft|achip\.may/.test(src),
+      `${name} still carries the third chip style the card was reduced from`);
+  }
+});
+check('may-contain is set as a sentence in every renderer', () => {
+  assert.ok(/class="aline"/.test(MENU), 'the QR menu still boxes the may-contain list');
+  assert.ok(/spb-allergen-line/.test(SHOP_JS) && /spb-allergen-line/.test(SHOP_CSS),
+    'the shop sheet still boxes the may-contain list');
+  assert.ok(/pb-allergen-line/.test(WXML) && /pb-allergen-line/.test(WXSS),
+    'the mini app still boxes the may-contain list');
+  assert.ok(/pa-prev-allergen-line/.test(EDITOR), 'the editor preview still boxes it');
+});
+check('and it is rejoined with the comma the office typed', () => {
+  // splitChips eats 、 and , alike; an ASCII comma between two Chinese words
+  // is the wrong punctuation, so each renderer puts back the right one.
+  assert.ok(/'、'/.test(MENU) && /run\(en, ', '\)/.test(MENU),
+    'the QR menu rejoins both languages on an ASCII comma');
+  assert.ok(/L === 'cn' \? '、' : ', '/.test(SHOP_JS), 'the shop sheet does not');
+  assert.ok(/L === 'cn' \? '、' : ', '/.test(MINI), 'the mini app does not');
+});
+check('every row starts at the same left edge', () => {
+  for (const [name, src, sel] of [['the shop sheet', SHOP_CSS, '.spb-allergen-row {'],
+                                  ['the mini app', WXSS, '.pb-allergen-row {'],
+                                  ['the back office', ADMIN_CSS, '.pa-prev-allergen-row {']]) {
+    const at = src.indexOf(sel);
+    assert.ok(at > -1, `${name} no longer styles the allergen row`);
+    const rule = src.slice(at, at + 260);
+    assert.ok(/flex-direction:\s*column/.test(rule) && /align-items:\s*flex-start/.test(rule),
+      `${name} is back to a label column beside its values`);
+  }
+  assert.ok(/\.arow\{[^}]*align-items:flex-start/.test(MENU.replace(/\s+/g, '')),
+    'the QR menu centres the allergen rows again');
+});
+
+/* THE BADGE ROW UNDER THE PRODUCT NAME SAYS IT ONCE, AND THE CARD SAYS IT.
+   NUT FREE / SOY FREE / GLUTEN FREE / 5-SPICE FREE sat under the name while
+   §232 put the same four flags in the card's own Free of row — where they are
+   checked against the card and these were not. Ash: "drop the three free
+   badges". PLANT-BASED stays: it is a statement about the shop rather than an
+   allergen, true of every product, with no row on the card to hold it. */
+check('the product page draws PLANT-BASED and no free-of badge', () => {
+  const at = PRODUCT_PAGE_JS.indexOf('const badges =');
+  assert.ok(at > -1, 'the badge row is gone entirely — PLANT-BASED went with it');
+  assert.ok(/const badges = \[lang\.pick\('PLANT-BASED'/.test(PRODUCT_PAGE_JS),
+    'the badge row is no longer just PLANT-BASED');
+  for (const dead of ['NUT FREE', 'SOY FREE', 'GLUTEN FREE', '5-SPICE FREE']) {
+    assert.ok(!PRODUCT_PAGE_JS.includes(dead),
+      `the product page still badges "${dead}" beside the card that says it`);
+  }
+});
+check('...and the LISTING filters keep every one of them', () => {
+  // The shop's own filter chips are a different control on a different screen:
+  // they pick products, they do not describe one. Cutting these would have
+  // been the easy over-reach.
+  for (const [name, src] of [['the web shop', SHOP_HTML], ['the mini app', MINI_SHOP]]) {
+    for (const live of ['NUT FREE', 'SOY FREE', 'GLUTEN FREE', '5-SPICE FREE']) {
+      assert.ok(src.includes(live), `${name} lost the "${live}" listing filter`);
+    }
+  }
+});
+check('the back office still offers the four flags to tick', () => {
+  for (const id of ['nuts', 'soy', 'gluten', '5 spice']) {
+    assert.ok(ADMIN_HTML.includes(`data-freeof-id="${id}"`),
+      `the details panel can no longer set "${id}"`);
+  }
+});
+
+/* ── "NOTHING HERE" IS NOT AN ALLERGEN ────────────────────────────────────
+   §234 made the contains value a filled box. Half the catalogue writes that
+   field as "None declared" — 21 of the 45 cards sampled on 2026-09-22, with
+   the Chinese half spelling it four ways — so without this the loudest object
+   on the card would be a black box announcing that there is no risk. */
+section('A contains field that says "nothing" is drawn quietly');
+
+check('every spelling the catalogue actually uses is recognised', () => {
+  for (const said of ['None declared', 'None', '未声明常见致敏原', '本产品不含已知致敏原',
+                      '无已知致敏原', '无', 'none declared.', ' None Declared ']) {
+    assert.strictEqual(R.saysNone([said]), said.trim(),
+      `"${said}" would have printed as a filled allergen box`);
+  }
+});
+check('THE ONE THAT MUST NEVER REGRESS — a real allergen is never swallowed', () => {
+  for (const said of ['Soy', 'Oats (gluten)', 'None declared except soy',
+                      'Tree nuts (cashew)', '大豆', '无麸质谷物以外的坚果']) {
+    assert.strictEqual(R.saysNone([said]), '',
+      `"${said}" would have been hidden as an empty state`);
+  }
+  // Two values are a list, whatever either one says.
+  assert.strictEqual(R.saysNone(['None', 'Soy']), '');
+  assert.strictEqual(R.saysNone([]), '');
+  assert.strictEqual(R.saysNone(null), '');
+});
+check('the office keeps its own words — the phrase is not swapped for ours', () => {
+  assert.strictEqual(R.saysNone(['本产品不含已知致敏原']), '本产品不含已知致敏原',
+    'a food label was edited to save a lookup');
+});
+check('every renderer asks before it draws a box', () => {
+  assert.ok(/blockRead\.saysNone\(a\.contains_en\)/.test(MENU), 'the QR menu does not');
+  assert.ok(/saysNone\(contains\)/.test(SHOP_JS), 'the shop sheet does not');
+  assert.ok(/_saysNone\(contains\)/.test(MINI), 'the mini app does not');
+  assert.ok(/saysNone\(contains\)/.test(EDITOR), 'the editor preview does not');
+});
+check('and every copy of the list holds the same phrases', () => {
+  for (const phrase of R.NONE_PHRASES) {
+    for (const [name, src] of [['the shop sheet', SHOP_JS], ['the mini app', MINI],
+                               ['the editor preview', EDITOR]]) {
+      assert.ok(src.includes(`'${phrase}'`),
+        `${name} does not know "${phrase}" means nothing to declare`);
+    }
+  }
 });
 
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);

@@ -502,41 +502,27 @@ Page({
     const priceWas = hasCmp ? money(cmp) : '';
     const saveN = hasCmp ? Math.round((cmp - v) * 100) / 100 : 0;
     const saveLabel = saveN > 0 ? (L === 'cn' ? '省' : 'SAVE ') + money(saveN) : '';
-    // free_of (comma list like "gluten,nuts") → allergen-free badges. The whole
-    // shop is 100% plant-based, so EVERY product also carries the PLANT-BASED
-    // badge by default (regardless of `free_of`).
-    // Lowercase on the way in so matching is case-insensitive — the store
-    // editor / legacy data can carry "Egg", "Animal Products", etc.
-    const freeOf = (p.free_of || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    // FOUR FLAGS. Ash, 2026-09-22: "nuts, soy, gluten, 5 spice. - those are the
-    // one that needed. nothing else, everywhere". DAIRY FREE was a badge here
-    // until then.
-    const badgeMap = {
-      gluten: { en: 'GLUTEN FREE', cn: '无麸质' },
-      nuts:   { en: 'NUT FREE',    cn: '无坚果' },
-      soy:    { en: 'SOY FREE',    cn: '无大豆' },
-      '5spice': { en: '5-SPICE FREE', cn: '无五香' },
-    };
-    // The three retired flags stay NAMED here rather than being deleted with
-    // their badge. scripts/oneoff_free_of_from_sheet.js cleared them from the
-    // catalogue, but the details panel keeps any value it does not recognise in
-    // a free-text tail and writes it back out on save — so a row can carry one
-    // again, and the fall-through below would shout a raw, untranslated "DAIRY"
-    // at a shopper reading Chinese. Hidden is the safe way for a retired flag
-    // to arrive. `egg` and `animal products` were already hidden as redundant
-    // in an all-plant catalogue; `dairy` joins them for that reason too.
-    const hiddenFreeOf = new Set(['egg', 'animal products', 'dairy']);
-    const plantBased = lang.pick('PLANT-BASED', '纯植物', L);
-    const freeBadges = freeOf
-      .filter(k => !hiddenFreeOf.has(k))
-      .map(k => {
-        // The store editor stores the 5-spice token as "5 spice" (with a space)
-        // while the badge key is "5spice"; collapse spaces for the lookup so it
-        // doesn't fall through to a raw, untranslated "5 SPICE" badge.
-        const bk = k.replace(/\s+/g, '');
-        return badgeMap[bk] ? lang.pick(badgeMap[bk].en, badgeMap[bk].cn, L) : k.toUpperCase();
-      });
-    const badges = [plantBased, ...freeBadges];
+    // §234 — THE FREE-OF BADGES ARE GONE FROM THIS ROW, AND THE ALLERGEN CARD
+    // SAYS IT INSTEAD. One outline box per free-of flag sat here while §232
+    // put those same four flags in the allergen card's own Free of row, where
+    // the card can subtract anything it already speaks about. Two places
+    // saying it, and only one of them checked against the card. Ash, on the
+    // badge row: "drop the three free badges".
+    //
+    // The four words are not written out anywhere in this file on purpose:
+    // scripts/test_product_blocks_read.js greps this source for them, and a
+    // comment that named them would pass for the badges coming back.
+    //
+    // PLANT-BASED STAYS, and it is the reason this row survives at all: it is
+    // a statement about the whole shop rather than an allergen, it is true of
+    // every product with no data behind it, and the card has no row for it.
+    //
+    // What went with them: the badgeMap of four pairs, the retired-flag guard
+    // (`egg`, `animal products`, `dairy` — a value the details panel can still
+    // write back and this row would have shouted untranslated), and the
+    // 5spice/"5 spice" spelling fold. None of them has a second reader here;
+    // lib/product-blocks-read.js FREE_OF_FLAGS carries all three concerns now.
+    const badges = [lang.pick('PLANT-BASED', '纯植物', L)];
     // Pre-resolve option labels for the WXML. A choice linked to a stock product
     // (a paid extra) is greyed + unselectable when that product is sold out.
     const options = (p.options || []).map(o => ({

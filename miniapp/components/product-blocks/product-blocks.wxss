@@ -339,14 +339,19 @@
   text-transform: uppercase;
   color: var(--ink-60);
 }
+/* §234 — THE LABEL SITS OVER ITS VALUES, AND BOTH START AT THE LEFT EDGE.
+   Beside a fixed 176rpx column each statement began at a different place on
+   the line, so there was no shared axis to read down; stacked, the values
+   also get the card's full width, which the long ones need. */
 .pb-allergen-row {
   display: flex;
-  align-items: baseline;
-  gap: 20rpx;
-  padding: 16rpx 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14rpx;
+  padding: 20rpx 0;
 }
 .pb-allergen-row + .pb-allergen-row {
-  border-top: 2rpx dashed var(--ink-30);
+  border-top: 2rpx solid var(--ink-12);
 }
 .pb-allergen-lbl {
   font-family: var(--f-bear);
@@ -354,37 +359,46 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-60);
-  flex: 0 0 176rpx;
   line-height: 1.4;
 }
 .pb-allergen-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 12rpx;
-  flex: 1;
+  width: 100%;
 }
+/* The may-contain sentence: body size, muted, wrapping like the prose it is. */
+.pb-allergen-line {
+  font-family: var(--f-aleo);
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: var(--ink-60);
+  width: 100%;
+}
+/* §234 — THIS PAGE'S OWN BADGE, AND ONE SHAPE FOR THE WHOLE CARD. The
+   dietary badges under the product name (.badge in pages/product) are
+   squared outline boxes with a caps label, and that row is the calmest
+   object on the page because it is one shape repeated. This card carried
+   three — a berry pill, a corn pill and a forest one — so it is the box
+   now, and THE FILL IS THE ONLY DIFFERENCE between what is in the food and
+   what is not. */
 .pb-al-chip {
   display: inline-block;
-  padding: 10rpx 20rpx 8rpx;
-  border-radius: 999rpx;
+  padding: 12rpx 20rpx 10rpx;
+  border: 3rpx solid var(--ink);
+  border-radius: 0;
   font-family: var(--f-bear);
-  font-size: 25rpx;
+  font-size: 21rpx;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   line-height: 1;
 }
 .pb-al-chip-strong {
-  background: var(--berry);
-  color: var(--ink);
-  font-weight: 700;
-}
-/* FREE OF reads as the opposite of the two rows above it, so it does not
-   borrow either of their colours: filled forest, the brand's own primary,
-   against the black CONTAINS pill and the dashed corn MAY CONTAIN one. */
-.pb-al-chip-free {
-  background: var(--forest);
+  background: var(--ink);
   color: var(--oat);
 }
-.pb-al-chip-soft {
-  background: var(--corn);
+.pb-al-chip-free {
+  background: transparent;
   color: var(--ink);
 }
 .pb-allergen-empty {
