@@ -226,7 +226,53 @@
       '</div>';
   }
 
-  function rAllergenCard(b, L) {
+  // ── FREE OF ───────────────────────────────────────────────────────────────
+  // free_of is the filter tag set behind the shop's GLUTEN FREE chips — four
+  // flags, assigned in bulk from a label sheet. It is never allowed to ADD an
+  // allergen; showing a flag that IS set is the other direction, and is what
+  // §232 allows.
+  //
+  // A FLAG THE CARD ALREADY NAMES IS DROPPED — either row, either language.
+  // Measured live on 2026-09-22: of 45 products carrying both, 34 had a flag
+  // the card also listed under "may contain traces of" and 4 had one the card
+  // listed under "contains". The match leans towards dropping on purpose
+  // ("coconut" costs a product its nut flag): a flag wrongly hidden costs one
+  // line of reassurance, a flag wrongly shown tells someone with an allergy
+  // that a food is safe.
+  //
+  // Same rule as freeOfChips() in lib/product-blocks-read.js, which this file
+  // cannot require. Change both, plus the mini app's component.
+  var FREE_OF_FLAGS = [
+    { id: 'nuts', en: 'Nuts', cn: '坚果', words: [
+      'nut', 'cashew', 'walnut', 'almond', 'hazel', 'pecan', 'pistachio',
+      'macadamia', 'brazil', 'praline', 'marzipan',
+      '坚果', '腰果', '核桃', '杏仁', '榛', '开心果', '碧根果', '夏威夷果', '巴西果'] },
+    { id: 'soy', en: 'Soy', cn: '大豆', words: [
+      'soy', 'soya', 'edamame', 'tofu', 'tempeh', 'miso', 'tamari',
+      '大豆', '黄豆', '豆腐', '豆浆', '酱油', '味噌', '豆豉', '腐竹'] },
+    { id: 'gluten', en: 'Gluten', cn: '麸质', words: [
+      'gluten', 'wheat', 'barley', 'rye', 'spelt', 'seitan', 'malt', 'semolina',
+      'couscous', 'farro',
+      '麸质', '小麦', '大麦', '黑麦', '面筋', '麦芽', '面粉'] },
+    { id: '5 spice', en: '5 Spice', cn: '五香', words: [
+      '5 spice', '5-spice', '5spice', 'five spice', 'five-spice',
+      '五香'] },
+  ];
+
+  function freeOfChips(raw, said, L) {
+    var tokens = {};
+    String(raw == null ? '' : raw).split(/[,、，]/g).forEach(function (t) {
+      var k = t.trim().toLowerCase().replace(/\s+/g, ' ');
+      // The editor writes "5 spice"; the listing filters key it "5spice".
+      if (k) tokens[k === '5spice' ? '5 spice' : k] = true;
+    });
+    var hay = String(said || '').toLowerCase();
+    return FREE_OF_FLAGS.filter(function (f) {
+      return tokens[f.id] && !f.words.some(function (w) { return hay.indexOf(w) !== -1; });
+    }).map(function (f) { return L === 'cn' ? f.cn : f.en; });
+  }
+
+  function rAllergenCard(b, L, freeOf) {
     var contains = splitChips(pickLang(b.contains_en, b.contains_cn, L));
     var mayContain = splitChips(pickLang(b.may_contain_en, b.may_contain_cn, L));
     if (!contains.length && !mayContain.length) return '';
@@ -252,6 +298,22 @@
         '</div>'
       : '';
 
+    // BOTH LANGUAGES ARE SEARCHED, not only the one on screen: a card that
+    // names an allergen in Chinese only still names it.
+    var said = [b.contains_en, b.contains_cn, b.may_contain_en, b.may_contain_cn]
+      .filter(Boolean).join(' ');
+    var free = freeOfChips(freeOf, said, L);
+    var freeRow = free.length
+      ? '<div class="spb-allergen-row">' +
+          '<span class="spb-allergen-lbl">' + escapeHtml(L === 'cn' ? '不含' : 'Free of') + '</span>' +
+          '<div class="spb-allergen-chips">' +
+            free.map(function (c) {
+              return '<span class="spb-al-chip spb-al-chip-free">' + escapeHtml(c) + '</span>';
+            }).join('') +
+          '</div>' +
+        '</div>'
+      : '';
+
     return '<div class="spb-allergen">' +
       '<div class="spb-allergen-card">' +
         '<div class="spb-allergen-top"><div class="spb-allergen-ttl">' +
@@ -262,6 +324,7 @@
           '<div class="spb-allergen-chips">' + containsChips + '</div>' +
         '</div>' +
         mayRow +
+        freeRow +
       '</div>' +
     '</div>';
   }
@@ -504,12 +567,12 @@
     nutrition_facts:   { fn: rNutritionFacts,   cls: 'nutrition_facts' },
   };
 
-  function renderOne(b, L) {
+  function renderOne(b, L, freeOf) {
     if (!b || typeof b !== 'object') return '';
     var def = RENDERERS[b.type];
     if (!def) return '';                       // unknown type -> drop, no crash
     var inner;
-    try { inner = def.fn(b, L); } catch (e) { inner = ''; }
+    try { inner = def.fn(b, L, freeOf); } catch (e) { inner = ''; }
     if (!inner) return '';
     var style = blockStyle(b);
     return '<div class="spb spb-' + def.cls + '"' +
@@ -524,7 +587,9 @@
       try { arr = JSON.parse(arr); } catch (e) { arr = []; }
     }
     if (!Array.isArray(arr)) return '';
-    var html = arr.map(function (b) { return renderOne(b, L); }).filter(Boolean).join('');
+    // The product's free_of column, for the one block that reads it.
+    var freeOf = (opts && opts.freeOf) || '';
+    var html = arr.map(function (b) { return renderOne(b, L, freeOf); }).filter(Boolean).join('');
     if (!html) return '';
     return '<div class="shop-product-blocks">' + html + '</div>';
   }

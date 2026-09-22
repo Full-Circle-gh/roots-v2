@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.374
+# Tacet shared-core consolidation — decisions record, v4.375
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-09-22 · v4.375 — **§232 · THE ALLERGEN CARD GAINS A FREE-OF ROW, AND THE CARD WINS EVERY DISAGREEMENT — ASKED FOR BY ASH** (*"I want to add to the allergies block free of ... all the free of information for each product that is available can use"*). **THE FEATURE WAS NOT THE HARD PART; THE DATA WAS.** `free_of` is the filter tag set behind the storefront's GLUTEN FREE chips — four flags, closed at four in §231-era work, assigned in bulk off a label sheet — and `routes/shop-menu.js` carried a comment REFUSING to read it, because an absent tag means "not tagged" and never "contains". That refusal is narrowed here, not overturned: **deriving** an allergen from the column stays forbidden; **showing** a flag the office set is the act allowed. **WHAT THE LIVE READ FOUND, and it is why this entry exists.** Of 45 sampled products carrying both a `free_of` value and an allergen card, **34 had a flag the card ALSO listed under "may contain traces of"** and **4 had one the card listed under "contains"** — Seitan is tagged free of soy and its card says it contains soy; Fire Spice Cake, Savory Quinoa Patties and Herbal Nourish Soup are the same shape. Printed raw, the row would have contradicted the card on eight products in ten and told a customer avoiding soy that Seitan was safe. **SO THE CARD WINS, FLAG BY FLAG.** `blockRead.freeOfChips` drops any flag whose allergen the card names in either row and EITHER LANGUAGE, and shows what is left; a product whose card speaks about all four shows no row at all (Garlic Dill Sour Cream, the sheet Ash was looking at, is exactly that). **THE MATCH LEANS TOWARDS DROPPING, DELIBERATELY** — "coconut" carries the letters of "nut", so a card naming coconut costs the product its nut flag. A flag wrongly hidden costs one line of reassurance; a flag wrongly shown tells someone with an allergy that a food is safe, and the second is not a cost this shop pays for the first. **THE DATA WAS REPAIRED BEFORE THE DISPLAY SHIPPED**, on Ash's instruction (*"run the data repair first"*): `scripts/oneoff_free_of_from_sheet.js` applied through oneoff.yml, 2 rows written — the last two `animal products` stragglers — leaving the live catalogue on four tokens exactly, 217 of 238 products carrying at least one. **THREE SURFACES, ONE RULE, AND THE EDITOR IS NOT ONE OF THEM**: the QR menu, the shop sheet and the mini-app component each carry a copy of the rule because none can require the others, and `scripts/test_product_blocks_read.js` holds the flag list and every drop-word equal across them. `public/product-editor.html` does NOT get the row and cannot: the free-of checkboxes live in the details panel on a different page and that column never reaches the editor's preview. **ONE CHINESE ROW LABEL, NO INVENTION** — `不含` is the back office's own pair for this exact field, declared in `docs/tacet-delivery-vocabulary.md` v1.164 with the chip words beside it. **NOT IN THIS CHANGE:** the four contradictions themselves, which are the office's to resolve on the card — code can hide a wrong flag and cannot make a right one. No schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **331/331 green**; `scripts/test_product_blocks_read.js` 54 → **65**.
 2026-09-22 · v4.374 — **§231 · HOW TO USE FILLS ITS LAST ROW, WHATEVER THE TILE COUNT — ASKED FOR BY ASH** (*"this block on many product doesn't have 6 sections and it looks like this. I need better solution"*), with the live Arugula-Basil Pesto sheet attached showing a grey slab where two tiles were not. **THE HOLE WAS NOT A MISSING TILE — IT WAS THE GRID'S OWN BACKGROUND.** The hairlines between tiles are the container colour showing through a 2rpx gap, which is how the mini-app component has always drawn it, so a cell nobody filled is not empty space but a painted block. Four tiles in a three-wide grid left two of them. **THE OLD RULE IS RETIRED**: *four across at eight tiles or more, three otherwise* — and with it the editor's standing instruction to the office, *"6 tiles (3-col grid) or 8 tiles (4-col grid) — never 5 or 7"*, which told authors their four-moment product was the thing that was wrong. **THE FIX IS IN TWO HALVES AND ONLY ONE OF THEM IS ARITHMETIC.** The tile is now a WRAPPING FLEX ITEM THAT GROWS, so whatever lands on the last row fills it and no count can leave a cell — that alone closes the defect. The count then picks the row width that divides most evenly (four tiles run 2 + 2 rather than 3 + 1; five run 3 + 2; nine run 3 + 3 + 3), which is what makes it look chosen rather than survived. **`min-width: 0` IS LOAD-BEARING** and cost a round to find: a flex item refuses to shrink below its longest word, which silently overrode the width and re-wrapped the row — seven tiles drew 3 + 3 + 1 while claiming four across. **ONE RULE, FIVE COPIES, AND THE TEST IS THE ONLY THING HOLDING THEM TOGETHER.** `lib/product-blocks-read.js` owns `howToUseCols`; the shop sheet (`public/shop/product-blocks.js`), the editor's preview (`public/product-editor.html`) and the mini app cannot require it and carry their own copies, and four stylesheets plus `public/retail-admin.css` have to grow the tile. `scripts/test_product_blocks_read.js` fails the build when any one of them drifts back to a fixed grid or to the old ladder. **ONE CHINESE STRING IS COMPOSED** — `任意数量`, the editor's new helper line, declared in `docs/tacet-delivery-vocabulary.md` v1.163 with what it was built from. **NOT IN THIS CHANGE:** the tiles themselves, their wording, and the per-template overrides beyond restating the quiet_minimal two-column rule in flex terms. No schema change, no migration, no capability change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **331/331 green**; `scripts/test_product_blocks_read.js` 47 → **54**.
 2026-09-22 · v4.373 — **§230 · THE QR MENU DRAWS THE BLOCKS QUINOA SALAD DRAWS, AND NOTHING ELSE — DECIDED BY ASH**: *"i want by default that the blocks of quinoa salad that now shows on the qr code menu will be the default for all products"*. **THE FIRST IMPLEMENTATION READ THAT AS A BLOCK-LIST AND ASH REJECTED IT** — *"have all the product of the main menu QR code show the same blocks for each product. This is not what you did"* — and the distinction is the whole entry: a list of the types #196 has switched OFF (`storage_box`, `notes_callout`) answers for nothing that product does not carry, so `pull_quote` (11 products, 4 listed), `recipe_steps` (8) and `ingredients_line` (1) kept drawing and every block type the editor gains later would arrive on the counter menu switched on. **The rule is an ALLOW-LIST**: the eight types Quinoa Salad DRAWS — `spec_strip`, `hero_intro`, `big_stat`, `why`, `ingredients_chips`, `allergen_card`, `how_to_use`, `nutrition_facts` — are the eight the menu may draw, and a type absent from it does not draw unless the block says so. **WHY THE MISREADING WAS EASY**, recorded so it is not re-derived: the two rules agree on every product carrying only the nine common types, which is most of the catalogue, and diverge only on the unusual product and the next new block type. **`ingredients_line` IS THE ONE TO WATCH** — it is the other ingredients block and carries the same items as `ingredients_chips`, so a product using it would show no ingredients at a counter; one product carries it and it is listed nowhere today. **THE COPY HALF WAS NOT DONE**: the live read (`scripts/diagnose_qr_block_defaults.js`) found only two products in 287 carrying any `hide_qr` flag and **no product anywhere having switched off a type Quinoa Salad shows**, so a bulk write would have edited 216 products to reach the state the rule reaches by itself while burying the office's two real choices in a sweep. **THE FLAG GAINS A THIRD STATE**: `true` hides, **`false` SHOWS against an allow-list that omits its type** — new, and now persisted where `paBlocksCollect` used to delete it — and ABSENT asks the list; `paSetHideQr` DELETES rather than writes whenever the office lands on the list's own answer, so a block that agrees keeps following it. **THREE EMPTY STATES STAY DISTINCT AND THAT IS LOAD-BEARING**: no `storefront_config` row means the seed, a stored `[]` means allow nothing, and no list passed to the reader means no rule in force; a malformed row falls back to the seed and never to `[]`, which would empty every detail sheet in the shop while looking shipped. **NO ROW IS WRITTEN AND NO MIGRATION RUNS.** The editor's copy of the list starts at `null`, not `[]`, or every eye would paint shut before the config landed, and GET `/api/retail-admin/config` always answers with the EFFECTIVE list computed by the same function `routes/shop-menu.js` reads — `scripts/test_qr_menu_block_defaults.js` fails the build on a second copy of the seed in either file. **No Chinese was composed** (the *following the default* hint was deliberately not added, the existing hidden-block note being true either way), so `docs/tacet-delivery-vocabulary.md` is untouched. **NOT IN THIS CHANGE:** a screen for editing the list. No schema change, no migration, no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **329/329 green**; `scripts/test_product_blocks_read.js` 39 → **47**, `scripts/test_product_editor_hide_qr.js` 11 → **13**, `scripts/test_qr_menu_block_defaults.js` new at **18**.
 2026-09-22 · v4.372 — **§229 · THE CUSTOMER CHECKOUT ANSWERS TO THE SAME OPTION RULES AS THE MENU AND THE TILL, AND THE REFUSAL NAMES THE ITEM — ASKED FOR BY ASH** (*"fix all"*), closing the second gap §227 flagged. **THE RULE HAD TWO OF ITS THREE DOORS LOCKED.** §120 gave the QR menu a server-side check and §183 moved the counter till onto the same module; `/api/retail/orders` — the mini app and the web storefront, which is most of the shop's revenue — kept an inline copy whose only question was HOW MANY answers a pick-any group took: `checkOptionLimits` reads `type = 'multi' AND (min_choices > 0 OR max_choices > 0)`, and **a REQUIRED SINGLE question is not of type 'multi'**, so a dressing, a packaging choice or *heat it up?* was never checked at all. **THE INLINE COPY WAS WEAKER IN FOUR MORE WAYS**, each now a case: a choice id matching no row was SILENTLY DROPPED (the loop walked the rows the lookup returned, not the ids that were posted); a single-answer question could be answered twice and both deltas charged; a `text` option's choice was accepted though neither storefront renders one; and nothing capped a line's choices. That is the drift `lib/product-options.js`'s header predicted in as many words, and it accumulated silently because nobody compares two implementations nobody remembers are two. **`checkOptionLimits` IS DELETED RATHER THAN WIDENED.** Widening it would have left the third copy alive; `addonAvailabilityById` stays and is handed to the module as the sold-out predicate, which is how **the storefront keeps its own shelf** — the whole company's sellable count, because the online shop does not route to a location until checkout, where the QR menu asks per-location. The module takes that verdict from the caller for exactly this reason, so moving onto it did not move the shop onto the menu's answer. **THE PART ASH DECIDED, AND IT IS NOT THE SERVER HALF.** Put to him as a choice, because turning the check on ALONE makes things worse: neither client had a word for any of these codes, so the customer met `出错：choice_required` — a raw code, no item named, nowhere to go — and the person most likely to meet it did nothing wrong, since **the cart lives in the handset's own storage** and a line added before its product gained a question carries no answer and cannot grow one. Offered refuse-and-name, auto-apply-the-default, or flag-it-in-the-cart, **Ash chose refuse, name the item, send them to pick** — consistent with the two doors already locked, and it refuses to let the system quietly decide a choice on the customer's behalf, which is the habit that produced §227. So both clients name the product and offer the product page: a modal in the mini app, a message plus a hop on the web. **NO CHINESE IS COMPOSED** — `请选择` is the product sheet's own word for this and already sits in the web checkout's error map, `选规格` is live on the mini-app checkout, `取消` is live on three screens; `docs/tacet-delivery-vocabulary.md` is untouched. **NOT WIDENED, DELIBERATELY:** `priceCart` (behind `/quote`) and `deriveAddonLineMoney` keep their inline reads and are RIGHT to — both only price, neither validates, and one prices from a snapshot already stored. Making `/quote` refuse too would be the flag-it-earlier option Ash did not choose. **THE COVERAGE ADMISSION, WHICH IS THE ENTRY'S REAL LESSON.** `resolveAnswers` is now called once per basket and read back as `answers.lines[i]`; pinning that to `lines[0]` prices one line's extras onto another, and **every case in the new suite still passes under that mutation** — a refusal is decided inside the module before the loop indexes anything, so what the mixed-basket case holds is that the refusal NAMES the right product, a different claim from the one the first draft's comment made. The mutation is caught by `scripts/test_preorder_park.js`, whose paid order carries `choices` on the SECOND of two lines. Rather than leave that load-bearing by accident, the new suite ASSERTS THAT SIBLING'S SHAPE, so simplifying it to one line fails loudly instead of removing the shard's only detector in silence. `scripts/test_checkout_required_options.js`, new, auto-discovered into the fast shard, 18 checks, driving the REAL route over HTTP against a real database. **MUTANT-VERIFIED** — removing the `is_required` branch in the module lets the order through to a 409 on stock instead of a 400 on the question. No schema change, no migration, no capability change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **330/330 green**.
@@ -20001,3 +20002,80 @@ The tiles, their wording and their icons are untouched. The `quiet_minimal`
 template still forces two across and says so in flex terms rather than grid
 terms. **One Chinese string is composed** — `任意数量` — declared in
 `docs/tacet-delivery-vocabulary.md` v1.163.
+
+## §232 — THE ALLERGEN CARD GAINS A FREE-OF ROW, AND THE CARD WINS EVERY DISAGREEMENT
+
+**Decided 2026-09-22, asked for by Ash** against the QR menu's Garlic Dill Sour
+Cream sheet: *"I want to add to the allergies block free of"*.
+
+### WHAT free_of IS, WHICH IS THE WHOLE DIFFICULTY
+
+It is the FILTER TAG SET behind the storefront's GLUTEN FREE chips: four flags,
+bulk-assigned from a label sheet. It is not a sentence the kitchen wrote about
+one product. `lib/product-blocks-read.js` has said since §120 that an absent tag
+means "not tagged" and never "contains", and `routes/shop-menu.js` refused to
+read the column at all.
+
+**That refusal is narrowed, not overturned.** Deriving an allergen from the
+column stays forbidden — an earlier draft of the counter sheet did it and would
+have asserted an allergen nobody declared. Showing a flag the office DID set is
+the other direction, and it is what was asked for.
+
+### THE MEASUREMENT THAT SHAPED THE FEATURE
+
+Read off the live catalogue on 2026-09-22, 45 products carrying both a
+`free_of` value and an allergen card:
+
+| | |
+|---|---|
+| flag also listed under MAY CONTAIN | **34** |
+| flag listed under CONTAINS — a contradiction | **4** |
+| no overlap; the row reads cleanly | **7** |
+
+The four are Seitan (tagged free of soy, card says contains soy), Fire Spice
+Cake, Savory Quinoa Patties and Herbal Nourish Soup. Printed raw, the row would
+have contradicted the card on eight products in ten.
+
+### THE RULE
+
+`blockRead.freeOfChips(free_of, card)` drops any flag whose allergen the card
+names — **either row, either language** — and returns what is left. So:
+
+* **Mango Protein Bites** (card: cashews, walnuts, coconut) → *free of soy,
+  gluten, 5 spice*. This is what the feature is for.
+* **Mix Color Quinoa** (card: may contain tree nuts, soy, gluten) → *free of 5
+  spice*, and nothing else.
+* **Garlic Dill Sour Cream** → no row at all.
+
+**THE MATCH LEANS TOWARDS DROPPING.** "Coconut" carries the letters of "nut", so
+a card naming coconut costs that product its nut flag. Every ambiguity in the
+word lists resolves that way, because a flag wrongly hidden costs a customer one
+line of reassurance and a flag wrongly shown tells someone with an allergy that
+a food is safe.
+
+**The chip is filled forest, the tenant's own primary** — not lime. The QR
+menu's own note says lime is that page's "yes, add it" colour, and a chip nobody
+can tap must not wear it.
+
+### THE DATA WAS REPAIRED FIRST
+
+Ash: *"run the data repair first"*. `scripts/oneoff_free_of_from_sheet.js` ran
+through oneoff.yml (dry run, then apply, backup verified and kept). **2 rows
+written** — the last two products carrying the retired `animal products` flag —
+after which the live catalogue holds those four tokens and nothing else, on 217
+of 238 products.
+
+The read-only diagnostic reports 12 sheet rows as "would change" where the
+repair writes 2, and the difference is not a disagreement: `diagnose_free_of_sheet.js`
+compares in the SHEET's flag order, the repair canonicalises to the details
+panel's order first. Ten of those twelve are reorders that change nothing.
+
+### What is NOT in this change
+
+**The four contradictions.** Code can hide a wrong flag; only the office can
+correct the card. They are listed above by name.
+
+**The editor preview.** `public/product-editor.html` never receives `free_of` —
+the checkboxes that write it live in the details panel on another page — so the
+preview shows the card without this row, and saying otherwise would need that
+column plumbed into a second editor.

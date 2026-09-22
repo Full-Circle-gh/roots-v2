@@ -5854,7 +5854,7 @@ async function renderProduct(id){
   if(typeof blocks==='string'){ try{ blocks=JSON.parse(blocks); }catch{ blocks=null; } }
   const useBlocks = p.use_block_design && Array.isArray(blocks) && blocks.length && window.ShopProductBlocks;
   const descBody = useBlocks
-    ? `<div class="shop-product-blocks">${ShopProductBlocks.render(blocks,{lang:state.lang})}</div>`
+    ? `<div class="shop-product-blocks">${ShopProductBlocks.render(blocks,{lang:state.lang,freeOf:p.free_of})}</div>`
     : (desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:'');
 
   // Per-product options (dressing, spice, paid extras) are chosen in a bottom

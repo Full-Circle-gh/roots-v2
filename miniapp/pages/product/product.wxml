@@ -157,6 +157,7 @@
       <product-blocks wx:if="{{descriptionBlocks.length}}"
                       blocks="{{descriptionBlocks}}"
                       template="{{product.page_template}}"
+                      free-of="{{product.free_of}}"
                       lang="{{lang}}"/>
       <rich-text wx:elif="{{descHtml}}" class="description-rich" nodes="{{descHtml}}"></rich-text>
       <block wx:elif="{{descriptionParts.length}}">

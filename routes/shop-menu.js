@@ -413,13 +413,19 @@ function buildMenu(shop) {
            -- claims, the usage tiles or the tagline: a person standing at a
            -- counter is deciding whether they can eat it.
            --
-           -- NOT product_facts.ingredients_* AND NOT free_of. The first is a
-           -- second, sparser home for the same idea; the second is the filter
-           -- tag set behind the storefront's GLUTEN FREE chips, where an absent
-           -- tag means "not tagged" and never "contains". An earlier draft of
-           -- this sheet read both and would have asserted an allergen nobody
-           -- declared.
-           p.description_blocks, p.nutrition,
+           -- NOT product_facts.ingredients_*: a second, sparser home for the
+           -- same idea.
+           --
+           -- free_of IS read, since §232, and the distinction is the whole
+           -- reason this comment stays long. It is the filter tag set behind
+           -- the storefront's GLUTEN FREE chips, where an absent tag means
+           -- "not tagged" and NEVER "contains" — so it may not be used to
+           -- DERIVE an allergen, which is what an earlier draft of this sheet
+           -- did and which would have asserted an allergen nobody declared.
+           -- Showing a tag that IS set is the other direction and is what Ash
+           -- asked for; blockRead.freeOfChips drops any flag the card itself
+           -- speaks about, so the card is never contradicted.
+           p.description_blocks, p.nutrition, p.free_of,
            -- §179 — WHAT SIGNS THE SHEET. The colophon is NOT a block and never
            -- was: it is three columns on the product row over the shop's own
            -- signature. That is why the per-block "hide on the QR menu" switch
@@ -1163,6 +1169,11 @@ img{display:block;max-width:100%}
    lime is this menu's "yes, add it" colour and an allergen is not that. */
 .achip.has{background:var(--ink);color:var(--oat)}
 .achip.may{background:transparent;color:var(--olive);border:1.5px dashed var(--olive)}
+/* FREE OF is the opposite statement to the two above it, so it borrows
+   neither: filled forest, the tenant's own primary. Still not lime — lime is
+   this menu's "yes, add it" colour and a chip that is not tappable must not
+   wear it. */
+.achip.free{background:var(--forest);color:var(--oat)}
 .anone{font-size:calc(12 * var(--u));color:var(--olive);font-style:italic}
 
 /* .nut-card from miniapp/pages/product/product.wxss, converted at the same
@@ -2994,15 +3005,25 @@ function detailBody(it, code, listed, sig, qrShown) {
       `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
       `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
   };
-  const algCard = (a) =>
-    `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
-    (algRow(L.contains, a.contains_en, a.contains_cn, 'has') ||
-      // "None declared" is the mini app's own empty state for this row, and it
-      // is a statement rather than a blank: the office looked and found none.
-      `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
-      `<div class="achips"><span class="anone">${bi(L.none.en, L.none.cn)}</span></div></div>`) +
-    algRow(L.mayContain, a.may_en, a.may_cn, 'may') +
-    `</div>`;
+  // THE THIRD ROW IS NOT THE OFFICE'S CARD, it is the product's free_of column
+  // with the card's own words subtracted — see blockRead.freeOfChips. A flag
+  // the card already names, in either row and either language, never reaches
+  // here, so the row can only ever say something the card did not.
+  const algCard = (a) => {
+    const chips = blockRead.freeOfChips(it.free_of, a);
+    const freeRow = chips.length
+      ? algRow(L.freeOf, chips.map(c => c.en), chips.map(c => c.cn), 'free')
+      : '';
+    return `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
+      (algRow(L.contains, a.contains_en, a.contains_cn, 'has') ||
+        // "None declared" is the mini app's own empty state for this row, and it
+        // is a statement rather than a blank: the office looked and found none.
+        `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
+        `<div class="achips"><span class="anone">${bi(L.none.en, L.none.cn)}</span></div></div>`) +
+      algRow(L.mayContain, a.may_en, a.may_cn, 'may') +
+      freeRow +
+      `</div>`;
+  };
 
   const nutCard = (title, basis, rows) =>
     `<div class="nut"><div class="nut-top"><div class="nut-ttl">${p2(title)}</div>` +

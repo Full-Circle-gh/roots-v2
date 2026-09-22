@@ -376,6 +376,13 @@
   color: var(--ink);
   font-weight: 700;
 }
+/* FREE OF reads as the opposite of the two rows above it, so it does not
+   borrow either of their colours: filled forest, the brand's own primary,
+   against the black CONTAINS pill and the dashed corn MAY CONTAIN one. */
+.pb-al-chip-free {
+  background: var(--forest);
+  color: var(--oat);
+}
 .pb-al-chip-soft {
   background: var(--corn);
   color: var(--ink);

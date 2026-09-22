@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.164 · 2026-09-22 · §232 PUTS A FREE-OF ROW ON THE ALLERGEN CARD — NOTHING COMPOSED, ONE PAIR CROSSING FROM THE BACK OFFICE TO A CUSTOMER.** `不含` is the details panel's own label for this exact column and has been shipping over it; it now appears in front of customers for the first time, which is the only reason this entry exists. The four chips are the words the allergen cards themselves use, and the one that had to be lifted rather than copied — `五香` — is lifted out of the live badge `无五香`. See *The free-of row on the allergen card (§232)*.
+
 **v1.163 · 2026-09-22 · §231 LETS THE HOW-TO-USE GRID TAKE ANY TILE COUNT — ONE COMPOSED STRING, BOTH WORDS LIVE.** The editor told the office *"6 tiles (3-col grid) or 8 tiles (4-col grid) — never 5 or 7"*, which is why a four-moment product looked like the author's mistake rather than the grid's. The rule is gone and the helper says so. `任意` and `数量` are each live many times over; what is composed is the PAIR, and everything beside it is a numeral. See *Any number of usage tiles (§231)*.
 
 **v1.162 · 2026-09-22 · §223 LETS A STALE COURIER COPY MOVE THE DAY — ONE COMPOSED STRING, EVERY FRAGMENT LIFTED.** A copy the platform has stopped reporting on is neither proven cancelled nor demonstrably live. The date moves; the rider does not get re-called on a guess; one sentence says both and names the step left. See *Moved, but the old order may still be live (§223)*.
@@ -8496,3 +8498,34 @@ numerals carry the whole rule.
 - `不限` (live in the delivery rules as *no limit*) — **rejected**: it describes
   a cap that was lifted. Nothing here was ever capped; six and eight were a
   recommendation the grid could not keep.
+
+## The free-of row on the allergen card (§232)
+
+**Nothing composed, by Claude, 2026-09-22.** One live pair crosses from the back
+office to a customer; the rest is the cards' own vocabulary.
+
+| shipped | built from |
+|---|---|
+| `Free of · 不含` (the row label) | verbatim from `cuT('Free of', '不含')` in `public/retail-admin/09-products.js`, the details panel's own label for the `free_of` column, over the same four checkboxes that write it |
+| `Nuts · 坚果` | `坚果` is the allergen cards' own word — live on Kara Coconut Cream's may-contain row and a dozen others |
+| `Soy · 大豆` | live on Minced meat's contains row (`麸质、大豆`) |
+| `Gluten · 麸质` | the same row |
+| `5 Spice · 五香` | **lifted**, not copied: the live pair is `5-SPICE FREE · 无五香` (`public/shop.html`, `miniapp/pages/shop/shop.js`, `miniapp/pages/product/product.js`). Under a row already reading 不含, the 无 would say it twice |
+
+**WHY THE CHIPS DO NOT REUSE THE LIVE BADGE PAIRS WHOLE.** `无坚果 · 无大豆 ·
+无麸质 · 无五香` ship today on the storefront's filter chips and would have cost
+nothing to reuse — but they are a complete sentence each, and under a row label
+that already says 不含 they read as a double negative: *free of: no soy, no
+gluten*. The row label is what the card's other two rows do (`含有`, `可能含有微量`
+each sit over bare allergen names), so the chips drop to bare names too and the
+card keeps one grammar.
+
+**Live candidates rejected.**
+
+- `无坚果 · 无大豆 · 无麸质 · 无五香` (the storefront's own badge pairs) —
+  **rejected** for the doubling above. They stay correct where they are, on a
+  chip that carries no label.
+- `不含致敏原` (*free of allergens*, the shape of `未声明常见致敏原` on a live
+  card) — **rejected**: it claims more than the column knows. Four flags are not
+  every allergen, and a customer reading that sentence would believe the card
+  had cleared the product of all of them.

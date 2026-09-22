@@ -130,7 +130,61 @@ function _segmentHighlighted(s) {
 // template stays declarative. Returning { type: '_skip' } drops the block
 // (e.g. all fields empty, or unknown type → forward-compatibility with
 // older mini-app builds receiving a newer block schema).
-function _resolveBlock(b, L) {
+// ── FREE OF, AND WHY THE CARD WINS ─────────────────────────────────────────
+//
+// free_of is the filter tag set behind the shop's GLUTEN FREE chips — four
+// flags, closed at four by Ash on 2026-09-22, assigned in bulk from a label
+// sheet. It is not a sentence the kitchen wrote about THIS product, so it is
+// never allowed to add an allergen. Showing a tag that IS set is a different
+// act and is the one §232 allows.
+//
+// A FLAG THE CARD ALREADY NAMES IS DROPPED, either row, either language.
+// Measured on the live catalogue 2026-09-22: of 45 products carrying both, 34
+// had a flag the card also listed under "may contain traces of" and 4 had one
+// the card listed under "contains" — Seitan is tagged free of soy and its card
+// says it contains soy. Printed raw the row would have contradicted the card
+// on eight products in ten.
+//
+// THE MATCH LEANS TOWARDS DROPPING. "Coconut" carries the letters of "nut", so
+// a card saying coconut costs the product its nut flag. That is the safe
+// direction: a flag wrongly hidden costs one line of reassurance, a flag
+// wrongly shown tells someone with an allergy that a food is safe.
+//
+// Same rule as freeOfChips() in lib/product-blocks-read.js, which a WeChat
+// bundle cannot require — the two are held together by
+// scripts/test_product_blocks_read.js. Change both, plus the shop sheet.
+const _FREE_OF_FLAGS = [
+  { id: 'nuts', en: 'Nuts', cn: '坚果', words: [
+    'nut', 'cashew', 'walnut', 'almond', 'hazel', 'pecan', 'pistachio',
+    'macadamia', 'brazil', 'praline', 'marzipan',
+    '坚果', '腰果', '核桃', '杏仁', '榛', '开心果', '碧根果', '夏威夷果', '巴西果'] },
+  { id: 'soy', en: 'Soy', cn: '大豆', words: [
+    'soy', 'soya', 'edamame', 'tofu', 'tempeh', 'miso', 'tamari',
+    '大豆', '黄豆', '豆腐', '豆浆', '酱油', '味噌', '豆豉', '腐竹'] },
+  { id: 'gluten', en: 'Gluten', cn: '麸质', words: [
+    'gluten', 'wheat', 'barley', 'rye', 'spelt', 'seitan', 'malt', 'semolina',
+    'couscous', 'farro',
+    '麸质', '小麦', '大麦', '黑麦', '面筋', '麦芽', '面粉'] },
+  { id: '5 spice', en: '5 Spice', cn: '五香', words: [
+    '5 spice', '5-spice', '5spice', 'five spice', 'five-spice',
+    '五香'] },
+];
+
+function _freeOfChips(raw, said, L) {
+  const tokens = {};
+  String(raw == null ? '' : raw).split(/[,、，]/g).forEach((t) => {
+    const k = t.trim().toLowerCase().replace(/\s+/g, ' ');
+    // The editor writes "5 spice"; the listing filters key it "5spice".
+    if (k) tokens[k === '5spice' ? '5 spice' : k] = true;
+  });
+  const hay = String(said || '').toLowerCase();
+  return _FREE_OF_FLAGS
+    .filter(f => tokens[f.id])
+    .filter(f => !f.words.some(w => hay.indexOf(w) !== -1))
+    .map(f => (L === 'cn' ? f.cn : f.en));
+}
+
+function _resolveBlock(b, L, freeOf) {
   const t = b.type;
 
   if (t === 'spec_strip') {
@@ -214,12 +268,18 @@ function _resolveBlock(b, L) {
     const contains    = _splitChips(_pick(b.contains_en,    b.contains_cn,    L));
     const mayContain  = _splitChips(_pick(b.may_contain_en, b.may_contain_cn, L));
     if (!contains.length && !mayContain.length) return { type: '_skip' };
+    // BOTH LANGUAGES ARE SEARCHED, not just the one on screen: a card that
+    // names an allergen in Chinese only still names it.
+    const said = [b.contains_en, b.contains_cn, b.may_contain_en, b.may_contain_cn]
+      .filter(Boolean).join(' ');
     return {
       type: t,
       title:           L === 'cn' ? '过敏原' : 'Allergens',
       compliance:      'GB-7718',
       containsLabel:   L === 'cn' ? '含有' : 'Contains',
       mayContainLabel: L === 'cn' ? '可能含有微量' : 'May contain traces of',
+      freeOfLabel:     L === 'cn' ? '不含' : 'Free of',
+      freeOf:          _freeOfChips(freeOf, said, L),
       contains,
       mayContain,
       // Empty-contains state per v1 spec
@@ -422,6 +482,9 @@ Component({
   properties: {
     blocks: { type: Array,  value: [], observer() { this._resolveAll(); } },
     lang:   { type: String, value: 'en', observer() { this._resolveAll(); } },
+    // The product's free_of column, verbatim. Only the allergen card reads it,
+    // and only to SHOW a flag the card does not already speak about.
+    freeOf: { type: String, value: '', observer() { this._resolveAll(); } },
     // page_template id (e.g. 'editorial_light') → drives the per-template visual
     // skin on the wrapper (pb-tpl-<id>). Empty = base styling.
     template: { type: String, value: '', observer() { this._applyTpl(); } },
@@ -435,7 +498,7 @@ Component({
       const L = this.data.lang || 'en';
       const arr = this.data.blocks || [];
       const resolved = arr
-        .map((b, i) => ({ ...(_resolveBlock(b, L) || {}), _k: b.id || ('b' + i), _style: _blockStyle(b) }))
+        .map((b, i) => ({ ...(_resolveBlock(b, L, this.data.freeOf) || {}), _k: b.id || ('b' + i), _style: _blockStyle(b) }))
         .filter(b => b.type !== '_skip');
       this.setData({ resolved });
     },

@@ -316,6 +316,12 @@
   color: var(--ink);
   font-weight: 700;
 }
+/* FREE OF states the opposite of the two rows above it, so it borrows the
+   colour of neither: filled forest, the brand's primary. */
+.shop-product-blocks .spb-al-chip-free {
+  background: var(--forest);
+  color: var(--oat);
+}
 .shop-product-blocks .spb-al-chip-soft {
   background: var(--corn);
   color: var(--ink);
