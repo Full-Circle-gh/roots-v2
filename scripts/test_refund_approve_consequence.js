@@ -252,7 +252,10 @@ it('the old developer-language subtitle is gone from the dialog', () => {
 });
 
 it('the full-refund box is marked as the dangerous one', () => {
-  assert.ok(/borderLeftColor = full \? 'var\(--danger\)'/.test(DIALOG),
+  // --td-brick-ink, not --danger: same Brick on light (#B4533E) and a legible
+  // #D07A66 on dark, where --danger stayed the light value. The colour is
+  // unchanged in the theme this was written against; only the token moved.
+  assert.ok(/borderLeftColor = full \? 'var\(--td-brick-ink\)'/.test(DIALOG),
     'full and partial look identical');
 });
 
