@@ -138,6 +138,20 @@
   -webkit-box-decoration-break: clone;
 }
 
+/* ── THE AIR GOES INSIDE THE BLOCKS, NOT BETWEEN THEM ───────────────────
+   §239. Ash, against the live Quinoa Salad sheet: "maybe can add more
+   breathing room between each block". The gap he pointed at was already
+   the widest on the page -- .spb-why's 44rpx bottom plus .spb-ing's 60rpx
+   top is 104rpx across the ink rule, about 55px on a 393px phone -- while
+   a 52rpx heading sat 36rpx above its own content and fourteen chips
+   cleared each other by 16rpx, which is eight pixels and reads as one
+   clump. Widening the block gap was built and shown beside the live
+   values; it reads as unrelated pages stacked up and costs about a screen
+   of scroll per product. Ash flipped the three and chose this one.
+   SO THE BLOCK PADDING IS UNTOUCHED and the three below moved instead:
+   why-row 28 -> 34rpx, section head 36 -> 48rpx, chip rows 16 -> 26rpx.
+   The mini app carries the same three; §235 is why they move together. */
+
 /* ───────── 03 · WHY PEOPLE CHOOSE IT ───────── */
 .shop-product-blocks .spb-why {
   padding: calc(12 * var(--u)) calc(44 * var(--u)) calc(44 * var(--u));
@@ -160,7 +174,7 @@
   grid-template-columns: calc(72 * var(--u)) 1fr;
   gap: calc(28 * var(--u));
   align-items: baseline;
-  padding: calc(28 * var(--u)) 0;
+  padding: calc(34 * var(--u)) 0;
   border-top: calc(2 * var(--u)) solid var(--ink-12);
 }
 .shop-product-blocks .spb-why-row.first { border-top: calc(2 * var(--u)) solid var(--ink); }
@@ -183,7 +197,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: calc(36 * var(--u));
+  margin-bottom: calc(48 * var(--u));
 }
 .shop-product-blocks .spb-section-h3 {
   font-family: var(--f-bear);
@@ -201,7 +215,7 @@
 .shop-product-blocks .spb-ing-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: calc(16 * var(--u));
+  gap: calc(26 * var(--u));
   align-items: flex-start;
 }
 .shop-product-blocks .spb-chip {
