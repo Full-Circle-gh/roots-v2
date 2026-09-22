@@ -1604,10 +1604,15 @@ function sanitizeBundleItems(input, selfId = null) {
 // yet. The counter/QR menu DOES know its store and asks per-location instead
 // (routes/shop-menu.js attachOptions) — the two differ on purpose.
 //
-// TWO CALLERS, ONE RULE: the product detail response greys the extra out, and
-// order-create counts the same choices to clamp a pick-any group's floor. They
-// were one inline block until the floor needed it too; a second copy would be a
-// second answer to "is this extra still on the shelf".
+// THREE CALLERS, ONE RULE: the product detail response greys the extra out, and
+// the two customer order paths hand this map to lib/product-options.js as their
+// sold-out predicate. They were one inline block until the floor needed it too;
+// a second copy would be a second answer to "is this extra still on the shelf".
+//
+// The floor-clamping that used to live beside this in checkOptionLimits is gone
+// with it (§229): that helper only ever knew about pick-any groups, so it could
+// not see an unanswered REQUIRED single question, and the module it was replaced
+// by applies the floor, the ceiling and the requirement from one place.
 function addonAvailabilityById(addonIds) {
   const ids = [...new Set((addonIds || []).filter(Boolean))];
   if (!ids.length) return new Map();
@@ -1628,50 +1633,6 @@ function addonAvailabilityById(addonIds) {
   )]));
 }
 
-// HOW MANY of a pick-any group a line must answer, checked against the database.
-// Returns null when the line is fine, or an error code to refuse it with.
-//
-// The sheet greys out the tick-box that would break the ceiling and blocks the
-// Add button under the floor; this is that same rule where a post straight at
-// the endpoint cannot skip it. `chosenIds` is what the line posted, deduped —
-// a tick-box is on or off, so the same choice twice is one answer, not two.
-//
-// THE FLOOR IS MEASURED AGAINST PICKABLE CHOICES, the way the product response
-// clamped it before serving the page (see product.options above). Measuring it
-// any other way would refuse an order the page itself told the customer to
-// place: "choose 2 sides" with two of three sold out is served as "choose 1".
-function checkOptionLimits(productId, chosenIds) {
-  const groups = tdb().prepare(
-    `SELECT id, type, min_choices, max_choices FROM retail_product_options
-      WHERE product_id = ? AND type = 'multi' AND (min_choices > 0 OR max_choices > 0)`
-  ).all(productId);
-  if (!groups.length) return null;
-
-  const gph = groups.map(() => '?').join(',');
-  const gChoices = tdb().prepare(
-    `SELECT id, option_id, stock_product_id FROM retail_product_option_choices
-      WHERE option_id IN (${gph})`
-  ).all(...groups.map(g => g.id));
-  const availById = addonAvailabilityById(gChoices.map(c => c.stock_product_id));
-  const pickable = new Map();
-  for (const c of gChoices) {
-    if (c.stock_product_id && availById.get(c.stock_product_id) !== true) continue;
-    pickable.set(c.option_id, (pickable.get(c.option_id) || 0) + 1);
-  }
-
-  const chosen = new Set((chosenIds || []).map(n => parseInt(n, 10)).filter(Number.isFinite));
-  const answered = new Map();
-  for (const c of gChoices) {
-    if (chosen.has(c.id)) answered.set(c.option_id, (answered.get(c.option_id) || 0) + 1);
-  }
-  for (const g of groups) {
-    const lim = optionLimits.effectiveLimits(g, pickable.get(g.id) || 0);
-    const n = answered.get(g.id) || 0;
-    if (lim.max && n > lim.max) return 'too_many_answers';
-    if (lim.min && n < lim.min) return 'too_few_answers';
-  }
-  return null;
-}
 
 // ── Per-product options (customer choices: dressing, spice level, cutlery…) ──
 // Stored in retail_product_options + retail_product_option_choices, keyed by the
@@ -11164,10 +11125,68 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // ── Resolve + price each item server-side ────────────────────────────
   const orderNowMs = Date.now();
   const resolved = [];
+
+  /* ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§120; moved out in §183) ──
+     THE THIRD AND LAST CALLER TO BE MOVED ONTO THE SHARED MODULE, and the one
+     the rule was missing from longest. The QR menu (§120) and the counter till
+     (§183) have both refused an unanswered required question since they were
+     written; this route — the mini app and the web storefront, which is most of
+     the shop's revenue — kept an inline copy that checked only how MANY answers
+     a pick-any group took. `checkOptionLimits` reads
+       type = 'multi' AND (min_choices > 0 OR max_choices > 0)
+     so a REQUIRED SINGLE question — a dressing, a packaging choice, "heat it
+     up?" — was never checked at all, and an order that answered nothing was
+     accepted, priced and sent to the kitchen for someone to guess at.
+
+     THE INLINE COPY WAS WEAKER IN FOUR MORE WAYS, every one of them the kind of
+     drift the module's header says a second copy produces. A choice id that
+     matched no row was SILENTLY DROPPED rather than refused, because the loop
+     iterated the rows the lookup returned instead of the ids that were posted.
+     A single-answer question could be answered twice, and both deltas charged.
+     A `text` option's choice was accepted, though neither storefront can render
+     one. And nothing capped how many choices a line could carry.
+
+     NOTHING HERE IS PRICED FROM THE POST BODY, which is the module's own rule
+     and was already this route's: the body carries choice ids, and every label,
+     question, delta and shelf link is read back out of this tenant's tables.
+
+     THE SHELF STAYS THE STOREFRONT'S OWN. addonAvailabilityById asks the whole
+     company's sellable count rather than one location's, because this is the
+     online shop and it does not route to a store until checkout — the comment
+     on that function records the decision. The module takes the verdict as a
+     caller-supplied predicate for exactly this reason, so moving onto it does
+     not move the shop onto the QR menu's per-location answer. */
   for (const it of items) {
+    if (!parseInt(it.product_id, 10) || !(Number(it.qty) > 0)) {
+      return res.status(400).json({ success: false, error: 'invalid_item' });
+    }
+  }
+  const orderedPids = [...new Set(items.map(it => parseInt(it.product_id, 10)))];
+  const optAddonIds = [...new Set(tdb().prepare(
+    `SELECT DISTINCT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+      WHERE o.product_id IN (${orderedPids.map(() => '?').join(',')})
+        AND c.stock_product_id IS NOT NULL`
+  ).all(...orderedPids).map(r => r.stock_product_id))];
+  const optAddonAvail = addonAvailabilityById(optAddonIds);
+  const answers = productOptions.resolveAnswers(
+    tdb(),
+    items.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty), choices: it.choices })),
+    { isChoiceSoldOut: (c) => optAddonAvail.get(c.stock_product_id) !== true }
+  );
+  // product_id is carried so the client can NAME the item rather than showing a
+  // bare code. A customer holding a cart line added before its question existed
+  // meets this refusal, and "Beet Salad — please choose" with a tap through to
+  // the picker is the difference between one extra tap and an abandoned basket.
+  if (answers.error) {
+    return res.status(400).json({ success: false, error: answers.error, product_id: answers.product_id || null });
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
-    if (!pid || !(qty > 0)) return res.status(400).json({ success: false, error: 'invalid_item' });
 
     const p = tdb().prepare(
       `SELECT id, name_en, name_cn, sku, weight AS size,
@@ -11182,41 +11201,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     ).get(pid);
     if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
 
-    let optionDelta = 0;
-    const chosenLabels = [];
-    if (Array.isArray(it.choices) && it.choices.length) {
-      const placeholders = it.choices.map(() => '?').join(',');
-      const choices = tdb().prepare(
-        `SELECT c.id, c.option_id, c.label_en, c.label_cn, c.price_delta, c.stock_product_id,
-                o.product_id, o.type, o.question_en, o.question_cn
-           FROM retail_product_option_choices c
-           JOIN retail_product_options o ON o.id = c.option_id
-          WHERE c.id IN (${placeholders})`
-      ).all(...it.choices);
-      for (const c of choices) {
-        if (c.product_id !== pid) {
-          return res.status(400).json({ success: false, error: 'choice_wrong_product' });
-        }
-        optionDelta += Number(c.price_delta) || 0;
-        // stock_product_id carries through so expandStockLines can reserve a
-        // stock-backed paid extra's inventory alongside the main product.
-        // question_en/cn + label_cn are snapshotted so the order line is
-        // self-describing ("Heat up?: Yes" not a bare "Yes") even if the
-        // option is later edited or deleted.
-        chosenLabels.push({
-          option_id: c.option_id, choice_id: c.id,
-          label: c.label_en, label_cn: c.label_cn || null,
-          question_en: c.question_en || null, question_cn: c.question_cn || null,
-          delta: c.price_delta, stock_product_id: c.stock_product_id || null,
-        });
-      }
-    }
-    // HOW MANY, server side — runs whether or not the line posted any choices,
-    // so a pick-any floor cannot be dodged by sending none at all.
-    {
-      const bad = checkOptionLimits(pid, Array.isArray(it.choices) ? it.choices : []);
-      if (bad) return res.status(400).json({ success: false, error: bad, product_id: pid });
-    }
+    // Resolved above, for every line at once. `options` is the bilingual
+    // snapshot that goes onto the order line — stock_product_id carries through
+    // so expandStockLines can reserve a stock-backed paid extra alongside its
+    // parent, and question_en/cn are stored so the line still reads "Heat up?:
+    // Yes" rather than a bare "Yes" after the option is edited or deleted.
+    const optionDelta = answers.lines[i].delta;
+    const chosenLabels = answers.lines[i].options;
 
     // Apply flash price when active. Stock-cap enforcement happens inside
     // the order transaction below via a conditional UPDATE so two parallel
@@ -38951,10 +38942,40 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
   try { destCity = (JSON.parse(order.address_json || '{}').city) || ''; } catch {}
   const orderNowMs = Date.now();
   const resolved = [];
+
+  // THE SAME MODULE THE FIRST CHECKOUT USES — a line added to a live order is
+  // still a line, and the sheet that built it is the same sheet, so it answers
+  // to the same rules. This path carried its own copy of the inline resolver
+  // and inherited every one of its gaps: a required question unchecked, an
+  // unknown choice id dropped rather than refused, a single question answerable
+  // twice. One rule, stated once, or it is not a rule.
   for (const it of rawItems) {
+    if (!parseInt(it.product_id, 10) || !(Number(it.qty) > 0)) {
+      return res.status(400).json({ success: false, error: 'invalid_item' });
+    }
+  }
+  const addonPids = [...new Set(rawItems.map(it => parseInt(it.product_id, 10)))];
+  const addonOptIds = [...new Set(tdb().prepare(
+    `SELECT DISTINCT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+      WHERE o.product_id IN (${addonPids.map(() => '?').join(',')})
+        AND c.stock_product_id IS NOT NULL`
+  ).all(...addonPids).map(r => r.stock_product_id))];
+  const addonOptAvail = addonAvailabilityById(addonOptIds);
+  const addonAnswers = productOptions.resolveAnswers(
+    tdb(),
+    rawItems.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty), choices: it.choices })),
+    { isChoiceSoldOut: (c) => addonOptAvail.get(c.stock_product_id) !== true }
+  );
+  if (addonAnswers.error) {
+    return res.status(400).json({ success: false, error: addonAnswers.error, product_id: addonAnswers.product_id || null });
+  }
+
+  for (let i = 0; i < rawItems.length; i++) {
+    const it = rawItems[i];
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
-    if (!pid || !(qty > 0)) return res.status(400).json({ success: false, error: 'invalid_item' });
 
     const p = tdb().prepare(
       `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
@@ -38966,34 +38987,8 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     ).get(pid);
     if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
 
-    let optionDelta = 0;
-    const chosenLabels = [];
-    if (Array.isArray(it.choices) && it.choices.length) {
-      const ph = it.choices.map(() => '?').join(',');
-      const choices = tdb().prepare(
-        `SELECT c.id, c.option_id, c.label_en, c.label_cn, c.price_delta, c.stock_product_id,
-                o.product_id, o.question_en, o.question_cn
-           FROM retail_product_option_choices c
-           JOIN retail_product_options o ON o.id = c.option_id
-          WHERE c.id IN (${ph})`
-      ).all(...it.choices);
-      for (const ch of choices) {
-        if (ch.product_id !== pid) return res.status(400).json({ success: false, error: 'choice_wrong_product' });
-        optionDelta += Number(ch.price_delta) || 0;
-        chosenLabels.push({
-          option_id: ch.option_id, choice_id: ch.id, label: ch.label_en, label_cn: ch.label_cn || null,
-          question_en: ch.question_en || null, question_cn: ch.question_cn || null,
-          delta: ch.price_delta, stock_product_id: ch.stock_product_id || null,
-        });
-      }
-    }
-    // The same pick-any floor/ceiling the first checkout applied — a line added
-    // to a live order is still a line, and the sheet that built it is the same
-    // sheet.
-    {
-      const bad = checkOptionLimits(pid, Array.isArray(it.choices) ? it.choices : []);
-      if (bad) return res.status(400).json({ success: false, error: bad, product_id: pid });
-    }
+    const optionDelta = addonAnswers.lines[i].delta;
+    const chosenLabels = addonAnswers.lines[i].options;
 
     const eff = flashsales.effectivePriceFor(p, p.price, orderNowMs);
     if (eff.is_flash && p.flash_stock_limit != null) {
