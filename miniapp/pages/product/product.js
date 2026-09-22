@@ -504,19 +504,28 @@ Page({
     const saveLabel = saveN > 0 ? (L === 'cn' ? '省' : 'SAVE ') + money(saveN) : '';
     // free_of (comma list like "gluten,nuts") → allergen-free badges. The whole
     // shop is 100% plant-based, so EVERY product also carries the PLANT-BASED
-    // badge by default (regardless of `free_of`). EGG FREE is intentionally
-    // hidden — it's redundant in an all-plant catalogue.
+    // badge by default (regardless of `free_of`).
     // Lowercase on the way in so matching is case-insensitive — the store
     // editor / legacy data can carry "Egg", "Animal Products", etc.
     const freeOf = (p.free_of || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    // FOUR FLAGS. Ash, 2026-09-22: "nuts, soy, gluten, 5 spice. - those are the
+    // one that needed. nothing else, everywhere". DAIRY FREE was a badge here
+    // until then.
     const badgeMap = {
       gluten: { en: 'GLUTEN FREE', cn: '无麸质' },
       nuts:   { en: 'NUT FREE',    cn: '无坚果' },
       soy:    { en: 'SOY FREE',    cn: '无大豆' },
-      dairy:  { en: 'DAIRY FREE',  cn: '无乳制品' },
       '5spice': { en: '5-SPICE FREE', cn: '无五香' },
     };
-    const hiddenFreeOf = new Set(['egg', 'animal products']);
+    // The three retired flags stay NAMED here rather than being deleted with
+    // their badge. scripts/oneoff_free_of_from_sheet.js cleared them from the
+    // catalogue, but the details panel keeps any value it does not recognise in
+    // a free-text tail and writes it back out on save — so a row can carry one
+    // again, and the fall-through below would shout a raw, untranslated "DAIRY"
+    // at a shopper reading Chinese. Hidden is the safe way for a retired flag
+    // to arrive. `egg` and `animal products` were already hidden as redundant
+    // in an all-plant catalogue; `dairy` joins them for that reason too.
+    const hiddenFreeOf = new Set(['egg', 'animal products', 'dairy']);
     const plantBased = lang.pick('PLANT-BASED', '纯植物', L);
     const freeBadges = freeOf
       .filter(k => !hiddenFreeOf.has(k))

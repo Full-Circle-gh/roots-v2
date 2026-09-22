@@ -14,7 +14,14 @@
 //
 // §148 added three entries the office had been typing by hand into that
 // free-text tail — `animal products` on 75 products, `dairy` on 15, `egg` on
-// 14 — which is exactly the moment the two lists can drift apart.
+// 14 — which is exactly the moment the two lists can drift apart. On
+// 2026-09-22 those same three were REMOVED again, which is the same moment
+// from the other side: a removal from one list and not the other leaves a
+// checkbox nothing can tick.
+//
+// The list is now closed at four, so this file checks the lists BOTH ways —
+// that the four are there, and that a fifth is not. See "Four flags, and the
+// list is closed" below.
 'use strict';
 
 const assert = require('assert');
@@ -140,22 +147,44 @@ check('the typo fold happens on READ, and sweeps nothing', () => {
   assert.ok(/'5spice'/.test(alias[1]), 'the 5spice fold is gone, and 16 products carry that spelling');
 });
 
-section('The three §148 additions');
+section('Four flags, and the list is closed');
 
-check('animal products, dairy and egg are offered', () => {
-  const ids = new Set(WIZ.map(([id]) => id));
-  for (const [id, n] of [['animal products', 75], ['dairy', 15], ['egg', 14]]) {
-    assert.ok(ids.has(id),
-      `"${id}" is no longer offered, and ${n} products were typing it by hand into the free-text tail`);
-  }
-});
+/* §148 added three — `animal products`, `dairy`, `egg` — because the office had
+   been typing them into the free-text tail by hand, 75, 15 and 14 times. They
+   were removed again on 2026-09-22, together with every value that used them.
+   Ash, asked whether the new label sheet should replace a product's whole
+   free_of value or only the part the sheet speaks about:
 
-check('the original four are untouched', () => {
+     "nuts, soy, gluten, 5 spice. - those are the one that needed. nothing
+     else, everywhere"
+
+   So the list is now closed rather than growing, and this checks it in both
+   directions. The upward check matters more than it looks: a free-of flag is a
+   promise to a shopper with an allergy, and a fifth flag appearing because a
+   later change "added it back for completeness" is exactly the kind of edit
+   nobody would think to ask about. */
+check('the four Ash named are all offered, and they lead the list', () => {
   const ids = WIZ.map(([id]) => id);
   for (const id of ['nuts', 'soy', 'gluten', '5 spice']) {
     assert.ok(ids.includes(id), `"${id}" has left the list — 148 to 230 products carry it`);
   }
   assert.strictEqual(ids[0], 'nuts', 'the original four no longer lead the list');
+});
+
+check('nothing else is offered', () => {
+  const four = new Set(['nuts', 'soy', 'gluten', '5 spice']);
+  for (const id of WIZ.map(([id]) => id)) {
+    assert.ok(four.has(id),
+      `"${id}" is offered, and only four flags exist. Adding a fifth is a decision ` +
+      `for Ash, not an edit — see the note above PW_FREE_OF.`);
+  }
+});
+
+check('the three retired flags are gone from both lists', () => {
+  for (const id of ['animal products', 'dairy', 'egg']) {
+    assert.ok(!WIZ.some(([w]) => w === id), `the wizard still offers "${id}"`);
+    assert.ok(!PANEL.includes(id), `the details panel still offers "${id}"`);
+  }
 });
 
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
