@@ -1257,7 +1257,17 @@ img{display:block;max-width:100%}
    So the pill is retired for the box, and THE FILL IS THE ONLY DIFFERENCE
    between what is in the food and what is not. One shape, two states, and no
    third colour anywhere on the card. */
-.achip{border-radius:0;padding:calc(6 * var(--u)) calc(10 * var(--u)) calc(5 * var(--u));
+/* THE RIGHT PADDING GIVES BACK THE TRAILING LETTER-SPACE, and the four
+   values are written out for that one reason. letter-spacing puts its gap
+   AFTER every character including the last, so a run of text carries .08em of
+   blank at its right end and none at its left -- the box centres perfectly
+   and the INK inside it sits left of the middle, which is the one thing the
+   pixel check below measures and the one thing a reader sees. Widening the
+   spacing from .03em to .08em trebled that gap. Taking it off this edge is
+   the same correction .tr makes for a full-width bracket, for the same
+   reason, and the two stack on a chip that ends in one. */
+.achip{border-radius:0;
+  padding:calc(6 * var(--u)) calc(10 * var(--u) - .08em) calc(5 * var(--u)) calc(10 * var(--u));
   font-size:calc(10.5 * var(--u));line-height:1;font-family:var(--f-bear);
   letter-spacing:.08em;text-transform:uppercase;border:1.5px solid var(--ink)}
 /* A FULL-WIDTH CLOSING BRACKET RESERVES A WHOLE CHARACTER BOX AND DRAWS ITS INK

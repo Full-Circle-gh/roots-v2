@@ -872,10 +872,24 @@ function boxOf(text) {
         const mid = (cb.left + parseFloat(cs.paddingLeft)
                    + cb.right - parseFloat(cs.paddingRight)) / 2;
         return Array.from(card.querySelectorAll('.arow')).map(r => {
-          const chips = Array.from(r.querySelectorAll('.achips span'))
+          /* EVERY ROW'S VALUES, WHETHER THEY ARE BOXES OR A SENTENCE.
+             §236 made may-contain a text line rather than chips -- a box is
+             a shape for a token and that field holds a 90-character sentence
+             on some products -- and this selector still read only
+             `.achips span`, so the row it had just redesigned dropped out of
+             the measurement and the card came back with one row where the
+             assertion wants two. That is what left this check red on main.
+
+             The rule being asserted does not care which it is: the label and
+             its values share one left edge, and the sentence is held to it
+             exactly as the boxes are. The language wrappers inside `.achips`
+             are display:contents and measure zero, so the width filter
+             already keeps the chips themselves; inside `.aline` the same
+             filter keeps the one language that is on screen. */
+          const vals = Array.from(r.querySelectorAll('.achips span, .aline span'))
             .filter(el => el.getBoundingClientRect().width > 0);
-          if (!chips.length) return null;
-          const boxes = chips.map(c => c.getBoundingClientRect());
+          if (!vals.length) return null;
+          const boxes = vals.map(c => c.getBoundingClientRect());
           const left = Math.min(...boxes.map(b => b.left));
           const right = Math.max(...boxes.map(b => b.right));
           const lab = r.querySelector('.alab').getBoundingClientRect();
@@ -883,7 +897,7 @@ function boxOf(text) {
           // the three statements shared no edge and the eye crossed the card
           // six times to read three facts. `mid` is kept only to report by how
           // far a row would have been off it, when one regresses.
-          return { off: ((left + right) / 2) - mid, n: chips.length,
+          return { off: ((left + right) / 2) - mid, n: vals.length,
                    left, labLeft: lab.left,
                    // The label still sits ABOVE its values rather than beside
                    // them — which is what stops a long value from ever being
