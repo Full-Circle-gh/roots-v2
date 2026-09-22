@@ -293,7 +293,7 @@
     var mayContainLabel = L === 'cn' ? '可能含有微量' : 'May contain traces of';
     var emptyText = L === 'cn' ? '未声明' : 'None declared';
 
-    // §234 — "nothing here" is not an allergen: a contains field the office
+    // §236 — "nothing here" is not an allergen: a contains field the office
     // wrote as "None declared" (or one of four Chinese spellings) prints in
     // the quiet state, in THEIR words. Same list as saysNone() in
     // lib/product-blocks-read.js, which this file cannot require.
@@ -306,7 +306,7 @@
           }).join('')
         : '<span class="spb-allergen-empty">' + escapeHtml(emptyText) + '</span>';
 
-    // §234 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
+    // §236 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
     // for a token; this field holds a 90-character facility warning on some
     // products, and a box around that is a box with a paragraph in it.
     var mayRow = mayContain.length

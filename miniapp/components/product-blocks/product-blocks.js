@@ -130,7 +130,7 @@ function _segmentHighlighted(s) {
 // template stays declarative. Returning { type: '_skip' } drops the block
 // (e.g. all fields empty, or unknown type → forward-compatibility with
 // older mini-app builds receiving a newer block schema).
-// §234 — "NOTHING HERE" IS NOT AN ALLERGEN. Half the catalogue writes the
+// §236 — "NOTHING HERE" IS NOT AN ALLERGEN. Half the catalogue writes the
 // contains field as "None declared", and the Chinese half spells it four ways.
 // A filled box is for what is IN the food, so the office's own phrase prints
 // in the card's quiet state instead — their words, not the component's.
@@ -298,11 +298,11 @@ function _resolveBlock(b, L, freeOf) {
       freeOf:          _freeOfChips(freeOf, said, L),
       contains,
       mayContain,
-      // §234 — a sentence, not a row of boxes: this field holds a 90-character
+      // §236 — a sentence, not a row of boxes: this field holds a 90-character
       // facility warning on some products and a box around that is a box with
       // a paragraph in it.
       mayContainLine: mayContain.join(L === 'cn' ? '、' : ', '),
-      // Empty-contains state per v1 spec, and §234's: a contains field the
+      // Empty-contains state per v1 spec, and §236's: a contains field the
       // office wrote as "nothing to declare" is the same state, in their words.
       containsEmpty:   contains.length === 0 || !!_saysNone(contains),
       emptyText:       _saysNone(contains) || (L === 'cn' ? '未声明' : 'None declared'),

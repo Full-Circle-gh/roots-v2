@@ -1354,7 +1354,7 @@
   .pa-prev-allergen-ttl { display: flex; align-items: center; gap: 8px; font-family: 'Bear Serif', serif; font-size: 18px; line-height: 1; color: var(--pa-fg, #1a1a17); }
   .pa-prev-allergen-warn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: var(--pa-accent, #E96174); color: #F2E7DF; border-radius: 4px; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
   .pa-prev-allergen-meta { font-family: 'Toni Grotesk', sans-serif; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
-  /* §234 — label over values, flush left; one shape for the card, and the
+  /* §236 — label over values, flush left; one shape for the card, and the
      fill is the only difference between what is in the food and what is not. */
   .pa-prev-allergen-row { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 10px 0; }
   .pa-prev-allergen-row + .pa-prev-allergen-row { border-top: 1px solid rgba(26, 26, 23, 0.14); }
@@ -5680,7 +5680,7 @@ function _paPreviewBlockHtml(b) {
     const mayContain = _paSplitChips(pickT(b.may_contain_en, b.may_contain_cn));
     if (!contains.length && !mayContain.length) return '';
     const chips = (arr, cls) => arr.map(c => `<span class="pa-prev-allergen-chip ${cls}">${esc(c)}</span>`).join('');
-    // §234 — a contains field the office wrote as "nothing to declare" is the
+    // §236 — a contains field the office wrote as "nothing to declare" is the
     // quiet state, in their words. Same list as NONE_PHRASES in
     // lib/product-blocks-read.js; matched whole, never by prefix.
     const NONE_PHRASES = ['none', 'none declared', 'no known allergens', 'no allergens', 'n/a', 'na',

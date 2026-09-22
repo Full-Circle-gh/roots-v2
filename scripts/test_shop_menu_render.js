@@ -820,7 +820,7 @@ function boxOf(text) {
         // this sheet outweighed the language switch. Scoping to make a test
         // pass, without asking why the other language was there, is what let
         // that reach a customer's phone.
-        // §234 — MAY-CONTAIN IS A LINE, NOT CHIPS. A box is a shape for a
+        // §236 — MAY-CONTAIN IS A LINE, NOT CHIPS. A box is a shape for a
         // token and that field carries a whole sentence on some products, so
         // it is set as text; .aline is where it lands, per language.
         const rows = Array.from(card.querySelectorAll('.arow')).map(r => ({
@@ -851,14 +851,14 @@ function boxOf(text) {
       assert.deepStrictEqual(m.rows[0].cn, ['麸质（燕麦）']);
       assert.strictEqual(m.rows[1].lineCn, '大豆、坚果、麸质',
         'the Chinese list was not split, or was rejoined with the wrong comma');
-      // §234 — ONE SHAPE, AND THE FILL IS THE DIFFERENCE. A square box, and
+      // §236 — ONE SHAPE, AND THE FILL IS THE DIFFERENCE. A square box, and
       // what is in the food is filled where what is not is the outline.
       assert.strictEqual(m.hasRadius, '0px', 'the chip is a pill again');
       if (m.freeBg) assert.notStrictEqual(m.hasBg, m.freeBg,
         'contains and free-of are filled the same');
     });
 
-    await check('§234 — the label and its values share one left edge', async () => {
+    await check('§236 — the label and its values share one left edge', async () => {
       // Reported from a phone: a single "Gluten (oats)" chip floated in the gap
       // between a short label and the middle of the card, aligned to nothing.
       const m = await page.evaluate(() => {
@@ -879,7 +879,7 @@ function boxOf(text) {
           const left = Math.min(...boxes.map(b => b.left));
           const right = Math.max(...boxes.map(b => b.right));
           const lab = r.querySelector('.alab').getBoundingClientRect();
-          // §234 — the axis is the card's left edge, not its middle. Centred,
+          // §236 — the axis is the card's left edge, not its middle. Centred,
           // the three statements shared no edge and the eye crossed the card
           // six times to read three facts. `mid` is kept only to report by how
           // far a row would have been off it, when one regresses.
@@ -930,7 +930,7 @@ function boxOf(text) {
           await hi.click('.it:not(.out)[data-open]');
           const sel = `#dsheetB .l-${lang} .achip.has`;
           // The ground behind the chip is repainted to a value that is
-          // neither the ink nor the oat before anything is counted. §234 made
+          // neither the ink nor the oat before anything is counted. §236 made
           // the chip square, so nothing shows through its corners any more —
           // the repaint stays because the measurement below still reads every
           // pixel of the screenshot, corners included.

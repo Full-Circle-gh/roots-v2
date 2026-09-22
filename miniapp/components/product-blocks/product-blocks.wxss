@@ -339,7 +339,7 @@
   text-transform: uppercase;
   color: var(--ink-60);
 }
-/* §234 — THE LABEL SITS OVER ITS VALUES, AND BOTH START AT THE LEFT EDGE.
+/* §236 — THE LABEL SITS OVER ITS VALUES, AND BOTH START AT THE LEFT EDGE.
    Beside a fixed 176rpx column each statement began at a different place on
    the line, so there was no shared axis to read down; stacked, the values
    also get the card's full width, which the long ones need. */
@@ -375,7 +375,7 @@
   color: var(--ink-60);
   width: 100%;
 }
-/* §234 — THIS PAGE'S OWN BADGE, AND ONE SHAPE FOR THE WHOLE CARD. The
+/* §236 — THIS PAGE'S OWN BADGE, AND ONE SHAPE FOR THE WHOLE CARD. The
    dietary badges under the product name (.badge in pages/product) are
    squared outline boxes with a caps label, and that row is the calmest
    object on the page because it is one shape repeated. This card carried

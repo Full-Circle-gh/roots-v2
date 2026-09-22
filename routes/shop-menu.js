@@ -1180,7 +1180,7 @@ img{display:block;max-width:100%}
    Centring them beside a fixed 96px label only centred them in what the label
    left over, so a short label like CONTAINS pushed its chip well right of the
    card's middle and it still read as misplaced — the second report of the same
-   thing. The label went onto its own line for that, and §234 takes the second
+   thing. The label went onto its own line for that, and §236 takes the second
    half of the fix: centred, the three statements had no shared edge to read
    down, and the eye crossed the card six times to read three facts. Flush
    left they stack on one axis. */
@@ -1230,7 +1230,7 @@ img{display:block;max-width:100%}
    has a FIXED 24px height and the line box had to stop disagreeing with it.
    Here the pill takes its height FROM the line box, so the font's own figure is
    the one that balances. */
-/* §234 — THE PRODUCT PAGE'S OWN BADGE, AND ONE SHAPE FOR THE WHOLE CARD.
+/* §236 — THE PRODUCT PAGE'S OWN BADGE, AND ONE SHAPE FOR THE WHOLE CARD.
    The mini app draws its dietary badges as squared outline boxes (.badge in
    miniapp/pages/product/product.wxss: a 3rpx ink rule, transparent, caps at
    .08em) and that row is the calmest object on the page — because it is one
@@ -3111,7 +3111,7 @@ function detailBody(it, code, listed, sig, qrShown) {
       `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
       `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
   };
-  /* §234 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
+  /* §236 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
      for a token. This field holds tokens on most products and a whole
      sentence on some — the longest on the live catalogue is 90 characters,
      "May be produced in a facility handling tree nuts, soy, or other
@@ -3136,7 +3136,7 @@ function detailBody(it, code, listed, sig, qrShown) {
     const freeRow = chips.length
       ? algRow(L.freeOf, chips.map(c => c.en), chips.map(c => c.cn), 'free')
       : '';
-    // §234 — "NOTHING HERE" IS NOT AN ALLERGEN. Half the catalogue writes the
+    // §236 — "NOTHING HERE" IS NOT AN ALLERGEN. Half the catalogue writes the
     // contains field as "None declared" (or one of four Chinese spellings of
     // it), and a filled box is for what is IN the food — so the office's own
     // phrase prints in the row's quiet state instead. Their words, not the

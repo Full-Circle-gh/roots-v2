@@ -502,7 +502,7 @@ Page({
     const priceWas = hasCmp ? money(cmp) : '';
     const saveN = hasCmp ? Math.round((cmp - v) * 100) / 100 : 0;
     const saveLabel = saveN > 0 ? (L === 'cn' ? '省' : 'SAVE ') + money(saveN) : '';
-    // §234 — THE FREE-OF BADGES ARE GONE FROM THIS ROW, AND THE ALLERGEN CARD
+    // §236 — THE FREE-OF BADGES ARE GONE FROM THIS ROW, AND THE ALLERGEN CARD
     // SAYS IT INSTEAD. One outline box per free-of flag sat here while §232
     // put those same four flags in the allergen card's own Free of row, where
     // the card can subtract anything it already speaks about. Two places

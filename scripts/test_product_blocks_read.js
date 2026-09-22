@@ -616,7 +616,7 @@ check('the mini app is handed the column by its product page', () => {
     'the mini app has no free-of chip');
 });
 
-/* ── §234: ONE SHAPE, AND THE FILL IS THE DIFFERENCE ──────────────────────
+/* ── §236: ONE SHAPE, AND THE FILL IS THE DIFFERENCE ──────────────────────
    Ash, on the dietary badge row under a product's name — squared outline
    boxes, caps, one shape repeated: "what about this style". The allergen card
    carried three shapes at once (a filled pill, a dashed pill, a solid green
@@ -725,7 +725,7 @@ check('the back office still offers the four flags to tick', () => {
 });
 
 /* ── "NOTHING HERE" IS NOT AN ALLERGEN ────────────────────────────────────
-   §234 made the contains value a filled box. Half the catalogue writes that
+   §236 made the contains value a filled box. Half the catalogue writes that
    field as "None declared" — 21 of the 45 cards sampled on 2026-09-22, with
    the Chinese half spelling it four ways — so without this the loudest object
    on the card would be a black box announcing that there is no risk. */

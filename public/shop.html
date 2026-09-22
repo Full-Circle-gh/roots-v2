@@ -12,6 +12,13 @@
   /* ── Brand fonts (served from /assets/fonts, shared with the mini-app) ── */
   @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
   @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  /* AND UNDER ITS OWN NAME. The rule above hides the substitute inside the
+     display family, which is right for prose carrying a number in it. --f-num
+     has to NAME the face to put a unit in it, and a family nothing declares
+     resolves to nothing and falls through to the next entry in the stack --
+     which is the display face, which is what it looked like before, so the
+     fix would have been invisible. Same file, fetched once. §234. */
+  @font-face { font-family:'Lilita One'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); font-display:swap; }
   @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
   @font-face { font-family:'League Gothic'; src:url('/assets/fonts/LeagueGothic.ttf') format('truetype'); font-display:swap; }
   @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW5.ttf') format('truetype'); font-weight:500; font-display:swap; }
@@ -33,6 +40,13 @@
     /* Font vars the ported block engines (blocks.css / product-blocks.css) use —
        MUST match the mini-app's --f-* names exactly, incl. Aleo for body copy. */
     --f-bear:'Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    /* The face a figure and its unit share (§234). The display family's digits
+       are served from a substitute by unicode-range, which covers the numeral
+       and stops -- so a unit sitting in the same run, the g in "18.4 g", came
+       from the display face and read lighter than the number beside it. Runs
+       that are ALL figure name the substitute outright. lib/brand-theme.js
+       builds the same token server-side. */
+    --f-num:'Lilita One','Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
     --f-toni:'Toni Grotesk','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif;
     --f-gothic:'League Gothic','DF Yuan','PingFang SC','Hiragino Sans GB','Bebas Neue',sans-serif;
     --f-aleo:'Aleo','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
