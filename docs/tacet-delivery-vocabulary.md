@@ -1,6 +1,8 @@
 # Tacet delivery vocabulary — locked
 
-**v1.157 · 2026-09-22 · §218 GIVES THE COURIER CARD A CANCELLED STAGE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS, NEITHER INVENTED.** 青云聚信 reports no cancel, so a cancelled rider left the row frozen and the drawer read `Rider coming · 骑手前往取货` under a rider who had gone. The stage label and the one line of body beneath it are declared below with the live candidates each was built from and what was rejected. See *The stage for a rider who is gone (§218)*.
+**v1.158 · 2026-09-22 · §219 GIVES THE COURIER CARD A CANCELLED STAGE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS, NEITHER INVENTED.** 青云聚信 reports no cancel, so a cancelled rider left the row frozen and the drawer read `Rider coming · 骑手前往取货` under a rider who had gone. The stage label and the one line of body beneath it are declared below with the live candidates each was built from and what was rejected. See *The stage for a rider who is gone (§219)*.
+
+**v1.157 · 2026-09-22 · §218 SAYS CHENGDU AIR IS SF’S LANE — THREE COMPOSED STRINGS, EVERY WORD LIFTED AND ONE SENTENCE COPIED WHOLE.** The air half of an order into Chengdu can only be bought from SF Express, and the drawer says so on the parcel and asks again at the JD label. `顺丰速运` is live in `lib/tracking.js`’s carrier registry, `空运` and `仅限` are live on this very screen, and the confirm’s second sentence — `仍要生成空运运单吗?` — is copied verbatim off the airline-rejection question sitting a few lines above it. What is composed is the CLAUSE that names the rule, and the two frames it sits in. Rejected: `仅空运`, which is live on this screen meaning the OPPOSITE thing. See *Chengdu air belongs to SF (§218)*.
 
 **v1.156 · 2026-09-21 · §215 PUTS A SHOP'S STOCK REQUEST ON HOME — ONE COMPOSED STRING, COMPOSED ONLY BECAUSE THE LIVE PAIR WOULD HAVE COLLIDED.** A request one shop raises against another announced itself with a push and then a 6px dot; it is a row in Home's *Needs you* list now. `Stock requests · 补货申请` is live (the back office, and the phone's own notification log) and was rejected: this app already carries `Your stock requests · 我的补货申请` for the ASKER's list, and the new row is its mirror image — what other shops have asked of me. Everything else on the row is live or is data. See *The row that says another shop is waiting (§215)*.
 
@@ -121,7 +123,7 @@ Every customer-facing status map must cover all nine statuses. Printing a raw in
 | `heading_to_pickup` | Rider coming · 骑手前往取货 | Rider picking up your order · 骑手正在取货 |
 | `in_transit` | On the way · 配送中 | On the way · 骑手配送中 |
 | `delivered` | Delivered · 已送达 | Delivered · 已送达 |
-| `cancelled` | Rider cancelled · 骑手已取消 | (nothing — tracking stops; see §218) |
+| `cancelled` | Rider cancelled · 骑手已取消 | (nothing — tracking stops; see §219) |
 
 `cancelled` is the one stage the platform never reports; it is read by elimination (`lib/qingyun-cancel.js`). It is deliberately **operator-only**: the shopper's live tracking simply stops, because a cancel is nearly always the shop's own decision and a new rider may be called minutes later.
 
@@ -8335,7 +8337,40 @@ catalogue's own `name_en`/`name_cn`, carried as a pair from the server so the ro
 follows the language switch — and the count is a numeral, which Rule 4's own note
 says needs no label. The row gained one word.
 
-## The stage for a rider who is gone (§218)
+
+## Chengdu air belongs to SF (§218)
+
+**WHAT THIS NAMES.** The warning on an order’s AIR parcel, and the question
+asked when somebody goes to buy a JD air label for it anyway, when the order is
+going to Chengdu. Asked for by Ash: *"orders from chengdu that should ship by
+air can only be shipped by SF express logistic"*, then *"only chengdu"* and
+*"message plus are you sure"*. **Register: OPERATOR** (Rule 1) — no shopper sees
+either. Roots only; no other tenant has an SF account for this lane.
+
+**THE CARRIER’S NAME WAS ALREADY LOCKED, WHICH IS MOST OF THE PROBLEM GONE.**
+`SF Express · 顺丰速运` has sat in `lib/tracking.js`’s carrier registry since
+it was written, and it is what the manual-entry dropdown on this same card
+already shows. Nothing about the company is minted here. Nor is the sentence
+that does the asking: `仍要生成空运运单吗?`, with its
+`仍要生成空运运单` button and its `暂不`, is the live
+airline-rejection question from the same dialog, reused whole — the operator is
+being asked the same thing for a different reason, so it should read the same.
+
+| Where | English | Chinese | Note |
+| --- | --- | --- | --- |
+| Banner on the air parcel, `renderShipmentTrackingCard` in `public/retail-admin/04-orders.js` | Chengdu air can only ship with SF Express · 顺丰速运. Book it on SF’s own system and enter the waybill number below. | 成都空运仅限顺丰速运。请在顺丰速运下单,并将运单号手动填写在下方。 | **COMPOSED** from six live parts, all of them from this screen or the module behind it: `成都` (the city map in this same file, and `lib/tracking.js`), `空运`, `仅限`, `顺丰速运`, `请在`, `下单`, `运单号`, `手动填写` (off *或手动填写已有运单*, four lines below this banner) and `下方`. Rejected: `仅空运`, live on this screen as a product badge meaning *air shipping only* — the opposite claim, a thumb apart, on the same card; a `请勿生成京东空运运单` tail, because the don’t-do-it half is the confirm dialog’s job and a banner that both instructs and forbids is one nobody finishes reading. |
+| Confirm title, `createJdLabel` in `public/retail-admin/04-orders.js` | SF Express only | 仅顺丰速运 | **COMPOSED**, and it is `仅` + a name, which is the shape this screen already speaks in three times: `仅空运`, `仅陆运` and `仅广州` (`09-products.js`). Nothing is added but the carrier’s own locked name. Rejected: `只能顺丰`, which abbreviates a company name this system spells in full everywhere else; `顺丰专送`, an actual SF product name and therefore a claim about which service, which nobody here has made. |
+| Confirm body, same dialog | Chengdu air can only ship with SF Express. Create a JD air waybill anyway? | 成都空运仅限顺丰速运。仍要生成空运运单吗? | **HALF COMPOSED, HALF COPIED.** The first sentence is the banner’s own clause, repeated word for word so the question reads as the same fact the card already carried rather than a new one. The second is LIVE and verbatim — the airline-rejection confirm in this same function. Its `仍要生成空运运单` and `暂不` buttons are reused unchanged. |
+
+Composed by Claude Opus 5 on 2026-09-22 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses it.
+
+**WHAT IS NOT A STRING.** `成都` is a place name the catalogue already carries
+on both sides (`成都`/`Chengdu`, `lib/tracking.js` and this file’s own city map),
+and the waybill number the operator pastes in is data. The rule itself lives in
+`lib/jd.js` as `SF_ONLY_AIR_CITIES` and is never printed.
+
+## The stage for a rider who is gone (§219)
 
 **Two strings composed, by Claude, 2026-09-22.** Both are assembled from fragments that are live elsewhere in this same drawer; neither introduces a character that was not already shipping.
 
