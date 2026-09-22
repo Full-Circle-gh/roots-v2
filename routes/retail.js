@@ -435,6 +435,9 @@ const money = require('../lib/money');
 const recycle = require('../lib/recycle');
 // Sales tax and VAT (audit I-03). Off unless a shop has set a rate.
 const tax = require('../lib/tax');
+// §228 — the QR menu's per-type default, so the product editor's eye and the
+// live counter menu resolve a block from the same list.
+const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
 // ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
 // Thirty-five day-boundary calculations in this file were the literal string
 // '+8 hours', so today's takings, the dashboard, the finance window and "new
@@ -22921,7 +22924,20 @@ router.get('/api/retail-admin/config', requireRetailAdmin, (req, res) => {
     ).get();
     timezone = (row && String(row.timezone).trim()) || null;
   } catch (e) { timezone = null; }   // column absent on an old account DB → fallback
-  res.json({ success: true, data: { ...loadConfig(), timezone } });
+  /* §228 — THE QR MENU'S BLOCK DEFAULT IS ALWAYS ANSWERED, set or not.
+     loadConfig() returns the rows that EXIST, and the default deliberately
+     stores no row until somebody changes it — so an unset tenant would hand
+     the product editor nothing and the editor would have to carry its own copy
+     of the seed list. Two copies of one list is how the editor's eye and the
+     live menu come to disagree about whether a block shows. The effective
+     value is computed here, by the same function the menu itself reads, so
+     there is one answer and the editor is told it. */
+  const cfgOut = { ...loadConfig(), timezone };
+  cfgOut.qrMenu = {
+    ...(cfgOut.qrMenu && typeof cfgOut.qrMenu === 'object' ? cfgOut.qrMenu : {}),
+    hiddenBlockTypes: qrBlockDefaults.readHiddenTypes(tdb()),
+  };
+  res.json({ success: true, data: cfgOut });
 });
 
 // Live per-tier member counts — context for the Membership tier editor so the

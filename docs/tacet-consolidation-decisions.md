@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.369
+# Tacet shared-core consolidation — decisions record, v4.371
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-09-22 · v4.371 — **§228 · THE QR MENU HAS A DEFAULT, AND IT IS READ OFF THE PRODUCT ASH WAS LOOKING AT — DECIDED BY ASH**: *"i want by default that the blocks of quinoa salad that now shows on the qr code menu will be the default for all products"*, and, asked to choose, *"copy it once and make it a rule"*. **THE LIVE READ CHANGED HALF THE INSTRUCTION AND THAT IS THE ENTRY'S POINT.** `scripts/diagnose_qr_block_defaults.js` against production found Quinoa Salad (#196) carrying ten blocks with exactly two switched off — `storage_box` and `notes_callout` — and found that it and Almond Banana Berry are the ONLY two products in a 287-product catalogue carrying any `hide_qr` flag at all, with **no product anywhere having switched off a type Quinoa Salad shows** (the §142-accident shape the diagnostic was written to find returned zero). **So the copy half was NOT DONE**: nothing contradicts the pattern, a bulk write would have edited 216 products to reach the state the rule reaches by itself, and it would have buried the office's two real choices inside a sweep nobody could later tell from an accident. Reported rather than performed; the rule alone moves all 216 (100 storage cards and 105 notes callouts across the 117 listed products). **THE FLAG GAINS A THIRD STATE, because that is what a default needs somewhere to act**: `true` hides, **`false` SHOWS against a hiding default** — new, and now persisted where `paBlocksCollect` used to delete it, which would silently re-hide the one product somebody had switched back on — and ABSENT follows the tenant's list; conversely `paSetHideQr` DELETES rather than writes whenever the office lands on the default's own answer, so a block that agrees with the rule keeps following it instead of quietly sitting out the next change to it. **NO ROW IS WRITTEN AND NO MIGRATION RUNS**: `lib/qr-menu-block-defaults.js` holds the seed, an absent `storefront_config` row RESOLVES TO IT, a stored `[]` is honoured as a real answer (hide nothing), and a malformed row falls back to the seed rather than to silence — those are opposite outcomes and the second would put the storage card back on 216 menus with nobody having asked. **THE ONE THING THAT WOULD HAVE BROKEN IT** is a second copy of the seed: the editor's eye runs in a browser, cannot `require` the module, and must never carry the list — so GET `/api/retail-admin/config` now always answers with the EFFECTIVE list, computed by the same function `routes/shop-menu.js` reads, and `scripts/test_qr_menu_block_defaults.js` fails the build on a copy in either file. The menu reads it ONCE PER REQUEST beside `menuSignature`, for §179's reason. **NO CHINESE WAS COMPOSED** — the line under the switch that would have said *following the default* was deliberately not added, the existing hidden-block note being true whichever way the block came to be hidden, so `docs/tacet-delivery-vocabulary.md` is untouched. **NOT IN THIS CHANGE:** a screen for editing the default (one config key, the PUT endpoint already takes arbitrary dotted keys, and a new admin surface does not belong in the same PR as a behaviour change); `pull_quote` and `ingredients_line`, which Quinoa Salad does not carry and which therefore keep showing. No schema change, no migration, no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **328/328 green**; `scripts/test_product_blocks_read.js` 39 → **45 checks**, `scripts/test_product_editor_hide_qr.js` 11 → **13**, and `scripts/test_qr_menu_block_defaults.js` is new at **15**.
 2026-09-22 · v4.369 — **§226 · WHO PAID DEFAULTS TO THE COMPANY, AND §87 STEP TWO'S ANSWER IS REVERSED — DECIDED BY ASH**, off a screenshot of the live Expense form with *My own money* filled in: *"defult should be company money. not own money"*. **THE OLD DEFAULT WAS A CHOICE, NOT AN OVERSIGHT**, and it is worth naming so nobody restores it by accident: `reference/expense-capture-mockup.html` put the question to him on 2026-09-09 under *Does "who paid" default?* and answered *to my own money, since that is why an employee is recording it at all*. **THE LIVE SHOP SAYS OTHERWISE, AND §207 IS THE COST SHEET.** Six weeks of real claims made the opposite case: most spending goes on the shop's own WeChat Pay account, and §207 exists BECAUSE somebody at a till taps *My own money* out of habit — the claim is approved and then sits in **Owed to your team** as a debt the business does not owe, until a real transfer is made against it. A default is a tap nobody makes, so the default was manufacturing exactly the wrong half of that pair, at whatever rate people accept what is already filled in. **THE RISK RUNS BOTH WAYS AND IS NOT PRETENDED AWAY:** somebody who really did pay out of their own pocket and taps straight through now files a claim that owes them nothing, and that person is out ¥38 rather than the shop being over. What makes the company default the safer of the two is not that its mistake never happens but that **both mistakes are now recoverable and only one of them invents money**: §207 lets the approver move the field in either direction before or after approval, `lib/expense-posting.js` reads `paid_by` nowhere so no ledger row changes either way, and the sentence under the chips re-renders with the choice — *The shop owes you this once it is approved.* against *Paid from the shop's own account. Nothing is owed to you.* — so the field is never silent about what it has just decided. **THE APPROVAL QUEUE ALREADY AGREED**: `aprPaidCell` on both surfaces falls to `company` for a claim that never said, and the suite has called that *the safe half of the pair* since §207 shipped. The capture form was the last place that disagreed with it. **ONE CONSTANT, `EXP_PAID_DEFAULT`, declared above `const state` in `public/m.html`**, because the form sets this field in TWO places — the initial state and the reset that runs on every entry to the screen — and a default written twice is a default that drifts; `scripts/test_staff_expenses.js` pins the value, refuses a hard-coded `employee` anywhere on the form, and counts the constant's three appearances so a future literal in either place fails rather than half-reverting the decision. **NOT TOUCHED, DELIBERATELY:** the server has no default at all and is not given one — `lib/expense-claim.js` refuses a claim whose `paid_by` is neither `company` nor `employee`, which is §87 step two's closed set and the reason no client can submit a claim that means nothing; `expAgain` still CARRIES who paid to the next claim rather than resetting it, because a second claim in a row is the same person on the same account and that is its own recorded reason. **No Chinese is minted** — `个人支付` and `公司` are live on this very field and three screens besides. No schema change, no migration, no route change, no capability change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work. `reference/expense-capture-mockup.html` is annotated SUPERSEDED in place rather than edited, the mockup being the record of what was asked on the day. `npm run test:fast` green; `scripts/test_staff_expenses.js` 141 → **142 cases**.
 
 2026-09-22 · v4.368 — **§225 · THE CANCEL CHECK HAD A PRECONDITION IT COULD NEVER MEET, AND THAT IS WHY NOTHING EVER CONCLUDED — REPORTED BY ASH** for the third time on one order: *"rider is not coming. we cancel the rider. the status in not correct"*, four hours after §219 shipped the check that was supposed to notice. **THE CONCLUSION WAS NEVER WRONG. ITS PRECONDITION WAS UNREACHABLE.** §219 refuses to read an absence as a cancel unless the poll saw the platform's WHOLE list, which is right — `order/list` is paged, and an order pushed off the page is absent for the same reason a cancelled one is. What §219 got wrong is that it read **one page of twenty per tab** and then declared any full page "there may be more". **待配送 HOLDS EVERY ORDER THAT HAS BEEN CREATED AND NOT YET HAD A COURIER CALLED**, which on any working day is more than twenty. So one tab came back full on every poll, the observation was disqualified on every poll, and the sweep did nothing — **permanently, and with no trace but its own absence.** **THE RULING: WALK THE PAGES.** Each active tab is read page by page until a SHORT page says the end was reached; only a tab still full at the cap (`LIST_MAX_PAGES`, ten pages = 200 orders) now counts as truncated. The 完成 tab is paged the same way, two pages deep — it exists only to catch an order that landed since the last poll, which is recent and therefore near the front of a newest-first list. **THE GUARD IS NOT WEAKENED, IT IS MADE SATISFIABLE**, which is the distinction worth recording: the safe answer to "I might not have seen everything" is still to conclude nothing, and the fix is to actually see everything rather than to start guessing. **AND THE SKIP IS NO LONGER SILENT.** A check that declines to run now says so on the console and in `qingyun_sync_log`, with the reason and the number of jobs currently unseen, so the Delivery card carries it. **THAT IS THE REAL LESSON OF THE DAY AND IT IS NOT THE PAGING.** §219, §220, §221, §223 and #767 were each correct and each shipped a working piece, while the one order that started it all sat unchanged through every one of them — because the thing that was broken produced no error, no alert and no log line, only an outcome that never arrived. **A GUARD THAT CANNOT PASS IS INDISTINGUISHABLE FROM A GUARD THAT NEVER FIRES, AND THE ONLY DIFFERENCE IS WHETHER IT SAYS ANYTHING.** Three rounds of this were spent proposing candidate causes to Ash instead of making the system report its own. `scripts/test_qingyun_cancel_detect.js` grew a Part A2 (4 checks, 37 total) pinning that every tab is paged, that a short page ends a tab, that only the cap counts as truncated, and that a skipped sweep is logged. `npm run test:fast` 325/325 green.
@@ -19802,4 +19803,114 @@ treatment and the partition.
 the order-record read goes red.
 
 `npm run test:fast` 295/295 green on `c2c4849`. No Chinese, no schema, no
+migration, no change to `.gitignore` or CI.
+
+## §228 — THE QR MENU HAS A DEFAULT, AND IT IS READ OFF THE PRODUCT ASH WAS LOOKING AT
+
+**Ash, 2026-09-22: *"in the product editor we can select which block it will show
+on that menu and which not. i want by default that the blocks of quinoa salad
+that now shows on the qr code menu will be the default for all products."*** And,
+asked to choose between a one-time copy and a standing rule: ***"copy it once and
+make it a rule."***
+
+### What existed, and why it could not scale
+
+§142 gave every block a per-product switch — `hide_qr`, the eye on the row and
+the "QR menu" checkbox in the inspector — and `lib/product-blocks-read.js` read
+it as a boolean: `!!b.hide_qr`. **Absent meant SHOWN, definitively, on every
+product.** There was no default anywhere. Switching a type off across the
+catalogue meant opening every product and clicking the eye, and the next
+product added started from the old answer again.
+
+### THE LIVE READ CAME FIRST, AND IT CHANGED HALF THE INSTRUCTION
+
+`scripts/diagnose_qr_block_defaults.js` (read-only, run against production the
+same morning, run 35713986310):
+
+* **Quinoa Salad (#196)** carries ten blocks and has exactly two switched off —
+  `storage_box` and `notes_callout`. Everything else is on.
+* **Two products in a 287-product catalogue carry any flag at all**: #196, and
+  #377 Almond Banana Berry (`notes_callout`).
+* **No product anywhere has switched OFF a type Quinoa Salad shows.** The
+  §142-accident shape the diagnostic was built to find — a lone flag on block
+  #1, written by the inverted checkbox rather than by a person — returned zero.
+* **216 products still show `storage_box` and/or `notes_callout`**; on the live
+  menu that is 100 and 105 blocks across 117 listed products.
+
+**DECIDED: the copy half is not done, and the ask is met in full without it.**
+Nothing contradicts the pattern, so a bulk write would edit 216 products to
+reach the state the rule reaches on its own — while burying the office's two
+real choices inside a sweep nobody could later tell from an accident. Reported
+to Ash rather than performed. The rule alone moves all 216.
+
+### DECIDED: the flag gets a THIRD state, because that is what a default needs
+
+A default can only exist where "nobody has said" is distinguishable from
+"somebody said show it". `hiddenHere` now resolves:
+
+| `hide_qr`  | meaning                                                      |
+|------------|--------------------------------------------------------------|
+| `true`     | hidden here. The office switched this block off.              |
+| `false`    | shown here, **against** a default that hides its type.        |
+| absent     | follow the tenant's list.                                     |
+
+**The `false` is new and is now PERSISTED.** `paBlocksCollect` used to delete a
+falsy flag on the way out — correct when absent already meant shown, and a
+silent re-hide now. Conversely `paSetHideQr` **deletes** rather than writes
+whenever the office lands on the default's own answer, so a block that agrees
+with the rule keeps following it: an explicit value there would quietly exempt
+that product from the next change to the default, with nothing in the editor
+saying why.
+
+### DECIDED: no row is written, and an absent row means the seed
+
+`lib/qr-menu-block-defaults.js` holds `SEED_HIDDEN = ['storage_box',
+'notes_callout']` and an ABSENT `storefront_config` row resolves to it. **No
+migration, no backfill, nothing stamped onto any tenant.** A tenant overrides by
+storing `qrMenu.hiddenBlockTypes`; a tenant that wants the old
+everything-shows behaviour stores `[]`, which is honoured as a real answer. A
+row that is malformed — not a list, unparseable, absent table — falls back to
+the seed rather than to "hide nothing", because those are opposite outcomes and
+the second would put the storage card back on 216 menus without anybody asking.
+
+### ONE RULE, AND THE THING THAT WOULD HAVE BROKEN IT
+
+The editor's eye claims to describe what the counter menu draws. It runs in a
+browser and cannot `require` the module, so it carries a **copy of the
+resolution** — and the seed list itself is the one thing it must never copy:
+GET `/api/retail-admin/config` now always answers with the EFFECTIVE list,
+computed by the same function `routes/shop-menu.js` reads. Two copies of that
+list agree on the day they are written; the day they drift, the editor shows an
+open eye on a block the customer cannot see, and nothing says so.
+`scripts/test_qr_menu_block_defaults.js` fails the build on a second copy in
+either file.
+
+The menu reads the list **once per request**, beside `menuSignature` and for the
+same reason §179 gives: every product on the page resolves against the same
+list, and a read inside the per-product renderer is one query per tile.
+
+### NO NEW STRINGS, AND THAT WAS A DESIGN CHOICE
+
+The obvious addition — a line under the switch reading "following the QR menu
+default" — was **not made**. The note already shown under a hidden block ("Hidden
+on the QR menu. The mini app and web shop still show it, and nothing is
+deleted.") is true whichever way the block came to be hidden, and whether the
+answer came from the rule or from a flag is machinery the office does not act
+on. Restructuring to fit a live pair rather than minting one, per §30 rule 3.
+**No Chinese was composed, so `docs/tacet-delivery-vocabulary.md` is untouched.**
+
+### What is NOT in this change
+
+**There is no screen for editing the default.** It is one `storefront_config`
+key and the PUT endpoint already takes arbitrary dotted keys, so changing it
+needs no deploy — but it needs somebody who knows the key. A control for it is a
+separate PR and a separate decision; putting it in this one would have made a
+behaviour change and a new admin surface impossible to review apart.
+
+**`pull_quote` and `ingredients_line` are unaffected.** Quinoa Salad carries
+neither, so the pattern says nothing about them, and saying nothing means they
+keep showing — the status quo for the 11 and 1 products that carry them. Read
+off the catalogue rather than assumed.
+
+`npm run test:fast` 328/328 green on `d8e26ef`. No Chinese, no schema, no
 migration, no change to `.gitignore` or CI.
