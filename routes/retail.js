@@ -8269,9 +8269,20 @@ function autoDeliverLocalEtaForTenant() {
           AND NOT EXISTS (
                 SELECT 1 FROM delivery_jobs j
                  WHERE j.retail_order_id = o.id
-                   AND j.order_status IS NOT NULL
-                   AND j.order_status < 50
-                   AND j.updated_at > datetime('now','-30 minutes'))`
+                   AND ( ( j.order_status IS NOT NULL
+                           AND j.order_status < 50
+                           AND j.updated_at > datetime('now','-30 minutes') )
+                         -- A CANCELLED delivery blocks the timer outright, with no
+                         -- freshness window. The window above asks "is a rider being
+                         -- tracked right now?", and the honest answer for a cancelled
+                         -- job is no — which would hand the order straight to the ETA
+                         -- fallback and mark it Delivered off a clock, over a parcel
+                         -- still sitting in the shop because the rider was cancelled.
+                         -- The fallback exists for orders that WENT OUT untracked;
+                         -- this one demonstrably did not. It stays blocked until a new
+                         -- delivery is created (a new row, cancelled_at NULL) or staff
+                         -- close the order by hand.
+                         OR j.cancelled_at IS NOT NULL )`
     ).all();
   } catch (e) {
     if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
@@ -8396,6 +8407,11 @@ function autoDispatchQingyunForTenant() {
         WHERE o.status IN (${AUTO_DISPATCH_FROM_SQL})
           AND j.order_status IS NOT NULL
           AND j.order_status < 50
+          -- A cancelled delivery's enum is frozen at whatever it held when the
+          -- platform stopped returning it, so a rider who cancelled after pickup
+          -- leaves a row that reads 配送中 for ever. Flipping the order to
+          -- "dispatched" off that tells the customer their parcel is on its way.
+          AND j.cancelled_at IS NULL
           AND ( j.order_status >= 40
                 OR (j.order_status >= 30 AND COALESCE(j.delivery_status, 0) >= 30) )`
     ).all();
@@ -8482,6 +8498,7 @@ function autoDeliverQingyunForTenant() {
          FROM retail_orders o
          JOIN delivery_jobs j ON j.retail_order_id = o.id
         WHERE o.status IN (${AUTO_DELIVER_FROM_SQL})
+          AND j.cancelled_at IS NULL
           AND j.order_status >= 50`
     ).all();
   } catch (e) {
@@ -13963,6 +13980,12 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
 // means exactly heading_to_pickup — a rider is travelling to the store. It is never
 // used for awaiting_dispatch (no rider yet)."
 function deliveryJobStage(job) {
+  // Read by elimination, and it OUTRANKS every raw enum below. A cancelled job's
+  // order_status is whatever it happened to hold when the platform stopped
+  // returning it — 30 配送中 on a rider who cancelled mid-run — so trusting the
+  // enum here is exactly the frozen "Rider coming" this column exists to end.
+  // See lib/qingyun-cancel.js for how the conclusion is reached.
+  if (job.cancelled_at) return 'cancelled';
   const os = job.order_status;
   const dispatched = !!(job.delivery_id || job.carrier_name || job.rider_name
     || (job.delivery_status != null && Number(job.delivery_status) > 0));
@@ -14042,6 +14065,20 @@ function buildDeliveryTrackData(job, slotLabel, scheduledFor, lang) {
   // Coarse stage from the delivery_jobs row — see deliveryJobStage (shared with
   // the admin drawer so staff + customer always read the same stage).
   const stage = deliveryJobStage(job);
+  // A cancelled delivery has NO live tracking to serve, and this payload is the
+  // map feed for both the shopper's order page and the admin drawer's map. Every
+  // position on a cancelled job is a frozen last-known fix of a rider who is no
+  // longer carrying anything, so serving it would draw a stationary scooter on
+  // the customer's map for as long as the row exists.
+  //
+  // The SHOPPER is told nothing beyond this, deliberately. They have no action to
+  // take: a cancel is nearly always the shop's own decision (short stock, a moved
+  // day, a bad address) and a new rider may be called minutes later, so a customer-
+  // facing "delivery cancelled" would raise a support call about a state that is
+  // about to stop being true. Their order simply stops claiming a rider and reads
+  // its own status again. STAFF are told plainly — see the drawer's courier card,
+  // which reads o.courier.stage and is where the cancel is actionable.
+  if (stage === 'cancelled') return { tracking: false };
   const coord = (lat, lng) => (lat != null && lng != null) ? { lat: lat / 1e6, lng: lng / 1e6 } : null;
 
   let route = [];
@@ -27298,10 +27335,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           stage,
           carrier: j.carrier_name || null,
           rider_name: j.rider_name || null,
-          // Suppress ETA/distance pre-dispatch (a 'scheduled' row's numbers are noise).
-          eta_seconds:     stage === 'scheduled' ? null : (j.eta_seconds ?? null),
-          rider_to_cust_m: stage === 'scheduled' ? null : (j.rider_to_cust_m ?? null),
+          // Suppress ETA/distance pre-dispatch (a 'scheduled' row's numbers are noise)
+          // and post-cancel (a gone rider's last real numbers read as live ones).
+          eta_seconds:     (stage === 'scheduled' || stage === 'cancelled') ? null : (j.eta_seconds ?? null),
+          rider_to_cust_m: (stage === 'scheduled' || stage === 'cancelled') ? null : (j.rider_to_cust_m ?? null),
           expected_delivery_at: j.expected_delivery_at || null,
+          cancelled_at: j.cancelled_at || null,
           updated_at: j.updated_at,
         });
       }
@@ -27771,7 +27810,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     if (job) {
       const stage = deliveryJobStage(job);
       o.courier = {
-        stage,                                            // scheduled | awaiting_dispatch | in_transit | delivered
+        stage,                          // scheduled | awaiting_dispatch | heading_to_pickup | in_transit | delivered | cancelled
         carrier: job.carrier_name || null,
         // Same shape, same reason as buildDeliveryTrackData's rider above: a
         // nameless rider still carries a number the customer can call.
@@ -27779,10 +27818,15 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
           ? { name: job.rider_name || null, phone: job.rider_phone || null }
           : null,
         // No ETA/distance before a rider is on it — suppress for the pre-dispatch
-        // preview so we never show a bogus "~N min".
-        eta_seconds:     stage === 'scheduled' ? null : (job.eta_seconds ?? null),
-        rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? null),
+        // preview so we never show a bogus "~N min". A CANCELLED job is suppressed
+        // for the mirror-image reason: its numbers are a real reading of a rider
+        // who has since gone, which is worse than a bogus one for looking true.
+        eta_seconds:     (stage === 'scheduled' || stage === 'cancelled') ? null : (job.eta_seconds ?? null),
+        rider_to_cust_m: (stage === 'scheduled' || stage === 'cancelled') ? null : (job.rider_to_cust_m ?? null),
         expected_delivery_at: job.expected_delivery_at || null,
+        // When the daemon concluded the delivery was gone. The card prints it, so
+        // staff can tell a cancel from a minute ago from one from this morning.
+        cancelled_at: job.cancelled_at || null,
         updated_at: job.updated_at,
       };
     }
@@ -29636,6 +29680,13 @@ function _qingyunCourierCommitted(qyOrderId) {
   try {
     const job = tdb().prepare('SELECT * FROM delivery_jobs WHERE qingyun_order_id = ?').get(String(qyOrderId));
     if (!job || job.order_status == null) return null;
+    // A cancelled delivery holds nothing, whatever enum it froze on. This is the
+    // same argument the header above makes for a rider who drops an order back to
+    // 待配送, one step further: there, the platform itself reverted the status; here
+    // the order left the platform's lists entirely and the status never moved. A
+    // job frozen at 30 配送中 would otherwise block re-dispatch for good — the
+    // order could never be given to another courier from this screen again.
+    if (job.cancelled_at) return null;
     if (Number(job.order_status) < 30) return null;      // 待配送 — nobody sent for it
     return deliveryJobStage(job);
   } catch (_) { return null; }                            // table missing pre-migration
@@ -29791,7 +29842,12 @@ function _qingyunMoveBlockedBy(qyOrderId) {
     const job = tdb().prepare('SELECT * FROM delivery_jobs WHERE qingyun_order_id = ?').get(String(qyOrderId));
     if (!job) return null;                        // not tracked yet — nothing dispatched
     const stage = deliveryJobStage(job);
-    return stage === 'scheduled' ? null : stage;
+    // 'cancelled' joins 'scheduled' as a stage that blocks nothing: both mean no
+    // courier is holding this order. Without it the drawer's ship-from line reads
+    // "A courier is already on this one. To collect it somewhere else, cancel it
+    // in the Qingyun app first." over a delivery that was cancelled in the Qingyun
+    // app — telling staff to do the thing they have already done.
+    return (stage === 'scheduled' || stage === 'cancelled') ? null : stage;
   } catch (_) { return null; }
 }
 
@@ -30592,19 +30648,61 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   const date = String(req.body?.date || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'bad_date' });
   const today = inventory.gzDateStr(new Date().toISOString());
-  if (date !== today) {
+  // A PAST day is still refused, and always will be: a date that has gone never
+  // becomes today, so a row parked on it would wait for ever. Today and any
+  // future day are both accepted now — the drain holds a future-dated row until
+  // its Guangzhou day instead of retiring it (lib/inventory qingyunPushDisposition),
+  // which is what used to make any day but today impossible to honour.
+  if (date < today) {
     return res.status(400).json({
-      success: false, error: 'today_only',
-      // Said plainly so the caller does not read this as a bug to retry: the
-      // delivery for another day has to be created by hand in Qingyun.
-      detail: 'Only today can be re-queued. A later day has to be dispatched by hand.',
+      success: false, error: 'date_passed',
+      detail: 'That day has gone. Pick today or a later day.',
     });
   }
 
   const q = _qingyunPushRow(id);
   if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+
+  // ── A copy already on the platform: which kind? ───────────────────────────
+  // This used to be one branch — any qingyun_order_id at all returned
+  // `already_created` and stopped, BEFORE the date write and the queue write
+  // below. That is right for a LIVE copy (a rider has it; there is nothing to
+  // re-queue) and wrong for a CANCELLED one, where the id points at a delivery
+  // that no longer exists.
+  //
+  // The wrong half was worse than silent. The client checked only `success`, so
+  // staff pressing "Reschedule delivery" on an order whose rider had been
+  // cancelled read "Moved to today — it goes back in the queue now" over an
+  // endpoint that had changed nothing at all: no date, no queue row, no rider.
+  // Reported on live order TC000823, 2026-09-22. It is the same no-op-with-a-
+  // caption this surface was built to remove, one branch further in.
+  //
+  // Whether the copy is cancelled is NOT this endpoint's judgement to make: it
+  // reads the daemon's conclusion (delivery_jobs.cancelled_at), which is reached
+  // under its own two guards — see lib/qingyun-cancel.js.
+  //
+  // The four sibling endpoints above carry the same early return. Theirs is left
+  // alone deliberately: each answers a different question (retry, place a point,
+  // accept a candidate, reject one) and "a courier already has it" is a correct
+  // and complete refusal for all four. Only this one promises a MOVE it did not
+  // make. Widening the change to them would be a bigger claim than the bug.
+  let cancelledCopy = null;
   if (q.qingyun_order_id) {
-    return res.json({ success: true, already_created: true, qingyun_order_id: String(q.qingyun_order_id) });
+    let job = null;
+    try {
+      job = tdb().prepare('SELECT cancelled_at FROM delivery_jobs WHERE qingyun_order_id = ?')
+        .get(String(q.qingyun_order_id));
+    } catch (_) { job = null; }        // pre-migration — fail safe, treat as live
+    if (!job || !job.cancelled_at) {
+      // A live copy. Reported as its own outcome, never as a move: the response
+      // now says which of the two writes happened, so the client cannot read it
+      // as success at the thing it asked for.
+      return res.json({
+        success: true, already_created: true, requeued: false, moved: false,
+        qingyun_order_id: String(q.qingyun_order_id),
+      });
+    }
+    cancelledCopy = String(q.qingyun_order_id);
   }
 
   const o = tdb().prepare(
@@ -30616,9 +30714,18 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
   const wasDate = inventory.gzDateStr(o.scheduled_for) || null;
 
-  // Same-day work, so it takes the slot kind that says so — which is what
-  // makes isQingyunSameCityToday accept it unconditionally on the next poll.
-  const kind = 'today';
+  // THE SLOT KIND IS NOT ALWAYS 'today' ANY MORE, AND GETTING THIS WRONG SHIPS
+  // THE ORDER EARLY. 'today' makes qingyunPushDisposition return 'push'
+  // unconditionally — it never looks at scheduled_for for that kind — so a
+  // future-dated order carrying kind 'today' would be dispatched on this poll,
+  // today, whatever date the operator picked. The customer-side reschedule
+  // carries a note about this exact trap ("a paid ship-district order could be
+  // rescheduled with kind 'today' and walk into the rider queue"); it applies
+  // here for a second reason now.
+  //
+  // A later day takes a null kind, which is the "scheduled / legacy" path: the
+  // disposition then compares scheduled_for against today and parks the row.
+  const kind = date === today ? 'today' : null;
   // NO NETWORK CALL HERE EITHER, for the same reason as confirm-point above:
   // the requeue only marks the row, and the drain does the remote work on its
   // own poll. An await on Qingyun inside this block would hold the shared handle
@@ -30632,7 +30739,13 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
                 seen_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(date, date, kind, id);                     // ← the date, FIRST
-      return tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;   // ← then the queue
+      // A cancelled copy takes the compare-and-swap that clears its dead id; every
+      // other row takes the ordinary manual-retry statement, whose own guard
+      // (qingyun_order_id IS NULL) is untouched. Both return 0 rows rather than
+      // throwing when another writer got there first, and that is reported.
+      return cancelledCopy
+        ? tx.prepare(qingyunQueue.REQUEUE_AFTER_CANCEL_SQL).run(id, cancelledCopy).changes > 0
+        : tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;       // ← then the queue
     });
   } catch (e) {
     console.error('[qingyun reschedule]', e.message);
@@ -30640,8 +30753,13 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
 
   logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
-    { from: wasDate, to: date, requeued }, req.ip);
-  res.json({ success: true, requeued, from: wasDate, to: date });
+    { from: wasDate, to: date, requeued, after_cancel: !!cancelledCopy }, req.ip);
+  // `moved` is the date write, which always happens once we get here; `requeued`
+  // is the queue, which can legitimately be false (another writer won the swap).
+  // The client words its toast off BOTH — see qpDoReschedule — because "moved to
+  // today" over a row that was not re-queued is the half-truth this endpoint has
+  // been telling.
+  res.json({ success: true, moved: true, requeued, after_cancel: !!cancelledCopy, from: wasDate, to: date });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's
