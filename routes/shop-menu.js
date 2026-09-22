@@ -746,6 +746,40 @@ img{display:block;max-width:100%}
    the mini app and stay full-width here, which is what the negative margin is
    for — the same trick the hero already uses. */
 
+/* EVERY BLOCK IS A BAND, WITH AIR AROUND IT AND A RULE BETWEEN.
+   Ash, against the live Ramada menu: the blocks are very tight. The component
+   gives each block 60rpx of padding above and below and divides them with a
+   rule (public/shop/product-blocks.css, .spb). §132 brought the thirteen
+   blocks here and left the bands behind: they were emitted flat, one after
+   another, so the only space between two sections was whatever the NEXT one's
+   root element happened to carry — 18u under the allergen card, 26u under a
+   heading, 14u under the nutrition table, and nothing at all for a block whose
+   root had no margin. The chip cloud, the allergen card and the usage tiles
+   therefore read as one continuous column rather than three sections.
+
+   A HAIRLINE, NOT THE COMPONENT'S INK RULE. The component draws 2rpx of full
+   ink across a 750rpx canvas. At this page's 390px the same weight reads as a
+   fence between every pair of sections, and this sheet already has a divider
+   for exactly this job: rgba(0,0,0,.08), what .ln and .og use.
+
+   THE WRAPPER OWNS THE SPACE AND THE BLOCK ROOTS GIVE THEIRS UP. Without the
+   reset below the wrapper's 26u and .pb-h's own 26u stack to 52u above a
+   heading and only above a heading, which trades one unevenness for another.
+   The roots are named rather than reached for with a child combinator, because
+   no angle bracket may appear in this stylesheet — see the note at the head of
+   styles(). Every class listed is a block's FIRST element by construction (one()
+   emits head() first where a block has a head), so a descendant selector picks
+   the same element the combinator would have. */
+.pb{margin-top:calc(20 * var(--u))}
+.pb + .pb{margin-top:calc(26 * var(--u));padding-top:calc(26 * var(--u));
+  border-top:1px solid rgba(0,0,0,.08)}
+.pb .pb-spec,.pb .dt-p,.pb .pb-why-h,.pb .pb-h,.pb .acard,.pb .pb-note,
+.pb .pb-stat,.pb .pb-qt,.pb .pb-band,.pb .nut{margin-top:0}
+/* margin-top and margin-bottom as LONGHANDS, never the margin shorthand: the
+   slab, the quote and the photo band carry -14px on the sides to bleed out
+   through .sheet-b's padding, and a shorthand here would take it back. */
+.pb .pb-stat,.pb .pb-qt{margin-bottom:0}
+
 /* The heading two-thirds of these blocks share. */
 .pb-h{display:flex;justify-content:space-between;align-items:flex-end;
   margin:calc(26 * var(--u)) 0 calc(19 * var(--u));gap:calc(10 * var(--u))}
@@ -1023,9 +1057,21 @@ img{display:block;max-width:100%}
 /* THE INGREDIENT CLOUD — the mini app's ingredients_chips, in this page's ink.
    The hero ingredient is FILLED and the rest outlined, which is the one thing
    the block's lead flag carries and the reason it exists: a customer reads
-   what the product is mostly made of before reading the list. */
-.ichips{display:flex;flex-wrap:wrap;gap:calc(6 * var(--u))}
-.ichip{border:1.5px solid var(--ink);border-radius:999px;padding:calc(5 * var(--u)) calc(11 * var(--u));
+   what the product is mostly made of before reading the list.
+
+   THE GAP AND THE PADDING ARE THE COMPONENT'S, AND THEY WERE NOT.
+   Converted at this page's own rpx x .52, the component's chip is 16rpx of gap
+   and 18rpx by 26rpx of padding: 8.3u, 9.4u, 13.5u. This page had 6u, 5u and
+   11u — about a third under, on every axis at once — so a salad carrying eleven
+   ingredients drew five rows of chips with six pixels between them and read as
+   one solid block. Reported by Ash from a phone against the Quinoa Salad.
+   WHOLE NUMBERS, not the converted decimals: .dt-k above records what a
+   fractional box costs this column, and 8 / 7 / 13 are within a pixel of the
+   component while keeping every chip on an integer. The padding stays
+   symmetrical top and bottom, which is what the render suite measures — it
+   checks where the chip's INK sits inside its pill, and that is unmoved. */
+.ichips{display:flex;flex-wrap:wrap;gap:calc(8 * var(--u))}
+.ichip{border:1.5px solid var(--ink);border-radius:999px;padding:calc(7 * var(--u)) calc(13 * var(--u));
   font-size:calc(12.5 * var(--u));line-height:calc(17 * var(--u))}
 .ichip.lead{background:var(--ink);color:var(--oat);border-color:var(--ink)}
 .ichip .pct{font-variant-numeric:tabular-nums;opacity:.7;font-size:calc(11 * var(--u))}
@@ -2905,6 +2951,13 @@ function detailBody(it, code, listed, sig) {
   const head = (h, tag) => `<div class="pb-h"><div class="pb-h-l">${p2(h)}</div>` +
     (tag ? `<div class="pb-h-r">${p2(tag)}</div>` : '') + `</div>`;
 
+  // ONE BLOCK, ONE BAND. The wrapper .pb carries the space above a block
+  // and the hairline between it and the one before; the block itself gives up
+  // its own top margin to it. Applied by the caller rather than inside one(),
+  // because the nutrition column appended AFTER the blocks is a band too and
+  // reaches this from the other side.
+  const band = (h) => h ? `<div class="pb">${h}</div>` : '';
+
   // THE HERO INGREDIENT IS FILLED, THE REST OUTLINED — the mini app's own chip
   // cloud, where `lead` marks the one the product is mostly made of. A pct the
   // office stated rides on the chip; most have none and that is normal.
@@ -3156,7 +3209,14 @@ function detailBody(it, code, listed, sig) {
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd"><div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
     `</div>` +
-    blocks.map(one).join('') +
+    /* EACH BLOCK IN ITS OWN BAND. The wrapper is what .pb spaces and
+       rules against its neighbour; see the CSS for why the blocks could not
+       simply keep their own margins. AN EMPTY BLOCK STAYS EMPTY: one() returns
+       '' for a type it does not draw and for a pairings block whose products
+       this shop no longer lists, and wrapping that would draw a rule and 52u of
+       air around nothing — the blank band being exactly what a customer would
+       read as a missing section. */
+    blocks.map(b => band(one(b))).join('') +
     /* THE NUTRITION COLUMN COMES LAST, AND ONLY WHEN NO BLOCK ALREADY SAID IT.
        retail_products.nutrition is a separate column from the nutrition_facts
        block and most products use one or the other; a product carrying both
@@ -3167,12 +3227,12 @@ function detailBody(it, code, listed, sig) {
        page is absent from `blocks`, and reading the absence as "no block" is
        how a hidden table would have printed here anyway, out of the column. */
     (nut && !blockRead.hasNutritionBlock(it.description_blocks)
-      ? nutCard({ en: 'Nutrition', cn: '营养成分' },
+      ? band(nutCard({ en: 'Nutrition', cn: '营养成分' },
                 { en: nut.basis_en || '', cn: nut.basis_cn || '' },
                 nutRows(nut.rows.map(r => ({
                   label: { en: r.label_en || '', cn: r.label_cn || '' },
                   value: r.value, kind: r.kind,
-                }))))
+                })))))
       : '') +
     /* LAST, UNDER EVERYTHING, which is where a signature goes. */
     colophon;
