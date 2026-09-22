@@ -57,8 +57,10 @@ main{padding:20px 18px 60px;overflow-x:auto}
 .cap h2 span{color:var(--chrome-mute)}
 .cap p{margin:5px 0 0;font-size:12px;color:var(--chrome-mute);line-height:1.5;min-height:52px}
 .phone{background:var(--oat);border:1px solid #000;box-shadow:0 10px 34px rgba(0,0,0,.45);
-  height:78vh;min-height:560px;overflow-y:auto;overflow-x:hidden;position:relative}
-.phone::-webkit-scrollbar{width:0}
+  height:78vh;min-height:560px;overflow:hidden;position:relative;
+  display:flex;flex-direction:column}
+.phone .sheet{flex:1;min-height:0;display:flex;flex-direction:column}
+.sheet-b::-webkit-scrollbar{width:0}
 .note{margin-top:9px;font-size:11.5px;color:var(--chrome-mute);line-height:1.5}
 .note b{color:var(--lime);font-weight:600}
 
@@ -79,7 +81,19 @@ main{padding:20px 18px 60px;overflow-x:auto}
 .sheet .lang i{font-style:normal;padding:6px 10px;font-family:var(--f-bear);font-size:13px;
   letter-spacing:.04em;color:var(--olive)}
 .sheet .lang i.on{background:var(--lime);color:var(--ink)}
-.sheet-b{padding:4px 14px 0}
+/* THE SCROLLER AND THE FOOT, WHICH THE FIRST CUT OF THIS MOCKUP LEFT OUT —
+   and leaving them out is what made option B's masthead look like it was
+   adding a price. .sheet-f is pinned under the scroller on every product
+   page and it already carries the price beside the add button, so a price
+   in the masthead would be the same number twice on one screen. */
+.sheet-b{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:4px 14px;
+  overscroll-behavior:contain}
+.sheet-f{flex:none;padding:12px 14px;border-top:2px solid var(--ink);background:var(--oat)}
+.tot{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  font-family:var(--f-bear);font-size:17px}
+.tot span:last-child{font-variant-numeric:tabular-nums}
+.place{border:2px solid var(--ink);background:var(--lime);color:var(--ink);
+  padding:11px 20px;font-family:var(--f-bear);font-size:16px}
 
 /* hero */
 .dt-ph{display:block;width:calc(100% + 28px);margin:-4px -14px 0;aspect-ratio:1/1;
@@ -418,8 +432,7 @@ function sheet(opt){
 
   let head = `<div class="dt-hd"><div class="dt-nm">Quinoa Salad</div></div>`;
   if (opt === 'b') head = `<div class="mast">
-      <div class="mast-t"><div class="mast-n">Quinoa Salad</div><div class="mast-p">¥44</div></div>
-      <div class="mast-f"><span class="fchip">Vegan</span><span class="fchip">Gluten free</span><span class="fchip">Buddhist friendly</span></div>
+      <div class="mast-n">Quinoa Salad</div>
       <div class="mast-a"><span class="mast-al">Contains</span><span class="achip has">Sesame</span>
         <span class="mast-al">May contain</span><span class="achip may">Gluten (oats)</span><span class="achip may">Tree nuts</span></div>
       <div class="mast-end"></div>
@@ -435,7 +448,7 @@ function sheet(opt){
       ${band(B_INTRO, r.story)}
       ${why}
       ${band(B_ING, r.list)}
-      ${C ? band(B_ALG, 'dark') : band(B_ALG, r.card)}
+      ${opt === 'b' ? '' : (C ? band(B_ALG, 'dark') : band(B_ALG, r.card))}
       ${band(B_HOW, r.list)}
       ${band(B_STORE, r.card)}
       ${band(B_STAT, r.bleed)}
@@ -443,6 +456,8 @@ function sheet(opt){
       ${band(B_NUT, r.card)}
       ${COLO}
     </div>
+    <div class="sheet-f"><div class="tot"><span>¥44</span>
+      <button type="button" class="place">ADD TO BASKET</button></div></div>
   </div>`;
 }
 
@@ -451,8 +466,8 @@ const PANELS = [
    d:'Every block is a band: 26u of air and a 1px hairline between each pair. Nine sections, one weight. The lime slab wears a hairline that stops 14px short of it.'},
   {k:'a', n:'Option A', t:'The heading carries the rule',
    d:'The hairline moves onto the block headings as the sheet’s own 2px ink rule. Headed blocks announce a section; the paragraph, the note and the slab just get air. One CSS move.'},
-  {k:'b', n:'Option B', t:'Answer first (A + masthead)',
-   d:'A fixed masthead under the photo — name, price, free-of flags, what it contains — then the office’s blocks. Restores what §120 wanted and §129 lost.'},
+  {k:'b', n:'Option B', t:'Answer first (A + hoisted allergens)',
+   d:'The office’s allergen card is hoisted under the name and does NOT draw twice. No price: .sheet-f already pins it below. No free-of flags: this page refuses to read that column, on purpose.'},
   {k:'c', n:'Option C', t:'Ground shift',
    d:'Rhythm from the ground changing colour, not from rules. The claims list lifts onto forest; the slab stays lime; rules mostly vanish. The loudest and the riskiest.'},
 ];
@@ -483,9 +498,9 @@ legend.addEventListener('click', e => {
 });
 
 let sync = false, lock = false;
-stage.querySelectorAll('.phone').forEach(ph => ph.addEventListener('scroll', () => {
+stage.querySelectorAll('.sheet-b').forEach(ph => ph.addEventListener('scroll', () => {
   if (!sync || lock) return; lock = true;
-  stage.querySelectorAll('.phone').forEach(o => { if (o !== ph) o.scrollTop = ph.scrollTop; });
+  stage.querySelectorAll('.sheet-b').forEach(o => { if (o !== ph) o.scrollTop = ph.scrollTop; });
   requestAnimationFrame(() => { lock = false; });
 }));
 </script>
