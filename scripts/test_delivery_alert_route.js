@@ -55,6 +55,38 @@ function it(name, fn) {
   catch (e) { console.log(`  ✗ ${name}\n      ${e.message}`); process.exitCode = 1; }
 }
 
+/* ── THE CLOCK THIS SUITE RUNS ON, AND WHY IT IS NOT THE WALL'S ────────────
+ *
+ * A local rider's promised arrival is stored as a bare `HH:MM` — no date — and
+ * lib/delivery-alerts resolves it against TODAY before asking whether it has
+ * passed. So a fixture that says "an hour ago" by subtracting an hour from the
+ * real clock writes `23:xx` whenever it runs in the first hour after midnight,
+ * and `23:xx` resolved against today is this EVENING: not overdue, no stuck
+ * rider, and four of this suite's cases fail.
+ *
+ * It ran red every night between 00:00 and 01:00 Guangzhou — scripts/
+ * run-suites.js pins TZ=Asia/Shanghai, so that is the hour that counts however
+ * the host is set — and green every working day. Nobody who saw it fail could
+ * reproduce it; nobody who could reproduce it was looking. Proven by running
+ * this file under TZ=Etc/GMT+1, where the same four cases fail on demand.
+ *
+ * `localStuckRows(db, now)` and `alertFilter(db, alias, now)` both take the
+ * instant to judge against — the parameter exists for exactly this — so the
+ * fix is to use it. NOON, not "now minus an hour": a fixed midday is far from
+ * both boundaries, so no arithmetic this fixture does can wrap a day, and the
+ * suite answers the same at every hour of the real clock.
+ *
+ * WHAT STAYS ON THE REAL CLOCK, deliberately: every `datetime('now', …)` seed
+ * below. Those are compared against SQLite's own `now` inside the queries under
+ * test, so pinning one side of that comparison and not the other is how a
+ * fixture starts lying. Only the JS-side wall-clock reading is pinned, because
+ * only that one is resolved against a bare HH:MM.
+ */
+const NOON = (() => { const d = new Date(); d.setHours(12, 0, 0, 0); return d; })();
+const hhmmOf = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+/** A local ETA an hour before NOON — 11:00, whatever hour this suite runs at. */
+const ETA_PAST = hhmmOf(new Date(NOON.getTime() - 3600e3));
+
 // ── A tenant, shaped like the real one in the columns these queries touch ──
 function fixture() {
   const db = new Database(':memory:');
@@ -77,8 +109,6 @@ function fixture() {
     db.prepare(`INSERT INTO retail_orders (id,order_no,${k.join(',')}) VALUES (?,?,${k.map(() => '?').join(',')})`)
       .run(id, 'A' + id, ...k.map((x) => cols[x]));
   };
-  const hhmm = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  const now = new Date();
 
   // 1 — the carrier said it cannot deliver.
   ord(1, { status: 'dispatched', channel: 'web', tracking_status: 'exception', fulfillment_type: 'delivery' });
@@ -92,7 +122,7 @@ function fixture() {
   // 4 — our own rider was requested and nobody picked it up.
   ord(4, { status: 'dispatched', channel: 'web', fulfillment_type: 'delivery' });
   db.prepare('INSERT INTO retail_shipments (id,order_id,mode,local_eta) VALUES (40,4,?,?)')
-    .run('local', hhmm(new Date(now.getTime() - 3600e3)));
+    .run('local', ETA_PAST);
   db.prepare("INSERT INTO delivery_jobs VALUES (41,4,20,datetime('now','-2 minutes'))").run();
   // 5 — nothing wrong with it at all.
   ord(5, { status: 'dispatched', channel: 'web', fulfillment_type: 'delivery' });
@@ -100,16 +130,33 @@ function fixture() {
   // 6 — same-city rider, but already carrying it. On its way, not stuck.
   ord(6, { status: 'dispatched', channel: 'web', fulfillment_type: 'delivery' });
   db.prepare('INSERT INTO retail_shipments (id,order_id,mode,local_eta) VALUES (60,6,?,?)')
-    .run('local', hhmm(new Date(now.getTime() - 3600e3)));
+    .run('local', ETA_PAST);
   db.prepare("INSERT INTO delivery_jobs VALUES (61,6,40,datetime('now','-2 minutes'))").run();
   return db;
 }
 
 const match = (db) => {
-  const f = alerts.alertFilter(db, 'o');
+  const f = alerts.alertFilter(db, 'o', NOON);
   return db.prepare(`SELECT o.id FROM retail_orders o WHERE 1=1 AND ${f.sql} ORDER BY o.id`)
            .all(...f.params).map((r) => r.id);
 };
+
+console.log('\nthe fixture answers the same at every hour of the day');
+
+it('the pinned clock is a fixed midday, not a reading of the wall', () => {
+  // If this ever goes back to `new Date()`, the suite goes back to failing for
+  // one hour a night and passing every time anybody looks at it.
+  assert.strictEqual(NOON.getHours(), 12, 'NOON must be midday, whatever hour this runs at');
+  assert.strictEqual(NOON.getMinutes(), 0);
+});
+
+it('the promised arrival is earlier the SAME day, so it can never read as tonight', () => {
+  // The whole defect in one assertion: a bare HH:MM is resolved against today,
+  // so an ETA that sorts AFTER the instant it is judged against is not overdue
+  // at all — it is this evening.
+  assert.ok(ETA_PAST < hhmmOf(NOON),
+    `an ETA of ${ETA_PAST} is not in the past relative to ${hhmmOf(NOON)}`);
+});
 
 console.log('\nlib/delivery-alerts — the set the card counts');
 
@@ -129,13 +176,13 @@ it('each sub-type is exactly one order, so none of them is doing another\'s work
   assert.deepStrictEqual(one(alerts.carrierAlertSql('o')), [1]);
   assert.deepStrictEqual(one(alerts.meituanAlertSql('o')), [2]);
   assert.deepStrictEqual(one(alerts.airAlertSql('o')), [3]);
-  assert.deepStrictEqual(alerts.localStuckRows(db).map((r) => r.id), [4]);
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON).map((r) => r.id), [4]);
 });
 
 it('no stuck riders still yields valid SQL — `id IN ()` is not a thing', () => {
   const db = fixture();
   db.prepare('DELETE FROM delivery_jobs').run();
-  const f = alerts.alertFilter(db, 'o');
+  const f = alerts.alertFilter(db, 'o', NOON);
   assert.strictEqual(f.params.length, 0);
   db.prepare(`SELECT o.id FROM retail_orders o WHERE 1=1 AND ${f.sql}`).all();   // must not throw
 });
@@ -143,12 +190,12 @@ it('no stuck riders still yields valid SQL — `id IN ()` is not a thing', () =>
 it('a pre-migration tenant loses the rider check, not the other three', () => {
   const db = fixture();
   db.exec('DROP TABLE delivery_jobs');
-  assert.deepStrictEqual(alerts.localStuckRows(db), []);
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON), []);
   assert.deepStrictEqual(match(db), [1, 2, 3]);
 });
 
 it('the ids are bound, never interpolated', () => {
-  const f = alerts.alertFilter(fixture(), 'o');
+  const f = alerts.alertFilter(fixture(), 'o', NOON);
   assert.ok(f.params.length > 0, 'the fixture has a stuck rider to bind');
   assert.ok(f.params.every(Number.isInteger), 'only integer row ids may be bound');
 });
@@ -169,9 +216,9 @@ const manual = (db, orderId, src) =>
 
 it('an operator-typed ETA takes the order off the card', () => {
   const db = fixture();
-  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4], 'the fixture starts stuck');
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON).map(r => r.id), [4], 'the fixture starts stuck');
   manual(db, 4, 'manual');
-  assert.deepStrictEqual(alerts.localStuckRows(db), [],
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON), [],
     'a person who types an arrival time has arranged the delivery');
   assert.deepStrictEqual(match(db), [1, 2, 3], 'and the card drops it with the list');
 });
@@ -179,7 +226,7 @@ it('an operator-typed ETA takes the order off the card', () => {
 it('a COURIER-set ETA is untouched — the contrast that proves it is the flag', () => {
   const db = fixture();
   manual(db, 4, 'auto');
-  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4],
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON).map(r => r.id), [4],
     'the daemon stamped this one; nobody said they had it');
 });
 
@@ -189,7 +236,7 @@ it('an ETA with no provenance still alerts — history is not muted', () => {
   const db = fixture();
   assert.strictEqual(
     db.prepare('SELECT eta_source FROM retail_shipments WHERE order_id = 4').get().eta_source, null);
-  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4]);
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON).map(r => r.id), [4]);
 });
 
 it('the other three kinds of trouble are NOT exempted by a typed time', () => {
@@ -214,7 +261,7 @@ it('a tenant without the column keeps its rider check', () => {
            DROP TABLE retail_shipments;
            ALTER TABLE tmp RENAME TO retail_shipments;`);
   assert.ok(!db.prepare('PRAGMA table_info(retail_shipments)').all().some(c => c.name === 'eta_source'));
-  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4]);
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON).map(r => r.id), [4]);
 });
 
 it('the time and its provenance are read off the SAME parcel', () => {
@@ -223,22 +270,16 @@ it('the time and its provenance are read off the SAME parcel', () => {
   // pair a time with another parcel's flag.
   const db = fixture();
   db.prepare("INSERT INTO retail_shipments (id,order_id,mode,local_eta,eta_source) VALUES (45,4,'local',NULL,'manual')").run();
-  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4],
+  assert.deepStrictEqual(alerts.localStuckRows(db, NOON).map(r => r.id), [4],
     'a parcel with no time must not lend its flag to the parcel that has one');
 });
 
 console.log('\nthe card counts the SET, not the sum of its parts');
 
-/** A local ETA that is already an hour in the past, in the shop's wall-clock. */
-function etaAnHourAgo() {
-  const d = new Date(Date.now() - 3600e3);
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-}
-
 /** Order 2 is the overdue Meituan order. Give it the stuck Qingyun rider that a
  *  Meituan mirror row is in fact fulfilled by, so one order is two sub-types. */
 function withOverlap(db) {
-  db.prepare("INSERT INTO retail_shipments (id,order_id,mode,local_eta) VALUES (20,2,'local',?)").run(etaAnHourAgo());
+  db.prepare("INSERT INTO retail_shipments (id,order_id,mode,local_eta) VALUES (20,2,'local',?)").run(ETA_PAST);
   db.prepare("INSERT INTO delivery_jobs VALUES (21,2,20,datetime('now','-2 minutes'))").run();
   return db;
 }
@@ -246,7 +287,7 @@ function withOverlap(db) {
 it('the four sub-types really do overlap — the fixture is not inventing it', () => {
   const db = withOverlap(fixture());
   const mt = db.prepare(`SELECT o.id FROM retail_orders o WHERE ${alerts.meituanAlertSql('o')}`).all().map((r) => r.id);
-  const stuck = alerts.localStuckRows(db).map((r) => r.id);
+  const stuck = alerts.localStuckRows(db, NOON).map((r) => r.id);
   assert.ok(mt.includes(2), 'order 2 must still be the overdue Meituan order');
   assert.ok(stuck.includes(2), 'order 2 must now also be a stuck rider — that is the overlap');
 });
@@ -257,14 +298,14 @@ it('an order that is two kinds of trouble at once is ONE call, not two', () => {
   // 1 in the list the card opens. Ash saw the filter show everything; the next
   // thing he would have seen, once it filtered, is a number that did not match.
   const db = withOverlap(fixture());
-  const f = alerts.alertFilter(db, 'o');
+  const f = alerts.alertFilter(db, 'o', NOON);
   const rows = db.prepare(`SELECT o.id FROM retail_orders o WHERE ${f.sql} ORDER BY o.id`).all(...f.params);
 
   const oldWay =
       db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.carrierAlertSql('o')}`).get().n
     + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.airAlertSql('o')}`).get().n
     + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.meituanAlertSql('o')}`).get().n
-    + alerts.localStuckRows(db).length;
+    + alerts.localStuckRows(db, NOON).length;
 
   assert.strictEqual(alerts.alertCount(db, f), rows.length,
     'the card must count exactly the rows the list shows');
@@ -276,12 +317,12 @@ it('an order that is two kinds of trouble at once is ONE call, not two', () => {
 
 it('with no overlap the two ways agree — the fix does not undercount', () => {
   const db = fixture();
-  const f = alerts.alertFilter(db, 'o');
+  const f = alerts.alertFilter(db, 'o', NOON);
   assert.strictEqual(alerts.alertCount(db, f), 4);
 });
 
 it('the filter hands back the stuck ROWS, so the card need not re-read them', () => {
-  const f = alerts.alertFilter(fixture(), 'o');
+  const f = alerts.alertFilter(fixture(), 'o', NOON);
   assert.ok(Array.isArray(f.stuck), 'alertFilter must return the stuck rows it already found');
   assert.ok(f.stuck.length > 0 && f.stuck.every((r) => Number.isInteger(r.id) && r.waiting_since),
     'a stuck row carries its id and the instant it went overdue');
