@@ -18,8 +18,13 @@ The portal splits its docs four ways:
 3. 零担业务
 4. 拉拉券
 
-**OPEN QUESTION: which category is our account?** If Roots signed up as 企业版,
-the endpoints below may be wrong. Confirm before building.
+**RESOLVED 2026-09-22: our account is 货拉拉APP业务**, so the endpoints below
+apply. The company books through the ordinary 货拉拉 app on a single company
+account that carries 企业认证 (enterprise verification). **企业认证 inside the
+consumer app is NOT 货拉拉企业版APP** — that is a separate product with its own
+app and its own doc category. The distinction matters because the OAuth flow
+below authorises a 货拉拉用户账户, i.e. the phone number that books in the
+consumer app, which is the same account these endpoints read.
 
 ## Gateway
 
