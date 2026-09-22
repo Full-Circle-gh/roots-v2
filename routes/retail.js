@@ -435,7 +435,7 @@ const money = require('../lib/money');
 const recycle = require('../lib/recycle');
 // Sales tax and VAT (audit I-03). Off unless a shop has set a rate.
 const tax = require('../lib/tax');
-// §228 — the QR menu's per-type allow-list, so the editor's eye and the
+// §229 — the QR menu's per-type allow-list, so the editor's eye and the
 // live counter menu resolve a block from the same list.
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
 // ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
@@ -22951,7 +22951,7 @@ router.get('/api/retail-admin/config', requireRetailAdmin, (req, res) => {
     ).get();
     timezone = (row && String(row.timezone).trim()) || null;
   } catch (e) { timezone = null; }   // column absent on an old account DB → fallback
-  /* §228 — THE QR MENU'S BLOCK ALLOW-LIST IS ALWAYS ANSWERED, set or not.
+  /* §229 — THE QR MENU'S BLOCK ALLOW-LIST IS ALWAYS ANSWERED, set or not.
      loadConfig() returns the rows that EXIST, and the default deliberately
      stores no row until somebody changes it — so an unset tenant would hand
      the product editor nothing and the editor would have to carry its own copy

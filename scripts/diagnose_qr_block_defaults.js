@@ -143,7 +143,7 @@ for (const [t, e] of [...tally.entries()].sort((a, b) => b[1].products - a[1].pr
 }
 if (unparseable) console.log(`\n  (${unparseable} product(s) have description_blocks that is not valid JSON)`);
 
-/* ── 2b · §228 · THE ALLOW-LIST READING, WHICH IS THE ONE THAT SHIPPED ──── */
+/* ── 2b · §229 · THE ALLOW-LIST READING, WHICH IS THE ONE THAT SHIPPED ──── */
 rule('2b · under the ALLOW-LIST: what each type loses');
 console.log(`
   Ash rejected the block-list reading of this ask on 2026-09-22: it takes the

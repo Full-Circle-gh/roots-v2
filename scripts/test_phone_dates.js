@@ -113,7 +113,7 @@ yes(/if\(cfg\.timezone\) window\.TD_TZ = cfg\.timezone;/.test(M),
 /* A settings read that nothing writes is the failure mode this pins: TD_TZ set
    from a key the endpoint does not return leaves every stamp on the fallback
    and looks, from the page, exactly like a working feature. */
-/* §228 gave this handler a second thing to add — the QR menu's block default
+/* §229 gave this handler a second thing to add — the QR menu's block default
    — so the response is assembled into a local before it is sent rather than
    built inside res.json(). The guarantee is unchanged and is asserted in two
    halves: the zone is spread into the payload, and that payload is what goes

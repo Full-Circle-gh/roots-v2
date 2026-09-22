@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * §228 — THE QR MENU DRAWS THE BLOCKS QUINOA SALAD DRAWS, AND NOTHING ELSE.
+ * §229 — THE QR MENU DRAWS THE BLOCKS QUINOA SALAD DRAWS, AND NOTHING ELSE.
  *
  *   node scripts/test_qr_menu_block_defaults.js
  *
