@@ -398,6 +398,30 @@ it('who paid says what it does to the person tapping it', () => {
   assert.ok(PHONE.includes('Nothing is owed to you.'));
 });
 
+it('§226 — who paid defaults to the company, from ONE constant', () => {
+  // Ash, 2026-09-22: *"defult should be company money. not own money"*. The
+  // value itself is the assertion — this is the field that decides whether the
+  // business owes a person, and a default flipped back by a later edit would be
+  // invisible on a screen that looks identical either way.
+  assert.match(PHONE_CODE, /const EXP_PAID_DEFAULT = 'company';/,
+    'the default is company money, named once');
+  // TWO PLACES SET IT — the state literal and the reset run on every entry to
+  // the screen — and both must read the constant. A literal in either is how
+  // the two halves drift and the form opens on one answer the second time.
+  assert.ok(!/paid *[:=] *'employee'/.test(PHONE_CODE),
+    'no hard-coded employee default anywhere on the form');
+  assert.strictEqual(PHONE_CODE.split('EXP_PAID_DEFAULT').length - 1, 3,
+    'declared once and read by both the initial state and the entry reset');
+  const reset = PHONE_CODE.match(/if\(route==='expense'\)\{[\s\S]*?\}/);
+  assert.match(reset[0], /x\.paid=EXP_PAID_DEFAULT;/,
+    'entering the screen resets who paid to the default, not to what was left');
+  // WHAT THE DEFAULT COSTS WHEN IT IS WRONG IS STATED ON SCREEN, which is what
+  // makes either default recoverable: the sentence under the chips re-renders
+  // with the choice, and §207 lets the approver correct it in both directions.
+  assert.ok(PHONE.includes('由本店账户支付，无需付给你。'),
+    'the company half of the consequence line is live');
+});
+
 it('the photo is downscaled on the phone before it is sent', () => {
   assert.match(PHONE_CODE, /toDataURL\('image\/jpeg',0\.7\)/);
   assert.match(PHONE_CODE, /const max=1280;/);

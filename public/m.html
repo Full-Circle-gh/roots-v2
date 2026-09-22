@@ -707,6 +707,28 @@ const DB = {
 };
 function chIcon(ch){ return `<span style="color:var(--text-secondary);display:flex;flex:none">${ic(CH_ICON[ch]||'store',16)}</span>`; }
 
+/* §226 — WHO PAID DEFAULTS TO THE COMPANY. ONE CONSTANT, BECAUSE THE FORM SETS
+   THIS FIELD IN TWO PLACES — the state below, and the reset every entry to the
+   screen runs — and a default written twice is a default that drifts.
+
+   IT WAS `employee` UNTIL NOW, and the reversal is Ash's: *"defult should be
+   company money. not own money"*. The old argument (in
+   `reference/expense-capture-mockup.html`, put to him on 2026-09-09) was that
+   an employee out of pocket is why somebody opens this screen at all. The live
+   shop says otherwise: most spending goes on the shop's own account, and §207
+   is the record of what the wrong default costs — *My own money* tapped out of
+   habit becomes an approved claim sitting in **Owed to your team** as a debt
+   the business does not owe.
+
+   THE RISK RUNS BOTH WAYS AND IS NOT PRETENDED AWAY: a person who really did
+   pay out of their own pocket and taps straight through now files a claim that
+   owes them nothing. What makes the company default the safer of the two is
+   which mistake is recoverable — §207 lets the approver correct either
+   direction before or after approval, and the sentence under the chips states
+   the consequence in words on every render, so the field is never silent about
+   what it just decided. */
+const EXP_PAID_DEFAULT = 'company';
+
 /* ==========================================================================
    State + navigation
    ========================================================================== */
@@ -1053,7 +1075,7 @@ const state = {
           is in its search box, held here rather than in the DOM because the
           results repaint and the input must not. */
        pick:false,q:'',
-       amount:'',cat:'',paid:'employee',note:'',storeId:null,date:null,photo:null,
+       amount:'',cat:'',paid:EXP_PAID_DEFAULT,note:'',storeId:null,date:null,photo:null,
        busy:false,err:'',sent:null,
        mine:null,mineTried:false,owed:0,waiting:0},
   /* THE APPROVAL QUEUE (§87 step three). A DIFFERENT SCREEN WITH A DIFFERENT
@@ -1262,7 +1284,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   if(route==='approvals'){ const a=state.apr;
     a.rows=null; a.tried=false; a.err=''; a.busy=0; a.shot=null; a.shotFor=null; }
   if(route==='expense'){ const x=state.exp;
-    x.amount=''; x.cat=''; x.paid='employee'; x.note=''; x.photo=null; x.date=null;
+    x.amount=''; x.cat=''; x.paid=EXP_PAID_DEFAULT; x.note=''; x.photo=null; x.date=null;
     x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
     x.pick=false; x.q=''; }
   /* A broadcast is written from an empty screen every time. What was left in
