@@ -1742,9 +1742,14 @@ function backfillOptionQuestions(items) {
 // one transaction). Editor sends the full list every save, so this is the whole
 // truth — an empty/missing array clears them. Choice price_delta is the only way
 // an option touches the bill; stock is never involved.
-async function saveProductOptions(productId, input, { allowClear = false } = {}) {
+// WHAT A VALID QUESTION LOOKS LIKE — split out from the save so the version
+// restore can reuse it instead of forming a second opinion. A snapshot is JSON
+// that has sat in a row for weeks and may predate any rule below, so it is put
+// through exactly the sanitiser a live save is put through rather than trusted
+// for having once been written by this same code.
+function sanitiseProductOptions(input) {
   const TYPES = ['single', 'multi', 'text'];
-  const clean = (Array.isArray(input) ? input : []).slice(0, 12).map(o => {
+  return (Array.isArray(input) ? input : []).slice(0, 12).map(o => {
     const type = TYPES.includes(o && o.type) ? o.type : 'single';
     const question_en = String((o && o.question_en) || '').trim().slice(0, 120);
     const question_cn = String((o && o.question_cn) || '').trim().slice(0, 120);
@@ -1786,6 +1791,42 @@ async function saveProductOptions(productId, input, { allowClear = false } = {})
     // in the DB survives an unrelated save instead of being silently deleted.
     // Build the input on both clients before offering it again.
     .filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
+}
+
+// THE WRITE ITSELF, on whatever handle the caller's transaction owns. Two
+// callers need it and they own their transactions differently: the save is
+// async and goes through withTransaction, while the version restore is a
+// synchronous better-sqlite3 transaction that also rewrites columns and must
+// commit the options in the SAME unit — a restore that put the old columns back
+// and left the new questions standing is a product describing itself two ways.
+// One writer, two transaction owners, rather than a second copy of the INSERTs.
+//
+// `clean` MUST already have been through sanitiseProductOptions. Nothing here
+// re-checks it, because a writer that also validates is a writer whose callers
+// stop validating.
+function writeProductOptions(handle, productId, clean) {
+  handle.prepare(
+    `DELETE FROM retail_product_option_choices
+      WHERE option_id IN (SELECT id FROM retail_product_options WHERE product_id = ?)`
+  ).run(productId);
+  handle.prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(productId);
+  const insOpt = handle.prepare(
+    `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order)
+     VALUES (?,?,?,?,?,?,?,?)`
+  );
+  const insChoice = handle.prepare(
+    `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
+     VALUES (?,?,?,?,?,?,?)`
+  );
+  clean.forEach((o, oi) => {
+    const optId = insOpt.run(productId, o.question_en, o.question_cn || null, o.type,
+      o.is_required, o.min_choices, o.max_choices, oi).lastInsertRowid;
+    o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, c.stock_product_id, ci));
+  });
+}
+
+async function saveProductOptions(productId, input, { allowClear = false } = {}) {
+  const clean = sanitiseProductOptions(input);
 
   // SILENCE IS NOT A DELETION, AND THIS GUARD IS THE WHOLE REASON THE RULE IS
   // STATED HERE RATHER THAN AT EACH CALLER. The write below is replace-all, so
@@ -1817,26 +1858,7 @@ async function saveProductOptions(productId, input, { allowClear = false } = {})
   // Replace-all, so the DELETEs and the re-INSERTs must be one unit: a failure
   // between them would leave the product with NO options at all. Every statement
   // runs on `tx`, the handle withTransaction hands in — see decisions §24.
-  await withTransaction(tdb(), (tx) => {
-    tx.prepare(
-      `DELETE FROM retail_product_option_choices
-        WHERE option_id IN (SELECT id FROM retail_product_options WHERE product_id = ?)`
-    ).run(productId);
-    tx.prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(productId);
-    const insOpt = tx.prepare(
-      `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order)
-       VALUES (?,?,?,?,?,?,?,?)`
-    );
-    const insChoice = tx.prepare(
-      `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
-       VALUES (?,?,?,?,?,?,?)`
-    );
-    clean.forEach((o, oi) => {
-      const optId = insOpt.run(productId, o.question_en, o.question_cn || null, o.type,
-        o.is_required, o.min_choices, o.max_choices, oi).lastInsertRowid;
-      o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, c.stock_product_id, ci));
-    });
-  });
+  await withTransaction(tdb(), (tx) => writeProductOptions(tx, productId, clean));
 }
 
 // resolveBundleComponents → customer/operator display shape: each component
@@ -23532,6 +23554,14 @@ const VERSION_KEEP = 25;               // newest non-baseline versions kept per 
 // 2026-08-04 left every JSON value untouched.
 const SNAPSHOT_UNIT_KEY = '_money_unit';
 const SNAPSHOT_UNIT = 'yuan';
+// The questions a product asks, carried inside the snapshot rather than as a
+// column. Underscored like the unit stamp because it is not a store_products
+// column and must never be mistaken for one by anything building a SET clause.
+// ITS ABSENCE AND ITS EMPTINESS MEAN DIFFERENT THINGS, which is the whole rule
+// §227 was written to state: a snapshot taken before this key existed says
+// NOTHING about options and must leave them alone, while `[]` is a real record
+// of a product that asked nothing and restores as a clear.
+const SNAPSHOT_OPTIONS_KEY = '_options';
 const SNAPSHOT_MONEY_COLUMNS = ['sell_price', 'compare_at_price', 'unit_cost'];
 
 // Money out of a snapshot, in the unit the application uses. Called at the one
@@ -23565,11 +23595,74 @@ function snapshotBody(json) {
     return JSON.stringify(o);
   } catch (e) { return json; }
 }
+// THE QUESTIONS A PRODUCT ASKS, in the portable shape sanitiseProductOptions
+// accepts — no ids, because a restore RE-CREATES the rows and the old ids are
+// gone. Ordered the way the customer is asked, since sort_order is part of what
+// is being preserved.
+function productOptionsSnapshot(db, id) {
+  const opts = db.prepare(
+    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices
+       FROM retail_product_options WHERE product_id = ?
+      ORDER BY sort_order ASC, id ASC`
+  ).all(id);
+  if (!opts.length) return [];
+  const ph = opts.map(() => '?').join(',');
+  const choices = db.prepare(
+    `SELECT option_id, label_en, label_cn, price_delta, is_default, stock_product_id
+       FROM retail_product_option_choices WHERE option_id IN (${ph})
+      ORDER BY sort_order ASC, id ASC`
+  ).all(...opts.map(o => o.id));
+  const byOpt = new Map();
+  for (const c of choices) {
+    if (!byOpt.has(c.option_id)) byOpt.set(c.option_id, []);
+    byOpt.get(c.option_id).push({
+      label_en: c.label_en || '', label_cn: c.label_cn || '',
+      price_delta: Number(c.price_delta) || 0,
+      is_default: c.is_default ? 1 : 0,
+      stock_product_id: c.stock_product_id || null,
+    });
+  }
+  return opts.map(o => ({
+    question_en: o.question_en || '', question_cn: o.question_cn || '',
+    type: o.type, is_required: o.is_required ? 1 : 0,
+    min_choices: Number(o.min_choices) || 0, max_choices: Number(o.max_choices) || 0,
+    choices: byOpt.get(o.id) || [],
+  }));
+}
+// Put a snapshot's questions back, on the caller's own transaction handle.
+//
+// ABSENT IS NOT EMPTY, and that distinction is the one §227 cost us. Every
+// version recorded before SNAPSHOT_OPTIONS_KEY existed carries no options at
+// all, and reading that silence as "the product asked nothing" would make
+// restoring any older version delete every question on the product — the exact
+// bug, rebuilt inside the feature meant to repair it. So a snapshot without the
+// key leaves the options standing and writes nothing; only a snapshot that
+// really recorded them writes, and an `[]` this code recorded is a true account
+// of a product that asked nothing, which restores as a clear.
+//
+// Named and separate rather than inline in the route because that rule is the
+// whole of this function and a rule worth stating is worth being able to test.
+function restoreProductOptionsFromSnapshot(handle, productId, snap) {
+  const recorded = snap && snap[SNAPSHOT_OPTIONS_KEY];
+  if (!Array.isArray(recorded)) return false;        // said nothing — change nothing
+  writeProductOptions(handle, productId, sanitiseProductOptions(recorded));
+  return true;
+}
 function productContentSnapshot(db, id) {
   const row = db.prepare(`SELECT ${VERSION_COLUMNS.join(', ')} FROM store_products WHERE id = ?`).get(id);
   if (!row) return null;
   const snap = {};
   for (const c of VERSION_COLUMNS) snap[c] = row[c];
+  // THE QUESTIONS TRAVEL WITH THE PRODUCT. They did not, until §227, and the
+  // cost of that was recorded there: options live in their own tables rather
+  // than in a store_products column, so VERSION_COLUMNS could never reach them,
+  // and the one history whose purpose is undoing an editing run could not undo
+  // the thing an editing run was most likely to destroy. A product's questions
+  // are as much its content as its description — a restore that rolled the copy
+  // back and left a since-deleted dressing deleted has not restored the product.
+  // NOT a VERSION_COLUMN, so it can never reach the UPDATE's SET clause; the
+  // restore applies it through the options writer instead.
+  snap[SNAPSHOT_OPTIONS_KEY] = productOptionsSnapshot(db, id);
   // Stamped last, so stripping it reproduces the pre-stamp string exactly.
   snap[SNAPSHOT_UNIT_KEY] = SNAPSHOT_UNIT;
   return snap;
@@ -23668,6 +23761,11 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
       if (String(e.message || '').includes('UNIQUE')) apply(cols.filter(c => c !== 'sku'));
       else throw e;
     }
+    // THE QUESTIONS, IN THE SAME UNIT AS THE COLUMNS. Restoring the copy and
+    // leaving a since-deleted dressing deleted is not a restore, so this runs on
+    // the transaction's own handle rather than through the async saver.
+    //
+    restoreProductOptionsFromSnapshot(db, id, snap);
     // Record the restored state as the newest version so newest === live.
     const postJson = JSON.stringify(productContentSnapshot(db, id) || {});
     if (postJson !== preJson) insertVersion(postJson);
@@ -40380,3 +40478,10 @@ module.exports.payDescription        = payDescription;
 // accidental empty payload and the silent deletion of every question a product
 // asks, which is how 134 live option rows were destroyed across 39 products.
 module.exports.saveProductOptions    = saveProductOptions;
+// The version snapshot and the rule that puts its questions back. Exported for
+// the same reason as the writer above: what needs holding is not that a restore
+// writes, it is that a snapshot which never RECORDED options leaves them alone.
+// Every version written before §228 is such a snapshot, so that branch is the
+// one a test has to be able to reach directly.
+module.exports.productContentSnapshot = productContentSnapshot;
+module.exports.restoreProductOptionsFromSnapshot = restoreProductOptionsFromSnapshot;
