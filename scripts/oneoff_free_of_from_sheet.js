@@ -39,11 +39,14 @@
  *    literally against `5spice`, so the two spellings are two different
  *    claims to anything that filters. One spelling, `5 spice`, is written.
  *
- * 2. IT REWRITES THE ORDER of the flags to nuts, soy, gluten, 5 spice. The
- *    sheet's own rows vary ("gluten, 5 spice, soy"), and order changes nothing
- *    about what a product claims — but with one order, two products claiming
- *    the same four things hold the same string, and a later diff of this column
- *    shows real changes rather than reshuffles.
+ * 2. IT REWRITES THE ORDER of the flags to nuts, soy, gluten, 5 spice — the
+ *    order the details panel's checkboxes are in, so it is also the order the
+ *    editor already saves. The sheet's own rows vary ("gluten, 5 spice, soy"),
+ *    and order changes nothing about what a product claims — but with one
+ *    order, two products claiming the same four things hold the same string,
+ *    and a later diff of this column shows real changes rather than reshuffles.
+ *    On the live data this costs nothing: the dry run found no row that was a
+ *    pure reorder.
  *
  * 3. IT CLEARS THE THREE SHEET ROWS WITH AN EMPTY CELL — 1-320 Thai Buckwheat
  *    Noodle Salad, 1-440 Pesto 'Chicken' Wrap, 3-30 Choco-Hazel Bars. Blank
@@ -214,7 +217,17 @@ function norm(t) {
 }
 const splitFree = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
 // Canonical order, no duplicates, only the four.
-const canon = (toks) => KEEP.filter(k => toks.some(t => norm(t) === k)).join(',');
+//
+// THE SEPARATOR IS ", " AND NOT ",". It matches pdFreeOfGet() in
+// public/retail-admin/09-products.js, which is what the details panel saves,
+// and the whole live catalogue is already written that way — the 2026-09-22
+// dry run found 287 values with the space and NOT ONE without it. Joining on a
+// bare comma instead made 143 of 402 rows (36%) a pure spacing rewrite, 109 of
+// them on products the sheet never names. Every reader splits on comma and
+// trims, so none of that churn would have meant anything to anybody; it would
+// just have been undone, one product at a time, by the next person to press
+// Save. Match the editor.
+const canon = (toks) => KEEP.filter(k => toks.some(t => norm(t) === k)).join(', ');
 
 // A printed SKU and a stored SKU differ by case, spacing and the full-width
 // brackets the office's keyboard produces — the sheet has "S(1-30）" with one

@@ -126,6 +126,12 @@ const FIXTURE = () => [
   // A free-text stray the details panel parked here. It is not one of the four,
   // so it goes the same way the retired flags do.
   { id: 9, sku: '3-997', name_en: 'Hand-Typed', free_of: 'gluten,palm oil' },
+  // ALREADY IN THE EDITOR'S OWN STYLE, canonical order, only the four. The
+  // whole live catalogue looks like this — 287 values with the space after the
+  // comma and not one without. It must be a no-op, or the repair rewrites a
+  // third of the catalogue to change nothing a reader can see, and the next
+  // person to press Save puts the space back.
+  { id: 10, sku: '3-996', name_en: 'Already Right', free_of: 'nuts, soy, gluten, 5 spice' },
 ];
 
 function run(rows, argv) {
@@ -169,7 +175,7 @@ const { wrote, state } = run(FIXTURE(), ['--apply']);
 check('a row the sheet names takes the sheet\'s answer WHOLE', () => {
   // The sheet drops gluten from 2-140. Keeping it would be the merge rule Ash
   // was offered and did not take.
-  assert.strictEqual(wrote.get(1), 'nuts,soy,5 spice');
+  assert.strictEqual(wrote.get(1), 'nuts, soy, 5 spice');
 });
 
 check('a full-width bracketed SKU still matches its sheet row', () => {
@@ -181,14 +187,28 @@ check('a row already equal to the sheet is not touched', () => {
 });
 
 check('a row outside the sheet keeps its four and loses the rest', () => {
-  assert.strictEqual(wrote.get(4), 'nuts,soy,gluten,5 spice');   // 5spice folded
-  assert.strictEqual(wrote.get(5), '');                          // all it had was retired
-  assert.strictEqual(wrote.get(7), 'soy,gluten,5 spice');         // no sku, dairy+egg gone
-  assert.strictEqual(wrote.get(9), 'gluten');                     // free-text stray gone
+  assert.strictEqual(wrote.get(4), 'nuts, soy, gluten, 5 spice');  // 5spice folded
+  assert.strictEqual(wrote.get(5), '');                            // all it had was retired
+  assert.strictEqual(wrote.get(7), 'soy, gluten, 5 spice');        // no sku, dairy+egg gone
+  assert.strictEqual(wrote.get(9), 'gluten');                      // free-text stray gone
 });
 
 check('a row outside the sheet with nothing to lose is not touched', () => {
   assert.ok(!wrote.has(6), 'rewrote a row that was already only-the-four');
+});
+
+check('it writes the separator the EDITOR writes, ", " and not ","', () => {
+  /* pdFreeOfGet() joins on ", ", and the live catalogue is written that way
+     throughout. Joining on a bare comma made 143 of 402 rows in the 2026-09-22
+     dry run a pure spacing rewrite — 109 of them on products the sheet never
+     names — which every reader would have ignored and the next Save would have
+     undone. */
+  for (const v of wrote.values()) {
+    if (!v.includes(',')) continue;
+    assert.ok(!/,(?! )/.test(v), `"${v}" uses a bare comma; the editor writes ", "`);
+  }
+  assert.ok(!wrote.has(10),
+    'rewrote a row that was ALREADY in the editor\'s style — this is the churn, exactly');
 });
 
 check('NULL is not churned into an empty string', () => {
@@ -202,7 +222,7 @@ check('NOTHING IS INVENTED: no row gains a flag it did not already claim', () =>
     if (r.sku && sheetSkus.has(String(r.sku).toLowerCase())) continue;   // the sheet may add
     const before = new Set(String(r.free_of || '').split(',')
       .map(s => s.trim().toLowerCase()).map(s => /^5[\s-]*spice$/.test(s) ? '5 spice' : s));
-    for (const t of wrote.get(r.id).split(',').filter(Boolean)) {
+    for (const t of wrote.get(r.id).split(',').map(x => x.trim()).filter(Boolean)) {
       assert.ok(before.has(t),
         `row ${r.id} (${r.name_en}) gained "${t}" it never claimed — that is the system ` +
         `telling a shopper something nobody checked`);
