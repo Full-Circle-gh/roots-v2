@@ -57,6 +57,7 @@ const ROOT = path.join(__dirname, '..');
 const RETAIL_JS = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
 const ORDERS_JS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
 const { applyVanishSweep } = require(path.join(ROOT, 'lib', 'qingyun-cancel.js'));
+const DAEMON = fs.readFileSync(path.join(ROOT, 'scripts', 'qingyun-daemon.js'), 'utf8');
 
 // Brace counting, deliberately naive: a mis-slice cannot make a test pass quietly
 // because the result is fed to vm.Script and fails to parse.
@@ -210,6 +211,47 @@ it('the conclusion does NOT touch updated_at', () => {
   const before = row(db).updated_at;
   sweep(db);
   assert.strictEqual(row(db).updated_at, before, 'the cancel refreshed updated_at');
+});
+
+// ── Part A2 · the precondition must be REACHABLE ─────────────────────────────
+// The sweep refusing to conclude from an incomplete list is correct. What was
+// wrong was that the list could never be complete: every tab was read as a
+// single page of 20, and 待配送 holds every order awaiting a courier, so on any
+// working day one tab came back full and disqualified the whole poll. The check
+// was therefore OFF, permanently and silently, and TC000823 read "Rider coming"
+// for four hours with its rider cancelled.
+console.log('\nA2 · the completeness precondition can actually be met\n');
+
+const BROWSER_JS = fs.readFileSync(path.join(ROOT, 'lib', 'qingyun-browser.js'), 'utf8');
+const POLL = slice(BROWSER_JS, 'async _pollActiveTabs()');
+
+it('every active tab is PAGED, not read as page 1', () => {
+  assert.ok(/pageNum=\$\{page\}/.test(POLL), 'the tab poll still asks for page 1 only');
+  assert.ok(/for \(let page = 1; page <= LIST_MAX_PAGES; page\+\+\)/.test(POLL),
+    'there is no page loop, so a busy tab still reads as truncated for ever');
+});
+
+it('a SHORT page ends the tab, and only the cap counts as truncated', () => {
+  assert.ok(/if \(list\.length < LIST_PAGE_SIZE\) tabTruncated = false;/.test(POLL),
+    'a fully-read tab can still be marked truncated');
+  assert.ok(/else if \(page === LIST_MAX_PAGES\) tabTruncated = true;/.test(POLL),
+    'truncation is not tied to the page cap');
+  assert.ok(/if \(list\.length < LIST_PAGE_SIZE\) break;/.test(POLL),
+    'the loop does not stop at the end of a tab, so it spends all its pages every time');
+});
+
+it('the completed tab is paged too', () => {
+  const done = slice(BROWSER_JS, 'async getCompletedDeliveries()');
+  assert.ok(/pageNum=\$\{page\}/.test(done), 'the completed read is still single-page');
+  assert.ok(/out\.complete = !full;/.test(done), 'a full first page still disqualifies the observation');
+});
+
+it('a skipped sweep is logged, never silent', () => {
+  // The failure mode was invisible: the only trace of a check that never ran was
+  // that nothing happened.
+  assert.ok(/if \(sweep\.skipped\)/.test(DAEMON), 'a skipped sweep still says nothing');
+  assert.ok(/logSync\(storeCode, 'cancel', 'error'/.test(DAEMON),
+    'a skipped sweep leaves no durable trace for the Delivery card');
 });
 
 // ── Part B · the stage ───────────────────────────────────────────────────────
