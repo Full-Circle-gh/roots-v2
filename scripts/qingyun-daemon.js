@@ -665,9 +665,14 @@ async function drainPushQueue(storeCode, br) {
 
   let rows = [];
   try {
-    rows = db.prepare(
-      "SELECT * FROM qingyun_push_queue WHERE store_code = ? AND status IN ('pending') ORDER BY id LIMIT 3"
-    ).all(storeCode);
+    // Only rows that are DUE. A delivery booked for a later day carries
+    // hold_until_date and is invisible here until that Guangzhou day arrives —
+    // it must be filtered before the claim below, not after, or three future
+    // orders would hold all three slots on every poll and nothing live would
+    // ever be dispatched again. See lib/qingyun-queue PENDING_DUE_SQL.
+    rows = db.prepare(qingyunQueue.PENDING_DUE_SQL).all({
+      store_code: storeCode, today: inventory.gzDateStr(new Date().toISOString()), limit: 3,
+    });
   } catch { return; }
   // Runs even with nothing to drain — that is exactly when the all-clear is due.
   if (!rows.length) { checkGeoHoldAlert(storeCode); return; }
@@ -696,9 +701,21 @@ async function drainPushQueue(storeCode, br) {
       // Final eligibility guard — a row queued before this gate existed (a stray
       // out-of-city / later-day / marketplace order) must not create a Qingyun
       // job. Retire it as 'skipped' instead of pushing it to 待配送.
-      if (!inventory.isQingyunSameCityToday(order)) {
+      // Final eligibility check, and now it can tell the two NOs apart. 'skip' is
+      // an order that is not a same-city rider job and never will be; 'wait' is
+      // one that is ours but whose promised day has not arrived, and retiring
+      // those is what made a future delivery date impossible to honour — nothing
+      // re-queues a skipped row, so every booked-for-tomorrow order was thrown
+      // out every morning, silently.
+      const disp = inventory.qingyunPushDisposition(order);
+      if (disp.action === 'wait') {
+        db.prepare(qingyunQueue.PARK_UNTIL_SQL).run({ id: row.id, until: disp.until, why: `waiting for ${disp.until}` });
+        log(storeCode, `push: order ${order.order_no} waits for ${disp.until}`);
+        continue;
+      }
+      if (disp.action !== 'push') {
         db.prepare("UPDATE qingyun_push_queue SET status='skipped', last_error='not same-city same-day', geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
-        log(storeCode, `push: skipped order ${order.order_no} — not same-city same-day`);
+        log(storeCode, `push: skipped order ${order.order_no} — ${disp.why || 'not same-city same-day'}`);
         continue;
       }
       const payload = await pushPayload(order, shop, br, storeCode);

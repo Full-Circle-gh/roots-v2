@@ -107,10 +107,18 @@ it('the success response reports both halves separately', () => {
     'the response still collapses the date write and the queue write into one word');
 });
 
-it('the today-only refusal is untouched', () => {
-  // Future dates still have nothing to hold them — nothing re-queues a skipped
-  // row on its own day. Out of scope here, and deliberately still refused.
-  assert.ok(/error: 'today_only'/.test(ENDPOINT), 'the today-only guard was removed');
+it('a day that has GONE is still refused', () => {
+  // This started as "the today-only refusal is untouched", and it was right for
+  // as long as nothing could hold a future-dated row: a later day was accepted,
+  // parked, and retired by the drain the next morning with no trace.
+  //
+  // Since the drain learned to wait (lib/inventory qingyunPushDisposition) a
+  // later day is real and is accepted. What survives, and is the part worth
+  // pinning, is the refusal of a day that has already passed — a past date never
+  // becomes today, so a row parked on one would wait for ever.
+  assert.ok(/if \(date < today\)/.test(ENDPOINT), 'a past date is no longer refused');
+  assert.ok(/date_passed/.test(ENDPOINT), 'the refusal has no name the client can read');
+  assert.ok(!/today_only/.test(ENDPOINT), 'a later day is still being refused');
 });
 
 // ── Part B · the statements ──────────────────────────────────────────────────
@@ -125,7 +133,8 @@ function freshQueue(over = {}) {
       attempts INTEGER DEFAULT 0, last_error TEXT, qingyun_order_id TEXT,
       geo_held_at DATETIME, needs_point_at DATETIME,
       guessed_lat REAL, guessed_lng REAL, guessed_precision TEXT,
-      candidates_json TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      candidates_json TEXT, hold_until_date TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );`);
   const r = Object.assign({ retail_order_id: 823, store_code: 'tianhe', status: 'done', qingyun_order_id: 'QY1' }, over);
   db.prepare(`INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, qingyun_order_id)
@@ -198,15 +207,19 @@ it('a live copy gets its own sentence, in both languages', () => {
 it('a date that moved without a requeue says BOTH halves', () => {
   // The customer HAS been told the new day, so this is not a no-op to retry
   // blindly; and no rider is queued, which is the part still owed.
-  assert.ok(/Moved to today, but it was not re-queued — check the courier/.test(CLIENT),
+  //
+  // The day is a VARIABLE here, not the word "today": since the picker learned to
+  // offer later days, this toast has to name the one that was chosen. The frame
+  // and its Chinese are otherwise the ones this suite first pinned.
+  assert.ok(/Moved to \$\{when\}, but it was not re-queued — check the courier/.test(CLIENT),
     'the partial outcome has no sentence');
-  assert.ok(/已改期至今天,但未重新排队 — 请核实运力。/.test(CLIENT), 'its Chinese is missing');
+  assert.ok(/已改期至\$\{whenCn\},但未重新排队 — 请核实运力。/.test(CLIENT), 'its Chinese is missing');
 });
 
 it('none of the three is vacuous — they are three different strings', () => {
   const said = ['Moved to today — it goes back in the queue now',
                 'A courier is already on this one — cancel it in the Qingyun app first',
-                'Moved to today, but it was not re-queued — check the courier'];
+                'Moved to ${when}, but it was not re-queued — check the courier'];
   assert.strictEqual(new Set(said).size, 3);
   for (const t of said) assert.ok(CLIENT.includes(t), `missing: ${t}`);
 });

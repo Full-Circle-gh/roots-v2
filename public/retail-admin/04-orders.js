@@ -4804,12 +4804,42 @@ function renderQyDispatch(o) {
   const compareBtn = showCompare
     ? `<button class="btn btn-sm" id="qy-get-${o.id}" onclick="qyLoadCarriers(${o.id}, this)">${cuT(relabel ? 'Call another courier' : 'Compare couriers', relabel ? '再叫一家运力' : '查看运力比价')}</button>`
     : '';
+  // ── Moving the day, from where the courier lives ──────────────────────────
+  // The reschedule control existed ONLY on the "Delivery date passed" surface,
+  // which renders after the day has gone. So the one case that started all this —
+  // a live order for today that the shop now wants to send tomorrow — had no
+  // control anywhere in the back office, and the honest instruction was "build it
+  // by hand in the Qingyun app". It belongs here, beside the courier it governs.
+  //
+  // Offered only while nobody is carrying the order. A rider already on the road
+  // cannot be re-dated from here (the server refuses it too, and says so), and a
+  // delivered or closed order has no day left to move. §218's cancelled stage
+  // counts as nobody, which is exactly the TC000823 case.
+  const heldByRider = !!(c && ['heading_to_pickup', 'in_transit'].includes(c.stage));
+  // An EXPIRED order already renders this control, with its own explanation, from
+  // renderQyPointSurface — and it emits these same two ids. Rendering both would
+  // put two `qp-resched-<id>` elements in the drawer, and getElementById takes the
+  // first, so the visible button would write into the hidden box and do nothing on
+  // screen. One entry point per order: the expired surface keeps its own.
+  const expired = !!(o.qingyun_ship_from && o.qingyun_ship_from.date_posture === 'passed');
+  const heldByRiderOrGone = heldByRider || delivered
+    || ['delivered', 'cancelled', 'refunded'].includes(o.status);
+  const canMoveDay = !!o.qingyun_ship_from && !expired && !heldByRiderOrGone;
+  const moveDayBtn = canMoveDay
+    ? `<button class="btn btn-sm" type="button" onclick="qpOpenReschedule(${o.id}, this)">${cuT('Change delivery day', '更改配送日期')}</button>`
+    : '';
   return `
     <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Same-city courier · 同城运力</div>
       ${card}
       ${renderQyShipFrom(o)}
       ${compareBtn}
+      ${moveDayBtn}
+      ${'' /* qpOpenReschedule writes into this, and qp-actions-<id> is the button
+             row it hides while choosing. Both ids are the ones the expired
+             surface already uses, so one renderer serves both entry points. */}
+      <div id="qp-actions-${o.id}" hidden></div>
+      <div id="qp-resched-${o.id}" style="margin-top:8px;"></div>
       <div id="qy-carriers-${o.id}" style="margin-top:8px;"></div>
     </div>`;
 }
@@ -5364,40 +5394,59 @@ async function qpConfirmPoint(orderId, btn) {
   }
 }
 
-// ── Reschedule an expired delivery ─────────────────────────────────────────
-// TODAY ONLY, until stage 6. A future date writes and requeues cleanly and
-// then dies the next morning, and every morning after: nothing re-queues a
-// 'skipped' row on its own day, so the drain retires it again on each pass.
-// The operator would pick Friday, watch it be accepted, and find it gone with
-// no error and no trace — the same silent no-op this whole build exists to
-// remove, with a caption on it.
+// ── Move a delivery to another day ──────────────────────────────────────────
+// TODAY ONLY UNTIL 2026-09-22, AND THE REASON IS GONE. The note that stood here
+// said a future date "writes and requeues cleanly and then dies the next
+// morning, and every morning after: nothing re-queues a 'skipped' row on its own
+// day, so the drain retires it again on each pass. The operator would pick
+// Friday, watch it be accepted, and find it gone with no error and no trace."
 //
-// Not offered-and-disabled either: an option you can see but not choose still
-// says it is coming. It is not coming until a skipped row can wait for its
-// day. For any other date the honest instruction is to build the delivery by
-// hand, which is what the copy says.
+// That was true and it is now false. The drain can tell a row that is not ours
+// from one that is not due yet (lib/inventory qingyunPushDisposition) and parks
+// the second on its promised Guangzhou day instead of retiring it, so a future
+// date survives every pass until its day arrives. The old copy's instruction —
+// build it by hand in the Qingyun app — is retired with it.
+//
+// How far ahead: a week. Not a limit the drain needs (it will hold any date) but
+// one this PICKER needs, because a list of dates has to end somewhere and a
+// delivery booked further out than that is a conversation, not a tap.
+const QP_DAYS_AHEAD = 7;
+
+function qpDayOptions() {
+  const out = [];
+  for (let i = 0; i < QP_DAYS_AHEAD; i++) {
+    // Beijing day, the same clock the server's gzDateStr reads. Built by adding
+    // whole days to the SHIFTED instant rather than shifting each result, so a
+    // run that crosses midnight UTC cannot produce the same date twice.
+    const d = new Date(Date.now() + 8 * 3600000 + i * 86400000);
+    out.push({
+      iso: d.toISOString().slice(0, 10),
+      rel: i === 0 ? cuT('today', '今天') : i === 1 ? cuT('tomorrow', '明天') : '',
+    });
+  }
+  return out;
+}
+
 function qpOpenReschedule(orderId, btn) {
   const box = document.getElementById('qp-resched-' + orderId);
   if (!box) return;
   const acts = document.getElementById('qp-actions-' + orderId);
   if (acts) acts.hidden = true;
-  const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);   // Beijing day
   box.innerHTML = `
     <div class="qp-dates">
+      ${qpDayOptions().map(d => `
       <label class="qp-date">
-        <input type="radio" name="qp-date-${orderId}" value="${today}" onchange="qpPickDate(${orderId}, '${today}')">
-        <span class="d">${today}</span>
-        <span class="muted" style="font-size:12.5px;">${cuT('today', '今天')}</span>
-      </label>
+        <input type="radio" name="qp-date-${orderId}" value="${d.iso}" onchange="qpPickDate(${orderId}, '${d.iso}')">
+        <span class="d">${d.iso}</span>
+        ${d.rel ? `<span class="muted" style="font-size:12.5px;">${d.rel}</span>` : ''}
+      </label>`).join('')}
     </div>
     <div class="qp-hint" style="margin-top:8px;line-height:1.6;">${cuT(
-      'Only today can go back in the queue. For a later day, create the delivery by hand in the Qingyun app.',
-      '仅可改期至今天并重新排队。如需改到其他日期,请在青云 App 中手动建单。')}</div>
+      'The rider is called on the morning of the day you pick. Nothing is dispatched before then.',
+      '所选日期当天才会呼叫骑手,在此之前不会发单。')}</div>
     <div id="qp-confirm-${orderId}"></div>`;
 }
 
-// Naming both days is the point: this changes what the customer was told, so
-// it takes a confirm — unlike placing a point, where the map IS the confirm.
 function qpPickDate(orderId, iso) {
   const box = document.getElementById('qp-confirm-' + orderId);
   const o = _OPEN_ORDER || {};
@@ -5418,6 +5467,11 @@ function qpPickDate(orderId, iso) {
 
 async function qpDoReschedule(orderId, iso, btn) {
   if (btn) { btn.disabled = true; btn.textContent = cuT('Moving…', '处理中…'); }
+  // Beijing day, matching the server's gzDateStr — the two must agree about what
+  // "today" is, or a 23:30 move would be worded for the wrong day.
+  const today = iso === new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+  const when   = today ? 'today' : iso;
+  const whenCn = today ? '今天' : ' ' + iso;
   try {
     const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/reschedule`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5439,14 +5493,23 @@ async function qpDoReschedule(orderId, iso, btn) {
         toast(cuT('A courier is already on this one — cancel it in the Qingyun app first',
                   '已呼叫运力。请先在青云 App 取消该单。'), 'err');
       } else if (j.requeued) {
-        toast(cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队'), 'success');
+        // TODAY keeps its own wording — "it goes back in the queue now" is true
+        // and is what the operator is waiting to read. A LATER day must not say
+        // that: the row IS queued, but parked, and nobody is dispatched until
+        // that morning. Saying "re-queued" over a delivery that will not move
+        // for three days is the same over-promise this whole surface has been
+        // unpicking. The day itself is data, substituted into the frame.
+        toast(today
+          ? cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队')
+          : cuT(`Moved to ${iso} — the rider is called that morning`,
+                `已改期至 ${iso} — 当天呼叫骑手`), 'success');
       } else {
         // The date moved but the queue row did not take the swap — another writer
         // reached it first (a drain completing, a retry). Say both halves: the
         // customer HAS been told the new day, so this is not a no-op to retry
         // blindly, and no rider has been queued, which is the part still owed.
-        toast(cuT('Moved to today, but it was not re-queued — check the courier',
-                  '已改期至今天,但未重新排队 — 请核实运力。'), 'err');
+        toast(cuT(`Moved to ${when}, but it was not re-queued — check the courier`,
+                  `已改期至${whenCn},但未重新排队 — 请核实运力。`), 'err');
       }
       openOrder(orderId, { instant: true });
       return;

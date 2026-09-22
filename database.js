@@ -6448,6 +6448,24 @@ addColumn('qingyun_push_queue', 'stale_store_code', 'TEXT');
 // outage alert measures. NULL = not held. See lib/qingyun-queue HOLD_SQL.
 addColumn('qingyun_push_queue', 'geo_held_at', 'DATETIME');
 
+// ── A delivery booked for a LATER DAY, waiting for that day ──────────────────
+// The Guangzhou day ('YYYY-MM-DD') this row must not be dispatched before. NULL
+// means due now, which is every row that existed before this column.
+//
+// It is a COLUMN and not a status because the drain claims rows before it can
+// judge them: it takes the three oldest pending rows per poll, marks them
+// 'processing', and only then reads the order. A future-dated row left pending
+// would therefore occupy one of those three slots on every poll for as long as
+// it waits — three of them would starve live orders of dispatch entirely, and
+// each would burn an attempt every 25 seconds. So the wait has to be expressible
+// in the SELECT, before a row is claimed. See lib/qingyun-queue PENDING_DUE_SQL.
+//
+// Before this, a row whose day had not arrived was retired as 'skipped' by the
+// drain's eligibility gate — every morning, on every pass, because nothing ever
+// re-queues a skipped row. That is why the reschedule control offered only today
+// and told the operator to build any other day by hand in the Qingyun app.
+addColumn('qingyun_push_queue', 'hold_until_date', 'TEXT');
+
 // ── Waiting for a human to say where the door is ──────────────────────────
 // The address only resolves to a coarse AREA (a district or city centre) and
 // the coordinates the order carries have no provenance — so nothing here knows
