@@ -780,7 +780,22 @@ img{display:block;max-width:100%}
 .pb-why-h{font-family:var(--f-bear);font-size:calc(11.4 * var(--u));line-height:calc(15 * var(--u));
   letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
   margin:calc(21 * var(--u)) 0 calc(15 * var(--u));overflow-wrap:anywhere}
-.pb-why-r{display:grid;grid-template-columns:calc(37 * var(--u)) 1fr;gap:calc(14 * var(--u));align-items:baseline;
+/* THE NUMERAL IS CENTRED ON THE CLAIM, NOT SAT ON ITS BASELINE. Baseline is
+   the component's own alignment and it is correct to the letter: measured on
+   the rendered page the two baselines land on the same pixel. It still reads
+   as misaligned, and the reason is the substitution above -- the numeral is
+   the display face at 33px against a 16.5px claim, roughly twice the cap
+   height, so baseline-aligned its ink centre sits ~7px ABOVE the claim's and
+   the number floats over the text rather than beside it. Reported by Ash
+   against this menu, 2026-09-22, chosen from a rendered comparison of four
+   alignments. align-items:center alone does it -- measured off the pixels
+   at 8x, the numeral's ink centre lands within a pixel of the claim's
+   cap-band centre on both one- and two-line claims, so there is no nudge
+   here to drift when the sizes change. Its cost, which Ash was shown and
+   accepted: a two-line claim is taller, so its numeral sits lower and the
+   rail is no longer a straight column. miniapp/components/product-blocks/product-blocks.wxss
+   carries the same change on the same block. */
+.pb-why-r{display:grid;grid-template-columns:calc(37 * var(--u)) 1fr;gap:calc(14 * var(--u));align-items:center;
   padding:calc(14 * var(--u)) 0;border-top:1px solid rgba(0,0,0,.08)}
 .pb-why-r.first{border-top:2px solid var(--ink)}
 .pb-why-n{font-family:var(--f-bear);font-size:calc(33 * var(--u));line-height:calc(28 * var(--u))}
