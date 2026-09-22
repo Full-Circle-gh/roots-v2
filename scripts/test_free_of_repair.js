@@ -9,9 +9,10 @@
 //
 // Four properties, and the last two are the ones that would hurt:
 //
-//   1. A row NAMED BY THE SHEET takes the sheet's answer whole.
-//   2. A row the sheet does NOT name keeps only nuts/soy/gluten/5 spice, and
-//      loses the three retired flags and any free-text stray.
+//   1. A row the sheet ANSWERS takes that answer whole.
+//   2. A row the sheet does not name — or names with an EMPTY cell, which is
+//      not an answer — keeps only nuts/soy/gluten/5 spice, and loses the three
+//      retired flags and any free-text stray.
 //   3. NOTHING IS INVENTED. A flag the row did not already claim is never
 //      added to a row outside the sheet — that would be the system telling a
 //      shopper a product is nut-free on no evidence at all.
@@ -132,6 +133,13 @@ const FIXTURE = () => [
   // third of the catalogue to change nothing a reader can see, and the next
   // person to press Save puts the space back.
   { id: 10, sku: '3-996', name_en: 'Already Right', free_of: 'nuts, soy, gluten, 5 spice' },
+  // NAMED BY THE SHEET WITH AN EMPTY CELL (1-320 Thai Buckwheat Noodle Salad).
+  // Ash: "ill fix them later ignore them" — so the blank is not an answer and
+  // the not-named rule applies. It must NOT be read as "free of nothing"
+  // (which would be indistinguishable here) and it must NOT be skipped
+  // outright either: the retired flag still has to go, or "nothing else,
+  // everywhere" has three exceptions nobody can see.
+  { id: 11, sku: '1-320', name_en: 'Thai Buckwheat Noodle Salad', free_of: 'gluten, animal products' },
 ];
 
 function run(rows, argv) {
@@ -197,6 +205,13 @@ check('a row outside the sheet with nothing to lose is not touched', () => {
   assert.ok(!wrote.has(6), 'rewrote a row that was already only-the-four');
 });
 
+check('an EMPTY sheet cell is not an answer — the not-named rule applies', () => {
+  /* Read as "free of nothing" this row would be cleared; skipped outright it
+     would keep `animal products` forever. Neither is right: it keeps the
+     gluten it already claims and loses the retired flag. */
+  assert.strictEqual(wrote.get(11), 'gluten');
+});
+
 check('it writes the separator the EDITOR writes, ", " and not ","', () => {
   /* pdFreeOfGet() joins on ", ", and the live catalogue is written that way
      throughout. Joining on a bare comma made 143 of 402 rows in the 2026-09-22
@@ -216,6 +231,8 @@ check('NULL is not churned into an empty string', () => {
 });
 
 check('NOTHING IS INVENTED: no row gains a flag it did not already claim', () => {
+  // Only the rows the sheet ANSWERS may gain a flag. 1-320 is named but its
+  // cell is empty, so it is NOT in this set — nothing may be added to it.
   const sheetSkus = new Set(['2-140', '1-50', 's(1-30)']);
   for (const r of FIXTURE()) {
     if (!wrote.has(r.id)) continue;

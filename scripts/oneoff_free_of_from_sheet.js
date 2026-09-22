@@ -48,13 +48,20 @@
  *    On the live data this costs nothing: the dry run found no row that was a
  *    pure reorder.
  *
- * 3. IT CLEARS THE THREE SHEET ROWS WITH AN EMPTY CELL — 1-320 Thai Buckwheat
- *    Noodle Salad, 1-440 Pesto 'Chicken' Wrap, 3-30 Choco-Hazel Bars. Blank
- *    could mean "free of nothing" or "not filled in yet", and the two want
- *    opposite writes. Clearing is the safe direction of the two: a claim
- *    removed is a shopper not told something true, a claim invented is a
- *    shopper with an allergy misled. They are printed by name on every run so
- *    the call can be reversed by hand if blank meant the other thing.
+ * 3. IT DOES NOT ACT ON THE THREE SHEET ROWS WITH AN EMPTY CELL — 1-320 Thai
+ *    Buckwheat Noodle Salad, 1-440 Pesto 'Chicken' Wrap, 3-30 Choco-Hazel
+ *    Bars. Blank could mean "free of nothing" or "not filled in yet", and the
+ *    two want opposite writes. Asked which, Ash: *"ill fix them later ignore
+ *    them"* — so the blank cell is not an instruction and the sheet is treated
+ *    as SILENT about those three: the not-named rule applies to them instead.
+ *
+ *    That is not the same as leaving them untouched, and the difference
+ *    matters: two of the three carry `animal products` today, and "ignore
+ *    them" cannot mean a retired flag survives on them when the whole point is
+ *    that it exists nowhere. So they keep whichever of the four they already
+ *    claim — which for these two is none — and the retired flag goes with
+ *    every other row's. Nothing is read off the empty cell. They are printed by
+ *    name on every run.
  *
  * ── SAFETY ─────────────────────────────────────────────────────────────────
  * DRY RUN BY DEFAULT. Nothing is written without --apply, and oneoff.yml takes
@@ -236,10 +243,17 @@ const canon = (toks) => KEEP.filter(k => toks.some(t => norm(t) === k)).join(', 
 const key = (s) => String(s || '').trim().toLowerCase()
   .replace(/（/g, '(').replace(/）/g, ')').replace(/\s+/g, '');
 
+// A row whose cell is EMPTY is recorded but carries no instruction — see point
+// 3 above. `want: null` is what makes the loop below fall through to the
+// not-named rule for it, and it is deliberately not `''`: an empty string is an
+// answer ("free of nothing"), null is the absence of one.
 const SHEET = new Map();
+const SHEET_BLANKS = [];
 for (const line of SHEET_ROWS) {
   const [sku, flags] = line.split('|');
-  SHEET.set(key(sku), { sku, want: canon(splitFree(flags)) });
+  const toks = splitFree(flags);
+  if (!toks.length) SHEET_BLANKS.push(sku);
+  SHEET.set(key(sku), { sku, want: toks.length ? canon(toks) : null });
 }
 if (SHEET.size !== SHEET_ROWS.length) {
   console.error(`REFUSING TO RUN: ${SHEET_ROWS.length} sheet rows collapse to ${SHEET.size} SKUs.`);
@@ -275,14 +289,16 @@ for (const table of found) {
     const cur = String(r.free_of == null ? '' : r.free_of);
     const hit = r.sku ? SHEET.get(key(r.sku)) : null;
     if (hit) sheetSeen.add(key(hit.sku));
-    // A row the sheet names takes the sheet's answer whole. A row it does not
-    // name keeps only the four it already claims — the sheet says nothing about
-    // that product, so nothing is invented for it.
-    const want = hit ? hit.want : canon(splitFree(cur));
+    // A row the sheet ANSWERS takes that answer whole. A row it does not name —
+    // or names with an empty cell, which is not an answer — keeps only the four
+    // it already claims: the sheet says nothing about that product, so nothing
+    // is invented for it.
+    const answered = !!(hit && hit.want !== null);
+    const want = answered ? hit.want : canon(splitFree(cur));
     // NULL and '' are the same emptiness to every reader of this column; do not
     // churn a row from one to the other and call it a change.
     if (cur === want || (!cur && !want)) continue;
-    plan.push({ id: r.id, sku: r.sku, name: r.name, from: cur, to: want, bySheet: !!hit });
+    plan.push({ id: r.id, sku: r.sku, name: r.name, from: cur, to: want, bySheet: answered });
   }
 
   console.log(`${'='.repeat(78)}\n### ${table} — ${rows.length} rows, ${plan.length} to change\n${'='.repeat(78)}`);
@@ -314,17 +330,20 @@ if (misses.length) {
   for (const m of misses) console.log(`     ${m.sku}   (would have been: ${m.want || 'blank'})`);
   console.log('   These labels are unchanged. Either the SKU is written differently in the');
   console.log('   catalogue, or the product is not in it.');
+  console.log('   KNOWN AND ACCEPTED on 2026-09-22: S(3-252) (GF Buckwheat Bread, shop slice).');
+  console.log('   3-252 exists and is updated; S(3-252) matches nothing. Ash: "ignore it".');
+  console.log('   A SKU appearing here that is NOT that one is a new miss and worth chasing.');
 } else {
   console.log(`All ${SHEET.size} sheet SKUs matched at least one row.`);
 }
 
 // Blanks are announced on every run, applied or not, so the judgement stays visible.
-const blanks = [...SHEET.values()].filter(s => !s.want);
-if (blanks.length) {
-  console.log(`\nSheet rows with an EMPTY "Free of" cell (${blanks.length}) — these CLEAR the row:`);
-  for (const b of blanks) console.log(`     ${b.sku}`);
-  console.log('   If blank meant "not filled in yet" rather than "free of nothing",');
-  console.log('   these three are the ones to put back by hand.');
+if (SHEET_BLANKS.length) {
+  console.log(`\nSheet rows with an EMPTY "Free of" cell (${SHEET_BLANKS.length}) — the sheet's`);
+  console.log(`answer for these is NOT read (Ash: "ill fix them later ignore them"). They are`);
+  console.log(`treated as rows the sheet does not name: they keep whichever of the four they`);
+  console.log(`already claim, and lose the retired flags like every other row.`);
+  for (const b of SHEET_BLANKS) console.log(`     ${b}`);
 }
 
 console.log(`\n${APPLY ? 'WROTE' : 'WOULD WRITE'} ${grandTotal} row${grandTotal === 1 ? '' : 's'} in total.`);
