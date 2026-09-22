@@ -10,7 +10,25 @@
                 we do NOT set max-width/margin — the host wraps us)
    Brand colour vars (--lime --forest --berry --oat --ink --carrot --papaya
    --corn --sky --pea --lotus --pink --citrus --olive …) and @font-face
-   (--f-bear --f-toni --f-aleo --f-gothic) come from the host page (shop.html).
+   (--f-bear --f-aleo --f-num) come from the host page (shop.html).
+
+   ── TWO FACES, NOT FOUR ─────────────────────────────────────────────────
+   This file wears --f-bear (display) and --f-aleo (body) and nothing else.
+   --f-toni and --f-gothic used to carry the kickers, the chip labels and
+   every big numeral here, which is what the mini-app component drew before
+   Ash compared the two surfaces against a live product and chose the QR
+   menu's reading: 2026-09-22, "i like it like that and i want it to be the
+   same on the mini app". The component moved that day and THIS PORT DID NOT
+   -- twenty-two declarations were left on the old design, so the storefront
+   and the phone drew the same block in different faces for as long as
+   nobody put them side by side. The letter-spacing, the sizes and the
+   uppercase are untouched: only the family changed, so this is not a
+   re-typesetting of the page.
+
+   THE NUTRITION VALUE IS THE ONE EXCEPTION AND WEARS --f-num, because a
+   value is one run of figure -- "18.4 g" is a single text node -- and the
+   display family's digits come from a substitute by unicode-range, so a
+   unit left on --f-bear reads lighter than the number beside it. §234.
    --font-scale defaults to 1 if the host doesn't set it.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -64,7 +82,7 @@
 }
 .shop-product-blocks .spb-spec-cell:last-child { border-right: 0; }
 .shop-product-blocks .spb-spec-k {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(22 * var(--u) * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -86,7 +104,7 @@
   align-items: center;
   gap: calc(20 * var(--u));
   margin-bottom: calc(28 * var(--u));
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(22 * var(--u) * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -147,13 +165,13 @@
 }
 .shop-product-blocks .spb-why-row.first { border-top: calc(2 * var(--u)) solid var(--ink); }
 .shop-product-blocks .spb-why-n {
-  font-family: var(--f-gothic);
+  font-family: var(--f-bear);
   font-size: calc(68 * var(--u) * var(--font-scale));
   line-height: 0.85;
   color: var(--pa-accent, var(--ink));
 }
 .shop-product-blocks .spb-why-claim {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(32 * var(--u) * var(--font-scale));
   line-height: 1.35;
   font-weight: 400;
@@ -194,7 +212,7 @@
   border: calc(2 * var(--u)) solid var(--ink);
   border-radius: calc(999 * var(--u));
   background: transparent;
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(26 * var(--u) * var(--font-scale));
   line-height: 1;
   color: var(--pa-fg, var(--ink));
@@ -207,7 +225,7 @@
   padding: calc(22 * var(--u)) calc(32 * var(--u)) calc(20 * var(--u));
 }
 .shop-product-blocks .spb-chip-pct {
-  font-family: var(--f-gothic);
+  font-family: var(--f-bear);
   font-size: calc(28 * var(--u) * var(--font-scale));
   letter-spacing: 0.02em;
   color: var(--pa-accent, var(--berry));
@@ -224,7 +242,7 @@
   color: var(--pa-fg, var(--ink));
 }
 .shop-product-blocks .spb-ing-line-pct {
-  font-family: var(--f-gothic);
+  font-family: var(--f-bear);
   color: var(--pa-accent, var(--berry));
   font-size: 0.85em;
   margin-left: 0.05em;
@@ -274,7 +292,7 @@
   background: var(--pa-accent, var(--berry));
   color: var(--oat);
   border-radius: calc(8 * var(--u));
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(26 * var(--u) * var(--font-scale));
   font-weight: 700;
   flex: none;
@@ -289,7 +307,7 @@
   border-top: calc(2 * var(--u)) dashed var(--ink-30);
 }
 .shop-product-blocks .spb-allergen-lbl {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(22 * var(--u) * var(--font-scale));
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -307,7 +325,7 @@
   display: inline-block;
   padding: calc(10 * var(--u)) calc(20 * var(--u)) calc(8 * var(--u));
   border-radius: calc(999 * var(--u));
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(25 * var(--u) * var(--font-scale));
   line-height: 1;
 }
@@ -375,7 +393,7 @@
 }
 .shop-product-blocks .spb-how-lbl {
   overflow-wrap: break-word;
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(24 * var(--u) * var(--font-scale));
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -422,13 +440,13 @@
   line-height: 1;
 }
 .shop-product-blocks .spb-storage-head {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(22 * var(--u) * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 .shop-product-blocks .spb-storage-num {
-  font-family: var(--f-gothic);
+  font-family: var(--f-bear);
   font-size: calc(96 * var(--u) * var(--font-scale));
   line-height: 0.95;
   margin-top: auto;
@@ -441,7 +459,7 @@
   line-height: 1.1;
 }
 .shop-product-blocks .spb-storage-unit {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(24 * var(--u) * var(--font-scale));
   letter-spacing: 0.16em;
   line-height: 1.5;
@@ -496,7 +514,7 @@
   color: var(--ink);
 }
 .shop-product-blocks .spb-bigstat-what {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(22 * var(--u) * var(--font-scale));
   letter-spacing: 0.32em;
   text-transform: uppercase;
@@ -545,7 +563,7 @@
   color: var(--oat);
 }
 .shop-product-blocks .spb-cbanner-sub {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(23 * var(--u) * var(--font-scale));
   letter-spacing: 0.06em;
   margin-top: calc(12 * var(--u));
@@ -567,7 +585,7 @@
 }
 .shop-product-blocks .spb-pullquote-who {
   margin-top: calc(20 * var(--u));
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(20 * var(--u) * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -607,7 +625,7 @@
 }
 .shop-product-blocks .spb-recipe-step:first-of-type { border-top: calc(2 * var(--u)) solid var(--ink); }
 .shop-product-blocks .spb-recipe-n {
-  font-family: var(--f-gothic);
+  font-family: var(--f-bear);
   font-size: calc(56 * var(--u) * var(--font-scale));
   line-height: 0.9;
   color: var(--pa-accent, var(--olive));
@@ -625,7 +643,7 @@
   color: var(--pa-fg, var(--ink));
 }
 .shop-product-blocks .spb-recipe-time {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(22 * var(--u) * var(--font-scale));
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -655,7 +673,7 @@
 }
 .shop-product-blocks .spb-faq-q::-webkit-details-marker { display: none; }
 .shop-product-blocks .spb-faq-q-txt {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(27 * var(--u) * var(--font-scale));
   line-height: 1.35;
   color: var(--pa-fg, var(--ink));
@@ -716,13 +734,13 @@
 }
 .shop-product-blocks .spb-nrow:last-child { border-bottom: 0; }
 .shop-product-blocks .spb-nrow-l {
-  font-family: var(--f-toni);
+  font-family: var(--f-bear);
   font-size: calc(27 * var(--u) * var(--font-scale));
   letter-spacing: 0.01em;
   color: var(--ink);
 }
 .shop-product-blocks .spb-nrow-r {
-  font-family: var(--f-gothic);
+  font-family: var(--f-num);
   font-size: calc(40 * var(--u) * var(--font-scale));
   line-height: 1;
   font-variant-numeric: tabular-nums;
