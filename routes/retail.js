@@ -27772,6 +27772,30 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // Split-package suggestion — drives the banner above Items in the drawer.
   try { o.shipment_suggestion = buildShipmentSuggestion(id); } catch (e) { o.shipment_suggestion = null; }
 
+  // §218 — air into Chengdu can only be bought from SF Express. The drawer says
+  // so on the air parcel's own tracking card and asks again at the JD label.
+  //
+  // COMPUTED HERE, ONCE, and that is the whole point of it being a flag rather
+  // than a city list in the browser: lib/jd.js is the only place that knows
+  // which cities this applies to, so there is no second copy to drift from it
+  // (the fault JD_LAND_DEFAULT_PROVINCES needs a whole test to guard against).
+  //
+  // ROOTS ONLY. This is a fact about Roots' own carrier accounts, not a truth
+  // about shipping, and a tenant that has never heard of SF must not inherit a
+  // warning telling its staff to use them. Gated on the tenant, not on a
+  // setting, because there is exactly one such rule and one tenant with it — a
+  // per-tenant carrier-rules table is the right answer to the SECOND one.
+  //
+  // THREE CONDITIONS, ALL REQUIRED. A Chengdu order shipping entirely by road
+  // gets nothing: there is no wrong click to warn about, and a banner on
+  // orders it does not apply to is how staff learn to read past banners.
+  try {
+    const a = o.address || {};
+    o.sf_only_air = (currentTenantId() === ROOTS_TENANT_ID)
+      && (jd.isSfOnlyAirCity(a.city) || jd.isSfOnlyAirCity(a.city_en))
+      && (o.shipments || []).some(s => s.mode === 'air');
+  } catch (e) { o.sf_only_air = false; }
+
   // Same-city courier (Qingyun) live status — so the drawer can show the real
   // rider stage, and the header pill stops reading "Dispatched" before a rider
   // is actually on it. Same match logic as the customer track endpoint: link by

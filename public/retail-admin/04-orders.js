@@ -8378,8 +8378,18 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   const multiParcel = (o.shipments?.length || 0) > 1;
   const has = !!(t && t.number);
   const sid = s.id;
+  // §218 — this parcel is the air half of an order into a city whose air lane
+  // is SF's. `o.sf_only_air` is the SERVER's answer (routes/retail.js, gated on
+  // the Roots tenant and on the order having an air parcel at all); the mode
+  // test is what narrows it from the order to THIS card, so the land parcel
+  // sitting beside it says nothing.
+  const sfOnlyAir = !!(o.sf_only_air && s.mode === 'air');
+  // The manual-entry dropdown opens on SF rather than JD for such a parcel,
+  // because SF is the only answer and the operator is about to paste an SF
+  // number into it. Untouched once a waybill exists — then the selected carrier
+  // is a fact about the parcel, not a suggestion.
   const carrierOpts = (TRACKING_CARRIERS || []).map(c =>
-    `<option value="${c.code}" ${ (has ? t.carrier_code : 'jd') === c.code ? 'selected' : '' }>${escapeHtml(c.name_en)} · ${escapeHtml(c.name_cn)}</option>`
+    `<option value="${c.code}" ${ (has ? t.carrier_code : (sfOnlyAir ? 'sf' : 'jd')) === c.code ? 'selected' : '' }>${escapeHtml(c.name_en)} · ${escapeHtml(c.name_cn)}</option>`
   ).join('');
   // This used to strip the leading year off the ISO stamp by regex so the
   // footer read "Updated 07-06 13:59". §1.18's year rule does exactly that
@@ -8477,6 +8487,21 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       </div>
     </div>` : '';
 
+  // §218 — said on the parcel, ten pixels from the button that would get it
+  // wrong. Amber, not the reuse banner's red: nothing has gone wrong yet and
+  // this is an instruction, not an error. It stays up after a waybill exists,
+  // because a JD air number already on a Chengdu parcel is the case where
+  // reading it matters most.
+  const sfBanner = sfOnlyAir ? `
+      <div style="display:flex; gap:8px; align-items:flex-start; padding:8px 10px; margin-bottom:10px;
+                  background:#FBF3E4; border:1px solid #9A6E2A; border-radius:6px;
+                  font-size:12px; line-height:1.45; color:#7A5520;">
+        <span>✈️</span>
+        <div>${cuT(
+          'Chengdu air can only ship with SF Express · 顺丰速运. Book it on SF’s own system and enter the waybill number below.',
+          '成都空运仅限顺丰速运。请在顺丰速运下单,并将运单号手动填写在下方。')}</div>
+      </div>` : '';
+
   const delayDays = airShipmentDelayDays(o, s);
   // Once an operator has contacted the customer they mark the alert handled; the
   // red banner collapses to a calm "handled" note (with an undo), and the same
@@ -8505,7 +8530,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
       ${renderGzMethodToggle(o, s)}
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">${cuT('Tracking', '物流')}</div>
-      ${delayBanner}${reuseBanner}
+      ${sfBanner}${delayBanner}${reuseBanner}
       ${has ? `
         <div class="od-trk-panel">
           <div class="od-trk-top">
@@ -8996,6 +9021,11 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   // other air parcel it now gets the two fresh services to choose between,
   // ground pre-selected — a default, not a lock, so air is still one click away.
   const landDefault = isAir && jdIsLandDefaultProvince(destProvince);
+  // §218 — this order is going to a city whose air lane belongs to SF. The
+  // SERVER's answer, read off the open order (routes/retail.js already gated it
+  // on the Roots tenant and on an air parcel existing), so the browser holds no
+  // city list of its own and there is nothing here to drift.
+  const sfOnlyAir = !!(ord && ord.sf_only_air);
   const preset = landDefault ? 'LL-HD-M'
     : isAir ? 'LL-SD-M'
     : jdSuggestedService(mode, !!Number(isFresh));
@@ -9092,11 +9122,37 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
     });
   }
   bg.querySelector('#jd-svc-submit').addEventListener('click', async (e) => {
+    // Captured BEFORE any await: currentTarget is nulled once the handler
+    // yields, and submitJdLabel uses it to put the button in its busy state.
+    const btn = e.currentTarget;
     const product = services.length ? (bg.querySelector('input[name="jd-svc"]:checked') || {}).value : preset;
     if (!product) return;
     const piecesEl = bg.querySelector('#jd-pieces');
     const pieces = Math.max(1, Math.min(30, parseInt(piecesEl && piecesEl.value, 10) || 1));
-    const ok = await submitJdLabel(orderId, shipmentId, product, e.currentTarget, pieces);
+    // §218 — the JD air product, on a parcel whose air lane belongs to SF.
+    //
+    // ASKED AT SUBMIT, not on the radio like the land-only question above, and
+    // that is forced rather than chosen: on an air parcel `services` is empty
+    // — there is nothing to pick, LL-SD-M is simply what gets sent — so no
+    // change event ever fires and a listener would never run. Submit is the one
+    // moment that covers both an air parcel and a land parcel pushed onto air.
+    //
+    // BOTH QUESTIONS CAN FIRE ON ONE CLICK: airline-refused goods, into
+    // Chengdu, on a land parcel the operator is moving to air. They are two
+    // different true facts and each deserves its own answer; folding them into
+    // one sentence would say neither well, and the combination is rare.
+    if (sfOnlyAir && product === 'LL-SD-M') {
+      const go = await askConfirm({
+        titleEn: 'SF Express only', titleCn: '仅顺丰速运',
+        bodyEn: 'Chengdu air can only ship with SF Express. Create a JD air waybill anyway?',
+        bodyCn: '成都空运仅限顺丰速运。仍要生成空运运单吗?',
+        confirmEn: 'Create air waybill anyway', confirmCn: '仍要生成空运运单',
+        cancelEn: 'Not yet', cancelCn: '暂不',
+        danger: true,
+      });
+      if (!go) return;
+    }
+    const ok = await submitJdLabel(orderId, shipmentId, product, btn, pieces);
     if (ok) bg.remove();
   });
 }

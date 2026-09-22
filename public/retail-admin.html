@@ -1202,12 +1202,26 @@
       <!-- Appearance preference — set-once toggle that used to sit loose in the
            topbar. Deliberately stays open on click so you can nudge theme
            repeatedly; the value shows in the right-hand chip (acctSyncPrefs).
-           Language now lives only inside Profile (langToggle), not duplicated here.
            Groups separate by space alone (acct-gap) — no rule lines. -->
       <button class="acct-item acct-gap" id="acctTheme" type="button" role="menuitem" title="Toggle light / dark mode · 切换浅色 / 深色模式">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></svg>
         <span>Appearance · 外观</span>
         <span class="acct-val" id="acctThemeVal"></span>
+      </button>
+      <!-- Language — moved here from Profile's rail foot (2026-09-22). It sat
+           two clicks deep behind the avatar → Profile pop-up, which is a strange
+           place for the one control that decides what every screen reads as; it
+           belongs beside Appearance, the other set-once device preference. Same
+           behaviour as that row: stays open on click, and the chip on the right
+           names the language that is ACTIVE (English / 中文), not the one the
+           click would switch to. The Profile pop-up's own globe is hidden while
+           embedded (backend-account.html, html.embedded .langrow) so there is
+           exactly one language control inside the back office; the standalone
+           /backend/account route keeps its globe, being outside this shell. -->
+      <button class="acct-item" id="acctLang" type="button" role="menuitem" title="Switch language · 切换语言">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>
+        <span>Language · 语言</span>
+        <span class="acct-val" id="acctLangVal"></span>
       </button>
       <!-- New-order sound moved to Profile → Notifications (2026-07-14). -->
       <!-- Install app — the back office as its own window, no tabs and no
