@@ -319,9 +319,23 @@ it('a live order can reach the control from the courier block', () => {
 });
 
 it('…but not while a rider is carrying it, and not on a closed order', () => {
-  assert.ok(/heldByRider = !!\(c && \['heading_to_pickup', 'in_transit'\]/.test(DISPATCH),
+  assert.ok(/heldByRider = !stale && !!\(c && \['heading_to_pickup', 'in_transit'\]/.test(DISPATCH),
     'a rider on the road can be re-dated from the drawer');
   assert.ok(/'delivered', 'cancelled', 'refunded'/.test(DISPATCH), 'a closed order still offers a day change');
+});
+
+it('…and a STALE job is NOT held, which is the case that matters most', () => {
+  // TC000823, the day this shipped: the rider had been cancelled, the card was
+  // frozen on "Rider coming" with the amber "may have cancelled" warning beside
+  // it, and this guard read the frozen stage as a rider on the road — hiding the
+  // control on the one order that needed it, while the same screen said the
+  // rider was probably gone. `stale` is the drawer's own freeze test, so the
+  // button now appears exactly when the card admits something is wrong.
+  assert.ok(/const heldByRider = !stale &&/.test(DISPATCH),
+    'a frozen "Rider coming" still hides the day change');
+  // Order of declaration matters: `stale` must be computed before it is read.
+  assert.ok(DISPATCH.indexOf('const stale =') < DISPATCH.indexOf('const heldByRider ='),
+    'heldByRider reads stale before it is assigned, so it is always undefined');
 });
 
 it('…and never alongside the expired surface, which has its own', () => {

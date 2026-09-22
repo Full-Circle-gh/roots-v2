@@ -4815,7 +4815,21 @@ function renderQyDispatch(o) {
   // cannot be re-dated from here (the server refuses it too, and says so), and a
   // delivered or closed order has no day left to move. §218's cancelled stage
   // counts as nobody, which is exactly the TC000823 case.
-  const heldByRider = !!(c && ['heading_to_pickup', 'in_transit'].includes(c.stage));
+  //
+  // A STALE job is NOT held. This was wrong on the day it shipped, and TC000823
+  // is the order that showed it: the rider had been cancelled, the card was
+  // frozen on "Rider coming" with the amber "the rider may have cancelled"
+  // warning beside it — and this guard read that frozen stage as a rider on the
+  // road and withheld the control. **The one state where an operator most needs
+  // to move the day is the one where the button was hidden**, and the same
+  // screen was simultaneously telling them the rider was probably gone.
+  //
+  // `stale` is the drawer's own 10-minute freeze test, already computed above
+  // for the warning. Reusing it means the button appears exactly when the card
+  // says something is wrong, and cannot disagree with it. A genuinely live rider
+  // still withholds it, which is right: the server refuses that move too
+  // (`already_created`), so offering it would be a control that cannot work.
+  const heldByRider = !stale && !!(c && ['heading_to_pickup', 'in_transit'].includes(c.stage));
   // An EXPIRED order already renders this control, with its own explanation, from
   // renderQyPointSurface — and it emits these same two ids. Rendering both would
   // put two `qp-resched-<id>` elements in the drawer, and getElementById takes the
