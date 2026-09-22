@@ -9685,7 +9685,7 @@ function openRefundApproveDialog(orderId) {
       <div class="pu-editor-head">
         <div>
           <h3 style="margin: 0; font-size: 14px;">Approve refund · 批准退款</h3>
-          <div class="muted" style="font-size: 11px; margin-top: 2px;">Lock in the amount. Full = order.status flips to refunded + inventory + points reverse. Partial = stays in current status, inventory reverses for selected lines only.</div>
+          <div class="muted" style="font-size: 11px; margin-top: 2px;">${cuT('Lock in the amount. What each mode does is spelled out above the button.', '确认退款金额。各模式的具体影响见按钮上方说明。')}</div>
         </div>
         <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">Close · 关闭</button>
       </div>
@@ -9729,6 +9729,20 @@ function openRefundApproveDialog(orderId) {
           </label>
           <div class="muted" style="font-size: 11px; margin-top: 4px;">Auto-on for full refunds. Off by default for partials. · 全额退款默认开启;部分退款默认关闭。</div>
         </div>
+        ${'' /* ── What pressing Approve actually does ──────────────────────────
+             The old subtitle said it at the top of the dialog in the language of
+             the columns it writes — an order status flipping, inventory and
+             points reversing — and it was INCOMPLETE: a full refund also pulls
+             the same-city courier
+             (qingyunDropCopyForClosedOrder, routes/retail.js), which appeared
+             nowhere on this screen at all. Somebody approving a full refund on an
+             order with a rider on the road had no way to know from here that they
+             were cancelling that rider.
+
+             It sits directly above the button, and it changes with the mode,
+             because full and partial do genuinely different things and one line
+             covering both is the line nobody reads. */}
+        <div id="rf-consequence" style="margin-bottom: 12px; padding: 10px 12px; border-radius: 6px; font-size: 11.5px; line-height: 1.6; background: var(--bg-elev-1); border-left: 3px solid var(--line-soft);"></div>
         <div style="display: flex; gap: 8px; justify-content: flex-end;">
           <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">Cancel · 取消</button>
           <button class="btn btn-primary" id="rf-submit">Approve · 批准</button>
@@ -9751,6 +9765,71 @@ function openRefundApproveDialog(orderId) {
   };
   bg.querySelectorAll('.rf-line-chk, .rf-line-qty').forEach(el => el.addEventListener('input', recalcLineAmt));
   recalcLineAmt();
+
+  // ── The consequence line, recomputed whenever the mode changes ────────────
+  // `full` is decided the same way the SERVER decides it — a mode of 'full', or
+  // an amount that reaches the order total — so the sentence cannot promise one
+  // thing while the endpoint does the other. (routes/retail.js reads isFull off
+  // the amount, not off the radio, so an operator who picks "Partial — amount"
+  // and then types the full total gets a full refund. That is exactly the case
+  // this line has to catch, and a sentence keyed on the radio alone would miss.)
+  const RIDER_ON_IT = ['awaiting_dispatch', 'heading_to_pickup', 'in_transit'];
+  // THE SERVER'S OWN THRESHOLD, not the order total. routes/retail.js decides
+  // isFull as `amount + 0.005 >= remainingGross`, where remainingGross is the
+  // GROSS tenders (points + wallet + cash, orderTenders) less anything already
+  // approved — NOT o.total, which is the cash slice alone. On an order paid
+  // partly with points or wallet the two differ, and a line keyed on o.total
+  // would show the full-refund consequences over a refund the server treats as
+  // partial. Both fields are already in the drawer payload, so this is computed
+  // the same way rather than approximated.
+  const grossTender = Math.round(((Number(o.points_amount) || 0)
+    + (Number(o.balance_used) || 0) + total) * 100) / 100;
+  const priorApproved = Math.max(0, Number(o.refund_amount_approved) || 0);
+  const remainingGross = Math.max(0, Math.round((grossTender - priorApproved) * 100) / 100);
+  const renderConsequence = () => {
+    const box = bg.querySelector('#rf-consequence');
+    if (!box) return;
+    const mode = (bg.querySelector('input[name="rf-mode"]:checked') || {}).value || 'full';
+    let amt = total;
+    if (mode === 'amount') amt = Number(bg.querySelector('#rf-amt').value) || 0;
+    else if (mode === 'lines') {
+      amt = 0;
+      bg.querySelectorAll('.rf-line-chk').forEach(chk => {
+        if (!chk.checked) return;
+        const q = Number(bg.querySelector(`.rf-line-qty[data-item="${chk.dataset.item}"]`).value) || 0;
+        amt += (Number(chk.dataset.unit) || 0) * q;
+      });
+      amt = +amt.toFixed(2);
+    }
+    // Mode 'full' submits no amount and is always full; otherwise mirror the
+    // server's own comparison exactly.
+    const full = mode === 'full' || (amt + 0.005) >= remainingGross;
+    const lines = [];
+    lines.push(full
+      ? cuT('Full refund: the order is marked refunded, its same-city delivery is cancelled, and stock, points and referral credit are reversed. The customer is told.',
+            '全额退款:订单将标记为已退款,同城配送将被取消,库存、积分与推荐奖励一并退回。系统会通知顾客。')
+      : cuT('Partial refund: the order keeps its status and its delivery. Stock reverses for the selected items only. The customer is told.',
+            '部分退款:订单状态与配送均不变,仅退回所选商品的库存。系统会通知顾客。'));
+    // The fact most easily missed, and only worth saying when it is true.
+    const stage = _OPEN_ORDER && _OPEN_ORDER.courier && _OPEN_ORDER.courier.stage;
+    if (full && RIDER_ON_IT.includes(stage)) {
+      lines.push(`<b>${cuT('A rider is on this order right now — approving cancels that delivery.',
+                           '当前已有骑手接单 — 批准后该配送会被取消。')}</b>`);
+    }
+    // The reason this dialog earned a warning at all: a customer with no other
+    // way to ask for a different day files a REFUND asking for one, and the
+    // button that reads like agreement spends money instead. Live order
+    // TC000823, 2026-09-22 — "I wnat to get it tomorrow", filed as a refund.
+    lines.push(`<span class="muted">${cuT(
+      'Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead.',
+      '退款不会更改配送日期。如顾客只是想改天收货,请拒绝此申请并改期。')}</span>`);
+    box.innerHTML = lines.map(l => `<div style="margin-top:4px;">${l}</div>`).join('');
+    box.style.borderLeftColor = full ? 'var(--danger)' : 'var(--line-soft)';
+  };
+  bg.querySelectorAll('input[name="rf-mode"], #rf-amt, .rf-line-chk, .rf-line-qty')
+    .forEach(el => el.addEventListener('input', renderConsequence));
+  bg.querySelectorAll('input[name="rf-mode"]').forEach(el => el.addEventListener('change', renderConsequence));
+  renderConsequence();
 
   // Reflect the customer-driven initial mode in the panel visibility.
   bg.querySelector('#rf-amt-wrap').style.display    = (initialMode === 'full' || initialMode === 'amount') ? '' : 'none';

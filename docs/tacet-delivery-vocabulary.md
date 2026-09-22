@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.157 · 2026-09-22 · §220 MAKES THE REFUND APPROVE BUTTON STATE ITS CONSEQUENCE — FIVE COMPOSED STRINGS, AND THE REASON THEY COULD NOT BE LIFTED.** A full refund cancels the order's same-city delivery, and the dialog named that nowhere. The sentences are new because nothing in the tree described a consequence before it happened — every live pair reports what already did. See *What Approve will do (§220)*.
+
 **v1.156 · 2026-09-21 · §215 PUTS A SHOP'S STOCK REQUEST ON HOME — ONE COMPOSED STRING, COMPOSED ONLY BECAUSE THE LIVE PAIR WOULD HAVE COLLIDED.** A request one shop raises against another announced itself with a push and then a 6px dot; it is a row in Home's *Needs you* list now. `Stock requests · 补货申请` is live (the back office, and the phone's own notification log) and was rejected: this app already carries `Your stock requests · 我的补货申请` for the ASKER's list, and the new row is its mirror image — what other shops have asked of me. Everything else on the row is live or is data. See *The row that says another shop is waiting (§215)*.
 
 **v1.155 · 2026-09-21 · §212 GIVES THE RECEIVE SCREEN A DONE TAB — ONE COMPOSED STRING, IN A FRAME THE SCREEN ALREADY USES.** Both tab labels are live (`On its way · 在途` off the stock-requests pill, `Done · 已完成` off the kitchen queue's own segmented control), as are the empty heading (`Nothing finished yet · 暂无已完成`) and every word of the receipt a finished delivery opens on (`sent · 发出`, `items · 项`, `Counted in · 已入库`, `The shelf has been updated. · 库存已更新。`). What is composed is the empty tab's ONE line of body text, built on the frame of the sentence the sibling tab already says. See *The Done tab on the receive screen (§212)*.
@@ -8329,3 +8331,25 @@ the `，` these fires join fragments with. **The shop names are DATA** — the
 catalogue's own `name_en`/`name_cn`, carried as a pair from the server so the row
 follows the language switch — and the count is a numeral, which Rule 4's own note
 says needs no label. The row gained one word.
+
+## What Approve will do (§220)
+
+**Five strings composed, by Claude, 2026-09-22.** More than any change should mint, and the reason is worth stating rather than apologising for: **every delivery pair in this file reports something that HAS happened** — 已送达, 已取消, 已改期至今天, 骑手前往取货. Nothing in the tree describes what a button is ABOUT to do, so there was no live sentence of that shape to copy. The nouns and verbs are all live; the sentences are not.
+
+| slot | shipped |
+|---|---|
+| subtitle | `Lock in the amount. What each mode does is spelled out above the button. · 确认退款金额。各模式的具体影响见按钮上方说明。` |
+| full refund | `Full refund: the order is marked refunded, its same-city delivery is cancelled, and stock, points and referral credit are reversed. The customer is told. · 全额退款：订单将标记为已退款，同城配送将被取消，库存、积分与推荐奖励一并退回。系统会通知顾客。` |
+| partial refund | `Partial refund: the order keeps its status and its delivery. Stock reverses for the selected items only. The customer is told. · 部分退款：订单状态与配送均不变，仅退回所选商品的库存。系统会通知顾客。` |
+| a rider is on it | `A rider is on this order right now — approving cancels that delivery. · 当前已有骑手接单 — 批准后该配送会被取消。` |
+| the day is not the money | `Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead. · 退款不会更改配送日期。如顾客只是想改天收货，请拒绝此申请并改期。` |
+
+**Every term inside them is live**: `已退款`, `同城配送`, `库存`, `积分`, `顾客`, `骑手`, `配送日期`, `改期`, `部分退款`, `全额` (from the dialog's own mode labels 全额 / 部分金额 / 按商品). What was assembled is the sentences.
+
+**Live candidates rejected.**
+
+- The old subtitle, `Lock in the amount. Full = order.status flips to refunded + inventory + points reverse…` — English-only, in the language of the columns it writes, and **incomplete**: it never mentioned the courier, which is the one consequence an operator cannot undo. Replaced rather than extended.
+- `已取消 (Cancelled)` on its own for the courier clause — **rejected for the same reason as §218**: on a refund dialog it would read as the ORDER being cancelled, which is a different and larger claim than the delivery being pulled. `同城配送将被取消` names what is actually cancelled.
+- `确定要退款吗？ (Are you sure?)` — the shape a confirm usually takes here. **Rejected outright**: a question adds a tap and tells the operator nothing they did not already know. The point is not to ask again, it is to say what will happen.
+
+**The last line is the one the change exists for.** A customer with no other way to ask for a different delivery day files a refund asking for one (live order TC000823, 2026-09-22: *"I wnat to get it tomorrow"*), and the button that reads like agreement spends money while moving the date by nothing. It shows in every mode, because the mode is not what makes it true.
