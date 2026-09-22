@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.157 · 2026-09-22 · §218 GIVES THE COURIER CARD A CANCELLED STAGE — TWO COMPOSED STRINGS, BOTH ASSEMBLED FROM LIVE FRAGMENTS, NEITHER INVENTED.** 青云聚信 reports no cancel, so a cancelled rider left the row frozen and the drawer read `Rider coming · 骑手前往取货` under a rider who had gone. The stage label and the one line of body beneath it are declared below with the live candidates each was built from and what was rejected. See *The stage for a rider who is gone (§218)*.
+
 **v1.156 · 2026-09-21 · §215 PUTS A SHOP'S STOCK REQUEST ON HOME — ONE COMPOSED STRING, COMPOSED ONLY BECAUSE THE LIVE PAIR WOULD HAVE COLLIDED.** A request one shop raises against another announced itself with a push and then a 6px dot; it is a row in Home's *Needs you* list now. `Stock requests · 补货申请` is live (the back office, and the phone's own notification log) and was rejected: this app already carries `Your stock requests · 我的补货申请` for the ASKER's list, and the new row is its mirror image — what other shops have asked of me. Everything else on the row is live or is data. See *The row that says another shop is waiting (§215)*.
 
 **v1.155 · 2026-09-21 · §212 GIVES THE RECEIVE SCREEN A DONE TAB — ONE COMPOSED STRING, IN A FRAME THE SCREEN ALREADY USES.** Both tab labels are live (`On its way · 在途` off the stock-requests pill, `Done · 已完成` off the kitchen queue's own segmented control), as are the empty heading (`Nothing finished yet · 暂无已完成`) and every word of the receipt a finished delivery opens on (`sent · 发出`, `items · 项`, `Counted in · 已入库`, `The shelf has been updated. · 库存已更新。`). What is composed is the empty tab's ONE line of body text, built on the frame of the sentence the sibling tab already says. See *The Done tab on the receive screen (§212)*.
@@ -119,6 +121,9 @@ Every customer-facing status map must cover all nine statuses. Printing a raw in
 | `heading_to_pickup` | Rider coming · 骑手前往取货 | Rider picking up your order · 骑手正在取货 |
 | `in_transit` | On the way · 配送中 | On the way · 骑手配送中 |
 | `delivered` | Delivered · 已送达 | Delivered · 已送达 |
+| `cancelled` | Rider cancelled · 骑手已取消 | (nothing — tracking stops; see §218) |
+
+`cancelled` is the one stage the platform never reports; it is read by elimination (`lib/qingyun-cancel.js`). It is deliberately **operator-only**: the shopper's live tracking simply stops, because a cancel is nearly always the shop's own decision and a new rider may be called minutes later.
 
 `Rider coming` means exactly `heading_to_pickup` — a rider is travelling to the store. It is never used for `awaiting_dispatch` (no rider yet) or as the `rider_pickup` chip's stand-in for anything else. `En route` is retired; the word is `On the way`.
 
@@ -8329,3 +8334,21 @@ the `，` these fires join fragments with. **The shop names are DATA** — the
 catalogue's own `name_en`/`name_cn`, carried as a pair from the server so the row
 follows the language switch — and the count is a numeral, which Rule 4's own note
 says needs no label. The row gained one word.
+
+## The stage for a rider who is gone (§218)
+
+**Two strings composed, by Claude, 2026-09-22.** Both are assembled from fragments that are live elsewhere in this same drawer; neither introduces a character that was not already shipping.
+
+| slot | shipped | built from |
+|---|---|---|
+| stage label | `Rider cancelled · 骑手已取消` | the live stale line `状态未更新 — 骑手可能已取消，请核实或另叫一位。`, with `可能` (may) dropped — that word is the hedge, and this stage exists precisely because the hedge is no longer needed |
+| card body | `No rider is on this order. Call another courier if it still needs to go. · 此订单目前无人接单。如仍需配送，请另叫一位。` | `此订单无人接单` from the live *Delivery date passed* copy (`此订单无人接单，<date> 已过。`) and `请另叫一位` from the live stale line above |
+
+**Live candidates rejected, and why.**
+
+- `已取消 (Cancelled)` — live in eight places (order status, refund state, purchase orders, JD pickup). **Rejected: it names the wrong noun.** On this card `已取消` alone would read as *the order* is cancelled, which is the one thing that has not happened — the order is still live and still owed to the customer. The subject has to be the rider.
+- `骑手可能已取消 (the rider may have cancelled)` — live, and the exact sentence this stage replaces. **Rejected as the label**: it is a guess, and the whole point of the stage is that the guess has been resolved. It stays in the file, unchanged, for the ten minutes before the grace window closes, which is still the only thing we have.
+- `再叫一家运力 (Call another courier)` — live on the dispatch button, and **kept**: the body names the action in words the button already uses, so the sentence and the control agree.
+- `无骑手 (no rider)` — considered for the body and **rejected as an invention**: nothing in the tree carries it. `无人接单` is live and says the same thing in words the operator has already read on the expired-date surface.
+
+**A numeral needed no label, and that was a correction.** The card's third line is the cancel time rendered by the existing `courierAgo`. It was first written as `Cancelled · 取消于 <ago>`, matching the live `Updated · 更新于 <ago>` a few lines below it — **but `取消于` is live nowhere in the tree**, so that label would have been a third composed string minted to say something the line above already says. It is dropped: the time prints bare, under `Rider cancelled · 骑手已取消`, and reads as the cancel's own clock. Two composed strings, not three.

@@ -6363,6 +6363,20 @@ db.exec(`
 // A superseded row is never matched to a roots order again.
 addColumn('delivery_jobs', 'superseded', 'INTEGER NOT NULL DEFAULT 0');
 
+// A delivery that is no longer on the courier platform at all. Qingyun exposes no
+// cancel signal we can read — the daemon polls the active tabs (待配送/待抢单/待取货/
+// 配送中) and the 完成 tab, and a cancelled order is in NONE of them. So a cancel is
+// detected by ELIMINATION: a job we track goes missing from a poll that saw the
+// platform's WHOLE list, stays missing past a grace window, and is then cancelled.
+//   missing_since  first poll that could not find it (NULL whenever it is seen).
+//   cancelled_at   the conclusion. Never unset by the daemon; a NEW delivery for
+//                  the same order arrives as its own qingyun_order_id and row.
+// Before this, such a row simply froze at its last in-flight stage and the drawer
+// kept reading "Rider coming" over an order nobody was coming for — the amber
+// "may have cancelled" line was the only hint, and it is a guess by construction.
+addColumn('delivery_jobs', 'missing_since', 'DATETIME');
+addColumn('delivery_jobs', 'cancelled_at', 'DATETIME');
+
 // Append-only log of qingyun-daemon events (polls, track fetches, login/verify,
 // proxy) for the admin sync-status panel and debugging. Same shape as
 // meituan_sync_log so the panel can reuse its renderer.

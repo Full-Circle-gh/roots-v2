@@ -16997,6 +16997,10 @@ const M_COURIER_STAGE={
   heading_to_pickup:{en:'Rider coming',zh:'骑手前往取货',dot:'var(--dusk-ink)'},
   in_transit:{en:'On the way',zh:'配送中',dot:'var(--brick-ink)'},
   delivered:{en:'Delivered',zh:'已送达',dot:'var(--sage-ink)'},
+  /* Read by elimination on the server (lib/qingyun-cancel.js), not reported by the
+     platform. Named here so the phone cannot go on showing a rider the desktop
+     has already stopped showing. */
+  cancelled:{en:'Rider cancelled',zh:'骑手已取消',dot:'var(--danger)'},
 };
 /* _date already fixes the zoneless-UTC trap this file names at length above —
    the desktop's courierAgeMs exists for exactly that bug, and reusing _date
@@ -23000,7 +23004,8 @@ function courierLine(r){
   if(['delivered','cancelled','refunded'].includes(r.status)) return null;
   const label = c.stage==='in_transit'?T('On the way','配送中')
     : c.stage==='heading_to_pickup'?T('Rider coming','骑手前往取货')
-    : c.stage==='awaiting_dispatch'?T('Finding a rider','正在找骑手') : '';
+    : c.stage==='awaiting_dispatch'?T('Finding a rider','正在找骑手')
+    : c.stage==='cancelled'?T('Rider cancelled','骑手已取消') : '';
   if(!label) return null;
   const mins=(c.stage==='in_transit'&&c.eta_seconds!=null)?('~'+Math.max(1,Math.round(c.eta_seconds/60))+T('m','分')):'';
   /* How far off the rider is, which is the half of "where are they" a row can
