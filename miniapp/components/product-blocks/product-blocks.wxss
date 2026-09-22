@@ -531,8 +531,15 @@
   font-size: 46rpx;
   line-height: 1.1;
 }
+/* --f-num: the unit is drawn in the face the figure's digits already come
+   from. See .pb-nrow-r for the same rule on one line instead of two; here the
+   figure and its unit are stacked, which is why it reads as a label and is
+   still the same mismatch. The figure itself stays --f-bear because .long
+   lets it hold a phrase, and a phrase is not a run of figure.
+   pb-tpl-quiet_minimal overrides this to --f-aleo and is untouched: it names
+   its own faces and is a different design. */
 .pb-storage-unit {
-  font-family: var(--f-bear);
+  font-family: var(--f-num);
   font-size: 24rpx;
   letter-spacing: 0.16em;
   line-height: 1.5;
