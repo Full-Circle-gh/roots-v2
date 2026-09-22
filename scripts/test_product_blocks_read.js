@@ -217,6 +217,7 @@ check('the LABELS are copied from it, not composed', () => {
                           [R.LABELS.allergens.en, R.LABELS.allergens.cn],
                           [R.LABELS.contains.en, R.LABELS.contains.cn],
                           [R.LABELS.mayContain.en, R.LABELS.mayContain.cn],
+                          [R.LABELS.freeOf.en, R.LABELS.freeOf.cn],
                           [R.LABELS.none.en, R.LABELS.none.cn]]) {
     assert.ok(MINI.includes(`'${en}'`), `"${en}" is not the mini app's wording`);
     assert.ok(MINI.includes(`'${cn}'`), `"${cn}" is not the mini app's wording`);
@@ -441,6 +442,8 @@ const SHOP_CSS  = fs.readFileSync(path.join(ROOT, 'public/shop/product-blocks.cs
 const EDITOR    = fs.readFileSync(path.join(ROOT, 'public/product-editor.html'), 'utf8');
 const ADMIN_CSS = fs.readFileSync(path.join(ROOT, 'public/retail-admin.css'), 'utf8');
 const MENU      = fs.readFileSync(path.join(ROOT, 'routes/shop-menu.js'), 'utf8');
+const SHOP_HTML = fs.readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
+const MINI_PAGE = fs.readFileSync(path.join(ROOT, 'miniapp/pages/product/product.wxml'), 'utf8');
 const WXSS      = fs.readFileSync(
   path.join(ROOT, 'miniapp/components/product-blocks/product-blocks.wxss'), 'utf8');
 const WXML      = fs.readFileSync(
@@ -510,6 +513,106 @@ check('the tile grows into the last row in every stylesheet', () => {
         `${name} has no width for ${n} across`);
     }
   }
+});
+
+/* ── FREE OF: THE CARD WINS ────────────────────────────────────────────────
+   §232. free_of is the storefront's filter tag set, assigned in bulk from a
+   label sheet — never a sentence the kitchen wrote about one product. It may
+   not ADD an allergen; it may only show a flag the office set AND the card is
+   silent about.
+
+   THE NUMBERS THAT MADE THE RULE, measured on the live catalogue 2026-09-22:
+   of 45 products carrying both a free_of value and an allergen card, 34 had a
+   flag the card ALSO listed under "may contain traces of" and 4 had one the
+   card listed under "contains". Seitan is tagged free of soy and its card says
+   it contains soy. Printed raw, the row would have contradicted the card on
+   eight products in ten — which is why every fixture below is a real product,
+   with the values it carried that day. */
+section('Free of — a flag the card speaks about never prints');
+
+const FREE_OF_CASES = [
+  // [name, free_of, card, what should survive]
+  ['Garlic Dill Sour Cream', 'soy, gluten',
+   { contains_en: ['Tree nuts (cashew)'], contains_cn: [], may_en: ['Soy', 'Gluten'], may_cn: [] }, []],
+  ['Mix Color Quinoa', 'nuts, soy, gluten, 5 spice',
+   { contains_en: ['None declared'], contains_cn: [], may_en: ['Tree nuts', 'Soy', 'Gluten'], may_cn: [] }, ['5 Spice']],
+  ['Mango Protein Bites', 'soy, gluten, 5 spice',
+   { contains_en: ['Cashews', 'Walnuts', 'Coconut'], contains_cn: ['腰果', '核桃', '椰子'], may_en: [], may_cn: [] },
+   ['Soy', 'Gluten', '5 Spice']],
+  ['Seitan', 'nuts, soy',
+   { contains_en: ['Gluten (wheat)', 'soy'], contains_cn: [], may_en: ['Nuts'], may_cn: [] }, []],
+  ['Minced meat', 'nuts',
+   { contains_en: ['Wheat', 'Soy'], contains_cn: ['麸质', '大豆'], may_en: [], may_cn: [] }, ['Nuts']],
+];
+
+check('every live case resolves the way the card says', () => {
+  for (const [name, raw, card, want] of FREE_OF_CASES) {
+    assert.deepStrictEqual(R.freeOfChips(raw, card).map(c => c.en), want,
+      `${name} would print the wrong Free of row`);
+  }
+});
+check('THE ONE THAT MUST NEVER REGRESS — a card saying "contains soy" kills the soy flag', () => {
+  const card = { contains_en: ['Gluten (wheat)', 'soy'], contains_cn: [], may_en: [], may_cn: [] };
+  assert.deepStrictEqual(R.freeOfChips('soy', card), [],
+    'the sheet would have told a customer avoiding soy that Seitan is free of it');
+});
+check('a card written only in Chinese is read too', () => {
+  const card = { contains_en: [], contains_cn: ['腰果'], may_en: [], may_cn: ['大豆'] };
+  assert.deepStrictEqual(R.freeOfChips('nuts, soy', card), [],
+    'the English half was empty, so the Chinese allergens went unseen');
+});
+check('both spellings of the 5-spice token mean the one flag', () => {
+  const card = { contains_en: ['Salt'], contains_cn: [], may_en: [], may_cn: [] };
+  for (const raw of ['5 spice', '5spice', '5 Spice']) {
+    assert.deepStrictEqual(R.freeOfChips(raw, card).map(c => c.en), ['5 Spice'],
+      `"${raw}" did not resolve to the 5-spice flag`);
+  }
+});
+check('a retired flag, or anything else parked in the column, prints nothing', () => {
+  const card = { contains_en: ['Salt'], contains_cn: [], may_en: [], may_cn: [] };
+  assert.deepStrictEqual(R.freeOfChips('animal products, dairy, egg, palm oil', card), [],
+    'a value the four-flag list does not know reached a customer');
+});
+check('no card, no row — and an empty column is not a claim', () => {
+  assert.deepStrictEqual(R.freeOfChips('nuts, soy', null), []);
+  assert.deepStrictEqual(R.freeOfChips('', { contains_en: ['Salt'], contains_cn: [], may_en: [], may_cn: [] }), []);
+  assert.deepStrictEqual(R.freeOfChips(null, { contains_en: [], contains_cn: [], may_en: [], may_cn: [] }), []);
+});
+check('the list is still closed at four, in every copy of it', () => {
+  assert.deepStrictEqual(R.FREE_OF_FLAGS.map(f => f.id), ['nuts', 'soy', 'gluten', '5 spice'],
+    'the reader knows a flag the back office cannot set');
+  for (const [name, src] of [['the shop sheet', SHOP_JS], ['the mini app', MINI]]) {
+    const ids = [...src.matchAll(/\{ id: '([^']+)'/g)].map(m => m[1]);
+    assert.deepStrictEqual(ids, ['nuts', 'soy', 'gluten', '5 spice'],
+      `${name} carries a different set of free-of flags`);
+  }
+});
+check('every copy drops on the same words — the lists cannot drift apart', () => {
+  for (const f of R.FREE_OF_FLAGS) {
+    for (const w of f.words) {
+      for (const [name, src] of [['the shop sheet', SHOP_JS], ['the mini app', MINI]]) {
+        assert.ok(src.includes(`'${w}'`),
+          `${name} does not drop the ${f.id} flag on "${w}"`);
+      }
+    }
+  }
+});
+check('the QR menu asks for the column, and subtracts the card before printing it', () => {
+  assert.ok(/p\.free_of/.test(MENU), 'the QR menu no longer reads free_of at all');
+  assert.ok(/blockRead\.freeOfChips\(it\.free_of, a\)/.test(MENU),
+    'the QR menu prints free_of without subtracting what the card says');
+  assert.ok(/\.achip\.free\{/.test(MENU), 'the free-of chip has no style of its own');
+});
+check('the shop sheet is handed the column by its host page', () => {
+  assert.ok(/freeOf:p\.free_of/.test(SHOP_HTML), 'shop.html renders blocks without the column');
+  assert.ok(/spb-al-chip-free/.test(SHOP_JS) && /spb-al-chip-free/.test(SHOP_CSS),
+    'the shop sheet has no free-of chip');
+});
+check('the mini app is handed the column by its product page', () => {
+  assert.ok(/free-of="\{\{product\.free_of\}\}"/.test(MINI_PAGE),
+    'the mini app renders blocks without the column');
+  assert.ok(/pb-al-chip-free/.test(WXML) && /pb-al-chip-free/.test(WXSS),
+    'the mini app has no free-of chip');
 });
 
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);

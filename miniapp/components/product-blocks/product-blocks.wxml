@@ -95,6 +95,13 @@
                     class="pb-al-chip pb-al-chip-soft">{{item}}</text>
             </view>
           </view>
+          <view wx:if="{{item.freeOf.length}}" class="pb-allergen-row">
+            <text class="pb-allergen-lbl">{{item.freeOfLabel}}</text>
+            <view class="pb-allergen-chips">
+              <text wx:for="{{item.freeOf}}" wx:key="*this"
+                    class="pb-al-chip pb-al-chip-free">{{item}}</text>
+            </view>
+          </view>
         </view>
       </view>
     </block>
