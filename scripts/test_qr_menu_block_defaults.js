@@ -1,29 +1,36 @@
 #!/usr/bin/env node
 /**
- * §228 — THE QR MENU HAS A DEFAULT, AND IT IS THE SAME ONE EVERYWHERE.
+ * §228 — THE QR MENU DRAWS THE BLOCKS QUINOA SALAD DRAWS, AND NOTHING ELSE.
  *
  *   node scripts/test_qr_menu_block_defaults.js
  *
- * Ash, 2026-09-22: *"the blocks of quinoa salad that now show on the qr code
- * menu will be the default for all products."* Read live the same morning,
- * Quinoa Salad (#196) carried ten blocks with exactly two switched off — the
- * storage card and the notes callout — and it and Almond Banana Berry were the
- * only two products in a 287-product catalogue carrying any flag at all. The
- * rule below is that arrangement stated once.
+ * Ash, 2026-09-22: *"check which blocks available to view of the quinoa salad
+ * in the QR code menu and have all the product of the main menu QR code show
+ * the same blocks for each product."* Read live the same morning, Quinoa Salad
+ * (#196) carried ten blocks with two switched off; the eight that remain are
+ * the rule.
+ *
+ * THE FIRST IMPLEMENTATION GOT THE DIRECTION WRONG and this file exists mostly
+ * to stop that coming back. It read the ask as a BLOCK-LIST — take the two
+ * types #196 has switched off and switch those off everywhere. That is a
+ * weaker rule with a hole in the middle of it: it says nothing about a type
+ * #196 does not carry at all, so `pull_quote` (11 products, 4 listed),
+ * `recipe_steps` (8) and `ingredients_line` (1) kept drawing, and every block
+ * type the editor gains next year would arrive on the counter menu switched
+ * on. Ash rejected it in those terms. The rule is an ALLOW-LIST.
  *
  * WHAT THIS HOLDS THAT READING THE FILES CANNOT.
  *
- *  1. AN ABSENT CONFIG ROW MEANS THE SEED, NOT SILENCE. The whole design is
- *     that nothing is written to the database: the default lives in code and a
- *     tenant overrides it by storing the key. If an absent row ever came back
- *     as "hide nothing", the change would look shipped, every test that passes
- *     a list would still pass, and 216 products would quietly go back to
- *     printing the storage card on the counter menu.
+ *  1. THE DIRECTION ITSELF. A block-list and an allow-list agree on every
+ *     product in today's catalogue that happens to carry only the nine common
+ *     types — which is most of them — so the difference is invisible in a
+ *     spot check and shows up on the first product that carries something
+ *     unusual, or the first new block type.
  *
- *  2. AN EMPTY ARRAY IS A REAL ANSWER and a malformed one is not. Those are
- *     opposite outcomes from values that look similar in a config table, and
- *     the difference decides whether a tenant who asked for everything to show
- *     gets it, or gets the seed back without being told.
+ *  2. THREE EMPTY STATES THAT ARE NOT THE SAME. No config row means the seed.
+ *     A stored `[]` means allow nothing. A caller passing no list at all means
+ *     no rule in force. Conflating any two of them either blanks every detail
+ *     sheet in the shop or silently ships nothing.
  *
  *  3. THE THREE READERS RESOLVE ONE RULE. lib/product-blocks-read.js decides
  *     what the menu draws, routes/shop-menu.js supplies the list, and
@@ -64,89 +71,106 @@ function fakeDb(answer) {
   };
 }
 
-section('The seed is Quinoa Salad’s arrangement, stated once');
-check('the two blocks that product had switched off, and no others', () => {
-  assert.deepStrictEqual([...D.SEED_HIDDEN].sort(), ['notes_callout', 'storage_box'],
+const SEED = ['spec_strip', 'hero_intro', 'big_stat', 'why',
+              'ingredients_chips', 'allergen_card', 'how_to_use', 'nutrition_facts'];
+
+section('The seed is what Quinoa Salad DRAWS, stated once');
+check('exactly the eight blocks that product shows, in its own order', () => {
+  assert.deepStrictEqual([...D.SEED_SHOWN], SEED,
     'the seed no longer matches what was read off product #196 on 2026-09-22 — ' +
     'if that is deliberate, the live read that justified it has to be redone');
 });
+check('THE TWO IT SWITCHED OFF ARE ABSENT, and so are the three it never had', () => {
+  /* The two are the office's own choice. The three are the correction: a
+     block-list would have left them drawing, because nobody ever switched
+     them off — they simply are not on that product. */
+  for (const t of ['storage_box', 'notes_callout']) {
+    assert.ok(D.SEED_SHOWN.indexOf(t) < 0, t + ' is allowed, but #196 has it switched off');
+  }
+  for (const t of ['pull_quote', 'recipe_steps', 'ingredients_line']) {
+    assert.ok(D.SEED_SHOWN.indexOf(t) < 0,
+      t + ' is allowed, but #196 does not carry it — this is the block-list reading coming back');
+  }
+});
 check('it cannot be edited out from under a caller', () => {
-  assert.throws(() => { D.SEED_HIDDEN.push('hero_intro'); },
-    'SEED_HIDDEN is mutable — one caller pushing to it changes the default for every other');
+  assert.throws(() => { D.SEED_SHOWN.push('pull_quote'); },
+    'SEED_SHOWN is mutable — one caller pushing to it changes the rule for every other');
 });
 
-section('An unset tenant gets the seed, not silence');
-check('no config row at all', () => {
-  assert.deepStrictEqual(D.readHiddenTypes(fakeDb(undefined)), ['storage_box', 'notes_callout'],
-    'an unset tenant hides nothing — the change would look shipped and do nothing');
+section('Three empty states, and they are three different answers');
+check('NO CONFIG ROW means the seed', () => {
+  assert.deepStrictEqual(D.readShownTypes(fakeDb(undefined)), SEED,
+    'an unset tenant gets no rule — the change would look shipped and do nothing');
 });
 check('no storefront_config table at all (an older account database)', () => {
-  assert.deepStrictEqual(D.readHiddenTypes(fakeDb(new Error('no such table'))),
-    ['storage_box', 'notes_callout'], 'a missing table threw instead of falling back');
+  assert.deepStrictEqual(D.readShownTypes(fakeDb(new Error('no such table'))), SEED,
+    'a missing table threw instead of falling back');
 });
-check('a row holding unparseable JSON', () => {
-  assert.deepStrictEqual(D.readHiddenTypes(fakeDb({ value_json: '{oops' })),
-    ['storage_box', 'notes_callout'], 'a malformed row read as "hide nothing"');
+check('A STORED [] means allow nothing, and it is honoured', () => {
+  assert.deepStrictEqual(D.readShownTypes(fakeDb({ value_json: '[]' })), [],
+    'a tenant who deliberately allowed nothing got the seed back instead');
 });
-check('a row holding something that is not a list', () => {
-  for (const v of ['"storage_box"', '{"storage_box":true}', 'null', '7']) {
-    assert.deepStrictEqual(D.readHiddenTypes(fakeDb({ value_json: v })),
-      ['storage_box', 'notes_callout'], 'a malformed row (' + v + ') read as "hide nothing"');
+check('NO LIST PASSED TO THE READER means no rule in force', () => {
+  const b = [{ type: 'pull_quote', text_en: 'Best soup in town.' }];
+  assert.strictEqual(R.pageBlocks(b).length, 1, 'a caller passing nothing had its blocks filtered');
+  assert.strictEqual(R.pageBlocks(b, []).length, 0, '…and an empty list failed to filter');
+});
+
+section('A malformed row falls back to the seed, never to a blank menu');
+check('unparseable JSON', () => {
+  assert.deepStrictEqual(D.readShownTypes(fakeDb({ value_json: '{oops' })), SEED,
+    'a malformed row read as "allow nothing" — that empties every detail sheet in the shop');
+});
+check('something that is not a list', () => {
+  for (const v of ['"hero_intro"', '{"hero_intro":true}', 'null', '7']) {
+    assert.deepStrictEqual(D.readShownTypes(fakeDb({ value_json: v })), SEED,
+      'a malformed row (' + v + ') read as "allow nothing"');
   }
 });
 
-section('A tenant that has answered is obeyed, including when the answer is none');
-check('AN EMPTY LIST IS HONOURED — it is not a malformed row', () => {
-  assert.deepStrictEqual(D.readHiddenTypes(fakeDb({ value_json: '[]' })), [],
-    'a tenant who asked for every block to show got the seed back instead');
-});
+section('A tenant that has answered is obeyed');
 check('a stored list replaces the seed outright', () => {
-  assert.deepStrictEqual(D.readHiddenTypes(fakeDb({ value_json: '["why","faq"]' })), ['why', 'faq'],
+  assert.deepStrictEqual(D.readShownTypes(fakeDb({ value_json: '["why","faq"]' })), ['why', 'faq'],
     'the stored list was merged with the seed rather than replacing it');
 });
 check('blanks and duplicates are dropped, and entries are not renamed', () => {
   assert.deepStrictEqual(
-    D.readHiddenTypes(fakeDb({ value_json: '["  why  ","why","","faq",null]' })), ['why', 'faq'],
-    'the list is not normalised, so a stray space makes a type unhideable');
+    D.readShownTypes(fakeDb({ value_json: '["  why  ","why","","faq",null]' })), ['why', 'faq'],
+    'the list is not normalised, so a stray space makes a type undrawable');
 });
 
 section('One rule, resolved the same way by everything that resolves it');
 check('the menu reads the list ONCE PER REQUEST, not per product', () => {
-  assert.ok(/qrBlockDefaults\.readHiddenTypes\(/.test(MENU_SRC),
-    'routes/shop-menu.js never reads the default — the page still draws every block');
-  const reads = [...MENU_SRC.matchAll(/readHiddenTypes\(/g)].length;
+  assert.ok(/qrBlockDefaults\.readShownTypes\(/.test(MENU_SRC),
+    'routes/shop-menu.js never reads the allow-list — the page still draws every block');
+  const reads = [...MENU_SRC.matchAll(/readShownTypes\(/g)].length;
   assert.strictEqual(reads, 1,
-    `${reads} reads of the default in routes/shop-menu.js — one per card is one query per tile`);
-  // …and it is not read inside the per-product body.
-  const body = MENU_SRC.slice(MENU_SRC.indexOf('function detailBody('),
-                              MENU_SRC.indexOf('function detailBody(') + 4000);
-  assert.ok(!/readHiddenTypes\(/.test(body),
-    'detailBody reads the default itself — that is one query per product on the page');
+    `${reads} reads of the allow-list in routes/shop-menu.js — one per card is one query per tile`);
+  const at = MENU_SRC.indexOf('function detailBody(');
+  assert.ok(!/readShownTypes\(/.test(MENU_SRC.slice(at, at + 4000)),
+    'detailBody reads the list itself — that is one query per product on the page');
 });
 check('the menu hands the list to pageBlocks rather than dropping it', () => {
-  assert.ok(/pageBlocks\(it\.description_blocks,\s*qrHidden\)/.test(MENU_SRC),
-    'the list is read and then not passed — pageBlocks would apply no default at all');
+  assert.ok(/pageBlocks\(it\.description_blocks,\s*qrShown\)/.test(MENU_SRC),
+    'the list is read and then not passed — pageBlocks would apply no rule at all');
 });
 check('the admin config endpoint answers with the EFFECTIVE list', () => {
-  assert.ok(/hiddenBlockTypes:\s*qrBlockDefaults\.readHiddenTypes\(/.test(ADMIN_SRC),
-    'GET /api/retail-admin/config does not compute the effective default, so an unset ' +
+  assert.ok(/shownBlockTypes:\s*qrBlockDefaults\.readShownTypes\(/.test(ADMIN_SRC),
+    'GET /api/retail-admin/config does not compute the effective list, so an unset ' +
     'tenant hands the product editor nothing and the editor must invent it');
 });
 check('NOBODY CARRIES A SECOND COPY OF THE SEED', () => {
   /* The list may be named once, in the module that owns it. A copy in the
      menu, the admin route or the editor agrees on the day it is written and
      drifts the first time somebody edits one of them — and the failure is
-     invisible: the editor's eye says shown, the customer sees nothing. */
-  const seedRe = /['"]notes_callout['"]/;
+     invisible: the editor's eye says shown, the customer sees nothing.
+     PA_SPINE in the editor is the section ORDER, not an allow-list, and is
+     excised by name rather than skipped by shape. */
   for (const [name, src] of [['routes/shop-menu.js', MENU_SRC],
                              ['public/product-editor.html', EDITOR_SRC]]) {
-    /* PA_SPINE in the editor is the section ORDER — the nine types the form
-       lays out, which happens to contain both seed names. It is excised by
-       NAME rather than skipped by shape, so a genuine copy that happened to
-       sit on the same line as one of its entries still fails this. */
     const scrubbed = src.replace(/const PA_SPINE = \[[^\]]*\];/, '');
     const offenders = scrubbed.split('\n')
-      .filter(l => seedRe.test(l) && /storage_box/.test(l));
+      .filter(l => /['"]ingredients_chips['"]/.test(l) && /['"]allergen_card['"]/.test(l));
     assert.strictEqual(offenders.length, 0,
       name + ' carries its own copy of the seed list: ' + offenders.join(' | '));
   }
@@ -160,19 +184,37 @@ check('the editor resolves a block exactly as lib/product-blocks-read does', () 
   const head = fn.slice(0, fn.indexOf('\n}'));
   assert.ok(head.indexOf('hide_qr === true') < head.indexOf('hide_qr === false'),
     'the editor checks false before true — the two states can both be claimed');
-  assert.ok(/paQrTypeHiddenByDefault\(b\.type\)/.test(head),
-    'the editor falls back to something other than the default list');
+  assert.ok(/!paQrTypeShownByDefault\(b\.type\)/.test(head),
+    'the editor does not invert the allow-list — an allowed type would read as hidden, or worse');
+});
+check('THE EDITOR STARTS AT null, NOT AT AN EMPTY LIST', () => {
+  /* An empty list means "allow nothing", so an editor that started there would
+     paint every eye shut for one frame and, if the config read failed, keep
+     saying so. null is "no rule in force yet" and paints the old behaviour. */
+  assert.ok(/let PA_QR_SHOWN_TYPES = null;/.test(EDITOR_SRC),
+    'PA_QR_SHOWN_TYPES does not start null — an empty start claims every block is hidden');
+  const load = EDITOR_SRC.slice(EDITOR_SRC.indexOf('async function paLoadQrDefaults('));
+  const loadBody = load.slice(0, load.indexOf('\n}'));
+  assert.ok(/retail-admin\/config/.test(loadBody), 'the list does not come from the config endpoint');
+  const fills = [...EDITOR_SRC.matchAll(/PA_QR_SHOWN_TYPES\s*=\s*(?!=)/g)].length;
+  const inLoader = [...loadBody.matchAll(/PA_QR_SHOWN_TYPES\s*=\s*(?!=)/g)].length;
+  assert.strictEqual(fills - inLoader, 1,
+    'the list is written somewhere other than its declaration and its loader');
 });
 
 section('The rule the whole change turns on, end to end');
-check('a product nobody has touched follows the tenant default', () => {
+check('an untouched product draws Quinoa Salad’s eight and nothing else', () => {
   const untouched = [
     { type: 'hero_intro', body_en: 'Brewed slowly' },
+    { type: 'ingredients_chips', items: [{ name_en: 'Oats' }] },
     { type: 'storage_box', left: { head_en: 'Chill', num_en: '0–4°' } },
     { type: 'notes_callout', text_en: 'Stir before use.' },
+    { type: 'pull_quote', text_en: 'Best soup in town.' },
+    { type: 'recipe_steps', steps: [{ text_en: 'Warm gently.' }] },
   ];
-  const hidden = D.readHiddenTypes(fakeDb(undefined));
-  assert.deepStrictEqual(R.pageBlocks(untouched, hidden).map(b => b.type), ['hero_intro'],
+  const shown = D.readShownTypes(fakeDb(undefined));
+  assert.deepStrictEqual(R.pageBlocks(untouched, shown).map(b => b.type),
+    ['hero_intro', 'ingredients_chips'],
     'the seed and the reader disagree — the two halves of the change do not meet');
 });
 

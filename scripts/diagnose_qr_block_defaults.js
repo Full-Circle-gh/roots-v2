@@ -143,6 +143,46 @@ for (const [t, e] of [...tally.entries()].sort((a, b) => b[1].products - a[1].pr
 }
 if (unparseable) console.log(`\n  (${unparseable} product(s) have description_blocks that is not valid JSON)`);
 
+/* ── 2b · §228 · THE ALLOW-LIST READING, WHICH IS THE ONE THAT SHIPPED ──── */
+rule('2b · under the ALLOW-LIST: what each type loses');
+console.log(`
+  Ash rejected the block-list reading of this ask on 2026-09-22: it takes the
+  types Quinoa Salad has switched OFF and switches those off everywhere, which
+  says NOTHING about a type that product does not carry. The rule that shipped
+  is the other one — the eight types Quinoa Salad DRAWS are the eight the menu
+  may draw, and a type absent from that list does not draw.
+
+  This section is the difference between the two readings, which is the only
+  number that says what the correction actually cost or bought.
+`);
+const ALLOW = [...patternTypes].filter(t => !hiddenTypes.has(t));
+console.log('  allow-list read off Quinoa Salad: ' + (ALLOW.join(', ') || '(none)'));
+
+let lostListed = 0, lostAll = 0;
+const perType = new Map();
+for (const r of all) {
+  const bs = blocksOf(r.blocks);
+  if (!bs || !bs.length) continue;
+  for (const b of bs) {
+    const t = (b && b.type) || '(untyped)';
+    // What the allow-list drops that the block-list would have kept: a type
+    // nobody ever switched off, simply absent from the reference product.
+    if (ALLOW.indexOf(t) >= 0) continue;
+    if (hiddenTypes.has(t)) continue;      // both readings drop these
+    if (off(b)) continue;                  // already off by a flag
+    if (!perType.has(t)) perType.set(t, { all: 0, listed: 0 });
+    const e = perType.get(t);
+    e.all++; lostAll++;
+    if (listedIds.has(r.id)) { e.listed++; lostListed++; }
+  }
+}
+console.log('\n  types the BLOCK-LIST would have kept drawing and the ALLOW-LIST does not:');
+if (!perType.size) console.log('    (none — the two readings agree on this catalogue)');
+for (const [t, e] of [...perType.entries()].sort((a, b) => b[1].all - a[1].all)) {
+  console.log('    ' + pad(t, 22) + pad(e.all + ' blocks', 14) + e.listed + ' of them on a live menu');
+}
+console.log(`\n  total: ${lostAll} blocks, ${lostListed} of them reachable by a customer today.`);
+
 /* ── 3 · WHAT THE COPY WOULD HAVE TO TOUCH ─────────────────────────────── */
 rule('3 · products whose flags contradict the Quinoa Salad pattern');
 console.log(`

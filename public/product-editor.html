@@ -2289,24 +2289,35 @@ function paInspToggle(btn) {
 // The web storefront (public/shop.html) is deliberately NOT here. It renders
 // the same stack as the mini app and nobody has asked for it to differ; a third
 // switch nobody uses is a third thing to keep correct.
-/* §228 — THE TENANT'S DEFAULT, AND THE THREE STATES IT CREATED.
-   The QR menu now carries a per-TYPE default (lib/qr-menu-block-defaults.js):
-   a block the office has never touched follows it, rather than always showing.
-   So the editor can no longer read `b.hide_qr` as a boolean — an absent flag
-   is a question, not an answer, and the eye would say SHOWN on a block the
-   counter menu is about to skip.
+/* §228 — THE TENANT'S ALLOW-LIST, AND THE THREE STATES IT CREATED.
+   The QR menu now carries a per-TYPE rule (lib/qr-menu-block-defaults.js):
+   the types it MAY draw. A block the office has never touched draws only if
+   its type is on that list, rather than always drawing. So the editor can no
+   longer read `b.hide_qr` as a boolean — an absent flag is a question, not an
+   answer, and the eye would say SHOWN on a block the counter menu will skip.
+
+   AN ALLOW-LIST, NOT A BLOCK-LIST. The first draft of this had it the other
+   way round and it is worth naming: a list of types that are OFF says nothing
+   about a type nobody has considered, so anything the editor gains later
+   arrives on the counter menu switched on. The list here is what may draw.
 
    THE LIST IS NEVER HARDCODED HERE. It arrives from GET /api/retail-admin/
    config, which computes it with the same function routes/shop-menu.js reads,
    because the one thing this control must never do is disagree with the page
-   it is describing. Until that answer lands the list is empty, which reads as
-   the pre-§228 behaviour — every block shown — and the eye repaints when the
-   config resolves rather than guessing in the meantime. */
-let PA_QR_HIDDEN_TYPES = [];
+   it is describing.
 
-// What the default says about a type, with no block involved.
-function paQrTypeHiddenByDefault(type) {
-  return PA_QR_HIDDEN_TYPES.indexOf(String(type || '')) >= 0;
+   NULL UNTIL IT LANDS, and null is not an empty list. An empty list means
+   "nothing draws" and would paint every eye shut on first render; null means
+   "no list in force yet" and paints the pre-§228 behaviour — every block
+   shown — repainting when the config resolves. Guessing either way would be
+   wrong invisibly; this is wrong visibly, for one paint, and self-corrects. */
+let PA_QR_SHOWN_TYPES = null;
+
+// What the allow-list says about a type, with no block involved.
+// null (not loaded) answers "shown", which is what no-list-in-force means.
+function paQrTypeShownByDefault(type) {
+  if (!Array.isArray(PA_QR_SHOWN_TYPES)) return true;
+  return PA_QR_SHOWN_TYPES.indexOf(String(type || '')) >= 0;
 }
 
 /* THE ONE READER, and it is the same resolution as lib/product-blocks-read.js
@@ -2317,20 +2328,20 @@ function paQrHidden(b) {
   if (!b) return false;
   if (b.hide_qr === true) return true;
   if (b.hide_qr === false) return false;
-  return paQrTypeHiddenByDefault(b.type);
+  return !paQrTypeShownByDefault(b.type);
 }
 
-// Read once when the editor opens. A failure leaves the list empty — the eye
+// Read once when the editor opens. A failure leaves the list null — the eye
 // then describes the old behaviour, which is wrong but visibly so and
 // recoverable by a reload, where a guessed list would be wrong invisibly.
 async function paLoadQrDefaults() {
   try {
     const r = await fetch('/api/retail-admin/config', { credentials: 'same-origin', cache: 'no-store' });
     const j = await r.json();
-    const list = j && j.data && j.data.qrMenu && j.data.qrMenu.hiddenBlockTypes;
-    PA_QR_HIDDEN_TYPES = Array.isArray(list) ? list.map(x => String(x)) : [];
+    const list = j && j.data && j.data.qrMenu && j.data.qrMenu.shownBlockTypes;
+    PA_QR_SHOWN_TYPES = Array.isArray(list) ? list.map(x => String(x)) : null;
   } catch (e) {
-    PA_QR_HIDDEN_TYPES = [];
+    PA_QR_SHOWN_TYPES = null;
   }
 }
 
@@ -2374,7 +2385,7 @@ function paSetHideQr(id, hidden, fromRow) {
      office would have no way to see why from the editor. The inverse is also
      why a `false` is now written at all — before §228 it was deleted, and a
      block switched ON against a hiding default had nowhere to say so. */
-  if (hidden === paQrTypeHiddenByDefault(b.type)) delete b.hide_qr;
+  if (hidden === !paQrTypeShownByDefault(b.type)) delete b.hide_qr;
   else b.hide_qr = !!hidden;
   const nowHidden = paQrHidden(b);
   // Repaint the SECTION, never the document: a full repaint would discard
