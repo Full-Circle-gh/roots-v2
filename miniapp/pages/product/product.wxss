@@ -591,6 +591,13 @@
   color: var(--ink);
 }
 .nrow-r {
+  /* SET AT ALL, WHICH IT WAS NOT. This rule carried no font-family, so the
+     value fell through to whatever the page inherits while its sibling
+     .pb-nrow-l two rules up explicitly names the display face and says why:
+     "the card would read in a different face depending on which path a
+     product took". The value was that drift. --f-num closes it and fixes the
+     unit weight in the same line -- see the token in app.wxss. */
+  font-family: var(--f-num);
   font-size: calc(40rpx * var(--font-scale));
   line-height: 1;
   font-variant-numeric: tabular-nums;

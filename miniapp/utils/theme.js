@@ -61,6 +61,10 @@ const CJK_TAIL = "'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, s
  *   this.setData({ themeVars: buildThemeVars(app.globalData.config) });
  *   // wxml:  <view class="page-root" style="{{themeVars}}"> … </view>
  */
+// Mirrors lib/brand-theme.js. Bear Serif's digits are served from Lilita One,
+// so a unit standing beside a figure needs the same face or it reads lighter.
+const DIGIT_SUBSTITUTE = { 'Bear Serif': 'Lilita One' };
+
 function buildThemeVars(config) {
   const t = (config && config.theme) || {};
   const p = t.palette || {};
@@ -76,6 +80,11 @@ function buildThemeVars(config) {
   push('--olive',  p.muted);
   push('--f-bear', fam(f.display));
   push('--f-aleo', fam(f.body));
+  // The face a figure and its unit share — themeToCssVars builds the same
+  // token for the web and lib/brand-theme.js owns the substitute map.
+  // A display family with no substitute yields exactly --f-bear.
+  push('--f-num', (DIGIT_SUBSTITUTE[String(f.display.family)] ?
+    `'${DIGIT_SUBSTITUTE[String(f.display.family)]}', ` : '') + fam(f.display));
   return pairs.join(';');
 }
 

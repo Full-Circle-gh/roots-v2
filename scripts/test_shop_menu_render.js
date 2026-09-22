@@ -2792,6 +2792,44 @@ function boxOf(text) {
       assert.strictEqual(m.band, 1, 'the image band did not render');
     });
 
+    await check('a nutrition value and its unit are drawn by ONE face', async () => {
+      /* "18.4 g" is a SINGLE text node. Bear Serif's digits are served from
+         Lilita One by unicode-range — app.wxss states why — so under
+         --f-bear the figure came from Lilita One and the g beside it came
+         from Bear Serif, and the unit read a shade lighter than the number it
+         belonged to. Reported by Ash against this card.
+
+         THE FAILURE MODE THIS CATCHES IS SILENCE. --f-num names the substitute
+         outright, and a font-family naming a face that nothing declares
+         resolves to nothing and falls through to the next entry in the stack
+         — which is Bear Serif, which is what it looked like before. The fix
+         would have shipped looking untouched. So this asserts BOTH halves:
+         the value asks for the substitute, AND the substitute is a family the
+         document actually has. */
+      const m = await page.evaluate(async () => {
+        const v = document.querySelector('#dsheetB .nr-r');
+        if (!v) return null;
+        const first = (getComputedStyle(v).fontFamily || '').split(',')[0]
+          .trim().replace(/^["']|["']$/g, '');
+        /* THE DECLARED FAMILIES, NOT document.fonts.check(). check() answers
+           "is it loaded and able to render this text", which is false for a
+           declared-but-not-yet-fetched face and would fail this check for a
+           reason that has nothing to do with the stylesheet. Walking the set
+           answers the question actually being asked: does a rule name it. */
+        try { await document.fonts.ready; } catch (e) { /* not fatal */ }
+        const families = [];
+        document.fonts.forEach(f => families.push(f.family.replace(/^["']|["']$/g, '')));
+        return { first, families, declared: families.indexOf(first) >= 0 };
+      });
+      assert.ok(m, 'no nutrition value on the sheet to measure');
+      assert.strictEqual(m.first, 'Lilita One',
+        `the value does not lead with the digit face: ${m.first}`);
+      assert.ok(m.declared,
+        `"${m.first}" is named by --f-num but no @font-face declares it, so ` +
+        `the unit silently falls back to the display face and nothing changed. ` +
+        `Declared: ${JSON.stringify(m.families)}`);
+    });
+
     await check('a HIDDEN nutrition block does not come back out of the column', async () => {
       /* The bun carries both: a nutrition COLUMN and a nutrition_facts BLOCK
          the office switched off. The block is skipped, and the column must NOT

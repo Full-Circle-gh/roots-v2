@@ -65,6 +65,17 @@ page {
      the kicker dropped to -apple-system's CJK pick while the headline
      dropped to PingFang SC, and their first characters didn't line up. */
   --f-bear:   'Bear Serif',   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, serif;
+  /* THE FACE A FIGURE AND ITS UNIT SHARE. The @font-face pair at the head of
+     this file serves Bear Serif's digits from Lilita One by unicode-range,
+     which fixes the numeral and stops there -- so the g in "18.4 g", sitting
+     in the same run, stayed Bear Serif and read a shade lighter than the
+     number it belongs to. Reported by Ash. Widening the range would take
+     every g and k on the page with it; naming the face is what a run that is
+     ALL figure wants. Bear Serif follows it for any glyph Lilita One lacks.
+     utils/fonts.js already loads Lilita One as a family in its own right, so
+     this names something that exists. Mirrored in lib/brand-theme.js, which
+     builds the same token for the web as --f-num. */
+  --f-num:    'Lilita One', 'Bear Serif', 'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, serif;
   --f-toni:   'Toni Grotesk', 'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, sans-serif;
   --f-gothic: 'League Gothic','DF Yuan', 'PingFang SC', 'Hiragino Sans GB', 'Bebas Neue', sans-serif;
   --f-aleo:   'Aleo',         'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, serif;
