@@ -2201,6 +2201,72 @@ pre-filter stays a superset of the JS test.
 
 ---
 
+## 21. Two listings that differ only by a bracketed size were one name to the order resolver, and the tie was settled by row order (found and FIXED 2026-09-21)
+
+Status: fixed, both channels. Found from a customer order, not from a survey:
+a person put the Meituan merchant screen and the order drawer side by side and
+saw two different bottles.
+
+**Meituan order `MT20260921488622`, 天河, 12:30.** The customer bought two of the
+230g peach yogurt at ¥48. Two of the **130g** came off the shelf. The 230g count
+never moved, and both wrong numbers were then pushed back to the channel as fact.
+Nothing was logged, nothing alerted, and the order looked ordinary.
+
+**Nothing in the data was wrong.** The listing carried the right 货号. Both
+mappings pointed at the right products:
+
+| product | sku | mapped to |
+|---|---|---|
+| 265 (Big) | 1-190 | `纯素椰子酸奶-桃子味Peach (230g)` |
+| 264 (Small) | 1-180 | `纯素椰子酸奶-桃子味Peach(130g)` |
+
+The line arrived with no 货号 on it, so branches 0 and 1 of
+`matchProductForLine` were skipped and the map branch compared names. `normName`
+deleted every half-width bracketed run before comparing — brackets hold a 货号
+(`(1-300)`) and a storage note (`(冷藏)`), and neither belongs in a name. The
+size is in there too. Both listings collapsed to `纯素椰子酸奶桃子味peach`:
+
+```
+normName('纯素椰子酸奶-桃子味Peach (230g)')  →  纯素椰子酸奶桃子味peach
+normName('纯素椰子酸奶-桃子味Peach(130g)')   →  纯素椰子酸奶桃子味peach
+```
+
+**And then the resolver picked one.** `rows.find(...)` — the first row the
+database handed back, with no check that a second had matched equally well. The
+substring fallback directly beneath it did demand a unique candidate
+(`cands.length === 1`); the exact path above it did not. The strict branch was
+the loose one.
+
+**Both channels, because both files.** `routes/eleme-internal.js` describes
+itself as a deliberate copy of `routes/meituan-internal.js`, and its `normName`
+was byte-identical. So was the `rows.find`. The same order on 饿了么 would have
+done the same thing.
+
+### The fix
+
+`lib/channel-name-match.js`, required by both routes, replacing both copies:
+
+- `normListingName` keeps a **size** and drops the rest of the bracket. `230g`
+  and `230克` normalise to one token, so keeping the size did not turn a working
+  mapping into a miss; a 货号 has no unit after its digits, so it is still
+  dropped and branch 1 still reads it.
+- `pickByListingName` **refuses a tie** rather than taking the first row. The
+  line is surfaced as unresolved with reason `ambiguous_map` and nothing is
+  deducted, and the refusal does not fall through to the looser name branch —
+  that branch is a weaker test than the one that just declined.
+
+Full-width `（…）` runs are untouched, as before: their contents are as often
+part of the name (`（大）`, `（小）`) as a note about it, and changing that is a
+judgement about live mappings rather than a size fix.
+
+`scripts/test_channel_size_collision.js` drives both real route handlers and
+fails on the old code — 16 assertions red, including this order replayed.
+
+**The size fix is the smaller half.** Sizes are one way two listings can read
+alike and they will not be the last. The refusal is what covers the next one.
+
+---
+
 ## Context — what was and was not done on 2026-08-26
 
 > **Amended after findings 10 and 11.** The bullet below was written when this

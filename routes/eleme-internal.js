@@ -88,14 +88,14 @@ function totalDisagreement(channelTotal, itemsTotal) {
   return { kind: c <= 0 ? 'no_channel_total' : (gap > 0 ? 'below_items' : 'above_items'), gap, ratio: c > 0 ? Math.round(ratio * 1000) / 1000 : null };
 }
 
-// Collapse a name for fuzzy comparison (drop spec parens, spaces, punctuation).
-function normName(s) {
-  return String(s || '')
-    .replace(/\([^)]*\)/g, ' ')
-    .replace(/[\s　]+/g, '')
-    .replace(/[^\p{L}\p{N}]/gu, '')
-    .toLowerCase();
-}
+// Collapse a name for fuzzy comparison, and pick the one row it belongs to.
+//
+// SHARED WITH meituan-internal.js via lib/channel-name-match.js. This file's own
+// header calls itself a deliberate copy of that one, and the normaliser was a
+// byte-identical copy — so the bug the lib describes (a bracketed size deleted
+// before comparing, then a tie settled by row order) was a copy too. Fixed in one
+// place so it cannot be fixed in only one place.
+const { normListingName: normName, pickByListingName } = require('../lib/channel-name-match');
 
 // Map an Eleme platform status label → our internal `status`, so the order shows
 // OUR lifecycle vocabulary (Paid/Preparing/Dispatched/Delivered) and lands in the
@@ -377,15 +377,13 @@ function matchProductForLine(item, storeId) {
           JOIN store_products p ON p.id = m.product_id
          WHERE m.retail_store_id = ? AND p.is_active = 1 AND m.eleme_name IS NOT NULL
       `).all(storeId);
-      let hit = rows.find(r => normName(r.eleme_name) === wanted);
-      if (!hit) {
-        const cands = rows.filter(r => {
-          const mn = normName(r.eleme_name);
-          return mn && (mn.includes(wanted) || wanted.includes(mn));
-        });
-        if (cands.length === 1) hit = cands[0];
-      }
+      // Exact, then an unambiguous substring. A TIE IS REFUSED rather than
+      // settled by row order — see the lib's header.
+      const { hit, ambiguous } = pickByListingName(rows, r => r.eleme_name, wanted);
       if (hit) { apply(hit, 'map'); return withFallbackUnits(out, storeId); }
+      // Two mappings answer to this name, so the looser name branch below must
+      // not be allowed to answer it either. Surfaced as unresolved instead.
+      if (ambiguous) { out.matchBy = 'ambiguous_map'; return out; }
     }
   }
 

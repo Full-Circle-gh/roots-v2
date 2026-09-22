@@ -34,16 +34,15 @@ router.use((req, res, next) => {
   next();
 });
 
-// Collapse a name for comparison: drop spec parens, whitespace, punctuation and
-// case so "巧克力榛棒 Premium Nutella Bars" and its map entry compare equal even
-// across the CN/EN word order and stray spacing Meituan inserts.
-function normName(s) {
-  return String(s || '')
-    .replace(/\([^)]*\)/g, ' ')          // (300ml), (1-300) specs
-    .replace(/[\s　]+/g, '')          // all spaces incl. full-width
-    .replace(/[^\p{L}\p{N}]/gu, '')       // punctuation/symbols
-    .toLowerCase();
-}
+// Collapse a name for comparison, and pick the one row it belongs to.
+//
+// BOTH NOW LIVE IN lib/channel-name-match.js, shared with eleme-internal.js,
+// which held a byte-identical copy of the normaliser this replaces. Its header
+// carries the reason: the old one deleted the size along with the rest of the
+// bracket, so 纯素椰子酸奶-桃子味Peach (230g) and …Peach(130g) were the same name,
+// and the caller took whichever row came back first. Order MT20260921488622 sold
+// the big bottle and deducted the small one.
+const { normListingName: normName, pickByListingName } = require('../lib/channel-name-match');
 
 // The claim that says which 规格 of a listing this line was sold as, and how many
 // units of the product that option holds. One listing sells the same bottle as
@@ -178,17 +177,15 @@ function matchProductForLine(item, storeId, storeCode) {
           JOIN store_products p ON p.id = m.product_id
          WHERE m.retail_store_id = ? AND p.is_active = 1 AND m.meituan_name IS NOT NULL
       `).all(storeId);
-      let hit = rows.find(r => normName(r.meituan_name) === wanted);
-      if (!hit) {
-        // Substring either way (Meituan sometimes appends/trims a suffix), but
-        // only when it's unambiguous.
-        const cands = rows.filter(r => {
-          const mn = normName(r.meituan_name);
-          return mn && (mn.includes(wanted) || wanted.includes(mn));
-        });
-        if (cands.length === 1) hit = cands[0];
-      }
+      // Exact, then an unambiguous substring (Meituan appends and trims
+      // suffixes on an order line). A TIE IS REFUSED, not resolved by row
+      // order — see the lib's header.
+      const { hit, ambiguous } = pickByListingName(rows, r => r.meituan_name, wanted);
       if (hit) { apply(hit, 'map'); return withUnits(); }
+      // Two mappings answer to this name. Branch 3 below is a looser test than
+      // the one that just failed, so letting it run would answer a question we
+      // have already established we cannot answer. The line is surfaced instead.
+      if (ambiguous) { out.matchBy = 'ambiguous_map'; return out; }
     }
   }
 
