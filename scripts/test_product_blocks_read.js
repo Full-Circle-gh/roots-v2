@@ -915,7 +915,7 @@ check('the QR menu opens every food product and draws the card built from nothin
 });
 check('the mini app does the same, on block pages and on plain ones', () => {
   assert.ok(/p\.is_food === false\) pageBlocks = noCard\(pageBlocks\)/.test(PRODUCT_PAGE_JS), 'non-food keeps its card');
-  assert.ok(/facilityBlocks = \(p\.is_food === true && !useBlocks\)/.test(PRODUCT_PAGE_JS),
+  assert.ok(/const facilityBlocks = useBlocks \? \[\]\s*:\s*\[\]\.concat\(p\.is_food === true \? \[FACILITY_CARD\]/.test(PRODUCT_PAGE_JS),
     'a food page with no blocks gets no card');
   assert.ok(/blocks="\{\{facilityBlocks\}\}"/.test(MINI_PAGE), 'the product page never draws the facility card');
   assert.ok(/const facilityOnly = !!b\._facility/.test(MINI) && /wx:if="\{\{!item\.facilityOnly\}\}"/.test(WXML),
@@ -953,6 +953,43 @@ check('the column is drawn as a nutrition block, once, and only when no block ex
   assert.ok(both.includes('1 kJ') && !both.includes('520 kJ'), 'the table printed twice, or the column beat the block');
   assert.strictEqual(SPB.render([], { lang: 'en', nutrition: null }), '', 'something was drawn from nothing');
   assert.ok(/nutrition:p\.nutrition\|\|null/.test(SHOP_HTML), 'shop.html does not hand the sheet the column');
+});
+
+/* ── §248: THE MINI APP FOLLOWS THE QR MENU'S ORDER ────────────────────────
+   Ash: "i want the mini app match the qr". The page's own code is run here,
+   sliced out of the source, so a copy cannot pass while the page drifts. */
+section('Mini app — QR menu order');
+function miniOrder(p) {
+  const a = PRODUCT_PAGE_JS.indexOf('    const useBlocks = ');
+  const endMark = 'NUT_BLOCK ? [NUT_BLOCK] : []);';
+  const b = PRODUCT_PAGE_JS.indexOf(endMark) + endMark.length;
+  assert.ok(a > -1 && b > a, 'the block-order code moved; the test cannot find it');
+  return new Function('p', PRODUCT_PAGE_JS.slice(a, b) +
+    '\nreturn { page: pageBlocks.map(x => x.type), plain: facilityBlocks.map(x => x.type) };')(p);
+}
+check('the card moves under the ingredients, whatever the office order', () => {
+  const r = miniOrder({ use_block_design: 1, is_food: true, description_blocks: [
+    { type: 'allergen_card', contains_en: 'Chickpeas' }, { type: 'spec_strip' },
+    { type: 'ingredients_chips' }, { type: 'how_to_use' }] });
+  assert.deepStrictEqual(r.page, ['spec_strip', 'ingredients_chips', 'allergen_card', 'how_to_use']);
+});
+check('no ingredients block: the office position stands', () => {
+  const r = miniOrder({ use_block_design: 1, is_food: true, description_blocks: [
+    { type: 'spec_strip' }, { type: 'allergen_card', contains_en: 'Soy' }, { type: 'how_to_use' }] });
+  assert.deepStrictEqual(r.page, ['spec_strip', 'allergen_card', 'how_to_use']);
+});
+check('the nutrition column joins the blocks at the end, once, and never beats a block', () => {
+  const nut = { basis_en: 'Per 100g', rows: [{ label_en: 'Energy', value: '1 kJ' }] };
+  const col = miniOrder({ use_block_design: 1, is_food: false, nutrition: nut,
+    description_blocks: [{ type: 'spec_strip' }] });
+  assert.deepStrictEqual(col.page, ['spec_strip', 'nutrition_facts']);
+  const blk = miniOrder({ use_block_design: 1, is_food: false, nutrition: nut,
+    description_blocks: [{ type: 'nutrition_facts', rows: [] }, { type: 'spec_strip' }] });
+  assert.deepStrictEqual(blk.page, ['nutrition_facts', 'spec_strip']);
+  const plain = miniOrder({ use_block_design: 0, is_food: true, nutrition: nut });
+  assert.deepStrictEqual(plain.plain, ['allergen_card', 'nutrition_facts']);
+  assert.ok(/hasNutritionBlock: pageBlocks\.concat\(facilityBlocks\)\.some/.test(PRODUCT_PAGE_JS),
+    'the old panel after the reviews would still draw the table a second time');
 });
 
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);

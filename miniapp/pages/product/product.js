@@ -854,7 +854,36 @@ Page({
     else if (p.is_food === true && useBlocks && !pageBlocks.some(writtenCard)) {
       pageBlocks = noCard(pageBlocks).concat([FACILITY_CARD]);
     }
-    const facilityBlocks = (p.is_food === true && !useBlocks) ? [FACILITY_CARD] : [];
+    // §248 — THE MINI APP FOLLOWS THE QR MENU'S ORDER. Ash: "i want the mini
+    // app match the qr". Two moves, both the QR menu's own rules (§246, §247):
+    //  1. The first allergen card sits straight after the first ingredients
+    //     block. With no ingredients block it keeps the office's position, and
+    //     a card built from nothing (above) is already last.
+    //  2. The nutrition COLUMN, on a product with no nutrition block, is drawn
+    //     as a block at the end of the blocks instead of in the old panel after
+    //     the reviews. The column has the block's own shape. hasNutritionBlock
+    //     below then reads true and the panel stays off, so it never prints twice.
+    // The QR menu's eight-type allow-list is NOT applied: this is the full
+    // product page, and cutting blocks from it was not asked for.
+    const isIng = (b) => !!(b && (b.type === 'ingredients_chips' || b.type === 'ingredients_line'));
+    const cardAt = pageBlocks.findIndex(b => b && b.type === 'allergen_card');
+    if (cardAt !== -1) {
+      const card = pageBlocks[cardAt];
+      const rest = pageBlocks.filter((_, i) => i !== cardAt);
+      const ingAt = rest.findIndex(isIng);
+      if (ingAt !== -1) pageBlocks = rest.slice(0, ingAt + 1).concat([card], rest.slice(ingAt + 1));
+    }
+    const n = p.nutrition;
+    const NUT_BLOCK = (n && typeof n === 'object' &&
+      (n.basis_en || n.basis_cn || (Array.isArray(n.rows) && n.rows.length)))
+      ? { type: 'nutrition_facts', basis_en: n.basis_en || '', basis_cn: n.basis_cn || '',
+          rows: Array.isArray(n.rows) ? n.rows : [] }
+      : null;
+    if (NUT_BLOCK && useBlocks && !pageBlocks.some(b => b && b.type === 'nutrition_facts')) {
+      pageBlocks = pageBlocks.concat([NUT_BLOCK]);
+    }
+    const facilityBlocks = useBlocks ? []
+      : [].concat(p.is_food === true ? [FACILITY_CARD] : [], NUT_BLOCK ? [NUT_BLOCK] : []);
 
     // §108 — the button says what the badge above it says. It used to read
     // `preorder`, the ship-vs-run question, so a Guangzhou shopper waiting on
@@ -932,7 +961,8 @@ Page({
       descriptionParts: useBlocks ? [] : (isRichDesc ? [] : descParts),
       descriptionBlocks: pageBlocks,
       facilityBlocks,
-      hasNutritionBlock: useBlocks && p.description_blocks.some(b => b && b.type === 'nutrition_facts'),
+      // §248 — asked of what is DRAWN: a column moved into the blocks counts.
+      hasNutritionBlock: pageBlocks.concat(facilityBlocks).some(b => b && b.type === 'nutrition_facts'),
       size: p.size || p.weight || '',
       keywords: lang.pick(p.keywords_en, p.keywords_cn, L),
       tagline: rawTag,
