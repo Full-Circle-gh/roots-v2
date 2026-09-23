@@ -225,7 +225,6 @@ Page({
     colophonTagline: '', // the product's own tagline, else this shop's house line
     colophonHouse: '',   // this shop's name on the hairline rule, '' when it has none
     colophonShow: false, // nothing to sign with → the block is not drawn at all
-    badges: [],
     shipFromSupplier: false, // drop-ship product → show "ships separately" notice
     options: [],
     optionsSingle: [],     // 'single'/'text' groups → first (dressing) sheet
@@ -502,27 +501,14 @@ Page({
     const priceWas = hasCmp ? money(cmp) : '';
     const saveN = hasCmp ? Math.round((cmp - v) * 100) / 100 : 0;
     const saveLabel = saveN > 0 ? (L === 'cn' ? '省' : 'SAVE ') + money(saveN) : '';
-    // §236 — THE FREE-OF BADGES ARE GONE FROM THIS ROW, AND THE ALLERGEN CARD
-    // SAYS IT INSTEAD. One outline box per free-of flag sat here while §232
-    // put those same four flags in the allergen card's own Free of row, where
-    // the card can subtract anything it already speaks about. Two places
-    // saying it, and only one of them checked against the card. Ash, on the
-    // badge row: "drop the three free badges".
+    // §242 — THE BADGE ROW UNDER THE DESCRIPTION IS GONE, ALL OF IT. §236
+    // dropped the free-of badges from it and kept one; Ash, on the one left:
+    // "its not neccesary can drop that from all products". The allergen card
+    // says what the badges said, checked against the card.
     //
-    // The four words are not written out anywhere in this file on purpose:
-    // scripts/test_product_blocks_read.js greps this source for them, and a
-    // comment that named them would pass for the badges coming back.
-    //
-    // PLANT-BASED STAYS, and it is the reason this row survives at all: it is
-    // a statement about the whole shop rather than an allergen, it is true of
-    // every product with no data behind it, and the card has no row for it.
-    //
-    // What went with them: the badgeMap of four pairs, the retired-flag guard
-    // (`egg`, `animal products`, `dairy` — a value the details panel can still
-    // write back and this row would have shouted untranslated), and the
-    // 5spice/"5 spice" spelling fold. None of them has a second reader here;
-    // lib/product-blocks-read.js FREE_OF_FLAGS carries all three concerns now.
-    const badges = [lang.pick('PLANT-BASED', '纯植物', L)];
+    // The four free-of words are not written out anywhere in this file on
+    // purpose: scripts/test_product_blocks_read.js greps this source for them,
+    // and a comment that named them would pass for the badges coming back.
     // Pre-resolve option labels for the WXML. A choice linked to a stock product
     // (a paid extra) is greyed + unselectable when that product is sold out.
     const options = (p.options || []).map(o => ({
@@ -949,7 +935,6 @@ Page({
       // when they do the card is the one about what is actually in the cart.
       careNoteTitle: lang.pick(p.cart_notice && p.cart_notice.title_en, p.cart_notice && p.cart_notice.title_cn, L),
       careNoteBody:  lang.pick(p.cart_notice && p.cart_notice.body_en,  p.cart_notice && p.cart_notice.body_cn,  L),
-      badges,
       options,
       optionsSingle,
       optionsExtra,

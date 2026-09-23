@@ -167,10 +167,6 @@
         </block>
       </block>
 
-      <view wx:if="{{badges.length}}" class="badges">
-        <view wx:for="{{badges}}" wx:key="*this" class="badge f-toni">{{item}}</view>
-      </view>
-
       <!-- "Buy together" bundle — one tap adds every (in-stock) item. Each is a
            real product with its own price/stock; sold-out items are skipped. -->
       <view wx:if="{{bundle}}" class="pd-bundle">

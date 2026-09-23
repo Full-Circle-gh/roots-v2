@@ -376,23 +376,6 @@
 }
 .desc-heading:first-child { margin-top: 28rpx; }
 
-/* Free-of / dietary badges */
-.badges {
-  margin-top: 32rpx;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
-}
-.badge {
-  padding: 12rpx 20rpx;
-  border: 3rpx solid var(--ink);
-  font-size: calc(20rpx * var(--font-scale));
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  background: transparent;
-  color: var(--ink);
-}
-
 /* Reviews block */
 .reviews-block {
   margin-top: 40rpx;

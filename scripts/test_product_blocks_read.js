@@ -767,11 +767,12 @@ check('every row starts at the same left edge', () => {
    checked against the card and these were not. Ash: "drop the three free
    badges". PLANT-BASED stays: it is a statement about the shop rather than an
    allergen, true of every product, with no row on the card to hold it. */
-check('the product page draws PLANT-BASED and no free-of badge', () => {
-  const at = PRODUCT_PAGE_JS.indexOf('const badges =');
-  assert.ok(at > -1, 'the badge row is gone entirely — PLANT-BASED went with it');
-  assert.ok(/const badges = \[lang\.pick\('PLANT-BASED'/.test(PRODUCT_PAGE_JS),
-    'the badge row is no longer just PLANT-BASED');
+/* §242 — and then the row itself. Ash, on the PLANT-BASED badge §236 kept:
+   "its not neccesary can drop that from all products". */
+check('the product page draws no badge row at all', () => {
+  assert.ok(!/const badges =/.test(PRODUCT_PAGE_JS), 'the product page still builds a badge row');
+  assert.ok(!PRODUCT_PAGE_JS.includes("'PLANT-BASED'"), 'the PLANT-BASED badge came back');
+  assert.ok(!/class="badges"/.test(MINI_PAGE), 'the product page still draws a badge row');
   for (const dead of ['NUT FREE', 'SOY FREE', 'GLUTEN FREE', '5-SPICE FREE']) {
     assert.ok(!PRODUCT_PAGE_JS.includes(dead),
       `the product page still badges "${dead}" beside the card that says it`);
