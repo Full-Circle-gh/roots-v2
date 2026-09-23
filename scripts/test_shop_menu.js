@@ -338,7 +338,15 @@ const soldOut = (row) => /class="sold"/.test(row);
       const withPhoto = rowFor(body, 'Fixture cold brew');
       // Available AND photoless, so the frame is empty rather than holding a
       // sold-out bar — the case that would otherwise draw a broken glyph.
-      const without = rowFor(body, 'Fixture oat latte');
+      // §243 — every food product now opens a detail sheet (the allergen
+      // card's trace line), and a sheet ends in the shop's colophon, whose
+      // character is a real image. The sheet is cut out of the row (it sits
+      // before the list frame): what this check is about is the LIST's photo.
+      const withoutRow = rowFor(body, 'Fixture oat latte');
+      const sheetAt = withoutRow.indexOf('<div class="dt-top"');
+      const frameAt = withoutRow.indexOf('<div class="ph">');
+      const without = (sheetAt === -1 || frameAt < sheetAt) ? withoutRow
+        : withoutRow.slice(0, sheetAt) + withoutRow.slice(frameAt);
       assert.ok(/<img /.test(withPhoto), 'a product WITH a photo lost its image');
       assert.ok(!/<img /.test(without), 'a product with no photo still emits an <img> that will 404');
       // The frame is emitted and holds no image. Asserted as "opens, and has no
@@ -495,8 +503,16 @@ const soldOut = (row) => /class="sold"/.test(row);
       for (const v of ['#123456', '#654321', '#abcdef', '#101010', '#202020', 'Inter', 'Work Sans', 'Fixture Tenant']) {
         assert.ok(body.includes(v), `the tenant's own ${v} did not reach the page`);
       }
+      // §243 — every food product now opens a sheet, and a sheet ends in the
+      // colophon. This fixture is tenant #1, whose signature IS Roots by §158
+      // (lib/brand-signature.js, held by scripts/test_brand_signature.js), so
+      // "Roots · ESTD 2017" there is correct and is not a theme value. The
+      // colophon is cut out; every theme value is still checked on all the rest.
+      const themed = body.replace(/<div class="pb-colo">[\s\S]*?<\/div><\/div>/g, '');
+      assert.ok(themed.length < body.length || !body.includes('pb-colo'),
+        'the colophon was not found where it was expected');
       for (const v of ['Roots', '#365329', '#F2E7DF', '#CCD900', '#6A6E2D', '#1a1a17', 'Bear Serif', 'Aleo']) {
-        assert.ok(!body.includes(v), `a Roots value survived a non-Roots theme: ${v}`);
+        assert.ok(!themed.includes(v), `a Roots value survived a non-Roots theme: ${v}`);
       }
     });
     await checkAsync('money is the tenant\'s own currency, not a ¥ literal', async () => {

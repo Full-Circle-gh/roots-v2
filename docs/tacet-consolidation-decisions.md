@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.385
+# Tacet shared-core consolidation — decisions record, v4.386
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.386 — **§243 · EVERY FOOD PRODUCT CARRIES THE ALLERGEN CARD, AND NOTHING ELSE DOES — DECIDED BY ASH.** §241 left the shared-facility trace line only on products whose office had written a card. **THE READ CAME FIRST** (`scripts/diagnose_allergen_card_coverage.js`, `scripts/diagnose_product_categories.js`, both new and read-only): 109 active products showed no card — 63 block pages with no card block, 44 plain pages, 2 plain pages hiding a filled card — and **many were not food**: floor cleaner, laundry powder, lipsticks, foundation, a puff applicator, and internal restock rows (banana, olive oil, cow milk). A food warning on a lipstick is careless, and "shared facility" on a detergent is untrue. **FLAGGED TO ASH BEFORE BUILDING; ASH RULED BY CATEGORY**: food gets the card, home care, beauty and accessories do not, and bought-in powders, teas and supplements are food — *"packed in our facility"*; cow milk is *"only used in yuexiu location … ignore it"*. **A LIST OF WHAT IS NOT FOOD** — `Home & Body`, `Personal Care`, `Restock- only，internal` — in `lib/product-blocks-read.js` `NON_FOOD_CATEGORIES`, folded for case, spacing and full-width punctuation. A new category is food until someone says otherwise, so the legal line reaches it without a code change. **ONE ANSWER, SERVED**: `GET /api/retail/products/:id` now carries `is_food`, which the web shop and the mini app read rather than copying the list; the QR menu reads the same function server-side. **A CARD NOBODY WROTE HAS NO CONTAINS ROW** — it is drawn for the trace line and "Made without" alone, because "None declared" would be a claim the office never made; a card with a may-contain field and no contains keeps §236's "None declared" as before. **NON-FOOD CARRIES NO CARD AT ALL**, even one written, so the bulk "made without nuts, soy, gluten" on cleaning products stops printing. **WHERE IT DRAWS**: on a block page the card joins the blocks; on a plain page (web shop and mini app) it sits alone under the description. **THE QR MENU NOW OPENS EVERY FOOD PRODUCT** — §120's rule that a product with nothing to say does not open is narrowed, because a food product always has this to say; the sheet is the photo, the name, the card and the shop's colophon. **TWO QR-MENU CHECKS WERE NARROWED, NOT RELAXED, AND THIS IS RECORDED**: `scripts/test_shop_menu.js`'s photo check now cuts the newly opened sheet out of the row it inspects (the colophon's character is a real image, not a 404), and its non-Roots theme check cuts out the colophon, because that fixture is tenant #1 whose signature is Roots by §158 and is held by `scripts/test_brand_signature.js`; every theme value is still asserted on the rest of the page. Both were confirmed green on pristine main and red on the branch before being touched. **`scripts/test_shop_menu_colophon.js` TESTED §120 ITSELF**, on a bare `drink` fixture: that fixture is now `Home & Body`, so §120 is still asserted where it still holds, and a new bare FOOD fixture asserts the opposite — it opens, carries the trace line, and claims nothing under Contains; the colophon count goes 4 → 5 with it. **NOT IN THIS CHANGE**: the product editor's preview (it does not know the category), and the storefront filter chips (§241 open item (b)). **THE MINI APP HALF REACHES CUSTOMERS ONLY ON THE NEXT WECHAT RELEASE.** No Chinese string composed — every word on the card is §241's. No schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-23 · v4.385 — **§242 · THE MINI APP'S BADGE ROW GOES, PLANT-BASED WITH IT — ASKED FOR BY ASH**, from a phone screenshot of the Quinoa Salad page showing `PLANT-BASED` and `GLUTEN FREE` under the usage tiles: *"its not neccesary can drop that from all products"*. **THE PHONE WAS ON AN OLDER RELEASE**: §236 had already removed the free-of badges from the source, and Quinoa Salad is not even flagged gluten free, so `GLUTEN FREE` there is a pre-§236 build. What main still drew was `PLANT-BASED` alone, which §236 kept on purpose as a statement about the whole shop. **ASH'S CALL REVERSES THAT ONE KEEP**: the row, its data field, its WXML and its two style rules are removed from `miniapp/pages/product/`. The web shop never had this row. **THE STOREFRONT'S LISTING FILTER CHIPS ARE A DIFFERENT CONTROL AND ARE UNTOUCHED** — they pick products rather than describe one, and their wording is §241's open item (b). `scripts/test_product_blocks_read.js`'s check that PLANT-BASED stays is inverted to check that no badge row is drawn. **REACHES CUSTOMERS ONLY ON THE NEXT WECHAT RELEASE.** No Chinese string composed or removed from the vocabulary lock (纯植物 is still live in the CMS hero). No schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20224,4 +20226,19 @@ holds the copies equal.
 products"*, of the PLANT-BASED badge under the product description. §236 had
 kept it as the one badge that was not an allergen; the row is now gone
 entirely. The allergen card carries what the badges used to say.
+
+## §243 — EVERY FOOD PRODUCT CARRIES THE ALLERGEN CARD, AND NOTHING ELSE DOES
+
+**Decided 2026-09-23 by Ash**, by category, after the live read showed the
+products without a card included cleaning products, cosmetics and internal
+restock rows.
+
+- **Not food** (no card, written or not): `Home & Body`, `Personal Care`,
+  `Restock- only，internal`. Everything else is food, including bought-in
+  powders, teas and supplements, which are packed in the facility.
+- **Food with no card written** gets one for the trace line and "Made
+  without", with no Contains row.
+- **One answer**: `isFoodCategory` in `lib/product-blocks-read.js`, served as
+  `is_food` on the product API and read server-side by the QR menu.
+- **The QR menu opens every food product.**
 

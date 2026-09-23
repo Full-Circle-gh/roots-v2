@@ -73,10 +73,11 @@ const db = tdb();
 const LOC = 9871;
 const P_AUTO   = 9971;  // no character stored     → the auto pick, by category
 const P_PICK   = 9972;  // character stored        → the override wins
-const P_BARE   = 9973;  // nothing to say at all   → no sheet, so no colophon
+const P_BARE   = 9973;  // not food, nothing to say → no sheet, so no colophon
 const P_TAGEN  = 9974;  // English tagline only    → must reach both languages
 const P_JUNK   = 9975;  // a character that is not → no image, colophon stands
-const PRODS = [P_AUTO, P_PICK, P_BARE, P_TAGEN, P_JUNK];
+const P_BFOOD  = 9976;  // FOOD, nothing written   → §243: opens for the card
+const PRODS = [P_AUTO, P_PICK, P_BARE, P_TAGEN, P_JUNK, P_BFOOD];
 
 const T_OTHER = 9979;                       // a tenant that is not Roots
 const T_HOST  = 'colophon-fixture.example';
@@ -118,9 +119,14 @@ function seed() {
   // own and is asserted through the module below, never re-spelled here.
   prod.run(P_AUTO,  'Colo Auto',  '签名自动', '__colo_auto',  10, 'drink',  CHIPS, null,      null, null);
   prod.run(P_PICK,  'Colo Pick',  '签名指定', '__colo_pick',  11, 'drink',  CHIPS, 'skater',  null, null);
-  prod.run(P_BARE,  'Colo Bare',  '签名空白', '__colo_bare',  12, 'drink',  null,  null,      null, null);
+  // §243 — a FOOD product always has something to say now (the allergen
+  // card's shared-facility trace line), so §120's "nothing to say, no sheet"
+  // is tested on a product that is not food, and the bare food product below
+  // is tested for the opposite.
+  prod.run(P_BARE,  'Colo Bare',  '签名空白', '__colo_bare',  12, 'Home & Body', null, null, null, null);
   prod.run(P_TAGEN, 'Colo TagEn', '签名标语', '__colo_tagen', 13, 'drink',  CHIPS, null,      'Only in English', null);
   prod.run(P_JUNK,  'Colo Junk',  '签名乱码', '__colo_junk',  14, 'drink',  CHIPS, '../../brand/secret', null, null);
+  prod.run(P_BFOOD, 'Colo BareFood', '签名空食', '__colo_bfood', 15, 'drink', null,  null,      null, null);
 
   // A fixed code in lib/shop-code.js's own alphabet, the way the sibling
   // suites spell theirs — isShopCode() refuses the path before it can become
@@ -258,6 +264,13 @@ function sheetFor(html, nameEn) {
     assert.ok(colo.includes(roots.house), 'the house line went with it');
   });
 
+  check('§243 — a FOOD product with nothing written opens, onto the allergen card', () => {
+    const sheet = sheetFor(page, 'Colo BareFood');
+    assert.ok(sheet, 'a food product with no blocks still has no sheet, so no trace line');
+    assert.ok(sheet.includes('(shared facility)'), 'the sheet opened without the trace line');
+    assert.ok(!sheet.includes('None declared'), 'a card nobody wrote claims what the food contains');
+  });
+
   check('a product with nothing to say STILL does not open — §120 survives', () => {
     assert.strictEqual(sheetFor(page, 'Colo Bare'), null,
       'the colophon gave a card with nothing to say a sheet of its own');
@@ -302,8 +315,8 @@ function sheetFor(html, nameEn) {
 
   check('THE ASSERTIONS ARE NOT VACUOUS — the page really does carry a colophon', () => {
     const hits = page.split('class="pb-colo"').length - 1;
-    // Four of the five products open a sheet; the bare one must not.
-    assert.strictEqual(hits, 4, `expected 4 colophons on this menu, found ${hits}`);
+    // Five of the six products open a sheet; the bare non-food one must not.
+    assert.strictEqual(hits, 5, `expected 5 colophons on this menu, found ${hits}`);
     assert.ok(page.includes('.pb-colo{'), 'the stylesheet never shipped the rule');
   });
 

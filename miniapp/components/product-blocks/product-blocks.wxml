@@ -78,7 +78,7 @@
               <text>{{item.title}}</text>
             </view>
           </view>
-          <view class="pb-allergen-row">
+          <view wx:if="{{!item.facilityOnly}}" class="pb-allergen-row">
             <text class="pb-allergen-lbl">{{item.containsLabel}}</text>
             <view class="pb-allergen-chips">
               <text wx:if="{{item.containsEmpty}}" class="pb-allergen-empty">{{item.emptyText}}</text>

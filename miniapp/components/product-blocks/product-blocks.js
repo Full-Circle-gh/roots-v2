@@ -310,7 +310,11 @@ function _resolveBlock(b, L, freeOf) {
   if (t === 'allergen_card') {
     const contains    = _splitChips(_pick(b.contains_en,    b.contains_cn,    L));
     const mayContain  = _splitChips(_pick(b.may_contain_en, b.may_contain_cn, L));
-    if (!contains.length && !mayContain.length) return { type: '_skip' };
+    // §243 — a card the product page adds for the trace line alone (food with
+    // no card written) draws with no Contains row: "None declared" would be a
+    // statement the office never made.
+    const facilityOnly = !!b._facility;
+    if (!facilityOnly && !contains.length && !mayContain.length) return { type: '_skip' };
     // BOTH LANGUAGES ARE SEARCHED, not just the one on screen: a card that
     // names an allergen in Chinese only still names it. CONTAINS only (§241).
     const said = [b.contains_en, b.contains_cn].filter(Boolean).join(' ');
@@ -318,6 +322,7 @@ function _resolveBlock(b, L, freeOf) {
       type: t,
       title:           L === 'cn' ? '过敏原' : 'Allergens',
       compliance:      'GB-7718',
+      facilityOnly,
       containsLabel:   L === 'cn' ? '含有' : 'Contains',
       mayContainLabel: L === 'cn' ? '可能含有微量' : 'May contain traces of',
       freeOfLabel:     L === 'cn' ? '配方不含' : 'Made without',
