@@ -5885,11 +5885,13 @@ async function renderProduct(id){
   // shared-facility trace line is required on every food product. is_food is
   // the server's answer; a product without blocks gets the card alone, under
   // its plain description.
-  const blockOpts={lang:state.lang,freeOf:p.free_of,food:p.is_food===true?true:(p.is_food===false?false:undefined)};
+  // §247 — the nutrition column rides along too: the sheet draws it as a
+  // block when the product has no nutrition block of its own.
+  const blockOpts={lang:state.lang,freeOf:p.free_of,food:p.is_food===true?true:(p.is_food===false?false:undefined),nutrition:p.nutrition||null};
   const descBody = useBlocks
     ? `<div class="shop-product-blocks">${ShopProductBlocks.render(blocks,blockOpts)}</div>`
     : (desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:'')
-      + (p.is_food===true&&window.ShopProductBlocks?`<div class="shop-product-blocks">${ShopProductBlocks.render([],blockOpts)}</div>`:'');
+      + (window.ShopProductBlocks?(()=>{const h=ShopProductBlocks.render([],blockOpts);return h?`<div class="shop-product-blocks">${h}</div>`:'';})():'');
 
   // Per-product options (dressing, spice, paid extras) are chosen in a bottom
   // sheet opened from ADD TO BASKET — not inline — to match the mini-app.
