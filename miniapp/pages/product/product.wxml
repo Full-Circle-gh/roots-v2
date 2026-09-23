@@ -167,6 +167,14 @@
         </block>
       </block>
 
+      <!-- §243 — a food product with no blocks still carries the allergen card,
+           for the shared-facility trace line. -->
+      <product-blocks wx:if="{{facilityBlocks.length}}"
+                      blocks="{{facilityBlocks}}"
+                      template="{{product.page_template}}"
+                      free-of="{{product.free_of}}"
+                      lang="{{lang}}"/>
+
       <!-- "Buy together" bundle — one tap adds every (in-stock) item. Each is a
            real product with its own price/stock; sold-out items are skipped. -->
       <view wx:if="{{bundle}}" class="pd-bundle">

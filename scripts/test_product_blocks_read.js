@@ -840,5 +840,61 @@ check('and every copy of the list holds the same phrases', () => {
   }
 });
 
+/* ── §243: EVERY FOOD PRODUCT CARRIES THE CARD, NOTHING ELSE DOES ─────────
+   Ash, 2026-09-23: by category — food gets the card with the trace line even
+   when the office wrote none; home care, beauty and internal restock rows get
+   no card at all; bought-in powders are food ("packed in our facility"). The
+   categories are the live ones (scripts/diagnose_product_categories.js). */
+section('Which products carry the card');
+
+check('the three non-food categories, spelled the way the office typed them', () => {
+  for (const c of ['Home & Body', 'home  &  body', 'Personal Care', 'Restock- only，internal', 'Restock-only, internal']) {
+    assert.strictEqual(R.isFoodCategory(c), false, `"${c}" would carry a food warning`);
+  }
+});
+check('everything else is food — including powders, supplements, and no category at all', () => {
+  for (const c of ['Ready to Eat', 'Wellness', 'Drinks', 'Dry & Pantry', 'Fresh & Deli', 'Toasts',
+                   'Snacks & Treats', 'Platters', '', null, undefined, 'A category added next month']) {
+    assert.strictEqual(R.isFoodCategory(c), true, `"${c}" would lose the trace line`);
+  }
+});
+check('the product API hands every surface the one answer', () => {
+  const RETAIL = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  assert.ok(/product\.is_food = require\('\.\.\/lib\/product-blocks-read'\)\.isFoodCategory\(product\.category\)/.test(RETAIL),
+    'GET /api/retail/products/:id no longer says whether a product is food');
+});
+check('the shop sheet adds the card to food with none, and strips it from anything else', () => {
+  const sandbox = {};
+  new Function('window', SHOP_JS + '\n;')(sandbox);
+  const SPB = sandbox.ShopProductBlocks;
+  const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const bare = text(SPB.render([], { lang: 'en', freeOf: 'nuts', food: true }));
+  assert.ok(bare.includes('Nuts, Soy, Gluten (shared facility)'), 'food with no card shows no trace line');
+  assert.ok(bare.includes('Made without'), 'food with no card lost its made-without row');
+  assert.ok(!bare.includes('Contains') && !bare.includes('None declared'),
+    'a card nobody wrote claims something about what the product contains');
+  assert.strictEqual(SPB.render([{ type: 'allergen_card', contains_en: 'Soy' }], { lang: 'en', food: false }), '',
+    'a product that is not food still draws an allergen card');
+  const written = text(SPB.render([{ type: 'allergen_card', contains_en: 'Sesame' }], { lang: 'en', food: true }));
+  assert.ok(written.includes('Contains') && written.includes('Sesame'), "the office's own card was replaced");
+  assert.strictEqual((written.match(/Allergens/g) || []).length, 1, 'food with a card got a second one');
+  assert.ok(/food:p\.is_food===true/.test(SHOP_HTML) && /ShopProductBlocks\.render\(\[\],blockOpts\)/.test(SHOP_HTML),
+    'shop.html does not hand the sheet is_food, or skips the card on a page with no blocks');
+});
+check('the QR menu opens every food product and draws the card built from nothing', () => {
+  assert.ok(/const food = blockRead\.isFoodCategory\(it\.category\)/.test(MENU), 'the QR menu does not ask');
+  assert.ok(/if \(!food && !blocks\.length/.test(MENU), 'a food product with no blocks still does not open');
+  assert.ok(/const algHtml = !food \? ''/.test(MENU), 'a non-food product still draws its card');
+  assert.ok(/wroteNothing \? '' : containsRow/.test(MENU), 'a card nobody wrote still claims "None declared"');
+});
+check('the mini app does the same, on block pages and on plain ones', () => {
+  assert.ok(/p\.is_food === false\) pageBlocks = noCard\(pageBlocks\)/.test(PRODUCT_PAGE_JS), 'non-food keeps its card');
+  assert.ok(/facilityBlocks = \(p\.is_food === true && !useBlocks\)/.test(PRODUCT_PAGE_JS),
+    'a food page with no blocks gets no card');
+  assert.ok(/blocks="\{\{facilityBlocks\}\}"/.test(MINI_PAGE), 'the product page never draws the facility card');
+  assert.ok(/const facilityOnly = !!b\._facility/.test(MINI) && /wx:if="\{\{!item\.facilityOnly\}\}"/.test(WXML),
+    'the component draws a Contains row on a card nobody wrote');
+});
+
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
 process.exit(fail ? 1 : 0);

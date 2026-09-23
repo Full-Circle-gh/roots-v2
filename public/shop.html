@@ -5867,9 +5867,15 @@ async function renderProduct(id){
   let blocks=p.description_blocks;
   if(typeof blocks==='string'){ try{ blocks=JSON.parse(blocks); }catch{ blocks=null; } }
   const useBlocks = p.use_block_design && Array.isArray(blocks) && blocks.length && window.ShopProductBlocks;
+  // §243 — food carries the allergen card even with no blocks at all: the
+  // shared-facility trace line is required on every food product. is_food is
+  // the server's answer; a product without blocks gets the card alone, under
+  // its plain description.
+  const blockOpts={lang:state.lang,freeOf:p.free_of,food:p.is_food===true?true:(p.is_food===false?false:undefined)};
   const descBody = useBlocks
-    ? `<div class="shop-product-blocks">${ShopProductBlocks.render(blocks,{lang:state.lang,freeOf:p.free_of})}</div>`
-    : (desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:'');
+    ? `<div class="shop-product-blocks">${ShopProductBlocks.render(blocks,blockOpts)}</div>`
+    : (desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:'')
+      + (p.is_food===true&&window.ShopProductBlocks?`<div class="shop-product-blocks">${ShopProductBlocks.render([],blockOpts)}</div>`:'');
 
   // Per-product options (dressing, spice, paid extras) are chosen in a bottom
   // sheet opened from ADD TO BASKET — not inline — to match the mini-app.

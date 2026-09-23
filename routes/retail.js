@@ -3528,6 +3528,12 @@ router.get('/api/retail/products/:id', (req, res) => {
 
   product.social_proof = socialProofForProduct(id);
 
+  // §243 — whether this product carries the allergen card at all. Food does,
+  // with the shared-facility trace line even when the office wrote no card;
+  // home care, beauty and internal restock rows do not. Decided once here so
+  // the web shop and the mini app read one answer rather than copying a list.
+  product.is_food = require('../lib/product-blocks-read').isFoodCategory(product.category);
+
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: product });
 });

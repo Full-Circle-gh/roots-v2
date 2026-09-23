@@ -217,6 +217,7 @@ Page({
     description: '',
     descriptionParts: [], // [{ kind: 'heading'|'para', text }] (legacy renderer)
     descriptionBlocks: [], // designer-block array — when non-empty, replaces descriptionParts
+    facilityBlocks: [],    // §243 — the allergen card alone, for a food page with no blocks
     size: '',           // weight string e.g. "330ml" — shown big right of name
     keywords: '',       // bilingual short descriptors (e.g. "raw, alive")
     tagline: '',        // bold one-liner slogan
@@ -839,6 +840,21 @@ Page({
     // Blocks only "win" when the toggle is on AND blocks were actually authored.
     // An empty/failed designed page falls back to the classic description below.
     const useBlocks = !!(p.use_block_design && Array.isArray(p.description_blocks) && p.description_blocks.length);
+    // §243 — the allergen card follows the server's is_food. Food always carries
+    // one, with the shared-facility trace line, so a card is added when the
+    // office wrote none; anything else carries none. A page with no blocks at
+    // all gets the card alone under its plain description (facilityBlocks).
+    const writtenCard = (b) => !!(b && b.type === 'allergen_card' &&
+      [b.contains_en, b.contains_cn, b.may_contain_en, b.may_contain_cn]
+        .some(v => String(v == null ? '' : v).trim()));
+    const noCard = (list) => list.filter(b => !(b && b.type === 'allergen_card'));
+    const FACILITY_CARD = { type: 'allergen_card', _facility: true };
+    let pageBlocks = useBlocks ? p.description_blocks : [];
+    if (p.is_food === false) pageBlocks = noCard(pageBlocks);
+    else if (p.is_food === true && useBlocks && !pageBlocks.some(writtenCard)) {
+      pageBlocks = noCard(pageBlocks).concat([FACILITY_CARD]);
+    }
+    const facilityBlocks = (p.is_food === true && !useBlocks) ? [FACILITY_CARD] : [];
 
     // §108 — the button says what the badge above it says. It used to read
     // `preorder`, the ship-vs-run question, so a Guangzhou shopper waiting on
@@ -914,7 +930,8 @@ Page({
       // authored, with no way to preview the classic copy without deleting them.
       descHtml: useBlocks ? '' : descHtml,
       descriptionParts: useBlocks ? [] : (isRichDesc ? [] : descParts),
-      descriptionBlocks: useBlocks ? p.description_blocks : [],
+      descriptionBlocks: pageBlocks,
+      facilityBlocks,
       hasNutritionBlock: useBlocks && p.description_blocks.some(b => b && b.type === 'nutrition_facts'),
       size: p.size || p.weight || '',
       keywords: lang.pick(p.keywords_en, p.keywords_cn, L),

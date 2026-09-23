@@ -317,7 +317,11 @@
   function rAllergenCard(b, L, freeOf) {
     var contains = splitChips(pickLang(b.contains_en, b.contains_cn, L));
     var mayContain = splitChips(pickLang(b.may_contain_en, b.may_contain_cn, L));
-    if (!contains.length && !mayContain.length) return '';
+    // §243 — a card built for the trace line alone (render() adds one to a
+    // food product that has none) draws with no Contains row: "None declared"
+    // would be a statement the office never made.
+    var facilityOnly = !!b._facility;
+    if (!facilityOnly && !contains.length && !mayContain.length) return '';
     var title = L === 'cn' ? '过敏原' : 'Allergens';
     var containsLabel = L === 'cn' ? '含有' : 'Contains';
     var mayContainLabel = L === 'cn' ? '可能含有微量' : 'May contain traces of';
@@ -369,10 +373,11 @@
         '<div class="spb-allergen-top"><div class="spb-allergen-ttl">' +
           '<span class="spb-allergen-warn">!</span><span>' + escapeHtml(title) + '</span>' +
         '</div></div>' +
+        (facilityOnly ? '' :
         '<div class="spb-allergen-row">' +
           '<span class="spb-allergen-lbl">' + escapeHtml(containsLabel) + '</span>' +
           '<div class="spb-allergen-chips">' + containsChips + '</div>' +
-        '</div>' +
+        '</div>') +
         mayRow +
         freeRow +
       '</div>' +
@@ -630,6 +635,13 @@
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
+  function hasWrittenCard(b) {
+    return !!(b && b.type === 'allergen_card' &&
+      [b.contains_en, b.contains_cn, b.may_contain_en, b.may_contain_cn].some(function (v) {
+        return String(v == null ? '' : v).trim();
+      }));
+  }
+
   function render(blocks, opts) {
     var L = (opts && opts.lang === 'cn') ? 'cn' : 'en';
     var arr = blocks;
@@ -639,6 +651,16 @@
     if (!Array.isArray(arr)) return '';
     // The product's free_of column, for the one block that reads it.
     var freeOf = (opts && opts.freeOf) || '';
+    // §243 — opts.food is the product's is_food from the API. Food always
+    // carries a card, so one is added for the trace line when the office wrote
+    // none; anything else carries no card at all. Absent means the caller did
+    // not say, and the blocks draw exactly as written.
+    if (opts && opts.food === false) {
+      arr = arr.filter(function (b) { return !(b && b.type === 'allergen_card'); });
+    } else if (opts && opts.food === true && !arr.some(hasWrittenCard)) {
+      arr = arr.filter(function (b) { return !(b && b.type === 'allergen_card'); })
+        .concat([{ type: 'allergen_card', _facility: true }]);
+    }
     var html = arr.map(function (b) { return renderOne(b, L, freeOf); }).filter(Boolean).join('');
     if (!html) return '';
     return '<div class="shop-product-blocks">' + html + '</div>';

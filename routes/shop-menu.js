@@ -3094,7 +3094,11 @@ function detailBody(it, code, listed, sig, qrShown) {
      better than one that opens onto nothing. What counts as something to say is
      now any block at all, plus having more than one size — a collapsed card
      whose picker could not be reached would be a size nobody can buy. */
-  if (!blocks.length && !nut && !(it.variants && it.variants.length > 1)) return '';
+  // §243 — A FOOD PRODUCT ALWAYS HAS SOMETHING TO SAY: the shared-facility
+  // trace line, whether or not the office wrote a card. So every food product
+  // now opens, onto at least its photo, its name and that card.
+  const food = blockRead.isFoodCategory(it.category);
+  if (!food && !blocks.length && !nut && !(it.variants && it.variants.length > 1)) return '';
 
   // A bilingual pair where ONE language may be missing: the other stands in,
   // because a blank half reads as a fault rather than as an omission.
@@ -3190,8 +3194,14 @@ function detailBody(it, code, listed, sig, qrShown) {
         `<div class="achips"><span class="anone">` +
         bi(noneEn || L.none.en, noneCn || L.none.cn) + `</span></div></div>`
       : algRow(L.contains, a.contains_en, a.contains_cn, 'has');
+    // §243 — A CARD NOBODY WROTE HAS NO CONTAINS ROW. It is drawn for the
+    // trace line alone, and "None declared" would be a statement the office
+    // never made. A card with a may-contain field and no contains keeps §236's
+    // "None declared", as before.
+    const wroteNothing = !a.contains_en.length && !a.contains_cn.length &&
+      !a.may_en.length && !a.may_cn.length;
     return `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
-      (containsRow ||
+      (wroteNothing ? '' : containsRow ||
         // "None declared" is the mini app's own empty state for this row, and it
         // is a statement rather than a blank: the office looked and found none.
         `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
@@ -3417,7 +3427,13 @@ function detailBody(it, code, listed, sig, qrShown) {
      wrote a second card keeps it where they put it -- only the first is
      hoisted, and "hoist the first" is a rule a reader can check. */
   const algAt = blocks.findIndex(b => b.type === 'allergen_card');
-  const algHtml = algAt === -1 ? '' : one(blocks[algAt]);
+  /* §243 — food without a card gets one built from nothing, for the trace
+     line; a product that is not food gets none, even if a card exists, and
+     the index still keeps that card out of the body below. */
+  const algHtml = !food ? ''
+    : algAt === -1
+      ? algCard({ contains_en: [], contains_cn: [], may_en: [], may_cn: [] })
+      : one(blocks[algAt]);
   /* EMPTY BLOCKS ARE DROPPED HERE rather than wrapped and left blank: one()
      returns '' for a type it does not draw and for a pairings block whose
      products this shop no longer lists, and a band around nothing draws a
