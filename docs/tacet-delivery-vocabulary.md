@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.165 · 2026-09-23 · §241 SPLITS THE ALLERGEN CARD INTO A RECIPE CLAIM AND A FACILITY WARNING — TWO STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `配方不含` (*Made without*) replaces `不含` as the row label over the free_of flags, and `（共用生产环境）` (*shared facility*) closes the one may-contain line every product now carries. `种子类` is copied from a live card. See *Made without, and the shared-facility line (§241)*.
+
 **v1.164 · 2026-09-22 · §232 PUTS A FREE-OF ROW ON THE ALLERGEN CARD — NOTHING COMPOSED, ONE PAIR CROSSING FROM THE BACK OFFICE TO A CUSTOMER.** `不含` is the details panel's own label for this exact column and has been shipping over it; it now appears in front of customers for the first time, which is the only reason this entry exists. The four chips are the words the allergen cards themselves use, and the one that had to be lifted rather than copied — `五香` — is lifted out of the live badge `无五香`. See *The free-of row on the allergen card (§232)*.
 
 **v1.163 · 2026-09-22 · §231 LETS THE HOW-TO-USE GRID TAKE ANY TILE COUNT — ONE COMPOSED STRING, BOTH WORDS LIVE.** The editor told the office *"6 tiles (3-col grid) or 8 tiles (4-col grid) — never 5 or 7"*, which is why a four-moment product looked like the author's mistake rather than the grid's. The rule is gone and the helper says so. `任意` and `数量` are each live many times over; what is composed is the PAIR, and everything beside it is a numeral. See *Any number of usage tiles (§231)*.
@@ -8529,3 +8531,37 @@ card keeps one grammar.
   card) — **rejected**: it claims more than the column knows. Four flags are not
   every allergen, and a customer reading that sentence would believe the card
   had cleared the product of all of them.
+
+## Made without, and the shared-facility line (§241)
+
+**Two strings composed, by Claude, 2026-09-23, under the 2026-09-06 amendment.**
+Every fragment of each is live; what is composed is the join.
+
+| shipped | built from |
+|---|---|
+| `Made without · 配方不含` (row label over the free_of flags) | **composed.** `配方` is live as *Recipe* (`cuT('Recipe', '配方')`, `public/retail-admin/09-products.js` and `21-product-build.js`); `不含` is §232's live row label. Together: *the recipe does not contain* |
+| `(shared facility) · （共用生产环境）` (closes the may-contain line) | **composed.** `共用` is live as *shared* (`与其他规格共用`, the variant photo notes in `09-products.js`); `生产环境` is lifted from a live allergen card, Buckwheat Bread's `大豆（生产环境）` over *soy (manufacturing environment)* |
+| `Seeds · 种子类` | copied: the live pair on Pesto 'Chicken' Wrap's may-contain row |
+| `Peanuts · 花生`, `Sesame · 芝麻` | copied: live on the cards' own may-contain rows (the nut products; Falafel Wrap, Choco-Hazel Bars) |
+| `Nuts · 坚果`, `Soy · 大豆`, `Gluten · 麸质` | unchanged from §232 |
+
+**WHY `不含` HAD TO GO.** It means *does not contain*, and every product now
+also reads *may contain traces of* nuts, soy and gluten. `不含：坚果` above
+`可能含有微量：坚果` is the same contradiction in Chinese that `Free of` was in
+English, and it is the reason §241 exists.
+
+**Live candidates rejected.**
+
+- `不含` alone (§232's label) — **rejected** for the contradiction above.
+- `无坚果 · 无大豆 · 无麸质` (the storefront's badge pairs) — **rejected** for
+  the same reason, and §232's doubling reason still applies under a label.
+- `不添加` (*no added*) — **rejected**: on a Chinese label it is the shape of an
+  additive claim (`不添加防腐剂`), and it reads as "nothing extra was put in",
+  not "this is not in the recipe".
+- `可能在同时处理坚果、大豆等致敏原的设施中生产` (Berry Intelligence House
+  Blend's live sentence) — **rejected** as the facility note: it repeats the
+  allergens the line has just listed and runs to twenty-two characters inside
+  a bracket.
+- `其他籽类` (Whole Sesame Tahini's live entry) — **rejected** for Seeds: `其他`
+  is relative to a list the line no longer carries.
+
