@@ -922,5 +922,17 @@ check('the mini app does the same, on block pages and on plain ones', () => {
     'the component draws a Contains row on a card nobody wrote');
 });
 
+/* ── §245: THE SPEC STRIP SITS ABOVE THE CARD ON THE COUNTER MENU ─────────
+   Ash, against the Quinoa Salad sheet: net weight / type / origin before the
+   allergens, on the QR menu only for now. */
+section('QR menu head order');
+check('the spec strip is hoisted, moved not copied, and drawn before the card', () => {
+  assert.ok(/const specAt = blocks\.findIndex\(b => b\.type === 'spec_strip'\)/.test(MENU),
+    'the QR menu does not hoist the spec strip');
+  assert.ok(/i !== algAt && i !== specAt/.test(MENU), 'the spec strip is drawn twice');
+  assert.ok(/<\/div>\$\{specHtml\}\$\{algHtml\}<\/div>/.test(MENU),
+    'the spec strip is not between the name and the allergen card');
+});
+
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
 process.exit(fail ? 1 : 0);
