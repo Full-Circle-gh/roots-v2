@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.390
+# Tacet shared-core consolidation — decisions record, v4.391
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.391 — **§248 · THE ONE-OFF PROD REPAIR WORKFLOW PRUNES ITS OWN BACKUPS AFTER 14 DAYS — DECIDED BY ASH, FOUND WHILE DIAGNOSING A DISK-FULL OUTAGE.** `.github/workflows/oneoff.yml` (§ decision 2026-09-08, no section number recorded at the time) backs up the live database to `/root/backups/oneoff-<timestamp>-<run-id>.db` before every `apply=true` run, and its own comment says the snapshot **"is kept whatever happens."** That was true and unqualified: nothing ever deleted these files. Three `apply` runs on the morning of 2026-09-23 (03:14, 03:32, 03:35) wrote ~2.7GB in twenty minutes on top of what was already there, the box's disk hit 0 bytes free, and production started returning `SQLITE_FULL` on live routes — the fault that opened this investigation. `daily/` and `hourly/` in the same `/root/backups/` tree already retain correctly (14 days, matching `db-backup.sh`'s `RETAIN_DAYS`); this bucket was the one with no retention at all. **ASH'S CALL, ASKED DIRECTLY BEFORE CHANGING BUILD/CI BEHAVIOR**: keep the safety backup, but bound it — 14 days, the same number as everywhere else in this system, so the box has one retention window to remember rather than two. `.github/workflows/oneoff.yml` gains a prune step, run on every invocation of the workflow (not only `apply=true`), that deletes `/root/backups/oneoff-*.db` files whose embedded `YYYYmmdd` is older than the cutoff — parsed from the FILENAME, not filesystem mtime, matching `prune-deploy-backups.sh`'s own convention for the identical reason: a copy or touch must never make an old snapshot look fresh. The most recent repair's backup is always within the window, so a rollback of last week's fix is unaffected. **THIS IS A CI/BUILD-CONFIG CHANGE, CALLED OUT HERE, IN ITS COMMIT MESSAGE, AND IN ITS PULL REQUEST, PER CLAUDE.md.** No Chinese string, no schema change, no application code touched, no change to `.gitignore`.
 
 2026-09-23 · v4.390 — **§247 · THE WEB SHOP DRAWS THE NUTRITION COLUMN WHEN A PRODUCT HAS NO NUTRITION BLOCK — ASH: *"for webshop, fix it"*.** Asked whether nutrition facts are now a block like any other: they are — the editor saves the table INTO `description_blocks` in the office's position and mirrors it to the product's `nutrition` column for mini app builds that predate the block, and every surface prefers the block. **THE GAP WAS THE WEB SHOP**: for a product carrying only the column, the QR menu appends it at the end of the sheet and the mini app draws its fixed panel (after the reviews), but `public/shop/product-blocks.js` read blocks alone, so those products showed no nutrition on the web. **NOW `render()` TAKES `opts.nutrition`** (the API's hydrated column) and, when the blocks carry no `nutrition_facts`, draws the column as one — last, through the existing renderer, because the column has the block's own shape. A product with a block is untouched, so the table cannot print twice. `shop.html` passes the column on block pages and on plain pages alike. **ALSO ANSWERED, NO CODE**: the mini app's nutrition panel AFTER THE REVIEWS is that same column fallback, and it is suppressed whenever the product carries a nutrition block (since #740, 2026-09-21); Quinoa Salad carries one, so a phone showing its table after the reviews is on a build older than #740 — the same stale build that still showed the GLUTEN FREE badge. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20275,4 +20277,14 @@ last when it was built from nothing. QR menu only.
 **Asked for by Ash, 2026-09-23.** The web shop's block renderer draws the
 product's `nutrition` column as a nutrition block, last, when the product has
 no nutrition block of its own — matching the QR menu and the mini app.
+
+## §248 — THE ONE-OFF PROD REPAIR WORKFLOW'S BACKUPS ARE KEPT 14 DAYS, NOT FOREVER
+
+**Decided by Ash, 2026-09-23, after a disk-full production outage.**
+`.github/workflows/oneoff.yml` still takes a verified backup to
+`/root/backups/oneoff-*.db` before every `apply=true` run. It no longer keeps
+every one forever: a prune step, run on every invocation, deletes those files
+once their embedded date is more than 14 days old — the same window
+`db-backup.sh` and `prune-deploy-backups.sh` already use elsewhere in
+`/root/backups/`. See the 2026-09-23 changelog entry for the full account.
 
