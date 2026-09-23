@@ -922,16 +922,17 @@ check('the mini app does the same, on block pages and on plain ones', () => {
     'the component draws a Contains row on a card nobody wrote');
 });
 
-/* ── §245: THE SPEC STRIP SITS ABOVE THE CARD ON THE COUNTER MENU ─────────
-   Ash, against the Quinoa Salad sheet: net weight / type / origin before the
-   allergens, on the QR menu only for now. */
-section('QR menu head order');
-check('the spec strip is hoisted, moved not copied, and drawn before the card', () => {
-  assert.ok(/const specAt = blocks\.findIndex\(b => b\.type === 'spec_strip'\)/.test(MENU),
-    'the QR menu does not hoist the spec strip');
-  assert.ok(/i !== algAt && i !== specAt/.test(MENU), 'the spec strip is drawn twice');
-  assert.ok(/<\/div>\$\{specHtml\}\$\{algHtml\}<\/div>/.test(MENU),
-    'the spec strip is not between the name and the allergen card');
+/* ── §246: ON THE COUNTER MENU THE CARD SITS UNDER THE INGREDIENTS ───────
+   Ash, after §245's trial: "alergin block should go under ingridents". The
+   head is the name alone again; §245's spec-strip hoist is undone. */
+section('QR menu — where the allergen card sits');
+check('the card follows the first ingredients block, and nothing is hoisted into the head', () => {
+  assert.ok(!/specHtml|specAt/.test(MENU), '§245 spec-strip hoist is still in place');
+  assert.ok(/<div class="dt-nm">\$\{bi\(it\.name_en, it\.name_cn\)\}<\/div><\/div>/.test(MENU),
+    'the sheet head still carries more than the name');
+  assert.ok(/x\.b\.type === 'ingredients_chips' \|\| x\.b\.type === 'ingredients_line'/.test(MENU) &&
+            /ingAt !== -1 \? ingAt \+ 1/.test(MENU), 'the card is not placed after the ingredients');
+  assert.ok(/bodyBands\.splice\(cardAt, 0, algHtml\)/.test(MENU), 'the card is not placed into the body');
 });
 
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);

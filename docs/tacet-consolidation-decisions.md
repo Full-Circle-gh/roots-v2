@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.388
+# Tacet shared-core consolidation — decisions record, v4.389
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.389 — **§246 · ON THE QR MENU THE ALLERGEN CARD SITS UNDER THE INGREDIENTS, AND THE HEAD IS THE NAME ALONE — DECIDED BY ASH, REPLACING §245 AND §233's HOIST.** After seeing §245's trial live (spec strip above the card, both in the head): *"i change my mind, alergin block should go under ingridents"*. **FLAGGED TO ASH BEFORE BUILDING, AND RECORDED**: §233 hoisted the card under the name because a customer with an allergy is looking for one fact, not reading a page; under the ingredients, on a long product, that fact is several screens down. Ash's call; it is built. **THE RULE**: nothing is hoisted — the sheet head is the photo and the name; the office's block order stands, except that the first allergen card is placed **straight after the first ingredients block** (`ingredients_chips` or `ingredients_line`), whatever position the office gave it. With no ingredients block the card keeps the office's own position; a card built from nothing for a food product (§243) with no ingredients block to follow goes last. **§245 IS UNDONE** — the spec strip is back in the body, first where the office put it first. `.pb.first` is no longer applied, because no head rule sits above the first band any more. **CHECKED ON RENDERED OUTPUT, NOT ONLY SOURCE**: a Quinoa-shaped product with the office's card placed LAST renders spec → description → ingredients → allergens → how-to-use, head = name only. `scripts/test_shop_menu_render.js`'s order expectation is now `spec, hero, why, stat, ingredients, allergens, how, …`, **edited by reading, not by running** (slow shard). **QR MENU ONLY** — on the web shop and the mini app the card already follows the office's order, which on Quinoa Salad is under the ingredients. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-23 · v4.388 — **§245 · ON THE QR MENU THE SPEC STRIP SITS ABOVE THE ALLERGEN CARD — ASKED FOR BY ASH, AS A TRIAL.** From a phone screenshot of the live Quinoa Salad sheet, the net weight / type / origin row arrowed up above the card: *"i want his 2 blocks to switch right now only in the menu qr code. if its ok we will change everythnig"*. **THE SPEC STRIP IS HOISTED THE WAY §233 HOISTS THE CARD** — the first one, by index, rendered by the same `one()`, so it moves and is never drawn twice — and the head now reads name, spec strip, allergen card. Nothing else moves; a product with no spec strip is unchanged. **THE QR MENU ONLY**: the web shop and the mini app keep the office's order until Ash has seen this and decided. `scripts/test_shop_menu_render.js`'s order expectation moves from `allergens, spec, …` to `spec, allergens, …`, **edited by reading, not by running** — it is in the slow shard, which is not run. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20258,4 +20260,11 @@ longer selected, using the list's `is_food`.
 **Decided 2026-09-23 by Ash, as a trial on the QR menu only.** The first spec
 strip is hoisted into the sheet's head between the name and the allergen
 card. The other surfaces follow only if Ash approves it.
+
+## §246 — ON THE QR MENU THE ALLERGEN CARD SITS UNDER THE INGREDIENTS
+
+**Decided 2026-09-23 by Ash, replacing §245 and §233's hoist.** The sheet
+head is the name alone. The first allergen card is placed straight after the
+first ingredients block; with none, it keeps the office's position, or goes
+last when it was built from nothing. QR menu only.
 

@@ -3440,17 +3440,27 @@ function detailBody(it, code, listed, sig, qrShown) {
      rule and 26u of air around it -- the blank section a customer reads as
      something missing. band() did this already; doing it before the map is
      what lets .first land on the first band that actually exists. */
-  /* §245 — THE SPEC STRIP RIDES UP TOO, ABOVE THE CARD. Ash, against the
-     live Quinoa Salad sheet: the net weight / type / origin row should come
-     before the allergens, "right now only in the menu qr code. if its ok we
-     will change everything". Hoisted the way the card is -- the first one, by
-     index, rendered by the same one() -- so it moves and is not copied. */
-  const specAt = blocks.findIndex(b => b.type === 'spec_strip');
-  const specHtml = specAt === -1 ? '' : one(blocks[specAt]);
-  const bodyBands = blocks
-    .filter((b, i) => i !== algAt && i !== specAt)
-    .map(b => one(b))
-    .filter(Boolean);
+  /* §246 — THE CARD GOES BACK INTO THE BODY, UNDER THE INGREDIENTS. Ash,
+     after seeing §245's trial (spec strip over the card in the head): "i
+     change my mind, alergin block should go under ingridents". §245 is
+     undone -- the spec strip is back in the office's order -- and §233's
+     hoist with it: the head is the name alone. The card is placed straight
+     after the first ingredients block, whatever order the office wrote;
+     with no ingredients block it keeps the office's own position, and a card
+     built from nothing (§243) with nowhere to follow goes last. Flagged to
+     Ash before building: on a long product this puts the one fact an allergic
+     customer is looking for several screens down, which is what §233 moved it
+     up to avoid. */
+  const kept = blocks.map((b, i) => ({ b, i })).filter(x => x.i !== algAt);
+  const ingAt = kept.findIndex(x =>
+    x.b.type === 'ingredients_chips' || x.b.type === 'ingredients_line');
+  const cardAt = !algHtml ? -1
+    : ingAt !== -1 ? ingAt + 1
+    : algAt !== -1 ? kept.filter(x => x.i < algAt).length
+    : kept.length;
+  const bodyBands = kept.map(x => one(x.b));
+  if (cardAt !== -1) bodyBands.splice(cardAt, 0, algHtml);
+  const bands = bodyBands.filter(Boolean);
 
   return `<div class="dt-top">` +
       (it.has_photo
@@ -3460,8 +3470,8 @@ function detailBody(it, code, listed, sig, qrShown) {
           `?v=${encodeURIComponent(it.updated_at || '')}&w=${HERO_W}" alt="" loading="lazy" decoding="async">` +
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
-      `<div class="dt-hd${algHtml ? ' alg' : ''}">` +
-        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div>${specHtml}${algHtml}</div>` +
+      `<div class="dt-hd">` +
+        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
     `</div>` +
     /* EACH BLOCK IN ITS OWN BAND. The wrapper is what .pb spaces and
        rules against its neighbour; see the CSS for why the blocks could not
@@ -3472,8 +3482,7 @@ function detailBody(it, code, listed, sig, qrShown) {
        read as a missing section. */
     /* EACH BLOCK IN ITS OWN BAND, and the first one skips the ink rule its
        heading would draw when the head above it has already drawn one. */
-    bodyBands.map((h, i) =>
-      `<div class="pb${i === 0 && algHtml ? ' first' : ''}">${h}</div>`).join('') +
+    bands.map(h => `<div class="pb">${h}</div>`).join('') +
     /* THE NUTRITION COLUMN COMES LAST, AND ONLY WHEN NO BLOCK ALREADY SAID IT.
        retail_products.nutrition is a separate column from the nutrition_facts
        block and most products use one or the other; a product carrying both
