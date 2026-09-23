@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.391
+# Tacet shared-core consolidation — decisions record, v4.392
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.392 — **§249 · THE ONE-OFF PROD REPAIR WORKFLOW PRUNES ITS OWN BACKUPS AFTER 14 DAYS — DECIDED BY ASH, FOUND WHILE DIAGNOSING A DISK-FULL OUTAGE.** `.github/workflows/oneoff.yml` (§ decision 2026-09-08, no section number recorded at the time) backs up the live database to `/root/backups/oneoff-<timestamp>-<run-id>.db` before every `apply=true` run, and its own comment says the snapshot **"is kept whatever happens."** That was true and unqualified: nothing ever deleted these files. Three `apply` runs on the morning of 2026-09-23 (03:14, 03:32, 03:35) wrote ~2.7GB in twenty minutes on top of what was already there, the box's disk hit 0 bytes free, and production started returning `SQLITE_FULL` on live routes — the fault that opened this investigation. `daily/` and `hourly/` in the same `/root/backups/` tree already retain correctly (14 days, matching `db-backup.sh`'s `RETAIN_DAYS`); this bucket was the one with no retention at all. **ASH'S CALL, ASKED DIRECTLY BEFORE CHANGING BUILD/CI BEHAVIOR**: keep the safety backup, but bound it — 14 days, the same number as everywhere else in this system, so the box has one retention window to remember rather than two. `.github/workflows/oneoff.yml` gains a prune step, run on every invocation of the workflow (not only `apply=true`), that deletes `/root/backups/oneoff-*.db` files whose embedded `YYYYmmdd` is older than the cutoff — parsed from the FILENAME, not filesystem mtime, matching `prune-deploy-backups.sh`'s own convention for the identical reason: a copy or touch must never make an old snapshot look fresh. The most recent repair's backup is always within the window, so a rollback of last week's fix is unaffected. **THIS IS A CI/BUILD-CONFIG CHANGE, CALLED OUT HERE, IN ITS COMMIT MESSAGE, AND IN ITS PULL REQUEST, PER CLAUDE.md.** No Chinese string, no schema change, no application code touched, no change to `.gitignore`. **RENUMBERED FROM A DRAFT §248 TO §249 ON MERGE**: §248 was independently claimed by PR #798 ("mini app follows the QR menu's order"), which reached `main` first; per this file's own numbering rule no section is ever renumbered once it has landed, so the draft took the next free number instead.
 
 2026-09-23 · v4.391 — **§248 · THE MINI APP FOLLOWS THE QR MENU'S ORDER FOR THE ALLERGEN CARD AND THE NUTRITION COLUMN — ASH: *"i want the mini app match the qr"*.** Asked whether the next WeChat release would make the mini app match the counter menu, the answer was "mostly": the card sat where the office put it rather than under the ingredients (§246), and a product with only the nutrition column drew its table in the old panel after the reviews rather than at the end of the blocks. **BOTH NOW FOLLOW THE QR MENU'S RULES**, in `miniapp/pages/product/product.js` only: (1) the first allergen card is placed straight after the first ingredients block — with none, the office's position stands, and a card built from nothing (§243) is already last; (2) the nutrition column, on a product with no nutrition block, joins the blocks as one at the end — on a plain page it joins the card under the description — and `hasNutritionBlock` is now asked of what is DRAWN, so the old panel stays off and the table cannot print twice. **THE QR MENU'S EIGHT-TYPE ALLOW-LIST IS NOT APPLIED** — the mini app is the full product page, and cutting blocks from it was not asked for; said to Ash before building. **TESTED ON THE PAGE'S OWN CODE**: `scripts/test_product_blocks_read.js` slices the block-order code out of the page source and runs it, so a copy cannot pass while the page drifts. **REACHES CUSTOMERS ONLY ON THE NEXT WECHAT RELEASE**, with §241–§244's changes. The web shop keeps the office's order for the card; not asked for. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20284,4 +20286,14 @@ no nutrition block of its own — matching the QR menu and the mini app.
 card sits straight after the ingredients, and the nutrition column (on a
 product with no nutrition block) joins the blocks at the end instead of the
 old panel after the reviews. The eight-type allow-list is not applied.
+
+## §249 — THE ONE-OFF PROD REPAIR WORKFLOW'S BACKUPS ARE KEPT 14 DAYS, NOT FOREVER
+
+**Decided by Ash, 2026-09-23, after a disk-full production outage.**
+`.github/workflows/oneoff.yml` still takes a verified backup to
+`/root/backups/oneoff-*.db` before every `apply=true` run. It no longer keeps
+every one forever: a prune step, run on every invocation, deletes those files
+once their embedded date is more than 14 days old — the same window
+`db-backup.sh` and `prune-deploy-backups.sh` already use elsewhere in
+`/root/backups/`. See the 2026-09-23 changelog entry for the full account.
 
