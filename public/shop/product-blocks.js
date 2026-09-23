@@ -661,6 +661,22 @@
       arr = arr.filter(function (b) { return !(b && b.type === 'allergen_card'); })
         .concat([{ type: 'allergen_card', _facility: true }]);
     }
+    // §247 — THE NUTRITION COLUMN, WHEN THERE IS NO NUTRITION BLOCK. The
+    // editor saves the table as a block AND mirrors it to the product's
+    // nutrition column; older products carry only the column. The QR menu
+    // appends the column at the end of the sheet and the mini app draws it in
+    // its own panel, but this sheet read blocks alone, so those products had
+    // no nutrition on the web shop at all. The column has the block's own
+    // shape (basis_en/cn, rows of label_en/cn + value), so it is drawn as one,
+    // last. A product with a block never reaches here: the block wins, and
+    // the table cannot print twice.
+    var nut = opts && opts.nutrition;
+    if (nut && typeof nut === 'object' &&
+        (nut.basis_en || nut.basis_cn || (Array.isArray(nut.rows) && nut.rows.length)) &&
+        !arr.some(function (b) { return b && b.type === 'nutrition_facts'; })) {
+      arr = arr.concat([{ type: 'nutrition_facts', basis_en: nut.basis_en || '',
+        basis_cn: nut.basis_cn || '', rows: Array.isArray(nut.rows) ? nut.rows : [] }]);
+    }
     var html = arr.map(function (b) { return renderOne(b, L, freeOf); }).filter(Boolean).join('');
     if (!html) return '';
     return '<div class="shop-product-blocks">' + html + '</div>';

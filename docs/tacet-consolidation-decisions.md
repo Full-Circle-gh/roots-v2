@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.389
+# Tacet shared-core consolidation — decisions record, v4.390
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.390 — **§247 · THE WEB SHOP DRAWS THE NUTRITION COLUMN WHEN A PRODUCT HAS NO NUTRITION BLOCK — ASH: *"for webshop, fix it"*.** Asked whether nutrition facts are now a block like any other: they are — the editor saves the table INTO `description_blocks` in the office's position and mirrors it to the product's `nutrition` column for mini app builds that predate the block, and every surface prefers the block. **THE GAP WAS THE WEB SHOP**: for a product carrying only the column, the QR menu appends it at the end of the sheet and the mini app draws its fixed panel (after the reviews), but `public/shop/product-blocks.js` read blocks alone, so those products showed no nutrition on the web. **NOW `render()` TAKES `opts.nutrition`** (the API's hydrated column) and, when the blocks carry no `nutrition_facts`, draws the column as one — last, through the existing renderer, because the column has the block's own shape. A product with a block is untouched, so the table cannot print twice. `shop.html` passes the column on block pages and on plain pages alike. **ALSO ANSWERED, NO CODE**: the mini app's nutrition panel AFTER THE REVIEWS is that same column fallback, and it is suppressed whenever the product carries a nutrition block (since #740, 2026-09-21); Quinoa Salad carries one, so a phone showing its table after the reviews is on a build older than #740 — the same stale build that still showed the GLUTEN FREE badge. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-23 · v4.389 — **§246 · ON THE QR MENU THE ALLERGEN CARD SITS UNDER THE INGREDIENTS, AND THE HEAD IS THE NAME ALONE — DECIDED BY ASH, REPLACING §245 AND §233's HOIST.** After seeing §245's trial live (spec strip above the card, both in the head): *"i change my mind, alergin block should go under ingridents"*. **FLAGGED TO ASH BEFORE BUILDING, AND RECORDED**: §233 hoisted the card under the name because a customer with an allergy is looking for one fact, not reading a page; under the ingredients, on a long product, that fact is several screens down. Ash's call; it is built. **THE RULE**: nothing is hoisted — the sheet head is the photo and the name; the office's block order stands, except that the first allergen card is placed **straight after the first ingredients block** (`ingredients_chips` or `ingredients_line`), whatever position the office gave it. With no ingredients block the card keeps the office's own position; a card built from nothing for a food product (§243) with no ingredients block to follow goes last. **§245 IS UNDONE** — the spec strip is back in the body, first where the office put it first. `.pb.first` is no longer applied, because no head rule sits above the first band any more. **CHECKED ON RENDERED OUTPUT, NOT ONLY SOURCE**: a Quinoa-shaped product with the office's card placed LAST renders spec → description → ingredients → allergens → how-to-use, head = name only. `scripts/test_shop_menu_render.js`'s order expectation is now `spec, hero, why, stat, ingredients, allergens, how, …`, **edited by reading, not by running** (slow shard). **QR MENU ONLY** — on the web shop and the mini app the card already follows the office's order, which on Quinoa Salad is under the ingredients. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20267,4 +20269,10 @@ card. The other surfaces follow only if Ash approves it.
 head is the name alone. The first allergen card is placed straight after the
 first ingredients block; with none, it keeps the office's position, or goes
 last when it was built from nothing. QR menu only.
+
+## §247 — THE WEB SHOP DRAWS THE NUTRITION COLUMN WHEN A PRODUCT HAS NO NUTRITION BLOCK
+
+**Asked for by Ash, 2026-09-23.** The web shop's block renderer draws the
+product's `nutrition` column as a nutrition block, last, when the product has
+no nutrition block of its own — matching the QR menu and the mini app.
 

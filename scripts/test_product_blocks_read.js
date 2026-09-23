@@ -935,5 +935,25 @@ check('the card follows the first ingredients block, and nothing is hoisted into
   assert.ok(/bodyBands\.splice\(cardAt, 0, algHtml\)/.test(MENU), 'the card is not placed into the body');
 });
 
+/* ── §247: THE WEB SHOP DRAWS THE NUTRITION COLUMN WHEN THERE IS NO BLOCK ──
+   The QR menu and the mini app both fall back to the product's nutrition
+   column; the web shop read blocks only, so a column-only product showed no
+   nutrition there. Ash: "for webshop, fix it". */
+section('Web shop — nutrition from the column');
+check('the column is drawn as a nutrition block, once, and only when no block exists', () => {
+  const sandbox = {};
+  new Function('window', SHOP_JS + '\n;')(sandbox);
+  const SPB = sandbox.ShopProductBlocks;
+  const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const nut = { basis_en: 'Per 100g', rows: [{ label_en: 'Energy', value: '520 kJ' }] };
+  assert.ok(text(SPB.render([], { lang: 'en', nutrition: nut })).includes('520 kJ'),
+    'a column-only product still has no nutrition on the web shop');
+  const both = SPB.render([{ type: 'nutrition_facts', basis_en: 'Per serving',
+    rows: [{ label_en: 'Energy', value: '1 kJ' }] }], { lang: 'en', nutrition: nut });
+  assert.ok(both.includes('1 kJ') && !both.includes('520 kJ'), 'the table printed twice, or the column beat the block');
+  assert.strictEqual(SPB.render([], { lang: 'en', nutrition: null }), '', 'something was drawn from nothing');
+  assert.ok(/nutrition:p\.nutrition\|\|null/.test(SHOP_HTML), 'shop.html does not hand the sheet the column');
+});
+
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
 process.exit(fail ? 1 : 0);
