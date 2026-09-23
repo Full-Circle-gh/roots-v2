@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.390
+# Tacet shared-core consolidation — decisions record, v4.391
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.391 — **§248 · THE MINI APP FOLLOWS THE QR MENU'S ORDER FOR THE ALLERGEN CARD AND THE NUTRITION COLUMN — ASH: *"i want the mini app match the qr"*.** Asked whether the next WeChat release would make the mini app match the counter menu, the answer was "mostly": the card sat where the office put it rather than under the ingredients (§246), and a product with only the nutrition column drew its table in the old panel after the reviews rather than at the end of the blocks. **BOTH NOW FOLLOW THE QR MENU'S RULES**, in `miniapp/pages/product/product.js` only: (1) the first allergen card is placed straight after the first ingredients block — with none, the office's position stands, and a card built from nothing (§243) is already last; (2) the nutrition column, on a product with no nutrition block, joins the blocks as one at the end — on a plain page it joins the card under the description — and `hasNutritionBlock` is now asked of what is DRAWN, so the old panel stays off and the table cannot print twice. **THE QR MENU'S EIGHT-TYPE ALLOW-LIST IS NOT APPLIED** — the mini app is the full product page, and cutting blocks from it was not asked for; said to Ash before building. **TESTED ON THE PAGE'S OWN CODE**: `scripts/test_product_blocks_read.js` slices the block-order code out of the page source and runs it, so a copy cannot pass while the page drifts. **REACHES CUSTOMERS ONLY ON THE NEXT WECHAT RELEASE**, with §241–§244's changes. The web shop keeps the office's order for the card; not asked for. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-23 · v4.390 — **§247 · THE WEB SHOP DRAWS THE NUTRITION COLUMN WHEN A PRODUCT HAS NO NUTRITION BLOCK — ASH: *"for webshop, fix it"*.** Asked whether nutrition facts are now a block like any other: they are — the editor saves the table INTO `description_blocks` in the office's position and mirrors it to the product's `nutrition` column for mini app builds that predate the block, and every surface prefers the block. **THE GAP WAS THE WEB SHOP**: for a product carrying only the column, the QR menu appends it at the end of the sheet and the mini app draws its fixed panel (after the reviews), but `public/shop/product-blocks.js` read blocks alone, so those products showed no nutrition on the web. **NOW `render()` TAKES `opts.nutrition`** (the API's hydrated column) and, when the blocks carry no `nutrition_facts`, draws the column as one — last, through the existing renderer, because the column has the block's own shape. A product with a block is untouched, so the table cannot print twice. `shop.html` passes the column on block pages and on plain pages alike. **ALSO ANSWERED, NO CODE**: the mini app's nutrition panel AFTER THE REVIEWS is that same column fallback, and it is suppressed whenever the product carries a nutrition block (since #740, 2026-09-21); Quinoa Salad carries one, so a phone showing its table after the reviews is on a build older than #740 — the same stale build that still showed the GLUTEN FREE badge. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20275,4 +20277,11 @@ last when it was built from nothing. QR menu only.
 **Asked for by Ash, 2026-09-23.** The web shop's block renderer draws the
 product's `nutrition` column as a nutrition block, last, when the product has
 no nutrition block of its own — matching the QR menu and the mini app.
+
+## §248 — THE MINI APP FOLLOWS THE QR MENU'S ORDER
+
+**Asked for by Ash, 2026-09-23.** On the mini app product page the allergen
+card sits straight after the ingredients, and the nutrition column (on a
+product with no nutrition block) joins the blocks at the end instead of the
+old panel after the reviews. The eight-type allow-list is not applied.
 
