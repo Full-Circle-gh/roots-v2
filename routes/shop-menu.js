@@ -3440,8 +3440,15 @@ function detailBody(it, code, listed, sig, qrShown) {
      rule and 26u of air around it -- the blank section a customer reads as
      something missing. band() did this already; doing it before the map is
      what lets .first land on the first band that actually exists. */
+  /* §245 — THE SPEC STRIP RIDES UP TOO, ABOVE THE CARD. Ash, against the
+     live Quinoa Salad sheet: the net weight / type / origin row should come
+     before the allergens, "right now only in the menu qr code. if its ok we
+     will change everything". Hoisted the way the card is -- the first one, by
+     index, rendered by the same one() -- so it moves and is not copied. */
+  const specAt = blocks.findIndex(b => b.type === 'spec_strip');
+  const specHtml = specAt === -1 ? '' : one(blocks[specAt]);
   const bodyBands = blocks
-    .filter((b, i) => i !== algAt)
+    .filter((b, i) => i !== algAt && i !== specAt)
     .map(b => one(b))
     .filter(Boolean);
 
@@ -3454,7 +3461,7 @@ function detailBody(it, code, listed, sig, qrShown) {
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd${algHtml ? ' alg' : ''}">` +
-        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div>${algHtml}</div>` +
+        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div>${specHtml}${algHtml}</div>` +
     `</div>` +
     /* EACH BLOCK IN ITS OWN BAND. The wrapper is what .pb spaces and
        rules against its neighbour; see the CSS for why the blocks could not

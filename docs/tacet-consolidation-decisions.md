@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.387
+# Tacet shared-core consolidation — decisions record, v4.388
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.388 — **§245 · ON THE QR MENU THE SPEC STRIP SITS ABOVE THE ALLERGEN CARD — ASKED FOR BY ASH, AS A TRIAL.** From a phone screenshot of the live Quinoa Salad sheet, the net weight / type / origin row arrowed up above the card: *"i want his 2 blocks to switch right now only in the menu qr code. if its ok we will change everythnig"*. **THE SPEC STRIP IS HOISTED THE WAY §233 HOISTS THE CARD** — the first one, by index, rendered by the same `one()`, so it moves and is never drawn twice — and the head now reads name, spec strip, allergen card. Nothing else moves; a product with no spec strip is unchanged. **THE QR MENU ONLY**: the web shop and the mini app keep the office's order until Ash has seen this and decided. `scripts/test_shop_menu_render.js`'s order expectation moves from `allergens, spec, …` to `spec, allergens, …`, **edited by reading, not by running** — it is in the slow shard, which is not run. No Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-23 · v4.387 — **§244 · THE LISTING FILTER CHIPS SAY MADE WITHOUT, FIND 5-SPICE, AND SELECT ONLY FOOD — ASH: *"ok do it"*.** §241 took "Free of" off the allergen card because every product may carry traces from the shared facility; the storefront's four filter chips (`GLUTEN FREE · NUT FREE · SOY FREE · 5-SPICE FREE`, `无麸质 · 无坚果 · 无大豆 · 无五香`) still made the zero-trace promise. **THE CHIPS NOW READ AS THE CARD READS**: one `MADE WITHOUT · 配方不含` label, then `NUTS · SOY · GLUTEN · 5-SPICE` / `坚果 · 大豆 · 麸质 · 五香`, in the card's order. `NO NUTS`-style chips were put to Ash and not recommended — "no nuts" is still a promise of zero. **TWO BUGS FOUND IN THE SURVEY AND FIXED WITH IT**: (1) **THE 5-SPICE CHIP NEVER MATCHED ANYTHING** — its key is `5spice` and every product stores `5 spice`, and both surfaces compared the two raw, so the chip always returned an empty list; the chips now select on the stored token, case- and spacing-folded; (2) **THE CHIPS LISTED CLEANING PRODUCTS AND COSMETICS**, which carry bulk-set flags — `GET /api/retail/products` now ships `is_food` per row (§243's `isFoodCategory`, one answer), and a chip selects food only. **THE KEYS ARE UNCHANGED** (`nuts`, `soy`, `gluten`, `5spice`) so nothing that stores or passes a key breaks. **BOTH SURFACES IN ONE CHANGE**: `public/shop.html` and `miniapp/pages/shop/`. **NO CHINESE COMPOSED** — `配方不含` is §241's, the four names are the card's. The back office details panel keeps its own `Nuts · 无坚果` labels: it is the office's tagging control, not a customer claim. **THE MINI APP HALF REACHES CUSTOMERS ONLY ON THE NEXT WECHAT RELEASE.** No schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20250,4 +20252,10 @@ restock rows.
 WITHOUT · 配方不含` then the four bare names, matching the allergen card. The
 5-spice chip, which matched no stored value, now works. Non-food rows are no
 longer selected, using the list's `is_food`.
+
+## §245 — ON THE QR MENU THE SPEC STRIP SITS ABOVE THE ALLERGEN CARD
+
+**Decided 2026-09-23 by Ash, as a trial on the QR menu only.** The first spec
+strip is hoisted into the sheet's head between the name and the allergen
+card. The other surfaces follow only if Ash approves it.
 

@@ -1178,9 +1178,15 @@ function boxOf(text) {
          of the flow into the head, which is the ONE exception to §132's rule
          that block order is the office's, and it is the point of §232: a
          customer with an allergy is looking for one fact, not reading a page.
-         Everything after it is still in the order the office laid out. */
+         Everything after it is still in the order the office laid out.
+
+         §245 PUT `spec` BACK IN FRONT OF IT. Ash asked for the net weight /
+         type / origin row above the allergen card on the counter menu, so the
+         first spec strip is hoisted into the head too, between the name and
+         the card. Edited by reading, not by running: this suite is in the
+         slow shard, which is not run (CLAUDE.md, Tests). */
       assert.deepStrictEqual(order,
-        ['allergens', 'spec', 'hero', 'why', 'stat', 'ingredients', 'how',
+        ['spec', 'allergens', 'hero', 'why', 'stat', 'ingredients', 'how',
          'storage', 'quote', 'recipe', 'pairings', 'faq', 'notes'],
         `the page re-ordered the office's blocks: ${JSON.stringify(order)}`);
     });
