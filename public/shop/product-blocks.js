@@ -226,19 +226,20 @@
       '</div>';
   }
 
-  // ── FREE OF ───────────────────────────────────────────────────────────────
+  // ── MADE WITHOUT (the free_of column) ─────────────────────────────────────
   // free_of is the filter tag set behind the shop's GLUTEN FREE chips — four
   // flags, assigned in bulk from a label sheet. It is never allowed to ADD an
   // allergen; showing a flag that IS set is the other direction, and is what
   // §232 allows.
   //
-  // A FLAG THE CARD ALREADY NAMES IS DROPPED — either row, either language.
-  // Measured live on 2026-09-22: of 45 products carrying both, 34 had a flag
-  // the card also listed under "may contain traces of" and 4 had one the card
-  // listed under "contains". The match leans towards dropping on purpose
-  // ("coconut" costs a product its nut flag): a flag wrongly hidden costs one
-  // line of reassurance, a flag wrongly shown tells someone with an allergy
-  // that a food is safe.
+  // §241 — IT IS A RECIPE CLAIM, SO THE ROW READS "MADE WITHOUT", and only the
+  // card's CONTAINS row cancels a flag. Every product now carries the shared-
+  // facility trace line (nuts, soy, gluten), and a trace warning does not
+  // contradict "made without"; "contains soy" does (Seitan), and still never
+  // prints. The match leans towards dropping on purpose ("coconut" costs a
+  // product its nut flag): a flag wrongly hidden costs one line of
+  // reassurance, a flag wrongly shown tells someone with an allergy that a
+  // food is safe.
   //
   // Same rule as freeOfChips() in lib/product-blocks-read.js, which this file
   // cannot require. Change both, plus the mini app's component.
@@ -270,6 +271,35 @@
     return FREE_OF_FLAGS.filter(function (f) {
       return tokens[f.id] && !f.words.some(function (w) { return hay.indexOf(w) !== -1; });
     }).map(function (f) { return L === 'cn' ? f.cn : f.en; });
+  }
+
+  // ── MAY CONTAIN TRACES OF: ONE LINE FOR THE WHOLE SHOP (§241) ─────────────
+  // Every product is made in one shared facility, so the row reads nuts, soy,
+  // gluten (shared facility) everywhere — the card's own field no longer
+  // writes it. Peanuts, sesame and seeds are added where the card names them;
+  // anything else in that field is ignored. Same lists as FACILITY_TRACES,
+  // TRACE_EXTRAS and FACILITY_NOTE in lib/product-blocks-read.js.
+  var FACILITY_TRACES = [
+    { en: 'Nuts',   cn: '坚果' },
+    { en: 'Soy',    cn: '大豆' },
+    { en: 'Gluten', cn: '麸质' },
+  ];
+  var TRACE_EXTRAS = [
+    { en: 'Peanuts', cn: '花生',   words: ['peanut', '花生'] },
+    { en: 'Sesame',  cn: '芝麻',   words: ['sesame', '芝麻'] },
+    { en: 'Seeds',   cn: '种子类', words: ['seed', '籽', '种子'] },
+  ];
+  var FACILITY_NOTE = { en: '(shared facility)', cn: '（共用生产环境）' };
+
+  function traceLine(said, L) {
+    var hay = String(said || '').toLowerCase();
+    var list = FACILITY_TRACES.concat(TRACE_EXTRAS.filter(function (x) {
+      return x.words.some(function (w) { return hay.indexOf(w) !== -1; });
+    }));
+    var names = list.map(function (x) { return L === 'cn' ? x.cn : x.en; });
+    return L === 'cn'
+      ? names.join('、') + FACILITY_NOTE.cn
+      : names.join(', ') + ' ' + FACILITY_NOTE.en;
   }
 
   // Matched whole, never by prefix: a phrase this misses is merely loud, and
@@ -309,21 +339,23 @@
     // §236 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
     // for a token; this field holds a 90-character facility warning on some
     // products, and a box around that is a box with a paragraph in it.
-    var mayRow = mayContain.length
-      ? '<div class="spb-allergen-row">' +
-          '<span class="spb-allergen-lbl">' + escapeHtml(mayContainLabel) + '</span>' +
-          '<div class="spb-allergen-line">' + escapeHtml(mayContain.join(L === 'cn' ? '、' : ', ')) + '</div>' +
-        '</div>'
-      : '';
+    // §241 — the facility's line, not the card's: the extras are read from
+    // the card's may-contain field in BOTH languages.
+    var mayRow =
+      '<div class="spb-allergen-row">' +
+        '<span class="spb-allergen-lbl">' + escapeHtml(mayContainLabel) + '</span>' +
+        '<div class="spb-allergen-line">' +
+          escapeHtml(traceLine([b.may_contain_en, b.may_contain_cn].filter(Boolean).join(' '), L)) +
+        '</div>' +
+      '</div>';
 
     // BOTH LANGUAGES ARE SEARCHED, not only the one on screen: a card that
-    // names an allergen in Chinese only still names it.
-    var said = [b.contains_en, b.contains_cn, b.may_contain_en, b.may_contain_cn]
-      .filter(Boolean).join(' ');
+    // names an allergen in Chinese only still names it. CONTAINS only (§241).
+    var said = [b.contains_en, b.contains_cn].filter(Boolean).join(' ');
     var free = freeOfChips(freeOf, said, L);
     var freeRow = free.length
       ? '<div class="spb-allergen-row">' +
-          '<span class="spb-allergen-lbl">' + escapeHtml(L === 'cn' ? '不含' : 'Free of') + '</span>' +
+          '<span class="spb-allergen-lbl">' + escapeHtml(L === 'cn' ? '配方不含' : 'Made without') + '</span>' +
           '<div class="spb-allergen-chips">' +
             free.map(function (c) {
               return '<span class="spb-al-chip spb-al-chip-free">' + escapeHtml(c) + '</span>';

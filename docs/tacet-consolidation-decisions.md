@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.383
+# Tacet shared-core consolidation — decisions record, v4.385
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-23 · v4.385 — **§242 · THE MINI APP'S BADGE ROW GOES, PLANT-BASED WITH IT — ASKED FOR BY ASH**, from a phone screenshot of the Quinoa Salad page showing `PLANT-BASED` and `GLUTEN FREE` under the usage tiles: *"its not neccesary can drop that from all products"*. **THE PHONE WAS ON AN OLDER RELEASE**: §236 had already removed the free-of badges from the source, and Quinoa Salad is not even flagged gluten free, so `GLUTEN FREE` there is a pre-§236 build. What main still drew was `PLANT-BASED` alone, which §236 kept on purpose as a statement about the whole shop. **ASH'S CALL REVERSES THAT ONE KEEP**: the row, its data field, its WXML and its two style rules are removed from `miniapp/pages/product/`. The web shop never had this row. **THE STOREFRONT'S LISTING FILTER CHIPS ARE A DIFFERENT CONTROL AND ARE UNTOUCHED** — they pick products rather than describe one, and their wording is §241's open item (b). `scripts/test_product_blocks_read.js`'s check that PLANT-BASED stays is inverted to check that no badge row is drawn. **REACHES CUSTOMERS ONLY ON THE NEXT WECHAT RELEASE.** No Chinese string composed or removed from the vocabulary lock (纯植物 is still live in the CMS hero). No schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
+
+2026-09-23 · v4.384 — **§241 · THE ALLERGEN CARD SAYS WHAT IS IN THE RECIPE AND WHAT THE FACILITY HANDLES, AND THEY NO LONGER CONTRADICT EACH OTHER — DECIDED BY ASH.** Reported from the Quinoa Salad: flagged free of nuts, soy and 5 spice, the QR menu showed only 5 spice. **§232 WAS WORKING AS BUILT**: the card's may-contain row named nuts and soy, and §232 dropped any flag the card named in either row. Ash then gave the reason the row says that — *"may contains its because all products are made in the same facility. its something that required by law to write"* — which makes "Free of: Nuts" above "May contain traces of: Nuts" two claims that cannot both be true. **THREE RULINGS, ALL ASH'S**: (1) **the row is "Made without" / `配方不含`**, a recipe claim, built from the product editor's free_of chips; (2) **"may contain traces of" is one line for the whole shop** — *"all products should show the same may contains traces of nuts soy gluten (shared facility)"*; (3) **of the extras the live read found, peanuts, sesame and seeds stay where a card names them, dairy and celery do not** — *"no need dairy and celery. except that fix all"*. **THE READ CAME FIRST** (`scripts/diagnose_may_contain_list.js`, new, read-only, run through ro-query on 2026-09-23): 198 of 372 store products carry a card; every may-contain entry was a spelling of nuts, soy or gluten, office text parked in the wrong field (*"Dairy-free"*, *"Nut-free · Soy-free · Gluten-free"*, a 90-character sentence), or one of five real extras — **peanuts on seven bought-in nut products**, sesame (2), seeds (2), dairy (1, the NOW Foods supplement), celery (1). **FLAGGED TO ASH BEFORE BUILDING AND RECORDED HERE**: the NOW Foods dairy warning is the maker's own label, and dropping it means the page says less than the packet does. Ash's call; it is dropped. **ONLY CONTAINS CAN CANCEL A FLAG NOW.** With the facility line on every product, §232's either-row rule would have emptied the row everywhere; a trace warning does not contradict "made without", and a contains entry still does — Seitan's soy flag still never prints. Quinoa Salad now reads *Made without: Nuts · Soy · 5 Spice* over *May contain traces of: Nuts, Soy, Gluten (shared facility)*. **FOUR RENDERERS, ONE RULE**: `lib/product-blocks-read.js` (read by the QR menu), `public/shop/product-blocks.js`, the mini app's `product-blocks` component, and the product editor's preview, whose may-contain placeholder now suggests the three extras instead of the three the line already prints. The misplaced text is cleared by being ignored — **no product is written**. **TWO CHINESE STRINGS COMPOSED AND DECLARED**, `配方不含` and `（共用生产环境）`, in `docs/tacet-delivery-vocabulary.md` v1.165 with the live candidates rejected. **NOT IN THIS CHANGE, AND EACH IS ITS OWN PR**: (a) the 174 products with no allergen card still show no card, so no trace line — drawing one needs its own survey of the non-block product pages on three surfaces, and must not print "None declared" for a product whose office wrote nothing; (b) the storefront's filter chips still read `GLUTEN FREE / NUT FREE`, the same "free" claim, and are reworded separately. **THE MINI APP HALF REACHES CUSTOMERS ONLY ON THE NEXT WECHAT RELEASE.** No schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **331/331**; `scripts/test_product_blocks_read.js` 78 → **83**.
 
 2026-09-22 · v4.383 — **§240 · THE QR MENU FOLLOWS §239, AND IT HAS NOW DRAWN THE SAME CLUMP TWICE — ASKED BY ASH**: *"it fixed also in the main menu qr code ?"* It was not. **THE QR MENU IS A THIRD RENDERER AND §239 NEVER REACHED IT** — `routes/shop-menu.js` carries its own stylesheet, its own class names (`.ichips`, `.pb-h`, `.pb-why-r`, not `.spb-*`/`.pb-*-row`) and its own unit scale (`--u: 100vw/390` against the component's `100vw/750`, so the conversion is **× .52**), and the two files §239 changed are not among its sources. **THE FOLLOW IS THIS PAGE'S OWN STANDING RULE, NOT A NEW JUDGEMENT.** The chip cloud's note already says *"THE GAP AND THE PADDING ARE THE COMPONENT'S"*; it was written when this page drew *"five rows of chips with six pixels between them"* and read as one solid block — **reported by Ash from a phone against the Quinoa Salad**, the same surface and the same salad as §239. Pinning to the component means moving when the component moves, so §239 leaving this page at the old `16rpx` had re-opened the fault its own comment closed. **THREE VALUES, EACH THE COMPONENT'S NEW ONE AT × .52, ROUNDED TO A WHOLE NUMBER** for the reason `.dt-k` records at length (a fractional box puts every box under it on a fraction of a pixel and its text rasterises half blurred): `.ichips` gap `8 -> 14u` (26 × .52 = 13.5); `.pb-h` margin-bottom `19 -> 25u` (48 × .52 = 24.96); `.pb-why-r` padding `14 -> 18u` (34 × .52 = 17.68). **`.pb + .pb`'s 26u BETWEEN BLOCKS IS UNTOUCHED**, which is §239's whole finding carried across. **TWO NEAR-MISSES ON THE SAME LINES, BOTH AVOIDED BY READING BEFORE EDITING**: `.pb-why-r`'s column `gap` is also `calc(14 * var(--u))` and sits on the line above its padding — it maps to the component's `28rpx` row gap, which §239 did NOT move, so it stands; and `.pb-step` carries an identical `padding:calc(14 * var(--u)) 0` for a different block whose component counterpart §239 also did not touch. Both were edited by line number, not by pattern. **THE RENDER SUITE WAS NOT RUN AND THIS IS STATED RATHER THAN GLOSSED**: `scripts/test_shop_menu_render.js` measures where a chip's INK sits INSIDE its pill, and it is in the SLOW shard, which is not run per the standing instruction. None of the three values moves ink inside a pill — they are a gap between pills and two margins above content — so the measurement is expected to be unmoved, **but that is established by reading the suite, not by running it**. **THE FIRST DRAFT OF THIS CHANGE WAS RED, AND THE FAULT WAS IN THE COMMENTS.** `scripts/test_shop_menu.js` asserts that **no `<` or `>` reaches the inlined stylesheet at all** — the invariant that stops an operator building markup out of a palette or font value — and it does not exempt comments. Both new notes wrote the moves as `8 -> 14u`, so a `>` landed in the sheet and the check went red. **CONFIRMED AS MINE BEFORE FIXING IT**: the suite was run against pristine `main` (green) and against the branch (red), rather than assumed to be a flake. The arrows are now the word `to`, which is why every other comment in that file spells its ranges out. Worth recording because the check reads as an XSS guard and the thing it caught was prose. **NO CHINESE STRING IS COMPOSED**; no schema change, no migration, and no change to `.gitignore`, CI or anything governing how sessions and builds work. `npm run test:fast` **331/331**; `scripts/test_shop_menu.js` **all checks passed** and `scripts/test_product_blocks_read.js` **78/78**; `scripts/check-doc-numbering.js` PASS.
 
@@ -20165,3 +20169,59 @@ raising it here so the next reader knows it was looked at rather than missed.
 Its allergen assertions described markup that no longer exists, and leaving them
 would have made the repair harder for whoever gets to it; the edit is unverified
 by construction.
+
+## §241 — THE ALLERGEN CARD SAYS WHAT IS IN THE RECIPE AND WHAT THE FACILITY HANDLES
+
+**Decided 2026-09-23 by Ash**, from the QR menu's Quinoa Salad sheet.
+
+### THE CONTRADICTION
+
+§232 printed the free_of flags as *Free of* and dropped any flag the card
+named in either row. The card's may-contain row is the shared-facility warning
+the law requires, so on most products it named the very flags the office had
+set, and the row came out nearly empty. Printing them anyway would have read
+*Free of: Nuts* above *May contain traces of: Nuts*.
+
+### THE RULINGS
+
+1. **Made without / 配方不含.** The flags are a recipe claim, and the row says
+   so. Only the card's CONTAINS row cancels one.
+2. **One trace line for every product**: *Nuts, Soy, Gluten (shared
+   facility)*. The card's own may-contain field no longer writes the row.
+3. **Three extras survive** where a card's may-contain field names them, in
+   either language: Peanuts, Sesame, Seeds. Dairy and celery do not.
+
+### WHAT THE LIVE READ FOUND (2026-09-23)
+
+| may-contain entry | entries (a product can list two spellings) |
+|---|---|
+| soy (any spelling) | 137 |
+| gluten, incl. "gluten-containing cereals" | 105 |
+| nuts, tree nuts, other nuts | 153 |
+| peanuts | 7 |
+| sesame | 2 |
+| seeds / other seeds | 2 |
+| dairy | 1 |
+| celery | 1 |
+| office text in the wrong field | 6 |
+
+### WHERE THE RULE LIVES
+
+`FACILITY_TRACES`, `TRACE_EXTRAS`, `FACILITY_NOTE` and `freeOfChips` in
+`lib/product-blocks-read.js`, copied into `public/shop/product-blocks.js`, the
+mini app's `product-blocks` component and `public/product-editor.html`'s
+preview, because none can require the others. `scripts/test_product_blocks_read.js`
+holds the copies equal.
+
+### STILL OPEN
+
+- Products with no allergen card show no trace line.
+- The storefront filter chips still say *free*.
+
+## §242 — THE MINI APP'S BADGE ROW GOES
+
+**Decided 2026-09-23 by Ash**: *"its not neccesary can drop that from all
+products"*, of the PLANT-BASED badge under the product description. §236 had
+kept it as the one badge that was not an allergen; the row is now gone
+entirely. The allergen card carries what the badges used to say.
+

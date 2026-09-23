@@ -146,7 +146,7 @@ function _saysNone(list) {
   return _NONE_PHRASES.indexOf(only.toLowerCase().replace(/[.。]$/, '')) > -1 ? only : '';
 }
 
-// ── FREE OF, AND WHY THE CARD WINS ─────────────────────────────────────────
+// ── MADE WITHOUT (the free_of column) ─────────────────────────────────────
 //
 // free_of is the filter tag set behind the shop's GLUTEN FREE chips — four
 // flags, closed at four by Ash on 2026-09-22, assigned in bulk from a label
@@ -154,17 +154,16 @@ function _saysNone(list) {
 // never allowed to add an allergen. Showing a tag that IS set is a different
 // act and is the one §232 allows.
 //
-// A FLAG THE CARD ALREADY NAMES IS DROPPED, either row, either language.
-// Measured on the live catalogue 2026-09-22: of 45 products carrying both, 34
-// had a flag the card also listed under "may contain traces of" and 4 had one
-// the card listed under "contains" — Seitan is tagged free of soy and its card
-// says it contains soy. Printed raw the row would have contradicted the card
-// on eight products in ten.
+// §241 — IT IS A RECIPE CLAIM, SO THE ROW READS "MADE WITHOUT", and only the
+// card's CONTAINS row cancels a flag. Every product now carries the shared-
+// facility trace line (nuts, soy, gluten), and a trace warning does not
+// contradict "made without". "Contains soy" does — Seitan is tagged free of
+// soy and its card says it contains soy — and that case still never prints.
 //
 // THE MATCH LEANS TOWARDS DROPPING. "Coconut" carries the letters of "nut", so
-// a card saying coconut costs the product its nut flag. That is the safe
-// direction: a flag wrongly hidden costs one line of reassurance, a flag
-// wrongly shown tells someone with an allergy that a food is safe.
+// a card saying it contains coconut costs the product its nut flag. That is
+// the safe direction: a flag wrongly hidden costs one line of reassurance, a
+// flag wrongly shown tells someone with an allergy that a food is safe.
 //
 // Same rule as freeOfChips() in lib/product-blocks-read.js, which a WeChat
 // bundle cannot require — the two are held together by
@@ -198,6 +197,34 @@ function _freeOfChips(raw, said, L) {
     .filter(f => tokens[f.id])
     .filter(f => !f.words.some(w => hay.indexOf(w) !== -1))
     .map(f => (L === 'cn' ? f.cn : f.en));
+}
+
+// ── MAY CONTAIN TRACES OF: ONE LINE FOR THE WHOLE SHOP (§241) ─────────────
+// Every product is made in one shared facility, so the row reads nuts, soy,
+// gluten (shared facility) everywhere — the card's own field no longer writes
+// it. Peanuts, sesame and seeds are added where the card names them; anything
+// else in that field is ignored. Same lists as FACILITY_TRACES, TRACE_EXTRAS
+// and FACILITY_NOTE in lib/product-blocks-read.js.
+const _FACILITY_TRACES = [
+  { en: 'Nuts',   cn: '坚果' },
+  { en: 'Soy',    cn: '大豆' },
+  { en: 'Gluten', cn: '麸质' },
+];
+const _TRACE_EXTRAS = [
+  { en: 'Peanuts', cn: '花生',   words: ['peanut', '花生'] },
+  { en: 'Sesame',  cn: '芝麻',   words: ['sesame', '芝麻'] },
+  { en: 'Seeds',   cn: '种子类', words: ['seed', '籽', '种子'] },
+];
+const _FACILITY_NOTE = { en: '(shared facility)', cn: '（共用生产环境）' };
+
+function _traceLine(said, L) {
+  const hay = String(said || '').toLowerCase();
+  const names = _FACILITY_TRACES
+    .concat(_TRACE_EXTRAS.filter(x => x.words.some(w => hay.indexOf(w) !== -1)))
+    .map(x => (L === 'cn' ? x.cn : x.en));
+  return L === 'cn'
+    ? names.join('、') + _FACILITY_NOTE.cn
+    : names.join(', ') + ' ' + _FACILITY_NOTE.en;
 }
 
 function _resolveBlock(b, L, freeOf) {
@@ -285,23 +312,24 @@ function _resolveBlock(b, L, freeOf) {
     const mayContain  = _splitChips(_pick(b.may_contain_en, b.may_contain_cn, L));
     if (!contains.length && !mayContain.length) return { type: '_skip' };
     // BOTH LANGUAGES ARE SEARCHED, not just the one on screen: a card that
-    // names an allergen in Chinese only still names it.
-    const said = [b.contains_en, b.contains_cn, b.may_contain_en, b.may_contain_cn]
-      .filter(Boolean).join(' ');
+    // names an allergen in Chinese only still names it. CONTAINS only (§241).
+    const said = [b.contains_en, b.contains_cn].filter(Boolean).join(' ');
     return {
       type: t,
       title:           L === 'cn' ? '过敏原' : 'Allergens',
       compliance:      'GB-7718',
       containsLabel:   L === 'cn' ? '含有' : 'Contains',
       mayContainLabel: L === 'cn' ? '可能含有微量' : 'May contain traces of',
-      freeOfLabel:     L === 'cn' ? '不含' : 'Free of',
+      freeOfLabel:     L === 'cn' ? '配方不含' : 'Made without',
       freeOf:          _freeOfChips(freeOf, said, L),
       contains,
       mayContain,
       // §236 — a sentence, not a row of boxes: this field holds a 90-character
       // facility warning on some products and a box around that is a box with
       // a paragraph in it.
-      mayContainLine: mayContain.join(L === 'cn' ? '、' : ', '),
+      // §241 — the facility's line, not the card's: the extras are read from
+      // the card's may-contain field in both languages.
+      mayContainLine: _traceLine([b.may_contain_en, b.may_contain_cn].filter(Boolean).join(' '), L),
       // Empty-contains state per v1 spec, and §236's: a contains field the
       // office wrote as "nothing to declare" is the same state, in their words.
       containsEmpty:   contains.length === 0 || !!_saysNone(contains),

@@ -3155,24 +3155,29 @@ function detailBody(it, code, listed, sig, qrShown) {
      allergens — check latest label" — and a box around that is a box with a
      paragraph in it. Joined with the comma the office would have typed and
      set as text, it reads the same either way. */
-  const algLine = (label, en, cn) => {
+  const algLine = (label, en, cn, note) => {
     if (!en.length && !cn.length) return '';
     // The separator is the one the office typed — splitChips ate it, and an
     // ASCII comma between two Chinese words is the wrong punctuation.
     const run = (list, sep) => esc(list.join(sep));
+    // §241's "(shared facility)". A space before the English bracket, none
+    // before the full-width one, which carries its own.
     return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
-      `<div class="aline"><span class="l-en">${run(en, ', ')}</span>` +
-      `<span class="l-cn">${run(cn.length ? cn : en, '、')}</span></div></div>`;
+      `<div class="aline"><span class="l-en">${run(en, ', ')}${note ? ' ' + esc(note.en) : ''}</span>` +
+      `<span class="l-cn">${run(cn.length ? cn : en, '、')}${note ? esc(note.cn) : ''}</span></div></div>`;
   };
   // THE THIRD ROW IS NOT THE OFFICE'S CARD, it is the product's free_of column
-  // with the card's own words subtracted — see blockRead.freeOfChips. A flag
-  // the card already names, in either row and either language, never reaches
-  // here, so the row can only ever say something the card did not.
+  // with the card's CONTAINS row subtracted — see blockRead.freeOfChips. §241
+  // renamed it "Made without": it is a recipe claim, and it sits beside the
+  // shared-facility trace line without contradicting it.
   const algCard = (a) => {
     const chips = blockRead.freeOfChips(it.free_of, a);
     const freeRow = chips.length
-      ? algRow(L.freeOf, chips.map(c => c.en), chips.map(c => c.cn), 'free')
+      ? algRow(L.madeWithout, chips.map(c => c.en), chips.map(c => c.cn), 'free')
       : '';
+    // §241 — the trace line is the facility's, not the card's: the same three
+    // on every product, plus peanuts, sesame or seeds where the card names them.
+    const traces = blockRead.facilityTraces(a);
     // §236 — "NOTHING HERE" IS NOT AN ALLERGEN. Half the catalogue writes the
     // contains field as "None declared" (or one of four Chinese spellings of
     // it), and a filled box is for what is IN the food — so the office's own
@@ -3191,7 +3196,7 @@ function detailBody(it, code, listed, sig, qrShown) {
         // is a statement rather than a blank: the office looked and found none.
         `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
         `<div class="achips"><span class="anone">${bi(L.none.en, L.none.cn)}</span></div></div>`) +
-      algLine(L.mayContain, a.may_en, a.may_cn) +
+      algLine(L.mayContain, traces.en, traces.cn, blockRead.FACILITY_NOTE) +
       freeRow +
       `</div>`;
   };

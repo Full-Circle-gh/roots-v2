@@ -5294,7 +5294,7 @@ function _paBlockEditorBody(b) {
           </p>
         </div>
         <div data-pickscope style="grid-column:1/-1">
-          ${paPair({ label: paBiTitle('May Contain', '可能含有'), keyEn: 'may_contain_en', keyCn: 'may_contain_cn', valEn: b.may_contain_en, valCn: b.may_contain_cn, phEn: 'Tree nuts, Soy, Gluten', phCn: '坚果、大豆、麸质', span2: true })}
+          ${paPair({ label: paBiTitle('May Contain', '可能含有'), keyEn: 'may_contain_en', keyCn: 'may_contain_cn', valEn: b.may_contain_en, valCn: b.may_contain_cn, phEn: 'Peanuts, Sesame, Seeds', phCn: '花生、芝麻、种子类', span2: true })}
           ${_paAllergenChips('may_contain_en', 'may_contain_cn')}
           <p class="helper pa-allergen-note" data-no-i18n>
             <span data-lang-block="en">A chip adds to both languages. <b>Peanuts and tree nuts are separate allergens</b> — somebody allergic to one is often fine with the other, so “Nuts” on its own is not offered.</span>
@@ -5692,10 +5692,30 @@ function _paPreviewBlockHtml(b) {
       return NONE_PHRASES.indexOf(only.toLowerCase().replace(/[.。]$/, '')) > -1 ? only : '';
     };
     const noneSaid = saysNone(contains);
+    // §241 — the trace line is the facility's, not this field's: nuts, soy,
+    // gluten (shared facility) on every product, plus peanuts, sesame or seeds
+    // where the field names them. Same lists as FACILITY_TRACES, TRACE_EXTRAS
+    // and FACILITY_NOTE in lib/product-blocks-read.js; the preview shows what
+    // the customer will read, not what was typed.
+    const FACILITY_TRACES = [
+      { en: 'Nuts',   cn: '坚果' },
+      { en: 'Soy',    cn: '大豆' },
+      { en: 'Gluten', cn: '麸质' },
+    ];
+    const TRACE_EXTRAS = [
+      { en: 'Peanuts', cn: '花生',   words: ['peanut', '花生'] },
+      { en: 'Sesame',  cn: '芝麻',   words: ['sesame', '芝麻'] },
+      { en: 'Seeds',   cn: '种子类', words: ['seed', '籽', '种子'] },
+    ];
+    const FACILITY_NOTE = { en: '(shared facility)', cn: '（共用生产环境）' };
+    const hay = [b.may_contain_en, b.may_contain_cn].filter(Boolean).join(' ').toLowerCase();
+    const traces = FACILITY_TRACES.concat(TRACE_EXTRAS.filter(x => x.words.some(w => hay.includes(w))));
+    const traceLine = T(traces.map(x => x.en).join(', ') + ' ' + FACILITY_NOTE.en,
+                        traces.map(x => x.cn).join('、') + FACILITY_NOTE.cn);
     return `<div class="pa-prev-block pa-prev-allergen"><div class="pa-prev-allergen-card">
       <div class="pa-prev-allergen-top"><span class="pa-prev-allergen-ttl"><span class="pa-prev-allergen-warn">!</span> ${T('Allergens', '过敏原')}</span><span class="pa-prev-allergen-meta">GB-7718</span></div>
       <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('Contains', '含有')}</span><span class="pa-prev-allergen-chips">${noneSaid ? `<span class="pa-prev-allergen-empty">${esc(noneSaid)}</span>` : contains.length ? chips(contains, 'strong') : `<span class="pa-prev-allergen-empty">${T('None declared', '未声明')}</span>`}</span></div>
-      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('May contain traces of', '可能含有微量')}</span><span class="pa-prev-allergen-line">${esc(mayContain.join(T(', ', '、')))}</span></div>` : ''}
+      <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('May contain traces of', '可能含有微量')}</span><span class="pa-prev-allergen-line">${esc(traceLine)}</span></div>
     </div></div>`;
   }
   if (b.type === 'how_to_use') {

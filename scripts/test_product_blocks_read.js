@@ -217,7 +217,7 @@ check('the LABELS are copied from it, not composed', () => {
                           [R.LABELS.allergens.en, R.LABELS.allergens.cn],
                           [R.LABELS.contains.en, R.LABELS.contains.cn],
                           [R.LABELS.mayContain.en, R.LABELS.mayContain.cn],
-                          [R.LABELS.freeOf.en, R.LABELS.freeOf.cn],
+                          [R.LABELS.madeWithout.en, R.LABELS.madeWithout.cn],
                           [R.LABELS.none.en, R.LABELS.none.cn]]) {
     assert.ok(MINI.includes(`'${en}'`), `"${en}" is not the mini app's wording`);
     assert.ok(MINI.includes(`'${cn}'`), `"${cn}" is not the mini app's wording`);
@@ -528,20 +528,27 @@ check('the tile grows into the last row in every stylesheet', () => {
    card listed under "contains". Seitan is tagged free of soy and its card says
    it contains soy. Printed raw, the row would have contradicted the card on
    eight products in ten — which is why every fixture below is a real product,
-   with the values it carried that day. */
-section('Free of — a flag the card speaks about never prints');
+   with the values it carried that day.
+
+   §241 NARROWED WHICH ROW CANCELS A FLAG. Every product now carries the
+   shared-facility trace line (nuts, soy, gluten), so the row reads "Made
+   without" — a recipe claim — and a TRACE warning no longer contradicts it.
+   Only the CONTAINS row cancels a flag. The fixtures keep their real values;
+   what survives changed where the overlap was only in may-contain. */
+section('Made without — a flag the card says the food CONTAINS never prints');
 
 const FREE_OF_CASES = [
   // [name, free_of, card, what should survive]
   ['Garlic Dill Sour Cream', 'soy, gluten',
-   { contains_en: ['Tree nuts (cashew)'], contains_cn: [], may_en: ['Soy', 'Gluten'], may_cn: [] }, []],
+   { contains_en: ['Tree nuts (cashew)'], contains_cn: [], may_en: ['Soy', 'Gluten'], may_cn: [] }, ['Soy', 'Gluten']],
   ['Mix Color Quinoa', 'nuts, soy, gluten, 5 spice',
-   { contains_en: ['None declared'], contains_cn: [], may_en: ['Tree nuts', 'Soy', 'Gluten'], may_cn: [] }, ['5 Spice']],
+   { contains_en: ['None declared'], contains_cn: [], may_en: ['Tree nuts', 'Soy', 'Gluten'], may_cn: [] },
+   ['Nuts', 'Soy', 'Gluten', '5 Spice']],
   ['Mango Protein Bites', 'soy, gluten, 5 spice',
    { contains_en: ['Cashews', 'Walnuts', 'Coconut'], contains_cn: ['腰果', '核桃', '椰子'], may_en: [], may_cn: [] },
    ['Soy', 'Gluten', '5 Spice']],
   ['Seitan', 'nuts, soy',
-   { contains_en: ['Gluten (wheat)', 'soy'], contains_cn: [], may_en: ['Nuts'], may_cn: [] }, []],
+   { contains_en: ['Gluten (wheat)', 'soy'], contains_cn: [], may_en: ['Nuts'], may_cn: [] }, ['Nuts']],
   ['Minced meat', 'nuts',
    { contains_en: ['Wheat', 'Soy'], contains_cn: ['麸质', '大豆'], may_en: [], may_cn: [] }, ['Nuts']],
 ];
@@ -549,7 +556,7 @@ const FREE_OF_CASES = [
 check('every live case resolves the way the card says', () => {
   for (const [name, raw, card, want] of FREE_OF_CASES) {
     assert.deepStrictEqual(R.freeOfChips(raw, card).map(c => c.en), want,
-      `${name} would print the wrong Free of row`);
+      `${name} would print the wrong Made without row`);
   }
 });
 check('THE ONE THAT MUST NEVER REGRESS — a card saying "contains soy" kills the soy flag', () => {
@@ -559,8 +566,15 @@ check('THE ONE THAT MUST NEVER REGRESS — a card saying "contains soy" kills th
 });
 check('a card written only in Chinese is read too', () => {
   const card = { contains_en: [], contains_cn: ['腰果'], may_en: [], may_cn: ['大豆'] };
-  assert.deepStrictEqual(R.freeOfChips('nuts, soy', card), [],
+  assert.deepStrictEqual(R.freeOfChips('nuts, soy', card).map(c => c.en), ['Soy'],
     'the English half was empty, so the Chinese allergens went unseen');
+});
+check('§241 — a trace warning does not cancel a recipe claim', () => {
+  // Quinoa Salad, the product Ash was looking at: flags nuts, soy, 5 spice and
+  // a card whose may-contain names nuts and soy. §232 showed only 5 Spice.
+  const card = { contains_en: [], contains_cn: [], may_en: ['Nuts', 'Soy'], may_cn: ['坚果', '大豆'] };
+  assert.deepStrictEqual(R.freeOfChips('nuts,soy,5 spice', card).map(c => c.en),
+    ['Nuts', 'Soy', '5 Spice'], 'the may-contain row still cancels the made-without row');
 });
 check('both spellings of the 5-spice token mean the one flag', () => {
   const card = { contains_en: ['Salt'], contains_cn: [], may_en: [], may_cn: [] };
@@ -674,8 +688,64 @@ check('and it is rejoined with the comma the office typed', () => {
   // is the wrong punctuation, so each renderer puts back the right one.
   assert.ok(/'、'/.test(MENU) && /run\(en, ', '\)/.test(MENU),
     'the QR menu rejoins both languages on an ASCII comma');
-  assert.ok(/L === 'cn' \? '、' : ', '/.test(SHOP_JS), 'the shop sheet does not');
-  assert.ok(/L === 'cn' \? '、' : ', '/.test(MINI), 'the mini app does not');
+  assert.ok(/names\.join\('、'\)/.test(SHOP_JS) && /names\.join\(', '\)/.test(SHOP_JS),
+    'the shop sheet does not');
+  assert.ok(/names\.join\('、'\)/.test(MINI) && /names\.join\(', '\)/.test(MINI),
+    'the mini app does not');
+});
+
+/* ── §241: ONE TRACE LINE FOR THE WHOLE SHOP ──────────────────────────────
+   Ash, 2026-09-23: every product is made in one shared facility, the warning
+   is required by law, and "may contain traces of" reads the same on every
+   product — nuts, soy, gluten (shared facility). Of the extras the live read
+   found (scripts/diagnose_may_contain_list.js), peanuts, sesame and seeds are
+   kept where a card names them; dairy and celery are not, on Ash's word. */
+section('May contain traces of — the facility line');
+
+check('every product reads the same three, whatever its card says', () => {
+  for (const card of [null,
+    { may_en: [], may_cn: [] },
+    { may_en: ['Tree nuts', 'Soy', 'Gluten'], may_cn: ['坚果', '大豆', '麸质'] },
+    // Office text parked in the wrong field, as found on the live catalogue.
+    { may_en: ['Nut-free · Soy-free · Gluten-free'], may_cn: [] },
+    { may_en: ['Dairy-free', 'fully plant-based'], may_cn: ['不含乳制品'] },
+    // The two extras Ash dropped.
+    { may_en: ['dairy', 'Celery'], may_cn: ['乳', '芹菜'] }]) {
+    const t = R.facilityTraces(card);
+    assert.deepStrictEqual(t.en, ['Nuts', 'Soy', 'Gluten'], JSON.stringify(card));
+    assert.deepStrictEqual(t.cn, ['坚果', '大豆', '麸质'], JSON.stringify(card));
+  }
+});
+check('peanuts, sesame and seeds are added where the card names them, in either language', () => {
+  assert.deepStrictEqual(R.facilityTraces({ may_en: ['Peanuts'], may_cn: [] }).en,
+    ['Nuts', 'Soy', 'Gluten', 'Peanuts'], 'the walnuts lost their peanut warning');
+  assert.deepStrictEqual(R.facilityTraces({ may_en: [], may_cn: ['芝麻'] }).en,
+    ['Nuts', 'Soy', 'Gluten', 'Sesame'], 'a Chinese-only sesame warning went unseen');
+  assert.deepStrictEqual(R.facilityTraces({ may_en: ['Other seeds'], may_cn: ['其他籽类'] }).cn,
+    ['坚果', '大豆', '麸质', '种子类']);
+});
+check('the note and the lists are the same in every renderer', () => {
+  assert.deepStrictEqual(R.FACILITY_NOTE, { en: '(shared facility)', cn: '（共用生产环境）' });
+  for (const [name, src] of [['the shop sheet', SHOP_JS], ['the mini app', MINI], ['the editor preview', EDITOR]]) {
+    for (const x of R.FACILITY_TRACES.concat(R.TRACE_EXTRAS)) {
+      assert.ok(src.includes(`en: '${x.en}'`) && src.includes(`cn: '${x.cn}'`),
+        `${name} does not carry ${x.en} / ${x.cn}`);
+      for (const w of x.words || []) {
+        assert.ok(src.includes(`'${w}'`), `${name} does not match ${x.en} on "${w}"`);
+      }
+    }
+    assert.ok(src.includes("'(shared facility)'") && src.includes("'（共用生产环境）'"),
+      `${name} does not carry the shared-facility note`);
+  }
+  assert.ok(/blockRead\.facilityTraces\(a\)/.test(MENU) && /blockRead\.FACILITY_NOTE/.test(MENU),
+    'the QR menu does not print the facility line');
+});
+check('the row is "Made without" in every renderer, and "Free of" is gone from the card', () => {
+  for (const [name, src] of [['the shop sheet', SHOP_JS], ['the mini app', MINI]]) {
+    assert.ok(src.includes("'Made without'") && src.includes("'配方不含'"), `${name} lacks the new label`);
+    assert.ok(!src.includes("'Free of'"), `${name} still says Free of`);
+  }
+  assert.ok(/L\.madeWithout/.test(MENU), 'the QR menu does not use the new label');
 });
 check('every row starts at the same left edge', () => {
   for (const [name, src, sel] of [['the shop sheet', SHOP_CSS, '.spb-allergen-row {'],
@@ -697,11 +767,12 @@ check('every row starts at the same left edge', () => {
    checked against the card and these were not. Ash: "drop the three free
    badges". PLANT-BASED stays: it is a statement about the shop rather than an
    allergen, true of every product, with no row on the card to hold it. */
-check('the product page draws PLANT-BASED and no free-of badge', () => {
-  const at = PRODUCT_PAGE_JS.indexOf('const badges =');
-  assert.ok(at > -1, 'the badge row is gone entirely — PLANT-BASED went with it');
-  assert.ok(/const badges = \[lang\.pick\('PLANT-BASED'/.test(PRODUCT_PAGE_JS),
-    'the badge row is no longer just PLANT-BASED');
+/* §242 — and then the row itself. Ash, on the PLANT-BASED badge §236 kept:
+   "its not neccesary can drop that from all products". */
+check('the product page draws no badge row at all', () => {
+  assert.ok(!/const badges =/.test(PRODUCT_PAGE_JS), 'the product page still builds a badge row');
+  assert.ok(!PRODUCT_PAGE_JS.includes("'PLANT-BASED'"), 'the PLANT-BASED badge came back');
+  assert.ok(!/class="badges"/.test(MINI_PAGE), 'the product page still draws a badge row');
   for (const dead of ['NUT FREE', 'SOY FREE', 'GLUTEN FREE', '5-SPICE FREE']) {
     assert.ok(!PRODUCT_PAGE_JS.includes(dead),
       `the product page still badges "${dead}" beside the card that says it`);
