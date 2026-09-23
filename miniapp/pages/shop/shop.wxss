@@ -252,6 +252,17 @@
   margin-right: 8rpx;
 }
 .diet-chip.on { background: var(--lime); color: var(--ink); border-color: var(--ink); }
+/* §244 — the MADE WITHOUT label the chips hang off; quieter than a chip. */
+.diet-lbl {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8rpx;
+  color: var(--olive);
+  opacity: 0.7;
+  font-family: var(--f-toni);
+  font-size: calc(16rpx * var(--font-scale)); font-weight: 700;
+  letter-spacing: 0.08em;
+}
 
 /* ─── Grid 2-col / 3-col ─────────────────────────────────────────── */
 /* Both grids live INSIDE the category pane (.list-main), not across the
