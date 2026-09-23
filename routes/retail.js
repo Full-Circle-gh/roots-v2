@@ -2651,6 +2651,13 @@ router.get('/api/retail/products', (req, res) => {
 
   // Short cache — flash-sale windows mean the response goes stale in
   // minutes, not the prior 30s used for static catalogue data.
+  // §244 — the listing's MADE WITHOUT filter chips select on free_of, and
+  // non-food rows carry bulk-set flags too (a floor cleaner "made without
+  // nuts"). is_food is the same answer the product page ships (§243), so the
+  // chips can keep those rows out without a second copy of the list.
+  const { isFoodCategory } = require('../lib/product-blocks-read');
+  for (const r of rows) r.is_food = isFoodCategory(r.category);
+
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: rows, meta: { total, limit, offset, server_time_ms: now } });
 });

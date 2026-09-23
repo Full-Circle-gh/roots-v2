@@ -917,6 +917,7 @@
     .sl-diet::-webkit-scrollbar{display:none;}
     .sl-diet .c{flex:none;padding:5px 13px;background:rgba(0,0,0,.04);color:var(--olive);border:1.5px solid transparent;border-radius:999px;font-family:var(--bf-toni);font-weight:700;font-size:11px;letter-spacing:.08em;white-space:nowrap;cursor:pointer;}
     .sl-diet .c.on{background:var(--lime);color:var(--ink);border-color:var(--ink);}
+    .sl-diet .lbl{flex:none;align-self:center;padding-right:2px;color:var(--olive);opacity:.7;font-family:var(--bf-toni);font-weight:700;font-size:10px;letter-spacing:.08em;white-space:nowrap;}
     .sl-body{flex:1;display:flex;min-height:0;border-top:1.5px solid rgba(0,0,0,.1);}
     .sl-side{width:92px;flex:none;background:var(--oat);border-right:1.5px solid var(--ink);overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
     .sl-side::-webkit-scrollbar{display:none;}
@@ -5082,12 +5083,25 @@ const SL = {
   drill:'', drillLabel:'', subTabs:[], activeCat:'', activeSub:'',
   suppress:0, offsets:[], vpRep:null, _searchT:null, _scrollT:null,
 };
+/* §244 — the chips read the way the allergen card reads (§241): one MADE
+   WITHOUT label, then bare names. "NUT FREE" promised zero nuts in a shared
+   facility whose every product may carry traces. The keys are unchanged; the
+   flag each one selects is the free_of token it names, "5 spice" with its
+   space — the old '5spice' key matched no stored value, so that chip always
+   came back empty. Only food is selected: non-food rows carry bulk flags. */
+const SL_DIET_LABEL={en:'MADE WITHOUT',cn:'配方不含'};
 const SL_DIET=[
-  {key:'gluten',en:'GLUTEN FREE',cn:'无麸质'},
-  {key:'nuts',  en:'NUT FREE',   cn:'无坚果'},
-  {key:'soy',   en:'SOY FREE',   cn:'无大豆'},
-  {key:'5spice',en:'5-SPICE FREE',cn:'无五香'},
+  {key:'nuts',  flag:'nuts',    en:'NUTS',    cn:'坚果'},
+  {key:'soy',   flag:'soy',     en:'SOY',     cn:'大豆'},
+  {key:'gluten',flag:'gluten',  en:'GLUTEN',  cn:'麸质'},
+  {key:'5spice',flag:'5 spice', en:'5-SPICE', cn:'五香'},
 ];
+function slMadeWithout(p,key){
+  const d=SL_DIET.find(x=>x.key===key);if(!d)return true;
+  if(p.is_food===false)return false;
+  return String(p.free_of||'').split(/[,、，]/).map(s=>s.trim().toLowerCase().replace(/\s+/g,' '))
+    .map(s=>s==='5spice'?'5 spice':s).includes(d.flag);
+}
 const SL_VIEWS=[
   {key:'list',        icon:'☰'},
   {key:'grid-2col',   icon:'⊞'},
@@ -5285,7 +5299,7 @@ async function renderShopList(params){
       <span class="clr" id="slClear" ${SL.q?'':'hidden'}>×</span>
     </div>
     <div class="sl-vs" id="slVs">${SL_VIEWS.map(v=>`<button data-k="${v.key}" class="${SL.layout===v.key?'on':''}">${v.icon}</button>`).join('')}</div>
-    <div class="sl-diet" id="slDiet">${SL_DIET.map(d=>`<span class="c" data-k="${d.key}">${state.lang==='cn'?d.cn:d.en}</span>`).join('')}</div>
+    <div class="sl-diet" id="slDiet"><span class="lbl">${state.lang==='cn'?SL_DIET_LABEL.cn:SL_DIET_LABEL.en}</span>${SL_DIET.map(d=>`<span class="c" data-k="${d.key}">${state.lang==='cn'?d.cn:d.en}</span>`).join('')}</div>
     <div class="sl-body">
       <div class="sl-side" id="slSide"></div>
       <div class="sl-main" id="slMain"><div class="sl-skel"></div><div class="sl-skel"></div><div class="sl-skel"></div></div>
@@ -5334,7 +5348,7 @@ async function slRefresh(){
     const r=await fetch('/api/retail/products?'+qp.toString()).then(x=>x.json());
     let raw=(r&&r.data)||[];
     if(SL.diet){
-      raw=raw.filter(p=>{const tags=(p.free_of||'').split(',').map(s=>s.trim());return tags.includes(SL.diet);});
+      raw=raw.filter(p=>slMadeWithout(p,SL.diet));
     }
     SL.prods=raw;
     const display=slCollapse(raw);

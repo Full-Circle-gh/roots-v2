@@ -87,12 +87,28 @@ function _stockState(p, onLocalRun) {
 // slow payment must not be cut off to make a list feel quick.
 const BROWSE_TIMEOUT_MS = 8000;
 
+// §244 — the chips read the way the allergen card reads (§241): one MADE
+// WITHOUT label, then bare names. "NUT FREE" promised zero nuts in a shared
+// facility whose every product may carry traces. The keys are unchanged; the
+// flag each one selects is the free_of token it names, "5 spice" with its
+// space — the old '5spice' key matched no stored value, so that chip always
+// came back empty. Only food is selected: non-food rows carry bulk flags.
+const DIETARY_LABEL = { en: 'MADE WITHOUT', cn: '配方不含' };
 const DIETARY_FILTERS = [
-  { key: 'gluten', en: 'GLUTEN FREE', cn: '无麸质' },
-  { key: 'nuts',   en: 'NUT FREE',    cn: '无坚果' },
-  { key: 'soy',    en: 'SOY FREE',    cn: '无大豆' },
-  { key: '5spice', en: '5-SPICE FREE', cn: '无五香' },
+  { key: 'nuts',   flag: 'nuts',    en: 'NUTS',    cn: '坚果' },
+  { key: 'soy',    flag: 'soy',     en: 'SOY',     cn: '大豆' },
+  { key: 'gluten', flag: 'gluten',  en: 'GLUTEN',  cn: '麸质' },
+  { key: '5spice', flag: '5 spice', en: '5-SPICE', cn: '五香' },
 ];
+function madeWithout(p, key) {
+  const f = DIETARY_FILTERS.find(x => x.key === key);
+  if (!f) return true;
+  if (p.is_food === false) return false;
+  return String(p.free_of || '').split(/[,、，]/)
+    .map(s => s.trim().toLowerCase().replace(/\s+/g, ' '))
+    .map(s => (s === '5spice' ? '5 spice' : s))
+    .includes(f.flag);
+}
 
 const BADGE_FILTERS = [
   { key: 'NEW',  en: 'NEW',  cn: '新品' },
@@ -221,6 +237,7 @@ Page({
     oosLabel: 'SOLD OUT',
     preLabel: 'PRE-ORDER',
     dietaryFilters: DIETARY_FILTERS.map(f => ({ ...f, label: f.en })),
+    dietaryLabel: DIETARY_LABEL.en,
     badgeFilters:   BADGE_FILTERS.map(b   => ({ ...b, label: b.en })),
 
     flyShow: false,
@@ -319,6 +336,7 @@ Page({
       preLabel:          L === 'cn' ? '可预订' : 'PRE-ORDER',
       ...this._emptyCopy(L, this.data.loadError, this._isNarrowed()),
       dietaryFilters: DIETARY_FILTERS.map(f => ({ ...f, label: L === 'cn' ? f.cn : f.en })),
+      dietaryLabel: L === 'cn' ? DIETARY_LABEL.cn : DIETARY_LABEL.en,
       badgeFilters:   BADGE_FILTERS.map(b   => ({ ...b, label: L === 'cn' ? b.cn : b.en })),
     });
   },
@@ -428,10 +446,7 @@ Page({
 
       // Client-side filters
       if (this.data.activeDietary) {
-        raw = raw.filter(p => {
-          const tags = (p.free_of || '').split(',').map(s => s.trim());
-          return tags.includes(this.data.activeDietary);
-        });
+        raw = raw.filter(p => madeWithout(p, this.data.activeDietary));
       }
       if (this.data.activeBadge) {
         raw = raw.filter(p => pickBadge(p.tags) === this.data.activeBadge);

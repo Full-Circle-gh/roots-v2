@@ -75,6 +75,7 @@
       </view>
 
       <scroll-view wx:if="{{showDietary}}" scroll-x class="diet-chips" enhanced show-scrollbar="{{false}}">
+        <text class="diet-lbl">{{dietaryLabel}}</text>
         <view wx:for="{{dietaryFilters}}" wx:key="key"
               class="diet-chip {{activeDietary === item.key ? 'on' : ''}}"
               data-key="{{item.key}}" bindtap="setDietary">

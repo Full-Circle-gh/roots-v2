@@ -778,15 +778,41 @@ check('the product page draws no badge row at all', () => {
       `the product page still badges "${dead}" beside the card that says it`);
   }
 });
-check('...and the LISTING filters keep every one of them', () => {
+check('...and the LISTING filters keep every one of them, worded as MADE WITHOUT (§244)', () => {
   // The shop's own filter chips are a different control on a different screen:
   // they pick products, they do not describe one. Cutting these would have
-  // been the easy over-reach.
+  // been the easy over-reach. §244 rewords them to agree with the card: one
+  // MADE WITHOUT label and the four bare names, no "FREE" promise.
   for (const [name, src] of [['the web shop', SHOP_HTML], ['the mini app', MINI_SHOP]]) {
-    for (const live of ['NUT FREE', 'SOY FREE', 'GLUTEN FREE', '5-SPICE FREE']) {
-      assert.ok(src.includes(live), `${name} lost the "${live}" listing filter`);
+    for (const key of ['nuts', 'soy', 'gluten', '5spice']) {
+      assert.ok(new RegExp(`key: ?'${key}'`).test(src), `${name} lost the "${key}" listing filter`);
+    }
+    for (const w of ["'MADE WITHOUT'", "'配方不含'", "'NUTS'", "'SOY'", "'GLUTEN'", "'5-SPICE'"]) {
+      assert.ok(src.includes(w), `${name} does not say ${w}`);
+    }
+    for (const dead of ['NUT FREE', 'SOY FREE', 'GLUTEN FREE', '5-SPICE FREE']) {
+      assert.ok(!src.includes(`'${dead}'`), `${name} still promises "${dead}"`);
     }
   }
+});
+check('§244 — the 5-spice chip selects the token that is actually stored, and only food', () => {
+  // Every product stores "5 spice"; the chip's key is "5spice". The old filter
+  // compared the two directly, so the chip always came back empty.
+  const load = (src, fn) => new Function(
+    src.slice(src.indexOf(src.includes('const SL_DIET_LABEL') ? 'const SL_DIET=' : 'const DIETARY_FILTERS'),
+              src.indexOf('\n}\n', src.indexOf(`function ${fn}`)) + 2) + `;return ${fn};`)();
+  for (const [name, f] of [['the web shop', load(SHOP_HTML, 'slMadeWithout')],
+                           ['the mini app', load(MINI_SHOP, 'madeWithout')]]) {
+    assert.strictEqual(f({ free_of: 'nuts, soy, gluten, 5 spice', is_food: true }, '5spice'), true,
+      `${name}: the 5-spice chip still finds nothing`);
+    assert.strictEqual(f({ free_of: 'Nuts,Soy', is_food: true }, 'nuts'), true, `${name}: case or spacing defeats the match`);
+    assert.strictEqual(f({ free_of: 'gluten', is_food: true }, 'soy'), false, `${name}: an unset flag matched`);
+    assert.strictEqual(f({ free_of: 'nuts, soy, gluten, 5 spice', is_food: false }, 'nuts'), false,
+      `${name}: a floor cleaner is listed as made without nuts`);
+  }
+  const RETAIL = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  assert.ok(/for \(const r of rows\) r\.is_food = isFoodCategory\(r\.category\)/.test(RETAIL),
+    'the product list does not say which rows are food');
 });
 check('the back office still offers the four flags to tick', () => {
   for (const id of ['nuts', 'soy', 'gluten', '5 spice']) {
