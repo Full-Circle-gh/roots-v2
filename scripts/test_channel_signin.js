@@ -185,6 +185,13 @@ check('every button is gated on the permission and on a cause signing in clears'
   ok(/can\('integrations:signin'\)/.test(read('public/retail-admin/03-dashboard.js')), 'desktop Home');
 });
 
+check('the Meituan tab no longer offers the relay wizard, which cannot sign anyone in', () => {
+  // §250 PR 4. The wizard fails in production with `no_worker_attached` — no
+  // login-relay driver is registered — so it was a button that could not do
+  // what it said, on the one line an operator reads during an outage.
+  ok(!/igRelayWizard/.test(read('public/retail-admin/11-meituan.js')), 'the Meituan tab still reaches for the wizard');
+});
+
 check('the page draws states only; every check is on the server', () => {
   const page = read('public/channel-signin.html');
   ok(/import\('\/novnc\/core\/rfb\.js'\)/.test(page), 'noVNC is not loaded from the pinned package');
