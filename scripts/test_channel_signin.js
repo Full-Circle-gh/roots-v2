@@ -136,6 +136,21 @@ check('a stopped channel’s headline names the cause a person can act on', () =
   ok(/function csHeadline\(ch\)/.test(read('public/m.html')) && /\$\{csHeadline\(ch\)\}/.test(read('public/m.html')), 'the phone card title');
 });
 
+// §256 — Alibaba's slider rejected every human drag on the Eleme login inside a
+// Playwright-launched window; the login now opens a genuine Chrome and attaches
+// only after the dashboard is reached.
+check('the Eleme login opens a genuine Chrome and attaches only after login', () => {
+  const src = read('scripts/eleme-login.js');
+  ok(/launchGenuineChrome\(/.test(src), 'the login does not use the genuine Chrome');
+  ok(!/new ElemeBrowser|\.init\(\{ headed/.test(src), 'the login still launches a Playwright browser');
+  const watch = src.indexOf('listTabs(port)'), attach = src.indexOf('connectOverCDP(');
+  ok(watch !== -1 && attach > watch, 'the login attaches before it has seen the dashboard');
+  ok(/process\.exit\(ok \? 0 : 1\)/.test(src), 'the trigger reads the exit code to decide success');
+  const lib = read('lib/genuine-chrome.js');
+  ok(!/chromium\.launch\(/.test(lib), 'the genuine Chrome is launched through Playwright');
+  ok(/\/json\/list/.test(lib), 'the tab list is not read from Chrome’s own HTTP listing');
+});
+
 check('the relay refuses a cross-origin upgrade before it looks at anything else', () => {
   const { screenRefusal } = require('../routes/channel-signin');
   eq(screenRefusal({ headers: { host: 'store.example', origin: 'https://evil.example' }, session: {} }), 'cross_origin');
