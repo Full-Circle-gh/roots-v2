@@ -55,7 +55,10 @@ const failCount = {}; // `${channel}:${label}` -> consecutive failed probes
 // decides which exit every Meituan channel uses kept no local record of having
 // decided anything. Every alert is now mirrored to stdout, where pm2 keeps it.
 function say(msg) { console.log(`[proxy-watchdog] ${new Date().toISOString()} ${msg}`); }
-async function announce(text, line) { say(line); await pm.sendProxyAlert(text); }
+async function announce(text, line, quiet = false) {
+  say(quiet ? `${line} (location closed — not paged)` : line);
+  if (!quiet) await pm.sendProxyAlert(text);
+}
 
 // …and a periodic line even when nothing changes, so the log distinguishes "no
 // failovers" from "this loop stopped running hours ago". Bounded: once per
@@ -63,11 +66,39 @@ async function announce(text, line) { say(line); await pm.sendProxyAlert(text); 
 const LOG_EVERY_MS = Number(process.env.PROXY_WATCHDOG_LOG_MS || 1_800_000); // 30 min
 const lastLogged = {}; // channel -> epoch ms
 
+// A closed location pages nobody (§217, and pm.routeTrading for why). 越秀 was
+// closed until further notice and this loop kept paging the group about its
+// broadband: every blink of the shop's own internet was a 🔀 "switched… nothing
+// to do" about a shop that is not selling.
+// The route is still probed and still failed over — only the page is dropped.
+// Stopping the probes instead would pin 闪购's Chrome to whatever route it was on
+// when the shop closed; if that route died, shangou-daemon's own gate would page
+// 代理掉线, and the reopen would start from a dead exit. Every decision still
+// goes to the pm2 log through say().
+// The DB is opened lazily and only for this question; if it cannot be opened,
+// routeTrading answers "trading" and the route pages as before.
+let _db;
+function getDb() {
+  if (_db === undefined) {
+    try { _db = require('../database'); }
+    catch (e) { _db = null; say(`database unavailable (${e.message}) — every route pages`); }
+  }
+  return _db;
+}
+const closedNow = {}; // channel -> true while its location is closed
+
 async function tick() {
   const stateOut = pm.readState();
   for (const channel of pm.CHANNELS) {
     const cands = pm.candidates(channel);
     const cn = pm.CHANNEL_CN[channel] || channel;
+
+    const quiet = !pm.routeTrading(getDb(), channel);
+    if (quiet !== !!closedNow[channel]) {
+      say(quiet ? `${channel}: location closed — route still kept working, nothing paged until it reopens`
+                : `${channel}: location reopened — route changes page the group again`);
+      closedNow[channel] = quiet;
+    }
 
     // Probe every candidate; debounce into a usable/unusable verdict.
     const avail = {};
@@ -105,7 +136,7 @@ async function tick() {
         await announce(now
           ? `🟢 ${cn}：${name} 恢复可用\n${cn}: ${nameEn} can reach Meituan again. Nothing to do.`
           : `🟠 ${cn}：${name} 不可达\n${cn}: ${nameEn} cannot reach Meituan. Another route is being used instead — nothing to do.`,
-          `${channel}: ${c.label} ${now ? 'back UP' : "DOWN (can't reach Meituan)"}`);
+          `${channel}: ${c.label} ${now ? 'back UP' : "DOWN (can't reach Meituan)"}`, quiet);
       }
     }
     lastHealth[channel] = avail;
@@ -129,14 +160,14 @@ async function tick() {
       const rawDescEn = cands.map(c => `${pm.LABEL_EN[c.label] || c.label}${probed[c.label] ? ' ✓' : ' ✗'}`).join(' · ');
       const line = `${channel}: active=${active.label} — ${rawDesc}`;
       if (cands.some(c => !probed[c.label]) || active.label !== cands[0].label) {
-        await announce(`⚠️ ${cn}：启动时已降级，当前走 ${toName}\n${cn} started up on a backup route, not the usual one. It is now using ${toNameEn}. Selling carries on; tell whoever looks after the box.\n${rawDescEn}`, line);
+        await announce(`⚠️ ${cn}：启动时已降级，当前走 ${toName}\n${cn} started up on a backup route, not the usual one. It is now using ${toNameEn}. Selling carries on; tell whoever looks after the box.\n${rawDescEn}`, line, quiet);
       } else {
         say(line);   // all green on boot — the log remembers it, the group does not need to
       }
       lastLogged[channel] = Date.now();
     } else if (prevActive !== undefined && prevActive !== active.url) {
       await announce(`🔀 ${cn}：切换到 ${toName}\n${cn} switched itself to ${toNameEn} because the one before it stopped working. Selling carries on — nothing to do.\n${descEn}`,
-        `${channel}: FAILOVER ${prevActive || 'direct'} → ${active.label} — ${desc}`);
+        `${channel}: FAILOVER ${prevActive || 'direct'} → ${active.label} — ${desc}`, quiet);
       lastLogged[channel] = Date.now();
     } else if (Date.now() - (lastLogged[channel] || 0) >= LOG_EVERY_MS) {
       // Quiet-period heartbeat — no alert, just proof the loop is still deciding.
