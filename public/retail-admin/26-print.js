@@ -165,7 +165,7 @@ window.tdPrintTable = tdPrintTable;
      nameEn/nameCn  the recipe's two names
      sku            its SKU, or ''
      facts          [[label, value]…] — batch, servings, shelf life, storage
-     lines          [{ en, cn, qty }] — cn '' prints the English alone
+     lines          [{ sku, en, cn, qty }] — cn '' prints the English alone
      steps          [{ name, text }]
      notes          the recipe's notes, or '' */
 function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
@@ -176,6 +176,7 @@ function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
   const metaHtml = (facts || []).filter(Boolean)
     .map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join('');
   const lineRows = (lines || []).map((l, i) => `<tr><td class="idx">${i + 1}</td>`
+    + `<td class="sku">${e(l.sku || '')}</td>`
     + `<td>${e(l.en)}${l.cn ? `<span class="zh">${e(l.cn)}</span>` : ''}</td>`
     + `<td class="r">${e(l.qty)}</td></tr>`).join('');
   const stepItems = (steps || []).map((s) => '<li><div>'
@@ -193,6 +194,7 @@ function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
   table { margin-top:8px; }
   tbody td { padding:8px 10px; }
   td .zh { color:var(--grey); margin-left:8px; }
+  td.sku { white-space:nowrap; width:1%; font-variant-numeric:tabular-nums; }
   ol.steps { margin:10px 0 0; padding:0; list-style:none; counter-reset:s; }
   ol.steps li { counter-increment:s; display:grid; grid-template-columns:26px 1fr; gap:0 10px; padding:9px 0;
                 border-bottom:1px solid var(--hair); font-size:12.5px; line-height:1.55; break-inside:avoid; }
@@ -217,8 +219,8 @@ function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
   </div>
   <h2>Ingredients<span>原料</span></h2>
   <table>
-    <thead><tr><th style="width:26px">#</th><th>Ingredient · 原料</th><th class="r">Qty · 数量</th></tr></thead>
-    <tbody>${lineRows || '<tr><td colspan="3" class="empty">Nothing to show · 暂无内容</td></tr>'}</tbody>
+    <thead><tr><th style="width:26px">#</th><th>SKU · 货号</th><th>Ingredient · 原料</th><th class="r">Qty · 数量</th></tr></thead>
+    <tbody>${lineRows || '<tr><td colspan="4" class="empty">Nothing to show · 暂无内容</td></tr>'}</tbody>
   </table>
   ${stepItems ? `<h2>Steps<span>步骤</span></h2><ol class="steps">${stepItems}</ol>` : ''}
   ${notes ? `<h2>Notes<span>备注</span></h2><div class="notes">${e(notes)}</div>` : ''}
