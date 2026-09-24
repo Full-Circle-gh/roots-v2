@@ -569,6 +569,7 @@ function chBlockSentence(channel, by) {
                  '验证中心风控，同步已暂停，需要人工验证。');
     case 'needs_login':
     case 'auth_required':          // Eleme's name for the same thing
+    case 'binding_lost':           // Meituan: signed in, shop forgotten — same re-login fixes it
       return cuT(`The sync service is signed out of ${ch}. Sign in again.`, `同步服务已退出登录${ch}。请重新登录。`);
     case 'proxy_down':
     case 'proxy_stale':

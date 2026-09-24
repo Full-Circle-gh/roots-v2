@@ -455,6 +455,31 @@ function noteBindingResult(storeCode, lost) {
   }
 }
 
+// ── Signed out (§250) ────────────────────────────────────────────────────────
+// Meituan rejecting the saved session used to be a console line only, so the
+// back office learned of it hours later as a stalled queue. Same shape as the
+// binding latch above: logged once after it has persisted past the same
+// threshold (a lone bad page load never reports), latched on disk, and cleared
+// by the next confirmed login. `needs_login` is the event every channel's
+// signed-out state is read by (lib/channel-block.js).
+const loginDown = {}; // storeCode -> { since: epochMs|null }
+
+function noteLoginResult(storeCode, signedOut) {
+  const s = loginDown[storeCode] || (loginDown[storeCode] = { since: null });
+  const latch = 'needs_login:' + storeCode;
+  if (!signedOut) {
+    if (alerts[latch]) logSync(storeCode, 'login_restored', 'ok', null, 'signed in again — sync resumed');
+    s.since = null; alerts[latch] = false;
+    return;
+  }
+  const now = Date.now();
+  if (s.since == null) s.since = now;
+  if (!alerts[latch] && now - s.since >= BINDING_ALERT_AFTER_MS) {
+    alerts[latch] = true;
+    logSync(storeCode, 'needs_login', 'error', null, 'Meituan session signed out — stock push STOPPED, needs re-login');
+  }
+}
+
 // ── Heartbeat canary (Layer 2: generic stall backstop) ──────────────────────
 // The verify / binding / proxy / browser-crash alerts each cover a KNOWN silent
 // mode. This is the catch-all for an unforeseen one: during open hours, if a store
@@ -475,7 +500,8 @@ function heartbeatTick(storeCode) {
   const now = Date.now();
   const bd = browserDown[storeCode];
   const excused = !isStoreOpen(storeCode) || inVerifyCooldown(storeCode)
-                  || bindingSuspected(storeCode) || (bd && bd.since != null);
+                  || bindingSuspected(storeCode) || (bd && bd.since != null)
+                  || (loginDown[storeCode] && loginDown[storeCode].since != null);
   if (excused || lastOrderFetchOk[storeCode] == null) { lastOrderFetchOk[storeCode] = now; return; }
   const stale = now - lastOrderFetchOk[storeCode] >= HEARTBEAT_STALE_MS;
   if (stale && !heartbeatFlagged['heartbeat:' + storeCode]) {
@@ -630,12 +656,14 @@ async function pollOrders(storeConfig) {
     // is the primary detector AND the recovery probe. A clean read (neither verify
     // nor binding) also feeds the heartbeat canary.
     noteBindingResult(storeCode, browser.bindingLost);
-    if (!browser.verificationRequired && !browser.bindingLost) noteOrderFetchOk(storeCode);
+    noteLoginResult(storeCode, browser.signedOut);
+    const clean = !browser.verificationRequired && !browser.bindingLost && !browser.signedOut;
+    if (clean) noteOrderFetchOk(storeCode);
 
     // Keep the on-disk session fresh while we're cleanly logged in, so a crash
     // restores recent cookies instead of the stale login-time snapshot (fewer
     // forced re-logins). Throttled; console-only log (not the admin sync log).
-    if (!browser.verificationRequired && !browser.bindingLost) {
+    if (clean) {
       const now = Date.now();
       if (!lastSessionSave[storeCode] || now - lastSessionSave[storeCode] >= SESSION_SAVE_MS) {
         if (await browser.persistSession()) {

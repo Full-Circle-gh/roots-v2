@@ -14514,6 +14514,7 @@ function csBlockSentence(ch,by){
   switch(by){
     case 'verify_required': return T(nm+' is asking for a captcha — a human has to pass it on the sync machine. Sync is paused.','验证中心风控，同步已暂停，需要人工验证。');
     case 'needs_login':
+    case 'binding_lost':
     case 'auth_required':   return T('The sync service is signed out of '+nm+'. Sign in again.','同步服务已退出登录'+nm+'。请重新登录。');
     case 'proxy_down':
     case 'proxy_stale':     return T('Cannot reach the sync service. Sync is paused.','无法连接同步服务。同步已暂停。');
@@ -15959,7 +15960,7 @@ function opsFires(){
     const down={}; for(const s of stalled) down[s.channel]=s;
     const blk={}; for(const b of blockedChs) blk[b.key]=b.blocked;
     const byCh=cia.by_channel||{};
-    const blockWord=(en,cn,by)=>(by==='needs_login'||by==='auth_required')?T(en+' is signed out',cn+' 已退出登录')
+    const blockWord=(en,cn,by)=>(by==='needs_login'||by==='auth_required'||by==='binding_lost')?T(en+' is signed out',cn+' 已退出登录')
       :by==='verify_required'?T(en+' needs a captcha',cn+' 需要人工验证')
       :T(en+' not syncing',cn+' 未同步');
     /* A channel says ONE thing about itself, worst first: a channel not
