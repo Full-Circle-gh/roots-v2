@@ -167,25 +167,105 @@ check('no screen or endpoint takes a channel password any more', () => {
   ok(/\^\(meituan\|qingyun\)\\\.\[a-z0-9\]/.test(wipe), 'the wipe does not target only the per-store family');
 });
 
-// The 越秀 Meituan store is served by 闪购, whose faults land in the Meituan
-// log; Sign in runs the 外卖 login, which cannot clear them.
-check('a Meituan store served by 闪购 is never offered or granted Sign in', () => {
+// ── §260: a holder browser (闪购) ──────────────────────────────────────────
+// The 越秀 Meituan store's stock goes through the 闪购 holder browser. Sign in
+// for it must reach THAT browser's screen, never run the 外卖 login.
+check('a 闪购 store resolves to the holder job and the holder’s own screen', () => {
   const db = storeDb();
-  eq(signin.resolveStore(db, 'meituan', 'yuexiu'), null, 'the server grants it');
-  const items = require('../lib/channel-sync-items');
-  const sdb = new Database(':memory:');
-  sdb.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, name_cn TEXT, name_en TEXT, is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0);
-    INSERT INTO retail_stores (id, code) VALUES (1, 'tianhe'), (2, 'yuexiu');
-    CREATE TABLE channel_status (channel TEXT, store_code TEXT, is_open INTEGER);
-    CREATE TABLE store_business_status (store_code TEXT PRIMARY KEY, is_open INTEGER, target_open INTEGER, fulfillment_open INTEGER);
-    CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
-    CREATE TABLE meituan_sync_log (id INTEGER PRIMARY KEY AUTOINCREMENT, store_code TEXT, event_type TEXT, status TEXT, detail TEXT, error_msg TEXT, created_at TEXT);
-    INSERT INTO meituan_sync_log (store_code, event_type, status, created_at) VALUES ('yuexiu', 'needs_login', 'error', '2026-09-24 01:00:00');`);
-  const mt = items.channelBlocks(sdb).find((c) => c.key === 'meituan');
-  eq([mt.blocked.store, mt.blocked.signable], ['yuexiu', false], 'the block does not say Sign in cannot clear it');
-  ok(/if \(signable === false\) return '';/.test(read('public/retail-admin/01-core.js')), 'the desktop button ignores it');
-  ok(/blk\.signable===false/.test(read('public/m.html')), 'the phone button ignores it');
-  ok(/b\.blocked\.signable !== false/.test(read('public/retail-admin/03-dashboard.js')), 'the Home button ignores it');
+  const st = signin.resolveStore(db, 'meituan', 'yuexiu');
+  eq(st, { id: 2, code: 'yuexiu', job: 'shangou' }, 'the 闪购 store');
+  eq(signin.jobChannel('meituan', st), 'shangou', 'the trigger is asked for');
+  eq(signin.jobChannel('meituan', signin.resolveStore(db, 'meituan', 'tianhe')), 'meituan', 'a 外卖 store');
+  eq(signin.screenFor('shangou'), { host: '127.0.0.1', port: 5902 }, 'the holder’s screen');
+  eq(signin.screenFor('meituan'), signin.SCREEN, 'a login script’s screen');
+  eq(signin.resolveStore(db, 'shangou', 'yuexiu'), null, 'the job name is not a channel a caller may send');
+});
+
+check('the relay shows the screen of the sign-in its grant is for', () => {
+  const { screenOf } = require('../routes/channel-signin');
+  eq(screenOf(null), signin.SCREEN, 'no grant');
+  // screenOf reads the live Roots database; the store rows it needs are the
+  // real ones, so only the mapping is asserted here, not the port per store.
+  const src = read('routes/channel-signin.js');
+  ok(/const screen = screenOf\(signin\.liveGrant\(\)\);/.test(src), 'the upgrade does not pick the screen from the grant');
+  ok(/const vnc = net\.connect\(screen\);/.test(src), 'the pipe does not connect to that screen');
+});
+
+check('Done is only for a holder, and only for the person watching', () => {
+  const src = read('routes/channel-signin.js');
+  const fin = src.slice(src.indexOf("'/api/retail-admin/channel-signin/finish'"));
+  ok(/const g = gate\(req, res, channel, code\);/.test(fin), 'finish skips the gate');
+  ok(/if \(!g\.store\.job\) return res\.status\(400\)/.test(fin), 'finish accepts a non-holder');
+  ok(/if \(!signin\.mayWatch\(g\.caller\.user\.id\)\) return res\.status\(409\)/.test(fin), 'finish accepts someone not watching');
+});
+
+check('the trigger runs a holder session: Done, the login page left, never a script', async () => {
+  // A stand-in for the holder Chrome's /json/list.
+  let tabs = [{ type: 'page', url: 'https://shangoue.meituan.com/' }];
+  const cdp = http.createServer((q, r) => { r.end(JSON.stringify(tabs)); });
+  await new Promise((res) => cdp.listen(0, '127.0.0.1', res));
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'ops', 'ops-screen', 'login-trigger.js')],
+    { env: { ...process.env, OPS_SCREEN_CTL_PORT: String(port), PM2_BIN: 'true', SHANGOU_CDP_PORT: String(cdp.address().port) },
+      stdio: ['ignore', 'pipe', 'pipe'] });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('trigger did not start')), 5000);
+      child.stdout.on('data', (d) => { if (String(d).includes('ops-screen control')) { clearTimeout(t); resolve(); } });
+    });
+    // Done ends it, and it is a success.
+    eq((await req(port, 'POST', '/api/start', { channel: 'shangou', store: 'yuexiu' })).status, 200, 'start');
+    const st = (await req(port, 'GET', '/api/status')).json;
+    eq([st.running.channel, st.running.store, st.running.holder], ['shangou', 'yuexiu', true], 'the running session');
+    eq((await req(port, 'POST', '/api/finish', { channel: 'shangou', store: 'tianhe' })).status, 409, 'Done for another store');
+    eq((await req(port, 'POST', '/api/finish', { channel: 'shangou', store: 'yuexiu' })).status, 200, 'Done');
+    const after = (await req(port, 'GET', '/api/status')).json;
+    eq([after.running, after.last.ok, after.last.holder], [null, true, true], 'after Done');
+    eq((await req(port, 'POST', '/api/finish', { channel: 'shangou', store: 'yuexiu' })).status, 409, 'Done twice');
+    // Leaving the login page ends it too, without Done.
+    tabs = [{ type: 'page', url: 'https://waimaie.meituan.com/logon/login_gw' }];
+    eq((await req(port, 'POST', '/api/start', { channel: 'shangou', store: 'yuexiu' })).status, 200, 'second start');
+    await sleep(3500);
+    ok((await req(port, 'GET', '/api/status')).json.running, 'ended while still on the login page');
+    tabs = [{ type: 'page', url: 'https://shangoue.meituan.com/#/home' }];
+    await sleep(3500);
+    const auto = (await req(port, 'GET', '/api/status')).json;
+    eq([auto.running, auto.last.ok], [null, true], 'after the login page was left');
+    // A holder job carries no script; a finish for a login script is refused.
+    ok(!/scripts\/shangou-login/.test(read('ops/ops-screen/login-trigger.js')), 'a holder runs a script');
+  } finally { child.kill(); cdp.close(); }
+});
+
+check('a timed-out holder session does not restart the daemon', () => {
+  const src = read('ops/ops-screen/login-trigger.js');
+  ok(/setTimeout\(\(\) => endHolder\(me, false\), LOCK_MS\)/.test(src), 'no lock on a holder session');
+  ok(/if \(ok\) restartScript\(HOLDERS\[session\.channel\]\.daemonScript\)/.test(src), 'the restart is not gated on success');
+});
+
+check('the 闪购 daemon says signed-in on start, only for a sign-in fault', () => {
+  const src = read('scripts/shangou-daemon.js');
+  ok(/const SIGNIN_FAULTS = \['needs_login', 'verify_required'\];/.test(src), 'the faults it re-checks');
+  ok(/if \(!block \|\| !SIGNIN_FAULTS\.includes\(block\.by\)\) return;/.test(src), 'it touches a store with no such fault');
+  ok(/logSync\(storeCode, 'login_restored', 'ok'/.test(src), 'it does not log the recovery');
+  // After the proxy and warm-up gates: never a call into a cold browser.
+  const loop = src.slice(src.indexOf('async function main()'));
+  ok(loop.indexOf('coldMsRemaining') < loop.indexOf('confirmSignedIn('), 'checked before the warm-up gate');
+  // And login_restored is a Meituan clearing event, so the block does clear.
+  ok(require('../lib/channel-block').CHANNELS.meituan.clearing.includes('login_restored'), 'not a clearing event');
+});
+
+check('the 闪购 holder draws on the display .env names, else the one it inherits', () => {
+  const src = read('scripts/shangou-chrome.js');
+  ok(/process\.env\.SHANGOU_DISPLAY\s*\?\s*\{ \.\.\.process\.env, DISPLAY: process\.env\.SHANGOU_DISPLAY \}\s*:\s*process\.env/.test(src), 'the display rule');
+  ok(/spawn\(exe, args, \{ stdio: 'inherit', env: CHROME_ENV \}\)/.test(src), 'Chrome is not launched with it');
+});
+
+check('the page offers Done for a holder and says signed in only when the block clears', () => {
+  const page = read('public/channel-signin.html');
+  ok(/holder = !!r\.json\.holder;/.test(page), 'the page does not learn it is a holder');
+  ok(/\/api\/retail-admin\/channel-signin\/finish/.test(page), 'Done does not call finish');
+  ok(/if \(!s\.blocked\) \{\s*finished = true;\s*end\(S\.done, 'ok', false\);/.test(page), 'success is not the block clearing');
 });
 
 check('the relay refuses a cross-origin upgrade before it looks at anything else', () => {

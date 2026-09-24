@@ -39,21 +39,24 @@ router.post('/api/retail-admin/channel-signin/start', express.json(), async (req
   // told the next person "someone is already signing in" when nobody was.
   const st = await signin.trigger('GET', '/api/status');
   if (st.status !== 200 || !st.json) return res.status(503).json({ success: false, error: 'trigger_unavailable' });
-  const next = signin.startDecision(st.json.running, channel, g.store.code);
+  // Decided on the trigger's own job name: for a 闪购 store that is 'shangou',
+  // not the 'meituan' the button sent (§260).
+  const job = signin.jobChannel(channel, g.store);
+  const next = signin.startDecision(st.json.running, job, g.store.code);
   if (next === 'busy') return res.status(409).json({ success: false, error: 'busy', busy: st.json.running });
   if (next === 'join') {
     // The same channel and store is already at its login window: whoever asks
     // now, with the same permission and scope, takes the screen over and
     // finishes it. The previous viewer's relay closes on its next check.
     signin.grantFor(g.caller.user.id, channel, g.store.code);
-    return res.json({ success: true, resumed: true });
+    return res.json({ success: true, resumed: true, holder: !!g.store.job });
   }
   signin.endGrant();
-  const r = await signin.trigger('POST', '/api/start', { channel, store: g.store.code, shopId: g.store.shopId || null });
+  const r = await signin.trigger('POST', '/api/start', { channel: job, store: g.store.code, shopId: g.store.shopId || null });
   if (r.status === 409) return res.status(409).json({ success: false, error: 'busy', busy: r.json && r.json.running });
   if (r.status !== 200) return res.status(503).json({ success: false, error: 'trigger_unavailable' });
   signin.grantFor(g.caller.user.id, channel, g.store.code);
-  res.json({ success: true });
+  res.json({ success: true, holder: !!g.store.job });
 });
 
 // What the page polls: is the login window still open, did it succeed, and has
@@ -63,18 +66,37 @@ router.get('/api/retail-admin/channel-signin/status', async (req, res) => {
   const g = gate(req, res, channel, code);
   if (!g) return;
   const r = await signin.trigger('GET', '/api/status');
-  const job = r.status === 200 && r.json ? r.json : null;
-  const mine = (j) => j && j.channel === channel && j.store === g.store.code ? j : null;
-  const running = job ? mine(job.running) : null;
-  const last = job ? mine(job.last) : null;
+  const st = r.status === 200 && r.json ? r.json : null;
+  const job = signin.jobChannel(channel, g.store);
+  const mine = (j) => j && j.channel === job && j.store === g.store.code ? j : null;
+  const running = st ? mine(st.running) : null;
+  const last = st ? mine(st.last) : null;
   if (!running && signin.liveGrant() && signin.liveGrant().userId === g.caller.user.id) signin.endGrant();
   res.json({
     success: true,
-    trigger: !!job,
+    trigger: !!st,
+    // §260 — a holder session: the page shows Done, and success is the
+    // daemon's own word (blocked clearing), not the session ending.
+    holder: !!g.store.job,
     running: !!running,
     last: last ? { ok: !!last.ok, endedAt: last.endedAt || null } : null,
     blocked: channelBlock(g.db, channel, g.store.code),
   });
+});
+
+// §260 — the person is done on a holder's screen. Only the person watching it
+// may say so: the same gate, and the grant must be theirs.
+router.post('/api/retail-admin/channel-signin/finish', express.json(), async (req, res) => {
+  const { channel, store: code } = req.body || {};
+  const g = gate(req, res, channel, code);
+  if (!g) return;
+  if (!g.store.job) return res.status(400).json({ success: false, error: 'not_a_holder' });
+  if (!signin.mayWatch(g.caller.user.id)) return res.status(409).json({ success: false, error: 'not_running' });
+  const r = await signin.trigger('POST', '/api/finish', { channel: g.store.job, store: g.store.code });
+  if (r.status === 409) return res.status(409).json({ success: false, error: 'not_running' });
+  if (r.status !== 200) return res.status(503).json({ success: false, error: 'trigger_unavailable' });
+  signin.endGrant();
+  res.json({ success: true });
 });
 
 // The page. It authenticates itself through the two calls above, like the
@@ -132,13 +154,19 @@ function attachScreenRelay(server, sessionMiddleware) {
       try { why = screenRefusal(req); } catch (e) { why = 'error'; }
       if (why) return refuse(why);
       const userId = loadCaller(req).user.id;
-      wss.handleUpgrade(req, socket, head, (ws) => pipe(ws, userId));
+      const screen = screenOf(signin.liveGrant());
+      wss.handleUpgrade(req, socket, head, (ws) => pipe(ws, userId, screen));
     });
   });
 }
 
-function pipe(ws, userId) {
-  const vnc = net.connect(signin.SCREEN);
+// The screen a grant is for: a holder's own (§260), else the sign-in display.
+function screenOf(g) {
+  const store = g ? signin.resolveStore(getTenantDb(ROOTS_TENANT_ID), g.channel, g.store) : null;
+  return signin.screenFor(signin.jobChannel(g && g.channel, store));
+}
+function pipe(ws, userId, screen) {
+  const vnc = net.connect(screen);
   const close = () => {
     try { ws.close(); } catch (_) { /* already closing: both ends call this, and a second close is a no-op we do not need to hear about */ }
     vnc.destroy();
@@ -159,4 +187,5 @@ function pipe(ws, userId) {
 module.exports = router;
 module.exports.attachScreenRelay = attachScreenRelay;
 module.exports.screenRefusal = screenRefusal;
+module.exports.screenOf = screenOf;
 module.exports.SCREEN_PATH = SCREEN_PATH;

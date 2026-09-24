@@ -25,6 +25,10 @@
 // (:98, its own loopback x11vnc) that shows nothing but the one login window —
 // display :99 carries every channel's logged-in browser, and a person signing
 // in to one channel must not see or type into the others.
+//
+// §260 — 闪购 is signed in inside its long-lived holder browser, which draws on
+// its own private display (:97, loopback x11vnc 5902). A 'shangou' job starts
+// nothing; see HOLDERS below.
 "use strict";
 const http = require("http");
 const fs = require("fs");
