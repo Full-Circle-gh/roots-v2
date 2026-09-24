@@ -25,7 +25,8 @@
  * -------------------------------------------
  * Section 2/3 reproduce lib/channel-sync-stale.js:127-140 exactly: the same
  * ROW_NUMBER() OVER (PARTITION BY retail_store_id, product_id ORDER BY id DESC),
- * the same `rn = 1 AND status IN ('pending','error')`, and the same restriction
+ * the same `rn = 1 AND status = 'pending'` (§255: a refused `error` row is the
+ * product's own Needs attention, not the channel's stall), and the same restriction
  * to stores that isStoreTradingOnChannel() calls trading. The ONLY difference is
  * the projection — this selects the whole row instead of COUNT(*) — which cannot
  * change which rows match. If the count here disagrees with the badge, that
@@ -282,7 +283,7 @@ for (const file of files) {
       if (trading.length) {
         rows = db.prepare(`${LATEST}
           SELECT * FROM latest
-           WHERE rn = 1 AND status IN ('pending','error') AND store_code IN (${ph})
+           WHERE rn = 1 AND status = 'pending' AND store_code IN (${ph})
            ORDER BY created_at ASC, id ASC`).all(...trading);
       }
       badgeRowsByChannel[ch.key] = rows;
@@ -290,7 +291,7 @@ for (const file of files) {
       // The same count, unrestricted by trading — so "excluded" and "empty" are
       // never confused with each other.
       const anyStore = db.prepare(`${LATEST}
-        SELECT COUNT(*) AS n FROM latest WHERE rn = 1 AND status IN ('pending','error')`).get().n;
+        SELECT COUNT(*) AS n FROM latest WHERE rn = 1 AND status = 'pending'`).get().n;
 
       console.log(`   BADGE COUNT (trading stores only) = ${rows.length}`);
       console.log(`   same rule, ALL stores regardless of trading = ${anyStore}`);
@@ -439,7 +440,7 @@ for (const file of files) {
         FROM meituan_sync_queue
       )
       SELECT * FROM latest
-       WHERE rn = 1 AND status IN ('pending','error') AND store_code IN (${ph}) AND product_id IS NULL
+       WHERE rn = 1 AND status = 'pending' AND store_code IN (${ph}) AND product_id IS NULL
        ORDER BY created_at ASC, id ASC`).all(...trading);
 
     // (b) the same question partitioned CORRECTLY — one partition per bundle.
@@ -450,7 +451,7 @@ for (const file of files) {
         WHERE bundle_id IS NOT NULL
       )
       SELECT * FROM latest
-       WHERE rn = 1 AND status IN ('pending','error') AND store_code IN (${ph})
+       WHERE rn = 1 AND status = 'pending' AND store_code IN (${ph})
        ORDER BY created_at ASC, id ASC`).all(...trading);
 
     console.log(`   bundle rows the badge actually counts (product_id IS NULL, rn=1) : ${collapsed.length}`);
@@ -591,13 +592,13 @@ for (const file of files) {
         FROM guanyi_sync_queue
       )`;
     const all = db.prepare(`${LATEST}
-      SELECT COUNT(*) AS n FROM latest WHERE rn = 1 AND status IN ('pending','error')`).get().n;
+      SELECT COUNT(*) AS n FROM latest WHERE rn = 1 AND status = 'pending'`).get().n;
     let rows = [];
     if (trading.length) {
       const ph = trading.map(() => '?').join(',');
       rows = db.prepare(`${LATEST}
         SELECT * FROM latest
-         WHERE rn = 1 AND status IN ('pending','error') AND store_code IN (${ph})
+         WHERE rn = 1 AND status = 'pending' AND store_code IN (${ph})
          ORDER BY created_at ASC, id ASC`).all(...trading);
     }
 

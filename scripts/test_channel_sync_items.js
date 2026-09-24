@@ -968,6 +968,37 @@ check('the corner button that used to reach Channel sync is gone', () => {
      'the Sales header’s Channel sync button is back beside the sub-nav');
 });
 
+// ── 12. §258 · the table is a table ──────────────────────────────────────────
+// Ash, from the live page: the row's values sat packed to the left under the
+// wrong column headers, each in its own grey box. The rows carried class "row"
+// and later "cs-row" — BOTH of which retail-admin.css turns into a flex box
+// elsewhere, which takes a <tr> out of the table.
+section('12 · §258 · the Channel sync table rows stay table rows');
+
+check('the item row’s class is not one a global rule turns into a flex box', () => {
+  const js = read('public/retail-admin/29-channel-sync.js');
+  const m = js.match(/<tr class="([a-z0-9-]+)" tabindex/);
+  ok(m, 'no item row found');
+  const cls = m[1];
+  const css = read('public/retail-admin.css');
+  const esc = cls.replace(/-/g, '\\-');
+  const global = new RegExp(`(^|[\\s,}])\\.${esc}\\s*\\{`, 'm');
+  ok(!global.test(css), `".${cls}" has a global rule of its own — a <tr> that picks up display:flex leaves the table`);
+});
+
+check('the page’s buttons are the design system’s secondary style, not a filled slab', () => {
+  const css = read('public/retail-admin.css');
+  ok(/\.btn\.td-secondary[^{]*\{[^}]*background: transparent/.test(css), 'no secondary button style');
+  ok(/#tab-channel-sync \.cs-dcard \.cs-fix \.btn \{ flex: 0 0 auto; \}/.test(css), 'the row’s buttons still stretch across the card');
+  ok(/class="btn btn-sm td-secondary"/.test(read('public/retail-admin/01-core.js')), 'the Sign in button is filled');
+});
+
+check('the sign-in page keeps to Inter 400/500', () => {
+  const page = read('public/channel-signin.html');
+  ok(/family=Inter:wght@400;500/.test(page), 'Inter is not loaded');
+  ok(!/font-weight:\s*[6-9]00|font:\s*[6-9]00/.test(page), 'a weight above 500 — the design system allows 400 and 500 only');
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

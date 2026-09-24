@@ -236,43 +236,14 @@ router.post('/api/retail-admin/channel-hub/:kind/todos/dismiss', requireRetailAd
   }
 });
 
-// ── Login relay (session-based channels: Meituan, Qingyun) — Phase 6 ────────
-// The merchant can't paste a browser session into a form, so the worker drives
-// the portal login and, when it SMS-challenges, the tenant types the code here
-// and we relay it to the worker (lib/integrations/session-relay). Credentials
-// are stored per-store via tenant-creds (never in the session table); the worker
-// reads them there. In dev without a worker, INTEGRATION_RELAY_SIM=1 enables a
-// simulation driver so the whole flow is demoable (code 000000).
+// ── Login relay sessions (Meituan, Qingyun) ────────────────────────────────
+// §257: the wizard steps that took a merchant's password and SMS code, and the
+// two endpoints behind them, are gone. No driver ever existed to use them, so
+// every attempt failed, while the password was stored for nothing. A channel
+// login is a human at a genuine browser on the box (§252, §256). What remains
+// is the read of each store's session record, which the cards show.
 
 function assertRelayKind(kind) { if (!relay.RELAY_KINDS.has(kind)) { const e = new Error('not_a_relay_integration'); e.http = 400; throw e; } }
-
-// Start a login attempt for one store. Stores the merchant credentials for that
-// store, then kicks off the relay. Returns the resulting session snapshot.
-router.post('/api/retail-admin/channel-hub/:kind/session/start', requireRetailAdmin, express.json(), (req, res) => {
-  try {
-    assertRelayKind(req.params.kind);
-    const id = tenantId(req);
-    const { storeCode, username, password } = req.body || {};
-    if (!storeCode || !username || !password) return res.status(400).json({ success: false, error: 'store_credentials_required' });
-    // Persist per-store credentials (meituan.<code>.user / .pass) — encrypted,
-    // read by the worker at login time; never echoed back.
-    setTenantSecret(id, `${req.params.kind}.${storeCode}.user`, username);
-    setTenantSecret(id, `${req.params.kind}.${storeCode}.pass`, password);
-    const s = relay.startLogin(id, req.params.kind, storeCode, { username, password });
-    res.json({ success: true, session: publicSession(s) });
-  } catch (e) { res.status(e.http || 500).json({ success: false, error: e.message }); }
-});
-
-// Relay an SMS code the tenant typed into the wizard.
-router.post('/api/retail-admin/channel-hub/:kind/session/sms', requireRetailAdmin, express.json(), (req, res) => {
-  try {
-    assertRelayKind(req.params.kind);
-    const { storeCode, code } = req.body || {};
-    if (!storeCode || !code) return res.status(400).json({ success: false, error: 'store_code_and_code_required' });
-    const s = relay.submitSms(tenantId(req), req.params.kind, storeCode, code);
-    res.json({ success: true, session: publicSession(s) });
-  } catch (e) { res.status(400).json({ success: false, error: e.message }); }
-});
 
 // Poll all per-store sessions for a kind (the wizard long-polls this).
 router.get('/api/retail-admin/channel-hub/:kind/session', requireRetailAdmin, (req, res) => {
@@ -282,10 +253,6 @@ router.get('/api/retail-admin/channel-hub/:kind/session', requireRetailAdmin, (r
   } catch (e) { res.status(e.http || 500).json({ success: false, error: e.message }); }
 });
 
-function publicSession(s) {
-  if (!s) return null;
-  return { storeCode: s.store_code, status: s.status, phoneHint: s.phone_hint, lastError: s.last_error };
-}
 
 // A timestamp out of meituan_sync_log / store_business_status, as epoch ms.
 // SQLite writes these without a zone; they are UTC, so say so before parsing.

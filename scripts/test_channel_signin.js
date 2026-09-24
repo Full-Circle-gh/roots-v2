@@ -136,6 +136,37 @@ check('a stopped channel’s headline names the cause a person can act on', () =
   ok(/function csHeadline\(ch\)/.test(read('public/m.html')) && /\$\{csHeadline\(ch\)\}/.test(read('public/m.html')), 'the phone card title');
 });
 
+// §256 — Alibaba's slider rejected every human drag on the Eleme login inside a
+// Playwright-launched window; the login now opens a genuine Chrome and attaches
+// only after the dashboard is reached.
+check('the Eleme login opens a genuine Chrome and attaches only after login', () => {
+  const src = read('scripts/eleme-login.js');
+  ok(/launchGenuineChrome\(/.test(src), 'the login does not use the genuine Chrome');
+  ok(!/new ElemeBrowser|\.init\(\{ headed/.test(src), 'the login still launches a Playwright browser');
+  const watch = src.indexOf('listTabs(port)'), attach = src.indexOf('connectOverCDP(');
+  ok(watch !== -1 && attach > watch, 'the login attaches before it has seen the dashboard');
+  ok(/process\.exit\(ok \? 0 : 1\)/.test(src), 'the trigger reads the exit code to decide success');
+  const lib = read('lib/genuine-chrome.js');
+  ok(!/chromium\.launch\(/.test(lib), 'the genuine Chrome is launched through Playwright');
+  ok(/\/json\/list/.test(lib), 'the tab list is not read from Chrome’s own HTTP listing');
+});
+
+// §257 — the Integrations wizard stored a merchant's channel password for a
+// login no driver could ever run. The password steps and their endpoints are
+// gone, and a one-off deletes what they stored.
+check('no screen or endpoint takes a channel password any more', () => {
+  const ui = read('public/retail-admin/15-integrations.js');
+  ok(!/id="rl_pass"|igRelayStart|igRelaySms|session\/start|session\/sms/.test(ui), 'the wizard still asks for a password');
+  ok(/igRelayBoxRequest/.test(ui), 'the box request went with it, and it should have stayed');
+  const route = read('routes/integrations-admin.js');
+  ok(!/session\/start|session\/sms|relay\.startLogin|relay\.submitSms/.test(route), 'an endpoint still takes a password');
+  const relay = require('../lib/integrations/session-relay');
+  ok(!relay.startLogin && !relay.submitSms && !relay.registerDriver, 'the login driver is still exported');
+  ok(typeof relay.summary === 'function', 'the cards lost their session read');
+  const wipe = read('scripts/oneoff_wipe_relay_channel_passwords.js');
+  ok(/\^\(meituan\|qingyun\)\\\.\[a-z0-9\]/.test(wipe), 'the wipe does not target only the per-store family');
+});
+
 check('the relay refuses a cross-origin upgrade before it looks at anything else', () => {
   const { screenRefusal } = require('../routes/channel-signin');
   eq(screenRefusal({ headers: { host: 'store.example', origin: 'https://evil.example' }, session: {} }), 'cross_origin');

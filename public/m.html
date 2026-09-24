@@ -14556,7 +14556,7 @@ function csSignInBtn(ch,blk){
   const name=T(blk.storeNameEn||blk.storeName||blk.store,blk.storeName||blk.storeNameEn||blk.store);
   // Inside a quoted onclick, so only characters that cannot end the string.
   const k=v=>String(v||'').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g,'');
-  return `<button type="button" onclick="APP.cmd('chSignIn','${k(ch)}','${k(blk.store)}','${k(name)}')" style="align-self:flex-start;margin-top:6px;font-family:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:10px;border:0;background:var(--brick-ink);color:#fff">${T('Sign in again','重新登录')}</button>`;
+  return `<button type="button" onclick="APP.cmd('chSignIn','${k(ch)}','${k(blk.store)}','${k(name)}')" style="align-self:flex-start;margin-top:6px;font-family:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid var(--brick-ink);background:transparent;color:var(--brick-ink)">${T('Sign in again','重新登录')}</button>`;
 }
 reg('chSignIn',(ch,store,name)=>{
   location.href='/channel-signin?channel='+encodeURIComponent(ch)+'&store='+encodeURIComponent(store)+
@@ -15981,20 +15981,23 @@ function opsFires(){
     const blockWord=(en,cn,by)=>(by==='needs_login'||by==='auth_required'||by==='binding_lost')?T(en+' is signed out',cn+' 已退出登录')
       :by==='verify_required'?T(en+' needs a captcha',cn+' 需要人工验证')
       :T(en+' not syncing',cn+' 未同步');
+    const needN=(n,bracket)=>bracket?T(' ('+n+' need attention)','（'+n+' 个待处理）'):T(n+' need attention',n+' 个待处理');
     /* A channel says ONE thing about itself, worst first: a channel not
        syncing at all is not also described by how many of its items have been
        caught out — the stall is the larger fact and it contains them. */
     const parts=[];
     for(const k of Object.keys(CH)){
-      if(blk[k]) parts.push(blockWord(CH[k][0],CH[k][1],blk[k].by));
+      /* A count says what it counts, and a signed-out channel carries its own,
+         so the parts add up to the pill. Mirrors the desktop. */
+      if(blk[k]) parts.push(blockWord(CH[k][0],CH[k][1],blk[k].by)+(byCh[k]?needN(byCh[k],true):''));
       else if(down[k]) parts.push(T(CH[k][0]+' not syncing',CH[k][1]+' 未同步'));
-      else if(byCh[k]) parts.push(T(CH[k][0],CH[k][1])+' '+byCh[k]);
+      else if(byCh[k]) parts.push(T(CH[k][0]+': ',CH[k][1]+' ')+needN(byCh[k],false));
     }
     /* A channel the server names that this map has never heard of is still
        said rather than dropped — a fourth channel needs no change here. */
-    for(const b of blockedChs) if(!CH[b.key]) parts.push(blockWord(b.label,b.label,b.blocked.by));
+    for(const b of blockedChs) if(!CH[b.key]) parts.push(blockWord(b.label,b.label,b.blocked.by)+(byCh[b.key]?needN(byCh[b.key],true):''));
     for(const s of stalled) if(!CH[s.channel]&&!blk[s.channel]) parts.push(T(s.label+' not syncing',s.label+' 未同步'));
-    for(const k of Object.keys(byCh)) if(!CH[k]&&!down[k]&&!blk[k]) parts.push(k+' '+byCh[k]);
+    for(const k of Object.keys(byCh)) if(!CH[k]&&!down[k]&&!blk[k]) parts.push(T(k+': ',k+' ')+needN(byCh[k],false));
     /* The clock is the OLDEST of the facts — the earliest moment a customer
        may have started reading a wrong number. All stamps are the server's
        'YYYY-MM-DD HH:MM:SS' UTC, so a string sort picks the minimum. */

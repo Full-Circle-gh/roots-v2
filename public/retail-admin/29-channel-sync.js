@@ -284,7 +284,10 @@
       const open = _open === p.id;
       const shelf = Object.values(p.shelf || {});
       const shelfTxt = shelf.length ? shelf.reduce((a, b) => a + Number(b || 0), 0) : '—';
-      return '<tr class="row" tabindex="0" data-pid="' + p.id + '" aria-expanded="' + open + '" onclick="csToggle(' + p.id + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();csToggle(' + p.id + ')}">' +
+      // NOT class="row" nor "cs-row": retail-admin.css makes both a flex box, which
+      // took these rows out of the table — cells packed left under the wrong
+      // headers, each cell's background drawn as its own grey box.
+      return '<tr class="cs-item-row" tabindex="0" data-pid="' + p.id + '" aria-expanded="' + open + '" onclick="csToggle(' + p.id + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();csToggle(' + p.id + ')}">' +
         '<td><div class="cs-item"><span class="cs-n">' + esc(itemName(p)) + '</span>' + (p.sku ? '<span class="cs-s">SKU ' + esc(p.sku) + '</span>' : '') + '</div></td>' +
         '<td class="cs-c cs-shelf">' + esc(String(shelfTxt)) + '</td>' +
         _data.channels.map(ch => '<td>' + cell(ch.key, p.channels[ch.key] || { k: 'none', reason: 'no_map' }) + '</td>').join('') +
