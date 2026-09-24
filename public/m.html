@@ -14556,7 +14556,7 @@ function csSignInBtn(ch,blk){
   const name=T(blk.storeNameEn||blk.storeName||blk.store,blk.storeName||blk.storeNameEn||blk.store);
   // Inside a quoted onclick, so only characters that cannot end the string.
   const k=v=>String(v||'').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g,'');
-  return `<button type="button" onclick="APP.cmd('chSignIn','${k(ch)}','${k(blk.store)}','${k(name)}')" style="align-self:flex-start;margin-top:6px;font-family:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:10px;border:0;background:var(--brick-ink);color:#fff">${T('Sign in again','重新登录')}</button>`;
+  return `<button type="button" onclick="APP.cmd('chSignIn','${k(ch)}','${k(blk.store)}','${k(name)}')" style="align-self:flex-start;margin-top:6px;font-family:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid var(--brick-ink);background:transparent;color:var(--brick-ink)">${T('Sign in again','重新登录')}</button>`;
 }
 reg('chSignIn',(ch,store,name)=>{
   location.href='/channel-signin?channel='+encodeURIComponent(ch)+'&store='+encodeURIComponent(store)+
