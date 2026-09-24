@@ -3242,6 +3242,18 @@ function tdAttnRender() {
       // strip at the top of the page says the stall in full.
       cta: cuT('See items', '查看商品'), go: `csOpen('${attN ? 'att' : 'all'}')`,
     });
+    // §251 — when the worst thing on the row is a sign-out this operator can
+    // clear, the row's one button is that, for the first such channel. The
+    // others are still on the Channel sync page, each on its own card.
+    const signable = typeof chSignInable === 'function' && typeof can === 'function' && can('integrations:signin')
+      ? blockedChs.find(b => b.blocked && b.blocked.store && chSignInable(b.blocked.by)) : null;
+    if (signable) {
+      const clean = (v) => String(v || '').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g, '');
+      const nm = cn ? signable.blocked.storeName : (signable.blocked.storeNameEn || signable.blocked.storeName);
+      const f = fires[fires.length - 1];
+      f.cta = cuT('Sign in again', '重新登录');
+      f.go = `chSignIn('${clean(signable.key)}','${clean(signable.blocked.store)}','${clean(nm)}')`;
+    }
   }
 
   // Severity first, then oldest first, and a fire with no age sorts last —

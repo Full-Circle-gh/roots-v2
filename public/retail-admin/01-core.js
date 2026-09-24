@@ -592,6 +592,28 @@ function chCauseFor(channel, cell, channelBlock) {
   }
   return chCauseLine(channel, cell);
 }
+/* §251 — the causes a person at a login window can clear: a signed-out session
+   (each channel's own name for it), a forgotten shop binding, a captcha. A
+   proxy or a stalled queue is not fixed by signing in, so it gets no button. */
+const CH_SIGNIN_CAUSES = ['needs_login', 'auth_required', 'binding_lost', 'verify_required'];
+function chSignInable(by) { return CH_SIGNIN_CAUSES.indexOf(by) !== -1; }
+function chSignIn(channel, store, name) {
+  const lang = document.documentElement.dataset.uiLang === 'cn' ? 'cn' : 'en';
+  const url = '/channel-signin?channel=' + encodeURIComponent(channel) + '&store=' + encodeURIComponent(store) +
+    '&name=' + encodeURIComponent(name || store) + '&lang=' + lang;
+  window.open(url, 'tacet-signin');
+}
+/* The button, or nothing: only for a cause signing in can clear, and only for
+   someone holding the permission (the server checks again either way). */
+function chSignInBtn(channel, store, name, by) {
+  if (!store || !chSignInable(by) || (typeof can === 'function' && !can('integrations:signin'))) return '';
+  return '<button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation();chSignIn(' +
+    [channel, store, name || store].map(v => "'" + String(v).replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g, '') + "'").join(',') +
+    ')">' + escapeHtml(cuT('Sign in again', '重新登录')) + '</button>';
+}
+window.chSignInable = chSignInable;
+window.chSignIn = chSignIn;
+window.chSignInBtn = chSignInBtn;
 window.chBlockSentence = chBlockSentence;
 window.chCauseFor = chCauseFor;
 window.chCauseSentence = chCauseSentence;

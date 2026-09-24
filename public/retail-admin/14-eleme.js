@@ -214,8 +214,12 @@
           cls = '';
         }
         // The one action that unblocks it. Linking a shop id is a field; signing
-        // in needs a human at a browser on the box, so that one is the command.
+        // in is the Sign in button (§251) for whoever may press it, and the
+        // box command for anyone else.
+        const sign = st.blocked && st.blockedBy !== 'no_shop' && typeof chSignInBtn === 'function'
+          ? chSignInBtn('eleme', st.code, elStoreName(st), st.blockedBy) : '';
         const act = !st.blocked ? ''
+          : sign ? sign
           : st.blockedBy === 'no_shop'
             ? '<input id="el-shop-' + st.id + '" class="shopinp" placeholder="' +
                 esc(cuT('Eleme shop id', '饿了么店铺ID')) + '">' +

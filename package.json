@@ -190,6 +190,7 @@
     "test:production-log": "node scripts/test_production_log.js"
   },
   "dependencies": {
+    "@novnc/novnc": "^1.7.0",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^9.4.3",
     "connect-sqlite3": "^0.9.13",
@@ -204,7 +205,8 @@
     "playwright": "^1.61.0",
     "sharp": "^0.35.0",
     "uuid": "^9.0.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "acorn": "^8.16.0",

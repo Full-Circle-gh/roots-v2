@@ -304,7 +304,7 @@
             '<span class="dot"></span><span class="nm">' + esc(who) + '</span>' +
             '<span class="st">' + esc(state) + '</span>' +
             mtSyncStartCtl(st.code) +
-            (st.blocked && !off ? mtFixAction(st.code) : '') +
+            (st.blocked && !off ? mtFixAction(st.code, st.blockedBy, who) : '') +
           '</div>';
       }).join('') +
       // Sits with the store lines because it is the same kind of fact — a per
@@ -466,15 +466,19 @@
     }
   };
 
-  // Signing a store back in needs a human at a browser on the box, so this is
-  // the guided wizard when it is loaded and the command to run when it is not.
-  // Never a button that cannot do what it says.
-  function mtFixAction(code) {
+  // Signing a store back in needs a human at a browser on the box. §251's Sign
+  // in button does that for whoever holds the permission; otherwise the guided
+  // wizard when it is loaded and the command to run when it is not. Never a
+  // button that cannot do what it says. The instant (闪购) store signs in by a
+  // different script the sign-in screen does not run, so it keeps its command.
+  function mtFixAction(code, by, name) {
+    const isInstant = _storeB && code === _storeB.code;
+    const sign = !isInstant && typeof chSignInBtn === 'function' ? chSignInBtn('meituan', code, name, by) : '';
+    if (sign) return sign;
     if (typeof window.igRelayWizard === 'function') {
       return '<button class="btn btn-primary" onclick="igRelayWizard(\'meituan\', ' +
         '{step:\'creds\', store:\'' + esc(code) + '\'})">' + cuT('Sign in again', '重新登录') + '</button>';
     }
-    const isInstant = _storeB && code === _storeB.code;
     return '<code class="mt-cmd">' + esc(isInstant ? 'node scripts/shangou-export-session.js'
                                                    : 'node scripts/meituan-login.js ' + code) + '</code>';
   }
