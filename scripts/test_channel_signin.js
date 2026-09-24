@@ -187,7 +187,13 @@ check('every button is gated on the permission and on a cause signing in clears'
 
 check('the page draws states only; every check is on the server', () => {
   const page = read('public/channel-signin.html');
-  ok(/from '\/novnc\/core\/rfb\.js'/.test(page), 'noVNC is not loaded from the pinned package');
+  ok(/import\('\/novnc\/core\/rfb\.js'\)/.test(page), 'noVNC is not loaded from the pinned package');
+  // The deploy's installer runs this exact checker on every staged .html and
+  // aborts on a failure — a static `import` in the inline script did exactly
+  // that to the first deploy of this page.
+  const r = require('child_process').spawnSync(process.execPath,
+    [path.join(__dirname, 'check-html-js.js'), path.join(__dirname, '..', 'public', 'channel-signin.html')], { encoding: 'utf8' });
+  eq(r.status, 0, `the deploy's inline-script gate rejects the page: ${r.stdout}${r.stderr}`);
   ok(/\/api\/retail-admin\/channel-signin\/screen/.test(page), 'the page does not use the relay');
   ok(!/password|credentials:\s*\{\s*password/i.test(page), 'a VNC password in the page');
 });
