@@ -47,31 +47,18 @@ const _tdPrintEsc = (v) => String(v == null ? '' : v)
  *                be { v, cls } for one that needs a class (a blank write-in box)
  *   note         a line at the foot, for what the reader has to know
  */
-function tdPrintTable({ docEn, docCn, subtitle, meta, columns, rows, note }) {
+// The window every document opens in. A blocked pop-up is said, not swallowed:
+// somebody pressed Print and nothing happening is the one answer they cannot
+// act on.
+function _tdPrintOpen() {
   const w = window.open('', '_blank', 'width=900,height=1100');
-  if (!w) {
-    toast(cuT('Allow pop-ups, then print again', '请允许弹窗后再打印'), 'err');
-    return null;
-  }
-  const e = _tdPrintEsc;
-  const shop = tdPrintShopName();
-  const metaHtml = (meta || []).filter(Boolean)
-    .map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join('');
-  const head = (columns || [])
-    .map((c) => `<th${c.r ? ' class="r"' : ''}${c.w ? ` style="width:${c.w}"` : ''}>${e(c.h)}</th>`).join('');
-  const body = (rows || []).map((r, i) => '<tr><td class="idx">' + (i + 1) + '</td>'
-    + r.map((cell, ci) => {
-      const col = (columns || [])[ci + 1] || {};
-      if (cell && typeof cell === 'object') {
-        return `<td class="${cell.cls || ''}${col.r ? ' r' : ''}">${e(cell.v || '')}</td>`;
-      }
-      return `<td${col.r ? ' class="r"' : ''}>${e(cell)}</td>`;
-    }).join('') + '</tr>').join('');
+  if (!w) toast(cuT('Allow pop-ups, then print again', '请允许弹窗后再打印'), 'err');
+  return w || null;
+}
 
-  const doc = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>${e(docEn)}${shop ? ' — ' + e(shop) : ''}</title>
-<style>
-  @page { size: A4; margin: 12mm; }
+// One stylesheet for every document here, so a recipe card and a count sheet
+// cannot drift apart in how they print.
+const _TD_PRINT_CSS = `  @page { size: A4; margin: 12mm; }
   /* No webfont. See the header: a print window that stalls on a font request is
      a person standing at a printer waiting for nothing. */
   :root { --ink:#000; --grey:#555; --hair:#C9C4B6;
@@ -109,7 +96,30 @@ function tdPrintTable({ docEn, docCn, subtitle, meta, columns, rows, note }) {
           justify-content:space-between; font-size:10px; color:var(--grey); }
   .empty { padding:24px; text-align:center; color:var(--grey); font-size:12.5px; }
   @media print { body { background:#fff; } .toolbar { display:none; } .sheet { margin:0; padding:10mm; max-width:none; } }
-</style></head><body>
+`;
+
+function tdPrintTable({ docEn, docCn, subtitle, meta, columns, rows, note }) {
+  const w = _tdPrintOpen();
+  if (!w) return null;
+  const e = _tdPrintEsc;
+  const shop = tdPrintShopName();
+  const metaHtml = (meta || []).filter(Boolean)
+    .map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join('');
+  const head = (columns || [])
+    .map((c) => `<th${c.r ? ' class="r"' : ''}${c.w ? ` style="width:${c.w}"` : ''}>${e(c.h)}</th>`).join('');
+  const body = (rows || []).map((r, i) => '<tr><td class="idx">' + (i + 1) + '</td>'
+    + r.map((cell, ci) => {
+      const col = (columns || [])[ci + 1] || {};
+      if (cell && typeof cell === 'object') {
+        return `<td class="${cell.cls || ''}${col.r ? ' r' : ''}">${e(cell.v || '')}</td>`;
+      }
+      return `<td${col.r ? ' class="r"' : ''}>${e(cell)}</td>`;
+    }).join('') + '</tr>').join('');
+
+  const doc = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>${e(docEn)}${shop ? ' — ' + e(shop) : ''}</title>
+<style>
+${_TD_PRINT_CSS}</style></head><body>
 <div class="toolbar">${e(docEn)}<span style="flex:1"></span>
   <button onclick="window.print()">Print / Save as PDF</button>
   <button class="ghost" onclick="window.close()">Close 关闭</button>
@@ -140,6 +150,86 @@ function tdPrintTable({ docEn, docCn, subtitle, meta, columns, rows, note }) {
   return w;
 }
 window.tdPrintTable = tdPrintTable;
+
+/* ── Recipe card ───────────────────────────────────────────────────────────
+   What a cook needs to make the batch, in both languages, and nothing a cook
+   should not see: NO cost, price or margin. The screen hides those from anyone
+   without recipes:costs, and a sheet pinned to a kitchen wall is read by
+   everyone who walks past it — so they are not passed in, not merely not shown.
+
+   The caller hands over text already paired ("Fridge · 冷藏"), because only
+   the recipe screen knows both halves of its own option lists. Steps and notes
+   are printed exactly as typed: there is one box for each, in whatever
+   language somebody wrote it.
+
+     nameEn/nameCn  the recipe's two names
+     sku            its SKU, or ''
+     facts          [[label, value]…] — batch, servings, shelf life, storage
+     lines          [{ en, cn, qty }] — cn '' prints the English alone
+     steps          [{ name, text }]
+     notes          the recipe's notes, or '' */
+function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
+  const w = _tdPrintOpen();
+  if (!w) return null;
+  const e = _tdPrintEsc;
+  const shop = tdPrintShopName();
+  const metaHtml = (facts || []).filter(Boolean)
+    .map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join('');
+  const lineRows = (lines || []).map((l, i) => `<tr><td class="idx">${i + 1}</td>`
+    + `<td>${e(l.en)}${l.cn ? `<span class="zh">${e(l.cn)}</span>` : ''}</td>`
+    + `<td class="r">${e(l.qty)}</td></tr>`).join('');
+  const stepItems = (steps || []).map((s) => '<li><div>'
+    + (s.name ? `<div class="sn">${e(s.name)}</div>` : '')
+    + (s.text ? `<div class="st">${e(s.text)}</div>` : '')
+    + '</div></li>').join('');
+
+  const doc = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>${e(nameEn)}${shop ? ' — ' + e(shop) : ''}</title>
+<style>${_TD_PRINT_CSS}
+  .masthead { border-bottom:1.5px solid var(--ink); flex-wrap:wrap; }
+  .cn-name { font-size:18px; margin-top:6px; letter-spacing:.08em; }
+  h2 { font-size:14px; font-weight:600; margin:26px 0 0; }
+  h2 span { font-weight:400; color:var(--grey); margin-left:6px; }
+  table { margin-top:8px; }
+  tbody td { padding:8px 10px; }
+  td .zh { color:var(--grey); margin-left:8px; }
+  ol.steps { margin:10px 0 0; padding:0; list-style:none; counter-reset:s; }
+  ol.steps li { counter-increment:s; display:grid; grid-template-columns:26px 1fr; gap:0 10px; padding:9px 0;
+                border-bottom:1px solid var(--hair); font-size:12.5px; line-height:1.55; break-inside:avoid; }
+  ol.steps li::before { content:counter(s); color:var(--grey); font-size:11px; padding-top:2px; }
+  ol.steps .sn { font-weight:600; }
+  ol.steps .st, .notes { white-space:pre-line; }
+  .notes { margin-top:10px; padding:10px 12px; border-left:2px solid var(--hair); font-size:12.5px; line-height:1.6; }
+</style></head><body>
+<div class="toolbar">Recipe · 食谱<span style="flex:1"></span>
+  <button onclick="window.print()">Print / Save as PDF</button>
+  <button class="ghost" onclick="window.close()">Close 关闭</button>
+</div>
+<div class="sheet">
+  <div class="masthead">
+    <div>
+      ${shop ? `<div class="shop">${e(shop)}</div>` : ''}
+      <h1>${e(nameEn)}</h1>
+      ${nameCn ? `<div class="cn-name">${e(nameCn)}</div>` : ''}
+      ${sku ? `<div class="sub">SKU ${e(sku)}</div>` : ''}
+    </div>
+    <div class="meta"><dl>${metaHtml}</dl></div>
+  </div>
+  <h2>Ingredients<span>原料</span></h2>
+  <table>
+    <thead><tr><th style="width:26px">#</th><th>Ingredient · 原料</th><th class="r">Qty · 数量</th></tr></thead>
+    <tbody>${lineRows || '<tr><td colspan="3" class="empty">Nothing to show · 暂无内容</td></tr>'}</tbody>
+  </table>
+  ${stepItems ? `<h2>Steps<span>步骤</span></h2><ol class="steps">${stepItems}</ol>` : ''}
+  ${notes ? `<h2>Notes<span>备注</span></h2><div class="notes">${e(notes)}</div>` : ''}
+  <div class="foot"><span>${e(shop)}</span><span>${e(tdWhen(new Date(), 'dateTime'))}</span></div>
+</div>
+</body></html>`;
+  w.document.write(doc);
+  w.document.close();
+  return w;
+}
+window.tdPrintRecipe = tdPrintRecipe;
 
 /* ── Stock count sheet ─────────────────────────────────────────────────────
    A clipboard for a stocktake: what is on the shelf according to the system,
