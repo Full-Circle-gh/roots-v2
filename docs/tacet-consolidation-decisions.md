@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.401
+# Tacet shared-core consolidation — decisions record, v4.402
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-24 · v4.402 — **§255 · "NOT SYNCING" MEANS A PUSH IS WAITING, NOT THAT THE CHANNEL REFUSED ONE PRODUCT — ASH: *"why it say meitaun not synicing"*.** Home read *Meituan not syncing … since Sep 7, 5:56 PM* while the Meituan tab said *Tianhe · Up to date* and *0 stock updates waiting*. A read-only production query (`scripts/diagnose_channel_queue.js` through `ro-query.yml`) found the three rows behind it. All were latest-per-target rows in `error`, and none was pending: Yasmin White 2023 (no listing with that exact name, since 2026-09-07), Black Beans 黑豆 (the listing could not be read), and Raspberry Mango (the chosen option was removed from the listing). `lib/channel-sync-stale.js` counted `status IN ('pending','error')`, so three products Meituan had REFUSED read as the whole channel stopped. **THE RULING: only `pending` is a stall.** The daemons re-pend every transient failure themselves, so `error` is final. It is already that product's own *Needs attention* (§103, `lib/channel-sync-items.js`), which is where Home now names it (*Meituan 3*), and it no longer shows as *not syncing*. This is the shape §102 predicted and could not confirm without a production read. `scripts/diagnose_channel_queue.js` keeps its verbatim copy of the rule in step. `scripts/test_channel_sync_stale.js` gains section 5 (refused alone → no card; waiting → card, with its own age and count; refused then re-queued → waiting). No string, no schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-24 · v4.401 — **§253 ON THE PHONE — ASH: *"fix the phone"*.** §253 shipped with the phone unchanged: in `public/m.html` a channel row under a shut shop still went to `chanShopShut`, an explainer saying no channel could open until the shop did — true under §181, false once #806 was live. **NOW**: every row sends the same `chanCell` write, so tapping a channel at a shut shop asks *Open {channel} at {store}?* and opens the shop with only that channel, exactly as the desktop does. The row still reads *Shop closed* until it is tapped. `chanShopShut` and the `shop_closed` error branch are removed; the server no longer sends that refusal. **THE SHOP SWITCH NAMES WHAT COMES BACK**: when the server remembers a set (`reopenChannels`), the confirm reads *Open {channels} at {store}?* with the body *New orders can arrive at this store again.*; with nothing remembered it keeps its old wording, which is still true then. Nothing new is decided: this is §253 reaching the second screen. Tests: `scripts/test_mobile_sales.js` (four new browser cases) and `scripts/test_channel_shop_close.js` §3.
 
@@ -20369,3 +20371,11 @@ storage, ingredients with both names and amounts, steps and notes. Every label
 is in both languages. No cost, price or margin is ever on it — they are not
 passed to the card at all. Steps and notes print as typed. See the 2026-09-24
 changelog entry.
+
+## §255 — "NOT SYNCING" IS A PUSH WAITING, NEVER A PUSH THE CHANNEL REFUSED
+
+**Asked by Ash, 2026-09-24.** A channel reads *not syncing* only while the
+latest queue row for some target is still `pending`. A latest row in `error`
+is a push the channel refused for that one product. It is final, because the
+daemons re-pend transient failures themselves, and it is that product's own
+*Needs attention* (§103), never the channel's stall. See the v4.402 changelog entry.

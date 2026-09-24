@@ -182,5 +182,48 @@ section('4 · every off switch returns null, so most tenants pay one null check'
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+section('5 · §255 — "not syncing" is a push WAITING, never a push the channel refused');
+{
+  // Ash, 2026-09-24: Home said "Meituan not syncing since Sep 7" for 17 days
+  // over three products Meituan had refused (a renamed wine listing, a removed
+  // option), while every other push landed. A refused push is final — the
+  // daemons re-pend transient failures themselves — and it is already the
+  // product's own "Needs attention" row (§103).
+  const Database = require('better-sqlite3');
+  const mk = () => {
+    const db = new Database(':memory:');
+    db.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, is_active INTEGER DEFAULT 1);
+      INSERT INTO retail_stores (id, code) VALUES (1, 'tianhe');
+      CREATE TABLE channel_status (channel TEXT, store_code TEXT, is_open INTEGER, PRIMARY KEY (channel, store_code));
+      CREATE TABLE store_business_status (store_code TEXT PRIMARY KEY, is_open INTEGER, target_open INTEGER, fulfillment_open INTEGER);
+      CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
+      CREATE TABLE eleme_sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, retail_store_id INTEGER, product_id INTEGER,
+        store_code TEXT, status TEXT, created_at TEXT);`);
+    return db;
+  };
+  const row = (db, product, status, created) => db.prepare(
+    'INSERT INTO eleme_sync_queue (retail_store_id, product_id, store_code, status, created_at) VALUES (1, ?, ?, ?, ?)')
+    .run(product, 'tianhe', status, created);
+  const NOW = Date.parse('2026-09-24T05:00:00Z');
+  const eleme = (db) => stale.channelSyncStale(db, NOW).find((c) => c.channel === 'eleme') || null;
+
+  it('a refused push alone does not make the channel "not syncing"', () => {
+    const db = mk(); row(db, 254, 'error', '2026-09-07 09:56:01');
+    assert.strictEqual(eleme(db), null);
+  });
+  it('a push still waiting does, with its own age and count', () => {
+    const db = mk(); row(db, 254, 'error', '2026-09-07 09:56:01'); row(db, 7, 'pending', '2026-09-24 04:00:00');
+    const c = eleme(db);
+    assert.ok(c, 'no card for a waiting push');
+    assert.strictEqual(c.waiting_count, 1, 'the refused row was counted as waiting');
+    assert.strictEqual(c.oldest_at, '2026-09-24 04:00:00', 'the clock came from the refused row');
+  });
+  it('a refused push that is re-queued is waiting again', () => {
+    const db = mk(); row(db, 254, 'error', '2026-09-07 09:56:01'); row(db, 254, 'pending', '2026-09-24 04:00:00');
+    assert.strictEqual(eleme(db).waiting_count, 1);
+  });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
