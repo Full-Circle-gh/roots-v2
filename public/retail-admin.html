@@ -13094,6 +13094,10 @@
             <!-- History — the other half of autosave. Not gated on
                  recipes:edit for READING it, but the panel's Restore button is;
                  the server gates the restore itself either way. -->
+            <!-- Print — the kitchen's copy of the recipe, both languages, no
+                 money on it (rcpPrint in 19-recipes.js). Not gated: it shows
+                 nothing a recipe viewer cannot already see. -->
+            <button type="button" class="rcp-btn ghost" id="rcp-rec-print" onclick="rcpPrint()"></button>
             <button type="button" class="rcp-btn ghost" id="rcp-rec-history" onclick="rcpHistory()"></button>
             <button type="button" class="rcp-btn danger" id="rcp-rec-arch" data-cap="recipes:edit" onclick="rcpArchive()"></button>
             <button type="button" class="rcp-btn primary" id="rcp-rec-save" data-cap="recipes:edit" onclick="rcpSave()"></button>

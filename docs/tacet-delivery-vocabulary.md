@@ -1,6 +1,8 @@
 # Tacet delivery vocabulary — locked
 
-**v1.168 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
+**v1.169 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
+
+**v1.168 · 2026-09-24 · §254 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§254)*.
 
 **v1.167 · 2026-09-24 · §253 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§253)*.
 
@@ -8636,7 +8638,7 @@ name needs no label.
   server's §181 `shop_closed` message, English only): **rejected**. The
   refusal it described no longer happens.
 
-**The phone, v1.168.** `public/m.html`'s shop switch confirm uses, when a
+**The phone, v1.169.** `public/m.html`'s shop switch confirm uses, when a
 reopen set is remembered, `Open {channels} at {store}? · 在 {store} 开启
 {channels}？` and `New orders can arrive at this store again. · 这家门店可以重新接单。`.
 Both are the phone's own `chanCell` pairs, copied whole; `{channels}` is the
@@ -8645,3 +8647,30 @@ phone's channel names joined `, ` / `、`. **Retired from the phone:**
 every channel there is closed and none can be opened on its own…*, and the
 `shop_closed` error line *…is closed as a shop, so no channel can open there…*.
 Both described a refusal the server no longer makes.
+
+## The recipe card (§254)
+
+**One pair declared as composed, by Claude, 2026-09-24, under the 2026-09-06
+amendment.** Every other word on the card is copied from the recipe screen,
+which already says it; the card prints both halves side by side
+(`Storage · 储存方式`) instead of the one the screen's language picks.
+
+| shipped | built from |
+|---|---|
+| `Print · 打印` (the recipe header's button) | **composed pair, Chinese copied whole.** `打印` ships alone in `public/m.html` over *Printing* (`T('Printing','打印')`), and inside every live print label (`打印小票`, `打印面单`). Declared because the English half beside it is new |
+| `Recipe · 食谱` (the print window's toolbar) | copied: the recipe screen's own `T('Recipe', '食谱')` |
+| `Batch size · 批量大小`, `Servings · 份数`, `Shelf life · 保质期`, `Storage · 储存方式` | copied: the Details tab's field labels |
+| `Freezer · 冷冻`, `Fridge · 冷藏`, `Room temperature · 常温`, `Days · 天`, `Months · 个月`, `Years · 年` | copied: the Details tab's option lists (storage order confirmed by Ash 2026-09-03) |
+| `Ingredients · 原料`, `Ingredient · 原料`, `Steps · 步骤`, `Notes · 备注` | copied: the record's sub-tabs and fields |
+| `Qty · 数量` | copied: `T('Qty', '数量')` |
+| `Add a name in Chinese · 添加中文名` (the notice naming what printed in English only) | copied whole: the live prompt of the same meaning |
+| `Nothing to show · 暂无内容`, `Close 关闭`, `Allow pop-ups, then print again · 请允许弹窗后再打印` | copied: the shared print sheet's own strings (`26-print.js`) |
+
+**Live candidates rejected.**
+
+- `配方` for the toolbar — **rejected**: it is live as *Recipe* elsewhere, but
+  the recipe screen itself says `食谱` everywhere, and the card is that screen's
+  page.
+- `打印小票` / `打印面单` for the button — **rejected**: *receipt* and *waybill*
+  are what those print, not a recipe.
+
