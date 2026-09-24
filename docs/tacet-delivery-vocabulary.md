@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.170 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
+
 **v1.169 · 2026-09-24 · §252 NAMES THE CHANNEL ON THE HOME ROW'S SIGN-IN BUTTON — THREE STRINGS COMPOSED BY CLAUDE, EVERY PART LIVE — AND THE CHANNEL CARDS' HEADLINES NAME THE CAUSE.** The row can name two channels ("Meituan not syncing, Eleme is signed out") above one button, and "Sign in again" did not say which it opens. See *Signing a channel back in (§252)*. The same day Ash read both channel cards as "Not syncing since…" when one was signed out, so the headline and the summary now name the cause.
 
 **v1.168 · 2026-09-24 · §254 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§254)*.
@@ -8641,6 +8643,16 @@ name needs no label.
 - `This shop is closed. Open the shop before opening a channel at it.` (the
   server's §181 `shop_closed` message, English only): **rejected**. The
   refusal it described no longer happens.
+
+**The phone, v1.170.** `public/m.html`'s shop switch confirm uses, when a
+reopen set is remembered, `Open {channels} at {store}? · 在 {store} 开启
+{channels}？` and `New orders can arrive at this store again. · 这家门店可以重新接单。`.
+Both are the phone's own `chanCell` pairs, copied whole; `{channels}` is the
+phone's channel names joined `, ` / `、`. **Retired from the phone:**
+`{store} is closed · 门店 {store} 已关闭` with its body *The whole shop is shut, so
+every channel there is closed and none can be opened on its own…*, and the
+`shop_closed` error line *…is closed as a shop, so no channel can open there…*.
+Both described a refusal the server no longer makes.
 
 ## The recipe card (§254)
 

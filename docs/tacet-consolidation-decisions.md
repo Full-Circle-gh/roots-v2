@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.400
+# Tacet shared-core consolidation — decisions record, v4.401
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-24 · v4.401 — **§253 ON THE PHONE — ASH: *"fix the phone"*.** §253 shipped with the phone unchanged: in `public/m.html` a channel row under a shut shop still went to `chanShopShut`, an explainer saying no channel could open until the shop did — true under §181, false once #806 was live. **NOW**: every row sends the same `chanCell` write, so tapping a channel at a shut shop asks *Open {channel} at {store}?* and opens the shop with only that channel, exactly as the desktop does. The row still reads *Shop closed* until it is tapped. `chanShopShut` and the `shop_closed` error branch are removed; the server no longer sends that refusal. **THE SHOP SWITCH NAMES WHAT COMES BACK**: when the server remembers a set (`reopenChannels`), the confirm reads *Open {channels} at {store}?* with the body *New orders can arrive at this store again.*; with nothing remembered it keeps its old wording, which is still true then. Nothing new is decided: this is §253 reaching the second screen. Tests: `scripts/test_mobile_sales.js` (four new browser cases) and `scripts/test_channel_shop_close.js` §3.
 
 2026-09-24 · v4.400 — **§252 · THE HOME ROW'S SIGN-IN BUTTON NAMES ITS CHANNEL — ASH: *"when i click sign in again he decide that eleme is the one i need to sign in but it also say meituan"*.** The one §104 Channel sync row can name several channels ("Meituan not syncing, Eleme is signed out") above one button. The button opened the first channel whose cause a sign-in clears, which was correct, but its label did not say which. It now reads `Sign in to <channel>` · `重新登录<channel>`. Meituan's "not syncing" there is a stalled queue, not a sign-out, so it rightly gets no button: since §250 PR 2 the Meituan daemon reports a rejected session within five minutes, and it has not. No schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work. **TWO MORE FIXES FROM THE SAME FIRST LIVE USE.** (1) **A CLOSED TAB NO LONGER LOCKS OTHERS OUT.** Ash pressed Sign in, closed the tab, and the warehouse (granted `integrations:signin` to finish it) was told *someone is already signing in* for up to eight minutes, because a live grant alone blocked the next person. The start route now decides from what the trigger says is running (`startDecision`): a press for the same channel and store **joins** the open login window and takes the screen over (the previous viewer's relay closes within five seconds); only a different channel or store is *busy*. (2) **THE CARDS SAY THE CAUSE.** Ash: *"it feels both of them are not sign out, only if reading it will say eleme is sign out"* — both channel cards read *Not syncing since…*. A card's headline and the page's summary line now say *Signed out since …* / *Waiting for a captcha since …* when that is the cause (`chHeadState`), and the phone card's title says *Eleme is signed out*. A signed-out channel whose queue had not yet stalled also read *Syncing* above its own red card; it no longer does. Three strings composed, declared in the vocabulary (v1.169).
 
@@ -20353,6 +20355,11 @@ with only that channel (reverses §181's `409 shop_closed` for that case).
 Closing a location remembers its live channels and the master reopens exactly
 those. A channel's everywhere switch never reopens a closed shop. See the
 2026-09-24 changelog entry.
+
+**The phone follows, 2026-09-24 (v4.401).** A channel row under a shut shop
+opens that one channel, and the shop switch names the channels a reopen brings
+back.
+
 
 ## §254 — A RECIPE CAN BE PRINTED
 
