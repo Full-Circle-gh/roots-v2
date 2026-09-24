@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.395
+# Tacet shared-core consolidation — decisions record, v4.396
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-24 · v4.396 — **§252 · A LOCATION GETS A SWITCH PER CHANNEL, AND A CLOSED ONE CAN OPEN ON ONE CHANNEL — ASKED BY ASH**, looking at the Sales page with 越秀 shut: *"if i have yuexiu open only one sale channel how i can do it with the current sales screen ? seems impossible"*. It was. The location card's channel chips were plain labels, the location master opened every channel at once, and `POST /channel-status/cell` refused (§181's `409 shop_closed`) to open one channel at a shop whose `fulfillment_open` is 0 — so the only route to *越秀 on WeChat only* was to open everything and then shut five channels one by one, with the shop live on all of them in between. **THE RULINGS.** (1) The location card carries one small switch per channel it serves; the channel cards keep their numbers and their everywhere switch and lose their per-location rows, so a cell has one control, not two. (2) **§181's refusal is REVERSED for this one case**: opening a channel at a closed shop opens the shop (`fulfillment_open = 1`) with ONLY that channel — every other channel at that shop is explicitly written closed in the same transaction, so a row stored before the close cannot come back unmasked. The masked-write loop §181 fixed stays fixed, because the write now changes the thing that masked it. (3) **Closing a location remembers which of its channels were on** (`store_business_status.reopen_channels`, a JSON list); reopening it with the master restores that set, and falls back to every channel only when nothing is remembered. This removes §181's stated cost, that a reopen switched on channels an operator had deliberately shut. (4) **The channel card's everywhere switch never opens a closed shop**: it opens the channel at every trading location and leaves a closed one closed, and says so. One tap on WeChat must not reopen a shop that is closed until further notice. The phone (`public/m.html`) is unchanged: it still routes a row under a shut shop to its shop switch. The location-level writes live beside `setChannelOpen` in `lib/store-close.js` (`setShopOpen`, `openOneChannel`). Tests: `scripts/test_channel_shop_close.js` §2 rewritten for the reversal, §5 added for remember-and-restore and the everywhere switch.
 
 2026-09-24 · v4.395 — **§251 · A CLOSED LOCATION PAGES NOBODY ABOUT ITS PROXY ROUTE — REPORTED BY ASH**, off the proxy group at 11:43: *"yuexiu location is close until further notice we talked about it , why it keep trying ?"* The page was `🔀 越秀 闪购：切换到 门店住宅代理` with its `🟢 … 恢复可用` twin — "nothing to do", about a shop closed since 2026-09-10. **§217 GATED THE STOCK SWEEPS AND NOTHING ELSE**: `scripts/proxy-watchdog.js` probes every route every 30s and pages `PROXY_WATCHDOG_WEBHOOK` on every flip, and it never asked whether the shop behind the route was trading. **THE RULING: THE WATCHDOG ASKS THE SAME ONE PREDICATE** (`isStoreTradingOnChannel`, through the new `routeTrading` / `CHANNEL_STORE` in `lib/proxy-manager.js`), and while the location is not trading every alert goes to the pm2 log only. **IT STILL PROBES AND STILL FAILS OVER, AND THAT IS DELIBERATE**: stopping the probes would pin 闪购's Chrome to whatever route it was on at close; if that route died, `scripts/shangou-daemon.js`'s own gate would page `🔴 美团闪购 代理掉线` instead, and a reopen would start from a dead exit. **tianhe IS NOT MAPPED**: 外卖 rides that route for every store it serves (`MEITUAN_SKIP_STORES` decides which), so one store closing is no reason to go quiet about it. Fails open — no DB, or a DB that throws, pages as before. Tests: six new cases in `scripts/test_proxy_failover.js`.
 
@@ -20323,3 +20325,12 @@ While a route's location is not trading (`isStoreTradingOnChannel`), its route
 is still probed and still failed over, but nothing is paged — every decision
 goes to the pm2 log only. Only 越秀 闪购 is mapped; the 天河 外卖 route serves
 more than one store and always pages. See the 2026-09-24 changelog entry.
+
+## §252 — A LOCATION GETS A SWITCH PER CHANNEL, AND A CLOSED ONE CAN OPEN ON ONE CHANNEL
+
+**Asked by Ash, 2026-09-24.** Each location card has a master switch and one
+small switch per channel. Opening one channel at a closed shop opens the shop
+with only that channel (reverses §181's `409 shop_closed` for that case).
+Closing a location remembers its live channels and the master reopens exactly
+those. A channel's everywhere switch never reopens a closed shop. See the
+2026-09-24 changelog entry.

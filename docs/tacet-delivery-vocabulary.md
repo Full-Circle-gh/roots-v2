@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.166 · 2026-09-24 · §252 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§252)*.
+
 **v1.165 · 2026-09-23 · §241 SPLITS THE ALLERGEN CARD INTO A RECIPE CLAIM AND A FACILITY WARNING — TWO STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `配方不含` (*Made without*) replaces `不含` as the row label over the free_of flags, and `（共用生产环境）` (*shared facility*) closes the one may-contain line every product now carries. `种子类` is copied from a live card. See *Made without, and the shared-facility line (§241)*.
 
 **v1.164 · 2026-09-22 · §232 PUTS A FREE-OF ROW ON THE ALLERGEN CARD — NOTHING COMPOSED, ONE PAIR CROSSING FROM THE BACK OFFICE TO A CUSTOMER.** `不含` is the details panel's own label for this exact column and has been shipping over it; it now appears in front of customers for the first time, which is the only reason this entry exists. The four chips are the words the allergen cards themselves use, and the one that had to be lifted rather than copied — `五香` — is lifted out of the live badge `无五香`. See *The free-of row on the allergen card (§232)*.
@@ -8565,3 +8567,32 @@ English, and it is the reason §241 exists.
 - `其他籽类` (Whole Sesame Tahini's live entry) — **rejected** for Seeds: `其他`
   is relative to a list the line no longer carries.
 
+
+## A switch per channel on the location card (§252)
+
+**Nothing composed, 2026-09-24.** Every pair below was already live; three of
+them move from the phone to the desktop for the first time.
+
+| shipped | built from |
+|---|---|
+| `Open {channel} at {store}? · 在 {store} 开启 {channel}？` (confirm title: one channel at a closed shop, and the master reopening a remembered set) | copied: the phone's `chanCell` confirm title in `public/m.html`. For a set, `{channel}` is the channel names joined `, ` / `、` |
+| `New orders can arrive at this store again. · 这家门店可以重新接单。` (confirm body) | copied: the phone's `chanCell` confirm body |
+| `Open · 开启` (confirm button) | copied: the phone's `chanCell` confirm label |
+| `Shop closed · 门店已关闭` (toast, after an everywhere-open skipped a closed shop) | copied: the phone's row pill under a shut shop. Joined to `Saved · 已保存` with ` · ` and to the store names with `: ` / `：` |
+| `Open · 营业中`, `Closed · 已关闭`, `applying… · 处理中…` | unchanged: they move from the channel card's per-location rows to the location card's channel rows |
+| `、` list join, `：` | live: `public/retail-admin/03-dashboard.js` (`deductParts.join('、')`, `watch.join('、')`, `'：'` after *Top spender*) |
+
+**Retired from the desktop Sales page:** `Per location · 按门店` and
+`serves 1 store · 仅 1 家门店`. The channel card's per-location rows they
+headed are gone; a channel card now names its locations with a dot each, and a
+name needs no label.
+
+**Live candidates rejected.**
+
+- `Open ALL sales channels for this location? · 开启该门店的所有销售渠道？`
+  (the desktop's existing reopen title): **rejected for the remembered-set
+  case**, where it would be false because only some channels come back. It is
+  kept for the case where nothing is remembered and every channel does open.
+- `This shop is closed. Open the shop before opening a channel at it.` (the
+  server's §181 `shop_closed` message, English only): **rejected**. The
+  refusal it described no longer happens.
