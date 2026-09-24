@@ -14552,7 +14552,7 @@ function csHeadline(ch){
 }
 function csSignInable(by){ return CS_SIGNIN_CAUSES.indexOf(by)!==-1; }
 function csSignInBtn(ch,blk){
-  if(!blk||!blk.store||!csSignInable(blk.by)||!mCan('integrations:signin')) return '';
+  if(!blk||!blk.store||blk.signable===false||!csSignInable(blk.by)||!mCan('integrations:signin')) return '';
   const name=T(blk.storeNameEn||blk.storeName||blk.store,blk.storeName||blk.storeNameEn||blk.store);
   // Inside a quoted onclick, so only characters that cannot end the string.
   const k=v=>String(v||'').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g,'');
