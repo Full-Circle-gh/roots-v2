@@ -2727,7 +2727,7 @@ if (posGridLine) {
     /channel === 'gzgrocery' \? all\.filter/.test(POS_MA) && !/'pos'\s*\?/.test(POS_MA), true);
   // The location master closes every applicable channel; pos riding in
   // GRID_CHANNELS is what makes "close this location" also shut its till.
-  // The set is built by csChannelsAt since §252, which the master uses.
+  // The set is built by csChannelsAt since §253, which the master uses.
   check('closing a whole location covers pos, because it iterates GRID_CHANNELS',
     /function csChannelsAt\([^)]*\)\s*\{\s*return GRID_CHANNELS\.filter/.test(POS_MA)
       && /const applies = csChannelsAt\(storeCode\)/.test(POS_MA), true);

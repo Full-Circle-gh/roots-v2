@@ -19,7 +19,7 @@
  *
  *   §1  the shop-wide state is REPORTED, not only folded into every cell
  *   §2  opening one channel at a shut shop opens the shop with ONLY that
- *       channel (§252 — this used to be refused with 409 shop_closed, §181)
+ *       channel (§253 — this used to be refused with 409 shop_closed, §181)
  *   §3  the phone can work the shop switch, and re-reads instead of guessing
  *   §5  closing a location remembers its live channels and reopening brings
  *       exactly those back; the everywhere switch never reopens a shut shop
@@ -168,10 +168,10 @@ const shutShop = (code) => db.prepare(
     is(g.locations.find((l) => l.storeCode === 'yuexiu').shopOpen, false, 'the locations list carries it too');
   }
 
-  section('2 · one channel at a shut shop opens the shop with only that channel (§252)');
+  section('2 · one channel at a shut shop opens the shop with only that channel (§253)');
   {
     // §181 refused this with 409 shop_closed, because the write landed under
-    // fulfillment_open = 0 and the next read masked it back to Closed. §252
+    // fulfillment_open = 0 and the next read masked it back to Closed. §253
     // lifts the mask in the same write, so the read agrees with the tap.
     const r = await call('POST', '/api/retail-admin/channel-status/cell',
       { channel: 'pos', storeCode: 'yuexiu', open: true });
@@ -220,7 +220,7 @@ const shutShop = (code) => db.prepare(
   }
 
 
-  section('5 · closing remembers, reopening restores, the everywhere switch leaves a shut shop shut (§252)');
+  section('5 · closing remembers, reopening restores, the everywhere switch leaves a shut shop shut (§253)');
   {
     // Yuexiu trading on WeChat only.
     for (const ch of ['web', 'pos', 'eleme', 'meituan']) {

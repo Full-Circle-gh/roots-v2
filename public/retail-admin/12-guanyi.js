@@ -203,6 +203,7 @@
         '<div class="gy-storeline' + (blk ? ' att' : '') + '"><span class="dot"></span>' +
         '<span class="nm">' + esc(typeof csChannelName === 'function' ? csChannelName('guanyi') : 'GZ Grocery') + '</span>' +
         '<span class="st">' + esc([why, read, fresh].filter(Boolean).join(' · ')) + '</span>' +
+        (blk && typeof chSignInBtn === 'function' ? chSignInBtn('guanyi', blk.store, '', blk.by) : '') +
         '<button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()"' +
         (busy ? ' disabled' : '') + '>' +
         esc(cuT('⟳ Refresh list', '⟳ 刷新')) + '</button></div>';

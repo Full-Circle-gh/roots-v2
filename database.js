@@ -6294,7 +6294,7 @@ try { db.prepare('UPDATE store_business_status SET fulfillment_open = 1 WHERE fu
 // reopen_channels: the channels that were live when the location master last
 // closed this shop, as a JSON list — so reopening it brings back exactly those
 // rather than every channel, including ones the operator had shut on purpose
-// (§252). NULL = nothing remembered, reopen opens every channel. Written only by
+// (§253). NULL = nothing remembered, reopen opens every channel. Written only by
 // setShopOpen / openOneChannel in lib/store-close.js.
 addColumn('store_business_status', 'reopen_channels', 'TEXT');
 

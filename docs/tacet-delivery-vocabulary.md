@@ -1,6 +1,8 @@
 # Tacet delivery vocabulary — locked
 
-**v1.166 · 2026-09-24 · §252 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§252)*.
+**v1.167 · 2026-09-24 · §253 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§253)*.
+
+**v1.166 · 2026-09-24 · §252 SIGNS A CHANNEL BACK IN FROM TACET — SIX STRINGS COMPOSED BY CLAUDE, THE REST LIFTED.** The Sign in button, the permission that grants it, and the page that shows the private sign-in screen. Every composed string is built from live fragments. Each one is listed below with the live candidates rejected for it.
 
 **v1.165 · 2026-09-23 · §241 SPLITS THE ALLERGEN CARD INTO A RECIPE CLAIM AND A FACILITY WARNING — TWO STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `配方不含` (*Made without*) replaces `不含` as the row label over the free_of flags, and `（共用生产环境）` (*shared facility*) closes the one may-contain line every product now carries. `种子类` is copied from a live card. See *Made without, and the shared-facility line (§241)*.
 
@@ -8567,8 +8569,43 @@ English, and it is the reason §241 exists.
 - `其他籽类` (Whole Sesame Tahini's live entry) — **rejected** for Seeds: `其他`
   is relative to a list the line no longer carries.
 
+## Signing a channel back in (§252)
 
-## A switch per channel on the location card (§252)
+**Six strings composed, by Claude, 2026-09-24, under the 2026-09-06 amendment.**
+The rest are copied or lifted. The page is `public/channel-signin.html`. The
+buttons are built by `chSignInBtn` (`public/retail-admin/01-core.js`) and
+`csSignInBtn` (`public/m.html`). The permission is in `lib/capabilities.js`.
+
+| shipped | built from |
+|---|---|
+| `Sign in again · 重新登录` (the button, every surface) | **copied**: the live pair on the Meituan tab's old wizard button (`11-meituan.js`), and `重新登录` in the locked sign-in sentence (§105) |
+| `Sign channels back in · 重新登录渠道` (the Team matrix permission) | **composed**: `重新登录` (above) + `渠道`, live throughout the matrix's own section (`查看渠道与配送`) |
+| `Opening… · 正在打开…` | **copied**: live as the draft editor's `已存为草稿!正在打开…` tail |
+| `Log in on the screen below. This page closes by itself when you’re done. · 请在下方画面中登录，完成后本页会自动关闭。` | **composed**: `请在…` and `下方` are live (the SF Express banner, `04-orders.js`); `画面`, `本页` and `自动关闭` are new, joined in the house's instruction shape |
+| `Signed in again. Stock updates resume in a few minutes. · 已重新登录，库存推送将在几分钟内恢复。` | **composed** on the GZ Grocery daemon's own recovery alert, `已重新登录，库存推送恢复` (`scripts/guanyi-daemon.js`), with `将在几分钟内` added because a daemon picks the session up on its next cycle, not at once. `几分钟内` is live (`通常几分钟内完成`) |
+| `The login window closed without signing in. · 登录窗口已关闭，未能登录。` | **composed**: `登录`, `已关闭` and `未能` are all live; `登录窗口` is new and names the one window the page showed |
+| `Lost the screen. · 画面已断开。` | **composed**, and the least-sourced string here: `断开` (*disconnected*) appears nowhere else in the app. It is built on the live `已X` state shape (`已关闭`, `已恢复`); `画面` as above. Rejected: `连接已过期` (live, a stored connection's expiry), because nothing has expired — the live picture dropped |
+| `Someone is already signing in. Try again in a few minutes. · 已有人正在登录，请稍后再试。` | **composed**, with the tail copied: `请稍后再试` is live ten times over |
+| `The sign-in service on the server is not running. · 服务器上的登录服务未运行。` | **composed**: `服务器` and `登录` are live; `服务未运行` is new |
+| `You don’t have permission for this · 你没有此操作的权限` | **copied**: `lib/require-cap.js`'s own 403 |
+| `Try again · 重试`, `Close · 关闭` | **copied**: both live many times |
+| `Sign in again · … · 重新登录 · …` (the page title, with channel and store names) | the button's pair, plus names that are data |
+
+**Live candidates rejected.**
+
+- `登录` alone, for the button: **rejected**. The card above it says the channel
+  is *signed out*, and a bare *Log in* reads like the operator's own Tacet
+  login, not the channel's.
+- `设置/管理接入` (the integrations:manage label), for the permission:
+  **rejected**, because granting sign-in was decided to be a separate, on-shift
+  job (§250).
+- `请重新登录。` (the locked sentence's tail), for the button: **rejected**. It
+  is an instruction with a full stop, and a button is a verb.
+- `无法加载，请稍后再试。` (live), for the service being down: **rejected**. It
+  blames the page, and the fault is a process on the server that somebody has
+  to start.
+
+## A switch per channel on the location card (§253)
 
 **Nothing composed, 2026-09-24.** Every pair below was already live; three of
 them move from the phone to the desktop for the first time.

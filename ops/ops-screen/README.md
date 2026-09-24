@@ -116,6 +116,60 @@ reproduce all four blocks — the access log (`GET /websockify` vs
 `GET /ops-screen/websockify`) is the fastest way to tell whether a given
 noVNC build wants the prefixed or the bare path; add whichever is missing.
 
+## Tacet's Sign in button (§252): the private sign-in screen
+
+Tacet's **Sign in again** button (Home, Channel sync, each channel tab) does
+not use the shared screen above. Display `:99` shows every channel's
+logged-in browser, and someone signing in to one channel must not see or
+type into the others. Tacet's logins run on their **own display, `:98`**,
+which shows only the one login window. The Tacet app relays that display
+itself, behind its own login, the `integrations:signin` permission, the
+operator's store scope, and a sign-in that operator started. Nothing about
+it goes through nginx's ops-screen blocks.
+
+| Process | What it is |
+|---|---|
+| `xvfb-signin` | `Xvfb :98 -screen 0 1280x800x24`, the private display. |
+| `ops-screen-vnc-signin` | `x11vnc -display :98 -localhost -rfbport 5901 -nopw -forever -shared`. It is **loopback only and has no VNC password on purpose**: the only thing that can reach it is the Tacet process on this box, and that process checks before it relays a byte. Never expose 5901 through nginx. |
+| `ops-screen-ctl` | The same `login-trigger.js`, now with a JSON API (`/api/start`, `/api/status`). Tacet calls it on `127.0.0.1:6090`. It refuses any request carrying `X-Real-IP` / `X-Forwarded-For`, which is every request nginx forwards. |
+
+### One-time setup on the box
+
+```bash
+# 1. The private display and its loopback-only VNC.
+pm2 start "Xvfb :98 -screen 0 1280x800x24" --name xvfb-signin
+pm2 start "x11vnc -display :98 -localhost -rfbport 5901 -nopw -forever -shared" --name ops-screen-vnc-signin
+# 5901 must answer on loopback only:
+ss -ltnp | grep 5901        # want 127.0.0.1:5901, never 0.0.0.0
+
+# 2. The new login-trigger.js (Eleme, the JSON API, daemon restart after login).
+scp ops/ops-screen/login-trigger.js root@<box>:/opt/ops-screen/login-trigger.js
+pm2 restart ops-screen-ctl
+curl -s 127.0.0.1:6090/api/status           # want {"running":null,"last":null}
+
+pm2 save
+```
+
+**Check nginx passes WebSocket upgrades to the Tacet app** on
+`store.rootskitchenchina.com`. The screen is a WebSocket at
+`/api/retail-admin/channel-signin/screen`. If the `store.*` server block's
+`location /` lacks the two upgrade headers, the page will say *Lost the
+screen* right away. It needs:
+
+```nginx
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+```
+
+`Connection "upgrade"` on every request is what the ops-screen blocks
+already use. If `location /` sends a different `Connection` header today,
+use a `map $http_upgrade $connection_upgrade` instead of changing it blind.
+
+After a successful Meituan or Eleme login, the trigger restarts
+`meituan-sync` / `eleme-sync` itself. GZ Grocery picks the new session up
+on its own.
+
 ## Troubleshooting
 
 - **Tapped a channel, no window appears, page still says success** — check

@@ -14544,6 +14544,24 @@ function csBlockLine(ch,blk){
   const store=blk.storeName?T(blk.storeNameEn||blk.storeName,blk.storeName||blk.storeNameEn):'';
   return said+(store?' · '+store:'')+(blk.at?' · '+T('since','自')+' '+fmtDay(blk.at):'');
 }
+/* §252 — Sign in, the phone's half. Same causes as the desktop's
+   chSignInable: a signed-out session in any channel's own name for it, a lost
+   shop binding, a captcha. Opens the sign-in page IN THIS WINDOW rather than a
+   new tab: an installed iPhone web app does not share its sign-in with Safari,
+   so a new tab would open signed out. The page goes back here when it is done. */
+const CS_SIGNIN_CAUSES=['needs_login','auth_required','binding_lost','verify_required'];
+function csSignInable(by){ return CS_SIGNIN_CAUSES.indexOf(by)!==-1; }
+function csSignInBtn(ch,blk){
+  if(!blk||!blk.store||!csSignInable(blk.by)||!mCan('integrations:signin')) return '';
+  const name=T(blk.storeNameEn||blk.storeName||blk.store,blk.storeName||blk.storeNameEn||blk.store);
+  // Inside a quoted onclick, so only characters that cannot end the string.
+  const k=v=>String(v||'').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g,'');
+  return `<button type="button" onclick="APP.cmd('chSignIn','${k(ch)}','${k(blk.store)}','${k(name)}')" style="align-self:flex-start;margin-top:6px;font-family:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:10px;border:0;background:var(--brick-ink);color:#fff">${T('Sign in again','重新登录')}</button>`;
+}
+reg('chSignIn',(ch,store,name)=>{
+  location.href='/channel-signin?channel='+encodeURIComponent(ch)+'&store='+encodeURIComponent(store)+
+    '&name='+encodeURIComponent(name||store)+'&lang='+(LANG==='en'?'en':'cn');
+});
 /* §107 — waiting_count (store×product push targets) and counts.att (items,
    worst-store-wins) are different denominators by design (§104) and can
    legitimately differ; naming both here is what stops that from reading as a
@@ -14631,7 +14649,7 @@ function screenChannelSync(){
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
         <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T(csChName(ch.key)+' stopped taking stock updates',csChName(ch.key)+' 已停止接收库存更新')}</span></div>
-      ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>`:''}
+      ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>${csSignInBtn(ch.key,ch.blocked)}`:''}
       ${ch.stale?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${csStaleLine(ch)}</div>`:''}</div>`).join('')}
     ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--sage-ink)"><i style="width:8px;height:8px;border-radius:50%;background:var(--sage)"></i>${T('Every channel is in step','各渠道均已同步')}</div>

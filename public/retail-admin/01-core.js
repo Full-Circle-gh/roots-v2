@@ -592,6 +592,28 @@ function chCauseFor(channel, cell, channelBlock) {
   }
   return chCauseLine(channel, cell);
 }
+/* §252 — the causes a person at a login window can clear: a signed-out session
+   (each channel's own name for it), a forgotten shop binding, a captcha. A
+   proxy or a stalled queue is not fixed by signing in, so it gets no button. */
+const CH_SIGNIN_CAUSES = ['needs_login', 'auth_required', 'binding_lost', 'verify_required'];
+function chSignInable(by) { return CH_SIGNIN_CAUSES.indexOf(by) !== -1; }
+function chSignIn(channel, store, name) {
+  const lang = document.documentElement.dataset.uiLang === 'cn' ? 'cn' : 'en';
+  const url = '/channel-signin?channel=' + encodeURIComponent(channel) + '&store=' + encodeURIComponent(store) +
+    '&name=' + encodeURIComponent(name || store) + '&lang=' + lang;
+  window.open(url, 'tacet-signin');
+}
+/* The button, or nothing: only for a cause signing in can clear, and only for
+   someone holding the permission (the server checks again either way). */
+function chSignInBtn(channel, store, name, by) {
+  if (!store || !chSignInable(by) || (typeof can === 'function' && !can('integrations:signin'))) return '';
+  return '<button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation();chSignIn(' +
+    [channel, store, name || store].map(v => "'" + String(v).replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g, '') + "'").join(',') +
+    ')">' + escapeHtml(cuT('Sign in again', '重新登录')) + '</button>';
+}
+window.chSignInable = chSignInable;
+window.chSignIn = chSignIn;
+window.chSignInBtn = chSignInBtn;
 window.chBlockSentence = chBlockSentence;
 window.chCauseFor = chCauseFor;
 window.chCauseSentence = chCauseSentence;
@@ -1433,7 +1455,7 @@ function csRender() {
     btn.onclick = () => csChannelToggle(ch, cardOpen);
 
     // Where this channel is live: one dot + name per location, read-only. The
-    // per-location switches live on the location cards (§252) — one control per
+    // per-location switches live on the location cards (§253) — one control per
     // cell, not two — so this line only says where the channel is on.
     const prev = card.querySelector('.sales-ch-locs');
     if (prev) prev.remove();
@@ -1487,7 +1509,7 @@ function csRenderLocations() {
     let dot = 'ok', txt = cuT('Open — all channels live', '营业中 — 所有渠道');
     if (none) { dot = 'warn'; txt = cuT('Closed — every channel off', '已关闭 — 所有渠道'); }
     else if (partial) { dot = 'warn'; txt = cuT(live + ' of ' + total + ' channels live', total + ' 个渠道中 ' + live + ' 个在线'); }
-    // One row per channel with its own small switch (§252): this is where a
+    // One row per channel with its own small switch (§253): this is where a
     // single channel is opened or closed at this location. At a closed shop,
     // switching one on opens the shop with only that channel.
     const rows = serving.map((c) => {
@@ -1532,7 +1554,7 @@ window.csChannelToggle = async function (ch, isOpenNow) {
   if (!open && !(await askConfirm({ title: cuT('Close this channel at every store?', '关闭所有门店的该渠道？'), confirmLabel: cuT('Close channel', '关闭渠道'), danger: true }))) return;
   try {
     const r = await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } });
-    // Opening everywhere leaves a closed shop closed (§252) — say which, so the
+    // Opening everywhere leaves a closed shop closed (§253) — say which, so the
     // half-lit switch that follows is not a mystery.
     const skipped = ((r && r.skipped) || []).map((code) => csLocationOf(code)).filter(Boolean);
     if (window.toast) {
@@ -1570,7 +1592,7 @@ function csStoreText(o) { return cuT(o.nameEn || o.name || '', o.nameCn || o.nam
 function csLocationOf(storeCode) { return ((_csData && _csData.locations) || []).find((l) => l.storeCode === storeCode); }
 window.csCell = async function (ch, storeCode, open) {
   // Opening one channel at a closed shop opens the shop with only that channel
-  // (§252) — a bigger step than a cell, so it is confirmed. The title and body
+  // (§253) — a bigger step than a cell, so it is confirmed. The title and body
   // are the phone's own live pairs for opening a channel at a store.
   const loc = csLocationOf(storeCode);
   if (open && loc && loc.shopOpen === false) {
@@ -1610,7 +1632,7 @@ window.csCell = async function (ch, storeCode, open) {
 };
 // Location master: open/close EVERY channel for one store.
 // Reopening a closed shop brings back the channels that were live when it was
-// closed (§252), so the confirm names them; with nothing remembered it opens all.
+// closed (§253), so the confirm names them; with nothing remembered it opens all.
 window.csLocation = async function (storeCode, open) {
   const loc = csLocationOf(storeCode);
   const back = open && loc && Array.isArray(loc.reopenChannels) && loc.reopenChannels.length ? loc.reopenChannels : null;

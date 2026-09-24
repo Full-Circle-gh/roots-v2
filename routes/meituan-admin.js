@@ -1154,7 +1154,7 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
     });
     const locations = stores.map((s) => {
       const applies = csChannelsAt(s.code);
-      // What the master will bring back (§252): the channels live when the shop
+      // What the master will bring back (§253): the channels live when the shop
       // was last closed, so its confirm can name them. Null = every channel.
       const mem = shopOpen(s.code) ? null : rememberedChannels(db, s.code);
       const back = mem ? mem.filter((ch) => applies.includes(ch)) : [];
@@ -1210,7 +1210,7 @@ router.post('/api/retail-admin/channel-status/cell', requireRetailAdmin, express
   if (!GRID_CHANNELS.includes(channel) || !storeCode || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'channel, storeCode, open (boolean) required' });
   if (channel === 'gzgrocery' && storeCode !== 'tianhe') return res.status(400).json({ success: false, error: 'gzgrocery is tianhe-only' });
   // Opening a channel at a shop that is not trading opens the shop with ONLY
-  // that channel (§252, reversing §181's 409 shop_closed for this case). §181
+  // that channel (§253, reversing §181's 409 shop_closed for this case). §181
   // refused because the write landed under fulfillment_open = 0 and the next
   // read masked it straight back to Closed; here the same transaction lifts
   // that mask, and every other channel at the shop is written closed so
@@ -1233,7 +1233,7 @@ router.post('/api/retail-admin/channel-status/channel', requireRetailAdmin, expr
   if (!GRID_CHANNELS.includes(channel) || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'channel, open (boolean) required' });
   try {
     const by = csBy(req); const all = csStores(db, channel);
-    // Opening everywhere never reopens a closed shop (§252): one tap on a
+    // Opening everywhere never reopens a closed shop (§253): one tap on a
     // channel must not bring back a location that is shut until further
     // notice. Those are skipped and named so the screen can say so.
     const stores = open ? all.filter((s) => shopIsOpen(db, s.code)) : all;
@@ -1257,7 +1257,7 @@ router.post('/api/retail-admin/channel-status/location', requireRetailAdmin, exp
     if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
     const applies = csChannelsAt(storeCode);
     // Close remembers which channels were live; open brings exactly those back,
-    // or every channel when nothing is remembered (§252, lib/store-close.js).
+    // or every channel when nothing is remembered (§253, lib/store-close.js).
     let r;
     db.transaction(() => { r = setShopOpen(db, { storeCode, channels: applies, open, by: csBy(req) }); })();
     res.json({ success: true, channels: applies, opened: r.channels });

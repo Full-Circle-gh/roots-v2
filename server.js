@@ -146,7 +146,9 @@ if (!SESSION_SECRET || SESSION_SECRET === LEAKED_DEFAULT) {
 // Sessions — secure cookies in production (HTTPS), plain cookies in dev.
 // "auto" lets Express decide based on req.secure (works correctly because
 // trust proxy is set above).
-app.use(session({
+// Named, because the channel sign-in screen relay (routes/channel-signin.js)
+// authenticates a WebSocket upgrade, which never passes through app.use.
+const sessionMiddleware = session({
   store: new SQLiteStore({ db: 'sessions.db', dir: DATA_DIR }),
   secret: SESSION_SECRET,
   resave: false,
@@ -157,7 +159,8 @@ app.use(session({
     sameSite: 'lax',
     secure: 'auto'
   }
-}));
+});
+app.use(sessionMiddleware);
 
 // ── Canonical host ──────────────────────────────────────────────────────────
 // The kitchen app lives only at food.rootskitchenchina.com. The bare domain,
@@ -465,6 +468,8 @@ app.use(require('./routes/meituan-admin')); // retail-admin Meituan sync config
 app.use(require('./routes/guanyi-admin')); // retail-admin Guanyi (gzgrocery) sync config
 app.use('/api/internal/eleme', require('./routes/eleme-internal')); // daemon-only, localhost
 app.use(require('./routes/eleme-admin')); // retail-admin Eleme sync config + OAuth callback
+const channelSignin = require('./routes/channel-signin'); // §252 — sign a channel back in
+app.use(channelSignin);
 app.use(require('./routes/channel-sync')); // §103 one verdict per item per channel, read-only
 app.use(require('./routes/integrations-admin')); // retail-admin Channels & Delivery hub
 
@@ -1193,7 +1198,7 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`Roots System v2 running on port ${PORT}`);
   // Fire a push notification announcing the current release if we
   // haven't already announced this version (see release.json + _migrations).
@@ -1273,3 +1278,7 @@ app.listen(PORT, () => {
     }
   } catch (e) { console.warn('[security] secret-box health check skipped:', e.message); }
 });
+
+// §252 — the channel sign-in screen. A WebSocket upgrade, authenticated by the
+// same session, capability and store scope as the sign-in routes themselves.
+channelSignin.attachScreenRelay(httpServer, sessionMiddleware);
