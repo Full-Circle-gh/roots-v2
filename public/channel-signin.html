@@ -47,8 +47,10 @@
 </div>
 <div id="screen"></div>
 
-<script type="module">
-import RFB from '/novnc/core/rfb.js';
+<script>
+// noVNC is an ES module; it is loaded with import() below rather than a static
+// import, because the deploy's own syntax gate (scripts/check-html-js.js) reads
+// inline scripts as classic scripts, where a static import is an error.
 
 const q = new URLSearchParams(location.search);
 const channel = q.get('channel') || '';
@@ -127,7 +129,11 @@ function refusal(r) {
   return end(S.down, 'bad', true);
 }
 
-function showScreen() {
+async function showScreen() {
+  let RFB;
+  try { RFB = (await import('/novnc/core/rfb.js')).default; }
+  catch (_) { return end(S.lost, 'bad', true); }
+  if (finished) return;
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   $('screen').classList.add('on');
   rfb = new RFB($('screen'), `${proto}//${location.host}/api/retail-admin/channel-signin/screen`,
