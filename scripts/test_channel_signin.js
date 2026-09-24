@@ -96,6 +96,46 @@ check('only the person whose sign-in is running may watch, and only while it run
   ok(!signin.mayWatch(7, t0 + 1000), 'after it ended');
 });
 
+// First live use, 2026-09-24: Ash pressed Sign in, closed the tab, and the
+// warehouse — granted the permission to finish it — was told "someone is
+// already signing in" for minutes. The login window was still open and was
+// exactly the one they needed.
+check('a press joins the login already open for the same channel and store', () => {
+  eq(signin.startDecision(null, 'eleme', 'tianhe'), 'start', 'nothing running');
+  eq(signin.startDecision({ channel: 'eleme', store: 'tianhe' }, 'eleme', 'tianhe'), 'join', 'same channel and store');
+  eq(signin.startDecision({ channel: 'eleme', store: 'yuexiu' }, 'eleme', 'tianhe'), 'busy', 'another store');
+  eq(signin.startDecision({ channel: 'meituan', store: 'tianhe' }, 'eleme', 'tianhe'), 'busy', 'another channel');
+});
+check('taking a sign-in over hands the screen to the new person and off the old one', () => {
+  signin.grantFor(7, 'eleme', 'tianhe');
+  signin.grantFor(9, 'eleme', 'tianhe');
+  ok(signin.mayWatch(9), 'the person who joined');
+  ok(!signin.mayWatch(7), 'the person who left');
+  signin.endGrant();
+});
+check('the start route asks what is running, not whose grant is live', () => {
+  const src = read('routes/channel-signin.js');
+  ok(/signin\.startDecision\(st\.json\.running/.test(src), 'start does not decide from the trigger');
+  ok(!/live\.userId !== g\.caller\.user\.id/.test(src), 'a live grant alone still blocks the next person');
+  ok(/signin\.mayWatch\(userId\)/.test(src), 'an open relay does not close when its viewer is replaced');
+});
+
+// Ash, the same day: both channel cards read "Not syncing since…" and only the
+// small print said Eleme was signed out.
+check('a stopped channel’s headline names the cause a person can act on', () => {
+  const vm = require('vm');
+  const core = read('public/retail-admin/01-core.js');
+  const fn = core.slice(core.indexOf('function chHeadState'), core.indexOf('window.chHeadState'));
+  const ctx = {}; vm.runInNewContext(fn + ';this.f=chHeadState;', ctx);
+  for (const by of ['needs_login', 'auth_required', 'binding_lost']) eq(ctx.f(by), ['signed out', '已退出登录'], by);
+  eq(ctx.f('verify_required'), ['waiting for a captcha', '需要人工验证']);
+  eq(ctx.f('queue_stalled'), null, 'a stalled queue stays "not syncing"');
+  const page = read('public/retail-admin/29-channel-sync.js');
+  ok(/filter\(ch => ch\.stale \|\| ch\.blocked\)/.test(page), 'the summary ignores a signed-out channel whose queue has not stalled');
+  ok(/Signed out since \$\{at\}/.test(page), 'the card headline');
+  ok(/function csHeadline\(ch\)/.test(read('public/m.html')) && /\$\{csHeadline\(ch\)\}/.test(read('public/m.html')), 'the phone card title');
+});
+
 check('the relay refuses a cross-origin upgrade before it looks at anything else', () => {
   const { screenRefusal } = require('../routes/channel-signin');
   eq(screenRefusal({ headers: { host: 'store.example', origin: 'https://evil.example' }, session: {} }), 'cross_origin');
@@ -183,6 +223,9 @@ check('every button is gated on the permission and on a cause signing in clears'
   ok(/chSignInBtn\('meituan'/.test(read('public/retail-admin/11-meituan.js')), 'Meituan tab');
   ok(/csSignInBtn\(ch\.key,ch\.blocked\)/.test(phone), 'phone card');
   ok(/can\('integrations:signin'\)/.test(read('public/retail-admin/03-dashboard.js')), 'desktop Home');
+  // The Home row can name two channels above one button; the button says which.
+  ok(/cuT\(`Sign in to \$\{chName\(signable\.key\)\}`, `重新登录\$\{chName\(signable\.key\)\}`\)/
+    .test(read('public/retail-admin/03-dashboard.js')), 'the Home button does not name its channel');
 });
 
 check('the Meituan tab no longer offers the relay wizard, which cannot sign anyone in', () => {
