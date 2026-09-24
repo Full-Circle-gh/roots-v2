@@ -57,6 +57,7 @@
     "verify:swallowed-errors": "node scripts/check-swallowed-errors.js",
     "verify:glued-language": "node scripts/check-glued-language.js",
     "test:awaiting-restock": "node scripts/test_awaiting_restock_client.js",
+    "test:sales-switches": "node scripts/test_sales_channel_switches.js",
     "test:warehouse-pin": "node scripts/test_warehouse_store_pin.js",
     "test:shop-listings": "node scripts/test_shop_listings.js",
     "test:shop-menu-geometry": "node scripts/test_shop_menu_geometry.js",
