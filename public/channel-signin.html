@@ -32,6 +32,8 @@
   h1 { font-size:18px; font-weight:500; line-height:1.3; margin:0; }
   #msg { margin:4px 0 0; font-size:13px; color:var(--graphite); min-height:1.6em; }
   #msg.ok { color:var(--sage-ink); } #msg.bad { color:var(--brick); }
+  #done { margin-top:8px; display:none; }
+  #done.on { display:inline-block; }
   #screen { flex:1; min-height:0; background:#000; display:none; }
   #screen.on { display:block; }
   .actions { padding:16px; display:none; gap:8px; }
@@ -48,6 +50,7 @@
 <header>
   <h1 id="title"></h1>
   <p id="msg"></p>
+  <button id="done"></button>
 </header>
 <div class="actions" id="actions">
   <button id="retry"></button>
@@ -84,6 +87,13 @@ const S = {
   busy:     T('Someone is already signing in. Try again in a few minutes.', '已有人正在登录，请稍后再试。'),
   denied:   T('You don’t have permission for this', '你没有此操作的权限'),
   down:     T('The sign-in service on the server is not running.', '服务器上的登录服务未运行。'),
+  // §260 — a holder browser (闪购): signed in inside the browser that stays open.
+  holderNow: T('Sign in or pass the check on the screen below, then press Done.',
+               '请在下方画面中登录或通过人工验证，然后点击完成。'),
+  doneBtn:  T('Done', '完成'),
+  checking: T('Checking that stock updates are working again…', '正在确认库存推送是否恢复…'),
+  still:    T('Stock updates have not come back yet.', '库存推送仍未恢复。'),
+  timeout:  T('Time ran out. Try again.', '已超时，请重试。'),
   retry:    T('Try again', '重试'),
   close:    T('Close', '关闭'),
 };
@@ -93,6 +103,8 @@ $('title').textContent = S.title;
 document.title = S.title;
 $('retry').textContent = S.retry;
 $('close').textContent = S.close;
+$('done').textContent = S.doneBtn;
+$('done').onclick = finish;
 function leave() {
   if (window.opener) return window.close();
   if (history.length > 1) return history.back();
@@ -108,6 +120,7 @@ function say(text, cls) {
 function end(text, cls, canRetry) {
   say(text, cls);
   $('actions').classList.add('on');
+  $('done').classList.remove('on');
   $('retry').style.display = canRetry ? '' : 'none';
   stopPolling();
   if (rfb) { try { rfb.disconnect(); } catch (_) {} rfb = null; }
@@ -117,6 +130,8 @@ function end(text, cls, canRetry) {
 let rfb = null;
 let poll = null;
 let finished = false;
+let holder = false;   // §260 — this sign-in is inside a holder browser
+let verifying = null; // when the wait for the daemon's own word began
 function stopPolling() { if (poll) { clearInterval(poll); poll = null; } }
 
 async function api(method, url, body) {
@@ -148,7 +163,7 @@ async function showScreen() {
     { wsProtocols: ['binary'] });
   rfb.scaleViewport = true;
   rfb.resizeSession = false;
-  rfb.addEventListener('disconnect', () => { if (!finished) end(S.lost, 'bad', true); });
+  rfb.addEventListener('disconnect', () => { if (!finished && !verifying) end(S.lost, 'bad', true); });
 }
 
 async function check() {
@@ -156,6 +171,7 @@ async function check() {
   if (r.status !== 200) return refusal(r);
   const s = r.json;
   if (!s.trigger) return end(S.down, 'bad', true);
+  if (holder) return checkHolder(s);
   if (s.running) return;
   finished = true;
   if (s.last && s.last.ok) {
@@ -169,11 +185,47 @@ async function check() {
   }
 }
 
+// A holder session is over when Done is pressed or the trigger saw the login
+// page left. Signed in is then the daemon's own word: the channel's block
+// clears once it restarts and re-checks. Up to three minutes.
+const VERIFY_MS = 3 * 60 * 1000;
+function checkHolder(s) {
+  if (s.running && !verifying) return;
+  if (!verifying) {
+    if (!s.last || !s.last.ok) { finished = true; return end(S.timeout, 'bad', true); }
+    beginVerify();
+  }
+  if (!s.blocked) {
+    finished = true;
+    end(S.done, 'ok', false);
+    return setTimeout(leave, 3000);
+  }
+  if (Date.now() - verifying > VERIFY_MS) { finished = true; end(S.still, 'bad', true); }
+}
+function beginVerify() {
+  verifying = Date.now();
+  $('done').classList.remove('on');
+  if (rfb) { try { rfb.disconnect(); } catch (_) {} rfb = null; }
+  $('screen').classList.remove('on');
+  say(S.checking);
+}
+async function finish() {
+  $('done').disabled = true;
+  const r = await api('POST', '/api/retail-admin/channel-signin/finish', { channel, store });
+  $('done').disabled = false;
+  // Already over (the trigger saw the login page left): the poll takes it from here.
+  if (r.status === 409) return;
+  if (r.status !== 200) return refusal(r);
+  if (!verifying) beginVerify();
+}
+
 async function start() {
   say(S.opening);
   const r = await api('POST', '/api/retail-admin/channel-signin/start', { channel, store });
   if (r.status !== 200) return refusal(r);
-  say(S.loginNow);
+  holder = !!r.json.holder;
+  say(holder ? S.holderNow : S.loginNow);
+  if (holder) $('done').classList.add('on');
   // The login script needs a moment to open its window on the screen.
   setTimeout(showScreen, 1500);
   poll = setInterval(check, 3000);

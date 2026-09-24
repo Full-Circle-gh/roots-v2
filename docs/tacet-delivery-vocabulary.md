@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.171 · 2026-09-24 · §260 SIGNS 闪购 IN INSIDE ITS OWN BROWSER — FOUR STRINGS COMPOSED BY CLAUDE, ONE COPIED.** The sign-in page gains a *Done* button and three lines for a channel whose browser stays open. `Done · 完成` is copied; the instruction, the checking line, the not-yet line and the timeout are composed from live fragments. See *闪购 on its own screen (§260)*.
+
 **v1.170 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
 
 **v1.169 · 2026-09-24 · §252 NAMES THE CHANNEL ON THE HOME ROW'S SIGN-IN BUTTON — THREE STRINGS COMPOSED BY CLAUDE, EVERY PART LIVE — AND THE CHANNEL CARDS' HEADLINES NAME THE CAUSE.** The row can name two channels ("Meituan not syncing, Eleme is signed out") above one button, and "Sign in again" did not say which it opens. See *Signing a channel back in (§252)*. The same day Ash read both channel cards as "Not syncing since…" when one was signed out, so the headline and the summary now name the cause.
@@ -8680,3 +8682,26 @@ which already says it; the card prints both halves side by side
 - `打印小票` / `打印面单` for the button — **rejected**: *receipt* and *waybill*
   are what those print, not a recipe.
 
+## 闪购 on its own screen (§260)
+
+**Four strings composed, by Claude, 2026-09-24, under the 2026-09-06 amendment.**
+One is copied. The page is `public/channel-signin.html`, and these lines show
+only when the sign-in is inside a holder browser (闪购).
+
+| shipped | built from |
+|---|---|
+| `Done · 完成` (the button) | **copied**: live as `T('Done','完成')` on fifteen screens |
+| `Sign in or pass the check on the screen below, then press Done. · 请在下方画面中登录或通过人工验证，然后点击完成。` | **composed**: `请在下方画面中登录` is §252's own instruction; `人工验证` is the Meituan daemon's alert, verbatim; `点击` is live throughout; `完成` names the button above |
+| `Checking that stock updates are working again… · 正在确认库存推送是否恢复…` | **composed**: `正在…` as in §252's `正在打开…`; `库存推送` and `恢复` are §252's own *signed in again* line; `确认` is live |
+| `Stock updates have not come back yet. · 库存推送仍未恢复。` | **composed** from the same `库存推送` and `恢复`, with `仍未` for *not yet* |
+| `Time ran out. Try again. · 已超时，请重试。` | **composed**: `已超时` is live once; `请重试` joins the page's own `重试` button word in the house's `请…` shape |
+
+**Live candidates rejected.**
+
+- `已完成` (live, four times), for the button: **rejected**. It is a state,
+  *done already*, and a button is a verb.
+- `登录窗口已关闭，未能登录。` (§252's own), for the timeout: **rejected**.
+  The 闪购 browser never closes; saying its window closed would be false.
+- `已重新登录，库存推送将在几分钟内恢复。` (§252), for the checking line:
+  **rejected**. It says the sign-in worked before the channel has said so,
+  which is the one thing this flow waits to hear.

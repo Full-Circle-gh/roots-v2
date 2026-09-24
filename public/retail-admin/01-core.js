@@ -616,10 +616,8 @@ function chSignIn(channel, store, name) {
 }
 /* The button, or nothing: only for a cause signing in can clear, and only for
    someone holding the permission (the server checks again either way). */
-function chSignInBtn(channel, store, name, by, signable) {
+function chSignInBtn(channel, store, name, by) {
   if (!store || !chSignInable(by) || (typeof can === 'function' && !can('integrations:signin'))) return '';
-  // The server says when Sign in cannot clear this block (a 闪购 store).
-  if (signable === false) return '';
   // Secondary, not primary: a filled button is the design system's one Dusk
   // CTA per screen, and this is a person's action on a warning card.
   return '<button type="button" class="btn btn-sm td-secondary" onclick="event.stopPropagation();chSignIn(' +
