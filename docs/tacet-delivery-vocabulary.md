@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.172 · 2026-09-24 · §261 PUTS A DELIVERY PHOTO ON THE ORDER — ONE STRING COMPOSED BY CLAUDE, LIFTED FROM THE COURIER PLATFORM; EVERYTHING ELSE COPIED.** Staff add the photo of a same-city parcel at the door from the order drawer (desktop and phone), and the customer sees it on their order page (mini app and web shop). `Delivery photo · 送达照片` is the one new pair; every control and message beside it is a live pair copied whole. See *The delivery photo (§261)*.
+
 **v1.171 · 2026-09-24 · §260 SIGNS 闪购 IN INSIDE ITS OWN BROWSER — FOUR STRINGS COMPOSED BY CLAUDE, ONE COPIED.** The sign-in page gains a *Done* button and three lines for a channel whose browser stays open. `Done · 完成` is copied; the instruction, the checking line, the not-yet line and the timeout are composed from live fragments. See *闪购 on its own screen (§260)*.
 
 **v1.170 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
@@ -8705,3 +8707,32 @@ only when the sign-in is inside a holder browser (闪购).
 - `已重新登录，库存推送将在几分钟内恢复。` (§252), for the checking line:
   **rejected**. It says the sign-in worked before the channel has said so,
   which is the one thing this flow waits to hear.
+
+## The delivery photo (§261)
+
+**One string composed, by Claude, 2026-09-24, under the 2026-09-06 amendment.**
+Everything else is copied whole. The pair shows in both registers: as the
+drawer's line label (operator, desktop `04-orders.js` and phone `m.html`) and as
+the order page's section label (customer, mini app `pages/order` and web shop
+`shop.html`). Same words in both, because it is the same thing in both.
+
+| shipped | built from |
+|---|---|
+| `Delivery photo · 送达照片` | **composed, lifted from the source**: the Qingyun merchant app labels the rider's picture `骑手送达照片` (Ash's screenshot, 2026-09-24), which is where this photo comes from. `骑手` is dropped because staff can add one too; `送达` is this document's own word for *delivered* (`已送达`), and `照片` is live on every photo control in the product. The mini app's section label is written `DELIVERY PHOTO` in English, as its every other section label is capitalised |
+| `Add photo · 添加照片`, `Replace · 更换`, `View · 查看`, `Remove · 删除` | copied: the late-parcel evidence line, and the product picture's `更换` |
+| `Customers see this · 顾客可见` | copied: the settings screen's own marker for a field shoppers see |
+| `Remove this photo? · 删除这张照片?`, `Could not read that photo · 无法读取该照片`, `That photo is too large — under 3.5MB please · 照片过大,请小于 3.5MB`, `Photo not found · 未找到照片`, `Could not open that photo · 无法打开该照片`, `Could not attach · 上传失败`, `Could not remove · 删除失败` | copied: the evidence line's own messages |
+
+**Live candidates rejected.**
+
+- `凭证` (*Evidence*, live on the late-parcel case): **rejected**. It is a
+  document kept as proof for a claim, and the customer is not being shown proof;
+  they are being shown their parcel.
+- `骑手送达照片` whole: **rejected**. It says the rider took it, and a photo
+  staff added would then be labelled as the rider's.
+- `配送照片`: **rejected**. `配送` is the journey (`配送中`, *on the way*); the
+  photo is of the arrival.
+- `图片` for `照片`: **rejected**. `图片` is live for a product *image* chosen
+  in an editor; a photograph taken on the day is `照片` everywhere in this
+  product.
+

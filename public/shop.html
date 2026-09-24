@@ -3488,6 +3488,11 @@ async function renderOrderDetail(id){
       ${acCtl}
       ${rsCtl}
     </div>
+    ${/* §261 — the photo of the parcel at the door. The section is drawn empty
+         and the picture fetched after, from the customer-scoped route: the
+         order read says only that there is one, never the bytes. */''}
+    ${o.delivery_photo&&o.delivery_photo.has?`<div class="co-sec" id="odPhotoSec"><h3>${cn?'送达照片':'Delivery photo'}</h3>
+      <img id="odPhoto" alt="" style="display:none;width:100%;max-height:420px;object-fit:cover;border-radius:8px;cursor:zoom-in"></div>`:''}
     <div class="co-sec"><h3>${cn?'金额':'Payment'}</h3>
       <div class="co-line"><span>${cn?'小计':'Subtotal'}</span><span>${money(sub)}</span></div>
       ${ship>0?`<div class="co-line"><span>${cn?'配送费':'Delivery'}</span><span>${money(ship)}</span></div>`:''}
@@ -3506,6 +3511,16 @@ async function renderOrderDetail(id){
   const pay=$('#odPay'); if(pay)pay.addEventListener('click',()=>coStartPayment({id:o.id,order_no:o.order_no,total:o.total}));
   const rb=$('#odResched'); if(rb)rb.addEventListener('click',()=>openReschedule(o));
   const ab=$('#odAddr'); if(ab)ab.addEventListener('click',()=>openAddressChange(o));
+  const ph=$('#odPhoto');
+  if(ph){
+    api('/api/retail/orders/'+encodeURIComponent(o.id)+'/delivery-photo').then(d=>{
+      const uri=d&&d.data;
+      if(!/^data:image\/(png|jpe?g|webp);base64,/i.test(uri||'')) throw new Error('bad');
+      ph.src=uri; ph.style.display='block';
+      // Full size in a tab of its own, as the back office opens it.
+      ph.addEventListener('click',()=>{ const w=window.open(); if(w) w.document.write('<img src="'+uri+'" style="max-width:100%">'); });
+    }).catch(()=>{ const sec=$('#odPhotoSec'); if(sec) sec.remove(); });
+  }
 }
 function rsReasonText(reason,cn){
   switch(reason){
