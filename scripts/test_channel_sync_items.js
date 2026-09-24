@@ -843,6 +843,45 @@ check('both clients read the channel’s cause where the server offers one', () 
   ok(/ch\.stale\|\|ch\.blocked/.test(read('public/m.html')), 'the phone’s stopped-channel card ignores a block');
 });
 
+// GZ Grocery was signed out for a day while its tab's dot stayed green and Home
+// said nothing, because neither read the block: the tab looked at a listings
+// read from weeks before, and Home waited for the queue to count as stalled.
+check('each store says whether IT is blocked, not only the worst one', () => {
+  const db = freshDb(); product(db, 1, { stock: 3 });
+  mtCatalogue(db, 'tianhe', ['听装1']); mtMap(db, 1, { pushed: 3 });
+  db.prepare(`INSERT INTO meituan_sync_log (store_code, event_type, status, error_msg, created_at)
+              VALUES ('yuexiu', 'needs_login', 'error', 'signed out', '2026-09-12 09:14:00')`).run();
+  const mt = channelSyncItems(db).channels.find(c => c.key === 'meituan');
+  const by = Object.fromEntries(mt.stores.map(s => [s.code, s.blocked]));
+  eq(by, { tianhe: false, yuexiu: true });
+});
+
+check('the dashboard read names every stopped channel and nothing else', () => {
+  const db = freshDb();
+  eq(mod.channelBlocks(db), [], 'a quiet box reports nothing');
+  db.prepare(`INSERT INTO guanyi_sync_log (store_code, event_type, status, error_msg, created_at)
+              VALUES ('tianhe', 'needs_login', 'error', 'session expired', '2026-09-23 05:03:00')`).run();
+  const out = mod.channelBlocks(db);
+  eq(out.map(c => [c.key, c.blocked.by, c.blocked.store]), [['guanyi', 'needs_login', 'tianhe']]);
+  // The daemon's own recovery announcement clears it, as on the page.
+  db.prepare(`INSERT INTO guanyi_sync_log (store_code, event_type, status, created_at)
+              VALUES ('tianhe', 'needs_login', 'ok', '2026-09-23 06:00:00')`).run();
+  eq(mod.channelBlocks(db), []);
+});
+
+check('Home says a stopped channel on both screens, from the first failed read', () => {
+  ok(/channel_blocked = channelBlocks\(/.test(read('routes/retail.js')), 'the dashboard route does not read it');
+  ok(/channel_blocked, server_now/.test(read('routes/retail.js')), 'the dashboard route does not send it');
+  ok(/DASH_OPS\.channel_blocked/.test(read('public/retail-admin/03-dashboard.js')), 'desktop Home ignores it');
+  ok(/o\.channel_blocked/.test(read('public/m.html')), 'phone Home ignores it');
+});
+
+check('the GZ Grocery tab reads the block instead of a green dot by default', () => {
+  ok(/channelBlock\(db, 'guanyi', store\.code\)/.test(read('routes/guanyi-admin.js')), '/guanyi/status does not send it');
+  ok(/st\.block/.test(read('public/retail-admin/12-guanyi.js')), 'the tab does not read it');
+  ok(/s\.blocked \? 'is-down'/.test(read('public/retail-admin/29-channel-sync.js')), 'Channel sync keeps a blocked store green');
+});
+
 
 // ── 11. §117 · all syncing gathers in one place ──────────────────────────────
 //

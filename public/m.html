@@ -15947,28 +15947,39 @@ function opsFires(){
 
      No featOn/permission gate for SEEING it: every role that sees Home should
      see when a channel stops syncing. Opening goes through the screen's gate. */
-  const cia=o.channel_items_attention||{}, stalled=o.channel_sync_stale||[];
+  /* §106 — a third fact rides the same row, worst of all: a channel STOPPED
+     by a channel-level cause (signed out, captcha), said from the first failed
+     read. A signed-out channel's queue takes hours to count as stalled, and
+     Home stayed silent for a day while GZ Grocery was signed out. It outranks
+     the stall for that channel and turns the row brick. Mirrors the desktop. */
+  const cia=o.channel_items_attention||{}, stalled=o.channel_sync_stale||[], blockedChs=o.channel_blocked||[];
   const attN=Number(cia.count)||0;
-  if(attN>0||stalled.length){
+  if(attN>0||stalled.length||blockedChs.length){
     const CH={meituan:['Meituan','美团'],eleme:['Eleme','饿了么'],guanyi:['GZ Grocery','GZ Grocery']};
     const down={}; for(const s of stalled) down[s.channel]=s;
+    const blk={}; for(const b of blockedChs) blk[b.key]=b.blocked;
     const byCh=cia.by_channel||{};
+    const blockWord=(en,cn,by)=>(by==='needs_login'||by==='auth_required')?T(en+' is signed out',cn+' 已退出登录')
+      :by==='verify_required'?T(en+' needs a captcha',cn+' 需要人工验证')
+      :T(en+' not syncing',cn+' 未同步');
     /* A channel says ONE thing about itself, worst first: a channel not
        syncing at all is not also described by how many of its items have been
        caught out — the stall is the larger fact and it contains them. */
     const parts=[];
     for(const k of Object.keys(CH)){
-      if(down[k]) parts.push(T(CH[k][0]+' not syncing',CH[k][1]+' 未同步'));
+      if(blk[k]) parts.push(blockWord(CH[k][0],CH[k][1],blk[k].by));
+      else if(down[k]) parts.push(T(CH[k][0]+' not syncing',CH[k][1]+' 未同步'));
       else if(byCh[k]) parts.push(T(CH[k][0],CH[k][1])+' '+byCh[k]);
     }
     /* A channel the server names that this map has never heard of is still
        said rather than dropped — a fourth channel needs no change here. */
-    for(const s of stalled) if(!CH[s.channel]) parts.push(T(s.label+' not syncing',s.label+' 未同步'));
-    for(const k of Object.keys(byCh)) if(!CH[k]&&!down[k]) parts.push(k+' '+byCh[k]);
-    /* The clock is the OLDER of the two facts — the earliest moment a customer
-       may have started reading a wrong number. Both stamps are the server's
+    for(const b of blockedChs) if(!CH[b.key]) parts.push(blockWord(b.label,b.label,b.blocked.by));
+    for(const s of stalled) if(!CH[s.channel]&&!blk[s.channel]) parts.push(T(s.label+' not syncing',s.label+' 未同步'));
+    for(const k of Object.keys(byCh)) if(!CH[k]&&!down[k]&&!blk[k]) parts.push(k+' '+byCh[k]);
+    /* The clock is the OLDEST of the facts — the earliest moment a customer
+       may have started reading a wrong number. All stamps are the server's
        'YYYY-MM-DD HH:MM:SS' UTC, so a string sort picks the minimum. */
-    const oldest=[cia.oldest_at].concat(stalled.map(s=>s.oldest_at)).filter(Boolean).map(String).sort()[0]||null;
+    const oldest=[cia.oldest_at].concat(stalled.map(s=>s.oldest_at),blockedChs.map(b=>b.blocked.at)).filter(Boolean).map(String).sort()[0]||null;
     const t=oldest?_date(oldest):null;
     /* Carry the date when it isn't today — a bare clock time makes a fact stuck
        since another DAY read as newer than one stuck this morning, so the text
@@ -15976,8 +15987,10 @@ function opsFires(){
     const sameDay=!!t&&shopDayOf(t)===shopToday();
     const when=!t?'':tdWhen(t,sameDay?'time':'dateTime',_tdL());
     const meta=[parts.join(T(', ','，')),when?T('wrong since '+when,'自 '+when+' 起不符'):''].filter(Boolean).join(T(', ','，'));
-    f.push({sev:'amber',icon:'refresh-cw',label:T('Channel sync','渠道同步'),
-      n:attN||stalled.reduce((n,s)=>n+(Number(s.waiting_count)||0),0),meta,
+    f.push({sev:blockedChs.length?'brick':'amber',icon:'refresh-cw',label:T('Channel sync','渠道同步'),
+      /* A block caught before any queue stalls has no count of its own yet,
+         so the pill counts stopped channels rather than reading 0. */
+      n:attN||stalled.reduce((n,s)=>n+(Number(s.waiting_count)||0),0)||blockedChs.length,meta,
       /* mins stays real so this still outranks Restock below (whose mins is
          deliberately null, and a fire with no age sorts last) — a channel that
          may be SELLING stock we don't have beats an empty shelf. age:false

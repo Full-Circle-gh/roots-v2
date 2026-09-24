@@ -12,6 +12,7 @@
 const express = require('express');
 // §85 — the published figure, allowance included during a pre-order window.
 const channelPublish = require('../lib/channel-publish');
+const { channelBlock } = require('../lib/channel-block');
 const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
@@ -238,7 +239,12 @@ router.get('/api/retail-admin/guanyi/status', requireRetailAdmin, (req, res) => 
       SELECT store_code, event_type, status, detail, error_msg, created_at
         FROM guanyi_sync_log ORDER BY created_at DESC LIMIT 20
     `).all();
-    res.json({ success: true, queuePending, queueError, mappedCount, recentLogs });
+    // §106 — whether the channel is stopped (signed out, proxy down) right now.
+    // Without it the tab's store line was green while the Channel sync page
+    // said the same channel had been signed out since yesterday.
+    const store = guanyiStore(db);
+    const block = store ? channelBlock(db, 'guanyi', store.code) : null;
+    res.json({ success: true, queuePending, queueError, mappedCount, recentLogs, block });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

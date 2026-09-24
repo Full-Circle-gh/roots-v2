@@ -200,7 +200,7 @@
         if (!s.connected) t = cuT('Store not connected', '门店未关联');
         else if (s.catalogue && s.catalogue.count) t = cuT(`${s.catalogue.count} listings read`, `已读取 ${s.catalogue.count} 个商品`) + (s.catalogue.at ? ' · ' + ago(s.catalogue.at) : '');
         else t = cuT('no listings read yet', '尚未读取商品');
-        return '<div class="cs-store"><i class="cs-dot ' + (s.connected ? 'is-ok' : 'is-none') + '"></i><span>' + esc(storeName(s) + ' · ' + t) + '</span></div>';
+        return '<div class="cs-store"><i class="cs-dot ' + (s.blocked ? 'is-down' : s.connected ? 'is-ok' : 'is-none') + '"></i><span>' + esc(storeName(s) + ' · ' + t) + '</span></div>';
       }).join('');
       /* §106 — WHY the channel is stopped, from its own daemon log: a captcha
          waiting on a named store since a named time, the proxy down, a
