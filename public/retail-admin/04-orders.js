@@ -4281,6 +4281,103 @@ function hoistedTracking(o) {
   return `<div class="od-tracking-top">${cards.join('')}</div>`;
 }
 
+// ── Delivery photo (§261) ──────────────────────────────────────────────────
+// The photo of the parcel at the door, which the customer sees on their order
+// page. One per order: a second one replaces the first. The server sends
+// o.delivery_photo only for a same-city delivery that has left the shop (or an
+// order already carrying a photo), and never the bytes — View fetches them.
+// Under the courier card because that is where staff are looking when the
+// rider says it is done.
+function renderDeliveryPhoto(o) {
+  const p = o.delivery_photo;
+  if (!p) return '';
+  const oid = Number(o.id);
+  const link = (fn, text) => delayBtn(fn, text, 'link');
+  return `
+    <div class="od-delivery-photo" style="display:flex; gap:9px; align-items:center; flex-wrap:wrap;
+         padding:8px 0; margin-bottom:var(--s3); border-bottom:1px solid var(--line-soft);">
+      <span style="flex:none; width:12px; text-align:center; color:var(--text-3);">${p.has ? '▣' : '▢'}</span>
+      <span style="color:var(--text-3);">${cuT('Delivery photo', '送达照片')}</span>
+      ${p.has ? link(`deliveryPhotoView(${oid})`, cuT('View', '查看')) : ''}
+      ${p.has && p.customer_sees ? `<span style="font-size:11px; color:var(--text-3);">${cuT('Customers see this', '顾客可见')}</span>` : ''}
+      <input type="file" accept="image/*" id="dph-${oid}" style="display:none;"
+             onchange="deliveryPhotoAdd(${oid},this)">
+      <span style="margin-left:auto; display:inline-flex; gap:10px;">
+        ${link(`document.getElementById('dph-${oid}').click()`, p.has ? cuT('Replace', '更换') : cuT('Add photo', '添加照片'))}
+        ${p.has ? link(`deliveryPhotoRemove(${oid})`, cuT('Remove', '删除')) : ''}
+      </span>
+    </div>`;
+}
+
+// Downscaled here before it is sent, the way the phone's evidence photo is: a
+// phone camera's four or five megabytes would pass the 3.5MB check below only
+// sometimes, and the customer's order page needs no more than 1280px.
+function deliveryPhotoShrink(file) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onerror = () => resolve(null);
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = () => resolve(null);
+      img.onload = () => {
+        try {
+          const max = 1280;
+          const scale = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
+          const w = Math.max(1, Math.round((img.width || 1) * scale));
+          const h = Math.max(1, Math.round((img.height || 1) * scale));
+          const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(cv.toDataURL('image/jpeg', 0.7));
+        } catch { resolve(null); }
+      };
+      img.src = String(r.result || '');
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+async function deliveryPhotoAdd(orderId, input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  input.value = '';                                  // so the same file can be re-picked
+  const data = await deliveryPhotoShrink(file);
+  if (!data) { toast(cuT('Could not read that photo', '无法读取该照片'), 'err'); return; }
+  if (data.length > 3.5 * 1024 * 1024) {
+    toast(cuT('That photo is too large — under 3.5MB please', '照片过大,请小于 3.5MB'), 'err');
+    return;
+  }
+  try {
+    await adminWrite({
+      url: `/api/retail-admin/orders/${orderId}/delivery-photo`,
+      method: 'POST', body: { data },
+      errLabelEn: 'Could not attach', errLabelCn: '上传失败',
+    });
+    openOrder(orderId, { instant: true });
+  } catch { /* adminWrite has already said why in a toast */ }
+}
+
+async function deliveryPhotoView(orderId) {
+  try {
+    const j = await api(`/api/retail-admin/orders/${orderId}/delivery-photo`);
+    const data = j?.data?.data;
+    if (!data) { toast(cuT('Photo not found', '未找到照片'), 'err'); return; }
+    const w = window.open();
+    if (w) w.document.write(`<img src="${data}" style="max-width:100%">`);
+  } catch { toast(cuT('Could not open that photo', '无法打开该照片'), 'err'); }
+}
+
+async function deliveryPhotoRemove(orderId) {
+  if (!confirm(cuT('Remove this photo?', '删除这张照片?'))) return;
+  try {
+    await adminWrite({
+      url: `/api/retail-admin/orders/${orderId}/delivery-photo`,
+      method: 'DELETE',
+      errLabelEn: 'Could not remove', errLabelCn: '删除失败',
+    });
+    openOrder(orderId, { instant: true });
+  } catch { /* adminWrite has already said why in a toast */ }
+}
+
 // GZ outer-district orders (花都/番禺/南沙/从化/增城/白云) can go out by either a
 // same-city rider (local ETA) or JD logistics (waybill). Server flags this on
 // o.gz_method_toggle. The toggle sits at the top of whichever card is showing
@@ -6959,6 +7056,7 @@ function renderOpenOrder(o) {
         ${orderHeadMarks(o)}
 
         ${hoistedTracking(o)}
+        ${renderDeliveryPhoto(o)}
 
         ${drawerRefundBanner(o)}
         ${renderRefundPanel(o)}

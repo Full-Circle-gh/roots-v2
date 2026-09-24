@@ -1915,6 +1915,68 @@ reg('dcDelEv', (sid,fid)=>{
     }};
   render();
 });
+/* §261 — the delivery photo. Downscaled before it leaves the phone, exactly as
+   the evidence photo above is, and for the same reason. */
+function dphOrder(){
+  return (state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+}
+function dphReload(o){
+  state.parcelBusy=null;
+  api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+}
+function dphFail(e){
+  state.parcelBusy=null;
+  if(String(e.message)==='auth') return;
+  state.orderErr=E(orderErrorText(e),orderErrorText(e)); render();
+}
+reg('dphAdd', input=>{
+  const f=input&&input.files&&input.files[0];
+  if(!f) return;
+  input.value='';                                   // so the same file can be re-picked
+  const o=dphOrder();
+  if(!o||o._id==null||state.parcelBusy) return;
+  const unread=()=>{ state.orderErr=E('Could not read that photo.','无法读取该照片。'); render(); };
+  const rd=new FileReader(), img=new Image();
+  rd.onload=()=>{ img.onload=()=>{
+      let data=null;
+      try{
+        const max=1280;
+        const scale=Math.min(1, max/Math.max(img.width||1, img.height||1));
+        const w=Math.max(1,Math.round((img.width||1)*scale)), h=Math.max(1,Math.round((img.height||1)*scale));
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        data=cv.toDataURL('image/jpeg',0.7);
+      }catch(e){ data=null; }
+      if(!data){ unread(); return; }
+      state.parcelBusy='dph'; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/delivery-photo',{data}).then(()=>dphReload(o)).catch(dphFail);
+    };
+    img.onerror=unread;
+    img.src=String(rd.result||'');
+  };
+  rd.onerror=unread;
+  rd.readAsDataURL(f);
+});
+reg('dphView', ()=>{
+  const o=dphOrder();
+  if(!o||o._id==null) return;
+  api('/orders/'+o._id+'/delivery-photo').then(j=>{
+    const data=j&&j.data&&j.data.data;
+    if(!data){ state.orderErr=E('Photo not found.','未找到照片。'); render(); return; }
+    state.imgZoom=data; render();   // the generic full-screen viewer
+  }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
+});
+reg('dphDel', ()=>{
+  const o=dphOrder();
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.ask={title:T('Remove this photo?','删除这张照片?'),
+    confirmLabel:T('Remove','删除'), danger:true,
+    run:()=>{
+      state.parcelBusy='dph'; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/delivery-photo',{},'DELETE').then(()=>dphReload(o)).catch(dphFail);
+    }};
+  render();
+});
 reg('dcTold', sid=>{ dcStep(sid,'customer_told',{}); });
 reg('dcRemedy', (sid,kind)=>{ dcStep(sid,'remedy',{kind}); });
 /* Unfold one later step's controls. ONE AT A TIME: opening the second closes
@@ -16510,6 +16572,7 @@ function sheetOrderDetail(){
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
        ${shopNoteCard(o)}
        ${riderCard(o)}
+       ${deliveryPhotoCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!o.viewOnly&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -17105,6 +17168,24 @@ function riderLive(o){
   if(['delivered','cancelled','refunded'].includes(o.raw)) return null;
   if(courierAgeMs(c.updated_at)>M_COURIER_STALE_MS) return null;
   return c;
+}
+/* §261 — the photo of the parcel at the door, which the customer sees on their
+   order page. One per order; a second replaces the first. Under the rider card
+   because that is where staff are looking when the rider says it is done. */
+function deliveryPhotoCard(o){
+  const p=o.dphoto;
+  if(!p||o.viewOnly) return '';
+  const busy=state.parcelBusy==='dph';
+  return `<div class="card" style="padding:4px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="flex:none;color:var(--text-secondary);display:flex">${ic('camera',18)}</span>
+    <span style="font-size:14.5px;font-weight:500">${T('Delivery photo','送达照片')}</span>
+    ${p.has&&p.customer_sees?`<span style="font-size:12px;color:var(--text-secondary)">${T('Customers see this','顾客可见')}</span>`:''}
+    <span style="margin-left:auto;display:inline-flex;gap:14px">
+      ${p.has?`<button class="rowact" onclick="APP.cmd('dphView')">${T('View','查看')}</button>`:''}
+      <label class="rowact"${busy?' style="opacity:.55;pointer-events:none"':''}>${p.has?T('Replace','更换'):T('Add photo','添加照片')}
+        <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dphAdd',this)"></label>
+      ${p.has?`<button class="rowact brick"${busy?' disabled':''} onclick="APP.cmd('dphDel')">${T('Remove','删除')}</button>`:''}
+    </span></div>`;
 }
 function riderCard(o){
   const c=o.courier;
@@ -23442,6 +23523,10 @@ const ITEM_TUPLE=it=>[it.qty||it.quantity||1,
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);
+  /* §261 — the delivery photo slot. Present only where the server offers one
+     (a same-city delivery that has left the shop, or an order already carrying
+     a photo); never the bytes, which dphView fetches. */
+  base.dphoto=o.delivery_photo||null;
   // The parcels the order is actually split into. An out-of-Guangzhou order
   // becomes an Air parcel and a Land parcel, each shipping and arriving on its
   // own clock — the phone showed one flat item list and one tracking block, so
