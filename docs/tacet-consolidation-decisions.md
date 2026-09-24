@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.404
+# Tacet shared-core consolidation — decisions record, v4.405
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-24 · v4.405 — **§257 · THE INTEGRATIONS WIZARD STOPS TAKING CHANNEL PASSWORDS; THE BOX REQUEST STAYS; THE SHARED SCREEN'S PASSWORD IS ROTATED BEFORE IT CLOSES — ASH: *"do everything as you recommend"*.** **THE WIZARD WAS TWO THINGS.** Its first step, *Request the box*, is a real onboarding request, so it stays. Its login steps asked for the merchant's Meituan or Qingyun account and password and an SMS code, and saved the password encrypted under `meituan.<store>.user|pass` / `qingyun.<store>.user|pass` in `tenant_secrets`. They then handed the login to a driver that was never registered, so every attempt ended `no_worker_attached`. A search finds no reader of those keys outside `lib/tenant-creds.js`. **REMOVED**: the password and SMS steps in `public/retail-admin/15-integrations.js` (its *continue* buttons now open *Get help*, which is how a box is actually connected), the `session/start` and `session/sms` endpoints in `routes/integrations-admin.js`, and the driver seam, simulator, `startLogin` and `submitSms` in `lib/integrations/session-relay.js`. The session read the cards use stays. **WIPED**: `scripts/oneoff_wipe_relay_channel_passwords.js` deletes exactly the per-store family through `oneoff.yml` (dry run first, verified backup on apply). The tenant-level `QINGYUN_USER` / `QINGYUN_PASS` are untouched. **THE SHARED SCREEN.** Display `:99` is still the only way to clear a captcha on the 闪购 (越秀) and Qingyun browsers, which §252's Sign in does not cover, so its password-only WebSocket paths are NOT closed yet. Instead x11vnc's shared password is rotated now to a long random one (a box command, run by Ash). Closing the paths follows once Sign in covers those two channels. No string composed, no schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-24 · v4.404 — **§104 · THE CHANNEL SYNC ROW'S COUNTS SAY WHAT THEY COUNT — ASH: *"why not saying 3 products need attention? also what is the 25"*.** Home read *Channel sync · 25 · Meituan 2, Eleme is signed out*. The 2 did not say *2 what*, and the pill's 25 was explained nowhere: it is §104's `channel_items_attention.count`, products wrong on some channel, of which Eleme's 23 were hidden behind *is signed out*. **Each channel now names its count**, and **a stopped channel carries its own**, so the parts add up to the pill: *Meituan: 2 need attention, Eleme is signed out (23 need attention)* · *美团 2 个待处理，饿了么 已退出登录（23 个待处理）*. Desktop (`03-dashboard.js`) and phone (`m.html`) change together, and `scripts/test_channel_sync_home_row.js` keeps asserting they are equal. It gains a case where the line adds up to the pill; its pinned Chinese set gains `个待处理`, the Channel sync strip's own live pair, copied rather than composed. No schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20392,3 +20394,12 @@ drags the slider. A login a person performs opens a plain Chromium process
 (`lib/genuine-chrome.js`), is watched only through Chrome's HTTP tab list, and
 is attached to only once it has reached the dashboard, to copy the session out.
 Eleme first; see the v4.403 changelog entry.
+
+## §257 — NO SCREEN TAKES A CHANNEL PASSWORD; THE SHARED SCREEN CLOSES AFTER SIGN IN COVERS 闪购 AND QINGYUN
+
+**Decided by Ash, 2026-09-24.** The Integrations wizard keeps *Request the
+box* and loses its password and SMS steps, which could never log in and stored
+the password for nothing. What they stored is deleted by a one-off. The shared
+ops screen's VNC password is rotated now. Its password-only paths close once
+§252's Sign in also clears 闪购 and Qingyun captchas. See the v4.405 changelog
+entry.
