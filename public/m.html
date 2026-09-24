@@ -3645,6 +3645,10 @@ reg('chanCell', (channel, storeCode, next)=>{
       // own next read hides, so the row said Open until the app was restarted
       // and then said Closed. The toggle looked like it undid itself; it had
       // never taken in the first place.
+      // At a shut shop this open is not refused any more (§253): the server
+      // opens the shop with ONLY this channel, every other channel there
+      // staying shut, in one write. So it is the same write as anywhere else,
+      // and the re-read below shows the shop open with this one row live.
       apiWrite('/channel-status/cell',{channel,storeCode,open},'POST').then(()=>{
         state.chanBusy=null;
         showToast(open?T('Open at '+store,store+' 已开启'):T('Closed at '+store,store+' 已关闭'));
@@ -3652,29 +3656,10 @@ reg('chanCell', (channel, storeCode, next)=>{
       }).catch(e=>{
         state.chanBusy=null;
         if(String(e.message)==='auth') return;
-        state.chanErr = e.code==='shop_closed'
-          ? E(store+' is closed as a shop, so no channel can open there. Open the shop first — it is on the Sales screen, under Shops.',
-              store+' 门店已关闭，任何渠道都无法在此开启。请先在销售页面的「门店」中开启该门店。')
-          : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.chanErr = E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
-        if(e.code==='shop_closed') loadChannels(true);
       });
     }};
-  render();
-});
-/* Tapping a channel row at a shop that is shut. The write it would have sent is
-   refused by the server now, so the row does not send one: it says what is in
-   the way and where the switch is, which is two taps up the same screen. */
-reg('chanShopShut', (channel, storeCode)=>{
-  const d=state.chan, c=((d&&d.channels)||[]).find(x=>x.channel===channel);
-  const cell=c&&(c.cells||[]).find(x=>x.storeCode===storeCode); if(!cell) return;
-  const store=chanStoreName(cell);
-  state.ask={
-    title:T(store+' is closed','门店 '+store+' 已关闭'),
-    body:T('The whole shop is shut, so every channel there is closed and none can be opened on its own. Open '+store+' under Shops on the Sales screen first.',
-           '整家门店已关闭，因此该门店的所有渠道均为关闭状态，也无法单独开启。请先在销售页面的「门店」中开启 '+store+'。'),
-    confirmLabel:T('OK','知道了'),
-    run:()=>{ state.chanSheet=null; render(); }};
   render();
 });
 /* THE SHOP SWITCH — the desktop Sales page's location master, on the phone.
@@ -3688,10 +3673,17 @@ reg('shopOpen', (storeCode, next)=>{
   const loc=((state.chan&&state.chan.locations)||[]).find(x=>x.storeCode===storeCode); if(!loc) return;
   const open=String(next)==='1';
   const store=chanStoreName(loc);
+  // Reopening brings back the channels that were live when the shop was last
+  // closed (§253), not every channel — so when the server remembers a set, the
+  // confirm names it, in the same words as opening one channel at a store.
+  const back=open&&Array.isArray(loc.reopenChannels)&&loc.reopenChannels.length?loc.reopenChannels:null;
+  const backNames=back?back.map(k=>{const m=CHAN_META[k]||{en:k,zh:k};return T(m.en,m.zh);}).join(T(', ','、')):'';
   state.ask={
-    title: open ? T('Open '+store+'?', '开启 '+store+'？') : T('Close '+store+'?', '关闭 '+store+'？'),
-    body: open ? T('Every sales channel at this shop opens, and it takes orders, pickups and counter sales again. Meituan follows within about a minute.',
-                   '该门店的所有销售渠道将开启，恢复接单、自提与门店收银。美团约一分钟内跟随。')
+    title: open ? (back ? T('Open '+backNames+' at '+store+'?', '在 '+store+' 开启 '+backNames+'？') : T('Open '+store+'?', '开启 '+store+'？'))
+                : T('Close '+store+'?', '关闭 '+store+'？'),
+    body: open ? (back ? T('New orders can arrive at this store again.','这家门店可以重新接单。')
+                       : T('Every sales channel at this shop opens, and it takes orders, pickups and counter sales again. Meituan follows within about a minute.',
+                           '该门店的所有销售渠道将开启，恢复接单、自提与门店收银。美团约一分钟内跟随。'))
                : T('Every sales channel at this shop closes, the counter till stops selling, and orders route to the other shop. Orders already placed are not affected.',
                    '该门店的所有销售渠道将关闭，门店收银台停止销售，订单将转由其他门店处理。已下单的订单不受影响。'),
     confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
@@ -4900,12 +4892,11 @@ function sheetChannel(){
        <div class="list">${cells.map((cell,i)=>{
          const busy=state.chanBusy===key+'|'+cell.storeCode;
          // A shop that is not trading outranks this row, so the row says so
-         // instead of showing a bare "Closed" next to an Open it cannot
-         // deliver. Tapping it explains and points at the shop switch rather
-         // than posting a write the server now refuses by name.
+         // instead of a bare "Closed". Tapping it opens this one channel,
+         // which opens the shop with only this channel live (§253).
          const shopShut=cell.shopOpen===false&&key!=='meituan';
          return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
-         <button ${busy||state.chanBusy?'disabled':''} onclick="APP.cmd('${shopShut?'chanShopShut':'chanCell'}','${escAttr(key)}','${escAttr(cell.storeCode)}',${cell.open?'0':'1'})"
+         <button ${busy||state.chanBusy?'disabled':''} onclick="APP.cmd('chanCell','${escAttr(key)}','${escAttr(cell.storeCode)}',${cell.open?'0':'1'})"
            style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:14px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;${state.chanBusy&&!busy?'opacity:.5':''}">
            <span style="font-size:15px;color:var(--text-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(chanStoreName(cell))}</span>
            ${/* The state, and a chevron — not the state AND the verb. The row
@@ -14550,6 +14541,15 @@ function csBlockLine(ch,blk){
    new tab: an installed iPhone web app does not share its sign-in with Safari,
    so a new tab would open signed out. The page goes back here when it is done. */
 const CS_SIGNIN_CAUSES=['needs_login','auth_required','binding_lost','verify_required'];
+/* The card's title names the cause when a person can act on it — the desktop's
+   chHeadState, same three words. Both cards read "stopped taking stock
+   updates" and only the small print said which one was signed out. */
+function csHeadline(ch){
+  const nm=csChName(ch.key), by=ch.blocked&&ch.blocked.by;
+  if(by==='needs_login'||by==='auth_required'||by==='binding_lost') return T(nm+' is signed out',nm+' 已退出登录');
+  if(by==='verify_required') return T(nm+' needs a captcha',nm+' 需要人工验证');
+  return T(nm+' stopped taking stock updates',nm+' 已停止接收库存更新');
+}
 function csSignInable(by){ return CS_SIGNIN_CAUSES.indexOf(by)!==-1; }
 function csSignInBtn(ch,blk){
   if(!blk||!blk.store||!csSignInable(blk.by)||!mCan('integrations:signin')) return '';
@@ -14648,7 +14648,7 @@ function screenChannelSync(){
     ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T(csChName(ch.key)+' stopped taking stock updates',csChName(ch.key)+' 已停止接收库存更新')}</span></div>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${csHeadline(ch)}</span></div>
       ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>${csSignInBtn(ch.key,ch.blocked)}`:''}
       ${ch.stale?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${csStaleLine(ch)}</div>`:''}</div>`).join('')}
     ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">

@@ -51,12 +51,26 @@ yes(/state\.shopBusy/.test(M), 'a shop write in flight disables the rows',
 {
   // THE REGRESSION. Patching the local cell is what made a refused write look
   // like a successful one. The handler must re-read.
-  const h = M.slice(M.indexOf("reg('chanCell'"), M.indexOf("reg('chanShopShut'"))
+  const h = M.slice(M.indexOf("reg('chanCell'"), M.indexOf("reg('shopOpen'"))
     .replace(/\/\/[^\n]*/g, '');   // the prose about the old assignment is not the assignment
   yes(h.includes('loadChannels(true)'), 'opening a channel re-reads the board afterwards');
   yes(!/cell\.open\s*=\s*open/.test(h), 'and never patches the row to agree with the tap',
     'cell.open=open is the assignment that hid the masked write');
-  yes(h.includes('shop_closed'), 'a refusal from the server is said in words, not as "try again"');
+}
+
+// §253 on the phone. A row under a shut shop used to open an explainer that
+// pointed at the shop switch, because the server refused the write. The server
+// now opens the shop with only that channel, so the row sends the same write
+// as any other row.
+yes(!M.includes("reg('chanShopShut'") && !M.includes("'chanShopShut'"),
+  'a row under a shut shop no longer routes to the "open the shop first" explainer');
+yes(M.includes("onclick=\"APP.cmd('chanCell','${escAttr(key)}'"),
+  'every row, shut shop or not, sends the one channel write');
+{
+  const s = M.slice(M.indexOf("reg('shopOpen'"), M.indexOf("reg('reloadChannels'"));
+  yes(s.includes('loc.reopenChannels'), 'the shop switch reads what a reopen will bring back');
+  yes(s.includes("T('Open '+backNames+' at '+store+'?', '在 '+store+' 开启 '+backNames+'？')"),
+    'and names those channels in the confirm, in the words used for opening one channel');
 }
 
 yes(/loadChannels\(force\)/.test(M) && /state\.chanTried&&!force/.test(M),
