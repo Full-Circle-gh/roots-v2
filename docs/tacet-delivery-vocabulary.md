@@ -1,6 +1,8 @@
 # Tacet delivery vocabulary — locked
 
-**v1.167 · 2026-09-24 · §253 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§253)*.
+**v1.168 · 2026-09-24 · §254 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§254)*.
+
+**v1.167 · 2026-09-24 · §253 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§253)*.
 
 **v1.166 · 2026-09-24 · §252 SIGNS A CHANNEL BACK IN FROM TACET — SIX STRINGS COMPOSED BY CLAUDE, THE REST LIFTED.** The Sign in button, the permission that grants it, and the page that shows the private sign-in screen. Every composed string is built from live fragments. Each one is listed below with the live candidates rejected for it.
 
@@ -8605,7 +8607,36 @@ buttons are built by `chSignInBtn` (`public/retail-admin/01-core.js`) and
   blames the page, and the fault is a process on the server that somebody has
   to start.
 
-## The recipe card (§253)
+## A switch per channel on the location card (§253)
+
+**Nothing composed, 2026-09-24.** Every pair below was already live; three of
+them move from the phone to the desktop for the first time.
+
+| shipped | built from |
+|---|---|
+| `Open {channel} at {store}? · 在 {store} 开启 {channel}？` (confirm title: one channel at a closed shop, and the master reopening a remembered set) | copied: the phone's `chanCell` confirm title in `public/m.html`. For a set, `{channel}` is the channel names joined `, ` / `、` |
+| `New orders can arrive at this store again. · 这家门店可以重新接单。` (confirm body) | copied: the phone's `chanCell` confirm body |
+| `Open · 开启` (confirm button) | copied: the phone's `chanCell` confirm label |
+| `Shop closed · 门店已关闭` (toast, after an everywhere-open skipped a closed shop) | copied: the phone's row pill under a shut shop. Joined to `Saved · 已保存` with ` · ` and to the store names with `: ` / `：` |
+| `Open · 营业中`, `Closed · 已关闭`, `applying… · 处理中…` | unchanged: they move from the channel card's per-location rows to the location card's channel rows |
+| `、` list join, `：` | live: `public/retail-admin/03-dashboard.js` (`deductParts.join('、')`, `watch.join('、')`, `'：'` after *Top spender*) |
+
+**Retired from the desktop Sales page:** `Per location · 按门店` and
+`serves 1 store · 仅 1 家门店`. The channel card's per-location rows they
+headed are gone; a channel card now names its locations with a dot each, and a
+name needs no label.
+
+**Live candidates rejected.**
+
+- `Open ALL sales channels for this location? · 开启该门店的所有销售渠道？`
+  (the desktop's existing reopen title): **rejected for the remembered-set
+  case**, where it would be false because only some channels come back. It is
+  kept for the case where nothing is remembered and every channel does open.
+- `This shop is closed. Open the shop before opening a channel at it.` (the
+  server's §181 `shop_closed` message, English only): **rejected**. The
+  refusal it described no longer happens.
+
+## The recipe card (§254)
 
 **One pair declared as composed, by Claude, 2026-09-24, under the 2026-09-06
 amendment.** Every other word on the card is copied from the recipe screen,

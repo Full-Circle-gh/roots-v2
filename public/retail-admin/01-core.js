@@ -1454,24 +1454,19 @@ function csRender() {
     btn.classList.toggle('on', !partial && cardOpen);
     btn.onclick = () => csChannelToggle(ch, cardOpen);
 
-    // Inline per-location rows (rebuilt each render), between metrics + footer.
+    // Where this channel is live: one dot + name per location, read-only. The
+    // per-location switches live on the location cards (§253) — one control per
+    // cell, not two — so this line only says where the channel is on.
     const prev = card.querySelector('.sales-ch-locs');
     if (prev) prev.remove();
     const box = document.createElement('div');
-    box.className = 'sales-ch-locs';
-    const single = cells.length <= 1;
-    let html = '<div class="sales-ch-locs-hd"><span>' + cuT('Per location', '按门店') + '</span>'
-      + (single ? '<span class="sales-ch-locs-note">' + cuT('serves 1 store', '仅 1 家门店') + '</span>' : '') + '</div>';
+    box.className = 'sales-ch-locs sales-ch-where';
+    let html = '';
     for (const c of cells) {
       if (c.pending) anyPending = true;
       const note = (ch === 'meituan' && c.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
-      html += '<div class="sales-ch-loc-row' + (c.open ? '' : ' closed') + '">'
-        + '<span class="sales-dot ' + (c.open ? 'ok' : 'warn') + '"></span>'
-        + '<span class="sales-ch-loc-nm">' + csStoreName(c) + note + '</span>'
-        + '<span class="sales-ch-loc-st">' + (c.open ? cuT('Open', '营业中') : cuT('Closed', '已关闭')) + '</span>'
-        + '<button class="sales-toggle sm' + (c.open ? ' on' : '') + '" type="button" aria-label="'
-        + escapeHtml(c.nameEn || c.name || '') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')"><span class="knob"></span></button>'
-        + '</div>';
+      html += '<span class="sales-ch-where-it' + (c.open ? '' : ' closed') + '">'
+        + '<span class="sales-dot ' + (c.open ? 'ok' : 'off') + '"></span>' + csStoreName(c) + note + '</span>';
     }
     box.innerHTML = html;
     const foot = card.querySelector('.sales-ch-foot');
@@ -1514,9 +1509,19 @@ function csRenderLocations() {
     let dot = 'ok', txt = cuT('Open — all channels live', '营业中 — 所有渠道');
     if (none) { dot = 'warn'; txt = cuT('Closed — every channel off', '已关闭 — 所有渠道'); }
     else if (partial) { dot = 'warn'; txt = cuT(live + ' of ' + total + ' channels live', total + ' 个渠道中 ' + live + ' 个在线'); }
-    const chips = serving.map((c) => {
-      const x = cellFor(c, l.storeCode); const on = x && x.open;
-      return '<span class="sales-chip' + (on ? '' : ' off') + '"><span class="sales-chip-dot"></span>' + csName(c.channel) + '</span>';
+    // One row per channel with its own small switch (§253): this is where a
+    // single channel is opened or closed at this location. At a closed shop,
+    // switching one on opens the shop with only that channel.
+    const rows = serving.map((c) => {
+      const x = cellFor(c, l.storeCode); const on = !!(x && x.open);
+      const note = (c.channel === 'meituan' && x && x.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
+      return '<div class="sales-ch-loc-row' + (on ? '' : ' closed') + '">'
+        + '<span class="sales-dot ' + (on ? 'ok' : 'off') + '"></span>'
+        + '<span class="sales-ch-loc-nm">' + csName(c.channel) + note + '</span>'
+        + '<span class="sales-ch-loc-st">' + (on ? cuT('Open', '营业中') : cuT('Closed', '已关闭')) + '</span>'
+        + '<button class="sales-toggle sm' + (on ? ' on' : '') + '" type="button" aria-pressed="' + on + '" aria-label="'
+        + escapeHtml(csName(c.channel)) + '" onclick="csCell(\'' + c.channel + '\',\'' + escapeHtml(l.storeCode) + '\',' + (on ? 'false' : 'true') + ')"><span class="knob"></span></button>'
+        + '</div>';
     }).join('');
     const tgl = partial ? ' partial' : (allOn ? ' on' : '');
     // The one link out, bottom of the card (A5 Board): the location's shop menu
@@ -1534,7 +1539,7 @@ function csRenderLocations() {
       + '<button class="sales-toggle' + tgl + '" type="button" title="' + cuT('Open or close the whole store', '开关整个门店')
       + '" onclick="csLocation(\'' + l.storeCode + '\',' + (none ? 'true' : 'false') + ')"><span class="knob"></span></button>'
       + '</div>'
-      + '<div class="sales-loc-chips">' + chips + '</div>'
+      + '<div class="sales-ch-locs sales-loc-rows">' + rows + '</div>'
       + menuLink
       + '</div>';
   }).join('');
@@ -1548,8 +1553,15 @@ window.csChannelToggle = async function (ch, isOpenNow) {
   const open = !isOpenNow;
   if (!open && !(await askConfirm({ title: cuT('Close this channel at every store?', '关闭所有门店的该渠道？'), confirmLabel: cuT('Close channel', '关闭渠道'), danger: true }))) return;
   try {
-    await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } });
-    if (window.toast) toast(cuT('Saved', '已保存'));
+    const r = await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } });
+    // Opening everywhere leaves a closed shop closed (§253) — say which, so the
+    // half-lit switch that follows is not a mystery.
+    const skipped = ((r && r.skipped) || []).map((code) => csLocationOf(code)).filter(Boolean);
+    if (window.toast) {
+      toast(skipped.length
+        ? cuT('Saved', '已保存') + ' · ' + skipped.map(csStoreText).join(cuT(', ', '、')) + cuT(': ', '：') + cuT('Shop closed', '门店已关闭')
+        : cuT('Saved', '已保存'));
+    }
     await csLoad();
   } catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };
@@ -1575,7 +1587,23 @@ function csAgeText(iso) {
 // stale the oldest of it is. Always confirmed, with no freshness check of any
 // kind: the dialog is skipped only when the preview comes back with nothing
 // mapped for that store on that channel, because there is nothing to publish.
+// Plain-text store name for a dialog title (csStoreName returns markup).
+function csStoreText(o) { return cuT(o.nameEn || o.name || '', o.nameCn || o.name || ''); }
+function csLocationOf(storeCode) { return ((_csData && _csData.locations) || []).find((l) => l.storeCode === storeCode); }
 window.csCell = async function (ch, storeCode, open) {
+  // Opening one channel at a closed shop opens the shop with only that channel
+  // (§253) — a bigger step than a cell, so it is confirmed. The title and body
+  // are the phone's own live pairs for opening a channel at a store.
+  const loc = csLocationOf(storeCode);
+  if (open && loc && loc.shopOpen === false) {
+    const store = cuT(loc.nameEn || loc.name || '', loc.nameCn || loc.name || '');
+    const chan = csName(ch);
+    if (!(await askConfirm({
+      title: cuT('Open ' + chan + ' at ' + store + '?', '在 ' + store + ' 开启 ' + chan + '？'),
+      body: cuT('New orders can arrive at this store again.', '这家门店可以重新接单。'),
+      confirmLabel: cuT('Open', '开启'),
+    }))) return;
+  }
   if (open) {
     let prev = null;
     // Short leash on purpose: this dialog is a courtesy, not a gate, and a
@@ -1603,11 +1631,21 @@ window.csCell = async function (ch, storeCode, open) {
   catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };
 // Location master: open/close EVERY channel for one store.
+// Reopening a closed shop brings back the channels that were live when it was
+// closed (§253), so the confirm names them; with nothing remembered it opens all.
 window.csLocation = async function (storeCode, open) {
+  const loc = csLocationOf(storeCode);
+  const back = open && loc && Array.isArray(loc.reopenChannels) && loc.reopenChannels.length ? loc.reopenChannels : null;
+  let openTitle = cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道？');
+  if (back) {
+    const store = csStoreText(loc);
+    const list = cuT(back.map(csName).join(', '), back.map(csName).join('、'));
+    openTitle = cuT('Open ' + list + ' at ' + store + '?', '在 ' + store + ' 开启 ' + list + '？');
+  }
   if (!(await askConfirm({
-    title: open ? cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道？')
+    title: open ? openTitle
                 : cuT('Close ALL sales channels for this location?', '关闭该门店的所有销售渠道？'),
-    confirmLabel: open ? cuT('Open all', '全部开启') : cuT('Close all', '全部关闭'),
+    confirmLabel: open ? (back ? cuT('Open', '开启') : cuT('Open all', '全部开启')) : cuT('Close all', '全部关闭'),
     danger: !open,
   }))) return;
   try { await api('/api/retail-admin/channel-status/location', { method: 'POST', body: { storeCode, open } }); if (window.toast) toast(cuT('Done', '完成')); await csLoad(); }
