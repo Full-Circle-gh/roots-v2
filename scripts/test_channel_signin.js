@@ -185,9 +185,22 @@ check('every button is gated on the permission and on a cause signing in clears'
   ok(/can\('integrations:signin'\)/.test(read('public/retail-admin/03-dashboard.js')), 'desktop Home');
 });
 
+check('the Meituan tab no longer offers the relay wizard, which cannot sign anyone in', () => {
+  // §250 PR 4. The wizard fails in production with `no_worker_attached` — no
+  // login-relay driver is registered — so it was a button that could not do
+  // what it said, on the one line an operator reads during an outage.
+  ok(!/igRelayWizard/.test(read('public/retail-admin/11-meituan.js')), 'the Meituan tab still reaches for the wizard');
+});
+
 check('the page draws states only; every check is on the server', () => {
   const page = read('public/channel-signin.html');
-  ok(/from '\/novnc\/core\/rfb\.js'/.test(page), 'noVNC is not loaded from the pinned package');
+  ok(/import\('\/novnc\/core\/rfb\.js'\)/.test(page), 'noVNC is not loaded from the pinned package');
+  // The deploy's installer runs this exact checker on every staged .html and
+  // aborts on a failure — a static `import` in the inline script did exactly
+  // that to the first deploy of this page.
+  const r = require('child_process').spawnSync(process.execPath,
+    [path.join(__dirname, 'check-html-js.js'), path.join(__dirname, '..', 'public', 'channel-signin.html')], { encoding: 'utf8' });
+  eq(r.status, 0, `the deploy's inline-script gate rejects the page: ${r.stdout}${r.stderr}`);
   ok(/\/api\/retail-admin\/channel-signin\/screen/.test(page), 'the page does not use the relay');
   ok(!/password|credentials:\s*\{\s*password/i.test(page), 'a VNC password in the page');
 });
