@@ -151,6 +151,22 @@ check('the Eleme login opens a genuine Chrome and attaches only after login', ()
   ok(/\/json\/list/.test(lib), 'the tab list is not read from Chrome’s own HTTP listing');
 });
 
+// §257 — the Integrations wizard stored a merchant's channel password for a
+// login no driver could ever run. The password steps and their endpoints are
+// gone, and a one-off deletes what they stored.
+check('no screen or endpoint takes a channel password any more', () => {
+  const ui = read('public/retail-admin/15-integrations.js');
+  ok(!/id="rl_pass"|igRelayStart|igRelaySms|session\/start|session\/sms/.test(ui), 'the wizard still asks for a password');
+  ok(/igRelayBoxRequest/.test(ui), 'the box request went with it, and it should have stayed');
+  const route = read('routes/integrations-admin.js');
+  ok(!/session\/start|session\/sms|relay\.startLogin|relay\.submitSms/.test(route), 'an endpoint still takes a password');
+  const relay = require('../lib/integrations/session-relay');
+  ok(!relay.startLogin && !relay.submitSms && !relay.registerDriver, 'the login driver is still exported');
+  ok(typeof relay.summary === 'function', 'the cards lost their session read');
+  const wipe = read('scripts/oneoff_wipe_relay_channel_passwords.js');
+  ok(/\^\(meituan\|qingyun\)\\\.\[a-z0-9\]/.test(wipe), 'the wipe does not target only the per-store family');
+});
+
 check('the relay refuses a cross-origin upgrade before it looks at anything else', () => {
   const { screenRefusal } = require('../routes/channel-signin');
   eq(screenRefusal({ headers: { host: 'store.example', origin: 'https://evil.example' }, session: {} }), 'cross_origin');
