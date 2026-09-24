@@ -1,6 +1,8 @@
 # Tacet delivery vocabulary — locked
 
-**v1.169 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
+**v1.170 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
+
+**v1.169 · 2026-09-24 · §252 NAMES THE CHANNEL ON THE HOME ROW'S SIGN-IN BUTTON — THREE STRINGS COMPOSED BY CLAUDE, EVERY PART LIVE — AND THE CHANNEL CARDS' HEADLINES NAME THE CAUSE.** The row can name two channels ("Meituan not syncing, Eleme is signed out") above one button, and "Sign in again" did not say which it opens. See *Signing a channel back in (§252)*. The same day Ash read both channel cards as "Not syncing since…" when one was signed out, so the headline and the summary now name the cause.
 
 **v1.168 · 2026-09-24 · §254 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§254)*.
 
@@ -8594,6 +8596,10 @@ buttons are built by `chSignInBtn` (`public/retail-admin/01-core.js`) and
 | `You don’t have permission for this · 你没有此操作的权限` | **copied**: `lib/require-cap.js`'s own 403 |
 | `Try again · 重试`, `Close · 关闭` | **copied**: both live many times |
 | `Sign in again · … · 重新登录 · …` (the page title, with channel and store names) | the button's pair, plus names that are data |
+| `Sign in to Eleme · 重新登录饿了么` (the desktop Home row's button, v1.169) | **composed**: `重新登录` (the button's pair above) + the channel's own name, joined with no space, the way the locked sentence joins them (`同步服务已退出登录美团`). Rejected: `Sign in again` alone, because the row it sits on can name two channels; `前往登录`, which is not live and says where you go rather than what you do |
+| `Signed out since 9:39 AM · 自 9:39 AM 起已退出登录` (a channel card's headline, desktop, v1.169) | **composed** on the card's own live frame, `Not syncing since … · 自 … 起未同步`, with the state swapped for the locked `已退出登录` |
+| `Waiting for a captcha since … · 自 … 起需要人工验证` (the same headline for a captcha) | **composed** on the same frame; `需要人工验证` is the Meituan daemon's own alert, verbatim |
+| `Eleme is signed out · 饿了么 已退出登录`, `Meituan needs a captcha · 美团 需要人工验证` (the phone card's title and the desktop summary line) | **copied**: the Home row's own pairs (v1.165), unchanged |
 
 **Live candidates rejected.**
 
@@ -8638,7 +8644,7 @@ name needs no label.
   server's §181 `shop_closed` message, English only): **rejected**. The
   refusal it described no longer happens.
 
-**The phone, v1.169.** `public/m.html`'s shop switch confirm uses, when a
+**The phone, v1.170.** `public/m.html`'s shop switch confirm uses, when a
 reopen set is remembered, `Open {channels} at {store}? · 在 {store} 开启
 {channels}？` and `New orders can arrive at this store again. · 这家门店可以重新接单。`.
 Both are the phone's own `chanCell` pairs, copied whole; `{channels}` is the

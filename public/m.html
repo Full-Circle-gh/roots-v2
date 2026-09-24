@@ -14541,6 +14541,15 @@ function csBlockLine(ch,blk){
    new tab: an installed iPhone web app does not share its sign-in with Safari,
    so a new tab would open signed out. The page goes back here when it is done. */
 const CS_SIGNIN_CAUSES=['needs_login','auth_required','binding_lost','verify_required'];
+/* The card's title names the cause when a person can act on it — the desktop's
+   chHeadState, same three words. Both cards read "stopped taking stock
+   updates" and only the small print said which one was signed out. */
+function csHeadline(ch){
+  const nm=csChName(ch.key), by=ch.blocked&&ch.blocked.by;
+  if(by==='needs_login'||by==='auth_required'||by==='binding_lost') return T(nm+' is signed out',nm+' 已退出登录');
+  if(by==='verify_required') return T(nm+' needs a captcha',nm+' 需要人工验证');
+  return T(nm+' stopped taking stock updates',nm+' 已停止接收库存更新');
+}
 function csSignInable(by){ return CS_SIGNIN_CAUSES.indexOf(by)!==-1; }
 function csSignInBtn(ch,blk){
   if(!blk||!blk.store||!csSignInable(blk.by)||!mCan('integrations:signin')) return '';
@@ -14639,7 +14648,7 @@ function screenChannelSync(){
     ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T(csChName(ch.key)+' stopped taking stock updates',csChName(ch.key)+' 已停止接收库存更新')}</span></div>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${csHeadline(ch)}</span></div>
       ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>${csSignInBtn(ch.key,ch.blocked)}`:''}
       ${ch.stale?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${csStaleLine(ch)}</div>`:''}</div>`).join('')}
     ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
