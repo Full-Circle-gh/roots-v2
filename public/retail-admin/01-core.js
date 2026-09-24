@@ -1229,11 +1229,27 @@ function closeInboxMenu() {
 document.addEventListener('click', (ev) => {
   if (!ev.target.closest || !ev.target.closest('#tbInbox')) closeInboxMenu();
 });
+let _salesLangHooked = false;
 // Sales overview → fill today's per-channel figures + the folded summary from
 // /sales/summary. Called when the Sales tab is opened. Leaves the "—"
 // placeholders in place on any error rather than blanking the page. dashMoney
 // (part 03) is loaded by the time a tab can be clicked.
 async function salesInit() {
+  // Nothing read yet (or the last read failed): blank the switches now, before
+  // the summary round-trip, so the HTML's placeholder on/off is never shown.
+  if (!_csData) csMarkUnknown(_csFailed);
+  // Everything this page paints from JS is built with cuT at paint time, so a
+  // language switch after it painted left it in the old language — "已连接"
+  // under an English page. Repaint on the switch. Hooked here, not at file
+  // scope: onLangChange is defined by an inline script that runs after this
+  // file loads.
+  if (!_salesLangHooked && typeof window.onLangChange === 'function') {
+    _salesLangHooked = true;
+    onLangChange(() => {
+      const sales = document.getElementById('tab-sales');
+      if (sales && sales.classList.contains('active')) salesInit();
+    });
+  }
   const set   = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   const money = (n) => (typeof dashMoney === 'function' ? dashMoney(n) : acWrap(Number(n || 0)));
   const num   = (n) => Number(n || 0).toLocaleString();
@@ -1435,24 +1451,102 @@ function csStoreName(o) {
   return '<span data-lang-block="en">' + escapeHtml(en) + '</span><span data-lang-block="cn">' + escapeHtml(cn) + '</span>';
 }
 
+/* A SWITCH WITH NO DATA BEHIND IT SHOWS NO STATE. retail-admin.html ships each
+   channel card's switch pre-set on or off, and csLoad used to swallow a failed
+   read and leave those placeholders standing — where they read exactly like
+   live state. That is how the desktop showed Eleme off at every store while
+   the phone, reading the same table, said it was open at Tianhe: the read had
+   failed, and every other switch on the page was a placeholder too. So until
+   the matrix lands, and whenever it cannot, the switches are blank and inert,
+   the "where it is live" lines and the Locations section come off, and one
+   line under the Channels kicker says the state could not be read, with a
+   Retry. A failed read also retries on its own a few times while the Sales tab
+   is open. */
+let _csSeq = 0, _csFailed = false, _csRetryTimer = null, _csRetries = 0;
+const CS_RETRY_MS = [3000, 10000, 30000];
+function csChannelCards() {
+  const out = [];
+  document.querySelectorAll('#tab-sales .sales-ch').forEach((card) => {
+    const m = card.querySelector('[id^="sales-"][id$="-rev"]');
+    const mm = m && m.id.match(/^sales-(\w+)-rev$/);
+    const ch = mm && CS_KEY2CH[mm[1]];
+    const btn = card.querySelector('.sales-toggle');
+    if (ch && btn) out.push({ card, ch, btn });
+  });
+  return out;
+}
+function csMarkUnknown(failed) {
+  for (const { card, btn } of csChannelCards()) {
+    btn.disabled = true; btn.onclick = null;
+    btn.classList.remove('on', 'partial', 'is-locked');
+    btn.classList.add('unknown');
+    btn.title = failed ? cuT('Could not read the shop status', '无法读取营业状态') : cuT('Loading…', '加载中…');
+    const where = card.querySelector('.sales-ch-locs');
+    if (where) where.remove();
+  }
+  const locs = document.getElementById('cs-locations');
+  if (locs) locs.remove();
+  csShowError(failed);
+}
+function csShowError(on) {
+  let el = document.getElementById('cs-err');
+  if (!on) { if (el) el.remove(); return; }
+  const anchor = document.getElementById('sales-ch-kicker');
+  if (!anchor) return;
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cs-err';
+    el.className = 'sales-cs-err';
+    el.setAttribute('role', 'alert');
+    anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  }
+  el.innerHTML = '<span>' + cuT('Could not read the shop status', '无法读取营业状态') + '</span>'
+    + '<button class="btn btn-sm" type="button" onclick="csRetryNow()">' + cuT('Retry', '重试') + '</button>';
+}
+function csClearRetry() { if (_csRetryTimer) { clearTimeout(_csRetryTimer); _csRetryTimer = null; } }
+window.csRetryNow = function () { _csRetries = 0; csLoad(); };
+
 async function csLoad() {
-  try { _csData = await api('/api/retail-admin/channel-status'); csRender(); }
-  catch (e) { /* leave the cards untouched on error */ }
+  const seq = ++_csSeq;
+  csClearRetry();
+  let data;
+  try {
+    data = await api('/api/retail-admin/channel-status');
+    if (!data || !Array.isArray(data.channels)) throw new Error('no channels in reply');
+  } catch (e) {
+    if (seq !== _csSeq) return;  // a newer read owns the page now
+    console.warn('channel-status read failed:', e && e.message);
+    _csData = null; _csFailed = true;
+    csClearPoll();
+    csMarkUnknown(true);
+    const sales = document.getElementById('tab-sales');
+    if (_csRetries < CS_RETRY_MS.length && sales && sales.classList.contains('active')) {
+      _csRetryTimer = setTimeout(() => { _csRetryTimer = null; csLoad(); }, CS_RETRY_MS[_csRetries++]);
+    }
+    return;
+  }
+  if (seq !== _csSeq) return;
+  _csData = data; _csFailed = false; _csRetries = 0;
+  csShowError(false);
+  csRender();
 }
 
 function csRender() {
   if (!_csData) return;
   let anyPending = false;
-  document.querySelectorAll('#tab-sales .sales-ch').forEach((card) => {
-    const m = card.querySelector('[id^="sales-"][id$="-rev"]');
-    const mm = m && m.id.match(/^sales-(\w+)-rev$/);
-    const ch = mm && CS_KEY2CH[mm[1]];
-    const info = ch && csChannel(ch);
-    const btn = card.querySelector('.sales-toggle');
-    if (!info || !btn) return;
-    // Not-set-up channels (e.g. Eleme): leave the locked toggle + "Set up"
-    // footer as salesWireSetup left them — no channel×location matrix yet.
-    if (info.integrated === false) return;
+  for (const { card, ch, btn } of csChannelCards()) {
+    const info = csChannel(ch);
+    btn.classList.remove('unknown');
+    // No row for this channel, or not set up yet: a locked, empty switch — no
+    // channel×location matrix to open or close. The "Set up" footer is
+    // salesWireSetup's.
+    if (!info || info.integrated === false) {
+      btn.disabled = true; btn.onclick = null;
+      btn.classList.remove('on', 'partial'); btn.classList.add('is-locked');
+      const stale = card.querySelector('.sales-ch-locs');
+      if (stale) stale.remove();
+      continue;
+    }
 
     const cells = info.cells || [];
     const openCount = cells.filter((c) => c.open).length;
@@ -1484,7 +1578,7 @@ function csRender() {
     box.innerHTML = html;
     const foot = card.querySelector('.sales-ch-foot');
     if (foot) card.insertBefore(box, foot); else card.appendChild(box);
-  });
+  }
   csRenderLocations();
   // Meituan applies open/close on the box asynchronously (置休 via the daemon);
   // poll until the pending cells settle, then the rows flip on their own.
