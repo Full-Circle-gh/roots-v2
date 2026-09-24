@@ -105,7 +105,7 @@ const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, curre
 const { withTransaction } = require('../lib/db-transaction');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 const { channelSyncStale } = require('../lib/channel-sync-stale');
-const { channelSyncSummary } = require('../lib/channel-sync-items');
+const { channelSyncSummary, channelBlocks } = require('../lib/channel-sync-items');
 // The dashboard's "the kitchen finished it" row counts exactly the requests
 // routes/restock.js's own kitchen-ready endpoint counts — one clause, required
 // by both, for the reason REVIEW_WAITING_SQL is shared with the Reviews fire.
@@ -17421,6 +17421,10 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // { count, by_channel: { meituan: n, ... }, oldest_at } — see
   // lib/channel-sync-items.js channelSyncSummary().
   let channel_items_attention = { count: 0, by_channel: {}, oldest_at: null };
+  // §106 — channels stopped by a channel-level cause (signed out, captcha,
+  // proxy) right now. Fires from the first failed read, not once the queue
+  // stalls. [{ key, label, tab, blocked }] — lib/channel-sync-items.js.
+  let channel_blocked = [];
   // Kitchen requests the kitchen has finished and nobody in the warehouse has
   // read yet. Same zero-count default as its siblings, and — like the two Inbox
   // queues above — NOT store-scoped: a kitchen request is a job the kitchen did,
@@ -18290,12 +18294,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // inside their own try, so a box without one channel still answers.
     try { channel_items_attention = channelSyncSummary(tdb()); }
     catch (e) { console.warn('[dashboard/ops channel_items_attention]', e.message); }
+    try { channel_blocked = channelBlocks(tdb()); }
+    catch (e) { console.warn('[dashboard/ops channel_blocked]', e.message); }
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, parcel_recovery, channel_sync_stale, channel_items_attention, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, parcel_recovery, channel_sync_stale, channel_items_attention, channel_blocked, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.

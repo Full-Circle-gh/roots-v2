@@ -157,10 +157,16 @@
       const bits = [];
       if (attention) bits.push(cuT(`${attention} need attention`, `${attention} 个待处理`));
       if (pending) bits.push(cuT(`${pending} sending…`, `${pending} 发送中…`));
-      if (!bits.length) bits.push(cuT('nothing needs you', '无需处理'));
-      line.innerHTML = attention
-        ? '<span class="att">' + esc(bits[0]) + '</span>' + (bits[1] ? ' · ' + esc(bits[1]) : '')
-        : esc(bits.join(' · '));
+      // "nothing needs you" is false while the channel is stopped.
+      const stopped = st.block && typeof chBlockSentence === 'function' ? chBlockSentence('guanyi', st.block.by) : '';
+      if (stopped) {
+        line.innerHTML = '<span class="att">' + esc(stopped) + '</span>' + (bits.length ? ' · ' + esc(bits.join(' · ')) : '');
+      } else {
+        if (!bits.length) bits.push(cuT('nothing needs you', '无需处理'));
+        line.innerHTML = attention
+          ? '<span class="att">' + esc(bits[0]) + '</span>' + (bits[1] ? ' · ' + esc(bits[1]) : '')
+          : esc(bits.join(' · '));
+      }
     }
 
     const tiles = document.getElementById('gy-tiles');
@@ -189,10 +195,14 @@
         : ls.job ? (ls.job.completed_at ? gyLocalTime(ls.job.completed_at, false) : cuT('cached', '已缓存'))
         : cuT('never refreshed', '未刷新');
       const read = n == null ? '' : cuT(`${n} listings read`, `已读取 ${n} 个商品`);
+      // A stopped channel says why first, amber like the Meituan and Eleme lines.
+      // Reading listings once proved nothing about being signed in now.
+      const blk = st.block || null;
+      const why = blk && typeof chBlockSentence === 'function' ? chBlockSentence('guanyi', blk.by) : '';
       lines.innerHTML =
-        '<div class="gy-storeline"><span class="dot"></span>' +
+        '<div class="gy-storeline' + (blk ? ' att' : '') + '"><span class="dot"></span>' +
         '<span class="nm">' + esc(typeof csChannelName === 'function' ? csChannelName('guanyi') : 'GZ Grocery') + '</span>' +
-        '<span class="st">' + esc([read, fresh].filter(Boolean).join(' · ')) + '</span>' +
+        '<span class="st">' + esc([why, read, fresh].filter(Boolean).join(' · ')) + '</span>' +
         '<button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()"' +
         (busy ? ' disabled' : '') + '>' +
         esc(cuT('⟳ Refresh list', '⟳ 刷新')) + '</button></div>';

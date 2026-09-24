@@ -310,6 +310,42 @@ both('the row never appends a duration on top of the clock it already says',
   'en', (fires) => ok(fires[0].noAutoAge === true || fires[0].age === false,
     'the age suffix is not suppressed — the line would read "…17:56, oldest 5d"'));
 
+// ── §106 · a stopped channel ────────────────────────────────────────────────
+// GZ Grocery was signed out for a day and Home said nothing: its queue had not
+// yet counted as stalled and no item was provably wrong. The block is said from
+// the first failed read, and it is the worst thing this row can say.
+section('§106 · a stopped channel lights the row on its own');
+
+const blocked = (key, by, at, label) => ({ key, label: label || key, tab: key, blocked: { by, at, store: 'tianhe' } });
+
+both('a signed-out channel alone lights the row, brick, and names the cause',
+  { channel_items_attention: att(0, {}, null), channel_sync_stale: [],
+    channel_blocked: [blocked('guanyi', 'needs_login', SEP7, 'GZ Grocery')] },
+  'en', (fires, row) => {
+    eq(fires.length, 1, 'row count');
+    eq(fires[0].sev, 'brick', 'severity');
+    ok(/GZ Grocery is signed out/.test(row.line), `state line: ${row.line}`);
+    eq(row.n, 1, 'the pill counts stopped channels when nothing else has a count');
+  });
+
+both('the block outranks the stall on the same channel, and is said once',
+  { channel_items_attention: att(0, {}, null), channel_sync_stale: [stall('eleme', 10, SEP7, 'Eleme')],
+    channel_blocked: [blocked('eleme', 'auth_required', SEP7_LATER, 'Eleme')] },
+  'en', (fires, row) => {
+    ok(/Eleme is signed out/.test(row.line), `state line: ${row.line}`);
+    ok(!/Eleme not syncing/.test(row.line), `said twice: ${row.line}`);
+  });
+
+both('a captcha is named, in Chinese too',
+  { channel_items_attention: att(0, {}, null), channel_sync_stale: [],
+    channel_blocked: [blocked('meituan', 'verify_required', SEP7, 'Meituan')] },
+  'cn', (fires, row) => ok(/美团 需要人工验证/.test(row.line), `state line: ${row.line}`));
+
+both('signed out reads in Chinese with the locked pair',
+  { channel_items_attention: att(0, {}, null), channel_sync_stale: [],
+    channel_blocked: [blocked('meituan', 'needs_login', SEP7, 'Meituan')] },
+  'cn', (fires, row) => ok(/美团 已退出登录/.test(row.line), `state line: ${row.line}`));
+
 // ── Chinese ─────────────────────────────────────────────────────────────────
 section('Chinese');
 
@@ -332,9 +368,12 @@ check('no new Chinese string was minted for this row — every pair is live', ()
   // 29-channel-sync.js; `渠道同步`, `查看商品` and the `自 … 起不符` pair off
   // §103's own row; the two channel names off its CH map; and the phone's
   // "Review this on desktop" toast off the fallback it already shipped.
+  // §106's stopped channel adds two lifts, neither composed: `已退出登录` is the
+  // vocabulary's locked "… is signed out" pair, and `需要人工验证` is the tail of
+  // the Meituan daemon's own captcha alert, verbatim.
   const LIVE = {
-    desktop: ['未同步', '渠道同步', '查看商品', '美团', '饿了么', '自', '起不符'],
-    phone: ['未同步', '渠道同步', '美团', '饿了么', '自', '起不符', '请在电脑端查看'],
+    desktop: ['未同步', '渠道同步', '查看商品', '美团', '饿了么', '自', '起不符', '已退出登录', '需要人工验证'],
+    phone: ['未同步', '渠道同步', '美团', '饿了么', '自', '起不符', '请在电脑端查看', '已退出登录', '需要人工验证'],
   };
   for (const [who, src] of [['desktop', DESK_BLOCK], ['phone', PHONE_BLOCK]]) {
     // Comments come out first: both blocks name 越秀 in prose, and a check that
