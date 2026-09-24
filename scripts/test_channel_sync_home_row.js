@@ -241,7 +241,7 @@ both('one down, one drifting: both named, in one line',
   { channel_items_attention: att(4, { eleme: 4 }, TODAY_0900), channel_sync_stale: [stall('meituan', 3, SEP7, 'Meituan')] },
   'en', (fires, row) => {
     eq(fires.length, 1, 'row count');
-    eq(row.line, 'Meituan not syncing, Eleme 4, wrong since 2026-09-07 17:56', 'state line');
+    eq(row.line, 'Meituan not syncing, Eleme: 4 need attention, wrong since 2026-09-07 17:56', 'state line');
     eq(row.n, 4, 'pill');
   });
 
@@ -263,13 +263,13 @@ both('all three channels, each with its own worst fact',
   { channel_items_attention: att(9, { meituan: 2, eleme: 4, guanyi: 3 }, SEP7),
     channel_sync_stale: [stall('meituan', 3, SEP7, 'Meituan')] },
   'en', (fires, row) => {
-    eq(row.line, 'Meituan not syncing, Eleme 4, GZ Grocery 3, wrong since 2026-09-07 17:56', 'state line');
+    eq(row.line, 'Meituan not syncing, Eleme: 4 need attention, GZ Grocery: 3 need attention, wrong since 2026-09-07 17:56', 'state line');
     eq(row.n, 9, 'pill counts every wrong item, the stalled channel\'s included');
   });
 
 both('a fourth channel the name map has never heard of is still said, not dropped',
   { channel_items_attention: att(2, { douyin: 2 }, SEP7), channel_sync_stale: [] },
-  'en', (fires, row) => ok(/douyin 2/.test(row.line), `unknown channel dropped: ${row.line}`));
+  'en', (fires, row) => ok(/douyin: 2 need attention/.test(row.line), `unknown channel dropped: ${row.line}`));
 
 both('…and a fourth channel that is DOWN is named from the label the server sent',
   { channel_items_attention: att(0, {}, null), channel_sync_stale: [stall('douyin', 7, SEP7, 'Douyin')] },
@@ -291,11 +291,11 @@ section('The clock');
 
 both('a fact from today reads as a bare time',
   { channel_items_attention: att(2, { meituan: 2 }, TODAY_0900), channel_sync_stale: [] },
-  'en', (fires, row) => eq(row.line, 'Meituan 2, wrong since 01:20', 'state line'));
+  'en', (fires, row) => eq(row.line, 'Meituan: 2 need attention, wrong since 01:20', 'state line'));
 
 both('…and one from another day carries its date, or the row argues with its own order',
   { channel_items_attention: att(2, { meituan: 2 }, SEP7), channel_sync_stale: [] },
-  'en', (fires, row) => eq(row.line, 'Meituan 2, wrong since 2026-09-07 17:56', 'state line'));
+  'en', (fires, row) => eq(row.line, 'Meituan: 2 need attention, wrong since 2026-09-07 17:56', 'state line'));
 
 both('a stall with no readable stamp still lights the row, silent about when',
   { channel_items_attention: att(0, {}, null), channel_sync_stale: [stall('meituan', 3, null, 'Meituan')] },
@@ -336,6 +336,15 @@ both('the block outranks the stall on the same channel, and is said once',
     ok(!/Eleme not syncing/.test(row.line), `said twice: ${row.line}`);
   });
 
+both('a signed-out channel carries its own count, so the line adds up to the pill',
+  { channel_items_attention: att(25, { meituan: 2, eleme: 23 }, SEP7), channel_sync_stale: [],
+    channel_blocked: [blocked('eleme', 'auth_required', SEP7_LATER, 'Eleme')] },
+  'en', (fires, row) => {
+    eq(row.n, 25, 'pill');
+    ok(/Meituan: 2 need attention/.test(row.line), `Meituan count unlabelled: ${row.line}`);
+    ok(/Eleme is signed out \(23 need attention\)/.test(row.line), `Eleme count missing: ${row.line}`);
+  });
+
 both('a captcha is named, in Chinese too',
   { channel_items_attention: att(0, {}, null), channel_sync_stale: [],
     channel_blocked: [blocked('meituan', 'verify_required', SEP7, 'Meituan')] },
@@ -354,7 +363,7 @@ both('the whole line is Chinese, channel names included',
   'cn', (fires, row) => {
     eq(row.label, '渠道同步', 'label');
     ok(/美团 未同步/.test(row.line), `Meituan not localised: ${row.line}`);
-    ok(/饿了么 4/.test(row.line), `Eleme not localised: ${row.line}`);
+    ok(/饿了么 4 个待处理/.test(row.line), `Eleme not localised: ${row.line}`);
     ok(/自 2026-09-07 17:56 起不符/.test(row.line), `clock not localised: ${row.line}`);
     ok(!/Meituan|Eleme/.test(row.line), `English leaked into the Chinese line: ${row.line}`);
   });
@@ -373,9 +382,11 @@ check('no new Chinese string was minted for this row — every pair is live', ()
   // the Meituan daemon's own captcha alert, verbatim. §252 puts the desktop
   // row's button on `重新登录` when a sign-out is the worst thing on it — the
   // vocabulary's declared Sign in again pair. The phone row has no button.
+  // A count now says what it counts (Ash: "Meituan 2" did not say 2 what):
+  // `N 个待处理` is the Channel sync strip's own live pair, copied.
   const LIVE = {
-    desktop: ['未同步', '渠道同步', '查看商品', '美团', '饿了么', '自', '起不符', '已退出登录', '需要人工验证', '重新登录'],
-    phone: ['未同步', '渠道同步', '美团', '饿了么', '自', '起不符', '请在电脑端查看', '已退出登录', '需要人工验证'],
+    desktop: ['未同步', '渠道同步', '查看商品', '美团', '饿了么', '自', '起不符', '已退出登录', '需要人工验证', '重新登录', '个待处理'],
+    phone: ['未同步', '渠道同步', '美团', '饿了么', '自', '起不符', '请在电脑端查看', '已退出登录', '需要人工验证', '个待处理'],
   };
   for (const [who, src] of [['desktop', DESK_BLOCK], ['phone', PHONE_BLOCK]]) {
     // Comments come out first: both blocks name 越秀 in prose, and a check that
@@ -402,13 +413,13 @@ check('desktop: the row asks csChannelName rather than answering for itself', ()
   const shared = (k) => ({ meituan: 'MEITUAN!', eleme: 'ELEME!' })[k] || k;
   const line = rowOf(runDesk(ops, 'en', shared)[0]).line;
   ok(/MEITUAN! not syncing/.test(line), `the stalled channel kept a local name: ${line}`);
-  ok(/ELEME! 4/.test(line), `the drifting channel kept a local name: ${line}`);
+  ok(/ELEME!: 4 need attention/.test(line), `the drifting channel kept a local name: ${line}`);
 });
 
 check('…and falls back to its own pair when that module has not loaded', () => {
   const ops = { channel_items_attention: att(4, { eleme: 4 }, SEP7),
     channel_sync_stale: [stall('meituan', 3, SEP7, 'Meituan')] };
-  eq(rowOf(runDesk(ops, 'en')[0]).line, 'Meituan not syncing, Eleme 4, wrong since 2026-09-07 17:56');
+  eq(rowOf(runDesk(ops, 'en')[0]).line, 'Meituan not syncing, Eleme: 4 need attention, wrong since 2026-09-07 17:56');
   ok(/美团 未同步/.test(rowOf(runDesk(ops, 'cn')[0]).line), 'the fallback is bilingual too');
 });
 
