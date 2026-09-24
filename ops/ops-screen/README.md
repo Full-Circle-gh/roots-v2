@@ -116,7 +116,7 @@ reproduce all four blocks — the access log (`GET /websockify` vs
 `GET /ops-screen/websockify`) is the fastest way to tell whether a given
 noVNC build wants the prefixed or the bare path; add whichever is missing.
 
-## Tacet's Sign in button (§251): the private sign-in screen
+## Tacet's Sign in button (§252): the private sign-in screen
 
 Tacet's **Sign in again** button (Home, Channel sync, each channel tab) does
 not use the shared screen above. Display `:99` shows every channel's

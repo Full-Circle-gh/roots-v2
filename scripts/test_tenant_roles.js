@@ -343,7 +343,7 @@ function versionOf(tid) {
   // reading the diff for.
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 23, '23 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  // §251 added `integrations:signin`, which moves no money and shows none.
+  // §252 added `integrations:signin`, which moves no money and shows none.
   is(caps.CAPABILITIES.length, 118, 'across all 118');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money

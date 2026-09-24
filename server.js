@@ -468,7 +468,7 @@ app.use(require('./routes/meituan-admin')); // retail-admin Meituan sync config
 app.use(require('./routes/guanyi-admin')); // retail-admin Guanyi (gzgrocery) sync config
 app.use('/api/internal/eleme', require('./routes/eleme-internal')); // daemon-only, localhost
 app.use(require('./routes/eleme-admin')); // retail-admin Eleme sync config + OAuth callback
-const channelSignin = require('./routes/channel-signin'); // §251 — sign a channel back in
+const channelSignin = require('./routes/channel-signin'); // §252 — sign a channel back in
 app.use(channelSignin);
 app.use(require('./routes/channel-sync')); // §103 one verdict per item per channel, read-only
 app.use(require('./routes/integrations-admin')); // retail-admin Channels & Delivery hub
@@ -1279,6 +1279,6 @@ const httpServer = app.listen(PORT, () => {
   } catch (e) { console.warn('[security] secret-box health check skipped:', e.message); }
 });
 
-// §251 — the channel sign-in screen. A WebSocket upgrade, authenticated by the
+// §252 — the channel sign-in screen. A WebSocket upgrade, authenticated by the
 // same session, capability and store scope as the sign-in routes themselves.
 channelSignin.attachScreenRelay(httpServer, sessionMiddleware);

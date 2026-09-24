@@ -225,6 +225,40 @@ await it('the rate limit is per channel — 闪购 is not held back by 外卖', 
   assert.ok(JSON.parse(fs.readFileSync(STATE, 'utf8')).tianhe, 'and must not wipe the other channel');
 });
 
+// ── 5. A closed location pages nobody (§217) ─────────────────────────────────
+// A stand-in for the two store_business_status reads isStoreTradingOnChannel
+// makes, so the real predicate runs with no database behind it.
+const fakeDb = (row) => ({ prepare: () => ({ get: () => row }) });
+
+await it('越秀 closed on 闪购 — its route is not trading, so the watchdog stays quiet', async () => {
+  assert.strictEqual(pm.routeTrading(fakeDb({ fulfillment_open: 1, target_open: null, is_open: 0 }), 'yuexiu'), false);
+});
+
+await it('越秀 closed shop-wide (fulfillment_open = 0) is also quiet', async () => {
+  assert.strictEqual(pm.routeTrading(fakeDb({ fulfillment_open: 0, target_open: null, is_open: 1 }), 'yuexiu'), false);
+});
+
+await it('越秀 trading — its route pages as before', async () => {
+  assert.strictEqual(pm.routeTrading(fakeDb({ fulfillment_open: 1, target_open: null, is_open: 1 }), 'yuexiu'), true);
+});
+
+await it('tianhe always pages — 外卖 serves more than one store on that route', async () => {
+  assert.strictEqual(pm.routeTrading(fakeDb({ fulfillment_open: 0, target_open: 0, is_open: 0 }), 'tianhe'), true);
+});
+
+await it('no DB, or a DB that throws, keeps paging — never silence a live route', async () => {
+  assert.strictEqual(pm.routeTrading(null, 'yuexiu'), true);
+  const broken = { prepare: () => { throw new Error('SQLITE_BUSY'); } };
+  assert.strictEqual(pm.routeTrading(broken, 'yuexiu'), true);
+});
+
+await it('the watchdog asks routeTrading and drops only the page, not the failover', async () => {
+  const src = fs.readFileSync(path.join(__dirname, 'proxy-watchdog.js'), 'utf8');
+  assert.match(src, /pm\.routeTrading\(getDb\(\), channel\)/, 'the watchdog must ask the shared predicate');
+  assert.match(src, /if \(!quiet\) await pm\.sendProxyAlert\(text\)/, 'a closed location must not page');
+  assert.doesNotMatch(src, /if \(quiet\)[^\n]*continue/, 'closed must not skip the probe and state write');
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
 })();

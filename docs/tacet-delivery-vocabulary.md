@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.166 · 2026-09-24 · §251 SIGNS A CHANNEL BACK IN FROM TACET — SIX STRINGS COMPOSED BY CLAUDE, THE REST LIFTED.** The Sign in button, the permission that grants it, and the page that shows the private sign-in screen. Every composed string is built from live fragments. Each one is listed below with the live candidates rejected for it.
+**v1.166 · 2026-09-24 · §252 SIGNS A CHANNEL BACK IN FROM TACET — SIX STRINGS COMPOSED BY CLAUDE, THE REST LIFTED.** The Sign in button, the permission that grants it, and the page that shows the private sign-in screen. Every composed string is built from live fragments. Each one is listed below with the live candidates rejected for it.
 
 **v1.165 · 2026-09-23 · §241 SPLITS THE ALLERGEN CARD INTO A RECIPE CLAIM AND A FACILITY WARNING — TWO STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `配方不含` (*Made without*) replaces `不含` as the row label over the free_of flags, and `（共用生产环境）` (*shared facility*) closes the one may-contain line every product now carries. `种子类` is copied from a live card. See *Made without, and the shared-facility line (§241)*.
 
@@ -8567,7 +8567,7 @@ English, and it is the reason §241 exists.
 - `其他籽类` (Whole Sesame Tahini's live entry) — **rejected** for Seeds: `其他`
   is relative to a list the line no longer carries.
 
-## Signing a channel back in (§251)
+## Signing a channel back in (§252)
 
 **Six strings composed, by Claude, 2026-09-24, under the 2026-09-06 amendment.**
 The rest are copied or lifted. The page is `public/channel-signin.html`. The

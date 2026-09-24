@@ -20,7 +20,7 @@
 // scp. GZ Grocery's browser layer notices a newer session file on its own;
 // Meituan's and Eleme's do not, so a successful login restarts their daemon.
 //
-// §251 — Tacet's Sign in button drives this too, through the JSON API at the
+// §252 — Tacet's Sign in button drives this too, through the JSON API at the
 // bottom (/api/start, /api/status). Those logins run on a PRIVATE display
 // (:98, its own loopback x11vnc) that shows nothing but the one login window —
 // display :99 carries every channel's logged-in browser, and a person signing
@@ -52,7 +52,7 @@ const JOBS = {
                       hint: "账号 + 密码 / account + password (SMS code if asked)." },
 };
 
-// The shared screen, and the private one Tacet's Sign in uses (§251).
+// The shared screen, and the private one Tacet's Sign in uses (§252).
 const SHARED_DISPLAY = ":99";
 const SIGNIN_DISPLAY = process.env.SIGNIN_DISPLAY || ":98";
 
@@ -201,7 +201,7 @@ const srv = http.createServer(async (req, res) => {
   const json = (code, o) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(o)); };
   const pub = (r) => r && { channel: r.channel, store: r.store, startedAt: new Date(r.startedAt).toISOString() };
 
-  // §251 — Tacet's API, for the Tacet process on this box and nothing else.
+  // §252 — Tacet's API, for the Tacet process on this box and nothing else.
   // nginx's /ops-screen/ctl/ block strips its prefix, so /ops-screen/ctl/api/…
   // WOULD land here; every request nginx forwards carries X-Real-IP (see the
   // README's block), and Tacet's direct loopback call never does, so that

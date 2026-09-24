@@ -370,7 +370,7 @@ check('no new Chinese string was minted for this row — every pair is live', ()
   // "Review this on desktop" toast off the fallback it already shipped.
   // §106's stopped channel adds two lifts, neither composed: `已退出登录` is the
   // vocabulary's locked "… is signed out" pair, and `需要人工验证` is the tail of
-  // the Meituan daemon's own captcha alert, verbatim. §251 puts the desktop
+  // the Meituan daemon's own captcha alert, verbatim. §252 puts the desktop
   // row's button on `重新登录` when a sign-out is the worst thing on it — the
   // vocabulary's declared Sign in again pair. The phone row has no button.
   const LIVE = {

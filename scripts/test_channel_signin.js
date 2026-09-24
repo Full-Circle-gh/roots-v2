@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Tests for §251 — signing a channel back in from Tacet.
+// Tests for §252 — signing a channel back in from Tacet.
 //
 //   node scripts/test_channel_signin.js
 //

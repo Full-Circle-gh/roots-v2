@@ -466,7 +466,7 @@
     }
   };
 
-  // Signing a store back in needs a human at a browser on the box. §251's Sign
+  // Signing a store back in needs a human at a browser on the box. §252's Sign
   // in button does that for whoever holds the permission; otherwise the guided
   // wizard when it is loaded and the command to run when it is not. Never a
   // button that cannot do what it says. The instant (闪购) store signs in by a

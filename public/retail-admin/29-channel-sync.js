@@ -208,7 +208,7 @@
       const blk = ch.blocked;
       const blkTxt = blk && typeof chBlockSentence === 'function' ? chBlockSentence(ch.key, blk.by) : '';
       const blkStore = blk && blk.storeName ? (document.documentElement.dataset.uiLang === 'cn' ? blk.storeName : (blk.storeNameEn || blk.storeName)) : '';
-      // §251 — the one action that clears it, on the card that says it.
+      // §252 — the one action that clears it, on the card that says it.
       const signBtn = blk && typeof chSignInBtn === 'function' ? chSignInBtn(ch.key, blk.store, blkStore, blk.by) : '';
       const blkLine = blkTxt
         ? '<div class="cs-why">' + esc(blkTxt

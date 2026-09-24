@@ -592,7 +592,7 @@ function chCauseFor(channel, cell, channelBlock) {
   }
   return chCauseLine(channel, cell);
 }
-/* §251 — the causes a person at a login window can clear: a signed-out session
+/* §252 — the causes a person at a login window can clear: a signed-out session
    (each channel's own name for it), a forgotten shop binding, a captcha. A
    proxy or a stalled queue is not fixed by signing in, so it gets no button. */
 const CH_SIGNIN_CAUSES = ['needs_login', 'auth_required', 'binding_lost', 'verify_required'];

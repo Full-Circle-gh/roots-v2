@@ -244,7 +244,7 @@ router.get('/api/retail-admin/guanyi/status', requireRetailAdmin, (req, res) => 
     // said the same channel had been signed out since yesterday.
     const store = guanyiStore(db);
     const b = store ? channelBlock(db, 'guanyi', store.code) : null;
-    // The store travels with it: the tab's Sign in button (§251) needs to say which.
+    // The store travels with it: the tab's Sign in button (§252) needs to say which.
     const block = b ? { ...b, store: store.code } : null;
     res.json({ success: true, queuePending, queueError, mappedCount, recentLogs, block });
   } catch (e) {

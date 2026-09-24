@@ -1,6 +1,6 @@
 'use strict';
 
-// Sign a channel back in (§250, §251). The rules live in lib/channel-signin.js;
+// Sign a channel back in (§250, §252). The rules live in lib/channel-signin.js;
 // this file is the HTTP around them, plus the WebSocket relay that shows the
 // private sign-in screen.
 

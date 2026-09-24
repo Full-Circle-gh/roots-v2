@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>Sign in</title>
 <!--
-  §251 — sign a channel back in. Opened in its own tab by a Sign in button with
+  §252 — sign a channel back in. Opened in its own tab by a Sign in button with
   ?channel=&store=&name=&lang=. It asks Tacet to start that channel's login on
   the box's PRIVATE sign-in display, shows that display through Tacet's own
   relay, and closes itself once the login script reports success. Every check
@@ -62,7 +62,7 @@ const CH = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guan
 const chName = (CH[channel] || [channel, channel])[cn ? 1 : 0];
 
 // Every sentence on this page, both languages. The Chinese is declared in
-// docs/tacet-delivery-vocabulary.md (§251), each one marked lifted or composed.
+// docs/tacet-delivery-vocabulary.md (§252), each one marked lifted or composed.
 const S = {
   title:    T(`Sign in again · ${chName} · ${storeName}`, `重新登录 · ${chName} · ${storeName}`),
   opening:  T('Opening…', '正在打开…'),

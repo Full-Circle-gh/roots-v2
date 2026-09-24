@@ -3242,7 +3242,7 @@ function tdAttnRender() {
       // strip at the top of the page says the stall in full.
       cta: cuT('See items', '查看商品'), go: `csOpen('${attN ? 'att' : 'all'}')`,
     });
-    // §251 — when the worst thing on the row is a sign-out this operator can
+    // §252 — when the worst thing on the row is a sign-out this operator can
     // clear, the row's one button is that, for the first such channel. The
     // others are still on the Channel sync page, each on its own card.
     const signable = typeof chSignInable === 'function' && typeof can === 'function' && can('integrations:signin')
