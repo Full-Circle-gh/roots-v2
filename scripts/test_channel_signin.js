@@ -167,6 +167,27 @@ check('no screen or endpoint takes a channel password any more', () => {
   ok(/\^\(meituan\|qingyun\)\\\.\[a-z0-9\]/.test(wipe), 'the wipe does not target only the per-store family');
 });
 
+// The 越秀 Meituan store is served by 闪购, whose faults land in the Meituan
+// log; Sign in runs the 外卖 login, which cannot clear them.
+check('a Meituan store served by 闪购 is never offered or granted Sign in', () => {
+  const db = storeDb();
+  eq(signin.resolveStore(db, 'meituan', 'yuexiu'), null, 'the server grants it');
+  const items = require('../lib/channel-sync-items');
+  const sdb = new Database(':memory:');
+  sdb.exec(`CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, name_cn TEXT, name_en TEXT, is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0);
+    INSERT INTO retail_stores (id, code) VALUES (1, 'tianhe'), (2, 'yuexiu');
+    CREATE TABLE channel_status (channel TEXT, store_code TEXT, is_open INTEGER);
+    CREATE TABLE store_business_status (store_code TEXT PRIMARY KEY, is_open INTEGER, target_open INTEGER, fulfillment_open INTEGER);
+    CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
+    CREATE TABLE meituan_sync_log (id INTEGER PRIMARY KEY AUTOINCREMENT, store_code TEXT, event_type TEXT, status TEXT, detail TEXT, error_msg TEXT, created_at TEXT);
+    INSERT INTO meituan_sync_log (store_code, event_type, status, created_at) VALUES ('yuexiu', 'needs_login', 'error', '2026-09-24 01:00:00');`);
+  const mt = items.channelBlocks(sdb).find((c) => c.key === 'meituan');
+  eq([mt.blocked.store, mt.blocked.signable], ['yuexiu', false], 'the block does not say Sign in cannot clear it');
+  ok(/if \(signable === false\) return '';/.test(read('public/retail-admin/01-core.js')), 'the desktop button ignores it');
+  ok(/blk\.signable===false/.test(read('public/m.html')), 'the phone button ignores it');
+  ok(/b\.blocked\.signable !== false/.test(read('public/retail-admin/03-dashboard.js')), 'the Home button ignores it');
+});
+
 check('the relay refuses a cross-origin upgrade before it looks at anything else', () => {
   const { screenRefusal } = require('../routes/channel-signin');
   eq(screenRefusal({ headers: { host: 'store.example', origin: 'https://evil.example' }, session: {} }), 'cross_origin');
