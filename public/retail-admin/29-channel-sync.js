@@ -207,10 +207,14 @@
          signed-out session. One cause, on the card, once. */
       const blk = ch.blocked;
       const blkTxt = blk && typeof chBlockSentence === 'function' ? chBlockSentence(ch.key, blk.by) : '';
+      const blkStore = blk && blk.storeName ? (document.documentElement.dataset.uiLang === 'cn' ? blk.storeName : (blk.storeNameEn || blk.storeName)) : '';
+      // §252 — the one action that clears it, on the card that says it.
+      const signBtn = blk && typeof chSignInBtn === 'function' ? chSignInBtn(ch.key, blk.store, blkStore, blk.by) : '';
       const blkLine = blkTxt
         ? '<div class="cs-why">' + esc(blkTxt
-            + (blk.storeName ? ' · ' + (document.documentElement.dataset.uiLang === 'cn' ? blk.storeName : (blk.storeNameEn || blk.storeName)) : '')
-            + (blk.at ? ' · ' + cuT('since', '自') + ' ' + clock(blk.at) : '')) + '</div>'
+            + (blkStore ? ' · ' + blkStore : '')
+            + (blk.at ? ' · ' + cuT('since', '自') + ' ' + clock(blk.at) : '')) + '</div>' +
+          (signBtn ? '<div class="cs-act">' + signBtn + '</div>' : '')
         : '';
       return '<div class="cs-ch' + (down || blk ? ' is-down' : '') + (idle ? ' is-idle' : '') + '">' +
         '<div class="cs-nm"><span class="cs-glyph">' + esc(chGlyph(ch.key)) + '</span><span>' + esc(name) + '</span></div>' +

@@ -15591,6 +15591,7 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
    nothing is getting through, and it sits above the counts rather than among
    them. */
 #tab-channel-sync .cs-ch .cs-why { font: 400 13px/1.5 var(--f-sans); color: var(--td-brick-ink); }
+#tab-channel-sync .cs-ch .cs-act { margin-top: 8px; }
 #tab-channel-sync .cs-ch.is-down .cs-sub { color: var(--td-brick-ink); opacity: .9; }
 #tab-channel-sync .cs-ch .cs-stores { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
 #tab-channel-sync .cs-ch .cs-store { font: 400 12.5px var(--f-sans); color: var(--td-text2); display: flex; align-items: center; gap: 6px; min-width: 0; }

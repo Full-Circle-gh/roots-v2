@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sign in</title>
+<!--
+  §252 — sign a channel back in. Opened in its own tab by a Sign in button with
+  ?channel=&store=&name=&lang=. It asks Tacet to start that channel's login on
+  the box's PRIVATE sign-in display, shows that display through Tacet's own
+  relay, and closes itself once the login script reports success. Every check
+  is on the server (routes/channel-signin.js); this page only draws states.
+-->
+<style>
+  :root { --bg:#f9f7f2; --surface:#fff; --ink:#1f2328; --ink2:#5f6368; --line:#e4dfd3;
+          --ok:#4f7a57; --bad:#b4532f; --btn:#1f2328; --btnInk:#fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16171a; --surface:#1f2024; --ink:#ecebe7; --ink2:#a3a29d; --line:#34353a;
+            --ok:#8fbf95; --bad:#e08a68; --btn:#ecebe7; --btnInk:#16171a; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+               font:400 15px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", system-ui, sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { padding:16px; border-bottom:1px solid var(--line); }
+  h1 { font-size:17px; font-weight:600; line-height:1.3; margin:0; }
+  #msg { margin:4px 0 0; color:var(--ink2); min-height:1.5em; }
+  #msg.ok { color:var(--ok); } #msg.bad { color:var(--bad); }
+  #screen { flex:1; min-height:0; background:#000; display:none; }
+  #screen.on { display:block; }
+  .actions { padding:12px 16px 16px; display:none; gap:8px; }
+  .actions.on { display:flex; }
+  button { font-family:inherit; font-size:15px; font-weight:500; padding:10px 16px; border-radius:10px; border:1px solid var(--line);
+           background:var(--surface); color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--btn); color:var(--btnInk); border-color:var(--btn); }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p id="msg"></p>
+</header>
+<div class="actions" id="actions">
+  <button class="primary" id="retry"></button>
+  <button id="close"></button>
+</div>
+<div id="screen"></div>
+
+<script type="module">
+import RFB from '/novnc/core/rfb.js';
+
+const q = new URLSearchParams(location.search);
+const channel = q.get('channel') || '';
+const store = q.get('store') || '';
+const storeName = q.get('name') || store;
+const cn = q.get('lang') === 'cn';
+const T = (en, zh) => (cn ? zh : en);
+document.documentElement.lang = cn ? 'zh' : 'en';
+
+const CH = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
+const chName = (CH[channel] || [channel, channel])[cn ? 1 : 0];
+
+// Every sentence on this page, both languages. The Chinese is declared in
+// docs/tacet-delivery-vocabulary.md (§252), each one marked lifted or composed.
+const S = {
+  title:    T(`Sign in again · ${chName} · ${storeName}`, `重新登录 · ${chName} · ${storeName}`),
+  opening:  T('Opening…', '正在打开…'),
+  loginNow: T('Log in on the screen below. This page closes by itself when you’re done.',
+              '请在下方画面中登录，完成后本页会自动关闭。'),
+  done:     T('Signed in again. Stock updates resume in a few minutes.', '已重新登录，库存推送将在几分钟内恢复。'),
+  failed:   T('The login window closed without signing in.', '登录窗口已关闭，未能登录。'),
+  lost:     T('Lost the screen.', '画面已断开。'),
+  busy:     T('Someone is already signing in. Try again in a few minutes.', '已有人正在登录，请稍后再试。'),
+  denied:   T('You don’t have permission for this', '你没有此操作的权限'),
+  down:     T('The sign-in service on the server is not running.', '服务器上的登录服务未运行。'),
+  retry:    T('Try again', '重试'),
+  close:    T('Close', '关闭'),
+};
+
+const $ = (id) => document.getElementById(id);
+$('title').textContent = S.title;
+document.title = S.title;
+$('retry').textContent = S.retry;
+$('close').textContent = S.close;
+function leave() {
+  if (window.opener) return window.close();
+  if (history.length > 1) return history.back();
+  location.href = '/';
+}
+$('retry').onclick = () => location.reload();
+$('close').onclick = leave;
+
+function say(text, cls) {
+  $('msg').textContent = text;
+  $('msg').className = cls || '';
+}
+function end(text, cls, canRetry) {
+  say(text, cls);
+  $('actions').classList.add('on');
+  $('retry').style.display = canRetry ? '' : 'none';
+  stopPolling();
+  if (rfb) { try { rfb.disconnect(); } catch (_) {} rfb = null; }
+  $('screen').classList.remove('on');
+}
+
+let rfb = null;
+let poll = null;
+let finished = false;
+function stopPolling() { if (poll) { clearInterval(poll); poll = null; } }
+
+async function api(method, url, body) {
+  try {
+    const r = await fetch(url, {
+      method, credentials: 'same-origin',
+      headers: body ? { 'content-type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let j = null; try { j = await r.json(); } catch (_) {}
+    return { status: r.status, json: j || {} };
+  } catch (_) { return { status: 0, json: {} }; }
+}
+
+function refusal(r) {
+  if (r.status === 401 || r.status === 403) return end(S.denied, 'bad', false);
+  if (r.status === 409) return end(S.busy, 'bad', true);
+  return end(S.down, 'bad', true);
+}
+
+function showScreen() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  $('screen').classList.add('on');
+  rfb = new RFB($('screen'), `${proto}//${location.host}/api/retail-admin/channel-signin/screen`,
+    { wsProtocols: ['binary'] });
+  rfb.scaleViewport = true;
+  rfb.resizeSession = false;
+  rfb.addEventListener('disconnect', () => { if (!finished) end(S.lost, 'bad', true); });
+}
+
+async function check() {
+  const r = await api('GET', `/api/retail-admin/channel-signin/status?channel=${encodeURIComponent(channel)}&store=${encodeURIComponent(store)}`);
+  if (r.status !== 200) return refusal(r);
+  const s = r.json;
+  if (!s.trigger) return end(S.down, 'bad', true);
+  if (s.running) return;
+  finished = true;
+  if (s.last && s.last.ok) {
+    end(S.done, 'ok', false);
+    // The desktop opens this in its own tab, which can close itself. The phone
+    // opens it in the same window (an installed web app would lose its sign-in
+    // in a new one), so there it goes back to where the button was.
+    setTimeout(leave, 3000);
+  } else {
+    end(S.failed, 'bad', true);
+  }
+}
+
+async function start() {
+  say(S.opening);
+  const r = await api('POST', '/api/retail-admin/channel-signin/start', { channel, store });
+  if (r.status !== 200) return refusal(r);
+  say(S.loginNow);
+  // The login script needs a moment to open its window on the screen.
+  setTimeout(showScreen, 1500);
+  poll = setInterval(check, 3000);
+}
+
+start();
+</script>
+</body>
+</html>
