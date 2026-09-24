@@ -19,6 +19,9 @@
 //   SHANGOU_PROXY_UPSTREAM  authed upstream proxy URL (default: MEITUAN_PROXY_URL).
 //                           Set empty to go DIRECT (no proxy).
 //   SHANGOU_PROXY_LOCAL_PORT (default 9344) — local no-auth port Chrome points at.
+//   SHANGOU_DISPLAY        the X display Chrome draws on (§260: ':97', the holder's
+//                          private screen that Tacet's Sign in relays). Unset, Chrome
+//                          keeps whatever DISPLAY this process was started with.
 
 'use strict';
 
@@ -44,6 +47,12 @@ const PORT       = process.env.SHANGOU_CDP_PORT        || '9333';
 const PROFILE    = process.env.SHANGOU_PROFILE_DIR     || path.join(os.homedir(), '.shangou-chrome-profile');
 const LOCAL_PORT = Number(process.env.SHANGOU_PROXY_LOCAL_PORT || 9344);
 const START_URL  = 'https://shangoue.meituan.com/';
+// Read here, from .env, rather than set in pm2: a deploy restarts this holder
+// with --update-env, and a DISPLAY that lived only in pm2's saved env is not
+// something a restart can be trusted to keep.
+const CHROME_ENV = process.env.SHANGOU_DISPLAY
+  ? { ...process.env, DISPLAY: process.env.SHANGOU_DISPLAY }
+  : process.env;
 
 // The failover watchdog (lib/proxy-manager + scripts/proxy-watchdog) decides which
 // proxy 闪购 (yuexiu) should use and writes it to data/proxy-active.json. We follow
@@ -170,8 +179,8 @@ function startChrome(upstream) {
   if (process.platform !== 'win32') args.push('--no-sandbox', '--disable-gpu');
   if (chromeProxy) args.push(`--proxy-server=${chromeProxy}`);
 
-  console.log(`[shangou-chrome] launching ${exe}\n  port=${PORT} profile=${PROFILE} upstream=${upstream || '(direct)'} proxy=${chromeProxy || '(direct)'} display=${process.env.DISPLAY || '(none)'}`);
-  const child = spawn(exe, args, { stdio: 'inherit', env: process.env });
+  console.log(`[shangou-chrome] launching ${exe}\n  port=${PORT} profile=${PROFILE} upstream=${upstream || '(direct)'} proxy=${chromeProxy || '(direct)'} display=${CHROME_ENV.DISPLAY || '(none)'}`);
+  const child = spawn(exe, args, { stdio: 'inherit', env: CHROME_ENV });
   currentChild = child;
   child.on('exit', (code) => {
     if (intentionalKill) { intentionalKill = false; return; } // a proxy-switch relaunch handles it
