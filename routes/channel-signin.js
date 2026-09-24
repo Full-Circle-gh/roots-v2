@@ -34,17 +34,21 @@ router.post('/api/retail-admin/channel-signin/start', express.json(), async (req
   const { channel, store: code } = req.body || {};
   const g = gate(req, res, channel, code);
   if (!g) return;
-  const live = signin.liveGrant();
-  // The same person reloading the page mid sign-in rejoins it rather than being
-  // told somebody is already signing in.
-  if (live && live.userId === g.caller.user.id && live.channel === channel && live.store === g.store.code) {
-    const st = await signin.trigger('GET', '/api/status');
-    const run = st.json && st.json.running;
-    if (run && run.channel === channel && run.store === g.store.code) return res.json({ success: true, resumed: true });
+  // What is actually running on the screen decides, never the grant alone: a
+  // closed tab keeps its grant for minutes, and on the first live use that grant
+  // told the next person "someone is already signing in" when nobody was.
+  const st = await signin.trigger('GET', '/api/status');
+  if (st.status !== 200 || !st.json) return res.status(503).json({ success: false, error: 'trigger_unavailable' });
+  const next = signin.startDecision(st.json.running, channel, g.store.code);
+  if (next === 'busy') return res.status(409).json({ success: false, error: 'busy', busy: st.json.running });
+  if (next === 'join') {
+    // The same channel and store is already at its login window: whoever asks
+    // now, with the same permission and scope, takes the screen over and
+    // finishes it. The previous viewer's relay closes on its next check.
+    signin.grantFor(g.caller.user.id, channel, g.store.code);
+    return res.json({ success: true, resumed: true });
   }
-  if (live && live.userId !== g.caller.user.id) {
-    return res.status(409).json({ success: false, error: 'busy', busy: { channel: live.channel, store: live.store } });
-  }
+  signin.endGrant();
   const r = await signin.trigger('POST', '/api/start', { channel, store: g.store.code, shopId: g.store.shopId || null });
   if (r.status === 409) return res.status(409).json({ success: false, error: 'busy', busy: r.json && r.json.running });
   if (r.status !== 200) return res.status(503).json({ success: false, error: 'trigger_unavailable' });
@@ -127,12 +131,13 @@ function attachScreenRelay(server, sessionMiddleware) {
       let why;
       try { why = screenRefusal(req); } catch (e) { why = 'error'; }
       if (why) return refuse(why);
-      wss.handleUpgrade(req, socket, head, (ws) => pipe(ws));
+      const userId = loadCaller(req).user.id;
+      wss.handleUpgrade(req, socket, head, (ws) => pipe(ws, userId));
     });
   });
 }
 
-function pipe(ws) {
+function pipe(ws, userId) {
   const vnc = net.connect(signin.SCREEN);
   const close = () => {
     try { ws.close(); } catch (_) { /* already closing: both ends call this, and a second close is a no-op we do not need to hear about */ }
@@ -144,9 +149,10 @@ function pipe(ws) {
   ws.on('message', (d) => vnc.write(d));
   ws.on('close', close);
   ws.on('error', close);
-  // Watching ends with the sign-in: checked every few seconds, so a screen left
-  // open in a tab cannot outlive the grant that allowed it.
-  const t = setInterval(() => { if (!signin.liveGrant()) { clearInterval(t); close(); } }, 5000);
+  // Watching ends with the sign-in, or when somebody else takes it over:
+  // checked every few seconds, so a screen left open in a tab cannot outlive
+  // the grant that allowed it, and there is only ever one viewer.
+  const t = setInterval(() => { if (!signin.mayWatch(userId)) { clearInterval(t); close(); } }, 5000);
   ws.on('close', () => clearInterval(t));
 }
 

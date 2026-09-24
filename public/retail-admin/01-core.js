@@ -597,6 +597,17 @@ function chCauseFor(channel, cell, channelBlock) {
    proxy or a stalled queue is not fixed by signing in, so it gets no button. */
 const CH_SIGNIN_CAUSES = ['needs_login', 'auth_required', 'binding_lost', 'verify_required'];
 function chSignInable(by) { return CH_SIGNIN_CAUSES.indexOf(by) !== -1; }
+/* The short state a stopped channel's HEADLINE says, when its cause is one a
+   person can name: signed out (every channel's word for it, and a forgotten
+   Meituan shop, whose fix is the same), or a captcha. [en, cn] or null — null
+   leaves the headline on "not syncing". Ash, 2026-09-24: both cards read "Not
+   syncing since…" and only the small print said Eleme was signed out. */
+function chHeadState(by) {
+  if (by === 'needs_login' || by === 'auth_required' || by === 'binding_lost') return ['signed out', '已退出登录'];
+  if (by === 'verify_required') return ['waiting for a captcha', '需要人工验证'];
+  return null;
+}
+window.chHeadState = chHeadState;
 function chSignIn(channel, store, name) {
   const lang = document.documentElement.dataset.uiLang === 'cn' ? 'cn' : 'en';
   const url = '/channel-signin?channel=' + encodeURIComponent(channel) + '&store=' + encodeURIComponent(store) +
