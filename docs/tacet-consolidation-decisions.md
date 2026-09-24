@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.394
+# Tacet shared-core consolidation — decisions record, v4.395
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-24 · v4.395 — **§251 · A CLOSED LOCATION PAGES NOBODY ABOUT ITS PROXY ROUTE — REPORTED BY ASH**, off the proxy group at 11:43: *"yuexiu location is close until further notice we talked about it , why it keep trying ?"* The page was `🔀 越秀 闪购：切换到 门店住宅代理` with its `🟢 … 恢复可用` twin — "nothing to do", about a shop closed since 2026-09-10. **§217 GATED THE STOCK SWEEPS AND NOTHING ELSE**: `scripts/proxy-watchdog.js` probes every route every 30s and pages `PROXY_WATCHDOG_WEBHOOK` on every flip, and it never asked whether the shop behind the route was trading. **THE RULING: THE WATCHDOG ASKS THE SAME ONE PREDICATE** (`isStoreTradingOnChannel`, through the new `routeTrading` / `CHANNEL_STORE` in `lib/proxy-manager.js`), and while the location is not trading every alert goes to the pm2 log only. **IT STILL PROBES AND STILL FAILS OVER, AND THAT IS DELIBERATE**: stopping the probes would pin 闪购's Chrome to whatever route it was on at close; if that route died, `scripts/shangou-daemon.js`'s own gate would page `🔴 美团闪购 代理掉线` instead, and a reopen would start from a dead exit. **tianhe IS NOT MAPPED**: 外卖 rides that route for every store it serves (`MEITUAN_SKIP_STORES` decides which), so one store closing is no reason to go quiet about it. Fails open — no DB, or a DB that throws, pages as before. Tests: six new cases in `scripts/test_proxy_failover.js`.
 
 2026-09-24 · v4.394 — **§250 PR 2 · ONE SIGNED-OUT SIGNAL ACROSS ALL THREE CHANNELS.** **MEITUAN NEVER LOGGED A REJECTED SESSION**: `lib/meituan-browser.js`'s `ensureLoggedIn` wrote "session expired" to the console and returned false, so the back office learned of it hours later as a stalled queue. A session that expired while the browser was up was not seen at all, because `ensureLoggedIn` short-circuits on `_loggedIn`. The browser now raises `signedOut` in both places: an expired saved session, and a redirect to the login page on the order read. A proxy outage never raises it. `scripts/meituan-daemon.js` gains `noteLoginResult`, the binding latch's shape: `needs_login` is logged once it has lasted `BINDING_ALERT_AFTER_MS`, latched on disk, and `login_restored` is logged on the next confirmed login. The heartbeat canary skips a signed-out store the way it skips a lost binding, so one fault is not also reported as a stall. No merchant alert was added; that would be a new composed Chinese string, and Home now says it. **`binding_lost` NOW COUNTS AS SIGNED OUT** in `lib/channel-block.js`, cleared by `binding_cleared`. Its own alert already said "needs re-login", and the fix is the same, so every surface words it with the signed-out sentence (desktop and phone block sentences, both Home rows, the Meituan tab). **THE ELEME TAB READS `auth_required`**: `elemeStoreHealth` in `routes/eleme-admin.js` decided "signed out" from session-file existence alone, with a comment saying the log had no such event. It did. It now asks `channelBlock` as well, so an expired file stops reading as a healthy store. Daemons pick this up on deploy: `scripts/deploy-apply.sh` bounces the channel daemons whenever `lib/` changes. No new Chinese string, no schema change, no migration, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20313,3 +20315,11 @@ itself on recovery. Never a Tacet credential form; never the ops screen by its
 shared password alone. Who may press it is a per-role capability, granted on
 the Team page, and bounded by the operator's store scope. See the 2026-09-24 changelog
 entry for the full account and the four-PR order.
+
+## §251 — A CLOSED LOCATION PAGES NOBODY ABOUT ITS PROXY ROUTE
+
+**Reported by Ash, 2026-09-24.** §217 applied to `scripts/proxy-watchdog.js`.
+While a route's location is not trading (`isStoreTradingOnChannel`), its route
+is still probed and still failed over, but nothing is paged — every decision
+goes to the pm2 log only. Only 越秀 闪购 is mapped; the 天河 外卖 route serves
+more than one store and always pages. See the 2026-09-24 changelog entry.
