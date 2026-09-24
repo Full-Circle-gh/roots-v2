@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.168 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
+
 **v1.167 · 2026-09-24 · §253 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§253)*.
 
 **v1.166 · 2026-09-24 · §252 SIGNS A CHANNEL BACK IN FROM TACET — SIX STRINGS COMPOSED BY CLAUDE, THE REST LIFTED.** The Sign in button, the permission that grants it, and the page that shows the private sign-in screen. Every composed string is built from live fragments. Each one is listed below with the live candidates rejected for it.
@@ -8633,3 +8635,13 @@ name needs no label.
 - `This shop is closed. Open the shop before opening a channel at it.` (the
   server's §181 `shop_closed` message, English only): **rejected**. The
   refusal it described no longer happens.
+
+**The phone, v1.168.** `public/m.html`'s shop switch confirm uses, when a
+reopen set is remembered, `Open {channels} at {store}? · 在 {store} 开启
+{channels}？` and `New orders can arrive at this store again. · 这家门店可以重新接单。`.
+Both are the phone's own `chanCell` pairs, copied whole; `{channels}` is the
+phone's channel names joined `, ` / `、`. **Retired from the phone:**
+`{store} is closed · 门店 {store} 已关闭` with its body *The whole shop is shut, so
+every channel there is closed and none can be opened on its own…*, and the
+`shop_closed` error line *…is closed as a shop, so no channel can open there…*.
+Both described a refusal the server no longer makes.
