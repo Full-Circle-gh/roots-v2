@@ -164,16 +164,20 @@
 
   // Coldest to warmest, matching food-safety convention (frozen → chilled →
   // ambient). Confirmed by Ash on 2026-09-03.
+  //
+  // Both halves are kept as data, not behind a T() call, because the printed
+  // recipe card says them together ("Fridge · 冷藏") whatever the screen's
+  // language — rcpPrint() below.
   const STORAGE_OPTIONS = [
-    ['freezer',   () => T('Freezer', '冷冻')],
-    ['fridge',    () => T('Fridge', '冷藏')],
-    ['room_temp', () => T('Room temperature', '常温')],
+    ['freezer',   'Freezer', '冷冻'],
+    ['fridge',    'Fridge', '冷藏'],
+    ['room_temp', 'Room temperature', '常温'],
   ];
 
   const SHELF_LIFE_UNITS = [
-    ['days',   () => T('Days', '天')],
-    ['months', () => T('Months', '个月')],
-    ['years',  () => T('Years', '年')],
+    ['days',   'Days', '天'],
+    ['months', 'Months', '个月'],
+    ['years',  'Years', '年'],
   ];
   // Reads a stored "6 months" / "30 days" string back into {n, unit} for the
   // number+unit controls. Anything that doesn't match that shape (older free
@@ -1217,7 +1221,7 @@
   }
   function shelfLifeField(raw) {
     const sl = parseShelfLife(raw);
-    const opts = SHELF_LIFE_UNITS.map(([v, plural]) => `<option value="${esc(v)}"${sl.unit === v ? ' selected' : ''}>${esc(plural())}</option>`).join('');
+    const opts = SHELF_LIFE_UNITS.map(([v, en, cn]) => `<option value="${esc(v)}"${sl.unit === v ? ' selected' : ''}>${esc(T(en, cn))}</option>`).join('');
     return `<div class="rcp-shelf-life">`
       + `<input class="rcp-input" id="rcp-f-shelf_life_n" type="number" min="0" step="1" value="${esc(sl.n)}"`
       + ` oninput="rcpDirty();rcpShelfTouch()">`
@@ -1247,6 +1251,10 @@
     // no saves behind it and an empty panel explains nothing.
     const histBtn = document.getElementById('rcp-rec-history');
     if (histBtn) { histBtn.hidden = isNew; histBtn.textContent = T('History', '修改记录'); }
+    // Print — hidden on the same rule: a recipe not yet saved has no name to
+    // head the card with.
+    const printBtn = document.getElementById('rcp-rec-print');
+    if (printBtn) { printBtn.hidden = isNew; printBtn.textContent = T('Print', '打印'); }
 
     // §29 step 5 — state-dependent: "Make available as material" when
     // unlinked, "Linked to material: X" (click to unlink) when linked.
@@ -1411,7 +1419,7 @@
           </div>`)}
         ${band(T('Storage & notes', '储存与备注'), `
           <div class="rcp-fgrid notes">
-            ${field(T('Storage', '储存方式'), select('storage', m.storage, [['', T('None', '无')]].concat(STORAGE_OPTIONS.map(([v, lbl]) => [v, lbl()]))))}
+            ${field(T('Storage', '储存方式'), select('storage', m.storage, [['', T('None', '无')]].concat(STORAGE_OPTIONS.map(([v, en, cn]) => [v, T(en, cn)]))))}
             <div class="rcp-f">
               <span class="lbl">${esc(T('Notes', '备注'))}</span>
               <textarea class="rcp-input" id="rcp-f-notes" rows="3" oninput="rcpDirty()">${esc(m.notes || '')}</textarea>
@@ -2762,6 +2770,77 @@
     if (!d) return '—';
     return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
+
+  // ── Print — the kitchen's copy ─────────────────────────────────────────────
+  //
+  // Built from what is ON SCREEN (the inputs, _lines, _steps), not the last
+  // save, so the card matches what the operator is looking at when they press
+  // it. Both languages throughout, whatever the screen's language; steps and
+  // notes as typed, because there is one box for each.
+  //
+  // NO MONEY IS READ HERE. Not the cost, not the sell price, not the margin: a
+  // card pinned to a kitchen wall is read by people the screen would hide
+  // those from (recipes:costs, §164). Leaving them out of the INPUT, rather
+  // than out of the layout, is what keeps a later edit to the layout from
+  // putting them back.
+  //
+  // Pure, so a test can run it: details is readDetails()'s shape.
+  function recipePrintCard(details, lines, steps) {
+    const d = details || {};
+    const both = (en, cn) => `${en} · ${cn}`;
+    const num = (n) => String(Math.round(Number(n) * 100) / 100);
+    const facts = [];
+    if (d.batch_size) facts.push([both('Batch size', '批量大小'), num(d.batch_size) + ' g']);
+    if (d.servings) {
+      facts.push([both('Servings', '份数'),
+        num(d.servings) + (d.serving_size ? ' × ' + num(d.serving_size) + ' g' : '')]);
+    }
+    if (d.shelf_life) {
+      const sl = parseShelfLife(d.shelf_life);
+      const unit = SHELF_LIFE_UNITS.find(([v]) => v === sl.unit);
+      facts.push([both('Shelf life', '保质期'),
+        sl.ok && unit ? `${sl.n} ${unit[1]} · ${sl.n} ${unit[2]}` : String(d.shelf_life)]);
+    }
+    const store = STORAGE_OPTIONS.find(([v]) => v === d.storage);
+    if (store) facts.push([both('Storage', '储存方式'), both(store[1], store[2])]);
+
+    // A line with no name at all is an empty row somebody added and never
+    // filled; it has nothing to tell a cook.
+    const named = (lines || []).filter((l) => String(l.name_en || l.name_cn || '').trim());
+    const printLines = named.map((l) => ({
+      en: String(l.name_en || l.name_cn || '').trim(),
+      cn: l.name_en ? String(l.name_cn || '').trim() : '',
+      qty: (l.qty === '' || l.qty == null) ? '' : num(l.qty) + ' ' + (l.unit || 'g'),
+    }));
+    // Everything that printed in English only, so the operator is told what to
+    // fill in instead of finding out from the kitchen.
+    const missingCn = [];
+    if (d.name_en && !d.name_cn) missingCn.push(d.name_en);
+    named.forEach((l) => { if (l.name_en && !String(l.name_cn || '').trim()) missingCn.push(l.name_en); });
+
+    return {
+      card: {
+        nameEn: d.name_en || '', nameCn: d.name_cn || '', sku: d.sku || '',
+        facts,
+        lines: printLines,
+        steps: (steps || [])
+          .map((s) => ({ name: String(s.name || '').trim(), text: String(s.instructions || '').trim() }))
+          .filter((s) => s.name || s.text),
+        notes: String(d.notes || '').trim(),
+      },
+      missingCn,
+    };
+  }
+
+  window.rcpPrint = function () {
+    if (!_rec) return;
+    const { card, missingCn } = recipePrintCard(readDetails(), _lines, _steps);
+    if (typeof tdPrintRecipe !== 'function') return;
+    const w = tdPrintRecipe(card);
+    if (w && missingCn.length) {
+      toast(T('Add a name in Chinese', '添加中文名') + ': ' + missingCn.join(', '));
+    }
+  };
 
   window.rcpHistory = async function () {
     if (!_rec || !_rec.id) return;

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.166 · 2026-09-24 · §252 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§252)*.
+
 **v1.165 · 2026-09-23 · §241 SPLITS THE ALLERGEN CARD INTO A RECIPE CLAIM AND A FACILITY WARNING — TWO STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `配方不含` (*Made without*) replaces `不含` as the row label over the free_of flags, and `（共用生产环境）` (*shared facility*) closes the one may-contain line every product now carries. `种子类` is copied from a live card. See *Made without, and the shared-facility line (§241)*.
 
 **v1.164 · 2026-09-22 · §232 PUTS A FREE-OF ROW ON THE ALLERGEN CARD — NOTHING COMPOSED, ONE PAIR CROSSING FROM THE BACK OFFICE TO A CUSTOMER.** `不含` is the details panel's own label for this exact column and has been shipping over it; it now appears in front of customers for the first time, which is the only reason this entry exists. The four chips are the words the allergen cards themselves use, and the one that had to be lifted rather than copied — `五香` — is lifted out of the live badge `无五香`. See *The free-of row on the allergen card (§232)*.
@@ -8564,4 +8566,30 @@ English, and it is the reason §241 exists.
   a bracket.
 - `其他籽类` (Whole Sesame Tahini's live entry) — **rejected** for Seeds: `其他`
   is relative to a list the line no longer carries.
+
+## The recipe card (§252)
+
+**One pair declared as composed, by Claude, 2026-09-24, under the 2026-09-06
+amendment.** Every other word on the card is copied from the recipe screen,
+which already says it; the card prints both halves side by side
+(`Storage · 储存方式`) instead of the one the screen's language picks.
+
+| shipped | built from |
+|---|---|
+| `Print · 打印` (the recipe header's button) | **composed pair, Chinese copied whole.** `打印` ships alone in `public/m.html` over *Printing* (`T('Printing','打印')`), and inside every live print label (`打印小票`, `打印面单`). Declared because the English half beside it is new |
+| `Recipe · 食谱` (the print window's toolbar) | copied: the recipe screen's own `T('Recipe', '食谱')` |
+| `Batch size · 批量大小`, `Servings · 份数`, `Shelf life · 保质期`, `Storage · 储存方式` | copied: the Details tab's field labels |
+| `Freezer · 冷冻`, `Fridge · 冷藏`, `Room temperature · 常温`, `Days · 天`, `Months · 个月`, `Years · 年` | copied: the Details tab's option lists (storage order confirmed by Ash 2026-09-03) |
+| `Ingredients · 原料`, `Ingredient · 原料`, `Steps · 步骤`, `Notes · 备注` | copied: the record's sub-tabs and fields |
+| `Qty · 数量` | copied: `T('Qty', '数量')` |
+| `Add a name in Chinese · 添加中文名` (the notice naming what printed in English only) | copied whole: the live prompt of the same meaning |
+| `Nothing to show · 暂无内容`, `Close 关闭`, `Allow pop-ups, then print again · 请允许弹窗后再打印` | copied: the shared print sheet's own strings (`26-print.js`) |
+
+**Live candidates rejected.**
+
+- `配方` for the toolbar — **rejected**: it is live as *Recipe* elsewhere, but
+  the recipe screen itself says `食谱` everywhere, and the card is that screen's
+  page.
+- `打印小票` / `打印面单` for the button — **rejected**: *receipt* and *waybill*
+  are what those print, not a recipe.
 
