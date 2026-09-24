@@ -3188,7 +3188,7 @@ function tdAttnRender() {
     // Signed out and captcha are named; any other channel-level stop reads as
     // the stall's own words, since to an operator it is the same fact.
     const blockWord = (name, by) =>
-      (by === 'needs_login' || by === 'auth_required') ? cuT(`${name} is signed out`, `${name} 已退出登录`)
+      (by === 'needs_login' || by === 'auth_required' || by === 'binding_lost') ? cuT(`${name} is signed out`, `${name} 已退出登录`)
       : by === 'verify_required' ? cuT(`${name} needs a captcha`, `${name} 需要人工验证`)
       : cuT(`${name} not syncing`, `${name} 未同步`);
     // A channel says ONE thing about itself, worst first. A channel that is not

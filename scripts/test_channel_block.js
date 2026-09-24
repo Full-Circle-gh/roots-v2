@@ -170,6 +170,50 @@ check('GZ Grocery announces recovery with the fault’s own event type, and that
   eq(channelBlock(db, 'guanyi', 'tianhe').by, 'needs_login', 'and it blocks again on the next fault');
 });
 
+// §250 — one signed-out signal across all three channels. Before it Meituan
+// never logged a rejected session, and a lost shop binding (whose own alert says
+// "needs re-login") was read by nothing here.
+check('Meituan: a rejected session blocks, and its own recovery clears it', () => {
+  const db = freshDb();
+  log(db, 'meituan_sync_log', 'tianhe', 'needs_login', 'error', T(9), 'Meituan session signed out');
+  eq(channelBlock(db, 'meituan', 'tianhe').by, 'needs_login');
+  log(db, 'meituan_sync_log', 'tianhe', 'login_restored', 'ok', T(10), 'signed in again');
+  eq(channelBlock(db, 'meituan', 'tianhe'), null);
+});
+
+check('Meituan: a lost shop binding blocks as a sign-out, and binding_cleared clears it', () => {
+  const db = freshDb();
+  log(db, 'meituan_sync_log', 'tianhe', 'binding_lost', 'error', T(9), 'lost store binding — needs re-login');
+  eq(channelBlock(db, 'meituan', 'tianhe').by, 'binding_lost');
+  log(db, 'meituan_sync_log', 'tianhe', 'binding_cleared', 'ok', T(10), 'store binding restored');
+  eq(channelBlock(db, 'meituan', 'tianhe'), null);
+});
+
+check('the Meituan daemon and browser actually write the events the table reads', () => {
+  const daemon = fs.readFileSync(path.join(__dirname, 'meituan-daemon.js'), 'utf8');
+  const browser = fs.readFileSync(path.join(__dirname, '..', 'lib', 'meituan-browser.js'), 'utf8');
+  ok(/logSync\(storeCode, 'needs_login', 'error'/.test(daemon), 'the daemon never logs needs_login');
+  ok(/logSync\(storeCode, 'login_restored', 'ok'/.test(daemon), 'the daemon never logs its recovery');
+  ok(/noteLoginResult\(storeCode, browser\.signedOut\)/.test(daemon), 'the order poll does not report the flag');
+  ok(/this\.signedOut = true/.test(browser), 'the browser never raises the flag');
+  for (const ev of ['needs_login', 'binding_lost']) ok(CHANNELS.meituan.blocking.includes(ev), `${ev} does not block`);
+  for (const ev of ['login_restored', 'binding_cleared']) ok(CHANNELS.meituan.clearing.includes(ev), `${ev} does not clear`);
+});
+
+check('every surface words a lost binding as signed out', () => {
+  const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+  ok(/case 'binding_lost':/.test(read('public/retail-admin/01-core.js')), 'desktop block sentence');
+  ok(/case 'binding_lost':/.test(read('public/m.html')), 'phone block sentence');
+  ok(/by === 'binding_lost'/.test(read('public/retail-admin/03-dashboard.js')), 'desktop Home');
+  ok(/by==='binding_lost'/.test(read('public/m.html')), 'phone Home');
+  ok(/binding_lost:\s*\['is signed out'/.test(read('public/retail-admin/11-meituan.js')), 'Meituan tab');
+});
+
+check('the Eleme tab reads the daemon’s signal, not only whether a session file exists', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'eleme-admin.js'), 'utf8');
+  ok(/channelBlock\(db, 'eleme', st\.code\)/.test(src), 'elemeStoreHealth ignores auth_required');
+});
+
 check('a missing log table is a channel this box does not run, not an error', () => {
   const db = new Database(':memory:');
   eq(channelBlock(db, 'meituan', 'tianhe'), null);

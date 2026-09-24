@@ -210,6 +210,7 @@
   // when both are healthy the page opens straight on the work.
   const MT_BLOCK_TXT = {
     needs_login:     ['is signed out', '已退出登录'],
+    binding_lost:    ['is signed out', '已退出登录'],   // shop forgotten; the fix is the same re-login
     verify_required: ['needs a verification scan', '需要扫码验证'],
     queue_stalled:   ['has a stalled stock queue', '库存推送停滞'],
     poll_paused:     ['has order polling paused', '订单轮询已暂停'],
