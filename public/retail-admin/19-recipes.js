@@ -1792,10 +1792,20 @@
     return isFree ? T('free', '免费')
       : (hasCost ? `${moneyU(l.master_cost)}/${esc(l.master_unit || l.unit || '')}` : T('no cost', '无成本'));
   }
+  // The material's SKU as it is now (master_sku, joined in by the route), not
+  // the copy the line took when it was added — a renumbered material would
+  // otherwise print its old code. A line whose material is gone keeps its copy,
+  // the only one left; a line added since the load has no master_sku yet and
+  // its copy is seconds old.
+  function lineSku(l) {
+    const cur = (l.ingredient_id != null && l.master_sku !== undefined) ? l.master_sku : l.sku;
+    return String(cur || '').trim();
+  }
   function lineRow(l, idx) {
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
     const per = linePerText(l);
+    const sku = lineSku(l);
     return `
       <div class="rcp-line" draggable="false" ondragover="rcpLineDragOver(event,${idx})" ondragleave="rcpLineDragLeave(event)" ondrop="rcpLineDrop(event,${idx})" ondragend="rcpLineDragEnd()">
         <span class="rcp-line-drag" draggable="true" ondragstart="rcpLineDragStart(event,${idx})" title="${esc(T('Drag to reorder', '拖动排序'))}">⠿</span>
@@ -1808,7 +1818,7 @@
                write-back, an edit on the Materials screen. Painted as part of
                the sentence it used to be baked into, so nothing moves on
                screen; only the figure changes. -->
-          <div class="s${hasCost ? '' : ' warn'}">${esc(l.name_cn || '')}${l.name_cn && per ? ' · ' : ''}<span class="rcp-line-per" data-line="${idx}">${esc(per)}</span>${l.ingredient_id == null ? ((l.name_cn || per) ? ' · ' : '') + esc(T('material deleted', '物料已删除')) : ''}</div>
+          <div class="s${hasCost ? '' : ' warn'}">${sku ? `<span class="rcp-line-sku">${esc(sku)}</span>${l.name_cn || per ? ' · ' : ''}` : ''}${esc(l.name_cn || '')}${l.name_cn && per ? ' · ' : ''}<span class="rcp-line-per" data-line="${idx}">${esc(per)}</span>${l.ingredient_id == null ? ((l.name_cn || per) ? ' · ' : '') + esc(T('material deleted', '物料已删除')) : ''}</div>
           <!-- The mark, on the line it is about. Painted here rather than only
                once per recipe because the summary pill names the CONDITION and
                this names the ROW — an operator who reads UNIT MISMATCH on the
@@ -2798,8 +2808,11 @@
     if (d.shelf_life) {
       const sl = parseShelfLife(d.shelf_life);
       const unit = SHELF_LIFE_UNITS.find(([v]) => v === sl.unit);
+      // "1 Days" is how the plural option label reads beside a 1; the Chinese
+      // has no plural to get wrong.
+      const en = unit && Number(sl.n) === 1 ? unit[1].replace(/s$/, '') : unit && unit[1];
       facts.push([both('Shelf life', '保质期'),
-        sl.ok && unit ? `${sl.n} ${unit[1]} · ${sl.n} ${unit[2]}` : String(d.shelf_life)]);
+        sl.ok && unit ? `${sl.n} ${en} · ${sl.n} ${unit[2]}` : String(d.shelf_life)]);
     }
     const store = STORAGE_OPTIONS.find(([v]) => v === d.storage);
     if (store) facts.push([both('Storage', '储存方式'), both(store[1], store[2])]);
@@ -2808,6 +2821,7 @@
     // filled; it has nothing to tell a cook.
     const named = (lines || []).filter((l) => String(l.name_en || l.name_cn || '').trim());
     const printLines = named.map((l) => ({
+      sku: lineSku(l),
       en: String(l.name_en || l.name_cn || '').trim(),
       cn: l.name_en ? String(l.name_cn || '').trim() : '',
       qty: (l.qty === '' || l.qty == null) ? '' : num(l.qty) + ' ' + (l.unit || 'g'),

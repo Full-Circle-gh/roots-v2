@@ -13660,6 +13660,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-line-name .n { font-weight: 500; color: var(--td-text); font-size: 13.5px; }
   #tab-recipes-record .rcp-line-name .s { font-size: 12px; color: var(--td-text2); }
   #tab-recipes-record .rcp-line-name .s.warn { color: var(--td-amber-ink); }
+  #tab-recipes-record .rcp-line-sku { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
   /* ── UNIT MISMATCH, on the line it is about ──────────────────────────────
      The record card's .rcp-warn pill names the CONDITION once per recipe; this
      names the ROW. Same amber, same triangle (I.warn) as the pill above it and
