@@ -527,6 +527,9 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
   // reason lineCostText is rather than stubbed: a stub would let the row under
   // test drift from the one that ships.
   const LINE_IN_YIELD_FN = extractFunction(RECIPES_JS, 'function lineInYield(l)');
+  // And lineSku() (§254 addendum, 2026-09-24): the row shows the material's
+  // SKU through it, so it comes out of the shipped file with the rest.
+  const LINE_SKU_FN = extractFunction(RECIPES_JS, 'function lineSku(l)');
   const YIELD_TITLE_FN = (() => {
     const at = RECIPES_JS.indexOf('const YIELD_TITLE = () => T(');
     assert.notStrictEqual(at, -1, 'YIELD_TITLE not found in the shipped file');
@@ -545,7 +548,7 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
       Number, String,
     };
     vm.createContext(sb);
-    vm.runInContext([SHOW_MONEY_FN, YIELD_TITLE_FN, LINE_IN_YIELD_FN, LINE_COST_TEXT_FN, LINE_PER_TEXT_FN, LINE_ROW_FN,
+    vm.runInContext([SHOW_MONEY_FN, YIELD_TITLE_FN, LINE_IN_YIELD_FN, LINE_COST_TEXT_FN, LINE_PER_TEXT_FN, LINE_SKU_FN, LINE_ROW_FN,
       'this.__row = lineRow;'].join('\n'), sb, { filename: '19-recipes.js#lineRow' });
     return sb.__row(l, idx);
   }

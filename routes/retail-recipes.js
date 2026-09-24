@@ -327,7 +327,11 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
   const ingredients = tdb().prepare(`
     SELECT ri.*, i.cost_per_unit AS master_cost, i.unit AS master_unit,
-           i.free_by_design AS master_free, i.name_en AS master_name_en, i.item_kind AS master_item_kind
+           i.free_by_design AS master_free, i.name_en AS master_name_en, i.item_kind AS master_item_kind,
+           -- The material's SKU as it is NOW. ri.sku is a copy taken when the
+           -- line was added and goes stale when the material is renumbered;
+           -- the record shows and prints this one (lineSku in 19-recipes.js).
+           i.sku AS master_sku
       FROM recipe_ingredients ri
       LEFT JOIN ingredients i ON ri.ingredient_id = i.id
      WHERE ri.recipe_id = ? ORDER BY ri.sort_order

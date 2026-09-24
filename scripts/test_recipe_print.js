@@ -50,7 +50,7 @@ function extract(src, decl) {
 const cardSandbox = { console };
 vm.createContext(cardSandbox);
 for (const decl of ['const STORAGE_OPTIONS = [', 'const SHELF_LIFE_UNITS = [',
-  'function parseShelfLife(', 'function recipePrintCard(']) {
+  'function parseShelfLife(', 'function lineSku(', 'function recipePrintCard(']) {
   vm.runInContext(extract(RECIPES_JS, decl), cardSandbox);
 }
 cardSandbox.__in = null;
@@ -69,9 +69,11 @@ const PESTO = {
   sell_price: 38, labour: 5, overhead_pct: 10, target_food_cost: 30,
 };
 const LINES = [
-  { name_en: 'Arugula', name_cn: '芝麻叶', qty: 150, unit: 'g', cost: 3.2 },
-  { name_en: 'Nutritional yeast', name_cn: '', qty: 2, unit: 'g' },
-  { name_en: 'Lemon juice', name_cn: '柠檬汁', qty: '20.5', unit: 'ml' },
+  // sku is the copy taken when the line was added; master_sku is the
+  // material's SKU now. The card prints the current one.
+  { ingredient_id: 1, sku: 'J-01-OLD', master_sku: 'J-01', name_en: 'Arugula', name_cn: '芝麻叶', qty: 150, unit: 'g', cost: 3.2 },
+  { ingredient_id: null, sku: 'J-02', name_en: 'Nutritional yeast', name_cn: '', qty: 2, unit: 'g' },
+  { ingredient_id: 3, sku: 'J-03', name_en: 'Lemon juice', name_cn: '柠檬汁', qty: '20.5', unit: 'ml' },
   { name_en: '', name_cn: '', qty: 0, unit: 'g' },           // an empty row
 ];
 const STEPS = [
@@ -96,6 +98,10 @@ section('1 · what the card says, from what is on screen');
   yes(c.lines[0].en === 'Arugula' && c.lines[0].cn === '芝麻叶' && c.lines[0].qty === '150 g',
     'an ingredient carries both names and its amount', JSON.stringify(c.lines[0]));
   yes(c.lines[2].qty === '20.5 ml', 'the line keeps its own unit');
+  yes(c.lines[0].sku === 'J-01', "an ingredient's SKU is the material's current one, not the line's old copy",
+    c.lines[0].sku);
+  yes(c.lines[1].sku === 'J-02', 'a line whose material is gone keeps the copy it took');
+  yes(c.lines[2].sku === 'J-03', 'a line added since the load uses the copy it just took');
   yes(c.steps.length === 2, 'an empty step is left off');
   yes(c.steps[0].text === 'Wash the greens.\nToast the nuts.', 'a step prints as typed, line breaks kept');
   yes(c.notes === 'Keep the oil layer on top.', 'the notes');
@@ -118,6 +124,8 @@ section('3 · what is missing is left off, not printed blank');
   yes(missingCn[0] === 'Plain', 'a recipe with no Chinese name is named too');
   const odd = card({ name_en: 'Old', shelf_life: 'best before date on pack' }, [], []).card;
   yes(odd.facts[0][1] === 'best before date on pack', 'older free-text shelf life prints as it was written');
+  const one = card({ name_en: 'Toast', shelf_life: '1 days' }, [], []).card;
+  yes(one.facts[0][1] === '1 Day · 1 天', 'one day reads "1 Day", not "1 Days"', one.facts[0][1]);
 }
 
 // ── the sheet, from the print module ──────────────────────────────────────
@@ -148,6 +156,8 @@ section('4 · the printed sheet');
   yes(h.includes('Ingredients<span>原料</span>') && h.includes('Steps<span>步骤</span>')
     && h.includes('Notes<span>备注</span>'), 'every heading in both languages');
   yes(h.includes('Arugula<span class="zh">芝麻叶</span>'), 'an ingredient in both languages');
+  yes(h.includes('<th>SKU · 货号</th>') && h.includes('<td class="sku">J-01</td>'),
+    "each ingredient's SKU has its own column");
   yes(h.includes('<td>Nutritional yeast</td>'), 'an ingredient with no Chinese name prints in English alone');
   no(/¥/.test(h), 'no currency anywhere on the sheet');
   no(/fonts\.googleapis|@import|<link/i.test(h), 'no external font or stylesheet');
@@ -173,6 +183,15 @@ section('5 · the button');
   no(/id="rcp-rec-print"[^>]*data-cap=/.test(ADMIN_HTML), 'it is not gated: it shows nothing a viewer cannot see');
   yes(RECIPES_JS.includes("T('Print', '打印')"), 'its label is bilingual');
   yes(/window\.rcpPrint = function/.test(RECIPES_JS), 'the handler exists');
+}
+
+section('6 · the SKU on screen');
+{
+  const route = read('routes/retail-recipes.js');
+  const one = route.slice(route.indexOf("router.get('/api/retail-admin/recipes/:id'"));
+  yes(/i\.sku AS master_sku/.test(one.slice(0, 1500)), "the record's lines carry the material's current SKU");
+  yes(/rcp-line-sku/.test(RECIPES_JS) && /const sku = lineSku\(l\)/.test(RECIPES_JS),
+    'each ingredient line shows it'); 
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
