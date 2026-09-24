@@ -618,7 +618,9 @@ function chSignIn(channel, store, name) {
    someone holding the permission (the server checks again either way). */
 function chSignInBtn(channel, store, name, by) {
   if (!store || !chSignInable(by) || (typeof can === 'function' && !can('integrations:signin'))) return '';
-  return '<button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation();chSignIn(' +
+  // Secondary, not primary: a filled button is the design system's one Dusk
+  // CTA per screen, and this is a person's action on a warning card.
+  return '<button type="button" class="btn btn-sm td-secondary" onclick="event.stopPropagation();chSignIn(' +
     [channel, store, name || store].map(v => "'" + String(v).replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g, '') + "'").join(',') +
     ')">' + escapeHtml(cuT('Sign in again', '重新登录')) + '</button>';
 }

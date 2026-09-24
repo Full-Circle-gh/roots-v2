@@ -12,28 +12,36 @@
   relay, and closes itself once the login script reports success. Every check
   is on the server (routes/channel-signin.js); this page only draws states.
 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#f9f7f2; --surface:#fff; --ink:#1f2328; --ink2:#5f6368; --line:#e4dfd3;
-          --ok:#4f7a57; --bad:#b4532f; --btn:#1f2328; --btnInk:#fff; }
+  /* docs/tacet-design-system.md: Paper / Ink / Graphite, Inter 400/500 only,
+     8px controls, secondary buttons outlined, Sage for all-clear, Brick for
+     errors. Paper and Ink swap in dark mode; every other colour keeps its role. */
+  :root { --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --line:#E4E0D5; --raised:#F6F3EC;
+          --sage-ink:#5E7359; --brick:#B4533E; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#16171a; --surface:#1f2024; --ink:#ecebe7; --ink2:#a3a29d; --line:#34353a;
-            --ok:#8fbf95; --bad:#e08a68; --btn:#ecebe7; --btnInk:#16171a; }
+    :root { --paper:#111A2B; --ink:#FBF9F4; --graphite:#A9AFBA; --line:#2A3550; --raised:#1E2A44;
+            --sage-ink:#A3B49F; --brick:#D98A77; }
   }
   * { box-sizing: border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
-               font:400 15px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", system-ui, sans-serif; }
+  html, body { margin:0; height:100%; background:var(--paper); color:var(--ink);
+               font:400 15px/1.6 'Inter', 'IBM Plex Sans SC', 'PingFang SC', system-ui, sans-serif; }
   body { display:flex; flex-direction:column; }
   header { padding:16px; border-bottom:1px solid var(--line); }
-  h1 { font-size:17px; font-weight:600; line-height:1.3; margin:0; }
-  #msg { margin:4px 0 0; color:var(--ink2); min-height:1.5em; }
-  #msg.ok { color:var(--ok); } #msg.bad { color:var(--bad); }
+  h1 { font-size:18px; font-weight:500; line-height:1.3; margin:0; }
+  #msg { margin:4px 0 0; font-size:13px; color:var(--graphite); min-height:1.6em; }
+  #msg.ok { color:var(--sage-ink); } #msg.bad { color:var(--brick); }
   #screen { flex:1; min-height:0; background:#000; display:none; }
   #screen.on { display:block; }
-  .actions { padding:12px 16px 16px; display:none; gap:8px; }
+  .actions { padding:16px; display:none; gap:8px; }
   .actions.on { display:flex; }
-  button { font-family:inherit; font-size:15px; font-weight:500; padding:10px 16px; border-radius:10px; border:1px solid var(--line);
-           background:var(--surface); color:var(--ink); cursor:pointer; }
-  button.primary { background:var(--btn); color:var(--btnInk); border-color:var(--btn); }
+  button { font-family:inherit; font-size:15px; font-weight:500; padding:8px 16px; border-radius:8px;
+           border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer;
+           transition:background 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+  button:hover { background:var(--raised); }
+  button.ghost { border-color:transparent; color:var(--graphite); }
+  @media (prefers-reduced-motion: reduce) { button { transition:none; } }
 </style>
 </head>
 <body>
@@ -42,8 +50,8 @@
   <p id="msg"></p>
 </header>
 <div class="actions" id="actions">
-  <button class="primary" id="retry"></button>
-  <button id="close"></button>
+  <button id="retry"></button>
+  <button class="ghost" id="close"></button>
 </div>
 <div id="screen"></div>
 

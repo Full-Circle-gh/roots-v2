@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.405
+# Tacet shared-core consolidation — decisions record, v4.406
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-24 · v4.406 — **§258 · THE CHANNEL SYNC PAGE AND THE SIGN-IN SCREENS KEEP TO THE DESIGN SYSTEM — ASH: *"the design fit tacet design rules and guideline?"* → *"fix all"*.** **THE TABLE WAS NOT A TABLE.** Each item row's values sat packed left under the wrong column headers (*Shelf · Meituan · Eleme · GZ Grocery*), each in its own grey box. The `<tr>` carried class `row`, which `retail-admin.css` makes a flex box globally, so the row left the table layout. The first rename, `cs-row`, hit a SECOND global flex rule of that name (another panel's list row); the browser's own matched-rule list found it. The row is now `cs-item-row`, a name nothing else styles, and `scripts/test_channel_sync_items.js` section 12 fails if the class ever again has a global rule of its own (checked red on both old names). Searched for the same pattern: no other desktop `<tr>` uses a bare `row` class. **BUTTONS.** `docs/tacet-design-system.md` §5 makes a secondary button transparent with a 1px border, not a filled slab, and keeps a filled one for the screen's one Dusk CTA. A shared `.btn.td-secondary` now carries that style. The detail cards' *Sync now* / *Open <channel>* use it and keep their own width. §252's *Sign in again* moves off `btn-primary`, which rendered as a gold weight-600 fill, onto it; the phone's card button becomes a Brick outline. **THE SIGN-IN PAGE** (`public/channel-signin.html`) was written in system fonts at weight 600. It now loads Inter 400/500 as the back office does, uses Paper / Ink / Graphite / Sage-ink / Brick with the dark-mode swap, and has an outlined *Try again* and a ghost *Close*. No string, no schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-24 · v4.405 — **§257 · THE INTEGRATIONS WIZARD STOPS TAKING CHANNEL PASSWORDS; THE BOX REQUEST STAYS; THE SHARED SCREEN'S PASSWORD IS ROTATED BEFORE IT CLOSES — ASH: *"do everything as you recommend"*.** **THE WIZARD WAS TWO THINGS.** Its first step, *Request the box*, is a real onboarding request, so it stays. Its login steps asked for the merchant's Meituan or Qingyun account and password and an SMS code, and saved the password encrypted under `meituan.<store>.user|pass` / `qingyun.<store>.user|pass` in `tenant_secrets`. They then handed the login to a driver that was never registered, so every attempt ended `no_worker_attached`. A search finds no reader of those keys outside `lib/tenant-creds.js`. **REMOVED**: the password and SMS steps in `public/retail-admin/15-integrations.js` (its *continue* buttons now open *Get help*, which is how a box is actually connected), the `session/start` and `session/sms` endpoints in `routes/integrations-admin.js`, and the driver seam, simulator, `startLogin` and `submitSms` in `lib/integrations/session-relay.js`. The session read the cards use stays. **WIPED**: `scripts/oneoff_wipe_relay_channel_passwords.js` deletes exactly the per-store family through `oneoff.yml` (dry run first, verified backup on apply). The tenant-level `QINGYUN_USER` / `QINGYUN_PASS` are untouched. **THE SHARED SCREEN.** Display `:99` is still the only way to clear a captcha on the 闪购 (越秀) and Qingyun browsers, which §252's Sign in does not cover, so its password-only WebSocket paths are NOT closed yet. Instead x11vnc's shared password is rotated now to a long random one (a box command, run by Ash). Closing the paths follows once Sign in covers those two channels. No string composed, no schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -20403,3 +20405,12 @@ the password for nothing. What they stored is deleted by a one-off. The shared
 ops screen's VNC password is rotated now. Its password-only paths close once
 §252's Sign in also clears 闪购 and Qingyun captchas. See the v4.405 changelog
 entry.
+
+## §258 — A TABLE ROW CARRIES A CLASS NO GLOBAL RULE STYLES
+
+**Found 2026-09-24, from Ash's design question.** The Channel sync table's rows
+had lost their columns, because the global `.row` (and then `.cs-row`) rule
+made a `<tr>` a flex box. A table row's class must be one nothing else styles;
+section 12 of `scripts/test_channel_sync_items.js` enforces that for this
+page. Secondary buttons use `.btn.td-secondary`, the design system's outlined
+style. See the v4.406 changelog entry.
