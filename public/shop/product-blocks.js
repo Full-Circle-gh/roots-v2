@@ -441,6 +441,9 @@
           .replace(/^\s*[℃℉]\s*/, '')
           .trim();
       }
+      // A range is one figure: "0 — 4°" closes up to "0–4°" so it stays on
+      // one line. Same rule as closeRange() in lib/product-blocks-read.js.
+      num = num.replace(/(\d)\s*[-\u2010-\u2015]\s*(?=\d)/g, '$1\u2013');
       var numLong = num.replace(/\s+/g, '').length > 5;
       return { icon: icon(c.icon), head: head, num: num, numLong: numLong, unit: unit, alt: !!c.alt };
     }

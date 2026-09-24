@@ -143,6 +143,22 @@ check('a storage card promotes a lone phrase and strips a repeated scale', () =>
   assert.ok(b.right.long, 'the promoted phrase kept the hero numeral size and would clip');
   assert.ok(!b.left.long, 'a short figure was treated as a phrase');
 });
+check('a temperature range is closed up so it stays on one line', () => {
+  // "0 — 4°" at hero size is wider than the half-width card: the line broke at
+  // the space and "4°" fell to a second line in the mini app.
+  const b = R.pageBlocks(JSON.stringify([{ type: 'storage_box',
+    left:  { num_en: '0 \u2014 4\u00b0', num_cn: '0 - 4\u00b0' },
+    right: { num_en: '-18\u00b0' } }]))[0];
+  assert.strictEqual(b.left.num.en, '0\u20134\u00b0', `the range kept its spaces: ${b.left.num.en}`);
+  assert.strictEqual(b.left.num.cn, '0\u20134\u00b0', `the range kept its spaces: ${b.left.num.cn}`);
+  assert.strictEqual(b.right.num.en, '-18\u00b0', 'a leading minus was taken for a range');
+});
+check('the mini app and the shop close up a range by the same rule', () => {
+  const rule = "(\\d)\\s*[-\\u2010-\\u2015]\\s*(?=\\d)/g, '$1\\u2013'";
+  assert.ok(MINI.includes(rule), 'the mini app no longer closes up a range the same way');
+  const SHOP = fs.readFileSync(path.join(ROOT, 'public', 'shop', 'product-blocks.js'), 'utf8');
+  assert.ok(SHOP.includes(rule), 'the web shop no longer closes up a range the same way');
+});
 check('NOTHING IS PICKED — both languages survive every block', () => {
   const b = R.pageBlocks(JSON.stringify([
     { type: 'pull_quote', text_en: 'EN', text_cn: '\u4e2d' }]))[0];
