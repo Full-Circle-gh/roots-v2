@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.169 · 2026-09-24 · §252 NAMES THE CHANNEL ON THE HOME ROW'S SIGN-IN BUTTON — ONE STRING COMPOSED BY CLAUDE, BOTH PARTS LIVE.** The row can name two channels ("Meituan not syncing, Eleme is signed out") above one button, and "Sign in again" did not say which it opens. See *Signing a channel back in (§252)*.
+
 **v1.168 · 2026-09-24 · §254 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§254)*.
 
 **v1.167 · 2026-09-24 · §253 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§253)*.
@@ -8592,6 +8594,7 @@ buttons are built by `chSignInBtn` (`public/retail-admin/01-core.js`) and
 | `You don’t have permission for this · 你没有此操作的权限` | **copied**: `lib/require-cap.js`'s own 403 |
 | `Try again · 重试`, `Close · 关闭` | **copied**: both live many times |
 | `Sign in again · … · 重新登录 · …` (the page title, with channel and store names) | the button's pair, plus names that are data |
+| `Sign in to Eleme · 重新登录饿了么` (the desktop Home row's button, v1.169) | **composed**: `重新登录` (the button's pair above) + the channel's own name, joined with no space, the way the locked sentence joins them (`同步服务已退出登录美团`). Rejected: `Sign in again` alone, because the row it sits on can name two channels; `前往登录`, which is not live and says where you go rather than what you do |
 
 **Live candidates rejected.**
 

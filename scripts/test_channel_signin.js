@@ -183,6 +183,9 @@ check('every button is gated on the permission and on a cause signing in clears'
   ok(/chSignInBtn\('meituan'/.test(read('public/retail-admin/11-meituan.js')), 'Meituan tab');
   ok(/csSignInBtn\(ch\.key,ch\.blocked\)/.test(phone), 'phone card');
   ok(/can\('integrations:signin'\)/.test(read('public/retail-admin/03-dashboard.js')), 'desktop Home');
+  // The Home row can name two channels above one button; the button says which.
+  ok(/cuT\(`Sign in to \$\{chName\(signable\.key\)\}`, `重新登录\$\{chName\(signable\.key\)\}`\)/
+    .test(read('public/retail-admin/03-dashboard.js')), 'the Home button does not name its channel');
 });
 
 check('the Meituan tab no longer offers the relay wizard, which cannot sign anyone in', () => {

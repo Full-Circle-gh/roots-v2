@@ -3251,7 +3251,10 @@ function tdAttnRender() {
       const clean = (v) => String(v || '').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g, '');
       const nm = cn ? signable.blocked.storeName : (signable.blocked.storeNameEn || signable.blocked.storeName);
       const f = fires[fires.length - 1];
-      f.cta = cuT('Sign in again', '重新登录');
+      // The row can name two channels and has one button, so the button says
+      // which one it opens (Ash, 2026-09-24: "it also say meituan"). chName has
+      // already resolved the language, as for the state line above.
+      f.cta = cuT(`Sign in to ${chName(signable.key)}`, `重新登录${chName(signable.key)}`);
       f.go = `chSignIn('${clean(signable.key)}','${clean(signable.blocked.store)}','${clean(nm)}')`;
     }
   }
