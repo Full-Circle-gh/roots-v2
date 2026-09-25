@@ -4294,18 +4294,16 @@ function renderDeliveryPhoto(o) {
   const oid = Number(o.id);
   const link = (fn, text) => delayBtn(fn, text, 'link');
   // One chip per photo, the evidence line's shape: its name opens it, × takes it
-  // off. The staff photo is "Shop"; the rider's (§261 addendum, from Qingyun) are
-  // "Rider", numbered when there are two. Add / Replace act on the staff photo
-  // only — a rider's photo is never replaced, only removed.
+  // off. Numbered in the order shown (the staff photo first, then the rider's
+  // from Qingyun, §261 addendum): "Photo 1", "Photo 2". They were "Shop" and
+  // "Rider 1 / Rider 2", which Ash read as two riders — it is one rider's two
+  // photos. Add / Replace act on the staff photo only; a rider's photo is never
+  // replaced, only removed.
   const photos = Array.isArray(p.photos) ? p.photos
                : (p.has ? [{ key: 's', kind: 'staff' }] : []);
-  const riders = photos.filter(x => x.kind === 'rider').length;
-  let n = 0;
-  const chips = photos.map(x => {
+  const chips = photos.map((x, i) => {
     const key = escapeHtml(String(x.key));
-    const name = x.kind === 'rider'
-      ? cuT('Rider', '骑手') + (riders > 1 ? ' ' + (++n) : '')
-      : cuT('Shop', '门店');
+    const name = cuT('Photo', '照片') + (photos.length > 1 ? ' ' + (i + 1) : '');
     return `<span style="display:inline-flex; align-items:center; gap:5px;
            border:1px solid var(--line); border-radius:var(--r-sm,5px); padding:2px 6px; font-size:11px;">
         <a href="#" onclick="deliveryPhotoView(${oid},'${key}');return false;"

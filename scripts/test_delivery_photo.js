@@ -196,6 +196,17 @@ it('the one composed pair ships on all five surfaces and is declared', () => {
   assert.ok(mini.includes("deliveryPhotosLabel: '送达照片'") && mini.includes("deliveryPhotosLabel: 'DELIVERY PHOTOS'"));
   assert.ok(/Delivery photo · 送达照片/.test(read('docs/tacet-delivery-vocabulary.md')), 'not declared');
 });
+it("the staff screens number the photos — never 'Rider 1 / Rider 2', which reads as two riders", () => {
+  for (const [f, pair] of [['public/retail-admin/04-orders.js', "cuT('Photo', '照片')"], ['public/m.html', "T('Photo','照片')"]]) {
+    const src = read(f);
+    const at = src.indexOf(f.endsWith('.js') ? 'function renderDeliveryPhoto(' : 'function deliveryPhotoCard(');
+    assert.ok(at > 0, f);
+    const body = src.slice(at, src.indexOf('\n}\n', at));
+    assert.ok(body.includes(pair), `${f}: chips are not "Photo · 照片"`);
+    assert.ok(!/'Rider'|'骑手'|'Shop'|'门店'/.test(body), `${f}: a chip is still named for who took it`);
+  }
+  assert.ok(/`Photo · 照片`/.test(read('docs/tacet-delivery-vocabulary.md')), 'Photo · 照片 not declared');
+});
 
 console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) process.exit(1);

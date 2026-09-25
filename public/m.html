@@ -17176,15 +17176,14 @@ function deliveryPhotoCard(o){
   const p=o.dphoto;
   if(!p||o.viewOnly) return '';
   const busy=state.parcelBusy==='dph';
-  /* One chip per photo: its name opens it, × takes it off. "Shop" is the one
-     staff chose; "Rider" are the rider's own from Qingyun (§261 addendum),
-     numbered when there are two. Add / Replace act on the staff photo only. */
+  /* One chip per photo: its name opens it, × takes it off. Numbered in the
+     order shown, the staff photo first and then the rider's from Qingyun
+     (§261 addendum): "Photo 1", "Photo 2". "Rider 1 / Rider 2" read as two
+     riders. Add / Replace act on the staff photo only. */
   const photos=Array.isArray(p.photos)?p.photos:(p.has?[{key:'s',kind:'staff'}]:[]);
-  const riders=photos.filter(x=>x.kind==='rider').length;
-  let n=0;
-  const chips=photos.map(x=>{
+  const chips=photos.map((x,i)=>{
     const key=escAttr(String(x.key));
-    const name=x.kind==='rider'?T('Rider','骑手')+(riders>1?' '+(++n):''):T('Shop','门店');
+    const name=T('Photo','照片')+(photos.length>1?' '+(i+1):'');
     return `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-default);border-radius:8px;padding:3px 8px;font-size:13px">
       <a href="#" onclick="APP.cmd('dphView','${key}');return false" style="color:inherit;text-decoration:none">${name}</a>
       <a href="#" onclick="APP.cmd('dphDel','${key}');return false" style="color:var(--text-secondary);text-decoration:none;padding:0 2px">×</a></span>`;
