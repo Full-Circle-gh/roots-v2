@@ -43,7 +43,7 @@ const lift = (t) => {
 const STAFF_TABLE = lift('retail_delivery_photos');
 const RIDER_TABLE = lift('retail_rider_photos');
 
-function fresh() {
+function fresh(opts = {}) {
   const db = openMemoryDb();
   db.exec(`CREATE TABLE retail_orders (id INTEGER PRIMARY KEY, status TEXT,
              fulfillment_type TEXT, customer_id INTEGER)`);
@@ -52,6 +52,7 @@ function fresh() {
              qingyun_order_id TEXT, store_code TEXT)`);
   db.exec(STAFF_TABLE);
   db.exec(RIDER_TABLE);
+  if (!opts.noSlotIndex) rp.ensureSlotIndex(db);   // what database.js does on boot
   return db;
 }
 const order = (db, id, { status = 'delivered', store = 'tianhe', qy = 'QY' + id } = {}) => {
@@ -114,6 +115,41 @@ const OK = { code: 0, picUrl: 'https://img.example.test/door.png' };
     assert.strictEqual(rp.record(db, 1, 'QY1', ['A', 'B']), 2);
     assert.strictEqual(rp.record(db, 1, 'QY1', ['A', 'B']), 0);
     assert.strictEqual(db.prepare('SELECT COUNT(*) n FROM retail_rider_photos').get().n, 2);
+  });
+
+  // ── The first live hour's bug: a fresh code for the same photo every read ──
+  await it('Qingyun re-encrypting a photo on every read does not note it again', () => {
+    const db = fresh(); order(db, 1);
+    for (let read = 0; read < 96; read++) rp.record(db, 1, 'QY1', [`A-${read}`, `B-${read}`]);
+    const rows = db.prepare('SELECT position, token FROM retail_rider_photos ORDER BY position').all();
+    assert.strictEqual(rows.length, 2, `${rows.length} rows for two photos`);
+    assert.deepStrictEqual(rows.map(r => r.token), ['A-0', 'B-0'], 'the first code seen is not the one kept');
+  });
+  await it('a second photo that appears on a later read is still noted', () => {
+    const db = fresh(); order(db, 1);
+    rp.record(db, 1, 'QY1', ['A-0']);
+    assert.strictEqual(rp.record(db, 1, 'QY1', ['A-1', 'B-1']), 1);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) n FROM retail_rider_photos').get().n, 2);
+  });
+  await it('the boot migration folds duplicates already written, keeping the fetched one', () => {
+    const db = fresh({ noSlotIndex: true }); order(db, 1); order(db, 2);
+    const ins = db.prepare(`INSERT INTO retail_rider_photos (order_id, position, token, status, data)
+                            VALUES (?,?,?,?,?)`);
+    for (let i = 0; i < 96; i++) { ins.run(1, 0, 'a' + i, 'pending', null); ins.run(1, 1, 'b' + i, 'pending', null); }
+    ins.run(1, 0, 'a-fetched', 'ok', 'data:image/jpeg;base64,AAAA');   // fetched, but not the oldest
+    ins.run(2, 0, 'c0', 'removed', null); ins.run(2, 0, 'c1', 'pending', null);
+    const folded = rp.ensureSlotIndex(db);
+    assert.strictEqual(folded, 96 + 95 + 1);
+    const rows = db.prepare('SELECT order_id, position, token, status FROM retail_rider_photos ORDER BY order_id, position').all();
+    assert.deepStrictEqual(rows.map(r => `${r.order_id}/${r.position}/${r.token}/${r.status}`),
+      ['1/0/a-fetched/ok', '1/1/b0/pending', '2/0/c0/removed']);
+    assert.strictEqual(rp.ensureSlotIndex(db), 0, 'a second boot did something');
+    assert.strictEqual(rp.record(db, 1, 'QY1', ['new-a', 'new-b']), 0);
+  });
+  await it('database.js runs the migration right after creating the table', () => {
+    const at = DB_SRC.indexOf('CREATE TABLE IF NOT EXISTS retail_rider_photos');
+    const call = DB_SRC.indexOf("require('./lib/rider-photos').ensureSlotIndex(db)");
+    assert.ok(at > 0 && call > at && call - at < 4000, 'ensureSlotIndex is not called after the table');
   });
 
   // ── Fetching ─────────────────────────────────────────────────────────────

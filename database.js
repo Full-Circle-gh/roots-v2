@@ -4362,6 +4362,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_rider_photos_due
     ON retail_rider_photos(status, next_try_at);
 `);
+// One row per photo by its PLACE on the order (order_id, position), because
+// Qingyun hands out a fresh code for the same photo on every read. Folds the
+// duplicates the first live hour wrote, then adds the unique index; a no-op
+// after that. The reasoning is in lib/rider-photos.js ensureSlotIndex.
+try {
+  const folded = require('./lib/rider-photos').ensureSlotIndex(db);
+  if (folded) console.log(`[migration rider_photo_slot] folded ${folded} duplicate rider photo row(s)`);
+} catch (e) {
+  console.error('[migration rider_photo_slot] failed — rider photos may be noted twice:', e.message);
+}
 
 // THE FLAG EVERY MONEY FIGURE READS. `paidWhere()` in lib/finance-window.js
 // excludes any order carrying this, which is the whole reason the eleven
