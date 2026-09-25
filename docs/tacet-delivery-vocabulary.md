@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.177 · 2026-09-25 · §267 A CART NOTICE COVERS EVERY SIZE — ONE OPERATOR LINE COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The product editor's *Add-to-cart notice* card gains `Covers every size of this product. · 适用于本商品的所有规格。`. No customer-facing string. See *A cart notice covers every size (§267)*.
+
 **v1.176 · 2026-09-25 · THE SIDE DRAWER IS RETIRED AS A VIEW — NOTHING COMPOSED, ONE TOOLTIP RETIRED.** Ash: *"no need this window anymore, expand it as default"*. Every product now opens on the full product page. The page's back button lost its tooltip `Back to the list and quick-edit panel · 返回列表与快捷面板`, which named a panel that no longer opens; its visible `Products · 产品` stays. See *The product page's sections and the card that orders them (§206)*.
 
 **v1.175 · 2026-09-25 · §261 ADDENDUM: A PHOTO CHIP IS NUMBERED, NOT NAMED FOR WHO TOOK IT — ONE PAIR COMPOSED BY CLAUDE, TWO RETIRED FROM THIS USE.** Ash, looking at the drawer: *"why rider 1 rider 2 its picture 1 picture 2"*. `Rider 1 / Rider 2` read as two riders; it is one rider's two photos. Each chip now reads `Photo · 照片` with its number (`Photo 1`, `Photo 2`). See *The delivery photo (§261)*.
@@ -8808,3 +8810,21 @@ backup route*). Their pieces live on inside the pages above.
   the words would make the two sound equally urgent.
 - `订单已超过30分钟读取失败` whole: **rejected**. It is about orders; only its
   `已超过30分钟` is lifted.
+
+## A cart notice covers every size (§267)
+
+**One pair composed by Claude, 2026-09-25, under the 2026-09-06 amendment.**
+Operator-only: a helper line on the product editor's *Add-to-cart notice* card,
+under the existing *Shown once when…* line.
+
+| shipped | built from |
+|---|---|
+| `Covers every size of this product. · 适用于本商品的所有规格。` | **composed from live fragments.** `本商品` is the same card's own word (`顾客将本商品加入购物车时…`). `所有规格` is live for *every option of this product* on the Meituan and Eleme mapping screens (`勾选该商品在售的所有规格`). `适用于…所有` is live in `其权限适用于所有门店` |
+
+**Live candidates rejected.**
+
+- `各规格` (live in `打开产品以分别设置各规格库存`): **rejected**. It means *each
+  size separately*, the opposite of one notice shared across them.
+- `所有尺寸`: **rejected**. Not live anywhere; `规格` is the product's own word
+  for a size in this back office.
+

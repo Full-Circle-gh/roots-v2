@@ -1685,6 +1685,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
             <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16" x2="12" y2="16"/></svg></span> Add-to-cart notice · 加入购物车提示 <span id="pe-cartnotice-dot" class="pe-acc-dot"></span></summary>
             <div class="pa-left-acc-body">
               <div class="helper" style="font-size:11px;margin-bottom:8px">Shown once when a customer adds this product to the basket, and again on their order. · 顾客将本商品加入购物车时显示一次,并在订单页再次显示。</div>
+              <div class="helper" style="font-size:11px;margin-bottom:8px">Covers every size of this product. · 适用于本商品的所有规格。</div>
               <div class="field"><label class="stacked">Notice · 提示</label>
                 <select id="pa-cn-pick" onchange="paCartNoticePick()">
                   <option value="">— None · 无提示</option>
@@ -3568,11 +3569,23 @@ async function paLoadCartNotices() {
 // Fill the card for the open product. Called after the product loads; awaits
 // the config read, so the picker is briefly empty on a cold open — which is
 // correct, an empty picker is what "we do not know yet" looks like.
+// The ids a notice pick is read from and written to: the open product and every
+// other size in its family. Falls back to the one id when the product has no
+// sizes or the catalogue list has not loaded.
+function paNoticeFamily(pid) {
+  const pidN = Number(pid);
+  const fam = (PA_CURRENT && Number(PA_CURRENT.id) === pidN ? peFamilyIds() : [pidN]).map(Number);
+  return fam.includes(pidN) ? fam : fam.concat(pidN);
+}
+
 async function paFillCartNotice(pid) {
   await paLoadCartNotices();
   const sel = document.getElementById('pa-cn-pick');
   if (!sel) return;
-  const mine = PA_NOTICES.find(n => Array.isArray(n.product_ids) && n.product_ids.map(Number).includes(Number(pid)));
+  // Every size of the product, not just the one open (§267): a notice named on
+  // the 300 ml shows here when the 1 L is the size being edited.
+  const fam = paNoticeFamily(pid);
+  const mine = PA_NOTICES.find(n => Array.isArray(n.product_ids) && n.product_ids.map(Number).some(x => fam.includes(x)));
   PA_NOTICE_ORIG = mine ? String(mine.id) : '';
   sel.innerHTML =
     '<option value="">— None · 无提示</option>'
@@ -3636,14 +3649,16 @@ async function paSaveCartNotice(pid) {
   const st = paCartNoticeState();
   const id = st.pick;
   let list = PA_NOTICES.map(n => ({ ...n, product_ids: (Array.isArray(n.product_ids) ? n.product_ids : []).map(Number) }));
-  const pidN = Number(pid);
+  // The pick applies to every size of the product (§267), so all of them are
+  // detached from other notices and attached to this one together.
+  const fam = paNoticeFamily(pid);
   let changed = false;
 
   // Detach from anything that is no longer the pick — including the notice it
   // was on, when the operator has moved it to another.
   list.forEach(n => {
     if (String(n.id) === id) return;
-    if (n.product_ids.includes(pidN)) { n.product_ids = n.product_ids.filter(x => x !== pidN); changed = true; }
+    if (n.product_ids.some(x => fam.includes(x))) { n.product_ids = n.product_ids.filter(x => !fam.includes(x)); changed = true; }
   });
 
   if (id === 'new') {
@@ -3652,14 +3667,14 @@ async function paSaveCartNotice(pid) {
         id: paNoticeUid(), enabled: true,
         title_en: st.title_en, title_cn: st.title_cn,
         body_en: st.body_en, body_cn: st.body_cn,
-        product_ids: [pidN], updated_at: Date.now(),
+        product_ids: fam.slice(), updated_at: Date.now(),
       });
       changed = true;
     }
   } else if (id) {
     const n = list.find(x => String(x.id) === id);
     if (n) {
-      if (!n.product_ids.includes(pidN)) { n.product_ids.push(pidN); changed = true; }
+      for (const x of fam) if (!n.product_ids.includes(x)) { n.product_ids.push(x); changed = true; }
       const copyChanged = (n.title_en || '') !== st.title_en || (n.title_cn || '') !== st.title_cn
         || (n.body_en || '') !== st.body_en || (n.body_cn || '') !== st.body_cn;
       if (copyChanged) {

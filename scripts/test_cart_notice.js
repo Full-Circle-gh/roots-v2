@@ -86,13 +86,32 @@ function grab(src, name) {
 /* ── 1 · the server — what a stored notice turns into ────────────────────── */
 section('1 · the server — resolving a notice onto a product');
 
-// cfgValue is the one dependency; everything else in these helpers is pure.
-function serverWith(list) {
-  const sandbox = { cfgValue: (k, fb) => (k === 'cart_notices.list' ? list : fb), module: {}, console };
+// cfgValue and the sibling query are the two dependencies; everything else in
+// these helpers is pure. `groups` is { productId: variantGroupId } and stands in
+// for store_products — the stub answers the query the way the JOIN does.
+function serverWith(list, groups = {}, opts = {}) {
+  const tdb = () => ({
+    prepare: () => ({
+      all: (...ids) => {
+        if (opts.throws) throw new Error('db gone');
+        const out = [];
+        for (const id of ids) {
+          const g = groups[id];
+          if (g == null) continue;
+          for (const [sib, sg] of Object.entries(groups)) {
+            if (sg === g && Number(sib) !== id) out.push({ of_id: id, sib_id: Number(sib) });
+          }
+        }
+        return out;
+      },
+    }),
+  });
+  const sandbox = { cfgValue: (k, fb) => (k === 'cart_notices.list' ? list : fb), tdb, module: {}, console: { ...console, warn() {} } };
   vm.createContext(sandbox);
   vm.runInContext(
     grab(RETAIL, 'cartNoticeList') + '\n'
     + grab(RETAIL, 'shapeCartNotice') + '\n'
+    + grab(RETAIL, 'cartNoticeSiblings') + '\n'
     + grab(RETAIL, 'cartNoticeIndex') + '\n'
     + grab(RETAIL, 'attachCartNotices') + '\n',
     sandbox);
@@ -163,6 +182,58 @@ it('product ids stored as strings still match — an admin JSON round-trip is no
   const rows = [{ id: 11 }];
   s.attachCartNotices(rows);
   assert.strictEqual(rows[0].cart_notice.id, 'cn_fridge');
+});
+
+/* ── 1b · every size of the product (§267) ───────────────────────────────── */
+section('1b · a notice on one size covers every size (§267)');
+
+// The live case: the notice named the 300 ml Lemongrass (90); the shop opens
+// the 1 L (314), which is the family's hero. The page showed nothing and the
+// 1 L went into baskets with no card.
+const KOMBUCHA = { 90: 314, 314: 314 };
+
+it('the size the notice does not name gets it from its sibling', () => {
+  const s = serverWith([{ ...FRIDGE, product_ids: [90] }], KOMBUCHA);
+  const rows = [{ id: 314 }, { id: 90 }];
+  s.attachCartNotices(rows);
+  assert.strictEqual(rows[0].cart_notice && rows[0].cart_notice.id, 'cn_fridge', 'the 1 L must carry the 300 ml\'s notice');
+  assert.strictEqual(rows[1].cart_notice.id, 'cn_fridge');
+});
+
+it('a size\'s OWN notice beats one it would inherit', () => {
+  const own = { id: 'cn_big', enabled: true, title_en: 'Big bottle', product_ids: [314] };
+  const s = serverWith([{ ...FRIDGE, product_ids: [90] }, own], KOMBUCHA);
+  const rows = [{ id: 314 }, { id: 90 }];
+  s.attachCartNotices(rows);
+  assert.strictEqual(rows[0].cart_notice.id, 'cn_big', 'named later in the list, but named — it must not be overwritten by the sibling pass');
+  assert.strictEqual(rows[1].cart_notice.id, 'cn_fridge');
+});
+
+it('a product outside the family is not touched', () => {
+  const s = serverWith([{ ...FRIDGE, product_ids: [90] }], { ...KOMBUCHA, 286: 286, 319: 286 });
+  const rows = [{ id: 286 }, { id: 319 }];
+  s.attachCartNotices(rows);
+  assert.ok(!('cart_notice' in rows[0]) && !('cart_notice' in rows[1]), 'Mango is its own family');
+});
+
+it('a disabled notice is not inherited either', () => {
+  const s = serverWith([{ ...FRIDGE, enabled: false, product_ids: [90] }], KOMBUCHA);
+  const rows = [{ id: 314 }];
+  s.attachCartNotices(rows);
+  assert.ok(!('cart_notice' in rows[0]));
+});
+
+it('a failed sibling lookup falls back to the named ids — never a broken page', () => {
+  const s = serverWith([{ ...FRIDGE, product_ids: [90] }], KOMBUCHA, { throws: true });
+  const rows = [{ id: 314 }, { id: 90 }];
+  s.attachCartNotices(rows);
+  assert.ok(!('cart_notice' in rows[0]));
+  assert.strictEqual(rows[1].cart_notice.id, 'cn_fridge');
+});
+
+it('the order page reads the same index, so it restates the notice for the inherited size', () => {
+  const s = serverWith([{ ...FRIDGE, product_ids: [90] }], KOMBUCHA);
+  assert.strictEqual(s.cartNoticeIndex().get(314).id, 'cn_fridge');
 });
 
 /* ── 2 · the mini app — the queue and the seen mark ──────────────────────── */
@@ -370,7 +441,7 @@ it('no customer client reads the notice LIST — they read what the server resol
 /* ── 6 · the admin card — the stamp moves only when the words do ─────────── */
 section('6 · the admin card');
 
-function editor(list) {
+function editor(list, family) {
   const fields = { 'pa-cn-pick': '', 'pa-cn-title-en': '', 'pa-cn-title-cn': '', 'pa-cn-body-en': '', 'pa-cn-body-cn': '' };
   const put = [];
   const sandbox = {
@@ -380,10 +451,13 @@ function editor(list) {
     toast() {},
     fetch: (url, opt) => { put.push({ url, body: JSON.parse(opt.body) }); return Promise.resolve({ json: () => Promise.resolve({ success: true }) }); },
     paFillCartNotice: () => Promise.resolve(),
+    PA_CURRENT: family ? { id: family.open } : null,
+    peFamilyIds: () => (family ? family.ids.slice() : []),
   };
   vm.createContext(sandbox);
   vm.runInContext(
     grab(EDITOR, 'paNoticeUid') + '\n'
+    + grab(EDITOR, 'paNoticeFamily') + '\n'
     + grab(EDITOR, 'paCartNoticeState') + '\n'
     + grab(EDITOR, 'paSaveCartNotice') + '\n',
     sandbox);
@@ -471,6 +545,46 @@ it('moving a product from one notice to another detaches it from the first', asy
   const list = savedList(s);
   assert.deepStrictEqual(list.find(n => n.id === 'cn_fridge').product_ids, [12]);
   assert.deepStrictEqual(list.find(n => n.id === 'cn_other').product_ids, [20, 11]);
+});
+
+section('6b · the admin card writes the whole size family (§267)');
+
+it('attaching the open size attaches every size', async () => {
+  const s = editor([{ ...JSON.parse(JSON.stringify(FRIDGE)), product_ids: [20] }], { open: 314, ids: [90, 314] });
+  s.fields['pa-cn-pick'] = 'cn_fridge';
+  s.fields['pa-cn-title-en'] = FRIDGE.title_en; s.fields['pa-cn-title-cn'] = FRIDGE.title_cn;
+  s.fields['pa-cn-body-en'] = FRIDGE.body_en;   s.fields['pa-cn-body-cn'] = FRIDGE.body_cn;
+  await s.paSaveCartNotice(314);
+  const n = savedList(s)[0];
+  assert.deepStrictEqual(n.product_ids, [20, 90, 314]);
+  assert.strictEqual(n.updated_at, 1700000000000, 'adding sizes is not a change of words');
+});
+
+it('a new notice covers every size', async () => {
+  const s = editor([], { open: 90, ids: [90, 314] });
+  s.fields['pa-cn-pick'] = 'new';
+  s.fields['pa-cn-title-en'] = 'Chill before opening';
+  await s.paSaveCartNotice(90);
+  assert.deepStrictEqual(savedList(s)[0].product_ids, [90, 314]);
+});
+
+it('None detaches every size, not just the open one', async () => {
+  const s = editor([{ ...JSON.parse(JSON.stringify(FRIDGE)), product_ids: [90, 20] }], { open: 314, ids: [90, 314] });
+  s.fields['pa-cn-pick'] = '';
+  await s.paSaveCartNotice(314);
+  assert.deepStrictEqual(savedList(s)[0].product_ids, [20], 'the 300 ml must not keep the notice the operator removed from the 1 L');
+});
+
+it('the family helper always includes the open product', () => {
+  const s = editor([], { open: 314, ids: [90] });
+  assert.deepStrictEqual(Array.from(s.paNoticeFamily(314)).sort((a, b) => a - b), [90, 314]);
+  const lone = editor([]);
+  assert.deepStrictEqual(Array.from(lone.paNoticeFamily(11)), [11]);
+});
+
+it('the picker is filled from any size in the family', () => {
+  assert.ok(/const fam = paNoticeFamily\(pid\);\s*const mine = PA_NOTICES\.find\([^\n]*fam\.includes/.test(EDITOR),
+    'paFillCartNotice must look up the notice across the family, or the 1 L shows None while it is covered');
 });
 
 /* ── run ─────────────────────────────────────────────────────────────────── */

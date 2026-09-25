@@ -2492,6 +2492,28 @@ function shapeCartNotice(n) {
   };
 }
 
+// id → the other sizes in its variant family (§267). One query for every id a
+// notice names, never one per product. A lookup that fails returns nothing, so
+// a notice falls back to the ids it names rather than taking the page down.
+function cartNoticeSiblings(ids) {
+  const out = new Map();
+  if (!ids.length) return out;
+  try {
+    const rows = tdb().prepare(
+      `SELECT p.id AS of_id, s.id AS sib_id FROM store_products p
+         JOIN store_products s ON s.variant_group_id = p.variant_group_id AND s.id != p.id
+        WHERE p.variant_group_id IS NOT NULL AND p.id IN (${ids.map(() => '?').join(',')})`
+    ).all(...ids);
+    for (const r of rows) {
+      if (!out.has(r.of_id)) out.set(r.of_id, []);
+      out.get(r.of_id).push(r.sib_id);
+    }
+  } catch (e) {
+    console.warn('[cart-notice] sibling lookup failed:', e.message);
+  }
+  return out;
+}
+
 // product id → its notice, built ONCE per request. Called per row on a grid that
 // pulls hundreds, so the alternative — a config read per product — is the shape
 // of a slow page rather than a wrong one, which is the harder kind to notice.
@@ -2499,8 +2521,15 @@ function shapeCartNotice(n) {
 // than stacking two modals on one add. That is a deliberate ceiling — §196 built
 // a QUEUE at checkout because four notices genuinely co-occur there; an add is
 // one gesture about one product and has no such case.
+//
+// A NOTICE ON ONE SIZE COVERS EVERY SIZE (§267). The kombucha notice was on the
+// 300 ml Lemongrass and not the 1 L, and the shop opens the 1 L — so the page
+// showed nothing, and the 1 L went into baskets with no card. Sizes are the
+// same product in a different bottle. A size's OWN notice still wins over one
+// it inherits, which is why the named ids are all placed before any sibling.
 function cartNoticeIndex() {
   const idx = new Map();
+  const named = [];   // [id, shaped] in list order, for the sibling pass
   for (const n of cartNoticeList()) {
     if (!n || n.enabled === false) continue;
     const shaped = shapeCartNotice(n);
@@ -2508,7 +2537,15 @@ function cartNoticeIndex() {
     const ids = Array.isArray(n.product_ids) ? n.product_ids : [];
     for (const raw of ids) {
       const id = Number(raw);
-      if (Number.isFinite(id) && !idx.has(id)) idx.set(id, shaped);
+      if (!Number.isFinite(id)) continue;
+      named.push([id, shaped]);
+      if (!idx.has(id)) idx.set(id, shaped);
+    }
+  }
+  const sibs = cartNoticeSiblings([...new Set(named.map(([id]) => id))]);
+  for (const [id, shaped] of named) {
+    for (const sib of sibs.get(id) || []) {
+      if (!idx.has(sib)) idx.set(sib, shaped);
     }
   }
   return idx;

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.421
+# Tacet shared-core consolidation — decisions record, v4.422
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-25 · v4.422 — **§267 · A CART NOTICE ON ONE SIZE COVERS EVERY SIZE — ASH:** *"I don't see the same message as tofu for the kombucha in product page"*, then *"yes build the editor fix, all sizes by default"* and *"I don't think this should be at the editor at all"*. **THE NOTICE WAS ON THE WRONG BOTTLES.** Live data: "Chill before opening" named 90 (Lemongrass 300 ml), 319 (Mango 1 L), 283 (Passion Fruit 300 ml) and 323 (Mix Berries 1 L). The shop collapses a size family to the member whose id is the `variant_group_id` — 314, 286, 324 and 285 — and those four named nothing. So every kombucha page the shop opened showed no notice, and those four sizes went into baskets with no card and no line on the order. The tofu has one size, which is why it looked right. **FIXED ON THE SERVER, NOT THE PAGE.** `cartNoticeIndex` (routes/retail.js) now carries each named id's whole variant family, with one query per request (`cartNoticeSiblings`). Every surface already reads that index: grid, product page, size rows, favourites, checkout upsell, order page. So one change fixes them all, and it reaches the mini app on deploy, not after WeChat review. Fixing it only in the mini-app page would have shown the words on the page while the add-to-basket card for that size stayed silent. A size's OWN notice still beats one it inherits. A failed sibling lookup falls back to the named ids. **THE EDITOR SAYS THE SAME THING.** The product editor's notice picker reads the notice from any size in the family and saves the pick to every size (`paNoticeFamily`, public/product-editor.html). Opening the 1 L no longer shows *None* while it is covered, and saving it writes the whole family, which also heals existing single-size data. **NOT BUILT: a per-size opt-out.** Nobody needs one today. A size that ever needs different words gets its own notice, which wins. One operator helper line is composed in Chinese; see `docs/tacet-delivery-vocabulary.md` v1.177. Tests: `scripts/test_cart_notice.js` §1b and §6b (11 new). Two of them were run against the unfixed resolver and failed. No schema, no migration, no mini-app change, no change to `.gitignore` or CI.
 
 2026-09-25 · v4.421 — **§254 ADDENDUM · EACH INGREDIENT LINE'S NOTE PRINTS ON THE RECIPE CARD — ASH:** *"the notes doesnt show"*, with the Ingredients tab showing notes like *2 slices*, *25g each slice*, *one tomato each*. The line note (`recipe_ingredients.notes`, typed in the Note box on each line) was never passed to the card. It now prints, as typed and at the ingredient name's size, in a *Note · 备注* column between the ingredient and its SKU. The column shows only when at least one line has a note. The cell is classed `lnote`, not `note`: the shared print stylesheet's `.note` is the grey foot-note box and would have shrunk and greyed it. `recipePrintCard` (public/retail-admin/19-recipes.js) and `tdPrintRecipe` (public/retail-admin/26-print.js) only. No new Chinese: *备注* is the live Note label on the same screen. Tests: `scripts/test_recipe_print.js` §1 and §4b.
 
@@ -20542,3 +20544,13 @@ chip and the product page's MADE WITHOUT row always give the same answer. The
 may-contain row cancels nothing. Server-side, so it reaches the mini app without
 a WeChat release. The stored tag is not rewritten. See the v4.418 changelog
 entry.
+
+## §267 — A CART NOTICE ON ONE SIZE COVERS EVERY SIZE
+
+**Decided 2026-09-25 by Ash** (*"all sizes by default"*). A notice that names
+any size of a product applies to every size in its `variant_group_id` family.
+This is resolved on the server in `cartNoticeIndex`, so the product page, the
+add-to-basket card and the order page all agree, and the change reaches the
+mini app without a WeChat release. A size's own notice wins over one it
+inherits. The product editor reads and writes the notice for the whole family.
+There is no per-size opt-out. See the v4.422 changelog entry.
