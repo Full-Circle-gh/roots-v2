@@ -16,6 +16,10 @@
  *   store_products.sku, name_en, description_blocks (the allergen_card block)
  * NO CUSTOMER DATA of any kind: no orders, names, addresses or payments.
  *
+ * WHAT IT FOUND, 2026-09-23, and what was decided on it: §241 in
+ * docs/tacet-consolidation-decisions.md — one shared-facility line for every
+ * product, plus peanuts, sesame and seeds where a card names them.
+ *
  * It changes nothing.
  *
  *   node scripts/diagnose_may_contain_list.js
