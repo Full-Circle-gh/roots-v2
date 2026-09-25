@@ -425,7 +425,11 @@ function _resolveBlock(b, L, freeOf) {
       // clips. Flag anything longer than a short numeric so the WXSS can drop
       // it to a readable, wrapping display size instead of clipping.
       const numLong = num.replace(/\s+/g, '').length > 5;
-      return { icon: _icon(c.icon), head, num, numLong, unit, alt: !!c.alt };
+      // §264: a short value with a number in it is a FIGURE and is drawn in
+      // the figure face (.fig), so its dash and degree come from the same font
+      // as its digits. Anything longer is a phrase and keeps the display face.
+      const numFig = !numLong && /\d/.test(num);
+      return { icon: _icon(c.icon), head, num, numLong, numFig, unit, alt: !!c.alt };
     };
     const left  = card(b.left);
     const right = card(b.right);

@@ -964,6 +964,12 @@ img{display:block;max-width:100%}
 .pb-store-n{font-family:var(--f-bear);font-size:calc(50 * var(--u));line-height:calc(48 * var(--u));margin-top:auto;
   overflow-wrap:break-word;word-break:break-word}
 .pb-store-n.long{font-size:calc(24 * var(--u));line-height:calc(27 * var(--u))}
+/* A FIGURE WEARS --f-num WHOLE (section 264). The display family has no dash and
+   no degree sign, so with only the digits substituted those two fell through
+   to the CJK face at a full em each and a range like 0-4 broke onto two lines.
+   .fig is set only on a short value that holds a number; a phrase is .long
+   and keeps the display family. */
+.pb-store-n.fig{font-family:var(--f-num)}
 /* THE UNIT MATCHES THE FIGURE ABOVE IT, which is the same rule as the
    nutrition value and the second half of it. The figure wears the display
    family, whose digits come from a substitute by unicode-range; the unit is
@@ -973,13 +979,8 @@ img{display:block;max-width:100%}
    not the same line -- it is the same fault. --f-num draws the unit in the
    face the figure's digits are already drawn in.
 
-   THE FIGURE ITSELF IS NOT MOVED. It can hold a PHRASE rather than a number
-   (see .pb-store-n.long, which the office reaches by writing words), and a
-   phrase is not a run of figure -- the rule is that an ALL-FIGURE run wears
-   this face. So the en dash in a range like 0-4 still comes from the display
-   family. That is one character inside the number and it is not what was
-   reported; moving it means deciding what .long should wear, which is a
-   question about the card rather than about the unit. */
+   THE FIGURE MOVES TOO, when it is one: see .pb-store-n.fig. A PHRASE in
+   the figure slot (.pb-store-n.long) keeps the display family. */
 .pb-store-u{font-family:var(--f-num);font-size:calc(12.5 * var(--u));line-height:calc(19 * var(--u));
   letter-spacing:.16em;text-transform:uppercase;overflow-wrap:anywhere}
 .pb-store-note{margin-top:calc(12 * var(--u));font-style:italic;font-size:calc(12.5 * var(--u));line-height:calc(18 * var(--u));
@@ -3278,7 +3279,7 @@ function detailBody(it, code, listed, sig, qrShown) {
         `<div class="pb-store-c${c.alt ? ' alt' : ''}">` +
         (c.icon ? `<div class="pb-store-i">${esc(c.icon)}</div>` : '') +
         ((c.head.en || c.head.cn) ? `<div class="pb-store-h">${p2(c.head)}</div>` : '') +
-        ((c.num.en || c.num.cn) ? `<div class="pb-store-n${c.long ? ' long' : ''}">${p2(c.num)}</div>` : '') +
+        ((c.num.en || c.num.cn) ? `<div class="pb-store-n${c.long ? ' long' : ''}${c.fig ? ' fig' : ''}">${p2(c.num)}</div>` : '') +
         ((c.unit.en || c.unit.cn) ? `<div class="pb-store-u">${p2(c.unit)}</div>` : '') +
         `</div>`;
       return head(b.head) +
