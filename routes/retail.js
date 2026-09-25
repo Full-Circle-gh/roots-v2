@@ -2656,8 +2656,24 @@ router.get('/api/retail/products', (req, res) => {
   // non-food rows carry bulk-set flags too (a floor cleaner "made without
   // nuts"). is_food is the same answer the product page ships (§243), so the
   // chips can keep those rows out without a second copy of the list.
-  const { isFoodCategory } = require('../lib/product-blocks-read');
+  const { isFoodCategory, allergensOf, freeOfForListing } = require('../lib/product-blocks-read');
   for (const r of rows) r.is_food = isFoodCategory(r.category);
+  // §266 — and the chips never select a flag the product's own allergen card
+  // cancels: a row tagged "gluten" whose card says CONTAINS GLUTEN (WHEAT)
+  // loses the tag here, the same rule the product page's MADE WITHOUT row
+  // already applies. The list columns leave description_blocks out, so the
+  // cards are read in one extra query, server-side only, for tagged rows —
+  // nothing extra goes over the wire.
+  const tagged = rows.filter(r => r.free_of);
+  if (tagged.length) {
+    const ph = tagged.map(() => '?').join(',');
+    const cards = new Map(
+      tdb().prepare(`SELECT id, description_blocks FROM store_products WHERE id IN (${ph})`)
+        .all(...tagged.map(r => r.id))
+        .map(x => [x.id, allergensOf(x.description_blocks)])
+    );
+    for (const r of tagged) r.free_of = freeOfForListing(r.free_of, cards.get(r.id));
+  }
 
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: rows, meta: { total, limit, offset, server_time_ms: now } });
