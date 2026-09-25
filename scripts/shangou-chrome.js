@@ -150,12 +150,14 @@ let currentChild = null;
 let currentForwarder = null;
 let currentUpstream = null;   // upstream URL Chrome is currently running with
 let intentionalKill = false;  // set when WE kill Chrome for a proxy switch
+let lastLaunchAt = 0;         // epoch ms of the last startChrome (spaces proxy switches, §262)
 
 function startChrome(upstream) {
   if (!fs.existsSync(PROFILE)) fs.mkdirSync(PROFILE, { recursive: true });
   const { chromeProxy, forwarder } = buildProxy(upstream);
   currentForwarder = forwarder;
   currentUpstream = upstream;
+  lastLaunchAt = Date.now();
   const exe = chromeBinary();
   const args = [
     `--remote-debugging-port=${PORT}`,
@@ -202,10 +204,25 @@ function relaunchWith(upstream) {
 
 // Follow the failover watchdog: when it switches yuexiu's proxy in
 // data/proxy-active.json, relaunch Chrome onto the new exit.
+// A switch is held until the last launch is SWITCH_MIN_GAP_MS old (§262): nothing
+// here used to limit how often a flapping path could relaunch Chrome, and a cold
+// 闪购 browser is what risk-control answers with 418. A switch that flips back
+// while held never relaunches at all.
 const SWITCH_POLL_MS = Number(process.env.SHANGOU_PROXY_POLL_MS || 30_000);
+let heldSwitch; // the upstream a held switch is waiting to apply (log once)
 setInterval(() => {
   const want = desiredUpstream();
-  if (want !== currentUpstream) relaunchWith(want);
+  if (want === currentUpstream) { heldSwitch = undefined; return; }
+  if (pm && pm.switchAllowed && !pm.switchAllowed(lastLaunchAt)) {
+    if (heldSwitch !== want) {
+      heldSwitch = want;
+      const noCreds = (u) => String(u || '').replace(/\/\/[^@/]*@/, '//'); // the GZ relay URL carries its password
+      console.log(`[shangou-chrome] proxy switch to ${noCreds(want) || 'direct'} held — Chrome launched under ${Math.round(pm.SWITCH_MIN_GAP_MS / 1000)}s ago; staying on ${noCreds(currentUpstream) || 'direct'} for now`);
+    }
+    return;
+  }
+  heldSwitch = undefined;
+  relaunchWith(want);
 }, SWITCH_POLL_MS);
 
 startChrome(desiredUpstream());

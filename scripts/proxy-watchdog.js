@@ -40,13 +40,13 @@ const lastActive = {};            // channel -> url ('' direct), '' is valid so 
 const lastHealth = {};            // channel -> { label: bool }
 let firstRun = true;
 
-// Hysteresis: a candidate is only treated as DOWN after FAIL_THRESHOLD
-// consecutive failed probes (and UP again on the first success). Without this a
-// single transient blip on the WireGuard tunnel would flap the active proxy —
-// thrashing browser relaunches and spamming the bot. ~2 × CHECK_MS of sustained
-// failure before a failover.
-const FAIL_THRESHOLD = Number(process.env.PROXY_FAIL_THRESHOLD || 2);
-const failCount = {}; // `${channel}:${label}` -> consecutive failed probes
+// Hysteresis, both ways (pm.nextPathHealth, §262): a candidate is DOWN after
+// PROXY_FAIL_THRESHOLD failed probes in a row (default 2, ~1 min), and once down
+// is UP again only after PROXY_UP_THRESHOLD good probes in a row (default 4,
+// ~2 min). It used to come back on the first good probe, so a marginal tunnel
+// rang back and forth — each ring a failover page, a failback page and two
+// browser relaunches.
+const pathHealth = {}; // `${channel}:${label}` -> { fails, oks, down }
 
 // Everything this process decides used to go to the WeCom bot and NOWHERE else,
 // so `pm2 logs proxy-watchdog` was empty — and sendProxyAlert returns false and
@@ -103,7 +103,7 @@ async function tick() {
     // Probe every candidate; debounce into a usable/unusable verdict.
     const avail = {};
     // Raw, undebounced probe results. `avail` is what the failover DECIDES on and
-    // must stay debounced, but on a cold start failCount is empty, so every
+    // must stay debounced, but on a cold start pathHealth is empty, so every
     // candidate reads usable no matter what curl said — the first tick literally
     // cannot express "this path is down". The cold-start report below needs the
     // truth, so keep both.
@@ -113,9 +113,9 @@ async function tick() {
       try { ok = await pm.probe(c.url); } catch (_) { ok = false; }
       probed[c.label] = ok;
       const key = `${channel}:${c.label}`;
-      failCount[key] = ok ? 0 : (failCount[key] || 0) + 1;
-      // 'direct' is the last resort and always usable; proxies need < threshold fails.
-      avail[c.label] = c.label === 'direct' ? true : (failCount[key] < FAIL_THRESHOLD);
+      pathHealth[key] = pm.nextPathHealth(pathHealth[key], ok);
+      // 'direct' is the last resort and always usable.
+      avail[c.label] = c.label === 'direct' ? true : !pathHealth[key].down;
     }
 
     // Active = first usable candidate in priority order (direct always backstops).
