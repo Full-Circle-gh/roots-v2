@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.173 · 2026-09-25 · §263 THE PROXY WATCHDOG PAGES ONLY WHEN SOMEONE IS NEEDED — THREE PAGES, BUILT FROM LIVE PIECES; FOUR SHORT PHRASES COMPOSED BY CLAUDE; THREE PAGES RETIRED.** The watchdog's *down*, *switched* and *started on a backup route* pages, each ending *nothing to do*, are gone from the group and go to the pm2 log instead. What pages now: a channel off its first-choice path for half an hour, a channel on the Hong Kong line, and the *back* message after either. The *back* page is the old live pair word for word. See *The proxy watchdog's pages (§263)* at the foot.
+
 **v1.172 · 2026-09-24 · §261 PUTS A DELIVERY PHOTO ON THE ORDER — ONE STRING COMPOSED BY CLAUDE, LIFTED FROM THE COURIER PLATFORM; EVERYTHING ELSE COPIED.** Staff add the photo of a same-city parcel at the door from the order drawer (desktop and phone), and the customer sees it on their order page (mini app and web shop). `Delivery photo · 送达照片` is the one new pair; every control and message beside it is a live pair copied whole. See *The delivery photo (§261)*.
 
 **v1.171 · 2026-09-24 · §260 SIGNS 闪购 IN INSIDE ITS OWN BROWSER — FOUR STRINGS COMPOSED BY CLAUDE, ONE COPIED.** The sign-in page gains a *Done* button and three lines for a channel whose browser stays open. `Done · 完成` is copied; the instruction, the checking line, the not-yet line and the timeout are composed from live fragments. See *闪购 on its own screen (§260)*.
@@ -8736,3 +8738,31 @@ the order page's section label (customer, mini app `pages/order` and web shop
   in an editor; a photograph taken on the day is `照片` everywhere in this
   product.
 
+## The proxy watchdog's pages (§263)
+
+**Composed by Claude, 2026-09-25, under the 2026-09-06 amendment.** Register:
+OPERATOR (Rule 1): these go to the WeCom proxy alert group, where the owner and
+whoever looks after the shop's internet read them. Built in `pageText` in
+`lib/proxy-manager.js`; `{…}` are the live path and channel labels
+(`门店住宅代理`, `GZ 机房代理`, `直连(香港)`, `天河 外卖`, `越秀 闪购`).
+
+| shipped | built from |
+|---|---|
+| `🟢 {channel}：{path} 恢复可用` / `{channel}: {path} can reach Meituan again. Nothing to do.` | **copied whole**: the watchdog's own UP page, which it sent on every flap. Now sent only to close a page below |
+| `🟠 {channel}：{path}已超过30分钟不可达，当前走 {backup}。请检查门店网络。` / `{channel}: {path} has not reached Meituan for over 30 min. Selling carries on through {backup}. Please check the shop's internet.` | **built from live pieces**: `不可达` and `当前走` are the watchdog's own; `已超过30分钟` is eleme-daemon's order alert (`订单已超过30分钟读取失败`); `门店网络` is the box-setup screen's (`请接入门店网络`); `请检查` is the daemons' own alert shape. The minutes follow `PROXY_DEGRADED_PAGE_MS`. **Composed**: only the order of those pieces |
+| `🔴 {channel}：切换到 {direct}，{paths} 均不可达。销售照常，但美团更可能要求验证。请检查门店网络。` / `{channel} is now on {direct}: {paths} cannot reach Meituan. Selling carries on, but Meituan is more likely to ask for a verification check. Please check the shop's internet.` | `切换到` is the watchdog's own; the path list joins live labels with the live `、`. **Composed**: `均` (*all of them*), and `销售照常，但美团更可能要求验证` — `照常` is live (`店面照常运行`), `验证` is live in `验证中心`, which is the challenge this sentence warns of |
+
+**Retired, not reused**: `🟠 {channel}：{path} 不可达` (*another route is being
+used instead — nothing to do*), `🔀 {channel}：切换到 {path}` (*switched itself…
+nothing to do*), `⚠️ {channel}：启动时已降级，当前走 {path}` (*started up on a
+backup route*). Their pieces live on inside the pages above.
+
+**Live candidates rejected.**
+
+- `线路` for *route*: **rejected**, not live anywhere. The page names the paths
+  by their live labels instead, which also tells the reader which ones failed.
+- `代理掉线` (the daemons' *proxy down, sync paused*): **rejected**. It means
+  sync has stopped; these pages go out while selling carries on, and borrowing
+  the words would make the two sound equally urgent.
+- `订单已超过30分钟读取失败` whole: **rejected**. It is about orders; only its
+  `已超过30分钟` is lifted.
