@@ -178,7 +178,8 @@ window.tdPrintTable = tdPrintTable;
 
      nameEn/nameCn  the recipe's two names
      facts          [[label, value]…] — servings, SKU, shelf life, storage
-     lines          [{ sku, en, cn, qty }] — cn '' prints the English alone
+     lines          [{ sku, en, cn, qty, note }] — cn '' prints the English
+                    alone; the Note column shows only when a line has one
      steps          [{ name, text }]
      notes          the recipe's notes, or '' */
 function tdPrintRecipe({ nameEn, nameCn, facts, lines, steps, notes }) {
@@ -188,9 +189,14 @@ function tdPrintRecipe({ nameEn, nameCn, facts, lines, steps, notes }) {
   const shop = tdPrintShopName();
   const factHtml = (facts || []).filter(Boolean)
     .map(([k, v]) => `<div><dt>${e(k)}</dt><dd>${e(v)}</dd></div>`).join('');
+  // The line notes are how a cook measures ("2 slices", "one tomato each"),
+  // so they get a column of their own at full size — but only when some line
+  // has one, or every recipe without notes would carry an empty column.
+  const hasNote = (lines || []).some((l) => l.note);
   const lineRows = (lines || []).map((l, i) => `<tr><td class="idx">${i + 1}</td>`
     + `<td class="qty">${e(l.qty)}</td>`
     + `<td>${e(l.en)}${l.cn ? `<span class="zh">${e(l.cn)}</span>` : ''}</td>`
+    + (hasNote ? `<td class="lnote">${e(l.note || '')}</td>` : '')
     + `<td class="sku">${e(l.sku || '')}</td></tr>`).join('');
   const stepItems = (steps || []).map((s) => '<li><div>'
     + (s.name ? `<div class="sn">${e(s.name)}</div>` : '')
@@ -218,6 +224,7 @@ function tdPrintRecipe({ nameEn, nameCn, facts, lines, steps, notes }) {
   td.qty { width:1%; white-space:nowrap; text-align:right; font-weight:700; font-size:17px;
            font-variant-numeric:tabular-nums; padding-right:18px; }
   td .zh { display:block; margin-top:2px; }
+  td.lnote { width:26%; }
   td.sku { width:1%; white-space:nowrap; font-size:11.5px; color:var(--grey); padding-top:12px;
            font-variant-numeric:tabular-nums; }
   ol.steps { margin:8px 0 0; padding:0; list-style:none; counter-reset:s; }
@@ -251,7 +258,7 @@ function tdPrintRecipe({ nameEn, nameCn, facts, lines, steps, notes }) {
   ${factHtml ? `<dl class="facts">${factHtml}</dl>` : ''}
   <h2>Ingredients<span>原料</span></h2>
   <table>
-    <thead><tr><th style="width:26px">#</th><th class="r">Qty · 数量</th><th>Ingredient · 原料</th><th>SKU · 货号</th></tr></thead>
+    <thead><tr><th style="width:26px">#</th><th class="r">Qty · 数量</th><th>Ingredient · 原料</th>${hasNote ? '<th>Note · 备注</th>' : ''}<th>SKU · 货号</th></tr></thead>
     <tbody>${lineRows || '<tr><td colspan="4" class="empty">Nothing to show · 暂无内容</td></tr>'}</tbody>
   </table>
   ${stepItems ? `<h2>Steps<span>步骤</span></h2><ol class="steps">${stepItems}</ol>` : ''}
