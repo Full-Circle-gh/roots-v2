@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.422
+# Tacet shared-core consolidation — decisions record, v4.423
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-25 · v4.423 — **§268 · ONE PARCEL'S DISPATCH CAN BE UNDONE, AND THE BOX GOES BACK TO PACKED — ASH:** *"land 4 didn't dispatch but I don't see on the mobile any way to cancel dispatch"* (TC000851), then chose *Back to Packed* over *back to Not shipped + return stock* and over *don't build it*. **THE CONTROL WAS NEVER BUILT, ON EITHER SCREEN.** The order-level `undo-dispatch` is refused once any parcel carries a waybill, and TC000851's other parcel does, rightly. §180 named the missing parcel-level undo and left it for a decision. **STOCK DOES NOT MOVE, BY CONSTRUCTION:** `orderShippedQty`, `orderShippedOutPids`, `parcelsStillInTheBuilding` and `flagParcelsForRecovery` all treat `prepared_at` exactly as `dispatched_at`, so `POST /shipments/:sid/undo-dispatch` swaps one stamp for the other (`prepared_at = COALESCE(prepared_at, dispatched_at)`, `dispatched_at = NULL`) and every stock reader answers the same. No reversal, no new ledger reason; the later re-dispatch is a no-op for stock. **THE ORDER'S STATUS IS NOT TOUCHED.** On a `dispatched` order another parcel must still be out (`last_parcel_out` otherwise — that case is the order-level undo's). A parked order takes no status from its parcels (§187) and needs no sibling. **AIR AND LAND ONLY:** the waybill is the proof a box has not left and only those two carry one; a same-city rider is booked per order in `delivery_jobs`, and a supplier box is marked by its tracking number. Silent to the customer, like both existing undos; both screens ask first. The logic is `undoParcelDispatch` in `routes/retail.js`, run against a throwaway database by `scripts/test_parcel_undo_dispatch.js`. Chinese: vocabulary v1.178.
 
 2026-09-25 · v4.422 — **§267 · A CART NOTICE ON ONE SIZE COVERS EVERY SIZE — ASH:** *"I don't see the same message as tofu for the kombucha in product page"*, then *"yes build the editor fix, all sizes by default"* and *"I don't think this should be at the editor at all"*. **THE NOTICE WAS ON THE WRONG BOTTLES.** Live data: "Chill before opening" named 90 (Lemongrass 300 ml), 319 (Mango 1 L), 283 (Passion Fruit 300 ml) and 323 (Mix Berries 1 L). The shop collapses a size family to the member whose id is the `variant_group_id` — 314, 286, 324 and 285 — and those four named nothing. So every kombucha page the shop opened showed no notice, and those four sizes went into baskets with no card and no line on the order. The tofu has one size, which is why it looked right. **FIXED ON THE SERVER, NOT THE PAGE.** `cartNoticeIndex` (routes/retail.js) now carries each named id's whole variant family, with one query per request (`cartNoticeSiblings`). Every surface already reads that index: grid, product page, size rows, favourites, checkout upsell, order page. So one change fixes them all, and it reaches the mini app on deploy, not after WeChat review. Fixing it only in the mini-app page would have shown the words on the page while the add-to-basket card for that size stayed silent. A size's OWN notice still beats one it inherits. A failed sibling lookup falls back to the named ids. **THE EDITOR SAYS THE SAME THING.** The product editor's notice picker reads the notice from any size in the family and saves the pick to every size (`paNoticeFamily`, public/product-editor.html). Opening the 1 L no longer shows *None* while it is covered, and saving it writes the whole family, which also heals existing single-size data. **NOT BUILT: a per-size opt-out.** Nobody needs one today. A size that ever needs different words gets its own notice, which wins. One operator helper line is composed in Chinese; see `docs/tacet-delivery-vocabulary.md` v1.177. Tests: `scripts/test_cart_notice.js` §1b and §6b (11 new). Two of them were run against the unfixed resolver and failed. No schema, no migration, no mini-app change, no change to `.gitignore` or CI.
 
@@ -20554,3 +20556,14 @@ add-to-basket card and the order page all agree, and the change reaches the
 mini app without a WeChat release. A size's own notice wins over one it
 inherits. The product editor reads and writes the notice for the whole family.
 There is no per-size opt-out. See the v4.422 changelog entry.
+
+## §268 — ONE PARCEL'S DISPATCH CAN BE UNDONE; THE BOX GOES BACK TO PACKED
+
+**Decided 2026-09-25 by Ash** (*Back to Packed*). An Air or Land parcel marked
+dispatched that has no waybill and has not landed can be put back to Packed
+(`已备货`) from its parcel card, on the desktop and the phone. No stock moves,
+because every stock reader already counts a packed box as off the shelf. The
+order's status does not change: on a dispatched order another parcel must still
+be out, and with none the order-level undo is the tool. Same-city and supplier
+parcels are excluded. The customer is not notified. Returning the stock to the
+shelf was offered and not chosen. See the v4.423 changelog entry.

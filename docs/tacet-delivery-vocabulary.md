@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.178 · 2026-09-25 · §268 ONE PARCEL'S DISPATCH CAN BE UNDONE — ONE SENTENCE AND TWO SHORT LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The parcel card's `Undo dispatch · 撤销发货` button and `Undo dispatch? · 撤销发货?` title are copied whole. The confirm's body, the success line and the desktop's failure line are composed. See *One parcel back to packed (§268)* at the foot.
+
 **v1.177 · 2026-09-25 · §267 A CART NOTICE COVERS EVERY SIZE — ONE OPERATOR LINE COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The product editor's *Add-to-cart notice* card gains `Covers every size of this product. · 适用于本商品的所有规格。`. No customer-facing string. See *A cart notice covers every size (§267)*.
 
 **v1.176 · 2026-09-25 · THE SIDE DRAWER IS RETIRED AS A VIEW — NOTHING COMPOSED, ONE TOOLTIP RETIRED.** Ash: *"no need this window anymore, expand it as default"*. Every product now opens on the full product page. The page's back button lost its tooltip `Back to the list and quick-edit panel · 返回列表与快捷面板`, which named a panel that no longer opens; its visible `Products · 产品` stays. See *The product page's sections and the card that orders them (§206)*.
@@ -8828,3 +8830,21 @@ under the existing *Shown once when…* line.
 - `所有尺寸`: **rejected**. Not live anywhere; `规格` is the product's own word
   for a size in this back office.
 
+## One parcel back to packed (§268)
+
+**Composed by Claude, 2026-09-25, under the 2026-09-06 amendment.** Operator-only:
+the parcel card's undo, desktop and phone.
+
+| shipped | built from |
+|---|---|
+| `Undo dispatch · 撤销发货`, `Undo dispatch? · 撤销发货?`, `Keep as is · 保持不变` | **copied whole** from the order-level undo on both screens |
+| `这会把此包裹退回已备货。如果你是误点了发货(实际上还没发出),可以用它撤销。订单状态不变,不会通知顾客。` | **composed.** The live order-level body `这会把订单退回<b>备货中</b>。如果你是误点了发货(实际上还没发出),可以用它撤销。不会通知顾客。` with `订单` → `此包裹` (live in `标记此包裹已发货`) and `备货中` → `已备货` (the parcel's own live pill), without the order body's `<b>` tags, which the glued-language gate reads as a Chinese-only node. `订单状态不变` is lifted from the live `订单状态与配送均不变` |
+| `Back to prepared · 退回已备货` (phone), `Undone · 已撤销 — back to Prepared · 退回已备货` (desktop) | **composed** on the live `Back to paid · 退回已支付` and `Undone · 已撤销 — back to Paid · 退回已支付`, with `已支付` → `已备货` |
+| `Undo dispatch failed · 撤销发货失败` | **composed**: `撤销发货` + the live `…失败` failure pattern (`发货失败`, `标记备货失败`) |
+
+**Live candidates rejected.**
+
+- `已退回备货中` (the phone's order-level success line): **rejected**. `备货中`
+  is the ORDER's word for being prepared; a parcel's word is `已备货`.
+- `包裹已备货` (the prepare toast): **rejected**. It reads as a new packing,
+  not as an undo, and the person needs to know which one happened.

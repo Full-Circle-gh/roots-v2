@@ -2135,6 +2135,34 @@ reg('prepareParcel', sid=>{
     render();
   });
 });
+/* §268 — one box marked dispatched by mistake goes back to Packed. Asks first,
+   like the order-level undo: it is a silent write, so the person doing it
+   should be told what it does. No stock moves (a packed box is already off the
+   shelf) and the order's own status stays where it is. */
+reg('undoParcelDispatch', sid=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.ask={title:T('Undo dispatch?','撤销发货?'),
+    body:T("This moves this parcel back to Prepared. Use it if you marked it dispatched by mistake — it hasn't actually shipped. The order's status does not change and the customer is not notified.",
+           '这会把此包裹退回已备货。如果你是误点了发货(实际上还没发出),可以用它撤销。订单状态不变,不会通知顾客。'),
+    confirmLabel:T('Undo dispatch','撤销发货'),
+    run:()=>{
+      state.parcelBusy=sid; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/shipments/'+sid+'/undo-dispatch',{}).then(()=>{
+        state.parcelBusy=null;
+        showToast(T('Back to prepared','退回已备货'));
+        // Re-read rather than guess, for the reason dispatchParcel gives.
+        api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+        loadOrdersPage();
+      }).catch(e=>{
+        state.parcelBusy=null;
+        if(String(e.message)==='auth') return;
+        state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+        render();
+      });
+    }};
+  render();
+});
 /* THE TWO HALVES OF ONE DECISION — everything went in one box, or it did not.
    Both ask first, in the desktop's own words, because each rewrites what the
    customer will track: a combine collapses two waybills-to-be into one, and the
@@ -17451,7 +17479,7 @@ const PARCEL_STATE={
   dispatched:{en:'Dispatched',zh:'已发货',kind:'success'},
   delivered:{en:'Delivered',zh:'已送达',kind:'success'},
 };
-function parcelCard(o,sp,i,n){
+function parcelCard(o,sp,i,n,ships){
   const m=PARCEL_MODE[sp.mode]||PARCEL_MODE.local;
   // §180 — a packed box is still 'pending' to everything that asks whether it
   // has LEFT. Prepared replaces "Not shipped" on the pill, never "Dispatched".
@@ -17473,6 +17501,16 @@ function parcelCard(o,sp,i,n){
   // for good, so the parked box had no way forward and its stock stayed on the
   // count. Same conditions as dispatch, plus "not already packed".
   const canPrepare = canDispatch && !sp.prepared;
+  /* §268 — a box marked dispatched that never left goes back to Packed. The
+     route's conditions, asked the same way: an Air or Land box that is out, not
+     landed and has no waybill; and on a dispatched order, some OTHER box must
+     still be out, or the order would read Dispatched with nothing gone (the
+     More sheet's whole-order undo owns that case). A parked order takes no
+     status from its parcels, so it needs no sibling. */
+  const canUndoParcel = sp.state==='dispatched' && (sp.mode==='air'||sp.mode==='land') && n>1
+    && !(sp.trk&&sp.trk.number) && !o.viewOnly && o._id!=null
+    && (o.rawStatus==='awaiting_restock'
+        || (o.rawStatus==='dispatched' && (ships||[]).some(x=>x&&x.id!==sp.id&&x.state!=='pending')));
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic(m.icon,17)}
@@ -17483,6 +17521,7 @@ function parcelCard(o,sp,i,n){
     ${sp.trk&&sp.trk.number?`<div style="padding-top:10px;border-top:1px solid var(--border-default);font-size:12.5px;color:var(--text-secondary)">${T('Tracking is at the top of this order','物流信息在本单顶部')}</div>`:''}
     ${canPrepare?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('prepareParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel prepared','标记此包裹已备货')}</button>`:''}
     ${canDispatch?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('dispatchParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel dispatched','标记此包裹已发货')}</button>`:''}
+    ${canUndoParcel?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('undoParcelDispatch',${sp.id})">${busy?T('Marking…','处理中…'):T('Undo dispatch','撤销发货')}</button>`:''}
   </div>`;
 }
 /* PRODUCTS is how many lines to pick; UNITS is how many things go in the box.
@@ -17560,7 +17599,7 @@ function orderItemsBlock(o){
   }
   return `<div><div class="eyebrow" style="padding:4px 4px 8px">${T(ships.length>1?ships.length+' parcels':'1 parcel', ships.length+' 个包裹')} · ${countLabel(n,units)}</div>
     <div style="display:flex;flex-direction:column;gap:12px">
-      ${ships.map((sp,i)=>parcelCard(o,sp,i,ships.length)).join('')}
+      ${ships.map((sp,i)=>parcelCard(o,sp,i,ships.length,ships)).join('')}
       ${loose.length?`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('package',17)}
           <span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T('Not yet in a parcel','待分配包裹')}</span>

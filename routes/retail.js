@@ -29109,6 +29109,80 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: after } });
 });
 
+/* §268 — UNDO ONE PARCEL'S DISPATCH: THE BOX GOES BACK TO PACKED, NOT TO
+   "NOT SHIPPED". Reported on TC000851: the Land box read Dispatched and had not
+   left, while its sibling carried a real waybill. The order-level undo-dispatch
+   is refused the moment ANY parcel has a waybill (rightly — that one really
+   went), so there was no way back on either screen.
+
+   STOCK DOES NOT MOVE, BY CONSTRUCTION, and that is why Ash chose Packed. Every
+   stock reader (orderShippedQty, orderShippedOutPids, parcelsStillInTheBuilding,
+   flagParcelsForRecovery) treats prepared_at exactly as dispatched_at: the goods
+   are off the shelf and set aside for this order. Swapping one stamp for the
+   other leaves every one of them answering the same, so nothing is reversed and
+   the ledger gets no new kind of row. The later re-dispatch is a no-op for stock
+   through commitUnreservedOrder's per-product guard.
+
+   THE ORDER'S STATUS IS NOT TOUCHED. On a 'dispatched' order another parcel must
+   still be out, or the order would read Dispatched with nothing gone — that case
+   is the order-level undo's, and this refuses it by name. A parked order never
+   took its status from a parcel (§187), so it needs no sibling.
+
+   AIR AND LAND ONLY. The waybill is the proof a box has not left, and only those
+   two carry one. A same-city rider is booked per ORDER (delivery_jobs), so a
+   local parcel's "no waybill" proves nothing; a supplier parcel ships on the
+   supplier's clock and is marked by its tracking number.
+
+   Returns { code, body } so the route is a thin wrapper and the rule can be run
+   against a throwaway database (scripts/test_parcel_undo_dispatch.js). */
+function undoParcelDispatch(orderId, shipmentId) {
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(orderId);
+  if (!o) return { code: 404, body: { success: false, error: 'not_found' } };
+  if (!['dispatched', 'awaiting_restock'].includes(o.status)) {
+    return { code: 409, body: { success: false, error: 'not_reversible', from: o.status } };
+  }
+  const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(shipmentId, orderId);
+  if (!ship) return { code: 404, body: { success: false, error: 'shipment_not_found' } };
+  if (ship.mode !== 'air' && ship.mode !== 'land') {
+    return { code: 409, body: { success: false, error: 'mode_not_reversible', mode: ship.mode } };
+  }
+  if (!ship.dispatched_at) return { code: 409, body: { success: false, error: 'not_dispatched' } };
+  if (ship.delivered_at)   return { code: 409, body: { success: false, error: 'already_delivered' } };
+  if (String(ship.tracking_number || '').trim()) {
+    return { code: 409, body: { success: false, error: 'already_shipped',
+      message: 'This parcel has a waybill — cancel the waybill first to roll it back.' } };
+  }
+  if (o.status === 'dispatched') {
+    const othersOut = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_shipments
+        WHERE order_id = ? AND id != ? AND (dispatched_at IS NOT NULL OR delivered_at IS NOT NULL)`
+    ).get(orderId, shipmentId).n;
+    if (!othersOut) return { code: 409, body: { success: false, error: 'last_parcel_out' } };
+  }
+  // Atomic: only if STILL dispatched, undelivered and waybill-less, so a double
+  // tap or a waybill saved a moment ago cannot be rolled over.
+  const upd = tdb().prepare(
+    `UPDATE retail_shipments
+        SET prepared_at = COALESCE(prepared_at, dispatched_at), dispatched_at = NULL,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND dispatched_at IS NOT NULL AND delivered_at IS NULL
+        AND TRIM(COALESCE(tracking_number, '')) = ''`
+  ).run(shipmentId);
+  if (upd.changes !== 1) return { code: 409, body: { success: false, error: 'not_reversible', from: o.status } };
+  return { code: 200, body: { success: true, data: { order_status: o.status, mode: ship.mode } } };
+}
+
+router.post('/api/retail-admin/orders/:id/shipments/:sid/undo-dispatch',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.params.sid, 10);
+  const r = undoParcelDispatch(id, sid);
+  if (r.code !== 200) return res.status(r.code).json(r.body);
+  logActivity(req.user.id, req.user.username, 'shipment_undispatched', 'retail_order', id,
+    { shipment_id: sid, mode: r.body.data.mode, to: 'prepared' }, req.ip);
+  res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: r.body.data.order_status } });
+});
+
 // Mark a late-air food-safety alert handled (or re-open it). A delivered order
 // with an air parcel that landed >1 day late raises the "AIR DELAYED · contact
 // customer" badge in the list and a "Delivery needs a call" card on the
