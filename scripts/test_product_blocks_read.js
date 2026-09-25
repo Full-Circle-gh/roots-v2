@@ -668,6 +668,25 @@ check('the QR menu asks for the column, and subtracts the card before printing i
     'the QR menu prints free_of without subtracting what the card says');
   assert.ok(/\.achip\.free\{/.test(MENU), 'the free-of chip has no style of its own');
 });
+check('§266 — the listing drops a flag the card cancels, so the chips cannot select it', () => {
+  // Savory Quinoa Patties, 2026-09-25: tagged gluten, card says it contains
+  // gluten (wheat), and it came back under MADE WITHOUT · GLUTEN.
+  const card = { contains_en: ['Gluten (wheat)', 'Sesame'], contains_cn: [], may_en: [], may_cn: [] };
+  assert.strictEqual(R.freeOfForListing('nuts, soy, gluten', card), 'nuts, soy',
+    'the grid would still list a wheat product under MADE WITHOUT · GLUTEN');
+  // Chinese-only card, and a flag the four-flag list does not know passes through.
+  const cn = { contains_en: [], contains_cn: ['小麦'], may_en: [], may_cn: [] };
+  assert.strictEqual(R.freeOfForListing('gluten、dairy', cn), 'dairy');
+  // A trace warning does not cancel (§241), and nothing cancelled is byte-for-byte.
+  const traces = { contains_en: [], contains_cn: [], may_en: ['Gluten'], may_cn: [] };
+  assert.strictEqual(R.freeOfForListing('Gluten,5spice', traces), 'Gluten,5spice');
+  assert.strictEqual(R.freeOfForListing('nuts', null), 'nuts');
+  assert.strictEqual(R.freeOfForListing(null, card), null);
+  // And the listing route actually runs it.
+  const RETAIL = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  assert.ok(/r\.free_of = freeOfForListing\(r\.free_of, cards\.get\(r\.id\)\)/.test(RETAIL),
+    'GET /api/retail/products ships free_of without subtracting the card');
+});
 check('the shop sheet is handed the column by its host page', () => {
   assert.ok(/freeOf:p\.free_of/.test(SHOP_HTML), 'shop.html renders blocks without the column');
   assert.ok(/spb-al-chip-free/.test(SHOP_JS) && /spb-al-chip-free/.test(SHOP_CSS),
