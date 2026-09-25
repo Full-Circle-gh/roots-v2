@@ -157,6 +157,18 @@ window.tdPrintTable = tdPrintTable;
    without recipes:costs, and a sheet pinned to a kitchen wall is read by
    everyone who walks past it — so they are not passed in, not merely not shown.
 
+   LAID OUT FOR SOMEBODY MID-TASK, NOT AT A DESK (Ash, 2026-09-25: "is that
+   the best template for people that work in kitchen"). It is read at arm's
+   length with busy hands, so the order is what a cook looks for first:
+     1. the name, both languages at full size — a Chinese-reading cook reads
+        the second line as the title, so it is not greyed or shrunk;
+     2. what it makes and how it keeps, as a row of large figures under the
+        name rather than small print tucked top right;
+     3. the amount FIRST on each ingredient line, bold, so the eye does not
+        travel across a wide row to find it and land on the wrong line;
+     4. the SKUs last and quiet — purchasing reads them, a cook does not.
+   Text is sized to be read off a wall, not a screen.
+
    The caller hands over text already paired ("Fridge · 冷藏"), because only
    the recipe screen knows both halves of its own option lists. Steps and notes
    are printed exactly as typed: there is one box for each, in whatever
@@ -164,7 +176,7 @@ window.tdPrintTable = tdPrintTable;
 
      nameEn/nameCn  the recipe's two names
      sku            its SKU, or ''
-     facts          [[label, value]…] — batch, servings, shelf life, storage
+     facts          [[label, value]…] — servings, batch, shelf life, storage
      lines          [{ sku, en, cn, qty }] — cn '' prints the English alone
      steps          [{ name, text }]
      notes          the recipe's notes, or '' */
@@ -173,12 +185,12 @@ function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
   if (!w) return null;
   const e = _tdPrintEsc;
   const shop = tdPrintShopName();
-  const metaHtml = (facts || []).filter(Boolean)
-    .map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join('');
+  const factHtml = (facts || []).filter(Boolean)
+    .map(([k, v]) => `<div><dt>${e(k)}</dt><dd>${e(v)}</dd></div>`).join('');
   const lineRows = (lines || []).map((l, i) => `<tr><td class="idx">${i + 1}</td>`
-    + `<td class="sku">${e(l.sku || '')}</td>`
+    + `<td class="qty">${e(l.qty)}</td>`
     + `<td>${e(l.en)}${l.cn ? `<span class="zh">${e(l.cn)}</span>` : ''}</td>`
-    + `<td class="r">${e(l.qty)}</td></tr>`).join('');
+    + `<td class="sku">${e(l.sku || '')}</td></tr>`).join('');
   const stepItems = (steps || []).map((s) => '<li><div>'
     + (s.name ? `<div class="sn">${e(s.name)}</div>` : '')
     + (s.text ? `<div class="st">${e(s.text)}</div>` : '')
@@ -187,21 +199,43 @@ function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
   const doc = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><title>${e(nameEn)}${shop ? ' — ' + e(shop) : ''}</title>
 <style>${_TD_PRINT_CSS}
-  .masthead { border-bottom:1.5px solid var(--ink); flex-wrap:wrap; }
-  .cn-name { font-size:18px; margin-top:6px; letter-spacing:.08em; }
-  h2 { font-size:14px; font-weight:600; margin:26px 0 0; }
-  h2 span { font-weight:400; color:var(--grey); margin-left:6px; }
-  table { margin-top:8px; }
-  tbody td { padding:8px 10px; }
-  td .zh { color:var(--grey); margin-left:8px; }
-  td.sku { white-space:nowrap; width:1%; font-variant-numeric:tabular-nums; }
-  ol.steps { margin:10px 0 0; padding:0; list-style:none; counter-reset:s; }
-  ol.steps li { counter-increment:s; display:grid; grid-template-columns:26px 1fr; gap:0 10px; padding:9px 0;
-                border-bottom:1px solid var(--hair); font-size:12.5px; line-height:1.55; break-inside:avoid; }
-  ol.steps li::before { content:counter(s); color:var(--grey); font-size:11px; padding-top:2px; }
-  ol.steps .sn { font-weight:600; }
+  .masthead { display:block; padding-bottom:12px; }
+  h1 { font-size:32px; font-weight:600; }
+  .cn-name { font-size:28px; font-weight:600; margin-top:4px; letter-spacing:.04em; }
+  dl.facts { margin:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:0;
+             border-top:2px solid var(--ink); border-bottom:2px solid var(--ink); }
+  dl.facts > div { padding:10px 12px; border-left:1px solid var(--hair); }
+  dl.facts > div:first-child { border-left:none; padding-left:0; }
+  dl.facts dt { font-size:11.5px; color:var(--grey); }
+  dl.facts dd { margin:3px 0 0; font-size:19px; font-weight:600; font-variant-numeric:tabular-nums; }
+  h2 { font-size:17px; font-weight:700; margin:24px 0 0; }
+  h2 span { font-weight:400; margin-left:8px; }
+  table { margin-top:6px; }
+  thead th { font-size:11.5px; }
+  tbody td { padding:9px 10px; font-size:16px; line-height:1.35; }
+  td.idx { font-size:12px; padding-top:12px; }
+  td.qty { width:1%; white-space:nowrap; text-align:right; font-weight:700; font-size:17px;
+           font-variant-numeric:tabular-nums; padding-right:18px; }
+  td .zh { display:block; margin-top:2px; }
+  td.sku { width:1%; white-space:nowrap; font-size:11.5px; color:var(--grey); padding-top:12px;
+           font-variant-numeric:tabular-nums; }
+  ol.steps { margin:8px 0 0; padding:0; list-style:none; counter-reset:s; }
+  ol.steps li { counter-increment:s; display:grid; grid-template-columns:34px 1fr; gap:0 10px; padding:10px 0;
+                border-bottom:1px solid var(--hair); font-size:15.5px; line-height:1.6; break-inside:avoid; }
+  ol.steps li::before { content:counter(s); font-size:18px; font-weight:700; line-height:1.4; }
+  ol.steps .sn { font-weight:700; }
   ol.steps .st, .notes { white-space:pre-line; }
-  .notes { margin-top:10px; padding:10px 12px; border-left:2px solid var(--hair); font-size:12.5px; line-height:1.6; }
+  .notes { margin-top:10px; padding:10px 12px; border-left:3px solid var(--ink); font-size:15px; line-height:1.6; }
+  /* One sheet of A4 for an ordinary recipe: the same sizes, less air. */
+  @media print {
+    .sheet { padding:0; }
+    dl.facts > div { padding-top:6px; padding-bottom:6px; }
+    h2 { margin-top:14px; }
+    tbody td { padding-top:6px; padding-bottom:6px; }
+    td.idx, td.sku { padding-top:9px; }
+    ol.steps li { padding:6px 0; line-height:1.45; }
+    .foot { margin-top:14px; }
+  }
 </style></head><body>
 <div class="toolbar">Recipe · 食谱<span style="flex:1"></span>
   <button onclick="window.print()">Print / Save as PDF</button>
@@ -209,22 +243,19 @@ function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
 </div>
 <div class="sheet">
   <div class="masthead">
-    <div>
-      ${shop ? `<div class="shop">${e(shop)}</div>` : ''}
-      <h1>${e(nameEn)}</h1>
-      ${nameCn ? `<div class="cn-name">${e(nameCn)}</div>` : ''}
-      ${sku ? `<div class="sub">SKU ${e(sku)}</div>` : ''}
-    </div>
-    <div class="meta"><dl>${metaHtml}</dl></div>
+    ${shop ? `<div class="shop">${e(shop)}</div>` : ''}
+    <h1>${e(nameEn)}</h1>
+    ${nameCn ? `<div class="cn-name">${e(nameCn)}</div>` : ''}
   </div>
+  ${factHtml ? `<dl class="facts">${factHtml}</dl>` : ''}
   <h2>Ingredients<span>原料</span></h2>
   <table>
-    <thead><tr><th style="width:26px">#</th><th>SKU · 货号</th><th>Ingredient · 原料</th><th class="r">Qty · 数量</th></tr></thead>
+    <thead><tr><th style="width:26px">#</th><th class="r">Qty · 数量</th><th>Ingredient · 原料</th><th>SKU · 货号</th></tr></thead>
     <tbody>${lineRows || '<tr><td colspan="4" class="empty">Nothing to show · 暂无内容</td></tr>'}</tbody>
   </table>
   ${stepItems ? `<h2>Steps<span>步骤</span></h2><ol class="steps">${stepItems}</ol>` : ''}
   ${notes ? `<h2>Notes<span>备注</span></h2><div class="notes">${e(notes)}</div>` : ''}
-  <div class="foot"><span>${e(shop)}</span><span>${e(tdWhen(new Date(), 'dateTime'))}</span></div>
+  <div class="foot"><span>${e(shop)}${shop && sku ? ' · ' : ''}${sku ? 'SKU ' + e(sku) : ''}</span><span>${e(tdWhen(new Date(), 'dateTime'))}</span></div>
 </div>
 </body></html>`;
   w.document.write(doc);

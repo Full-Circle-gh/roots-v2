@@ -163,6 +163,32 @@ section('4 · the printed sheet');
   no(/fonts\.googleapis|@import|<link/i.test(h), 'no external font or stylesheet');
   yes(/white-space:\s*pre-line/.test(h), "a step's line breaks survive to paper");
 }
+
+section('4b · laid out for the kitchen: amount first, SKU last, facts under the name');
+{
+  const r = runPrint({ TD_SHOP_NAME: 'Harbour Greens' });
+  r.sandbox.tdPrintRecipe(card(PESTO, LINES, STEPS).card);
+  const h = r.html();
+  const head = (h.match(/<thead><tr>[\s\S]*?<\/tr><\/thead>/g) || [])[0] || '';
+  const at = (s) => head.indexOf(s);
+  yes(at('Qty · 数量') > -1 && at('Qty · 数量') < at('Ingredient · 原料') && at('Ingredient · 原料') < at('SKU · 货号'),
+    'the columns read amount, ingredient, SKU', head);
+  yes(/<td class="qty">150 g<\/td><td>Arugula/.test(h), 'each row starts with its amount, beside the name');
+  const { card: c } = card(PESTO, LINES, STEPS);
+  yes(c.facts[0][0] === 'Servings · 份数', 'servings is the first fact, before the batch weight',
+    JSON.stringify(c.facts.map((f) => f[0])));
+  const name = h.indexOf('<h1>'), facts = h.indexOf('<dl class="facts">'), ing = h.indexOf('Ingredients<span>');
+  yes(name > -1 && name < facts && facts < ing, 'the facts sit under the name, above the ingredients');
+  yes(h.includes('<dd>4 × 150 g</dd>'), 'a fact prints its value');
+  no(/class="meta"/.test(h), 'no small facts block tucked top right');
+  yes(/<div class="foot"><span>Harbour Greens · SKU 1-20<\/span>/.test(h), "the recipe's SKU sits in the foot");
+  no(/<div class="sub">SKU/.test(h), 'and not under the name');
+}
+{
+  const r = runPrint();
+  r.sandbox.tdPrintRecipe(card({ name_en: 'Plain' }, [], []).card);
+  no(r.html().includes('<dl class="facts">'), 'a recipe with no facts prints no empty facts row');
+}
 {
   const r = runPrint();
   r.sandbox.tdPrintRecipe(card({ name_en: 'Plain' }, [], []).card);
