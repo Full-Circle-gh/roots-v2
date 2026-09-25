@@ -4322,6 +4322,47 @@ db.exec(`
   );
 `);
 
+// ── The rider's own delivery photos, from Qingyun (§261 addendum) ───────────
+// A JD rider leaves two (`unloadPics` on the Qingyun order); a Huolala rider
+// leaves none. They arrive as ENCRYPTED codes, not links, and each is turned
+// into a picture by Qingyun's own `waybill/image/resolveUrl` — the call its
+// merchant page makes when somebody presses 查看图片.
+//
+// ITS OWN TABLE, NOT MORE ROWS IN THE ONE ABOVE. That table is one photo per
+// order by a UNIQUE key, and the one a person chose stays that way: a rider's
+// two photos sit beside it and never replace it.
+//
+// A ROW EXISTS FROM THE MOMENT THE CODE IS SEEN, before the picture is fetched,
+// so the daemon has a queue with its attempts on it and a Qingyun refusal is
+// asked once, not every 25 seconds. `status`:
+//   pending  seen, not fetched yet (or failed and waiting for next_try_at)
+//   ok       fetched; `data` holds the picture
+//   blocked  Qingyun refused it (code 500002) — never asked again
+//   failed   gave up after the attempt cap
+//   removed  staff took it off; the code is kept so it is not fetched back
+// Same storage rule as above: a data URI, never in retail_media.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_rider_photos (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id         INTEGER NOT NULL,
+    qingyun_order_id TEXT,
+    position         INTEGER NOT NULL DEFAULT 0,       -- the rider's order, 0 first
+    token            TEXT NOT NULL,                    -- Qingyun's encryptedPicUrl
+    status           TEXT NOT NULL DEFAULT 'pending',
+    data             TEXT,                             -- base64 data URI once fetched
+    bytes            INTEGER,
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    last_error       TEXT,
+    next_try_at      DATETIME,
+    fetched_at       DATETIME,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (order_id, token),
+    FOREIGN KEY (order_id) REFERENCES retail_orders(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_rider_photos_due
+    ON retail_rider_photos(status, next_try_at);
+`);
+
 // THE FLAG EVERY MONEY FIGURE READS. `paidWhere()` in lib/finance-window.js
 // excludes any order carrying this, which is the whole reason the eleven
 // hand-written copies of that predicate were consolidated first: without one

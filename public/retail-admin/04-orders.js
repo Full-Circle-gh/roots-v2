@@ -4293,18 +4293,38 @@ function renderDeliveryPhoto(o) {
   if (!p) return '';
   const oid = Number(o.id);
   const link = (fn, text) => delayBtn(fn, text, 'link');
+  // One chip per photo, the evidence line's shape: its name opens it, × takes it
+  // off. The staff photo is "Shop"; the rider's (§261 addendum, from Qingyun) are
+  // "Rider", numbered when there are two. Add / Replace act on the staff photo
+  // only — a rider's photo is never replaced, only removed.
+  const photos = Array.isArray(p.photos) ? p.photos
+               : (p.has ? [{ key: 's', kind: 'staff' }] : []);
+  const riders = photos.filter(x => x.kind === 'rider').length;
+  let n = 0;
+  const chips = photos.map(x => {
+    const key = escapeHtml(String(x.key));
+    const name = x.kind === 'rider'
+      ? cuT('Rider', '骑手') + (riders > 1 ? ' ' + (++n) : '')
+      : cuT('Shop', '门店');
+    return `<span style="display:inline-flex; align-items:center; gap:5px;
+           border:1px solid var(--line); border-radius:var(--r-sm,5px); padding:2px 6px; font-size:11px;">
+        <a href="#" onclick="deliveryPhotoView(${oid},'${key}');return false;"
+           style="color:var(--text-1); text-decoration:none;">${name}</a>
+        <a href="#" onclick="deliveryPhotoRemove(${oid},'${key}');return false;"
+           style="color:var(--text-3); text-decoration:none;" title="${cuT('Remove', '删除')}">×</a>
+      </span>`;
+  }).join('');
   return `
     <div class="od-delivery-photo" style="display:flex; gap:9px; align-items:center; flex-wrap:wrap;
          padding:8px 0; margin-bottom:var(--s3); border-bottom:1px solid var(--line-soft);">
-      <span style="flex:none; width:12px; text-align:center; color:var(--text-3);">${p.has ? '▣' : '▢'}</span>
+      <span style="flex:none; width:12px; text-align:center; color:var(--text-3);">${photos.length ? '▣' : '▢'}</span>
       <span style="color:var(--text-3);">${cuT('Delivery photo', '送达照片')}</span>
-      ${p.has ? link(`deliveryPhotoView(${oid})`, cuT('View', '查看')) : ''}
-      ${p.has && p.customer_sees ? `<span style="font-size:11px; color:var(--text-3);">${cuT('Customers see this', '顾客可见')}</span>` : ''}
+      ${chips}
+      ${photos.length && p.customer_sees ? `<span style="font-size:11px; color:var(--text-3);">${cuT('Customers see this', '顾客可见')}</span>` : ''}
       <input type="file" accept="image/*" id="dph-${oid}" style="display:none;"
              onchange="deliveryPhotoAdd(${oid},this)">
-      <span style="margin-left:auto; display:inline-flex; gap:10px;">
+      <span style="margin-left:auto;">
         ${link(`document.getElementById('dph-${oid}').click()`, p.has ? cuT('Replace', '更换') : cuT('Add photo', '添加照片'))}
-        ${p.has ? link(`deliveryPhotoRemove(${oid})`, cuT('Remove', '删除')) : ''}
       </span>
     </div>`;
 }
@@ -4356,9 +4376,9 @@ async function deliveryPhotoAdd(orderId, input) {
   } catch { /* adminWrite has already said why in a toast */ }
 }
 
-async function deliveryPhotoView(orderId) {
+async function deliveryPhotoView(orderId, key) {
   try {
-    const j = await api(`/api/retail-admin/orders/${orderId}/delivery-photo`);
+    const j = await api(`/api/retail-admin/orders/${orderId}/delivery-photo?key=${encodeURIComponent(key || 's')}`);
     const data = j?.data?.data;
     if (!data) { toast(cuT('Photo not found', '未找到照片'), 'err'); return; }
     const w = window.open();
@@ -4366,11 +4386,11 @@ async function deliveryPhotoView(orderId) {
   } catch { toast(cuT('Could not open that photo', '无法打开该照片'), 'err'); }
 }
 
-async function deliveryPhotoRemove(orderId) {
+async function deliveryPhotoRemove(orderId, key) {
   if (!confirm(cuT('Remove this photo?', '删除这张照片?'))) return;
   try {
     await adminWrite({
-      url: `/api/retail-admin/orders/${orderId}/delivery-photo`,
+      url: `/api/retail-admin/orders/${orderId}/delivery-photo?key=${encodeURIComponent(key || 's')}`,
       method: 'DELETE',
       errLabelEn: 'Could not remove', errLabelCn: '删除失败',
     });

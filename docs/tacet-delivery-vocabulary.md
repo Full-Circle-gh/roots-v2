@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.174 · 2026-09-25 · §261 ADDENDUM SHOWS THE RIDER'S OWN PHOTOS — NOTHING COMPOSED IN CHINESE; ONE ENGLISH PLURAL.** The staff screens name each photo `Rider · 骑手` or `Shop · 门店`, both copied. The customer's section reads `Delivery photos` in English when there is more than one, on the same `送达照片`. See *The delivery photo (§261)*.
+
 **v1.173 · 2026-09-25 · §263 THE PROXY WATCHDOG PAGES ONLY WHEN SOMEONE IS NEEDED — THREE PAGES, BUILT FROM LIVE PIECES; FOUR SHORT PHRASES COMPOSED BY CLAUDE; THREE PAGES RETIRED.** The watchdog's *down*, *switched* and *started on a backup route* pages, each ending *nothing to do*, are gone from the group and go to the pm2 log instead. What pages now: a channel off its first-choice path for half an hour, a channel on the Hong Kong line, and the *back* message after either. The *back* page is the old live pair word for word. See *The proxy watchdog's pages (§263)* at the foot.
 
 **v1.172 · 2026-09-24 · §261 PUTS A DELIVERY PHOTO ON THE ORDER — ONE STRING COMPOSED BY CLAUDE, LIFTED FROM THE COURIER PLATFORM; EVERYTHING ELSE COPIED.** Staff add the photo of a same-city parcel at the door from the order drawer (desktop and phone), and the customer sees it on their order page (mini app and web shop). `Delivery photo · 送达照片` is the one new pair; every control and message beside it is a live pair copied whole. See *The delivery photo (§261)*.
@@ -8737,6 +8739,23 @@ the order page's section label (customer, mini app `pages/order` and web shop
 - `图片` for `照片`: **rejected**. `图片` is live for a product *image* chosen
   in an editor; a photograph taken on the day is `照片` everywhere in this
   product.
+
+**Addendum 2026-09-25 (v1.174) — the rider's own photos.** Each photo on the
+staff screens is a chip named for who took it; nothing is composed in Chinese.
+
+| shipped | built from |
+|---|---|
+| `Rider · 骑手` (a rider's photo; `Rider 1`, `Rider 2` when there are two) | copied: `cuT('Rider', '骑手')`, live on the courier card. The numeral needs no word |
+| `Shop · 门店` (the photo staff added) | copied: `T('Shop','门店')`, live on the phone |
+| `Delivery photos` / `DELIVERY PHOTOS` (customer section, two or more) | **English composed, by Claude**: the plural of the pair above. The Chinese stays `送达照片`, which carries no number |
+
+**Live candidates rejected.**
+
+- `骑手取货图片` / `骑手送达图片` (Qingyun's own labels, read in its page code):
+  **rejected**. Only the delivery photo is shown, and `图片` was rejected above.
+- `商家` for the staff photo: **rejected**. It is live as *Store* in the
+  merchant sense (the platform's word for us), and the chip means the photo was
+  added at our end, which the phone's `门店` already says.
 
 ## The proxy watchdog's pages (§263)
 

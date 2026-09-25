@@ -962,11 +962,18 @@
 }
 .qy-track .qy-call:active { opacity: 0.7; }
 
-/* The delivery photo (§261) — one picture, the full width of the card. */
+/* The delivery photos (§261) — one picture takes the card's width; two or
+   three sit side by side, each tap opening the full-size viewer. */
+.dph .dph-row {
+  display: flex;
+  gap: 12rpx;
+}
 .dph .dph-img {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 420rpx;
   border-radius: 8rpx;
   background: rgba(0, 0, 0, 0.04);
 }
+.dph .dph-many .dph-img { height: 300rpx; }

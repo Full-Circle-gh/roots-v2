@@ -68,6 +68,7 @@ const phoneCn = require('../lib/phone-cn'); // is this a number a rider can call
 // Hold-vs-refuse decision + the statements that implement it (see lib/qingyun-queue).
 const qingyunQueue = require('../lib/qingyun-queue');
 const pointMemory = require('../lib/delivery-point-memory'); // answers operators have already given for an address
+const riderPhotos = require('../lib/rider-photos'); // §261 addendum — the rider's delivery photos
 const { withTransaction } = require('../lib/db-transaction'); // one transaction or neither write (§24)
 const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
 
@@ -114,6 +115,16 @@ const LEGACY_ALERT_HOURS = {
 };
 // Escape hatch for a genuine 24h store, or for testing an alert path on demand.
 const ALERT_ALWAYS = process.env.QINGYUN_ALERT_ALWAYS === '1';
+
+// §261 addendum — fetch the rider's delivery photos off Qingyun. OFF unless
+// switched on in the box's .env, because it is the one new call this daemon
+// makes to the platform (waybill/image/resolveUrl, the merchant page's own call
+// behind 查看图片) and it goes on only after scripts/diagnose_qingyun_rider_photo.js
+// has shown one photo coming back. The codes are noted either way (no call, just
+// the order list this daemon already reads), so switching it on works through
+// the last week's deliveries. At most this many photos per store per cycle.
+const RIDER_PHOTOS = process.env.QINGYUN_RIDER_PHOTOS === '1';
+const RIDER_PHOTOS_PER_CYCLE = Number(process.env.QINGYUN_RIDER_PHOTOS_PER_CYCLE || 2);
 
 // True when a page for this store would reach someone who can act on it.
 function alertsAllowed(storeCode, now = new Date()) {
@@ -1032,20 +1043,35 @@ async function pollStore(storeCode) {
     // auto-deliver sweep flips the roots order on the true drop-off signal.
     try {
       const done = await br.getCompletedDeliveries();
-      let reconciled = 0;
+      let reconciled = 0, photoCodes = 0;
+      // The rider's delivery photo codes (§261 addendum), noted for every order
+      // we track on this page — delivered in this poll or earlier, because a
+      // rider can upload the photo a minute after marking the drop-off. Only an
+      // order linked to ours (a superseded copy never is), and never a call to
+      // Qingyun: the codes are already in the list just read.
+      const notePhotos = (orderId, d) => {
+        if (!orderId) return;
+        try { photoCodes += riderPhotos.record(db, orderId, d.qingyunOrderId, riderPhotos.tokensFrom(d.raw)); }
+        catch (e) { log(storeCode, `rider photo codes for ${d.qingyunOrderId}: ${e.message}`); }
+      };
       for (const d of done) {
         if (!d.qingyunOrderId) continue;
         const existing = db.prepare(
           'SELECT retail_order_id, order_status, superseded FROM delivery_jobs WHERE qingyun_order_id = ?'
         ).get(d.qingyunOrderId);
         if (!existing) continue;                                  // untracked → skip
-        if ((existing.order_status ?? 0) >= DELIVERED_STATUS) continue; // already delivered
+        if ((existing.order_status ?? 0) >= DELIVERED_STATUS) {   // already delivered
+          if (!existing.superseded) notePhotos(existing.retail_order_id, d);
+          continue;
+        }
         const retailOrderId = existing.superseded
           ? null                                                  // abandoned copy — never re-link
           : (existing.retail_order_id || matchRetailOrderId(d));
         upsert.run(buildDeliveryRow(d, null, storeCode, retailOrderId));
+        notePhotos(retailOrderId, d);
         reconciled++;
       }
+      if (photoCodes) log(storeCode, `noted ${photoCodes} rider photo code(s)`);
       if (reconciled) { logSync(storeCode, 'complete', 'ok', { reconciled }); log(storeCode, `reconciled ${reconciled} delivered order(s)`); }
       for (const d of done) if (d.qingyunOrderId) seenIds.add(String(d.qingyunOrderId));
       // A 完成 tab that filled its page may have pushed a fresh drop-off out of
@@ -1097,6 +1123,24 @@ ${ono}: the courier is gone — no rider is on this order. Call another if it st
         log(storeCode, `${sweep.missing.length} tracked job(s) missing from the platform, within the grace window`);
       }
     } catch (e) { log(storeCode, `cancel sweep error: ${e.message}`); }
+
+    // ── The rider's delivery photos (§261 addendum) ─────────────────────────
+    // Turn noted codes into pictures, a couple per cycle. Behind its switch (see
+    // RIDER_PHOTOS), and LAST in the cycle, after the cancel sweep, so a slow
+    // download can never delay a delivery's own status or its cancel check.
+    // fetchDue never throws; a photo that fails waits and is retried, and one
+    // Qingyun refuses is not asked again.
+    if (RIDER_PHOTOS) {
+      try {
+        const t = await riderPhotos.fetchDue(db, br, {
+          limit: RIDER_PHOTOS_PER_CYCLE, storeCode, log: (m) => log(storeCode, m),
+        });
+        if (t.ok || t.retry || t.blocked || t.failed) {
+          log(storeCode, `rider photos: ${t.ok} fetched, ${t.retry} to retry, ${t.blocked} refused, ${t.failed} given up`);
+          logSync(storeCode, 'rider_photo', (t.failed || t.blocked) ? 'error' : 'ok', t);
+        }
+      } catch (e) { log(storeCode, `rider photo fetch error: ${e.message}`); }
+    }
   } catch (err) {
     log(storeCode, `pollStore error: ${err.message}`);
     logSync(storeCode, 'poll', 'error', null, err.message);

@@ -3491,8 +3491,8 @@ async function renderOrderDetail(id){
     ${/* §261 — the photo of the parcel at the door. The section is drawn empty
          and the picture fetched after, from the customer-scoped route: the
          order read says only that there is one, never the bytes. */''}
-    ${o.delivery_photo&&o.delivery_photo.has?`<div class="co-sec" id="odPhotoSec"><h3>${cn?'送达照片':'Delivery photo'}</h3>
-      <img id="odPhoto" alt="" style="display:none;width:100%;max-height:420px;object-fit:cover;border-radius:8px;cursor:zoom-in"></div>`:''}
+    ${o.delivery_photo&&o.delivery_photo.has?`<div class="co-sec" id="odPhotoSec"><h3>${cn?'送达照片':((o.delivery_photo.photos||[]).length>1?'Delivery photos':'Delivery photo')}</h3>
+      <div id="odPhotos" style="display:flex;gap:8px"></div></div>`:''}
     <div class="co-sec"><h3>${cn?'金额':'Payment'}</h3>
       <div class="co-line"><span>${cn?'小计':'Subtotal'}</span><span>${money(sub)}</span></div>
       ${ship>0?`<div class="co-line"><span>${cn?'配送费':'Delivery'}</span><span>${money(ship)}</span></div>`:''}
@@ -3511,15 +3511,26 @@ async function renderOrderDetail(id){
   const pay=$('#odPay'); if(pay)pay.addEventListener('click',()=>coStartPayment({id:o.id,order_no:o.order_no,total:o.total}));
   const rb=$('#odResched'); if(rb)rb.addEventListener('click',()=>openReschedule(o));
   const ab=$('#odAddr'); if(ab)ab.addEventListener('click',()=>openAddressChange(o));
-  const ph=$('#odPhoto');
-  if(ph){
-    api('/api/retail/orders/'+encodeURIComponent(o.id)+'/delivery-photo').then(d=>{
-      const uri=d&&d.data;
-      if(!/^data:image\/(png|jpe?g|webp);base64,/i.test(uri||'')) throw new Error('bad');
-      ph.src=uri; ph.style.display='block';
-      // Full size in a tab of its own, as the back office opens it.
-      ph.addEventListener('click',()=>{ const w=window.open(); if(w) w.document.write('<img src="'+uri+'" style="max-width:100%">'); });
-    }).catch(()=>{ const sec=$('#odPhotoSec'); if(sec) sec.remove(); });
+  // Each photo fetched on its own, by the key the order read named it with (the
+  // shop's photo and the rider's, §261 addendum), in that order. A photo that
+  // will not load is left out; a section with none left is removed.
+  const phBox=$('#odPhotos');
+  if(phBox){
+    const list=(o.delivery_photo.photos&&o.delivery_photo.photos.length)?o.delivery_photo.photos:[{key:''}];
+    Promise.all(list.map(p=>api('/api/retail/orders/'+encodeURIComponent(o.id)+'/delivery-photo'+(p.key?'?key='+encodeURIComponent(p.key):''))
+      .then(d=>(d&&/^data:image\/(png|jpe?g|webp);base64,/i.test(d.data||''))?d.data:null).catch(()=>null)))
+    .then(uris=>{
+      uris=uris.filter(Boolean);
+      if(!uris.length){ const sec=$('#odPhotoSec'); if(sec) sec.remove(); return; }
+      for(const uri of uris){
+        const im=document.createElement('img');
+        im.alt=''; im.src=uri;
+        im.style.cssText='flex:1;min-width:0;width:100%;height:'+(uris.length>1?'260px':'420px')+';object-fit:cover;border-radius:8px;cursor:zoom-in';
+        // Full size in a tab of its own, as the back office opens it.
+        im.addEventListener('click',()=>{ const w=window.open(); if(w) w.document.write('<img src="'+uri+'" style="max-width:100%">'); });
+        phBox.appendChild(im);
+      }
+    });
   }
 }
 function rsReasonText(reason,cn){
