@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.420
+# Tacet shared-core consolidation — decisions record, v4.421
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-25 · v4.421 — **§254 ADDENDUM · EACH INGREDIENT LINE'S NOTE PRINTS ON THE RECIPE CARD — ASH:** *"the notes doesnt show"*, with the Ingredients tab showing notes like *2 slices*, *25g each slice*, *one tomato each*. The line note (`recipe_ingredients.notes`, typed in the Note box on each line) was never passed to the card. It now prints, as typed and at the ingredient name's size, in a *Note · 备注* column between the ingredient and its SKU. The column shows only when at least one line has a note. The cell is classed `lnote`, not `note`: the shared print stylesheet's `.note` is the grey foot-note box and would have shrunk and greyed it. `recipePrintCard` (public/retail-admin/19-recipes.js) and `tdPrintRecipe` (public/retail-admin/26-print.js) only. No new Chinese: *备注* is the live Note label on the same screen. Tests: `scripts/test_recipe_print.js` §1 and §4b.
 
 2026-09-25 · v4.420 — **§254 ADDENDUM · THE RECIPE'S SKU TAKES BATCH SIZE'S SLOT ON THE PRINTED CARD — ASH:** *"sku can replace batch size positing and size"*. The facts row under the name now reads Servings, SKU, Shelf life, Storage: the recipe's SKU prints at the full fact size in the slot batch size had, and batch size is no longer on the card. The SKU leaves the foot, so it prints once. What is lost: the total-weight check on a recipe with no serving size; where there is one, Servings still reads e.g. *4 × 150 g*. `recipePrintCard` (public/retail-admin/19-recipes.js) and `tdPrintRecipe` (public/retail-admin/26-print.js) only. No new Chinese: *SKU · 货号* is the live pair on the ingredient column. Tests: `scripts/test_recipe_print.js` §1 and §4b.
 
@@ -20409,6 +20411,9 @@ quiet. Content is unchanged. See the v4.419 changelog entry.
 **Addendum, 2026-09-25 (2).** The recipe's SKU takes batch size's slot in the
 facts row, at the same size, and batch size is off the card. See the v4.420
 changelog entry.
+
+**Addendum, 2026-09-25 (3).** Each ingredient line's note prints in a Note
+column, shown only when some line has one. See the v4.421 changelog entry.
 
 ## §255 — "NOT SYNCING" IS A PUSH WAITING, NEVER A PUSH THE CHANNEL REFUSED
 

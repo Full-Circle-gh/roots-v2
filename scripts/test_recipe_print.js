@@ -71,7 +71,8 @@ const PESTO = {
 const LINES = [
   // sku is the copy taken when the line was added; master_sku is the
   // material's SKU now. The card prints the current one.
-  { ingredient_id: 1, sku: 'J-01-OLD', master_sku: 'J-01', name_en: 'Arugula', name_cn: '芝麻叶', qty: 150, unit: 'g', cost: 3.2 },
+  { ingredient_id: 1, sku: 'J-01-OLD', master_sku: 'J-01', name_en: 'Arugula', name_cn: '芝麻叶', qty: 150, unit: 'g', cost: 3.2,
+    notes: '  two big handfuls ' },
   { ingredient_id: null, sku: 'J-02', name_en: 'Nutritional yeast', name_cn: '', qty: 2, unit: 'g' },
   { ingredient_id: 3, sku: 'J-03', name_en: 'Lemon juice', name_cn: '柠檬汁', qty: '20.5', unit: 'ml' },
   { name_en: '', name_cn: '', qty: 0, unit: 'g' },           // an empty row
@@ -100,6 +101,9 @@ section('1 · what the card says, from what is on screen');
   yes(c.lines[0].en === 'Arugula' && c.lines[0].cn === '芝麻叶' && c.lines[0].qty === '150 g',
     'an ingredient carries both names and its amount', JSON.stringify(c.lines[0]));
   yes(c.lines[2].qty === '20.5 ml', 'the line keeps its own unit');
+  yes(c.lines[0].note === 'two big handfuls', "an ingredient line's note reaches the card, trimmed",
+    JSON.stringify(c.lines[0]));
+  yes(c.lines[1].note === '', 'a line with no note carries an empty one');
   yes(c.lines[0].sku === 'J-01', "an ingredient's SKU is the material's current one, not the line's old copy",
     c.lines[0].sku);
   yes(c.lines[1].sku === 'J-02', 'a line whose material is gone keeps the copy it took');
@@ -176,6 +180,10 @@ section('4b · laid out for the kitchen: amount first, SKU last, facts under the
   yes(at('Qty · 数量') > -1 && at('Qty · 数量') < at('Ingredient · 原料') && at('Ingredient · 原料') < at('SKU · 货号'),
     'the columns read amount, ingredient, SKU', head);
   yes(/<td class="qty">150 g<\/td><td>Arugula/.test(h), 'each row starts with its amount, beside the name');
+  yes(at('Ingredient · 原料') < at('Note · 备注') && at('Note · 备注') < at('SKU · 货号'),
+    'a Note column sits between the ingredient and the SKU', head);
+  yes(h.includes('<td class="lnote">two big handfuls</td>'), "the line's note prints in it, as typed");
+  yes(/Nutritional yeast<\/td><td class="lnote"><\/td>/.test(h), 'a line with no note leaves its cell empty');
   const { card: c } = card(PESTO, LINES, STEPS);
   yes(c.facts[0][0] === 'Servings · 份数' && c.facts[1][0] === 'SKU · 货号',
     'servings first, then the SKU in the slot batch size had',
@@ -192,6 +200,13 @@ section('4b · laid out for the kitchen: amount first, SKU last, facts under the
   const r = runPrint();
   r.sandbox.tdPrintRecipe(card({ name_en: 'Plain' }, [], []).card);
   no(r.html().includes('<dl class="facts">'), 'a recipe with no facts prints no empty facts row');
+}
+{
+  const r = runPrint();
+  const plain = LINES.map((l) => Object.assign({}, l, { notes: '' }));
+  r.sandbox.tdPrintRecipe(card(PESTO, plain, STEPS).card);
+  const h = r.html();
+  no(h.includes('Note · 备注') || h.includes('class="lnote"'), 'no line has a note: no empty Note column');
 }
 {
   const r = runPrint();

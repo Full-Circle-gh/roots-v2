@@ -2829,6 +2829,9 @@
       en: String(l.name_en || l.name_cn || '').trim(),
       cn: l.name_en ? String(l.name_cn || '').trim() : '',
       qty: (l.qty === '' || l.qty == null) ? '' : num(l.qty) + ' ' + (l.unit || 'g'),
+      // The line's note is often the kitchen's own measure — "2 slices",
+      // "25g each slice" — so it prints beside the amount, as typed.
+      note: String(l.notes || '').trim(),
     }));
     // Everything that printed in English only, so the operator is told what to
     // fill in instead of finding out from the kitchen.
