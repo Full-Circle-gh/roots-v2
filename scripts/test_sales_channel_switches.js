@@ -168,8 +168,27 @@ function buildPage() {
   };
 }
 
+// ── Every script on the admin page shares one global scope ────────────────
+// retail-admin.html loads 01-core.js … 31-product-page.js as classic scripts,
+// plus inline ones. A top-level `function x` and a `window.x = …` are the same
+// slot, and whichever runs LAST wins, with no error anywhere.
+const ADMIN_DIR = path.join(ROOT, 'public', 'retail-admin');
+const ADMIN_FILES = fs.readdirSync(ADMIN_DIR).filter((f) => f.endsWith('.js')).sort();
+// A SELF-GUARDED FALLBACK IS NOT A SECOND OWNER. 10-extras.js carries a copy
+// of the page's inline i18n engine (cuT, onLangChange, …) inside an IIFE that
+// returns at once when window.__raI18nEngine is already set — which the inline
+// copy sets first. It only ever runs when the inline copy did not, so its
+// names are left out of the claims. Found by the guard, not by a list of
+// names, so a new fallback has to be written the same guarded way to pass.
+const stripGuardedFallbacks = (text) =>
+  text.replace(/\(function \(\) \{\n\s*if \(window\.__raI18nEngine\) return;[\s\S]*?\n\}\)\(\);/g, '');
+const readAdmin = (f) => stripGuardedFallbacks(fs.readFileSync(path.join(ADMIN_DIR, f), 'utf8'));
+const topLevelFns = (text) => [...text.matchAll(/^(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm)].map((m) => m[1]);
+const windowFns = (text) => [...text.matchAll(/\bwindow\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/g)].map((m) => m[1]);
+const OTHER_WINDOW_GLOBALS = [...new Set(ADMIN_FILES.filter((f) => f !== '01-core.js').flatMap((f) => windowFns(readAdmin(f))))];
+
 // ── Sandbox ───────────────────────────────────────────────────────────────
-const NAMES = ['csName', 'csChannel', 'csStoreName', 'csChannelCards', 'csMarkUnknown', 'csShowError',
+const NAMES = ['csName', 'csChannelInfo', 'csStoreName', 'csChannelCards', 'csMarkUnknown', 'csShowError',
   'csClearRetry', 'csLoad', 'csRender', 'csClearPoll', 'csRenderLocations', 'salesInit'];
 const DECLS = ['const CS_KEY2CH', 'let _csData', 'let _csSeq', 'const CS_RETRY_MS', 'let _csPollTimer', 'let _salesLangHooked'];
 
@@ -181,7 +200,6 @@ function makeSandbox() {
     LANG: 'en',
     console: { log() {}, warn() {}, error() {} },
     document: page.document,
-    window: {},
     setTimeout: (fn, ms) => { const t = { fn, ms, live: true }; timers.push(t); return t; },
     clearTimeout: (t) => { if (t) t.live = false; },
     escapeHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
@@ -191,13 +209,23 @@ function makeSandbox() {
     acWrap: (s) => '¥' + s,
   };
   sb.cuT = (en, cn) => (sb.LANG === 'cn' ? cn : en);
-  sb.window.onLangChange = (cb) => { langCbs.push(cb); };
-  sb.onLangChange = sb.window.onLangChange;
+  // ONE GLOBAL SCOPE, as in the browser: `window` IS the global. The first
+  // version of this sandbox gave the slices a separate `window` object, and
+  // that is exactly why it could not see the bug that mattered — another
+  // script's `window.csChannel = …` replacing this file's csChannel().
+  sb.window = sb;
+  sb.onLangChange = (cb) => { langCbs.push(cb); };
   sb.globalThis = sb;
   vm.createContext(sb);
   vm.runInContext(DECLS.map(line).join('') + NAMES.map(slice).join('\n')
     + '\nglobalThis.__state = () => ({ data: _csData, failed: _csFailed, retries: _csRetries });', sb);
-  sb.window.csRetryNow = () => {};
+  // Then every OTHER admin script loads, as it does on the real page, and
+  // puts its window.* globals down on top. Each is stubbed as a function that
+  // returns nothing — which is what 29-channel-sync.js's csChannel() handed
+  // back to csRender for two weeks. If any of them shares a name with a slice
+  // above, the slice is replaced and the render assertions below go red.
+  for (const name of OTHER_WINDOW_GLOBALS) sb[name] = () => undefined;
+  sb.csRetryNow = () => {};
   return { sb, page, timers, langCbs };
 }
 
@@ -292,7 +320,7 @@ function assertBlank(page, label) {
     check(cls(c.el.btn) === 'partial sales-toggle', 'Eleme open at Tianhe, shut at Yuexiu → half-lit', cls(c.el.btn));
     check(!c.el.btn.disabled && typeof c.el.btn.onclick === 'function', 'and it is a working switch again');
     check(c.el.where && /Tianhe/.test(c.el.where.textContent) && /Yuexiu/.test(c.el.where.textContent), 'its where-line names both stores');
-    check(/sales-dot ok[^]*Tianhe/.test(c.el.where.innerHTML) && /closed[^]*Yuexiu/.test(c.el.where.innerHTML), 'Tianhe lit, Yuexiu marked closed');
+    check(!!c.el.where && /sales-dot ok[^]*Tianhe/.test(c.el.where.innerHTML) && /closed[^]*Yuexiu/.test(c.el.where.innerHTML), 'Tianhe lit, Yuexiu marked closed');
     check(cls(c.mt.btn) === 'on sales-toggle', 'Meituan, open at both, is fully on', cls(c.mt.btn));
     check(cls(c.wc.btn) === 'partial sales-toggle', 'WeChat — shipped "on" — is half-lit, because Yuexiu is shut', cls(c.wc.btn));
     check(cls(c.gy.btn) === 'on sales-toggle', 'gzgrocery (Tianhe only) is on');
@@ -380,6 +408,28 @@ function assertBlank(page, label) {
   {
     check(/#tab-sales \.sales-toggle\.unknown \.knob\s*\{\s*display:\s*none/.test(css), '.sales-toggle.unknown hides the knob');
     check(/#tab-sales \.sales-cs-err\s*\{/.test(css), '.sales-cs-err is styled');
+  }
+
+  section('10 · 🔴 No two admin scripts claim the same global name');
+  {
+    // Who claims what: a top-level function declaration, or a window.x
+    // function assignment. The same name claimed from two FILES is a clash —
+    // one silently replaces the other. (A file may declare a function and
+    // export it as window.x itself; that is one owner, not a clash.)
+    const owners = new Map();
+    const claim = (name, file) => { if (!owners.has(name)) owners.set(name, new Set()); owners.get(name).add(file); };
+    for (const f of ADMIN_FILES) {
+      const t = readAdmin(f);
+      for (const n of topLevelFns(t)) claim(n, f);
+      for (const n of windowFns(t)) claim(n, f);
+    }
+    const html = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
+    for (const n of windowFns(html)) claim(n, 'retail-admin.html (inline)');
+    const clashes = [...owners].filter(([, fs2]) => fs2.size > 1).map(([n, fs2]) => n + ' ← ' + [...fs2].join(', '));
+    check(clashes.length === 0, 'every global function name has exactly one owning file', clashes.join('\n      '));
+    check(topLevelFns(readAdmin('01-core.js')).includes('csChannelInfo'), 'the Sales lookup is csChannelInfo, in 01-core.js');
+    check(windowFns(readAdmin('29-channel-sync.js')).includes('csChannel'),
+      "29-channel-sync.js still owns window.csChannel (so the clash above is the one that would bite if the lookup were renamed back)");
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

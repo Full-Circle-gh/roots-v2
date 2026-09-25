@@ -1441,7 +1441,15 @@ function csName(ch) {
             pos: cuT('Counter sale', '前台销售') })[ch] || ch;
 }
 let _csData = null;
-function csChannel(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }
+/* NOT `csChannel`. That was this function's name until 2026-09-25, and
+   29-channel-sync.js has set `window.csChannel` — its own channel-filter
+   setter — since 2026-09-11. It loads later, so it replaced this one: every
+   Sales card looked its channel up, got undefined back, and was left as the
+   HTML shipped it — WeChat "on", Eleme "off", none clickable — while the phone
+   showed the real state. Every script on this page shares one global scope;
+   scripts/test_sales_channel_switches.js now fails on any name two of them
+   both claim. */
+function csChannelInfo(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }
 // Store name that follows the EN/中文 toggle. Falls back to data-no-i18n when
 // only one name exists (or both are identical) so the walker leaves it alone.
 function csStoreName(o) {
@@ -1535,7 +1543,7 @@ function csRender() {
   if (!_csData) return;
   let anyPending = false;
   for (const { card, ch, btn } of csChannelCards()) {
-    const info = csChannel(ch);
+    const info = csChannelInfo(ch);
     btn.classList.remove('unknown');
     // No row for this channel, or not set up yet: a locked, empty switch — no
     // channel×location matrix to open or close. The "Set up" footer is
