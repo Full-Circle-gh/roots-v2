@@ -385,6 +385,135 @@ await it('闪购 holder spaces proxy-switch relaunches too', async () => {
   assert.match(sg, /lastLaunchAt = Date\.now\(\)/, '闪购: every launch must be stamped');
 });
 
+// ── 7. What pages the group (§263) ───────────────────────────────────────────
+// The rule on its own first, then the real watchdog loop.
+const step = (prev, facts, now) => pm.nextPage(prev, { ...facts, now, degradedPageMs: 30 * 60_000 });
+const OFF = { onFirst: false, onDirect: false }, ON = { onFirst: true, onDirect: false };
+const HK = { onFirst: false, onDirect: true };
+
+await it('a short spell on the backup pages nobody, going or coming back', async () => {
+  let r = step(undefined, OFF, 0);
+  assert.strictEqual(r.page, null);
+  r = step(r.state, OFF, 29 * 60_000);
+  assert.strictEqual(r.page, null, 'under half an hour is the backup doing its job');
+  r = step(r.state, ON, 29.5 * 60_000);
+  assert.strictEqual(r.page, null, 'no "back" message for a page never sent');
+});
+
+await it('half an hour off the first choice pages once — and only once', async () => {
+  let r = step(undefined, OFF, 0);
+  r = step(r.state, OFF, 30 * 60_000);
+  assert.strictEqual(r.page, 'degraded');
+  r = step(r.state, OFF, 90 * 60_000);
+  assert.strictEqual(r.page, null, 'still degraded is not news');
+  r = step(r.state, ON, 91 * 60_000);
+  assert.strictEqual(r.page, 'recovered', 'the person who went to check is told to stop');
+  r = step(r.state, ON, 92 * 60_000);
+  assert.strictEqual(r.page, null);
+});
+
+await it('landing on the Hong Kong line pages at once, and escalates a degraded page', async () => {
+  let r = step(undefined, HK, 0);
+  assert.strictEqual(r.page, 'direct');
+  r = step(r.state, HK, 60_000);
+  assert.strictEqual(r.page, null, 'still on Hong Kong is not news');
+  let d = step(undefined, OFF, 0);
+  d = step(d.state, OFF, 30 * 60_000);
+  assert.strictEqual(d.page, 'degraded');
+  d = step(d.state, HK, 31 * 60_000);
+  assert.strictEqual(d.page, 'direct', 'getting worse is news');
+});
+
+await it('the "back" page is the live pair, word for word', async () => {
+  const text = pm.pageText('recovered', 'tianhe', { cands: pm.candidates('tianhe'), active: pm.candidates('tianhe')[0] });
+  assert.strictEqual(text, '🟢 天河 外卖：门店住宅代理 恢复可用\n天河 外卖: the shop\'s own internet can reach Meituan again. Nothing to do.');
+});
+
+await it('the pages that ask for someone say what to check, in both languages', async () => {
+  const cands = pm.candidates('tianhe');
+  const deg = pm.pageText('degraded', 'tianhe', { cands, active: cands[1] });
+  assert.match(deg, /门店住宅代理已超过30分钟不可达，当前走 GZ 机房代理。请检查门店网络。/);
+  assert.match(deg, /the shop's own internet has not reached Meituan for over 30 min\. Selling carries on through the Guangzhou relay\. Please check the shop's internet\./);
+  const hk = pm.pageText('direct', 'tianhe', { cands, active: cands[2], down: ['residential', 'gz'] });
+  assert.match(hk, /切换到 直连\(香港\)，门店住宅代理、GZ 机房代理 均不可达/);
+  assert.match(hk, /the shop's own internet and the Guangzhou relay cannot reach Meituan/);
+  assert.doesNotMatch(deg + hk, /nothing to do/i, 'a page that asks for a person must not also say there is nothing to do');
+});
+
+// The real loop: the watchdog's own tick(), with the fake curl above, a clock the
+// test moves, and the page SENDER replaced by a recorder. The box's .env carries
+// the real webhook, so nothing here may reach it.
+{
+  const sent = [];
+  pm.sendProxyAlert = async (text) => { sent.push(text); return true; };
+  const dbPath = require.resolve('../database');
+  const trading = fakeDb({ fulfillment_open: 1, target_open: null, is_open: 1 });
+  require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: trading };
+  process.env.PROXY_WATCHDOG_NO_LOOP = '1';
+  const wd = require('./proxy-watchdog');
+
+  const realNow = Date.now, realLog = console.log;
+  let skew = 0;
+  Date.now = () => realNow() + skew;
+  // One tick per 30s of fake time; `res` is 'o' (answers) or 'x' (no reply) per tick.
+  const run = async (resSeq, { gz = '200' } = {}) => {
+    for (const ch of resSeq) {
+      setCodes({ res: ch === 'o' ? '302' : '000', gz, direct: '200' });
+      skew += 30_000;
+      console.log = () => {};   // the loop's own pm2 lines; the pages are what is checked
+      try { await wd.tick(); } finally { console.log = realLog; }
+    }
+  };
+  const pagesFor = (cn) => sent.filter(t => t.includes(cn));
+  try {
+    await run('o');
+    sent.length = 0;
+
+    await it('watchdog: a marginal night pages 天河 nothing at all', async () => {
+      await run('xxoxxoxxoxxoxxoxxo');   // 9 min of the 08-23 shape
+      await run('oooo');                // then it holds
+      assert.deepStrictEqual(pagesFor('天河'), [],
+        'it used to page every flap: down, switched, up, switched back');
+    });
+
+    await it('watchdog: 越秀 has no Guangzhou relay, so that night pages it twice — Hong Kong, then back', async () => {
+      const y = pagesFor('越秀');
+      assert.strictEqual(y.length, 2, y.join('\n---\n'));
+      assert.match(y[0], /^🔴 越秀 闪购：切换到 直连\(香港\)/);
+      assert.match(y[1], /^🟢 越秀 闪购：门店住宅代理 恢复可用/);
+    });
+
+    await it('watchdog: the shop link down for half an hour pages 天河 once, then once when it is back', async () => {
+      sent.length = 0;
+      await run('x'.repeat(62));        // 31 min
+      await run('oooo');
+      const t = pagesFor('天河');
+      assert.strictEqual(t.length, 2, t.join('\n---\n'));
+      assert.match(t[0], /^🟠 天河 外卖：门店住宅代理已超过30分钟不可达，当前走 GZ 机房代理。/);
+      assert.match(t[1], /^🟢 天河 外卖：门店住宅代理 恢复可用/);
+    });
+
+    await it('watchdog: every relay down puts 天河 on Hong Kong, and that pages at once', async () => {
+      sent.length = 0;
+      await run('xx', { gz: '000' });
+      const t = pagesFor('天河');
+      assert.strictEqual(t.length, 1, t.join('\n---\n'));
+      assert.match(t[0], /^🔴 天河 外卖：切换到 直连\(香港\)，门店住宅代理、GZ 机房代理 均不可达/);
+      await run('oooo');
+    });
+  } finally {
+    Date.now = realNow;
+  }
+}
+
+await it('the old "nothing to do" pages are gone from the watchdog', async () => {
+  const src = fs.readFileSync(path.join(__dirname, 'proxy-watchdog.js'), 'utf8');
+  assert.doesNotMatch(src, /Another route is being used instead/);
+  assert.doesNotMatch(src, /switched itself to/);
+  assert.doesNotMatch(src, /started up on a backup route/);
+  assert.strictEqual((src.match(/await announce\(/g) || []).length, 1, 'one place pages, and it asks nextPage');
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
 })();

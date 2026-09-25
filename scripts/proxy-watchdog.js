@@ -5,12 +5,14 @@
 //
 // Every CHECK_MS it health-probes each Meituan channel's ordered proxy list,
 // writes the winning choice to data/proxy-active.json (the meituan + shangou
-// launchers read it and relaunch their browser when it changes), and pages the
-// DEDICATED WeCom proxy bot (PROXY_WATCHDOG_WEBHOOK) on EVERY state change:
+// launchers read it and relaunch their browser when it changes), and logs every
+// state change to pm2:
 //   • a proxy path going DOWN or recovering UP (per channel, per candidate)
 //   • a channel FAILING OVER to a different proxy (and failing back)
-// First run announces the initial active path per channel so the operator can see
-// the baseline in the bot group.
+//   • the baseline on start
+// It pages the DEDICATED WeCom proxy bot (PROXY_WATCHDOG_WEBHOOK) only when a
+// person is needed — see pm.nextPage (§263). It used to page every change above,
+// each one ending "nothing to do".
 //
 // Start:  pm2 start scripts/proxy-watchdog.js --name proxy-watchdog
 // Logs:   pm2 logs proxy-watchdog
@@ -39,6 +41,7 @@ const CHECK_MS = Number(process.env.PROXY_WATCHDOG_CHECK_MS || 30_000);
 const lastActive = {};            // channel -> url ('' direct), '' is valid so use a sentinel
 const lastHealth = {};            // channel -> { label: bool }
 let firstRun = true;
+const pageState = {};             // channel -> pm.nextPage state { since, paged }
 
 // Hysteresis, both ways (pm.nextPathHealth, §262): a candidate is DOWN after
 // PROXY_FAIL_THRESHOLD failed probes in a row (default 2, ~1 min), and once down
@@ -91,7 +94,6 @@ async function tick() {
   const stateOut = pm.readState();
   for (const channel of pm.CHANNELS) {
     const cands = pm.candidates(channel);
-    const cn = pm.CHANNEL_CN[channel] || channel;
 
     const quiet = !pm.routeTrading(getDb(), channel);
     if (quiet !== !!closedNow[channel]) {
@@ -121,58 +123,51 @@ async function tick() {
     // Active = first usable candidate in priority order (direct always backstops).
     const active = cands.find(c => avail[c.label]) || cands[cands.length - 1];
     const desc = cands.map(c => `${pm.LABEL_CN[c.label] || c.label}${avail[c.label] ? '✓' : '✗'}`).join(' · ');
-    // The same list for the English half. It used to print `desc` — the CHINESE
-    // labels — inside an English sentence, so the English reader got the raw key
-    // in one place and Chinese in the other, and neither said what a path is.
-    const descEn = cands.map(c => `${pm.LABEL_EN[c.label] || c.label}${avail[c.label] ? ' ✓' : ' ✗'}`).join(' · ');
 
-    // 1) Per-candidate up/down transitions → one alert per flip.
+    // 1) Per-candidate up/down transitions → the log (§263: no longer paged).
     const prevHealth = lastHealth[channel] || {};
     for (const c of cands) {
       const now = avail[c.label], before = prevHealth[c.label];
       if (before !== undefined && before !== now) {
-        const name = pm.LABEL_CN[c.label] || c.label;
-        const nameEn = pm.LABEL_EN[c.label] || c.label;
-        await announce(now
-          ? `🟢 ${cn}：${name} 恢复可用\n${cn}: ${nameEn} can reach Meituan again. Nothing to do.`
-          : `🟠 ${cn}：${name} 不可达\n${cn}: ${nameEn} cannot reach Meituan. Another route is being used instead — nothing to do.`,
-          `${channel}: ${c.label} ${now ? 'back UP' : "DOWN (can't reach Meituan)"}`, quiet);
+        say(`${channel}: ${c.label} ${now ? 'back UP' : "DOWN (can't reach Meituan)"}`);
       }
     }
     lastHealth[channel] = avail;
 
-    // 2) Active-path change → failover/failback alert + persist for the launchers.
+    // 2) Active-path change → the log (§263: no longer paged).
     const prevActive = lastActive[channel];
-    const toName = pm.LABEL_CN[active.label] || active.label;
-    const toNameEn = pm.LABEL_EN[active.label] || active.label;
     if (firstRun) {
-      // A cold start used to page the bot with this baseline EVERY time, and this
-      // process restarts on every deploy that ships anything under lib/ (see
-      // bounce_daemon in scripts/deploy-apply.sh — it fires on SHARED_TOUCHED, and
-      // nearly every ship touches lib/). Eight deploys on 2026-08-23 meant sixteen
-      // bot messages, all of them saying nothing is wrong; that is how a channel
-      // the operator is supposed to read gets tuned out.
-      // So the baseline now always goes to the pm2 log, and pages the group only
-      // when the process comes up ALREADY degraded — some path failed its probe, or
-      // we are not on the top-priority candidate. Read `probed`, not `avail`: see
-      // above, the debounce makes every candidate look healthy on tick one.
+      // The baseline goes to the log only. It used to page the group on every
+      // cold start, and this process restarts on nearly every deploy (see
+      // bounce_daemon in scripts/deploy-apply.sh) — sixteen "nothing is wrong"
+      // messages on 2026-08-23 alone. Coming up ALREADY degraded paged too, until
+      // §263: a degraded channel now pages through nextPage below, on the same
+      // half-hour rule as any other. Read `probed`, not `avail`: the debounce makes
+      // every candidate look healthy on tick one.
       const rawDesc = cands.map(c => `${pm.LABEL_CN[c.label] || c.label}${probed[c.label] ? '✓' : '✗'}`).join(' · ');
-      const rawDescEn = cands.map(c => `${pm.LABEL_EN[c.label] || c.label}${probed[c.label] ? ' ✓' : ' ✗'}`).join(' · ');
-      const line = `${channel}: active=${active.label} — ${rawDesc}`;
-      if (cands.some(c => !probed[c.label]) || active.label !== cands[0].label) {
-        await announce(`⚠️ ${cn}：启动时已降级，当前走 ${toName}\n${cn} started up on a backup route, not the usual one. It is now using ${toNameEn}. Selling carries on; tell whoever looks after the box.\n${rawDescEn}`, line, quiet);
-      } else {
-        say(line);   // all green on boot — the log remembers it, the group does not need to
-      }
+      say(`${channel}: active=${active.label} — ${rawDesc}`);
       lastLogged[channel] = Date.now();
     } else if (prevActive !== undefined && prevActive !== active.url) {
-      await announce(`🔀 ${cn}：切换到 ${toName}\n${cn} switched itself to ${toNameEn} because the one before it stopped working. Selling carries on — nothing to do.\n${descEn}`,
-        `${channel}: FAILOVER ${prevActive || 'direct'} → ${active.label} — ${desc}`, quiet);
+      // By label, not URL: the GZ relay's URL carries its password.
+      const from = (cands.find(c => c.url === prevActive) || {}).label || 'unknown';
+      say(`${channel}: FAILOVER ${from} → ${active.label} — ${desc}`);
       lastLogged[channel] = Date.now();
     } else if (Date.now() - (lastLogged[channel] || 0) >= LOG_EVERY_MS) {
       // Quiet-period heartbeat — no alert, just proof the loop is still deciding.
       say(`${channel}: active=${active.label} — ${desc}`);
       lastLogged[channel] = Date.now();
+    }
+
+    // 3) Page only when a person is needed (pm.nextPage, §263): off the first
+    // choice for half an hour, on the Hong Kong line, or back after either.
+    const onFirst = active.label === cands[0].label;
+    const onDirect = !onFirst && active.label === 'direct';
+    const { state, page } = pm.nextPage(pageState[channel], { onFirst, onDirect });
+    pageState[channel] = state;
+    if (page) {
+      const down = cands.filter(c => c.label !== 'direct' && !avail[c.label]).map(c => c.label);
+      await announce(pm.pageText(page, channel, { cands, active, down }),
+        `${channel}: PAGE ${page} — active=${active.label} — ${desc}`, quiet);
     }
     lastActive[channel] = active.url;
 
@@ -197,4 +192,12 @@ async function main() {
   }
 }
 
-main().catch(err => { console.error('[proxy-watchdog] fatal:', err); process.exit(1); });
+// scripts/test_proxy_failover.js loads this file with PROXY_WATCHDOG_NO_LOOP=1 to
+// drive single ticks, so the paging rules are tested on the real loop. Keyed on a
+// flag the test sets, NOT on require.main: pm2 loads scripts through its own
+// container, and a check that read "not main" there would start nothing, silently.
+if (process.env.PROXY_WATCHDOG_NO_LOOP === '1') {
+  module.exports = { tick };
+} else {
+  main().catch(err => { console.error('[proxy-watchdog] fatal:', err); process.exit(1); });
+}
