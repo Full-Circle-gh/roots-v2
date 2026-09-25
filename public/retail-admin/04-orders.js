@@ -4119,11 +4119,22 @@ function renderShipmentCard(o, s) {
   // "Ship part later" splits this parcel in two. Only meaningful when the
   // parcel is still pending and holds 2+ lines (must leave one behind).
   const canSplit = state === 'pending' && lines >= 2;
-  const actions = (showParcelDispatch || showParcelPrepare || canSplit) ? `
+  // §268 — "Undo dispatch" on ONE box that was marked dispatched and never left.
+  // It goes back to Packed, so no stock moves. The route's conditions: an Air or
+  // Land box that is out, not landed, with no waybill; and on a dispatched
+  // order some OTHER box must still be out (with none, the whole-order undo in
+  // the "…" menu is the tool). A parked order needs no sibling.
+  const showParcelUndo = state === 'dispatched' && (mode === 'air' || mode === 'land') &&
+    (o.shipments?.length || 0) > 1 &&
+    !((s.tracking_number && String(s.tracking_number).trim()) || (s.tracking && s.tracking.number)) &&
+    (o.status === 'awaiting_restock' ||
+      (o.status === 'dispatched' && o.shipments.some(x => x.id !== s.id && (x.state || 'pending') !== 'pending')));
+  const actions = (showParcelDispatch || showParcelPrepare || canSplit || showParcelUndo) ? `
       <div class="row" style="gap:8px; flex-wrap:wrap; margin-top: var(--s3);">
         ${showParcelPrepare ? `<button class="btn btn-sm" onclick="prepareShipment(${o.id}, ${s.id}, event)">Mark this parcel prepared · 标记此包裹已备货</button>` : ''}
         ${showParcelDispatch ? `<button class="btn btn-primary btn-sm" onclick="dispatchShipment(${o.id}, ${s.id})">Mark this parcel dispatched · 标记此包裹已发货</button>` : ''}
         ${canSplit ? `<button class="btn btn-sm" onclick="toggleSplitPanel(${s.id})">Ship part later · 分批发货</button>` : ''}
+        ${showParcelUndo ? `<button class="btn btn-sm" onclick="undoShipmentDispatch(${o.id}, ${s.id}, event)">Undo dispatch · 撤销发货</button>` : ''}
       </div>
       ${canSplit ? renderSplitPanel(o, s) : ''}` : '';
   return `
@@ -9371,6 +9382,35 @@ async function prepareShipment(orderId, shipmentId, ev) {
     // adminWrite has already shown the operator the failure and left the button
     // in its pre-click state; nothing was written, so there is nothing to undo
     // and no second message worth printing over the one they can see.
+  }
+}
+
+// §268 — ONE box marked dispatched by mistake goes back to Packed. No stock
+// moves (a packed box is already off the shelf), the order's status stays, and
+// the customer is not told — which is why this asks first, as undoDispatch does.
+async function undoShipmentDispatch(orderId, shipmentId, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
+  const ok = await askConfirm({
+    titleEn: 'Undo dispatch?', titleCn: '撤销发货?',
+    bodyEn: "This moves this parcel back to Prepared. Use it if you marked it dispatched by mistake — it hasn't actually shipped. The order's status does not change and the customer is not notified.",
+    bodyCn: '这会把此包裹退回已备货。如果你是误点了发货(实际上还没发出),可以用它撤销。订单状态不变,不会通知顾客。',
+    confirmEn: 'Undo dispatch', confirmCn: '撤销发货',
+    cancelEn: 'Keep as is', cancelCn: '保持不变',
+  });
+  if (!ok) return;
+  try {
+    await adminWrite({
+      btn,
+      url: `/api/retail-admin/orders/${orderId}/shipments/${shipmentId}/undo-dispatch`,
+      method: 'POST',
+      errLabelEn: 'Undo dispatch failed', errLabelCn: '撤销发货失败',
+    });
+    toast('Undone · 已撤销 — back to Prepared · 退回已备货');
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {
+    // adminWrite has already shown the failure and restored the button;
+    // nothing was written, so there is nothing to undo.
   }
 }
 
