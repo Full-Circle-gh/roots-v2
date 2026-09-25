@@ -5355,12 +5355,13 @@
          field, so ids, typed-but-unsaved values and every renderer survive.
          The rail is painted from the tenant's own order (Settings › Operations
          › Product page); the page carries no field markup of its own except
-         the Shopper page summary, which exists only here. Hidden until Expand.
+         the Shopper page summary, which exists only here. Opens with every
+         product (the side drawer is retired as a view, 2026-09-25).
          Styled by the `.ppg` block in retail-admin.css and nothing else: no
          `#pd-editor …` rule reaches in here, which is the point. ── -->
     <div id="ppg" class="ppg" style="display:none;">
       <div class="ppg-crumb">
-        <button type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
+        <button type="button" onclick="pdClose()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
       </div>
       <div class="ppg-head">
         <div class="ppg-id">

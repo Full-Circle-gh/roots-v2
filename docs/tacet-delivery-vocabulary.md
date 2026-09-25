@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.176 · 2026-09-25 · THE SIDE DRAWER IS RETIRED AS A VIEW — NOTHING COMPOSED, ONE TOOLTIP RETIRED.** Ash: *"no need this window anymore, expand it as default"*. Every product now opens on the full product page. The page's back button lost its tooltip `Back to the list and quick-edit panel · 返回列表与快捷面板`, which named a panel that no longer opens; its visible `Products · 产品` stays. See *The product page's sections and the card that orders them (§206)*.
+
 **v1.175 · 2026-09-25 · §261 ADDENDUM: A PHOTO CHIP IS NUMBERED, NOT NAMED FOR WHO TOOK IT — ONE PAIR COMPOSED BY CLAUDE, TWO RETIRED FROM THIS USE.** Ash, looking at the drawer: *"why rider 1 rider 2 its picture 1 picture 2"*. `Rider 1 / Rider 2` read as two riders; it is one rider's two photos. Each chip now reads `Photo · 照片` with its number (`Photo 1`, `Photo 2`). See *The delivery photo (§261)*.
 
 **v1.174 · 2026-09-25 · §261 ADDENDUM SHOWS THE RIDER'S OWN PHOTOS — NOTHING COMPOSED IN CHINESE; ONE ENGLISH PLURAL.** The staff screens name each photo `Rider · 骑手` or `Shop · 门店`, both copied. The customer's section reads `Delivery photos` in English when there is more than one, on the same `送达照片`. See *The delivery photo (§261)*.
@@ -8183,8 +8185,9 @@ column keeps `Sales · 销量`, `Shipping · 配送方式`, `Free of · 不含`,
 details · 产品详情`, `Written · 已填写`, `Not written yet · 尚未填写`, `Designed page ·
 已设计页面`, `Designed page — out of date · 已设计页面 — 已过期`, `Default template ·
 默认模板`. The header keeps `New product · 新产品`, `SKU · 货号`, `on hand · 在库`,
-`Products · 产品` and the crumb's `Back to the list and quick-edit panel ·
-返回列表与快捷面板`. The card's controls keep `Edit · 编辑`, `Close · 关闭`, `Move up ·
+`Products · 产品`. The crumb's `Back to the list and quick-edit panel ·
+返回列表与快捷面板` tooltip is retired (v1.176): there is no quick-edit panel to go
+back to, and the button's own `Products · 产品` says where it goes. The card's controls keep `Edit · 编辑`, `Close · 关闭`, `Move up ·
 上移`, `Move down · 下移` (`19-recipes.js`), `Drag to reorder · 拖动以排序`
 (`vaRender`), `Saved · 已保存`, `Saving… · 保存中…` and `Save failed: · 保存失败: `
 (`02-settings-ops.js`).

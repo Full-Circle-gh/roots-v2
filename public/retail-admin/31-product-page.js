@@ -108,6 +108,7 @@ function ppgSection(key) { return PPG_SECTIONS.find(s => s.key === key) || null;
 let _ppgHomes = [];
 let _ppgOpen = false;
 let _ppgCurrent = null;
+let _ppgListScroll = 0;
 
 function ppgCarry(sel, into) {
   const el = document.querySelector(sel);
@@ -174,11 +175,16 @@ function pdExpand(section) {
     ppgCarryAll();
     document.getElementById('tab-products')?.classList.add('pd-page-open');
     stage.style.display = '';
+    // Esc goes back to the list, as it did from the drawer (pdDrawerEsc still
+    // lets any overlay stacked on top answer first).
+    document.addEventListener('keydown', pdDrawerEsc);
     ppgWire();
     ppgRenderRail();
     pdSyncPageHead();
     ppgRenderPageCard();
     ppgWatchStock(true);
+    // Remember where the list was, so going back lands on the row just opened.
+    _ppgListScroll = window.scrollY;
     window.scrollTo({ top: 0, behavior: 'auto' });
     ppgFitSide();
     window.addEventListener('resize', ppgFitSide);
@@ -226,20 +232,22 @@ function pdCollapseToPanel() {
   _ppgCurrent = null;
   ppgWatchStock(false);
   window.removeEventListener('resize', ppgFitSide);
+  document.removeEventListener('keydown', pdDrawerEsc);
   ppgCarryHome();
   ppgWriteReset();
   const stage = document.getElementById('ppg');
   if (stage) stage.style.display = 'none';
   document.getElementById('tab-products')?.classList.remove('pd-page-open');
-  // Back to the glance: the drawer comes with it, but only if a product is
-  // actually open — collapsing on the way to closing must not re-open it.
-  if (typeof _paEditorOpen !== 'undefined' && _paEditorOpen) pdOpenDrawer();
+  // The drawer does NOT come back: it is retired as a view (2026-09-25), so
+  // this only brings the nodes home. Callers either close the product
+  // (pdClose) or open the next one straight onto the page (pdOpen).
   // State can have moved while the page was open (a size added, a bundle set
   // up, a description written) — repaint the summaries that stand for it.
   pdRenderSummaries();
-  window.scrollTo({ top: 0, behavior: 'auto' });
+  window.scrollTo({ top: _ppgListScroll, behavior: 'auto' });
 }
-// The dock's Expand button.
+// The dock's Expand button. The drawer that showed it is never opened now;
+// kept so the seam 09-products.js and the tests name stays whole.
 function pdToggleFullscreen() { if (_ppgOpen) pdCollapseToPanel(); else pdExpand(); }
 
 // ── The header: read from the live form, so a rename typed a second ago is
