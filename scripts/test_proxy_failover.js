@@ -259,6 +259,132 @@ await it('the watchdog asks routeTrading and drops only the page, not the failov
   assert.doesNotMatch(src, /if \(quiet\)[^\n]*continue/, 'closed must not skip the probe and state write');
 });
 
+// ── 6. Hysteresis both ways, and relaunch spacing (§262) ─────────────────────
+// Feed a run of probe results through nextPathHealth; return the down/up flags.
+const run = (seq, opts) => {
+  let s; const out = [];
+  for (const ch of seq) { s = pm.nextPathHealth(s, ch === 'o', opts); out.push(s.down); }
+  return out;
+};
+// Count down↔up transitions in a flag series — each one is a page and a relaunch.
+const flips = (flags) => flags.reduce((n, d, i) => n + (i && d !== flags[i - 1] ? 1 : 0), 0);
+
+await it('defaults: 2 fails to go down, 4 good probes to come back', async () => {
+  assert.strictEqual(pm.FAIL_THRESHOLD, 2);
+  assert.strictEqual(pm.UP_THRESHOLD, 4);
+});
+
+await it('a path never probed counts as up (cold start trusts it)', async () => {
+  assert.strictEqual(pm.nextPathHealth(undefined, true).down, false);
+  assert.strictEqual(pm.nextPathHealth(undefined, false).down, false, 'one failure is not down yet');
+});
+
+await it('two failures in a row take a path down', async () => {
+  assert.deepStrictEqual(run('xx'), [false, true]);
+});
+
+await it('once down, it takes FOUR good probes in a row to come back — not one', async () => {
+  assert.deepStrictEqual(run('xxoooo'), [false, true, true, true, true, false],
+    'it used to come back on the first good probe, which is what made it ring');
+});
+
+await it('a failure during recovery starts the count again', async () => {
+  const flags = run('xxoooxoooo');
+  assert.strictEqual(flags[5], true, 'still down after the blip');
+  assert.strictEqual(flags[8], true, '3 good since the blip is not enough');
+  assert.strictEqual(flags[9], false, '4 good since the blip is');
+});
+
+await it('a single blip on a healthy path changes nothing', async () => {
+  assert.deepStrictEqual(run('oxo'), [false, false, false]);
+});
+
+// The 2026-08-23 shape: a marginal tunnel, a good probe between short drops.
+const MARGINAL = 'xxoxxoxxoxxoxxooooo';
+await it('the old rule (up on the first success) rings on a marginal link', async () => {
+  assert.ok(flips(run(MARGINAL, { upThreshold: 1 })) >= 8,
+    'control: with upThreshold 1 this replay must reproduce the old ringing');
+});
+
+await it('the new rule rides the same link out with ONE switch away and ONE back', async () => {
+  const flags = run(MARGINAL);
+  assert.strictEqual(flips(flags), 2, `expected down once and up once, got ${flips(flags)} flips`);
+  assert.strictEqual(flags[flags.length - 1], false, 'and it does come back once the link holds');
+});
+
+await it('relaunch spacing: no previous launch → a switch applies at once', async () => {
+  assert.strictEqual(pm.switchAllowed(0), true);
+  assert.strictEqual(pm.switchAllowed(undefined), true);
+});
+
+await it('relaunch spacing: a switch inside the gap is held, after it applies', async () => {
+  const now = 1_000_000_000;
+  assert.strictEqual(pm.SWITCH_MIN_GAP_MS, 60_000);
+  assert.strictEqual(pm.switchAllowed(now - 30_000, now), false);
+  assert.strictEqual(pm.switchAllowed(now - 60_000, now), true);
+});
+
+await it('the watchdog decides on nextPathHealth, not the old one-sided counter', async () => {
+  const src = fs.readFileSync(path.join(__dirname, 'proxy-watchdog.js'), 'utf8');
+  assert.match(src, /pm\.nextPathHealth\(pathHealth\[key\], ok\)/);
+  assert.doesNotMatch(src, /failCount\[key\] < FAIL_THRESHOLD/, 'the one-sided rule must be gone');
+});
+
+// 外卖's holder, run for real: getBrowser with only the Chromium launch stubbed.
+// The instance takes the path the watchdog wrote, as the real init() does.
+{
+  const mb = require('../lib/meituan-browser');
+  const P = mb.MeituanBrowser.prototype;
+  let launches = 0;
+  P.init    = async function () { launches++; this._proxyRaw = pm.readActive(this.storeCode) ?? ''; };
+  P.isAlive = function () { return true; };
+  P.close   = async function () {};
+  const realNow = Date.now;
+  let skew = 0;
+  Date.now = () => realNow() + skew;
+  const choose = (url, label) => pm.writeState({ tianhe: { url, label, ts: pm.shStamp() } });
+  const RES = 'socks5://10.8.0.2:1080', GZ = 'http://user:pw@8.163.120.72:8888';
+  try {
+    await it('外卖: a switch within a minute of launch keeps the browser it has', async () => {
+      choose(RES, 'residential');
+      const b1 = await mb.getBrowser('tianhe');
+      choose(GZ, 'gz');
+      skew += 20_000;
+      const b2 = await mb.getBrowser('tianhe');
+      assert.strictEqual(b2, b1, 'the switch used to bypass every cooldown and relaunch at once');
+      assert.strictEqual(launches, 1);
+    });
+
+    await it('外卖: once the minute is up, the held switch is applied', async () => {
+      skew += 45_000;
+      choose(GZ, 'gz');   // the watchdog re-writes its choice every tick; this file's TTL is 60s
+      const b3 = await mb.getBrowser('tianhe');
+      assert.strictEqual(launches, 2);
+      assert.strictEqual(b3._proxyRaw, GZ);
+    });
+
+    await it('外卖: a choice that flips back inside the gap never relaunches', async () => {
+      choose(RES, 'residential');
+      skew += 10_000;
+      await mb.getBrowser('tianhe');
+      choose(GZ, 'gz');
+      skew += 10_000;
+      const b = await mb.getBrowser('tianhe');
+      assert.strictEqual(launches, 2, 'there and back inside the gap is zero relaunches');
+      assert.strictEqual(b._proxyRaw, GZ);
+    });
+  } finally {
+    Date.now = realNow;
+    await mb.closeAll();
+  }
+}
+
+await it('闪购 holder spaces proxy-switch relaunches too', async () => {
+  const sg = fs.readFileSync(path.join(__dirname, 'shangou-chrome.js'), 'utf8');
+  assert.match(sg, /pm\.switchAllowed\(lastLaunchAt\)/, '闪购: the poll must hold a switch inside the gap');
+  assert.match(sg, /lastLaunchAt = Date\.now\(\)/, '闪购: every launch must be stamped');
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
 })();
