@@ -69,6 +69,7 @@ const pointMemory = require('../lib/delivery-point-memory');
 const phoneCn = require('../lib/phone-cn');
 const tracking = require('../lib/tracking');
 const delayCase = require('../lib/delay-case');
+const deliveryPhoto = require('../lib/delivery-photo');
 const { postDelayCase } = require('../lib/delay-case-posting');
 // Which orders "Delivery needs a call" is about. Read by BOTH the dashboard
 // card (below) and the orders list's `status=delayed` filter, so the number on
@@ -105,7 +106,7 @@ const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, curre
 const { withTransaction } = require('../lib/db-transaction');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 const { channelSyncStale } = require('../lib/channel-sync-stale');
-const { channelSyncSummary } = require('../lib/channel-sync-items');
+const { channelSyncSummary, channelBlocks } = require('../lib/channel-sync-items');
 // The dashboard's "the kitchen finished it" row counts exactly the requests
 // routes/restock.js's own kitchen-ready endpoint counts — one clause, required
 // by both, for the reason REVIEW_WAITING_SQL is shared with the Reviews fire.
@@ -13088,6 +13089,12 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
     ).get(orderId);
     if (etaRow) o.delivery_eta = formatLocalEta(etaRow.local_eta);
   } catch (e) { /* column is optional on older DBs */ }
+  // The delivery photo (§261): whether there is one, never the bytes. The page
+  // fetches it from /api/retail/orders/:id/delivery-photo, scoped to this
+  // customer exactly as this read is.
+  // `at` is there so the page can tell a replaced photo from the one it holds.
+  const photo = deliveryPhoto.meta(tdb(), orderId);
+  if (photo) o.delivery_photo = { has: true, at: photo.at };
   // Items snapshot historical name + price at order time, but image_url
   // was never captured (always null on insert). Fall through to the live
   // product image so order/review thumbnails actually render. The tradeoff
@@ -14210,6 +14217,23 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
   const job = findDeliveryJobForOrder(id, order.recipient_phone);
   if (!job) return res.json({ success: true, data: { tracking: false } });
   res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label, order.scheduled_for, viewerLang(req)) });
+});
+
+// The delivery photo, for the customer whose order it is (§261). THE ONLY WAY
+// A CUSTOMER REACHES IT: scoped by customer_id, so an order id on its own opens
+// nothing — unlike /api/retail/media/:id, which needs no login and counts up.
+// Sent as a data URI in JSON because the mini app's request domain is the one
+// its every other call uses; it writes the picture to a local file to show it.
+router.get('/api/retail/orders/:id/delivery-photo', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_request' });
+  const order = tdb().prepare('SELECT id FROM retail_orders WHERE id = ? AND customer_id = ?')
+    .get(id, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  const data = deliveryPhoto.data(tdb(), id);
+  if (!data) return res.status(404).json({ success: false, error: 'not_found' });
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ success: true, data: { data } });
 });
 
 // Admin twin of the track endpoint — identical payload, admin auth, no
@@ -17421,6 +17445,10 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // { count, by_channel: { meituan: n, ... }, oldest_at } — see
   // lib/channel-sync-items.js channelSyncSummary().
   let channel_items_attention = { count: 0, by_channel: {}, oldest_at: null };
+  // §106 — channels stopped by a channel-level cause (signed out, captcha,
+  // proxy) right now. Fires from the first failed read, not once the queue
+  // stalls. [{ key, label, tab, blocked }] — lib/channel-sync-items.js.
+  let channel_blocked = [];
   // Kitchen requests the kitchen has finished and nobody in the warehouse has
   // read yet. Same zero-count default as its siblings, and — like the two Inbox
   // queues above — NOT store-scoped: a kitchen request is a job the kitchen did,
@@ -18290,12 +18318,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // inside their own try, so a box without one channel still answers.
     try { channel_items_attention = channelSyncSummary(tdb()); }
     catch (e) { console.warn('[dashboard/ops channel_items_attention]', e.message); }
+    try { channel_blocked = channelBlocks(tdb()); }
+    catch (e) { console.warn('[dashboard/ops channel_blocked]', e.message); }
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, parcel_recovery, channel_sync_stale, channel_items_attention, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, parcel_recovery, channel_sync_stale, channel_items_attention, channel_blocked, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -27980,6 +28010,18 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     }
   } catch (e) { /* delivery_jobs missing (pre-migration) — no courier block */ }
 
+  // The delivery photo slot (§261). Present only on a same-city delivery that
+  // has left the shop, or on any order already carrying a photo. Never the
+  // bytes: the drawer fetches the picture when somebody asks to see it.
+  // `customer_sees` is false on a Meituan / Eleme mirror, whose customer never
+  // opens our order page, so the drawer does not promise them a photo.
+  try {
+    if (deliveryPhoto.eligible(tdb(), o)) {
+      const m = deliveryPhoto.meta(tdb(), id);
+      o.delivery_photo = { has: !!m, ...(m || {}), customer_sees: o.customer_id != null };
+    }
+  } catch (e) { /* table missing on an older database — no slot */ }
+
   // Where the rider collects, and whether staff can still change it. Present only
   // for orders WE created in Qingyun (auto-push), which are the only ones we can
   // re-create at another location — see qingyunShipFromState.
@@ -29285,6 +29327,57 @@ router.delete('/api/retail-admin/orders/:id/delay-case/evidence/:fileId',
   logActivity(req.user.id, req.user.username, 'delay_case_evidence_removed', 'retail_order', id,
     { shipment_id: sid, file_id: fid }, req.ip);
   res.json({ success: true, data: delayCase.forScreen(tdb(), delayCase.readCase(tdb(), sid)) });
+});
+
+// ── The delivery photo (§261) ───────────────────────────────────────────────
+// One per order; a second upload replaces the first. Offered only where
+// deliveryPhoto.eligible says a same-city parcel has left the shop, so the
+// route refuses what the drawer would never show. A 4mb body, as evidence.
+function deliveryPhotoOrder(id) {
+  return tdb().prepare(
+    'SELECT id, status, fulfillment_type, customer_id FROM retail_orders WHERE id = ?').get(id);
+}
+
+router.post('/api/retail-admin/orders/:id/delivery-photo',
+  requireRetailAdmin, express.json({ limit: '4mb' }), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_request' });
+  const order = deliveryPhotoOrder(id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!deliveryPhoto.eligible(tdb(), order)) {
+    return res.status(409).json({ success: false, error: 'not_out_for_delivery' });
+  }
+  let m;
+  try {
+    m = deliveryPhoto.put(tdb(), id, {
+      data: req.body?.data, source: 'staff',
+      actor: { id: req.user.id, label: req.user.username || null },
+    });
+  } catch (e) {
+    if (e && e.code) return res.status(400).json({ success: false, error: e.code });
+    throw e;
+  }
+  logActivity(req.user.id, req.user.username, 'delivery_photo', 'retail_order', id, {}, req.ip);
+  res.json({ success: true, data: { has: true, ...m, customer_sees: order.customer_id != null } });
+});
+
+router.get('/api/retail-admin/orders/:id/delivery-photo', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_request' });
+  const data = deliveryPhoto.data(tdb(), id);
+  if (!data) return res.status(404).json({ success: false, error: 'not_found' });
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ success: true, data: { data } });
+});
+
+router.delete('/api/retail-admin/orders/:id/delivery-photo', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_request' });
+  const order = deliveryPhotoOrder(id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  deliveryPhoto.remove(tdb(), id);
+  logActivity(req.user.id, req.user.username, 'delivery_photo_removed', 'retail_order', id, {}, req.ip);
+  res.json({ success: true, data: { has: false, customer_sees: order.customer_id != null } });
 });
 
 // Raise the ¥0 replacement order for a late-parcel case (§98 stage three).

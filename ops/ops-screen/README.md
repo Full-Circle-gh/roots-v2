@@ -116,6 +116,104 @@ reproduce all four blocks — the access log (`GET /websockify` vs
 `GET /ops-screen/websockify`) is the fastest way to tell whether a given
 noVNC build wants the prefixed or the bare path; add whichever is missing.
 
+## Tacet's Sign in button (§252): the private sign-in screen
+
+Tacet's **Sign in again** button (Home, Channel sync, each channel tab) does
+not use the shared screen above. Display `:99` shows every channel's
+logged-in browser, and someone signing in to one channel must not see or
+type into the others. Tacet's logins run on their **own display, `:98`**,
+which shows only the one login window. The Tacet app relays that display
+itself, behind its own login, the `integrations:signin` permission, the
+operator's store scope, and a sign-in that operator started. Nothing about
+it goes through nginx's ops-screen blocks.
+
+| Process | What it is |
+|---|---|
+| `xvfb-signin` | `Xvfb :98 -screen 0 1280x800x24`, the private display. |
+| `ops-screen-vnc-signin` | `x11vnc -display :98 -localhost -rfbport 5901 -nopw -forever -shared`. It is **loopback only and has no VNC password on purpose**: the only thing that can reach it is the Tacet process on this box, and that process checks before it relays a byte. Never expose 5901 through nginx. |
+| `ops-screen-ctl` | The same `login-trigger.js`, now with a JSON API (`/api/start`, `/api/status`). Tacet calls it on `127.0.0.1:6090`. It refuses any request carrying `X-Real-IP` / `X-Forwarded-For`, which is every request nginx forwards. |
+
+### One-time setup on the box
+
+```bash
+# 1. The private display and its loopback-only VNC.
+pm2 start "Xvfb :98 -screen 0 1280x800x24" --name xvfb-signin
+pm2 start "x11vnc -display :98 -localhost -rfbport 5901 -nopw -forever -shared" --name ops-screen-vnc-signin
+# 5901 must answer on loopback only:
+ss -ltnp | grep 5901        # want 127.0.0.1:5901, never 0.0.0.0
+
+# 2. The new login-trigger.js (Eleme, the JSON API, daemon restart after login).
+scp ops/ops-screen/login-trigger.js root@<box>:/opt/ops-screen/login-trigger.js
+pm2 restart ops-screen-ctl
+curl -s 127.0.0.1:6090/api/status           # want {"running":null,"last":null}
+
+pm2 save
+```
+
+**Check nginx passes WebSocket upgrades to the Tacet app** on
+`store.rootskitchenchina.com`. The screen is a WebSocket at
+`/api/retail-admin/channel-signin/screen`. If the `store.*` server block's
+`location /` lacks the two upgrade headers, the page will say *Lost the
+screen* right away. It needs:
+
+```nginx
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+```
+
+`Connection "upgrade"` on every request is what the ops-screen blocks
+already use. If `location /` sends a different `Connection` header today,
+use a `map $http_upgrade $connection_upgrade` instead of changing it blind.
+
+After a successful Meituan or Eleme login, the trigger restarts
+`meituan-sync` / `eleme-sync` itself. GZ Grocery picks the new session up
+on its own.
+
+## 闪购 on its own screen (§260)
+
+闪购 has no login script. Its stock goes through a browser that stays open
+(`shangou-chrome`), and a sign-out or a security check has to be cleared
+inside that browser. Tacet's **Sign in again** for the 越秀 Meituan store
+shows that browser on its **own display, `:97`**, never the shared `:99`.
+
+| Process | What it is |
+|---|---|
+| `xvfb-shangou` | `Xvfb :97 -screen 0 1280x800x24`, the 闪购 browser's private display. |
+| `ops-screen-vnc-shangou` | `x11vnc -display :97 -localhost -rfbport 5902 -nopw -forever -shared`. Loopback only, no password, for the same reason as 5901. Never expose 5902 through nginx. |
+
+The session ends when the person presses **Done**, when the browser leaves
+the login page, or after 7 minutes. Done and leaving the login page restart
+the 闪购 daemon (found by its script path, so its pm2 name does not matter),
+which checks the login once on start and reports it.
+
+### One-time setup, in this order
+
+The browser moves display on its next restart, and the deploy of the §260 PR
+IS that restart (it ships `scripts/shangou-chrome.js`). So the box goes first
+and the PR merges after, at a quiet hour.
+
+```bash
+# 1. The display and its loopback-only VNC.
+pm2 start "Xvfb :97 -screen 0 1280x800x24" --name xvfb-shangou
+pm2 start "x11vnc -display :97 -localhost -rfbport 5902 -nopw -forever -shared" --name ops-screen-vnc-shangou
+ss -ltnp | grep 5902        # want 127.0.0.1:5902, never 0.0.0.0
+
+# 2. Tell the 闪购 browser to use it (read from .env on its next start).
+grep -q '^SHANGOU_DISPLAY=' /root/roots-v2/.env || echo 'SHANGOU_DISPLAY=:97' >> /root/roots-v2/.env
+
+# 3. The trigger with holder sessions.
+#    (install login-trigger.js as in the section above)
+pm2 restart ops-screen-ctl
+curl -s 127.0.0.1:6090/api/status
+
+pm2 save
+```
+
+Then merge. After the deploy, `pm2 logs shangou-chrome --lines 5` should
+say `display=:97`. A cold restart can bring a security check: that is what
+this Sign in is for.
+
 ## Troubleshooting
 
 - **Tapped a channel, no window appears, page still says success** — check

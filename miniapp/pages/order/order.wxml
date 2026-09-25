@@ -89,6 +89,14 @@
       </view>
     </view>
 
+    <!-- The photo of the parcel at the door (§261) — the rider's, or one the
+         shop added. Shown after delivery too, when the live card above is gone.
+         Tap for full size. -->
+    <view wx:if="{{deliveryPhoto}}" class="section dph">
+      <view class="section-label f-toni">{{copy.deliveryPhotoLabel}}</view>
+      <image class="dph-img" src="{{deliveryPhoto}}" mode="aspectFill" bindtap="previewDeliveryPhoto"></image>
+    </view>
+
     <!-- Partial shipment — some parcels are out, the rest still to follow.
          Shows regardless of whether the shipped parcel carries a waybill. -->
     <view wx:if="{{partialShip}}" class="partial-banner">

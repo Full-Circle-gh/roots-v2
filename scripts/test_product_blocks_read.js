@@ -143,6 +143,56 @@ check('a storage card promotes a lone phrase and strips a repeated scale', () =>
   assert.ok(b.right.long, 'the promoted phrase kept the hero numeral size and would clip');
   assert.ok(!b.left.long, 'a short figure was treated as a phrase');
 });
+check('a temperature range is closed up so it stays on one line', () => {
+  // "0 — 4°" at hero size is wider than the half-width card: the line broke at
+  // the space and "4°" fell to a second line in the mini app.
+  const b = R.pageBlocks(JSON.stringify([{ type: 'storage_box',
+    left:  { num_en: '0 \u2014 4\u00b0', num_cn: '0 - 4\u00b0' },
+    right: { num_en: '-18\u00b0' } }]))[0];
+  assert.strictEqual(b.left.num.en, '0\u20134\u00b0', `the range kept its spaces: ${b.left.num.en}`);
+  assert.strictEqual(b.left.num.cn, '0\u20134\u00b0', `the range kept its spaces: ${b.left.num.cn}`);
+  assert.strictEqual(b.right.num.en, '-18\u00b0', 'a leading minus was taken for a range');
+});
+check('the mini app and the shop close up a range by the same rule', () => {
+  const rule = "(\\d)\\s*[-\\u2010-\\u2015]\\s*(?=\\d)/g, '$1\\u2013'";
+  assert.ok(MINI.includes(rule), 'the mini app no longer closes up a range the same way');
+  const SHOP = fs.readFileSync(path.join(ROOT, 'public', 'shop', 'product-blocks.js'), 'utf8');
+  assert.ok(SHOP.includes(rule), 'the web shop no longer closes up a range the same way');
+});
+check('§264 · a short value with a number is a FIGURE; a phrase is not', () => {
+  // The display face has no dash and no degree sign, so a figure is drawn
+  // whole in the figure face — otherwise those two fall to the CJK face at a
+  // full em each and "0–4°" breaks onto two lines in the half-width card.
+  const b = R.pageBlocks(JSON.stringify([{ type: 'storage_box',
+    left:  { num_en: '0\u20134\u00b0', num_cn: '0\u20134\u00b0' },
+    right: { head_en: 'Shelf life', num_en: 'See packaging' } }]))[0];
+  assert.ok(b.left.fig, 'the range was not marked a figure and would wrap');
+  assert.ok(!b.right.fig, 'a phrase was marked a figure and would change face');
+  const c = R.pageBlocks(JSON.stringify([{ type: 'storage_box',
+    left:  { num_en: 'Cool', num_cn: '\u9634\u51c9' },
+    right: { num_en: '-18\u00b0', num_cn: '\u51b7\u51bb' } }]))[0];
+  assert.ok(!c.left.fig, 'a short word with no number was marked a figure');
+  assert.ok(!c.right.fig, 'a pair whose Chinese half is words was marked a figure');
+});
+check('§264 · all three surfaces draw a figure in the figure face', () => {
+  const WXML = fs.readFileSync(path.join(ROOT, 'miniapp/components/product-blocks/product-blocks.wxml'), 'utf8');
+  const WXSS = fs.readFileSync(path.join(ROOT, 'miniapp/components/product-blocks/product-blocks.wxss'), 'utf8');
+  const SHOP = fs.readFileSync(path.join(ROOT, 'public/shop/product-blocks.js'), 'utf8');
+  const SCSS = fs.readFileSync(path.join(ROOT, 'public/shop/product-blocks.css'), 'utf8');
+  const QR   = fs.readFileSync(path.join(ROOT, 'routes/shop-menu.js'), 'utf8');
+  const fig = /!numLong && \/\\d\/\.test\(num\)/;
+  assert.ok(fig.test(MINI), 'the mini app no longer flags a figure by the same rule');
+  assert.ok(fig.test(SHOP), 'the web shop no longer flags a figure by the same rule');
+  assert.ok(/item\.left\.numFig \? 'fig'/.test(WXML) && /item\.right\.numFig \? 'fig'/.test(WXML),
+    'the mini app no longer puts .fig on both cards');
+  assert.ok(/\.pb-storage-num\.fig\s*\{\s*font-family:\s*var\(--f-num\)/.test(WXSS),
+    'the mini app .fig rule no longer names --f-num');
+  assert.ok(/\.spb-storage-num\.fig\s*\{\s*font-family:\s*var\(--f-num\)/.test(SCSS),
+    'the web shop .fig rule no longer names --f-num');
+  assert.ok(/c\.numFig \? ' fig'/.test(SHOP), 'the web shop no longer renders .fig');
+  assert.ok(/\.pb-store-n\.fig\{font-family:var\(--f-num\)\}/.test(QR), 'the QR menu .fig rule no longer names --f-num');
+  assert.ok(/c\.fig \? ' fig'/.test(QR), 'the QR menu no longer renders .fig');
+});
 check('NOTHING IS PICKED — both languages survive every block', () => {
   const b = R.pageBlocks(JSON.stringify([
     { type: 'pull_quote', text_en: 'EN', text_cn: '\u4e2d' }]))[0];

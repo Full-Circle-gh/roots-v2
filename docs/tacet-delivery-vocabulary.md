@@ -1,5 +1,21 @@
 # Tacet delivery vocabulary — locked
 
+**v1.173 · 2026-09-25 · §263 THE PROXY WATCHDOG PAGES ONLY WHEN SOMEONE IS NEEDED — THREE PAGES, BUILT FROM LIVE PIECES; FOUR SHORT PHRASES COMPOSED BY CLAUDE; THREE PAGES RETIRED.** The watchdog's *down*, *switched* and *started on a backup route* pages, each ending *nothing to do*, are gone from the group and go to the pm2 log instead. What pages now: a channel off its first-choice path for half an hour, a channel on the Hong Kong line, and the *back* message after either. The *back* page is the old live pair word for word. See *The proxy watchdog's pages (§263)* at the foot.
+
+**v1.172 · 2026-09-24 · §261 PUTS A DELIVERY PHOTO ON THE ORDER — ONE STRING COMPOSED BY CLAUDE, LIFTED FROM THE COURIER PLATFORM; EVERYTHING ELSE COPIED.** Staff add the photo of a same-city parcel at the door from the order drawer (desktop and phone), and the customer sees it on their order page (mini app and web shop). `Delivery photo · 送达照片` is the one new pair; every control and message beside it is a live pair copied whole. See *The delivery photo (§261)*.
+
+**v1.171 · 2026-09-24 · §260 SIGNS 闪购 IN INSIDE ITS OWN BROWSER — FOUR STRINGS COMPOSED BY CLAUDE, ONE COPIED.** The sign-in page gains a *Done* button and three lines for a channel whose browser stays open. `Done · 完成` is copied; the instruction, the checking line, the not-yet line and the timeout are composed from live fragments. See *闪购 on its own screen (§260)*.
+
+**v1.170 · 2026-09-24 · §253 REACHES THE PHONE — NOTHING COMPOSED, TWO PAIRS RETIRED.** The phone's shop switch reuses its own *Open {channel} at {store}?* and *New orders can arrive at this store again.* pairs to name a remembered reopen set, joined with the live `、`. The *open the shop first* explainer and the `shop_closed` error line are retired with the refusal they described. See *A switch per channel on the location card (§253)*.
+
+**v1.169 · 2026-09-24 · §252 NAMES THE CHANNEL ON THE HOME ROW'S SIGN-IN BUTTON — THREE STRINGS COMPOSED BY CLAUDE, EVERY PART LIVE — AND THE CHANNEL CARDS' HEADLINES NAME THE CAUSE.** The row can name two channels ("Meituan not syncing, Eleme is signed out") above one button, and "Sign in again" did not say which it opens. See *Signing a channel back in (§252)*. The same day Ash read both channel cards as "Not syncing since…" when one was signed out, so the headline and the summary now name the cause.
+
+**v1.168 · 2026-09-24 · §254 THE RECIPE CARD PRINTS IN BOTH LANGUAGES — ONE BUTTON LABEL, ITS CHINESE COPIED WHOLE, EVERYTHING ELSE ON THE CARD ALREADY LIVE.** `Print · 打印` is the one new pair and is declared as composed because the English half is new beside it; `打印` itself ships alone in `public/m.html`. The toolbar says `Recipe · 食谱`, the recipe screen's own word, not `配方`. See *The recipe card (§254)*.
+
+**v1.167 · 2026-09-24 · §253 PUTS A SWITCH PER CHANNEL ON EACH LOCATION CARD — NOTHING COMPOSED, THREE PAIRS CROSSING FROM THE PHONE TO THE DESKTOP.** Opening one channel at a closed shop now opens the shop with only that channel, so the desktop confirms it; the confirm is the phone's own live pair for opening a channel at a store, copied whole. The reopen confirm names the channels it will bring back with the same template and the live `、` list join. See *A switch per channel on the location card (§253)*.
+
+**v1.166 · 2026-09-24 · §252 SIGNS A CHANNEL BACK IN FROM TACET — SIX STRINGS COMPOSED BY CLAUDE, THE REST LIFTED.** The Sign in button, the permission that grants it, and the page that shows the private sign-in screen. Every composed string is built from live fragments. Each one is listed below with the live candidates rejected for it.
+
 **v1.165 · 2026-09-23 · §241 SPLITS THE ALLERGEN CARD INTO A RECIPE CLAIM AND A FACILITY WARNING — TWO STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `配方不含` (*Made without*) replaces `不含` as the row label over the free_of flags, and `（共用生产环境）` (*shared facility*) closes the one may-contain line every product now carries. `种子类` is copied from a live card. See *Made without, and the shared-facility line (§241)*.
 
 **v1.164 · 2026-09-22 · §232 PUTS A FREE-OF ROW ON THE ALLERGEN CARD — NOTHING COMPOSED, ONE PAIR CROSSING FROM THE BACK OFFICE TO A CUSTOMER.** `不含` is the details panel's own label for this exact column and has been shipping over it; it now appears in front of customers for the first time, which is the only reason this entry exists. The four chips are the words the allergen cards themselves use, and the one that had to be lifted rather than copied — `五香` — is lifted out of the live badge `无五香`. See *The free-of row on the allergen card (§232)*.
@@ -8565,3 +8581,188 @@ English, and it is the reason §241 exists.
 - `其他籽类` (Whole Sesame Tahini's live entry) — **rejected** for Seeds: `其他`
   is relative to a list the line no longer carries.
 
+## Signing a channel back in (§252)
+
+**Six strings composed, by Claude, 2026-09-24, under the 2026-09-06 amendment.**
+The rest are copied or lifted. The page is `public/channel-signin.html`. The
+buttons are built by `chSignInBtn` (`public/retail-admin/01-core.js`) and
+`csSignInBtn` (`public/m.html`). The permission is in `lib/capabilities.js`.
+
+| shipped | built from |
+|---|---|
+| `Sign in again · 重新登录` (the button, every surface) | **copied**: the live pair on the Meituan tab's old wizard button (`11-meituan.js`), and `重新登录` in the locked sign-in sentence (§105) |
+| `Sign channels back in · 重新登录渠道` (the Team matrix permission) | **composed**: `重新登录` (above) + `渠道`, live throughout the matrix's own section (`查看渠道与配送`) |
+| `Opening… · 正在打开…` | **copied**: live as the draft editor's `已存为草稿!正在打开…` tail |
+| `Log in on the screen below. This page closes by itself when you’re done. · 请在下方画面中登录，完成后本页会自动关闭。` | **composed**: `请在…` and `下方` are live (the SF Express banner, `04-orders.js`); `画面`, `本页` and `自动关闭` are new, joined in the house's instruction shape |
+| `Signed in again. Stock updates resume in a few minutes. · 已重新登录，库存推送将在几分钟内恢复。` | **composed** on the GZ Grocery daemon's own recovery alert, `已重新登录，库存推送恢复` (`scripts/guanyi-daemon.js`), with `将在几分钟内` added because a daemon picks the session up on its next cycle, not at once. `几分钟内` is live (`通常几分钟内完成`) |
+| `The login window closed without signing in. · 登录窗口已关闭，未能登录。` | **composed**: `登录`, `已关闭` and `未能` are all live; `登录窗口` is new and names the one window the page showed |
+| `Lost the screen. · 画面已断开。` | **composed**, and the least-sourced string here: `断开` (*disconnected*) appears nowhere else in the app. It is built on the live `已X` state shape (`已关闭`, `已恢复`); `画面` as above. Rejected: `连接已过期` (live, a stored connection's expiry), because nothing has expired — the live picture dropped |
+| `Someone is already signing in. Try again in a few minutes. · 已有人正在登录，请稍后再试。` | **composed**, with the tail copied: `请稍后再试` is live ten times over |
+| `The sign-in service on the server is not running. · 服务器上的登录服务未运行。` | **composed**: `服务器` and `登录` are live; `服务未运行` is new |
+| `You don’t have permission for this · 你没有此操作的权限` | **copied**: `lib/require-cap.js`'s own 403 |
+| `Try again · 重试`, `Close · 关闭` | **copied**: both live many times |
+| `Sign in again · … · 重新登录 · …` (the page title, with channel and store names) | the button's pair, plus names that are data |
+| `Sign in to Eleme · 重新登录饿了么` (the desktop Home row's button, v1.169) | **composed**: `重新登录` (the button's pair above) + the channel's own name, joined with no space, the way the locked sentence joins them (`同步服务已退出登录美团`). Rejected: `Sign in again` alone, because the row it sits on can name two channels; `前往登录`, which is not live and says where you go rather than what you do |
+| `Signed out since 9:39 AM · 自 9:39 AM 起已退出登录` (a channel card's headline, desktop, v1.169) | **composed** on the card's own live frame, `Not syncing since … · 自 … 起未同步`, with the state swapped for the locked `已退出登录` |
+| `Waiting for a captcha since … · 自 … 起需要人工验证` (the same headline for a captcha) | **composed** on the same frame; `需要人工验证` is the Meituan daemon's own alert, verbatim |
+| `Eleme is signed out · 饿了么 已退出登录`, `Meituan needs a captcha · 美团 需要人工验证` (the phone card's title and the desktop summary line) | **copied**: the Home row's own pairs (v1.165), unchanged |
+
+**Live candidates rejected.**
+
+- `登录` alone, for the button: **rejected**. The card above it says the channel
+  is *signed out*, and a bare *Log in* reads like the operator's own Tacet
+  login, not the channel's.
+- `设置/管理接入` (the integrations:manage label), for the permission:
+  **rejected**, because granting sign-in was decided to be a separate, on-shift
+  job (§250).
+- `请重新登录。` (the locked sentence's tail), for the button: **rejected**. It
+  is an instruction with a full stop, and a button is a verb.
+- `无法加载，请稍后再试。` (live), for the service being down: **rejected**. It
+  blames the page, and the fault is a process on the server that somebody has
+  to start.
+
+## A switch per channel on the location card (§253)
+
+**Nothing composed, 2026-09-24.** Every pair below was already live; three of
+them move from the phone to the desktop for the first time.
+
+| shipped | built from |
+|---|---|
+| `Open {channel} at {store}? · 在 {store} 开启 {channel}？` (confirm title: one channel at a closed shop, and the master reopening a remembered set) | copied: the phone's `chanCell` confirm title in `public/m.html`. For a set, `{channel}` is the channel names joined `, ` / `、` |
+| `New orders can arrive at this store again. · 这家门店可以重新接单。` (confirm body) | copied: the phone's `chanCell` confirm body |
+| `Open · 开启` (confirm button) | copied: the phone's `chanCell` confirm label |
+| `Shop closed · 门店已关闭` (toast, after an everywhere-open skipped a closed shop) | copied: the phone's row pill under a shut shop. Joined to `Saved · 已保存` with ` · ` and to the store names with `: ` / `：` |
+| `Open · 营业中`, `Closed · 已关闭`, `applying… · 处理中…` | unchanged: they move from the channel card's per-location rows to the location card's channel rows |
+| `、` list join, `：` | live: `public/retail-admin/03-dashboard.js` (`deductParts.join('、')`, `watch.join('、')`, `'：'` after *Top spender*) |
+
+**Retired from the desktop Sales page:** `Per location · 按门店` and
+`serves 1 store · 仅 1 家门店`. The channel card's per-location rows they
+headed are gone; a channel card now names its locations with a dot each, and a
+name needs no label.
+
+**Live candidates rejected.**
+
+- `Open ALL sales channels for this location? · 开启该门店的所有销售渠道？`
+  (the desktop's existing reopen title): **rejected for the remembered-set
+  case**, where it would be false because only some channels come back. It is
+  kept for the case where nothing is remembered and every channel does open.
+- `This shop is closed. Open the shop before opening a channel at it.` (the
+  server's §181 `shop_closed` message, English only): **rejected**. The
+  refusal it described no longer happens.
+
+**The phone, v1.170.** `public/m.html`'s shop switch confirm uses, when a
+reopen set is remembered, `Open {channels} at {store}? · 在 {store} 开启
+{channels}？` and `New orders can arrive at this store again. · 这家门店可以重新接单。`.
+Both are the phone's own `chanCell` pairs, copied whole; `{channels}` is the
+phone's channel names joined `, ` / `、`. **Retired from the phone:**
+`{store} is closed · 门店 {store} 已关闭` with its body *The whole shop is shut, so
+every channel there is closed and none can be opened on its own…*, and the
+`shop_closed` error line *…is closed as a shop, so no channel can open there…*.
+Both described a refusal the server no longer makes.
+
+## The recipe card (§254)
+
+**One pair declared as composed, by Claude, 2026-09-24, under the 2026-09-06
+amendment.** Every other word on the card is copied from the recipe screen,
+which already says it; the card prints both halves side by side
+(`Storage · 储存方式`) instead of the one the screen's language picks.
+
+| shipped | built from |
+|---|---|
+| `Print · 打印` (the recipe header's button) | **composed pair, Chinese copied whole.** `打印` ships alone in `public/m.html` over *Printing* (`T('Printing','打印')`), and inside every live print label (`打印小票`, `打印面单`). Declared because the English half beside it is new |
+| `Recipe · 食谱` (the print window's toolbar) | copied: the recipe screen's own `T('Recipe', '食谱')` |
+| `Batch size · 批量大小`, `Servings · 份数`, `Shelf life · 保质期`, `Storage · 储存方式` | copied: the Details tab's field labels |
+| `Freezer · 冷冻`, `Fridge · 冷藏`, `Room temperature · 常温`, `Days · 天`, `Months · 个月`, `Years · 年` | copied: the Details tab's option lists (storage order confirmed by Ash 2026-09-03) |
+| `Ingredients · 原料`, `Ingredient · 原料`, `Steps · 步骤`, `Notes · 备注` | copied: the record's sub-tabs and fields |
+| `Qty · 数量` | copied: `T('Qty', '数量')` |
+| `Add a name in Chinese · 添加中文名` (the notice naming what printed in English only) | copied whole: the live prompt of the same meaning |
+| `Nothing to show · 暂无内容`, `Close 关闭`, `Allow pop-ups, then print again · 请允许弹窗后再打印` | copied: the shared print sheet's own strings (`26-print.js`) |
+
+**Live candidates rejected.**
+
+- `配方` for the toolbar — **rejected**: it is live as *Recipe* elsewhere, but
+  the recipe screen itself says `食谱` everywhere, and the card is that screen's
+  page.
+- `打印小票` / `打印面单` for the button — **rejected**: *receipt* and *waybill*
+  are what those print, not a recipe.
+
+## 闪购 on its own screen (§260)
+
+**Four strings composed, by Claude, 2026-09-24, under the 2026-09-06 amendment.**
+One is copied. The page is `public/channel-signin.html`, and these lines show
+only when the sign-in is inside a holder browser (闪购).
+
+| shipped | built from |
+|---|---|
+| `Done · 完成` (the button) | **copied**: live as `T('Done','完成')` on fifteen screens |
+| `Sign in or pass the check on the screen below, then press Done. · 请在下方画面中登录或通过人工验证，然后点击完成。` | **composed**: `请在下方画面中登录` is §252's own instruction; `人工验证` is the Meituan daemon's alert, verbatim; `点击` is live throughout; `完成` names the button above |
+| `Checking that stock updates are working again… · 正在确认库存推送是否恢复…` | **composed**: `正在…` as in §252's `正在打开…`; `库存推送` and `恢复` are §252's own *signed in again* line; `确认` is live |
+| `Stock updates have not come back yet. · 库存推送仍未恢复。` | **composed** from the same `库存推送` and `恢复`, with `仍未` for *not yet* |
+| `Time ran out. Try again. · 已超时，请重试。` | **composed**: `已超时` is live once; `请重试` joins the page's own `重试` button word in the house's `请…` shape |
+
+**Live candidates rejected.**
+
+- `已完成` (live, four times), for the button: **rejected**. It is a state,
+  *done already*, and a button is a verb.
+- `登录窗口已关闭，未能登录。` (§252's own), for the timeout: **rejected**.
+  The 闪购 browser never closes; saying its window closed would be false.
+- `已重新登录，库存推送将在几分钟内恢复。` (§252), for the checking line:
+  **rejected**. It says the sign-in worked before the channel has said so,
+  which is the one thing this flow waits to hear.
+
+## The delivery photo (§261)
+
+**One string composed, by Claude, 2026-09-24, under the 2026-09-06 amendment.**
+Everything else is copied whole. The pair shows in both registers: as the
+drawer's line label (operator, desktop `04-orders.js` and phone `m.html`) and as
+the order page's section label (customer, mini app `pages/order` and web shop
+`shop.html`). Same words in both, because it is the same thing in both.
+
+| shipped | built from |
+|---|---|
+| `Delivery photo · 送达照片` | **composed, lifted from the source**: the Qingyun merchant app labels the rider's picture `骑手送达照片` (Ash's screenshot, 2026-09-24), which is where this photo comes from. `骑手` is dropped because staff can add one too; `送达` is this document's own word for *delivered* (`已送达`), and `照片` is live on every photo control in the product. The mini app's section label is written `DELIVERY PHOTO` in English, as its every other section label is capitalised |
+| `Add photo · 添加照片`, `Replace · 更换`, `View · 查看`, `Remove · 删除` | copied: the late-parcel evidence line, and the product picture's `更换` |
+| `Customers see this · 顾客可见` | copied: the settings screen's own marker for a field shoppers see |
+| `Remove this photo? · 删除这张照片?`, `Could not read that photo · 无法读取该照片`, `That photo is too large — under 3.5MB please · 照片过大,请小于 3.5MB`, `Photo not found · 未找到照片`, `Could not open that photo · 无法打开该照片`, `Could not attach · 上传失败`, `Could not remove · 删除失败` | copied: the evidence line's own messages |
+
+**Live candidates rejected.**
+
+- `凭证` (*Evidence*, live on the late-parcel case): **rejected**. It is a
+  document kept as proof for a claim, and the customer is not being shown proof;
+  they are being shown their parcel.
+- `骑手送达照片` whole: **rejected**. It says the rider took it, and a photo
+  staff added would then be labelled as the rider's.
+- `配送照片`: **rejected**. `配送` is the journey (`配送中`, *on the way*); the
+  photo is of the arrival.
+- `图片` for `照片`: **rejected**. `图片` is live for a product *image* chosen
+  in an editor; a photograph taken on the day is `照片` everywhere in this
+  product.
+
+## The proxy watchdog's pages (§263)
+
+**Composed by Claude, 2026-09-25, under the 2026-09-06 amendment.** Register:
+OPERATOR (Rule 1): these go to the WeCom proxy alert group, where the owner and
+whoever looks after the shop's internet read them. Built in `pageText` in
+`lib/proxy-manager.js`; `{…}` are the live path and channel labels
+(`门店住宅代理`, `GZ 机房代理`, `直连(香港)`, `天河 外卖`, `越秀 闪购`).
+
+| shipped | built from |
+|---|---|
+| `🟢 {channel}：{path} 恢复可用` / `{channel}: {path} can reach Meituan again. Nothing to do.` | **copied whole**: the watchdog's own UP page, which it sent on every flap. Now sent only to close a page below |
+| `🟠 {channel}：{path}已超过30分钟不可达，当前走 {backup}。请检查门店网络。` / `{channel}: {path} has not reached Meituan for over 30 min. Selling carries on through {backup}. Please check the shop's internet.` | **built from live pieces**: `不可达` and `当前走` are the watchdog's own; `已超过30分钟` is eleme-daemon's order alert (`订单已超过30分钟读取失败`); `门店网络` is the box-setup screen's (`请接入门店网络`); `请检查` is the daemons' own alert shape. The minutes follow `PROXY_DEGRADED_PAGE_MS`. **Composed**: only the order of those pieces |
+| `🔴 {channel}：切换到 {direct}，{paths} 均不可达。销售照常，但美团更可能要求验证。请检查门店网络。` / `{channel} is now on {direct}: {paths} cannot reach Meituan. Selling carries on, but Meituan is more likely to ask for a verification check. Please check the shop's internet.` | `切换到` is the watchdog's own; the path list joins live labels with the live `、`. **Composed**: `均` (*all of them*), and `销售照常，但美团更可能要求验证` — `照常` is live (`店面照常运行`), `验证` is live in `验证中心`, which is the challenge this sentence warns of |
+
+**Retired, not reused**: `🟠 {channel}：{path} 不可达` (*another route is being
+used instead — nothing to do*), `🔀 {channel}：切换到 {path}` (*switched itself…
+nothing to do*), `⚠️ {channel}：启动时已降级，当前走 {path}` (*started up on a
+backup route*). Their pieces live on inside the pages above.
+
+**Live candidates rejected.**
+
+- `线路` for *route*: **rejected**, not live anywhere. The page names the paths
+  by their live labels instead, which also tells the reader which ones failed.
+- `代理掉线` (the daemons' *proxy down, sync paused*): **rejected**. It means
+  sync has stopped; these pages go out while selling carries on, and borrowing
+  the words would make the two sound equally urgent.
+- `订单已超过30分钟读取失败` whole: **rejected**. It is about orders; only its
+  `已超过30分钟` is lifted.

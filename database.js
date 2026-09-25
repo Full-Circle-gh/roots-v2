@@ -4295,6 +4295,33 @@ db.exec(`
     ON retail_delay_case_files(case_id, id);
 `);
 
+// ── The photo of a same-city delivery at the door (§261) ────────────────────
+// ONE PER ORDER, so order_id is UNIQUE and a second upload replaces the first:
+// the customer is shown "the" delivery photo, and two on one order would ask
+// them to work out which was the real one. `source` says who put it there —
+// 'staff' today, 'qingyun' once the rider's own photo is read off the platform
+// — so a later automatic fill can tell a picture staff chose from one it may
+// overwrite.
+//
+// STORED AS A DATA URI for the reason the evidence table above gives: there is
+// no object store in this product. NEVER in retail_media: that table is served
+// by `/api/retail/media/:id` with no login and a counting id, and this picture
+// is somebody's front door. It leaves only through the customer's own order
+// route and the admin one.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_delivery_photos (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id          INTEGER NOT NULL UNIQUE,
+    source            TEXT NOT NULL DEFAULT 'staff',   -- 'staff' | 'qingyun'
+    data              TEXT NOT NULL,                    -- base64 data URI
+    bytes             INTEGER,                          -- of the encoded string
+    uploaded_by       INTEGER,
+    uploaded_by_label TEXT,                             -- snapshotted, as evidence is
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES retail_orders(id) ON DELETE CASCADE
+  );
+`);
+
 // THE FLAG EVERY MONEY FIGURE READS. `paidWhere()` in lib/finance-window.js
 // excludes any order carrying this, which is the whole reason the eleven
 // hand-written copies of that predicate were consolidated first: without one
@@ -6291,6 +6318,12 @@ db.exec(`
 // the store that is still open. Default 1 = fulfilling.
 addColumn('store_business_status', 'fulfillment_open', 'INTEGER DEFAULT 1');
 try { db.prepare('UPDATE store_business_status SET fulfillment_open = 1 WHERE fulfillment_open IS NULL').run(); } catch {}
+// reopen_channels: the channels that were live when the location master last
+// closed this shop, as a JSON list — so reopening it brings back exactly those
+// rather than every channel, including ones the operator had shut on purpose
+// (§253). NULL = nothing remembered, reopen opens every channel. Written only by
+// setShopOpen / openOneChannel in lib/store-close.js.
+addColumn('store_business_status', 'reopen_channels', 'TEXT');
 
 // ── channel_status: per-(channel, store) open/closed matrix ───────────────────
 // The sales grid is channel × location. This holds the closable cells for the

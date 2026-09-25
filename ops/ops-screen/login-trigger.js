@@ -17,7 +17,18 @@
 // re-login into a forty-minute one, most of it spent on a Windows toolchain.
 // Run HERE, the browser renders on the display noVNC already exposes, and the
 // session file lands straight in the daemon's data/ directory. No laptop, no
-// scp, no restart: the browser layer notices a newer session file on its own.
+// scp. GZ Grocery's browser layer notices a newer session file on its own;
+// Meituan's and Eleme's do not, so a successful login restarts their daemon.
+//
+// §252 — Tacet's Sign in button drives this too, through the JSON API at the
+// bottom (/api/start, /api/status). Those logins run on a PRIVATE display
+// (:98, its own loopback x11vnc) that shows nothing but the one login window —
+// display :99 carries every channel's logged-in browser, and a person signing
+// in to one channel must not see or type into the others.
+//
+// §260 — 闪购 is signed in inside its long-lived holder browser, which draws on
+// its own private display (:97, loopback x11vnc 5902). A 'shangou' job starts
+// nothing; see HOLDERS below.
 "use strict";
 const http = require("http");
 const fs = require("fs");
@@ -35,20 +46,53 @@ const LOG_FILE = "/root/.pm2/logs/ops-screen-login.log";
 // must be a HEADED login that self-closes and writes its own session file.
 const JOBS = {
   "meituan-tianhe": { label: "美团外卖 · 天河", script: "scripts/meituan-login.js", args: ["tianhe"],
+                      channel: "meituan", store: "tianhe",
                       hint: "扫码登录 / QR scan, then re-select the store." },
   "meituan-yuexiu": { label: "美团外卖 · 越秀", script: "scripts/meituan-login.js", args: ["yuexiu"],
+                      channel: "meituan", store: "yuexiu",
                       hint: "扫码登录 / QR scan, then re-select the store." },
   "guanyi-tianhe":  { label: "管易 Guanyi · 天河", script: "scripts/guanyi-login.js", args: ["tianhe"],
+                      channel: "guanyi", store: "tianhe",
                       hint: "账号 + 密码 / account + password (SMS code if asked)." },
 };
 
+// The shared screen, and the private one Tacet's Sign in uses (§252).
+const SHARED_DISPLAY = ":99";
+const SIGNIN_DISPLAY = process.env.SIGNIN_DISPLAY || ":98";
+
+// Which login script signs each channel in, and which daemon must be restarted
+// afterwards because it does not pick a new session file up by itself. GZ
+// Grocery does (lib/guanyi-browser.js), so it has none.
+const CHANNEL_LOGIN = {
+  meituan: { script: "scripts/meituan-login.js", daemon: "meituan-sync" },
+  eleme:   { script: "scripts/eleme-login.js",   daemon: "eleme-sync" },
+  guanyi:  { script: "scripts/guanyi-login.js",  daemon: null },
+};
+const PM2 = process.env.PM2_BIN || "pm2";
+
+// §260 — channels whose stock goes through a long-lived browser (a "holder")
+// rather than a login script. Signing one in starts nothing: the holder is
+// already open on its own private display, and Tacet shows that display. The
+// session ends when the person presses Done, when the holder's tabs leave the
+// login page, or when the lock runs out. The first two restart the channel's
+// daemon, which re-checks the session on start (scripts/shangou-daemon.js
+// confirmSignedIn) and otherwise sits out a verify cool-down of 30 min to 4 h.
+const HOLDERS = {
+  shangou: { cdpPort: Number(process.env.SHANGOU_CDP_PORT || 9333),
+             daemonScript: "scripts/shangou-daemon.js" },
+};
+// A holder tab on one of these is at a login gate (lib/shangou-browser.js
+// isLoggedIn reads the same patterns).
+const LOGIN_URL = /login_gw|\/logon|passport\.meituan/;
+const HOLDER_POLL_MS = 3000;
+
 // One login window at a time: they all share the single Xvfb display, and two
 // browsers stacked on it is how an operator ends up typing into the wrong one.
-let running = null; // { id, label, pid, startedAt }
+let running = null; // { id, label, pid, startedAt, channel, store }
+let last = null;    // { channel, store, ok, exitCode, endedAt } — the most recent login to end
 const LOCK_MS = 7 * 60 * 1000; // login scripts self-close at ~6 min
 
-function launch(id) {
-  const job = JOBS[id];
+function launch(id, job = JOBS[id], display = SHARED_DISPLAY) {
   if (!job) return { ok: false, msg: `Unknown login "${id}".` };
   if (running) {
     const mins = Math.round((Date.now() - running.startedAt) / 60000);
@@ -71,7 +115,7 @@ function launch(id) {
   // is by definition the interpreter already running this server.
   const child = spawn(process.execPath, [job.script, ...job.args], {
     cwd: REPO,
-    env: { ...process.env, DISPLAY: ":99" },
+    env: { ...process.env, DISPLAY: display },
     detached: true,
     stdio: out === "ignore" ? "ignore" : ["ignore", out, out],
   });
@@ -91,13 +135,132 @@ function launch(id) {
   child.on("exit", (code, signal) => {
     if (out !== "ignore") { try { fs.closeSync(out); } catch (_) { /* already gone */ } }
     if (code !== 0) console.error(`[ops-screen] ${id} exited ${signal || code} — see ${LOG_FILE}`);
+    last = { channel: job.channel || null, store: job.store || null, ok: code === 0,
+             exitCode: code, endedAt: new Date().toISOString() };
+    if (code === 0) restartDaemon(job.channel);
     release();
   });
   child.unref();
-  running = { id, label: job.label, pid: child.pid, startedAt: Date.now() };
+  running = { id, label: job.label, pid: child.pid, startedAt: Date.now(),
+              channel: job.channel || null, store: job.store || null };
   const me = running;
   setTimeout(() => { if (running === me) running = null; }, LOCK_MS);
   return { ok: true, msg: `${job.label} login window opening on the screen (~5s). ${job.hint}` };
+}
+
+// A new session file is only read by the Meituan and Eleme daemons at start-up,
+// so the login is not finished until the daemon has been bounced. Best-effort:
+// a failed restart is logged, and the channel's card simply stays red until
+// someone restarts it, which is the honest state.
+function restartDaemon(channel) {
+  const d = CHANNEL_LOGIN[channel] && CHANNEL_LOGIN[channel].daemon;
+  if (!d) return;
+  const p = spawn(PM2, ["restart", d], { stdio: "ignore" });
+  p.on("error", (e) => console.error(`[ops-screen] pm2 restart ${d} failed: ${e.message}`));
+  p.on("exit", (c) => { if (c !== 0) console.error(`[ops-screen] pm2 restart ${d} exited ${c}`); });
+}
+
+// The holder's open tabs, from Chrome's own /json/list: a plain HTTP read that
+// attaches nothing, so it cannot leave an automation mark on the session.
+// Resolves [] when the holder does not answer.
+function holderTabs(port) {
+  return new Promise((resolve) => {
+    const req = http.get({ host: "127.0.0.1", port, path: "/json/list", timeout: 2000 }, (res) => {
+      let buf = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { buf += c; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(buf).filter((t) => t.type === "page").map((t) => String(t.url || ""))); }
+        catch (_) { resolve([]); } // not Chrome's JSON: treated as no tabs, so nothing is concluded from it
+      });
+    });
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve([]));
+  });
+}
+
+let holderWatch = null;
+function startHolder(job) {
+  const h = HOLDERS[job.channel];
+  let sawLogin = false;
+  running = { id: `signin-${job.channel}-${job.store}`, label: job.label, pid: null, startedAt: Date.now(),
+              channel: job.channel, store: job.store, holder: true };
+  const me = running;
+  holderWatch = setInterval(async () => {
+    if (running !== me) return;
+    const tabs = await holderTabs(h.cdpPort);
+    if (tabs.some((u) => LOGIN_URL.test(u))) { sawLogin = true; return; }
+    // Left the login page for the merchant site: signed in. A verify check
+    // leaves no such trace in the URL, which is what Done is for.
+    if (sawLogin && tabs.some((u) => /meituan\.com/.test(u))) endHolder(me, true);
+  }, HOLDER_POLL_MS);
+  setTimeout(() => endHolder(me, false), LOCK_MS);
+  return { ok: true };
+}
+// A timeout does not restart the daemon: if the check was not passed, a fresh
+// daemon would hit it again at once, and every hit deepens the flag.
+function endHolder(session, ok) {
+  if (running !== session) return false;
+  clearInterval(holderWatch);
+  holderWatch = null;
+  running = null;
+  last = { channel: session.channel, store: session.store, ok, holder: true, endedAt: new Date().toISOString() };
+  if (ok) restartScript(HOLDERS[session.channel].daemonScript);
+  return true;
+}
+
+// Restart whichever pm2 process runs this script, found by its path the way
+// scripts/deploy-apply.sh finds daemons, so the pm2 name need not be known here.
+// No --update-env: the process keeps the environment it was started with.
+function restartScript(script) {
+  const base = "/" + script.split("/").pop();
+  const list = spawn(PM2, ["jlist"], { stdio: ["ignore", "pipe", "ignore"] });
+  let buf = "";
+  list.stdout.on("data", (c) => { buf += c; });
+  list.on("error", (e) => console.error(`[ops-screen] pm2 jlist failed: ${e.message}`));
+  list.on("close", () => {
+    let names = [];
+    try {
+      names = JSON.parse(buf)
+        .filter((p) => String((p.pm2_env && p.pm2_env.pm_exec_path) || "").endsWith(base))
+        .map((p) => p.name);
+    } catch (e) { console.error(`[ops-screen] pm2 jlist unreadable: ${e.message}`); }
+    if (!names.length) console.error(`[ops-screen] no pm2 process runs ${script} — nothing restarted`);
+    for (const n of names) {
+      const p = spawn(PM2, ["restart", n], { stdio: "ignore" });
+      p.on("error", (e) => console.error(`[ops-screen] pm2 restart ${n} failed: ${e.message}`));
+    }
+  });
+}
+
+// The one job Tacet may ask for: a channel, a store code, and for Eleme its
+// numeric shop id. Everything is checked against a fixed shape before it gets
+// anywhere near spawn(), because the arguments come over a socket.
+const CODE = /^[a-z0-9_-]{1,32}$/;
+function signinJob(body) {
+  const b = body || {};
+  if (!CODE.test(String(b.store || ""))) return null;
+  if (HOLDERS[b.channel]) {
+    return { label: `${b.channel} · ${b.store}`, channel: b.channel, store: b.store, holder: true };
+  }
+  const c = CHANNEL_LOGIN[b.channel];
+  if (!c) return null;
+  const args = [b.store];
+  if (b.channel === "eleme") {
+    if (!/^\d{1,20}$/.test(String(b.shopId || ""))) return null;
+    args.push(String(b.shopId));
+  }
+  return { label: `${b.channel} · ${b.store}`, script: c.script, args,
+           channel: b.channel, store: b.store, hint: "" };
+}
+
+function readJson(req) {
+  return new Promise((resolve) => {
+    let buf = "";
+    req.setEncoding("utf8");
+    req.on("data", (c) => { buf += c; if (buf.length > 4096) req.destroy(); });
+    req.on("end", () => { try { resolve(JSON.parse(buf)); } catch (_) { resolve(null); } });
+  });
 }
 
 function page() {
@@ -118,7 +281,7 @@ ${buttons}
 <div id=msg></div>
 <a class="btn vnc" href="../vnc.html?resize=scale&reconnect=true">Open screen (VNC)</a>
 <p>The window closes itself once the dashboard loads. Sync picks the new session
-up on its own within a minute — no restart needed.</p>
+up within a minute — Meituan's and Eleme's sync are restarted for you.</p>
 <script>
 async function go(id){
   document.getElementById("msg").textContent="starting…";
@@ -129,9 +292,42 @@ async function go(id){
 </script></body></html>`;
 }
 
-const srv = http.createServer((req, res) => {
+const srv = http.createServer(async (req, res) => {
   const url = req.url.replace(/\?.*$/, "");
   const text = (code, s) => { res.writeHead(code, { "content-type": "text/plain; charset=utf-8" }); res.end(s); };
+  const json = (code, o) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(o)); };
+  const pub = (r) => r && { channel: r.channel, store: r.store, holder: !!r.holder,
+                            startedAt: new Date(r.startedAt).toISOString() };
+
+  // §252 — Tacet's API, for the Tacet process on this box and nothing else.
+  // nginx's /ops-screen/ctl/ block strips its prefix, so /ops-screen/ctl/api/…
+  // WOULD land here; every request nginx forwards carries X-Real-IP (see the
+  // README's block), and Tacet's direct loopback call never does, so that
+  // header is what refuses the outside path.
+  if (url.startsWith("/api/") && (req.headers["x-real-ip"] || req.headers["x-forwarded-for"])) {
+    return json(404, { ok: false, error: "not_here" });
+  }
+  if (url === "/api/status" && req.method === "GET") {
+    return json(200, { running: pub(running), last });
+  }
+  // §260 — the person says they are done on a holder's screen.
+  if (url === "/api/finish" && req.method === "POST") {
+    const b = (await readJson(req)) || {};
+    const r = running;
+    if (!r || !r.holder || r.channel !== b.channel || r.store !== b.store) {
+      return json(409, { ok: false, error: "not_running" });
+    }
+    endHolder(r, true);
+    return json(200, { ok: true, last });
+  }
+  if (url === "/api/start" && req.method === "POST") {
+    const job = signinJob(await readJson(req));
+    if (!job) return json(400, { ok: false, error: "bad_job" });
+    if (running) return json(409, { ok: false, error: "busy", running: pub(running) });
+    if (job.holder) { startHolder(job); return json(200, { ok: true, running: pub(running) }); }
+    const r = launch(`signin-${job.channel}-${job.store}`, job, SIGNIN_DISPLAY);
+    return json(r.ok ? 200 : 409, { ok: r.ok, running: pub(running) });
+  }
 
   if (req.method === "POST") {
     const m = url.match(/\/start\/([a-z0-9-]+)$/i);
@@ -149,4 +345,5 @@ const srv = http.createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end(page());
 });
-srv.listen(6090, "127.0.0.1", () => console.log("ops-screen control on 127.0.0.1:6090"));
+const PORT = Number(process.env.OPS_SCREEN_CTL_PORT || 6090);
+srv.listen(PORT, "127.0.0.1", () => console.log(`ops-screen control on 127.0.0.1:${PORT}`));

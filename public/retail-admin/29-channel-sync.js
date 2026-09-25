@@ -153,10 +153,16 @@
     let html = esc(cuT(`${c.ok} synced`, `${c.ok} 个已同步`));
     if (c.att) html += ' · <span class="att">' + esc(cuT(`${c.att} need attention`, `${c.att} 个待处理`)) + '</span>';
     if (c.none) html += ' · ' + esc(cuT(`${c.none} not listed`, `${c.none} 个未上架`));
-    const down = _data.channels.filter(ch => ch.stale);
+    // A channel says its own trouble: "is signed out" where that is the cause,
+    // "not syncing" where only the queue has stopped.
+    const down = _data.channels.filter(ch => ch.stale || ch.blocked);
     if (down.length) {
-      html += ' · <span class="att">' + esc(cuT(down.map(ch => chName(ch.key)).join(', ') + ' not syncing',
-                                              down.map(ch => chName(ch.key)).join('、') + ' 未同步')) + '</span>';
+      const said = (ch) => {
+        const hs = ch.blocked && typeof chHeadState === 'function' ? chHeadState(ch.blocked.by) : null;
+        return hs ? cuT(`${chName(ch.key)} is ${hs[0]}`, `${chName(ch.key)} ${hs[1]}`)
+                  : cuT(`${chName(ch.key)} not syncing`, `${chName(ch.key)} 未同步`);
+      };
+      html += ' · <span class="att">' + esc(down.map(said).join(cuT(', ', '，'))) + '</span>';
     } else if (!c.att) {
       html += ' · ' + esc(cuT('nothing needs you', '无需处理'));
     }
@@ -200,17 +206,31 @@
         if (!s.connected) t = cuT('Store not connected', '门店未关联');
         else if (s.catalogue && s.catalogue.count) t = cuT(`${s.catalogue.count} listings read`, `已读取 ${s.catalogue.count} 个商品`) + (s.catalogue.at ? ' · ' + ago(s.catalogue.at) : '');
         else t = cuT('no listings read yet', '尚未读取商品');
-        return '<div class="cs-store"><i class="cs-dot ' + (s.connected ? 'is-ok' : 'is-none') + '"></i><span>' + esc(storeName(s) + ' · ' + t) + '</span></div>';
+        return '<div class="cs-store"><i class="cs-dot ' + (s.blocked ? 'is-down' : s.connected ? 'is-ok' : 'is-none') + '"></i><span>' + esc(storeName(s) + ' · ' + t) + '</span></div>';
       }).join('');
       /* §106 — WHY the channel is stopped, from its own daemon log: a captcha
          waiting on a named store since a named time, the proxy down, a
          signed-out session. One cause, on the card, once. */
       const blk = ch.blocked;
+      // The headline names the cause when a person can act on it, whether or
+      // not the queue has stalled yet — a signed-out channel read "Syncing"
+      // above its own red card until its queue caught up.
+      const hs = blk && blk.at && typeof chHeadState === 'function' ? chHeadState(blk.by) : null;
+      if (hs && !idle) {
+        const at = clock(blk.at);
+        st = '<i class="cs-dot is-down"></i>' + esc(hs[0] === 'signed out'
+          ? cuT(`Signed out since ${at}`, `自 ${at} 起${hs[1]}`)
+          : cuT(`Waiting for a captcha since ${at}`, `自 ${at} 起${hs[1]}`));
+      }
       const blkTxt = blk && typeof chBlockSentence === 'function' ? chBlockSentence(ch.key, blk.by) : '';
+      const blkStore = blk && blk.storeName ? (document.documentElement.dataset.uiLang === 'cn' ? blk.storeName : (blk.storeNameEn || blk.storeName)) : '';
+      // §252 — the one action that clears it, on the card that says it.
+      const signBtn = blk && typeof chSignInBtn === 'function' ? chSignInBtn(ch.key, blk.store, blkStore, blk.by) : '';
       const blkLine = blkTxt
         ? '<div class="cs-why">' + esc(blkTxt
-            + (blk.storeName ? ' · ' + (document.documentElement.dataset.uiLang === 'cn' ? blk.storeName : (blk.storeNameEn || blk.storeName)) : '')
-            + (blk.at ? ' · ' + cuT('since', '自') + ' ' + clock(blk.at) : '')) + '</div>'
+            + (blkStore ? ' · ' + blkStore : '')
+            + (blk.at ? ' · ' + cuT('since', '自') + ' ' + clock(blk.at) : '')) + '</div>' +
+          (signBtn ? '<div class="cs-act">' + signBtn + '</div>' : '')
         : '';
       return '<div class="cs-ch' + (down || blk ? ' is-down' : '') + (idle ? ' is-idle' : '') + '">' +
         '<div class="cs-nm"><span class="cs-glyph">' + esc(chGlyph(ch.key)) + '</span><span>' + esc(name) + '</span></div>' +
@@ -264,7 +284,10 @@
       const open = _open === p.id;
       const shelf = Object.values(p.shelf || {});
       const shelfTxt = shelf.length ? shelf.reduce((a, b) => a + Number(b || 0), 0) : '—';
-      return '<tr class="row" tabindex="0" data-pid="' + p.id + '" aria-expanded="' + open + '" onclick="csToggle(' + p.id + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();csToggle(' + p.id + ')}">' +
+      // NOT class="row" nor "cs-row": retail-admin.css makes both a flex box, which
+      // took these rows out of the table — cells packed left under the wrong
+      // headers, each cell's background drawn as its own grey box.
+      return '<tr class="cs-item-row" tabindex="0" data-pid="' + p.id + '" aria-expanded="' + open + '" onclick="csToggle(' + p.id + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();csToggle(' + p.id + ')}">' +
         '<td><div class="cs-item"><span class="cs-n">' + esc(itemName(p)) + '</span>' + (p.sku ? '<span class="cs-s">SKU ' + esc(p.sku) + '</span>' : '') + '</div></td>' +
         '<td class="cs-c cs-shelf">' + esc(String(shelfTxt)) + '</td>' +
         _data.channels.map(ch => '<td>' + cell(ch.key, p.channels[ch.key] || { k: 'none', reason: 'no_map' }) + '</td>').join('') +

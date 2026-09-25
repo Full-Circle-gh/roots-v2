@@ -569,6 +569,7 @@ function chBlockSentence(channel, by) {
                  '验证中心风控，同步已暂停，需要人工验证。');
     case 'needs_login':
     case 'auth_required':          // Eleme's name for the same thing
+    case 'binding_lost':           // Meituan: signed in, shop forgotten — same re-login fixes it
       return cuT(`The sync service is signed out of ${ch}. Sign in again.`, `同步服务已退出登录${ch}。请重新登录。`);
     case 'proxy_down':
     case 'proxy_stale':
@@ -591,6 +592,41 @@ function chCauseFor(channel, cell, channelBlock) {
   }
   return chCauseLine(channel, cell);
 }
+/* §252 — the causes a person at a login window can clear: a signed-out session
+   (each channel's own name for it), a forgotten shop binding, a captcha. A
+   proxy or a stalled queue is not fixed by signing in, so it gets no button. */
+const CH_SIGNIN_CAUSES = ['needs_login', 'auth_required', 'binding_lost', 'verify_required'];
+function chSignInable(by) { return CH_SIGNIN_CAUSES.indexOf(by) !== -1; }
+/* The short state a stopped channel's HEADLINE says, when its cause is one a
+   person can name: signed out (every channel's word for it, and a forgotten
+   Meituan shop, whose fix is the same), or a captcha. [en, cn] or null — null
+   leaves the headline on "not syncing". Ash, 2026-09-24: both cards read "Not
+   syncing since…" and only the small print said Eleme was signed out. */
+function chHeadState(by) {
+  if (by === 'needs_login' || by === 'auth_required' || by === 'binding_lost') return ['signed out', '已退出登录'];
+  if (by === 'verify_required') return ['waiting for a captcha', '需要人工验证'];
+  return null;
+}
+window.chHeadState = chHeadState;
+function chSignIn(channel, store, name) {
+  const lang = document.documentElement.dataset.uiLang === 'cn' ? 'cn' : 'en';
+  const url = '/channel-signin?channel=' + encodeURIComponent(channel) + '&store=' + encodeURIComponent(store) +
+    '&name=' + encodeURIComponent(name || store) + '&lang=' + lang;
+  window.open(url, 'tacet-signin');
+}
+/* The button, or nothing: only for a cause signing in can clear, and only for
+   someone holding the permission (the server checks again either way). */
+function chSignInBtn(channel, store, name, by) {
+  if (!store || !chSignInable(by) || (typeof can === 'function' && !can('integrations:signin'))) return '';
+  // Secondary, not primary: a filled button is the design system's one Dusk
+  // CTA per screen, and this is a person's action on a warning card.
+  return '<button type="button" class="btn btn-sm td-secondary" onclick="event.stopPropagation();chSignIn(' +
+    [channel, store, name || store].map(v => "'" + String(v).replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g, '') + "'").join(',') +
+    ')">' + escapeHtml(cuT('Sign in again', '重新登录')) + '</button>';
+}
+window.chSignInable = chSignInable;
+window.chSignIn = chSignIn;
+window.chSignInBtn = chSignInBtn;
 window.chBlockSentence = chBlockSentence;
 window.chCauseFor = chCauseFor;
 window.chCauseSentence = chCauseSentence;
@@ -1193,11 +1229,27 @@ function closeInboxMenu() {
 document.addEventListener('click', (ev) => {
   if (!ev.target.closest || !ev.target.closest('#tbInbox')) closeInboxMenu();
 });
+let _salesLangHooked = false;
 // Sales overview → fill today's per-channel figures + the folded summary from
 // /sales/summary. Called when the Sales tab is opened. Leaves the "—"
 // placeholders in place on any error rather than blanking the page. dashMoney
 // (part 03) is loaded by the time a tab can be clicked.
 async function salesInit() {
+  // Nothing read yet (or the last read failed): blank the switches now, before
+  // the summary round-trip, so the HTML's placeholder on/off is never shown.
+  if (!_csData) csMarkUnknown(_csFailed);
+  // Everything this page paints from JS is built with cuT at paint time, so a
+  // language switch after it painted left it in the old language — "已连接"
+  // under an English page. Repaint on the switch. Hooked here, not at file
+  // scope: onLangChange is defined by an inline script that runs after this
+  // file loads.
+  if (!_salesLangHooked && typeof window.onLangChange === 'function') {
+    _salesLangHooked = true;
+    onLangChange(() => {
+      const sales = document.getElementById('tab-sales');
+      if (sales && sales.classList.contains('active')) salesInit();
+    });
+  }
   const set   = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   const money = (n) => (typeof dashMoney === 'function' ? dashMoney(n) : acWrap(Number(n || 0)));
   const num   = (n) => Number(n || 0).toLocaleString();
@@ -1389,7 +1441,15 @@ function csName(ch) {
             pos: cuT('Counter sale', '前台销售') })[ch] || ch;
 }
 let _csData = null;
-function csChannel(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }
+/* NOT `csChannel`. That was this function's name until 2026-09-25, and
+   29-channel-sync.js has set `window.csChannel` — its own channel-filter
+   setter — since 2026-09-11. It loads later, so it replaced this one: every
+   Sales card looked its channel up, got undefined back, and was left as the
+   HTML shipped it — WeChat "on", Eleme "off", none clickable — while the phone
+   showed the real state. Every script on this page shares one global scope;
+   scripts/test_sales_channel_switches.js now fails on any name two of them
+   both claim. */
+function csChannelInfo(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }
 // Store name that follows the EN/中文 toggle. Falls back to data-no-i18n when
 // only one name exists (or both are identical) so the walker leaves it alone.
 function csStoreName(o) {
@@ -1399,24 +1459,102 @@ function csStoreName(o) {
   return '<span data-lang-block="en">' + escapeHtml(en) + '</span><span data-lang-block="cn">' + escapeHtml(cn) + '</span>';
 }
 
+/* A SWITCH WITH NO DATA BEHIND IT SHOWS NO STATE. retail-admin.html ships each
+   channel card's switch pre-set on or off, and csLoad used to swallow a failed
+   read and leave those placeholders standing — where they read exactly like
+   live state. That is how the desktop showed Eleme off at every store while
+   the phone, reading the same table, said it was open at Tianhe: the read had
+   failed, and every other switch on the page was a placeholder too. So until
+   the matrix lands, and whenever it cannot, the switches are blank and inert,
+   the "where it is live" lines and the Locations section come off, and one
+   line under the Channels kicker says the state could not be read, with a
+   Retry. A failed read also retries on its own a few times while the Sales tab
+   is open. */
+let _csSeq = 0, _csFailed = false, _csRetryTimer = null, _csRetries = 0;
+const CS_RETRY_MS = [3000, 10000, 30000];
+function csChannelCards() {
+  const out = [];
+  document.querySelectorAll('#tab-sales .sales-ch').forEach((card) => {
+    const m = card.querySelector('[id^="sales-"][id$="-rev"]');
+    const mm = m && m.id.match(/^sales-(\w+)-rev$/);
+    const ch = mm && CS_KEY2CH[mm[1]];
+    const btn = card.querySelector('.sales-toggle');
+    if (ch && btn) out.push({ card, ch, btn });
+  });
+  return out;
+}
+function csMarkUnknown(failed) {
+  for (const { card, btn } of csChannelCards()) {
+    btn.disabled = true; btn.onclick = null;
+    btn.classList.remove('on', 'partial', 'is-locked');
+    btn.classList.add('unknown');
+    btn.title = failed ? cuT('Could not read the shop status', '无法读取营业状态') : cuT('Loading…', '加载中…');
+    const where = card.querySelector('.sales-ch-locs');
+    if (where) where.remove();
+  }
+  const locs = document.getElementById('cs-locations');
+  if (locs) locs.remove();
+  csShowError(failed);
+}
+function csShowError(on) {
+  let el = document.getElementById('cs-err');
+  if (!on) { if (el) el.remove(); return; }
+  const anchor = document.getElementById('sales-ch-kicker');
+  if (!anchor) return;
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cs-err';
+    el.className = 'sales-cs-err';
+    el.setAttribute('role', 'alert');
+    anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  }
+  el.innerHTML = '<span>' + cuT('Could not read the shop status', '无法读取营业状态') + '</span>'
+    + '<button class="btn btn-sm" type="button" onclick="csRetryNow()">' + cuT('Retry', '重试') + '</button>';
+}
+function csClearRetry() { if (_csRetryTimer) { clearTimeout(_csRetryTimer); _csRetryTimer = null; } }
+window.csRetryNow = function () { _csRetries = 0; csLoad(); };
+
 async function csLoad() {
-  try { _csData = await api('/api/retail-admin/channel-status'); csRender(); }
-  catch (e) { /* leave the cards untouched on error */ }
+  const seq = ++_csSeq;
+  csClearRetry();
+  let data;
+  try {
+    data = await api('/api/retail-admin/channel-status');
+    if (!data || !Array.isArray(data.channels)) throw new Error('no channels in reply');
+  } catch (e) {
+    if (seq !== _csSeq) return;  // a newer read owns the page now
+    console.warn('channel-status read failed:', e && e.message);
+    _csData = null; _csFailed = true;
+    csClearPoll();
+    csMarkUnknown(true);
+    const sales = document.getElementById('tab-sales');
+    if (_csRetries < CS_RETRY_MS.length && sales && sales.classList.contains('active')) {
+      _csRetryTimer = setTimeout(() => { _csRetryTimer = null; csLoad(); }, CS_RETRY_MS[_csRetries++]);
+    }
+    return;
+  }
+  if (seq !== _csSeq) return;
+  _csData = data; _csFailed = false; _csRetries = 0;
+  csShowError(false);
+  csRender();
 }
 
 function csRender() {
   if (!_csData) return;
   let anyPending = false;
-  document.querySelectorAll('#tab-sales .sales-ch').forEach((card) => {
-    const m = card.querySelector('[id^="sales-"][id$="-rev"]');
-    const mm = m && m.id.match(/^sales-(\w+)-rev$/);
-    const ch = mm && CS_KEY2CH[mm[1]];
-    const info = ch && csChannel(ch);
-    const btn = card.querySelector('.sales-toggle');
-    if (!info || !btn) return;
-    // Not-set-up channels (e.g. Eleme): leave the locked toggle + "Set up"
-    // footer as salesWireSetup left them — no channel×location matrix yet.
-    if (info.integrated === false) return;
+  for (const { card, ch, btn } of csChannelCards()) {
+    const info = csChannelInfo(ch);
+    btn.classList.remove('unknown');
+    // No row for this channel, or not set up yet: a locked, empty switch — no
+    // channel×location matrix to open or close. The "Set up" footer is
+    // salesWireSetup's.
+    if (!info || info.integrated === false) {
+      btn.disabled = true; btn.onclick = null;
+      btn.classList.remove('on', 'partial'); btn.classList.add('is-locked');
+      const stale = card.querySelector('.sales-ch-locs');
+      if (stale) stale.remove();
+      continue;
+    }
 
     const cells = info.cells || [];
     const openCount = cells.filter((c) => c.open).length;
@@ -1431,29 +1569,24 @@ function csRender() {
     btn.classList.toggle('on', !partial && cardOpen);
     btn.onclick = () => csChannelToggle(ch, cardOpen);
 
-    // Inline per-location rows (rebuilt each render), between metrics + footer.
+    // Where this channel is live: one dot + name per location, read-only. The
+    // per-location switches live on the location cards (§253) — one control per
+    // cell, not two — so this line only says where the channel is on.
     const prev = card.querySelector('.sales-ch-locs');
     if (prev) prev.remove();
     const box = document.createElement('div');
-    box.className = 'sales-ch-locs';
-    const single = cells.length <= 1;
-    let html = '<div class="sales-ch-locs-hd"><span>' + cuT('Per location', '按门店') + '</span>'
-      + (single ? '<span class="sales-ch-locs-note">' + cuT('serves 1 store', '仅 1 家门店') + '</span>' : '') + '</div>';
+    box.className = 'sales-ch-locs sales-ch-where';
+    let html = '';
     for (const c of cells) {
       if (c.pending) anyPending = true;
       const note = (ch === 'meituan' && c.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
-      html += '<div class="sales-ch-loc-row' + (c.open ? '' : ' closed') + '">'
-        + '<span class="sales-dot ' + (c.open ? 'ok' : 'warn') + '"></span>'
-        + '<span class="sales-ch-loc-nm">' + csStoreName(c) + note + '</span>'
-        + '<span class="sales-ch-loc-st">' + (c.open ? cuT('Open', '营业中') : cuT('Closed', '已关闭')) + '</span>'
-        + '<button class="sales-toggle sm' + (c.open ? ' on' : '') + '" type="button" aria-label="'
-        + escapeHtml(c.nameEn || c.name || '') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')"><span class="knob"></span></button>'
-        + '</div>';
+      html += '<span class="sales-ch-where-it' + (c.open ? '' : ' closed') + '">'
+        + '<span class="sales-dot ' + (c.open ? 'ok' : 'off') + '"></span>' + csStoreName(c) + note + '</span>';
     }
     box.innerHTML = html;
     const foot = card.querySelector('.sales-ch-foot');
     if (foot) card.insertBefore(box, foot); else card.appendChild(box);
-  });
+  }
   csRenderLocations();
   // Meituan applies open/close on the box asynchronously (置休 via the daemon);
   // poll until the pending cells settle, then the rows flip on their own.
@@ -1491,9 +1624,19 @@ function csRenderLocations() {
     let dot = 'ok', txt = cuT('Open — all channels live', '营业中 — 所有渠道');
     if (none) { dot = 'warn'; txt = cuT('Closed — every channel off', '已关闭 — 所有渠道'); }
     else if (partial) { dot = 'warn'; txt = cuT(live + ' of ' + total + ' channels live', total + ' 个渠道中 ' + live + ' 个在线'); }
-    const chips = serving.map((c) => {
-      const x = cellFor(c, l.storeCode); const on = x && x.open;
-      return '<span class="sales-chip' + (on ? '' : ' off') + '"><span class="sales-chip-dot"></span>' + csName(c.channel) + '</span>';
+    // One row per channel with its own small switch (§253): this is where a
+    // single channel is opened or closed at this location. At a closed shop,
+    // switching one on opens the shop with only that channel.
+    const rows = serving.map((c) => {
+      const x = cellFor(c, l.storeCode); const on = !!(x && x.open);
+      const note = (c.channel === 'meituan' && x && x.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
+      return '<div class="sales-ch-loc-row' + (on ? '' : ' closed') + '">'
+        + '<span class="sales-dot ' + (on ? 'ok' : 'off') + '"></span>'
+        + '<span class="sales-ch-loc-nm">' + csName(c.channel) + note + '</span>'
+        + '<span class="sales-ch-loc-st">' + (on ? cuT('Open', '营业中') : cuT('Closed', '已关闭')) + '</span>'
+        + '<button class="sales-toggle sm' + (on ? ' on' : '') + '" type="button" aria-pressed="' + on + '" aria-label="'
+        + escapeHtml(csName(c.channel)) + '" onclick="csCell(\'' + c.channel + '\',\'' + escapeHtml(l.storeCode) + '\',' + (on ? 'false' : 'true') + ')"><span class="knob"></span></button>'
+        + '</div>';
     }).join('');
     const tgl = partial ? ' partial' : (allOn ? ' on' : '');
     // The one link out, bottom of the card (A5 Board): the location's shop menu
@@ -1511,7 +1654,7 @@ function csRenderLocations() {
       + '<button class="sales-toggle' + tgl + '" type="button" title="' + cuT('Open or close the whole store', '开关整个门店')
       + '" onclick="csLocation(\'' + l.storeCode + '\',' + (none ? 'true' : 'false') + ')"><span class="knob"></span></button>'
       + '</div>'
-      + '<div class="sales-loc-chips">' + chips + '</div>'
+      + '<div class="sales-ch-locs sales-loc-rows">' + rows + '</div>'
       + menuLink
       + '</div>';
   }).join('');
@@ -1525,8 +1668,15 @@ window.csChannelToggle = async function (ch, isOpenNow) {
   const open = !isOpenNow;
   if (!open && !(await askConfirm({ title: cuT('Close this channel at every store?', '关闭所有门店的该渠道？'), confirmLabel: cuT('Close channel', '关闭渠道'), danger: true }))) return;
   try {
-    await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } });
-    if (window.toast) toast(cuT('Saved', '已保存'));
+    const r = await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } });
+    // Opening everywhere leaves a closed shop closed (§253) — say which, so the
+    // half-lit switch that follows is not a mystery.
+    const skipped = ((r && r.skipped) || []).map((code) => csLocationOf(code)).filter(Boolean);
+    if (window.toast) {
+      toast(skipped.length
+        ? cuT('Saved', '已保存') + ' · ' + skipped.map(csStoreText).join(cuT(', ', '、')) + cuT(': ', '：') + cuT('Shop closed', '门店已关闭')
+        : cuT('Saved', '已保存'));
+    }
     await csLoad();
   } catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };
@@ -1552,7 +1702,23 @@ function csAgeText(iso) {
 // stale the oldest of it is. Always confirmed, with no freshness check of any
 // kind: the dialog is skipped only when the preview comes back with nothing
 // mapped for that store on that channel, because there is nothing to publish.
+// Plain-text store name for a dialog title (csStoreName returns markup).
+function csStoreText(o) { return cuT(o.nameEn || o.name || '', o.nameCn || o.name || ''); }
+function csLocationOf(storeCode) { return ((_csData && _csData.locations) || []).find((l) => l.storeCode === storeCode); }
 window.csCell = async function (ch, storeCode, open) {
+  // Opening one channel at a closed shop opens the shop with only that channel
+  // (§253) — a bigger step than a cell, so it is confirmed. The title and body
+  // are the phone's own live pairs for opening a channel at a store.
+  const loc = csLocationOf(storeCode);
+  if (open && loc && loc.shopOpen === false) {
+    const store = cuT(loc.nameEn || loc.name || '', loc.nameCn || loc.name || '');
+    const chan = csName(ch);
+    if (!(await askConfirm({
+      title: cuT('Open ' + chan + ' at ' + store + '?', '在 ' + store + ' 开启 ' + chan + '？'),
+      body: cuT('New orders can arrive at this store again.', '这家门店可以重新接单。'),
+      confirmLabel: cuT('Open', '开启'),
+    }))) return;
+  }
   if (open) {
     let prev = null;
     // Short leash on purpose: this dialog is a courtesy, not a gate, and a
@@ -1580,11 +1746,21 @@ window.csCell = async function (ch, storeCode, open) {
   catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };
 // Location master: open/close EVERY channel for one store.
+// Reopening a closed shop brings back the channels that were live when it was
+// closed (§253), so the confirm names them; with nothing remembered it opens all.
 window.csLocation = async function (storeCode, open) {
+  const loc = csLocationOf(storeCode);
+  const back = open && loc && Array.isArray(loc.reopenChannels) && loc.reopenChannels.length ? loc.reopenChannels : null;
+  let openTitle = cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道？');
+  if (back) {
+    const store = csStoreText(loc);
+    const list = cuT(back.map(csName).join(', '), back.map(csName).join('、'));
+    openTitle = cuT('Open ' + list + ' at ' + store + '?', '在 ' + store + ' 开启 ' + list + '？');
+  }
   if (!(await askConfirm({
-    title: open ? cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道？')
+    title: open ? openTitle
                 : cuT('Close ALL sales channels for this location?', '关闭该门店的所有销售渠道？'),
-    confirmLabel: open ? cuT('Open all', '全部开启') : cuT('Close all', '全部关闭'),
+    confirmLabel: open ? (back ? cuT('Open', '开启') : cuT('Open all', '全部开启')) : cuT('Close all', '全部关闭'),
     danger: !open,
   }))) return;
   try { await api('/api/retail-admin/channel-status/location', { method: 'POST', body: { storeCode, open } }); if (window.toast) toast(cuT('Done', '完成')); await csLoad(); }

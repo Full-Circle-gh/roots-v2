@@ -19,6 +19,9 @@
 //   SHANGOU_PROXY_UPSTREAM  authed upstream proxy URL (default: MEITUAN_PROXY_URL).
 //                           Set empty to go DIRECT (no proxy).
 //   SHANGOU_PROXY_LOCAL_PORT (default 9344) — local no-auth port Chrome points at.
+//   SHANGOU_DISPLAY        the X display Chrome draws on (§260: ':97', the holder's
+//                          private screen that Tacet's Sign in relays). Unset, Chrome
+//                          keeps whatever DISPLAY this process was started with.
 
 'use strict';
 
@@ -44,6 +47,12 @@ const PORT       = process.env.SHANGOU_CDP_PORT        || '9333';
 const PROFILE    = process.env.SHANGOU_PROFILE_DIR     || path.join(os.homedir(), '.shangou-chrome-profile');
 const LOCAL_PORT = Number(process.env.SHANGOU_PROXY_LOCAL_PORT || 9344);
 const START_URL  = 'https://shangoue.meituan.com/';
+// Read here, from .env, rather than set in pm2: a deploy restarts this holder
+// with --update-env, and a DISPLAY that lived only in pm2's saved env is not
+// something a restart can be trusted to keep.
+const CHROME_ENV = process.env.SHANGOU_DISPLAY
+  ? { ...process.env, DISPLAY: process.env.SHANGOU_DISPLAY }
+  : process.env;
 
 // The failover watchdog (lib/proxy-manager + scripts/proxy-watchdog) decides which
 // proxy 闪购 (yuexiu) should use and writes it to data/proxy-active.json. We follow
@@ -141,12 +150,14 @@ let currentChild = null;
 let currentForwarder = null;
 let currentUpstream = null;   // upstream URL Chrome is currently running with
 let intentionalKill = false;  // set when WE kill Chrome for a proxy switch
+let lastLaunchAt = 0;         // epoch ms of the last startChrome (spaces proxy switches, §262)
 
 function startChrome(upstream) {
   if (!fs.existsSync(PROFILE)) fs.mkdirSync(PROFILE, { recursive: true });
   const { chromeProxy, forwarder } = buildProxy(upstream);
   currentForwarder = forwarder;
   currentUpstream = upstream;
+  lastLaunchAt = Date.now();
   const exe = chromeBinary();
   const args = [
     `--remote-debugging-port=${PORT}`,
@@ -170,8 +181,8 @@ function startChrome(upstream) {
   if (process.platform !== 'win32') args.push('--no-sandbox', '--disable-gpu');
   if (chromeProxy) args.push(`--proxy-server=${chromeProxy}`);
 
-  console.log(`[shangou-chrome] launching ${exe}\n  port=${PORT} profile=${PROFILE} upstream=${upstream || '(direct)'} proxy=${chromeProxy || '(direct)'} display=${process.env.DISPLAY || '(none)'}`);
-  const child = spawn(exe, args, { stdio: 'inherit', env: process.env });
+  console.log(`[shangou-chrome] launching ${exe}\n  port=${PORT} profile=${PROFILE} upstream=${upstream || '(direct)'} proxy=${chromeProxy || '(direct)'} display=${CHROME_ENV.DISPLAY || '(none)'}`);
+  const child = spawn(exe, args, { stdio: 'inherit', env: CHROME_ENV });
   currentChild = child;
   child.on('exit', (code) => {
     if (intentionalKill) { intentionalKill = false; return; } // a proxy-switch relaunch handles it
@@ -193,10 +204,25 @@ function relaunchWith(upstream) {
 
 // Follow the failover watchdog: when it switches yuexiu's proxy in
 // data/proxy-active.json, relaunch Chrome onto the new exit.
+// A switch is held until the last launch is SWITCH_MIN_GAP_MS old (§262): nothing
+// here used to limit how often a flapping path could relaunch Chrome, and a cold
+// 闪购 browser is what risk-control answers with 418. A switch that flips back
+// while held never relaunches at all.
 const SWITCH_POLL_MS = Number(process.env.SHANGOU_PROXY_POLL_MS || 30_000);
+let heldSwitch; // the upstream a held switch is waiting to apply (log once)
 setInterval(() => {
   const want = desiredUpstream();
-  if (want !== currentUpstream) relaunchWith(want);
+  if (want === currentUpstream) { heldSwitch = undefined; return; }
+  if (pm && pm.switchAllowed && !pm.switchAllowed(lastLaunchAt)) {
+    if (heldSwitch !== want) {
+      heldSwitch = want;
+      const noCreds = (u) => String(u || '').replace(/\/\/[^@/]*@/, '//'); // the GZ relay URL carries its password
+      console.log(`[shangou-chrome] proxy switch to ${noCreds(want) || 'direct'} held — Chrome launched under ${Math.round(pm.SWITCH_MIN_GAP_MS / 1000)}s ago; staying on ${noCreds(currentUpstream) || 'direct'} for now`);
+    }
+    return;
+  }
+  heldSwitch = undefined;
+  relaunchWith(want);
 }, SWITCH_POLL_MS);
 
 startChrome(desiredUpstream());

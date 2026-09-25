@@ -843,6 +843,45 @@ check('both clients read the channel’s cause where the server offers one', () 
   ok(/ch\.stale\|\|ch\.blocked/.test(read('public/m.html')), 'the phone’s stopped-channel card ignores a block');
 });
 
+// GZ Grocery was signed out for a day while its tab's dot stayed green and Home
+// said nothing, because neither read the block: the tab looked at a listings
+// read from weeks before, and Home waited for the queue to count as stalled.
+check('each store says whether IT is blocked, not only the worst one', () => {
+  const db = freshDb(); product(db, 1, { stock: 3 });
+  mtCatalogue(db, 'tianhe', ['听装1']); mtMap(db, 1, { pushed: 3 });
+  db.prepare(`INSERT INTO meituan_sync_log (store_code, event_type, status, error_msg, created_at)
+              VALUES ('yuexiu', 'needs_login', 'error', 'signed out', '2026-09-12 09:14:00')`).run();
+  const mt = channelSyncItems(db).channels.find(c => c.key === 'meituan');
+  const by = Object.fromEntries(mt.stores.map(s => [s.code, s.blocked]));
+  eq(by, { tianhe: false, yuexiu: true });
+});
+
+check('the dashboard read names every stopped channel and nothing else', () => {
+  const db = freshDb();
+  eq(mod.channelBlocks(db), [], 'a quiet box reports nothing');
+  db.prepare(`INSERT INTO guanyi_sync_log (store_code, event_type, status, error_msg, created_at)
+              VALUES ('tianhe', 'needs_login', 'error', 'session expired', '2026-09-23 05:03:00')`).run();
+  const out = mod.channelBlocks(db);
+  eq(out.map(c => [c.key, c.blocked.by, c.blocked.store]), [['guanyi', 'needs_login', 'tianhe']]);
+  // The daemon's own recovery announcement clears it, as on the page.
+  db.prepare(`INSERT INTO guanyi_sync_log (store_code, event_type, status, created_at)
+              VALUES ('tianhe', 'needs_login', 'ok', '2026-09-23 06:00:00')`).run();
+  eq(mod.channelBlocks(db), []);
+});
+
+check('Home says a stopped channel on both screens, from the first failed read', () => {
+  ok(/channel_blocked = channelBlocks\(/.test(read('routes/retail.js')), 'the dashboard route does not read it');
+  ok(/channel_blocked, server_now/.test(read('routes/retail.js')), 'the dashboard route does not send it');
+  ok(/DASH_OPS\.channel_blocked/.test(read('public/retail-admin/03-dashboard.js')), 'desktop Home ignores it');
+  ok(/o\.channel_blocked/.test(read('public/m.html')), 'phone Home ignores it');
+});
+
+check('the GZ Grocery tab reads the block instead of a green dot by default', () => {
+  ok(/channelBlock\(db, 'guanyi', store\.code\)/.test(read('routes/guanyi-admin.js')), '/guanyi/status does not send it');
+  ok(/st\.block/.test(read('public/retail-admin/12-guanyi.js')), 'the tab does not read it');
+  ok(/s\.blocked \? 'is-down'/.test(read('public/retail-admin/29-channel-sync.js')), 'Channel sync keeps a blocked store green');
+});
+
 
 // ── 11. §117 · all syncing gathers in one place ──────────────────────────────
 //
@@ -927,6 +966,37 @@ check('the corner button that used to reach Channel sync is gone', () => {
   const html = read('public/retail-admin.html');
   ok(!/class="btn btn-sm" type="button" onclick="goTab\('channel-sync'\)/.test(html),
      'the Sales header’s Channel sync button is back beside the sub-nav');
+});
+
+// ── 12. §258 · the table is a table ──────────────────────────────────────────
+// Ash, from the live page: the row's values sat packed to the left under the
+// wrong column headers, each in its own grey box. The rows carried class "row"
+// and later "cs-row" — BOTH of which retail-admin.css turns into a flex box
+// elsewhere, which takes a <tr> out of the table.
+section('12 · §258 · the Channel sync table rows stay table rows');
+
+check('the item row’s class is not one a global rule turns into a flex box', () => {
+  const js = read('public/retail-admin/29-channel-sync.js');
+  const m = js.match(/<tr class="([a-z0-9-]+)" tabindex/);
+  ok(m, 'no item row found');
+  const cls = m[1];
+  const css = read('public/retail-admin.css');
+  const esc = cls.replace(/-/g, '\\-');
+  const global = new RegExp(`(^|[\\s,}])\\.${esc}\\s*\\{`, 'm');
+  ok(!global.test(css), `".${cls}" has a global rule of its own — a <tr> that picks up display:flex leaves the table`);
+});
+
+check('the page’s buttons are the design system’s secondary style, not a filled slab', () => {
+  const css = read('public/retail-admin.css');
+  ok(/\.btn\.td-secondary[^{]*\{[^}]*background: transparent/.test(css), 'no secondary button style');
+  ok(/#tab-channel-sync \.cs-dcard \.cs-fix \.btn \{ flex: 0 0 auto; \}/.test(css), 'the row’s buttons still stretch across the card');
+  ok(/class="btn btn-sm td-secondary"/.test(read('public/retail-admin/01-core.js')), 'the Sign in button is filled');
+});
+
+check('the sign-in page keeps to Inter 400/500', () => {
+  const page = read('public/channel-signin.html');
+  ok(/family=Inter:wght@400;500/.test(page), 'Inter is not loaded');
+  ok(!/font-weight:\s*[6-9]00|font:\s*[6-9]00/.test(page), 'a weight above 500 — the design system allows 400 and 500 only');
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────

@@ -125,6 +125,40 @@ CASES.push(['opening one back up', STUB + GRID
   ['with open:true',              body('"open":true')],
 ]]);
 
+// §253 — a shut shop. Panyu is closed as a shop; the web row there used to open
+// an explainer pointing at the shop switch, because the server refused the
+// write. It now opens the shop with only that channel, so the row asks and
+// then sends the one cell write like every other row.
+const SHUT = GRID + `state.chan.channels[1].cells[1].shopOpen=false;
+  state.chan.locations=[{storeCode:'tianhe',nameEn:'Tianhe',nameCn:'天河店',shopOpen:true},
+    {storeCode:'panyu',nameEn:'Panyu',nameCn:'番禺店',shopOpen:false,reopenChannels:['mini_app','pos']}];`;
+const tapRow = (store) => `[].slice.call(document.querySelectorAll('.sheet .list button'))
+  .filter(function(b){return b.innerText.indexOf(${JSON.stringify(store)})>=0})[0].click();`;
+
+CASES.push(['a row under a shut shop says so', STUB + SHUT + `APP.cmd('openChannel','web');`, [
+  ['the row says the shop is closed', `sheetText().includes('Shop closed')`],
+]]);
+
+CASES.push(['a channel at a shut shop can be opened on its own', STUB + SHUT
+  + `APP.cmd('openChannel','web');` + tapRow('Panyu'), [
+  ['tapping it asks to open that channel there', `sheetText().includes('Open Web store at Panyu?')`],
+  ['not the old "open the shop first" explainer', `!sheetText().includes('Open Panyu under Shops')`],
+  ['and nothing was sent yet', `!${sent('/channel-status')}`],
+]]);
+
+CASES.push(['confirming it sends the one cell write', STUB + SHUT
+  + `APP.cmd('openChannel','web');` + tapRow('Panyu') + `APP.cmd('askRun');`, [
+  ['to the per-store endpoint', sent('/channel-status/cell')],
+  ['not the shop switch',       `!${sent('/channel-status/location')}`],
+  ['for web at Panyu',          body('"channel":"web"') + ' && ' + body('"storeCode":"panyu"')],
+  ['with open:true',            body('"open":true')],
+]]);
+
+CASES.push(['reopening a shop names what comes back', STUB + SHUT + `APP.cmd('shopOpen','panyu',1);`, [
+  ['the confirm names the remembered channels', `sheetText().includes('Open Mini app, In store at Panyu?')`],
+  ['not "every sales channel"', `!sheetText().includes('Every sales channel at this shop opens')`],
+]]);
+
 // The whole-channel endpoint exists and is deliberately unreachable from here:
 // one tap should not be able to stop orders arriving everywhere.
 CASES.push(['no way to close a channel everywhere', GRID + `APP.cmd('openChannel','meituan');`, [

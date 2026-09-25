@@ -27,6 +27,10 @@ const api = require('../../utils/api');
 
 function _pick(en, cn, L) { return lang.pick(en, cn, L); }
 
+// "0 — 4°", "0 - 4°", "0—4°" → "0–4°". Same rule as closeRange() in
+// lib/product-blocks-read.js, which a WeChat bundle cannot require.
+function _closeRange(v) { return String(v || '').replace(/(\d)\s*[-\u2010-\u2015]\s*(?=\d)/g, '$1\u2013'); }
+
 // ── Plant-based icon guard ──
 // The whole shop is vegan and leans into it, so a product page must never
 // show an animal-product glyph (a fried egg in the "Pan" tile, a cheese
@@ -410,13 +414,22 @@ function _resolveBlock(b, L, freeOf) {
           .replace(/^\s*[℃℉]\s*/, '')             // "℃ "
           .trim();
       }
+      // A range is one figure, so it is drawn as one: "0 — 4°" closes up to
+      // "0–4°". The spaces are where the line broke — at 96rpx the spaced
+      // em-dash form is wider than the half-width card, so "4°" dropped to a
+      // second line — and a range takes the en dash anyway.
+      num = _closeRange(num);
       // The `num` slot is a 96rpx hero numeral (designed for "4°C", "1", "-18°C").
       // The office sometimes authors a whole phrase here ("Cool & dry",
       // "Refrigerate") — at hero size that overflows the half-width card and
       // clips. Flag anything longer than a short numeric so the WXSS can drop
       // it to a readable, wrapping display size instead of clipping.
       const numLong = num.replace(/\s+/g, '').length > 5;
-      return { icon: _icon(c.icon), head, num, numLong, unit, alt: !!c.alt };
+      // §264: a short value with a number in it is a FIGURE and is drawn in
+      // the figure face (.fig), so its dash and degree come from the same font
+      // as its digits. Anything longer is a phrase and keeps the display face.
+      const numFig = !numLong && /\d/.test(num);
+      return { icon: _icon(c.icon), head, num, numLong, numFig, unit, alt: !!c.alt };
     };
     const left  = card(b.left);
     const right = card(b.right);

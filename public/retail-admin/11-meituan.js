@@ -210,6 +210,7 @@
   // when both are healthy the page opens straight on the work.
   const MT_BLOCK_TXT = {
     needs_login:     ['is signed out', '已退出登录'],
+    binding_lost:    ['is signed out', '已退出登录'],   // shop forgotten; the fix is the same re-login
     verify_required: ['needs a verification scan', '需要扫码验证'],
     queue_stalled:   ['has a stalled stock queue', '库存推送停滞'],
     poll_paused:     ['has order polling paused', '订单轮询已暂停'],
@@ -303,7 +304,7 @@
             '<span class="dot"></span><span class="nm">' + esc(who) + '</span>' +
             '<span class="st">' + esc(state) + '</span>' +
             mtSyncStartCtl(st.code) +
-            (st.blocked && !off ? mtFixAction(st.code) : '') +
+            (st.blocked && !off ? mtFixAction(st.code, st.blockedBy, who) : '') +
           '</div>';
       }).join('') +
       // Sits with the store lines because it is the same kind of fact — a per
@@ -465,15 +466,17 @@
     }
   };
 
-  // Signing a store back in needs a human at a browser on the box, so this is
-  // the guided wizard when it is loaded and the command to run when it is not.
-  // Never a button that cannot do what it says.
-  function mtFixAction(code) {
-    if (typeof window.igRelayWizard === 'function') {
-      return '<button class="btn btn-primary" onclick="igRelayWizard(\'meituan\', ' +
-        '{step:\'creds\', store:\'' + esc(code) + '\'})">' + cuT('Sign in again', '重新登录') + '</button>';
-    }
+  // Signing a store back in needs a human at a browser on the box. §252's Sign
+  // in button does that for whoever holds the permission, and anyone else gets
+  // the command to run. Never a button that cannot do what it says — which is
+  // why the Integrations relay wizard is no longer offered here (§250 PR 4): in
+  // production it fails every time with `no_worker_attached`, because no
+  // login-relay driver is registered. The instant (闪购) store signs in by a
+  // different script the sign-in screen does not run, so it keeps its command.
+  function mtFixAction(code, by, name) {
     const isInstant = _storeB && code === _storeB.code;
+    const sign = !isInstant && typeof chSignInBtn === 'function' ? chSignInBtn('meituan', code, name, by) : '';
+    if (sign) return sign;
     return '<code class="mt-cmd">' + esc(isInstant ? 'node scripts/shangou-export-session.js'
                                                    : 'node scripts/meituan-login.js ' + code) + '</code>';
   }

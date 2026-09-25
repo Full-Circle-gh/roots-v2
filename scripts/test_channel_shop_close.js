@@ -15,11 +15,14 @@
  * switch, and no screen but the desktop could touch it. The operator's reading —
  * "I open it and it closes automatically" — was the only reading available.
  *
- * Three things are checked, and the loop is the point of all three:
+ * Checked, and the loop is the point of all of them:
  *
  *   §1  the shop-wide state is REPORTED, not only folded into every cell
- *   §2  an open that cannot land is REFUSED, by name, instead of stored
+ *   §2  opening one channel at a shut shop opens the shop with ONLY that
+ *       channel (§253 — this used to be refused with 409 shop_closed, §181)
  *   §3  the phone can work the shop switch, and re-reads instead of guessing
+ *   §5  closing a location remembers its live channels and reopening brings
+ *       exactly those back; the everywhere switch never reopens a shut shop
  */
 'use strict';
 
@@ -48,12 +51,26 @@ yes(/state\.shopBusy/.test(M), 'a shop write in flight disables the rows',
 {
   // THE REGRESSION. Patching the local cell is what made a refused write look
   // like a successful one. The handler must re-read.
-  const h = M.slice(M.indexOf("reg('chanCell'"), M.indexOf("reg('chanShopShut'"))
+  const h = M.slice(M.indexOf("reg('chanCell'"), M.indexOf("reg('shopOpen'"))
     .replace(/\/\/[^\n]*/g, '');   // the prose about the old assignment is not the assignment
   yes(h.includes('loadChannels(true)'), 'opening a channel re-reads the board afterwards');
   yes(!/cell\.open\s*=\s*open/.test(h), 'and never patches the row to agree with the tap',
     'cell.open=open is the assignment that hid the masked write');
-  yes(h.includes('shop_closed'), 'a refusal from the server is said in words, not as "try again"');
+}
+
+// §253 on the phone. A row under a shut shop used to open an explainer that
+// pointed at the shop switch, because the server refused the write. The server
+// now opens the shop with only that channel, so the row sends the same write
+// as any other row.
+yes(!M.includes("reg('chanShopShut'") && !M.includes("'chanShopShut'"),
+  'a row under a shut shop no longer routes to the "open the shop first" explainer');
+yes(M.includes("onclick=\"APP.cmd('chanCell','${escAttr(key)}'"),
+  'every row, shut shop or not, sends the one channel write');
+{
+  const s = M.slice(M.indexOf("reg('shopOpen'"), M.indexOf("reg('reloadChannels'"));
+  yes(s.includes('loc.reopenChannels'), 'the shop switch reads what a reopen will bring back');
+  yes(s.includes("T('Open '+backNames+' at '+store+'?', '在 '+store+' 开启 '+backNames+'？')"),
+    'and names those channels in the confirm, in the words used for opening one channel');
 }
 
 yes(/loadChannels\(force\)/.test(M) && /state\.chanTried&&!force/.test(M),
@@ -89,7 +106,7 @@ db.exec(`
   CREATE TABLE store_business_status (
     store_code TEXT PRIMARY KEY, is_open INTEGER, status_desc TEXT, read_ok INTEGER DEFAULT 0,
     read_at DATETIME, target_open INTEGER, target_by TEXT, target_at DATETIME,
-    fulfillment_open INTEGER DEFAULT 1, updated_at DATETIME);
+    fulfillment_open INTEGER DEFAULT 1, reopen_channels TEXT, updated_at DATETIME);
   CREATE TABLE channel_status (channel TEXT NOT NULL, store_code TEXT NOT NULL,
     is_open INTEGER DEFAULT 1, updated_at DATETIME, updated_by TEXT,
     PRIMARY KEY (channel, store_code));
@@ -165,50 +182,39 @@ const shutShop = (code) => db.prepare(
     is(g.locations.find((l) => l.storeCode === 'yuexiu').shopOpen, false, 'the locations list carries it too');
   }
 
-  section('2 · an open that cannot land is refused, not stored');
+  section('2 · one channel at a shut shop opens the shop with only that channel (§253)');
   {
-    // THE LOOP, end to end. Before this, the POST returned 200, the row went
-    // into channel_status, and the next GET reported it closed anyway.
+    // §181 refused this with 409 shop_closed, because the write landed under
+    // fulfillment_open = 0 and the next read masked it back to Closed. §253
+    // lifts the mask in the same write, so the read agrees with the tap.
     const r = await call('POST', '/api/retail-admin/channel-status/cell',
       { channel: 'pos', storeCode: 'yuexiu', open: true });
-    is(r.status, 409, 'opening the till at a shut shop is refused');
-    is(r.body.error, 'shop_closed', 'by name, so the screen can say which switch is in the way');
-    const stored = db.prepare("SELECT is_open FROM channel_status WHERE channel='pos' AND store_code='yuexiu'").get();
-    yes(!stored, 'and nothing is written that the next read would hide',
-      'a stored row the grid masks is exactly the state that reads as a till closing itself');
-  }
-  {
-    // Closing must still work at a shut shop — refusing it would strand an
-    // operator who wants the cell off for when the shop comes back.
-    const r = await call('POST', '/api/retail-admin/channel-status/cell',
-      { channel: 'pos', storeCode: 'yuexiu', open: false });
-    is(r.status, 200, 'closing a channel at a shut shop is still allowed');
-  }
-  {
-    // The switch that DOES apply, and the loop closing honestly this time.
-    const r = await call('POST', '/api/retail-admin/channel-status/location',
-      { storeCode: 'yuexiu', open: true });
-    is(r.status, 200, 'the location master opens the shop');
+    is(r.status, 200, 'opening the till at a shut shop is accepted');
+    is(r.body.shopOpened, true, 'and says it opened the shop');
     const g = await grid();
-    is(cellOf(g, 'pos', 'yuexiu').open, true, 'and the counter till comes back open');
-    is(cellOf(g, 'pos', 'yuexiu').shopOpen, true, 'with the shop reported open');
-    is(db.prepare("SELECT fulfillment_open AS f FROM store_business_status WHERE store_code='yuexiu'").get().f, 1,
-      'because the shop-wide flag is what it wrote');
+    is(cellOf(g, 'pos', 'yuexiu').open, true, 'the counter till reads open');
+    is(cellOf(g, 'pos', 'yuexiu').shopOpen, true, 'the shop reads open');
+    is(['web', 'mini_app', 'eleme'].map((ch) => cellOf(g, ch, 'yuexiu').open), [false, false, false],
+      'and every other channel at that shop stays shut',
+      'a cell stored before the close must not come back with it');
+    is(db.prepare("SELECT target_open AS t FROM store_business_status WHERE store_code='yuexiu'").get().t, 0,
+      'Meituan is commanded shut, not left as it was');
+    is(cellOf(g, 'web', 'tianhe').open, true, 'the other shop is untouched');
   }
   {
     // A per-channel close at an OPEN shop is still just that: the cell, not the
-    // shop. The guard must not have widened into "everything is a shop switch".
+    // shop. The rule must not have widened into "everything is a shop switch".
     await call('POST', '/api/retail-admin/channel-status/cell',
       { channel: 'pos', storeCode: 'yuexiu', open: false });
     const g = await grid();
     is(cellOf(g, 'pos', 'yuexiu').open, false, 'closing the till closes the till');
     is(cellOf(g, 'pos', 'yuexiu').shopOpen, true, 'and leaves the shop trading');
-    is(cellOf(g, 'web', 'yuexiu').open, true, 'and the other channels at that shop alone');
   }
   {
     const r = await call('POST', '/api/retail-admin/channel-status/cell',
       { channel: 'pos', storeCode: 'yuexiu', open: true });
-    is(r.status, 200, 'and it reopens without complaint once the shop is trading');
+    is(r.status, 200, 'it reopens at a trading shop');
+    is(r.body.shopOpened, false, 'as a plain cell write, not a shop reopen');
     is(cellOf(await grid(), 'pos', 'yuexiu').open, true, 'the read agreeing with the write, which is the whole finding');
   }
 
@@ -225,6 +231,53 @@ const shutShop = (code) => db.prepare(
     const n = db.prepare("SELECT COUNT(*) AS n FROM meituan_sync_queue WHERE store_code='yuexiu'").get().n;
     is(n, 1, 'the mapped product is queued for push',
       'a silent 0 here is the swallowed prepare() throw, not an empty catalogue');
+  }
+
+
+  section('5 · closing remembers, reopening restores, the everywhere switch leaves a shut shop shut (§253)');
+  {
+    // Yuexiu trading on WeChat only.
+    for (const ch of ['web', 'pos', 'eleme', 'meituan']) {
+      await call('POST', '/api/retail-admin/channel-status/cell', { channel: ch, storeCode: 'yuexiu', open: false });
+    }
+    await call('POST', '/api/retail-admin/channel-status/cell', { channel: 'mini_app', storeCode: 'yuexiu', open: true });
+    const r = await call('POST', '/api/retail-admin/channel-status/location', { storeCode: 'yuexiu', open: false });
+    is(r.status, 200, 'the location master closes the shop');
+    const row = db.prepare("SELECT fulfillment_open AS f, reopen_channels AS m FROM store_business_status WHERE store_code='yuexiu'").get();
+    is(row.f, 0, 'the shop-wide flag is off');
+    is(JSON.parse(row.m), ['mini_app'], 'and the one live channel is remembered');
+    is((await grid()).locations.find((l) => l.storeCode === 'yuexiu').reopenChannels, ['mini_app'],
+      'the grid reports what a reopen will bring back');
+  }
+  {
+    await call('POST', '/api/retail-admin/channel-status/location', { storeCode: 'yuexiu', open: false });
+    is(JSON.parse(db.prepare("SELECT reopen_channels AS m FROM store_business_status WHERE store_code='yuexiu'").get().m),
+      ['mini_app'], 'a second close keeps the memory instead of overwriting it with nothing');
+  }
+  {
+    // The everywhere switch, with Yuexiu shut.
+    const r = await call('POST', '/api/retail-admin/channel-status/channel', { channel: 'web', open: true });
+    is(r.body.skipped, ['yuexiu'], 'opening a channel everywhere skips the shut shop, by name');
+    is(r.body.stores, ['tianhe'], 'and opens it where the shop trades');
+    const g = await grid();
+    is(cellOf(g, 'web', 'yuexiu').shopOpen, false, 'the shut shop stays shut');
+    is(cellOf(g, 'web', 'tianhe').open, true, 'the trading shop has the channel');
+  }
+  {
+    const r = await call('POST', '/api/retail-admin/channel-status/location', { storeCode: 'yuexiu', open: true });
+    is(r.body.opened, ['mini_app'], 'the master reopens exactly what was live');
+    const g = await grid();
+    is(cellOf(g, 'mini_app', 'yuexiu').open, true, 'WeChat is back');
+    is(['web', 'pos', 'eleme'].map((ch) => cellOf(g, ch, 'yuexiu').open), [false, false, false],
+      'and nothing that was shut on purpose came back with it');
+    is(db.prepare("SELECT reopen_channels AS m FROM store_business_status WHERE store_code='yuexiu'").get().m, null,
+      'the memory is spent once used');
+  }
+  {
+    // A shop closed some other way has nothing remembered: every channel opens.
+    shutShop('yuexiu');
+    const r = await call('POST', '/api/retail-admin/channel-status/location', { storeCode: 'yuexiu', open: true });
+    is(r.body.opened, ['mini_app', 'web', 'meituan', 'eleme', 'pos'], 'with nothing remembered, every channel opens');
   }
 
   console.log(`\n${pass} passed, ${fail} failed\n`);

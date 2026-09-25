@@ -19,6 +19,7 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const eleme = require('../lib/eleme-client');
 const elemeSync = require('../lib/eleme-sync');
+const { channelBlock } = require('../lib/channel-block');
 
 // ── Token persistence (shared shape with the daemon) ───────────────────────────
 function saveToken(db, account, tok) {
@@ -431,9 +432,10 @@ router.post('/api/retail-admin/eleme/products/:id/claim', requireRetailAdmin, ex
 // Per-store health, on the same contract as the Meituan page's store cards.
 //
 // A store is blocked when it cannot push at all: no shop id linked (never set
-// up) or no saved session (needs a login). Unlike Meituan there is no
-// needs_login event to read — eleme_sync_log only carries stock_push rows — so
-// the session file on disk is the signal, exactly as /eleme/stores reports it.
+// up), no saved session, or the daemon's own report that the session it has is
+// signed out or held at a captcha (`auth_required` / `verify_required`, read
+// through lib/channel-block.js like every other channel). The file alone was
+// the only signal once, and an EXPIRED file read as a healthy store (§250).
 //
 // A run of push errors is deliberately NOT "blocked": pushes fail for ordinary
 // reasons (a renamed listing, a 审核 queue) while the channel itself is fine,
@@ -481,6 +483,11 @@ function elemeStoreHealth(db) {
     let sessionActive = false;
     try { sessionActive = fs.existsSync(path.join(sessionDir, `${st.code}-session.json`)); } catch (e) {}
     const shopSet = !!(st.shop_id && String(st.shop_id).trim());
+    const logBlock = channelBlock(db, 'eleme', st.code);
+    const blockedBy = !shopSet ? 'no_shop'
+      : !sessionActive ? 'needs_login'
+      : logBlock ? (logBlock.by === 'auth_required' ? 'needs_login' : logBlock.by)
+      : null;
     const q = queueRow.get(st.code) || {};
     const live = liveCount.get(st.code)?.n || 0;
     const c = cat.get(st.code) || {};
@@ -491,8 +498,8 @@ function elemeStoreHealth(db) {
       nameEn: st.nameEn || st.name,
       shopId: st.shop_id || null,
       shopName: st.shop_name || null,
-      blocked: !shopSet || !sessionActive,
-      blockedBy: !shopSet ? 'no_shop' : (!sessionActive ? 'needs_login' : null),
+      blocked: !!blockedBy,
+      blockedBy,
       lastPushAt:  lastPush.get(st.code)?.t || null,
       lastOrderAt: lastOrder.get(st.code)?.t || null,
       pending:    Number(q.pending    || 0),

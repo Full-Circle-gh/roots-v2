@@ -57,6 +57,7 @@
     "verify:swallowed-errors": "node scripts/check-swallowed-errors.js",
     "verify:glued-language": "node scripts/check-glued-language.js",
     "test:awaiting-restock": "node scripts/test_awaiting_restock_client.js",
+    "test:sales-switches": "node scripts/test_sales_channel_switches.js",
     "test:warehouse-pin": "node scripts/test_warehouse_store_pin.js",
     "test:shop-listings": "node scripts/test_shop_listings.js",
     "test:shop-menu-geometry": "node scripts/test_shop_menu_geometry.js",
@@ -190,6 +191,7 @@
     "test:production-log": "node scripts/test_production_log.js"
   },
   "dependencies": {
+    "@novnc/novnc": "^1.7.0",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^9.4.3",
     "connect-sqlite3": "^0.9.13",
@@ -204,7 +206,8 @@
     "playwright": "^1.61.0",
     "sharp": "^0.35.0",
     "uuid": "^9.0.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "acorn": "^8.16.0",

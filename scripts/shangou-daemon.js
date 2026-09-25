@@ -63,6 +63,7 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 const { latchStore } = require('../lib/alert-latch');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 const { isStoreTradingOnChannel } = require('../lib/store-trading');
+const { channelBlock } = require('../lib/channel-block');
 // Opening hours off the store's own row, cached — so an admin edit takes effect
 // without a restart. Same module qingyun-daemon reads.
 const { storeHours, within, syncWindow, envLeadMin } = require('../lib/store-hours');
@@ -870,6 +871,27 @@ async function syncBusinessStatus(storeCode) {
   }
 }
 
+// §260 — say so when a sign-in has worked. Tacet's Sign in ends by restarting
+// this daemon, and until now it re-checked the session only when it had stock
+// to push, so a fixed 闪购 could stay red for hours. Once per start, for a store
+// whose latest fault is a sign-out or a check, look once and log the recovery.
+// Not gated on opening hours: it is one cheap call, made right after a person
+// fixed the session, and a store with no such fault is never touched.
+const SIGNIN_FAULTS = ['needs_login', 'verify_required'];
+async function confirmSignedIn(storeCode) {
+  const block = channelBlock(db, 'meituan', storeCode);
+  if (!block || !SIGNIN_FAULTS.includes(block.by)) return;
+  try {
+    const browser = await getShangouBrowser(storeCode);
+    if ((await browser.isLoggedIn()) && !browser.verificationRequired) {
+      logSync(storeCode, 'login_restored', 'ok', null, '闪购 signed in — checked when sync started');
+      log(storeCode, `signed in on start — ${block.by} cleared`);
+    } else {
+      log(storeCode, `still ${browser.verificationRequired ? 'behind a check' : 'signed out'} on start`);
+    }
+  } catch (e) { log(storeCode, `start-up sign-in check failed: ${e.message}`); }
+}
+
 // ── Main loop ────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -879,6 +901,7 @@ async function main() {
   recoverOrphanedProcessing(SHANGOU_STORES);
 
   let lastOrderPoll = 0;
+  let startCheckDone = false; // §260 — confirmSignedIn once per start
   let warmupFlagged = false;   // log the cold-Chrome hold once per transition
   let orderPollGap = jitter(ORDER_POLL_MS, 0.4);
   let lastOrderSweep = 0;
@@ -932,6 +955,12 @@ async function main() {
       warmupFlagged = false;
       console.log(`[shangou-daemon] ${new Date().toISOString()} browser warm — resuming sync`);
       for (const s of SHANGOU_STORES) logSync(s, 'chrome_warm', 'ok', null, 'warm-up over — sync resumed');
+    }
+
+    // After the proxy and warm-up gates, so the check is never a cold hit.
+    if (!startCheckDone) {
+      startCheckDone = true;
+      for (const storeCode of SHANGOU_STORES) await confirmSignedIn(storeCode);
     }
 
     if (now - lastOrderPoll >= orderPollGap) {

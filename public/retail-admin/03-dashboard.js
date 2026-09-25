@@ -3158,10 +3158,17 @@ function tdAttnRender() {
   // No dashCardWants() gate, deliberately: every role that can see the
   // dashboard should see when a channel stops syncing, not only operators with
   // a specific capability.
+  //
+  // §106 — a THIRD fact rides the same row, worst of all: a channel STOPPED by
+  // a channel-level cause (signed out, captcha). It is said from the first
+  // failed read, because a signed-out channel's queue takes hours to count as
+  // stalled and Home stayed silent for a day while GZ Grocery was signed out.
+  // It outranks the stall for that channel and turns the row brick.
   const cia = DASH_OPS.channel_items_attention || {};
   const stalled = DASH_OPS.channel_sync_stale || [];
+  const blockedChs = DASH_OPS.channel_blocked || [];
   const attN = Number(cia.count) || 0;
-  if (attN > 0 || stalled.length) {
+  if (attN > 0 || stalled.length || blockedChs.length) {
     const cn = document.documentElement.dataset.uiLang === 'cn';
     // The channel's NAME comes from 29-channel-sync.js, which owns it as an
     // EN/CN pair for every surface that draws one — §103's bilingual fix took
@@ -3175,7 +3182,20 @@ function tdAttnRender() {
       : (CH[k] || [k, k])[cn ? 1 : 0]);
     const down = {};
     for (const s of stalled) down[s.channel] = s;
+    const blk = {};
+    for (const b of blockedChs) blk[b.key] = b.blocked;
     const byCh = cia.by_channel || {};
+    // Signed out and captcha are named; any other channel-level stop reads as
+    // the stall's own words, since to an operator it is the same fact.
+    const blockWord = (name, by) =>
+      (by === 'needs_login' || by === 'auth_required' || by === 'binding_lost') ? cuT(`${name} is signed out`, `${name} 已退出登录`)
+      : by === 'verify_required' ? cuT(`${name} needs a captcha`, `${name} 需要人工验证`)
+      : cuT(`${name} not syncing`, `${name} 未同步`);
+    // "N need attention" · "N 个待处理" — the live pair the Channel sync page's
+    // own strip says. In brackets after a sign-out, bare otherwise.
+    const needN = (n, bracket) => bracket
+      ? cuT(` (${n} need attention)`, `（${n} 个待处理）`)
+      : cuT(`${n} need attention`, `${n} 个待处理`);
     // A channel says ONE thing about itself, worst first. A channel that is not
     // syncing AT ALL is not also described by how many of its items have been
     // caught out so far: the stall is the larger fact and it contains them.
@@ -3183,18 +3203,23 @@ function tdAttnRender() {
     for (const k of Object.keys(CH)) {
       // chName has already resolved the language, so both halves of the pair
       // carry the right name and cuT only picks the phrase around it.
-      if (down[k]) parts.push(cuT(`${chName(k)} not syncing`, `${chName(k)} 未同步`));
-      else if (byCh[k]) parts.push(chName(k) + ' ' + byCh[k]);
+      // A count says what it counts (Ash, 2026-09-24: "Meituan 2" did not say
+      // 2 what, and the pill's total was explained nowhere). A signed-out
+      // channel carries its own count too, so the parts add up to the pill.
+      if (blk[k]) parts.push(blockWord(chName(k), blk[k].by) + (byCh[k] ? needN(byCh[k], true) : ''));
+      else if (down[k]) parts.push(cuT(`${chName(k)} not syncing`, `${chName(k)} 未同步`));
+      else if (byCh[k]) parts.push(cuT(`${chName(k)}: `, `${chName(k)} `) + needN(byCh[k], false));
     }
     // A channel the server names that this map has never heard of is still
     // said rather than dropped — a fourth channel needs no change here.
-    for (const s of stalled) if (!CH[s.channel]) parts.push(cuT(`${s.label} not syncing`, `${s.label} 未同步`));
-    for (const k of Object.keys(byCh)) if (!CH[k] && !down[k]) parts.push(k + ' ' + byCh[k]);
-    // The clock is the OLDER of the two facts — the earliest moment a customer
+    for (const b of blockedChs) if (!CH[b.key]) parts.push(blockWord(b.label, b.blocked.by) + (byCh[b.key] ? needN(byCh[b.key], true) : ''));
+    for (const s of stalled) if (!CH[s.channel] && !blk[s.channel]) parts.push(cuT(`${s.label} not syncing`, `${s.label} 未同步`));
+    for (const k of Object.keys(byCh)) if (!CH[k] && !down[k] && !blk[k]) parts.push(cuT(`${k}: `, `${k} `) + needN(byCh[k], false));
+    // The clock is the OLDEST of the facts — the earliest moment a customer
     // may have started reading a wrong number, whichever way it went wrong.
-    // Both are the server's 'YYYY-MM-DD HH:MM:SS' UTC, so a string sort picks
-    // the minimum without three Date parses to get there.
-    const oldest = [cia.oldest_at, ...stalled.map(s => s.oldest_at)]
+    // All are the server's 'YYYY-MM-DD HH:MM:SS' UTC, so a string sort picks
+    // the minimum without Date parses to get there.
+    const oldest = [cia.oldest_at, ...stalled.map(s => s.oldest_at), ...blockedChs.map(b => b.blocked.at)]
       .filter(Boolean).map(String).sort()[0] || null;
     const t = new Date(String(oldest || '').replace(' ', 'T') + 'Z');
     // A bare clock time is a trap here: two facts stuck on different DAYS read
@@ -3210,9 +3235,11 @@ function tdAttnRender() {
     const state = [parts.join(cn ? '，' : ', '), when ? cuT(`wrong since ${when}`, `自 ${when} 起不符`) : '']
       .filter(Boolean).join(cn ? '，' : ', ');
     fires.push({
-      sev: 'amber', icon: 'plug',
+      sev: blockedChs.length ? 'brick' : 'amber', icon: 'plug',
       label: cuT('Channel sync', '渠道同步'),
-      n: attN || stalled.reduce((n, s) => n + (Number(s.waiting_count) || 0), 0),
+      // A block caught before any queue stalls has no count of its own yet, so
+      // the pill counts stopped channels rather than reading 0.
+      n: attN || stalled.reduce((n, s) => n + (Number(s.waiting_count) || 0), 0) || blockedChs.length,
       // Real, so the row keeps its place in the oldest-first order, but the
       // state line above already says the clock, so noAutoAge stops the row
       // appending a duration to it as well.
@@ -3223,6 +3250,21 @@ function tdAttnRender() {
       // strip at the top of the page says the stall in full.
       cta: cuT('See items', '查看商品'), go: `csOpen('${attN ? 'att' : 'all'}')`,
     });
+    // §252 — when the worst thing on the row is a sign-out this operator can
+    // clear, the row's one button is that, for the first such channel. The
+    // others are still on the Channel sync page, each on its own card.
+    const signable = typeof chSignInable === 'function' && typeof can === 'function' && can('integrations:signin')
+      ? blockedChs.find(b => b.blocked && b.blocked.store && chSignInable(b.blocked.by)) : null;
+    if (signable) {
+      const clean = (v) => String(v || '').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g, '');
+      const nm = cn ? signable.blocked.storeName : (signable.blocked.storeNameEn || signable.blocked.storeName);
+      const f = fires[fires.length - 1];
+      // The row can name two channels and has one button, so the button says
+      // which one it opens (Ash, 2026-09-24: "it also say meituan"). chName has
+      // already resolved the language, as for the state line above.
+      f.cta = cuT(`Sign in to ${chName(signable.key)}`, `重新登录${chName(signable.key)}`);
+      f.go = `chSignIn('${clean(signable.key)}','${clean(signable.blocked.store)}','${clean(nm)}')`;
+    }
   }
 
   // Severity first, then oldest first, and a fire with no age sorts last —

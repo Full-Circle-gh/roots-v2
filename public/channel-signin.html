@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sign in</title>
+<!--
+  §252 — sign a channel back in. Opened in its own tab by a Sign in button with
+  ?channel=&store=&name=&lang=. It asks Tacet to start that channel's login on
+  the box's PRIVATE sign-in display, shows that display through Tacet's own
+  relay, and closes itself once the login script reports success. Every check
+  is on the server (routes/channel-signin.js); this page only draws states.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* docs/tacet-design-system.md: Paper / Ink / Graphite, Inter 400/500 only,
+     8px controls, secondary buttons outlined, Sage for all-clear, Brick for
+     errors. Paper and Ink swap in dark mode; every other colour keeps its role. */
+  :root { --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --line:#E4E0D5; --raised:#F6F3EC;
+          --sage-ink:#5E7359; --brick:#B4533E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#111A2B; --ink:#FBF9F4; --graphite:#A9AFBA; --line:#2A3550; --raised:#1E2A44;
+            --sage-ink:#A3B49F; --brick:#D98A77; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--paper); color:var(--ink);
+               font:400 15px/1.6 'Inter', 'IBM Plex Sans SC', 'PingFang SC', system-ui, sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { padding:16px; border-bottom:1px solid var(--line); }
+  h1 { font-size:18px; font-weight:500; line-height:1.3; margin:0; }
+  #msg { margin:4px 0 0; font-size:13px; color:var(--graphite); min-height:1.6em; }
+  #msg.ok { color:var(--sage-ink); } #msg.bad { color:var(--brick); }
+  #done { margin-top:8px; display:none; }
+  #done.on { display:inline-block; }
+  #screen { flex:1; min-height:0; background:#000; display:none; }
+  #screen.on { display:block; }
+  .actions { padding:16px; display:none; gap:8px; }
+  .actions.on { display:flex; }
+  button { font-family:inherit; font-size:15px; font-weight:500; padding:8px 16px; border-radius:8px;
+           border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer;
+           transition:background 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+  button:hover { background:var(--raised); }
+  button.ghost { border-color:transparent; color:var(--graphite); }
+  @media (prefers-reduced-motion: reduce) { button { transition:none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p id="msg"></p>
+  <button id="done"></button>
+</header>
+<div class="actions" id="actions">
+  <button id="retry"></button>
+  <button class="ghost" id="close"></button>
+</div>
+<div id="screen"></div>
+
+<script>
+// noVNC is an ES module; it is loaded with import() below rather than a static
+// import, because the deploy's own syntax gate (scripts/check-html-js.js) reads
+// inline scripts as classic scripts, where a static import is an error.
+
+const q = new URLSearchParams(location.search);
+const channel = q.get('channel') || '';
+const store = q.get('store') || '';
+const storeName = q.get('name') || store;
+const cn = q.get('lang') === 'cn';
+const T = (en, zh) => (cn ? zh : en);
+document.documentElement.lang = cn ? 'zh' : 'en';
+
+const CH = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
+const chName = (CH[channel] || [channel, channel])[cn ? 1 : 0];
+
+// Every sentence on this page, both languages. The Chinese is declared in
+// docs/tacet-delivery-vocabulary.md (§252), each one marked lifted or composed.
+const S = {
+  title:    T(`Sign in again · ${chName} · ${storeName}`, `重新登录 · ${chName} · ${storeName}`),
+  opening:  T('Opening…', '正在打开…'),
+  loginNow: T('Log in on the screen below. This page closes by itself when you’re done.',
+              '请在下方画面中登录，完成后本页会自动关闭。'),
+  done:     T('Signed in again. Stock updates resume in a few minutes.', '已重新登录，库存推送将在几分钟内恢复。'),
+  failed:   T('The login window closed without signing in.', '登录窗口已关闭，未能登录。'),
+  lost:     T('Lost the screen.', '画面已断开。'),
+  busy:     T('Someone is already signing in. Try again in a few minutes.', '已有人正在登录，请稍后再试。'),
+  denied:   T('You don’t have permission for this', '你没有此操作的权限'),
+  down:     T('The sign-in service on the server is not running.', '服务器上的登录服务未运行。'),
+  // §260 — a holder browser (闪购): signed in inside the browser that stays open.
+  holderNow: T('Sign in or pass the check on the screen below, then press Done.',
+               '请在下方画面中登录或通过人工验证，然后点击完成。'),
+  doneBtn:  T('Done', '完成'),
+  checking: T('Checking that stock updates are working again…', '正在确认库存推送是否恢复…'),
+  still:    T('Stock updates have not come back yet.', '库存推送仍未恢复。'),
+  timeout:  T('Time ran out. Try again.', '已超时，请重试。'),
+  retry:    T('Try again', '重试'),
+  close:    T('Close', '关闭'),
+};
+
+const $ = (id) => document.getElementById(id);
+$('title').textContent = S.title;
+document.title = S.title;
+$('retry').textContent = S.retry;
+$('close').textContent = S.close;
+$('done').textContent = S.doneBtn;
+$('done').onclick = finish;
+function leave() {
+  if (window.opener) return window.close();
+  if (history.length > 1) return history.back();
+  location.href = '/';
+}
+$('retry').onclick = () => location.reload();
+$('close').onclick = leave;
+
+function say(text, cls) {
+  $('msg').textContent = text;
+  $('msg').className = cls || '';
+}
+function end(text, cls, canRetry) {
+  say(text, cls);
+  $('actions').classList.add('on');
+  $('done').classList.remove('on');
+  $('retry').style.display = canRetry ? '' : 'none';
+  stopPolling();
+  if (rfb) { try { rfb.disconnect(); } catch (_) {} rfb = null; }
+  $('screen').classList.remove('on');
+}
+
+let rfb = null;
+let poll = null;
+let finished = false;
+let holder = false;   // §260 — this sign-in is inside a holder browser
+let verifying = null; // when the wait for the daemon's own word began
+function stopPolling() { if (poll) { clearInterval(poll); poll = null; } }
+
+async function api(method, url, body) {
+  try {
+    const r = await fetch(url, {
+      method, credentials: 'same-origin',
+      headers: body ? { 'content-type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let j = null; try { j = await r.json(); } catch (_) {}
+    return { status: r.status, json: j || {} };
+  } catch (_) { return { status: 0, json: {} }; }
+}
+
+function refusal(r) {
+  if (r.status === 401 || r.status === 403) return end(S.denied, 'bad', false);
+  if (r.status === 409) return end(S.busy, 'bad', true);
+  return end(S.down, 'bad', true);
+}
+
+async function showScreen() {
+  let RFB;
+  try { RFB = (await import('/novnc/core/rfb.js')).default; }
+  catch (_) { return end(S.lost, 'bad', true); }
+  if (finished) return;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  $('screen').classList.add('on');
+  rfb = new RFB($('screen'), `${proto}//${location.host}/api/retail-admin/channel-signin/screen`,
+    { wsProtocols: ['binary'] });
+  rfb.scaleViewport = true;
+  rfb.resizeSession = false;
+  rfb.addEventListener('disconnect', () => { if (!finished && !verifying) end(S.lost, 'bad', true); });
+}
+
+async function check() {
+  const r = await api('GET', `/api/retail-admin/channel-signin/status?channel=${encodeURIComponent(channel)}&store=${encodeURIComponent(store)}`);
+  if (r.status !== 200) return refusal(r);
+  const s = r.json;
+  if (!s.trigger) return end(S.down, 'bad', true);
+  if (holder) return checkHolder(s);
+  if (s.running) return;
+  finished = true;
+  if (s.last && s.last.ok) {
+    end(S.done, 'ok', false);
+    // The desktop opens this in its own tab, which can close itself. The phone
+    // opens it in the same window (an installed web app would lose its sign-in
+    // in a new one), so there it goes back to where the button was.
+    setTimeout(leave, 3000);
+  } else {
+    end(S.failed, 'bad', true);
+  }
+}
+
+// A holder session is over when Done is pressed or the trigger saw the login
+// page left. Signed in is then the daemon's own word: the channel's block
+// clears once it restarts and re-checks. Up to three minutes.
+const VERIFY_MS = 3 * 60 * 1000;
+function checkHolder(s) {
+  if (s.running && !verifying) return;
+  if (!verifying) {
+    if (!s.last || !s.last.ok) { finished = true; return end(S.timeout, 'bad', true); }
+    beginVerify();
+  }
+  if (!s.blocked) {
+    finished = true;
+    end(S.done, 'ok', false);
+    return setTimeout(leave, 3000);
+  }
+  if (Date.now() - verifying > VERIFY_MS) { finished = true; end(S.still, 'bad', true); }
+}
+function beginVerify() {
+  verifying = Date.now();
+  $('done').classList.remove('on');
+  if (rfb) { try { rfb.disconnect(); } catch (_) {} rfb = null; }
+  $('screen').classList.remove('on');
+  say(S.checking);
+}
+async function finish() {
+  $('done').disabled = true;
+  const r = await api('POST', '/api/retail-admin/channel-signin/finish', { channel, store });
+  $('done').disabled = false;
+  // Already over (the trigger saw the login page left): the poll takes it from here.
+  if (r.status === 409) return;
+  if (r.status !== 200) return refusal(r);
+  if (!verifying) beginVerify();
+}
+
+async function start() {
+  say(S.opening);
+  const r = await api('POST', '/api/retail-admin/channel-signin/start', { channel, store });
+  if (r.status !== 200) return refusal(r);
+  holder = !!r.json.holder;
+  say(holder ? S.holderNow : S.loginNow);
+  if (holder) $('done').classList.add('on');
+  // The login script needs a moment to open its window on the screen.
+  setTimeout(showScreen, 1500);
+  poll = setInterval(check, 3000);
+}
+
+start();
+</script>
+</body>
+</html>

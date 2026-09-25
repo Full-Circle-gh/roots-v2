@@ -1915,6 +1915,68 @@ reg('dcDelEv', (sid,fid)=>{
     }};
   render();
 });
+/* §261 — the delivery photo. Downscaled before it leaves the phone, exactly as
+   the evidence photo above is, and for the same reason. */
+function dphOrder(){
+  return (state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+}
+function dphReload(o){
+  state.parcelBusy=null;
+  api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+}
+function dphFail(e){
+  state.parcelBusy=null;
+  if(String(e.message)==='auth') return;
+  state.orderErr=E(orderErrorText(e),orderErrorText(e)); render();
+}
+reg('dphAdd', input=>{
+  const f=input&&input.files&&input.files[0];
+  if(!f) return;
+  input.value='';                                   // so the same file can be re-picked
+  const o=dphOrder();
+  if(!o||o._id==null||state.parcelBusy) return;
+  const unread=()=>{ state.orderErr=E('Could not read that photo.','无法读取该照片。'); render(); };
+  const rd=new FileReader(), img=new Image();
+  rd.onload=()=>{ img.onload=()=>{
+      let data=null;
+      try{
+        const max=1280;
+        const scale=Math.min(1, max/Math.max(img.width||1, img.height||1));
+        const w=Math.max(1,Math.round((img.width||1)*scale)), h=Math.max(1,Math.round((img.height||1)*scale));
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        data=cv.toDataURL('image/jpeg',0.7);
+      }catch(e){ data=null; }
+      if(!data){ unread(); return; }
+      state.parcelBusy='dph'; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/delivery-photo',{data}).then(()=>dphReload(o)).catch(dphFail);
+    };
+    img.onerror=unread;
+    img.src=String(rd.result||'');
+  };
+  rd.onerror=unread;
+  rd.readAsDataURL(f);
+});
+reg('dphView', ()=>{
+  const o=dphOrder();
+  if(!o||o._id==null) return;
+  api('/orders/'+o._id+'/delivery-photo').then(j=>{
+    const data=j&&j.data&&j.data.data;
+    if(!data){ state.orderErr=E('Photo not found.','未找到照片。'); render(); return; }
+    state.imgZoom=data; render();   // the generic full-screen viewer
+  }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
+});
+reg('dphDel', ()=>{
+  const o=dphOrder();
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.ask={title:T('Remove this photo?','删除这张照片?'),
+    confirmLabel:T('Remove','删除'), danger:true,
+    run:()=>{
+      state.parcelBusy='dph'; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/delivery-photo',{},'DELETE').then(()=>dphReload(o)).catch(dphFail);
+    }};
+  render();
+});
 reg('dcTold', sid=>{ dcStep(sid,'customer_told',{}); });
 reg('dcRemedy', (sid,kind)=>{ dcStep(sid,'remedy',{kind}); });
 /* Unfold one later step's controls. ONE AT A TIME: opening the second closes
@@ -3645,6 +3707,10 @@ reg('chanCell', (channel, storeCode, next)=>{
       // own next read hides, so the row said Open until the app was restarted
       // and then said Closed. The toggle looked like it undid itself; it had
       // never taken in the first place.
+      // At a shut shop this open is not refused any more (§253): the server
+      // opens the shop with ONLY this channel, every other channel there
+      // staying shut, in one write. So it is the same write as anywhere else,
+      // and the re-read below shows the shop open with this one row live.
       apiWrite('/channel-status/cell',{channel,storeCode,open},'POST').then(()=>{
         state.chanBusy=null;
         showToast(open?T('Open at '+store,store+' 已开启'):T('Closed at '+store,store+' 已关闭'));
@@ -3652,29 +3718,10 @@ reg('chanCell', (channel, storeCode, next)=>{
       }).catch(e=>{
         state.chanBusy=null;
         if(String(e.message)==='auth') return;
-        state.chanErr = e.code==='shop_closed'
-          ? E(store+' is closed as a shop, so no channel can open there. Open the shop first — it is on the Sales screen, under Shops.',
-              store+' 门店已关闭，任何渠道都无法在此开启。请先在销售页面的「门店」中开启该门店。')
-          : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.chanErr = E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
-        if(e.code==='shop_closed') loadChannels(true);
       });
     }};
-  render();
-});
-/* Tapping a channel row at a shop that is shut. The write it would have sent is
-   refused by the server now, so the row does not send one: it says what is in
-   the way and where the switch is, which is two taps up the same screen. */
-reg('chanShopShut', (channel, storeCode)=>{
-  const d=state.chan, c=((d&&d.channels)||[]).find(x=>x.channel===channel);
-  const cell=c&&(c.cells||[]).find(x=>x.storeCode===storeCode); if(!cell) return;
-  const store=chanStoreName(cell);
-  state.ask={
-    title:T(store+' is closed','门店 '+store+' 已关闭'),
-    body:T('The whole shop is shut, so every channel there is closed and none can be opened on its own. Open '+store+' under Shops on the Sales screen first.',
-           '整家门店已关闭，因此该门店的所有渠道均为关闭状态，也无法单独开启。请先在销售页面的「门店」中开启 '+store+'。'),
-    confirmLabel:T('OK','知道了'),
-    run:()=>{ state.chanSheet=null; render(); }};
   render();
 });
 /* THE SHOP SWITCH — the desktop Sales page's location master, on the phone.
@@ -3688,10 +3735,17 @@ reg('shopOpen', (storeCode, next)=>{
   const loc=((state.chan&&state.chan.locations)||[]).find(x=>x.storeCode===storeCode); if(!loc) return;
   const open=String(next)==='1';
   const store=chanStoreName(loc);
+  // Reopening brings back the channels that were live when the shop was last
+  // closed (§253), not every channel — so when the server remembers a set, the
+  // confirm names it, in the same words as opening one channel at a store.
+  const back=open&&Array.isArray(loc.reopenChannels)&&loc.reopenChannels.length?loc.reopenChannels:null;
+  const backNames=back?back.map(k=>{const m=CHAN_META[k]||{en:k,zh:k};return T(m.en,m.zh);}).join(T(', ','、')):'';
   state.ask={
-    title: open ? T('Open '+store+'?', '开启 '+store+'？') : T('Close '+store+'?', '关闭 '+store+'？'),
-    body: open ? T('Every sales channel at this shop opens, and it takes orders, pickups and counter sales again. Meituan follows within about a minute.',
-                   '该门店的所有销售渠道将开启，恢复接单、自提与门店收银。美团约一分钟内跟随。')
+    title: open ? (back ? T('Open '+backNames+' at '+store+'?', '在 '+store+' 开启 '+backNames+'？') : T('Open '+store+'?', '开启 '+store+'？'))
+                : T('Close '+store+'?', '关闭 '+store+'？'),
+    body: open ? (back ? T('New orders can arrive at this store again.','这家门店可以重新接单。')
+                       : T('Every sales channel at this shop opens, and it takes orders, pickups and counter sales again. Meituan follows within about a minute.',
+                           '该门店的所有销售渠道将开启，恢复接单、自提与门店收银。美团约一分钟内跟随。'))
                : T('Every sales channel at this shop closes, the counter till stops selling, and orders route to the other shop. Orders already placed are not affected.',
                    '该门店的所有销售渠道将关闭，门店收银台停止销售，订单将转由其他门店处理。已下单的订单不受影响。'),
     confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
@@ -4900,12 +4954,11 @@ function sheetChannel(){
        <div class="list">${cells.map((cell,i)=>{
          const busy=state.chanBusy===key+'|'+cell.storeCode;
          // A shop that is not trading outranks this row, so the row says so
-         // instead of showing a bare "Closed" next to an Open it cannot
-         // deliver. Tapping it explains and points at the shop switch rather
-         // than posting a write the server now refuses by name.
+         // instead of a bare "Closed". Tapping it opens this one channel,
+         // which opens the shop with only this channel live (§253).
          const shopShut=cell.shopOpen===false&&key!=='meituan';
          return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
-         <button ${busy||state.chanBusy?'disabled':''} onclick="APP.cmd('${shopShut?'chanShopShut':'chanCell'}','${escAttr(key)}','${escAttr(cell.storeCode)}',${cell.open?'0':'1'})"
+         <button ${busy||state.chanBusy?'disabled':''} onclick="APP.cmd('chanCell','${escAttr(key)}','${escAttr(cell.storeCode)}',${cell.open?'0':'1'})"
            style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:14px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;${state.chanBusy&&!busy?'opacity:.5':''}">
            <span style="font-size:15px;color:var(--text-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(chanStoreName(cell))}</span>
            ${/* The state, and a chevron — not the state AND the verb. The row
@@ -14514,6 +14567,7 @@ function csBlockSentence(ch,by){
   switch(by){
     case 'verify_required': return T(nm+' is asking for a captcha — a human has to pass it on the sync machine. Sync is paused.','验证中心风控，同步已暂停，需要人工验证。');
     case 'needs_login':
+    case 'binding_lost':
     case 'auth_required':   return T('The sync service is signed out of '+nm+'. Sign in again.','同步服务已退出登录'+nm+'。请重新登录。');
     case 'proxy_down':
     case 'proxy_stale':     return T('Cannot reach the sync service. Sync is paused.','无法连接同步服务。同步已暂停。');
@@ -14543,6 +14597,33 @@ function csBlockLine(ch,blk){
   const store=blk.storeName?T(blk.storeNameEn||blk.storeName,blk.storeName||blk.storeNameEn):'';
   return said+(store?' · '+store:'')+(blk.at?' · '+T('since','自')+' '+fmtDay(blk.at):'');
 }
+/* §252 — Sign in, the phone's half. Same causes as the desktop's
+   chSignInable: a signed-out session in any channel's own name for it, a lost
+   shop binding, a captcha. Opens the sign-in page IN THIS WINDOW rather than a
+   new tab: an installed iPhone web app does not share its sign-in with Safari,
+   so a new tab would open signed out. The page goes back here when it is done. */
+const CS_SIGNIN_CAUSES=['needs_login','auth_required','binding_lost','verify_required'];
+/* The card's title names the cause when a person can act on it — the desktop's
+   chHeadState, same three words. Both cards read "stopped taking stock
+   updates" and only the small print said which one was signed out. */
+function csHeadline(ch){
+  const nm=csChName(ch.key), by=ch.blocked&&ch.blocked.by;
+  if(by==='needs_login'||by==='auth_required'||by==='binding_lost') return T(nm+' is signed out',nm+' 已退出登录');
+  if(by==='verify_required') return T(nm+' needs a captcha',nm+' 需要人工验证');
+  return T(nm+' stopped taking stock updates',nm+' 已停止接收库存更新');
+}
+function csSignInable(by){ return CS_SIGNIN_CAUSES.indexOf(by)!==-1; }
+function csSignInBtn(ch,blk){
+  if(!blk||!blk.store||!csSignInable(blk.by)||!mCan('integrations:signin')) return '';
+  const name=T(blk.storeNameEn||blk.storeName||blk.store,blk.storeName||blk.storeNameEn||blk.store);
+  // Inside a quoted onclick, so only characters that cannot end the string.
+  const k=v=>String(v||'').replace(/[^A-Za-z0-9_\-\u3400-\u9fff ]/g,'');
+  return `<button type="button" onclick="APP.cmd('chSignIn','${k(ch)}','${k(blk.store)}','${k(name)}')" style="align-self:flex-start;margin-top:6px;font-family:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid var(--brick-ink);background:transparent;color:var(--brick-ink)">${T('Sign in again','重新登录')}</button>`;
+}
+reg('chSignIn',(ch,store,name)=>{
+  location.href='/channel-signin?channel='+encodeURIComponent(ch)+'&store='+encodeURIComponent(store)+
+    '&name='+encodeURIComponent(name||store)+'&lang='+(LANG==='en'?'en':'cn');
+});
 /* §107 — waiting_count (store×product push targets) and counts.att (items,
    worst-store-wins) are different denominators by design (§104) and can
    legitimately differ; naming both here is what stops that from reading as a
@@ -14629,8 +14710,8 @@ function screenChannelSync(){
     ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T(csChName(ch.key)+' stopped taking stock updates',csChName(ch.key)+' 已停止接收库存更新')}</span></div>
-      ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>`:''}
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${csHeadline(ch)}</span></div>
+      ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>${csSignInBtn(ch.key,ch.blocked)}`:''}
       ${ch.stale?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${csStaleLine(ch)}</div>`:''}</div>`).join('')}
     ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--sage-ink)"><i style="width:8px;height:8px;border-radius:50%;background:var(--sage)"></i>${T('Every channel is in step','各渠道均已同步')}</div>
@@ -15947,28 +16028,42 @@ function opsFires(){
 
      No featOn/permission gate for SEEING it: every role that sees Home should
      see when a channel stops syncing. Opening goes through the screen's gate. */
-  const cia=o.channel_items_attention||{}, stalled=o.channel_sync_stale||[];
+  /* §106 — a third fact rides the same row, worst of all: a channel STOPPED
+     by a channel-level cause (signed out, captcha), said from the first failed
+     read. A signed-out channel's queue takes hours to count as stalled, and
+     Home stayed silent for a day while GZ Grocery was signed out. It outranks
+     the stall for that channel and turns the row brick. Mirrors the desktop. */
+  const cia=o.channel_items_attention||{}, stalled=o.channel_sync_stale||[], blockedChs=o.channel_blocked||[];
   const attN=Number(cia.count)||0;
-  if(attN>0||stalled.length){
+  if(attN>0||stalled.length||blockedChs.length){
     const CH={meituan:['Meituan','美团'],eleme:['Eleme','饿了么'],guanyi:['GZ Grocery','GZ Grocery']};
     const down={}; for(const s of stalled) down[s.channel]=s;
+    const blk={}; for(const b of blockedChs) blk[b.key]=b.blocked;
     const byCh=cia.by_channel||{};
+    const blockWord=(en,cn,by)=>(by==='needs_login'||by==='auth_required'||by==='binding_lost')?T(en+' is signed out',cn+' 已退出登录')
+      :by==='verify_required'?T(en+' needs a captcha',cn+' 需要人工验证')
+      :T(en+' not syncing',cn+' 未同步');
+    const needN=(n,bracket)=>bracket?T(' ('+n+' need attention)','（'+n+' 个待处理）'):T(n+' need attention',n+' 个待处理');
     /* A channel says ONE thing about itself, worst first: a channel not
        syncing at all is not also described by how many of its items have been
        caught out — the stall is the larger fact and it contains them. */
     const parts=[];
     for(const k of Object.keys(CH)){
-      if(down[k]) parts.push(T(CH[k][0]+' not syncing',CH[k][1]+' 未同步'));
-      else if(byCh[k]) parts.push(T(CH[k][0],CH[k][1])+' '+byCh[k]);
+      /* A count says what it counts, and a signed-out channel carries its own,
+         so the parts add up to the pill. Mirrors the desktop. */
+      if(blk[k]) parts.push(blockWord(CH[k][0],CH[k][1],blk[k].by)+(byCh[k]?needN(byCh[k],true):''));
+      else if(down[k]) parts.push(T(CH[k][0]+' not syncing',CH[k][1]+' 未同步'));
+      else if(byCh[k]) parts.push(T(CH[k][0]+': ',CH[k][1]+' ')+needN(byCh[k],false));
     }
     /* A channel the server names that this map has never heard of is still
        said rather than dropped — a fourth channel needs no change here. */
-    for(const s of stalled) if(!CH[s.channel]) parts.push(T(s.label+' not syncing',s.label+' 未同步'));
-    for(const k of Object.keys(byCh)) if(!CH[k]&&!down[k]) parts.push(k+' '+byCh[k]);
-    /* The clock is the OLDER of the two facts — the earliest moment a customer
-       may have started reading a wrong number. Both stamps are the server's
+    for(const b of blockedChs) if(!CH[b.key]) parts.push(blockWord(b.label,b.label,b.blocked.by)+(byCh[b.key]?needN(byCh[b.key],true):''));
+    for(const s of stalled) if(!CH[s.channel]&&!blk[s.channel]) parts.push(T(s.label+' not syncing',s.label+' 未同步'));
+    for(const k of Object.keys(byCh)) if(!CH[k]&&!down[k]&&!blk[k]) parts.push(T(k+': ',k+' ')+needN(byCh[k],false));
+    /* The clock is the OLDEST of the facts — the earliest moment a customer
+       may have started reading a wrong number. All stamps are the server's
        'YYYY-MM-DD HH:MM:SS' UTC, so a string sort picks the minimum. */
-    const oldest=[cia.oldest_at].concat(stalled.map(s=>s.oldest_at)).filter(Boolean).map(String).sort()[0]||null;
+    const oldest=[cia.oldest_at].concat(stalled.map(s=>s.oldest_at),blockedChs.map(b=>b.blocked.at)).filter(Boolean).map(String).sort()[0]||null;
     const t=oldest?_date(oldest):null;
     /* Carry the date when it isn't today — a bare clock time makes a fact stuck
        since another DAY read as newer than one stuck this morning, so the text
@@ -15976,8 +16071,10 @@ function opsFires(){
     const sameDay=!!t&&shopDayOf(t)===shopToday();
     const when=!t?'':tdWhen(t,sameDay?'time':'dateTime',_tdL());
     const meta=[parts.join(T(', ','，')),when?T('wrong since '+when,'自 '+when+' 起不符'):''].filter(Boolean).join(T(', ','，'));
-    f.push({sev:'amber',icon:'refresh-cw',label:T('Channel sync','渠道同步'),
-      n:attN||stalled.reduce((n,s)=>n+(Number(s.waiting_count)||0),0),meta,
+    f.push({sev:blockedChs.length?'brick':'amber',icon:'refresh-cw',label:T('Channel sync','渠道同步'),
+      /* A block caught before any queue stalls has no count of its own yet,
+         so the pill counts stopped channels rather than reading 0. */
+      n:attN||stalled.reduce((n,s)=>n+(Number(s.waiting_count)||0),0)||blockedChs.length,meta,
       /* mins stays real so this still outranks Restock below (whose mins is
          deliberately null, and a fire with no age sorts last) — a channel that
          may be SELLING stock we don't have beats an empty shelf. age:false
@@ -16475,6 +16572,7 @@ function sheetOrderDetail(){
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
        ${shopNoteCard(o)}
        ${riderCard(o)}
+       ${deliveryPhotoCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!o.viewOnly&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -17070,6 +17168,24 @@ function riderLive(o){
   if(['delivered','cancelled','refunded'].includes(o.raw)) return null;
   if(courierAgeMs(c.updated_at)>M_COURIER_STALE_MS) return null;
   return c;
+}
+/* §261 — the photo of the parcel at the door, which the customer sees on their
+   order page. One per order; a second replaces the first. Under the rider card
+   because that is where staff are looking when the rider says it is done. */
+function deliveryPhotoCard(o){
+  const p=o.dphoto;
+  if(!p||o.viewOnly) return '';
+  const busy=state.parcelBusy==='dph';
+  return `<div class="card" style="padding:4px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="flex:none;color:var(--text-secondary);display:flex">${ic('camera',18)}</span>
+    <span style="font-size:14.5px;font-weight:500">${T('Delivery photo','送达照片')}</span>
+    ${p.has&&p.customer_sees?`<span style="font-size:12px;color:var(--text-secondary)">${T('Customers see this','顾客可见')}</span>`:''}
+    <span style="margin-left:auto;display:inline-flex;gap:14px">
+      ${p.has?`<button class="rowact" onclick="APP.cmd('dphView')">${T('View','查看')}</button>`:''}
+      <label class="rowact"${busy?' style="opacity:.55;pointer-events:none"':''}>${p.has?T('Replace','更换'):T('Add photo','添加照片')}
+        <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dphAdd',this)"></label>
+      ${p.has?`<button class="rowact brick"${busy?' disabled':''} onclick="APP.cmd('dphDel')">${T('Remove','删除')}</button>`:''}
+    </span></div>`;
 }
 function riderCard(o){
   const c=o.courier;
@@ -23407,6 +23523,10 @@ const ITEM_TUPLE=it=>[it.qty||it.quantity||1,
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);
+  /* §261 — the delivery photo slot. Present only where the server offers one
+     (a same-city delivery that has left the shop, or an order already carrying
+     a photo); never the bytes, which dphView fetches. */
+  base.dphoto=o.delivery_photo||null;
   // The parcels the order is actually split into. An out-of-Guangzhou order
   // becomes an Air parcel and a Land parcel, each shipping and arriving on its
   // own clock — the phone showed one flat item list and one tracking block, so
