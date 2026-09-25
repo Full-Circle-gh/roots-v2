@@ -222,9 +222,16 @@ jobs:
           # path through ROOTS_DB.
           ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
           scp -q "$S" "prod:$REMOTE"
-          for d in lib routes middleware; do
-            [ -d "$d" ] && scp -qr "$d" "prod:$STAGE/$d"
-          done
+          # ONE COMPRESSED STREAM, NOT 207 ROUND TRIPS. scp -r opened every file
+          # separately, and each one paid the full round trip to a host on the
+          # far side of the world: this copy was about two of the ~2.6 minutes a
+          # run took, and GitHub bills each job rounded UP to the whole minute.
+          # tar sends the same three directories as one gzip stream over the
+          # ControlMaster socket, and unpacks them to the same paths. set -o
+          # pipefail (above) fails the step if either end fails.
+          dirs=""
+          for d in lib routes middleware; do [ -d "$d" ] && dirs="$dirs $d"; done
+          tar czf - $dirs | ssh prod "tar xzf - -C '$STAGE'"
           ssh prod "ln -s /root/roots-v2/node_modules '$STAGE/node_modules' && \
                     printf 'module.exports = {};\n' > '$STAGE/database.js'"
 

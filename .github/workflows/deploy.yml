@@ -38,6 +38,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # EVERY COMMIT AND TREE, BUT ONLY HEAD'S FILE CONTENTS. The steps below
+          # need the whole commit graph (merge-base, is-ancestor, diff
+          # --name-only against the deploy record) and those read commits and
+          # trees only; the files shipped come from the working tree, which is
+          # HEAD. A blob:none partial clone keeps all of that identical and
+          # skips downloading every old version of every file -- about 17 s
+          # of a ~64 s job, and GitHub bills each job rounded UP to the minute.
+          # Any later step that did read an old blob would still work: git
+          # fetches it on demand.
+          filter: blob:none
 
       - name: Honour skip-deploy token
         id: gate
@@ -387,16 +397,17 @@ jobs:
           APP=/root/roots-v2
           STAGE="$APP/__stage__"
           ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
-          # Recreate the directory tree for any nested files. Grep the files
-          # that HAVE a slash first, THEN strip to their dir — doing it the
-          # other way (sed then grep '/') drops single-level dirs like
-          # public/ and routes/, so scp of nested files fails on a fresh stage.
-          DIRS=$(grep '/' /tmp/files.txt | sed 's@/[^/]*$@@' | sort -u || true)
-          for d in $DIRS; do ssh prod "mkdir -p '$STAGE/$d'"; done
-          # Upload each file to its matching relative path under __stage__.
-          while IFS= read -r f; do
-            scp -q "$f" "prod:$STAGE/$f"
-          done < /tmp/files.txt
+          # Upload every file to its matching relative path under __stage__, as
+          # ONE COMPRESSED STREAM rather than one ssh per directory and one scp
+          # per file, each paying the full round trip to the host. tar creates
+          # the directory tree itself (the old DIRS loop existed only to do
+          # that for scp). --no-same-owner / --no-same-permissions make the
+          # unpacked files what scp made them: owned by the ssh user, mode
+          # under its umask -- tar run as root would otherwise restore the
+          # runner's uid. The "Verify what landed" step below still checks every
+          # shipped file byte for byte, so a copy that went wrong cannot pass.
+          tar czf - -T /tmp/files.txt | \
+            ssh prod "tar xzf - -C '$STAGE' --no-same-owner --no-same-permissions"
           # Hand off to the server's installer: syntax-check, backup, install,
           # pm2 restart, health probe, auto-rollback. RESULT= line is the verdict.
           ssh prod "cp '$APP/scripts/deploy-apply.sh' /tmp/roots-v2-apply.sh && bash /tmp/roots-v2-apply.sh" | tee /tmp/apply.log || true
