@@ -487,9 +487,16 @@
   font-size: calc(46 * var(--u) * var(--font-scale));
   line-height: 1.1;
 }
+/* §264 · a figure (a short value with a number in it) wears --f-num whole.
+   The display face has no digits, dash or degree sign; only the digits were
+   substituted, so the dash and the degree fell through to the CJK face, which
+   draws them a full em wide and pushed "0–4°" onto two lines. A phrase
+   (.long) keeps --f-bear. */
+.shop-product-blocks .spb-storage-num.fig {
+  font-family: var(--f-num);
+}
 /* --f-num: the unit wears the face the figure's digits come from. Same rule
-   as .spb-nrow-r, stacked instead of inline. The figure stays --f-bear
-   because .long lets it hold a phrase. */
+   as .spb-nrow-r, stacked instead of inline. */
 .shop-product-blocks .spb-storage-unit {
   font-family: var(--f-num);
   font-size: calc(24 * var(--u) * var(--font-scale));
