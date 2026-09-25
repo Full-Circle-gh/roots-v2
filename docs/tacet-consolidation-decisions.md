@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.419
+# Tacet shared-core consolidation — decisions record, v4.420
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-25 · v4.420 — **§254 ADDENDUM · THE RECIPE'S SKU TAKES BATCH SIZE'S SLOT ON THE PRINTED CARD — ASH:** *"sku can replace batch size positing and size"*. The facts row under the name now reads Servings, SKU, Shelf life, Storage: the recipe's SKU prints at the full fact size in the slot batch size had, and batch size is no longer on the card. The SKU leaves the foot, so it prints once. What is lost: the total-weight check on a recipe with no serving size; where there is one, Servings still reads e.g. *4 × 150 g*. `recipePrintCard` (public/retail-admin/19-recipes.js) and `tdPrintRecipe` (public/retail-admin/26-print.js) only. No new Chinese: *SKU · 货号* is the live pair on the ingredient column. Tests: `scripts/test_recipe_print.js` §1 and §4b.
 
 2026-09-25 · v4.419 — **§254 ADDENDUM · THE RECIPE CARD IS LAID OUT FOR THE KITCHEN — ASH:** *"is that the best template for people that work in kitchen and need information clear and pririties what they need to see first"*, then *"ignore the data. fix the template"*. **WHAT CHANGED.** `tdPrintRecipe` (public/retail-admin/26-print.js) only: both names at full size, the Chinese no longer grey and small; the facts (servings first, then batch size, shelf life, storage) move from small grey print top right to a row of large figures under the name; each ingredient row reads amount (bold, first), then the name with the Chinese on its own line, then the SKU, small and grey, last; steps and notes are larger with bold step numbers; the recipe's own SKU moves to the foot. Print-only spacing keeps an ordinary recipe on one A4 sheet (checked with a seven-step, five-ingredient card). **WHAT DID NOT.** Same content as §254, no money, no new field, no schema change, no new Chinese — every label is a live pair already on the card. **NOT DONE, NEEDS DATA:** a photo, allergens and oven settings would lead the card, but a recipe stores none of them. Tests: `scripts/test_recipe_print.js` §4b.
 
@@ -20403,6 +20405,10 @@ v4.408 changelog entry.
 length: names at full size in both languages, servings and batch as large
 figures under the name, amount first on each ingredient line, SKUs last and
 quiet. Content is unchanged. See the v4.419 changelog entry.
+
+**Addendum, 2026-09-25 (2).** The recipe's SKU takes batch size's slot in the
+facts row, at the same size, and batch size is off the card. See the v4.420
+changelog entry.
 
 ## §255 — "NOT SYNCING" IS A PUSH WAITING, NEVER A PUSH THE CHANNEL REFUSED
 

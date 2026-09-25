@@ -162,8 +162,10 @@ window.tdPrintTable = tdPrintTable;
    length with busy hands, so the order is what a cook looks for first:
      1. the name, both languages at full size — a Chinese-reading cook reads
         the second line as the title, so it is not greyed or shrunk;
-     2. what it makes and how it keeps, as a row of large figures under the
-        name rather than small print tucked top right;
+     2. what it makes, which product it is and how it keeps, as a row of
+        large figures under the name rather than small print tucked top right
+        — the recipe's SKU sits in that row, in the slot batch size had
+        (Ash, 2026-09-25: "sku can replace batch size positing and size");
      3. the amount FIRST on each ingredient line, bold, so the eye does not
         travel across a wide row to find it and land on the wrong line;
      4. the SKUs last and quiet — purchasing reads them, a cook does not.
@@ -175,12 +177,11 @@ window.tdPrintTable = tdPrintTable;
    language somebody wrote it.
 
      nameEn/nameCn  the recipe's two names
-     sku            its SKU, or ''
-     facts          [[label, value]…] — servings, batch, shelf life, storage
+     facts          [[label, value]…] — servings, SKU, shelf life, storage
      lines          [{ sku, en, cn, qty }] — cn '' prints the English alone
      steps          [{ name, text }]
      notes          the recipe's notes, or '' */
-function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
+function tdPrintRecipe({ nameEn, nameCn, facts, lines, steps, notes }) {
   const w = _tdPrintOpen();
   if (!w) return null;
   const e = _tdPrintEsc;
@@ -255,7 +256,7 @@ function tdPrintRecipe({ nameEn, nameCn, sku, facts, lines, steps, notes }) {
   </table>
   ${stepItems ? `<h2>Steps<span>步骤</span></h2><ol class="steps">${stepItems}</ol>` : ''}
   ${notes ? `<h2>Notes<span>备注</span></h2><div class="notes">${e(notes)}</div>` : ''}
-  <div class="foot"><span>${e(shop)}${shop && sku ? ' · ' : ''}${sku ? 'SKU ' + e(sku) : ''}</span><span>${e(tdWhen(new Date(), 'dateTime'))}</span></div>
+  <div class="foot"><span>${e(shop)}</span><span>${e(tdWhen(new Date(), 'dateTime'))}</span></div>
 </div>
 </body></html>`;
   w.document.write(doc);
