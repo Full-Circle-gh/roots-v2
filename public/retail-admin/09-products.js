@@ -381,9 +381,9 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 // order is its own place, not a fact about the catalogue.
 function prodShowView(view) {
   // A sub-view switch is a "show me the catalogue's other face" move, so the
-  // expanded product page comes down first — otherwise coming back from the
-  // ledger would land on a full page with no toolbar and no way to see the list.
-  if (pdIsExpanded()) pdCollapseToPanel();
+  // open product page closes first — otherwise coming back from the ledger
+  // would land on a full page with no toolbar and no way to see the list.
+  if (pdIsExpanded()) pdClose();
   const allowed = (v, cap) => v === view && (typeof can !== 'function' || can(cap));
   if (!allowed('activity', 'activity:view') && !allowed('categories', 'categories:view')) view = 'catalog';
   const panes = {
@@ -3312,6 +3312,8 @@ async function pdOpen(id) {
   pdLoadCatTree().then(() => {
     pdFillTopCats(p && p.top_category);
     pdFillSubCats(p && p.top_category, p && p.subcategory);
+    // The page opens before the category tree lands; repaint its subtitle.
+    pdSyncPageHead();
   });
   // Duplicate + delete only apply to an existing product.
   document.getElementById('pd-dup-btn').style.display = p ? '' : 'none';
@@ -3435,10 +3437,12 @@ function pdShowDocked() {
   const ed = document.getElementById('pd-editor');
   _paEditorOpen = true;
   if (ed) ed.style.display = '';
-  pdOpenDrawer();
-  // Every open lands on the Basics pane — no matter which pane was showing when
-  // the previous product was closed.
+  // The dock's own panes reset to Basics so its hidden state stays tidy.
   pdTab('basics');
+  // Every open lands on the full product page. The side drawer is retired as
+  // a view (Ash, 2026-09-25: "no need this window anymore, expand it as
+  // default"); its nodes are still the page's fields, carried out by pdExpand.
+  pdExpand();
   // First paint of the summary rows. The va*/bu*/bp*/opt* loads that follow are
   // async and each repaints again as it lands, so this only has to be right for
   // the fields already in the form.
@@ -3447,17 +3451,12 @@ function pdShowDocked() {
   // its own scroll position, and the row stays lit where the operator left it.
   paRender();
 }
-// ── The drawer, opened and closed ───────────────────────────────────────────
-// Esc closes it (§1.13), but never while a nested overlay owns the key — the
-// lightbox, the library picker and the version-history modal all sit on top of
-// the drawer and each closes itself first.
-function pdOpenDrawer() {
-  const bg = document.getElementById('pd-bg');
-  const scrim = document.getElementById('pd-scrim');
-  if (bg) bg.classList.add('is-open');
-  if (scrim) scrim.classList.add('is-open');
-  document.addEventListener('keydown', pdDrawerEsc);
-}
+// ── The drawer, closed ──────────────────────────────────────────────────────
+// The drawer is never opened any more (2026-09-25): every product lands on the
+// full page. pdCloseDrawer stays so a stale open state can always be cleared.
+// Esc closes the product (§1.13) — the page wires pdDrawerEsc — but never
+// while a nested overlay owns the key: the lightbox, the library picker and
+// the version-history modal all sit on top and each closes itself first.
 function pdCloseDrawer() {
   const bg = document.getElementById('pd-bg');
   const scrim = document.getElementById('pd-scrim');
