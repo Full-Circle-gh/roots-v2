@@ -47,7 +47,7 @@ function cleanup() {
   const oids = orderIds();
   if (oids.length) {
     const ph = oids.map(() => '?').join(',');
-    for (const t of ['retail_delivery_photos', 'retail_shipments', 'retail_order_items']) {
+    for (const t of ['retail_delivery_photos', 'retail_rider_photos', 'retail_shipments', 'retail_order_items']) {
       try { db.prepare(`DELETE FROM ${t} WHERE order_id IN (${ph})`).run(...oids); }
       catch (e) { /* a table this checkout does not have yet — nothing to remove */ }
     }
@@ -141,6 +141,59 @@ function seed() {
     it('remove takes it off for the customer too', () => {
       assert.strictEqual(del.status, 200);
       assert.strictEqual(gone.status, 404);
+    });
+
+    console.log("\n── The rider's photos beside the shop's (§261 addendum)");
+    // Rows as lib/rider-photos.js leaves them once fetched; the fetch itself is
+    // covered by test_rider_photos.js, so the rows are written straight in here.
+    const c = makeOrder('delivered');
+    const riderRow = db.prepare(
+      `INSERT INTO retail_rider_photos (order_id, qingyun_order_id, position, token, status, data, bytes, fetched_at)
+       VALUES (?,?,?,?, 'ok', ?, ?, CURRENT_TIMESTAMP)`);
+    const R1 = 'data:image/jpeg;base64,' + Buffer.from('rider one').toString('base64');
+    const R2 = 'data:image/jpeg;base64,' + Buffer.from('rider two').toString('base64');
+    riderRow.run(c, 'DPHQY1', 0, 'tok-a', R1, R1.length);
+    riderRow.run(c, 'DPHQY1', 1, 'tok-b', R2, R2.length);
+    await call('POST', `/api/retail-admin/orders/${c}/delivery-photo`, { body: { data: JPEG } });
+
+    const cd = await call('GET', `/api/retail/orders/${c}`, { token: T_OWNER });
+    const keys = (cd.body?.data?.delivery_photo?.photos || []).map(p => p.key);
+    it("the customer's order read names all three: the shop's first, then the rider's", () => {
+      assert.strictEqual(keys.length, 3, JSON.stringify(cd.body?.data?.delivery_photo));
+      assert.strictEqual(keys[0], 's');
+      assert.ok(/^r\d+$/.test(keys[1]) && /^r\d+$/.test(keys[2]));
+      assert.ok(!JSON.stringify(cd.body.data.delivery_photo).includes('base64'));
+    });
+    const got = [];
+    for (const k of keys) got.push((await call('GET', `/api/retail/orders/${c}/delivery-photo?key=${k}`, { token: T_OWNER })).body?.data?.data);
+    it('each key opens its own photo for the owner', () => assert.deepStrictEqual(got, [JPEG, R1, R2]));
+    const strangerR = await call('GET', `/api/retail/orders/${c}/delivery-photo?key=${keys[1]}`, { token: T_STRANGER });
+    it("another customer cannot open a rider photo either", () => assert.strictEqual(strangerR.status, 404));
+    const d2 = makeOrder('delivered');
+    const crossed = await call('GET', `/api/retail/orders/${d2}/delivery-photo?key=${keys[1]}`, { token: T_OWNER });
+    it("a rider photo's key opens nothing on another order, even the owner's", () => assert.strictEqual(crossed.status, 404));
+
+    const cadm = await call('GET', `/api/retail-admin/orders/${c}`);
+    it('the drawer lists them by kind, without the bytes', () => {
+      const ph = cadm.body?.data?.delivery_photo?.photos || [];
+      assert.deepStrictEqual(ph.map(p => p.kind), ['staff', 'rider', 'rider']);
+      assert.ok(!JSON.stringify(ph).includes('base64'));
+    });
+    const rm = await call('DELETE', `/api/retail-admin/orders/${c}/delivery-photo?key=${keys[1]}`);
+    const after = await call('GET', `/api/retail/orders/${c}`, { token: T_OWNER });
+    it('staff can take a rider photo off; it is marked removed, its bytes dropped', () => {
+      assert.strictEqual(rm.status, 200);
+      assert.strictEqual(after.body?.data?.delivery_photo?.photos?.length, 2);
+      const row = db.prepare('SELECT status, data FROM retail_rider_photos WHERE id = ?').get(Number(keys[1].slice(1)));
+      assert.strictEqual(row.status, 'removed');
+      assert.strictEqual(row.data, null);
+    });
+    const bad = await call('DELETE', `/api/retail-admin/orders/${c}/delivery-photo?key=../1`);
+    it('a malformed key is refused', () => assert.strictEqual(bad.status, 400));
+    const staffGone = await call('DELETE', `/api/retail-admin/orders/${c}/delivery-photo`);
+    it("no key still removes the shop's photo, as before, and leaves the rider's", () => {
+      assert.strictEqual(staffGone.status, 200);
+      assert.deepStrictEqual(staffGone.body?.data?.photos?.map(p => p.kind), ['rider']);
     });
 
     console.log('\n── Where the slot is refused');

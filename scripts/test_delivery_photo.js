@@ -187,9 +187,13 @@ it('an order already carrying a photo keeps its slot, whatever its state', () =>
 it('the one composed pair ships on all five surfaces and is declared', () => {
   assert.ok(read('public/retail-admin/04-orders.js').includes("cuT('Delivery photo', '送达照片')"));
   assert.ok(read('public/m.html').includes("T('Delivery photo','送达照片')"));
-  assert.ok(read('public/shop.html').includes("cn?'送达照片':'Delivery photo'"));
+  // The web shop picks the English plural when there is more than one photo
+  // (§261 addendum); the Chinese is the same pair either way.
+  const shop = read('public/shop.html');
+  assert.ok(shop.includes("cn?'送达照片':(") && shop.includes("'Delivery photos':'Delivery photo'"), 'web shop label');
   const mini = read('miniapp/pages/order/order.js');
   assert.ok(mini.includes("deliveryPhotoLabel: '送达照片'") && mini.includes("deliveryPhotoLabel: 'DELIVERY PHOTO'"));
+  assert.ok(mini.includes("deliveryPhotosLabel: '送达照片'") && mini.includes("deliveryPhotosLabel: 'DELIVERY PHOTOS'"));
   assert.ok(/Delivery photo · 送达照片/.test(read('docs/tacet-delivery-vocabulary.md')), 'not declared');
 });
 

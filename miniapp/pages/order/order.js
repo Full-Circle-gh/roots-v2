@@ -47,7 +47,7 @@ Page({
     timeline: [],
     tracking: null,
     deliveryTrack: null,         // live 青云聚信 courier tracking (same-city e-bike)
-    deliveryPhoto: '',           // §261 — local file path of the photo at the door, once fetched
+    deliveryPhotos: [],          // §261 — local file paths of the photos at the door, once fetched
     shipments: [],
     etaLabel: '',                // local (same-city) delivery arrival time, e.g. "2:50 PM"
     partialShip: null,           // {line, sub} when some-but-not-all parcels shipped
@@ -82,6 +82,7 @@ Page({
       timelineLabel: 'TIMELINE',
       etaLabel: 'Estimated arrival',
       deliveryPhotoLabel: 'DELIVERY PHOTO',
+      deliveryPhotosLabel: 'DELIVERY PHOTOS',
       trackingLabel: 'SHIPMENT TRACKING',
       trackingNoEvents: 'Waiting for the first update from the carrier.',
       trackingPending: 'Tracking will appear here shortly.',
@@ -262,6 +263,7 @@ Page({
         timelineLabel: '订单进度',
         etaLabel: '预计送达',
         deliveryPhotoLabel: '送达照片',
+        deliveryPhotosLabel: '送达照片',
         trackingLabel: '物流跟踪',
         trackingNoEvents: '等待承运商首次更新…',
         trackingPending: '物流信息即将更新。',
@@ -634,15 +636,18 @@ Page({
         this.setData({ deliveryTrack: null });
       }
 
-      // The photo of the parcel at the door (§261). It is the one thing about
-      // the courier still worth showing once the order is delivered, which is
-      // exactly when the live card above stands down. Fetched once per photo:
-      // the poll re-reads the order, and `at` changes only when staff replace it.
-      if (data.delivery_photo && data.delivery_photo.has) {
-        this.loadDeliveryPhoto(String(data.delivery_photo.at || '1'));
-      } else if (this.data.deliveryPhoto) {
+      // The photos of the parcel at the door (§261): the one the shop added and
+      // the rider's own (addendum). The one thing about the courier still worth
+      // showing once the order is delivered, which is exactly when the live card
+      // above stands down. Fetched once per set: the poll re-reads the order, and
+      // `at` changes only when a photo is added, replaced or removed.
+      const dp = data.delivery_photo;
+      if (dp && dp.has) {
+        const photos = Array.isArray(dp.photos) && dp.photos.length ? dp.photos : [{ key: '', at: dp.at }];
+        this.loadDeliveryPhotos(photos, String(dp.at || '1'));
+      } else if (this.data.deliveryPhotos.length) {
         this._dphKey = null;
-        this.setData({ deliveryPhoto: '' });
+        this.setData({ deliveryPhotos: [] });
       }
     } catch (e) {
       console.warn('[order] load failed:', e.message);
@@ -731,43 +736,51 @@ Page({
   },
 
   // Call the courier (青云聚信 rider). Phone comes from the live track payload.
-  // Sent as a data URI by the customer-scoped route, then written to a local
-  // file: <image> can draw a data URI, but wx.previewImage (tap to see it full
-  // size) needs a path. The key is in the file name so a replaced photo is not
-  // served from the image cache under the old name.
-  async loadDeliveryPhoto(key) {
-    if (this._dphKey === key) return;
-    this._dphKey = key;
+  // Each photo is sent as a data URI by the customer-scoped route, then written
+  // to a local file: <image> can draw a data URI, but wx.previewImage (tap to
+  // see it full size, swipe to the next) needs a path. The set's stamp is in the
+  // file names so a changed photo is not served from the image cache under an
+  // old name.
+  async loadDeliveryPhotos(photos, stamp) {
+    if (this._dphKey === stamp) return;
+    this._dphKey = stamp;
+    const fs = wx.getFileSystemManager();
+    const tag = stamp.replace(/\W/g, '');
+    const paths = [];
     try {
-      const r = await api.get('/api/retail/orders/' + this.data.id + '/delivery-photo');
-      const d = r?.data || r;
-      const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec((d && d.data) || '');
-      if (!m) { this._dphKey = null; return; }
-      const ext = m[1].toLowerCase() === 'png' ? 'png' : m[1].toLowerCase() === 'webp' ? 'webp' : 'jpg';
-      const path = `${wx.env.USER_DATA_PATH}/delivery-photo-${this.data.id}-${key.replace(/\W/g, '')}.${ext}`;
-      const fs = wx.getFileSystemManager();
-      await new Promise((resolve, reject) => fs.writeFile({
-        filePath: path, data: m[2], encoding: 'base64', success: resolve, fail: reject,
-      }));
-      this.setData({ deliveryPhoto: path });
-      // Keep one on the device, the one on screen. The user-data folder has a
+      for (const p of photos) {
+        const q = p.key ? '?key=' + encodeURIComponent(p.key) : '';
+        const r = await api.get('/api/retail/orders/' + this.data.id + '/delivery-photo' + q);
+        const d = r?.data || r;
+        const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec((d && d.data) || '');
+        if (!m) continue;                 // one photo gone since the order was read
+        const ext = m[1].toLowerCase() === 'png' ? 'png' : m[1].toLowerCase() === 'webp' ? 'webp' : 'jpg';
+        const path = `${wx.env.USER_DATA_PATH}/delivery-photo-${this.data.id}-${String(p.key || 'x').replace(/\W/g, '')}-${tag}.${ext}`;
+        await new Promise((resolve, reject) => fs.writeFile({
+          filePath: path, data: m[2], encoding: 'base64', success: resolve, fail: reject,
+        }));
+        paths.push(path);
+      }
+      this.setData({ deliveryPhotos: paths });
+      // Keep on the device only the set on screen. The user-data folder has a
       // hard size cap and each photo is a few hundred KB, so a customer who
-      // opens thirty orders must not end up with thirty.
+      // opens thirty orders must not end up with sixty.
       try {
-        const name = path.slice(path.lastIndexOf('/') + 1);
+        const keep = new Set(paths.map((x) => x.slice(x.lastIndexOf('/') + 1)));
         fs.readdirSync(wx.env.USER_DATA_PATH)
-          .filter((n) => /^delivery-photo-/.test(n) && n !== name)
-          .forEach((n) => { try { fs.unlinkSync(`${wx.env.USER_DATA_PATH}/${n}`); } catch {} });
-      } catch {}
+          .filter((n) => /^delivery-photo-/.test(n) && !keep.has(n))
+          .forEach((n) => { try { fs.unlinkSync(`${wx.env.USER_DATA_PATH}/${n}`); } catch (e) { /* already gone */ } });
+      } catch (e) { /* the folder cannot be listed — the files stay until next time */ }
     } catch (e) {
       this._dphKey = null;            // try again on the next read
       console.warn('[order] delivery photo failed:', e && (e.message || e.errMsg));
     }
   },
 
-  previewDeliveryPhoto() {
-    const p = this.data.deliveryPhoto;
-    if (p) wx.previewImage({ urls: [p], current: p, fail: () => {} });
+  previewDeliveryPhoto(e) {
+    const urls = this.data.deliveryPhotos;
+    const current = (e && e.currentTarget && e.currentTarget.dataset.src) || urls[0];
+    if (urls.length) wx.previewImage({ urls, current, fail: () => {} });
   },
 
   callRider() {

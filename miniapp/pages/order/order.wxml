@@ -92,9 +92,12 @@
     <!-- The photo of the parcel at the door (§261) — the rider's, or one the
          shop added. Shown after delivery too, when the live card above is gone.
          Tap for full size. -->
-    <view wx:if="{{deliveryPhoto}}" class="section dph">
-      <view class="section-label f-toni">{{copy.deliveryPhotoLabel}}</view>
-      <image class="dph-img" src="{{deliveryPhoto}}" mode="aspectFill" bindtap="previewDeliveryPhoto"></image>
+    <view wx:if="{{deliveryPhotos.length}}" class="section dph">
+      <view class="section-label f-toni">{{deliveryPhotos.length > 1 ? copy.deliveryPhotosLabel : copy.deliveryPhotoLabel}}</view>
+      <view class="dph-row {{deliveryPhotos.length > 1 ? 'dph-many' : ''}}">
+        <image wx:for="{{deliveryPhotos}}" wx:key="*this" class="dph-img" src="{{item}}" data-src="{{item}}"
+               mode="aspectFill" bindtap="previewDeliveryPhoto"></image>
+      </view>
     </view>
 
     <!-- Partial shipment — some parcels are out, the rest still to follow.

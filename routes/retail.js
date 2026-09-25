@@ -13092,9 +13092,14 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
   // The delivery photo (§261): whether there is one, never the bytes. The page
   // fetches it from /api/retail/orders/:id/delivery-photo, scoped to this
   // customer exactly as this read is.
-  // `at` is there so the page can tell a replaced photo from the one it holds.
-  const photo = deliveryPhoto.meta(tdb(), orderId);
-  if (photo) o.delivery_photo = { has: true, at: photo.at };
+  // `at` is there so the page can tell a changed set from the one it holds;
+  // `photos` names each one (the staff photo and the rider's) by the key the
+  // page fetches it with.
+  const photos = deliveryPhoto.list(tdb(), orderId);
+  if (photos.length) {
+    o.delivery_photo = { has: true, at: deliveryPhoto.stamp(photos),
+                         photos: photos.map(p => ({ key: p.key, at: p.at })) };
+  }
   // Items snapshot historical name + price at order time, but image_url
   // was never captured (always null on insert). Fall through to the live
   // product image so order/review thumbnails actually render. The tradeoff
@@ -14224,13 +14229,16 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
 // nothing — unlike /api/retail/media/:id, which needs no login and counts up.
 // Sent as a data URI in JSON because the mini app's request domain is the one
 // its every other call uses; it writes the picture to a local file to show it.
+// `?key=` picks one of the order's photos (see lib/delivery-photo.js list());
+// without it, the first — which is what a page from before the rider's photos
+// asked for.
 router.get('/api/retail/orders/:id/delivery-photo', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_request' });
   const order = tdb().prepare('SELECT id FROM retail_orders WHERE id = ? AND customer_id = ?')
     .get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
-  const data = deliveryPhoto.data(tdb(), id);
+  const data = deliveryPhoto.dataByKey(tdb(), id, req.query?.key);
   if (!data) return res.status(404).json({ success: false, error: 'not_found' });
   res.set('Cache-Control', 'private, no-store');
   res.json({ success: true, data: { data } });
@@ -28018,7 +28026,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   try {
     if (deliveryPhoto.eligible(tdb(), o)) {
       const m = deliveryPhoto.meta(tdb(), id);
-      o.delivery_photo = { has: !!m, ...(m || {}), customer_sees: o.customer_id != null };
+      // `has` and the staff fields describe the one staff photo (Add / Replace
+      // act on it); `photos` is everything on the order, the rider's included.
+      o.delivery_photo = { has: !!m, ...(m || {}), customer_sees: o.customer_id != null,
+                           photos: deliveryPhoto.list(tdb(), id) };
     }
   } catch (e) { /* table missing on an older database — no slot */ }
 
@@ -29358,13 +29369,15 @@ router.post('/api/retail-admin/orders/:id/delivery-photo',
     throw e;
   }
   logActivity(req.user.id, req.user.username, 'delivery_photo', 'retail_order', id, {}, req.ip);
-  res.json({ success: true, data: { has: true, ...m, customer_sees: order.customer_id != null } });
+  res.json({ success: true, data: { has: true, ...m, customer_sees: order.customer_id != null,
+                                    photos: deliveryPhoto.list(tdb(), id) } });
 });
 
+// `?key=` as the customer route: 's' the staff photo, 'r<id>' a rider's; none, the first.
 router.get('/api/retail-admin/orders/:id/delivery-photo', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_request' });
-  const data = deliveryPhoto.data(tdb(), id);
+  const data = deliveryPhoto.dataByKey(tdb(), id, req.query?.key);
   if (!data) return res.status(404).json({ success: false, error: 'not_found' });
   res.set('Cache-Control', 'private, no-store');
   res.json({ success: true, data: { data } });
@@ -29375,9 +29388,15 @@ router.delete('/api/retail-admin/orders/:id/delivery-photo', requireRetailAdmin,
   if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_request' });
   const order = deliveryPhotoOrder(id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
-  deliveryPhoto.remove(tdb(), id);
-  logActivity(req.user.id, req.user.username, 'delivery_photo_removed', 'retail_order', id, {}, req.ip);
-  res.json({ success: true, data: { has: false, customer_sees: order.customer_id != null } });
+  // `?key=` names which photo; none means the staff one, as before the rider's
+  // photos existed. A rider photo taken off is not fetched back (lib/delivery-photo.js).
+  const key = req.query?.key || 's';
+  if (!deliveryPhoto.parseKey(key)) return res.status(400).json({ success: false, error: 'bad_request' });
+  deliveryPhoto.removeByKey(tdb(), id, key);
+  logActivity(req.user.id, req.user.username, 'delivery_photo_removed', 'retail_order', id, { key }, req.ip);
+  const m = deliveryPhoto.meta(tdb(), id);
+  res.json({ success: true, data: { has: !!m, ...(m || {}), customer_sees: order.customer_id != null,
+                                    photos: deliveryPhoto.list(tdb(), id) } });
 });
 
 // Raise the ¥0 replacement order for a late-parcel case (§98 stage three).

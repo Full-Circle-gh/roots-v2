@@ -1957,23 +1957,23 @@ reg('dphAdd', input=>{
   rd.onerror=unread;
   rd.readAsDataURL(f);
 });
-reg('dphView', ()=>{
+reg('dphView', key=>{
   const o=dphOrder();
   if(!o||o._id==null) return;
-  api('/orders/'+o._id+'/delivery-photo').then(j=>{
+  api('/orders/'+o._id+'/delivery-photo?key='+encodeURIComponent(key||'s')).then(j=>{
     const data=j&&j.data&&j.data.data;
     if(!data){ state.orderErr=E('Photo not found.','未找到照片。'); render(); return; }
     state.imgZoom=data; render();   // the generic full-screen viewer
   }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
 });
-reg('dphDel', ()=>{
+reg('dphDel', key=>{
   const o=dphOrder();
   if(!o||o._id==null||state.parcelBusy) return;
   state.ask={title:T('Remove this photo?','删除这张照片?'),
     confirmLabel:T('Remove','删除'), danger:true,
     run:()=>{
       state.parcelBusy='dph'; state.orderErr=null; render();
-      apiWrite('/orders/'+o._id+'/delivery-photo',{},'DELETE').then(()=>dphReload(o)).catch(dphFail);
+      apiWrite('/orders/'+o._id+'/delivery-photo?key='+encodeURIComponent(key||'s'),{},'DELETE').then(()=>dphReload(o)).catch(dphFail);
     }};
   render();
 });
@@ -17176,16 +17176,27 @@ function deliveryPhotoCard(o){
   const p=o.dphoto;
   if(!p||o.viewOnly) return '';
   const busy=state.parcelBusy==='dph';
-  return `<div class="card" style="padding:4px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  /* One chip per photo: its name opens it, × takes it off. "Shop" is the one
+     staff chose; "Rider" are the rider's own from Qingyun (§261 addendum),
+     numbered when there are two. Add / Replace act on the staff photo only. */
+  const photos=Array.isArray(p.photos)?p.photos:(p.has?[{key:'s',kind:'staff'}]:[]);
+  const riders=photos.filter(x=>x.kind==='rider').length;
+  let n=0;
+  const chips=photos.map(x=>{
+    const key=escAttr(String(x.key));
+    const name=x.kind==='rider'?T('Rider','骑手')+(riders>1?' '+(++n):''):T('Shop','门店');
+    return `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-default);border-radius:8px;padding:3px 8px;font-size:13px">
+      <a href="#" onclick="APP.cmd('dphView','${key}');return false" style="color:inherit;text-decoration:none">${name}</a>
+      <a href="#" onclick="APP.cmd('dphDel','${key}');return false" style="color:var(--text-secondary);text-decoration:none;padding:0 2px">×</a></span>`;
+  }).join('');
+  return `<div class="card" style="padding:8px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span style="flex:none;color:var(--text-secondary);display:flex">${ic('camera',18)}</span>
     <span style="font-size:14.5px;font-weight:500">${T('Delivery photo','送达照片')}</span>
-    ${p.has&&p.customer_sees?`<span style="font-size:12px;color:var(--text-secondary)">${T('Customers see this','顾客可见')}</span>`:''}
-    <span style="margin-left:auto;display:inline-flex;gap:14px">
-      ${p.has?`<button class="rowact" onclick="APP.cmd('dphView')">${T('View','查看')}</button>`:''}
-      <label class="rowact"${busy?' style="opacity:.55;pointer-events:none"':''}>${p.has?T('Replace','更换'):T('Add photo','添加照片')}
-        <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dphAdd',this)"></label>
-      ${p.has?`<button class="rowact brick"${busy?' disabled':''} onclick="APP.cmd('dphDel')">${T('Remove','删除')}</button>`:''}
-    </span></div>`;
+    ${chips}
+    ${photos.length&&p.customer_sees?`<span style="font-size:12px;color:var(--text-secondary)">${T('Customers see this','顾客可见')}</span>`:''}
+    <label class="rowact" style="margin-left:auto${busy?';opacity:.55;pointer-events:none':''}">${p.has?T('Replace','更换'):T('Add photo','添加照片')}
+      <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dphAdd',this)"></label>
+  </div>`;
 }
 function riderCard(o){
   const c=o.courier;
