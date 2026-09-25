@@ -128,6 +128,8 @@ function clearRaised() {
 }
 
 function clearOwed() {
+  db.prepare("DELETE FROM retail_stock_ledger WHERE ref_table = 'retail_orders' AND ref_id IN (?,?)").run(ORDER, ORDER + 1);
+  db.prepare('DELETE FROM retail_stock_reservations WHERE order_id IN (?,?)').run(ORDER, ORDER + 1);
   db.prepare('DELETE FROM retail_order_items WHERE order_id IN (?,?)').run(ORDER, ORDER + 1);
   db.prepare('DELETE FROM retail_orders WHERE id IN (?,?)').run(ORDER, ORDER + 1);
   db.prepare('DELETE FROM retail_store_stock WHERE product_id IN (?,?,?)')
@@ -357,6 +359,38 @@ section('5 · nothing owed raises nothing');
     assert.strictEqual(
       morning.raiseMorningRequest(db, { now: at('06:30'), tz: TZ, genRsNumber }).skipped,
       'nothing_owed');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('5b · a paid order sold as "made fresh" prints on its ship day (§265)');
+{
+  // Paid, not parked, with the batch day the checkout promised. The shelf has
+  // units — which is why it was paid — and they are not the customer's.
+  const promise = (ship) => {
+    park(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 9 }], 'paid');
+    db.prepare('UPDATE retail_orders SET promised_ship_date = ? WHERE id = ?').run(ship, ORDER);
+  };
+  it('the ship-day morning raises it, whatever the shelf holds', () => {
+    clearAll(); setHour(6);
+    setStock(STORE_A, P_WRAP, 30);
+    promise(DAY);
+    const res = morning.raiseMorningRequest(db, { now: at('06:30'), tz: TZ, genRsNumber });
+    assert.ok(res && res.id, JSON.stringify(res));
+    const lines = linesOf(res.id);
+    assert.strictEqual(lines.length, 1);
+    assert.strictEqual(lines[0].qty_requested, 9);
+  });
+  it('the morning before its ship day, it is not on the slip', () => {
+    clearAll(); setHour(6);
+    promise('2031-03-05');
+    assert.strictEqual(
+      morning.raiseMorningRequest(db, { now: at('06:30'), tz: TZ, genRsNumber }).skipped,
+      'nothing_owed');
+  });
+  it('the date read is the day being raised FOR, not the host clock', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'lib/kitchen-morning-request.js'), 'utf8');
+    assert.ok(/owedLines\(db, \{ today: parts\.ymd \}\)/.test(src));
   });
 }
 

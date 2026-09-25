@@ -83,7 +83,18 @@ function park(orderId, storeId, lines, status = 'awaiting_restock') {
   for (const l of lines) ins.run(orderId, l.product_id, 'x', 'x', l.qty);
 }
 
+// §265 — an order sold as "made fresh": paid, on our own checkout, stamped with
+// the batch day it was promised. No reservation and no ledger row unless a case
+// adds one, which is exactly the out-of-town order the section was written for.
+function promise(orderId, storeId, lines, { status = 'paid', channel = 'wechat', ship = '2031-03-04' } = {}) {
+  park(orderId, storeId, lines, status);
+  db.prepare('UPDATE retail_orders SET channel = ?, promised_ship_date = ? WHERE id = ?')
+    .run(channel, ship, orderId);
+}
+
 function clearAll() {
+  db.prepare("DELETE FROM retail_stock_ledger WHERE ref_table = 'retail_orders' AND ref_id IN (?,?)").run(ORDER, ORDER + 1);
+  db.prepare('DELETE FROM retail_stock_reservations WHERE order_id IN (?,?)').run(ORDER, ORDER + 1);
   db.prepare('DELETE FROM retail_order_items WHERE order_id IN (?,?)').run(ORDER, ORDER + 1);
   db.prepare('DELETE FROM retail_orders WHERE id IN (?,?)').run(ORDER, ORDER + 1);
   db.prepare('DELETE FROM retail_store_stock WHERE product_id IN (?,?,?,?)')
@@ -192,6 +203,114 @@ section('3 · the parked order — the mini app\'s debt, which never touches the
   });
   it('the counted status is ONE value, and it is exported so it cannot widen quietly', () => {
     assert.strictEqual(owedLib.OWED_ORDER_STATUS, 'awaiting_restock');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('3b · the order sold as "made fresh" — §265, the paid order the kitchen was never told about');
+{
+  const TODAY = '2031-03-04';
+  const at = (d) => ({ today: d });
+
+  it('the case as reported: paid, stock pending, ship date today — owed, whatever the shelf says', () => {
+    clearAll();
+    setStock(STORE_A, P_WRAP, 30);   // the shelf had units; that is WHY it was paid, not parked
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 9 }]);
+    const r = rowFor(owedLib.owedAt(db, STORE_A, at(TODAY)), STORE_A, P_WRAP);
+    assert.ok(r, 'the kitchen is told');
+    assert.strictEqual(r.owed, 9, 'sold as a batch made for them, not as whatever is in the fridge');
+    assert.strictEqual(r.from_promised, 9);
+    assert.strictEqual(r.from_shelf, 0);
+    assert.strictEqual(r.from_parked, 0);
+  });
+  it('a ship date still to come is tomorrow\'s batch, not today\'s', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 9 }], { ship: '2031-03-05' });
+    assert.deepStrictEqual(owedLib.owedAt(db, STORE_A, at(TODAY)), []);
+    assert.strictEqual(owedLib.owedTotal(db, STORE_A, at('2031-03-05')), 9, 'and it arrives on the day');
+  });
+  it('a ship date already past stays owed until the order is packed — the customer was never served', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 3 }], { ship: '2031-03-02' });
+    assert.strictEqual(owedLib.owedTotal(db, STORE_A, at(TODAY)), 3);
+  });
+  it('no promised date means an ordinary paid order — still not a debt', () => {
+    clearAll();
+    park(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 9 }], 'paid');
+    assert.deepStrictEqual(owedLib.owedAt(db, STORE_A, at(TODAY)), []);
+  });
+  it('once the stock is taken the line leaves this term — a ledger row for that product', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 9 }], { status: 'preparing' });
+    db.prepare(`INSERT INTO retail_stock_ledger (store_id, product_id, delta, reason, ref_table, ref_id, balance_after)
+                VALUES (?,?,?,?,?,?,?)`).run(STORE_A, P_WRAP, -9, 'order_commit', 'retail_orders', ORDER, 21);
+    assert.deepStrictEqual(owedLib.owedAt(db, STORE_A, at(TODAY)), []);
+  });
+  it('…and a commit that sends the shelf negative is counted ONCE, by term one', () => {
+    clearAll();
+    setStock(STORE_A, P_WRAP, -9);
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 9 }], { status: 'dispatched' });
+    db.prepare(`INSERT INTO retail_stock_ledger (store_id, product_id, delta, reason, ref_table, ref_id, balance_after)
+                VALUES (?,?,?,?,?,?,?)`).run(STORE_A, P_WRAP, -9, 'order_commit', 'retail_orders', ORDER, -9);
+    const r = rowFor(owedLib.owedAt(db, STORE_A, at(TODAY)), STORE_A, P_WRAP);
+    assert.strictEqual(r.owed, 9);
+    assert.strictEqual(r.from_shelf, 9);
+    assert.strictEqual(r.from_promised, 0);
+  });
+  it('per LINE, not per order: §58 committed the grocery half, the fresh half is still owed', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 2 }, { product_id: P_OIL, qty: 1 }]);
+    db.prepare(`INSERT INTO retail_stock_ledger (store_id, product_id, delta, reason, ref_table, ref_id, balance_after)
+                VALUES (?,?,?,?,?,?,?)`).run(STORE_A, P_OIL, -1, 'order_commit', 'retail_orders', ORDER, 5);
+    assert.strictEqual(owedLib.owedTotal(db, STORE_A, at(TODAY)), 2);
+  });
+  it('a line holding a reservation is on the shelf\'s books already, and is not counted', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 4 }]);
+    db.prepare(`INSERT INTO retail_stock_reservations (store_id, product_id, order_id, qty, status, expires_at)
+                VALUES (?,?,?,?,'active', '2031-03-05 00:00:00')`).run(STORE_A, P_WRAP, ORDER, 4);
+    assert.deepStrictEqual(owedLib.owedAt(db, STORE_A, at(TODAY)), []);
+  });
+  it('a parked order with a promised date is term two\'s alone — never both', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 4 }], { status: 'awaiting_restock' });
+    const r = rowFor(owedLib.owedAt(db, STORE_A, at(TODAY)), STORE_A, P_WRAP);
+    assert.strictEqual(r.owed, 4);
+    assert.strictEqual(r.from_parked, 4);
+    assert.strictEqual(r.from_promised, 0);
+  });
+  it('unpaid, cancelled or delivered owes nothing', () => {
+    for (const st of ['pending_payment', 'cancelled', 'delivered']) {
+      clearAll();
+      promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 4 }], { status: st });
+      assert.deepStrictEqual(owedLib.owedAt(db, STORE_A, at(TODAY)), [], st);
+    }
+  });
+  it('a platform order is never this term\'s — it took the shelf on arrival', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 4 }], { channel: 'meituan' });
+    assert.deepStrictEqual(owedLib.owedAt(db, STORE_A, at(TODAY)), []);
+  });
+  it('a product nobody cooks is not the kitchen\'s, promised or not', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_OIL, qty: 4 }]);
+    assert.deepStrictEqual(owedLib.owedAt(db, STORE_A, at(TODAY)), []);
+  });
+  it('adds to the other two in one pile: oversold, parked and promised', () => {
+    clearAll();
+    setStock(STORE_A, P_WRAP, -5);
+    park(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 2 }]);
+    promise(ORDER + 1, STORE_A, [{ product_id: P_WRAP, qty: 9 }]);
+    const mine = owedLib.owedAt(db, STORE_A, at(TODAY)).filter((r) => r.product_id === P_WRAP);
+    assert.strictEqual(mine.length, 1);
+    assert.strictEqual(mine[0].owed, 16);
+  });
+  it('with no date passed it reads the shop\'s own clock, not the host\'s', () => {
+    clearAll();
+    promise(ORDER, STORE_A, [{ product_id: P_WRAP, qty: 1 }], { ship: '2000-01-01' });
+    assert.strictEqual(owedLib.owedTotal(db, STORE_A), 1, 'a date long past is due on any clock');
+    const src = fs.readFileSync(path.join(ROOT, 'lib/batch-owed.js'), 'utf8');
+    assert.ok(/businessDate\.zoneParts\(businessDate\.shopTimezone\(db\)\)\.ymd/.test(src));
   });
 }
 
