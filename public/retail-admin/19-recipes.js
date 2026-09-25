@@ -2799,14 +2799,16 @@
     const d = details || {};
     const both = (en, cn) => `${en} · ${cn}`;
     const num = (n) => String(Math.round(Number(n) * 100) / 100);
-    // Servings first: what the batch makes is what a cook looks for, and the
-    // batch weight is the check on it.
+    // Servings first: what the batch makes is what a cook looks for. The
+    // recipe's SKU takes the slot batch size had, and batch size is off the
+    // card (Ash, 2026-09-25: "sku can replace batch size positing and size");
+    // the servings figure still carries the portion weight where there is one.
     const facts = [];
     if (d.servings) {
       facts.push([both('Servings', '份数'),
         num(d.servings) + (d.serving_size ? ' × ' + num(d.serving_size) + ' g' : '')]);
     }
-    if (d.batch_size) facts.push([both('Batch size', '批量大小'), num(d.batch_size) + ' g']);
+    if (d.sku) facts.push([both('SKU', '货号'), d.sku]);
     if (d.shelf_life) {
       const sl = parseShelfLife(d.shelf_life);
       const unit = SHELF_LIFE_UNITS.find(([v]) => v === sl.unit);

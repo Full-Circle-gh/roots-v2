@@ -88,7 +88,9 @@ section('1 · what the card says, from what is on screen');
   const facts = Object.fromEntries(c.facts);
   yes(c.nameEn === 'Arugula-Basil Pesto' && c.nameCn === '芝麻叶罗勒青酱', 'both names');
   yes(c.sku === '1-20', 'the SKU');
-  yes(facts['Batch size · 批量大小'] === '652.82 g', 'batch size, labelled in both languages',
+  yes(facts['SKU · 货号'] === '1-20', "the recipe's SKU is a fact, labelled in both languages",
+    JSON.stringify(c.facts));
+  no('Batch size · 批量大小' in facts, 'batch size is off the card: the SKU took its slot',
     JSON.stringify(c.facts));
   yes(facts['Servings · 份数'] === '4 × 150 g', 'servings with the serving weight');
   yes(facts['Shelf life · 保质期'] === '14 Days · 14 天', 'shelf life in both languages',
@@ -175,14 +177,16 @@ section('4b · laid out for the kitchen: amount first, SKU last, facts under the
     'the columns read amount, ingredient, SKU', head);
   yes(/<td class="qty">150 g<\/td><td>Arugula/.test(h), 'each row starts with its amount, beside the name');
   const { card: c } = card(PESTO, LINES, STEPS);
-  yes(c.facts[0][0] === 'Servings · 份数', 'servings is the first fact, before the batch weight',
+  yes(c.facts[0][0] === 'Servings · 份数' && c.facts[1][0] === 'SKU · 货号',
+    'servings first, then the SKU in the slot batch size had',
     JSON.stringify(c.facts.map((f) => f[0])));
   const name = h.indexOf('<h1>'), facts = h.indexOf('<dl class="facts">'), ing = h.indexOf('Ingredients<span>');
   yes(name > -1 && name < facts && facts < ing, 'the facts sit under the name, above the ingredients');
   yes(h.includes('<dd>4 × 150 g</dd>'), 'a fact prints its value');
   no(/class="meta"/.test(h), 'no small facts block tucked top right');
-  yes(/<div class="foot"><span>Harbour Greens · SKU 1-20<\/span>/.test(h), "the recipe's SKU sits in the foot");
-  no(/<div class="sub">SKU/.test(h), 'and not under the name');
+  yes(h.includes('<dt>SKU · 货号</dt><dd>1-20</dd>'), "the recipe's SKU prints in the facts row, full size");
+  yes(/<div class="foot"><span>Harbour Greens<\/span>/.test(h), 'and not again in the foot');
+  no(/<div class="sub">SKU/.test(h), 'nor as small print under the name');
 }
 {
   const r = runPrint();
