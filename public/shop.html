@@ -205,9 +205,9 @@
 
   /* Editor desktop stage (?stage=1): blocks are click targets, the selected one
      wears the editor's own Dusk ring, the same colour cms.html uses on the phone. */
-  .cms-stage .sb-blk-outer{cursor:pointer;}
-  .cms-stage .sb-blk-outer:hover{outline:2px dashed rgba(110,103,175,.55);outline-offset:2px;}
-  .cms-stage .sb-blk-outer.cms-selected{outline:2px solid #6E67AF;outline-offset:2px;box-shadow:0 0 0 5px rgba(110,103,175,.18);}
+  .cms-stage .sb-blk-outer,.cms-stage .spb[data-block-id]{cursor:pointer;}
+  .cms-stage .sb-blk-outer:hover,.cms-stage .spb[data-block-id]:hover{outline:2px dashed rgba(110,103,175,.55);outline-offset:2px;}
+  .cms-stage .sb-blk-outer.cms-selected,.cms-stage .spb.cms-selected{outline:2px solid #6E67AF;outline-offset:2px;box-shadow:0 0 0 5px rgba(110,103,175,.18);}
   .cms-stage .cs-fab,.cms-stage #toast{display:none!important;}
   footer{margin-top:auto;border-top:1px solid var(--line);background:#fff;}
   .foot-in{max-width:var(--wrap);margin:0 auto;padding:26px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px;}
@@ -4954,11 +4954,14 @@ async function loadPolls(){
 // clean auto-layout when nothing is published.
 // Editor desktop stage (see boot): the selected block's id and its outline.
 let STAGE_MODE=false, stageSel=null, stageKey=null, stageIdKey=null;
+// The product editor's desktop stage: the product being edited, unsaved,
+// laid over the published one when the product route renders it.
+let stageProduct=null;
 function stageHighlight(scroll){
   if(!STAGE_MODE) return;
   document.querySelectorAll('.sb-blk-outer.cms-selected').forEach(el=>el.classList.remove('cms-selected'));
   if(!stageSel) return;
-  const el=document.querySelector('.sb-blk-outer[data-block-id="'+CSS.escape(stageSel)+'"]');
+  const el=document.querySelector('.sb-blk-outer[data-block-id="'+CSS.escape(stageSel)+'"],.spb[data-block-id="'+CSS.escape(stageSel)+'"]');
   if(!el) return;
   el.classList.add('cms-selected');
   if(scroll){ const r=el.getBoundingClientRect(); if(r.bottom<0||r.top>window.innerHeight) el.scrollIntoView({block:'center',behavior:'smooth'}); }
@@ -5920,6 +5923,8 @@ async function renderProduct(id){
   let p;
   try{ p=await api('/api/retail/products/'+encodeURIComponent(id)); }
   catch(e){ view.innerHTML=`<div class="wrap"><div class="empty">${state.lang==='cn'?'商品不存在或已下架。':'This product is unavailable.'}<br><a class="more" href="#/shop"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><polyline points="15 18 9 12 15 6"></polyline></svg>${state.lang==='cn'?'返回商品':'Back to shop'}</a></div></div>`; return; }
+  // Editor desktop stage: the unsaved draft wins over the published fields.
+  if(STAGE_MODE&&stageProduct&&String(stageProduct.id)===String(id)&&p){ p={...p,...stageProduct.fields}; }
 
   const now=nowPrice(p),was=wasPrice(p);
   const ss=stockState(p);
@@ -6214,6 +6219,7 @@ async function renderProduct(id){
     });
     refreshBar();
   })();
+  stageHighlight(true);
 }
 
 /* ════════════ CHROME / INIT ════════════ */
@@ -6333,6 +6339,24 @@ function ctaRoute(t){
         if(parseHash().seg.length){ location.hash='#/'; } else { route(); }
         return;
       }
+      if(ev.data.type==='cms:product-draft'&&STAGE_MODE){
+        // The product editor's draft (public/product-editor.html): the fields
+        // the page shows and the unsaved blocks, laid over the published
+        // product in renderProduct. Same rules as cms:draft: an unchanged
+        // draft is a highlight, not a render.
+        const d=ev.data, id=String(d.id||'');
+        if(!id) return;
+        const key=JSON.stringify([id,d.fields||{}]);
+        const langChanged=!!(d.lang&&d.lang!==state.lang);
+        stageSel=d.selectedId||null;
+        const onIt=parseHash().seg[0]==='product'&&String(parseHash().seg[1])===id;
+        if(key===stageKey&&!langChanged&&onIt){ stageHighlight(true); return; }
+        stageKey=key;
+        stageProduct={id, fields:(d.fields&&typeof d.fields==='object')?d.fields:{}};
+        if(langChanged){ state.lang=d.lang; applyLangToUI(); }
+        if(!onIt){ location.hash='#/product/'+encodeURIComponent(id); } else { route(); }
+        return;
+      }
       if(ev.data.type!=='cms:reload') return;
       try{ state.config=await api('/api/retail-admin/storefront/preview-config')||state.config; }catch(e){}
       state.homeProducts=null; route();
@@ -6341,7 +6365,7 @@ function ctaRoute(t){
   if(STAGE_MODE){
     // Clicks: a block selects itself in the editor; everything else is inert.
     document.addEventListener('click',ev=>{
-      const blk=ev.target.closest('.sb-blk-outer');
+      const blk=ev.target.closest('.sb-blk-outer,.spb[data-block-id]');
       if(blk){
         ev.preventDefault(); ev.stopPropagation();
         const id=blk.getAttribute('data-block-id');
