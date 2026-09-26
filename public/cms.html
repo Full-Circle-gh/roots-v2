@@ -1394,6 +1394,14 @@
     outline-offset: -2px;
   }
   .block-wrap:active { cursor: grabbing; }
+  /* "Mini app only" / "Website only" tag — editor chrome laid over the
+     customer's page, so it uses the editor's own ink, never a brand colour. */
+  .block-wrap .show-on-tag {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    font: 500 10px/1 Inter, system-ui, sans-serif; letter-spacing: .02em;
+    color: var(--tacet-paper, #fff); background: var(--tacet-ink, #1a1a17);
+    padding: 4px 7px; border-radius: 999px; pointer-events: none; opacity: .85;
+  }
   .block-wrap:hover { outline-color: rgba(110, 103, 175, .34); }
   /* Per-block chrome preview — mirrors the live mini-app .blk-outer rules.
      Frame: brand-colored outline (border-color set inline). Bleed: drop the
@@ -8647,6 +8655,28 @@ function buildDropZone(beforeIdx, isTail = false) {
   return d;
 }
 
+// Where a block shows — `show_on`: 'both' | 'miniapp' | 'web'. One layout
+// feeds the mini app and the web shop; this field says which of them draw the
+// block. The server writes it explicit on every block it serves (routes/
+// retail.js withShowOn), so a block loaded here already carries it. The one
+// case the server has not seen yet is a block just added on the canvas, so
+// this table is the server's SHOW_ON_DEFAULTS, copied: the four types that
+// lead to a wallet, notifications or order page the web shop does not have.
+// scripts/test_cms_show_on.js holds the two copies equal. Decided by Ash
+// 2026-09-26 — docs/tacet-consolidation-decisions.md §270.
+const SHOW_ON_DEFAULTS = Object.freeze({
+  order_tracker: 'miniapp', notification_bar: 'miniapp',
+  points_widget: 'miniapp', top_up: 'miniapp',
+});
+function showOnFor(b) {
+  if (b && (b.show_on === 'both' || b.show_on === 'miniapp' || b.show_on === 'web')) return b.show_on;
+  return (b && SHOW_ON_DEFAULTS[b.type]) || 'both';
+}
+const SHOW_ON_LABELS = {
+  miniapp: { en: 'Mini app only', cn: '仅小程序' },
+  web:     { en: 'Website only',  cn: '仅网页版' },
+};
+
 // Block types whose preview paints a full-panel background; when framed they
 // must fill the frame edge-to-edge (mirrors FULL_BG_TYPES in the mini-app).
 const FULL_BG_BLOCK_TYPES = [
@@ -8669,6 +8699,15 @@ function buildBlockEl(block, idx) {
   wrap.dataset.idx = idx;
   wrap.draggable = true;
   wrap.appendChild(renderBlockBody(block));
+  // A block that one surface skips wears a small tag on the canvas, so the
+  // phone stage never implies the website shows the same thing.
+  const showOn = showOnFor(block);
+  if (showOn !== 'both') {
+    const tag = document.createElement('span');
+    tag.className = 'show-on-tag';
+    tag.textContent = T(SHOW_ON_LABELS[showOn].en, SHOW_ON_LABELS[showOn].cn);
+    wrap.appendChild(tag);
+  }
   wrap.addEventListener('click', e => {
     if (e.target.closest('[data-action]')) return;
     selectBlock(block.id);
@@ -11146,6 +11185,26 @@ function renderInspector() {
 //     Stored as block.full_bleed (boolean). All persist via validateBlocks
 //     (structural validation only) and render in the live mini-app .blk-outer.
 function buildChromeSection(body, b) {
+  // Universal "Show on" control — which of the two customer surfaces draw
+  // this block. Reads the effective value (server default for a saved block,
+  // the local copy of that table for one just added) and writes it explicit.
+  const secShow = inspectorSection(body, b.type, 'show', T('Show on', '显示位置'));
+  const current = showOnFor(b);
+  secShow.appendChild(field(T('Show on', '显示位置'),
+    T('Where customers see this block. The website is your shop in a browser; the mini app is your shop in WeChat.', '顾客在哪里看到本模块。网页版是浏览器里的商店,小程序是微信里的商店。'),
+    sel(current, [
+      { value: 'both',    label: T('Mini app + website', '小程序 + 网页版') },
+      { value: 'miniapp', label: T('Mini app only', '仅小程序') },
+      { value: 'web',     label: T('Website only', '仅网页版') },
+    ], v => updateBlock(b.id, { show_on: v }))));
+  if (SHOW_ON_DEFAULTS[b.type] === 'miniapp') {
+    const n = document.createElement('div');
+    n.className = 'insp-note';
+    n.textContent = T('The website has no wallet, notifications or order pages yet, so this block is off there unless you turn it on.',
+      '网页版暂无钱包、通知和订单页面,因此本模块默认不在网页版显示,除非你打开它。');
+    secShow.appendChild(n);
+  }
+
   // Universal "Frame, radius & width" controls — a collapsed section at the
   // bottom of every block's inspector (set once, rarely reopened).
   const sec = inspectorSection(body, b.type, 'frame', T('Frame, radius & width', '边框、圆角与宽度'));

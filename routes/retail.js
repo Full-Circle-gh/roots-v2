@@ -481,6 +481,12 @@ function loadConfig() {
   }
   const t = tdb().prepare("SELECT COALESCE(MAX(strftime('%s', updated_at)), 0) AS t FROM storefront_config").get();
   out.version = Number(t?.t || 0);
+  // Every published page layout leaves here with `show_on` explicit on each
+  // block (see SHOW_ON_DEFAULTS), so the mini app and the web shop filter on
+  // one value rather than each guessing a type's default.
+  for (const page of ALLOWED_PAGES) {
+    if (out[page] && Array.isArray(out[page].layout)) out[page].layout = withShowOn(out[page].layout);
+  }
   return out;
 }
 function setPath(obj, path, value) {
@@ -880,7 +886,7 @@ router.get('/api/retail/config', (req, res) => {
         if (!r) continue;
         let draft; try { draft = JSON.parse(r.value_json); } catch { continue; }
         if (!cfg[page] || typeof cfg[page] !== 'object') cfg[page] = {};
-        cfg[page].layout = draft;
+        cfg[page].layout = withShowOn(draft);
       }
       cfg._preview = true;
     }
@@ -34737,6 +34743,38 @@ const ALLOWED_BLOCK_TYPES = new Set([
 // brand identity, intentionally pinned in code.
 const ALLOWED_PAGES = new Set(['home', 'promotions', 'membership', 'categories', 'onboarding']);
 
+// ── Where a block shows: `show_on` ─────────────────────────────────────────
+// One layout feeds two customer surfaces — the WeChat mini app and the web
+// shop (public/shop.html). `show_on` on a block says which of them draw it:
+//   'both'    — the default for nearly every type
+//   'miniapp' — the mini app only (the web shop skips it)
+//   'web'     — the web shop only (the mini app skips it)
+// The four types that default to 'miniapp' lead somewhere the web shop does
+// not have yet: shop.html's ctaRoute() answers wallet / notifications / order
+// targets with "coming soon", so a points, top-up, notification or order
+// tracker block on the website is a promise the site cannot keep. The default
+// is applied at READ time, here and only here, so a layout published before
+// the field existed behaves the same as one saved after it, and the four
+// renderers (mini app, shop.html, storefront.html, the editor canvas) read one
+// explicit value instead of each carrying a copy of this table. The editor
+// carries the same four-type table for a block added and not yet saved; the
+// test `scripts/test_cms_show_on.js` holds the two copies equal.
+// Decided by Ash 2026-09-26 — docs/tacet-consolidation-decisions.md §270.
+const SHOW_ON_VALUES = new Set(['both', 'miniapp', 'web']);
+const SHOW_ON_DEFAULTS = Object.freeze({
+  order_tracker: 'miniapp', notification_bar: 'miniapp',
+  points_widget: 'miniapp', top_up: 'miniapp',
+});
+function showOnFor(block) {
+  if (block && SHOW_ON_VALUES.has(block.show_on)) return block.show_on;
+  return (block && SHOW_ON_DEFAULTS[block.type]) || 'both';
+}
+// Returns a copy of the layout with `show_on` explicit on every block.
+function withShowOn(layout) {
+  if (!Array.isArray(layout)) return layout;
+  return layout.map(b => (b && typeof b === 'object') ? { ...b, show_on: showOnFor(b) } : b);
+}
+
 // Onboarding gating modes. See /api/retail/config surfacing above + the
 // /onboarding-settings admin endpoints below.
 const ONBOARDING_MODES = new Set(['new', 'version', 'always', 'off']);
@@ -34776,6 +34814,9 @@ function validateBlocks(blocks) {
     if (blockHasDangerousString(b)) {
       return { error: 'block_unsafe_value', details: { id: b.id } };
     }
+    if (b.show_on !== undefined && !SHOW_ON_VALUES.has(b.show_on)) {
+      return { error: 'block_show_on_invalid', details: { id: b.id, show_on: b.show_on } };
+    }
   }
   return {};
 }
@@ -34783,7 +34824,7 @@ function validateBlocks(blocks) {
 function readLayout(key) {
   const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
   if (!row) return [];
-  try { const v = JSON.parse(row.value_json); return Array.isArray(v) ? v : []; }
+  try { const v = JSON.parse(row.value_json); return Array.isArray(v) ? withShowOn(v) : []; }
   catch { return []; }
 }
 // Per-call (not a module-level prepared statement) so it binds to the
@@ -34911,7 +34952,7 @@ router.get('/api/retail-admin/storefront/preview-config', requireRetailAdmin, (r
     // under the page bucket — e.g. `home.layout`, `promotions.layout`. Mirror
     // that structure when overlaying.
     if (!live[page] || typeof live[page] !== 'object') live[page] = {};
-    live[page].layout = draft;
+    live[page].layout = withShowOn(draft);
   }
   // Bump the version so the front-end cache-busts when the draft changes.
   // (loadConfig() returns version = max updated_at across the table; that

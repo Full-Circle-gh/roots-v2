@@ -614,6 +614,9 @@
 .shop-blocks .sb-spot-thumb.on { background: var(--rv-accent, var(--lime)); }
 
 /* ── WeCom contact ───────────────────────────────────────────────────────── */
+/* two hints are rendered; the phone one ("long-press") shows below 768px, the
+   PC one ("scan with WeChat") from 768px up — see the §270 section at the end */
+.shop-blocks .sb-wc-hint-pc { display: none; }
 .shop-blocks .sb-wc-blk { margin: 0 calc(44 * var(--u)); }
 .shop-blocks .sb-wc-loop-qr-frame { border: calc(3 * var(--u)) solid var(--ink); border-radius: calc(20 * var(--u)); padding: calc(12 * var(--u)); background: #fff; }
 .shop-blocks .sb-wc-loop-qr-img { width: 100%; height: calc(192 * var(--u)); display: block; border-radius: calc(6 * var(--u)); object-fit: contain; }
@@ -2583,3 +2586,105 @@
 
 /* <picture> wrapper (desktop hero art variant) must not break the fill chain */
 .shop-blocks .sb-hero picture { display: contents; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PC-NATIVE, THE LAST FOUR (2026-09-26, §270) — the blocks that were still
+   phone widgets centred in a column on a PC. Same rules as the sections
+   above: fixed px on the desktop type scale, each block opting into the band
+   that suits the object. These come LAST so they win over ⑥ and ⑧ above at
+   equal specificity.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ⑪ COUPON — a promo strip across the 1240 band, not a ticket in the middle:
+   discount left, words in the middle, the button at the right edge. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="coupon_block"] { max-width: 1240px; }
+  .shop-blocks .sb-coupon-blk { justify-content: space-between; gap: 40px; padding: 34px 56px; border-radius: 22px; }
+  .shop-blocks .sb-cp-body { flex: 1 1 auto; }
+  .shop-blocks .sb-cp-disc { min-width: 160px; padding-right: 40px; }
+  .shop-blocks .sb-cp-big { font-size: 64px; }
+  .shop-blocks .sb-cp-kicker { font-size: 13px; }
+  .shop-blocks .sb-cp-title { font-size: 28px; }
+  .shop-blocks .sb-cp-sub { font-size: 17px; }
+  .shop-blocks .sb-cp-code { margin-top: 12px; padding: 8px 16px; font-size: 14px; }
+  .shop-blocks .sb-cp-cta { padding: 18px 36px; font-size: 15px; white-space: nowrap; }
+}
+@media (min-width: 1024px) {
+  .shop-blocks .sb-coupon-blk { padding: 40px 64px; gap: 56px; }
+  .shop-blocks .sb-cp-big { font-size: 72px; }
+}
+
+/* ⑫ REVIEWS — the phone's one-at-a-time swiper becomes a row of cards. The
+   track is a grid; the autoplay in blocks.js still ticks but scrollTo() on a
+   track that no longer scrolls is a no-op, and the dots are hidden. Cards
+   stretch to one height so the row reads as a set. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="review_card"] { max-width: 1240px; }
+  .shop-blocks .sb-review-blk { padding: 44px 40px; }
+  .shop-blocks .sb-rv-carousel .sb-rv-track {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 28px; overflow: visible; scroll-snap-type: none; padding: 22px 8px 12px;
+  }
+  .shop-blocks .sb-rv-carousel .sb-rv-slide { flex: none; width: auto; min-width: 0; display: flex; }
+  .shop-blocks .sb-rv-carousel .sb-rv-slide > * { flex: 1 1 auto; box-sizing: border-box; }
+  .shop-blocks .sb-rv-carousel + .sb-rv-dots { display: none; }
+  .shop-blocks .sb-rv-carousel .sb-rv-quote { font-size: 19px; line-height: 1.45; }
+  .shop-blocks .sb-rv-carousel .sb-rv-name { font-size: 16px; }
+  .shop-blocks .sb-riso-carousel .sb-riso-card { margin-top: 12px; padding: 34px 28px 26px; }
+}
+@media (min-width: 1024px) {
+  .shop-blocks .sb-rv-carousel .sb-rv-quote { font-size: 20px; }
+}
+
+/* ⑬ WECOM — a contact strip across the 1240 band: words left, QR at the
+   right edge, and the hint says "scan", because a PC reader scans the code
+   with the phone in hand and cannot long-press it. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="wecom_contact"] { max-width: 1240px; }
+  .shop-blocks .sb-wc-hint-phone { display: none; }
+  .shop-blocks .sb-wc-hint-pc { display: inline; }
+  .shop-blocks .sb-wc-lm-card { padding: 40px 56px; }
+  .shop-blocks .sb-wc-lm-body { justify-content: space-between; gap: 48px; }
+  .shop-blocks .sb-wc-lm-l { flex: 1 1 auto; max-width: 720px; }
+  .shop-blocks .sb-wc-lm-title { font-size: 36px; }
+  .shop-blocks .sb-wc-lm-sub { font-size: 17px; }
+  .shop-blocks .sb-wc-lm-cta { padding: 14px 28px; font-size: 14px; margin-top: 22px; }
+  .shop-blocks .sb-wc-lm-qr { width: 200px; }
+  .shop-blocks .sb-wc-loop-qr-frame { border-width: 3px; border-radius: 16px; padding: 10px; }
+  .shop-blocks .sb-wc-loop-qr-img { height: 156px; }
+  .shop-blocks .sb-wc-lm-hint, .shop-blocks .sb-wc-loop-qr-hint, .shop-blocks .sb-wc-hint { font-size: 13px; margin-top: 8px; }
+  .shop-blocks .sb-wc-loop-card { padding: 40px 56px; }
+  .shop-blocks .sb-wc-strip { padding: 32px 56px; }
+}
+@media (min-width: 1024px) {
+  .shop-blocks .sb-wc-lm-card { padding: 48px 64px; }
+  .shop-blocks .sb-wc-lm-title { font-size: 42px; }
+}
+
+/* ⑭ FLASH SALE (classic / editorial / urgency) — two columns on a desktop:
+   the words, the clock and the button stand on the left, the product cards
+   fill the right. Every non-card child of the body falls into column 1 in
+   its own order; the cards span the rows beside them. */
+@media (min-width: 1024px) {
+  .shop-blocks .sb-fsd-body {
+    display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+    column-gap: 56px; align-items: start; padding: 64px 56px 56px;
+  }
+  .shop-blocks .sb-fsd-body > * { grid-column: 1; }
+  .shop-blocks .sb-fsd-body > .sb-fsd-cards {
+    grid-column: 2; grid-row: 1 / span 8; align-self: center;
+    justify-content: flex-start; flex-wrap: wrap; overflow: visible; padding: 0; gap: 20px;
+  }
+  .shop-blocks .sb-fsd-card { flex: 1 1 200px; width: auto; min-width: 200px; max-width: 260px; }
+  .shop-blocks .sb-fsd-classic .sb-fsd-head,
+  .shop-blocks .sb-fsd-urgency .sb-fsd-head,
+  .shop-blocks .sb-fsd-editorial .sb-fsd-head { text-align: left; padding: 0; }
+  .shop-blocks .sb-fsd-classic .sb-fsd-ends { text-align: left; margin-top: 32px; }
+  .shop-blocks .sb-fsd-classic .sb-fsd-clock,
+  .shop-blocks .sb-fsd-urgency .sb-fsd-clock { justify-content: flex-start; padding: 0; margin-top: 28px; }
+  .shop-blocks .sb-fsd-urgency .sb-fsd-tile { flex: 0 0 auto; width: 76px; max-width: none; }
+  .shop-blocks .sb-fsd-classic .sb-fsd-cta-wrap,
+  .shop-blocks .sb-fsd-urgency .sb-fsd-cta-wrap { justify-content: flex-start; margin: 32px 0 0; }
+  .shop-blocks .sb-fsd-editorial .sb-fsd-cards { margin-top: 0; }
+  .shop-blocks .sb-fsd-title { font-size: 44px; }
+}

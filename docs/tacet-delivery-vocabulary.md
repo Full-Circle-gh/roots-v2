@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.182 · 2026-09-26 · §270 THE WEB SHOP'S WECOM HINT ON A PC — ONE CUSTOMER PAIR COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `Scan with WeChat to add us · 微信扫码添加`, shown from 768px up in place of the phone's long-press hint. `微信扫码` is the web shop's own `微信扫码支付` (checkout) with 支付 dropped; `添加` is the block's own live button `添加我们`. See *Where a block shows (§270)*.
+
+**v1.181 · 2026-09-26 · §270 A BLOCK SAYS WHERE IT SHOWS — ONE LABEL, THREE CHOICES AND ONE NOTE, COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The editor's new *Show on · 显示位置* section. `Mini app only · 仅小程序` is copied whole from the editor's own store-info form; `Website only · 仅网页版` and `Mini app + website · 小程序 + 网页版` are built from the same 仅 and the editor's live `网页版` (See it live → As a web page). See *Where a block shows (§270)*.
+
 **v1.180 · 2026-09-26 · §269 ADDENDUM THE PHONE — ONE ENGLISH LINE, NO NEW CHINESE.** The phone reuses v1.179's `应退还店里` and `标记已收回`; its own-screen line is `You owe the shop · 应退还店里`, a second English reading of the same Chinese. The recovered toast `Recovered · 已收回` is copied whole. See *A return on money out (§269)*.
 
 **v1.179 · 2026-09-26 · §269 A RETURN ON MONEY OUT — FOUR SHORT PAIRS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Transactions row's `Return · 退货` action, the owed block's `Owes the shop · 应退还店里` and `Mark recovered · 标记已收回`, and two refusals. Reasons, labels and confirms are copied whole. See *A return on money out (§269)*.
@@ -8878,3 +8882,30 @@ the Transactions row, the return dialog, the owed block, and two server refusals
   a customer; here the shop is getting money back from a seller.
 - `Mark paid · 标记已付` for the recovered case: **rejected**. It says the shop
   paid the person, which is the opposite of what happened.
+
+## Where a block shows (§270)
+
+The *Show on* section every block's inspector now carries in `public/cms.html`,
+and the tag the canvas puts on a block one surface skips. Register: OPERATOR
+(Rule 1) — read by a merchant editing their own shop, never by a customer.
+Composed under Rule 4's standing delegation; nothing here has been shown to Ash
+yet, so every composed row carries the "Ash should correct this if it reads
+wrong" caveat.
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| Show on | 显示位置 | **COMPOSED** — the section title and the field label. 显示 is live throughout this editor (`要显示的分类`, `控制客服按钮的显示`); 位置 is live in this editor's `按钮链接…跳转位置`. Rejected: `显示于` (reads as a preposition left hanging, needs its object), `显示范围` (range/scope — the choice is between two places, not a span) | section title, field label |
+| Mini app + website | 小程序 + 网页版 | **COPIED CONSTRUCT** — the editor's own `合并 — 小程序 + 门店(推荐)` (store-info form) supplies `小程序 + `, and its See-it-live menu supplies `网页版` for *As a web page* | select option (default) |
+| Mini app only | 仅小程序 | **COPIED** whole from the editor's store-info form (`Mini app only · 仅小程序`) | select option, canvas tag |
+| Website only | 仅网页版 | **COMPOSED** — the same `仅` prefix on the same `网页版`. Rejected: `仅网站` (`网站` is live only in prose here, `网页版` is the word the menu already uses for this surface) | select option, canvas tag |
+| Where customers see this block. The website is your shop in a browser; the mini app is your shop in WeChat. | 顾客在哪里看到本模块。网页版是浏览器里的商店,小程序是微信里的商店。 | **COMPOSED** — helper text on the field. `本模块` is live in this editor (affiliate form); `顾客` live throughout | field helper |
+| The website has no wallet, notifications or order pages yet, so this block is off there unless you turn it on. | 网页版暂无钱包、通知和订单页面,因此本模块默认不在网页版显示,除非你打开它。 | **COMPOSED** — the note under the field on the four mini-app-default types only. `钱包` `通知` `订单` are the mini app's own tab and page names; `默认` live in this editor (`默认打开…`) | note, four block types |
+
+**Register: CUSTOMER** (Rule 1) — one pair, read by a visitor on the web shop
+at PC width, on the WeCom contact block (`public/shop/blocks.js`). The phone
+hint the merchant wrote (or the block's default `长按二维码 · 识别添加`) is not
+touched; it stays the hint below 768px.
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| Scan with WeChat to add us | 微信扫码添加 | **COMPOSED** — `微信扫码` is copied from the web shop's own checkout heading `Pay with WeChat · 微信扫码支付` with `支付` dropped; `添加` is the block's own live button `Add us · 添加我们`. Rejected: `扫码添加` (which app is not said, and the block is WeCom's), `微信扫一扫` (WeChat's own verb for the camera screen, live nowhere in this product) | WeCom block hint, ≥768px |

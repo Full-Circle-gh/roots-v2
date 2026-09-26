@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.425
+# Tacet shared-core consolidation — decisions record, v4.427
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-26 · v4.427 — **§270 · THE WEB SHOP'S LAST FOUR PHONE WIDGETS GET THEIR PC SHAPE — the second half of Ash's *"go with 1 and 2"*.** CSS and one renderer line in `public/shop/`, no data change, the mini app untouched. Rendered from the live Roots home layout at 1440px before and after (the repo's own `public/shop/_gallery_frame.html`): the **coupon** was a 680px ticket floating mid-page and is now a promo strip across the 1240 band, discount left, words centre, button right; **reviews** were the phone's one-at-a-time swiper with the second card cut off at the right edge and are now a row of cards on a grid (the autoplay still ticks harmlessly on a track that no longer scrolls; dots hidden); the **WeCom card** was a 900px card whose hint told a PC reader to *long-press* the QR, and is now a strip across the band whose hint says `Scan with WeChat to add us · 微信扫码添加` from 768px up (both hints rendered, CSS shows one per width, the merchant's own phone hint untouched); the **flash sale** (classic / editorial / urgency views) stacked everything centred in a wide green band and is now two columns from 1024px, words, clock and button left, product cards filling the right. Categories, hero, product grid, recipe, bundle, announcement, featured, countdown, video, points, top-up, stores, favourites, affiliate and leaderboard already had PC compositions (blocks.css ①–⑩ twice over) and are unchanged. Voting's `No live poll` stub is data, not layout, and is left. Chinese: vocabulary v1.182.
+
+2026-09-26 · v4.426 — **§270 · A BLOCK SAYS WHERE IT SHOWS, AND THE WEB SHOP STOPS LOOKING LIKE A PHONE — ASH:** *"I feel our the website domain doesn't look great compare to the mini app. I guess it's because they are sharing the same editor instead of 2 seperate editors"*, then *"go with 1 and 2"* on the recommendation. **THE FINDING.** The shared editor is not the cause. One block list (`home.layout`) feeds the mini app and `public/shop.html`; the web engine (`public/shop/blocks.js` + `blocks.css`) already draws categories, hero, product grid, recipe and bundle in PC compositions, but the coupon, reviews, WeCom card, voting and flash sale were still phone widgets in a 720px column, and four blocks whose tap the web shop answers with "coming soon" (order tracker, notification bar, points, top-up) showed on the website anyway. The editor's stage is a phone; the PC exists only in the See-it-live drawer. **A SECOND EDITOR WAS REJECTED**: every content change done twice, two publish states, drift within a week, a second block catalogue on top of the four renderers the repo already carries. **DECISION 1 — `show_on`.** Every block carries `show_on` ∈ `both` · `miniapp` · `web`. The server fills it on every read (`withShowOn` in routes/retail.js: readLayout, loadConfig, both draft overlays) from one table, so a layout published before the field existed behaves like one saved after it; the four "coming soon" types default to `miniapp`, everything else to `both`; a stored value wins; an unknown value is refused on save (`block_show_on_invalid`). The mini app (`config.forMiniApp`, all three layout pages), the web shop (`ShopBlocks.forSurface` + `render`) and the phone drawer (`storefront.html`) each drop the other surface's blocks. The editor gains a *Show on* section on every block's inspector and a tag on the canvas for a block one surface skips; it carries the server's four-type table for a block added and not yet saved, and `scripts/test_cms_show_on.js` holds the two copies equal. **DECISION 2 — THE PC PASS IS FINISHED**, CSS and renderer only, no data change: see the v4.427 entry. **NOT IN THIS PASS, RECOMMENDED NEXT:** a Phone ↔ Desktop switch on the editor stage itself (the drawer's `/shop-preview` iframe, driven by postMessage like `cms-mobile.html` already does), then a Website settings page (nav links, footer, page title). Chinese: vocabulary v1.181.
 
 2026-09-26 · v4.425 — **§269 ADDENDUM · THE PHONE SHOWS WHO OWES THE SHOP — ASH:** *"fix the mobile now"*, on the gap v4.424 named. The phone's approvals owed list now lists a negative total too, marked `应退还店里`, as `−¥19` with `标记已收回` and its own confirm; the tap is the same settle, which absorbs the returns. The employee's own expense screen says `应退还店里 ¥19` where it used to say nothing, and the claim's pill nets returns: `应付您` only while money is still owed after returns, `应退还店里` while a paid-back employee holds a refund. A claim row shows `退货 ¥N` when something went back. No server change. Chinese: vocabulary v1.180.
 
@@ -20582,3 +20586,18 @@ never edited. Purchase-order goods keep going back through Purchasing. On a clai
 the employee paid for and was already paid back for, the employee owes the shop
 the refund until it is marked recovered. Recording a return takes
 `finance:record`. See the v4.424 changelog entry.
+
+## §270 — A BLOCK SAYS WHERE IT SHOWS; ONE EDITOR, TWO FACES
+
+**Decided 2026-09-26 by Ash** (*"go with 1 and 2"*). The mini app and the web
+shop keep ONE editor and ONE block list; a separate website editor is rejected
+because every content change would be done twice and the two would drift.
+Every block carries `show_on` (`both` · `miniapp` · `web`), filled by the server
+on every read from one default table: the four types whose tap the web shop
+cannot yet answer (order tracker, notification bar, points, top-up) default to
+the mini app, all else to both. Each renderer drops the other surface's blocks.
+The editor shows the control on every block and tags the canvas. The web shop's
+PC compositions are finished for the blocks that were still phone widgets, in
+CSS and renderer only. Recommended next, not built: a Phone ↔ Desktop switch on
+the editor stage, then a Website settings page for nav, footer and page title.
+See the v4.426 and v4.427 changelog entries.

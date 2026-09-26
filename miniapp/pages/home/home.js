@@ -302,7 +302,7 @@ Page({
         // Anonymous users have nothing to count.
         hasToken ? api.get('/api/retail/notifications/unread-count').catch(() => null) : Promise.resolve(null),
       ]);
-      const layout = cfg?.home?.layout || [];
+      const layout = config.forMiniApp(cfg?.home?.layout);
       // Tell the two empty states apart. No config at all means we could not
       // reach the server — a network error the customer can retry, not an
       // operator who forgot to publish. Leave a diagnostics breadcrumb either

@@ -4942,7 +4942,10 @@ async function loadPolls(){
 // content as the mini-app, responsive for phone + desktop. Falls back to a
 // clean auto-layout when nothing is published.
 async function renderHome(){
-  const layout = state.config && state.config.home && state.config.home.layout;
+  // Only the blocks the web shop shows (show_on 'both' or 'web'); a mini-app-
+  // only block is dropped here so the product pre-fetch below skips it too.
+  const published = state.config && state.config.home && state.config.home.layout;
+  const layout = (window.ShopBlocks && Array.isArray(published)) ? ShopBlocks.forSurface(published) : published;
   if(!(Array.isArray(layout) && layout.length) || !window.ShopBlocks) return renderHomeAuto();
   // Block engine needs products as context for by-id lookups (manual grids,
   // featured items, bundles). Fetch a base pull PLUS every product id the layout

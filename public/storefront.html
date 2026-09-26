@@ -1552,6 +1552,9 @@ function loadTopProducts(channel, window, limit) {
 
 function render(blocks) {
   const mount = $('#phone-content');
+  // This frame stands in for the mini app, so it draws what the mini app
+  // draws: show_on 'both' or 'miniapp'; a web-only block is skipped.
+  blocks = (blocks || []).filter(b => b && b.show_on !== 'web');
   if (!blocks.length) {
     mount.innerHTML = `<div class="empty-state">Nothing published yet. Open the <a href="/cms" style="color:var(--ink)">CMS</a> and publish a layout.</div>`;
     return;

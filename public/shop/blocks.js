@@ -1285,6 +1285,11 @@
     var title = pick(b.title_en, b.title_cn);
     var subtitle = pick(b.subtitle_en, b.subtitle_cn);
     var hint = pick(b.hint_en, b.hint_cn) || (CN() ? '长按二维码 · 识别添加' : 'Long-press QR · tap "Add"');
+    // The stored hint tells a phone reader to long-press the QR, which a PC
+    // reader cannot do — there the QR is scanned with the phone in hand. Both
+    // hints are rendered and blocks.css shows one per width (§270).
+    var hintPc = CN() ? '微信扫码添加' : 'Scan with WeChat to add us';
+    var hintHtml = '<span class="sb-wc-hint-phone">' + escapeHtml(hint) + '</span><span class="sb-wc-hint-pc">' + escapeHtml(hintPc) + '</span>';
     var buttonLabel = pick(b.button_label_en, b.button_label_cn) || (b.qr_image_url ? (CN() ? '添加我们' : 'Add us') : (CN() ? '联系客服' : 'Chat with us'));
     var qrUrl = absUrl(b.qr_image_url);
     var showButton = b.show_chat_button !== false;
@@ -1306,7 +1311,7 @@
         (title ? '<div class="sb-wc-strip-title">' + escapeHtml(title) + '</div>' : '') +
         (subtitle ? '<div class="sb-wc-strip-sub">' + escapeHtml(subtitle) + '</div>' : '') +
         (showButton ? ctaWrap(ctaTarget, '<button class="sb-wc-cta sb-wc-cta-strip" style="background:' + attr(accent) + ';color:' + attr(btnFg) + '">' + escapeHtml(buttonLabel) + '</button>') : '') +
-        '</div>' + (showQr && qrUrl ? '<div class="sb-wc-strip-qr"><img class="sb-wc-qr-sm" src="' + attr(qrUrl) + '" alt="QR"><div class="sb-wc-hint">' + escapeHtml(hint) + '</div></div>' : '') + '</div>';
+        '</div>' + (showQr && qrUrl ? '<div class="sb-wc-strip-qr"><img class="sb-wc-qr-sm" src="' + attr(qrUrl) + '" alt="QR"><div class="sb-wc-hint">' + hintHtml + '</div></div>' : '') + '</div>';
     }
 
     // card · compact (the live home uses this)
@@ -1318,7 +1323,7 @@
         (kicker ? '<div class="sb-wc-lm-kicker" style="color:' + attr(accent) + '">' + escapeHtml(kicker) + '</div>' : '') +
         (title ? '<div class="sb-wc-lm-title">' + escapeHtml(title) + '</div>' : '') +
         '<div class="sb-wc-lm-sub">' + escapeHtml(subtitle || oneLineProps) + '</div>' + cta + '</div>' +
-        (showQr && qrUrl ? '<div class="sb-wc-lm-qr">' + qrFrame + '<span class="sb-wc-lm-hint">' + escapeHtml(hint) + '</span></div>' : '') +
+        (showQr && qrUrl ? '<div class="sb-wc-lm-qr">' + qrFrame + '<span class="sb-wc-lm-hint">' + hintHtml + '</span></div>' : '') +
         '</div></div></div>';
     }
     // card · warm / poster / coupon -> render the warm "Stay in the loop" pop
@@ -1332,7 +1337,7 @@
       (title ? '<div class="sb-wc-loop-title">' + escapeHtml(title) + '</div>' : '') +
       (subtitle ? '<div class="sb-wc-loop-sub">' + escapeHtml(subtitle) + '</div>' : '') + chips +
       '<div class="sb-wc-loop-foot"><div class="sb-wc-loop-foot-l">' + ctaW + '</div>' +
-      (showQr && qrUrl ? '<div class="sb-wc-loop-qr">' + qrFrame + '<span class="sb-wc-loop-qr-hint">' + escapeHtml(hint) + '</span></div>' : '') +
+      (showQr && qrUrl ? '<div class="sb-wc-loop-qr">' + qrFrame + '<span class="sb-wc-loop-qr-hint">' + hintHtml + '</span></div>' : '') +
       '</div></div></div>';
   };
 
@@ -1846,12 +1851,25 @@
     ctx.productsById = byId;
   }
 
+  // `show_on` — which surface draws a block ('both' | 'miniapp' | 'web'). The
+  // server writes it explicit on every block it serves (routes/retail.js
+  // withShowOn), so a missing value only happens on a hand-built fixture and
+  // is read as 'both'. This engine IS the web shop, so it keeps 'both' and
+  // 'web' and drops 'miniapp'. Hosts that walk the layout before rendering
+  // (shop.html's renderHome pre-fetches the products a layout names) call
+  // forSurface() first so a hidden block costs no request either.
+  function showsOnWeb(b) { return !!b && b.show_on !== 'miniapp'; }
+  function forSurface(blocks) {
+    return Array.isArray(blocks) ? blocks.filter(showsOnWeb) : [];
+  }
+
   function render(blocks) {
     if (!Array.isArray(blocks)) return '';
     var html = '';
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (!b || !b.type) continue;
+      if (!showsOnWeb(b)) continue;      // mini-app-only block
       var fn = renderers[b.type];
       if (!fn) continue;                 // unknown type -> empty string (no crash)
       var inner;
@@ -2044,6 +2062,7 @@
   global.ShopBlocks = {
     setContext: setContext,
     render: render,
+    forSurface: forSurface,
     onRerender: onRerender,
     onCta: onCta,
     startTimers: startTimers,
