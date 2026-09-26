@@ -109,7 +109,7 @@ function main() {
   const chrome = findChrome();
   if (!chrome) { console.log('SKIP — no Chromium found.'); process.exit(0); }
   const src = inlineTdDatetime(fs.readFileSync(APP, 'utf8')
-    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
+    .replace(/<script src="\/assets\/vendor\/lucide[^>]*><\/script>/, '')
     .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '')
     .replace('<script>', `<script>${fakeServer()}</script><script>`));
 
