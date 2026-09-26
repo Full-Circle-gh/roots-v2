@@ -194,6 +194,15 @@ it('the screen offers Return and a way to delete a return', () => {
   assert.ok(FIN.includes('/api/retail-admin/finance/transactions/out/${Number(row.id)}/return'));
   assert.ok(FIN.includes("/api/retail-admin/finance/transactions/out/${Number(id)}`, { method: 'DELETE' }"));
 });
+it('the phone shows owing the shop, in the owed list, the settle confirm, and your own screen', () => {
+  const PHONE = read('public', 'm.html');
+  assert.ok(PHONE.includes("const owed=(a.owed||[]).filter(o=>Number(o.total)!==0);"), 'negative totals are listed');
+  assert.ok(PHONE.includes("T('Mark recovered','标记已收回')"), 'with their own verb');
+  assert.ok(PHONE.includes("T('Recovered ¥'+abs+'?','已收回 ¥'+abs+'？')"), 'and their own confirm');
+  assert.ok(PHONE.includes(":x.owed<0?"), 'the staff screen says when they owe the shop');
+  assert.ok(PHONE.includes("(Number(r.amount)-Number(r.returned||0))>0"), 'the Owed pill nets returns');
+  assert.ok(PHONE.includes("T('Owes the shop','应退还店里')"));
+});
 it('every composed string is declared in the vocabulary', () => {
   for (const cn of ['退货金额不能超过支出金额', '该笔已登记退货，请先删除退货', '应退还店里', '标记已收回']) {
     assert.ok(VOCAB.includes(cn), cn);

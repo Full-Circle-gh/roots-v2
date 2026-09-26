@@ -13525,7 +13525,16 @@ reg('aprSettle', async (who,total,ids)=>{
   if(a.busy) return;
   const list=String(ids||'').split(',').map(Number).filter(Boolean);
   if(!list.length) return;
-  if(typeof askConfirm==='function'){
+  // §269: a negative total is a refund the employee is handing back.
+  const owes=Number(total)<0;
+  const abs=String(Math.abs(Number(total)));
+  if(owes&&typeof askConfirm==='function'){
+    if(!(await askConfirm({
+      title:T('Recovered ¥'+abs+'?','已收回 ¥'+abs+'？'),
+      body:escAttr(who||''),
+      confirmLabel:T('Mark recovered','标记已收回'),
+    }))) return;
+  } else if(typeof askConfirm==='function'){
     if(!(await askConfirm({
       title:T('Paid ¥'+total+' back?','已付款 ¥'+total+'？'),
       body:T('This records that '+(who||'they')+' has been paid back. It does not change the accounts — the expense was recorded when it was approved.',
@@ -13539,7 +13548,7 @@ reg('aprSettle', async (who,total,ids)=>{
     // how a phone on a shop's wifi ends with two of them applied.
     for(const id of list) await apiWrite('/staff-expenses/'+id+'/settle',{settled:true});
     a.busy=0; a.tried=false; aprLoad();
-    if(window.toast) toast(T('Marked paid','已标记付款'));
+    if(window.toast) toast(owes?T('Recovered','已收回'):T('Marked paid','已标记付款'));
   }catch(e){
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -13730,19 +13739,22 @@ function screenApprovals(){
      ABSENT when nothing is owed rather than rendering a zero (§1.12).
 
      THE ROW IS A PERSON, NOT A CLAIM, because that is how it gets paid. */
-  const owed=(a.owed||[]).filter(o=>o.total>0);
+  /* §269: BELOW ZERO THE MONEY RUNS THE OTHER WAY — this person holds a refund
+     for goods returned after they were paid back. Same list, marked, with its
+     own verb; the tap is the same settle, which absorbs the returns. */
+  const owed=(a.owed||[]).filter(o=>Number(o.total)!==0);
   const owedBlock = owed.length ? `<div style="display:flex;flex-direction:column;gap:8px">
       <span style="font-size:12.5px;color:var(--text-secondary)">${T('Owed to your team','应付团队')}</span>
       <div class="list">${owed.map((o,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
           <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
             <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(o.who||T('Someone','未知'))}</span>
-            <span class="num" style="font-size:12px;color:var(--text-secondary)">${o.claims} ${o.claims===1?T('claim','笔'):T('claims','笔')}</span>
+            <span class="num" style="font-size:12px;color:var(--text-secondary)">${o.claims} ${o.claims===1?T('claim','笔'):T('claims','笔')}${Number(o.total)<0?` · ${T('Owes the shop','应退还店里')}`:''}</span>
           </span>
           <span style="display:flex;align-items:center;gap:10px;flex:none">
-            <span class="num" style="font-size:16px;font-weight:600">¥${escAttr(String(o.total))}</span>
+            <span class="num" style="font-size:16px;font-weight:600">${Number(o.total)<0?'−':''}¥${escAttr(String(Math.abs(Number(o.total))))}</span>
             <button class="btn2" style="padding:0 12px;height:38px;font-size:13px" ${a.busy?'disabled':''}
-              onclick="APP.cmd('aprSettle',${JSON.stringify(o.who||'').replace(/"/g,'&quot;')},'${escAttr(String(o.total))}','${escAttr(String(o.ids||''))}')">${T('Mark paid','标记已付')}</button>
+              onclick="APP.cmd('aprSettle',${JSON.stringify(o.who||'').replace(/"/g,'&quot;')},'${escAttr(String(o.total))}','${escAttr(String(o.ids||''))}')">${Number(o.total)<0?T('Mark recovered','标记已收回'):T('Mark paid','标记已付')}</button>
           </span>
         </div>`).join('')}</div>
       ${/* THE SENTENCE THAT KEEPS THE BUTTON HONEST, and it is the third of the
@@ -13891,8 +13903,13 @@ function expStatusPill(r){
        until it is settled, and the pill says which of the two it is. Approved
        and already paid back reads as finished; approved and unpaid is what the
        shop owes, and putting both under one word is how a debt gets forgotten. */
-    if(r.paid_by==='employee'&&!r.settled)
+    /* §269: NET OF RETURNS. A claim returned in full before payback owes
+       nobody; one paid back and then returned leaves the refund with the
+       employee, owed to the shop until it is marked recovered. */
+    if(r.paid_by==='employee'&&!r.settled&&(Number(r.amount)-Number(r.returned||0))>0)
       return `<span class="pill" style="background:var(--dusk-tint);color:var(--dusk-ink)">${T('Owed','应付您')}</span>`;
+    if(r.paid_by==='employee'&&r.settled&&Number(r.return_open||0)>0)
+      return `<span class="pill" style="background:var(--amber-tint);color:var(--amber-ink)">${T('Owes the shop','应退还店里')}</span>`;
     return `<span class="pill" style="background:var(--sage-tint);color:var(--sage-ink)">${T('Approved','已通过')}</span>`;
   }
   if(r.status==='rejected')
@@ -13904,6 +13921,8 @@ function expMineRow(r){
   const bits=[fmtDateOnly(r.date)];
   if(r.category) bits.push(catLabel(r.category));
   bits.push(r.paid_by==='employee'?T('Own money','个人支付'):T('Company','公司'));
+  // §269: what went back on this claim, the numeral outside the pair.
+  if(Number(r.returned)>0) bits.push(T('Returned','退货')+' ¥'+r.returned);
   return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0;gap:2px">
       <span class="num" style="font-size:15px;font-weight:500">¥${escAttr(String(r.amount))}</span>
@@ -14038,7 +14057,10 @@ function screenExpense(){
     ? `<div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:10px">
          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
            <span style="font-size:12.5px;color:var(--text-secondary)">${T('What you have sent','你提交的记录')}</span>
-           ${x.owed>0?`<span class="num" style="font-size:12.5px;color:var(--dusk-ink)">${T('Owed to you','应付您')} ¥${escAttr(String(x.owed))}</span>`:''}
+           ${x.owed>0?`<span class="num" style="font-size:12.5px;color:var(--dusk-ink)">${T('Owed to you','应付您')} ¥${escAttr(String(x.owed))}</span>`
+             /* §269: below zero this person holds a refund for goods returned
+                after they were paid back, and owes it to the shop. */
+             :x.owed<0?`<span class="num" style="font-size:12.5px;color:var(--amber-ink)">${T('You owe the shop','应退还店里')} ¥${escAttr(String(Math.abs(Number(x.owed))))}</span>`:''}
          </div>
          <div class="list">${mine.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${expMineRow(r)}`).join('')}</div>
        </div>`

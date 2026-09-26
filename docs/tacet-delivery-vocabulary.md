@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.180 · 2026-09-26 · §269 ADDENDUM THE PHONE — ONE ENGLISH LINE, NO NEW CHINESE.** The phone reuses v1.179's `应退还店里` and `标记已收回`; its own-screen line is `You owe the shop · 应退还店里`, a second English reading of the same Chinese. The recovered toast `Recovered · 已收回` is copied whole. See *A return on money out (§269)*.
+
 **v1.179 · 2026-09-26 · §269 A RETURN ON MONEY OUT — FOUR SHORT PAIRS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Transactions row's `Return · 退货` action, the owed block's `Owes the shop · 应退还店里` and `Mark recovered · 标记已收回`, and two refusals. Reasons, labels and confirms are copied whole. See *A return on money out (§269)*.
 
 **v1.178 · 2026-09-25 · §268 ONE PARCEL'S DISPATCH CAN BE UNDONE — ONE SENTENCE AND TWO SHORT LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The parcel card's `Undo dispatch · 撤销发货` button and `Undo dispatch? · 撤销发货?` title are copied whole. The confirm's body, the success line and the desktop's failure line are composed. See *One parcel back to packed (§268)* at the foot.
@@ -8866,6 +8868,9 @@ the Transactions row, the return dialog, the owed block, and two server refusals
 | `This has a return recorded. Delete the return first · 该笔已登记退货，请先删除退货` | **composed.** `该笔已` live (`该笔已记入采购单`); `登记…退货` live (`无法登记此次退货`); `请先删除` follows the live `请先…` shape (`请先填写英文名称`) |
 | `Owes the shop · 应退还店里` | **composed.** `应` from the live owed pair `应付团队`; `退还` is the ordinary word for handing money back; `店里` is the everyday shop word. The meaning is the reverse of `应付团队`, so it sits beside it |
 | `Mark recovered · 标记已收回`, `Recovered ¥X? · 已收回 ¥X？` | **composed** on the live `Mark paid · 标记已付` and `Paid ¥X back? · 已付款 ¥X？`, with `已收回` copied from the live `Recovered · 已收回` |
+
+| `You owe the shop · 应退还店里` (phone, the employee's own screen) | **v1.180.** The same Chinese as `Owes the shop`; `应退还店里` has no subject and reads right to the person themselves. Only the English needed a second reading |
+| `Recovered · 已收回` (phone toast) | **copied whole** |
 
 **Live candidates rejected.**
 
