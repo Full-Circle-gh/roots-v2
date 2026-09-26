@@ -922,6 +922,9 @@
     .sl-search input{flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:14px;color:var(--ink);}
     .sl-search .clr{width:22px;text-align:center;color:var(--olive);font-size:18px;cursor:pointer;flex:none;}
     .sl-vs{display:flex;justify-content:flex-end;gap:5px;padding:0 22px 6px;}
+    .sl-vs[hidden],.sl-diet[hidden],.toolbar .sort[hidden]{display:none;}   /* an office switch closes these by .hidden (§199) */
+    .sl-sort{display:flex;justify-content:flex-end;padding:0 22px 8px;}
+    .sl-sort select{font-family:var(--bf-toni);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:#FFFCF7;border:1.5px solid var(--ink);border-radius:999px;padding:5px 12px;}
     .sl-vs button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:transparent;border:1.5px solid rgba(0,0,0,.2);color:var(--olive);font-size:15px;line-height:1;border-radius:0;}
     .sl-vs button.on{background:var(--ink);border-color:var(--ink);color:var(--lime);}
     .sl-diet{display:flex;gap:6px;overflow-x:auto;padding:2px 22px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -5075,7 +5078,8 @@ async function renderShop(params){
   const view=$('#view');
   const cat=params.get('cat')||'';
   const q=params.get('q')||'';
-  const sort=params.get('sort')||'featured';
+  // No sort in the address → the office's default sort (§274), then Featured.
+  const sort=params.get('sort')||shopDefaultSort()||'featured';
   $('#searchInput').value=q;
 
   const chips=[`<a class="chip ${!cat?'on':''}" href="#/shop${q?`?q=${encodeURIComponent(q)}`:''}">${state.lang==='cn'?'全部':'All'}</a>`]
@@ -5096,12 +5100,7 @@ async function renderShop(params){
     <div class="chips">${chips}</div>
     <div class="toolbar">
       <span class="count" id="shopCount"></span>
-      <select class="sort" id="sortSel">
-        <option value="featured">${state.lang==='cn'?'推荐排序':'Featured'}</option>
-        <option value="newest">${state.lang==='cn'?'最新':'Newest'}</option>
-        <option value="price_asc">${state.lang==='cn'?'价格 ↑':'Price: low to high'}</option>
-        <option value="price_desc">${state.lang==='cn'?'价格 ↓':'Price: high to low'}</option>
-      </select>
+      <select class="sort" id="sortSel"${shopCfg().showSort?'':' hidden'}>${shopSortOptions(sort)}</select>
     </div>
     <div class="grid" id="shopGrid">${skeletons(10)}</div>
   </div>`;
@@ -5120,8 +5119,10 @@ async function renderShop(params){
   if(cat)qp.set('category',cat);if(q)qp.set('q',q);if(sort!=='featured')qp.set('sort',sort);
   try{
     const r=await fetch('/api/retail/products?'+qp.toString()).then(x=>x.json());
-    const prods=r&&r.data||[];
-    const total=(r&&r.meta&&r.meta.total)||prods.length;
+    const prods=shopHideOos(r&&r.data||[]);
+    // The count is the server's total unless out-of-stock rows were hidden
+    // here, in which case it is what is on the page.
+    const total=shopCfg().hideOutOfStock?prods.length:((r&&r.meta&&r.meta.total)||prods.length);
     $('#shopCount').textContent=total+(state.lang==='cn'?' 件商品':` ${total===1?'product':'products'}`);
     $('#shopGrid').innerHTML=prods.length?prods.map(cardHtml).join('')
       :`<div class="empty">${state.lang==='cn'?'没有找到商品':'No products found.'}</div>`;
@@ -5136,7 +5137,7 @@ function catLabelByName(name){const c=state.cats.find(x=>x.name===name);return c
    button and the variant size-picker mirror the mini-app. */
 const SL = {
   prods:[], sections:[], visible:[], members:{},
-  layout:'list', diet:'', q:'',
+  layout:'list', diet:'', q:'', sort:'',
   drill:'', drillLabel:'', subTabs:[], activeCat:'', activeSub:'',
   suppress:0, offsets:[], vpRep:null, _searchT:null, _scrollT:null,
 };
@@ -5346,8 +5347,13 @@ async function renderShopList(params){
   SL.q=params.get('q')||'';
   SL.diet='';SL.drill='';SL.drillLabel='';SL.subTabs=[];SL.activeCat='';SL.activeSub='';
   SL._pendingCat=params.get('cat')||'';
-  // restore saved view preference
-  try{const sv=localStorage.getItem('shop_layout_pref');if(sv&&SL_VIEWS.some(v=>v.key===sv))SL.layout=sv;}catch{}
+  // Layout (§274, the mini app's rule): the office's default, unless the
+  // shopper chose one here before — and the office's alone when it locked the
+  // layout, in which case the switcher is not shown at all.
+  const scfg=shopCfg(), layoutLocked=!!scfg.lockLayout, adminLayout=shopAdminLayout();
+  if(adminLayout) SL.layout=adminLayout;
+  if(!layoutLocked){ try{const sv=localStorage.getItem('shop_layout_pref');if(sv&&SL_VIEWS.some(v=>v.key===sv))SL.layout=sv;}catch{} }
+  SL.sort=shopDefaultSort();
   view.innerHTML=`<div class="shoplist" id="slRoot">
     <div class="sl-hd"><div class="t">${state.lang==='cn'?'分类':'CATEGORIES'}</div></div>
     <div class="sl-search">
@@ -5355,8 +5361,9 @@ async function renderShopList(params){
       <input id="slSearch" type="search" value="${escAttr(SL.q)}" placeholder="${state.lang==='cn'?'搜索…':'Search the pantry…'}" autocomplete="off">
       <span class="clr" id="slClear" ${SL.q?'':'hidden'}>×</span>
     </div>
-    <div class="sl-vs" id="slVs">${SL_VIEWS.map(v=>`<button data-k="${v.key}" class="${SL.layout===v.key?'on':''}">${v.icon}</button>`).join('')}</div>
-    <div class="sl-diet" id="slDiet"><span class="lbl">${state.lang==='cn'?SL_DIET_LABEL.cn:SL_DIET_LABEL.en}</span>${SL_DIET.map(d=>`<span class="c" data-k="${d.key}">${state.lang==='cn'?d.cn:d.en}</span>`).join('')}</div>
+    <div class="sl-vs" id="slVs"${layoutLocked?' hidden':''}>${SL_VIEWS.map(v=>`<button data-k="${v.key}" class="${SL.layout===v.key?'on':''}">${v.icon}</button>`).join('')}</div>
+    ${scfg.showSort?`<div class="sl-sort"><select id="slSort" aria-label="${state.lang==='cn'?'排序':'Sort'}">${shopSortOptions(SL.sort)}</select></div>`:''}
+    <div class="sl-diet" id="slDiet"${scfg.showDietary===false?' hidden':''}><span class="lbl">${state.lang==='cn'?SL_DIET_LABEL.cn:SL_DIET_LABEL.en}</span>${SL_DIET.map(d=>`<span class="c" data-k="${d.key}">${state.lang==='cn'?d.cn:d.en}</span>`).join('')}</div>
     <div class="sl-body">
       <div class="sl-side" id="slSide"></div>
       <div class="sl-main" id="slMain"><div class="sl-skel"></div><div class="sl-skel"></div><div class="sl-skel"></div></div>
@@ -5370,6 +5377,7 @@ async function renderShopList(params){
     clearTimeout(SL._searchT);SL._searchT=setTimeout(slRefresh,300);
   });
   $('#slClear').onclick=()=>{SL.q='';si.value='';$('#slClear').hidden=true;slRefresh();};
+  { const ss=$('#slSort'); if(ss){ ss.onchange=e=>{ const v=e.target.value; SL.sort=SHOP_SORTS.includes(v)?v:''; slRefresh(); }; } }
   $('#slVs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
     const k=b.dataset.k;if(!k||k===SL.layout)return;SL.layout=k;
     try{localStorage.setItem('shop_layout_pref',k);}catch{}
@@ -5402,11 +5410,13 @@ async function slRefresh(){
   try{
     const qp=new URLSearchParams();qp.set('slim','1');qp.set('limit','500');
     if(SL.q)qp.set('q',SL.q);
+    if(SL.sort)qp.set('sort',SL.sort);
     const r=await fetch('/api/retail/products?'+qp.toString()).then(x=>x.json());
     let raw=(r&&r.data)||[];
     if(SL.diet){
       raw=raw.filter(p=>slMadeWithout(p,SL.diet));
     }
+    raw=shopHideOos(raw);
     SL.prods=raw;
     const display=slCollapse(raw);
     SL.members={};for(const p of display)if(p._members)SL.members[p.id]=p._members;
@@ -6228,6 +6238,22 @@ async function renderProduct(id){
 // browser-tab title and the search description. Nothing set → the two
 // default menu links and the brand name, as before.
 function siteCfg(){ const w=state.config&&state.config.web; return (w&&w.site&&typeof w.site==='object')?w.site:{}; }
+// The Shop tab's own settings (cfg.shop — Mini App Backend → Shop tab), the
+// same ones miniapp/pages/shop/shop.js reads, so one setting governs both
+// surfaces (§274): layout and whether the shopper may change it, the default
+// sort and whether a sort control shows, the dietary chips, and hiding what
+// is out of stock. The three extra filters (stock, badge, price) have no web
+// control yet and are not read here.
+function shopCfg(){ const s=state.config&&state.config.shop; return (s&&typeof s==='object')?s:{}; }
+const SHOP_SORTS=['newest','price_asc','price_desc','popular'];
+function shopDefaultSort(){ const v=shopCfg().defaultSort; return SHOP_SORTS.includes(v)?v:''; }
+// The mini app's rule, exactly: a product with no stock figure is never hidden.
+function shopHideOos(list){ return shopCfg().hideOutOfStock?list.filter(p=>p&&(p.stock==null||Number(p.stock)>0)):list; }
+// The office's layout, in this page's names: 'grid' is the old name of the
+// two-column grid; 'gallery' has no web twin and reads as the two-column grid.
+function shopAdminLayout(){ let l=shopCfg().layout; if(l==='grid'||l==='gallery')l='grid-2col'; return SL_VIEWS.some(v=>v.key===l)?l:''; }
+const SHOP_SORT_LABELS={featured:['Featured','推荐'],newest:['Newest','最新'],price_asc:['Price ↑','价格 ↑'],price_desc:['Price ↓','价格 ↓'],popular:['Popular','热门']};
+function shopSortOptions(current){ return Object.keys(SHOP_SORT_LABELS).map(k=>`<option value="${k}"${(current||'featured')===k?' selected':''}>${SHOP_SORT_LABELS[k][state.lang==='cn'?1:0]}</option>`).join(''); }
 function sitePick(en,cn){ const cnOn=state.lang==='cn'; return (cnOn?(cn||en):(en||cn))||''; }
 function siteTitle(){ const t=sitePick(siteCfg().title_en,siteCfg().title_cn); return t||state.brand; }
 function renderSiteChrome(){
