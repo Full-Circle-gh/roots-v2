@@ -13628,7 +13628,7 @@ function aprRow(r){
   const waiting=r.status==='submitted';
   const own=r.paid_by==='employee';
   // The SERVER says whose claim this is. The phone holds no operator id — this
-  // read it off `state.me`, which carries a name and a role and nothing else, so
+  // read it off `state.me`, which carries a name, a role and a photo but no id, so
   // the marker silently never appeared.
   const mine=!!r.mine;
   const bits=[fmtDateOnly(r.date)];
@@ -21525,8 +21525,30 @@ function headControls(){
       ${unseen?`<span style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--bg)"></span>`:''}
     </span>`:''}
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}">
-      <span style="width:28px;height:28px;border-radius:8px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',16)}</span>
+      <span style="position:relative;width:28px;height:28px;border-radius:8px;overflow:hidden;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${acctMark()}</span>
     </button></span>`;
+}
+/* THE ACCOUNT BUTTON IS THE PERSON, NOT THE SHOP. It drew the store name's
+   first letter, so every operator of Roots saw the same "R" and the button
+   told nobody whose phone this was. It now follows the desktop's topbar circle
+   (acctInitials, 02-settings-ops.js): the uploaded photo, else up to two
+   initials for a Latin name, else the first character of a CJK one. The photo
+   falls back to the initials if it fails to load. */
+function acctInitials(name){
+  const src=String(name||'').trim();
+  if(!src) return '';
+  if(/^[\x00-\x7F]+$/.test(src)){
+    const parts=src.split(/\s+/).filter(Boolean);
+    return ((parts[0]||'').charAt(0)+(parts.length>1?parts[parts.length-1].charAt(0):'')).toUpperCase();
+  }
+  return Array.from(src)[0];
+}
+function acctMark(){
+  const me=state.me||{};
+  const mark=escAttr(acctInitials(me.name))||ic('user',16);
+  // The photo sits over the initials, so a broken one just removes itself.
+  const photo=me.avatarUrl?`<img src="${escAttr(me.avatarUrl)}" alt="" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">`:'';
+  return mark+photo;
 }
 /* Frame 4 of the canvas, "One header" — built as drawn. The old top bar carried
    a wordmark and then a SECOND header underneath it repeating the page's name;
@@ -24201,7 +24223,7 @@ async function loadMe(){
        re-renders template strings into #content, so what it does with them is
        FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */
     state.caps=Array.isArray(u.caps)?u.caps:null;
-    state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null};
+    state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null};
     /* The operator's own language, from their account (audit M-01 / M-02). It
        wins over whatever this handset had — that is the point. null means they
        have never chosen, and then the handset's value stands: nobody who has
