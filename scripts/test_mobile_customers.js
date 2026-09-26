@@ -248,6 +248,12 @@ const CASES = [
     APP.cmd('editCustomer');`, [
     ['the phone is one of them',   `!!document.getElementById('ask-phone')`],
     ['so are gender and birthday', `!!document.getElementById('ask-gender') && !!document.getElementById('ask-birthday')`],
+    // Gender was the one field the platform drew for itself — charcoal on a
+    // phone set to dark, inside a light sheet. It wears the input's surface now.
+    ['and gender looks like the fields around it', `(function(){
+       var g=getComputedStyle(document.getElementById('ask-gender')), e=getComputedStyle(document.getElementById('ask-email'));
+       return g.backgroundColor===e.backgroundColor && g.color===e.color && g.borderTopColor===e.borderTopColor
+         && g.borderTopLeftRadius===e.borderTopLeftRadius; })()`],
     ['and it no longer sends the operator to a desktop',
       `!sheetText().includes('changed on the desktop')`],
   ]],

@@ -530,6 +530,24 @@ input.qsnum:focus{outline:none;border-color:var(--accent);}
 input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-card);
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
+/* THE DROP-DOWN WEARS THE FIELD'S CLOTHES. There was no rule for <select> at
+   all, so the platform drew its own — and because the page declares
+   `color-scheme: light dark`, a phone set to dark painted a charcoal box with
+   white text inside a light sheet, one field in a stack of five looking like it
+   belonged to another app (reported on the customer Edit sheet's Gender). Same
+   border, radius, surface and type as the input beside it; the platform arrow
+   goes with `appearance:none` because it follows the phone's scheme too, and a
+   chevron drawn in the theme's own secondary ink replaces it. The inline
+   `height:40px`/`font-size` on the approvals pickers still win, as before. */
+select{font-family:inherit;padding:12px 36px 12px 14px;border:1px solid var(--border-default);border-radius:8px;
+  background-color:var(--surface-card);color:var(--text-primary);font-size:15px;width:100%;
+  -webkit-appearance:none;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--text-secondary) 50%),
+                   linear-gradient(135deg,var(--text-secondary) 50%,transparent 50%);
+  background-position:calc(100% - 19px) 50%,calc(100% - 14px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+select:focus{outline:none;border-color:var(--border-focus)}
+select:disabled{opacity:.6}
 
 /* THE SHOP NOTE'S SAVE/CANCEL PAIR, and the reason its layout is here rather
    than in the style string beside it. The pair is meant to appear only once the
@@ -13596,7 +13614,7 @@ function aprCatCell(r){
     ?`<option value=""${chosen?'':' selected'}>${T('— pick a category —','— 选择分类 —')}</option>`:'';
   const opts=list.map(c=>`<option value="${escAttr(c)}"${c===chosen?' selected':''}>${escAttr(labels.get(c)||catLabel(c))}</option>`).join('');
   const cmd=waiting?'aprCatPick':'aprFile';
-  return `<select style="width:100%;font-size:13.5px;height:40px"${a.busy?' disabled':''}
+  return `<select style="width:100%;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0"${a.busy?' disabled':''}
     onchange="APP.cmd('${cmd}',${r.id},this.value)">${blank}${opts}</select>`;
 }
 
@@ -13641,7 +13659,7 @@ function aprPaidCell(r){
      two words are the expense form's own, over this identical pair. */
   return `<label style="display:flex;align-items:center;gap:10px">
     <span style="font-size:12.5px;color:var(--text-secondary);flex:none">${T('Who paid','由谁付款')}</span>
-    <select style="flex:1;min-width:0;font-size:13.5px;height:40px"${a.busy?' disabled':''}
+    <select style="flex:1;min-width:0;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0"${a.busy?' disabled':''}
       onchange="APP.cmd('${cmd}',${r.id},this.value)">${opts}</select>
   </label>`;
 }
