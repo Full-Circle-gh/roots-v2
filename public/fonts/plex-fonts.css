@@ -1,0 +1,29 @@
+/* IBM Plex web type, served from this application (audit D-09).
+
+   The platform console (store-admin, saas-admin), billing, signup and the
+   phone CMS editor are drawn in IBM Plex, not the Tacet pair in
+   tacet-fonts.css. They loaded it from fonts.googleapis.com as a blocking
+   stylesheet, which does not answer from mainland China, so each of those
+   pages sat blank there until the connection gave up.
+
+   IBM Plex Sans: the Latin and Latin-extended slices of the variable font
+   (@fontsource-variable/ibm-plex-sans 5.3.0), one file for every weight.
+   IBM Plex Mono: the Latin 400 and 500 files (@fontsource/ibm-plex-mono
+   5.3.0), the two weights these pages asked Google for. Unchanged; OFL
+   licence beside them.
+
+   NO CHINESE FACE IS SERVED, the same call as tacet-fonts.css: IBM Plex Sans
+   SC never reached a browser in China, so the Chinese text there has always
+   been the system's own face. */
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:100 700;font-display:swap;
+  src:url(/assets/fonts/ibm-plex-sans-5.3.0-latin.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:100 700;font-display:swap;
+  src:url(/assets/fonts/ibm-plex-sans-5.3.0-latin-ext.woff2) format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+  src:url(/assets/fonts/ibm-plex-mono-5.3.0-latin-400.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;
+  src:url(/assets/fonts/ibm-plex-mono-5.3.0-latin-500.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
