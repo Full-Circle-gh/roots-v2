@@ -140,6 +140,8 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 
 **Data source:** two keys on `/api/retail-admin/dashboard/ops` — `reviews_unanswered {count, low, items}` and `feedback_waiting {count, items}`. No new route, no new poll, and **not store-scoped**: neither table carries a store, and a review is about a product rather than a shelf, so the header's store picker deliberately leaves both counts alone.
 
+**Superseded 2026-09-26 by decisions §271:** the topbar Inbox is gone. The doors now click the Reviews / Feedback rows in the rail's Inbox folder, after a `canTab` check. On the phone both rows also need `reviews:moderate` / `feedback:moderate`, matching the desktop's `DASH_CARD_CAP`. The paragraph below is kept as the record of how it worked before.
+
 **The doors** are the topbar Inbox dropdown's own two buttons, clicked programmatically (`dashOpenReviews` / `dashOpenFeedback`). Not `goTab` and not `dashJumpTab`: neither queue has had a rail button since Inbox moved to the topbar, and each tab's first load hangs off that button's own listener — `goTab` alone lights the section and leaves the table empty. `dashJumpTab('feedback')` had been failing that way silently in the activity feed's jump-to-report; it now goes through the same door.
 
 **Feature-gated, and this one fails closed.** A tenant who switched Reviews or Feedback off is not filling that queue any more, so its backlog is not a fire. The page itself stays reachable — feature-off dims a rail row, it does not hide it.

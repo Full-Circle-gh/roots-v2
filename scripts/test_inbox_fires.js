@@ -578,26 +578,36 @@ it('the reviews door is the reviews door', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-console.log('\n4 · the doors — the Inbox dropdown, clicked');
+console.log('\n4 · the doors — the rail Inbox rows, clicked (§271)');
 
 const OPEN_INBOX_SRC = sliceBlock(DASH_JS, 'function dashOpenInbox(which)');
 
-it('the door clicks the Inbox menu button, not goTab', () => {
-  // For what the button does either side of the navigation: mark-seen and
-  // close-menu. An operator who reached the queue from a fire has read it, so
-  // the unseen badge has to clear the same way it does from the menu — goTab
-  // alone leaves a red dot sitting on a list they have just worked.
+function runDoor(ctxExtra) {
   const clicked = [];
-  const ctx = {
+  const ctx = Object.assign({
     document: {
-      querySelector: (sel) => (/#tbInboxMenu \[data-tab="reviews"\]/.test(sel)
+      querySelector: (sel) => (/^\.tabs \[data-tab="reviews"\]$/.test(sel)
         ? { click: () => clicked.push(sel) } : null),
     },
-  };
+  }, ctxExtra || {});
   vm.createContext(ctx);
   new vm.Script(`${OPEN_INBOX_SRC}; var __ok = dashOpenInbox('reviews');`).runInContext(ctx);
-  assert.strictEqual(ctx.__ok, true);
-  assert.strictEqual(clicked.length, 1);
+  return { ok: ctx.__ok, clicked };
+}
+
+it('the door clicks the rail row, not a topbar menu', () => {
+  // The topbar Inbox dropdown is gone (§271). The rail row's own listener is
+  // what loads the page and drills the rail into the Inbox folder.
+  const r = runDoor();
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.clicked.length, 1);
+  assert.ok(!/tbInboxMenu/.test(OPEN_INBOX_SRC), 'the door still looks for the removed topbar menu');
+});
+
+it('a role that cannot view the page is refused, not let through a hidden row', () => {
+  const r = runDoor({ canTab: () => false });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.clicked.length, 0);
 });
 
 it('a missing button is reported, not thrown', () => {
@@ -608,8 +618,8 @@ it('a missing button is reported, not thrown', () => {
 });
 
 it('the click cannot load either tab twice', () => {
-  // The click reaches the button's own listener AND, through the inline onclick,
-  // goTab's TAB_INIT dispatch — both of which call the same init. That is only
+  // The rail row's own listener and goTab's TAB_INIT fallback both call the
+  // same init, and a page can be reached either way. That is only
   // safe because each init early-returns on its loaded flag. Lose the guard and
   // every door click becomes two of every fetch behind it.
   const CONTENT_JS = fs.readFileSync(
@@ -625,9 +635,9 @@ it('the click cannot load either tab twice', () => {
 });
 
 it('nothing routes either queue through dashJumpTab any more', () => {
-  // It queries `.tabs [data-tab=…]`, and neither queue has had a rail button
-  // since Inbox moved to the topbar — so a jump through it silently did
-  // nothing, which is exactly what the activity feed's jump-to-report did.
+  // dashOpenInbox is the one door: it asks canTab before clicking, which
+  // dashJumpTab does not. (Before §271 neither queue had a rail button at all,
+  // so a jump through dashJumpTab silently did nothing.)
   assert.ok(!/dashJumpTab\(['"](reviews|feedback)['"]\)/.test(DASH_JS),
     'a queue is still being opened through the rail-only jump');
 });

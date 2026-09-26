@@ -16004,7 +16004,10 @@ function opsFires(){
      keys on /dashboard/ops now, counted the same way the pages they open count
      them. Feature-gated: a shop that switched Reviews off is not filling that
      queue, so its backlog is not a fire. */
-  if(c('reviews_unanswered')&&featOn('reviews')){
+  /* By role, the same keys the desktop's DASH_CARD_CAP asks (§271): a row is
+     work to do, so it goes to whoever may write the answer, not to every role
+     that happens to open Home. */
+  if(c('reviews_unanswered')&&featOn('reviews')&&mCan('reviews:moderate')){
     const rv=o.reviews_unanswered, k=Number(rv.low||0), a=oldestOf(items('reviews_unanswered'));
     // Nine polite five-stars and nine one-stars are the same number and not the
     // same afternoon, so the low-rated count leads and the age follows it.
@@ -16012,7 +16015,7 @@ function opsFires(){
     f.push({sev:'amber',icon:'star',label:T('Reviews to answer','评价待回复'),n:rv.count,
       meta,age:false,go:"APP.cmd('inboxGo','reviews')",mins:oldestMins(items('reviews_unanswered'))});
   }
-  if(c('feedback_waiting')&&featOn('feedback')){
+  if(c('feedback_waiting')&&featOn('feedback')&&mCan('feedback:moderate')){
     add(true,'amber','message-square-text',T('Feedback to answer','反馈待回复'),
       c('feedback_waiting'),items('feedback_waiting'),'',"APP.cmd('inboxGo','feedback')");
   }
@@ -21656,17 +21659,13 @@ function tabDot(k){ return k==='orders' ? unseenOrders()
    scrolls. The account went with it into More, where every other setting is.
    Only a TOP-LEVEL screen carries them — a pushed screen has its back link and
    is one tap from the tab that does. */
+/* THE INBOX LEFT THE HEADER 2026-09-26 (§271, Ash: "the inbox on the top right
+   is not necessary"). A review or feedback waiting for an answer is a Needs-you
+   row on Home, for the roles that may answer it; the Inbox itself is still More
+   → Inbox, and More keeps its dot. */
 function headControls(){
-  const unseen=unseenReviews();
   return `<span style="display:flex;flex:none">
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
-    ${/* The Inbox icon rode every header ungated, so an operator without
-         reviews:view got a button that push() silently refuses — a control
-         that does nothing at all, which is worse than one that is absent. */''}
-    ${canRoute('inbox')?`<span style="position:relative;display:flex;flex:none">
-      <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
-      ${unseen?`<span style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--bg)"></span>`:''}
-    </span>`:''}
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}">
       <span style="position:relative;width:28px;height:28px;border-radius:8px;overflow:hidden;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${acctMark()}</span>
     </button></span>`;

@@ -82,6 +82,8 @@ One rule inside `@media (min-width:721px)` hides the in-content `<h2>`. The audi
 - **Still true, still the destination:** every page owns a real §1.7 header eventually. The header is the page's identity and chrome does not stand in for it (§1.7 v2.1). The fallback is scaffolding, not the answer.
 - **Never ship the crumb removal without the CSS narrowing.** Alone, it puts 16 tabs on screen with no title at all.
 
+> **Amended 2026-09-26 by decisions §271:** the inbox left the topbar, which is now brand block · search · avatar. Reviews and Feedback sit in the rail's Inbox folder, and a waiting review or feedback shows as a Needs-you row on the dashboard.
+
 **What the topbar becomes:** brand block · search · inbox · avatar. Nothing in the chrome names the **page** — the brand names the *product and the merchant*, which is a different job. That is correct **only** while precondition 2 holds — which is why it is a precondition and not a follow-up.
 
 ### 1.1a The page shell contract

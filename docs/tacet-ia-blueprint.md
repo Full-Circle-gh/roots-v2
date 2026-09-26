@@ -210,6 +210,8 @@ Grouped by function. "Skin" flags surfaces carrying something that is **per-busi
 | Open your store (setup guide) | `setup` | 1253 | `17-setup-guide.js` | onboarding |
 
 ### INBOX — topbar, not rail
+> **Superseded 2026-09-26 by decisions §271:** the topbar Inbox is gone on the PC and the phone. Reviews and Feedback are back in the rail, in an *Inbox · 收件箱* folder gated by `reviews:view` / `feedback:view`. A review or feedback waiting for an answer shows as a Needs-you row on the dashboard. The rows elsewhere in this file that place Inbox in the topbar are historical.
+
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
 | Reviews | `reviews` | 6925 | `10-extras.js` | feat `reviews` |

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.426
+# Tacet shared-core consolidation — decisions record, v4.427
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-26 · v4.427 — **§271 · THE HEADER INBOX IS GONE; A REVIEW OR FEEDBACK ANNOUNCES ITSELF ON THE DASHBOARD — ASH:** *"the inbox on the top right is not necessary for mobile or PC. if there is a review or a feedback it should show a notification of the dashboard for those that have it under the role"*, then *"yes"* to Claude's plan. This reverses the 2026-07-25 topbar settlement (brand · search · inbox · avatar, in `docs/tacet-ia-blueprint.md` and `docs/tacet-desktop-patterns.md`). **WHAT GOES.** The Inbox button in the PC topbar (`#tbInbox`, its dropdown and its unseen dot) and the Inbox button in the phone's header row. The PC poller that fed that dot, and played the order chime when a review or feedback arrived (`public/retail-admin/04-orders.js`), goes with it. The `unseen-count` endpoints stay: the phone's More dot still reads them. **WHAT CARRIES THE NOTICE.** The dashboard's *Needs you* rows *Reviews to answer* and *Feedback to answer*, which already existed on both screens (§131, `docs/tacet-dashboard-spec.md`). Checked before building: `FEEDBACK_WAITING_SQL` counts a customer's reply on a thread the shop started, because the customer reply route stamps `last_customer_msg_at`, so a reply to *Message customer* still raises the row. **BY ROLE.** The PC already gated both rows on `reviews:moderate` / `feedback:moderate` (`DASH_CARD_CAP`). The phone gated them on the feature only, so a role that cannot answer saw work it could not do; it now asks the same two keys. **THE WAY IN ON PC.** The topbar dropdown was the only door to the Reviews and Feedback pages. They now sit in a rail folder, *Inbox · 收件箱*, each row gated by `reviews:view` / `feedback:view` through `TAB_CAP`; with one visible the folder flattens, with none it is absent (`railSyncGroups`). The dashboard doors click the rail row. The phone keeps More → Inbox. No new Chinese: 收件箱, 评价 and 反馈 are the live pairs from the removed dropdown. No schema change, no server change, no change to `.gitignore` or CI. Numbered §271, not §270, because a concurrent session was recording §270 when this was written.
 
 2026-09-26 · v4.426 — **§270 · FIVE DEAD PAGES ARE DELETED, THE FULL CIRCLE LANDING PAGE WITH THEM — DECIDED BY ASH:** *"delete whatever need clean"*, on a survey of every page still loading Google Fonts. Deleted: `public/editor.html` (the /editor shell, unrouted since 2026-06-05), `public/cms-mobile-v2.html`, `public/cms-mobile-mockup.html` and its copy `public/assets/cms-mobile-mockup.html` (June design concepts, never routed), and `public/full-circle.html` with its `/full-circle` route, which now falls through to the 404. **THE FINDING THAT MAKES IT SAFE:** nothing in `public/`, `routes/`, `lib/`, `server.js` or the tests links to any of them; the only other mention is the generated hash list in `scripts/diagnose_deployed_tree.js`, left as it is. The Full Circle page was audit A1: a public pitch for the retired brand, with a placeholder contact address. **NOTHING LIVE IS LOST:** the decisions record cites `cms-mobile-v2.html` as one home of the *Undo · 撤销* pair, and the same pair stays live in `public/retail-admin/04-orders.js`. **THE DEPLOY INSTALLER ONLY ADDS FILES**, so all five stay on the box, and fetchable under `/assets/`, until removed by hand, the standing condition §76 records for `kitchen.html`; this deletion must not be read as having taken them off production. Code and this record; no schema, no migration, and no change to `.gitignore` or CI.
 
@@ -20591,3 +20593,14 @@ the refund until it is marked recovered. Recording a return takes
 `public/cms-mobile-mockup.html`, `public/assets/cms-mobile-mockup.html` and `public/full-circle.html` are
 deleted, and `/full-circle` answers 404. None was linked from anything live. The files stay on the
 production box until removed by hand, as with §76. See the v4.426 changelog entry.
+
+## §271 — THE HEADER INBOX IS GONE; A REVIEW OR FEEDBACK ANNOUNCES ITSELF ON THE DASHBOARD
+
+**Decided 2026-09-26 by Ash** (*"yes"*). Neither the PC topbar nor the phone's
+header carries an Inbox button any more. A review or feedback waiting for an
+answer shows as a *Needs you* row on the dashboard, and only for a role that
+may answer it (`reviews:moderate`, `feedback:moderate`) — on the phone as on
+the PC. On the PC the Reviews and Feedback pages are reached from an *Inbox*
+folder in the rail, shown only to roles that may view them; on the phone from
+More → Inbox. This reverses the 2026-07-25 topbar settlement. See the v4.427
+changelog entry.
