@@ -34713,6 +34713,12 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'voting_block',
   // Affiliate / refer-a-friend card with live invite code + share
   'affiliate_block',
+  // "Your saved" — each customer's own wishlist. In the editor's palette and
+  // both renderers since 2026-05 but never on this list, so a draft that held
+  // one was refused on save with block_type_invalid (found in the §272 survey,
+  // fixed 2026-09-26; scripts/test_cms_block_whitelist.js holds the palette
+  // and this list equal from now on).
+  'favorites_block',
   // Retention / personalization blocks
   'greeting',         // time-of-day "Good morning, {name} · pts"
   'kitchen_status',   // open / closed dot · hours · ETA
