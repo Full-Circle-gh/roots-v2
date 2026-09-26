@@ -1,0 +1,30 @@
+/* Tacet web type, served from this application (audit D-09).
+
+   These pages used to load their faces from fonts.googleapis.com, which does
+   not answer from mainland China, where the only live merchant trades. Several
+   loaded it as a blocking stylesheet, so a page there sat blank until the
+   connection gave up. Everything here is same-origin.
+
+   Inter (UI text) and Fraunces (the wordmark and display headings), the Latin
+   and Latin-extended slices of each variable font, from @fontsource-variable
+   5.3.0, unchanged, OFL licences beside them. One file covers every weight;
+   Fraunces carries its optical-size axis, as the Google request did. The
+   browser fetches a slice only when it draws a character in its range.
+
+   NO CHINESE FACE IS SERVED, deliberately — the same call as the phone app
+   (m.html). Google never delivered Noto Sans SC or IBM Plex Sans SC to a
+   browser in China, so the Chinese text operators read has always been the
+   system's own face, named next in every font stack. Serving one here would
+   change that text and cost megabytes. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;
+  src:url(/assets/fonts/inter-5.3.0-latin.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;
+  src:url(/assets/fonts/inter-5.3.0-latin-ext.woff2) format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Fraunces';font-style:normal;font-weight:100 900;font-display:swap;
+  src:url(/assets/fonts/fraunces-5.3.0-latin.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Fraunces';font-style:normal;font-weight:100 900;font-display:swap;
+  src:url(/assets/fonts/fraunces-5.3.0-latin-ext.woff2) format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}

@@ -182,8 +182,13 @@ check('Tea Green, Aged Brass and the old danger red are gone from the chrome', (
   }
 });
 check('Inter is loaded, and is the chrome’s --f-sans', () => {
-  assert.ok(/fonts\.googleapis\.com[^"]*family=Inter/.test(EDITOR),
+  // Served from the application now, not Google (audit D-09): the page links
+  // the shared face sheet, and that sheet must actually declare Inter.
+  assert.ok(/<link rel="stylesheet" href="\/assets\/fonts\/tacet-fonts\.css">/.test(EDITOR),
     'the Inter stylesheet is not linked, so the page falls back silently');
+  const faces = fs.readFileSync(path.join(ROOT, 'public/fonts/tacet-fonts.css'), 'utf8');
+  assert.ok(/font-family:'Inter'[^}]*src:url\(\/assets\/fonts\/inter-[^)]*\.woff2\)/.test(faces),
+    'tacet-fonts.css no longer declares Inter from /assets/fonts');
   assert.ok(/--f-sans:\s*'Inter'/.test(EDITOR), '--f-sans no longer starts with Inter');
   assert.ok(/'IBM Plex Sans SC'/.test(EDITOR),
     'the Chinese face was dropped with the Latin one — Inter carries no CJK and every label here is bilingual');

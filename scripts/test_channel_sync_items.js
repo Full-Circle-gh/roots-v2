@@ -995,7 +995,8 @@ check('the page’s buttons are the design system’s secondary style, not a fil
 
 check('the sign-in page keeps to Inter 400/500', () => {
   const page = read('public/channel-signin.html');
-  ok(/family=Inter:wght@400;500/.test(page), 'Inter is not loaded');
+  // Served from the application, not Google (audit D-09).
+  ok(/<link rel="stylesheet" href="\/assets\/fonts\/tacet-fonts\.css">/.test(page), 'Inter is not loaded');
   ok(!/font-weight:\s*[6-9]00|font:\s*[6-9]00/.test(page), 'a weight above 500 — the design system allows 400 and 500 only');
 });
 
