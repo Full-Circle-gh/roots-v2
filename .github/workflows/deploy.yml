@@ -23,6 +23,10 @@ on:
         description: "Ship ALL deployable files, not just the changed ones"
         type: boolean
         default: false
+      prune:
+        description: "Also remove these files from the server (space-separated repo paths; each must be deployable and NOT in the repo). For files deleted before deletions shipped (§271)."
+        type: string
+        default: ""
 
 # Never run two deploys at once; let an in-flight deploy finish rather than
 # cancelling it mid-restart.
@@ -121,6 +125,10 @@ jobs:
       - name: Compute deployable files
         if: steps.gate.outputs.skip == 'false'
         id: files
+        env:
+          # Through the environment, never interpolated into the script: it is
+          # free text typed into a dispatch form.
+          PRUNE: ${{ inputs.prune }}
         run: |
           set -euo pipefail
           # Same allowlist the local deploy uses — only paths the Node app serves.
@@ -245,6 +253,63 @@ jobs:
           fi
 
           filter /tmp/changed.txt /tmp/files.txt
+
+          # DELETIONS SHIP TOO (§271). A file deleted from the repository used to
+          # stay on the box, fetchable under /assets/, until removed by hand —
+          # kitchen.html, app.html.bak and the five §270 pages all did. What is
+          # removed is exactly what git records as DELETED in the range this run
+          # ships (renames count as a delete of the old path), plus any path named
+          # in the `prune` dispatch input. The box is never compared against the
+          # repository to find "extras": that would remove whatever the repo does
+          # not know about, which is not the same thing as what it deleted.
+          #
+          # Each path must be deployable, absent from HEAD (a file deleted and
+          # re-added is not removed), made of plain characters, and not one of the
+          # files the app cannot run without. The installer moves each one into
+          # its backup folder rather than deleting it, so it can be put back.
+          : > /tmp/deleted-raw.txt
+          if [ "$MODE" = "changed" ] && [ -n "${BASE:-}" ]; then
+            git diff --name-only --no-renames --diff-filter=D "$BASE" "${{ github.sha }}" >> /tmp/deleted-raw.txt
+          fi
+          if [ -n "${PRUNE:-}" ]; then
+            # read -a splits on whitespace without glob expansion, so a stray `*`
+            # stays a literal and is refused below rather than matching files.
+            read -r -a PRUNE_PATHS <<< "$PRUNE"
+            printf '%s\n' "${PRUNE_PATHS[@]}" >> /tmp/deleted-raw.txt
+          fi
+          : > /tmp/deleted.txt
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if ! printf '%s' "$f" | grep -qE '^[A-Za-z0-9._@+/-]+$' || case "$f" in /*|*..*) true ;; *) false ;; esac; then
+              echo "::warning::Not removing '$f' from the server: the path has characters or a shape the deploy will not act on."
+              continue
+            fi
+            case "$f" in
+              server.js|database.js|schema.sql|package.json|package-lock.json|scripts/deploy-apply.sh)
+                echo "::warning::Not removing $f from the server: the app cannot run without it. Remove it by hand if that is really meant."
+                continue ;;
+            esac
+            deployable "$f" || continue
+            if [ -e "$f" ]; then
+              echo "::warning::Not removing $f from the server: it is in this commit."
+              continue
+            fi
+            echo "$f" >> /tmp/deleted.txt
+          done < /tmp/deleted-raw.txt
+          sort -u -o /tmp/deleted.txt /tmp/deleted.txt
+          DCOUNT=$(wc -l < /tmp/deleted.txt | tr -d ' ')
+          echo "deleted=$DCOUNT" >> "$GITHUB_OUTPUT"
+          if [ "$DCOUNT" != "0" ]; then
+            echo "$DCOUNT file(s) to remove from the server:"
+            sed 's/^/  - /' /tmp/deleted.txt
+            # A run that only removes files still needs the installer to run, and
+            # the installer refuses an empty stage. sw.js is the natural rider: its
+            # stamp is what makes clients drop a cached copy of a removed page.
+            if [ ! -s /tmp/files.txt ] && [ -f public/sw.js ]; then
+              echo 'public/sw.js' >> /tmp/files.txt
+            fi
+          fi
+
           SW_RIDER=0
           if ! grep -qx 'public/sw.js' /tmp/files.txt 2>/dev/null; then SW_RIDER=1; fi
           add_sw /tmp/files.txt
@@ -392,11 +457,18 @@ jobs:
 
       - name: Ship changed files + run safe installer
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        id: ship
         run: |
           set -euo pipefail
           APP=/root/roots-v2
           STAGE="$APP/__stage__"
-          ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
+          DELFILE="$APP/__deletions__.txt"
+          ssh prod "rm -rf '$STAGE' '$DELFILE' && mkdir -p '$STAGE'"
+          # The removal list sits BESIDE the stage, not inside it: the installer
+          # installs every file it finds under __stage__.
+          if [ -s /tmp/deleted.txt ]; then
+            ssh prod "cat > '$DELFILE'" < /tmp/deleted.txt
+          fi
           # Upload every file to its matching relative path under __stage__, as
           # ONE COMPRESSED STREAM rather than one ssh per directory and one scp
           # per file, each paying the full round trip to the host. tar creates
@@ -419,6 +491,21 @@ jobs:
             echo "::error::Installer did not report SUCCESS — see output above."
             exit 1
           fi
+          # THE INSTALLER THAT RUNS IS THE ONE ALREADY ON THE BOX, copied above
+          # before this ship installs anything. So the deploy that first ships
+          # deletion support runs an installer that has never heard of the list,
+          # and one that predates it ignores the list silently. It says so by NOT
+          # printing DELETIONS_APPLIED. Then the removals did not happen, and the
+          # deploy record is held back (the Record step checks dels_ok), so the
+          # next deploy diffs from the same base and carries them again, this time
+          # through an installer that knows how.
+          DELS_OK=1
+          if [ -s /tmp/deleted.txt ] && ! grep -q '^DELETIONS_APPLIED=' /tmp/apply.log; then
+            DELS_OK=0
+            ssh prod "rm -f '$DELFILE'" || true
+            echo "::warning::The installer on the server predates deletion support, so no file was removed. The deploy record is deliberately NOT advanced; the next deploy carries these removals again."
+          fi
+          echo "dels_ok=$DELS_OK" >> "$GITHUB_OUTPUT"
           echo "Deployed successfully."
 
       # ──────────────────────────────────────────────────────────────────────
@@ -436,6 +523,20 @@ jobs:
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
         run: |
           set -euo pipefail
+          # Removals first, because a ship that carried only installer-rewritten
+          # files exits early below. Checked only when the installer said it
+          # applied them; when it did not, the Ship step has already held the
+          # record back and said why.
+          if [ -s /tmp/deleted.txt ] && [ "${{ steps.ship.outputs.dels_ok }}" = "1" ]; then
+            ssh prod "cat > /tmp/roots-v2-deleted.txt" < /tmp/deleted.txt
+            LEFT="$(ssh prod 'cd /root/roots-v2 && while IFS= read -r f; do [ -e "$f" ] && echo "$f"; done < /tmp/roots-v2-deleted.txt; rm -f /tmp/roots-v2-deleted.txt' || true)"
+            if [ -n "$LEFT" ]; then
+              printf '%s\n' "$LEFT" | sed 's/^/  still present: /'
+              echo "::error::The installer reported the removals applied but these files are still on the server. The deploy record is deliberately NOT advanced."
+              exit 1
+            fi
+            echo "Verified: all $(wc -l < /tmp/deleted.txt | tr -d ' ') removed file(s) are gone from the server."
+          fi
           # Two files the installer rewrites AFTER installing them, so neither
           # can ever match its committed bytes on the box:
           #   public/sw.js       deploy-apply.sh stamps the CACHE constant, by design
@@ -501,7 +602,7 @@ jobs:
       # that runs AHEAD of reality could skip files, and nothing here can
       # produce one.
       - name: Record the commit production now holds
-        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0' && steps.ship.outputs.dels_ok != '0'
         run: |
           set -euo pipefail
           STATE=/root/roots-v2/.deploy-state

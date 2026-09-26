@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.426
+# Tacet shared-core consolidation — decisions record, v4.427
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-26 · v4.427 — **§271 · A DEPLOY REMOVES WHAT THE REPOSITORY DELETED — DECIDED BY ASH:** *"go ahead fix it"*, on §270's standing condition that a deleted file stays on the box until removed by hand. **A CHANGE TO HOW DEPLOYS WORK, CALLED OUT AS ONE**: `.github/workflows/deploy.yml` and `scripts/deploy-apply.sh`. The Compute step now also lists the deployable paths git records as DELETED in the range it ships (`--no-renames --diff-filter=D`, so a rename removes its old path), plus any named in a new `prune` dispatch input. The list goes to `__deletions__.txt` beside the stage, and the installer **moves** each file into that deploy's backup folder after installing, so a removal is reversible and the auto-rollback moves it back. **WHAT IT WILL NOT DO, BY DESIGN:** compare the box against the repository and remove "extras" — that removes whatever the repo does not know about, which is not what it deleted; remove `server.js`, `database.js`, `schema.sql`, `package.json`, `package-lock.json` or the installer itself; act on a path that is still in HEAD, not deployable, or not plain characters. Both the workflow and the installer check, independently. **THE BOOTSTRAP IS HANDLED, NOT HOPED ABOUT:** the workflow runs the installer ALREADY on the box, so the deploy that ships this one runs its predecessor, which ignores the list. The installer now prints `DELETIONS_APPLIED=`; when it is missing and there were removals, the deploy record is held back, so the next deploy carries them again. The Verify step checks every removed path is gone. A removal-only deploy rides `public/sw.js`, whose stamp also drops cached copies of a removed page. **THE BACKLOG** — `kitchen.html` (§76), `app.html.bak`, and §270's five — predates the record and is cleared once with the `prune` input. **PROVED** against a fake box: removals moved to backup, unsafe and protected paths refused, the rollback restoring them; and the Compute step replayed on the real #847 range lists exactly §270's five. No schema, no migration, no `.gitignore` change.
 
 2026-09-26 · v4.426 — **§270 · FIVE DEAD PAGES ARE DELETED, THE FULL CIRCLE LANDING PAGE WITH THEM — DECIDED BY ASH:** *"delete whatever need clean"*, on a survey of every page still loading Google Fonts. Deleted: `public/editor.html` (the /editor shell, unrouted since 2026-06-05), `public/cms-mobile-v2.html`, `public/cms-mobile-mockup.html` and its copy `public/assets/cms-mobile-mockup.html` (June design concepts, never routed), and `public/full-circle.html` with its `/full-circle` route, which now falls through to the 404. **THE FINDING THAT MAKES IT SAFE:** nothing in `public/`, `routes/`, `lib/`, `server.js` or the tests links to any of them; the only other mention is the generated hash list in `scripts/diagnose_deployed_tree.js`, left as it is. The Full Circle page was audit A1: a public pitch for the retired brand, with a placeholder contact address. **NOTHING LIVE IS LOST:** the decisions record cites `cms-mobile-v2.html` as one home of the *Undo · 撤销* pair, and the same pair stays live in `public/retail-admin/04-orders.js`. **THE DEPLOY INSTALLER ONLY ADDS FILES**, so all five stay on the box, and fetchable under `/assets/`, until removed by hand, the standing condition §76 records for `kitchen.html`; this deletion must not be read as having taken them off production. Code and this record; no schema, no migration, and no change to `.gitignore` or CI.
 
@@ -20591,3 +20593,11 @@ the refund until it is marked recovered. Recording a return takes
 `public/cms-mobile-mockup.html`, `public/assets/cms-mobile-mockup.html` and `public/full-circle.html` are
 deleted, and `/full-circle` answers 404. None was linked from anything live. The files stay on the
 production box until removed by hand, as with §76. See the v4.426 changelog entry.
+
+## §271 — A DEPLOY REMOVES WHAT THE REPOSITORY DELETED
+
+**Decided 2026-09-26 by Ash** (*go ahead fix it*). A deploy removes from the box every deployable file git
+records as deleted in the range it ships, and any path named in the `prune` dispatch input. A removed file
+is moved into that deploy's backup folder, never destroyed, and the auto-rollback puts it back. The box is
+never compared against the repository to find extras, and the files the app cannot run without are never
+removed. This replaces the "until removed by hand" condition in §76 and §270. See the v4.427 changelog entry.
