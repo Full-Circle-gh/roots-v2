@@ -481,6 +481,12 @@ function loadConfig() {
   }
   const t = tdb().prepare("SELECT COALESCE(MAX(strftime('%s', updated_at)), 0) AS t FROM storefront_config").get();
   out.version = Number(t?.t || 0);
+  // Every published page layout leaves here with `show_on` explicit on each
+  // block (see SHOW_ON_DEFAULTS), so the mini app and the web shop filter on
+  // one value rather than each guessing a type's default.
+  for (const page of ALLOWED_PAGES) {
+    if (out[page] && Array.isArray(out[page].layout)) out[page].layout = withShowOn(out[page].layout);
+  }
   return out;
 }
 function setPath(obj, path, value) {
@@ -880,7 +886,7 @@ router.get('/api/retail/config', (req, res) => {
         if (!r) continue;
         let draft; try { draft = JSON.parse(r.value_json); } catch { continue; }
         if (!cfg[page] || typeof cfg[page] !== 'object') cfg[page] = {};
-        cfg[page].layout = draft;
+        cfg[page].layout = withShowOn(draft);
       }
       cfg._preview = true;
     }
@@ -23522,7 +23528,7 @@ router.post('/api/retail-admin/brand/publish', requireRetailAdmin, express.json(
   try {
     const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key='cms.draft.brand_theme'").get();
     const theme = row ? brandThemeLib.sanitizeTheme(JSON.parse(row.value_json)) : null;
-    const draftLayout = readLayout('cms.draft.home_layout');
+    const draftLayout = readLayoutStored('cms.draft.home_layout');
     const by = req.user.id;
     const upsert = tdb().prepare(
       `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
@@ -34707,6 +34713,12 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'voting_block',
   // Affiliate / refer-a-friend card with live invite code + share
   'affiliate_block',
+  // "Your saved" — each customer's own wishlist. In the editor's palette and
+  // both renderers since 2026-05 but never on this list, so a draft that held
+  // one was refused on save with block_type_invalid (found in the §272 survey,
+  // fixed 2026-09-26; scripts/test_cms_block_whitelist.js holds the palette
+  // and this list equal from now on).
+  'favorites_block',
   // Retention / personalization blocks
   'greeting',         // time-of-day "Good morning, {name} · pts"
   'kitchen_status',   // open / closed dot · hours · ETA
@@ -34736,6 +34748,42 @@ const ALLOWED_BLOCK_TYPES = new Set([
 // `about` is a hardcoded mini app page (/pages/about/about), not CMS-driven —
 // brand identity, intentionally pinned in code.
 const ALLOWED_PAGES = new Set(['home', 'promotions', 'membership', 'categories', 'onboarding']);
+
+// ── Where a block shows: `show_on` ─────────────────────────────────────────
+// One layout feeds two customer surfaces — the WeChat mini app and the web
+// shop (public/shop.html). `show_on` on a block says which of them draw it:
+//   'both'    — the default for nearly every type
+//   'miniapp' — the mini app only (the web shop skips it)
+//   'web'     — the web shop only (the mini app skips it)
+// The four types that default to 'miniapp' lead somewhere the web shop does
+// not have yet: shop.html's ctaRoute() answers wallet / notifications / order
+// targets with "coming soon", so a points, top-up, notification or order
+// tracker block on the website is a promise the site cannot keep. The default
+// is applied on the way OUT (readLayout for the editor, loadConfig for the
+// customer surfaces, the two draft overlays) and never written back: publish,
+// revert and brand-publish copy the STORED layout (readLayoutStored), so a
+// block that never had the field keeps following this table if the table
+// changes. A layout published before the field existed therefore behaves the
+// same as one saved after it, and the four renderers (mini app, shop.html,
+// storefront.html, the editor canvas) read one explicit value instead of each
+// carrying a copy of this table. The editor
+// carries the same four-type table for a block added and not yet saved; the
+// test `scripts/test_cms_show_on.js` holds the two copies equal.
+// Decided by Ash 2026-09-26 — docs/tacet-consolidation-decisions.md §272.
+const SHOW_ON_VALUES = new Set(['both', 'miniapp', 'web']);
+const SHOW_ON_DEFAULTS = Object.freeze({
+  order_tracker: 'miniapp', notification_bar: 'miniapp',
+  points_widget: 'miniapp', top_up: 'miniapp',
+});
+function showOnFor(block) {
+  if (block && SHOW_ON_VALUES.has(block.show_on)) return block.show_on;
+  return (block && SHOW_ON_DEFAULTS[block.type]) || 'both';
+}
+// Returns a copy of the layout with `show_on` explicit on every block.
+function withShowOn(layout) {
+  if (!Array.isArray(layout)) return layout;
+  return layout.map(b => (b && typeof b === 'object') ? { ...b, show_on: showOnFor(b) } : b);
+}
 
 // Onboarding gating modes. See /api/retail/config surfacing above + the
 // /onboarding-settings admin endpoints below.
@@ -34776,16 +34824,23 @@ function validateBlocks(blocks) {
     if (blockHasDangerousString(b)) {
       return { error: 'block_unsafe_value', details: { id: b.id } };
     }
+    if (b.show_on !== undefined && !SHOW_ON_VALUES.has(b.show_on)) {
+      return { error: 'block_show_on_invalid', details: { id: b.id, show_on: b.show_on } };
+    }
   }
   return {};
 }
 
-function readLayout(key) {
+// The layout as stored — for the paths that write it somewhere else (publish,
+// revert, brand-publish). Nothing is added on the way through.
+function readLayoutStored(key) {
   const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
   if (!row) return [];
   try { const v = JSON.parse(row.value_json); return Array.isArray(v) ? v : []; }
   catch { return []; }
 }
+// The layout as served — every block with `show_on` explicit (see withShowOn).
+function readLayout(key) { return withShowOn(readLayoutStored(key)); }
 // Per-call (not a module-level prepared statement) so it binds to the
 // request's tenant connection, not whatever db existed at load.
 //
@@ -34911,7 +34966,7 @@ router.get('/api/retail-admin/storefront/preview-config', requireRetailAdmin, (r
     // under the page bucket — e.g. `home.layout`, `promotions.layout`. Mirror
     // that structure when overlaying.
     if (!live[page] || typeof live[page] !== 'object') live[page] = {};
-    live[page].layout = draft;
+    live[page].layout = withShowOn(draft);
   }
   // Bump the version so the front-end cache-busts when the draft changes.
   // (loadConfig() returns version = max updated_at across the table; that
@@ -34952,7 +35007,7 @@ router.put('/api/retail-admin/cms/layout/draft', requireRetailAdmin, express.jso
 router.post('/api/retail-admin/cms/publish', requireRetailAdmin, express.json(), (req, res) => {
   const page = pageKey(req);
   if (!page) return res.status(400).json({ success: false, error: 'invalid_page' });
-  const draft = readLayout(`cms.draft.${page}_layout`);
+  const draft = readLayoutStored(`cms.draft.${page}_layout`);
   // Re-validate in case the draft was somehow written outside the editor
   const v = validateBlocks(draft);
   if (v.error) return res.status(400).json({ success: false, error: 'draft_invalid', details: v });
@@ -35442,7 +35497,7 @@ router.post('/api/retail-admin/media/upload', requireRetailAdmin, (req, res) => 
 router.post('/api/retail-admin/cms/revert-draft', requireRetailAdmin, express.json(), (req, res) => {
   const page = pageKey(req);
   if (!page) return res.status(400).json({ success: false, error: 'invalid_page' });
-  const live = readLayout(`${page}.layout`);
+  const live = readLayoutStored(`${page}.layout`);
   writeLayout(`cms.draft.${page}_layout`, JSON.stringify(live), req.user.id);
   res.json({ success: true, data: { page, draft: live } });
 });

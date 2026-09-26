@@ -636,7 +636,10 @@
     try { inner = def.fn(b, L, freeOf); } catch (e) { inner = ''; }
     if (!inner) return '';
     var style = blockStyle(b);
+    // data-block-id lets the product editor's desktop stage (shop.html
+    // ?stage=1) find and outline the block the office selected.
     return '<div class="spb spb-' + def.cls + '"' +
+      (b.id ? ' data-block-id="' + attr(b.id) + '"' : '') +
       (style ? ' style="' + attr(style) + '"' : '') + '>' + inner + '</div>';
   }
 

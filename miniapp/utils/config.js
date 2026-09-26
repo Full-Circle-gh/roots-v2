@@ -125,9 +125,17 @@ async function load(force = false) {
 // "you're looking at an older version" — or report it — read this.
 function wasStale() { return _stale; }
 
+// `show_on` — which surface draws a block ('both' | 'miniapp' | 'web'). The
+// server writes it explicit on every block (/api/retail/config), so a missing
+// value is read as 'both'. This is the mini app: keep 'both' and 'miniapp',
+// drop 'web'. Every page that renders a layout goes through here.
+function forMiniApp(blocks) {
+  return Array.isArray(blocks) ? blocks.filter(b => b && b.show_on !== 'web') : [];
+}
+
 function layout(page) {
   hydrate();
-  return _cache?.[page]?.layout || [];
+  return forMiniApp(_cache?.[page]?.layout);
 }
 
 // Synchronous read of a dotted path from the cached config (e.g.
@@ -154,4 +162,4 @@ function copy(key, lang) {
   return (lang === 'cn' ? node.cn : node.en) || node.en || node.cn || '';
 }
 
-module.exports = { load, layout, copy, get, wasStale };
+module.exports = { load, layout, forMiniApp, copy, get, wasStale };

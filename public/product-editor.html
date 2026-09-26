@@ -800,6 +800,23 @@
      Independent of the top-bar chrome toggle (you can read EN labels while
      previewing the 中文 customer view). */
   .pa-prev-langbar { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; flex-shrink: 0; }
+  /* Desktop ⇄ Phone stage (§273) — same pill as the language toggle; the
+     active side wears ink. Both labels are `EN · 中文` pairs the global pass
+     splits, like the hint beside them. */
+  .pe-stage-seg { margin-right: auto; }
+  .pe-stage-seg button.active { background: var(--tacet-ink, #111A2B); color: var(--tacet-paper, #FBF9F4); }
+  .pa-edit-canvas.stage-desktop { overflow: hidden; }
+  .pa-edit-canvas.stage-desktop .pa-prev-frame { display: none; }
+  .pe-desktop-stage {
+    width: 100%; flex: 1 1 auto; min-height: 320px; display: flex; flex-direction: column;
+    border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; background: #fff;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  }
+  .pe-ds-chrome { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: var(--bg-elev-2); border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+  .pe-ds-chrome > span:not(.pe-ds-url) { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong, #c9c4bb); }
+  .pe-ds-url { flex: 1; margin-left: 8px; height: 18px; border-radius: 6px; background: var(--bg-pane); font-size: 10.5px; color: var(--text-3); padding: 0 10px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pe-ds-view { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
+  .pe-ds-view iframe { position: absolute; top: 0; left: 0; width: 1280px; border: 0; background: #fff; transform-origin: 0 0; display: block; }
   .pa-prev-langbar-hint { font-size: 11px; color: var(--text-3); letter-spacing: .02em; }
 
   /* ── Right: inspector panel (chrome + form) ── */
@@ -1754,6 +1771,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     <!-- RIGHT: phone canvas -->
     <div class="pa-edit-canvas">
       <div class="pa-prev-langbar">
+        <!-- Desktop ⇄ Phone stage, Desktop first (§273). Desktop = the real
+             web shop's product page (shop.html via /shop-preview?stage=1),
+             fed this editor's unsaved draft and clickable into the document. -->
+        <div class="lang-toggle pe-stage-seg" id="pe-stage-seg" data-no-i18n>
+          <button type="button" data-stage="desktop" onclick="peSetStage('desktop')" title="Edit the website as customers see it on a computer · 按顾客在电脑上看到的样子编辑网页版">Desktop · 电脑</button>
+          <button type="button" data-stage="phone" onclick="peSetStage('phone')" title="Edit the mini app as customers see it on a phone · 按顾客在手机上看到的样子编辑小程序">Phone · 手机</button>
+        </div>
         <span class="pa-prev-langbar-hint">Preview as · 预览语言</span>
         <div class="lang-toggle pa-prev-langtoggle" data-no-i18n>
           <button type="button" data-plang="en" class="active" onclick="paSetPreviewLang('en')">EN</button>
@@ -1762,6 +1786,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       </div>
       <div class="pa-prev-frame">
         <div class="pa-prev-screen" id="pa-preview-screen"></div>
+      </div>
+      <!-- DESKTOP STAGE: the web shop's product page at 1280px, scaled to fit.
+           A click on a block posts cms:select and the document scrolls to that
+           block's section, exactly as a click on the phone does. -->
+      <div class="pe-desktop-stage" id="pe-desktop-stage" hidden>
+        <div class="pe-ds-chrome"><span></span><span></span><span></span><span class="pe-ds-url" id="pe-ds-url"></span></div>
+        <div class="pe-ds-view" id="pe-ds-view"></div>
       </div>
       <!-- Shown when no product is loaded yet (embedded entry from the Mini App
            Editor's "Products"): the left-pane picker drives selection. -->
@@ -5875,6 +5906,95 @@ function _paResolveColophonChar(override, category) {
 }
 // Switch the phone preview between the EN and 中文 customer view. Independent
 // of the top-bar chrome toggle — re-renders the preview in the chosen language.
+// ═══════════════════════════════════════════════════════════════════════
+// THE EDITOR STAGE — Desktop first, then Phone (§273, Ash 2026-09-26), the
+// product page's twin of the Mini App Editor's stage. The desktop stage is
+// the REAL web shop (public/shop.html) at /shop-preview?draft=1&stage=1,
+// on this product's route, 1280px wide and scaled to the canvas. Every
+// preview render posts this editor's unsaved draft into it
+// (cms:product-draft: the fields the page shows + the blocks), and a click
+// on a block there posts cms:select back, which scrolls the document to
+// that block's section like a click on the phone does. The preview language
+// applies to both stages.
+// ═══════════════════════════════════════════════════════════════════════
+const PE_STAGE_KEY = 'pe_stage';
+let PE_STAGE = 'desktop';
+try { PE_STAGE = localStorage.getItem(PE_STAGE_KEY) || 'desktop'; } catch (e) {}
+if (PE_STAGE !== 'phone') PE_STAGE = 'desktop';
+let _peStageIframe = null, _peStageReady = false, _peStageObserver = null, _peStageApplied = false;
+
+function peSetStage(stage) {
+  PE_STAGE = (stage === 'phone') ? 'phone' : 'desktop';
+  try { localStorage.setItem(PE_STAGE_KEY, PE_STAGE); } catch (e) {}
+  peApplyStage();
+}
+function peApplyStage() {
+  const canvas = document.querySelector('.pa-edit-canvas');
+  const ds = document.getElementById('pe-desktop-stage');
+  if (!canvas || !ds) return;
+  _peStageApplied = true;
+  canvas.classList.toggle('stage-desktop', PE_STAGE === 'desktop');
+  ds.hidden = PE_STAGE !== 'desktop';
+  document.querySelectorAll('#pe-stage-seg button[data-stage]').forEach(b => b.classList.toggle('active', b.dataset.stage === PE_STAGE));
+  if (PE_STAGE === 'desktop') { peMountStage(); peSizeStage(); pePushStage(); }
+}
+function peMountStage() {
+  if (_peStageIframe) return;
+  const view = document.getElementById('pe-ds-view');
+  if (!view) return;
+  const ifr = document.createElement('iframe');
+  ifr.id = 'pe-desktop-stage-iframe';
+  ifr.title = 'Website product page, as customers see it on a computer';
+  ifr.src = '/shop-preview?draft=1&stage=1' + (PA_CURRENT && PA_CURRENT.id ? '#/product/' + encodeURIComponent(PA_CURRENT.id) : '#/');
+  view.appendChild(ifr);
+  _peStageIframe = ifr;
+  _peStageReady = false;
+  const url = document.getElementById('pe-ds-url');
+  if (url) url.textContent = location.host + '/product  ·  draft · 草稿';
+  if (!_peStageObserver && typeof ResizeObserver !== 'undefined') {
+    _peStageObserver = new ResizeObserver(() => peSizeStage());
+    _peStageObserver.observe(view);
+  }
+}
+// 1280px is a real desktop; scale it to the canvas and let the frame scroll
+// inside itself at the scaled height.
+function peSizeStage() {
+  const view = document.getElementById('pe-ds-view');
+  if (!view || !_peStageIframe) return;
+  const w = view.clientWidth || 0, h = view.clientHeight || 0;
+  if (!w || !h) return;
+  const scale = Math.min(1, w / 1280);
+  _peStageIframe.style.transform = 'scale(' + scale + ')';
+  _peStageIframe.style.height = Math.round(h / scale) + 'px';
+}
+// The draft the web page needs: the fields it shows and the blocks, as the
+// phone preview has them (window._paBlocks). Saved fields not edited here
+// (price, stock, options) come from the published product on the page.
+function pePushStage() {
+  if (!_peStageIframe || !_peStageReady || PE_STAGE !== 'desktop' || !PA_CURRENT || !PA_CURRENT.id) return;
+  if (!_peStageIframe.contentWindow) return;
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const blocks = (window._paBlocks || []).filter(b => b && b.type);
+  _peStageIframe.contentWindow.postMessage({
+    type: 'cms:product-draft',
+    id: PA_CURRENT.id,
+    fields: {
+      name_en: PA_CURRENT.name_en || '', name_cn: PA_CURRENT.name_cn || '',
+      tagline_en: v('pa-edit-tagline-en'), tagline_cn: v('pa-edit-tagline-cn'),
+      description_blocks: blocks,
+      use_block_design: blocks.length > 0,
+      nutrition: (typeof paCollectNutrition === 'function') ? paCollectNutrition() : null,
+    },
+    selectedId: PA_SELECTED_BLOCK_ID,
+    lang: _paPreviewLang || 'en',
+  }, location.origin);
+}
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== location.origin || !ev.data || !_peStageIframe || ev.source !== _peStageIframe.contentWindow) return;
+  if (ev.data.type === 'cms:stage-ready') { _peStageReady = true; peSizeStage(); pePushStage(); }
+  else if (ev.data.type === 'cms:select') { if (ev.data.id) paBlocksSelect(ev.data.id); }
+});
+
 function paSetPreviewLang(l) {
   _paPreviewLang = (l === 'cn' ? 'cn' : 'en');
   _paSyncPreviewLangToggle();
@@ -5889,6 +6009,8 @@ function paRenderPreview() {
   // fresher one, and letting the timer fire afterwards paints the same page twice.
   clearTimeout(_paPreviewTimer);
   const screen = document.getElementById('pa-preview-screen'); if (!screen || !PA_CURRENT) return;
+  // The desktop stage (§273) is fed on every render; applied once on the first.
+  if (!_peStageApplied) peApplyStage(); else pePushStage();
   const p = PA_CURRENT;
   // Per-template visual skin — the preview screen carries a pa-tpl-<id> class so
   // scoped CSS (e.g. Style A "Quiet Minimal" for editorial_light) can restyle the

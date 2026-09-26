@@ -203,9 +203,19 @@
   .skel{background:linear-gradient(90deg,#eee,#f6f6f6,#eee);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:16px;aspect-ratio:.78;}
   @keyframes sk{to{background-position:-200% 0;}}
 
+  /* Editor desktop stage (?stage=1): blocks are click targets, the selected one
+     wears the editor's own Dusk ring, the same colour cms.html uses on the phone. */
+  .cms-stage .sb-blk-outer,.cms-stage .spb[data-block-id]{cursor:pointer;}
+  .cms-stage .sb-blk-outer:hover,.cms-stage .spb[data-block-id]:hover{outline:2px dashed rgba(110,103,175,.55);outline-offset:2px;}
+  .cms-stage .sb-blk-outer.cms-selected,.cms-stage .spb.cms-selected{outline:2px solid #6E67AF;outline-offset:2px;box-shadow:0 0 0 5px rgba(110,103,175,.18);}
+  .cms-stage .cs-fab,.cms-stage #toast{display:none!important;}
   footer{margin-top:auto;border-top:1px solid var(--line);background:#fff;}
   .foot-in{max-width:var(--wrap);margin:0 auto;padding:26px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px;}
   .foot-in .fm{font-family:var(--bf-bear);color:var(--accent);font-size:18px;}
+  .foot-links{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 22px;padding-top:4px;}
+  .foot-links[hidden]{display:none;}   /* closed by .hidden — its own display must not defeat it (§199) */
+  .foot-links a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;}
+  .foot-links a:hover{color:var(--ink);border-color:var(--accent);}
 
   #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);background:rgba(20,20,24,.96);color:#f2f2ec;padding:12px 20px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:80;max-width:90vw;text-align:center;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -323,6 +333,7 @@
     <div class="foot-in">
       <span class="fm" id="footBrand">Store</span>
       <span id="footMeta"></span>
+      <nav id="footLinks" class="foot-links" hidden aria-label="Footer links"></nav>
     </div>
   </footer>
 
@@ -911,6 +922,9 @@
     .sl-search input{flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:14px;color:var(--ink);}
     .sl-search .clr{width:22px;text-align:center;color:var(--olive);font-size:18px;cursor:pointer;flex:none;}
     .sl-vs{display:flex;justify-content:flex-end;gap:5px;padding:0 22px 6px;}
+    .sl-vs[hidden],.sl-diet[hidden],.toolbar .sort[hidden]{display:none;}   /* an office switch closes these by .hidden (§199) */
+    .sl-sort{display:flex;justify-content:flex-end;padding:0 22px 8px;}
+    .sl-sort select{font-family:var(--bf-toni);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:#FFFCF7;border:1.5px solid var(--ink);border-radius:999px;padding:5px 12px;}
     .sl-vs button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:transparent;border:1.5px solid rgba(0,0,0,.2);color:var(--olive);font-size:15px;line-height:1;border-radius:0;}
     .sl-vs button.on{background:var(--ink);border-color:var(--ink);color:var(--lime);}
     .sl-diet{display:flex;gap:6px;overflow-x:auto;padding:2px 22px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -4941,8 +4955,27 @@ async function loadPolls(){
 // (public/shop/blocks.js — a web port of the mini-app's block-renderer). Same
 // content as the mini-app, responsive for phone + desktop. Falls back to a
 // clean auto-layout when nothing is published.
+// Editor desktop stage (see boot): the selected block's id and its outline.
+let STAGE_MODE=false, stageSel=null, stageKey=null, stageIdKey=null;
+// The product editor's desktop stage: the product being edited, unsaved,
+// laid over the published one when the product route renders it.
+let stageProduct=null;
+function stageHighlight(scroll){
+  if(!STAGE_MODE) return;
+  document.querySelectorAll('.sb-blk-outer.cms-selected').forEach(el=>el.classList.remove('cms-selected'));
+  if(!stageSel) return;
+  const el=document.querySelector('.sb-blk-outer[data-block-id="'+CSS.escape(stageSel)+'"],.spb[data-block-id="'+CSS.escape(stageSel)+'"]');
+  if(!el) return;
+  el.classList.add('cms-selected');
+  if(scroll){ const r=el.getBoundingClientRect(); if(r.bottom<0||r.top>window.innerHeight) el.scrollIntoView({block:'center',behavior:'smooth'}); }
+}
+
 async function renderHome(){
-  const layout = state.config && state.config.home && state.config.home.layout;
+  document.title=siteTitle();
+  // Only the blocks the web shop shows (show_on 'both' or 'web'); a mini-app-
+  // only block is dropped here so the product pre-fetch below skips it too.
+  const published = state.config && state.config.home && state.config.home.layout;
+  const layout = (window.ShopBlocks && Array.isArray(published)) ? ShopBlocks.forSurface(published) : published;
   if(!(Array.isArray(layout) && layout.length) || !window.ShopBlocks) return renderHomeAuto();
   // Block engine needs products as context for by-id lookups (manual grids,
   // featured items, bundles). Fetch a base pull PLUS every product id the layout
@@ -5000,6 +5033,7 @@ async function renderHome(){
   const view=$('#view');
   view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
   ShopBlocks.startTimers(view);
+  stageHighlight(true);
 }
 
 async function renderHomeAuto(){
@@ -5044,7 +5078,8 @@ async function renderShop(params){
   const view=$('#view');
   const cat=params.get('cat')||'';
   const q=params.get('q')||'';
-  const sort=params.get('sort')||'featured';
+  // No sort in the address → the office's default sort (§274), then Featured.
+  const sort=params.get('sort')||shopDefaultSort()||'featured';
   $('#searchInput').value=q;
 
   const chips=[`<a class="chip ${!cat?'on':''}" href="#/shop${q?`?q=${encodeURIComponent(q)}`:''}">${state.lang==='cn'?'全部':'All'}</a>`]
@@ -5065,12 +5100,7 @@ async function renderShop(params){
     <div class="chips">${chips}</div>
     <div class="toolbar">
       <span class="count" id="shopCount"></span>
-      <select class="sort" id="sortSel">
-        <option value="featured">${state.lang==='cn'?'推荐排序':'Featured'}</option>
-        <option value="newest">${state.lang==='cn'?'最新':'Newest'}</option>
-        <option value="price_asc">${state.lang==='cn'?'价格 ↑':'Price: low to high'}</option>
-        <option value="price_desc">${state.lang==='cn'?'价格 ↓':'Price: high to low'}</option>
-      </select>
+      <select class="sort" id="sortSel"${shopCfg().showSort?'':' hidden'}>${shopSortOptions(sort)}</select>
     </div>
     <div class="grid" id="shopGrid">${skeletons(10)}</div>
   </div>`;
@@ -5089,8 +5119,10 @@ async function renderShop(params){
   if(cat)qp.set('category',cat);if(q)qp.set('q',q);if(sort!=='featured')qp.set('sort',sort);
   try{
     const r=await fetch('/api/retail/products?'+qp.toString()).then(x=>x.json());
-    const prods=r&&r.data||[];
-    const total=(r&&r.meta&&r.meta.total)||prods.length;
+    const prods=shopHideOos(r&&r.data||[]);
+    // The count is the server's total unless out-of-stock rows were hidden
+    // here, in which case it is what is on the page.
+    const total=shopCfg().hideOutOfStock?prods.length:((r&&r.meta&&r.meta.total)||prods.length);
     $('#shopCount').textContent=total+(state.lang==='cn'?' 件商品':` ${total===1?'product':'products'}`);
     $('#shopGrid').innerHTML=prods.length?prods.map(cardHtml).join('')
       :`<div class="empty">${state.lang==='cn'?'没有找到商品':'No products found.'}</div>`;
@@ -5105,7 +5137,7 @@ function catLabelByName(name){const c=state.cats.find(x=>x.name===name);return c
    button and the variant size-picker mirror the mini-app. */
 const SL = {
   prods:[], sections:[], visible:[], members:{},
-  layout:'list', diet:'', q:'',
+  layout:'list', diet:'', q:'', sort:'',
   drill:'', drillLabel:'', subTabs:[], activeCat:'', activeSub:'',
   suppress:0, offsets:[], vpRep:null, _searchT:null, _scrollT:null,
 };
@@ -5315,8 +5347,13 @@ async function renderShopList(params){
   SL.q=params.get('q')||'';
   SL.diet='';SL.drill='';SL.drillLabel='';SL.subTabs=[];SL.activeCat='';SL.activeSub='';
   SL._pendingCat=params.get('cat')||'';
-  // restore saved view preference
-  try{const sv=localStorage.getItem('shop_layout_pref');if(sv&&SL_VIEWS.some(v=>v.key===sv))SL.layout=sv;}catch{}
+  // Layout (§274, the mini app's rule): the office's default, unless the
+  // shopper chose one here before — and the office's alone when it locked the
+  // layout, in which case the switcher is not shown at all.
+  const scfg=shopCfg(), layoutLocked=!!scfg.lockLayout, adminLayout=shopAdminLayout();
+  if(adminLayout) SL.layout=adminLayout;
+  if(!layoutLocked){ try{const sv=localStorage.getItem('shop_layout_pref');if(sv&&SL_VIEWS.some(v=>v.key===sv))SL.layout=sv;}catch{} }
+  SL.sort=shopDefaultSort();
   view.innerHTML=`<div class="shoplist" id="slRoot">
     <div class="sl-hd"><div class="t">${state.lang==='cn'?'分类':'CATEGORIES'}</div></div>
     <div class="sl-search">
@@ -5324,8 +5361,9 @@ async function renderShopList(params){
       <input id="slSearch" type="search" value="${escAttr(SL.q)}" placeholder="${state.lang==='cn'?'搜索…':'Search the pantry…'}" autocomplete="off">
       <span class="clr" id="slClear" ${SL.q?'':'hidden'}>×</span>
     </div>
-    <div class="sl-vs" id="slVs">${SL_VIEWS.map(v=>`<button data-k="${v.key}" class="${SL.layout===v.key?'on':''}">${v.icon}</button>`).join('')}</div>
-    <div class="sl-diet" id="slDiet"><span class="lbl">${state.lang==='cn'?SL_DIET_LABEL.cn:SL_DIET_LABEL.en}</span>${SL_DIET.map(d=>`<span class="c" data-k="${d.key}">${state.lang==='cn'?d.cn:d.en}</span>`).join('')}</div>
+    <div class="sl-vs" id="slVs"${layoutLocked?' hidden':''}>${SL_VIEWS.map(v=>`<button data-k="${v.key}" class="${SL.layout===v.key?'on':''}">${v.icon}</button>`).join('')}</div>
+    ${scfg.showSort?`<div class="sl-sort"><select id="slSort" aria-label="${state.lang==='cn'?'排序':'Sort'}">${shopSortOptions(SL.sort)}</select></div>`:''}
+    <div class="sl-diet" id="slDiet"${scfg.showDietary===false?' hidden':''}><span class="lbl">${state.lang==='cn'?SL_DIET_LABEL.cn:SL_DIET_LABEL.en}</span>${SL_DIET.map(d=>`<span class="c" data-k="${d.key}">${state.lang==='cn'?d.cn:d.en}</span>`).join('')}</div>
     <div class="sl-body">
       <div class="sl-side" id="slSide"></div>
       <div class="sl-main" id="slMain"><div class="sl-skel"></div><div class="sl-skel"></div><div class="sl-skel"></div></div>
@@ -5339,6 +5377,7 @@ async function renderShopList(params){
     clearTimeout(SL._searchT);SL._searchT=setTimeout(slRefresh,300);
   });
   $('#slClear').onclick=()=>{SL.q='';si.value='';$('#slClear').hidden=true;slRefresh();};
+  { const ss=$('#slSort'); if(ss){ ss.onchange=e=>{ const v=e.target.value; SL.sort=SHOP_SORTS.includes(v)?v:''; slRefresh(); }; } }
   $('#slVs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
     const k=b.dataset.k;if(!k||k===SL.layout)return;SL.layout=k;
     try{localStorage.setItem('shop_layout_pref',k);}catch{}
@@ -5371,11 +5410,13 @@ async function slRefresh(){
   try{
     const qp=new URLSearchParams();qp.set('slim','1');qp.set('limit','500');
     if(SL.q)qp.set('q',SL.q);
+    if(SL.sort)qp.set('sort',SL.sort);
     const r=await fetch('/api/retail/products?'+qp.toString()).then(x=>x.json());
     let raw=(r&&r.data)||[];
     if(SL.diet){
       raw=raw.filter(p=>slMadeWithout(p,SL.diet));
     }
+    raw=shopHideOos(raw);
     SL.prods=raw;
     const display=slCollapse(raw);
     SL.members={};for(const p of display)if(p._members)SL.members[p.id]=p._members;
@@ -5892,6 +5933,8 @@ async function renderProduct(id){
   let p;
   try{ p=await api('/api/retail/products/'+encodeURIComponent(id)); }
   catch(e){ view.innerHTML=`<div class="wrap"><div class="empty">${state.lang==='cn'?'商品不存在或已下架。':'This product is unavailable.'}<br><a class="more" href="#/shop"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><polyline points="15 18 9 12 15 6"></polyline></svg>${state.lang==='cn'?'返回商品':'Back to shop'}</a></div></div>`; return; }
+  // Editor desktop stage: the unsaved draft wins over the published fields.
+  if(STAGE_MODE&&stageProduct&&String(stageProduct.id)===String(id)&&p){ p={...p,...stageProduct.fields}; }
 
   const now=nowPrice(p),was=wasPrice(p);
   const ss=stockState(p);
@@ -6186,14 +6229,71 @@ async function renderProduct(id){
     });
     refreshBar();
   })();
+  stageHighlight(true);
 }
 
 /* ════════════ CHROME / INIT ════════════ */
+// The website's own words (cfg.web.site, set in the back office → Web store
+// configuration, §273): the header menu, the footer line and links, the
+// browser-tab title and the search description. Nothing set → the two
+// default menu links and the brand name, as before.
+function siteCfg(){ const w=state.config&&state.config.web; return (w&&w.site&&typeof w.site==='object')?w.site:{}; }
+// The Shop tab's own settings (cfg.shop — Mini App Backend → Shop tab), the
+// same ones miniapp/pages/shop/shop.js reads, so one setting governs both
+// surfaces (§274): layout and whether the shopper may change it, the default
+// sort and whether a sort control shows, the dietary chips, and hiding what
+// is out of stock. The three extra filters (stock, badge, price) have no web
+// control yet and are not read here.
+function shopCfg(){ const s=state.config&&state.config.shop; return (s&&typeof s==='object')?s:{}; }
+const SHOP_SORTS=['newest','price_asc','price_desc','popular'];
+function shopDefaultSort(){ const v=shopCfg().defaultSort; return SHOP_SORTS.includes(v)?v:''; }
+// The mini app's rule, exactly: a product with no stock figure is never hidden.
+function shopHideOos(list){ return shopCfg().hideOutOfStock?list.filter(p=>p&&(p.stock==null||Number(p.stock)>0)):list; }
+// The office's layout, in this page's names: 'grid' is the old name of the
+// two-column grid; 'gallery' has no web twin and reads as the two-column grid.
+function shopAdminLayout(){ let l=shopCfg().layout; if(l==='grid'||l==='gallery')l='grid-2col'; return SL_VIEWS.some(v=>v.key===l)?l:''; }
+const SHOP_SORT_LABELS={featured:['Featured','推荐'],newest:['Newest','最新'],price_asc:['Price ↑','价格 ↑'],price_desc:['Price ↓','价格 ↓'],popular:['Popular','热门']};
+function shopSortOptions(current){ return Object.keys(SHOP_SORT_LABELS).map(k=>`<option value="${k}"${(current||'featured')===k?' selected':''}>${SHOP_SORT_LABELS[k][state.lang==='cn'?1:0]}</option>`).join(''); }
+function sitePick(en,cn){ const cnOn=state.lang==='cn'; return (cnOn?(cn||en):(en||cn))||''; }
+function siteTitle(){ const t=sitePick(siteCfg().title_en,siteCfg().title_cn); return t||state.brand; }
+function renderSiteChrome(){
+  const site=siteCfg(), cn=state.lang==='cn';
+  const nav=document.querySelector('nav.links');
+  if(nav){
+    const items=(Array.isArray(site.nav)&&site.nav.length)?site.nav:[{label_en:'Home',label_cn:'首页',target:'home'},{label_en:'Shop',label_cn:'商品',target:'shop'}];
+    nav.innerHTML='';
+    for(const it of items){
+      const a=document.createElement('a');
+      a.textContent=sitePick(it.label_en,it.label_cn);
+      if(it.target==='home'){ a.href='#/'; a.dataset.nav='home'; }
+      else if(it.target==='shop'){ a.href='#/shop'; a.dataset.nav='shop'; }
+      else if(/^https?:\/\//i.test(it.target||'')){ a.href=it.target; a.target='_blank'; a.rel='noopener'; }
+      else continue;
+      nav.appendChild(a);
+    }
+  }
+  const meta=$('#footMeta');
+  if(meta){
+    meta.textContent=sitePick(site.footer_en,site.footer_cn);
+    const row=$('#footLinks');
+    const links=Array.isArray(site.links)?site.links:[];
+    if(row){
+      row.innerHTML='';
+      for(const l of links){ const a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener'; a.textContent=sitePick(l.label_en,l.label_cn); row.appendChild(a); }
+      row.hidden=!links.length;
+    }
+  }
+  let desc=document.querySelector('meta[name="description"]');
+  const d=sitePick(site.description_en,site.description_cn);
+  if(d){ if(!desc){ desc=document.createElement('meta'); desc.name='description'; document.head.appendChild(desc); } desc.content=d; }
+  else if(desc){ desc.remove(); }
+  if(parseHash().seg.length===0) document.title=siteTitle();
+}
+
 function applyLangToUI(){
   document.querySelectorAll('#langToggle button, #mLangFloat button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
   $('#searchInput').placeholder=state.lang==='cn'?'搜索商品':'Search products';
-  document.querySelector('nav.links [data-nav=home]').textContent=state.lang==='cn'?'首页':'Home';
-  document.querySelector('nav.links [data-nav=shop]').textContent=state.lang==='cn'?'商品':'Shop';
+  renderSiteChrome();
   $('#footBrand').textContent=state.brand;
   // bottom tab labels
   const TB={home:['Home','首页'],shop:['Shop','商城'],cart:['Cart','购物车'],me:['Me','我的']};
@@ -6227,6 +6327,13 @@ function ctaRoute(t){
   // contract as /storefront. Falls back to the live config when the staff
   // session has lapsed, so the preview stays useful.
   const DRAFT_MODE=new URLSearchParams(location.search).get('draft')==='1';
+  // ?stage=1 (with draft=1): this page IS the editor's desktop stage
+  // (public/cms.html, §273). The editor posts the whole draft on every
+  // change (`cms:draft`), a click on a block posts `cms:select` back, and
+  // every link and button is inert — the stage is for editing Home, not for
+  // shopping. The selected block wears an outline (see .cms-stage CSS).
+  STAGE_MODE=DRAFT_MODE&&new URLSearchParams(location.search).get('stage')==='1';
+  if(STAGE_MODE) document.documentElement.classList.add('cms-stage');
   // config first (theme + brand), then categories — both tenant-scoped by Host.
   state.config={};
   if(DRAFT_MODE){ try{ state.config=await api('/api/retail-admin/storefront/preview-config')||{}; }catch(e){} }
@@ -6236,10 +6343,63 @@ function ctaRoute(t){
   if(DRAFT_MODE){
     // The CMS pings this iframe after each draft save — refetch + re-render.
     window.addEventListener('message',async ev=>{
-      if(ev.origin!==location.origin||!ev.data||ev.data.type!=='cms:reload') return;
+      if(ev.origin!==location.origin||!ev.data) return;
+      if(ev.data.type==='cms:draft'&&STAGE_MODE){
+        // The editor's draft, straight from its state — no round trip. The
+        // editor posts on every keystroke and every click, so: an unchanged
+        // layout (a click that only selected a block) is a highlight, not a
+        // render; a changed layout re-renders, and re-fetches products only
+        // when the set of products the layout names has changed.
+        const layout=Array.isArray(ev.data.layout)?ev.data.layout:[];
+        const key=JSON.stringify(layout);
+        const langChanged=!!(ev.data.lang&&ev.data.lang!==state.lang);
+        stageSel=ev.data.selectedId||null;
+        if(key===stageKey&&!langChanged&&parseHash().seg.length===0){ stageHighlight(true); return; }
+        stageKey=key;
+        state.config.home=state.config.home||{};
+        state.config.home.layout=layout;
+        if(langChanged){ state.lang=ev.data.lang; applyLangToUI(); }
+        const ids=[]; for(const b of layout){ (b.product_ids||[]).forEach(id=>ids.push(id)); if(b.product_id) ids.push(b.product_id); if(b.bundle_product_id) ids.push(b.bundle_product_id); }
+        const idKey=ids.slice().sort().join(',');
+        if(idKey!==stageIdKey){ stageIdKey=idKey; state.homeProducts=null; }
+        if(parseHash().seg.length){ location.hash='#/'; } else { route(); }
+        return;
+      }
+      if(ev.data.type==='cms:product-draft'&&STAGE_MODE){
+        // The product editor's draft (public/product-editor.html): the fields
+        // the page shows and the unsaved blocks, laid over the published
+        // product in renderProduct. Same rules as cms:draft: an unchanged
+        // draft is a highlight, not a render.
+        const d=ev.data, id=String(d.id||'');
+        if(!id) return;
+        const key=JSON.stringify([id,d.fields||{}]);
+        const langChanged=!!(d.lang&&d.lang!==state.lang);
+        stageSel=d.selectedId||null;
+        const onIt=parseHash().seg[0]==='product'&&String(parseHash().seg[1])===id;
+        if(key===stageKey&&!langChanged&&onIt){ stageHighlight(true); return; }
+        stageKey=key;
+        stageProduct={id, fields:(d.fields&&typeof d.fields==='object')?d.fields:{}};
+        if(langChanged){ state.lang=d.lang; applyLangToUI(); }
+        if(!onIt){ location.hash='#/product/'+encodeURIComponent(id); } else { route(); }
+        return;
+      }
+      if(ev.data.type!=='cms:reload') return;
       try{ state.config=await api('/api/retail-admin/storefront/preview-config')||state.config; }catch(e){}
       state.homeProducts=null; route();
     });
+  }
+  if(STAGE_MODE){
+    // Clicks: a block selects itself in the editor; everything else is inert.
+    document.addEventListener('click',ev=>{
+      const blk=ev.target.closest('.sb-blk-outer,.spb[data-block-id]');
+      if(blk){
+        ev.preventDefault(); ev.stopPropagation();
+        const id=blk.getAttribute('data-block-id');
+        if(id){ stageSel=id; stageHighlight(false); try{ parent.postMessage({type:'cms:select',id},location.origin); }catch(e){} }
+        return;
+      }
+      if(ev.target.closest('a,button,form')){ ev.preventDefault(); ev.stopPropagation(); }
+    },true);
   }
   try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
   try{ state.token=localStorage.getItem('shop_token')||''; }catch{}
@@ -6341,6 +6501,8 @@ function ctaRoute(t){
   window.addEventListener('hashchange',route);
   await route();
   $('#boot').classList.add('gone');
+  // Editor desktop stage: tell the editor we are up so it sends its draft.
+  if(STAGE_MODE){ try{ parent.postMessage({type:'cms:stage-ready'},location.origin); }catch(e){} }
 })();
 </script>
 </body>

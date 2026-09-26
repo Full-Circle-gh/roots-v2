@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
       prune:
-        description: "Also remove these files from the server (space-separated repo paths; each must be deployable and NOT in the repo). For files deleted before deletions shipped (§272)."
+        description: "Also remove these files from the server (space-separated repo paths; each must be deployable and NOT in the repo). For files deleted before deletions shipped (§275)."
         type: string
         default: ""
 
@@ -254,7 +254,7 @@ jobs:
 
           filter /tmp/changed.txt /tmp/files.txt
 
-          # DELETIONS SHIP TOO (§272). A file deleted from the repository used to
+          # DELETIONS SHIP TOO (§275). A file deleted from the repository used to
           # stay on the box, fetchable under /assets/, until removed by hand —
           # kitchen.html, app.html.bak and the five §270 pages all did. What is
           # removed is exactly what git records as DELETED in the range this run

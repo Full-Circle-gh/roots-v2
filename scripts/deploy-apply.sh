@@ -11,7 +11,7 @@
 #
 # Sequence: syntax-check staged .js  ->  back up live copies  ->  install
 #   ->  remove files deleted from the repo, listed in __deletions__.txt
-#       (moved into the backup, never destroyed; §272)
+#       (moved into the backup, never destroyed; §275)
 #   ->  npm install (only if package.json/package-lock.json shipped)
 #   ->  pm2 restart roots-v2  ->  health-check (auto-rollback on crash-loop).
 # A pm2 restart reloads the WHOLE backend, so the syntax gate + rollback are
@@ -70,7 +70,7 @@ BEFORE=$(rt)
 echo "=== 3/5 install (restart_time before = $BEFORE) ==="
 for f in "${FILES[@]}"; do mkdir -p "$APP/$(dirname "$f")"; cp "$STAGE/$f" "$APP/$f"; echo "  -> $f"; done
 
-# Files deleted from the repository (§272). The deploy writes the list to
+# Files deleted from the repository (§275). The deploy writes the list to
 # __deletions__.txt BESIDE the stage, never in it, because every file in the
 # stage is installed. Each one is MOVED into this deploy's backup folder rather
 # than deleted, so a removal is as reversible as an install: the rollback below

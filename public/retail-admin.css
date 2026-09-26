@@ -10254,6 +10254,8 @@
   :is(#tab-sales, .cfg-host) .mc-wiz .wc-dstep.now .stat { color: var(--td-amber-ink); }
   /* Inputs focus Dusk (the Tacet input accent), not brass. */
   :is(#tab-sales, .cfg-host) .mc-wiz .wc-di input:focus { border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-si:focus,
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-ss:focus { border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint); }
 
   /* ── Two-column, no-scroll layout for config panels in the overlay ──
      The sections (.mc-sec) flow into two balanced columns (multicol); chips +
