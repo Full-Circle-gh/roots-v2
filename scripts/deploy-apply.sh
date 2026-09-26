@@ -10,6 +10,8 @@
 #     __stage__/public/retail-admin.html
 #
 # Sequence: syntax-check staged .js  ->  back up live copies  ->  install
+#   ->  remove files deleted from the repo, listed in __deletions__.txt
+#       (moved into the backup, never destroyed; §275)
 #   ->  npm install (only if package.json/package-lock.json shipped)
 #   ->  pm2 restart roots-v2  ->  health-check (auto-rollback on crash-loop).
 # A pm2 restart reloads the WHOLE backend, so the syntax gate + rollback are
@@ -68,6 +70,44 @@ BEFORE=$(rt)
 echo "=== 3/5 install (restart_time before = $BEFORE) ==="
 for f in "${FILES[@]}"; do mkdir -p "$APP/$(dirname "$f")"; cp "$STAGE/$f" "$APP/$f"; echo "  -> $f"; done
 
+# Files deleted from the repository (§275). The deploy writes the list to
+# __deletions__.txt BESIDE the stage, never in it, because every file in the
+# stage is installed. Each one is MOVED into this deploy's backup folder rather
+# than deleted, so a removal is as reversible as an install: the rollback below
+# moves it back. Every path is re-checked here, whatever the workflow already
+# checked — this script is the last thing between a list and a live box.
+# DELETIONS_APPLIED= is printed unconditionally: it is how the workflow tells
+# this installer from one that predates the list and ignored it.
+DELFILE=$APP/__deletions__.txt
+REMOVED=()
+restore_removed(){
+  for f in ${REMOVED[@]+"${REMOVED[@]}"}; do
+    mkdir -p "$APP/$(dirname "$f")"; mv "$BK/$f" "$APP/$f" && echo "  restored $f"
+  done
+}
+if [ -f "$DELFILE" ]; then
+  echo "=== 3b/5 remove files deleted from the repository (moved to $BK) ==="
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if ! printf '%s' "$f" | grep -qE '^[A-Za-z0-9._@+/-]+$'; then echo "  SKIP '$f' — unsafe path"; continue; fi
+    case "$f" in /*|*..*) echo "  SKIP $f — unsafe path"; continue ;; esac
+    case "$f" in
+      server.js|database.js|schema.sql|package.json|package-lock.json|scripts/deploy-apply.sh)
+        echo "  SKIP $f — the app cannot run without it"; continue ;;
+    esac
+    case "$f" in public/*|routes/*|lib/*|middleware/*|scripts/*) ;; *) echo "  SKIP $f — not a deployable path"; continue ;; esac
+    if printf '%s\n' "${FILES[@]}" | grep -qxF -- "$f"; then echo "  SKIP $f — this ship installs it"; continue; fi
+    if [ -f "$APP/$f" ] || [ -L "$APP/$f" ]; then
+      mkdir -p "$BK/$(dirname "$f")"
+      if mv "$APP/$f" "$BK/$f"; then echo "  x $f"; REMOVED+=("$f"); else echo "  WARN: could not move $f"; fi
+    else
+      echo "  - $f (already absent)"
+    fi
+  done < "$DELFILE"
+  rm -f "$DELFILE"
+fi
+echo "DELETIONS_APPLIED=${#REMOVED[@]}"
+
 # If this ship touched package.json/package-lock.json, the live node_modules is
 # now out of sync with the manifest (a missing dep here means every future
 # restart crash-loops on MODULE_NOT_FOUND — the exact failure that motivated
@@ -86,6 +126,7 @@ if [ "$NPM_TOUCHED" = "1" ]; then
   else
     echo "ABORT: npm install failed -- restoring previous files, NOT restarting pm2"
     for f in "${FILES[@]}"; do [ -f "$BK/$f" ] && cp "$BK/$f" "$APP/$f"; done
+    restore_removed
     echo "RESULT=ABORTED_NPM_INSTALL backup=$BK"
     exit 1
   fi
@@ -158,6 +199,7 @@ echo "restart_time $BEFORE -> $AFTER | status = $ST | settled = $STABLE | probes
 if [ "$ST" != "online" ] || [ "$STABLE" != "1" ] || [ "$PROBE_BAD" = "1" ]; then
   echo "!!! UNHEALTHY (status=$ST settled=$STABLE probes:$PROBE_OUT) -> ROLLING BACK"
   for f in "${FILES[@]}"; do [ -f "$BK/$f" ] && cp "$BK/$f" "$APP/$f"; done
+  restore_removed
   pm2 restart roots-v2 --update-env >/dev/null; sleep 3
   echo "rolled back. status now = $(st)"
   echo "--- error log tail ---"; tail -n 30 /root/.pm2/logs/roots-v2-error.log
