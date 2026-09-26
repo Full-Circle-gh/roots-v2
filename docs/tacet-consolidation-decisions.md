@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.434
+# Tacet shared-core consolidation — decisions record, v4.435
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-26 · v4.435 — **§274 · THE WEB SHOP TAB OBEYS THE SAME SHOP-TAB SETTINGS AS THE MINI APP — on Ash's *"do all"*, the last of the three follow-ups v4.432's PR named.** `miniapp/pages/shop/shop.js` reads `cfg.shop` (Mini App Backend → Shop tab): the layout and whether the shopper may change it, the default sort and whether a sort control shows, the dietary chips, and hiding what is out of stock. `public/shop.html` read none of it: its own view switcher, its own always-on sort menu on the PC, its own always-on chips. **NOW, ONE SETTING GOVERNS BOTH SURFACES.** Phone list: the office's layout is the default (`grid` is the two-column grid's old name; `gallery` has no web twin and reads as the two-column grid), the shopper's own choice wins only while the layout is not locked, and a locked layout hides the switcher; a sort control appears only when the office shows one, on the office's default sort, with the mini app's five words; the dietary chips go when the office hides them; out-of-stock rows are dropped by the mini app's own rule (a product with no stock figure is never hidden). PC grid: no sort in the address means the office's default sort; the sort menu shows only when the office shows one, which means **a shop that never turned Show sort on loses the PC sort menu it had** — the setting was always meant to govern the customer-facing Shop, and the switch is one click; the count stays honest when rows were hidden. **NOT READ, ON PURPOSE:** the stock, badge and price filters — the web has no such control yet, and reading a switch it cannot honour would be a lie. Tests: scripts/test_web_shop_settings.js. Chinese: vocabulary v1.187 (five sort labels copied from the mini app).
 
 2026-09-26 · v4.434 — **§273 ADDENDUM · THE PRODUCT PAGE EDITOR GETS THE SAME STAGE — on Ash's *"do all"*, the first of the three follow-ups v4.432's PR named.** `public/product-editor.html` previewed a product on a phone only, so the web product page (a two-column page from 820px) was designed blind, the way the home page was before §273. **NOW.** A Desktop ⇄ Phone switch in the preview bar, Desktop first, remembered per browser (`pe_stage`). The desktop stage is the real web shop's product page — `public/shop.html` at `/shop-preview?draft=1&stage=1#/product/<id>` — 1280px wide and scaled to the canvas. Every preview render posts the editor's unsaved draft into it (`cms:product-draft`: names, the tagline as typed, the blocks as the phone has them, the nutrition table), and `renderProduct` lays those fields over the published product, so what the office sees is the page as it will be, not as it was. A click on a block in the frame posts `cms:select` and the document scrolls to that block's section, exactly as a click on the phone does; the selected block wears the editor's ring. The preview language applies to both stages. An unchanged draft is a highlight, not a re-render, as on the home stage. Price, stock and options come from the published product, because this editor does not edit them. `public/shop/product-blocks.js` now writes each block's id into the DOM. **KNOWN LIMIT, pre-existing and shared with every `/shop-preview` frame:** on the merchant back-office host the public product API resolves the tenant by Host, which is the default tenant; a second tenant previewing from that host sees the default tenant's product data under their own draft. Tests: scripts/test_product_editor_stage.js. No new Chinese: the switch reuses v1.183's pairs.
 
@@ -20644,3 +20646,13 @@ header menu and footer are a `web.site` config edited on the Web store
 configuration page and read by the web shop alone; the mini app never sees
 them. Written as §272 and renumbered twice on merge. See the v4.430 and v4.431
 changelog entries.
+
+## §274 — THE WEB SHOP TAB OBEYS THE SAME SHOP-TAB SETTINGS AS THE MINI APP
+
+**Decided 2026-09-26 by Ash** (*"do all"*). The Shop tab settings in the Mini
+App Backend (`cfg.shop`: layout and its lock, default sort and its control,
+dietary chips, hide out of stock) govern the web shop's Shop tab as they govern
+the mini app's, with one reading per setting in `public/shop.html` and the
+mini app's own rules (an unknown layout is ignored, a product with no stock
+figure is never hidden). The three filters the web has no control for are not
+read until it has one. See the v4.435 changelog entry.

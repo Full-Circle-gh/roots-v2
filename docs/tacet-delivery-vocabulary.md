@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.187 · 2026-09-26 · §274 THE WEB SHOP TAB'S SORT MENU — FIVE CUSTOMER PAIRS COPIED FROM THE MINI APP, NOTHING COMPOSED.** `Featured · 推荐`, `Newest · 最新`, `Price ↑ · 价格 ↑`, `Price ↓ · 价格 ↓`, `Popular · 热门` are `miniapp/pages/shop/shop.js`'s own `SORT_OPTIONS`, title-cased for the web where the app's are upper-case chips; the web's older `推荐排序` and `Price: low to high` forms are retired for them, so both surfaces say the same thing. See *The web Shop tab (§274)*.
+
 **v1.186 · 2026-09-26 · §273 ADDENDUM THE PRODUCT EDITOR'S STAGE — NOTHING COMPOSED.** The product page editor's new Desktop ⇄ Phone switch reuses v1.183's `Desktop · 电脑`, `Phone · 手机` and their two tooltips, as `EN · 中文` text nodes the global pass splits. Its frame's address line is `draft · 草稿`, live in the Mini App Editor's own drawer.
 
 **v1.185 · 2026-09-26 · §273 THE CARD CHECKS ITS ROWS BEFORE SAVING — FOUR OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** A code review found that a menu or footer row the server drops (no text, or a web address without https://) vanished silently after `Saved`. The card now names the row before anything is sent, and reports its two writes apart. See *The website's own words (§273)*, second table.
@@ -8972,3 +8974,17 @@ that needs no word.
 | Footer link {n} needs a web address starting with https:// | 页脚链接 {n} 需要以 https:// 开头的网址 | **COMPOSED** — same construct | save check |
 | Save failed: {part} | 保存失败:{part} | **COPIED** — the live `Save failed: · 保存失败:` (v1.5x, vaRender) | save result |
 | sign-in | 登录 | **COPIED** — this page's own `Customer sign-in · 顾客登录`, the qualifier dropped because the sentence names the page | save result part |
+
+## The web Shop tab (§274)
+
+Register: CUSTOMER (Rule 1) — the sort menu a shopper reads on the web shop's
+Shop tab, phone and PC (`public/shop.html`, `SHOP_SORT_LABELS`).
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| Featured | 推荐 | **COPIED** — `FEATURED · 推荐`, `miniapp/pages/shop/shop.js` SORT_OPTIONS | sort menu |
+| Newest | 最新 | **COPIED** — same source | sort menu |
+| Price ↑ | 价格 ↑ | **COPIED** — same source | sort menu |
+| Price ↓ | 价格 ↓ | **COPIED** — same source | sort menu |
+| Popular | 热门 | **COPIED** — same source | sort menu |
+| Sort | 排序 | **COPIED** — the aria-label on the phone list's control; `排序` is live in the back office (`精选(手动排序)`) | phone sort control |
