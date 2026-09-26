@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The editor stage is the website first, and the website has its own words — §271.
+ * The editor stage is the website first, and the website has its own words — §272.
  *
  * Two things Ash asked for in one shot ("desktop first then phone. do all on
  * one shot"):

@@ -6218,7 +6218,7 @@ async function renderProduct(id){
 
 /* ════════════ CHROME / INIT ════════════ */
 // The website's own words (cfg.web.site, set in the back office → Web store
-// configuration, §271): the header menu, the footer line and links, the
+// configuration, §272): the header menu, the footer line and links, the
 // browser-tab title and the search description. Nothing set → the two
 // default menu links and the brand name, as before.
 function siteCfg(){ const w=state.config&&state.config.web; return (w&&w.site&&typeof w.site==='object')?w.site:{}; }
@@ -6296,7 +6296,7 @@ function ctaRoute(t){
   // session has lapsed, so the preview stays useful.
   const DRAFT_MODE=new URLSearchParams(location.search).get('draft')==='1';
   // ?stage=1 (with draft=1): this page IS the editor's desktop stage
-  // (public/cms.html, §271). The editor posts the whole draft on every
+  // (public/cms.html, §272). The editor posts the whole draft on every
   // change (`cms:draft`), a click on a block posts `cms:select` back, and
   // every link and button is inert — the stage is for editing Home, not for
   // shopping. The selected block wears an outline (see .cms-stage CSS).

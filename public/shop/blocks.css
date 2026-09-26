@@ -615,7 +615,7 @@
 
 /* ── WeCom contact ───────────────────────────────────────────────────────── */
 /* two hints are rendered; the phone one ("long-press") shows below 768px, the
-   PC one ("scan with WeChat") from 768px up — see the §270 section at the end */
+   PC one ("scan with WeChat") from 768px up — see the §271 section at the end */
 .shop-blocks .sb-wc-hint-pc { display: none; }
 .shop-blocks .sb-wc-blk { margin: 0 calc(44 * var(--u)); }
 .shop-blocks .sb-wc-loop-qr-frame { border: calc(3 * var(--u)) solid var(--ink); border-radius: calc(20 * var(--u)); padding: calc(12 * var(--u)); background: #fff; }
@@ -2588,7 +2588,7 @@
 .shop-blocks .sb-hero picture { display: contents; }
 
 /* ════════════════════════════════════════════════════════════════════════
-   PC-NATIVE, THE LAST FOUR (2026-09-26, §270) — the blocks that were still
+   PC-NATIVE, THE LAST FOUR (2026-09-26, §271) — the blocks that were still
    phone widgets centred in a column on a PC. Same rules as the sections
    above: fixed px on the desktop type scale, each block opting into the band
    that suits the object. These come LAST so they win over ⑥ and ⑧ above at

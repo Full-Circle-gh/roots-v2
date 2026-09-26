@@ -34759,7 +34759,7 @@ const ALLOWED_PAGES = new Set(['home', 'promotions', 'membership', 'categories',
 // explicit value instead of each carrying a copy of this table. The editor
 // carries the same four-type table for a block added and not yet saved; the
 // test `scripts/test_cms_show_on.js` holds the two copies equal.
-// Decided by Ash 2026-09-26 — docs/tacet-consolidation-decisions.md §270.
+// Decided by Ash 2026-09-26 — docs/tacet-consolidation-decisions.md §271.
 const SHOW_ON_VALUES = new Set(['both', 'miniapp', 'web']);
 const SHOW_ON_DEFAULTS = Object.freeze({
   order_tracker: 'miniapp', notification_bar: 'miniapp',

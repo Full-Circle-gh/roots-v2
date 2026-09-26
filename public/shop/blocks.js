@@ -1287,7 +1287,7 @@
     var hint = pick(b.hint_en, b.hint_cn) || (CN() ? '长按二维码 · 识别添加' : 'Long-press QR · tap "Add"');
     // The stored hint tells a phone reader to long-press the QR, which a PC
     // reader cannot do — there the QR is scanned with the phone in hand. Both
-    // hints are rendered and blocks.css shows one per width (§270).
+    // hints are rendered and blocks.css shows one per width (§271).
     var hintPc = CN() ? '微信扫码添加' : 'Scan with WeChat to add us';
     var hintHtml = '<span class="sb-wc-hint-phone">' + escapeHtml(hint) + '</span><span class="sb-wc-hint-pc">' + escapeHtml(hintPc) + '</span>';
     var buttonLabel = pick(b.button_label_en, b.button_label_cn) || (b.qr_image_url ? (CN() ? '添加我们' : 'Add us') : (CN() ? '联系客服' : 'Chat with us'));

@@ -5751,7 +5751,7 @@ const state = {
   selectedId: null, dirty: false, saving: false,
   // The editor stage — 'desktop' (the real web shop at PC width, in an
   // iframe the office clicks into) or 'phone' (the mini-app-faithful frame).
-  // Desktop first, by Ash's direction (§271); persisted per browser. Only
+  // Desktop first, by Ash's direction (§272); persisted per browser. Only
   // Home reaches the website, so every other page forces the phone stage.
   stage: 'desktop',
   // Focus mode — when on, selecting a block fades every other block back
@@ -5951,7 +5951,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     }, 60 * 1000);
     // Initial page load — uses state.page (already set by buildPagePicker)
     await loadPage();
-    applyStage();   // Desktop first (§271); the phone stage off Home
+    applyStage();   // Desktop first (§272); the phone stage off Home
     // Now that all three design pickers have rendered their menus, wire
     // the positioning observer so they escape the pane's overflow.
     _wireDesignMenuPositioning();
@@ -7729,7 +7729,7 @@ async function buildDesignCheckPicker() {
 // so opening the editor from an English admin starts in English, and flipping
 // here follows you back out.
 const LANG_KEY = 'roots-admin-lang';
-const STAGE_KEY = 'cms_stage';   // Desktop ⇄ Phone stage preference (§271)
+const STAGE_KEY = 'cms_stage';   // Desktop ⇄ Phone stage preference (§272)
 function buildLangToggle() {
   try { state.lang = localStorage.getItem(LANG_KEY) || 'en'; } catch {}
   if (!['en', 'cn'].includes(state.lang)) state.lang = 'en';
@@ -8764,7 +8764,7 @@ function buildDropZone(beforeIdx, isTail = false) {
 // this table is the server's SHOW_ON_DEFAULTS, copied: the four types that
 // lead to a wallet, notifications or order page the web shop does not have.
 // scripts/test_cms_show_on.js holds the two copies equal. Decided by Ash
-// 2026-09-26 — docs/tacet-consolidation-decisions.md §270.
+// 2026-09-26 — docs/tacet-consolidation-decisions.md §271.
 const SHOW_ON_DEFAULTS = Object.freeze({
   order_tracker: 'miniapp', notification_bar: 'miniapp',
   points_widget: 'miniapp', top_up: 'miniapp',
@@ -15338,7 +15338,7 @@ function _lpOpen()  { const d = document.getElementById('live-preview-drawer'); 
 function _lpClose() { const d = document.getElementById('live-preview-drawer'); if (d) { d.classList.remove('open'); d.setAttribute('aria-hidden','true'); } }
 
 // ═══════════════════════════════════════════════════════════════════════
-// THE EDITOR STAGE — Desktop first, then Phone (§271, Ash 2026-09-26)
+// THE EDITOR STAGE — Desktop first, then Phone (§272, Ash 2026-09-26)
 // The desktop stage is the REAL web shop (public/shop.html) served at
 // /shop-preview?draft=1&stage=1, rendered 1280px wide and scaled to the
 // canvas. The office clicks a block in it; shop.html posts `cms:select` and

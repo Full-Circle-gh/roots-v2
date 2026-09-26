@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * A block says where it shows — §270.
+ * A block says where it shows — §271.
  *
  * One layout feeds two customer surfaces, the WeChat mini app and the web
  * shop. `show_on` on a block ('both' | 'miniapp' | 'web') says which of them

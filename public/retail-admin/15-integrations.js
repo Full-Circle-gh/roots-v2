@@ -1028,7 +1028,7 @@
   const SIGNIN_ORDER = ['phone', 'email', 'google', 'apple', 'wechat'];
   let _webCfg = null;
 
-  // ── The website's own words (§271): title, menu, footer ───────────────────
+  // ── The website's own words (§272): title, menu, footer ───────────────────
   // Held in _webSite while the page is open; the inputs write into it on
   // every change (wcSiteRead) so adding or removing a row never loses what
   // was typed. Saved with the page's one Save button (igWebSaveSignin).
@@ -1289,7 +1289,7 @@
     if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Saving…', '保存中…'); }
     try {
       await api('/api/retail-admin/channel-hub/web/signin', { method: 'POST', body });
-      // The website's own words save with the same button (§271).
+      // The website's own words save with the same button (§272).
       wcSiteRead();
       const r = await api('/api/retail-admin/channel-hub/web/site', { method: 'POST', body: _webSite || WC_SITE_EMPTY() });
       if (r && r.site) { _webSite = Object.assign(WC_SITE_EMPTY(), r.site); wcSiteRender(); }

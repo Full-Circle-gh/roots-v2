@@ -305,10 +305,9 @@ html,body{overscroll-behavior:none;overflow:hidden}
    typing breaks. .sel is the escape hatch for anything that later needs real
    selection.
 
-   Deliberately NOT applied to the customer-facing pages — shop.html,
-   storefront.html, full-circle.html. A visitor reading a shop or a marketing
-   landing page has every reason to select and copy, and none of the operator
-   chrome this protects. */
+   Deliberately NOT applied to the customer-facing pages — shop.html and
+   storefront.html. A visitor reading a shop has every reason to select and
+   copy, and none of the operator chrome this protects. */
 html,body{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   -webkit-user-select:text;-moz-user-select:text;user-select:text;-webkit-touch-callout:default}
@@ -1202,7 +1201,7 @@ const state = {
      ask, so there is nothing to wait for and the sample app paints at once,
      exactly as it always did. Only a real deployment holds. */
   capsLoaded:(typeof location!=='undefined' && location.protocol==='file:'),
-  liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
+  liveOrders:null, liveDetail:null, liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
@@ -3964,8 +3963,46 @@ function flagGate(flag){
    greeting is a fact about the person holding the phone. An owner reading the
    Recap from London at nine in the morning is having a morning, whatever time
    it is in the store. */
-function greetKey(){ const h=new Date().getHours(); return h<5?'night':h<12?'morning':h<18?'afternoon':'evening'; }
-const GREET={night:['Good evening','晚上好'],morning:['Good morning','早上好'],afternoon:['Good afternoon','下午好'],evening:['Good evening','晚上好']};
+/* Same bands as the desktop's tdGreetLine: 05–12 morning · 12–17 afternoon ·
+   17–23 evening · 23–05 late. They used to differ (evening from 18, and a
+   2am phone said "Good evening"), so the same person got two greetings. */
+function greetKey(){ const h=new Date().getHours(); return h<5||h>=23?'night':h<12?'morning':h<17?'afternoon':'evening'; }
+const GREET={morning:['Good morning','早上好'],afternoon:['Good afternoon','下午好'],evening:['Good evening','晚上好']};
+/* First name, the desktop's rule (tdGreetName): Latin → first word, CJK → the
+   whole name. Empty until /me lands, which drops the name rather than showing
+   a placeholder. */
+function greetName(){
+  const src=String((state.me&&state.me.name)||'').trim();
+  if(!src) return '';
+  // Escaped: this lands in a template string, where the desktop's textContent
+  // would have been safe on its own.
+  return escAttr(/^[\x00-\x7F]+$/.test(src)?src.split(/\s+/)[0]:src);
+}
+/* "Good evening, Asher" — the phone said only "Good evening" while the desktop
+   used the name it already had. Strings are the desktop's live pairs. */
+function greetLine(){
+  const name=greetName(), g=greetKey();
+  if(g==='night') return name?T('Still up, '+name+'?','还没休息，'+name+'？'):T('Still up?','还没休息?');
+  const [en,cn]=GREET[g];
+  return name?T(en+', '+name,cn+'，'+name):T(en,cn);
+}
+/* The day's one observation, ported from the desktop's tdObservationRender
+   with its three rules: true from the payload, only ever good news, and never
+   a card read aloud. Most days it says nothing, which is the point — a line
+   that speaks every day stops being read. Kept off roles that see no money:
+   it is a revenue remark even without a ¥ in it. */
+const GREET_DOW_EN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const GREET_DOW_CN=['周日','周一','周二','周三','周四','周五','周六'];
+function greetObservation(){
+  const b=state.liveBaseline;
+  if(!b||!(b.days>=2)||recapNoMoney()) return '';
+  const en=GREET_DOW_EN[b.weekday]||'', cn=GREET_DOW_CN[b.weekday]||'';
+  if(!en) return '';
+  if(b.best_in_weeks) return T('Best '+en+' in '+b.days+' weeks so far.','目前是最近 '+b.days+' 周里最好的'+cn+'。');
+  const d=b.revenue&&b.revenue.delta;
+  if(d!=null&&d>=15) return T('Ahead of a typical '+en+' at this point.','目前比往常的'+cn+'要好。');
+  return '';
+}
 
 function loadWork(){
   state.workLoading=true; state.workErr=null; render();
@@ -4616,8 +4653,12 @@ function screenHome(){
      same order, same picker, same six. */
   /* The shop's day, not the handset's — this line sits under the greeting and
      names the day every other number on the screen is counted over. */
-  const dateLine = tdWhen(new Date(),'weekday',_tdL());
-  return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine, controls:true})}
+  const obs = greetObservation();
+  const dateLine = tdWhen(new Date(),'weekday',_tdL())
+    // Its own line, not "date · remark" as on the desktop: at phone width the
+    // remark wrapped mid-sentence under the date.
+    + (obs?`<span style="display:block;margin-top:2px;color:var(--text-primary)">${obs}</span>`:'');
+  return `${pageHead({title:greetLine(), status:dateLine, controls:true})}
   <div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${recapCard()}
     ${showDashCard('needs')&&fires.length?`<div class="rise" style="animation-delay:.06s">
@@ -24400,6 +24441,7 @@ async function loadToday(){
   const today=shopToday();
   try{ const d=await api('/dashboard?from='+today+'&to='+today); const k=d.kpi||d.kpis||d||{}; const b=d.baseline||{};
     const bl=d.baseline||null;
+    state.liveBaseline=bl;   // Home's greeting observation reads it
     const rev=Number(k.revenue||0), ord=Number(k.orders!=null?k.orders:0);
     const nc=Number(k.new_customers!=null?k.new_customers:(k.newCustomers||0));
     state.liveKpis=[
