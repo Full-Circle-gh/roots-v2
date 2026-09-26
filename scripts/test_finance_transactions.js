@@ -158,7 +158,8 @@ it('the route is multi-tenant', () => {
     'routes/finance.js uses the global handle and is not a pattern to copy');
   // Every db handle inside the write paths must be the tenant one. A single
   // `db.` that resolved to the global would write a second tenant's ledger.
-  assert.strictEqual((ROUTE_CODE.match(/const db = tdb\(\)/g) || []).length, 4,
+  // Five since §269 added the return route.
+  assert.strictEqual((ROUTE_CODE.match(/const db = tdb\(\)/g) || []).length, 5,
     'each handler resolves its own tdb() handle');
 });
 

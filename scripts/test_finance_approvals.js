@@ -375,7 +375,8 @@ it('§207 — the pill and the picker read the SAME fact, so they cannot disagre
   // The "Owed to your team" pill is `paid_by === 'employee' && !settled`. A
   // correction that did not reload would leave the pill asserting a debt the
   // server has just been told does not exist.
-  assert.match(APR_CODE, /const owed = r\.paid_by === 'employee' && !Number\(r\.settled\);/);
+  // §269 adds the third term: a claim returned in full before payback owes nobody.
+  assert.match(APR_CODE, /const owed = r\.paid_by === 'employee' && !Number\(r\.settled\)\s+&& \(Number\(r\.amount\) - Number\(r\.returned \|\| 0\)\) > 0;/);
   const fn = APR_CODE.match(/finAprPaidSet = async function[\s\S]*?^\};/m);
   assert.match(fn[0], /await finAprLoad\(\);/);
 });
