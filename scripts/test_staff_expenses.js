@@ -770,7 +770,9 @@ it('the phone says marking paid changes nothing in the accounts', () => {
 });
 
 it('the owed block is absent when nothing is owed', () => {
-  assert.match(PHONE_CODE, /const owed=\(a\.owed\|\|\[\]\)\.filter\(o=>o\.total>0\);/);
+  // §269: a negative total (a refund the employee holds) is listed too; only a
+  // zero is dropped, and the server's HAVING drops it first.
+  assert.match(PHONE_CODE, /const owed=\(a\.owed\|\|\[\]\)\.filter\(o=>Number\(o\.total\)!==0\);/);
   assert.match(PHONE_CODE, /owed\.length \? `<div/, '§1.12: a zero here is a row that only says nothing happened');
 });
 
