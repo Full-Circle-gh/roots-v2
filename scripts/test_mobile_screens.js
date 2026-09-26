@@ -313,7 +313,7 @@ function main() {
   let src = fs.readFileSync(APP, 'utf8');
   // No network in a test runner: the CDN icon set and the font stylesheet would
   // each hold the page open until they time out.
-  src = src.replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
+  src = src.replace(/<script src="\/assets\/vendor\/lucide[^>]*><\/script>/, '')
            .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '');
   // The app's one LOCAL dependency, inlined — see inlineTdDatetime(). Every
   // screen below formats at least one date, so without it tdWhen is undefined

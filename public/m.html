@@ -143,7 +143,13 @@
      a deliberate step and not this change. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap"></noscript>
-<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<!-- THE ICONS ARE SERVED FROM HERE, NOT FROM unpkg. Every icon in this app is
+     drawn by ic() out of window.lucide, and when unpkg.com did not answer from
+     a phone in China the whole app lost its icons at once — tab bar, header,
+     the + button — with no error anywhere, because ic() draws an empty <svg>
+     for a name it cannot find. This is the npm package's own file, unchanged
+     (lucide@0.469.0, dist/umd/lucide.min.js; licence beside it). -->
+<script src="/assets/vendor/lucide-0.469.0.min.js"></script>
 <!-- Tacet date + time (§1.18) — THE SAME MODULE THE DESKTOP RENDERS WITH.
      The phone used to carry its own date family: its own parser, its own
      English and Chinese branches, and its own idea of what "today" is. It

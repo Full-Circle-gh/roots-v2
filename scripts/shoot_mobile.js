@@ -92,7 +92,7 @@ function main() {
   // The page's one local dependency, inlined — see inlineTdDatetime(). Without
   // it every screen in the shot renders empty, which is a slow way to find out.
   let src = inlineTdDatetime(src0
-    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, ICON_STUB)
+    .replace(/<script src="\/assets\/vendor\/lucide[^>]*><\/script>/, ICON_STUB)
     .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '')
     .replace('</head>', STILL + '</head>'));
 

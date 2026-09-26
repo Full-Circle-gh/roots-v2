@@ -93,7 +93,7 @@ function run(label, cases, opts) {
   const src = inlineTdDatetime(fs.readFileSync(APP, 'utf8')
     // No network in a test runner: the CDN icon set and the font stylesheet
     // would each hold the page open until they time out.
-    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
+    .replace(/<script src="\/assets\/vendor\/lucide[^>]*><\/script>/, '')
     .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, ''));
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm-probe-'));
