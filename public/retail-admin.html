@@ -1133,35 +1133,11 @@
     <span class="gsearch-kbd" id="gsearch-kbd">Ctrl K</span>
   </button>
 
-  <!-- Inbox + live-poll dot + sound — moved up from the rail foot into the
-       topbar, sitting beside Search. Inbox is a small dropdown to its two
-       queues (Reviews / Feedback); its unread badges keep their IDs so the
-       existing notification JS finds them unchanged. -->
-  <div class="tb-cluster">
-    <div class="acct" id="tbInbox" style="flex:none">
-      <button class="topbar-ico" id="tbInboxBtn" type="button" aria-haspopup="true" aria-expanded="false"
-              onclick="toggleInboxMenu(event)" title="Inbox · 收件箱" aria-label="Inbox · 收件箱">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-        <span id="inboxTriggerBadge" class="tab-badge" aria-label="Unseen inbox items"></span>
-      </button>
-      <div class="acct-menu" id="tbInboxMenu" role="menu" hidden style="min-width:200px">
-        <button class="acct-item" type="button" role="menuitem" data-tab="reviews" data-feat="reviews" onclick="goTab('reviews'); _markInboxSeenNow('reviews'); closeInboxMenu()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          <span>Reviews · 评价</span>
-          <span id="inbox-badge-reviews" class="tab-badge" aria-label="Unseen reviews" style="margin-left:auto"></span>
-        </button>
-        <button class="acct-item" type="button" role="menuitem" data-tab="feedback" data-feat="feedback" onclick="goTab('feedback'); _markInboxSeenNow('feedback'); closeInboxMenu()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
-          <span>Feedback · 反馈</span>
-          <span id="inbox-badge-feedback" class="tab-badge" aria-label="Unseen feedback" style="margin-left:auto"></span>
-        </button>
-      </div>
-    </div>
-    <!-- Sound toggle moved into the account dropdown (2026-07-07) — Tacet:
-         "runs in silence", so a ding control doesn't belong in the chrome; it's
-         a set-once preference beside Appearance / Text size / Language. The
-         handler (toggleOrdersSound) is unchanged; see #acctSound below. -->
-  </div>
+  <!-- The Inbox button that sat here (#tbInbox) was removed 2026-09-26, §271.
+       A review or feedback waiting for an answer shows as a Needs-you row on
+       the dashboard, by role; the two pages live in the rail's Inbox folder.
+       The sound toggle had already moved into the account dropdown
+       (#acctSound). -->
 
   <div class="acct" id="acct" style="display:none;">
     <button class="acct-btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Account · 账户" aria-label="Account · 账户">
@@ -1525,8 +1501,28 @@
        live under the Editor group above. -->
 
 
-  <!-- Inbox moved to the topbar (next to Search) — see #tbInbox. Its sections
-       (#tab-reviews / #tab-feedback) are reached from that dropdown via goTab(). -->
+  <!-- Inbox — Reviews + Feedback. Back in the rail 2026-09-26 (§271): the
+       topbar button that was their only door is gone. Each row is gated by
+       TAB_CAP (reviews:view / feedback:view) and by its feature flag, so
+       railSyncGroups flattens the folder to one row or drops it entirely. -->
+  <div class="tabs-group" data-group="inbox" style="order:10">
+    <button type="button" class="tabs-group-trigger">
+      <svg class="tabs-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18 5 12 11 6"/></svg>
+      <svg class="tabs-gicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <span class="tabs-glabel">Inbox · 收件箱</span><span class="tabs-flat-label" data-no-i18n></span>
+      <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+    </button>
+    <div class="tabs-popover">
+      <button data-tab="reviews" data-feat="reviews">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Reviews · 评价
+      </button>
+      <button data-tab="feedback" data-feat="feedback">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
+        Feedback · 反馈
+      </button>
+    </div>
+  </div>
 
   <!-- Delivery moved into Settings (#sub-delivery) 2026-09-09, §79 — every card
        on that page is a rule the shop sets once, not work done during a shift,
