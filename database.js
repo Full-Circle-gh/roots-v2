@@ -1251,6 +1251,18 @@ addColumn('staff_expenses', 'po_id',             'INTEGER');
 addColumn('expense_entries', 'claim_id', 'INTEGER');
 addColumn('expense_entries', 'store_id', 'INTEGER');
 
+// §269 — A RETURN ON MONEY OUT. Goods bought outside a purchase order that went
+// back to the seller are recorded as a NEGATIVE money-out row under the same
+// category, so every reader that sums this table nets it without being told.
+// The two ids say what it returns: a hand-typed row by its own id, a staff
+// claim by the CLAIM's id (a claim's ledger row is re-posted with a new id).
+// `return_settled` is 0 only while an employee holds a refund for a claim they
+// were already paid back for. lib/expense-returns.js is the one writer.
+addColumn('expense_entries', 'returns_entry_id', 'INTEGER');
+addColumn('expense_entries', 'returns_claim_id', 'INTEGER');
+addColumn('expense_entries', 'return_reason', 'TEXT');
+addColumn('expense_entries', 'return_settled', 'INTEGER');
+
 // WHICH LATE-PARCEL CASE PUT THIS MONEY IN THE BOOKS (§98 stage four).
 //
 // `claim_id`'s counterpart on the money-IN side, and it is a separate column

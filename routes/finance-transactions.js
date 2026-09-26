@@ -64,6 +64,7 @@
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+const money = require('../lib/money');
 // A ledger row says WHO PUT IT IN THE BOOKS (§92). `created_by` is a
 // `tenant_users` id and `tenant_users` is control-plane, so resolving it is a
 // cross-handle read — `lib/user-names.js` is the one place that does it, shared
@@ -76,6 +77,8 @@ const { listWindow, windowMeta } = require('../lib/list-window');
 const { storeCategory } = require('../lib/category-text');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
+// §269. Returns on money out — the one file that writes them.
+const expenseReturns = require('../lib/expense-returns');
 
 const router = express.Router();
 
@@ -172,6 +175,12 @@ function loadTyped(db, kind, id, refusal) {
   // the screen already shows — this path does not weaken it, and a typed row can
   // never acquire a `po_id` because nothing below ever writes one.
   if (kind === 'out' && row.po_id != null) return { error: refusal, status: 400 };
+  // §269. A RETURN ROW IS NOT EDITED — it is deleted and recorded again. Its
+  // amount is capped by what the row it returns cost, and an edit path would be
+  // a second place that cap had to be enforced. The screen offers Delete only.
+  if (kind === 'out' && expenseReturns.isReturnRow(row)) {
+    return refusal === ERR.poDelete ? { row, isReturn: true } : { error: ERR.notFound, status: 404 };
+  }
   // §87 step three: `claim_id` is `po_id`'s counterpart and carries the same
   // refusal. The caller passes the PO wording; this substitutes the claim's,
   // because a person looking at a ¥38 taxi told it belongs to a purchase order
@@ -236,8 +245,16 @@ router.put('/api/retail-admin/finance/transactions/:kind/:id', requireRetailAdmi
     const v = readBody({ ...req.body, kind }, db);
     if (v.error) return res.status(400).json({ error: v.error });
 
+    // §269. A row with a return against it may not be cut below what already
+    // went back, and its return moves to whatever category it is filed under.
+    const key = { entryId: Number(id) };
+    if (kind === 'out' && money.toMinor(v.amount) < expenseReturns.returnedMinor(db, key)) {
+      return res.status(400).json({ error: expenseReturns.ERR.tooMuch });
+    }
+
     db.prepare(`UPDATE ${TABLE[kind]} SET date = ?, amount = ?, category = ?, description = ? WHERE id = ?`)
       .run(v.date, v.amount, v.category, v.note, id);
+    if (kind === 'out') expenseReturns.refileReturns(db, key, v.category);
     logActivity(req.user?.id || null, req.user?.username || null, 'update',
       kind === 'in' ? 'income' : 'expense', Number(id),
       { amount: v.amount, category: v.category }, req.ip);
@@ -256,6 +273,24 @@ router.delete('/api/retail-admin/finance/transactions/:kind/:id', requireRetailA
     const found = loadTyped(db, kind, id, ERR.poDelete);
     if (found.error) return res.status(found.status).json({ error: found.error });
 
+    // §269. DELETING A RETURN IS ITS UNDO, and it is NOT copied to the recycle
+    // bin: a restored return could come back after the row it returned was
+    // deleted, and would then take money off the books with nothing under it.
+    if (found.isReturn) {
+      db.prepare('DELETE FROM expense_entries WHERE id = ?').run(id);
+      logActivity(req.user?.id || null, req.user?.username || null, 'delete',
+        'expense_return', Number(id),
+        { amount: found.row.amount, category: found.row.category,
+          entry_id: found.row.returns_entry_id || undefined,
+          claim_id: found.row.returns_claim_id || undefined }, req.ip);
+      return res.json({ success: true });
+    }
+    // A row with a return against it goes only after the return does — the
+    // return would otherwise be a refund of nothing.
+    if (kind === 'out' && expenseReturns.hasReturns(db, { entryId: Number(id) })) {
+      return res.status(409).json({ error: expenseReturns.ERR.hasReturns });
+    }
+
     // Copied before it goes (audit E-07). §36 decided a hand-typed row is
     // freely deletable because mistakes here are typos — which is exactly the
     // case that wants the row back rather than an offsetting entry.
@@ -268,6 +303,29 @@ router.delete('/api/retail-admin/finance/transactions/:kind/:id', requireRetailA
     res.json({ success: true });
   } catch (e) {
     console.error('[finance/transactions DELETE]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/finance/transactions/out/:id/return ─────────────
+// §269 — GOODS BOUGHT OUTSIDE A PURCHASE ORDER, SENT BACK. `:id` is the
+// money-out row being returned: a hand-typed one or one a staff claim posted.
+// A purchase-order row is refused — Purchasing's receive screen returns those,
+// and takes the units off stock too. lib/expense-returns.js holds every rule.
+//
+// Gated `finance:record` by lib/cap-routes.js's finance prefix, like every
+// other write here: a return adds a row and reverses nobody's decision.
+router.post('/api/retail-admin/finance/transactions/out/:id/return', requireRetailAdmin, (req, res) => {
+  try {
+    const db = tdb();
+    const out = expenseReturns.recordReturn(db, req.params.id, req.body, req.user?.id || null);
+    if (out.error) return res.status(out.status).json({ error: out.error });
+    logActivity(req.user?.id || null, req.user?.username || null, 'create',
+      'expense_return', out.id,
+      { amount: out.amount, of: Number(req.params.id), reason: String((req.body || {}).reason || '') }, req.ip);
+    res.json({ success: true, id: out.id, open: !!out.open });
+  } catch (e) {
+    console.error('[finance/transactions return]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -309,8 +367,38 @@ function readTransactions(query, opts = {}) {
   const manual = db.prepare(`
     SELECT id, ${LEDGER_DATE} AS date, amount, category, description, created_by
       FROM expense_entries
-     WHERE po_id IS NULL AND claim_id IS NULL AND ${LEDGER_DATE} BETWEEN ? AND ?
+     WHERE po_id IS NULL AND claim_id IS NULL
+       AND returns_entry_id IS NULL AND returns_claim_id IS NULL
+       AND ${LEDGER_DATE} BETWEEN ? AND ?
      ORDER BY date DESC, id DESC`).all(from, to);
+
+  // ── Money out · returns (§269) ──
+  // NEGATIVE ROWS, listed on their own so the screen can label them and offer
+  // Delete instead of Edit. The amount stays negative in the payload: it is
+  // money out that came back, and `totals.out` nets it exactly as the Summary
+  // does. `c.paid_by` says whether an employee holds the refund.
+  const returns = db.prepare(`
+    SELECT e.id, e.${LEDGER_DATE} AS date, e.amount, e.category, e.description,
+           e.created_by, e.returns_entry_id, e.returns_claim_id, e.return_reason,
+           e.return_settled, c.paid_by
+      FROM expense_entries e
+      LEFT JOIN staff_expenses c ON c.id = e.returns_claim_id
+     WHERE (e.returns_entry_id IS NOT NULL OR e.returns_claim_id IS NOT NULL)
+       AND e.${LEDGER_DATE} BETWEEN ? AND ?
+     ORDER BY e.date DESC, e.id DESC`).all(from, to);
+
+  // What has gone back on each source, WHOLE-LEDGER rather than windowed: a
+  // return in October against a September spend still limits what is left.
+  const returnedByEntry = new Map();
+  const returnedByClaim = new Map();
+  for (const r of db.prepare(`
+    SELECT returns_entry_id AS eid, returns_claim_id AS cid, -SUM(amount) AS returned
+      FROM expense_entries
+     WHERE returns_entry_id IS NOT NULL OR returns_claim_id IS NOT NULL
+     GROUP BY returns_entry_id, returns_claim_id`).all()) {
+    if (r.eid != null) returnedByEntry.set(r.eid, fen(r.returned));
+    if (r.cid != null) returnedByClaim.set(r.cid, fen(r.returned));
+  }
 
   // ── Money out · posted by an approved staff claim (§87 step three) ──
   // NOT COLLAPSED, unlike the PO rows below: a purchase order posts one row per
@@ -446,6 +534,7 @@ function readTransactions(query, opts = {}) {
     ...income.map(r => r.created_by),
     ...manual.map(r => r.created_by),
     ...claims.map(r => r.created_by),
+    ...returns.map(r => r.created_by),
   ]);
 
   // ── One list, both directions ──
@@ -480,6 +569,23 @@ function readTransactions(query, opts = {}) {
       note: r.description || null,
       amount: fen(r.amount),
       source: 'manual', po_id: null, po_number: null, categories: null,
+      // §269: how much of this has already gone back, so the screen offers
+      // Return only while something is left.
+      returned: returnedByEntry.get(r.id) || 0,
+      recorded_by: recordedBy.get(r.created_by) || null,
+    })),
+    ...returns.map(r => ({
+      kind: 'out', id: r.id, date: r.date,
+      subject: r.description || r.category || null,
+      category: r.category || null,
+      note: r.description || null,
+      amount: fen(r.amount),
+      source: 'return', po_id: null, po_number: null, categories: null,
+      returns_entry_id: r.returns_entry_id || null,
+      returns_claim_id: r.returns_claim_id || null,
+      reason: r.return_reason || null,
+      // Whether an employee still holds this refund (see lib/expense-returns.js).
+      held_by_staff: r.returns_claim_id != null && r.paid_by === 'employee' && Number(r.return_settled) === 0,
       recorded_by: recordedBy.get(r.created_by) || null,
     })),
     ...claims.map(r => ({
@@ -496,6 +602,8 @@ function readTransactions(query, opts = {}) {
       // §90: whether the claim has already been paid back — see the note above
       // the query.
       settled: !!r.settled,
+      // §269: how much of this claim has already gone back.
+      returned: returnedByClaim.get(r.claim_id) || 0,
       // WHO APPROVED IT, which on a claim row is who put it in the books —
       // `postClaim` writes `decided_by` into `created_by` for exactly that
       // reason. It is NOT the person in the description: that one spent the
@@ -598,6 +706,7 @@ router.get('/api/retail-admin/finance/transactions/export.csv', requireRetailAdm
         r.kind === 'in' ? r.amount : fen(-r.amount),
         r.source === 'po' ? 'Purchasing'
           : r.source === 'claim' ? (r.paid_by === 'employee' ? 'Staff claim (own money)' : 'Staff claim')
+          : r.source === 'return' ? 'Return'
           : 'Entered by hand',
         r.po_number || '',
         // Empty on a PO row, which names no single person — see the read.

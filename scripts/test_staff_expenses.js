@@ -461,7 +461,9 @@ pdb.exec(`
   CREATE TABLE expense_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT, date DATE, amount REAL, category TEXT,
     description TEXT, po_id INTEGER, payment_method TEXT, store_id INTEGER,
-    claim_id INTEGER, created_by INTEGER
+    claim_id INTEGER, created_by INTEGER,
+    -- §269: a return is a negative row pointing at its claim; postClaim moves it.
+    returns_entry_id INTEGER, returns_claim_id INTEGER
   );`);
 const claim = {
   id: 41, date: '2026-09-09', amount: 38, category: 'Transport 交通',
@@ -735,21 +737,27 @@ it('un-settling exists, because the un-approve refusal depends on it', () => {
 
 it('what is owed is counted over EVERY claim, not the queue page', () => {
   const q = ROUTE_CODE.slice(ROUTE_CODE.indexOf('let owed'));
-  assert.match(q, /WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE\(settled, 0\) = 0/);
-  assert.match(q, /GROUP BY submitted_by/, 'grouped by person, because that is how it is paid');
+  // §269: the query moved to lib/expense-returns.js so it can net returns; the
+  // predicate is the same one, with settled claims holding a refund added.
+  const OWED = require('../lib/expense-returns').OWED_SQL;
+  assert.match(OWED, /WHERE c\.status = 'approved' AND c\.paid_by = 'employee'\s+AND \(COALESCE\(c\.settled, 0\) = 0 OR/);
+  assert.ok(!/LIMIT/.test(OWED));
+  assert.match(q, /expenseReturns\.OWED_SQL/);
+  assert.match(q, /GROUP BY c\.submitted_by/, 'grouped by person, because that is how it is paid');
   assert.ok(!/LIMIT/.test(q.slice(0, q.indexOf('res.json'))),
     'a debt does not stop existing because it fell off the end of a list');
 });
 
 it('the owed totals carry the rows behind them', () => {
-  assert.match(ROUTE_CODE, /GROUP_CONCAT\(id\) AS ids/);
+  assert.match(require('../lib/expense-returns').OWED_SQL, /GROUP_CONCAT\(c\.id\) AS ids/);
   assert.match(PHONE_CODE, /aprSettle/);
   assert.match(PHONE_CODE, /for\(const id of list\) await apiWrite/,
     'sequential: four writes racing on a shop wifi is how two of them land');
 });
 
 it('a name is resolved for everyone the payload mentions, queue or not', () => {
-  assert.match(ROUTE_CODE, /SELECT DISTINCT submitted_by FROM staff_expenses WHERE status = 'approved'/,
+  // §269: the same owed query, so the names cover exactly the people it lists.
+  assert.match(ROUTE_CODE, /SELECT DISTINCT submitted_by FROM \(\$\{expenseReturns\.OWED_SQL\} GROUP BY c\.submitted_by\)/,
     'an owed person outside the 200-row queue would otherwise have a total and no name');
 });
 
@@ -762,7 +770,9 @@ it('the phone says marking paid changes nothing in the accounts', () => {
 });
 
 it('the owed block is absent when nothing is owed', () => {
-  assert.match(PHONE_CODE, /const owed=\(a\.owed\|\|\[\]\)\.filter\(o=>o\.total>0\);/);
+  // §269: a negative total (a refund the employee holds) is listed too; only a
+  // zero is dropped, and the server's HAVING drops it first.
+  assert.match(PHONE_CODE, /const owed=\(a\.owed\|\|\[\]\)\.filter\(o=>Number\(o\.total\)!==0\);/);
   assert.match(PHONE_CODE, /owed\.length \? `<div/, '§1.12: a zero here is a row that only says nothing happened');
 });
 
@@ -980,7 +990,9 @@ rdb.exec(`
   CREATE TABLE expense_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT, date DATE, amount REAL, category TEXT,
     description TEXT, po_id INTEGER, payment_method TEXT, store_id INTEGER,
-    claim_id INTEGER, created_by INTEGER
+    claim_id INTEGER, created_by INTEGER,
+    -- §269: a return is a negative row pointing at its claim; postClaim moves it.
+    returns_entry_id INTEGER, returns_claim_id INTEGER
   );`);
 const unfiled = {
   id: 77, date: '2026-09-16', amount: 299, category: null,

@@ -1243,6 +1243,9 @@ ins.run(8, '2026-08-07', 40, null, 'unlabelled', null, null);
 ins.run(9, '2026-08-08', 10, '', 'also unlabelled', null, null);
 // Outside the window entirely.
 ins.run(10, '2026-07-31', 9999, ING, 'last month', null, null);
+// §269: the drill-down reads which rows are returns. Added after the positional
+// inserts above so they keep their shape.
+cdb.exec('ALTER TABLE expense_entries ADD COLUMN returns_entry_id INTEGER; ALTER TABLE expense_entries ADD COLUMN returns_claim_id INTEGER;');
 
 const CFROM = '2026-08-01', CTO = '2026-08-31';
 const cGrouped = cdb.prepare(shippedGrouped()).all(CFROM, CTO);

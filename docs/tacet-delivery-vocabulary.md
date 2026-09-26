@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.180 · 2026-09-26 · §269 ADDENDUM THE PHONE — ONE ENGLISH LINE, NO NEW CHINESE.** The phone reuses v1.179's `应退还店里` and `标记已收回`; its own-screen line is `You owe the shop · 应退还店里`, a second English reading of the same Chinese. The recovered toast `Recovered · 已收回` is copied whole. See *A return on money out (§269)*.
+
+**v1.179 · 2026-09-26 · §269 A RETURN ON MONEY OUT — FOUR SHORT PAIRS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Transactions row's `Return · 退货` action, the owed block's `Owes the shop · 应退还店里` and `Mark recovered · 标记已收回`, and two refusals. Reasons, labels and confirms are copied whole. See *A return on money out (§269)*.
+
 **v1.178 · 2026-09-25 · §268 ONE PARCEL'S DISPATCH CAN BE UNDONE — ONE SENTENCE AND TWO SHORT LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The parcel card's `Undo dispatch · 撤销发货` button and `Undo dispatch? · 撤销发货?` title are copied whole. The confirm's body, the success line and the desktop's failure line are composed. See *One parcel back to packed (§268)* at the foot.
 
 **v1.177 · 2026-09-25 · §267 A CART NOTICE COVERS EVERY SIZE — ONE OPERATOR LINE COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The product editor's *Add-to-cart notice* card gains `Covers every size of this product. · 适用于本商品的所有规格。`. No customer-facing string. See *A cart notice covers every size (§267)*.
@@ -8848,3 +8852,29 @@ the parcel card's undo, desktop and phone.
   is the ORDER's word for being prepared; a parcel's word is `已备货`.
 - `包裹已备货` (the prepare toast): **rejected**. It reads as a new packing,
   not as an undo, and the person needs to know which one happened.
+
+## A return on money out (§269)
+
+**Composed by Claude, 2026-09-26, under the 2026-09-06 amendment.** Operator-only:
+the Transactions row, the return dialog, the owed block, and two server refusals.
+
+| shipped | built from |
+|---|---|
+| `Return · 退货` (row action, dialog title, row mark) | `退货` **copied** from the live `Returned · 退货` (16-purchasing.js, m.html); English is the verb form of the same action |
+| `Returned · 退货` + amount (on the returned row) | **copied whole** |
+| `Wrong item · 错货`, `Quality · 质量问题`, `Expired · 过期`, `Over-delivered · 多送`, `Not needed · 无需要`, `Why? · 原因？`, `Pick a reason for the return · 请选择退货原因` | **copied whole** from Purchasing's receive screen |
+| `A return needs a reason · 退货需要填写原因`, `Unknown return reason · 退货原因无效` | **copied whole** from routes/purchases.js |
+| `A return cannot be more than was spent · 退货金额不能超过支出金额` | **composed.** `退货` live; `金额` live (`Amount · 金额`); `支出` live (`Money out · 支出`); `不能超过` lifted from the live `退货数量超过该行实收数量` shape (`超过`) with `不能` from `不能直接编辑` |
+| `This has a return recorded. Delete the return first · 该笔已登记退货，请先删除退货` | **composed.** `该笔已` live (`该笔已记入采购单`); `登记…退货` live (`无法登记此次退货`); `请先删除` follows the live `请先…` shape (`请先填写英文名称`) |
+| `Owes the shop · 应退还店里` | **composed.** `应` from the live owed pair `应付团队`; `退还` is the ordinary word for handing money back; `店里` is the everyday shop word. The meaning is the reverse of `应付团队`, so it sits beside it |
+| `Mark recovered · 标记已收回`, `Recovered ¥X? · 已收回 ¥X？` | **composed** on the live `Mark paid · 标记已付` and `Paid ¥X back? · 已付款 ¥X？`, with `已收回` copied from the live `Recovered · 已收回` |
+
+| `You owe the shop · 应退还店里` (phone, the employee's own screen) | **v1.180.** The same Chinese as `Owes the shop`; `应退还店里` has no subject and reads right to the person themselves. Only the English needed a second reading |
+| `Recovered · 已收回` (phone toast) | **copied whole** |
+
+**Live candidates rejected.**
+
+- `退款` (*refund*): **rejected**. On this product it means money the SHOP gives
+  a customer; here the shop is getting money back from a seller.
+- `Mark paid · 标记已付` for the recovered case: **rejected**. It says the shop
+  paid the person, which is the opposite of what happened.

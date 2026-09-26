@@ -682,7 +682,7 @@ router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (re
     const rows = db.prepare(`
       SELECT e.id, e.${LEDGER_DATE} AS date, e.amount, e.description,
              e.po_id, po.po_number, COALESCE(po.scope, 'kitchen') AS po_scope,
-             e.claim_id, c.paid_by
+             e.claim_id, c.paid_by, e.returns_entry_id, e.returns_claim_id
         FROM expense_entries e
    LEFT JOIN purchase_orders po ON po.id = e.po_id
    LEFT JOIN staff_expenses  c  ON c.id  = e.claim_id
@@ -708,7 +708,10 @@ router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (re
         // operator meets these three kinds on that screen first. 'manual' is a
         // row somebody typed; 'claim' one an approved staff expense posted;
         // 'po' one a purchase order posted.
-        source: r.po_id ? 'po' : r.claim_id ? 'claim' : 'manual',
+        // §269: 'return' is a negative row — goods that went back — netted
+        // into this category's total like everything else here.
+        source: r.po_id ? 'po' : r.claim_id ? 'claim'
+          : (r.returns_entry_id != null || r.returns_claim_id != null) ? 'return' : 'manual',
         po_id: r.po_id || null,
         po_number: r.po_number || null,
         // Whether THIS admin's opener can serve that purchase order, not a fact
