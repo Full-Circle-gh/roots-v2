@@ -971,12 +971,9 @@ app.get('/storefront', (req, res) => {
 // only reads public /api/retail/* data). Remove once real domains are live.
 app.get('/shop-preview', serveShop);
 
-// Public marketing landing page — the B2B pitch for the Full Circle
-// platform. No auth, shareable link for prospects/investors.
-app.get('/full-circle', (req, res) => {
-  res.set('Cache-Control', 'public, max-age=300');
-  res.sendFile(path.join(__dirname, 'public', 'full-circle.html'));
-});
+/* The Full Circle landing page is GONE (§270). It pitched a retired brand with
+   a placeholder contact address (audit A1), and nothing linked to it. /full-circle
+   now falls through to the 404 below. */
 
 /* The kitchen station shell is GONE (§76). `public/kitchen.html` is deleted and
    the two jobs it held live in Tacet Mobile: the restock queue is `/m`'s

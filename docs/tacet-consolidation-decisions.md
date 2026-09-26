@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.425
+# Tacet shared-core consolidation — decisions record, v4.426
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-26 · v4.426 — **§270 · FIVE DEAD PAGES ARE DELETED, THE FULL CIRCLE LANDING PAGE WITH THEM — DECIDED BY ASH:** *"delete whatever need clean"*, on a survey of every page still loading Google Fonts. Deleted: `public/editor.html` (the /editor shell, unrouted since 2026-06-05), `public/cms-mobile-v2.html`, `public/cms-mobile-mockup.html` and its copy `public/assets/cms-mobile-mockup.html` (June design concepts, never routed), and `public/full-circle.html` with its `/full-circle` route, which now falls through to the 404. **THE FINDING THAT MAKES IT SAFE:** nothing in `public/`, `routes/`, `lib/`, `server.js` or the tests links to any of them; the only other mention is the generated hash list in `scripts/diagnose_deployed_tree.js`, left as it is. The Full Circle page was audit A1: a public pitch for the retired brand, with a placeholder contact address. **NOTHING LIVE IS LOST:** the decisions record cites `cms-mobile-v2.html` as one home of the *Undo · 撤销* pair, and the same pair stays live in `public/retail-admin/04-orders.js`. **THE DEPLOY INSTALLER ONLY ADDS FILES**, so all five stay on the box, and fetchable under `/assets/`, until removed by hand, the standing condition §76 records for `kitchen.html`; this deletion must not be read as having taken them off production. Code and this record; no schema, no migration, and no change to `.gitignore` or CI.
 
 2026-09-26 · v4.425 — **§269 ADDENDUM · THE PHONE SHOWS WHO OWES THE SHOP — ASH:** *"fix the mobile now"*, on the gap v4.424 named. The phone's approvals owed list now lists a negative total too, marked `应退还店里`, as `−¥19` with `标记已收回` and its own confirm; the tap is the same settle, which absorbs the returns. The employee's own expense screen says `应退还店里 ¥19` where it used to say nothing, and the claim's pill nets returns: `应付您` only while money is still owed after returns, `应退还店里` while a paid-back employee holds a refund. A claim row shows `退货 ¥N` when something went back. No server change. Chinese: vocabulary v1.180.
 
@@ -20582,3 +20584,10 @@ never edited. Purchase-order goods keep going back through Purchasing. On a clai
 the employee paid for and was already paid back for, the employee owes the shop
 the refund until it is marked recovered. Recording a return takes
 `finance:record`. See the v4.424 changelog entry.
+
+## §270 — FIVE DEAD PAGES ARE DELETED, THE FULL CIRCLE LANDING PAGE WITH THEM
+
+**Decided 2026-09-26 by Ash** (*delete whatever need clean*). `public/editor.html`, `public/cms-mobile-v2.html`,
+`public/cms-mobile-mockup.html`, `public/assets/cms-mobile-mockup.html` and `public/full-circle.html` are
+deleted, and `/full-circle` answers 404. None was linked from anything live. The files stay on the
+production box until removed by hand, as with §76. See the v4.426 changelog entry.
