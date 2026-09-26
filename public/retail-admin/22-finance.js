@@ -407,6 +407,10 @@ function finCatRow(r) {
         : cuT('Staff claim', '费用申请'))
     : fromCase
     ? cuT('Carrier claim', '承运商赔偿')
+    // §269. A return is a negative row here, and the figure already prints its
+    // sign; the mark says why this category's total is lower.
+    : r.source === 'return'
+    ? cuT('Return', '退货')
     : '';
   /* THE DESCRIPTION ALREADY CARRIES THE PO NUMBER — do not prepend it again.
      Both posters build the same string and both lead with it:
@@ -1150,7 +1154,29 @@ window.finShow = function finShow(which) {
    and money out is not an error. "A down delta renders in Graphite, never
    Brick." */
 function finTxAmount(r) {
+  // §269. A return is money out stored negative — money that came back — so it
+  // reads `+¥19` on the money-out side rather than `−¥-19`.
+  if (r.source === 'return') return '+' + finMoney(Math.abs(Number(r.amount) || 0));
   return (r.kind === 'out' ? '−' : '+') + finMoney(r.amount);
+}
+
+/* §269 — THE RETURN REASONS, the five Purchasing's receive screen already
+   ships (16-purchasing.js returnCell), in the same order and the same words,
+   so "what do we keep sending back" is one list across both kinds of purchase. */
+const FIN_RETURN_REASONS = [
+  ['wrong_item', 'Wrong item', '错货'],
+  ['quality', 'Quality', '质量问题'],
+  ['expired', 'Expired', '过期'],
+  ['over_delivery', 'Over-delivered', '多送'],
+  ['not_needed', 'Not needed', '无需要'],
+];
+function finReturnReason(v) {
+  const r = FIN_RETURN_REASONS.find(x => x[0] === v);
+  return r ? cuT(r[1], r[2]) : '';
+}
+/* What is still left to return on a row, in yuan. */
+function finTxReturnLeft(r) {
+  return Math.round((Number(r.amount) - Number(r.returned || 0)) * 100) / 100;
 }
 
 /* One row. A PO-derived row differs in four visible ways, and each is one of
@@ -1193,6 +1219,7 @@ function finTxRow(r) {
      mechanism that deletes this row on rejection delete it here too. */
   const claim = r.source === 'claim';
   const fromCase = r.source === 'delay_case';
+  const ret = r.source === 'return';
   // §36: the note vanishes ENTIRELY at one category. "It does not read '1
   // category'" — at one nothing was collapsed, so a note would assert a
   // breakdown that does not exist and send the operator looking for it.
@@ -1220,6 +1247,17 @@ function finTxRow(r) {
        and the line only makes the row SAY so. */
     : fromCase
     ? `<span class="fin-tx-mark">${escapeHtml(cuT('Carrier claim', '承运商赔偿'))}</span>`
+    /* §269. A return says it is one, why it went back, and — when an employee
+       was refunded on a claim they had already been paid back for — that the
+       money is with them until somebody marks it recovered. */
+    : ret
+    ? `<span class="fin-tx-mark">${escapeHtml([cuT('Return', '退货'), finReturnReason(r.reason)].filter(Boolean).join(' · '))}</span>`
+      + (r.held_by_staff ? ` · <span class="fin-tx-mark">${escapeHtml(cuT('Owes the shop', '应退还店里'))}</span>` : '')
+    : '';
+  /* §269. On the row that was returned: how much went back. The numeral sits
+     outside the pair, the house rule for a figure beside a word. */
+  const returned = (r.source === 'manual' || claim) && Number(r.returned) > 0
+    ? `<span class="fin-tx-mark">${escapeHtml(cuT('Returned', '退货'))} ${escapeHtml(finMoney(r.returned))}</span>`
     : '';
   /* WHO PUT THIS ROW IN THE BOOKS (§92). Reported by Ash off this screen: a
      ¥200 claim row and no way to see who had let it into the accounts.
@@ -1262,10 +1300,10 @@ function finTxRow(r) {
     : '';
   // The meta line is a `·`-joined list rather than a hand-built pair, so a
   // third part cannot reintroduce the separator bug a hand-built one invites.
-  const meta = [mark, hint, who, noteBadge].filter(Boolean);
+  const meta = [mark, returned, hint, who, noteBadge].filter(Boolean);
   // The date is the PO's own, never `created_at` — the route never selects
   // created_at, so there is nothing here that could drift onto a row.
-  return `<tr class="${po || claim ? 'fin-tx-posted' : ''}">`
+  return `<tr class="${po || claim || ret ? 'fin-tx-posted' : ''}">`
     + `<td class="fin-tx-date">${escapeHtml(finTxDay(r.date))}</td>`
     + `<td><span class="fin-tx-subj">${escapeHtml(finTxSubject(r))}</span>`
     + (meta.length ? `<span class="fin-tx-meta">${meta.join(' · ')}</span>` : '')
@@ -1295,15 +1333,109 @@ function finTxRow(r) {
     + '<td>' + (po
       ? (r.po_open === false ? ''
         : `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`)
+      /* §269. A RETURN IS DELETED, NEVER EDITED — its amount is capped by the
+         row it returns, and deleting and recording it again keeps that cap in
+         one place. Same pen as every typed row: `finance:record`. */
+      : ret
+      ? ((typeof can === 'function' && !can('finance:record')) ? ''
+        : `<a class="fin-tx-act" href="#" onclick="finTxDeleteReturn(${Number(r.id)});return false">${escapeHtml(cuT('Delete', '删除'))}</a>`)
       : claim
-      ? ((typeof can === 'function' && can('expenses:cancel') && !r.settled)
-        ? `<a class="fin-tx-act" href="#" onclick="finTxVoidClaim(${Number(r.claim_id)});return false">${escapeHtml(cuT('Void', '作废'))}</a>`
-        : '')
+      ? [((typeof can === 'function' && can('expenses:cancel') && !r.settled && !(Number(r.returned) > 0))
+          ? `<a class="fin-tx-act" href="#" onclick="finTxVoidClaim(${Number(r.claim_id)});return false">${escapeHtml(cuT('Void', '作废'))}</a>`
+          : ''),
+         finTxReturnLink(r)].filter(Boolean).join(' ')
       : (typeof can === 'function' && !can('finance:record')) ? ''
-      : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
+      : [`<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`,
+         finTxReturnLink(r)].filter(Boolean).join(' '))
     + '</td>'
     + '</tr>';
 }
+
+/* §269 — RETURN, on a money-out row bought outside a purchase order: a typed
+   row or a claim. Not on a PO row (Purchasing's receive screen returns those,
+   and takes the units off stock too), not on money in, not on a return, and
+   gone once everything has gone back. `finance:record`, like Edit. */
+function finTxReturnLink(r) {
+  if (!r || r.kind !== 'out' || (r.source !== 'manual' && r.source !== 'claim')) return '';
+  if (typeof can === 'function' && !can('finance:record')) return '';
+  if (!(finTxReturnLeft(r) > 0)) return '';
+  return `<a class="fin-tx-act" href="#" onclick="finTxReturn(${Number(r.id)});return false">${escapeHtml(cuT('Return', '退货'))}</a>`;
+}
+
+/* §269 — RECORD A RETURN. A second row on the date the money came back; the
+   row it returns is never touched. The amount starts at everything still left,
+   which is the common case (the whole thing went back), and the server refuses
+   more than that. The reason is required, the same five Purchasing uses. */
+window.finTxReturn = async function finTxReturn(id) {
+  if (!FIN_TX || typeof askCustom !== 'function') return;
+  const row = FIN_TX.rows.find(r => r.kind === 'out' && String(r.id) === String(id));
+  if (!row) return;
+  const left = finTxReturnLeft(row);
+  const body = '<h3 class="tdlg-title">' + escapeHtml(cuT('Return', '退货')) + ' · ' + escapeHtml(finTxSubject(row)) + '</h3>'
+    + '<div class="tdlg-field"><label for="fin-rt-date">' + escapeHtml(cuT('Date', '日期')) + '</label>'
+    + `<input type="date" id="fin-rt-date" value="${escapeHtml(tdToday())}"></div>`
+    + '<div class="tdlg-field"><label for="fin-rt-amount">' + escapeHtml(cuT('Amount', '金额')) + '</label>'
+    + `<input type="number" id="fin-rt-amount" min="0" max="${left}" step="0.01" inputmode="decimal" value="${left}"></div>`
+    + '<div class="tdlg-field"><label for="fin-rt-reason">' + escapeHtml(cuT('Why?', '原因？')) + '</label>'
+    + '<select id="fin-rt-reason"><option value="">' + escapeHtml(cuT('Why?', '原因？')) + '</option>'
+    + FIN_RETURN_REASONS.map(x => `<option value="${x[0]}">${escapeHtml(cuT(x[1], x[2]))}</option>`).join('')
+    + '</select></div>'
+    + '<div class="tdlg-field"><label for="fin-rt-note">' + escapeHtml(cuT('Note', '备注')) + '</label>'
+    + '<input type="text" id="fin-rt-note"></div>'
+    + '<p class="fin-modal-err" id="fin-rt-err" data-no-i18n hidden></p>';
+  const foot = '<button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>' + escapeHtml(cuT('Cancel', '取消')) + '</button>'
+    + '<button type="button" class="tdlg-btn tdlg-btn--primary" data-submit>' + escapeHtml(cuT('Save', '保存')) + '</button>';
+  const { scrim, closer, ready } = askCustom('tdlg-neutral', body, foot, '#fin-rt-amount');
+  scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => closer(false)));
+  const save = scrim.querySelector('[data-submit]');
+  const err = (m) => { const el = scrim.querySelector('#fin-rt-err'); if (el) { el.textContent = m || ''; el.hidden = !m; } };
+  save.addEventListener('click', async () => {
+    const val = (sel) => (scrim.querySelector(sel) || {}).value;
+    // Required HERE as well as on the server, so the one mistake everybody
+    // makes (no reason picked) is caught before a round trip. The words are
+    // Purchasing's own for the same miss.
+    if (!val('#fin-rt-reason')) { err(cuT('Pick a reason for the return', '请选择退货原因')); return; }
+    save.disabled = true;
+    try {
+      await api(`/api/retail-admin/finance/transactions/out/${Number(row.id)}/return`, {
+        method: 'POST',
+        body: { date: val('#fin-rt-date'), amount: val('#fin-rt-amount'),
+                reason: val('#fin-rt-reason'), note: val('#fin-rt-note') },
+      });
+      closer(true);
+    } catch (e) {
+      save.disabled = false;
+      err(e.message);
+    }
+  });
+  if (!(await ready)) return;
+  FIN_TX = null; FIN_DATA = null;            // the ledger and the staircase
+  FIN_APR = null; FIN_APR_SEEN = false;      // the owed block, on the other sub-view
+  await finTxLoad();
+  if (window.toast) toast(cuT('Saved', '已保存'));
+};
+
+/* §269 — UNDO A RETURN. Its own Delete, with the house confirm; the server
+   takes the row out without a recycle copy (see the route for why). */
+window.finTxDeleteReturn = async function finTxDeleteReturn(id) {
+  if (!id || typeof askConfirm !== 'function') return;
+  if (!(await askConfirm({
+    title: cuT('Delete this transaction?', '删除这条交易记录？'),
+    body: cuT('This removes the row from the ledger. This cannot be undone.',
+              '此操作将从账本中移除该记录。此操作无法撤销。'),
+    confirmLabel: cuT('Delete', '删除'),
+    danger: true,
+  }))) return;
+  try {
+    await api(`/api/retail-admin/finance/transactions/out/${Number(id)}`, { method: 'DELETE' });
+    FIN_TX = null; FIN_DATA = null;
+    FIN_APR = null; FIN_APR_SEEN = false;
+    await finTxLoad();
+    if (window.toast) toast(cuT('Deleted', '已删除'));
+  } catch (e) {
+    if (window.toast) toast(e.message, 'err');
+  }
+};
 
 /* §146 — WHERE A CLAIM ROW IS FILED, AS A PICKER ON THE ROW.
 
@@ -2672,7 +2804,18 @@ window.finAprSettle = async function finAprSettle(idx) {
   const list = String(o.ids || '').split(',').map(Number).filter(Boolean);
   if (!list.length) return;
   const person = o.who || cuT('Someone', '未知');
-  if (typeof askConfirm === 'function') {
+  // §269. BELOW ZERO THE MONEY RUNS THE OTHER WAY: this person holds a refund
+  // for something returned after they were paid back, and the tap records
+  // that they have handed it over. Same route, same claims — settling a claim
+  // absorbs its returns (lib/expense-returns.js).
+  const owes = Number(o.total) < 0;
+  if (owes && typeof askConfirm === 'function') {
+    if (!(await askConfirm({
+      title: cuT('Recovered ' + finAprMoney(Math.abs(Number(o.total))) + '?', '已收回 ' + finAprMoney(Math.abs(Number(o.total))) + '？'),
+      body: person,
+      confirmLabel: cuT('Mark recovered', '标记已收回'),
+    }))) return;
+  } else if (typeof askConfirm === 'function') {
     if (!(await askConfirm({
       title: cuT('Paid ' + total + ' back?', '已付款 ' + total + '？'),
       body: cuT('This records that ' + person + ' has been paid back. It does not change the accounts — the expense was recorded when it was approved.',
@@ -2708,7 +2851,9 @@ window.finAprSettle = async function finAprSettle(idx) {
 // division the phone makes.
 function finAprPill(r) {
   if (r.status === 'approved') {
-    const owed = r.paid_by === 'employee' && !Number(r.settled);
+    // §269: a claim returned in full before it was paid back owes nobody.
+    const owed = r.paid_by === 'employee' && !Number(r.settled)
+      && (Number(r.amount) - Number(r.returned || 0)) > 0;
     /* `Owed to your team · 应付团队` AND NOT THE PHONE'S `Owed · 应付您`, though
        both are live and the phone uses the second one on this very screen.
        应付您 is "owed to YOU", written for expStatusPill's first home — the
@@ -2874,7 +3019,10 @@ function finAprRender() {
      nothing is owed rather than rendering a zero (§1.12).
 
      THE ROW IS A PERSON, NOT A CLAIM, because that is how it gets paid. */
-  const owed = (FIN_APR.owed || []).filter(o => Number(o.total) > 0);
+  // §269: below zero is a person holding the shop's refund. Listed in the same
+  // block — it is the same question, which way money is still to move — and
+  // marked so it cannot be read as owed to them.
+  const owed = (FIN_APR.owed || []).filter(o => Number(o.total) !== 0);
   const owedBlock = owed.length
     ? '<div class="fin-apr-owed"><h3>' + escapeHtml(cuT('Owed to your team', '应付团队')) + '</h3>'
       /* ITS OWN COLGROUP, and it is not decoration. .fin-tx-table is
@@ -2888,7 +3036,8 @@ function finAprRender() {
       + '<colgroup><col class="fin-apr-c-who"><col class="fin-c-amt"><col class="fin-apr-c-act"></colgroup>'
       + '<tbody>'
       + owed.map((o, i) => {
-        const money = finAprMoney(o.total);
+        const owes = Number(o.total) < 0;
+        const money = owes ? '−' + finAprMoney(Math.abs(Number(o.total))) : finAprMoney(o.total);
         const n = Number(o.claims) || 0;
         return '<tr><td><span class="fin-apr-who">' + escapeHtml(o.who || cuT('Someone', '未知')) + '</span>'
           /* THE NUMERAL SITS OUTSIDE THE PAIR, which is the phone's shape and
@@ -2897,12 +3046,13 @@ function finAprRender() {
              can take, none of them declarable and all of them indistinguishable
              from a locked string once shipped. The Chinese half is 笔 at any
              count; only English inflects. */
-          + `<span class="fin-tx-meta">${n} ${escapeHtml(cuT(n === 1 ? 'claim' : 'claims', '笔'))}</span></td>`
+          + `<span class="fin-tx-meta">${n} ${escapeHtml(cuT(n === 1 ? 'claim' : 'claims', '笔'))}`
+          + (owes ? ` · ${escapeHtml(cuT('Owes the shop', '应退还店里'))}` : '') + '</span></td>'
           + `<td class="fin-tx-num">${escapeHtml(money)}</td>`
           + '<td class="fin-apr-act"><button type="button" class="fin-btn-sec"'
           + (FIN_APR_BUSY ? ' disabled' : '')
           + ` onclick="finAprSettle(${i})">`
-          + escapeHtml(cuT('Mark paid', '标记已付')) + '</button></td></tr>';
+          + escapeHtml(owes ? cuT('Mark recovered', '标记已收回') : cuT('Mark paid', '标记已付')) + '</button></td></tr>';
       }).join('')
       + '</tbody></table></div>'
       /* THE SENTENCE THAT KEEPS THE BUTTON HONEST, and it is the third of a set

@@ -191,6 +191,9 @@ const { readBody, PAID_BY, ERR: CLAIM_ERR } = require('../lib/expense-claim');
 // The one place a claim reaches the books, and a file for the same reason: it is
 // runnable against a fixture without an app behind it.
 const { postClaim } = require('../lib/expense-posting');
+// §269. Returns on a claim — goods sent back after the claim was approved. The
+// owed arithmetic and the two guards below read them from the one file.
+const expenseReturns = require('../lib/expense-returns');
 const { withTransaction } = require('../lib/db-transaction');
 // The one place a `tenant_users` id becomes a name — shared with Finance's
 // ledger so the two cannot name the same person differently (§92).
@@ -297,15 +300,28 @@ router.post('/api/retail-admin/staff-expenses', requireRetailAdmin, express.json
 router.get('/api/retail-admin/staff-expenses/mine', requireRetailAdmin, (req, res) => {
   try {
     const db = tdb();
-    const rows = listMine(db, req.user?.id || null).map(r => ({ ...r, amount: fen(r.amount) }));
+    // §269: what went back on each claim rides with it, so the owed figure
+    // below and the row the phone draws both net the return.
+    const ret = expenseReturns.returnsByClaim(db);
+    const rows = listMine(db, req.user?.id || null).map(r => ({
+      ...r, amount: fen(r.amount),
+      returned: (ret.get(r.id) || {}).returned || 0,
+      return_open: (ret.get(r.id) || {}).open || 0,
+    }));
     // WHAT THE BUSINESS OWES THIS PERSON, and it is not a sum of everything.
     // Only an APPROVED claim they paid for themselves and has not been settled
     // is a debt: a submitted one might be rejected, and a company-account one
     // owes nobody. Counted here rather than on the phone so the rule lives in
     // one place the day a second screen wants it.
+    //
+    // §269: NET OF RETURNS. An unsettled claim is owed less whatever went back
+    // on it; a settled one with a refund the employee still holds counts
+    // AGAINST them. Below zero means this person owes the shop.
     const owedMinor = rows
-      .filter(r => r.paid_by === 'employee' && r.status === 'approved' && !r.settled)
-      .reduce((t, r) => t + Math.round(r.amount * 100), 0);
+      .filter(r => r.paid_by === 'employee' && r.status === 'approved')
+      .reduce((t, r) => t + (r.settled
+        ? -Math.round(r.return_open * 100)
+        : Math.round(r.amount * 100) - Math.round(r.returned * 100)), 0);
     res.json({
       success: true,
       data: {
@@ -456,7 +472,7 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
       // last claim fell outside the 200-row queue would otherwise have a total
       // and no name against it.
       names = submitterNames(rows.map(r => r.submitted_by)
-        .concat(db.prepare("SELECT DISTINCT submitted_by FROM staff_expenses WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE(settled, 0) = 0").all().map(r => r.submitted_by)));
+        .concat(db.prepare(`SELECT DISTINCT submitted_by FROM (${expenseReturns.OWED_SQL} GROUP BY c.submitted_by)`).all().map(r => r.submitted_by)));
     } catch (e) { /* a name is a nicety; a claim without one still decides */ }
 
     // ── WHAT THE SHOP STILL OWES, BY PERSON (§87 step four) ──
@@ -470,14 +486,16 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
     // them settled together.
     let owed = [];
     try {
-      owed = db.prepare(`
-        SELECT submitted_by, COALESCE(SUM(amount), 0) AS total, COUNT(*) AS n,
-               GROUP_CONCAT(id) AS ids
-          FROM staff_expenses
-         WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE(settled, 0) = 0
-         GROUP BY submitted_by
+      // §269: NET OF RETURNS — the one query lives in lib/expense-returns.js.
+      // A person whose total is below zero holds a refund that belongs to the
+      // shop; the screen lists them as owing it, not as owed.
+      owed = db.prepare(`${expenseReturns.OWED_SQL}
+         GROUP BY c.submitted_by
+        HAVING ROUND(total, 2) <> 0
          ORDER BY total DESC`).all();
     } catch (e) { owed = []; }
+    let returned = new Map();
+    try { returned = expenseReturns.returnsByClaim(db); } catch (e) { /* no returns column yet */ }
 
     res.json({
       success: true,
@@ -505,6 +523,10 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
         rows: rows.map(r => ({
           ...r,
           amount: fen(r.amount),
+          // §269: what went back on this claim, and how much of that refund
+          // the employee still holds.
+          returned: (returned.get(r.id) || {}).returned || 0,
+          return_open: (returned.get(r.id) || {}).open || 0,
           who: names.get(r.submitted_by) || null,
           mine: r.submitted_by != null && r.submitted_by === (req.user?.id || null),
         })),
@@ -587,6 +609,13 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     // expense out of the books while leaving the payment made. That is the one
     // state this route refuses, and it refuses it rather than warning.
     if (claim.settled) return res.status(409).json({ error: ERR.settled });
+    // §269. A claim with a return recorded against it cannot be re-decided or
+    // voided: the return is a row of its own, and taking the claim out of the
+    // books under it would leave a refund with nothing to refund. The return
+    // is deleted first, from the Transactions screen, and then this works.
+    if (expenseReturns.hasReturns(db, { claimId: claim.id })) {
+      return res.status(409).json({ error: expenseReturns.ERR.hasReturns });
+    }
     // §114 part four. The order owns the cost, so there is no ledger row here to
     // take back — and cancelling the order on a rejection would reach into a
     // document that may already have been received.
@@ -784,6 +813,13 @@ router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, req
     // it would take the expense out of the books while leaving the payment
     // made.
     if (claim.settled) return res.status(409).json({ error: ERR.settled });
+    // §269. A claim with a return recorded against it cannot be re-decided or
+    // voided: the return is a row of its own, and taking the claim out of the
+    // books under it would leave a refund with nothing to refund. The return
+    // is deleted first, from the Transactions screen, and then this works.
+    if (expenseReturns.hasReturns(db, { claimId: claim.id })) {
+      return res.status(409).json({ error: expenseReturns.ERR.hasReturns });
+    }
 
     const note = (req.body && req.body.note != null && req.body.note !== '')
       ? String(req.body.note).slice(0, 500) : null;
@@ -1043,6 +1079,11 @@ router.post('/api/retail-admin/staff-expenses/:id/settle', requireRetailAdmin, r
     const settled = req.body && req.body.settled === false ? 0 : 1;
     db.prepare("UPDATE staff_expenses SET settled = ?, settled_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END WHERE id = ?")
       .run(settled, settled, claim.id);
+    // §269. EITHER WAY, every return on this claim is absorbed. Settling pays
+    // the NET (or, for a claim already paid, records that the employee handed
+    // the refund over); un-settling puts the claim back to "owed less what went
+    // back". lib/expense-returns.js states the rule this keeps true.
+    expenseReturns.settleClaimReturns(db, claim.id);
 
     logActivity(req.user?.id || null, req.user?.username || null,
       settled ? 'settle' : 'unsettle', 'staff_expense', claim.id,
