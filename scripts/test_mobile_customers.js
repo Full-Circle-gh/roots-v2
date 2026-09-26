@@ -209,6 +209,26 @@ const CASES = [
     ['twelve months of activity', `sheetText().includes('Last 12 months') && sheetText().includes('Busiest')`],
     ['the referral state, not just the code', `sheetText().includes('AB12CD') && sheetText().includes('Ongoing share')`],
   ]],
+  // The twelve columns were drawn with "no hover" on purpose, and on a phone
+  // that read as broken: a black bar a finger could not ask anything of. A tap
+  // puts that month on the caption line; the same tap again gives it back.
+  ['a tapped month says its count', ALL + REC + `custActSel=null; render(); APP.cmd('custMonth','2026-09');`, [
+    ['the caption names the month and its orders',
+      `document.querySelector('[data-cap-line]').textContent.trim()==='2026-09 · 2 orders'`],
+    ['the other columns step back',
+      `document.querySelector('[data-mk="2026-08"]').style.opacity==='0.3'
+       && document.querySelector('[data-mk="2026-09"]').style.opacity==='1'`],
+    ['a re-render keeps the pick', `(function(){ render();
+       return document.querySelector('[data-cap-line]').textContent.trim()==='2026-09 · 2 orders'; })()`],
+    ['a month with nothing says nothing, not blank', `(function(){
+       var k=document.querySelector('[data-mk]').getAttribute('data-mk'); APP.cmd('custMonth',k);
+       return document.querySelector('[data-cap-line]').textContent.trim()===k+' · 0 orders'; })()`],
+    ['tapping it again gives the busiest line back', `(function(){
+       var k=document.querySelector('[data-mk]').getAttribute('data-mk'); APP.cmd('custMonth',k);
+       return document.querySelector('[data-cap-line]').textContent.trim()==='Busiest: 2026-08 · 5 orders'; })()`],
+    ['each column is a button a finger can find',
+      `document.querySelectorAll('#custAct button[data-mk]').length===12`],
+  ]],
 
   // ── The writes ──────────────────────────────────────────────────────────
   ['tags save lower-cased and deduped', STUB + ALL + REC + `render();

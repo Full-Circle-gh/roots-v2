@@ -20372,8 +20372,40 @@ function custAddresses(d){
    behind them were enough, and for a while they were — there are no figures
    here at all, only a shape. `orders_by_month` has been arriving on every
    record read the whole time. Drawn as bare columns rather than a chart: no
-   axis, no gridlines, no hover — the tallest month is named underneath, which
-   is the one thing a hover would have said. */
+   axis, no gridlines — the tallest month is named underneath.
+
+   A TAP READS ONE MONTH. "No hover" left a black column a finger could not
+   ask anything of, and it was reported as broken: the phone's hover is a tap.
+   Each column is a button; tapping it puts that month's count on the caption
+   line the busiest month already owns, and dims the other eleven so it is
+   plain which column is speaking. Tapping it again gives the line back. No
+   new line and no tooltip floating over the bars — the caption is where the
+   eye already goes for the number. The pick is kept per customer so a
+   re-render (every sheet is rebuilt from scratch) does not drop it, and it is
+   updated in place on tap rather than by render(), which would replay the
+   sheet's rise under the reader's thumb. */
+let custActSel=null; // {cid, key}
+function custActPaint(box){
+  if(!box) return;
+  const cid=box.getAttribute('data-cid');
+  const sel=custActSel&&custActSel.cid===cid?custActSel.key:null;
+  let cap=box.getAttribute('data-busiest');
+  box.querySelectorAll('[data-mk]').forEach(b=>{
+    const on=b.getAttribute('data-mk')===sel;
+    if(on) cap=b.getAttribute('data-cap');
+    b.style.opacity=sel&&!on?'.3':'1';
+    b.setAttribute('aria-pressed', on?'true':'false');
+  });
+  const c=box.querySelector('[data-cap-line]');
+  if(c) c.textContent=cap;
+}
+reg('custMonth', key=>{
+  const box=document.getElementById('custAct');
+  if(!box) return;
+  const cid=box.getAttribute('data-cid');
+  custActSel=custActSel&&custActSel.cid===cid&&custActSel.key===key ? null : {cid, key};
+  custActPaint(box);
+});
 function custActivity(d){
   const rows=(d&&d.orders_by_month)||[];
   if(!rows.length) return '';
@@ -20391,19 +20423,29 @@ function custActivity(d){
   const max=Math.max.apply(null, cells.map(c=>c.n));
   if(!max) return '';
   const top=cells.reduce((a,b)=>b.n>a.n?b:a, cells[0]);
+  const cid=String(state.custId||'');
+  const sel=custActSel&&custActSel.cid===cid?custActSel.key:null;
+  /* One month's line reuses the busiest line's own shape without its label —
+     the month and the count name themselves, so no new string is minted. */
+  const capOf=c=>T(c.key+' · '+c.n+(c.n===1?' order':' orders'), c.key+' · '+c.n+' 单');
+  const busiest=T('Busiest: '+top.key+' · '+top.n+(top.n===1?' order':' orders'), '最多：'+top.key+' · '+top.n+' 单');
+  const selCell=sel?cells.find(c=>c.key===sel):null;
   return custSection(T('Last 12 months','近 12 个月'),
-    `<div style="display:flex;align-items:flex-end;gap:4px;height:56px">${cells.map(c=>
-      `<span style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
-         <span style="display:block;border-radius:3px 3px 0 0;background:${c.n?'var(--text-primary)':'var(--surface-raised)'};height:${c.n?Math.max(3,Math.round(c.n/max*100)):3}%"></span>
-       </span>`).join('')}</div>
+    `<div id="custAct" data-cid="${escAttr(cid)}" data-busiest="${escAttr(busiest)}">
+    <div style="display:flex;align-items:flex-end;gap:4px;height:56px">${cells.map(c=>
+      `<button type="button" data-mk="${c.key}" data-cap="${escAttr(capOf(c))}" aria-pressed="${c.key===sel?'true':'false'}"
+         aria-label="${escAttr(capOf(c))}" onclick="APP.cmd('custMonth','${c.key}')"
+         style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;min-width:0;padding:0;margin:0;border:none;background:none;cursor:pointer;opacity:${sel&&c.key!==sel?'.3':'1'};transition:opacity .15s">
+         <span style="display:block;width:100%;border-radius:3px 3px 0 0;background:${c.n?'var(--text-primary)':'var(--surface-raised)'};height:${c.n?Math.max(3,Math.round(c.n/max*100)):3}%"></span>
+       </button>`).join('')}</div>
      ${/* The two ends only. Twelve labels across 358px is a grey smear, and the
           question a reader brings to a twelve-column shape is which end is now
           — which two numbers answer. */''}
      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--text-secondary)">
        <span class="num">${T(cells[0].m+'/'+String(cells[0].y).slice(2), cells[0].y+' 年 '+cells[0].m+' 月')}</span>
        <span class="num">${T(cells[11].m+'/'+String(cells[11].y).slice(2), cells[11].y+' 年 '+cells[11].m+' 月')}</span></div>
-     <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px">${
-       T('Busiest: '+top.key+' · '+top.n+(top.n===1?' order':' orders'), '最多：'+top.key+' · '+top.n+' 单')}</div>`);
+     <div data-cap-line class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:4px">${
+       escAttr(selCell?capOf(selCell):busiest)}</div></div>`);
 }
 /* THE FOOT OF THE RECORD — the desktop's More ▾ menu, opened out. These are the
    rare and the deliberate: they take something away from a person, or they change
