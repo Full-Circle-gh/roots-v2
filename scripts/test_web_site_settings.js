@@ -155,7 +155,7 @@ yes(/parent\.postMessage\(\{type:'cms:stage-ready'\},location\.origin\)/.test(SH
 yes(/data-block-id="' \+ attr\(b\.id \|\| ''\) \+ '"/.test(BLOCKS), 'every block carries its id in the DOM for the stage to find');
 yes(/var hintPc = ownHint \|\| \(CN\(\) \? '微信扫码添加' : 'Scan with WeChat to add us'\);/.test(BLOCKS),
   'a WeCom hint the merchant wrote shows on both widths; only the default long-press line is swapped on a PC');
-yes(/\.cms-stage \.sb-blk-outer\.cms-selected\{outline:2px solid #6E67AF/.test(SHOP), 'the selected block wears the editor\'s ring');
+yes(/\.cms-stage \.sb-blk-outer\.cms-selected,\.cms-stage \.spb\.cms-selected\{outline:2px solid #6E67AF/.test(SHOP), 'the selected block wears the editor\'s ring');
 
 // ─────────────────────────────────────────────────────────────────────────
 section('5 · the back-office card');

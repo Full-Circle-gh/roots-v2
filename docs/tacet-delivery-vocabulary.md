@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.186 · 2026-09-26 · §273 ADDENDUM THE PRODUCT EDITOR'S STAGE — NOTHING COMPOSED.** The product page editor's new Desktop ⇄ Phone switch reuses v1.183's `Desktop · 电脑`, `Phone · 手机` and their two tooltips, as `EN · 中文` text nodes the global pass splits. Its frame's address line is `draft · 草稿`, live in the Mini App Editor's own drawer.
+
 **v1.185 · 2026-09-26 · §273 THE CARD CHECKS ITS ROWS BEFORE SAVING — FOUR OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** A code review found that a menu or footer row the server drops (no text, or a web address without https://) vanished silently after `Saved`. The card now names the row before anything is sent, and reports its two writes apart. See *The website's own words (§273)*, second table.
 
 **v1.184 · 2026-09-26 · §273 THE WEBSITE'S OWN WORDS — THE BACK-OFFICE CARD, TWELVE OPERATOR PAIRS, EIGHT COPIED, FOUR COMPOSED BY CLAUDE.** The *Title, menu and footer · 标题、菜单与页脚* card on the Web store configuration page. Every noun is live in this product (标题, 菜单, 页脚, 链接, 网址, 描述, 首页, 商品, 移除, 添加); what is composed is the joining. See *The website's own words (§273)*.
