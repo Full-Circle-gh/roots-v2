@@ -16667,7 +16667,13 @@ function sheetOrderDetail(){
    on it must not be skimmed past, and both were set in the same muted grey as
    everything else: a quantity greater than one, and the variant the customer
    actually chose. The desktop marks the first with .qty-multi — Ink, weight 500,
-   against the Graphite of a plain ×1 — and this is that rule. */
+   against the Graphite of a plain ×1 — and this is that rule.
+   The variant line is printed IN FULL. It was one nowrap line ending in an
+   ellipsis, so "heat up?: Yes · Add extras?: Brow…" hid the extras — the part
+   a packer has to act on. Each choice now sits on its own line (itemOpts joins
+   them with a newline, pre-line honours it) and a long one wraps. The name
+   still clips: the photo and SKU chip identify the product; this line says
+   which one to box. */
 function itemRow(it){
   const sku=it[3], img=it[4], opts=it[5];
   // ITEM_TUPLE hands us a [en, zh] pair; a hand-seeded tuple (the probe
@@ -16679,7 +16685,7 @@ function itemRow(it){
     <span style="width:44px;height:44px;border-radius:10px;flex:none;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('package',22)}</span>
     <span style="flex:1;min-width:0">
       <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>
-      ${opts?`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-primary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(...opts))}</span>`:''}
+      ${opts?`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-primary);margin-top:3px;line-height:1.4;white-space:pre-line;overflow-wrap:anywhere">${escAttr(T(...opts))}</span>`:''}
       ${(() => {
         if(!sku) return '';
         /* The SKU chip opens the product. The desktop links the line's NAME out
@@ -23543,7 +23549,8 @@ function itemOpts(it){
     if(!val) return '';
     const q=cn?(o.question_cn||o.question_en||''):(o.question_en||o.question_cn||'');
     return q?(q+': '+val):val;
-  }).filter(Boolean).join(' · ');
+  // One choice per line — itemRow renders this with pre-line so none is clipped.
+  }).filter(Boolean).join('\n');
   const en=side(false), zh=side(true);
   return en||zh?[en||zh, zh||en]:null;
 }
