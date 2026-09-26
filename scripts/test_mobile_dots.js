@@ -125,8 +125,10 @@ const CASES = [
   ['the inbox dot is the server\'s count, not a Set',
    `state.inboxUnseen=3; APP.cmd('tab','home'); render();`, [
     ['the More dot is on', dotOn('More')],
-    ['and so is the inbox mark in the header',
-     `!!document.querySelector('#app button[aria-label="Inbox"], #app [aria-label="Inbox"]')`],
+    // §271: the header carries no Inbox button any more. More → Inbox is the
+    // way in, and the dot on More is the one mark in the chrome.
+    ['and the header carries no inbox button',
+     `!document.querySelector('#app button[aria-label="Inbox"], #app [aria-label="Inbox"]')`],
   ]],
   ['opening the inbox stamps a last-seen that OUTLIVES the page',
    `state.inboxUnseen=3; APP.cmd('tab','home'); APP.cmd('push','inbox');`, [

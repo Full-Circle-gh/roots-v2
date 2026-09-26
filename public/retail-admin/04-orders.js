@@ -2010,95 +2010,11 @@ async function _pollUnseenInvoices() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollUnseenInvoices(); });
 })();
 
-// ── Unseen-inbox badges (Reviews + Feedback) ───────────────────────────
-// Each Inbox sub-tab gets its own red dot + chime; the Inbox group trigger
-// shows the combined count so it stays visible while the dropdown is collapsed.
-// Reuses the new-order chime + sound toggle. Feature-gated tabs are skipped.
-const _INBOX_CATS = [
-  { tab: 'reviews',  key: 'tacet-reviews-last-seen-at',  endpoint: '/api/retail-admin/reviews/unseen-count',  feat: 'feat-reviews',  prev: null, _count: 0 },
-  { tab: 'feedback', key: 'tacet-feedback-last-seen-at', endpoint: '/api/retail-admin/feedback/unseen-count', feat: 'feat-feedback', prev: null, _count: 0 },
-];
-
-function _inboxLastSeen(cat) {
-  try { return localStorage.getItem(cat.key) || ''; } catch { return ''; }
-}
-function _markInboxSeenNow(tab) {
-  const cat = _INBOX_CATS.find(c => c.tab === tab);
-  if (!cat) return;
-  try { localStorage.setItem(cat.key, new Date().toISOString()); } catch {}
-  cat._count = 0; cat.prev = 0;
-  _paintInboxBadges();
-}
-function _paintInboxBadges() {
-  let total = 0;
-  for (const cat of _INBOX_CATS) {
-    const count = cat._count || 0;
-    total += count;
-    const btn   = document.querySelector('[data-tab="' + cat.tab + '"]');
-    const badge = document.getElementById('inbox-badge-' + cat.tab);
-    if (btn && badge) {
-      if (count > 0) {
-        btn.classList.add('has-unseen');
-        badge.textContent = count > 1 ? (count > 99 ? '99+' : String(count)) : '';
-      } else {
-        btn.classList.remove('has-unseen');
-        badge.textContent = '';
-      }
-    }
-  }
-  // Roll the combined count up to the topbar Inbox button so it shows on the
-  // icon while the dropdown is closed. (Inbox moved from the rail to the topbar.)
-  const trigger = document.getElementById('tbInboxBtn');
-  const tBadge  = document.getElementById('inboxTriggerBadge');
-  if (trigger && tBadge) {
-    if (total > 0) {
-      trigger.classList.add('has-unseen');
-      tBadge.textContent = total > 1 ? (total > 99 ? '99+' : String(total)) : '';
-    } else {
-      trigger.classList.remove('has-unseen');
-      tBadge.textContent = '';
-    }
-  }
-}
-
-async function _pollUnseenInbox() {
-  if (document.hidden) return;
-  for (const cat of _INBOX_CATS) {
-    // Disabled feature → tab is hidden anyway; keep its count at zero.
-    if (cat.feat && !document.body.classList.contains(cat.feat)) { cat._count = 0; continue; }
-    // On the sub-tab → everything is seen.
-    if (document.getElementById('tab-' + cat.tab)?.classList.contains('active')) {
-      try { localStorage.setItem(cat.key, new Date().toISOString()); } catch {}
-      cat._count = 0; cat.prev = 0; continue;
-    }
-    try {
-      const j = await api(cat.endpoint + '?since=' + encodeURIComponent(_inboxLastSeen(cat)));
-      if (!j?.success) continue;
-      const count = j.data?.count || 0;
-      // Chime only on a genuine increase, not the first poll after load.
-      if (cat.prev !== null && count > cat.prev) _playOrderChime();
-      cat.prev = count;
-      cat._count = count;
-    } catch {
-      // Network / unauthorized — leave this category's badge alone.
-    }
-  }
-  _paintInboxBadges();
-}
-
-(function _startUnseenInboxPoller() {
-  if (window._unseenInboxPollerWired) return;
-  window._unseenInboxPollerWired = true;
-  setTimeout(_pollUnseenInbox, 600);
-  setInterval(_pollUnseenInbox, ORDERS_UNSEEN_POLL_MS);
-  window.addEventListener('focus', _pollUnseenInbox);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollUnseenInbox(); });
-  // Clear a sub-tab's badge as soon as it's opened.
-  _INBOX_CATS.forEach(cat => {
-    const btn = document.querySelector('.tabs [data-tab="' + cat.tab + '"]');
-    if (btn) btn.addEventListener('click', () => _markInboxSeenNow(cat.tab));
-  });
-})();
+// ── Unseen-inbox badges — removed 2026-09-26, §271 ─────────────────────
+// The topbar Inbox button they painted is gone. A review or feedback waiting
+// for an answer now announces itself as a Needs-you row on the dashboard
+// (03-dashboard.js, reviewsFire / feedbackFire), gated by role, so there is no
+// dot to feed and no chime to play for it here.
 
 // "Ship by" — when the customer needs this order shipped/delivered. Pulled
 // from `delivery_slot_label` (the human-readable picker label captured at
