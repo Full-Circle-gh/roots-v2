@@ -1028,6 +1028,123 @@
   const SIGNIN_ORDER = ['phone', 'email', 'google', 'apple', 'wechat'];
   let _webCfg = null;
 
+  // ── The website's own words (§273): title, menu, footer ───────────────────
+  // Held in _webSite while the page is open; the inputs write into it on
+  // every change (wcSiteRead) so adding or removing a row never loses what
+  // was typed. Saved with the page's one Save button (igWebSaveSignin).
+  let _webSite = null;
+  const WC_SITE_EMPTY = () => ({ title_en: '', title_cn: '', description_en: '', description_cn: '', nav: [], footer_en: '', footer_cn: '', links: [] });
+  function wcSiteInput(id, val, ph, extra) {
+    return `<input type="text" class="wc-si" id="${id}" value="${esc(val || '')}" placeholder="${esc(ph || '')}" ${extra || ''} oninput="wcSiteRead()">`;
+  }
+  function wcSiteRows(kind) {
+    const rows = (_webSite && Array.isArray(_webSite[kind])) ? _webSite[kind] : [];
+    if (!rows.length) return '';
+    return rows.map((r, i) => {
+      const isUrl = kind === 'links' || !(r.target === 'home' || r.target === 'shop');
+      const tgt = kind === 'nav'
+        ? `<select class="wc-ss" data-kind="nav" data-i="${i}" data-f="target" onchange="wcSiteRead(); wcSiteRender()">
+             <option value="home"${r.target === 'home' ? ' selected' : ''}>${cuT('Home', '首页')}</option>
+             <option value="shop"${r.target === 'shop' ? ' selected' : ''}>${cuT('Shop', '商品')}</option>
+             <option value="url"${isUrl ? ' selected' : ''}>${cuT('Web address', '网址')}</option>
+           </select>${isUrl ? wcSiteInput(`wcs_${kind}_${i}_url`, r.target, 'https://…', `data-kind="${kind}" data-i="${i}" data-f="url"`) : ''}`
+        : wcSiteInput(`wcs_${kind}_${i}_url`, r.url, 'https://…', `data-kind="${kind}" data-i="${i}" data-f="url"`);
+      return `<div class="wc-srow">
+        ${wcSiteInput(`wcs_${kind}_${i}_en`, r.label_en, 'English', `data-kind="${kind}" data-i="${i}" data-f="label_en"`)}
+        ${wcSiteInput(`wcs_${kind}_${i}_cn`, r.label_cn, '中文', `data-kind="${kind}" data-i="${i}" data-f="label_cn"`)}
+        ${tgt}
+        <button type="button" class="btn btn-sm" onclick="wcSiteRemove('${kind}', ${i})" aria-label="${cuT('Remove', '移除')}">✕</button>
+      </div>`;
+    }).join('');
+  }
+  function wcSiteHtml() {
+    const st = _webSite || WC_SITE_EMPTY();
+    return `<div class="wc-note" style="margin-top:0">${cuT('Website only — the mini app has its own tabs and footer.', '仅网页版 — 小程序有自己的标签栏和页脚。')}</div>
+      <div class="wc-sf"><label>${cuT('Site title', '网站标题')}</label>
+        <div class="wc-spair">${wcSiteInput('wcs_title_en', st.title_en, 'English')}${wcSiteInput('wcs_title_cn', st.title_cn, '中文')}</div>
+        <div class="wc-note">${cuT('Browser tab and search results. Blank = your brand name.', '浏览器标签页与搜索结果。留空 = 品牌名。')}</div></div>
+      <div class="wc-sf"><label>${cuT('Description', '描述')}</label>
+        <div class="wc-spair">${wcSiteInput('wcs_desc_en', st.description_en, 'English')}${wcSiteInput('wcs_desc_cn', st.description_cn, '中文')}</div>
+        <div class="wc-note">${cuT('One or two sentences for search results.', '一两句话,用于搜索结果。')}</div></div>
+      <div class="wc-sf"><label>${cuT('Menu', '菜单')}</label>
+        <div id="wcs_nav">${wcSiteRows('nav')}</div>
+        <button type="button" class="btn btn-sm" onclick="wcSiteAdd('nav')"${st.nav.length >= 6 ? ' disabled' : ''}>+ ${cuT('Add link', '添加链接')}</button>
+        <div class="wc-note">${cuT('The links across the top of the website. Blank = Home and Shop.', '网站顶部的链接。留空 = 首页和商品。')}</div></div>
+      <div class="wc-sf"><label>${cuT('Footer line', '页脚文字')}</label>
+        <div class="wc-spair">${wcSiteInput('wcs_foot_en', st.footer_en, 'English')}${wcSiteInput('wcs_foot_cn', st.footer_cn, '中文')}</div>
+        <div class="wc-note">${cuT('e.g. address, opening hours or ICP filing number.', '例如地址、营业时间或 ICP 备案号。')}</div></div>
+      <div class="wc-sf"><label>${cuT('Footer links', '页脚链接')}</label>
+        <div id="wcs_links">${wcSiteRows('links')}</div>
+        <button type="button" class="btn btn-sm" onclick="wcSiteAdd('links')"${st.links.length >= 6 ? ' disabled' : ''}>+ ${cuT('Add link', '添加链接')}</button></div>`;
+  }
+  // Inputs → _webSite. Runs on every keystroke, so a re-render never loses text.
+  window.wcSiteRead = function () {
+    if (!_webSite) _webSite = WC_SITE_EMPTY();
+    const v = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+    _webSite.title_en = v('wcs_title_en'); _webSite.title_cn = v('wcs_title_cn');
+    _webSite.description_en = v('wcs_desc_en'); _webSite.description_cn = v('wcs_desc_cn');
+    _webSite.footer_en = v('wcs_foot_en'); _webSite.footer_cn = v('wcs_foot_cn');
+    for (const kind of ['nav', 'links']) {
+      _webSite[kind] = (_webSite[kind] || []).map((r, i) => {
+        const out = { ...r };
+        out.label_en = v(`wcs_${kind}_${i}_en`); out.label_cn = v(`wcs_${kind}_${i}_cn`);
+        if (kind === 'nav') {
+          const sel = document.querySelector(`.wc-ss[data-kind="nav"][data-i="${i}"]`);
+          const choice = sel ? sel.value : (r.target === 'home' || r.target === 'shop' ? r.target : 'url');
+          out.target = choice === 'url' ? (document.getElementById(`wcs_nav_${i}_url`) ? v(`wcs_nav_${i}_url`) : (r.target === 'home' || r.target === 'shop' ? '' : r.target)) : choice;
+        } else {
+          out.url = v(`wcs_links_${i}_url`);
+        }
+        return out;
+      });
+    }
+  };
+  // Before a save: a bare domain gets its https://, and anything the server
+  // would drop is named to the operator instead of vanishing after "Saved".
+  function wcSiteProblems() {
+    if (!_webSite) return [];
+    const fixUrl = (u) => {
+      u = String(u || '').trim();
+      if (u && !/^https?:\/\//i.test(u) && /^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(u)) u = 'https://' + u;
+      return u;
+    };
+    const problems = [];
+    _webSite.nav.forEach((r, i) => {
+      if (r.target !== 'home' && r.target !== 'shop') r.target = fixUrl(r.target);
+      const n = i + 1;
+      if (!(r.label_en || r.label_cn)) problems.push(cuT(`Menu link ${n} has no text`, `菜单链接 ${n} 没有文字`));
+      if (r.target !== 'home' && r.target !== 'shop' && !/^https?:\/\/[^\s"'<>]+$/i.test(r.target)) problems.push(cuT(`Menu link ${n} needs a web address starting with https://`, `菜单链接 ${n} 需要以 https:// 开头的网址`));
+    });
+    _webSite.links.forEach((r, i) => {
+      r.url = fixUrl(r.url);
+      const n = i + 1;
+      if (!(r.label_en || r.label_cn)) problems.push(cuT(`Footer link ${n} has no text`, `页脚链接 ${n} 没有文字`));
+      if (!/^https?:\/\/[^\s"'<>]+$/i.test(r.url)) problems.push(cuT(`Footer link ${n} needs a web address starting with https://`, `页脚链接 ${n} 需要以 https:// 开头的网址`));
+    });
+    return problems;
+  }
+  window.wcSiteRender = function () {
+    const host = document.getElementById('wc_site');
+    if (host) host.innerHTML = wcSiteHtml();
+  };
+  window.wcSiteAdd = function (kind) {
+    wcSiteRead();
+    if (!_webSite) _webSite = WC_SITE_EMPTY();
+    if ((_webSite[kind] || []).length >= 6) return;
+    _webSite[kind] = _webSite[kind] || [];
+    _webSite[kind].push(kind === 'nav' ? { label_en: '', label_cn: '', target: 'home' } : { label_en: '', label_cn: '', url: '' });
+    wcSiteRender();
+    const last = _webSite[kind].length - 1;
+    const el = document.getElementById(`wcs_${kind}_${last}_en`);
+    if (el) el.focus();
+  };
+  window.wcSiteRemove = function (kind, i) {
+    wcSiteRead();
+    if (!_webSite || !Array.isArray(_webSite[kind])) return;
+    _webSite[kind].splice(i, 1);
+    wcSiteRender();
+  };
+
   window.igWebConfig = async function () {
     const box = igHostEl(); if (!box) return;
     box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Web store config…', '加载网页商店配置…'));
@@ -1035,6 +1152,7 @@
     try { cfg = await api('/api/retail-admin/channel-hub/web/config'); }
     catch (e) { box.innerHTML = igMuted(cuT('Failed to load', '加载失败')); return; }
     _webCfg = cfg;
+    _webSite = Object.assign(WC_SITE_EMPTY(), cfg.site || {});
 
     const domains = cfg.domains || [];
     const activeD = domains.filter(d => d.status === 'active');
@@ -1162,6 +1280,11 @@
       </div>
 
       <div class="mc-sec">
+        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.link}</span><b>${cuT('Title, menu and footer', '标题、菜单与页脚')}</b></div>
+        <div id="wc_site">${wcSiteHtml()}</div>
+      </div>
+
+      <div class="mc-sec">
         <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b></div>
         ${payHtml}
       </div>
@@ -1186,14 +1309,30 @@
     const body = {};
     document.querySelectorAll('.wc-tog[data-method]').forEach(t => { body[t.getAttribute('data-method')] = t.classList.contains('on'); });
     const btn = document.getElementById('wc_save'), out = document.getElementById('wc_result');
+    // The website's own words save with the same button (§273). Check them
+    // first: a row the server would drop is named here, not lost after "Saved".
+    wcSiteRead();
+    const problems = wcSiteProblems();
+    if (problems.length) {
+      wcSiteRender();   // shows any https:// that was added
+      if (out) { out.style.color = 'var(--danger)'; out.textContent = problems[0] + (problems.length > 1 ? ` (+${problems.length - 1})` : ''); }
+      return;
+    }
     if (btn) btn.disabled = true;
     if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Saving…', '保存中…'); }
+    // Two writes, each reported on its own, so a failure names the part.
+    const failed = [];
+    try { await api('/api/retail-admin/channel-hub/web/signin', { method: 'POST', body }); }
+    catch (e) { failed.push(cuT('sign-in', '登录')); }
     try {
-      await api('/api/retail-admin/channel-hub/web/signin', { method: 'POST', body });
-      if (out) { out.style.color = 'var(--accent)'; out.textContent = '✓ ' + cuT('Saved', '已保存'); }
-    } catch (e) {
-      if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Save failed', '保存失败'); }
-    } finally { if (btn) btn.disabled = false; }
+      const r = await api('/api/retail-admin/channel-hub/web/site', { method: 'POST', body: _webSite || WC_SITE_EMPTY() });
+      if (r && r.site) { _webSite = Object.assign(WC_SITE_EMPTY(), r.site); wcSiteRender(); }
+    } catch (e) { failed.push(cuT('title, menu and footer', '标题、菜单与页脚')); }
+    if (out) {
+      if (failed.length) { out.style.color = 'var(--danger)'; out.textContent = cuT('Save failed: ', '保存失败:') + failed.join(', '); }
+      else { out.style.color = 'var(--accent)'; out.textContent = '✓ ' + cuT('Saved', '已保存'); }
+    }
+    if (btn) btn.disabled = false;
   };
 
   window.igWebAddDomain = async function () {

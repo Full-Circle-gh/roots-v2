@@ -1302,6 +1302,54 @@
     color: var(--text-1); border-color: var(--line-strong);
   }
   .canvas-meta select:focus { box-shadow: none; }
+  /* Desktop ⇄ Phone stage switch — same pill family as the language toggle. */
+  .stage-seg {
+    display: inline-flex; margin-right: auto;
+    background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 999px; padding: 2px;
+  }
+  .stage-seg button {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: 0; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+    font: 500 11px var(--f-sans); letter-spacing: .04em; color: var(--text-3);
+    transition: color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .stage-seg button svg { width: 13px; height: 13px; }
+  .stage-seg button:hover { color: var(--text-1); }
+  .stage-seg button.active { background: var(--tacet-ink); color: var(--tacet-paper); }
+  .stage-seg button[disabled] { opacity: .45; cursor: not-allowed; }
+  /* On the desktop stage the phone frame and its two phone-only controls go;
+     the canvas becomes a column the stage fills. */
+  .canvas.stage-desktop { padding: var(--s5) var(--s5) var(--s5); overflow: hidden; }
+  .canvas.stage-desktop .canvas-meta { max-width: none; margin-bottom: 12px; }
+  .canvas.stage-desktop .phone,
+  .canvas.stage-desktop #resolution-picker,
+  .canvas.stage-desktop #focus-toggle,
+  .canvas.stage-desktop .link-status { display: none !important; }
+  .desktop-stage { width: 100%; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .ds-bar {
+    display: flex; align-items: center; gap: 12px; min-height: 34px; margin-bottom: 10px;
+    font: 500 12px var(--f-sans); color: var(--text-2);
+  }
+  .ds-hidden { color: var(--text-3); font-weight: 400; }
+  .ds-sel { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; background: var(--tacet-ink); color: var(--tacet-paper); border-radius: 999px; padding: 4px 6px 4px 12px; }
+  .ds-name { font: 500 11.5px var(--f-sans); letter-spacing: .02em; margin-right: 8px; white-space: nowrap; }
+  .ds-sel button {
+    width: 26px; height: 26px; border: 0; border-radius: 999px; background: transparent; color: inherit; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .ds-sel button svg { width: 14px; height: 14px; }
+  .ds-sel button:hover { background: rgba(251, 249, 244, .14); }
+  .ds-sel button.danger:hover { background: rgba(180, 83, 62, .28); color: #E8A597; }
+  .ds-frame {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+    border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden;
+    background: #fff; box-shadow: var(--sh-phone);
+  }
+  .ds-chrome { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: var(--bg-elev-2); border-bottom: 1px solid var(--line-soft); }
+  .ds-chrome > span:not(.ds-url) { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+  .ds-url { flex: 1; margin-left: 8px; height: 18px; border-radius: 6px; background: var(--bg-pane); font: 400 10.5px var(--f-sans); color: var(--text-3); padding: 0 10px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-view { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
+  .ds-view iframe { position: absolute; top: 0; left: 0; width: 1280px; border: 0; background: #fff; transform-origin: 0 0; display: block; }
   /* Focus-mode toggle — pill button matching .btn-phone-preview, with a
      small switch instead of a chevron so its on/off state reads at a glance. */
   .focus-toggle {
@@ -1394,6 +1442,14 @@
     outline-offset: -2px;
   }
   .block-wrap:active { cursor: grabbing; }
+  /* "Mini app only" / "Website only" tag — editor chrome laid over the
+     customer's page, so it uses the editor's own ink, never a brand colour. */
+  .block-wrap .show-on-tag {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    font: 500 10px/1 Inter, system-ui, sans-serif; letter-spacing: .02em;
+    color: var(--tacet-paper, #fff); background: var(--tacet-ink, #1a1a17);
+    padding: 4px 7px; border-radius: 999px; pointer-events: none; opacity: .85;
+  }
   .block-wrap:hover { outline-color: rgba(110, 103, 175, .34); }
   /* Per-block chrome preview — mirrors the live mini-app .blk-outer rules.
      Frame: brand-colored outline (border-color set inline). Bleed: drop the
@@ -5125,6 +5181,23 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   <!-- ─── CANVAS (CENTRE) ─── -->
   <div class="canvas">
     <div class="canvas-meta">
+      <!-- Desktop ⇄ Phone stage. Desktop = the real web shop (shop.html via
+           /shop-preview?stage=1) at PC width, clickable; Phone = the inline
+           frame below. See setStage(). -->
+      <div class="stage-seg" id="stage-seg" role="tablist">
+        <button type="button" data-stage="desktop" onclick="setStage('desktop')" role="tab"
+                data-ti-en="Edit the website as customers see it on a computer" data-ti-cn="按顾客在电脑上看到的样子编辑网页版"
+                title="Edit the website as customers see it on a computer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <span class="i18n-en">Desktop</span><span class="i18n-cn">电脑</span>
+        </button>
+        <button type="button" data-stage="phone" onclick="setStage('phone')" role="tab"
+                data-ti-en="Edit the mini app as customers see it on a phone" data-ti-cn="按顾客在手机上看到的样子编辑小程序"
+                title="Edit the mini app as customers see it on a phone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          <span class="i18n-en">Phone</span><span class="i18n-cn">手机</span>
+        </button>
+      </div>
       <select id="resolution-picker" title="Preview device"></select>
       <!-- Focus mode — while a block is selected, fades every other block
            back so it's unmistakable which one you're editing. Piggybacks on
@@ -5182,6 +5255,30 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       <!-- Filled in by renderPhoneTabs() so what staff see here matches the
            live customer mini-app for the picked icon style + colours. -->
       <div class="phone-tabs" id="phone-tabs-preview"></div>
+    </div>
+
+    <!-- ─── DESKTOP STAGE ─── The real web shop at 1280px, scaled to fit,
+         inside a plain browser frame. Clicking a block in it selects the
+         block here (postMessage both ways — see setStage / pushDraftToStage
+         and the stage code in public/shop.html). The phone stage's floating
+         toolbar cannot reach into an iframe, so the selected block's
+         actions live in the bar above the frame instead. -->
+    <div class="desktop-stage" id="desktop-stage" hidden>
+      <div class="ds-bar">
+        <span class="ds-hint" id="ds-hint"><span class="i18n-en">Click a block on the page to edit it.</span><span class="i18n-cn">点击页面上的模块进行编辑。</span></span>
+        <span class="ds-hidden" id="ds-hidden" hidden></span>
+        <div class="ds-sel" id="ds-sel" hidden>
+          <span class="ds-name" id="ds-name"></span>
+          <button type="button" data-action="up" data-ti-en="Move up" data-ti-cn="上移" title="Move up"></button>
+          <button type="button" data-action="down" data-ti-en="Move down" data-ti-cn="下移" title="Move down"></button>
+          <button type="button" data-action="duplicate" data-ti-en="Duplicate" data-ti-cn="复制" title="Duplicate"></button>
+          <button type="button" data-action="delete" class="danger" data-ti-en="Delete" data-ti-cn="删除" title="Delete"></button>
+        </div>
+      </div>
+      <div class="ds-frame">
+        <div class="ds-chrome"><span></span><span></span><span></span><span class="ds-url" id="ds-url"></span></div>
+        <div class="ds-view" id="ds-view"></div>
+      </div>
     </div>
   </div>
 
@@ -5652,6 +5749,11 @@ const state = {
   // never type a fake one. Loaded once from /api/retail-admin/vouchers.
   vouchers: [],
   selectedId: null, dirty: false, saving: false,
+  // The editor stage — 'desktop' (the real web shop at PC width, in an
+  // iframe the office clicks into) or 'phone' (the mini-app-faithful frame).
+  // Desktop first, by Ash's direction (§273); persisted per browser. Only
+  // Home reaches the website, so every other page forces the phone stage.
+  stage: 'desktop',
   // Focus mode — when on, selecting a block fades every other block back
   // (see .canvas.focus-active in CSS). On by default; persisted per-browser
   // like the other view prefs so it doesn't reset every session.
@@ -5849,6 +5951,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     }, 60 * 1000);
     // Initial page load — uses state.page (already set by buildPagePicker)
     await loadPage();
+    applyStage();   // Desktop first (§273); the phone stage off Home
     // Now that all three design pickers have rendered their menus, wire
     // the positioning observer so they escape the pane's overflow.
     _wireDesignMenuPositioning();
@@ -5981,7 +6084,9 @@ function initCanvasLayout() {
     if (!panel) return;
     const id = state.selectedId;
     const wrap = id && document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
-    panel.hidden = !(id && wrap);
+    // On the desktop stage the phone DOM is not built; the selection lives in
+    // the stage frame, and the inspector must still show for it.
+    panel.hidden = !(id && (wrap || effectiveStage() === 'desktop'));
   };
 
   // ── dismiss the drawer on outside click / Esc ──
@@ -6942,6 +7047,7 @@ async function switchPage(newPage) {
   try { localStorage.setItem('cms_page', newPage); } catch {}
   updatePagePickerLabel();
   await loadPage();
+  applyStage();
   // Keep the live-mirror iframe in sync if it's mounted.
   pingMirror({ page: newPage });
 }
@@ -7625,9 +7731,12 @@ async function buildDesignCheckPicker() {
 // so opening the editor from an English admin starts in English, and flipping
 // here follows you back out.
 const LANG_KEY = 'roots-admin-lang';
+const STAGE_KEY = 'cms_stage';   // Desktop ⇄ Phone stage preference (§273)
 function buildLangToggle() {
   try { state.lang = localStorage.getItem(LANG_KEY) || 'en'; } catch {}
   if (!['en', 'cn'].includes(state.lang)) state.lang = 'en';
+  try { state.stage = localStorage.getItem(STAGE_KEY) || 'desktop'; } catch {}
+  if (!['desktop', 'phone'].includes(state.stage)) state.stage = 'desktop';
   syncChromeLang();   // sets data-cms-lang + the topbar button's 中文/EN label
   applyTabLabels();
 }
@@ -8545,7 +8654,18 @@ function loadTopProducts(channel, window, limit) {
   return cached?.products || [];
 }
 
+// True when the phone DOM was skipped while the desktop stage was showing;
+// applyStage() rebuilds it the moment the phone stage comes back.
+let _phoneStale = false;
 function renderPreview() {
+  pushDraftToStage();
+  renderStageBar();
+  // On the desktop stage the phone is display:none and nobody can see it, so
+  // the per-keystroke rebuild (and its product fetches) is skipped. The few
+  // readers of the phone DOM cope with its absence: the toolbar hides, Locate
+  // falls back to the stage's own highlight, the timers skip.
+  if (effectiveStage() === 'desktop') { _phoneStale = true; return; }
+  _phoneStale = false;
   const mount = $('#phone-content');
   mount.innerHTML = '';
   state.draft.forEach((block, idx) => {
@@ -8647,6 +8767,28 @@ function buildDropZone(beforeIdx, isTail = false) {
   return d;
 }
 
+// Where a block shows — `show_on`: 'both' | 'miniapp' | 'web'. One layout
+// feeds the mini app and the web shop; this field says which of them draw the
+// block. The server writes it explicit on every block it serves (routes/
+// retail.js withShowOn), so a block loaded here already carries it. The one
+// case the server has not seen yet is a block just added on the canvas, so
+// this table is the server's SHOW_ON_DEFAULTS, copied: the four types that
+// lead to a wallet, notifications or order page the web shop does not have.
+// scripts/test_cms_show_on.js holds the two copies equal. Decided by Ash
+// 2026-09-26 — docs/tacet-consolidation-decisions.md §272.
+const SHOW_ON_DEFAULTS = Object.freeze({
+  order_tracker: 'miniapp', notification_bar: 'miniapp',
+  points_widget: 'miniapp', top_up: 'miniapp',
+});
+function showOnFor(b) {
+  if (b && (b.show_on === 'both' || b.show_on === 'miniapp' || b.show_on === 'web')) return b.show_on;
+  return (b && SHOW_ON_DEFAULTS[b.type]) || 'both';
+}
+const SHOW_ON_LABELS = {
+  miniapp: { en: 'Mini app only', cn: '仅小程序' },
+  web:     { en: 'Website only',  cn: '仅网页版' },
+};
+
 // Block types whose preview paints a full-panel background; when framed they
 // must fill the frame edge-to-edge (mirrors FULL_BG_TYPES in the mini-app).
 const FULL_BG_BLOCK_TYPES = [
@@ -8669,6 +8811,15 @@ function buildBlockEl(block, idx) {
   wrap.dataset.idx = idx;
   wrap.draggable = true;
   wrap.appendChild(renderBlockBody(block));
+  // A block that one surface skips wears a small tag on the canvas, so the
+  // phone stage never implies the website shows the same thing.
+  const showOn = showOnFor(block);
+  if (showOn !== 'both') {
+    const tag = document.createElement('span');
+    tag.className = 'show-on-tag';
+    tag.textContent = T(SHOW_ON_LABELS[showOn].en, SHOW_ON_LABELS[showOn].cn);
+    wrap.appendChild(tag);
+  }
   wrap.addEventListener('click', e => {
     if (e.target.closest('[data-action]')) return;
     selectBlock(block.id);
@@ -8717,7 +8868,7 @@ function ensureFloatingToolbar() {
 function positionFloatingToolbar() {
   const tb = ensureFloatingToolbar();
   const id = state.selectedId;
-  if (!id) { tb.style.display = 'none'; return; }
+  if (!id || effectiveStage() === 'desktop') { tb.style.display = 'none'; return; }
   const wrap = document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
   if (!wrap) { tb.style.display = 'none'; return; }
 
@@ -11146,6 +11297,26 @@ function renderInspector() {
 //     Stored as block.full_bleed (boolean). All persist via validateBlocks
 //     (structural validation only) and render in the live mini-app .blk-outer.
 function buildChromeSection(body, b) {
+  // Universal "Show on" control — which of the two customer surfaces draw
+  // this block. Reads the effective value (server default for a saved block,
+  // the local copy of that table for one just added) and writes it explicit.
+  const secShow = inspectorSection(body, b.type, 'show', T('Show on', '显示位置'));
+  const current = showOnFor(b);
+  secShow.appendChild(field(T('Show on', '显示位置'),
+    T('Where customers see this block. The website is your shop in a browser; the mini app is your shop in WeChat.', '顾客在哪里看到本模块。网页版是浏览器里的商店,小程序是微信里的商店。'),
+    sel(current, [
+      { value: 'both',    label: T('Mini app + website', '小程序 + 网页版') },
+      { value: 'miniapp', label: T('Mini app only', '仅小程序') },
+      { value: 'web',     label: T('Website only', '仅网页版') },
+    ], v => updateBlock(b.id, { show_on: v }))));
+  if (SHOW_ON_DEFAULTS[b.type] === 'miniapp' && current === 'miniapp') {
+    const n = document.createElement('div');
+    n.className = 'insp-note';
+    n.textContent = T('The website has no wallet, notifications or order pages yet, so this block is off there unless you turn it on.',
+      '网页版暂无钱包、通知和订单页面,因此本模块默认不在网页版显示,除非你打开它。');
+    secShow.appendChild(n);
+  }
+
   // Universal "Frame, radius & width" controls — a collapsed section at the
   // bottom of every block's inspector (set once, rarely reopened).
   const sec = inspectorSection(body, b.type, 'frame', T('Frame, radius & width', '边框、圆角与宽度'));
@@ -15176,6 +15347,166 @@ function _previewMenuOutside(e) {
 
 function _lpOpen()  { const d = document.getElementById('live-preview-drawer'); if (d) { d.classList.add('open'); d.setAttribute('aria-hidden','false'); } }
 function _lpClose() { const d = document.getElementById('live-preview-drawer'); if (d) { d.classList.remove('open'); d.setAttribute('aria-hidden','true'); } }
+
+// ═══════════════════════════════════════════════════════════════════════
+// THE EDITOR STAGE — Desktop first, then Phone (§273, Ash 2026-09-26)
+// The desktop stage is the REAL web shop (public/shop.html) served at
+// /shop-preview?draft=1&stage=1, rendered 1280px wide and scaled to the
+// canvas. The office clicks a block in it; shop.html posts `cms:select` and
+// the inspector opens on that block, exactly as on the phone. Every
+// renderPreview() posts the whole draft (`cms:draft`) into the frame, so the
+// page redraws as the office types, without waiting for the 800ms save.
+// Only Home reaches the website, so any other page forces the phone stage
+// and the Desktop button is disabled with the reason in its tooltip.
+// ═══════════════════════════════════════════════════════════════════════
+let _stageIframe = null;
+let _stageReady = false;
+let _stageObserver = null;
+
+function stageAllowed() { return state.page === 'home'; }
+
+function setStage(stage) {
+  state.stage = (stage === 'phone') ? 'phone' : 'desktop';
+  try { localStorage.setItem(STAGE_KEY, state.stage); } catch {}
+  applyStage();
+}
+
+// The stage actually shown: the preference, unless the page cannot be on
+// the website.
+function effectiveStage() {
+  // The phone editor shell (cms-mobile.html) embeds this page as its faithful
+  // phone preview; there the stage is the phone, whatever the desktop chose.
+  if (window.__fcPreviewEmbed) return 'phone';
+  return (state.stage === 'desktop' && stageAllowed()) ? 'desktop' : 'phone';
+}
+
+function applyStage() {
+  const stage = effectiveStage();
+  const canvas = document.querySelector('.canvas');
+  const ds = document.getElementById('desktop-stage');
+  if (!canvas || !ds) return;
+  canvas.classList.toggle('stage-desktop', stage === 'desktop');
+  ds.hidden = stage !== 'desktop';
+  const seg = document.getElementById('stage-seg');
+  if (seg) {
+    seg.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('active', b.dataset.stage === stage);
+      if (b.dataset.stage === 'desktop') {
+        b.disabled = !stageAllowed();
+        if (!stageAllowed()) {
+          b.dataset.tiEn = 'Only Home is on the website — the other pages are mini app only';
+          b.dataset.tiCn = '只有首页在网页版上 — 其他页面仅小程序';
+        } else {
+          b.dataset.tiEn = 'Edit the website as customers see it on a computer';
+          b.dataset.tiCn = '按顾客在电脑上看到的样子编辑网页版';
+        }
+        b.title = state.lang === 'cn' ? b.dataset.tiCn : b.dataset.tiEn;
+      }
+    });
+  }
+  if (stage === 'desktop') {
+    mountDesktopStage();
+    sizeDesktopStage();
+    pushDraftToStage();
+  } else if (_phoneStale) {
+    renderPreview();   // the phone DOM was skipped while the desktop stage showed
+  }
+  renderStageBar();
+  positionFloatingToolbar();
+}
+
+function mountDesktopStage() {
+  if (_stageIframe) return;
+  const view = document.getElementById('ds-view');
+  if (!view) return;
+  const ifr = document.createElement('iframe');
+  ifr.id = 'desktop-stage-iframe';
+  ifr.title = 'Website, as customers see it on a computer';
+  ifr.src = '/shop-preview?draft=1&stage=1';
+  view.appendChild(ifr);
+  _stageIframe = ifr;
+  _stageReady = false;
+  const url = document.getElementById('ds-url');
+  if (url) url.textContent = location.origin.replace(/^https?:\/\//, '') + '/  ·  ' + (state.lang === 'cn' ? '草稿' : 'draft');
+  if (!_stageObserver && typeof ResizeObserver !== 'undefined') {
+    _stageObserver = new ResizeObserver(() => sizeDesktopStage());
+    _stageObserver.observe(view);
+  }
+}
+
+// 1280px is a real desktop; scale it down to whatever the canvas gives us
+// and let the frame scroll inside itself at the scaled height.
+function sizeDesktopStage() {
+  const view = document.getElementById('ds-view');
+  if (!view || !_stageIframe) return;
+  const w = view.clientWidth || 0, h = view.clientHeight || 0;
+  if (!w || !h) return;
+  const scale = Math.min(1, w / 1280);
+  _stageIframe.style.transform = 'scale(' + scale + ')';
+  _stageIframe.style.height = Math.round(h / scale) + 'px';
+}
+
+function pushDraftToStage() {
+  if (!_stageIframe || !_stageReady || effectiveStage() !== 'desktop') return;
+  if (!_stageIframe.contentWindow) return;
+  _stageIframe.contentWindow.postMessage({
+    type: 'cms:draft',
+    page: state.page,
+    // The web shop reads show_on to decide what it draws; make the value
+    // explicit the way the server does on a saved layout.
+    layout: state.draft.map(b => ({ ...b, show_on: showOnFor(b) })),
+    selectedId: state.selectedId,
+    lang: state.lang,
+  }, location.origin);
+}
+
+// The bar above the frame: the selected block's name + the four actions the
+// phone stage floats over a block, and a count of blocks this page does not
+// show because they are mini app only.
+function renderStageBar() {
+  const sel = document.getElementById('ds-sel');
+  const name = document.getElementById('ds-name');
+  const hidden = document.getElementById('ds-hidden');
+  if (!sel || !name || !hidden) return;
+  const b = state.selectedId ? state.draft.find(x => x.id === state.selectedId) : null;
+  sel.hidden = !b;
+  if (b) name.textContent = T(BLOCK_META[b.type]?.name, BLOCK_META[b.type]?.name_cn) || b.type;
+  const n = state.draft.filter(x => showOnFor(x) === 'miniapp').length;
+  hidden.hidden = n === 0;
+  if (n) {
+    hidden.textContent = state.lang === 'cn'
+      ? (n + ' 个模块仅小程序显示 — 切换到手机编辑')
+      : (n + (n === 1 ? ' block is' : ' blocks are') + ' mini app only — switch to Phone to edit ' + (n === 1 ? 'it' : 'them'));
+  }
+  if (!sel.dataset.wired) {
+    sel.dataset.wired = '1';
+    sel.querySelector('[data-action="up"]').innerHTML = ICONS.arrow_up;
+    sel.querySelector('[data-action="down"]').innerHTML = ICONS.arrow_down;
+    sel.querySelector('[data-action="duplicate"]').innerHTML = ICONS.duplicate;
+    sel.querySelector('[data-action="delete"]').innerHTML = ICONS.trash;
+    sel.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const id = state.selectedId;
+      if (!id) return;
+      const idx = state.draft.findIndex(x => x.id === id);
+      if (idx === -1) return;
+      const a = btn.dataset.action;
+      if (a === 'delete')         deleteBlock(id);
+      else if (a === 'duplicate') duplicateBlock(id);
+      else if (a === 'up')        moveBlock(idx, -1);
+      else if (a === 'down')      moveBlock(idx, +1);
+    });
+  }
+}
+
+// Messages from the stage frame (same origin): ready → send the draft;
+// select → open the inspector on that block.
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== location.origin || !ev.data || !_stageIframe || ev.source !== _stageIframe.contentWindow) return;
+  if (ev.data.type === 'cms:stage-ready') { _stageReady = true; sizeDesktopStage(); pushDraftToStage(); }
+  else if (ev.data.type === 'cms:select') { if (ev.data.id && ev.data.id !== state.selectedId) selectBlock(ev.data.id); }
+});
 
 // Mode state for the drawer. 'draft' = preview the unpublished draft using
 // the admin-only /storefront?draft=1 route; 'live' = exactly what customers

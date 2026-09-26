@@ -203,9 +203,19 @@
   .skel{background:linear-gradient(90deg,#eee,#f6f6f6,#eee);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:16px;aspect-ratio:.78;}
   @keyframes sk{to{background-position:-200% 0;}}
 
+  /* Editor desktop stage (?stage=1): blocks are click targets, the selected one
+     wears the editor's own Dusk ring, the same colour cms.html uses on the phone. */
+  .cms-stage .sb-blk-outer{cursor:pointer;}
+  .cms-stage .sb-blk-outer:hover{outline:2px dashed rgba(110,103,175,.55);outline-offset:2px;}
+  .cms-stage .sb-blk-outer.cms-selected{outline:2px solid #6E67AF;outline-offset:2px;box-shadow:0 0 0 5px rgba(110,103,175,.18);}
+  .cms-stage .cs-fab,.cms-stage #toast{display:none!important;}
   footer{margin-top:auto;border-top:1px solid var(--line);background:#fff;}
   .foot-in{max-width:var(--wrap);margin:0 auto;padding:26px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px;}
   .foot-in .fm{font-family:var(--bf-bear);color:var(--accent);font-size:18px;}
+  .foot-links{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 22px;padding-top:4px;}
+  .foot-links[hidden]{display:none;}   /* closed by .hidden — its own display must not defeat it (§199) */
+  .foot-links a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;}
+  .foot-links a:hover{color:var(--ink);border-color:var(--accent);}
 
   #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);background:rgba(20,20,24,.96);color:#f2f2ec;padding:12px 20px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:80;max-width:90vw;text-align:center;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -323,6 +333,7 @@
     <div class="foot-in">
       <span class="fm" id="footBrand">Store</span>
       <span id="footMeta"></span>
+      <nav id="footLinks" class="foot-links" hidden aria-label="Footer links"></nav>
     </div>
   </footer>
 
@@ -4941,8 +4952,24 @@ async function loadPolls(){
 // (public/shop/blocks.js — a web port of the mini-app's block-renderer). Same
 // content as the mini-app, responsive for phone + desktop. Falls back to a
 // clean auto-layout when nothing is published.
+// Editor desktop stage (see boot): the selected block's id and its outline.
+let STAGE_MODE=false, stageSel=null, stageKey=null, stageIdKey=null;
+function stageHighlight(scroll){
+  if(!STAGE_MODE) return;
+  document.querySelectorAll('.sb-blk-outer.cms-selected').forEach(el=>el.classList.remove('cms-selected'));
+  if(!stageSel) return;
+  const el=document.querySelector('.sb-blk-outer[data-block-id="'+CSS.escape(stageSel)+'"]');
+  if(!el) return;
+  el.classList.add('cms-selected');
+  if(scroll){ const r=el.getBoundingClientRect(); if(r.bottom<0||r.top>window.innerHeight) el.scrollIntoView({block:'center',behavior:'smooth'}); }
+}
+
 async function renderHome(){
-  const layout = state.config && state.config.home && state.config.home.layout;
+  document.title=siteTitle();
+  // Only the blocks the web shop shows (show_on 'both' or 'web'); a mini-app-
+  // only block is dropped here so the product pre-fetch below skips it too.
+  const published = state.config && state.config.home && state.config.home.layout;
+  const layout = (window.ShopBlocks && Array.isArray(published)) ? ShopBlocks.forSurface(published) : published;
   if(!(Array.isArray(layout) && layout.length) || !window.ShopBlocks) return renderHomeAuto();
   // Block engine needs products as context for by-id lookups (manual grids,
   // featured items, bundles). Fetch a base pull PLUS every product id the layout
@@ -5000,6 +5027,7 @@ async function renderHome(){
   const view=$('#view');
   view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
   ShopBlocks.startTimers(view);
+  stageHighlight(true);
 }
 
 async function renderHomeAuto(){
@@ -6189,11 +6217,51 @@ async function renderProduct(id){
 }
 
 /* ════════════ CHROME / INIT ════════════ */
+// The website's own words (cfg.web.site, set in the back office → Web store
+// configuration, §273): the header menu, the footer line and links, the
+// browser-tab title and the search description. Nothing set → the two
+// default menu links and the brand name, as before.
+function siteCfg(){ const w=state.config&&state.config.web; return (w&&w.site&&typeof w.site==='object')?w.site:{}; }
+function sitePick(en,cn){ const cnOn=state.lang==='cn'; return (cnOn?(cn||en):(en||cn))||''; }
+function siteTitle(){ const t=sitePick(siteCfg().title_en,siteCfg().title_cn); return t||state.brand; }
+function renderSiteChrome(){
+  const site=siteCfg(), cn=state.lang==='cn';
+  const nav=document.querySelector('nav.links');
+  if(nav){
+    const items=(Array.isArray(site.nav)&&site.nav.length)?site.nav:[{label_en:'Home',label_cn:'首页',target:'home'},{label_en:'Shop',label_cn:'商品',target:'shop'}];
+    nav.innerHTML='';
+    for(const it of items){
+      const a=document.createElement('a');
+      a.textContent=sitePick(it.label_en,it.label_cn);
+      if(it.target==='home'){ a.href='#/'; a.dataset.nav='home'; }
+      else if(it.target==='shop'){ a.href='#/shop'; a.dataset.nav='shop'; }
+      else if(/^https?:\/\//i.test(it.target||'')){ a.href=it.target; a.target='_blank'; a.rel='noopener'; }
+      else continue;
+      nav.appendChild(a);
+    }
+  }
+  const meta=$('#footMeta');
+  if(meta){
+    meta.textContent=sitePick(site.footer_en,site.footer_cn);
+    const row=$('#footLinks');
+    const links=Array.isArray(site.links)?site.links:[];
+    if(row){
+      row.innerHTML='';
+      for(const l of links){ const a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener'; a.textContent=sitePick(l.label_en,l.label_cn); row.appendChild(a); }
+      row.hidden=!links.length;
+    }
+  }
+  let desc=document.querySelector('meta[name="description"]');
+  const d=sitePick(site.description_en,site.description_cn);
+  if(d){ if(!desc){ desc=document.createElement('meta'); desc.name='description'; document.head.appendChild(desc); } desc.content=d; }
+  else if(desc){ desc.remove(); }
+  if(parseHash().seg.length===0) document.title=siteTitle();
+}
+
 function applyLangToUI(){
   document.querySelectorAll('#langToggle button, #mLangFloat button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
   $('#searchInput').placeholder=state.lang==='cn'?'搜索商品':'Search products';
-  document.querySelector('nav.links [data-nav=home]').textContent=state.lang==='cn'?'首页':'Home';
-  document.querySelector('nav.links [data-nav=shop]').textContent=state.lang==='cn'?'商品':'Shop';
+  renderSiteChrome();
   $('#footBrand').textContent=state.brand;
   // bottom tab labels
   const TB={home:['Home','首页'],shop:['Shop','商城'],cart:['Cart','购物车'],me:['Me','我的']};
@@ -6227,6 +6295,13 @@ function ctaRoute(t){
   // contract as /storefront. Falls back to the live config when the staff
   // session has lapsed, so the preview stays useful.
   const DRAFT_MODE=new URLSearchParams(location.search).get('draft')==='1';
+  // ?stage=1 (with draft=1): this page IS the editor's desktop stage
+  // (public/cms.html, §273). The editor posts the whole draft on every
+  // change (`cms:draft`), a click on a block posts `cms:select` back, and
+  // every link and button is inert — the stage is for editing Home, not for
+  // shopping. The selected block wears an outline (see .cms-stage CSS).
+  STAGE_MODE=DRAFT_MODE&&new URLSearchParams(location.search).get('stage')==='1';
+  if(STAGE_MODE) document.documentElement.classList.add('cms-stage');
   // config first (theme + brand), then categories — both tenant-scoped by Host.
   state.config={};
   if(DRAFT_MODE){ try{ state.config=await api('/api/retail-admin/storefront/preview-config')||{}; }catch(e){} }
@@ -6236,10 +6311,45 @@ function ctaRoute(t){
   if(DRAFT_MODE){
     // The CMS pings this iframe after each draft save — refetch + re-render.
     window.addEventListener('message',async ev=>{
-      if(ev.origin!==location.origin||!ev.data||ev.data.type!=='cms:reload') return;
+      if(ev.origin!==location.origin||!ev.data) return;
+      if(ev.data.type==='cms:draft'&&STAGE_MODE){
+        // The editor's draft, straight from its state — no round trip. The
+        // editor posts on every keystroke and every click, so: an unchanged
+        // layout (a click that only selected a block) is a highlight, not a
+        // render; a changed layout re-renders, and re-fetches products only
+        // when the set of products the layout names has changed.
+        const layout=Array.isArray(ev.data.layout)?ev.data.layout:[];
+        const key=JSON.stringify(layout);
+        const langChanged=!!(ev.data.lang&&ev.data.lang!==state.lang);
+        stageSel=ev.data.selectedId||null;
+        if(key===stageKey&&!langChanged&&parseHash().seg.length===0){ stageHighlight(true); return; }
+        stageKey=key;
+        state.config.home=state.config.home||{};
+        state.config.home.layout=layout;
+        if(langChanged){ state.lang=ev.data.lang; applyLangToUI(); }
+        const ids=[]; for(const b of layout){ (b.product_ids||[]).forEach(id=>ids.push(id)); if(b.product_id) ids.push(b.product_id); if(b.bundle_product_id) ids.push(b.bundle_product_id); }
+        const idKey=ids.slice().sort().join(',');
+        if(idKey!==stageIdKey){ stageIdKey=idKey; state.homeProducts=null; }
+        if(parseHash().seg.length){ location.hash='#/'; } else { route(); }
+        return;
+      }
+      if(ev.data.type!=='cms:reload') return;
       try{ state.config=await api('/api/retail-admin/storefront/preview-config')||state.config; }catch(e){}
       state.homeProducts=null; route();
     });
+  }
+  if(STAGE_MODE){
+    // Clicks: a block selects itself in the editor; everything else is inert.
+    document.addEventListener('click',ev=>{
+      const blk=ev.target.closest('.sb-blk-outer');
+      if(blk){
+        ev.preventDefault(); ev.stopPropagation();
+        const id=blk.getAttribute('data-block-id');
+        if(id){ stageSel=id; stageHighlight(false); try{ parent.postMessage({type:'cms:select',id},location.origin); }catch(e){} }
+        return;
+      }
+      if(ev.target.closest('a,button,form')){ ev.preventDefault(); ev.stopPropagation(); }
+    },true);
   }
   try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
   try{ state.token=localStorage.getItem('shop_token')||''; }catch{}
@@ -6341,6 +6451,8 @@ function ctaRoute(t){
   window.addEventListener('hashchange',route);
   await route();
   $('#boot').classList.add('gone');
+  // Editor desktop stage: tell the editor we are up so it sends its draft.
+  if(STAGE_MODE){ try{ parent.postMessage({type:'cms:stage-ready'},location.origin); }catch(e){} }
 })();
 </script>
 </body>

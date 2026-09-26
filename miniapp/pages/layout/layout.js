@@ -70,7 +70,7 @@ Page({
         api.get('/api/retail/flash-sales').catch(() => []),
         hasToken ? api.get('/api/retail/polls').catch(() => []) : Promise.resolve([]),
       ]);
-      const layout = cfg?.[this.data.page]?.layout || [];
+      const layout = config.forMiniApp(cfg?.[this.data.page]?.layout);
       this.setData({
         layout,
         products: Array.isArray(prods) ? prods : prods?.data || [],

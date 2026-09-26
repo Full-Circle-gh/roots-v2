@@ -34,7 +34,7 @@ Page({
       const cfg = await config.load();
       const ver = Number.isFinite(cfg?.onboarding?.version)
         ? String(cfg.onboarding.version) : '1';
-      const layout = cfg?.onboarding?.layout || [];
+      const layout = config.forMiniApp(cfg?.onboarding?.layout);
       const splash = layout.some(b => b && b.type === 'video_banner' && b.display === 'fullscreen');
       this.setData({
         layout,
