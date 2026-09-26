@@ -8962,22 +8962,6 @@
   .topbar .topbar-ico { color: var(--td-text2); }
   .topbar .topbar-ico:hover { background: var(--td-raised); color: var(--td-text); }
 
-  /* Unseen inbox marker → Graphite, never Dusk. Dusk means "Tacet acted"; an
-     inbox count is customers acting, so it doesn't earn the automation colour
-     — same rule this chrome applies everywhere else. Count/shape/position
-     unchanged, colour only. */
-  /* Unseen inbox = ONE 6px Sage dot, never a count, never red (§1.1). Covers the
-     Inbox trigger pip and the Reviews/Feedback rows in the dropdown (all .tab-badge
-     inside .topbar). The count text is suppressed; the size is pinned even when the
-     badge has content, out-specificity-ing the base :not(:empty) count-pill rule. */
-  .topbar .tab-badge,
-  .topbar .has-unseen .tab-badge:not(:empty) {
-    min-width: 6px; width: 6px; height: 6px; padding: 0;
-    border-radius: 50%; background: var(--td-sage);
-    box-shadow: 0 0 0 2px var(--bg-pane);
-    animation: none; font-size: 0; color: transparent;
-  }
-
   /* Avatar → Ink circle, Paper initial (no Tea green), Graphite focus ring —
      not Dusk. The circle is real data (initials from /me) doing an ordinary
      job (identify the operator), not automation, so it doesn't earn Dusk

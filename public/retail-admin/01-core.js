@@ -1155,8 +1155,8 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
 // actually opens them. Kept as a separate name since call sites read clearer as
 // "go to this channel's admin" than "go to this tab".
 function salesGo(channel) { goTab(channel); }
-// Activate a tab/section by name from OUTSIDE the rail (e.g. the topbar Inbox
-// dropdown, or in-page buttons like the Sales channel cards). When the tab has
+// Activate a tab/section by name from OUTSIDE the rail (e.g. the dashboard's
+// Needs-you rows, or in-page buttons like the Sales channel cards). When the tab has
 // a rail button, CLICK it — that fires whatever the button's own listener does.
 // Otherwise (a channel admin with no rail row any more, or any other rail-less
 // tab) light the section manually and fire its init from TAB_INIT, so opening
@@ -1178,8 +1178,8 @@ function goTab(tab) {
   $$('.side-drawer.open').forEach(d => closeDrawer(d));
   // A rail-less tab (a channel admin, the Product Page Editor) lights the row it
   // sits under rather than nothing at all — RAIL_STANDIN names it. Everything
-  // else lights itself; a tab in neither camp (Inbox's reviews / feedback, which
-  // live in the topbar) lights nothing, which is the honest answer.
+  // else lights itself; a tab in neither camp lights nothing, which is the
+  // honest answer.
   const lit = RAIL_STANDIN[tab] || tab;
   $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === lit));
   $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
@@ -1210,25 +1210,6 @@ function goTab(tab) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', set, { once: true });
   else set();
 })();
-// Topbar Inbox dropdown (Reviews / Feedback).
-function toggleInboxMenu(ev) {
-  if (ev) ev.stopPropagation();
-  const m = document.getElementById('tbInboxMenu');
-  const b = document.getElementById('tbInboxBtn');
-  if (!m) return;
-  const willOpen = m.hasAttribute('hidden');
-  m.toggleAttribute('hidden', !willOpen);
-  if (b) b.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-}
-function closeInboxMenu() {
-  const m = document.getElementById('tbInboxMenu');
-  const b = document.getElementById('tbInboxBtn');
-  if (m) m.setAttribute('hidden', '');
-  if (b) b.setAttribute('aria-expanded', 'false');
-}
-document.addEventListener('click', (ev) => {
-  if (!ev.target.closest || !ev.target.closest('#tbInbox')) closeInboxMenu();
-});
 let _salesLangHooked = false;
 // Sales overview → fill today's per-channel figures + the folded summary from
 // /sales/summary. Called when the Sales tab is opened. Leaves the "—"
@@ -1893,6 +1874,7 @@ const RAIL_PARENT = {
   affiliate: 'marketing', sharing: 'marketing', broadcasts: 'marketing',
   social: 'marketing',
   membership: 'loyalty', topup: 'loyalty', leaderboard: 'loyalty', voting: 'loyalty',
+  reviews: 'inbox', feedback: 'inbox',   // §271 — the rail's Inbox folder
   // "editor" is the Content group's INTERNAL id — the label changed, the id did
   // not, because the bottom-nav mirror, the CSS and TAB_CAP all key off it.
   // mini-app-editor is now an ordinary child row, not the group row.
@@ -1907,8 +1889,7 @@ const RAIL_PARENT = {
 // Tabs with no rail row of their own → the row that stays lit while you are in
 // there (§2.3: "the nearest ancestor that does have one"). A tab in neither map
 // resolves to root highlighting itself; a tab with no rail row and no entry here
-// — Inbox's reviews / feedback, which live in the topbar — resolves to root with
-// nothing highlighted, which is the honest answer.
+// resolves to root with nothing highlighted, which is the honest answer.
 // Init function for a rail-less tab, keyed the same way as RAIL_STANDIN. A real
 // rail button's own click handler used to fire these (mtAdminInit / gyAdminInit
 // / elAdminInit); once those buttons were pulled during the Sales-page redesign,
@@ -1919,8 +1900,9 @@ const RAIL_PARENT = {
 const TAB_INIT = {
   meituan: 'mtAdminInit', guanyi: 'gyAdminInit', eleme: 'elAdminInit',
   'channel-sync': 'csAdminInit',   // §103
-  // The two topbar Inbox tabs. Rail-less, so goTab() always takes the manual
-  // path and TAB_INIT is the only thing that loads them.
+  // The two Inbox tabs. They have rail rows since §271 (the rail button's own
+  // listener loads them), so this only matters if a row is ever absent from the
+  // DOM; both inits are idempotent, so the two paths never load twice.
   reviews: 'reviewsTabInit', feedback: 'feedbackTabInit',
 };
 const RAIL_STANDIN = {

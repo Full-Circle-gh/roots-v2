@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.425
+# Tacet shared-core consolidation — decisions record, v4.427
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-26 · v4.427 — **§271 · THE HEADER INBOX IS GONE; A REVIEW OR FEEDBACK ANNOUNCES ITSELF ON THE DASHBOARD — ASH:** *"the inbox on the top right is not necessary for mobile or PC. if there is a review or a feedback it should show a notification of the dashboard for those that have it under the role"*, then *"yes"* to Claude's plan. This reverses the 2026-07-25 topbar settlement (brand · search · inbox · avatar, in `docs/tacet-ia-blueprint.md` and `docs/tacet-desktop-patterns.md`). **WHAT GOES.** The Inbox button in the PC topbar (`#tbInbox`, its dropdown and its unseen dot) and the Inbox button in the phone's header row. The PC poller that fed that dot, and played the order chime when a review or feedback arrived (`public/retail-admin/04-orders.js`), goes with it. The `unseen-count` endpoints stay: the phone's More dot still reads them. **WHAT CARRIES THE NOTICE.** The dashboard's *Needs you* rows *Reviews to answer* and *Feedback to answer*, which already existed on both screens (§131, `docs/tacet-dashboard-spec.md`). Checked before building: `FEEDBACK_WAITING_SQL` counts a customer's reply on a thread the shop started, because the customer reply route stamps `last_customer_msg_at`, so a reply to *Message customer* still raises the row. **BY ROLE.** The PC already gated both rows on `reviews:moderate` / `feedback:moderate` (`DASH_CARD_CAP`). The phone gated them on the feature only, so a role that cannot answer saw work it could not do; it now asks the same two keys. **THE WAY IN ON PC.** The topbar dropdown was the only door to the Reviews and Feedback pages. They now sit in a rail folder, *Inbox · 收件箱*, each row gated by `reviews:view` / `feedback:view` through `TAB_CAP`; with one visible the folder flattens, with none it is absent (`railSyncGroups`). The dashboard doors click the rail row. The phone keeps More → Inbox. No new Chinese: 收件箱, 评价 and 反馈 are the live pairs from the removed dropdown. No schema change, no server change, no change to `.gitignore` or CI. Numbered §271, not §270, because a concurrent session was recording §270 when this was written.
 
 2026-09-26 · v4.425 — **§269 ADDENDUM · THE PHONE SHOWS WHO OWES THE SHOP — ASH:** *"fix the mobile now"*, on the gap v4.424 named. The phone's approvals owed list now lists a negative total too, marked `应退还店里`, as `−¥19` with `标记已收回` and its own confirm; the tap is the same settle, which absorbs the returns. The employee's own expense screen says `应退还店里 ¥19` where it used to say nothing, and the claim's pill nets returns: `应付您` only while money is still owed after returns, `应退还店里` while a paid-back employee holds a refund. A claim row shows `退货 ¥N` when something went back. No server change. Chinese: vocabulary v1.180.
 
@@ -20582,3 +20584,14 @@ never edited. Purchase-order goods keep going back through Purchasing. On a clai
 the employee paid for and was already paid back for, the employee owes the shop
 the refund until it is marked recovered. Recording a return takes
 `finance:record`. See the v4.424 changelog entry.
+
+## §271 — THE HEADER INBOX IS GONE; A REVIEW OR FEEDBACK ANNOUNCES ITSELF ON THE DASHBOARD
+
+**Decided 2026-09-26 by Ash** (*"yes"*). Neither the PC topbar nor the phone's
+header carries an Inbox button any more. A review or feedback waiting for an
+answer shows as a *Needs you* row on the dashboard, and only for a role that
+may answer it (`reviews:moderate`, `feedback:moderate`) — on the phone as on
+the PC. On the PC the Reviews and Feedback pages are reached from an *Inbox*
+folder in the rail, shown only to roles that may view them; on the phone from
+More → Inbox. This reverses the 2026-07-25 topbar settlement. See the v4.427
+changelog entry.

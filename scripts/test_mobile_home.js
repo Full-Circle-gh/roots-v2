@@ -93,6 +93,26 @@ const CASES = [
     // used to glue "oldest" onto the front of it: "oldest 1 couldn't be read".
     ['a queue with a sentence is not', `txt('content').includes("1 couldn't be read") && !txt('content').includes("oldest 1 couldn't")`],
   ]],
+  // §271: the header Inbox is gone, so these two rows ARE the notice — and they
+  // go only to a role that may write the answer, as on the desktop
+  // (DASH_CARD_CAP). A role that can read the Inbox but not answer it keeps
+  // Home free of work it cannot do.
+  ['the inbox rows go only to a role that may answer them', `state.caps=['dashboard:view','orders:view','reviews:view','feedback:view'];
+    state.ops={unhandled:{count:3,items:[{waiting_since:'2026-08-22 07:00:00'}]},
+      reviews_unanswered:{count:4,low:2,items:[{waiting_since:'2026-08-20 09:00:00'}]},
+      feedback_waiting:{count:1,items:[{waiting_since:'2026-08-22 08:00:00'}]}};
+    state.liveAttn={}; APP.cmd('tab','home');`, [
+    ['the rest of the queue still shows', `txt('content').includes('Orders to start')`],
+    ['no reviews row',  `!txt('content').includes('Reviews to answer')`],
+    ['no feedback row', `!txt('content').includes('Feedback to answer')`],
+  ]],
+  ['and a role that may answer them sees both', `state.caps=['dashboard:view','orders:view','reviews:view','reviews:moderate','feedback:view','feedback:moderate'];
+    state.ops={reviews_unanswered:{count:4,low:2,items:[{waiting_since:'2026-08-20 09:00:00'}]},
+      feedback_waiting:{count:1,items:[{waiting_since:'2026-08-22 08:00:00'}]}};
+    state.liveAttn={}; APP.cmd('tab','home');`, [
+    ['reviews row',  `txt('content').includes('Reviews to answer')`],
+    ['feedback row', `txt('content').includes('Feedback to answer')`],
+  ]],
   ['a quiet shop shows no queue at all', `state.ops={unhandled:{count:0,items:[]}};
     state.liveAttn={}; APP.cmd('tab','home');`, [
     ['no "Needs you" heading', `!txt('content').includes('Needs you')`],

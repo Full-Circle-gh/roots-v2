@@ -1521,27 +1521,22 @@ function dashOpenInvoices() {
   if (chip && typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
 }
 
-// The two Inbox queues — Reviews and Feedback — are NOT rail tabs. They live in
-// the topbar Inbox dropdown, so `dashJumpTab` (which queries `.tabs [data-tab]`)
-// cannot reach either one, and this is the door instead.
+// The two Inbox queues — Reviews and Feedback. They sit in the rail's Inbox
+// folder since §271 (2026-09-26); before that the topbar Inbox dropdown was
+// their only door and this clicked its menu buttons.
 //
-// It CLICKS the menu button rather than calling goTab, for what the button does
-// either side of the navigation: `_markInboxSeenNow` and `closeInboxMenu`. An
-// operator who reaches the queue from a fire has read it, so the unseen badge
-// must clear exactly as it does when they use the menu — a red dot still sitting
-// on the Inbox icon after they have just worked the list is the badge lying.
-// goTab alone leaves it lit.
+// It CLICKS the rail row rather than calling goTab, for what the row's own
+// listeners do: load the page (reviewsTabInit / feedbackTabInit) and put the
+// rail inside the Inbox folder. A row hidden inside a closed folder still
+// answers .click().
 //
-// It does NOT click for the loading, any more: `TAB_INIT` registers
-// reviewsTabInit/feedbackTabInit, so goTab populates both tabs on its own now.
-// Both are idempotent (`if (LOADED) return`), so the click reaching the button's
-// own listener AND goTab's TAB_INIT dispatch loads once, not twice.
-//
-// Hidden inside a collapsed dropdown is no obstacle — a programmatic click on a
-// hidden button fires its handlers all the same.
+// canTab first, because a row hidden by applyCapGates is still in the DOM and
+// still clickable — the same refusal goTab makes. The dashboard only offers the
+// door to a role holding the :moderate key, which implies nothing about :view
+// on a custom role, so the check is not redundant.
 function dashOpenInbox(which) {
-  const btn = document.querySelector(`#tbInboxMenu [data-tab="${which}"]`)
-           || document.querySelector(`[data-tab="${which}"]`);
+  if (typeof canTab === 'function' && !canTab(which)) return false;
+  const btn = document.querySelector(`.tabs [data-tab="${which}"]`);
   if (!btn) return false;
   btn.click();
   return true;
