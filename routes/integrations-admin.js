@@ -697,8 +697,59 @@ router.get('/api/retail-admin/channel-hub/web/config', requireRetailAdmin, (req,
       cnameTarget: WEB_BASE_DOMAIN,   // custom domains CNAME to the platform base
       domains, suggestedSub,
       signin: { available, enabled },
+      site: normalizeWebSite(webCfgGet('web.site', null)),
       pay: { wechatReady: !!cs.payReady, alipayConfigured: !!(alipay && alipay.enabled && alipay.qr) },
     });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ── The website's own words: title, menu, footer (§271) ─────────────────
+// storefront_config 'web.site', public through /api/retail/config as
+// cfg.web.site, read by public/shop.html for the browser tab title and search
+// description, the header menu and the footer line + links. The mini app
+// never reads it: these are things a website has and a mini app does not.
+// Everything is trimmed and capped; a menu target is 'home', 'shop' or an
+// http(s) address; a footer link is an http(s) address. Nothing else gets in.
+const WEB_SITE_MAX = { title: 80, description: 200, label: 40, text: 200, url: 300, items: 6 };
+function webSiteStr(v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max); }
+function webSiteUrl(v) {
+  const u = String(v == null ? '' : v).trim().slice(0, WEB_SITE_MAX.url);
+  return /^https?:\/\/[^\s"'<>]+$/i.test(u) ? u : '';
+}
+function webSiteTarget(v) {
+  const t = String(v == null ? '' : v).trim();
+  if (t === 'home' || t === 'shop') return t;
+  return webSiteUrl(t);   // '' when it is not an address either
+}
+function normalizeWebSite(raw) {
+  const r = (raw && typeof raw === 'object') ? raw : {};
+  const nav = (Array.isArray(r.nav) ? r.nav : []).slice(0, WEB_SITE_MAX.items).map(n => ({
+    label_en: webSiteStr(n && n.label_en, WEB_SITE_MAX.label),
+    label_cn: webSiteStr(n && n.label_cn, WEB_SITE_MAX.label),
+    target: webSiteTarget(n && n.target),
+  })).filter(n => (n.label_en || n.label_cn) && n.target);
+  const links = (Array.isArray(r.links) ? r.links : []).slice(0, WEB_SITE_MAX.items).map(l => ({
+    label_en: webSiteStr(l && l.label_en, WEB_SITE_MAX.label),
+    label_cn: webSiteStr(l && l.label_cn, WEB_SITE_MAX.label),
+    url: webSiteUrl(l && l.url),
+  })).filter(l => (l.label_en || l.label_cn) && l.url);
+  return {
+    title_en: webSiteStr(r.title_en, WEB_SITE_MAX.title),
+    title_cn: webSiteStr(r.title_cn, WEB_SITE_MAX.title),
+    description_en: webSiteStr(r.description_en, WEB_SITE_MAX.description),
+    description_cn: webSiteStr(r.description_cn, WEB_SITE_MAX.description),
+    nav,
+    footer_en: webSiteStr(r.footer_en, WEB_SITE_MAX.text),
+    footer_cn: webSiteStr(r.footer_cn, WEB_SITE_MAX.text),
+    links,
+  };
+}
+
+router.post('/api/retail-admin/channel-hub/web/site', requireRetailAdmin, express.json({ limit: '64kb' }), (req, res) => {
+  try {
+    const site = normalizeWebSite(req.body);
+    webCfgSet('web.site', site);
+    res.json({ success: true, site });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 

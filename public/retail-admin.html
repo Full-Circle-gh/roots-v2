@@ -13380,6 +13380,14 @@
     .wc-dns th{text-align:left;font-weight:600;color:var(--text-3);font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;background:var(--bg-elev-1);border-bottom:1px solid var(--line)}
     .wc-dns td{padding:7px 10px;color:var(--text-1);border-bottom:1px solid var(--line)}
     .wc-dns tr:last-child td{border-bottom:none}
+    /* Title, menu and footer (§271): text fields in the page's own type, not the domain mono. */
+    .wc-sf{margin-top:14px}
+    .wc-sf>label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+    .wc-spair,.wc-srow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    .wc-si,.wc-ss{flex:1;min-width:140px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;padding:8px 10px;outline:none;background:var(--bg-pane);color:var(--text-1);transition:.15s}
+    .wc-ss{flex:0 0 auto;min-width:120px}
+    .wc-si:focus,.wc-ss:focus{border-color:var(--brass);box-shadow:0 0 0 3px rgba(201,149,74,.16)}
+    .wc-srow .btn{flex:0 0 auto}
     .wc-di{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
     .wc-di input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:8px;font-family:var(--f-mono,monospace);font-size:12.5px;padding:9px 11px;outline:none;background:var(--bg-pane);color:var(--text-1);transition:.15s}
     .wc-di input:focus{border-color:var(--brass);box-shadow:0 0 0 3px rgba(201,149,74,.16)}

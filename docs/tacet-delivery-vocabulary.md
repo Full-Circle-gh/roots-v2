@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.184 · 2026-09-26 · §271 THE WEBSITE'S OWN WORDS — THE BACK-OFFICE CARD, TWELVE OPERATOR PAIRS, EIGHT COPIED, FOUR COMPOSED BY CLAUDE.** The *Title, menu and footer · 标题、菜单与页脚* card on the Web store configuration page. Every noun is live in this product (标题, 菜单, 页脚, 链接, 网址, 描述, 首页, 商品, 移除, 添加); what is composed is the joining. See *The website's own words (§271)*.
+
+**v1.183 · 2026-09-26 · §271 THE EDITOR STAGE — SEVEN OPERATOR PAIRS, THREE COPIED, FOUR COMPOSED BY CLAUDE.** `Desktop · 电脑` and `Phone · 手机` on the stage switch are the editor's own words from its See-it-live drawer; the tooltips, the stage bar's hint and its mini-app-only count are composed from live fragments. See *The editor stage (§271)*.
+
 **v1.182 · 2026-09-26 · §270 THE WEB SHOP'S WECOM HINT ON A PC — ONE CUSTOMER PAIR COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** `Scan with WeChat to add us · 微信扫码添加`, shown from 768px up in place of the phone's long-press hint. `微信扫码` is the web shop's own `微信扫码支付` (checkout) with 支付 dropped; `添加` is the block's own live button `添加我们`. See *Where a block shows (§270)*.
 
 **v1.181 · 2026-09-26 · §270 A BLOCK SAYS WHERE IT SHOWS — ONE LABEL, THREE CHOICES AND ONE NOTE, COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The editor's new *Show on · 显示位置* section. `Mini app only · 仅小程序` is copied whole from the editor's own store-info form; `Website only · 仅网页版` and `Mini app + website · 小程序 + 网页版` are built from the same 仅 and the editor's live `网页版` (See it live → As a web page). See *Where a block shows (§270)*.
@@ -8909,3 +8913,46 @@ touched; it stays the hint below 768px.
 | EN | CN | provenance | where |
 |---|---|---|---|
 | Scan with WeChat to add us | 微信扫码添加 | **COMPOSED** — `微信扫码` is copied from the web shop's own checkout heading `Pay with WeChat · 微信扫码支付` with `支付` dropped; `添加` is the block's own live button `Add us · 添加我们`. Rejected: `扫码添加` (which app is not said, and the block is WeCom's), `微信扫一扫` (WeChat's own verb for the camera screen, live nowhere in this product) | WeCom block hint, ≥768px |
+
+## The editor stage (§271)
+
+The Desktop ⇄ Phone switch above the Mini App Editor's canvas, its tooltips,
+and the bar above the desktop frame (`public/cms.html`). Register: OPERATOR
+(Rule 1). Composed under Rule 4's standing delegation; not yet shown to Ash,
+so every composed row carries the "Ash should correct this if it reads wrong"
+caveat.
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| Desktop | 电脑 | **COPIED** — the editor's own drawer subline `the web store on a PC screen · 电脑屏幕上的网页商店` | stage switch |
+| Phone | 手机 | **COPIED** — the editor's own See-it-live item `On your phone · 在手机上` | stage switch |
+| Edit the website as customers see it on a computer | 按顾客在电脑上看到的样子编辑网页版 | **COMPOSED** — 网页版 and 电脑 as above; 顾客…看到 parallels the drawer's live `what customers see right now · 顾客当前所见` | Desktop tooltip |
+| Edit the mini app as customers see it on a phone | 按顾客在手机上看到的样子编辑小程序 | **COMPOSED** — same construct, 小程序 and 手机 live | Phone tooltip |
+| Only Home is on the website — the other pages are mini app only | 只有首页在网页版上 — 其他页面仅小程序 | **COMPOSED** — 首页 (page picker, live), 网页版, and §270's `仅小程序` | Desktop tooltip off Home |
+| Click a block on the page to edit it. | 点击页面上的模块进行编辑。 | **COMPOSED** — parallel to the inspector's live empty state `Select a block on the phone to edit it. · 在手机上点选一个模块进行编辑。`, with 点击 (live, `点击开关`) for a mouse rather than 点选 for a finger | stage bar |
+| {n} blocks are mini app only — switch to Phone to edit them | {n} 个模块仅小程序显示 — 切换到手机编辑 | **COMPOSED** — `仅小程序` (§270), 显示 and 模块 live in this editor, 切换 live (`Classic ⇄ Canvas` switch copy); the numeral needs no word | stage bar |
+| Move up · Move down · Duplicate · Delete | 上移 · 下移 · 复制 · 删除 | **COPIED** — the phone stage's own floating toolbar carries the same four; the Chinese is the editor's live `data-ti-cn` for each | stage bar buttons |
+
+## The website's own words (§271)
+
+The *Title, menu and footer* card on the Web store configuration page
+(`public/retail-admin/15-integrations.js`). Register: OPERATOR (Rule 1) — read
+by the merchant filling the card; what the merchant types is their own and is
+not vocabulary. Same caveat as above.
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| Title, menu and footer | 标题、菜单与页脚 | **COMPOSED** — the three nouns are each live: 标题 (`小标题`, editor), 菜单 (`主菜单`, back office), 页脚 (`小程序页脚`, editor); the joining `、…与` is the editor's own `边框、圆角与宽度` | card title |
+| Website only — the mini app has its own tabs and footer. | 仅网页版 — 小程序有自己的标签栏和页脚。 | **COMPOSED** — `仅网页版` (§270), 标签栏 live in the editor's tab-bar picker and on this same page, 页脚 as above | card note |
+| Site title | 网站标题 | **COMPOSED** — 网站 live in this editor's prose (`像网站一样`), 标题 as above. Rejected: `网页标题` (a page's title, and this names the whole site) | field |
+| Browser tab and search results. Blank = your brand name. | 浏览器标签页与搜索结果。留空 = 品牌名。 | **COMPOSED** — `留空 =` is the editor's live construct (`留空 = 柔奶白`); 品牌 live in the editor and the back office; 浏览器 live (`浏览器里的商店`, §270) | field note |
+| Description | 描述 | **COPIED** — the product editor's `Description · 描述` | field |
+| One or two sentences for search results. | 一两句话,用于搜索结果。 | **COMPOSED** | field note |
+| Menu | 菜单 | **COPIED** — `Main menu · 主菜单` (back office) less the qualifier | field |
+| The links across the top of the website. Blank = Home and Shop. | 网站顶部的链接。留空 = 首页和商品。 | **COMPOSED** — 首页 and 商品 are the web shop's own live menu words; 顶部 live in the editor and the back office | field note |
+| Home · Shop · Web address | 首页 · 商品 · 网址 | **COPIED** — 首页/商品 from the web shop's menu; 网址 from this same page's `免费网址` | target choices |
+| Add link | 添加链接 | **COPIED CONSTRUCT** — this page's `Add domain · 添加域名` with the noun swapped for the live 链接 | button |
+| Remove | 移除 | **COPIED** — this page's own `Remove · 移除` on a domain row | button |
+| Footer line | 页脚文字 | **COMPOSED** — 页脚 as above, 文字 live (`按钮文字`, editor). Rejected: `页脚内容` (content, wider than one line) | field |
+| e.g. address, opening hours or ICP filing number. | 例如地址、营业时间或 ICP 备案号。 | **COMPOSED** — 营业时间 live (`营业时间内自取`, orders); 备案 live on this same page's domain copy, and ICP 备案 is the regulator's own term | field note |
+| Footer links | 页脚链接 | **COMPOSED** — the two live nouns joined | field |

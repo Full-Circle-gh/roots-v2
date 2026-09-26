@@ -1834,7 +1834,7 @@
     var cls = 'sb-blk-outer sb-corner-' + corner +
       (frameOn ? ' framed' : '') + (fullBleed ? ' bleed' : '') + (fill ? ' fill' : '');
     var style = frameOn ? ('border-color:' + attr(frameColor)) : '';
-    return '<div class="' + cls + '" data-block-type="' + attr(b.type) + '" style="' + style + '">' + inner + '</div>';
+    return '<div class="' + cls + '" data-block-type="' + attr(b.type) + '" data-block-id="' + attr(b.id || '') + '" style="' + style + '">' + inner + '</div>';
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
