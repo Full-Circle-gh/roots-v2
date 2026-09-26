@@ -1028,7 +1028,7 @@
   const SIGNIN_ORDER = ['phone', 'email', 'google', 'apple', 'wechat'];
   let _webCfg = null;
 
-  // ── The website's own words (§272): title, menu, footer ───────────────────
+  // ── The website's own words (§273): title, menu, footer ───────────────────
   // Held in _webSite while the page is open; the inputs write into it on
   // every change (wcSiteRead) so adding or removing a row never loses what
   // was typed. Saved with the page's one Save button (igWebSaveSignin).
@@ -1099,6 +1099,30 @@
       });
     }
   };
+  // Before a save: a bare domain gets its https://, and anything the server
+  // would drop is named to the operator instead of vanishing after "Saved".
+  function wcSiteProblems() {
+    if (!_webSite) return [];
+    const fixUrl = (u) => {
+      u = String(u || '').trim();
+      if (u && !/^https?:\/\//i.test(u) && /^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(u)) u = 'https://' + u;
+      return u;
+    };
+    const problems = [];
+    _webSite.nav.forEach((r, i) => {
+      if (r.target !== 'home' && r.target !== 'shop') r.target = fixUrl(r.target);
+      const n = i + 1;
+      if (!(r.label_en || r.label_cn)) problems.push(cuT(`Menu link ${n} has no text`, `菜单链接 ${n} 没有文字`));
+      if (r.target !== 'home' && r.target !== 'shop' && !/^https?:\/\/[^\s"'<>]+$/i.test(r.target)) problems.push(cuT(`Menu link ${n} needs a web address starting with https://`, `菜单链接 ${n} 需要以 https:// 开头的网址`));
+    });
+    _webSite.links.forEach((r, i) => {
+      r.url = fixUrl(r.url);
+      const n = i + 1;
+      if (!(r.label_en || r.label_cn)) problems.push(cuT(`Footer link ${n} has no text`, `页脚链接 ${n} 没有文字`));
+      if (!/^https?:\/\/[^\s"'<>]+$/i.test(r.url)) problems.push(cuT(`Footer link ${n} needs a web address starting with https://`, `页脚链接 ${n} 需要以 https:// 开头的网址`));
+    });
+    return problems;
+  }
   window.wcSiteRender = function () {
     const host = document.getElementById('wc_site');
     if (host) host.innerHTML = wcSiteHtml();
@@ -1285,18 +1309,30 @@
     const body = {};
     document.querySelectorAll('.wc-tog[data-method]').forEach(t => { body[t.getAttribute('data-method')] = t.classList.contains('on'); });
     const btn = document.getElementById('wc_save'), out = document.getElementById('wc_result');
+    // The website's own words save with the same button (§273). Check them
+    // first: a row the server would drop is named here, not lost after "Saved".
+    wcSiteRead();
+    const problems = wcSiteProblems();
+    if (problems.length) {
+      wcSiteRender();   // shows any https:// that was added
+      if (out) { out.style.color = 'var(--danger)'; out.textContent = problems[0] + (problems.length > 1 ? ` (+${problems.length - 1})` : ''); }
+      return;
+    }
     if (btn) btn.disabled = true;
     if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Saving…', '保存中…'); }
+    // Two writes, each reported on its own, so a failure names the part.
+    const failed = [];
+    try { await api('/api/retail-admin/channel-hub/web/signin', { method: 'POST', body }); }
+    catch (e) { failed.push(cuT('sign-in', '登录')); }
     try {
-      await api('/api/retail-admin/channel-hub/web/signin', { method: 'POST', body });
-      // The website's own words save with the same button (§272).
-      wcSiteRead();
       const r = await api('/api/retail-admin/channel-hub/web/site', { method: 'POST', body: _webSite || WC_SITE_EMPTY() });
       if (r && r.site) { _webSite = Object.assign(WC_SITE_EMPTY(), r.site); wcSiteRender(); }
-      if (out) { out.style.color = 'var(--accent)'; out.textContent = '✓ ' + cuT('Saved', '已保存'); }
-    } catch (e) {
-      if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Save failed', '保存失败'); }
-    } finally { if (btn) btn.disabled = false; }
+    } catch (e) { failed.push(cuT('title, menu and footer', '标题、菜单与页脚')); }
+    if (out) {
+      if (failed.length) { out.style.color = 'var(--danger)'; out.textContent = cuT('Save failed: ', '保存失败:') + failed.join(', '); }
+      else { out.style.color = 'var(--accent)'; out.textContent = '✓ ' + cuT('Saved', '已保存'); }
+    }
+    if (btn) btn.disabled = false;
   };
 
   window.igWebAddDomain = async function () {

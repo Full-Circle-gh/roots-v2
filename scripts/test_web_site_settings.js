@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The editor stage is the website first, and the website has its own words — §272.
+ * The editor stage is the website first, and the website has its own words — §273.
  *
  * Two things Ash asked for in one shot ("desktop first then phone. do all on
  * one shot"):
@@ -124,11 +124,14 @@ yes(/ifr\.src = '\/shop-preview\?draft=1&stage=1';/.test(CMS), 'the desktop stag
 yes(/width: 1280px;/.test(CMS) && /const scale = Math\.min\(1, w \/ 1280\);/.test(CMS), 'rendered 1280px wide and scaled to the canvas');
 yes(/type: 'cms:draft',/.test(CMS) && /layout: state\.draft\.map\(b => \(\{ \.\.\.b, show_on: showOnFor\(b\) \}\)\)/.test(CMS),
   'every preview render posts the draft with show_on made explicit');
-yes(/pushDraftToStage\(\);\n  renderStageBar\(\);\n  const mount = \$\('#phone-content'\);/.test(CMS), 'renderPreview() feeds the stage first');
+yes(/pushDraftToStage\(\);\n  renderStageBar\(\);/.test(slice(CMS, 'function renderPreview() {', "const mount = $('#phone-content');")), 'renderPreview() feeds the stage first');
+yes(/if \(effectiveStage\(\) === 'desktop'\) \{ _phoneStale = true; return; \}/.test(CMS) && /else if \(_phoneStale\) \{\n    renderPreview\(\);/.test(CMS),
+  'the hidden phone DOM is not rebuilt per keystroke on the desktop stage, and is rebuilt when the phone stage returns');
+yes(/panel\.hidden = !\(id && \(wrap \|\| effectiveStage\(\) === 'desktop'\)\);/.test(CMS), 'the floating inspector still shows for a block selected on the desktop stage');
 yes(/ev\.data\.type === 'cms:select'/.test(CMS) && /selectBlock\(ev\.data\.id\)/.test(CMS), 'a click in the frame selects the block in the editor');
 yes(/ev\.source !== _stageIframe\.contentWindow\) return;/.test(CMS), '…and only the stage frame is listened to');
-yes(/if \(!id \|\| state\.stage === 'desktop'\) \{ tb\.style\.display = 'none'; return; \}/.test(CMS),
-  'the phone\'s floating toolbar stays hidden on the desktop stage');
+yes(/if \(!id \|\| effectiveStage\(\) === 'desktop'\) \{ tb\.style\.display = 'none'; return; \}/.test(CMS),
+  'the phone\'s floating toolbar hides on the desktop stage and shows on the phone stage — the EFFECTIVE stage, so it is there off Home');
 yes(/id="ds-sel"/.test(CMS) && /data-action="up"/.test(slice(CMS, 'id="ds-sel"', '</div>')), 'the stage bar carries the block actions instead');
 yes(/applyStage\(\);\n  \/\/ Keep the live-mirror iframe in sync/.test(CMS) && /applyStage\(\);   \/\/ Desktop first/.test(CMS),
   'the stage is applied on first load and on every page switch');
@@ -139,13 +142,19 @@ yes(/const STAGE_KEY = 'cms_stage';/.test(CMS) && CMS.indexOf("const STAGE_KEY")
 section('4 · the web shop as a stage');
 
 yes(/STAGE_MODE=DRAFT_MODE&&new URLSearchParams\(location\.search\)\.get\('stage'\)==='1';/.test(SHOP), 'stage mode needs draft mode too');
-yes(/ev\.data\.type==='cms:draft'&&STAGE_MODE/.test(SHOP) && /state\.config\.home\.layout=Array\.isArray\(ev\.data\.layout\)\?ev\.data\.layout:\[\];/.test(SHOP),
+yes(/ev\.data\.type==='cms:draft'&&STAGE_MODE/.test(SHOP) && /state\.config\.home\.layout=layout;/.test(SHOP),
   'the editor\'s draft replaces the home layout without a round trip');
+yes(/if\(key===stageKey&&!langChanged&&parseHash\(\)\.seg\.length===0\)\{ stageHighlight\(true\); return; \}/.test(SHOP),
+  'an unchanged layout (a click that only selected a block) is a highlight, not a re-render');
+yes(/if\(idKey!==stageIdKey\)\{ stageIdKey=idKey; state\.homeProducts=null; \}/.test(SHOP),
+  'products are re-fetched only when the set of products the layout names changed');
 yes(/parent\.postMessage\(\{type:'cms:select',id\},location\.origin\)/.test(SHOP), 'a click on a block tells the editor which one');
 yes(/if\(ev\.target\.closest\('a,button,form'\)\)\{ ev\.preventDefault\(\); ev\.stopPropagation\(\); \}/.test(SHOP), 'every other link and button is inert');
 yes(/\},true\);/.test(slice(SHOP, "document.addEventListener('click',ev=>{", '},true);')), '…caught in the capture phase, before the shop\'s own handlers');
 yes(/parent\.postMessage\(\{type:'cms:stage-ready'\},location\.origin\)/.test(SHOP), 'the page tells the editor when it is up');
 yes(/data-block-id="' \+ attr\(b\.id \|\| ''\) \+ '"/.test(BLOCKS), 'every block carries its id in the DOM for the stage to find');
+yes(/var hintPc = ownHint \|\| \(CN\(\) \? '微信扫码添加' : 'Scan with WeChat to add us'\);/.test(BLOCKS),
+  'a WeCom hint the merchant wrote shows on both widths; only the default long-press line is swapped on a PC');
 yes(/\.cms-stage \.sb-blk-outer\.cms-selected\{outline:2px solid #6E67AF/.test(SHOP), 'the selected block wears the editor\'s ring');
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -154,6 +163,11 @@ section('5 · the back-office card');
 yes(/cuT\('Title, menu and footer', '标题、菜单与页脚'\)/.test(ADMIN), 'the Web store configuration page has the card');
 yes(/'\/api\/retail-admin\/channel-hub\/web\/site', \{ method: 'POST', body: _webSite \|\| WC_SITE_EMPTY\(\) \}/.test(ADMIN), 'the page\'s one Save button saves it');
 yes(/_webSite\[kind\]\.length >= 6\) return;/.test(ADMIN) === false && /\(_webSite\[kind\] \|\| \[\]\)\.length >= 6\) return;/.test(ADMIN), 'the card stops at six links, like the server');
+yes(/const problems = wcSiteProblems\(\);\n    if \(problems\.length\) \{/.test(ADMIN) && ADMIN.indexOf('const problems = wcSiteProblems()') < ADMIN.indexOf("'/api/retail-admin/channel-hub/web/signin', { method: 'POST', body }"),
+  'a row the server would drop is named to the operator before anything is sent');
+yes(/u = 'https:\/\/' \+ u;/.test(ADMIN), 'a bare domain gets its https:// instead of being dropped');
+yes(/failed\.push\(cuT\('sign-in', '登录'\)\)/.test(ADMIN) && /failed\.push\(cuT\('title, menu and footer', '标题、菜单与页脚'\)\)/.test(ADMIN),
+  'the two writes are reported apart, so a failure names the part');
 
 // ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

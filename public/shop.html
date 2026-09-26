@@ -4953,7 +4953,7 @@ async function loadPolls(){
 // content as the mini-app, responsive for phone + desktop. Falls back to a
 // clean auto-layout when nothing is published.
 // Editor desktop stage (see boot): the selected block's id and its outline.
-let STAGE_MODE=false, stageSel=null;
+let STAGE_MODE=false, stageSel=null, stageKey=null, stageIdKey=null;
 function stageHighlight(scroll){
   if(!STAGE_MODE) return;
   document.querySelectorAll('.sb-blk-outer.cms-selected').forEach(el=>el.classList.remove('cms-selected'));
@@ -6218,7 +6218,7 @@ async function renderProduct(id){
 
 /* ════════════ CHROME / INIT ════════════ */
 // The website's own words (cfg.web.site, set in the back office → Web store
-// configuration, §272): the header menu, the footer line and links, the
+// configuration, §273): the header menu, the footer line and links, the
 // browser-tab title and the search description. Nothing set → the two
 // default menu links and the brand name, as before.
 function siteCfg(){ const w=state.config&&state.config.web; return (w&&w.site&&typeof w.site==='object')?w.site:{}; }
@@ -6296,7 +6296,7 @@ function ctaRoute(t){
   // session has lapsed, so the preview stays useful.
   const DRAFT_MODE=new URLSearchParams(location.search).get('draft')==='1';
   // ?stage=1 (with draft=1): this page IS the editor's desktop stage
-  // (public/cms.html, §272). The editor posts the whole draft on every
+  // (public/cms.html, §273). The editor posts the whole draft on every
   // change (`cms:draft`), a click on a block posts `cms:select` back, and
   // every link and button is inert — the stage is for editing Home, not for
   // shopping. The selected block wears an outline (see .cms-stage CSS).
@@ -6313,12 +6313,23 @@ function ctaRoute(t){
     window.addEventListener('message',async ev=>{
       if(ev.origin!==location.origin||!ev.data) return;
       if(ev.data.type==='cms:draft'&&STAGE_MODE){
-        // The editor's draft, straight from its state — no round trip.
-        state.config.home=state.config.home||{};
-        state.config.home.layout=Array.isArray(ev.data.layout)?ev.data.layout:[];
+        // The editor's draft, straight from its state — no round trip. The
+        // editor posts on every keystroke and every click, so: an unchanged
+        // layout (a click that only selected a block) is a highlight, not a
+        // render; a changed layout re-renders, and re-fetches products only
+        // when the set of products the layout names has changed.
+        const layout=Array.isArray(ev.data.layout)?ev.data.layout:[];
+        const key=JSON.stringify(layout);
+        const langChanged=!!(ev.data.lang&&ev.data.lang!==state.lang);
         stageSel=ev.data.selectedId||null;
-        if(ev.data.lang&&ev.data.lang!==state.lang){ state.lang=ev.data.lang; applyLangToUI(); }
-        state.homeProducts=null;
+        if(key===stageKey&&!langChanged&&parseHash().seg.length===0){ stageHighlight(true); return; }
+        stageKey=key;
+        state.config.home=state.config.home||{};
+        state.config.home.layout=layout;
+        if(langChanged){ state.lang=ev.data.lang; applyLangToUI(); }
+        const ids=[]; for(const b of layout){ (b.product_ids||[]).forEach(id=>ids.push(id)); if(b.product_id) ids.push(b.product_id); if(b.bundle_product_id) ids.push(b.bundle_product_id); }
+        const idKey=ids.slice().sort().join(',');
+        if(idKey!==stageIdKey){ stageIdKey=idKey; state.homeProducts=null; }
         if(parseHash().seg.length){ location.hash='#/'; } else { route(); }
         return;
       }

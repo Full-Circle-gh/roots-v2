@@ -23528,7 +23528,7 @@ router.post('/api/retail-admin/brand/publish', requireRetailAdmin, express.json(
   try {
     const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key='cms.draft.brand_theme'").get();
     const theme = row ? brandThemeLib.sanitizeTheme(JSON.parse(row.value_json)) : null;
-    const draftLayout = readLayout('cms.draft.home_layout');
+    const draftLayout = readLayoutStored('cms.draft.home_layout');
     const by = req.user.id;
     const upsert = tdb().prepare(
       `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
@@ -34753,13 +34753,17 @@ const ALLOWED_PAGES = new Set(['home', 'promotions', 'membership', 'categories',
 // not have yet: shop.html's ctaRoute() answers wallet / notifications / order
 // targets with "coming soon", so a points, top-up, notification or order
 // tracker block on the website is a promise the site cannot keep. The default
-// is applied at READ time, here and only here, so a layout published before
-// the field existed behaves the same as one saved after it, and the four
-// renderers (mini app, shop.html, storefront.html, the editor canvas) read one
-// explicit value instead of each carrying a copy of this table. The editor
+// is applied on the way OUT (readLayout for the editor, loadConfig for the
+// customer surfaces, the two draft overlays) and never written back: publish,
+// revert and brand-publish copy the STORED layout (readLayoutStored), so a
+// block that never had the field keeps following this table if the table
+// changes. A layout published before the field existed therefore behaves the
+// same as one saved after it, and the four renderers (mini app, shop.html,
+// storefront.html, the editor canvas) read one explicit value instead of each
+// carrying a copy of this table. The editor
 // carries the same four-type table for a block added and not yet saved; the
 // test `scripts/test_cms_show_on.js` holds the two copies equal.
-// Decided by Ash 2026-09-26 — docs/tacet-consolidation-decisions.md §271.
+// Decided by Ash 2026-09-26 — docs/tacet-consolidation-decisions.md §272.
 const SHOW_ON_VALUES = new Set(['both', 'miniapp', 'web']);
 const SHOW_ON_DEFAULTS = Object.freeze({
   order_tracker: 'miniapp', notification_bar: 'miniapp',
@@ -34821,12 +34825,16 @@ function validateBlocks(blocks) {
   return {};
 }
 
-function readLayout(key) {
+// The layout as stored — for the paths that write it somewhere else (publish,
+// revert, brand-publish). Nothing is added on the way through.
+function readLayoutStored(key) {
   const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
   if (!row) return [];
-  try { const v = JSON.parse(row.value_json); return Array.isArray(v) ? withShowOn(v) : []; }
+  try { const v = JSON.parse(row.value_json); return Array.isArray(v) ? v : []; }
   catch { return []; }
 }
+// The layout as served — every block with `show_on` explicit (see withShowOn).
+function readLayout(key) { return withShowOn(readLayoutStored(key)); }
 // Per-call (not a module-level prepared statement) so it binds to the
 // request's tenant connection, not whatever db existed at load.
 //
@@ -34993,7 +35001,7 @@ router.put('/api/retail-admin/cms/layout/draft', requireRetailAdmin, express.jso
 router.post('/api/retail-admin/cms/publish', requireRetailAdmin, express.json(), (req, res) => {
   const page = pageKey(req);
   if (!page) return res.status(400).json({ success: false, error: 'invalid_page' });
-  const draft = readLayout(`cms.draft.${page}_layout`);
+  const draft = readLayoutStored(`cms.draft.${page}_layout`);
   // Re-validate in case the draft was somehow written outside the editor
   const v = validateBlocks(draft);
   if (v.error) return res.status(400).json({ success: false, error: 'draft_invalid', details: v });
@@ -35483,7 +35491,7 @@ router.post('/api/retail-admin/media/upload', requireRetailAdmin, (req, res) => 
 router.post('/api/retail-admin/cms/revert-draft', requireRetailAdmin, express.json(), (req, res) => {
   const page = pageKey(req);
   if (!page) return res.status(400).json({ success: false, error: 'invalid_page' });
-  const live = readLayout(`${page}.layout`);
+  const live = readLayoutStored(`${page}.layout`);
   writeLayout(`cms.draft.${page}_layout`, JSON.stringify(live), req.user.id);
   res.json({ success: true, data: { page, draft: live } });
 });

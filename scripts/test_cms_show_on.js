@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * A block says where it shows — §271.
+ * A block says where it shows — §272.
  *
  * One layout feeds two customer surfaces, the WeChat mini app and the web
  * shop. `show_on` on a block ('both' | 'miniapp' | 'web') says which of them
@@ -80,7 +80,12 @@ is(srv.showOnFor({ type: 'hero_banner', show_on: 'phone' }), 'both', 'a value th
 }
 
 /* Every read path the two surfaces and the editor use runs the fill. */
-yes(/return Array\.isArray\(v\) \? withShowOn\(v\) : \[\];/.test(RETAIL), 'readLayout (editor GET, publish) fills it');
+yes(/function readLayout\(key\) \{ return withShowOn\(readLayoutStored\(key\)\); \}/.test(RETAIL), 'readLayout (the editor GET) fills it');
+/* …and the paths that WRITE a layout somewhere else copy the stored one, so
+   the default is never frozen into a published layout. */
+is((RETAIL.match(/readLayoutStored\(`cms\.draft\.\$\{page\}_layout`\)|readLayoutStored\(`\$\{page\}\.layout`\)|readLayoutStored\('cms\.draft\.home_layout'\)/g) || []).length, 3,
+  'publish, revert and brand-publish copy the stored layout, not the filled one');
+yes(!/writeLayout\([^\n]*withShowOn/.test(RETAIL), 'nothing writes a filled layout back');
 yes(/out\[page\]\.layout = withShowOn\(out\[page\]\.layout\)/.test(RETAIL), 'loadConfig (public /api/retail/config) fills it');
 is((RETAIL.match(/\.layout = withShowOn\(draft\)/g) || []).length, 2, 'both draft overlays (preview token, preview-config) fill it');
 

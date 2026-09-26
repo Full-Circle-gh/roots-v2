@@ -5751,7 +5751,7 @@ const state = {
   selectedId: null, dirty: false, saving: false,
   // The editor stage — 'desktop' (the real web shop at PC width, in an
   // iframe the office clicks into) or 'phone' (the mini-app-faithful frame).
-  // Desktop first, by Ash's direction (§272); persisted per browser. Only
+  // Desktop first, by Ash's direction (§273); persisted per browser. Only
   // Home reaches the website, so every other page forces the phone stage.
   stage: 'desktop',
   // Focus mode — when on, selecting a block fades every other block back
@@ -5951,7 +5951,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     }, 60 * 1000);
     // Initial page load — uses state.page (already set by buildPagePicker)
     await loadPage();
-    applyStage();   // Desktop first (§272); the phone stage off Home
+    applyStage();   // Desktop first (§273); the phone stage off Home
     // Now that all three design pickers have rendered their menus, wire
     // the positioning observer so they escape the pane's overflow.
     _wireDesignMenuPositioning();
@@ -6084,7 +6084,9 @@ function initCanvasLayout() {
     if (!panel) return;
     const id = state.selectedId;
     const wrap = id && document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
-    panel.hidden = !(id && wrap);
+    // On the desktop stage the phone DOM is not built; the selection lives in
+    // the stage frame, and the inspector must still show for it.
+    panel.hidden = !(id && (wrap || effectiveStage() === 'desktop'));
   };
 
   // ── dismiss the drawer on outside click / Esc ──
@@ -7729,7 +7731,7 @@ async function buildDesignCheckPicker() {
 // so opening the editor from an English admin starts in English, and flipping
 // here follows you back out.
 const LANG_KEY = 'roots-admin-lang';
-const STAGE_KEY = 'cms_stage';   // Desktop ⇄ Phone stage preference (§272)
+const STAGE_KEY = 'cms_stage';   // Desktop ⇄ Phone stage preference (§273)
 function buildLangToggle() {
   try { state.lang = localStorage.getItem(LANG_KEY) || 'en'; } catch {}
   if (!['en', 'cn'].includes(state.lang)) state.lang = 'en';
@@ -8652,9 +8654,18 @@ function loadTopProducts(channel, window, limit) {
   return cached?.products || [];
 }
 
+// True when the phone DOM was skipped while the desktop stage was showing;
+// applyStage() rebuilds it the moment the phone stage comes back.
+let _phoneStale = false;
 function renderPreview() {
   pushDraftToStage();
   renderStageBar();
+  // On the desktop stage the phone is display:none and nobody can see it, so
+  // the per-keystroke rebuild (and its product fetches) is skipped. The few
+  // readers of the phone DOM cope with its absence: the toolbar hides, Locate
+  // falls back to the stage's own highlight, the timers skip.
+  if (effectiveStage() === 'desktop') { _phoneStale = true; return; }
+  _phoneStale = false;
   const mount = $('#phone-content');
   mount.innerHTML = '';
   state.draft.forEach((block, idx) => {
@@ -8764,7 +8775,7 @@ function buildDropZone(beforeIdx, isTail = false) {
 // this table is the server's SHOW_ON_DEFAULTS, copied: the four types that
 // lead to a wallet, notifications or order page the web shop does not have.
 // scripts/test_cms_show_on.js holds the two copies equal. Decided by Ash
-// 2026-09-26 — docs/tacet-consolidation-decisions.md §271.
+// 2026-09-26 — docs/tacet-consolidation-decisions.md §272.
 const SHOW_ON_DEFAULTS = Object.freeze({
   order_tracker: 'miniapp', notification_bar: 'miniapp',
   points_widget: 'miniapp', top_up: 'miniapp',
@@ -8857,7 +8868,7 @@ function ensureFloatingToolbar() {
 function positionFloatingToolbar() {
   const tb = ensureFloatingToolbar();
   const id = state.selectedId;
-  if (!id || state.stage === 'desktop') { tb.style.display = 'none'; return; }
+  if (!id || effectiveStage() === 'desktop') { tb.style.display = 'none'; return; }
   const wrap = document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
   if (!wrap) { tb.style.display = 'none'; return; }
 
@@ -11298,7 +11309,7 @@ function buildChromeSection(body, b) {
       { value: 'miniapp', label: T('Mini app only', '仅小程序') },
       { value: 'web',     label: T('Website only', '仅网页版') },
     ], v => updateBlock(b.id, { show_on: v }))));
-  if (SHOW_ON_DEFAULTS[b.type] === 'miniapp') {
+  if (SHOW_ON_DEFAULTS[b.type] === 'miniapp' && current === 'miniapp') {
     const n = document.createElement('div');
     n.className = 'insp-note';
     n.textContent = T('The website has no wallet, notifications or order pages yet, so this block is off there unless you turn it on.',
@@ -15338,7 +15349,7 @@ function _lpOpen()  { const d = document.getElementById('live-preview-drawer'); 
 function _lpClose() { const d = document.getElementById('live-preview-drawer'); if (d) { d.classList.remove('open'); d.setAttribute('aria-hidden','true'); } }
 
 // ═══════════════════════════════════════════════════════════════════════
-// THE EDITOR STAGE — Desktop first, then Phone (§272, Ash 2026-09-26)
+// THE EDITOR STAGE — Desktop first, then Phone (§273, Ash 2026-09-26)
 // The desktop stage is the REAL web shop (public/shop.html) served at
 // /shop-preview?draft=1&stage=1, rendered 1280px wide and scaled to the
 // canvas. The office clicks a block in it; shop.html posts `cms:select` and
@@ -15397,6 +15408,8 @@ function applyStage() {
     mountDesktopStage();
     sizeDesktopStage();
     pushDraftToStage();
+  } else if (_phoneStale) {
+    renderPreview();   // the phone DOM was skipped while the desktop stage showed
   }
   renderStageBar();
   positionFloatingToolbar();

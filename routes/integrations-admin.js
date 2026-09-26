@@ -703,7 +703,7 @@ router.get('/api/retail-admin/channel-hub/web/config', requireRetailAdmin, (req,
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// ── The website's own words: title, menu, footer (§272) ─────────────────
+// ── The website's own words: title, menu, footer (§273) ─────────────────
 // storefront_config 'web.site', public through /api/retail/config as
 // cfg.web.site, read by public/shop.html for the browser tab title and search
 // description, the header menu and the footer line + links. The mini app
