@@ -9902,10 +9902,12 @@ function openDirectRefundDialog(orderId) {
           <label class="stacked">${cuT('Reason / note', '原因 / 备注')}</label>
           <textarea id="drf-note" rows="2" style="width: 100%;" data-ph-en="Optional" data-ph-cn="可选" placeholder="${cuT('Optional', '可选')}"></textarea>
         </div>
-        <div style="display: flex; gap: 8px; justify-content: flex-end;">
-          <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Cancel', '取消')}</button>
-          <button class="btn btn-primary" id="drf-submit">${cuT('Refund', '退款')}</button>
-        </div>
+      </div>
+      ${/* §282: the foot sits OUTSIDE the scrolling body, so a long item list
+           never carries Refund off the screen. */''}
+      <div class="pu-editor-foot">
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Cancel', '取消')}</button>
+        <button class="btn btn-primary" id="drf-submit">${cuT('Refund', '退款')}</button>
       </div>
     </div>`;
   mountFloatingPuModal(bg);
@@ -10080,10 +10082,11 @@ function openRefundApproveDialog(orderId) {
              because full and partial do genuinely different things and one line
              covering both is the line nobody reads. */}
         <div id="rf-consequence" style="margin-bottom: 12px; padding: 10px 12px; border-radius: 6px; font-size: 11.5px; line-height: 1.6; background: var(--bg-elev-1); border-left: 3px solid var(--line-soft);"></div>
-        <div style="display: flex; gap: 8px; justify-content: flex-end;">
-          <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">Cancel · 取消</button>
-          <button class="btn btn-primary" id="rf-submit">Approve · 批准</button>
-        </div>
+      </div>
+      ${/* §282: the foot sits OUTSIDE the scrolling body, as on the refund above. */''}
+      <div class="pu-editor-foot">
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">Cancel · 取消</button>
+        <button class="btn btn-primary" id="rf-submit">Approve · 批准</button>
       </div>
     </div>`;
   mountFloatingPuModal(bg);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * §282 on the desktop — a commit button never scrolls off the screen.
+ * §282 on the desktop — a commit button never scrolls off the screen, on a
+ * page (part 2) or in a pop-up (part 3).
  *
  *   node scripts/test_pin_bars.js
  *
@@ -27,6 +28,7 @@ const CSS = read('public/retail-admin.css');
 const OPS = read('public/retail-admin/02-settings-ops.js');
 const VOT = read('public/retail-admin/10-extras.js');
 const PUR = read('public/retail-admin/16-purchasing.js');
+const ORD = read('public/retail-admin/04-orders.js');
 
 let pass = 0, fail = 0;
 function ok(cond, msg) {
@@ -57,6 +59,19 @@ ok(count(PUR, /<div class="pu2-wizfoot pin-foot">/g) === 5,
   'Purchasing: order steps 1–3, a new supplier, the supplier import');
 ok(PUR.includes('<div class="pu2-actions pin-foot">\n        ${canReceive'), 'Purchasing: Confirm delivery');
 ok(!/<div class="pu2-wizfoot">/.test(PUR), 'no purchasing footer was left unpinned');
+
+console.log('\npop-ups: the foot stays put while the body scrolls');
+ok(/#prod-view-purchasing \.pu2-modal \{ display: flex; flex-direction: column; overflow: hidden; \}/.test(CSS)
+  && /#prod-view-purchasing \.pu2-modal > \.pu2-modal-body \{[^}]*overflow: auto/.test(CSS),
+  'every purchasing pop-up (invoice, set supplier, re-match) scrolls its body, not its foot');
+ok(/\.fsd-drawer \.fsc-foot \{ position: sticky; bottom: 0/.test(HTML), 'Flash sale: Start / Schedule');
+ok(/:is\(#tab-sales, \.cfg-host\) \.mc-wiz > \.mc-foot \{\s*position: sticky; bottom: 0/.test(CSS),
+  'Channel set-up (keys, the WeChat wizard, the web shop): Save / Next');
+for (const id of ['drf-submit', 'rf-submit']) {
+  const at = ORD.indexOf('id="' + id + '"');
+  const foot = ORD.lastIndexOf('<div class="pu-editor-foot">', at);
+  ok(at > 0 && foot > 0 && at - foot < 300, `Refund: #${id} is in the pop-up's foot, outside the scrolling body`);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
