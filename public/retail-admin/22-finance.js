@@ -1256,8 +1256,12 @@ function finTxRow(r) {
     : '';
   /* §269. On the row that was returned: how much went back. The numeral sits
      outside the pair, the house rule for a figure beside a word. */
+  /* §269 addendum: AND WHAT IT CAME TO. The row keeps the −¥19 that was paid,
+     which read as though the return had not counted; the net says what the
+     shop actually spent (the ¥10 shipping the seller kept). Same numeral rule. */
   const returned = (r.source === 'manual' || claim) && Number(r.returned) > 0
-    ? `<span class="fin-tx-mark">${escapeHtml(cuT('Returned', '退货'))} ${escapeHtml(finMoney(r.returned))}</span>`
+    ? `<span class="fin-tx-mark">${escapeHtml(cuT('Returned', '退货'))} ${escapeHtml(finMoney(r.returned))}`
+      + ` · ${escapeHtml(cuT('Net', '净额'))} ${escapeHtml(finMoney(finTxReturnLeft(r)))}</span>`
     : '';
   /* WHO PUT THIS ROW IN THE BOOKS (§92). Reported by Ash off this screen: a
      ¥200 claim row and no way to see who had let it into the accounts.
@@ -1375,7 +1379,13 @@ window.finTxReturn = async function finTxReturn(id) {
     + '<div class="tdlg-field"><label for="fin-rt-date">' + escapeHtml(cuT('Date', '日期')) + '</label>'
     + `<input type="date" id="fin-rt-date" value="${escapeHtml(tdToday())}"></div>`
     + '<div class="tdlg-field"><label for="fin-rt-amount">' + escapeHtml(cuT('Amount', '金额')) + '</label>'
-    + `<input type="number" id="fin-rt-amount" min="0" max="${left}" step="0.01" inputmode="decimal" value="${left}"></div>`
+    /* §269 addendum: EMPTY, NOT PREFILLED. Starting at the full amount is how
+       staff recorded a ¥19 return for ¥9 that came back and then typed the ¥10
+       shipping back in as a new expense. The ceiling is the placeholder, and the
+       line under it says what goes in the box. */
+    + `<input type="number" id="fin-rt-amount" min="0" max="${left}" step="0.01" inputmode="decimal" placeholder="${escapeHtml(finMoney(left))}">`
+    + '<p class="tdlg-sub">' + escapeHtml(cuT('Only what the seller actually refunded. If shipping was not refunded, leave it out.',
+                                          '只填卖家实际退回的金额。运费没退就不要算进去。')) + '</p></div>'
     + '<div class="tdlg-field"><label for="fin-rt-reason">' + escapeHtml(cuT('Why?', '原因？')) + '</label>'
     + '<select id="fin-rt-reason"><option value="">' + escapeHtml(cuT('Why?', '原因？')) + '</option>'
     + FIN_RETURN_REASONS.map(x => `<option value="${x[0]}">${escapeHtml(cuT(x[1], x[2]))}</option>`).join('')
@@ -1394,6 +1404,9 @@ window.finTxReturn = async function finTxReturn(id) {
     // Required HERE as well as on the server, so the one mistake everybody
     // makes (no reason picked) is caught before a round trip. The words are
     // Purchasing's own for the same miss.
+    // The box starts empty now, so an untouched one is caught here with the
+    // server's own words for it rather than a round trip.
+    if (!(Number(val('#fin-rt-amount')) > 0)) { err(cuT('amount must be positive', '金额必须大于零')); return; }
     if (!val('#fin-rt-reason')) { err(cuT('Pick a reason for the return', '请选择退货原因')); return; }
     save.disabled = true;
     try {
