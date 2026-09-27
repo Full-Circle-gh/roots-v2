@@ -351,15 +351,20 @@ run('mobile nav', [
   // action belonging to no capability was taken away from exactly the operators
   // with the fewest other ways out. The Account row pushed Settings
   // unconditionally too — a chevron promising a screen push() then refused.
+  // Since 2026-09-27 the row opens the operator's OWN Account screen, which no
+  // capability gates, so it is a live door for every role and never a door to
+  // the shop's Settings (scripts/test_mobile_account.js asserts what is on it).
   ['a narrowed operator can still sign out', KITCHEN + "state.overflow=true;render();", [
     ['the menu offers it', "document.querySelector('.sheet').innerText.indexOf('Sign out')>-1"],
     ['it names who is signed in', "document.querySelector('.sheet').innerText.indexOf('Account')>-1"],
     ['with no chevron promising a Settings they cannot open',
      "!document.querySelector('.sheet button[onclick*=\"push\\',\\'settings\"]')"],
+    ['and the row opens their own account instead',
+     "!!document.querySelector('.sheet button[onclick*=\"acctOpen\\',\\'account\"]')"],
   ]],
-  ['an operator who has Settings still reaches it from there',
+  ['an operator who has Settings gets their account from the row too',
     "state.caps=['settings:shop','orders:view'];state.overflow=true;render();", [
-      ['Account still goes somewhere', "document.querySelector('.sheet').innerHTML.indexOf(\"push','settings'\")>-1"],
+      ['Account goes to the account', "document.querySelector('.sheet').innerHTML.indexOf(\"acctOpen','account'\")>-1"],
       ['and Sign out is there too', "document.querySelector('.sheet').innerText.indexOf('Sign out')>-1"],
     ]],
 
