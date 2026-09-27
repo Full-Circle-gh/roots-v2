@@ -94,6 +94,8 @@ const sandbox = {
   setTimeout, clearTimeout,
   // The real engine, not a stub: §279 is only as good as the thing that sends.
   TacetAutosave: require('../public/tacet-autosave.js'),
+  // 01-core's shared history dialog and leave guard; not sliced, so stubbed.
+  autosaveRegister: () => {}, autosavePickVersion: async () => null,
   $: (sel) => (ELS[sel] = ELS[sel] || mkEl()),
   $$: () => [],
   cuT: (en) => en,                                   // assert against English

@@ -3046,7 +3046,6 @@ let RL_CAN_EDIT = false;
 let RL_LAYOUTS = ['default'];
 let RL_DASH_CATALOG = [];    // dashboard-card keys, in display order (from the server — lib/roles.DASH_CARDS)
 let RL_AUTO = null;           // this visit's autosave engine (public/tacet-autosave.js, §279)
-let RL_HIST = null, RL_HIST_FOR = null;
 
 function rlRole(key) { return RL_ROLES.find(r => r.key === key) || null; }
 
@@ -3450,7 +3449,6 @@ function rlAutoOpen(key) {
 // A save landed. The record is swapped for the server's answer and the LIST
 // repainted — not the pane, which holds the operator's caret and scroll.
 function rlLanded(key, role) {
-  RL_HIST = null; RL_HIST_FOR = null;
   if (!role) return;
   const i = RL_ROLES.findIndex(r => r.key === key);
   if (i !== -1) RL_ROLES[i] = role;
@@ -3600,7 +3598,6 @@ function rlSelect(key, force) {
         caps: new Set(r.caps || []), layout: r.layout || 'default',
         dashboardCards: Array.isArray(r.dashboardCards) ? [...r.dashboardCards] : null }
     : null;
-  RL_HIST = null; RL_HIST_FOR = null;
   rlAutoOpen(key);
   rlRenderList();
   rlRenderPane();
@@ -3640,56 +3637,23 @@ function rlUndo() {
     rlRenderPane();
   });
 }
-// HISTORY — the Original, then one version per editing session, newest first.
-// Restoring one is itself a version, so it can be taken back the same way.
-// The same list the phone shows (m.html roleHistory).
-function rlVerLine(v) {
-  const head = v.isBaseline ? cuT('Original', '原始版本') : v.note === 'undo' ? cuT('Undo', '撤销') : v.note === 'restore' ? cuT('Restore', '还原') : '';
+// HISTORY — the Original, then one version per editing session, newest first,
+// through the shared dialog (01-core autosavePickVersion). Restoring one is
+// itself a version, so it can be taken back the same way.
+function rlVerSub(v) {
   const c = v.changed || {}, bits = [];
   if (c.name) bits.push(cuT('name', '名称'));
   if (c.desc) bits.push(cuT('description', '说明'));
   if (c.dash) bits.push(cuT('dashboard', '仪表盘'));
   if (c.added) bits.push(cuT('+' + c.added + ' permission' + (c.added === 1 ? '' : 's'), '+' + c.added + ' 项权限'));
   if (c.removed) bits.push(cuT('−' + c.removed + ' permission' + (c.removed === 1 ? '' : 's'), '−' + c.removed + ' 项权限'));
-  return { top: [head, tdWhen(v.at, 'dateTime'), v.by || ''].filter(Boolean).join(' · '), sub: bits.join(' · ') };
+  return bits.join(' · ');
 }
 async function rlHistory() {
   const key = RL_SEL;
   if (!key || !RL_AUTO) return;
-  let list = RL_HIST_FOR === key ? RL_HIST : null;
-  if (!list) {
-    // What is on screen first, so the list ends on it rather than a step behind.
-    await RL_AUTO.flush();
-    try {
-      const j = await api('/api/backend/roles/' + encodeURIComponent(key) + '/history');
-      list = Array.isArray(j && j.versions) ? j.versions : [];
-      RL_HIST = list; RL_HIST_FOR = key;
-    } catch (e) { toast(cuT('Could not load the history', '无法加载历史版本'), 'err'); return; }
-  }
-  if (!list.length) { toast(cuT('No versions yet — they’re saved automatically as you edit.', '暂无历史版本 — 编辑时会自动保存。')); return; }
-  const rows = list.map((v, i) => {
-    const l = rlVerLine(v);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border-subtle,rgba(0,0,0,.08))">`
-      + `<div style="flex:1;min-width:0"><div>${escapeHtml(l.top)}${i === 0 ? ` <span class="rl-coin shows">${escapeHtml(cuT('Current', '当前'))}</span>` : ''}</div>`
-      + (l.sub ? `<div class="tm-fhint" style="margin:2px 0 0">${escapeHtml(l.sub)}</div>` : '') + `</div>`
-      + (i === 0 ? '' : `<button type="button" class="tm-btn-line" data-restore="${v.id}">${escapeHtml(cuT('Restore', '还原'))}</button>`)
-      + `</div>`;
-  }).join('');
-  const bodyHtml = `<h3 class="tdlg-title">${escapeHtml(cuT('Version history', '历史版本'))}</h3>`
-    + `<div style="max-height:60vh;overflow:auto">${rows}</div>`;
-  const footHtml = `<button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${escapeHtml(cuT('Close', '关闭'))}</button>`;
-  const { scrim, closer, ready } = askCustom('tdlg-neutral', bodyHtml, footHtml, '[data-restore], [data-cancel]');
-  scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => closer(null)));
-  scrim.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', () => closer(b.getAttribute('data-restore'))));
-  const picked = await ready;
-  if (!picked || RL_SEL !== key || !RL_AUTO || !RL_DRAFT) return;
-  const v = list.find(x => String(x.id) === String(picked));
-  if (!v) return;
-  if (!(await askConfirm({
-    titleEn: 'Restore this version?', titleCn: '还原此版本?',
-    confirmEn: 'Restore', confirmCn: '还原',
-  }))) return;
-  if (RL_SEL !== key || !RL_AUTO || !RL_DRAFT) return;
+  const v = await autosavePickVersion(RL_AUTO, '/api/backend/roles/' + encodeURIComponent(key) + '/history', rlVerSub);
+  if (!v || RL_SEL !== key || !RL_AUTO || !RL_DRAFT) return;
   const p = v.snapshot, d = RL_DRAFT;
   d.nameEn = p.nameEn || ''; d.nameCn = p.nameCn || ''; d.descEn = p.descEn || ''; d.descCn = p.descCn || '';
   d.layout = p.layout || 'default'; d.caps = new Set(p.caps || []);
@@ -3698,15 +3662,7 @@ async function rlHistory() {
   await RL_AUTO.flush('restore');
   if (RL_AUTO && RL_AUTO.state === 'saved') toast(cuT('Restored to the chosen version.', '已还原到所选版本。'), 'ok');
 }
-// Closing the tab mid-pause is the one way to lose an edit now; the browser's
-// own question stands in for the Save button that is gone. Switching away
-// sends it rather than waiting out the timer — the recipe record's rule.
-window.addEventListener('beforeunload', (e) => {
-  if (RL_AUTO && RL_AUTO.busy()) { e.preventDefault(); e.returnValue = ''; }
-});
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && RL_AUTO && RL_AUTO.busy()) RL_AUTO.flush();
-});
+autosaveRegister(() => RL_AUTO);
 
 async function rlAddRole() {
   const name = await askPrompt({

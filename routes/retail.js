@@ -100,6 +100,7 @@ const fapiaoReminders = require('../lib/fapiao-reminders');
 const { attachSlotDisplay, deliverySlotDisplay } = require('../lib/slot-label');
 const { logActivity } = require('../middleware/auth');
 const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
+const editHistory = require('../lib/edit-history');
 // The transaction helper (decisions §24, Path A step 3). Takes the handle as an
 // argument and hands it to the body, so every statement inside runs on the
 // transaction's own handle — the shape that survives the PostgreSQL cutover.
@@ -19547,6 +19548,41 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   });
 });
 
+// ── A customer's version history (decisions §279) ────────────────────────
+// The customer record saves itself on both surfaces, so its way back lives
+// here, in the tenant's own database. The snapshot is the fields the editors
+// autosave, in a FIXED key order (lib/edit-history compares JSON strings).
+// THE PHONE NUMBER IS LEFT OUT ON PURPOSE: changing it claims migration credit
+// and reconciles sign-up vouchers (below), so it keeps its own Save button and
+// no Undo or restore may ever write it.
+function customerSnapshot(c) {
+  return {
+    nickname: c.nickname || '', email: c.email || '',
+    gender: c.gender == null ? '' : String(c.gender), birthday: c.birthday ? String(c.birthday).slice(0, 10) : '',
+    note: c.note || '', tags: c.tags || '',
+  };
+}
+function historyTenantId() {
+  try { return currentTenantId() || ROOTS_TENANT_ID; } catch (e) { return ROOTS_TENANT_ID; }
+}
+const CUSTOMER_HISTORY_NOTES = new Set(['undo', 'restore']);
+
+router.get('/api/retail-admin/customers/:id/history', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  if (!tdb().prepare('SELECT 1 FROM retail_customers WHERE id = ?').get(id)) {
+    return res.status(404).json({ success: false, error: 'not_found' });
+  }
+  let rows = [];
+  try { rows = editHistory.list(tdb(), historyTenantId(), 'customer', id); } catch (e) { rows = []; }
+  const versions = rows.map((r, i) => {
+    const s = r.snapshot, prev = rows[i + 1] ? rows[i + 1].snapshot : null;
+    const changed = prev ? ['nickname', 'email', 'gender', 'birthday', 'note', 'tags'].filter(k => s[k] !== prev[k]) : [];
+    return { id: r.id, at: r.at, by: r.by, isBaseline: r.isBaseline, note: r.note, changed, snapshot: s };
+  });
+  res.json({ success: true, versions });
+});
+
 // Edit safe profile fields. Phone is loosely validated; openid/unionid are
 // never editable from here (they are WeChat-issued and changing them breaks
 // future logins).
@@ -19690,8 +19726,18 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
 
   if (!updates.length) return res.json({ success: true, changed: {} });
 
+  // History is best-effort: failing to record must never fail the save.
+  const histTid = historyTenantId();
+  try { editHistory.before(tdb(), histTid, 'customer', id, customerSnapshot(c)); }
+  catch (e) { console.error('[customer history before]', e.message); }
   params.push(id);
   tdb().prepare(`UPDATE retail_customers SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+  try {
+    const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
+    const note = CUSTOMER_HISTORY_NOTES.has(b.history_note) ? b.history_note : null;
+    if (fresh) editHistory.after(tdb(), histTid, 'customer', id, customerSnapshot(fresh),
+      { id: req.user && req.user.id, name: req.user && req.user.username }, { note });
+  } catch (e) { console.error('[customer history after]', e.message); }
   // If an admin set/changed this customer's phone, apply any unclaimed OUT1N
   // migration credit for it. Best-effort.
   if (Object.prototype.hasOwnProperty.call(changed, 'phone')) {

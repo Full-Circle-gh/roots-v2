@@ -231,19 +231,33 @@ const CASES = [
   ]],
 
   // ── The writes ──────────────────────────────────────────────────────────
+  // §279: the three sheets save themselves. A field writes into the draft
+  // (askLive), and Done — closeAsk — sends what is still waiting on its pause,
+  // in the same task, so the write is on the wire by the time the checks run.
   ['tags save lower-cased and deduped', STUB + ALL + REC + `render();
-    APP.cmd('editCustTags'); ` + type('tags', 'VIP, wholesale, vip ,  ') + ` APP.cmd('askRun','');`, [
+    APP.cmd('editCustTags'); APP.cmd('askLive','tags','VIP, wholesale, vip ,  '); APP.cmd('closeAsk');`, [
     ['through the profile PATCH',  `${sent('/customers/1')} && ${method('PATCH')}`],
-    ['one "vip", not two',         body('"tags":"vip,wholesale"')],
+    ['one "vip", not two',         body('"tags":["vip","wholesale"]')],
   ]],
   ['the note saves', STUB + ALL + REC + `render();
-    APP.cmd('editCustNote'); ` + type('note', 'Buzzer is broken.') + ` APP.cmd('askRun','');`, [
+    APP.cmd('editCustNote'); APP.cmd('askLive','note','Buzzer is broken.'); APP.cmd('closeAsk');`, [
     ['as a note',   body('"note":"Buzzer is broken."')],
     ['as a PATCH',  method('PATCH')],
   ]],
-  // The phone number was held back on 2026-08-22 because records dedupe on it.
-  // The endpoint has refused a duplicate since its own check went in, and this
-  // sheet already carried the wording for that refusal.
+  ['a live sheet has no Save — it says it saves itself, and Done closes it', STUB + ALL + REC + `render();
+    APP.cmd('editCustNote');`, [
+    ['it says so',          `sheetText().includes('All changes saved')`],
+    ['Done closes',         `!!document.querySelector('.sheet [onclick*="closeAsk"]') && sheetText().includes('Done')`],
+    ['with a version history', `!!document.querySelector('[onclick*="askLiveHistory"]')`],
+    ['and no Save or Cancel',  `!sheetText().includes('Cancel') && !/\\bSave\\b/.test(sheetText())`],
+  ]],
+  ['nothing typed, nothing sent', STUB + ALL + REC + `render();
+    APP.cmd('editCustomer'); APP.cmd('closeAsk');`, [
+    ['closing an untouched sheet writes nothing', `!${method('PATCH')}`],
+  ]],
+  // The phone was held back on 2026-08-22 because records dedupe on it; the
+  // endpoint has refused a duplicate since. §279 keeps it OUT of the autosave:
+  // a changed number claims migration credit and sign-up vouchers.
   ['the profile edit reaches all five fields', STUB + ALL + REC + `render();
     APP.cmd('editCustomer');`, [
     ['the phone is one of them',   `!!document.getElementById('ask-phone')`],
@@ -256,11 +270,23 @@ const CASES = [
          && g.borderTopLeftRadius===e.borderTopLeftRadius; })()`],
     ['and it no longer sends the operator to a desktop',
       `!sheetText().includes('changed on the desktop')`],
+    ['the number’s own Save is hidden until it differs', `document.getElementById('ask-own-phone').style.display==='none'`],
+  ]],
+  ['the name saves itself and never carries the phone number', STUB + ALL + REC + `render();
+    APP.cmd('editCustomer'); APP.cmd('askLive','nickname','Chen M.'); APP.cmd('askLiveOwn','phone','13900000000'); APP.cmd('closeAsk');`, [
+    ['the name went',            body('"nickname":"Chen M."')],
+    ['the typed number did not', `!window.__sent.some(function(r){return (r.body||'').indexOf('"phone"')>=0})`],
   ]],
   ['a phone number the server would refuse is refused here', STUB + ALL + REC + `render();
-    APP.cmd('editCustomer'); ` + type('phone', '12') + ` APP.cmd('askRun','');`, [
+    APP.cmd('editCustomer'); APP.cmd('askLiveOwn','phone','12'); APP.cmd('askLiveOwnSave','phone');`, [
     ['the sheet stays open with the reason', `sheetText().includes('phone number will not work')`],
     ['and nothing was sent',                 `!${method('PATCH')}`],
+  ]],
+  ['a good number goes on its own Save, alone', STUB + ALL + REC + `render();
+    APP.cmd('editCustomer'); APP.cmd('askLiveOwn','phone','13900000000');`, [
+    ['its Save appears once it differs', `document.getElementById('ask-own-phone').style.display===''`],
+    ['and sends only the number', `(function(){ APP.cmd('askLiveOwnSave','phone');
+       return window.__sent.some(function(r){return r.body==='{"phone":"13900000000"}'}); })()`],
   ]],
   ['adding a customer needs a name or a number', STUB + ALL + `
     state.custLoaded=true; state.customers=[]; APP.cmd('tab','customers'); APP.cmd('custNew');
