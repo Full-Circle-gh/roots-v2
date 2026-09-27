@@ -132,6 +132,10 @@ const SLOW = new Set([
      this list describes. Its sibling test_mobile_live.js is NOT here: that one
      only reads files and belongs in the gate. */
   'test_mobile_live_guards.js',
+  /* §282's pinned button bar. m-probe again, no findChrome() of its own, so
+     isSlow() cannot see the browser — named here for the reason every entry in
+     this block is. */
+  'test_mobile_footbar.js',
   'test_finance_presentation.js',
   // Drives Chromium for its render pass, so it belongs in the shard where
   // REQUIRE_BROWSER=1 — in the fast shard the render half would skip and report

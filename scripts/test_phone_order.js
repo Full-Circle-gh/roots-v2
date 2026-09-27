@@ -113,16 +113,19 @@ vm.createContext(ctx);
    It lives with the shared render helpers rather than inside this block, so it
    is sliced in separately — stubbing it would hide what the customer, product
    and city fields actually put on the glass, which is half of what this suite
-   checks. */
-{
-  const at = M.indexOf('function searchBox(');
-  if (at < 0) { console.error('FAIL — searchBox not found in public/m.html'); process.exit(1); }
+   checks. footBar (§281) is sliced in for the same reason: it is the pinned
+   bar the foot — and so the commit button — is drawn in. It asks navTabs()
+   only whether a tab bar sits under it, which this suite does not render. */
+ctx.navTabs = () => [];
+for (const fn of ['searchBox', 'footBar']) {
+  const at = M.indexOf('function ' + fn + '(');
+  if (at < 0) { console.error('FAIL — ' + fn + ' not found in public/m.html'); process.exit(1); }
   let depth = 0, end = -1;
   for (let j = M.indexOf('{', at); j < M.length; j++) {
     if (M[j] === '{') depth++;
     else if (M[j] === '}' && --depth === 0) { end = j + 1; break; }
   }
-  vm.runInContext(M.slice(at, end), ctx, { filename: 'm.html#searchBox' });
+  vm.runInContext(M.slice(at, end), ctx, { filename: 'm.html#' + fn });
 }
 vm.runInContext(BLOCK + '\nglobalThis.__ONW={onwBlank,onwReset,onwBlocked,onwBody,onwAddress,onwHasWork,'
   + 'onwSubtotal,onwTotal,onwDistrictRequired,onwErrText,onwFeeNote,onwLinesHtml,onwFootHtml,'
