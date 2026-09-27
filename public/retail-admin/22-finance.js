@@ -2368,6 +2368,10 @@ let FIN_APR_CAT = {};
    every re-render that happens between the two. Keyed by claim id, cleared when
    that claim is decided. */
 let FIN_APR_PAID = {};
+/* §270 — WHICH NOT-ARRIVED CLAIMS THE APPROVER HAS TICKED TO GO ON ONE ORDER.
+   Same survival rule as the two picks above: it has to outlive every re-render
+   between the tick and the button. Claim ids; cleared when they are decided. */
+let FIN_APR_JOIN = new Set();
 
 /* THE ROW IS BUSY, NOT THE SCREEN. Ported verbatim from the phone's reasoning:
    a manager working down a queue of six clicks the next one while the last is
@@ -2777,6 +2781,45 @@ window.finAprDecide = async function finAprDecide(id, decision) {
   }
 };
 
+/* §270 — TICK A CLAIM TO GO ON ONE ORDER WITH OTHERS. Re-renders so the
+   button appears at two and says how many. */
+window.finAprJoin = function finAprJoin(id, on) {
+  if (on) FIN_APR_JOIN.add(Number(id)); else FIN_APR_JOIN.delete(Number(id));
+  finAprRender();
+};
+
+/* §270 — APPROVE THE TICKED CLAIMS ONTO ONE PURCHASE ORDER. The per-claim picks
+   (category, who paid) travel with them, keyed by claim id, exactly as each
+   would on its own Approve. The server refuses a batch that does not fit —
+   two shops, one already decided — and says why; nothing is half-approved. */
+window.finAprTogether = async function finAprTogether() {
+  if (FIN_APR_BUSY || FIN_APR_JOIN.size < 2) return;
+  const ids = [...FIN_APR_JOIN];
+  const categories = {}, paid_by = {};
+  for (const id of ids) {
+    if (FIN_APR_CAT[id]) categories[id] = FIN_APR_CAT[id];
+    const row = (FIN_APR && FIN_APR.rows || []).find(r => r.id === id);
+    if (FIN_APR_PAID[id] && row && FIN_APR_PAID[id] !== row.paid_by) paid_by[id] = FIN_APR_PAID[id];
+  }
+  FIN_APR_BUSY = -1;
+  finAprRender();
+  try {
+    const j = await api('/api/retail-admin/staff-expenses/approve-together',
+      { method: 'POST', body: { ids, categories, paid_by } });
+    FIN_APR_BUSY = 0;
+    for (const id of ids) { delete FIN_APR_CAT[id]; delete FIN_APR_PAID[id]; }
+    FIN_APR_JOIN = new Set();
+    FIN_TX = null; FIN_TX_SEEN = false;
+    FIN_DATA = null;
+    await finAprLoad();
+    if (window.toast) toast(cuT('Approved', '已通过') + ' · ' + ((j && j.data && j.data.po_number) || ''));
+  } catch (e) {
+    FIN_APR_BUSY = 0;
+    if (window.toast) toast(e.message, 'err');
+    finAprRender();
+  }
+};
+
 /* ── MARKING A DEBT PAID (§87 step four) ────────────────────────────────────
    **IT POSTS NOTHING TO THE BOOKS** — the ¥38 was recorded once, when the claim
    was approved, and a second row for the repayment would report ¥76 of taxis.
@@ -2956,8 +2999,16 @@ function finAprRow(r) {
      row being decided says "Working…". A settle is a run of writes over claims
      that are also in this list, and leaving the rest live invites a second
      decision landing on a queue the first one is still reshaping. */
+  /* §270. A waiting claim whose goods have not arrived can be ticked to go on
+     one order with others. Only those: a claim that has arrived raises no order
+     at all, so there is nothing for it to join. */
+  const joinable = waiting && Number(r.awaiting_delivery) && !r.po_id;
+  const join = joinable
+    ? `<label class="fin-apr-join"><input type="checkbox"${FIN_APR_JOIN.has(r.id) ? ' checked' : ''}${anyBusy ? ' disabled' : ''} `
+      + `onchange="finAprJoin(${r.id}, this.checked)"> ${escapeHtml(cuT('Combine', '合并'))}</label>`
+    : '';
   const actions = waiting
-    ? `<div class="fin-apr-acts">`
+    ? `<div class="fin-apr-acts">` + join
       + `<button type="button" class="fin-apr-yes"${anyBusy ? ' disabled' : ''} `
       + `onclick="finAprDecide(${r.id}, 'approve')">`
       + escapeHtml(busy ? cuT('Working…', '处理中…') : cuT('Approve', '通过')) + '</button>'
@@ -3083,9 +3134,18 @@ function finAprRender() {
      and nothing to configure; everything that was sent has been decided. The two
      empty states are different facts and say different things: nothing has ever
      arrived, versus nothing is left. */
+  // §270: ticks for claims no longer waiting are dropped before counting.
+  for (const id of [...FIN_APR_JOIN]) {
+    if (!waiting.some(r => r.id === id && Number(r.awaiting_delivery) && !r.po_id)) FIN_APR_JOIN.delete(id);
+  }
+  const joinBar = FIN_APR_JOIN.size >= 2
+    ? `<div class="fin-apr-joinbar"><button type="button" class="fin-apr-yes"${FIN_APR_BUSY ? ' disabled' : ''} onclick="finAprTogether()">`
+      + escapeHtml(cuT('Approve on one purchase order', '合并为一张采购单')) + ' (' + FIN_APR_JOIN.size + ')</button></div>'
+    : '';
   const queue = waiting.length
     ? '<div class="fin-apr-queue"><h3>' + escapeHtml(cuT('Waiting', '待审批'))
       + ' · ' + waiting.length + '</h3>'
+      + joinBar
       + table(waiting)
       /* THE SENTENCE THAT MAKES THE BUTTON HONEST. Mirror of the one under
          Submit on the phone: there, nothing is in the accounts yet; here,

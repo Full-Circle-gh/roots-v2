@@ -223,13 +223,16 @@ it('nothing in this route writes the ledger', () => {
   for (const t of inserts) {
     assert.ok(allowed.has(t), `this file may not write ${t}`);
   }
-  const raise = ROUTE_CODE.match(/function raiseOrderForClaim[\s\S]*?\n}/);
-  assert.ok(raise, 'the order-raising helper must be readable');
+  // §270 split raiseOrderForClaim into openClaimOrder + addClaimLine so one
+  // order can carry several claims. The rule is unchanged: each table is still
+  // written in exactly one place, and that place is the order helpers.
+  const raise = ROUTE_CODE.match(/function raiseOrderForClaim[\s\S]*?function addClaimLine[\s\S]*?\n}/);
+  assert.ok(raise, 'the order-raising helpers must be readable');
   for (const t of ['purchase_orders', 'po_line_items']) {
     assert.strictEqual(ROUTE_CODE.split('INSERT INTO ' + t).length - 1, 1,
       `${t} is written in exactly one place`);
     assert.ok(raise[0].includes('INSERT INTO ' + t),
-      `${t} is written only by raiseOrderForClaim`);
+      `${t} is written only by the order helpers`);
   }
 });
 
