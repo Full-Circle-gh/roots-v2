@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.450
+# Tacet shared-core consolidation — decisions record, v4.451
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.451 — **§282 PART 2 · THE DESKTOP'S PAGES: THE BUTTON STAYS ON SCREEN.** Two shared classes in `public/retail-admin.css`: `.pin-foot`, a form's button row that sticks to the bottom of the screen while its form is on it, and `.pin-head`, a header holding a page's buttons that sticks to the top. **PINNED FOOTS:** Fresh batches (the schedule and the checkout pop-up), Cloud printers' *Save all*, a new store, Broadcasts' *Send*, and Purchasing — order steps 1–3, a new supplier, the supplier import, and *Confirm delivery*. **PINNED HEADS:** Orders → New order (its running total now stops under the header), Material record, and the poll editor (stopping under the 56px topbar, since that page scrolls the window). Sticky, not fixed: a bar holds only while its own form is in view, so a page never shows two, and a short form's row sits where it always did. Every one was checked in a browser with the page made far taller than the screen — each held at the edge, each as wide as the box it sits in; the one on the receive screen sat on the page rather than in a card and was narrowed to it. **RULE 3 SHARPENED:** a destructive button is never MOVED into a bar; one that already shared the commit's row (Delete draft, Disable, the poll's Delete) stays beside it. New fast suite `scripts/test_pin_bars.js` guards the classes and the shared rules (it fails 14 of 14 on the old files). No new words; no schema change; no change to `.gitignore` or CI.
 
 2026-09-27 · v4.450 — **§283 · A 发票 FOR A ONE-OFF PURCHASE NEEDS NO SUPPLIER — ASH:** staff *"它必须设置供应商才能添加发票。仅仅购买一次的物品不需要设置供应商信息。"*, then *"go"* on Claude's plan. **CAUSE.** On Purchasing → Invoices the `未指定 Unspecified` group offered only `设置供应商`, and both the add-invoice form and `POST`/`PUT /api/retail-admin/purchasing/invoices` refused an empty supplier (`supplier_required`). A 发票 for something bought once could only be recorded after inventing a supplier for it. **THE CHANGE.** The Unspecified row gains `添加发票` beside `设置供应商`. The form's supplier is optional: left empty, it offers the Unspecified lines to tick; emptying a picked supplier switches the form to them. The server files an empty supplier under the literal `未指定 Unspecified` (`invSupplierOrUnspecified`), the same string the grouping falls back to. Coverage keys on `invoice_lines`, never on `invoices.supplier`, so nothing else moves. **KEPT:** a typed name that matches no supplier is still refused — grouping keys on the string, and a free-typed name would open a near-duplicate supplier. The seller's name goes in the Note. `标记不开发票` is unchanged and remains the answer for a purchase that will never have a 发票. Tested by scripts/test_invoice_no_supplier.js and scripts/test_invoice_supplier_search.js §16–21. Chinese: vocabulary v1.195.
 
@@ -20793,7 +20795,9 @@ button"*, then *"go ahead"*).
 2. **A short form is already compliant** when its button sits directly under
    its few fields; it is not given a bar. A bar under three fields only costs
    room.
-3. **Destructive buttons are not pinned.** Delete stays in the page.
+3. **A destructive button is never moved into a bar.** Delete stays in the
+   page. One that already shared the commit's row (Delete draft, Disable, a
+   poll's Delete) stays beside it, pinned with it (v4.451).
 4. **The keyboard is part of "on the glass".** On the phone the pinned bar
    rides above the on-screen keyboard (`interactive-widget=resizes-content`),
    and the tab bar steps aside while it is up.

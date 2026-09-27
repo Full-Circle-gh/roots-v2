@@ -716,7 +716,7 @@ function _opsStoreForm(s) {
                re-locating the store. */ isEdit ? `<button class="btn" style="flex:none" onclick="_opsStorePin(${s.id})">Save · 保存</button>` : ''}
         </div>
       </div>
-      <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
+      <div class="pin-foot" style="--pin-x:16px;--pin-bg:var(--bg-elev-1);display:flex;gap:10px;margin-top:14px;align-items:center">
         ${isEdit
           ? `<div data-as-foot="store.${s.id}" style="flex:1"></div>
              <button class="btn" onclick="_opsStoreClose()">Close · 关闭</button>`

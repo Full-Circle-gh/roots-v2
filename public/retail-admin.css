@@ -16122,3 +16122,49 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 .as-foot .as-stat.is-bad { color: var(--danger); }
 .as-foot .as-stat.is-held { color: var(--warn); }
 .as-foot .btn[hidden] { display: none; }
+
+/* ── §282 · A COMMIT BUTTON NEVER SCROLLS OFF THE SCREEN ────────────────────
+   Ash: "the button should be in reach at any giving moment on the screen. I
+   don't want the user to scroll finding the save button."
+
+   TWO SHAPES, one per place a page put its button:
+   · .pin-foot — the button row at the END of a form sticks to the bottom of
+     the screen while the form is on it. Sticky, not fixed: it holds only
+     while its own form is in view, so a page with two forms never shows two
+     bars, and a short form's row simply sits where it always did.
+   · .pin-head — a page whose buttons are in its HEADER keeps the header on
+     screen instead (New order, Material record, the poll editor), the way
+     .rcp-pin already does for recipes.
+   --pin-x is the horizontal padding of whatever the bar sits in: the bar
+   reaches out over it, so nothing scrolling behind shows at its sides.
+   --pin-bg is the ground behind it — the card's surface or the page's paper.
+   A sticky element pins to its nearest scrolling ancestor; an overflow on any
+   box between the two kills it (the §1.13a trap), which is why each use below
+   was checked in a browser rather than assumed. */
+.pin-foot {
+  position: sticky; bottom: 0; z-index: 12;
+  background: var(--pin-bg, var(--td-surface));
+  border-top: 1px solid var(--td-border);
+  margin-left: calc(-1 * var(--pin-x, 0px)); margin-right: calc(-1 * var(--pin-x, 0px));
+  padding: 12px var(--pin-x, 0px);
+}
+.pin-head {
+  position: sticky; top: var(--pin-top, 0px); z-index: 12;
+  background: var(--pin-bg, var(--td-paper));
+  margin-left: calc(-1 * var(--pin-x, 0px)); margin-right: calc(-1 * var(--pin-x, 0px));
+  padding-left: var(--pin-x, 0px); padding-right: var(--pin-x, 0px);
+}
+/* Each use: how far its box is padded, what it sits on, and — for a header on
+   a page that scrolls the WINDOW — the 56px topbar it must stop under. */
+#tab-orders-new .onw-head.pin-head { --pin-x: 34px; padding-top: 12px; margin-top: -12px; }
+/* The running total pinned beside the form (.onw-right, top:0) now stops under
+   the pinned header instead of sliding beneath it. */
+#tab-orders-new .onw-right { top: 82px; }
+#tab-materials-record .mat-rechead.pin-head { --pin-x: var(--s6); padding-top: 12px; padding-bottom: 12px; margin-top: -12px; margin-bottom: 10px; }
+#tab-voting .vot-ed-head.pin-head { --pin-top: 56px; padding-top: 12px; padding-bottom: 12px; }
+#dlv-fresh .fb-save.pin-foot,
+#sub-ops .group-card > .pin-foot { --pin-x: 20px; }
+#tab-broadcasts .bx-sendbar.pin-foot { --pin-x: 28px; --pin-bg: var(--bg-pane); }
+#prod-view-purchasing .pin-foot { --pin-x: 28px; }
+/* The receive screen's actions sit on the page itself, not in a card. */
+#prod-view-purchasing .pu2-actions.pin-foot { --pin-x: 0px; --pin-bg: var(--td-paper); }

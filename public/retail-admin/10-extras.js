@@ -2828,7 +2828,7 @@ function votRenderEditor() {
     <div class="vot-ed">
       <button class="vot-ed-back" onclick="votCloseEditor()">&larr; ${escapeHtml(votT('Voting', '投票'))}</button>
 
-      <div class="vot-ed-head">
+      <div class="vot-ed-head pin-head">
         <div class="vot-ed-id">
           <h2>${votSafe(title)}</h2>
           <div class="vot-ed-state">${escapeHtml(state)}</div>

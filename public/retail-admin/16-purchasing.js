@@ -1190,7 +1190,7 @@
             <input class="pu2-input" type="text" id="pu2-w-notes" value="${esc(e.notes || '')}" placeholder="${esc(T('Anything the receiver should know', '收货人需要知道的信息'))}">
           </label>
         </div>
-        <div class="pu2-wizfoot">
+        <div class="pu2-wizfoot pin-foot">
           <button class="pu2-btn ghost" onclick="puBackOrders()">${esc(T('Cancel', '取消'))}</button>
           <span class="spacer"></span>
           <button class="pu2-btn primary" onclick="puWizNext(2)">${esc(T('Next — what to buy', '下一步 —— 采购内容'))}</button>
@@ -1279,7 +1279,7 @@
         </table>
         </div>
 
-        <div class="pu2-wizfoot">
+        <div class="pu2-wizfoot pin-foot">
           <button class="pu2-btn ghost" onclick="puWizStep(1)">${esc(T('Back', '上一步'))}</button>
           ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
           <span class="spacer"></span>
@@ -1998,7 +1998,7 @@
           <span class="dot"></span>
           <span>${esc(T('When you place the order,', '下单后,'))} <b>${money(total)} ${esc(T('posts to Finance → Expenses by itself.', '会自动记入财务 → 支出。'))}</b> ${esc(T('Nothing touches stock until the goods arrive and you tick them in.', '在到货并勾选收货之前,库存不会有任何变动。'))}</span>
         </div>`}
-        <div class="pu2-wizfoot">
+        <div class="pu2-wizfoot pin-foot">
           <button class="pu2-btn ghost" onclick="puWizStep(2)">${esc(T('Back', '上一步'))}</button>
           ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
           <span class="spacer"></span>
@@ -2183,7 +2183,7 @@
 
       ${canReceive ? receiveNote(p) : ''}
 
-      <div class="pu2-actions">
+      <div class="pu2-actions pin-foot">
         ${canReceive ? `<button class="pu2-btn primary" data-cap="purchasing:receive" onclick="puReceiveSave()">${esc(T('Confirm delivery', '确认收货'))}</button>` : ''}
         ${p.status === 'Ordered' ? `<button class="pu2-btn" data-cap="purchasing:receive" onclick="puAllArrived()">${esc(T('All arrived as ordered', '全部按订单到货'))}</button>` : ''}
         ${p.status === 'Ordered' ? `<button class="pu2-btn ghost" data-cap="purchasing:edit" onclick="puSetStatus('Requested')">${esc(T('Back to draft', '退回草稿'))}</button>` : ''}
@@ -4515,7 +4515,7 @@
           </div>
         </div>
 
-        <div class="pu2-wizfoot">
+        <div class="pu2-wizfoot pin-foot">
           ${s.id ? `<button class="pu2-btn ${s.is_active ? 'danger' : ''}" data-cap="purchasing:edit" onclick="puSupToggle()">${s.is_active ? esc(T('Disable', '停用')) : esc(T('Enable', '启用'))}</button>` : `<button class="pu2-btn ghost" onclick="puBackSuppliers()">${esc(T('Cancel', '取消'))}</button>`}
           <span class="spacer"></span>
           ${s.id
@@ -4863,7 +4863,7 @@
             }).join('')}
           </tbody>
         </table>
-        <div class="pu2-wizfoot">
+        <div class="pu2-wizfoot pin-foot">
           <button class="pu2-btn ghost" onclick="puImportOpen()">${esc(T('Choose a different file', '换一个文件'))}</button>
           <span class="spacer"></span>
           <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puImportRun()" ${willImport ? '' : 'disabled'}>${esc(T('Import', '导入'))} ${willImport} ${esc(T('suppliers', '个供应商'))}</button>
