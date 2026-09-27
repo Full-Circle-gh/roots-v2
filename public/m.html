@@ -11,7 +11,7 @@
      bought nothing here: the layout is already sized for a phone and the
      double-tap-zoom it was guarding against is not a hazard on any screen in
      this app. -->
-<!-- interactive-widget=resizes-content (§281): on Android Chrome the keyboard
+<!-- interactive-widget=resizes-content (§282): on Android Chrome the keyboard
      SHRINKS the page instead of covering its bottom, so the pinned bar holding
      a form's button (.footbar) rides above the keyboard. The viewport script
      below already re-measures the app when the height changes; this is what
@@ -549,7 +549,7 @@ input.qsnum:focus{outline:none;border-color:var(--accent);}
    see --dock-h above. Nothing about the layout changes: both children were
    already flex:none siblings of the scroller and still are, one level down. */
 .dock{flex:none}
-/* THE BUTTON NEVER LEAVES THE SCREEN (§281). Ash: *"the button should be in
+/* THE BUTTON NEVER LEAVES THE SCREEN (§282). Ash: *"the button should be in
    reach at any giving moment on the screen. I don't want the user to scroll
    finding the save button."* A form whose commit button sat at the end of a
    long page draws it in this bar instead: stuck to the bottom of the scroller,
@@ -1570,7 +1570,7 @@ function kbFocusIn(e){
   kbBase=vv.height; kbUp=false;
 }
 /* The page's own note that the keyboard is up — html.kb-up, which lets the tab
-   bar step aside for the pinned button bar (§281). Only ever follows kbUp. */
+   bar step aside for the pinned button bar (§282). Only ever follows kbUp. */
 function kbMark(){ const d=document.documentElement; if(d&&d.classList) d.classList.toggle('kb-up',kbUp); }
 function kbFocusOut(e){
   const t=e&&e.target;
@@ -3286,7 +3286,7 @@ reg('wstQty', d=>{ const w=state.wst;
   render(); loadWastePreview(); });
 reg('wstNote', v=>{ const w=state.wst, el=document.getElementById('mWstNote');
   w.note=String(v||''); state.focus={id:'mWstNote',pos:el?el.selectionStart:null}; render(); });
-reg('wstCode', c=>{ state.wst.code=String(c||''); state.wst.formErr=null; render(); });
+reg('wstCode', c=>{ state.wst.code=String(c||''); state.wst.formErr=null; render(); loadWastePreview(); });
 reg('wstSave', ()=>{
   const w=state.wst;
   if(w.busy||wstBlocked()) return;
@@ -7316,7 +7316,9 @@ function loadWastePreview(){
   const w=state.wst;
   if(!w.pick||!(w.qty>0)){ w.preview=null; return; }
   const seq=++w.previewSeq;
-  api('/waste/preview?store_product_id='+w.pick.id+'&qty='+w.qty).then(d=>{
+  /* The reason goes too: expired or spoiled leaves out a line the shop keeps,
+     such as a salad's dressing (§281), so the figure depends on it. */
+  api('/waste/preview?store_product_id='+w.pick.id+'&qty='+w.qty+'&reason_code='+encodeURIComponent(w.code||'')).then(d=>{
     if(seq!==w.previewSeq) return;
     w.preview=d||null; render();
   }).catch(e=>{ if(seq===w.previewSeq&&String(e.message)!=='auth'){ w.preview=null; render(); } });
@@ -7426,7 +7428,12 @@ function sheetWaste(){
       : w.preview
         ? (w.preview.is_uncosted
             ? T('No cost on file — it records without one','该产品暂无成本，将不计成本登记')
-            : `${T('Cost','成本')} <span class="num">${wstMoney(w.preview.cost_total_cents)}</span> · ${T('stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>`)
+            : `${T('Cost','成本')} <span class="num">${wstMoney(w.preview.cost_total_cents)}</span> · ${T('stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>`
+              /* §281: say what an expired or spoiled write-off left out, or the
+                 figure silently disagrees with the product's cost. */
+              +((w.preview.kept_lines||[]).length
+                ? `<br>${T('Kept, not counted: ','保留，不计入：')}${w.preview.kept_lines.map(k=>escAttr(T(k.name_en,k.name_cn||k.name_en))).join(', ')}`
+                : ''))
         : '&nbsp;';
   /* Animate on the way IN and never again. Every tap in this sheet — a store
      chip, a stepper, a reason, a keystroke in the note — goes through
@@ -14382,7 +14389,7 @@ function screenExpense(){
 
     ${storeField}
     ${x.metaErr?`<div style="font-size:13px;color:var(--brick-ink)">${x.metaErr}</div>`:''}
-  </div>${list}${/* §281: the button, the refusal it drew and the sentence under
+  </div>${list}${/* §282: the button, the refusal it drew and the sentence under
        it are pinned — on a phone the note and the date put Submit below the
        fold, and "what you have sent" puts it further. */''}${footBar(`
     ${x.err?`<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:12px;background:var(--brick-tint)">
@@ -20039,7 +20046,7 @@ function tmRoleFoot(){
     : T('All changes saved','已自动保存');
   const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
   const undo=a&&a.canUndo();
-  /* PINNED (§281): the role screen is the longest page on the phone and its
+  /* PINNED (§282): the role screen is the longest page on the phone and its
      way back was at the very end of it. One row — where the role stands, then
      the two ways back — so the bar costs one line of the screen. */
   return `<div style="flex:1;min-width:0;font-size:12.5px;line-height:1.35;color:${tone}">${line}</div>
@@ -22517,7 +22524,7 @@ function navTabs(){
                                       cmd:"APP.cmd('tab','more')",tab:'more'});
   return out;
 }
-/* THE PINNED BUTTON BAR (§281) — see .footbar in the stylesheet. The room for
+/* THE PINNED BUTTON BAR (§282) — see .footbar in the stylesheet. The room for
    the phone's gesture area is paid ONLY when no tab bar is drawn under it: the
    dock already holds that room open when it is there, and paying twice leaves
    the bar floating (the reasoning kqBackBar carries). `id` is kept on the bar

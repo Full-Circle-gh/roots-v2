@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The button never leaves the screen — §281, on the phone.
+ * The button never leaves the screen — §282, on the phone.
  *
  *   node scripts/test_mobile_footbar.js
  *

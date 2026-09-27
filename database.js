@@ -7258,6 +7258,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_product_build_lines_product ON product_build_lines(product_id);
   CREATE INDEX IF NOT EXISTS idx_product_build_lines_ingredient ON product_build_lines(ingredient_id);
 `);
+// §281: a line packed on its own — a salad's dressing in its own pot — that the
+// shop keeps when the product is written off as expired or spoiled. Read by
+// lib/waste-record.js wasteUnitCostYuan() and nothing else: the product's cost,
+// its margin and every sale still count the line in full, because every salad
+// SOLD goes out with its dressing. 0 is "goes in the bin with the product",
+// which is what every line meant before this column existed.
+addColumn('product_build_lines', 'packed_separately', 'INTEGER NOT NULL DEFAULT 0');
 
 // ── One-off: seed cost_incomplete from the build lists we can read ───────────
 //

@@ -1,5 +1,6 @@
 # Tacet delivery vocabulary — locked
 
+**v1.194 · 2026-09-27 · §281 A LINE PACKED SEPARATELY — TWO STRINGS COMPOSED BY CLAUDE, EVERY WORD LIVE.** The build-list tick and the waste screen's note of what it left out. See *Packed separately — kept on expiry (§281)*.
 **v1.193 · 2026-09-27 · §279 BATCH 3 · THE SHOP WORDING PAGES SAVE THEMSELVES — NOTHING COMPOSED, THREE TOASTS TRIMMED BY DELETION.** With no Save to press, three upload toasts stop telling the operator to press it: `Photo uploaded — remember to Save · 图片已上传 — 记得点保存` → `Photo uploaded · 图片已上传` (About), `Uploaded — Save to apply · 已上传 — 保存后生效` → `Uploaded · 已上传` and `Picture removed — Save to apply · 已移除图片 — 保存后生效` → `Picture removed · 已移除图片` (Share cards). Each is the old pair with its tail deleted and nothing added. The held-save lines on Review tags and FAQ are the old refusal toasts, unchanged.
 **v1.192 · 2026-09-27 · §269 ADDENDUM THE RETURN DIALOG — ONE LINE COMPOSED BY CLAUDE.** The hint under the amount; `Net · 净额` and `amount must be positive · 金额必须大于零` are copied whole. See *A return on money out (§269)*.
 
@@ -9062,3 +9063,22 @@ lower-cased.
 | birthday | 生日 | **lifted** — live `Birthday · 生日` | history row |
 | note | 备注 | **lifted** — live `Note · 备注` | history row |
 | tags | 标签 | **lifted** — live `Tags · 标签` | history row |
+
+## Packed separately — kept on expiry (§281)
+
+**Composed by Claude, 2026-09-27, under the 2026-09-06 amendment.** Operator-only:
+the tick on a build-list line (desktop product editor) and the note under a
+write-off's cost (desktop and phone waste screens).
+
+| shipped | built from |
+|---|---|
+| `Packed separately — kept if it expires or spoils · 单独包装 — 过期或变质时保留` | **composed.** `过期` and `变质` **copied** from the waste reasons `Expired · 过期` and `Spoiled · 变质` (routes/retail-waste.js), so the tick names the same two reasons the operator picks from; `包装` live (`KIND_LABEL.packaging`, 18-materials.js); `单独` live (`单独加载`, `单独设置`); `保留` live in many places (`归档后仍永久保留。`) |
+| `Kept, not counted: · 保留，不计入：` + the line's name | **composed.** `保留` as above; `不计入` live (`不计入营业费用`, `破损数量不计入库存。`) |
+
+**Live candidates rejected.**
+
+- `分装`: **rejected.** Live on the Materials screen for *portioned from a bulk
+  purchase* (`自制,或整批采购后分装`) — a different fact from a pot packed on its own.
+- `免费` / `按设计免费`: **rejected.** Those mean the line costs nothing. The
+  dressing costs money and is still counted on every sale; it is only left out
+  of an expired or spoiled write-off.

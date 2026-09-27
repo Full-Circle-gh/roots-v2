@@ -335,10 +335,24 @@
         ? '<span class="bl-fromw"> · ' + escapeHtml(T_FROM_WEIGHT(l.qty_from_weight)) + '</span>'
         : '');
 
+    // §281 — a line packed on its own (a salad's dressing in its own pot) that
+    // the shop keeps when the product expires or spoils. It changes ONLY what a
+    // waste entry charges; the cost on this screen still counts it, because
+    // every one sold goes out with it. Contents only: a box is binned with the
+    // salad, so a packaging row has nothing to keep and gets no tick.
+    // Chinese composed by Claude, declared in docs/tacet-delivery-vocabulary.md.
+    const kept = blGroupOf(l) === 'materials'
+      ? '<label class="bl-kept"><input type="checkbox"' + (l.packed_separately ? ' checked' : '')
+        + ' onchange="blField(' + idx + ',\'packed_separately\',this.checked)"> '
+        + escapeHtml(cuT('Packed separately — kept if it expires or spoils', '单独包装 — 过期或变质时保留'))
+        + '</label>'
+      : '';
+
     return '<div class="bl-row' + (cost === null ? ' is-nocost' : '') + '">'
       + '<div class="bl-name">'
       + '<div class="n">' + escapeHtml(l.name_en || l.name_cn || '') + '</div>'
       + '<div class="s' + (cost === null ? ' warn' : '') + '">' + sub + '</div>'
+      + kept
       + '</div>'
       + '<input class="bl-in" type="number" min="0" step="any" value="' + escapeAttr(String(l.qty))
       + '" aria-label="' + escapeAttr(T_QTY()) + '" placeholder="' + escapeAttr(T_QTY()) + '"'
@@ -862,6 +876,7 @@
             ingredient_id: l.ingredient_id,
             name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
             qty: Number(l.qty), unit: l.unit, notes: l.notes || null,
+            packed_separately: !!l.packed_separately,
           })),
         },
       });

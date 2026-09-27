@@ -39,7 +39,7 @@ router.get('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, (re
 
   const lines = db.prepare(`
     SELECT pbl.id, pbl.ingredient_id, pbl.name_en, pbl.name_cn, pbl.sku, pbl.qty, pbl.unit,
-           pbl.notes, pbl.sort_order,
+           pbl.notes, pbl.sort_order, pbl.packed_separately,
            i.item_kind AS material_item_kind, i.cost_per_unit AS material_cost_per_unit,
            -- buy_price is carried so the SCREEN can tell two very different
            -- states apart: a material nobody has ever priced, and one with a
@@ -235,12 +235,15 @@ router.put('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, exp
 
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM product_build_lines WHERE product_id = ?').run(id);
+    // packed_separately rides the delete-and-reinsert like every other column
+    // (§281). A client that does not send it writes 0 — "binned with the
+    // product" — which is what every line meant before the flag existed.
     const ins = db.prepare(`INSERT INTO product_build_lines
-      (product_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      (product_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, sort_order, packed_separately)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     lines.forEach((l, i) => {
       ins.run(id, l.ingredient_id || null, l.name_en || '', l.name_cn || null, l.sku || null,
-        Number(l.qty), l.unit || 'g', l.notes || null, i);
+        Number(l.qty), l.unit || 'g', l.notes || null, i, l.packed_separately ? 1 : 0);
     });
   });
   tx();

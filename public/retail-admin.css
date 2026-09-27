@@ -14145,6 +14145,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   /* An unpriced line is amber, never red: it is unfinished, not broken, and
      brick is this system's error colour (§1.10 — colour is status). */
   #pd-editor .bl-name .s.warn { color: var(--td-amber-ink); }
+  /* §281 — the "packed separately" tick. Secondary text size and colour: it is
+     a property of the line, not its name or its cost. Wraps rather than
+     truncating — a clipped sentence about what gets written off misleads. */
+  #pd-editor .bl-kept {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+    font-size: 13px; color: var(--td-text2); cursor: pointer;
+  }
+  #pd-editor .bl-kept input { margin: 0; flex: none; }
 
   #pd-editor .bl-in, #pd-editor .bl-unit {
     width: 100%; background: var(--td-paper); border: 1px solid var(--td-border);
@@ -15860,6 +15868,8 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 .ppg .bl-name .n { font-size: 15px; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ppg .bl-name .s { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ppg .bl-name .s.warn { color: var(--td-amber-ink); }
+.ppg .bl-kept { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; color: var(--td-text2); cursor: pointer; }
+.ppg .bl-kept input { margin: 0; flex: none; }
 .ppg .bl-row .bl-in, .ppg .bl-row .bl-unit { height: 36px; padding: 0 9px; background: var(--td-paper); }
 .ppg .bl-row .bl-in { text-align: right; font-variant-numeric: tabular-nums; }
 .ppg .bl-row .bl-unit { font-size: 13px; color: var(--td-text2); }
