@@ -19640,7 +19640,7 @@ function tmLayoutLabel(k){ const p=TM_LAYOUT_LABEL[k]||[k,k]; return T(p[0],p[1]
 function tmRoleFind(key){ return (tmS().roles||[]).find(r=>r.key===key)||null; }
 function tmDraftFrom(r){
   return {key:r.key, nameEn:r.nameEn||'', nameCn:r.nameCn||'', descEn:r.descEn||'', descCn:r.descCn||'',
-    caps:(r.caps||[]).slice(), layout:r.layout||'default', stockAppOnly:!!r.stockAppOnly,
+    caps:(r.caps||[]).slice(), layout:r.layout||'default',
     dashboardCards:Array.isArray(r.dashboardCards)?r.dashboardCards.slice():null};
 }
 function tmDraftHas(k){ const d=tmS().draft; return !!(d&&d.caps.indexOf(k)!==-1); }
@@ -19650,7 +19650,6 @@ function tmDirty(){
   if(d.nameEn!==(r.nameEn||'')||d.nameCn!==(r.nameCn||'')) return true;
   if(d.descEn!==(r.descEn||'')||d.descCn!==(r.descCn||'')) return true;
   if(d.layout!==(r.layout||'default')) return true;
-  if(d.stockAppOnly!==!!r.stockAppOnly) return true;
   const was=r.dashboardCards||null, now=d.dashboardCards||null;
   if((was===null)!==(now===null)) return true;
   if(was&&now&&(was.length!==now.length||was.some(k=>now.indexOf(k)===-1))) return true;
@@ -19672,19 +19671,6 @@ function tmMoneyLine(keys){
 function tmPeopleWord(n){
   if(!n) return T('Nobody holds this role yet','暂无成员使用此角色');
   return T(n===1?'1 person holds this role':n+' people hold this role',n+' 人使用此角色');
-}
-/* Only the widening direction has a precondition: a role that is already
-   unlocked can always be locked down. With enforcement off, requireRetailAdmin
-   never consults the route→capability map, so this lockdown is the only thing
-   between a restricted operator and the whole backend — said here, on a
-   disabled switch, rather than only when the save comes back refused. */
-function tmLockHint(on){
-  if(!on) return T('Off: this role reaches the backend, limited to the permissions below.',
-                   '关闭后:该角色可访问后台,权限以下方勾选为准。');
-  if(!state.teamEnforce) return T('To let this role out of the app, turn permissions enforcement on first (People tab) — otherwise it would reach the whole backend rather than the tools below.',
-    '若要让该角色使用其他功能,请先在“成员”中开启权限强制执行,否则该角色将可访问整个后台,而不仅是下方勾选的功能。');
-  return T('On: this role opens the Add Stock app and nothing else. The permissions below have no effect while it is on.',
-    '开启后:该角色仅可打开“加库存”应用,下方权限在此期间不生效。');
 }
 function tmDashHint(on){
   return on
@@ -19732,12 +19718,6 @@ function screenTeamRole(){
                 :T('Nothing you change here affects anyone yet.','此处的更改目前不影响任何人。')}
       ${r.exceptions?escAttr(T((r.exceptions===1?'1 of them has an exception':r.exceptions+' of them have exceptions')+' — their own permissions on top of this role. Those survive this edit.',
           '其中 '+r.exceptions+' 人设有例外权限，编辑角色后仍会保留。')):''}</div>
-    ${ro?'':tmList([tmRow({
-      label:T('Only the Add Stock app','仅可使用“加库存”应用'),
-      note:escAttr(tmLockHint(!!d.stockAppOnly)),
-      right:(d.stockAppOnly&&!state.teamEnforce)
-        ? `<span class="pill" style="background:${PILL.warning[0]};color:${PILL.warning[1]}">${T('On','开')}</span>`
-        : toggle(!!d.stockAppOnly,"APP.cmd('roleStockOnly')")})])}
     ${/* THE DASHBOARD, as one block: the switch that says whether this role has
          one at all, and under it the layout and the cards that only matter
          while it does. */''}
@@ -20069,12 +20049,6 @@ reg('roleCap', k=>{
   if(i===-1) d.caps.push(k); else d.caps.splice(i,1);
   render();
 });
-reg('roleStockOnly', ()=>{
-  const d=tmS().draft; if(!d||!tmS().canEdit) return;
-  // Only the widening direction has a precondition, and the server keeps it too.
-  if(d.stockAppOnly&&!state.teamEnforce) return;
-  d.stockAppOnly=!d.stockAppOnly; render();
-});
 reg('roleLayout', ()=>{
   const t=tmS(), d=t.draft; if(!d||!t.canEdit) return;
   state.ask={title:T('Dashboard layout','仪表盘布局'),
@@ -20107,7 +20081,7 @@ reg('roleSave', ()=>{
   t.roleBusy=true; t.roleErr=null; render();
   apiWrite('/api/backend/roles/'+encodeURIComponent(r.key),{
     name_en:d.nameEn.trim(),name_cn:d.nameCn.trim(),desc_en:d.descEn.trim(),desc_cn:d.descCn.trim(),
-    layout:d.layout,stock_app_only:d.stockAppOnly,caps:d.caps,dashboard_cards:d.dashboardCards,
+    layout:d.layout,caps:d.caps,dashboard_cards:d.dashboardCards,
   },'PUT').then(()=>{
     t.roleBusy=false;
     showToast(r.people
@@ -22675,11 +22649,9 @@ function mTyping(){
    false as "not yet", never as "never". */
 function mAutoOK(){
   if(document.visibilityState!=='visible') return false;
-  /* No board to refresh — and the stream is not on a confined role's allowlist
-     (lib/stock-app-only.js), so a kitchen phone opening it would 403, which
-     api()'s own rule turns into a bounce to /backend/login and server.js
-     bounces back to /m: the boot loop loadLive's flatNav gate exists to
-     prevent. Same gate, same reason, one line earlier. */
+  /* No board to refresh: an operator on the flat tool list has no tabs for
+     this to repaint. (It once also stopped a boot loop through the stock-only
+     lockdown's 403s; that gate is gone, decisions §278.) */
   if(!state.capsLoaded||flatNav()) return false;
   if(state.refreshing||_mLive.busy) return false;   // a pull is already doing this
   if(state.dragging) return false;                  // a sheet mid-gesture
@@ -24959,13 +24931,10 @@ async function loadLive(){
      screen (see flatNav's own note). Fetching a revenue board to render nothing
      was always waste; what makes it a BUG rather than waste is §48 step 3.
 
-     A confined role (kitchen, store_stock) now lives in this app, and
-     lib/stock-app-only.js does not admit `/dashboard` — it is the revenue
-     endpoint, and admitting it to a kitchen phone is the whole thing that gate
-     exists to prevent. So for them these calls do not merely waste a request:
-     `api()` turns a 403 into location.href='/backend/login', server.js bounces
-     that back to '/m', and the app boot-loops. The gate cannot open and the app
-     must not ask — this is the app not asking.
+     Until decisions §278 it was also a bug: the stock-only lockdown refused
+     `/dashboard` to kitchen and store_stock, `api()` turned that 403 into a
+     trip to the login page, and the app boot-looped. That gate is gone; the
+     app still does not ask for a board it has no screen for.
 
      It is placed AFTER /config deliberately: the store's name titles their home
      screen when the role record carries no name, and its timezone is what every

@@ -27,9 +27,8 @@
  *   PART D  no price reaches the screen, and neither does anything else the
  *           asker has no business reading.
  *   PART E  the screen and its DOOR went in together — the row, its capability
- *           gate, its SUBS entry, and the confined-role allowlist. #262 shipped
- *           a queue whose own role could not open it by getting this wrong, and
- *           the lesson is written into lib/stock-app-only.js in as many words.
+ *           gate and its SUBS entry. (The confined-role allowlist this also
+ *           checked is gone, decisions §278.)
  */
 'use strict';
 
@@ -172,14 +171,6 @@ const find = (rows, id) => rows.find(r => r.id === id);
      'NO MONEY ANYWHERE — a transfer moves value between two shelves of one business (§51’s rule for the slip, applied to the screen)');
 
   section('Part E · the screen and its door went in together');
-
-  const { stockAppOnlyAllows } = require(path.join(h.REPO, 'lib/stock-app-only.js'));
-  ok(stockAppOnlyAllows('GET', '/api/restock/mine', ['restock:request']),
-     'a shelf clerk who may RAISE a stock request may read back the ones they raised');
-  ok(!stockAppOnlyAllows('GET', '/api/restock/mine', ['restock:fulfil']),
-     'a kitchen operator may not — this is the asker’s side, and they raise none of these');
-  ok(!stockAppOnlyAllows('GET', '/api/restock/mine', []),
-     'and neither does a role holding nothing');
 
   const caps = require(path.join(h.REPO, 'lib/capabilities.js'));
   ok(caps.presetCapsFor('store_stock').includes('restock:request'),

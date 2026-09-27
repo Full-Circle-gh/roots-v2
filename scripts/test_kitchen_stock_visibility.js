@@ -49,7 +49,6 @@ const fail = (name, msg) => failures.push([name, msg]);
 // agree, and a GET that strips quantities while a PATCH accepts an absolute
 // count is not a half-open door but two policies wearing one name.
 const grant = require('../lib/quick-stock-grant');
-const { stockAppOnlyAllows } = require('../lib/stock-app-only');
 
 const caps = (...keys) => new Set(keys);
 const KITCHEN_OP = { backendUser: { role: 'kitchen', retail_store_id: 1 }, user: { role: 'kitchen' } };
@@ -165,20 +164,6 @@ const A = 'added-today';
   if (Object.keys(summariseKitchenAdds(null, TZ, NOW)).length) fail(A, 'a missing ledger threw or invented a row');
 }
 
-// ── The door ──────────────────────────────────────────────────────────────
-// A screen and its door go in together: the kitchen role is stock-app-only, and
-// a route missing from that list is refused before any handler runs.
-const D = 'stock-app-only';
-if (!stockAppOnlyAllows('GET', '/api/retail-admin/stores/1/stock/added-today')) {
-  fail(D, 'the added-today read is not admitted, so the line can never appear');
-}
-if (stockAppOnlyAllows('POST', '/api/retail-admin/stores/1/stock/added-today')) {
-  fail(D, 'added-today is admitted as a write');
-}
-if (stockAppOnlyAllows('GET', '/api/retail-admin/stores/1/stock/anything-else')) {
-  fail(D, 'the added-today line widened the stock pattern to every future segment');
-}
-
 /* ── The screen ────────────────────────────────────────────────────────────
    DELETED WITH THE APP IT RENDERED (§48 step 4). This section drove
    public/stock.html headlessly through eleven states to prove §46's rule — that
@@ -189,11 +174,11 @@ if (stockAppOnlyAllows('GET', '/api/retail-admin/stores/1/stock/anything-else'))
    scripts/test_mobile_addstock.js asserts the same rule on the surface that now
    carries it — "the shelf total never reaches the screen", "the count starts at
    +0", "11 is nowhere on it" — against public/m.html's own Add stock screen.
-   What survives HERE is the half that was never about a browser: the predicate,
-   today's adds, and the door. Those are the server's, and they still run. */
+   What survives HERE is the half that was never about a browser: the predicate
+   and today's adds. (The door went with the lockdown, §278.) Both still run. */
 
 if (failures.length) {
   for (const [n, m] of failures) console.log(`FAIL ${n} — ${m}`);
   process.exit(1);
 }
-console.log("ok — predicate, today's adds, and the door.");
+console.log("ok — predicate and today's adds.");

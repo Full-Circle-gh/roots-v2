@@ -346,6 +346,10 @@ try {
   // rows that already hold the finance/approval capabilities this rides beside.
   const voids = roles.migrateExpenseCancelCap();
   if (voids) console.log('[backend-auth] granted expenses:cancel to ' + voids + ' role(s)');
+  // §278: the kitchen and store-stock descriptions stop naming the deleted
+  // app, on every row whose description nobody has typed over.
+  const descs = roles.migrateStockRoleDescriptions();
+  if (descs) console.log('[backend-auth] reworded ' + descs + ' stock role description(s)');
 } catch (e) {
   // Seeding is best-effort by design. An unseeded tenant resolves from
   // presetCapsFor exactly as it did before roles became data.
@@ -710,10 +714,8 @@ router.get('/api/backend/me', (req, res) => {
   // browser chrome to press Back in either.
   //
   // The question is not "can they ring a sale", it is whether they have a home
-  // to return to: an operator whose role is not stock-app-locked has Tacet
-  // Mobile, whatever else they hold. A stock-app-only role is bounced back out
-  // of the backend by the restriction middleware in server.js, so a door
-  // offered to one of those would open onto a redirect.
+  // to return to, and every operator has Tacet Mobile, whatever else they hold
+  // (lib/app-home.js decides the door and its label).
   //
   // The label travels with it for the reason every pushed screen on the phone
   // already follows: a back link says where it GOES. Which screen that is, and

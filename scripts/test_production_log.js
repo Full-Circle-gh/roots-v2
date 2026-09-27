@@ -48,7 +48,6 @@ const ROOT = path.join(__dirname, '..');
 require(path.join(ROOT, 'database.js'));
 const { tdb } = require(path.join(ROOT, 'lib', 'tenant-db.js'));
 const inventory = require(path.join(ROOT, 'lib', 'inventory.js'));
-const { stockAppOnlyAllows } = require(path.join(ROOT, 'lib', 'stock-app-only.js'));
 const caps = require(path.join(ROOT, 'lib', 'capabilities.js'));
 const capRoutes = require(path.join(ROOT, 'lib', 'cap-routes.js'));
 
@@ -75,21 +74,9 @@ const PROD  = 9253;
 // UNIQUE, so the seed collided with the shop's own peanut butter.
 const SKU   = 'PRODTEST-' + PROD;
 
-// ── The door, before the route ─────────────────────────────────────────────
-// A screen and its door go in together. #262 shipped the kitchen queue without
-// touching the stock-app allowlist, so every call it made died before any route
-// ran and the queue was invisible to the only role it was built for.
-section('A confined kitchen role can reach it at all');
+// ── The capability, before the route ──────────────────────────────────────
+section('The kitchen role can reach it at all');
 
-check('POST /production is on the stock-app allowlist', () => {
-  assert.ok(stockAppOnlyAllows('POST', '/api/retail-admin/production'));
-});
-check('and the reason list it has to read', () => {
-  assert.ok(stockAppOnlyAllows('GET', '/api/retail-admin/production/reasons'));
-});
-check('the allowlist is still a floor, not a door — POST /api/restock stays shut', () => {
-  assert.strictEqual(stockAppOnlyAllows('POST', '/api/restock'), false);
-});
 check('the kitchen role actually HOLDS production:log', () => {
   assert.ok(caps.PRESETS.kitchen.indexOf('production:log') >= 0,
     `kitchen preset is ${JSON.stringify(caps.PRESETS.kitchen)}`);

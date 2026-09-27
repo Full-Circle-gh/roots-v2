@@ -145,12 +145,6 @@ const archived = (id) =>
 
   section('Part B2 · a dot never promises work behind a door you cannot open');
 
-  const { stockAppOnlyAllows } = require(path.join(h.REPO, 'lib/stock-app-only.js'));
-  ok(stockAppOnlyAllows('GET', '/api/restock/pick-count', ['restock:pick']),
-     'the count answers to the capability the SCREEN it points at is gated on');
-  ok(!stockAppOnlyAllows('GET', '/api/restock/pick-count', ['restock:request']),
-     'and not to the asker’s key — the two rows answer to different people');
-
   const m = fs.readFileSync(path.join(h.REPO, 'public/m.html'), 'utf8');
   ok(/key==='pick'\s*\?\s*waitingToPick\(\)>0/.test(m), 'the Pick row carries the dot');
   ok(/function waitingToPick\(\)\{ return canRoute\('pick'\)/.test(m),

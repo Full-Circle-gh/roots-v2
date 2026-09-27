@@ -27,8 +27,8 @@ const assert = require('assert');
 const path = require('path');
 const { backToTacet } = require(path.join(__dirname, '..', 'lib', 'app-home.js'));
 
-const WAREHOUSE = { nameEn: 'Warehouse', nameCn: '仓库', stockAppOnly: false };
-const CLERK = { nameEn: 'Shelf clerk', nameCn: '门店盘点', stockAppOnly: true };
+const WAREHOUSE = { nameEn: 'Warehouse', nameCn: '仓库' };
+const CLERK = { nameEn: 'Shelf clerk', nameCn: '门店盘点' };
 
 let checks = 0;
 function t(what, fn) { fn(); checks++; console.log('  ✓ ' + what); }
@@ -57,17 +57,17 @@ t('a role with no tabs at all keeps its own name — the list IS its home', () =
 });
 
 t('a nameless role falls back to More rather than to nothing', () => {
-  const r = backToTacet({ stockAppOnly: false }, ['quickstock:recount']);
+  const r = backToTacet({}, ['quickstock:recount']);
   assert.deepStrictEqual(r.homeLabel, { en: 'More', cn: '更多' });
 });
 
 /* WAS: "a stock-app-only role gets no door — /m would redirect it straight
    back." True while server.js bounced that role out of Tacet Mobile; §48 step 3
    re-points the confinement AT this app, so /m is now where the role lives and
-   the door is the truest one on the page. It is a FLAT role — it holds none of
-   the four tab capabilities — so it is named for itself, exactly as the
-   warehouse clerk above is. */
-t('a confined role gets the door into Tacet Mobile, named for its role', () => {
+   the door is the truest one on the page. §278 then removed the lockdown
+   altogether. It is a FLAT role — it holds none of the four tab capabilities —
+   so it is named for itself, exactly as the warehouse clerk above is. */
+t('a stock clerk gets the door into Tacet Mobile, named for its role', () => {
   const r = backToTacet(CLERK, ['quickstock:recount']);
   assert.strictEqual(r.home, '/m?to=more');
   assert.deepStrictEqual(r.homeLabel, { en: 'Shelf clerk', cn: '门店盘点' });
@@ -201,8 +201,8 @@ t('a ?from= this build does not know leaves the server\'s answer standing', () =
 });
 
 t('?from= cannot MINT a door where the server refused one', () => {
-  // The stock-app-only case above. server.js bounces that role out of /m, and
-  // a hand-typed ?from= must not talk either page into an exit at all.
+  // Whatever the reason the server gave no door, a hand-typed ?from= must not
+  // talk either page into an exit at all.
   for (const [n, r] of each('?from=dashboard', { home: null, homeLabel: null })) {
     assert.strictEqual(r.home, null, n);
     assert.strictEqual(r.homeLabel, null, n);
