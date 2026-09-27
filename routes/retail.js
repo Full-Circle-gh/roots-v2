@@ -20986,7 +20986,9 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
   const tx = tdb().transaction(() => {
     for (const [k, v] of writes) up.run(k, JSON.stringify(v), req.user.id);
   });
-  tx();
+  // §279: the invite share card saves itself and names itself in ?history;
+  // any other write here records nothing, as before.
+  withConfigHistory(req, writes.map(w => w[0]), () => tx());
   logActivity(req.user.id, req.user.username, 'affiliate_settings_update', 'storefront_config', null, { keys: writes.map(w => w[0]) }, req.ip);
   res.json({ success: true, data: affiliateSettings() });
 });
@@ -23240,6 +23242,28 @@ function configSnapshot(keys) {
   return out;
 }
 const CONFIG_HISTORY_NOTES = new Set(['undo', 'restore']);
+// The same per-card history, for a settings write that goes through a route of
+// its own rather than PUT /config (the leaderboard, voting and invite-card
+// writes): `keys` are the storefront_config keys the route writes, and
+// `write` is the route's own synchronous write. Without `?history` this is
+// exactly `write()`.
+function withConfigHistory(req, keys, write) {
+  const q = req.query || {};
+  const card = /^[a-z0-9._-]{1,60}$/i.test(String(q.history || '')) ? String(q.history) : null;
+  if (card) {
+    try { editHistory.before(tdb(), historyTenantId(), 'config', card, configSnapshot(keys)); }
+    catch (e) { console.error('[config history before]', e.message); }
+  }
+  const out = write();
+  if (card) {
+    try {
+      editHistory.after(tdb(), historyTenantId(), 'config', card, configSnapshot(keys),
+        { id: req.user && req.user.id, name: req.user && req.user.username },
+        { note: CONFIG_HISTORY_NOTES.has(q.note) ? q.note : null });
+    } catch (e) { console.error('[config history after]', e.message); }
+  }
+  return out;
+}
 
 router.get('/api/retail-admin/config/history', requireRetailAdmin, (req, res) => {
   const card = String(req.query.card || '');
@@ -40207,6 +40231,7 @@ router.put('/api/retail-admin/leaderboard/config', requireRetailAdmin, express.j
     })(),
   };
 
+  withConfigHistory(req, ['leaderboard.config'], () =>
   tdb().prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES (?, ?, CURRENT_TIMESTAMP, ?)
@@ -40214,7 +40239,7 @@ router.put('/api/retail-admin/leaderboard/config', requireRetailAdmin, express.j
        value_json = excluded.value_json,
        updated_at = CURRENT_TIMESTAMP,
        updated_by = excluded.updated_by`
-  ).run('leaderboard.config', JSON.stringify(next), req.user.id);
+  ).run('leaderboard.config', JSON.stringify(next), req.user.id));
 
   logActivity(req.user.id, req.user.username, 'update', 'leaderboard_config', null, { enabled: next.enabled, metric: next.metric, period: next.period }, req.ip);
   res.json({ success: true, data: next });
@@ -40598,6 +40623,7 @@ router.put('/api/retail-admin/voting/config', requireRetailAdmin, express.json()
     intro_cn: String(body.intro_cn || '').slice(0, 240) || VOTING_DEFAULTS.intro_cn,
     show_counts: body.show_counts !== false,
   };
+  withConfigHistory(req, ['voting.config'], () =>
   tdb().prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES (?, ?, CURRENT_TIMESTAMP, ?)
@@ -40605,7 +40631,7 @@ router.put('/api/retail-admin/voting/config', requireRetailAdmin, express.json()
        value_json = excluded.value_json,
        updated_at = CURRENT_TIMESTAMP,
        updated_by = excluded.updated_by`
-  ).run('voting.config', JSON.stringify(next), req.user.id);
+  ).run('voting.config', JSON.stringify(next), req.user.id));
   logActivity(req.user.id, req.user.username, 'update', 'voting_config', null, {}, req.ip);
   res.json({ success: true, data: next });
 });

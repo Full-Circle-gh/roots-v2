@@ -1219,6 +1219,7 @@ const REVIEW_TAG_COLOURS = [
 ];
 
 async function loadReviewTags() {
+  await RTAGS_CARD.flush();   // a pending edit goes before the table is rebuilt
   const tbody = $('#rtags-table tbody');
   tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading… · 加载中…</td></tr>';
   try {
@@ -1232,6 +1233,7 @@ async function loadReviewTags() {
     })) : [];
     syncReviewTagLabels();
     renderReviewTagsTable();
+    RTAGS_CARD.start();       // §279 — the table holds the server's tags now
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="5" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
   }
@@ -1254,7 +1256,7 @@ function renderReviewTagsTable() {
     ).join('');
     return `
     <tr data-i="${i}">
-      <td><input type="text" value="${escapeAttr(t.id)}" oninput="updateReviewTag(${i}, 'id', this.value)" style="width: 100%; font-family: var(--f-mono);"></td>
+      <td><input type="text" data-as-commit value="${escapeAttr(t.id)}" oninput="updateReviewTag(${i}, 'id', this.value)" style="width: 100%; font-family: var(--f-mono);"></td>
       <td><input type="text" value="${escapeAttr(t.en)}" oninput="updateReviewTag(${i}, 'en', this.value)" style="width: 100%;"></td>
       <td><input type="text" value="${escapeAttr(t.cn)}" oninput="updateReviewTag(${i}, 'cn', this.value)" style="width: 100%;"></td>
       <td>
@@ -1277,6 +1279,7 @@ function updateReviewTag(i, field, value) {
 function addReviewTag() {
   REVIEW_TAGS_STATE.push({ id: '', en: '', cn: '', color: 'lime' });
   renderReviewTagsTable();
+  RTAGS_CARD.touch();
 }
 
 async function removeReviewTag(i) {
@@ -1285,30 +1288,36 @@ async function removeReviewTag(i) {
   if (t.id && !(await askConfirm({ title: `Remove "${t.id}"? Reviews already tagged with this id will lose that chip. · 移除 "${t.id}"？已使用此标签的评价将失去该标记。`, confirmLabel: 'Remove tag', danger: true }))) return;
   REVIEW_TAGS_STATE.splice(i, 1);
   renderReviewTagsTable();
+  RTAGS_CARD.touch();
 }
 
-async function saveReviewTags() {
-  // Validate: no empty ids, no dupes, each has at least one label.
-  const ids = new Set();
-  for (const t of REVIEW_TAGS_STATE) {
-    if (!t.id) { toast('Every tag needs an id · 每个标签都需要 id', 'err'); return; }
-    if (ids.has(t.id)) { toast(`Duplicate id · 重复 id "${t.id}"`, 'err'); return; }
-    if (!t.en && !t.cn) { toast(`Tag "${t.id}" needs a label · 标签需至少一个名称`, 'err'); return; }
-    ids.add(t.id);
-  }
-  try {
-    await api('/api/retail-admin/config', {
-      method: 'PUT',
-      body: { 'reviews.tags': REVIEW_TAGS_STATE },
-    });
-    toast('Saved · 已保存');
-    await loadReviewTags();
-    // Re-render the reviews table so existing rows pick up new labels.
+// §279 — the tags save themselves. A tag still missing its id or its name, or
+// two tags sharing an id, HOLDS the save and the foot says which: the old Save
+// refused the same things with a toast. The id box saves when it is left, not
+// mid-word — it is the slug old reviews point at.
+const RTAGS_CARD = autosaveCard({
+  card: 'reviews.tags', root: '#rvw-set-tags',
+  read: () => ({ 'reviews.tags': REVIEW_TAGS_STATE.map(t => ({ id: t.id, en: t.en, cn: t.cn, color: t.color })) }),
+  hold: (b) => {
+    const ids = new Set();
+    for (const t of b['reviews.tags']) {
+      if (!t.id) return cuT('Every tag needs an id', '每个标签都需要 id');
+      if (ids.has(t.id)) return cuT('Duplicate id "' + t.id + '"', '重复 id "' + t.id + '"');
+      if (!t.en && !t.cn) return cuT('Tag "' + t.id + '" needs a label', '标签需至少一个名称');
+      ids.add(t.id);
+    }
+    return '';
+  },
+  apply: (b) => {
+    REVIEW_TAGS_STATE = (b['reviews.tags'] || []).map(t => ({ ...t }));
+    renderReviewTagsTable();
+  },
+  after: async () => {
+    syncReviewTagLabels();
+    // Existing review rows pick up renamed labels.
     if (REVIEWS_LOADED) await loadReviews();
-  } catch (e) {
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
-}
+  },
+});
 
 // ════════════════════════════════════════════════════════════════
 // FAQ / HELP CENTRE — edit-buffer pattern mirrors review tags above.
@@ -1333,6 +1342,7 @@ const FAQ_DEFAULT_CATS = [
 ];
 
 async function loadFaq() {
+  await FAQ_CARD.flush();     // a pending edit goes before the lists are rebuilt
   const catBody = $('#faq-cats-table tbody');
   const qsList  = $('#faq-qs-list');
   if (catBody) catBody.innerHTML = '<tr><td colspan="5" class="muted">Loading… · 加载中…</td></tr>';
@@ -1357,6 +1367,7 @@ async function loadFaq() {
     })) : [];
     renderFaqCatsTable();
     renderFaqQs();
+    FAQ_CARD.start();         // §279 — the lists hold the server's FAQ now
   } catch (e) {
     if (catBody) catBody.innerHTML = `<tr><td colspan="5" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
     if (qsList)  qsList.innerHTML  = `<div class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
@@ -1376,7 +1387,7 @@ function renderFaqCatsTable() {
     ).join('');
     return `
     <tr data-i="${i}">
-      <td><input type="text" value="${escapeAttr(c.id)}" oninput="updateFaqCat(${i}, 'id', this.value)" style="width: 100%; font-family: var(--f-mono);"></td>
+      <td><input type="text" data-as-commit value="${escapeAttr(c.id)}" oninput="updateFaqCat(${i}, 'id', this.value)" style="width: 100%; font-family: var(--f-mono);"></td>
       <td><input type="text" value="${escapeAttr(c.en)}" oninput="updateFaqCat(${i}, 'en', this.value)" style="width: 100%;"></td>
       <td><input type="text" value="${escapeAttr(c.cn)}" oninput="updateFaqCat(${i}, 'cn', this.value)" style="width: 100%;"></td>
       <td><select onchange="updateFaqCat(${i}, 'color', this.value)" style="width: 100%;">${opts}</select></td>
@@ -1399,6 +1410,7 @@ function addFaqCategory() {
   FAQ_CATS.push({ id: '', en: '', cn: '', color: 'lime' });
   renderFaqCatsTable();
   renderFaqQs();
+  FAQ_CARD.touch();
 }
 
 async function removeFaqCat(i) {
@@ -1409,6 +1421,7 @@ async function removeFaqCat(i) {
   FAQ_CATS.splice(i, 1);
   renderFaqCatsTable();
   renderFaqQs();
+  FAQ_CARD.touch();
 }
 
 function renderFaqQs() {
@@ -1433,7 +1446,7 @@ function renderFaqQs() {
         </div>
         <div class="field" style="flex: 1; margin: 0;">
           <label class="stacked">id (optional) · 选填</label>
-          <input type="text" value="${escapeAttr(q.id)}" oninput="updateFaqQ(${i}, 'id', this.value)" placeholder="auto" style="width: 100%; font-family: var(--f-mono);">
+          <input type="text" data-as-commit value="${escapeAttr(q.id)}" oninput="updateFaqQ(${i}, 'id', this.value)" placeholder="auto" style="width: 100%; font-family: var(--f-mono);">
         </div>
         <div class="row" style="gap: 4px; align-self: flex-end; padding-bottom: 2px;">
           <button class="btn btn-sm" onclick="moveFaqQ(${i}, -1)" ${i === 0 ? 'disabled' : ''}>↑</button>
@@ -1476,6 +1489,7 @@ function updateFaqQ(i, field, value) {
 function addFaqQuestion() {
   FAQ_QS.push({ id: '', cat: FAQ_CATS[0]?.id || '', q_en: '', q_cn: '', a_en: '', a_cn: '' });
   renderFaqQs();
+  FAQ_CARD.touch();
 }
 
 async function removeFaqQ(i) {
@@ -1484,6 +1498,7 @@ async function removeFaqQ(i) {
   if ((q.q_en || q.q_cn) && !(await askConfirm({ title: `Remove "${q.q_en || q.q_cn}"? · 移除 "${q.q_en || q.q_cn}"？`, confirmLabel: 'Remove question', danger: true }))) return;
   FAQ_QS.splice(i, 1);
   renderFaqQs();
+  FAQ_CARD.touch();
 }
 
 function moveFaqQ(i, dir) {
@@ -1491,50 +1506,23 @@ function moveFaqQ(i, dir) {
   if (j < 0 || j >= FAQ_QS.length) return;
   const tmp = FAQ_QS[i]; FAQ_QS[i] = FAQ_QS[j]; FAQ_QS[j] = tmp;
   renderFaqQs();
+  FAQ_CARD.touch();
 }
 
-// Legal pages live in the Content group (moved out of Settings 2026-06-08). They
-// save on their own button via a partial config PUT, mirroring the keys that used
-// to ride along in saveConfig().
-async function saveLegal() {
-  const status = $('#legal-status');
-  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
-  const today = new Date().toISOString().slice(0, 10);
-  const body = {
-    'legal.privacy.body_en': $('#cfg-legal-privacy-en').value,
-    'legal.privacy.body_cn': $('#cfg-legal-privacy-cn').value,
-    'legal.terms.body_en':   $('#cfg-legal-terms-en').value,
-    'legal.terms.body_cn':   $('#cfg-legal-terms-cn').value,
-    'legal.privacy.updated_at': today,
-    'legal.terms.updated_at':   today,
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    if (status) { status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>'; }
-    toast('Saved · 已保存');
-  } catch (e) {
-    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
-}
+// Legal pages live in the Content group (moved out of Settings 2026-06-08).
+// They save themselves since §279 — LEGAL_CARD, in 05-marketing.js beside the
+// loader that fills them.
 
-async function saveFaq() {
-  const status = $('#faq-status');
-  status.textContent = 'Saving… · 保存中…';
-
-  // Validate categories: unique non-empty ids + at least one label.
-  const catIds = new Set();
-  for (const c of FAQ_CATS) {
-    if (!c.id) { status.innerHTML = '<span class="err">Every category needs an id · 每个分类都需要 id</span>'; return; }
-    if (catIds.has(c.id)) { status.innerHTML = `<span class="err">Duplicate category id · 分类 id 重复 "${escapeHtml(c.id)}"</span>`; return; }
-    if (!c.en && !c.cn) { status.innerHTML = `<span class="err">Category "${escapeHtml(c.id)}" needs a label · 分类需要名称</span>`; return; }
-    catIds.add(c.id);
-  }
-
-  // Auto-assign question ids if missing — keeps the schema stable for
-  // analytics/feedback hits without forcing staff to type slugs.
+// §279 — the FAQ saves itself: both keys, whole, as the old Save sent them.
+// What the old Save refused with a red line now HOLDS the save, and the foot
+// says which: a category without an id or a name, two sharing an id, a
+// question without a category, a question or an answer in neither language.
+// A question with no id gets one from its text, as before — and keeps it: the
+// id is written back into the list, so later edits to the question do not
+// mint it a new one.
+function faqPayload() {
   const qIds = new Set();
-  const payloadQs = FAQ_QS.map((q, i) => {
+  const qs = FAQ_QS.map((q, i) => {
     let id = q.id;
     if (!id) {
       const base = (q.q_en || q.q_cn || `q-${i + 1}`).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -1543,32 +1531,48 @@ async function saveFaq() {
     let unique = id, n = 2;
     while (qIds.has(unique)) unique = `${id}-${n++}`;
     qIds.add(unique);
-    return { ...q, id: unique };
+    return { id: unique, cat: q.cat, q_en: q.q_en, q_cn: q.q_cn, a_en: q.a_en, a_cn: q.a_cn };
   });
-
-  // Sanity-check that each question has a category and at least one Q/A pair.
-  for (const q of payloadQs) {
-    if (!q.cat) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.q_en || q.q_cn || q.id)}" needs a category · 该问题需要选择分类</span>`; return; }
-    if (!q.q_en && !q.q_cn) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.id)}" needs a Q in at least one language · 问题至少需一种语言</span>`; return; }
-    if (!q.a_en && !q.a_cn) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.id)}" needs an A in at least one language · 回答至少需一种语言</span>`; return; }
-  }
-
-  try {
-    await api('/api/retail-admin/config', {
-      method: 'PUT',
-      body: {
-        'faq.categories': FAQ_CATS,
-        'faq.questions':  payloadQs,
-      },
-    });
-    FAQ_QS = payloadQs;  // keep buffer in sync with auto-assigned ids
-    renderFaqQs();
-    status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>';
-    toast('FAQ saved · 常见问题已保存');
-  } catch (e) {
-    status.innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
-  }
+  return {
+    'faq.categories': FAQ_CATS.map(c => ({ id: c.id, en: c.en, cn: c.cn, color: c.color })),
+    'faq.questions': qs,
+  };
 }
+const FAQ_CARD = autosaveCard({
+  card: 'faq', root: '#tab-faq',
+  read: faqPayload,
+  hold: (b) => {
+    const catIds = new Set();
+    for (const c of b['faq.categories']) {
+      if (!c.id) return cuT('Every category needs an id', '每个分类都需要 id');
+      if (catIds.has(c.id)) return cuT('Duplicate category id "' + c.id + '"', '分类 id 重复 "' + c.id + '"');
+      if (!c.en && !c.cn) return cuT('Category "' + c.id + '" needs a label', '分类需要名称');
+      catIds.add(c.id);
+    }
+    for (const q of b['faq.questions']) {
+      if (!q.cat) return cuT('Question "' + (q.q_en || q.q_cn || q.id) + '" needs a category', '该问题需要选择分类');
+      if (!q.q_en && !q.q_cn) return cuT('Question "' + q.id + '" needs a Q in at least one language', '问题至少需一种语言');
+      if (!q.a_en && !q.a_cn) return cuT('Question "' + q.id + '" needs an A in at least one language', '回答至少需一种语言');
+    }
+    return '';
+  },
+  apply: (b) => {
+    FAQ_CATS = (b['faq.categories'] || []).map(c => ({ ...c }));
+    FAQ_QS = (b['faq.questions'] || []).map(q => ({ ...q }));
+    renderFaqCatsTable();
+    renderFaqQs();
+  },
+  // Keep the ids the save assigned, WITHOUT repainting the list: the operator
+  // may be mid-sentence in one of its answers.
+  after: (b) => {
+    // Matched on the text as well as the place, so a question moved or added
+    // while the save was on its way is not handed another's id.
+    (b['faq.questions'] || []).forEach((q, i) => {
+      const cur = FAQ_QS[i];
+      if (cur && !cur.id && cur.q_en === q.q_en && cur.q_cn === q.q_cn) cur.id = q.id;
+    });
+  },
+});
 
 let REVIEWS_LOADED = false;
 // Cache of the last-loaded rows keyed by `${source}:${id}` so the Reply

@@ -54,7 +54,7 @@ const TEXT = field('text'), NUMBER = field('input[type="number"]');
 const SENT = [];
 const FORM = { msg: 'Closed for the holiday', on: true, mins: 10 };
 const sandbox = {
-  console, setTimeout, clearTimeout,
+  console, setTimeout, clearTimeout, queueMicrotask,
   TacetAutosave: require('../public/tacet-autosave.js'),
   cuT: (en) => en, escapeHtml: (s) => String(s), toast: () => {},
   document: { querySelector: () => null },
@@ -113,6 +113,16 @@ const run = (src) => vm.runInContext(src, sandbox);
   is(SENT[0] && SENT[0].body['delivery.holidayMessage'], { en: 'Closed for the holiday' }, 'with the card as it was when loaded');
   is(FORM.msg, 'Closed for the holiday', 'and the fields are put back too');
 
+  section('3b · an edit the page writes into its state AFTER the event is still sent');
+  // The social-proof rows write their edit on document, further up the bubble
+  // than the card's root: the card must read the page after that, not before.
+  SENT.length = 0;
+  fire('input', TEXT);
+  FORM.msg = 'Written by a handler further up';
+  await wait(900);
+  is(SENT.length, 1, 'one write');
+  is(SENT[0] && SENT[0].body['delivery.holidayMessage'], { en: 'Written by a handler further up' }, 'carrying what the later handler wrote');
+
   section('4 · the Delivery page');
   const HTML = read('public/retail-admin.html');
   const DLV = read('public/retail-admin/06-delivery.js');
@@ -133,6 +143,41 @@ const run = (src) => vm.runInContext(src, sandbox);
   yes(iStart > iFill, 'the cards start only after their fields are filled');
   yes(loadFn.lastIndexOf('c.start()') < loadFn.indexOf('} catch {}'), 'and only inside the try — a failed load never starts them');
 
+  section('4b · the shop wording pages (batch 3)');
+  const MKT = read('public/retail-admin/05-marketing.js');
+  const CONTENT = read('public/retail-admin/07-content-billing.js');
+  const EXTRAS = read('public/retail-admin/10-extras.js');
+  const ALLJS = MKT + CONTENT + EXTRAS;
+  const PAGES = [
+    // card, file, the loader that must start it, the line in that loader it must follow
+    ['copy.snippets', MKT, 'async function loadSnippets', 'snippetsRender();', 'SNIP_CARD.start()'],
+    ['reviews.tags', CONTENT, 'async function loadReviewTags', 'renderReviewTagsTable();', 'RTAGS_CARD.start()'],
+    ['faq', CONTENT, 'async function loadFaq', 'renderFaqQs();', 'FAQ_CARD.start()'],
+    ['about', EXTRAS, 'async function loadAbout', 'ABOUT_READY = true;', 'ABOUT_CARD.start()'],
+    ['leaderboard', EXTRAS, 'async function lbLoad', 'lbApplyConfigToForm(body.data);', 'LB_CARD.start()'],
+    ['voting', EXTRAS, 'async function votLoad', 'votRenderAll();', 'VOT_CARD.start()'],
+    ['legal', MKT, 'async function loadConfig', 'applyFeePreviews();', 'CFG_CARDS().forEach(k => k.start())'],
+    ['checkout.upsell', MKT, 'async function loadConfig', 'applyFeePreviews();', 'CFG_CARDS().forEach(k => k.start())'],
+    ['social_proof', MKT, 'async function loadConfig', 'applyFeePreviews();', 'CFG_CARDS().forEach(k => k.start())'],
+  ];
+  for (const [card, src, loader, fill, start] of PAGES) {
+    yes(HTML.includes('data-as-foot="' + card + '"'), card + ': the page wears the foot');
+    yes(src.includes("card: '" + card + "'"), card + ': and is an autosaving card');
+    const body = src.slice(src.indexOf(loader), src.indexOf('\n}\n', src.indexOf(loader)));
+    const iFill = body.indexOf(fill), iStart = body.indexOf(start), iCatch = body.lastIndexOf('} catch');   // the loader's own catch, not a nested one
+    yes(iFill !== -1 && iStart > iFill && (iCatch === -1 || iStart < iCatch), card + ': it starts only after its fields are filled, never from the catch');
+  }
+  for (const gone of ['saveSnippets', 'saveReviewTags', 'saveFaq', 'saveLegal', 'saveAbout', 'saveCheckoutUpsell',
+    'saveSocialProof', 'saveLeaderboardConfig', 'votSaveConfig', 'scSave']) {
+    yes(!new RegExp('function ' + gone + '\\(').test(ALLJS) && !HTML.includes(gone + '('), gone + ' and its button are gone');
+  }
+  yes(/const VOT_CARD[\s\S]*?if \(cfgRes && cfgRes\.data\) VOT_CARD\.start\(\)/.test(EXTRAS) || /if \(cfgRes && cfgRes\.data\) VOT_CARD\.start\(\)/.test(EXTRAS),
+    'voting starts only when its settings actually arrived (that read may fail quietly)');
+  yes(/\['home', 'product', 'voting'\]\.forEach\(k => SC_CARDS\[k\]\.start\(\)\)/.test(EXTRAS) && /SC_CARDS\.invite\.start\(\)/.test(EXTRAS),
+    'each share card starts only when its own source loaded');
+  yes(/data-as-commit value="\$\{escapeAttr\(t\.id\)\}"/.test(CONTENT), 'a review tag’s id saves when it is left, not mid-word');
+  yes((CONTENT.match(/data-as-commit value="\$\{escapeAttr\((c|q)\.id\)\}"/g) || []).length === 2, 'and so do the FAQ category and question ids');
+
   section('5 · the server keeps each card’s history');
   const RETAIL = read('routes/retail.js');
   const put = RETAIL.slice(RETAIL.indexOf("router.put('/api/retail-admin/config'"));
@@ -144,6 +189,12 @@ const run = (src) => vm.runInContext(src, sandbox);
   yes(/\^\[a-z0-9\._-\]\{1,60\}\$\/i\.test\(String\(q\.history/.test(putFn), 'a card name is checked before it is used');
   yes(/CONFIG_HISTORY_NOTES\.has\(q\.note\)/.test(putFn), 'and only a known note is filed');
   yes(/router\.get\('\/api\/retail-admin\/config\/history', requireRetailAdmin/.test(RETAIL), 'the history reads back per card, behind the admin gate');
+  for (const [route, key] of [["router.put('/api/retail-admin/leaderboard/config'", "['leaderboard.config']"],
+    ["router.put('/api/retail-admin/voting/config'", "['voting.config']"],
+    ["router.patch('/api/retail-admin/affiliate/settings'", 'writes.map(w => w[0])']]) {
+    const r = RETAIL.slice(RETAIL.indexOf(route)); const fn = r.slice(0, r.indexOf('\n});'));
+    yes(fn.includes('withConfigHistory(req, ' + key), route.split("'")[1] + ' records its card around its own write');
+  }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

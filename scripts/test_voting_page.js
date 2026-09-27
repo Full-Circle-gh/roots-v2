@@ -123,7 +123,11 @@ section('5 · in-flight states, and the button captured before the await (§1.12
 
 const writers = [...MOD.matchAll(/async function (vot\w+)\(([^)]*)\)\s*\{([\s\S]*?)\n\}/g)]
   .filter(m => m[3].includes('adminWrite'));
-yes(writers.length >= 4, `${writers.length} write paths found`);
+// Three since §279: the page settings stopped being a button-driven write —
+// they save themselves through VOT_CARD (scripts/test_settings_card_autosave.js).
+yes(writers.length >= 3, `${writers.length} write paths found`);
+yes(!/async function votSaveConfig/.test(MOD) && /const VOT_CARD = autosaveCard\(/.test(MOD),
+  'the page settings are the one writer that left, and they left for the autosave card');
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 for (const [, name, , raw] of writers) {
   // A comment that says the word does not run it — strip them, or this check

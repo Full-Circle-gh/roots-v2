@@ -1186,7 +1186,8 @@ function snippetsRender() {
 }
 
 async function loadSnippets() {
-  $('#snip-status').textContent = '';
+  // A pending edit goes before the boxes are rebuilt from the server.
+  await SNIP_CARD.flush();
   try {
     const { data: cfg } = await api('/api/retail-admin/config');
     // Merge DB values into the SNIPPETS catalog (use defaults if missing)
@@ -1198,6 +1199,8 @@ async function loadSnippets() {
       }
     }
     snippetsRender();
+    // §279 — the boxes hold the server's values now, so the page may save.
+    SNIP_CARD.start();
   } catch (e) {
     toast('Snippets load failed · 加载文案失败: ' + e.message, 'err');
   }
@@ -1207,29 +1210,28 @@ function getDottedPath(obj, path) {
   return path.split('.').reduce((acc, part) => acc?.[part], obj);
 }
 
-async function saveSnippets() {
-  const inputs = document.querySelectorAll('#snippets-mount input[data-key]');
+// §279 — the page saves itself: every snippet, as { key: { en, cn } } in the
+// catalogue's order, on the pause after typing. "Reset to saved" is gone —
+// there is nothing unsaved to reset to — and Undo takes its place.
+function snippetsBody() {
   const byKey = {};
-  inputs.forEach(inp => {
+  document.querySelectorAll('#snippets-mount input[data-key]').forEach(inp => {
     const k = inp.dataset.key, lang = inp.dataset.lang;
     if (!byKey[k]) byKey[k] = {};
     byKey[k][lang] = inp.value;
   });
-  $('#snip-status').textContent = 'Saving…';
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body: byKey });
-    $('#snip-status').innerHTML = '<span class="ok">Saved ✓</span>';
-    toast('Mini-app copy saved · 小程序文案已保存');
-    // Refresh in-memory defaults so a subsequent "Reset to saved" works
-    for (const g of SNIPPETS) {
-      for (const s of g.items) {
-        if (byKey[s.key]) { s._en = byKey[s.key].en; s._cn = byKey[s.key].cn; }
-      }
-    }
-  } catch (e) {
-    $('#snip-status').innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
-  }
+  return byKey;
 }
+const SNIP_CARD = autosaveCard({
+  card: 'copy.snippets', root: '#snippets-mount',
+  read: snippetsBody,
+  apply: (b) => {
+    document.querySelectorAll('#snippets-mount input[data-key]').forEach(inp => {
+      const v = b[inp.dataset.key];
+      if (v && typeof v === 'object' && inp.dataset.lang in v) inp.value = v[inp.dataset.lang];
+    });
+  },
+});
 
 // ════════════════════════════════════════════════════════════════
 // STOREFRONT SETTINGS
@@ -1571,7 +1573,61 @@ async function saveTaxSettings() {
   }
 }
 
+// Paint the social-proof widgets from a stored `social_proof` object —
+// loadConfig's, and Undo / restore's (§279).
+function paintSocialProof(sp) {
+  // Social-proof widgets — five sub-objects under social_proof. Defaults
+  // mirror the server-side fallbacks in routes/retail.js getSocialConfig().
+  const sp_bc = sp.bought_count  || {};
+  const sp_rb = sp.recent_buyers || {};
+  const sp_vn = sp.viewing_now   || {};
+  const sp_lo = sp.last_ordered  || {};
+  const sp_sb = sp.sold_badge    || {};
+  // Boost ranges — back-compat: old configs stored a single `boost` /
+  // `fallback_minutes`; if the new min/max isn't present, hydrate both
+  // sides of the range from that legacy value so the form round-trips
+  // cleanly without surprising the operator.
+  const bcBoostLegacy = Number(sp_bc.boost) || 0;
+  const vnBoostLegacy = Number(sp_vn.boost) || 0;
+  const sbBoostLegacy = Number(sp_sb.boost) || 0;
+  const loFallbackLegacy = Number(sp_lo.fallback_minutes) || 0;
+  $('#cfg-social-bc-enabled').checked   = sp_bc.enabled !== false;
+  $('#cfg-social-bc-min_today').value   = sp_bc.min_today ?? 2;
+  $('#cfg-social-bc-min_week').value    = sp_bc.min_week  ?? 2;
+  $('#cfg-social-bc-min_month').value   = sp_bc.min_month ?? 1;
+  $('#cfg-social-bc-min_all').value     = sp_bc.min_all   ?? 2;
+  $('#cfg-social-bc-boost_min').value   = sp_bc.boost_min ?? bcBoostLegacy;
+  $('#cfg-social-bc-boost_max').value   = sp_bc.boost_max ?? bcBoostLegacy;
+  $('#cfg-social-rb-enabled').checked    = sp_rb.enabled !== false;
+  $('#cfg-social-rb-window_days').value  = sp_rb.window_days ?? 7;
+  $('#cfg-social-rb-visible_secs').value = sp_rb.visible_secs ?? 4.5;
+  $('#cfg-social-rb-gap_secs').value     = sp_rb.gap_secs ?? 5;
+  _manualBuyers = Array.isArray(sp_rb.manual) ? sp_rb.manual.map(m => ({
+    name:         String(m && m.name || ''),
+    product_en:   String(m && m.product_en || ''),
+    product_cn:   String(m && m.product_cn || ''),
+    minutes_ago:  Number(m && m.minutes_ago) || 0,
+  })) : [];
+  renderManualBuyers();
+  $('#cfg-social-vn-enabled').checked   = sp_vn.enabled !== false;
+  $('#cfg-social-vn-show_in_app').checked = sp_vn.show_in_app !== false;
+  $('#cfg-social-vn-ttl_sec').value     = sp_vn.ttl_sec ?? 45;
+  $('#cfg-social-vn-boost_min').value   = sp_vn.boost_min ?? vnBoostLegacy;
+  $('#cfg-social-vn-boost_max').value   = sp_vn.boost_max ?? vnBoostLegacy;
+  $('#cfg-social-lo-enabled').checked   = sp_lo.enabled !== false;
+  $('#cfg-social-lo-max_hours').value   = sp_lo.max_hours ?? 24;
+  $('#cfg-social-lo-fallback_min_minutes').value = sp_lo.fallback_min_minutes ?? loFallbackLegacy;
+  $('#cfg-social-lo-fallback_max_minutes').value = sp_lo.fallback_max_minutes ?? loFallbackLegacy;
+  $('#cfg-social-sb-enabled').checked   = sp_sb.enabled !== false;
+  $('#cfg-social-sb-min_units').value   = sp_sb.min_units ?? 3;
+  $('#cfg-social-sb-boost_min').value   = sp_sb.boost_min ?? sbBoostLegacy;
+  $('#cfg-social-sb-boost_max').value   = sp_sb.boost_max ?? sbBoostLegacy;
+}
+
 async function loadConfig() {
+  // §279 — a pending edit on any of this loader's self-saving cards goes
+  // before the fields are refilled from the server.
+  await Promise.all(CFG_CARDS().map(k => k.flush()));
   try {
     const { data: c } = await api('/api/retail-admin/config');
     applyFeatureGates(c);
@@ -1683,58 +1739,15 @@ async function loadConfig() {
     if ($('#cfg-upsell-flash'))   $('#cfg-upsell-flash').checked   = up.flash   !== false;
     if ($('#cfg-upsell-max'))     $('#cfg-upsell-max').value       = up.max != null ? up.max : 4;
 
-    // Social-proof widgets — five sub-objects under social_proof. Defaults
-    // mirror the server-side fallbacks in routes/retail.js getSocialConfig().
-    const sp = c.social_proof || {};
-    const sp_bc = sp.bought_count  || {};
-    const sp_rb = sp.recent_buyers || {};
-    const sp_vn = sp.viewing_now   || {};
-    const sp_lo = sp.last_ordered  || {};
-    const sp_sb = sp.sold_badge    || {};
-    // Boost ranges — back-compat: old configs stored a single `boost` /
-    // `fallback_minutes`; if the new min/max isn't present, hydrate both
-    // sides of the range from that legacy value so the form round-trips
-    // cleanly without surprising the operator.
-    const bcBoostLegacy = Number(sp_bc.boost) || 0;
-    const vnBoostLegacy = Number(sp_vn.boost) || 0;
-    const sbBoostLegacy = Number(sp_sb.boost) || 0;
-    const loFallbackLegacy = Number(sp_lo.fallback_minutes) || 0;
-    $('#cfg-social-bc-enabled').checked   = sp_bc.enabled !== false;
-    $('#cfg-social-bc-min_today').value   = sp_bc.min_today ?? 2;
-    $('#cfg-social-bc-min_week').value    = sp_bc.min_week  ?? 2;
-    $('#cfg-social-bc-min_month').value   = sp_bc.min_month ?? 1;
-    $('#cfg-social-bc-min_all').value     = sp_bc.min_all   ?? 2;
-    $('#cfg-social-bc-boost_min').value   = sp_bc.boost_min ?? bcBoostLegacy;
-    $('#cfg-social-bc-boost_max').value   = sp_bc.boost_max ?? bcBoostLegacy;
-    $('#cfg-social-rb-enabled').checked    = sp_rb.enabled !== false;
-    $('#cfg-social-rb-window_days').value  = sp_rb.window_days ?? 7;
-    $('#cfg-social-rb-visible_secs').value = sp_rb.visible_secs ?? 4.5;
-    $('#cfg-social-rb-gap_secs').value     = sp_rb.gap_secs ?? 5;
-    _manualBuyers = Array.isArray(sp_rb.manual) ? sp_rb.manual.map(m => ({
-      name:         String(m && m.name || ''),
-      product_en:   String(m && m.product_en || ''),
-      product_cn:   String(m && m.product_cn || ''),
-      minutes_ago:  Number(m && m.minutes_ago) || 0,
-    })) : [];
-    renderManualBuyers();
-    $('#cfg-social-vn-enabled').checked   = sp_vn.enabled !== false;
-    $('#cfg-social-vn-show_in_app').checked = sp_vn.show_in_app !== false;
-    $('#cfg-social-vn-ttl_sec').value     = sp_vn.ttl_sec ?? 45;
-    $('#cfg-social-vn-boost_min').value   = sp_vn.boost_min ?? vnBoostLegacy;
-    $('#cfg-social-vn-boost_max').value   = sp_vn.boost_max ?? vnBoostLegacy;
-    $('#cfg-social-lo-enabled').checked   = sp_lo.enabled !== false;
-    $('#cfg-social-lo-max_hours').value   = sp_lo.max_hours ?? 24;
-    $('#cfg-social-lo-fallback_min_minutes').value = sp_lo.fallback_min_minutes ?? loFallbackLegacy;
-    $('#cfg-social-lo-fallback_max_minutes').value = sp_lo.fallback_max_minutes ?? loFallbackLegacy;
-    $('#cfg-social-sb-enabled').checked   = sp_sb.enabled !== false;
-    $('#cfg-social-sb-min_units').value   = sp_sb.min_units ?? 3;
-    $('#cfg-social-sb-boost_min').value   = sp_sb.boost_min ?? sbBoostLegacy;
-    $('#cfg-social-sb-boost_max').value   = sp_sb.boost_max ?? sbBoostLegacy;
+    paintSocialProof(c.social_proof || {});
     applyVisualPreviews();
     syncAllPickers();
     applyShopFiltersPreview();
     applySortPreview();
     applyFeePreviews();
+    // §279 — every field above holds the server's value, so these cards may
+    // save. A load that threw never gets here and leaves them inert.
+    CFG_CARDS().forEach(k => k.start());
   } catch (e) {
     toast('Config load failed · 加载配置失败: ' + e.message, 'err');
   }
@@ -1943,10 +1956,10 @@ async function saveConfig() {
     'customer_service.fab_side':       $('#cfg-cs-fab_side').value,
     'customer_service.fab_bottom':     parseInt($('#cfg-cs-fab_bottom').value, 10) || 220,
     // Legal pages moved to the Content group (Content → Legal pages) and save on
-    // their own button via saveLegal() — no longer ride along here (2026-06-08).
+    // their own card (LEGAL_CARD, §279) — no longer ride along here (2026-06-08).
     // Mini-app footer + Me-page menu moved to the Mini App Editor (/cms) 2026-06-09.
     // Social proof moved to the Marketing group 2026-06-09 — it saves on its own
-    // button via saveSocialProof() (partial PUT) and no longer rides along here.
+    // card (SOCIAL_CARD, §279) and no longer rides along here.
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
@@ -2024,37 +2037,56 @@ function buildSocialProof() {
     },
   };
 }
-async function saveCheckoutUpsell() {
-  const status = $('#upsell-status');
-  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
-  const upsell = {
+// §279 — the checkout pop-up card and the social-proof page save themselves.
+const UPSELL_CARD = autosaveCard({
+  card: 'checkout.upsell', root: '#upsell-card',
+  read: () => ({ 'checkout.upsell': {
     enabled: $('#cfg-upsell-enabled').checked,
     bundles: $('#cfg-upsell-bundles').checked,
     extras:  $('#cfg-upsell-extras').checked,
     flash:   $('#cfg-upsell-flash').checked,
     max:     Math.max(1, Math.min(6, Number($('#cfg-upsell-max').value) || 4)),
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body: { 'checkout.upsell': upsell } });
-    if (status) status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>';
-    toast('Saved · 已保存');
-  } catch (e) {
-    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
-}
-async function saveSocialProof() {
-  const status = $('#social-status');
-  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body: { 'social_proof': buildSocialProof() } });
-    if (status) status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>';
-    toast('Saved · 已保存');
-  } catch (e) {
-    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
-}
+  } }),
+  apply: (b) => {
+    const up = b['checkout.upsell'] || {};
+    $('#cfg-upsell-enabled').checked = up.enabled !== false;
+    $('#cfg-upsell-bundles').checked = up.bundles !== false;
+    $('#cfg-upsell-extras').checked  = up.extras  !== false;
+    $('#cfg-upsell-flash').checked   = up.flash   !== false;
+    $('#cfg-upsell-max').value       = up.max != null ? up.max : 4;
+  },
+});
+// Privacy and terms (the Legal pages tab). Filled by loadConfig like the two
+// cards around it, so it lives here with them. Each save stamps today's date
+// as the pages' "updated" line, which is what the old Save did.
+const LEGAL_CARD = autosaveCard({
+  card: 'legal', root: '#tab-legal',
+  read: () => {
+    const today = tdWhen(new Date(), 'machine');
+    return {
+      'legal.privacy.body_en': $('#cfg-legal-privacy-en').value,
+      'legal.privacy.body_cn': $('#cfg-legal-privacy-cn').value,
+      'legal.terms.body_en':   $('#cfg-legal-terms-en').value,
+      'legal.terms.body_cn':   $('#cfg-legal-terms-cn').value,
+      'legal.privacy.updated_at': today,
+      'legal.terms.updated_at':   today,
+    };
+  },
+  apply: (b) => {
+    $('#cfg-legal-privacy-en').value = b['legal.privacy.body_en'] || '';
+    $('#cfg-legal-privacy-cn').value = b['legal.privacy.body_cn'] || '';
+    $('#cfg-legal-terms-en').value   = b['legal.terms.body_en'] || '';
+    $('#cfg-legal-terms-cn').value   = b['legal.terms.body_cn'] || '';
+  },
+});
+// The cards loadConfig fills. A function, so it is read when called — by then
+// every card below has been made.
+function CFG_CARDS() { return [LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD]; }
+const SOCIAL_CARD = autosaveCard({
+  card: 'social_proof', root: '#tab-social',
+  read: () => ({ 'social_proof': buildSocialProof() }),
+  apply: (b) => paintSocialProof(b['social_proof'] || {}),
+});
 
 // Mini-app footer + Me-page menu (brand.me_footer / me_page.rows) moved to the
 // Mini App Editor (/cms) 2026-06-09 — load/save + the wordmark upload buffer and
@@ -2106,11 +2138,13 @@ function renderManualBuyers() {
 function addManualBuyer() {
   _manualBuyers.push({ name: '', product_en: '', product_cn: '', minutes_ago: 5 });
   renderManualBuyers();
+  SOCIAL_CARD.touch();
 }
 
 function removeManualBuyer(i) {
   _manualBuyers.splice(i, 1);
   renderManualBuyers();
+  SOCIAL_CARD.touch();
 }
 
 // Inline edits flow back into the state array via delegated change/input.

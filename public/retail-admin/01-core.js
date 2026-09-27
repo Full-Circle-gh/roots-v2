@@ -788,6 +788,12 @@ document.addEventListener('visibilitychange', () => {
 //     apply: (body) => { …put body back into the fields… },  // Undo / restore
 //     hold:  (body) => '' | 'why not yet',   // optional
 //     after: (body) => { … },                // optional, once a save lands
+//     url, method:                           // optional — a card whose route is
+//                                            // its own (default PUT /config);
+//                                            // the route must pass ?history on
+//     fromSnapshot: (stored) => body,        // optional — when the route stores
+//                                            // a different shape than it is sent,
+//                                            // how a restored version becomes a body
 //   });
 //   …then, ONCE THE FIELDS HAVE BEEN FILLED FROM THE SERVER, c.start().
 //
@@ -826,8 +832,12 @@ function autosaveCard(o) {
   const root = typeof o.root === 'string' ? document.querySelector(o.root) : o.root;
   if (root && !root._asWired) {
     root._asWired = true;
-    root.addEventListener('input', (e) => { if (!commits(e.target) && card.engine) card.engine.touch(); });
-    root.addEventListener('change', (e) => { if (commits(e.target) && card.engine) card.engine.touch(); });
+    // Deferred to a microtask: a page's own handler may write the edit into its
+    // state further up the bubble (the social-proof rows listen on document),
+    // and the engine must read the page after that, not before.
+    const later = () => queueMicrotask(() => { if (card.engine) card.engine.touch(); });
+    root.addEventListener('input', (e) => { if (!commits(e.target)) later(); });
+    root.addEventListener('change', (e) => { if (commits(e.target)) later(); });
   }
   card.start = () => {
     if (typeof TacetAutosave === 'undefined') return;
@@ -835,13 +845,15 @@ function autosaveCard(o) {
     card.engine = TacetAutosave.create({
       read: o.read,
       hold: o.hold,
-      send: (body, note) => api('/api/retail-admin/config?history=' + encodeURIComponent(o.card) + (note ? '&note=' + note : ''),
-        { method: 'PUT', body }).then(() => { if (o.after) o.after(body); }),
+      send: (body, note) => api((o.url || '/api/retail-admin/config') + '?history=' + encodeURIComponent(o.card) + (note ? '&note=' + note : ''),
+        { method: o.method || 'PUT', body }).then((j) => { if (o.after) o.after(body, j); }),
       onChange: paint,
     });
     card.engine.start();
     paint();
   };
+  // For a page that redraws the foot's element itself (the share-card stage).
+  card.paint = paint;
   card.touch = () => { if (card.engine) card.engine.touch(); };
   card.flush = (note) => (card.engine ? card.engine.flush(note) : Promise.resolve());
   card.undo = () => { if (card.engine) card.engine.undo((b) => o.apply(b)); };
@@ -849,7 +861,7 @@ function autosaveCard(o) {
     if (!card.engine) return;
     const v = await autosavePickVersion(card.engine, '/api/retail-admin/config/history?card=' + encodeURIComponent(o.card), null);
     if (!v || !card.engine) return;
-    o.apply(v.snapshot || {});
+    o.apply(o.fromSnapshot ? o.fromSnapshot(v.snapshot || {}) : (v.snapshot || {}));
     await card.engine.flush('restore');
     if (card.engine.state === 'saved') toast(cuT('Restored to the chosen version.', '已还原到所选版本。'), 'ok');
   };

@@ -115,12 +115,16 @@ section('2 · nothing is filled in on load, on either path');
    About page erases it. */
 {
   yes(/let ABOUT_READY = false;/.test(EDITOR), 'a load either succeeded or it did not, and the editor knows which');
-  const save = EDITOR.slice(EDITOR.indexOf('async function saveAbout'), EDITOR.indexOf('ABOUT_IMAGE_FIELDS'));
-  yes(/if \(!ABOUT_READY\)/.test(save) && /return;/.test(save),
+  /* §279 — there is no Save any more: the page saves itself (ABOUT_CARD), and
+     the same guarantee is kept by WHEN it may start. start() is called only
+     on the success path of loadAbout, after ABOUT_READY is set, and never in
+     the catch — so a failed load leaves a form that cannot save at all. */
+  const load = EDITOR.slice(EDITOR.indexOf('async function loadAbout'), EDITOR.indexOf('function paintAbout()'));
+  const iReady = load.indexOf('ABOUT_READY = true;'), iStart = load.indexOf('ABOUT_CARD.start()'), iCatch = load.indexOf('} catch (e) {');
+  yes(iReady >= 0 && iStart > iReady && iStart < iCatch,
     'Save is refused after a failed load — an empty form must not overwrite a real page');
-  const saveIdx = save.indexOf('if (!ABOUT_READY)');
-  const putIdx = save.indexOf('/api/retail-admin/config');
-  yes(saveIdx >= 0 && putIdx > saveIdx, '…and the refusal comes before the PUT, not after it');
+  yes(load.slice(iCatch).indexOf('ABOUT_CARD.start()') === -1 && !/async function saveAbout/.test(EDITOR),
+    '…and nothing else can write the page: no start in the catch, no Save of its own');
 }
 
 // ─────────────────────────────────────────────────────────────────────────
