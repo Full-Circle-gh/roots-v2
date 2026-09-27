@@ -3414,8 +3414,13 @@ function renderTrackingCell(o) {
   const airDelayBadge = o.air_delivery_delayed
     ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT('DELIVERY DELAYED · contact customer', '配送延误 · 联系客户')}</div>`
     : '';
+  // §284 — the courier couldn't get through and nobody has called yet. Held
+  // until someone does, so it outlives the "Out for delivery" line above it.
+  const noContactBadge = o.no_contact_open
+    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT("COURIER CAN'T REACH CUSTOMER · contact customer", '快递员联系不上客户 · 联系客户')}</div>`
+    : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
-          <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${airDelayBadge}`;
+          <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${noContactBadge}${airDelayBadge}`;
 }
 
 // For multi-parcel (split) orders, a two-line summary: "N parcels" + a breakdown
@@ -8631,11 +8636,13 @@ function renderShipmentTrackingCard(o, s, hoisted) {
     </div>`;
   }
 
+  const noContactBanner = renderNoContactBanner(o, s);
+
   return `
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
       ${renderGzMethodToggle(o, s)}
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">${cuT('Tracking', '物流')}</div>
-      ${sfBanner}${delayBanner}${reuseBanner}
+      ${sfBanner}${noContactBanner}${delayBanner}${reuseBanner}
       ${has ? `
         <div class="od-trk-panel">
           <div class="od-trk-top">
@@ -9368,6 +9375,59 @@ async function clearAirDelay(orderId, ev) {
     loadOrders();
     // Refresh the dashboard "Delivery needs a call" card so the handled order
     // drops off it right away — the ops query excludes cleared air-delays.
+    if (typeof tdOpsLoad === 'function') tdOpsLoad();
+  } catch {}
+}
+
+// §284 — THE COURIER COULD NOT REACH THE CUSTOMER. Red while nobody has called
+// them, with the carrier's own line quoted so the operator knows what was
+// tried; a calm "called" note with an undo once somebody has. The server holds
+// the line past the scans after it (lib/delivery-alerts.js), so this stays up
+// after the parcel's newest event has moved on to "Out for delivery".
+function renderNoContactBanner(o, s) {
+  const nc = s && s.no_contact;
+  if (!nc) return '';
+  if (!nc.open) {
+    return `
+    <div style="display:flex; gap:8px; align-items:center; padding:8px 12px; margin-bottom:12px;
+                background: var(--surface-2, #f4f2ec); border:1px solid var(--line-soft);
+                border-radius: var(--r-md, 6px); font-size:12px; line-height:1.4; color: var(--text-2);">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color: var(--sage, #5a7d5a);"><path d="M20 6 9 17l-5-5"/></svg>
+      <span style="flex:1;">${cuT('Customer contacted', '已联系客户')}${nc.cleared_by ? ' · ' + escapeHtml(nc.cleared_by) : ''}</span>
+      <button type="button" onclick="ackNoContact(${Number(o.id)}, false, event)"
+        style="font: inherit; font-size:11.5px; cursor:pointer; padding:2px 4px; border:none;
+               background: transparent; color: var(--text-3); text-decoration: underline;">
+        ${cuT('Undo', '撤销')}
+      </button>
+    </div>`;
+  }
+  const line = cuT(nc.text_en || nc.text_cn || '', nc.text_cn || nc.text_en || '');
+  const when = String(nc.event_time || '').replace(/^\d{4}-/, '').replace(/:\d{2}$/, '');
+  return `
+    <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; margin-bottom:12px;
+                background: var(--td-brick-tint, #F6E4DF); border:1px solid var(--td-brick-ink, #B4533E);
+                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.45; color: var(--td-brick-ink, #B4533E);">
+      <span style="flex-shrink:0;">${deliveryIcon('phone_off', 16)}</span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700;">${cuT("Courier can't reach the customer", '快递员联系不上客户')}</div>
+        ${line ? `<div style="margin-top:2px; color: var(--text-2);"><span style="font-family: var(--f-mono);">${escapeHtml(when)}</span> · ${escapeHtml(line)}</div>` : ''}
+      </div>
+      <button type="button" class="btn btn-sm btn-primary" style="flex-shrink:0;"
+        onclick="ackNoContact(${Number(o.id)}, true, event)">${cuT('I called the customer', '已联系客户')}</button>
+    </div>`;
+}
+
+async function ackNoContact(orderId, clear, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/no-contact/ack`,
+      method: 'POST', body: { cleared: !!clear },
+      errLabelEn: clear ? 'Could not save' : 'Could not re-open',
+      errLabelCn: clear ? '保存失败' : '撤销失败',
+    });
+    openOrder(orderId, { instant: true });
+    loadOrders();
     if (typeof tdOpsLoad === 'function') tdOpsLoad();
   } catch {}
 }

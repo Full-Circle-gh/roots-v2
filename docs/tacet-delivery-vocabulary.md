@@ -1,5 +1,6 @@
 # Tacet delivery vocabulary — locked
 
+**v1.196 · 2026-09-27 · §284 THE COURIER COULDN'T REACH THE CUSTOMER — FIVE OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *The courier couldn't reach the customer (§284)*.
 **v1.195 · 2026-09-27 · §283 A 发票 WITH NO SUPPLIER — TWO OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** Purchasing → Invoices. The Unspecified row's new `Add invoice · 添加发票` button is copied whole from the other groups' rows. The add-invoice form's supplier placeholder and the toast for a cleared supplier are composed. See *A 发票 with no supplier (§283)*.
 
 **v1.194 · 2026-09-27 · §281 A LINE PACKED SEPARATELY — TWO STRINGS COMPOSED BY CLAUDE, EVERY WORD LIVE.** The build-list tick and the waste screen's note of what it left out. See *Packed separately — kept on expiry (§281)*.
@@ -9103,3 +9104,26 @@ Ash should correct either line if it reads wrong.
   the invoice lands in, not what the operator just did, and reads as an error.
 - `清空` alone: **rejected**. It is a live BUTTON word (a command); a toast reports
   what happened, so it takes the `已` form.
+
+## The courier couldn't reach the customer (§284)
+
+**Composed by Claude, 2026-09-27, under the 2026-09-06 amendment.** Operator
+register only. Desktop says 客户 and the phone says 顾客, as each screen's live
+`联系不上客户` / `联系不上顾客` already do.
+
+| shipped | built from |
+|---|---|
+| `Courier can't reach the customer · 快递员联系不上客户` (desktop banner) / `· 快递员联系不上顾客` (phone card) | **composed.** `快递员联系不上` from the customer-register scenario label `快递员联系不上你` (`lib/tracking.js`), with each screen's own noun for the customer |
+| `COURIER CAN'T REACH CUSTOMER · contact customer · 快递员联系不上客户 · 联系客户` (desktop list) | **composed.** Tail `联系客户` copied from its sibling badge `配送延误 · 联系客户` |
+| `Courier can't reach them · call the customer · 快递员联系不上顾客 · 请联系顾客` (phone list) | **composed.** Tail `请联系顾客` copied from its sibling `配送延误 · 请联系顾客` |
+| `N can't reach customer · N 单联系不上客户` (desktop Needs-you) / `N can't reach the customer · N 单联系不上顾客` (phone) | **composed.** `N 单…` is the live counter shape (`N 单待处理`, `N 单待备货`) |
+| `I called the customer · 已联系客户` (button) and `Customer contacted · 已联系客户` (after the tap) | **Chinese copied whole** from the live delay-case step `Customer told · 已联系客户`; the two English labels are composed |
+
+`Undo · 撤销`, `保存失败` and `撤销失败` are copied whole.
+
+**Live candidates rejected.**
+
+- `快递员联系不上你`: **rejected** for these screens. It is the customer's own
+  banner and speaks to *you*.
+- `无人接听`: **rejected.** It is one of the courier's wordings, not ours, and
+  the alert also fires on 关机, 联系未果 and the rest.
