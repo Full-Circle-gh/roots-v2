@@ -14408,7 +14408,17 @@ function screenExpense(){
     ${x.metaErr?`<div style="font-size:13px;color:var(--brick-ink)">${x.metaErr}</div>`:''}
   </div>${list}${/* §282: the button, the refusal it drew and the sentence under
        it are pinned — on a phone the note and the date put Submit below the
-       fold, and "what you have sent" puts it further. */''}${footBar(`
+       fold, and "what you have sent" puts it further. */''}${footBar(expFootHtml(),'mExpFoot',true)}`;
+}
+/* The pinned foot, drawn on its own so typing can redraw it: the amount field
+   stores and never repaints the screen (the rule below), which left Submit
+   grey after a valid amount was typed until something else happened to
+   repaint — invisible while the button sat below the fold, the first thing
+   anybody saw once §282 pinned it above the keyboard. Nothing in the foot
+   takes focus, so patching it cannot take the caret. */
+function expFootHtml(){
+  const x=state.exp;
+  return `
     ${x.err?`<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:12px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',16)}</span>
       <span style="font-size:13.5px;color:var(--brick-ink)">${x.err}</span></div>`:''}
@@ -14419,13 +14429,17 @@ function screenExpense(){
          pressing the button, and it is under the button rather than in a help
          page for the same reason the draft note is on the purchase request. */''}
     <span style="font-size:12px;color:var(--text-secondary);text-align:center">${T(
-      'This is not recorded in the accounts until it is approved.','审批通过后才会记入账目。')}</span>`,'',true)}`;
+      'This is not recorded in the accounts until it is approved.','审批通过后才会记入账目。')}</span>`;
+}
+function expRepaintFoot(){
+  const f=document.getElementById('mExpFoot');
+  if(f) f.innerHTML=expFootHtml();
 }
 
 /* ── The commands ───────────────────────────────────────────────────────── */
 /* TYPING STORES AND NOTHING ELSE — no repaint, so the field is never rebuilt
    under a thumb. Same rule as mbTyped, learned on the waste picker before it. */
-reg('expAmt', v=>{ state.exp.amount=String(v==null?'':v); if(state.exp.err) { state.exp.err=''; } });
+reg('expAmt', v=>{ state.exp.amount=String(v==null?'':v); if(state.exp.err) { state.exp.err=''; } expRepaintFoot(); });
 reg('expNote', v=>{ state.exp.note=String(v==null?'':v); });
 /* PICKING CLOSES THE PICKER, and picking the SAME one again clears it — the
    chip behaviour this replaced, kept: a category chosen by mistake has to be
