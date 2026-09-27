@@ -3258,7 +3258,7 @@ reg('wstQty', d=>{ const w=state.wst;
   render(); loadWastePreview(); });
 reg('wstNote', v=>{ const w=state.wst, el=document.getElementById('mWstNote');
   w.note=String(v||''); state.focus={id:'mWstNote',pos:el?el.selectionStart:null}; render(); });
-reg('wstCode', c=>{ state.wst.code=String(c||''); state.wst.formErr=null; render(); });
+reg('wstCode', c=>{ state.wst.code=String(c||''); state.wst.formErr=null; render(); loadWastePreview(); });
 reg('wstSave', ()=>{
   const w=state.wst;
   if(w.busy||wstBlocked()) return;
@@ -7289,7 +7289,9 @@ function loadWastePreview(){
   const w=state.wst;
   if(!w.pick||!(w.qty>0)){ w.preview=null; return; }
   const seq=++w.previewSeq;
-  api('/waste/preview?store_product_id='+w.pick.id+'&qty='+w.qty).then(d=>{
+  /* The reason goes too: expired or spoiled leaves out a line the shop keeps,
+     such as a salad's dressing (§281), so the figure depends on it. */
+  api('/waste/preview?store_product_id='+w.pick.id+'&qty='+w.qty+'&reason_code='+encodeURIComponent(w.code||'')).then(d=>{
     if(seq!==w.previewSeq) return;
     w.preview=d||null; render();
   }).catch(e=>{ if(seq===w.previewSeq&&String(e.message)!=='auth'){ w.preview=null; render(); } });
@@ -7399,7 +7401,12 @@ function sheetWaste(){
       : w.preview
         ? (w.preview.is_uncosted
             ? T('No cost on file — it records without one','该产品暂无成本，将不计成本登记')
-            : `${T('Cost','成本')} <span class="num">${wstMoney(w.preview.cost_total_cents)}</span> · ${T('stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>`)
+            : `${T('Cost','成本')} <span class="num">${wstMoney(w.preview.cost_total_cents)}</span> · ${T('stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>`
+              /* §281: say what an expired or spoiled write-off left out, or the
+                 figure silently disagrees with the product's cost. */
+              +((w.preview.kept_lines||[]).length
+                ? `<br>${T('Kept, not counted: ','保留，不计入：')}${w.preview.kept_lines.map(k=>escAttr(T(k.name_en,k.name_cn||k.name_en))).join(', ')}`
+                : ''))
         : '&nbsp;';
   /* Animate on the way IN and never again. Every tap in this sheet — a store
      chip, a stepper, a reason, a keystroke in the note — goes through
