@@ -522,6 +522,17 @@ input.qsnum:focus{outline:none;border-color:var(--accent);}
   border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;
   color:var(--text-secondary);box-shadow:0 2px 10px rgba(17,26,43,.10)}
 @keyframes tDial{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* THE DIAL'S BACKDROP IS HEAVIER THAN A SHEET'S. A sheet brings its own solid
+   panel, so a light tint behind it is enough; the dial is loose pills floating
+   over the product cards, and the pills wear the same surface as the cards.
+   At the old 30% navy the list showed straight through on a dark phone and the
+   labels read as part of it (Ash's 2026-09-27 screenshot of Products). So the
+   page behind goes properly dark and slightly soft, and the pills are the only
+   sharp thing left on screen. Dark mode needs more than light: a navy tint on
+   a navy page changes almost nothing. */
+.fabscrim{z-index:43;background:rgba(17,26,43,.55);
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+:root[data-theme="dark"] .fabscrim{background:rgba(4,8,15,.78)}
 /* The dock is the strip and the bar together, and it exists to be MEASURED —
    see --dock-h above. Nothing about the layout changes: both children were
    already flex:none siblings of the scroller and still are, one level down. */
@@ -4570,7 +4581,7 @@ function fabHtml(){
   const item=(i,icon,label,cmd,muted)=>`<button class="dialrow" role="menuitem" style="animation-delay:${((n-1-i)*.03).toFixed(2)}s" onclick="${cmd}">
       <span class="diallabel"${muted?' style="color:var(--text-secondary)"':''}>${label}</span>
       <span class="dialico">${ic(icon)}</span></button>`;
-  const dial = open ? `<div class="scrim" style="z-index:43;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('fabClose')"></div>
+  const dial = open ? `<div class="scrim fabscrim" onclick="APP.scrimClose('fabClose')"></div>
     <div class="dial" role="menu" aria-label="${escAttr(T('Quick actions','快捷操作'))}">
       ${rows.map((q,i)=>item(i,q.icon,quickLabel(q),`APP.cmd('fabClose');${q.cmd}`,false)).join('')}
       ${item(rows.length, rows.length?'pencil':'plus',
