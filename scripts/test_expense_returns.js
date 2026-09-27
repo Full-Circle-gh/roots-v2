@@ -203,8 +203,14 @@ it('the phone shows owing the shop, in the owed list, the settle confirm, and yo
   assert.ok(PHONE.includes("(Number(r.amount)-Number(r.returned||0))>0"), 'the Owed pill nets returns');
   assert.ok(PHONE.includes("T('Owes the shop','应退还店里')"));
 });
+it('the return amount starts empty, says what goes in it, and the row shows its net', () => {
+  assert.ok(!/id="fin-rt-amount"[^>]*value=/.test(FIN), 'the amount box is not prefilled');
+  assert.ok(FIN.includes('只填卖家实际退回的金额。运费没退就不要算进去。'), 'the hint is under it');
+  assert.ok(FIN.includes("if (!(Number(val('#fin-rt-amount')) > 0))"), 'an empty box is caught before the request');
+  assert.ok(FIN.includes("cuT('Net', '净额')") && FIN.includes('finTxReturnLeft(r)'), 'the returned row shows its net');
+});
 it('every composed string is declared in the vocabulary', () => {
-  for (const cn of ['退货金额不能超过支出金额', '该笔已登记退货，请先删除退货', '应退还店里', '标记已收回']) {
+  for (const cn of ['退货金额不能超过支出金额', '该笔已登记退货，请先删除退货', '应退还店里', '标记已收回', '只填卖家实际退回的金额。运费没退就不要算进去。']) {
     assert.ok(VOCAB.includes(cn), cn);
   }
 });

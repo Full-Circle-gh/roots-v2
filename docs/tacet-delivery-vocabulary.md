@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.192 · 2026-09-27 · §269 ADDENDUM THE RETURN DIALOG — ONE LINE COMPOSED BY CLAUDE.** The hint under the amount; `Net · 净额` and `amount must be positive · 金额必须大于零` are copied whole. See *A return on money out (§269)*.
+
 **v1.191 · 2026-09-27 · §279 THE CUSTOMER RECORD SAVES ITSELF — NOTHING COMPOSED.** The customer editors (phone sheets, desktop header and Edit customer modal) lose Save / Reset / Cancel and reuse v1.189's status, Undo and history labels, plus `Done · 完成` and `Save · 保存` (the phone number's own button), both live. The history row's change words are the editors' own field labels, lifted: `name · 姓名`, `email · 邮箱`, `gender · 性别`, `birthday · 生日`, `note · 备注`, `tags · 标签`. See *The customer record's history (§279)*.
 **v1.190 · 2026-09-27 · §280 CLAIMS ON ONE PURCHASE ORDER — ONE BUTTON AND ONE REFUSAL COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The approvals queue's `Combine · 合并` tick is copied whole; `Approve on one purchase order · 合并为一张采购单` and the batch refusal are composed. See *Claims on one purchase order (§280)*.
 
@@ -8892,6 +8894,8 @@ the Transactions row, the return dialog, the owed block, and two server refusals
 
 | `You owe the shop · 应退还店里` (phone, the employee's own screen) | **v1.180.** The same Chinese as `Owes the shop`; `应退还店里` has no subject and reads right to the person themselves. Only the English needed a second reading |
 | `Recovered · 已收回` (phone toast) | **copied whole** |
+| `Only what the seller actually refunded. If shipping was not refunded, leave it out. · 只填卖家实际退回的金额。运费没退就不要算进去。` | **v1.192, composed.** `卖家` and `退回` are the ordinary words for seller and sent back; `金额` live; `运费` live on the order screens; `不要算进去` is plain speech for *leave out*. Written for the case that caused it — shipping kept by the seller |
+| `退货 ¥N · 净额 ¥N` (the returned row) | **v1.192.** `净额` copied whole from the live `Net · 净额`; the figures sit outside the pairs |
 
 **Live candidates rejected.**
 
