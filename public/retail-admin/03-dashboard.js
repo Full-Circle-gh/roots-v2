@@ -2918,10 +2918,17 @@ function tdAttnRender() {
     // §284 — name the ones where the courier couldn't get through: those are a
     // customer to ring now, not a parcel to watch. Exact, from the server.
     const nc = Number(da.no_contact || 0);
+    // §285 — and the ones still on the road past their due day: the early
+    // warning, while there is time to ring them before the box arrives.
+    const rl = Number(da.running_late || 0);
+    const daState = [
+      nc > 0 ? cuT(`${nc} can't reach customer`, `${nc} 单联系不上客户`) : '',
+      rl > 0 ? cuT(`${rl} running late`, `${rl} 单配送逾期`) : '',
+    ].filter(Boolean).join(' · ');
     fires.push({
       sev: 'brick', icon: 'truck',
       label: cuT('Delivery needs a call', '配送需要跟进'),
-      state: nc > 0 ? cuT(`${nc} can't reach customer`, `${nc} 单联系不上客户`) : null,
+      state: daState || null,
       n: da.count,
       // The oldest across every kind of delivery trouble. Each sub-list arrives
       // oldest-first, so the true oldest is always inside the preview even when

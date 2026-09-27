@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.453
+# Tacet shared-core consolidation — decisions record, v4.454
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.454 — **§285 · A LATE PARCEL IS FLAGGED WHILE IT IS STILL ON THE ROAD — DECIDED BY ASH:** *"delay order should be noticible to us not when the delivery already reach the customer, we should know it before"*, then *"both yes"* to Claude's proposal (a separate "running late" alert on the morning of the first late day, not a change to the late rule). **THE LATE ALERT COULD ONLY FIRE AFTER DELIVERY.** `lateShipmentSql` asks whether a parcel ARRIVED after `dispatched_at` + `LATE_AFTER_DAYS` (air 1, local 1, land 3), which has no answer until it arrives. **THE FIX ASKS THE SAME QUESTION EARLIER.** `runningLateSql` (`lib/delay-case.js`) is a parcel that has left, has not landed, and whose due day has passed — the same deadline and the same UTC day arithmetic, so a parcel "running late N days" that lands today is exactly N days late to the §98 case (held by a test). It is a fifth part of *Delivery needs a call* (`runningLateAlertSql`), so the count, the list behind it and its CSV include it. It fires at UTC midnight (08:00 Shanghai) of the first late day, and clears itself when the parcel lands; a late landing then becomes the §98 case exactly as before. Due days before 2026-09-26 are out of scope (`RUNNING_LATE_FROM`), for CASES_FROM's reason. Shown on the Needs-you row (*N running late*), the orders list, and a banner on the parcel, desktop and phone. **Deliberately not changed:** the late rule itself, the customer's *配送延误送达* message and the case flow — all still start on delivery. Changing the late rule instead would have told customers a parcel "arrived late" before it arrived. No button: the alert is a fact about the parcel and goes when the parcel lands. Four strings composed by Claude; see the vocabulary's v1.197.
 
 2026-09-27 · v4.453 — **§284 · "THE COURIER COULDN'T REACH THE CUSTOMER" STAYS ON THE CARD UNTIL SOMEONE RINGS THEM — DECIDED BY ASH:** *"if delivery guy try to contact the customer by phone and there is no answer, it shows in delivery tracking info. we should get an alert also in such situation and try to contact the customer ourselves. it should show in need you dashboard and order info as an alert, similar to delay in order"*, then *"both yes"* to Claude's two questions (add an *I called the customer* button; clear on the button or on delivery). **THE ALERT ALREADY EXISTED AND ALMOST NEVER SHOWED.** `carrierAlertSql` counted `tracking_scenario = 'no_contact'`, but the scenario is classified from the NEWEST carrier line only, and a courier who cannot get through writes 无人接听 and then, minutes later, 再次派送 or 妥投 — so the order left the card before anyone looked. Separately, the pattern missed 电话未接通, 联系客户未果, 联系不到 and a phone that is 关机, which raised nothing at all. **THE FIX HOLDS THE LINE.** One pattern (`NO_CONTACT_RE`, `lib/tracking.js`) now feeds the status, the scenario and the English translation. Every writer of a trace (the JD pull and the kd100 push) stamps the newest matching line on the tracking row (`tracking_no_contact_event`, the carrier's own time). The order is on the card while that line is unanswered and the parcel has not landed. *I called the customer* is order-level and answers the line it saw — a LATER failed call raises it again. Lines before 2026-09-26 are ignored, so the first sync does not light up old history (the CASES_FROM lesson). Shown on the Needs-you row (*N can't reach customer*), the orders list, and a red banner on the parcel card with the carrier's line quoted, on desktop and phone. Five strings composed by Claude; see the vocabulary's v1.196. **Deliberately not done:** nothing is sent to the customer (the carrier's own scenario push already tells them), and the running-late alert is a separate PR.
 
@@ -20829,3 +20831,16 @@ and try to contact the customer ourselves"*, then *"both yes"*).
 3. The tap answers the line it saw. A later failed call is a new alert.
 4. Lines older than 2026-09-26 never raise it (`NO_CONTACT_FROM`).
 5. Nothing new is sent to the customer.
+
+## §285 — A LATE PARCEL IS FLAGGED WHILE IT IS STILL ON THE ROAD
+
+**Decided 2026-09-27 by Ash** (*"we should know it before"*, then *"both
+yes"*).
+
+1. A parcel that has left, has not landed, and is past its due day
+   (`LATE_AFTER_DAYS`: air 1, local 1, land 3) is on *Delivery needs a call*,
+   from the start of the first late day.
+2. The deadline is lib/delay-case.js's, unchanged. The late rule, the §98
+   case and the customer's late-delivery message still start on delivery.
+3. It clears itself when the parcel lands. There is no button.
+4. Due days before 2026-09-26 are ignored (`RUNNING_LATE_FROM`).

@@ -17787,6 +17787,24 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
        ORDER BY waiting_since ASC LIMIT ?
     `).all(previewLimit);
 
+    // §285 — RUNNING LATE: a parcel still on the road after the day it was due.
+    // The late-parcel rows above only appear once it has LANDED late, which is
+    // after the customer already has the box. These appear the morning it
+    // misses its day (UTC midnight, 08:00 Shanghai), while there is still time
+    // to ring them. The age counts from that moment, the start of the first
+    // late day — the same instant lib/delay-case.js's runningLateSql tips over.
+    const RL_EXISTS = deliveryAlerts.runningLateAlertSql('o');
+    const rlItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.tracking_synced_at,
+             (SELECT MIN(${delayCase.runningLateSinceSql('srl')}) FROM retail_shipments srl
+               WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl')}) AS waiting_since,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${RL_EXISTS}
+       ORDER BY waiting_since ASC LIMIT ?
+    `).all(previewLimit);
+
     // Meituan (view-only channel) never writes tracking_status/scenario — the
     // platform runs its own rider + customer contact, and it exposes no explicit
     // "delivery failed" label; an undeliverable order just stalls, then flips to
@@ -17864,6 +17882,10 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
       no_contact: tdb().prepare(
         `SELECT COUNT(*) AS n FROM retail_orders o WHERE o.status = 'dispatched' AND ${NC_ORDER}`
       ).get().n,
+      // §285 — how many are still on the road past their due day. Whole set.
+      running_late: tdb().prepare(
+        `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${RL_EXISTS}`
+      ).get().n,
       items: daItems.map(r => ({
         id:               r.id,
         order_no:         r.order_no,
@@ -17879,6 +17901,13 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         synced_at:  r.tracking_synced_at,
         waiting_since: r.waiting_since,
         buyer:      r.buyer,
+      }))).concat(rlItems.map(r => ({
+        id:            r.id,
+        order_no:      r.order_no,
+        running_late:  1,
+        synced_at:     r.tracking_synced_at,
+        waiting_since: r.waiting_since,
+        buyer:         r.buyer,
       }))).concat(mtItems.map(r => ({
         id:         r.id,
         order_no:   r.order_no,
@@ -27652,6 +27681,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     -- has called them yet. Same predicate as the Needs-you card.
                     CASE WHEN o.status = 'dispatched'
                           AND ${deliveryAlerts.noContactOrderSql('o')} THEN 1 ELSE 0 END AS no_contact_open,
+                    -- §285 — days the most-overdue parcel still on the road is
+                    -- past its due day; NULL when none is. Same rule as the card.
+                    CASE WHEN o.status = 'dispatched' THEN
+                      (SELECT MAX(CAST(julianday(DATE('now')) - julianday(${delayCase.lateAfterSql('srl')}) AS INTEGER))
+                         FROM retail_shipments srl
+                        WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl')}) END AS running_late_days,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -28151,6 +28186,9 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     // one-day rule — two more places for the threshold in lib/delay-case.js to
     // drift from. 0 means on time.
     late_days: delayCase.lateDays(s),
+    // §285 — days past its due day while still on the road; 0 once it lands
+    // (late_days takes over then) or while it is on time.
+    running_late_days: o.status === 'dispatched' ? delayCase.runningLateDays(s) : 0,
     // The four steps. Read only, never created: a GET that wrote a row for
     // every drawer opened would mint a case for parcels nobody had trouble
     // with. NULL means nothing done yet, which is what both screens draw a
@@ -28187,6 +28225,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
               THEN 1 ELSE 0 END AS v FROM retail_orders o WHERE o.id = ?`
     ).get(id).v;
   } catch (e) { o.no_contact_open = 0; }
+  // §285 — the list's running-late figure, off the parcels just hydrated.
+  o.running_late_days = Math.max(0, ...o.shipments.map(sh => sh.running_late_days || 0)) || null;
 
   o.timeline = orderTimeline(o);
   // Keep legacy `o.tracking` populated from the primary shipment so older
