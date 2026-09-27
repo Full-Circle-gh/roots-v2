@@ -1503,6 +1503,60 @@ document.addEventListener('pointerdown', kbMark, true);
 document.addEventListener('mousedown', kbMark, true);
 document.addEventListener('click', kbTapAway);
 
+/* ── THE KEYBOARD THAT OPENS BY ITSELF ─────────────────────────────────────
+   THE COMPLAINT, from a phone on 2026-09-27: "the keyboard sometimes pops up
+   with no reason at all", in Settings → Team and on a role. Two ways a field
+   took the keyboard back without being asked, and both are closed here.
+
+   4. A CLOSED KEYBOARD LETS GO OF ITS FIELD. Android's own down-arrow or back
+      gesture hides the keyboard and leaves the field FOCUSED. A field that
+      still holds focus is one the phone will hand the keyboard back to on its
+      own — returning from a notification, the app switcher, a system popup —
+      which is the pop-up with no reason. The only sign the keyboard went away
+      is the visible area growing back, so that is what this reads: the height
+      when a field first took focus, the keyboard counted as open once the view
+      shrinks well below it, and as closed once it grows back near it. Closed
+      with a field still focused means blur it. A keyboard that never shrinks
+      the view (a floating one, a hardware one) never trips it, and moving from
+      one field to the next keeps the height measured before either opened.
+
+   5. A CARET REQUEST DIES WITH ITS FIELD. state.focus exists to put the caret
+      back into a field that render() is about to rebuild. Five search boxes
+      (recipes, the waste picker, the order composer's three) arm it on every
+      keystroke and repaint only their results — so it stayed armed after the
+      person finished typing and put the keyboard away, and the NEXT full paint
+      of that screen, whatever caused it, put the caret back and opened the
+      keyboard. Leaving the field now cancels the request. Not while render()
+      itself is tearing the field down: Chrome reports that as leaving too, and
+      that is the one leave the request exists to survive. */
+const KB_OPEN_PX=150, KB_SHUT_PX=100;
+let kbBase=null, kbUp=false, kbPainting=false;
+function kbFocusIn(e){
+  if(!kbField(e&&e.target)||kbBase!=null) return;
+  const vv=window.visualViewport; if(!vv) return;
+  kbBase=vv.height; kbUp=false;
+}
+function kbFocusOut(e){
+  const t=e&&e.target;
+  if(!kbPainting&&state.focus&&t&&t.id&&t.id===state.focus.id) state.focus=null;
+  // Asked after the move settles: a hop to the next field is still typing.
+  setTimeout(()=>{ if(!kbField(document.activeElement)){ kbBase=null; kbUp=false; } },0);
+}
+function kbViewport(h){
+  if(kbBase==null||!(h>0)) return;
+  if(h<kbBase-KB_OPEN_PX){ kbUp=true; return; }
+  if(kbUp&&h>=kbBase-KB_SHUT_PX){
+    kbUp=false;
+    const on=kbField(document.activeElement);
+    if(on&&on.blur) on.blur();
+  }
+}
+document.addEventListener('focusin', kbFocusIn, true);
+document.addEventListener('focusout', kbFocusOut, true);
+if(window.visualViewport) window.visualViewport.addEventListener('resize',()=>kbViewport(window.visualViewport.height));
+// A turned phone has a different full height; measure again on the next field.
+window.addEventListener('orientationchange',()=>{ kbBase=null; kbUp=false; });
+
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
 /* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch for the defect this
    removes. The armed state.focus goes with the render it existed to survive:
@@ -22394,7 +22448,9 @@ function render(){
   if(state.search) html += sheetSearch();
   if(state.imgZoom) html += sheetImgZoom();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
-  app.innerHTML = html;
+  // Flagged so kbFocusOut does not cancel the caret request this paint keeps.
+  kbPainting=true;
+  try{ app.innerHTML = html; }finally{ kbPainting=false; }
   /* WHERE THE FLOATING BUTTON SITS, measured off the dock that was just
      written — the install strip plus the tab bar, whichever of the two are
      actually on screen. Read HERE rather than on a frame of its own: this is
