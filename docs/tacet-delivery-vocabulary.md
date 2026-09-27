@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.190 · 2026-09-27 · §279 THE CUSTOMER RECORD SAVES ITSELF — NOTHING COMPOSED.** The customer editors (phone sheets, desktop header and Edit customer modal) lose Save / Reset / Cancel and reuse v1.189's status, Undo and history labels, plus `Done · 完成` and `Save · 保存` (the phone number's own button), both live. The history row's change words are the editors' own field labels, lifted: `name · 姓名`, `email · 邮箱`, `gender · 性别`, `birthday · 生日`, `note · 备注`, `tags · 标签`. See *The customer record's history (§279)*.
+
 **v1.189 · 2026-09-27 · §279 THE ROLE SCREEN SAVES ITSELF — EVERY LABEL COPIED LIVE BUT FIVE, COMPOSED BY CLAUDE.** The role screen (phone and desktop) loses Save / Revert and gains a save status, *Undo* and *Version history*. Every label except five is an existing live pair, most of them from the product editor's own autosave and history: `All changes saved · 已自动保存`, `Saving… · 保存中…`, `Save failed: · 保存失败:`, `Add a name to start autosaving · 填写名称后自动保存`, `Undo · 撤销`, `Version history · 历史版本`, `Original · 原始版本`, `Current · 当前`, `Restore · 还原`, `Restore this version? · 还原此版本?`, `Restored to the chosen version. · 已还原到所选版本。`, `No versions yet — they’re saved automatically as you edit. · 暂无历史版本 — 编辑时会自动保存。`, `Close · 关闭`. The five composed are the history row's change words and its load error. See *The role screen's history (§279)*.
 
 **v1.188 · 2026-09-27 · §278 THE TWO STOCK ROLES STOP NAMING THE DELETED APP — TWO OPERATOR DESCRIPTIONS REWORDED BY CLAUDE, BY DELETION ONLY.** The seeded descriptions of `kitchen` and `store_stock` (`lib/roles.js`) named the Add Stock / Quick Stock app §48 deleted. Each new string is the old one with the app's name taken out and nothing added: `一家门店的“加库存”,以及待制作队列。` and `盘点本店货架。在门店内管理,不出现在团队页。`. `加库存` stays because it is the phone's own Add stock screen, not the app. See *The stock roles' descriptions (§278)*.
@@ -9021,3 +9023,20 @@ wrong" standing.
 | dashboard | 仪表盘 | **COMPOSED by Claude, lifted** — from the live `Has a dashboard · 拥有仪表盘` and `Dashboard layout · 仪表盘布局` on the same screen | history row |
 | +N permission(s) / −N permission(s) | +N 项权限 / −N 项权限 | **COMPOSED by Claude** — the counter `N 项` is live on the same screen (`N 项涉及资金`, `N 项中已开启`); `权限` is live (`Permissions · 权限`). Rejected: `新增 N 项权限`, longer than the row allows | history row |
 | Could not load the history | 无法加载历史版本 | **COMPOSED by Claude** — `无法加载…` is the live shape (`Could not load the roles. · 无法加载角色。`); `历史版本` is the live title of the list. Rejected: the recipe screen's `无法加载修改记录`, whose `修改记录` is that screen's own word, not this list's | toast |
+
+## The customer record's history (§279)
+
+Register: OPERATOR — the second line of a row in *Version history* on a
+customer (`public/m.html` CUST_VER_WORDS, `public/retail-admin/08-customers.js`
+CU_VER_WORDS), naming what that version changed. Each Chinese word is the live
+label of the field it names, on the same record; the English is that label
+lower-cased.
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| name | 姓名 | **lifted** — live `Name · 姓名` (phone profile sheet) | history row |
+| email | 邮箱 | **lifted** — live `Email · 邮箱` | history row |
+| gender | 性别 | **lifted** — live `Gender · 性别` | history row |
+| birthday | 生日 | **lifted** — live `Birthday · 生日` | history row |
+| note | 备注 | **lifted** — live `Note · 备注` | history row |
+| tags | 标签 | **lifted** — live `Tags · 标签` | history row |

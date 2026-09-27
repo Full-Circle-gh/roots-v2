@@ -1906,7 +1906,19 @@ reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.or
   state.orderOverCust=false; state.detailFetch=false; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
 reg('closeActions', ()=>{ state.detailActions=false; render(); });
-reg('closeAsk', ()=>{ state.ask=null; state.askErr=null; render(); });
+reg('closeAsk', ()=>{ const L=state.ask&&state.ask.live; state.ask=null; state.askErr=null; render(); if(L) L.close(); });
+/* The live sheet's commands (§279). A field writes into the draft and nudges
+   the engine; nothing re-renders, because the operator is typing. */
+reg('askLive', (id,v)=>{ const L=state.ask&&state.ask.live; if(!L) return; L.set(id,String(v==null?'':v)); L.auto.touch(); });
+/* The field's own Save appears once it differs — shown in place, never by a
+   render, which would take the keyboard away after the first digit. */
+reg('askLiveOwn', (id,v)=>{ const L=state.ask&&state.ask.live; if(!L) return;
+  L.set(id,String(v==null?'':v));
+  const b=document.getElementById('ask-own-'+id); if(b) b.style.display=L.ownDirty(id)?'':'none'; });
+reg('askLiveOwnSave', id=>{ const L=state.ask&&state.ask.live; if(L&&L.ownSave) L.ownSave(id); });
+reg('askLiveUndo', ()=>{ const L=state.ask&&state.ask.live; if(!L) return;
+  L.auto.undo(p=>{ L.apply(p); state.askErr=null; render(); }); });
+reg('askLiveHistory', ()=>{ const L=state.ask&&state.ask.live; if(L&&L.history) L.history(); });
 reg('askRun', key=>{
   const a=state.ask; if(!a) return;
   if(a.fields){
@@ -16051,98 +16063,130 @@ reg('messageCustomer', ()=>{
    digit one-handed is a merge or a split, not a typo. Name and email are safe
    to fix from anywhere; the phone stays a desktop edit, and the sheet says so
    rather than leaving the operator wondering where it went. */
-reg('editCustomer', ()=>{
-  const c=(state.custDetail&&state.custDetail.customer)||null;
-  if(!c||c.id==null||!mCan('customers:edit')) return;
-  state.ask={title:T('Edit profile','编辑资料'),
-    /* THE PHONE NUMBER IS EDITABLE HERE NOW, and the sentence that said it was
-       not is gone with it. It was held back on 2026-08-22 because the number is
-       what customer records are deduped on, so a mistyped digit one-handed is a
-       merge or a split — but that reasoning describes a SILENT collision, and
-       the endpoint has not been silent about one since the duplicate-phone check
-       landed in PATCH /customers/:id. It answers `phone_taken` and writes
-       nothing, and this sheet has carried the wording for that refusal all along
-       (custWrite's own map) without any field that could provoke it. What is
-       left is a number typed wrong into an unused slot, which is the same risk
-       the name and the email already carry and the same fix: type it again.
-       The warning stays, as a warning rather than as a door. */
-    body:T('The phone number is what customer records are matched on — change it only if it is wrong.',
-           '手机号是顾客记录的匹配依据 — 确认填错时才修改。'),
-    fields:[
-      {id:'nickname',label:T('Name','姓名'),value:c.nickname||'',placeholder:T('No name','未填姓名')},
-      {id:'phone',label:T('Phone','电话'),type:'tel',value:c.phone||'',placeholder:'13800000000'},
-      {id:'email',label:T('Email','邮箱'),value:c.email||'',placeholder:'name@example.com'},
-      /* The desktop's modal edits five fields and the phone edited two. Gender
-         and birthday are the other three's quiet siblings — a birthday is what a
-         loyalty greeting is sent on, and neither had any way onto a record from
-         a phone. Both go through the same PATCH, both accept empty as "unknown",
-         and `0` is a real stored value the server takes alongside 1 and 2, so
-         the picker offers it rather than folding it into blank. */
-      {id:'gender',label:T('Gender','性别'),value:c.gender==null?'':String(c.gender),
-       choices:[['',T('— unknown —','— 未知 —')],['1',T('Male','男')],['2',T('Female','女')],['0',T('Other','其他')]]},
-      {id:'birthday',label:T('Birthday','生日'),type:'date',value:(c.birthday||'').slice(0,10)},
-    ],
-    confirmLabel:T('Save','保存'),
-    validate:v=>{
-      if(v.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email))
-        return T('That email address will not work.','邮箱地址无效。');
-      /* The server's own pattern, so a refusal it would make arrives beside the
-         field rather than as a 400 after the sheet has closed. */
-      const p=String(v.phone||'').replace(/\s+/g,'');
-      if(p&&!/^\+?[0-9]{7,15}$/.test(p))
-        return T('That phone number will not work.','手机号无效。');
-      return null; },
-    run:v=>custWrite('profile',
-      ()=>apiWrite('/customers/'+c.id,
-        {nickname:v.nickname, phone:String(v.phone||'').replace(/\s+/g,''), email:v.email||null,
-         gender:v.gender===''?null:v.gender, birthday:v.birthday||null},'PATCH'),
-      T('Profile saved','资料已保存'))};
-  render();
-});
-/* ── Tags and the note — the desktop's "Know" block ──────────────────────────
-   Both ride on the SAME PATCH the profile edit uses, and both have been coming
-   down the wire on every record read (the detail route is SELECT *) with nothing
-   on the phone rendering them. A tag is how a shop says wholesale, or allergic,
-   or pays-late; the note is the sentence underneath. Withholding them from the
-   phone meant the person standing in front of the customer was the one who could
-   not see it.
+/* ── THE CUSTOMER RECORD SAVES ITSELF (decisions §279) ─────────────────────
+   The three sheets — profile, tags, note — are LIVE: a field saves after the
+   pause (the email and the tags when you leave the field, so a half-typed
+   address or tag is never sent), the foot says where it stands, and Done
+   closes. One engine per opening, holding its own draft and customer id, so a
+   write still in flight when the sheet closes lands on the customer it was
+   typed for. Undo returns the record to how this sheet found it; Version
+   history goes further back. The engine is public/tacet-autosave.js — the one
+   the desktop runs.
 
-   The tag EDITOR is a comma line rather than the desktop's chip-and-Add pair:
-   one field, one keyboard, and the parse is the same split the server stores. */
+   THE PHONE NUMBER KEEPS ITS OWN SAVE. The number is what customer records are
+   matched on, and PATCH /customers/:id uses a changed one to claim migration
+   credit and reconcile sign-up vouchers — money, so never on a pause. It sits
+   in the profile sheet with a Save of its own that appears once it differs.
+   The dedupe refusal (`phone_taken`) still arrives beside it. */
 function custTagsOf(c){
   return String((c&&c.tags)||'').split(',').map(s=>s.trim()).filter(Boolean);
 }
-reg('editCustTags', ()=>{
+function custDraftFrom(c){
+  return {nickname:c.nickname||'', email:c.email||'', gender:c.gender==null?'':String(c.gender),
+    birthday:(c.birthday||'').slice(0,10), note:c.note||'', tags:custTagsOf(c).join(', '), phone:c.phone||''};
+}
+/* What goes on the wire, in a fixed key order — the desktop's cuPayload shape.
+   Tags are deduped and lower-cased on the way in because the roster filter
+   groups on the stored string: "VIP" and "vip" would be two chips for one idea. */
+function custPayload(d){
+  return {nickname:d.nickname.trim(), email:d.email.trim(), gender:d.gender, birthday:d.birthday,
+    note:String(d.note||'').slice(0,2000),
+    tags:[...new Set(String(d.tags||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean))]};
+}
+function custErrText(e){
+  return e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
+    :e.code==='phone_taken'?T('Another customer already has that phone number.','该手机号已被其他顾客使用。')
+    :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
+    :(e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'));
+}
+const CUST_VER_WORDS={nickname:['name','姓名'],email:['email','邮箱'],gender:['gender','性别'],
+  birthday:['birthday','生日'],note:['note','备注'],tags:['tags','标签']};
+function custLiveOpen(title, body, fields){
   const c=(state.custDetail&&state.custDetail.customer)||null;
-  if(!c||c.id==null||!mCan('customers:edit')) return;
-  state.ask={title:T('Tags','标签'),
-    body:T('Separate them with commas. They group the roster and anybody on your team can see them.',
-           '用逗号分隔。标签用于分组，团队成员都能看到。'),
-    fields:[{id:'tags',label:T('Tags','标签'),value:custTagsOf(c).join(', '),
-             placeholder:T('wholesale, pays late','批发, 结账慢')}],
-    confirmLabel:T('Save','保存'),
-    run:v=>custWrite('tags',
-      /* Deduped and lower-cased on the way in, because the filter row groups on
-         the stored string: "VIP" and "vip" would otherwise be two chips for one
-         idea, and the roster's tag query lower-cases what it matches. */
-      ()=>apiWrite('/customers/'+c.id,{tags:[...new Set(String(v.tags||'').split(',')
-        .map(s=>s.trim().toLowerCase()).filter(Boolean))].join(',')},'PATCH'),
-      T('Tags saved','标签已保存'))};
+  if(!c||c.id==null||!mCan('customers:edit')||typeof TacetAutosave==='undefined') return;
+  const id=c.id, d=custDraftFrom(c);
+  const auto=TacetAutosave.create({
+    read:()=>custPayload(d),
+    hold:p=>(p.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email))?T('That email address will not work.','邮箱地址无效。'):'',
+    send:(p,note)=>apiWrite('/customers/'+id,Object.assign({},p,note?{history_note:note}:{}),'PATCH').then(j=>{
+      /* The record behind the sheet takes the server's values in place — no
+         render, the operator may be mid-word. Done repaints it. */
+      const cur=state.custDetail&&state.custDetail.customer;
+      if(cur&&cur.id===id) Object.assign(cur,(j&&j.changed)||{}); }),
+    onChange:()=>askLiveRepaint(),
+  });
+  auto.start();
+  const live={auto,
+    get:k=>d[k], set:(k,v)=>{ d[k]=v; },
+    apply:p=>{ d.nickname=p.nickname; d.email=p.email; d.gender=p.gender; d.birthday=p.birthday;
+      d.note=p.note; d.tags=(p.tags||[]).join(', '); },
+    ownDirty:k=>k==='phone'&&String(d.phone||'').replace(/\s+/g,'')!==String(((state.custDetail||{}).customer||{}).phone||''),
+    ownSave:k=>{ if(k!=='phone') return;
+      const ph=String(d.phone||'').replace(/\s+/g,'');
+      if(ph&&!/^\+?[0-9]{7,15}$/.test(ph)){ state.askErr=T('That phone number will not work.','手机号无效。'); render(); return; }
+      state.askErr=null;
+      apiWrite('/customers/'+id,{phone:ph},'PATCH').then(j=>{
+        const cur=state.custDetail&&state.custDetail.customer;
+        if(cur&&cur.id===id) cur.phone=(j&&j.changed&&'phone' in j.changed)?j.changed.phone:(ph||null);
+        render(); showToast(T('Saved','已保存')); loadCustomers();
+      }).catch(e=>{ if(String(e.message)==='auth') return; state.askErr=custErrText(e); render(); }); },
+    history:()=>{
+      Promise.resolve(auto.flush()).then(()=>api('/customers/'+id+'/history')).then(j=>{
+        const list=Array.isArray(j&&j.versions)?j.versions:[];
+        if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+        liveHistorySheet(list,
+          v=>(v.changed||[]).map(k=>{ const w=CUST_VER_WORDS[k]; return w?T(w[0],w[1]):k; }).join(' · '),
+          v=>{ const p=v.snapshot;
+            return apiWrite('/customers/'+id,{nickname:p.nickname, email:p.email, gender:p.gender, birthday:p.birthday,
+              note:p.note, tags:p.tags, history_note:'restore'},'PATCH').then(()=>{
+                if(state.custId===id) loadCustomerDetail(id); loadCustomers(); }); });
+      }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+    },
+    /* Leaving: what is still waiting goes, then the record behind is re-read so
+       it shows what was saved. */
+    close:()=>{ Promise.resolve(auto.flush()).then(()=>{ if(state.custId===id) loadCustomerDetail(id); loadCustomers(); }); },
+  };
+  state.ask={title, body, fields, live};
   render();
-});
-reg('editCustNote', ()=>{
-  const c=(state.custDetail&&state.custDetail.customer)||null;
-  if(!c||c.id==null||!mCan('customers:edit')) return;
-  state.ask={title:T('Note','备注'),
-    body:T('Anything your team should know — allergies, delivery quirks, invoicing.','团队需要知道的事 — 过敏、配送要求、开票方式等。'),
-    fields:[{id:'note',label:T('Note','备注'),multiline:true,value:c.note||'',
-             placeholder:T('Anything your team should know','团队需要知道的事')}],
-    confirmLabel:T('Save','保存'),
-    run:v=>custWrite('note',
-      ()=>apiWrite('/customers/'+c.id,{note:String(v.note||'').slice(0,2000)},'PATCH'),
-      T('Note saved','备注已保存'))};
+}
+reg('editCustomer', ()=>custLiveOpen(T('Edit profile','编辑资料'),
+  T('The phone number is what customer records are matched on — change it only if it is wrong.',
+    '手机号是顾客记录的匹配依据 — 确认填错时才修改。'),
+  [ {id:'nickname',label:T('Name','姓名'),placeholder:T('No name','未填姓名')},
+    {id:'phone',label:T('Phone','电话'),type:'tel',placeholder:'13800000000',ownSave:true},
+    {id:'email',label:T('Email','邮箱'),placeholder:'name@example.com',commit:true},
+    /* `0` is a real stored value the server takes alongside 1 and 2, so the
+       picker offers it rather than folding it into blank. */
+    {id:'gender',label:T('Gender','性别'),
+     choices:[['',T('— unknown —','— 未知 —')],['1',T('Male','男')],['2',T('Female','女')],['0',T('Other','其他')]]},
+    {id:'birthday',label:T('Birthday','生日'),type:'date'} ]));
+reg('editCustTags', ()=>custLiveOpen(T('Tags','标签'),
+  T('Separate them with commas. They group the roster and anybody on your team can see them.',
+    '用逗号分隔。标签用于分组，团队成员都能看到。'),
+  [{id:'tags',label:T('Tags','标签'),placeholder:T('wholesale, pays late','批发, 结账慢'),commit:true}]));
+reg('editCustNote', ()=>custLiveOpen(T('Note','备注'),
+  T('Anything your team should know — allergies, delivery quirks, invoicing.','团队需要知道的事 — 过敏、配送要求、开票方式等。'),
+  [{id:'note',label:T('Note','备注'),multiline:true,placeholder:T('Anything your team should know','团队需要知道的事')}]));
+/* VERSION HISTORY as a sheet, for any live record: newest first, the current
+   one first of all; tapping an older one asks, then `restore(v)` writes it —
+   filed as a restore, so it can be taken back the same way. */
+function liveHistorySheet(list, sub, restore){
+  const top=v=>[v.isBaseline?T('Original','原始版本'):v.note==='undo'?T('Undo','撤销'):v.note==='restore'?T('Restore','还原'):'',
+    tdWhen(v.at,'dateTime',_tdL()), v.by?escAttr(v.by):''].filter(Boolean).join(' · ');
+  state.ask={title:T('Version history','历史版本'),
+    options:list.map((v,i)=>{ const w=sub(v);
+      return {key:String(v.id),label:(i===0?T('Current','当前')+' · ':'')+top(v)
+        +(w?`<div style="font-size:13px;color:var(--text-secondary);margin-top:3px">${escAttr(w)}</div>`:'')}; }),
+    run:vid=>{
+      const v=list.find(x=>String(x.id)===String(vid));
+      if(!v||v===list[0]) return;
+      state.ask={title:T('Restore this version?','还原此版本?'),confirmLabel:T('Restore','还原'),
+        run:()=>{ Promise.resolve(restore(v)).then(()=>showToast(T('Restored to the chosen version.','已还原到所选版本。')))
+          .catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Save failed: ','保存失败:')+(e.message||'')); }); }};
+      render();
+    }};
   render();
-});
+}
 reg('adjustPoints', ()=>{
   const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId||!mCan('customers:adjust')) return;
   state.ask={title:T('Adjust points','调整积分'),
@@ -18323,8 +18367,33 @@ function orderActionRow(o,isPO){
   if(orderActs(o).length) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
   return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">${btns.join('')}</div>`;
 }
+/* A LIVE SHEET (decisions §279) is an ask whose fields save themselves: each
+   one writes into a.live on input (or on change, for a field marked `commit`,
+   a select or a date), the engine sends after the pause, and the foot says
+   where it stands and offers Undo, Version history and Done in place of
+   Cancel and Save. A field marked `ownSave` is kept OUT of the autosave and
+   carries its own Save button — the customer's phone number, which moves
+   money on the server when it changes. See askLiveOpen below. */
+function askLiveFoot(){
+  const a=state.ask, L=a&&a.live; if(!L) return '';
+  const A=L.auto, st=A?A.state:'saved';
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…')
+    : st==='hold'?escAttr(A.message)
+    : st==='error'?escAttr(T('Save failed: ','保存失败:')+(A.message||''))
+    : T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<div style="font-size:12.5px;color:${tone};text-align:center">${line}</div>`
+    +(A&&A.canUndo()?`<button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('askLiveUndo')">${T('Undo','撤销')}</button>`:'');
+}
+function askLiveRepaint(){ const el=document.getElementById('mAskLiveFoot'); if(el) el.innerHTML=askLiveFoot(); }
 function sheetAsk(){
   const a=state.ask; if(!a) return '';
+  const L=a.live;
+  const val=f=>L?L.get(f.id):f.value;
+  /* How a field reports: on every keystroke, or once when it is left. */
+  const wire=f=>!L?'':(f.ownSave?`oninput="APP.cmd('askLiveOwn','${f.id}',this.value)"`
+    :(f.commit||f.choices||f.type==='date')?`onchange="APP.cmd('askLive','${f.id}',this.value)"`
+    :`oninput="APP.cmd('askLive','${f.id}',this.value)"`);
   return `<div class="scrim" style="z-index:49" onclick="APP.scrimClose('closeAsk')"></div>
    <div class="sheet" style="z-index:50;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">
      <div class="grabber" style="margin-bottom:12px"></div>
@@ -18342,18 +18411,23 @@ function sheetAsk(){
               [value,label] pairs; the label is already resolved to one language
               by the caller, exactly as `label` and `placeholder` are. */''}
          ${f.choices
-           ? `<select id="ask-${f.id}" style="width:100%">${f.choices.map(([val,lab])=>
-               `<option value="${escAttr(val)}"${String(f.value==null?'':f.value)===String(val)?' selected':''}>${lab}</option>`).join('')}</select>`
+           ? `<select id="ask-${f.id}" style="width:100%" ${wire(f)}>${f.choices.map(([v2,lab])=>
+               `<option value="${escAttr(v2)}"${String(val(f)==null?'':val(f))===String(v2)?' selected':''}>${lab}</option>`).join('')}</select>`
            : f.multiline
-           ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none">${f.value!=null?escAttr(f.value):''}</textarea>`
-           : `<input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('askRun','')}">`}
+           ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none" ${wire(f)}>${val(f)!=null?escAttr(val(f)):''}</textarea>`
+           : `<div style="display:flex;gap:8px;align-items:center"><input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${val(f)!=null?escAttr(val(f)):''}" style="flex:1;min-width:0" ${wire(f)}
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();${L?'':"APP.cmd('askRun','')"}}">${
+               L&&f.ownSave?`<button class="btn2" id="ask-own-${f.id}" style="flex:none;${L.ownDirty(f.id)?'':'display:none'}" onclick="APP.cmd('askLiveOwnSave','${f.id}')">${T('Save','保存')}</button>`:''}</div>`}
        </label>`).join('')}
        ${state.askErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.askErr}</div>`:''}
      </div>`:''}
      ${/* Capped and scrolled: a role's version history can run to thirty rows,
           which is taller than the phone. Short lists never reach the cap. */''}
-     ${a.options
+     ${L?`<div style="padding:16px 20px 0"><div id="mAskLiveFoot">${askLiveFoot()}</div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            ${L.history?`<button class="btn2" style="flex:1" onclick="APP.cmd('askLiveHistory')">${T('Version history','历史版本')}</button>`:''}
+            <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Done','完成')}</button></div></div>`
+     : a.options
        ? `<div style="max-height:62vh;overflow:auto">${a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')}</div>`
        : `<div style="display:flex;gap:8px;padding:16px 20px 0">
             <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>

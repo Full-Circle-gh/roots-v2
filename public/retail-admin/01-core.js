@@ -719,6 +719,62 @@ window.chApplyVerdict = chApplyVerdict;
 function thumbUrl(p) { return p?.image_url || p?.image_data || ''; }
 function fmt(n) { return Number(n || 0).toFixed(2); }
 
+// ── Version history (decisions §279) ─────────────────────────────────────────
+// ONE dialog for every screen that saves itself (public/tacet-autosave.js), so
+// the role screen, the customer record and each screen converted after them
+// show their history the same way. What is on screen is sent first, so the
+// list ends on it rather than a step behind. `sub(v)` says what that version
+// changed, in the screen's own words. Resolves the version the operator chose
+// to restore — after asking — or null.
+function autosaveVersionTop(v) {
+  const head = v.isBaseline ? cuT('Original', '原始版本')
+    : v.note === 'undo' ? cuT('Undo', '撤销')
+    : v.note === 'restore' ? cuT('Restore', '还原') : '';
+  return [head, tdWhen(v.at, 'dateTime'), v.by || ''].filter(Boolean).join(' · ');
+}
+async function autosavePickVersion(auto, url, sub) {
+  if (auto) await auto.flush();
+  let list;
+  try {
+    const j = await api(url);
+    list = Array.isArray(j && j.versions) ? j.versions : [];
+  } catch (e) { toast(cuT('Could not load the history', '无法加载历史版本'), 'err'); return null; }
+  if (!list.length) { toast(cuT('No versions yet — they’re saved automatically as you edit.', '暂无历史版本 — 编辑时会自动保存。')); return null; }
+  const rows = list.map((v, i) => {
+    const what = sub ? sub(v) : '';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border-subtle,rgba(0,0,0,.08))">`
+      + `<div style="flex:1;min-width:0"><div>${escapeHtml(autosaveVersionTop(v))}`
+      + (i === 0 ? ` <span class="muted">· ${escapeHtml(cuT('Current', '当前'))}</span>` : '') + `</div>`
+      + (what ? `<div class="muted" style="font-size:12.5px;margin-top:2px">${escapeHtml(what)}</div>` : '') + `</div>`
+      + (i === 0 ? '' : `<button type="button" class="btn btn-sm" data-restore="${v.id}">${escapeHtml(cuT('Restore', '还原'))}</button>`)
+      + `</div>`;
+  }).join('');
+  const bodyHtml = `<h3 class="tdlg-title">${escapeHtml(cuT('Version history', '历史版本'))}</h3>`
+    + `<div style="max-height:60vh;overflow:auto">${rows}</div>`;
+  const footHtml = `<button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${escapeHtml(cuT('Close', '关闭'))}</button>`;
+  const { scrim, closer, ready } = askCustom('tdlg-neutral', bodyHtml, footHtml, '[data-restore], [data-cancel]');
+  scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => closer(null)));
+  scrim.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', () => closer(b.getAttribute('data-restore'))));
+  const picked = await ready;
+  const v = picked ? list.find(x => String(x.id) === String(picked)) : null;
+  if (!v) return null;
+  if (!(await askConfirm({ titleEn: 'Restore this version?', titleCn: '还原此版本?', confirmEn: 'Restore', confirmCn: '还原' }))) return null;
+  return v;
+}
+// Every autosaving screen closing the tab mid-pause is the one way to lose an
+// edit; the browser's own question stands in for the Save buttons that are
+// gone, and switching away sends the pending edit — the recipe record's rule.
+// A screen registers its engine getter here once.
+const AUTOSAVE_ENGINES = [];
+function autosaveRegister(getEngine) { AUTOSAVE_ENGINES.push(getEngine); }
+window.addEventListener('beforeunload', (e) => {
+  if (AUTOSAVE_ENGINES.some(g => { const a = g(); return a && a.busy(); })) { e.preventDefault(); e.returnValue = ''; }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden') return;
+  AUTOSAVE_ENGINES.forEach(g => { const a = g(); if (a && a.busy()) a.flush(); });
+});
+
 // ── Tenant display currency ────────────────────────────────────────────────
 // The tenant's currency is a stored setting, not a constant: storefront_config
 // key `currency`, normalised server-side by routes/retail.js normalizeCurrency()

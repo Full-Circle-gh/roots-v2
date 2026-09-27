@@ -4142,6 +4142,10 @@
          so Save and Reset have been showing on every open since the card
          shipped — on a customer nobody had edited. */
       #cu-drawer .cu-note-foot[hidden] { display: none; }
+      /* §279's Undo and the phone number's own Save are .btn, whose display
+         beats the UA [hidden] rule — the trap retail-admin.css .acct-item names. */
+      [data-cu-undo][hidden], #cu-edit-phone-save[hidden] { display: none !important; }
+      #cu-drawer .cu-note-foot { align-items: center; }
 
       #cu-drawer .cux-kicker { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-1); letter-spacing: 0; margin-bottom: 10px; }
       /* Three sizes, so the eye ranks them without reading: title 16, value
@@ -4428,7 +4432,13 @@
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
           <div class="field"><label for="cu-edit-nickname" class="stacked">Nickname · 昵称</label><input type="text" id="cu-edit-nickname"></div>
-          <div class="field" id="cu-edit-phone-field"><label for="cu-edit-phone" class="stacked">Phone · 电话</label><input type="text" id="cu-edit-phone" placeholder="+86…"><div class="cu-err" id="cu-edit-phone-err" data-no-i18n></div></div>
+          <!-- The phone number keeps its own Save (decisions §279): a changed
+               number claims migration credit and sign-up vouchers on the
+               server, so it is never sent on a pause. The button shows only
+               once the number differs from the saved one. -->
+          <div class="field" id="cu-edit-phone-field"><label for="cu-edit-phone" class="stacked">Phone · 电话</label>
+            <div style="display:flex;gap:8px;align-items:center"><input type="text" id="cu-edit-phone" placeholder="+86…" style="flex:1;min-width:0"><button type="button" class="btn btn-sm btn-primary" id="cu-edit-phone-save" onclick="cuSavePhone()" hidden>Save · 保存</button></div>
+            <div class="cu-err" id="cu-edit-phone-err" data-no-i18n></div></div>
           <div class="field" id="cu-edit-email-field"><label for="cu-edit-email" class="stacked">Email · 邮箱</label><input type="text" id="cu-edit-email"><div class="cu-err" id="cu-edit-email-err" data-no-i18n></div></div>
           <div class="field"><label for="cu-edit-gender" class="stacked">Gender · 性别</label>
             <select id="cu-edit-gender">
@@ -4440,9 +4450,14 @@
           <div class="field" style="margin-bottom: 0;"><label for="cu-edit-birthday" class="stacked">Birthday · 生日</label><input type="date" id="cu-edit-birthday"></div>
           <!-- Tier · 等级 is auto-derived from lifetime spend (thresholds in routes/retail.js → TIER_THRESHOLDS). The detail header already shows the current pill — no manual override here. -->
         </div>
+        <!-- No Save button (decisions §279): every field above but the phone
+             saves itself. The foot says where it stands and offers the ways
+             back; Done closes. -->
         <div class="pu-editor-foot">
-          <button class="btn" id="cu-edit-cancel" onclick="cuCloseEdit()">Cancel · 取消</button>
-          <button class="btn btn-primary" id="cu-edit-save" onclick="cuSaveEdit()">Save changes · 保存修改</button>
+          <span class="muted" data-cu-autostat data-no-i18n style="margin-right:auto;font-size:12.5px"></span>
+          <button class="btn" type="button" data-cu-undo onclick="cuUndo()" hidden>Undo · 撤销</button>
+          <button class="btn" type="button" onclick="cuHistory()">Version history · 历史版本</button>
+          <button class="btn btn-primary" type="button" id="cu-edit-done" onclick="cuCloseEdit()">Done · 完成</button>
         </div>
       </div>
     </div>

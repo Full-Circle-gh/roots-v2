@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.440
+# Tacet shared-core consolidation — decisions record, v4.441
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.441 — **§279 AMENDED · ONE AREA PER PR, AND THE CUSTOMER RECORD IS FIRST — DECIDED BY ASH:** *"let's do all screens that doesn't involved money or accounting ? what do you suggest"*, then *"go ahead"* to Claude's five-batch plan (customer details; delivery settings; shop wording pages; records you edit; mixed screens split in two). Rule 5 changes from one screen per PR to **one area per PR**. **BATCH 1, THE CUSTOMER RECORD, phone and desktop.** Name, email, gender, birthday, tags and note save themselves (the email and the tags when their field is left, so a half-typed one is never sent); Undo returns the record to how it was opened; Version history reads `GET /api/retail-admin/customers/:id/history` from the tenant's own database. The phone's three sheets become LIVE SHEETS — a mode of the shared ask sheet any later phone screen can use — and a sheet dismissed by a stray tap no longer throws away a half-written note. The desktop's version-history dialog and leave guard move to `01-core.js` (`autosavePickVersion`, `autosaveRegister`) and the role screen uses them too. **THE PHONE NUMBER KEEPS ITS BUTTON — FOUND IN THE SURVEY, NOT ASSUMED.** `PATCH /customers/:id` uses a changed number to claim migration credit and reconcile sign-up vouchers, so under rule 2 it is money: it has its own Save, is sent alone, and is left out of the history snapshot so no Undo or restore can write it. No schema change (the tenant databases pick up `edit_history` from the main one); no change to `.gitignore` or CI.
 
 2026-09-27 · v4.440 — **§279 · SETTINGS SAVE THEMSELVES, WITH UNDO AND A HISTORY, THE SAME ON PHONE AND DESKTOP — DECIDED BY ASH:** *"all those setting should be auto save . no need to keep going to save button and click save . should have auto save and undo to previous version overall all app should be the same method mobile and PC"*, then *"ok"* to Claude's narrower recommendation: settings screens only, actions keep their button, the role screen first. **THE LINE CLAUDE DREW, AND WHY.** Autosave is right where the thing on screen IS the record (a name, a description, a switch). It is wrong where the screen CREATES a record or moves money or stock — a cost, an order, a refund — because a half-typed amount becomes a real row; §144 is what an autosave race already cost on products (43 paid lines sent out without their questions). Those screens keep their button. **THE PILOT.** Settings → Team → Roles, on `public/m.html` and `public/retail-admin/02-settings-ops.js`: Save and Revert are gone; an edit is sent 0.8s after the last change; the footer says Saving… / All changes saved / what failed; *Undo my changes* puts the role back as it was when this visit opened; *History* lists earlier versions and restores one. **BUILT ONCE.** `public/tacet-autosave.js` is the one engine both surfaces load (debounce, one write in flight, hold-while-invalid, visit-start undo); `lib/edit-history.js` is the one store (`edit_history`, keyed by tenant, type and key; created on first use, no migration). Other screens convert one PR at a time. **A CHANGE TO HOW BUILDS WORK, CALLED OUT:** `public/sw.js` pre-caches the new engine for the phone, and `scripts/lib/m-probe.js` inlines it the way it inlines td-datetime. No change to `.gitignore` or CI.
 
@@ -20732,5 +20734,9 @@ to the narrower form below).
    table are the one store. A screen converted later brings a type name and a
    snapshot, not a new mechanism. Products keep their own older history
    (`retail_product_versions`) until someone chooses to move them.
-5. **One screen per PR.** The role screen is first. See the v4.440 changelog
-   entry.
+5. **One area per PR** (amended 2026-09-27 by Ash, v4.441; it was one screen
+   per PR). The role screen was first; the customer record second.
+6. **A field whose save moves money keeps its own Save inside an autosaving
+   screen.** The customer's phone number is the first: a changed number claims
+   migration credit and sign-up vouchers. It is sent alone, never on a pause,
+   and is left out of the history so no Undo or restore can write it.
