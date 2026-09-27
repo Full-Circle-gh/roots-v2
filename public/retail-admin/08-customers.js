@@ -931,8 +931,9 @@ async function cuOpenDetail(id, restore = null) {
     return;
   }
   CU_CURRENT = j.data;
-  // A different person, so the tag draft from the last one is not theirs.
-  CU_TAG_DRAFT = null;
+  // A different person: the last one's pending edit is sent, and this one gets
+  // an engine and a draft of its own (§279).
+  cuAutoOpen();
   // The GET above stamps seen_at server-side, so this row is no longer unopened.
   // Clear it HERE rather than waiting for the next cuLoad(): dropping the class
   // lets the row's own 600ms transition settle the surface and the Sage edge out
@@ -1032,7 +1033,11 @@ onDrawerClose('#cu-drawer', () => {
   $('#cu-detail-body').innerHTML = '';
   $('#cu-drawer-actions').innerHTML = '';
   CU_CURRENT = null;
-  CU_TAG_DRAFT = null;
+  // Closing is leaving: whatever is still waiting on its pause is sent. The
+  // engine holds its own draft and customer id, so clearing CU_CURRENT above
+  // cannot redirect it.
+  if (CU_AUTO) CU_AUTO.flush();
+  CU_AUTO = null; CU_DRAFT = null;
 });
 // Backwards-compat shim — older modal save handlers still call
 // cuShowList() to return to the list after saving. Now that the list
@@ -1285,8 +1290,8 @@ function cuTagChipsHtml(list) {
 // somebody asks for the editor.
 //
 // The editor keeps EVERY id the old card had — cu-tagrow, cu-tag-new, cu-note,
-// cu-note-foot — so cuTagAdd, cuTagRemove, cuNoteChanged, cuNotesReset and
-// cuNotesSave keep working with no change at all. Only where the block sits,
+// cu-note-foot — so cuTagAdd, cuTagRemove and cuNoteChanged keep working
+// with no change at all. Only where the block sits,
 // and whether the editor is showing, is new.
 //
 // With no note there is NO note line — but the block NAMES ITSELF, because a
@@ -1347,9 +1352,12 @@ function cuKnowHtml(c) {
                   aria-label="${escapeAttr(cuT('Note about this customer', '关于该顾客的备注'))}"
                   placeholder="${escapeAttr(cuT('Anything your team should know — allergies, delivery quirks, invoicing.', '团队需要知道的事 — 过敏、配送要求、开票方式等。'))}"
                   oninput="cuNoteChanged()">${escapeHtml(note)}</textarea>
-        <div class="cu-note-foot" id="cu-note-foot" hidden>
-          <button type="button" class="btn btn-sm" onclick="cuNotesReset()">${escapeHtml(cuT('Reset', '还原'))}</button>
-          <button type="button" class="btn btn-sm btn-primary" onclick="cuNotesSave(this)">${escapeHtml(cuT('Save', '保存'))}</button>
+        ${/* NO SAVE BUTTON (§279): the note and the tags save themselves. The
+             foot says where they stand and offers the two ways back. */''}
+        <div class="cu-note-foot" id="cu-note-foot">
+          <span class="muted" data-cu-autostat style="margin-right:auto;font-size:12.5px"></span>
+          <button type="button" class="btn btn-sm" data-cu-undo onclick="cuUndo()" hidden>${escapeHtml(cuT('Undo', '撤销'))}</button>
+          <button type="button" class="btn btn-sm" onclick="cuHistory()">${escapeHtml(cuT('Version history', '历史版本'))}</button>
         </div>
       </div>
     </div>`;
@@ -1388,14 +1396,116 @@ function cuNotesEdit(on) {
   if (open) { const ta = document.getElementById('cu-note'); if (ta) ta.focus(); }
 }
 
-// The tags being edited right now. Held apart from CU_CURRENT so Reset has
-// something true to go back to — CU_CURRENT is the last SAVED state and must
-// stay that way until a save actually lands.
-let CU_TAG_DRAFT = null;
+// ── The customer record saves itself (decisions §279) ─────────────────────
+// ONE draft per open customer, shared by the header's note-and-tags editor and
+// the Edit customer modal, so Undo and Version history cover the whole record.
+// CU_CURRENT stays the last SAVED state, patched in place as each save lands.
+// The engine is public/tacet-autosave.js — the same one the phone runs.
+//
+// THE PHONE NUMBER IS NOT IN THE DRAFT. Changing it claims migration credit and
+// reconciles sign-up vouchers on the server, so it keeps its own Save button
+// (cuSavePhone) and no Undo or restore ever writes it.
+let CU_AUTO = null, CU_DRAFT = null;
+function cuDraftFrom(c) {
+  return {
+    nickname: c.nickname || '', email: c.email || '',
+    gender: c.gender == null ? '' : String(c.gender), birthday: c.birthday ? String(c.birthday).slice(0, 10) : '',
+    note: c.note || '', tags: cuTagList(c.tags),
+  };
+}
+// What goes on the wire, in a fixed key order — compared as JSON.
+function cuPayload(d) {
+  return {
+    nickname: d.nickname.trim(), email: d.email.trim(), gender: d.gender, birthday: d.birthday,
+    note: d.note, tags: d.tags.slice(),
+  };
+}
+function cuAutoOpen() {
+  if (CU_AUTO) CU_AUTO.flush();
+  const c = CU_CURRENT && CU_CURRENT.customer;
+  if (!c || typeof TacetAutosave === 'undefined') { CU_AUTO = null; CU_DRAFT = null; return; }
+  const d = CU_DRAFT = cuDraftFrom(c), id = c.id;
+  CU_AUTO = TacetAutosave.create({
+    read: () => cuPayload(d),
+    // A half-typed address is held, not refused: the email field saves when
+    // you leave it, so this only shows for one that is actually wrong.
+    hold: p => (p.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email))
+      ? cuT('That email address will not work.', '邮箱地址无效。') : '',
+    send: (p, note) => api('/api/retail-admin/customers/' + id, {
+      method: 'PATCH', body: Object.assign({}, p, note ? { history_note: note } : {}),
+    }).then(j => cuLanded(id, j)),
+    onChange: () => { if (CU_AUTO && CU_CURRENT && CU_CURRENT.customer && CU_CURRENT.customer.id === id) cuPaintAutoFoot(); },
+  });
+  CU_AUTO.start();
+}
+// A save landed: CU_CURRENT takes the server's own values, the read-only line
+// and chips follow, and the roster is re-read. Nothing the operator is typing
+// into is repainted.
+function cuLanded(id, j) {
+  const c = CU_CURRENT && CU_CURRENT.customer;
+  if (!c || c.id !== id) { cuLoad({ silent: true }); return; }
+  Object.assign(c, (j && j.changed) || {});
+  cuNotesRepaint();
+  cuLoad({ silent: true });
+}
+function cuTouch() { if (CU_AUTO) CU_AUTO.touch(); }
+function cuPaintAutoFoot() {
+  const a = CU_AUTO, st = a ? a.state : 'saved';
+  const line = st === 'saving' || st === 'pending' ? cuT('Saving…', '保存中…')
+    : st === 'hold' ? a.message
+    : st === 'error' ? cuT('Save failed: ', '保存失败:') + (a.message || '')
+    : cuT('All changes saved', '已自动保存');
+  document.querySelectorAll('[data-cu-autostat]').forEach(el => {
+    el.textContent = line;
+    el.style.color = st === 'error' ? 'var(--brick-ink, #b3261e)' : st === 'hold' ? 'var(--amber-ink, #8a5a00)' : '';
+  });
+  const undo = !!(a && a.canUndo());
+  document.querySelectorAll('[data-cu-undo]').forEach(el => { el.hidden = !undo; });
+}
+// UNDO: the record as it was when this customer was opened — every field, in
+// one write, filed as an undo so the history keeps what it took back.
+function cuUndo() {
+  if (!CU_AUTO || !CU_DRAFT) return;
+  const d = CU_DRAFT;
+  CU_AUTO.undo(p => {
+    Object.assign(d, { nickname: p.nickname, email: p.email, gender: p.gender, birthday: p.birthday, note: p.note, tags: p.tags.slice() });
+    cuDraftToScreen();
+  });
+}
+// Put the draft back into whichever editors are open.
+function cuDraftToScreen() {
+  const d = CU_DRAFT; if (!d) return;
+  const ta = document.getElementById('cu-note'); if (ta) ta.value = d.note;
+  const set = (sel, v) => { const el = $(sel); if (el) el.value = v; };
+  set('#cu-edit-nickname', d.nickname); set('#cu-edit-email', d.email);
+  set('#cu-edit-gender', d.gender); set('#cu-edit-birthday', d.birthday);
+  cuNotesRepaint();
+}
+const CU_VER_WORDS = {
+  nickname: ['name', '姓名'], email: ['email', '邮箱'], gender: ['gender', '性别'],
+  birthday: ['birthday', '生日'], note: ['note', '备注'], tags: ['tags', '标签'],
+};
+async function cuHistory() {
+  const c = CU_CURRENT && CU_CURRENT.customer;
+  if (!c || !CU_AUTO || !CU_DRAFT) return;
+  const id = c.id, d = CU_DRAFT;
+  const v = await autosavePickVersion(CU_AUTO, '/api/retail-admin/customers/' + id + '/history',
+    x => (x.changed || []).map(k => { const w = CU_VER_WORDS[k]; return w ? cuT(w[0], w[1]) : k; }).join(' · '));
+  if (!v || !CU_CURRENT || !CU_CURRENT.customer || CU_CURRENT.customer.id !== id || CU_DRAFT !== d) return;
+  const p = v.snapshot;
+  Object.assign(d, {
+    nickname: p.nickname || '', email: p.email || '', gender: p.gender || '', birthday: p.birthday || '',
+    note: p.note || '', tags: cuTagList(p.tags),
+  });
+  cuDraftToScreen();
+  await CU_AUTO.flush('restore');
+  if (CU_AUTO && CU_AUTO.state === 'saved') toast(cuT('Restored to the chosen version.', '已还原到所选版本。'), 'ok');
+}
+autosaveRegister(() => CU_AUTO);
 
 function _cuSavedTags() { return cuTagList(CU_CURRENT && CU_CURRENT.customer && CU_CURRENT.customer.tags); }
 function _cuSavedNote() { return (CU_CURRENT && CU_CURRENT.customer && CU_CURRENT.customer.note) || ''; }
-function _cuDraftTags() { return CU_TAG_DRAFT || _cuSavedTags(); }
+function _cuDraftTags() { return CU_DRAFT ? CU_DRAFT.tags : _cuSavedTags(); }
 
 function cuTagAdd() {
   const input = document.getElementById('cu-tag-new');
@@ -1413,14 +1523,16 @@ function cuTagAdd() {
               '标签最多 20 个,再多就失去筛选意义了。'), 'err');
     return;
   }
-  CU_TAG_DRAFT = list.concat(raw);
+  if (CU_DRAFT) CU_DRAFT.tags = list.concat(raw);
   cuNotesRepaint();
+  cuTouch();
   const again = document.getElementById('cu-tag-new'); if (again) again.focus();
 }
 
 function cuTagRemove(tag) {
-  CU_TAG_DRAFT = _cuDraftTags().filter(t => t !== tag);
+  if (CU_DRAFT) CU_DRAFT.tags = _cuDraftTags().filter(t => t !== tag);
   cuNotesRepaint();
+  cuTouch();
 }
 
 // Repaint only the chip row and the read-only note line, never the whole
@@ -1450,53 +1562,13 @@ function cuNotesRepaint() {
   cuNoteChanged();
 }
 
-// Show the Save/Reset foot only when there is something to save.
+// The note as typed goes into the draft and the engine takes it from there;
+// the foot is repainted rather than shown or hidden — it is always there.
 function cuNoteChanged() {
-  const foot = document.getElementById('cu-note-foot');
   const ta = document.getElementById('cu-note');
-  if (!foot || !ta) return;
-  const noteDirty = String(ta.value || '') !== String(_cuSavedNote() || '');
-  const tagsDirty = _cuDraftTags().join(',') !== _cuSavedTags().join(',');
-  foot.hidden = !(noteDirty || tagsDirty);
-}
-
-function cuNotesReset() {
-  CU_TAG_DRAFT = null;
-  const ta = document.getElementById('cu-note');
-  if (ta) ta.value = _cuSavedNote();
-  cuNotesRepaint();
-}
-
-async function cuNotesSave(btn) {
-  const d = CU_CURRENT; if (!d || !d.customer) return;
-  const ta = document.getElementById('cu-note');
-  const note = ta ? String(ta.value || '') : '';
-  const tags = _cuDraftTags();
-  // adminWrite THROWS on a failed write (it has already toasted the reason), so
-  // the catch is what stops an unhandled rejection — and, more to the point,
-  // what stops the lines below recording an edit that never landed.
-  let j;
-  try {
-    j = await adminWrite({
-      btn,
-      url: '/api/retail-admin/customers/' + d.customer.id,
-      method: 'PATCH',
-      body: { note, tags },
-      errLabelEn: 'Could not save the note', errLabelCn: '备注保存失败',
-      busyLabel: cuT('Saving…', '保存中…'),
-    });
-  } catch (e) { return; }
-  // The saved state IS what came back, so a later Reset goes to the truth
-  // rather than to what this page hoped it wrote.
-  d.customer.note = (j.changed && 'note' in j.changed) ? j.changed.note : (note.trim() || null);
-  d.customer.tags = (j.changed && 'tags' in j.changed) ? j.changed.tags : (tags.length ? tags.join(',') : null);
-  CU_TAG_DRAFT = null;
-  cuNotesEdit(false);
-  cuNotesRepaint();
-  toast(cuT('Saved', '已保存'));
-  // The roster row shows the tags, and the tag filter is built from what is in
-  // use — both are now behind by one edit.
-  cuLoad({ silent: true });
+  if (ta && CU_DRAFT) CU_DRAFT.note = String(ta.value || '');
+  cuPaintAutoFoot();
+  cuTouch();
 }
 
 function cuRenderDetail() {
@@ -2284,17 +2356,39 @@ function cuShowModal(sel) {
   el.classList.add('show');
 }
 
+// The modal edits the DRAFT, not the saved record, and every field saves
+// itself: the name on the pause, the email when you leave it (a half-typed
+// address is not worth refusing), gender and birthday when picked. The phone
+// number is the exception and keeps its own Save — see cuSavePhone.
 function cuOpenEdit() {
-  const c = CU_CURRENT.customer;
-  $('#cu-edit-nickname').value = c.nickname || '';
+  const c = CU_CURRENT.customer, d = CU_DRAFT || cuDraftFrom(c);
+  $('#cu-edit-nickname').value = d.nickname;
   $('#cu-edit-phone').value    = c.phone || '';
-  $('#cu-edit-email').value    = c.email || '';
-  $('#cu-edit-gender').value   = c.gender == null ? '' : String(c.gender);
-  $('#cu-edit-birthday').value = c.birthday || '';
+  $('#cu-edit-email').value    = d.email;
+  $('#cu-edit-gender').value   = d.gender;
+  $('#cu-edit-birthday').value = d.birthday;
+  cuErrClear(['cu-edit-phone-err', 'cu-edit-phone-field'], ['cu-edit-email-err', 'cu-edit-email-field']);
+  const bind = (sel, ev, field) => { const el = $(sel); if (el) el['on' + ev] = () => { if (CU_DRAFT) CU_DRAFT[field] = el.value; cuTouch(); }; };
+  bind('#cu-edit-nickname', 'input', 'nickname');
+  bind('#cu-edit-email', 'change', 'email');
+  bind('#cu-edit-gender', 'change', 'gender');
+  bind('#cu-edit-birthday', 'change', 'birthday');
+  const ph = $('#cu-edit-phone'), phs = $('#cu-edit-phone-save');
+  if (ph && phs) {
+    phs.hidden = true;
+    ph.oninput = () => { phs.hidden = ph.value.replace(/\s+/g, '') === String(c.phone || ''); };
+  }
   // Tier is auto-derived from lifetime_spend — no input here.
+  cuPaintAutoFoot();
   cuShowModal('#cu-edit-bg');
 }
-function cuCloseEdit() { $('#cu-edit-bg').classList.remove('show'); }
+// Closing is leaving: the pending edit goes, then the drawer is redrawn so the
+// header shows the name that was just saved.
+async function cuCloseEdit() {
+  $('#cu-edit-bg').classList.remove('show');
+  if (CU_AUTO) await CU_AUTO.flush();
+  if (CU_CURRENT) cuRenderDetail();
+}
 
 // ── Create a customer by hand — walk-in / phone order that never used the app.
 // The server mints a synthetic 'manual:' identity and reuses-by-phone, so this
@@ -2523,28 +2617,28 @@ function cuErrText(code) {
   return m ? cuT(m[0], m[1]) : String(code || '');
 }
 
-async function cuSaveEdit() {
+// THE PHONE NUMBER KEEPS ITS BUTTON (§279). The server uses a changed number
+// to claim migration credit and reconcile sign-up vouchers, so it is sent only
+// when asked, never on a pause, and only the number is sent.
+async function cuSavePhone() {
   if (!CU_CURRENT?.customer) return;
-  cuErrClear(['cu-edit-phone-err', 'cu-edit-phone-field'], ['cu-edit-email-err', 'cu-edit-email-field']);
-  const body = {
-    nickname: $('#cu-edit-nickname').value.trim(),
-    phone:    $('#cu-edit-phone').value.trim(),
-    email:    $('#cu-edit-email').value.trim(),
-    gender:   $('#cu-edit-gender').value,
-    birthday: $('#cu-edit-birthday').value,
-  };
+  cuErrClear(['cu-edit-phone-err', 'cu-edit-phone-field']);
+  const id = CU_CURRENT.customer.id;
+  const phone = $('#cu-edit-phone').value.trim();
   try {
-    await cuWriteRequest({
-      btnId: 'cu-edit-save', url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id,
-      method: 'PATCH', body,
-      // Inline, not toasted: the two checks this can fail (email shape,
-      // duplicate phone) both point at a specific field.
+    const j = await cuWriteRequest({
+      btnId: 'cu-edit-phone-save', url: '/api/retail-admin/customers/' + id,
+      method: 'PATCH', body: { phone },
+      // Inline, not toasted: both checks this can fail point at the field.
       silent: true,
       busyLabel: cuT('Saving…', '保存中…'),
-      also: '#cu-edit-cancel',
     });
-    cuCloseEdit();
-    cuOpenDetail(CU_CURRENT.customer.id);
+    if (CU_CURRENT?.customer?.id === id) {
+      CU_CURRENT.customer.phone = (j && j.changed && 'phone' in j.changed) ? j.changed.phone : (phone || null);
+      const phs = $('#cu-edit-phone-save'); if (phs) phs.hidden = true;
+    }
+    toast(cuT('Saved', '已保存'));
+    cuLoad({ silent: true });
   } catch (e) {
     const j = e.payload || {};
     if (e.code === 'phone_taken') {

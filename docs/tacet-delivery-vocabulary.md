@@ -1,5 +1,6 @@
 # Tacet delivery vocabulary — locked
 
+**v1.191 · 2026-09-27 · §279 THE CUSTOMER RECORD SAVES ITSELF — NOTHING COMPOSED.** The customer editors (phone sheets, desktop header and Edit customer modal) lose Save / Reset / Cancel and reuse v1.189's status, Undo and history labels, plus `Done · 完成` and `Save · 保存` (the phone number's own button), both live. The history row's change words are the editors' own field labels, lifted: `name · 姓名`, `email · 邮箱`, `gender · 性别`, `birthday · 生日`, `note · 备注`, `tags · 标签`. See *The customer record's history (§279)*.
 **v1.190 · 2026-09-27 · §280 CLAIMS ON ONE PURCHASE ORDER — ONE BUTTON AND ONE REFUSAL COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The approvals queue's `Combine · 合并` tick is copied whole; `Approve on one purchase order · 合并为一张采购单` and the batch refusal are composed. See *Claims on one purchase order (§280)*.
 
 **v1.189 · 2026-09-27 · §279 THE ROLE SCREEN SAVES ITSELF — EVERY LABEL COPIED LIVE BUT FIVE, COMPOSED BY CLAUDE.** The role screen (phone and desktop) loses Save / Revert and gains a save status, *Undo* and *Version history*. Every label except five is an existing live pair, most of them from the product editor's own autosave and history: `All changes saved · 已自动保存`, `Saving… · 保存中…`, `Save failed: · 保存失败:`, `Add a name to start autosaving · 填写名称后自动保存`, `Undo · 撤销`, `Version history · 历史版本`, `Original · 原始版本`, `Current · 当前`, `Restore · 还原`, `Restore this version? · 还原此版本?`, `Restored to the chosen version. · 已还原到所选版本。`, `No versions yet — they’re saved automatically as you edit. · 暂无历史版本 — 编辑时会自动保存。`, `Close · 关闭`. The five composed are the history row's change words and its load error. See *The role screen's history (§279)*.
@@ -9039,3 +9040,20 @@ the approvals queue on desktop and phone, and one server refusal.
 
 - `合并采购单` alone: **rejected**. It reads as merging orders that already
   exist, which this does not do.
+
+## The customer record's history (§279)
+
+Register: OPERATOR — the second line of a row in *Version history* on a
+customer (`public/m.html` CUST_VER_WORDS, `public/retail-admin/08-customers.js`
+CU_VER_WORDS), naming what that version changed. Each Chinese word is the live
+label of the field it names, on the same record; the English is that label
+lower-cased.
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| name | 姓名 | **lifted** — live `Name · 姓名` (phone profile sheet) | history row |
+| email | 邮箱 | **lifted** — live `Email · 邮箱` | history row |
+| gender | 性别 | **lifted** — live `Gender · 性别` | history row |
+| birthday | 生日 | **lifted** — live `Birthday · 生日` | history row |
+| note | 备注 | **lifted** — live `Note · 备注` | history row |
+| tags | 标签 | **lifted** — live `Tags · 标签` | history row |
