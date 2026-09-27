@@ -23732,6 +23732,15 @@ const ORDER_STATUS={
   paid:['paid','Paid','已付款'],preparing:['preparing','Preparing','备货中'],dispatched:['dispatched','Dispatched','已发货'],
   delivered:['delivered','Delivered','已送达'],pending:['pending','Pending','待处理'],pending_payment:['pending','Unpaid','待付款'],
   cancelled:['cancelled','Cancelled','已取消'],refunded:['refund','Refunded','已退款'],
+  /* These two were missing, so the fallback below printed the raw column —
+     "awaiting_restock" in the pill on the list and in the sheet's title bar.
+     Both pairs are the locked operator register (docs/tacet-delivery-vocabulary.md,
+     "Order status — operator register"). Amber for the restock hold, matching
+     the desktop's st-awaiting_restock: a person may need to act on it. The
+     rider's leg is neutral, not the green of Dispatched: the desktop gives it a
+     blue this palette does not have, and green would claim it has left. */
+  awaiting_restock:['restock','Awaiting restock','等待补货'],
+  rider_pickup:['preparing','Rider coming','骑手前往取货'],
 };
 // retail_orders.channel → this screen's chip key. KNOWN LIVE DEFECT, NOT FIXED
 // HERE: the read at the order card ends `|| 'miniapp'`, so any channel absent
