@@ -53,9 +53,32 @@ function resolveTenantByHost(host) {
   return null;
 }
 
+// The operator's own tenant, from the back-office session — §276. The editor's
+// preview frames (/shop-preview, /storefront, the stage in /cms and
+// /product-editor) run on the BACK-OFFICE host, which is no storefront, and
+// they read the public /api/retail/* surface like any shopper. Before this,
+// that read fell to the default (Roots) data for every operator, so a second
+// tenant's editor showed Roots' products under the tenant's own draft. The
+// session cookie is host-scoped, so it is present exactly there and never on
+// a customer's storefront host. Same fail-safe as the two signals above: only
+// an ACTIVE, non-Roots tenant enters a scope; anything else is the default.
+function resolveSessionTenant(req) {
+  const s = req && req.session;
+  if (!s || !s.backendUserId || !s.tenantId) return null;
+  try {
+    const t = db.prepare('SELECT id, status FROM tenants WHERE id = ?').get(s.tenantId);
+    if (t && t.status === 'active' && t.id !== ROOTS_TENANT_ID) return t.id;
+  } catch (e) { /* tenants table not present yet → default */ }
+  return null;
+}
+
 // Resolve the tenant for a public request, or null for "default (Roots)".
-// Two signals, checked in order: the mini-app's AppID header, then (for the
-// browser website, which sends no such header) the request Host.
+// Three signals, checked in order: the mini-app's AppID header; then (for the
+// browser website, which sends no such header) the request Host, which
+// decides on its own whenever it IS a storefront host — Roots' included, which
+// collapses to the default; then, and only on a host that is no storefront at
+// all (the back-office host, where the editor's preview frames live), the
+// operator's session (§276).
 function resolvePublicTenant(req) {
   try {
     const appid = String(req.get('x-wx-appid') || '').trim();
@@ -64,7 +87,10 @@ function resolvePublicTenant(req) {
       if (t && t.status === 'active' && t.id !== ROOTS_TENANT_ID) return t.id;
     }
   } catch (e) { /* wx_appid column not present yet → fall through */ }
-  return resolveTenantByHost(req.hostname || req.get('host'));
+  const host = req.hostname || req.get('host');
+  const storefront = lookupStorefrontHost(host);
+  if (storefront) return storefront.tenantId !== ROOTS_TENANT_ID ? storefront.tenantId : null;
+  return resolveSessionTenant(req);
 }
 
 // Express middleware for the public /api/retail/* surface. Enters the tenant's
@@ -77,6 +103,6 @@ function publicTenantScope(req, res, next) {
 }
 
 module.exports = {
-  publicTenantScope, resolvePublicTenant,
+  publicTenantScope, resolvePublicTenant, resolveSessionTenant,
   resolveTenantByHost, lookupStorefrontHost, normalizeHost,
 };
