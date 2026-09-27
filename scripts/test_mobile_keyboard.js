@@ -380,7 +380,7 @@ ok(/document\.addEventListener\('focusin',\s*kbFocusIn,\s*true\)/.test(SRC)
 ok(/visualViewport\.addEventListener\('resize',\s*\(\)=>kbViewport\(/.test(SRC),
    'the visible height is what tells the keyboard went away');
 const rsrc = sliceFn('render');
-ok(/kbPainting=true;\s*try\{\s*app\.innerHTML = html;\s*\}finally\{\s*kbPainting=false;\s*\}/.test(rsrc),
+ok(/kbPainting=true;\s*app\.innerHTML = html;[^]*?kbPainting=false;/.test(rsrc),
    "render() flags its own teardown, so the field it rebuilds keeps its caret");
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);

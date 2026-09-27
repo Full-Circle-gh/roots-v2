@@ -29,6 +29,7 @@
     "test:saved-views": "node scripts/test_saved_views.js",
     "test:keyboard": "node scripts/test_keyboard_reach.js",
     "test:state-keys": "node scripts/test_mobile_state_keys.js",
+    "test:sheet-still": "node scripts/test_mobile_sheet_still.js",
     "test:wizard-first-question": "node scripts/test_wizard_first_question.js",
     "test:wizard-required-pick": "node scripts/test_wizard_required_pick.js",
     "test:shop-menu-limits": "node scripts/test_shop_menu_limits.js",
