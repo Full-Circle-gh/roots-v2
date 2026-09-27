@@ -95,6 +95,10 @@ const ERR = {
      refuse a third spelling in identical words. Composed here: one string, and
      it is declared in docs/tacet-delivery-vocabulary.md v1.153. */
   notApprovedPaid: 'only an approved claim can be reassigned · 仅审批通过的申请可修改付款方式',
+  // §270. One refusal for every way a batch can fail to fit: fewer than two,
+  // one already decided or on an order, one that has arrived, or two shops.
+  // Composed; declared in docs/tacet-delivery-vocabulary.md v1.181.
+  together: 'Only claims that are waiting, not yet arrived and for the same shop can go on one order · 只有同一门店、待审批且尚未到货的申请才能合并为一张采购单',
 };
 
 /* WHO MAY DECIDE. `lib/cap-routes.js` gates the decide route on
@@ -572,13 +576,24 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
    failure here rolls the approval back with it rather than leaving a claim
    approved with no order and no ledger row. */
 function raiseOrderForClaim(tx, claim) {
+  const poId = openClaimOrder(tx, claim.date, claim.note || null, claim.store_id);
+  addClaimLine(tx, poId, claim, 0);
+  return poId;
+}
+
+/* The order itself, with no lines yet. Split out for §270, which opens ONE
+   order for several claims and then adds a line per claim. */
+function openClaimOrder(tx, date, notes, storeId) {
   const po = tx.prepare(`
     INSERT INTO purchase_orders
       (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, tenant_id)
     VALUES (?,?,NULL,'Ordered',NULL,?,'manual','retail',?,NULL,?)`)
-    .run(nextRetailPONumber(tx), claim.date, claim.note || null, claim.store_id,
-         currentTenantId());
-  const poId = po.lastInsertRowid;
+    .run(nextRetailPONumber(tx), date, notes, storeId, currentTenantId());
+  return po.lastInsertRowid;
+}
+
+/* One claim, as one typed line on an order. */
+function addClaimLine(tx, poId, claim, sortOrder) {
   // ONE UNIT AT THE WHOLE PRICE. A claim records a sum and has no quantity
   // field, so one at that price is the only reading of it that cannot be wrong —
   // the same rule §111 part two applies to a cost typed into Finance. The buyer
@@ -588,9 +603,8 @@ function raiseOrderForClaim(tx, claim) {
     INSERT INTO po_line_items
       (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit,
        cost_per_unit, total_cost, expense_category, supplier_name, sort_order)
-    VALUES (?,NULL,NULL,?,NULL,NULL,1,'pcs',?,?,?,NULL,0)`)
-    .run(poId, claim.note, claim.amount, claim.amount, claim.category || null);
-  return poId;
+    VALUES (?,NULL,NULL,?,NULL,NULL,1,'pcs',?,?,?,NULL,?)`)
+    .run(poId, claim.note, claim.amount, claim.amount, claim.category || null, sortOrder);
 }
 
 router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, requireApprover, express.json(), async (req, res) => {
@@ -772,6 +786,91 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     res.json({ success: true, data: after });
   } catch (e) {
     console.error('[staff-expenses decide]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/staff-expenses/approve-together ────────────────
+/* §270 — SEVERAL NOT-ARRIVED CLAIMS, APPROVED ONTO ONE PURCHASE ORDER.
+
+   Staff buy several things for the shop, often from several online sellers,
+   and submit one claim per item with *not arrived yet* ticked. `/decide` then
+   raises one order per claim (§114), so seven cups, jars and tools became seven
+   orders to receive one by one. Ash: merging them is easier to receive.
+
+   THE APPROVER CHOOSES WHICH CLAIMS GO TOGETHER, NOT THE SYSTEM. It cannot tell
+   whether two ¥10 items came in one parcel; the person approving can.
+
+   ONE ORDER, ONE TYPED LINE PER CLAIM, each with its own price and category —
+   the same line `/decide` would have raised on its own order. Several sellers
+   on one order is already a shape Purchasing has (a line carries its own
+   supplier), and receiving is per line, so parcels arriving on different days
+   still receive cleanly.
+
+   ALL OR NOTHING. Every claim must be waiting, not yet arrived, not already on
+   an order, and for the SAME shop — an order is delivered to one door. One
+   refusal refuses the batch; nothing is half-approved.
+
+   Per-claim picks travel with it exactly as `/decide` takes them: `categories`
+   and `paid_by`, keyed by claim id, applied with the same COALESCE so a claim
+   whose pick was not sent keeps its own answer. */
+router.post('/api/retail-admin/staff-expenses/approve-together', requireRetailAdmin, requireApprover, express.json(), async (req, res) => {
+  try {
+    const db = tdb();
+    const b = req.body || {};
+    const ids = [...new Set((Array.isArray(b.ids) ? b.ids : []).map(Number))].filter(n => Number.isInteger(n) && n > 0);
+    if (ids.length < 2 || ids.length > 50) return res.status(400).json({ error: ERR.together });
+    const holes = ids.map(() => '?').join(',');
+    const claims = db.prepare(`SELECT * FROM staff_expenses WHERE id IN (${holes}) ORDER BY date, id`).all(...ids);
+    if (claims.length !== ids.length) return res.status(404).json({ error: ERR.notFound });
+    const store = claims[0].store_id;
+    const fits = claims.every(c => c.status === 'submitted' && Number(c.awaiting_delivery) === 1
+      && !c.po_id && c.store_id != null && c.store_id === store);
+    if (!fits) return res.status(409).json({ error: ERR.together });
+
+    const cats = (b.categories && typeof b.categories === 'object') ? b.categories : {};
+    const paid = (b.paid_by && typeof b.paid_by === 'object') ? b.paid_by : {};
+    for (const c of claims) {
+      const p = paid[c.id];
+      if (p != null && p !== '' && !PAID_BY.has(String(p))) return res.status(400).json({ error: CLAIM_ERR.paidBy });
+    }
+    const decidedBy = req.user?.id || null;
+    const names = submitterNames(claims.map(c => c.submitted_by));
+    const note = (b.note == null || b.note === '') ? null : String(b.note).slice(0, 500);
+
+    let poId = null;
+    await withTransaction(db, (tx) => {
+      // Dated by the EARLIEST purchase: the order is when the money started to go.
+      poId = openClaimOrder(tx, claims[0].date, null, store);
+      claims.forEach((c, i) => {
+        const filedCategory = storeCategory(tx, cats[c.id], 'accounting');
+        const filedPaidBy = paid[c.id] ? String(paid[c.id]) : null;
+        tx.prepare(`UPDATE staff_expenses
+                       SET status = 'approved', decided_by = ?, decided_at = datetime('now'), decided_note = ?,
+                           category = COALESCE(?, category), paid_by = COALESCE(?, paid_by),
+                           expense_id = NULL, po_id = ?
+                     WHERE id = ?`).run(decidedBy, note, filedCategory, filedPaidBy, poId, c.id);
+        const fresh = tx.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(c.id);
+        fresh.submitted_name = names.get(c.submitted_by) || null;
+        addClaimLine(tx, poId, fresh, i);
+        // Posts nothing — the goods have not arrived, so the ORDER carries the
+        // cost — but its DELETE still runs, exactly as on `/decide`.
+        const expenseId = postClaim(tx, fresh);
+        tx.prepare('UPDATE staff_expenses SET expense_id = ? WHERE id = ?').run(expenseId, c.id);
+      });
+    });
+    // After the commit, where `/decide` posts its order too.
+    postRetailPOExpenses(poId);
+
+    for (const c of claims) {
+      logActivity(decidedBy, req.user?.username || null, 'approve', 'staff_expense', c.id,
+        { amount: fen(c.amount), po_id: poId, together: claims.length,
+          self: c.submitted_by === decidedBy }, req.ip);
+    }
+    const po = db.prepare('SELECT id, po_number FROM purchase_orders WHERE id = ?').get(poId);
+    res.json({ success: true, data: { po_id: po.id, po_number: po.po_number, claims: claims.length } });
+  } catch (e) {
+    console.error('[staff-expenses approve-together]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.440
+# Tacet shared-core consolidation — decisions record, v4.441
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.441 — **§280 · SEVERAL NOT-ARRIVED CLAIMS CAN BE APPROVED ONTO ONE PURCHASE ORDER — ASH:** staff *"它们不会集中在一张PO。它是每一样物料建立一个PO。"* (RPO-0055…0064: one order per item, no supplier, 已下单), then *"它们来自多个店铺。合并到一张PO更容易处理收货。"* **CAUSE.** §114 raises one Ordered order per approved claim marked *not arrived*, and a claim carries one amount, so seven items became seven orders. **THE CHANGE.** The approvals queue (desktop and phone) gains a `合并` tick on each waiting not-arrived claim; at two or more, `合并为一张采购单 (N)` approves them together through `POST /api/retail-admin/staff-expenses/approve-together` (gated `expenses:approve` in lib/cap-routes.js). One Ordered retail order for the shop, dated by the earliest purchase, with ONE TYPED LINE PER CLAIM at its own price and category — the same line §114 would have raised alone — posted once by `postRetailPOExpenses` after the commit. Per-claim category and who-paid picks apply as on `/decide`. **THE APPROVER CHOOSES, NOT THE SYSTEM:** it cannot tell which items travelled together. Several sellers on one order is an existing Purchasing shape (per-line supplier), and receiving is per line. **REFUSED WHOLE:** fewer than two, any claim not waiting / already on an order / arrived, or two shops (an order goes to one door); nothing is half-approved. `raiseOrderForClaim` is split into `openClaimOrder` + `addClaimLine`, still the only writers of the two tables. **NOT DONE:** orders already raised stay as they are; merging existing orders is a different, riskier operation (money already posted per order). Tested by scripts/test_claims_one_order.js. Chinese: vocabulary v1.190.
 
 2026-09-27 · v4.440 — **§279 · SETTINGS SAVE THEMSELVES, WITH UNDO AND A HISTORY, THE SAME ON PHONE AND DESKTOP — DECIDED BY ASH:** *"all those setting should be auto save . no need to keep going to save button and click save . should have auto save and undo to previous version overall all app should be the same method mobile and PC"*, then *"ok"* to Claude's narrower recommendation: settings screens only, actions keep their button, the role screen first. **THE LINE CLAUDE DREW, AND WHY.** Autosave is right where the thing on screen IS the record (a name, a description, a switch). It is wrong where the screen CREATES a record or moves money or stock — a cost, an order, a refund — because a half-typed amount becomes a real row; §144 is what an autosave race already cost on products (43 paid lines sent out without their questions). Those screens keep their button. **THE PILOT.** Settings → Team → Roles, on `public/m.html` and `public/retail-admin/02-settings-ops.js`: Save and Revert are gone; an edit is sent 0.8s after the last change; the footer says Saving… / All changes saved / what failed; *Undo my changes* puts the role back as it was when this visit opened; *History* lists earlier versions and restores one. **BUILT ONCE.** `public/tacet-autosave.js` is the one engine both surfaces load (debounce, one write in flight, hold-while-invalid, visit-start undo); `lib/edit-history.js` is the one store (`edit_history`, keyed by tenant, type and key; created on first use, no migration). Other screens convert one PR at a time. **A CHANGE TO HOW BUILDS WORK, CALLED OUT:** `public/sw.js` pre-caches the new engine for the phone, and `scripts/lib/m-probe.js` inlines it the way it inlines td-datetime. No change to `.gitignore` or CI.
 
@@ -20734,3 +20736,11 @@ to the narrower form below).
    (`retail_product_versions`) until someone chooses to move them.
 5. **One screen per PR.** The role screen is first. See the v4.440 changelog
    entry.
+
+## §280 — SEVERAL NOT-ARRIVED CLAIMS CAN BE APPROVED ONTO ONE PURCHASE ORDER
+
+**Decided 2026-09-27 by Ash.** On the approvals queue the approver can tick
+waiting claims whose goods have not arrived and approve them together onto one
+purchase order, one line per claim, for one shop. The approver chooses which go
+together. Claims approved one at a time still raise one order each (§114).
+Orders already raised are not merged. See the v4.441 changelog entry.

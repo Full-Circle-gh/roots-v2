@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.190 · 2026-09-27 · §280 CLAIMS ON ONE PURCHASE ORDER — ONE BUTTON AND ONE REFUSAL COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The approvals queue's `Combine · 合并` tick is copied whole; `Approve on one purchase order · 合并为一张采购单` and the batch refusal are composed. See *Claims on one purchase order (§280)*.
+
 **v1.189 · 2026-09-27 · §279 THE ROLE SCREEN SAVES ITSELF — EVERY LABEL COPIED LIVE BUT FIVE, COMPOSED BY CLAUDE.** The role screen (phone and desktop) loses Save / Revert and gains a save status, *Undo* and *Version history*. Every label except five is an existing live pair, most of them from the product editor's own autosave and history: `All changes saved · 已自动保存`, `Saving… · 保存中…`, `Save failed: · 保存失败:`, `Add a name to start autosaving · 填写名称后自动保存`, `Undo · 撤销`, `Version history · 历史版本`, `Original · 原始版本`, `Current · 当前`, `Restore · 还原`, `Restore this version? · 还原此版本?`, `Restored to the chosen version. · 已还原到所选版本。`, `No versions yet — they’re saved automatically as you edit. · 暂无历史版本 — 编辑时会自动保存。`, `Close · 关闭`. The five composed are the history row's change words and its load error. See *The role screen's history (§279)*.
 
 **v1.188 · 2026-09-27 · §278 THE TWO STOCK ROLES STOP NAMING THE DELETED APP — TWO OPERATOR DESCRIPTIONS REWORDED BY CLAUDE, BY DELETION ONLY.** The seeded descriptions of `kitchen` and `store_stock` (`lib/roles.js`) named the Add Stock / Quick Stock app §48 deleted. Each new string is the old one with the app's name taken out and nothing added: `一家门店的“加库存”,以及待制作队列。` and `盘点本店货架。在门店内管理,不出现在团队页。`. `加库存` stays because it is the phone's own Add stock screen, not the app. See *The stock roles' descriptions (§278)*.
@@ -9021,3 +9023,19 @@ wrong" standing.
 | dashboard | 仪表盘 | **COMPOSED by Claude, lifted** — from the live `Has a dashboard · 拥有仪表盘` and `Dashboard layout · 仪表盘布局` on the same screen | history row |
 | +N permission(s) / −N permission(s) | +N 项权限 / −N 项权限 | **COMPOSED by Claude** — the counter `N 项` is live on the same screen (`N 项涉及资金`, `N 项中已开启`); `权限` is live (`Permissions · 权限`). Rejected: `新增 N 项权限`, longer than the row allows | history row |
 | Could not load the history | 无法加载历史版本 | **COMPOSED by Claude** — `无法加载…` is the live shape (`Could not load the roles. · 无法加载角色。`); `历史版本` is the live title of the list. Rejected: the recipe screen's `无法加载修改记录`, whose `修改记录` is that screen's own word, not this list's | toast |
+
+## Claims on one purchase order (§280)
+
+**Composed by Claude, 2026-09-27, under the 2026-09-06 amendment.** Operator-only:
+the approvals queue on desktop and phone, and one server refusal.
+
+| shipped | built from |
+|---|---|
+| `Combine · 合并` (the tick) | **copied whole** — live on the parcel screens |
+| `Approve on one purchase order · 合并为一张采购单` + ` (N)` | **composed.** `合并为` from the live `合并为一个包裹`; `一张采购单` live (`创建第一张采购单`, `勾选的行会生成一张采购单草稿`). The count sits outside the pair |
+| `Only claims that are waiting, not yet arrived and for the same shop can go on one order · 只有同一门店、待审批且尚未到货的申请才能合并为一张采购单` | **composed.** `同一门店` is ordinary; `待审批` and `尚未到货` are the queue's own live labels; `合并为一张采购单` is the button's own words |
+
+**Live candidates rejected.**
+
+- `合并采购单` alone: **rejected**. It reads as merging orders that already
+  exist, which this does not do.

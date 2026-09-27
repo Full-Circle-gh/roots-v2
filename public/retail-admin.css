@@ -14917,6 +14917,16 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-apr-acts .fin-apr-yes,
 #tab-finance .fin-apr-acts .fin-btn-sec { padding: 4px 14px; font-size: 14px; }
 #tab-finance .fin-apr-act button[disabled] { opacity: .55; cursor: default; }
+/* §270 — the Combine tick beside Approve, and the one button that appears once
+   two or more are ticked. The button is the same Ink as Approve: it is Approve,
+   for several claims at once. */
+#tab-finance .fin-apr-join {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 13px;
+  color: var(--td-text2); cursor: pointer; margin-right: 4px;
+}
+#tab-finance .fin-apr-joinbar { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+#tab-finance .fin-apr-joinbar .fin-apr-yes { padding: 6px 16px; font-size: 14px; }
+#tab-finance .fin-apr-joinbar .fin-apr-yes[disabled] { opacity: .55; cursor: default; }
 
 /* A decided claim's pill. THREE STATES AND NOT TWO: approved-and-settled is
    finished, approved-and-still-owed is not, and one word for both would report a
