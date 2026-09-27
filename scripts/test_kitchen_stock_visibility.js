@@ -175,7 +175,7 @@ const A = 'added-today';
    carries it — "the shelf total never reaches the screen", "the count starts at
    +0", "11 is nowhere on it" — against public/m.html's own Add stock screen.
    What survives HERE is the half that was never about a browser: the predicate
-   and today's adds. (The door went with the lockdown, §277.) Both still run. */
+   and today's adds. (The door went with the lockdown, §278.) Both still run. */
 
 if (failures.length) {
   for (const [n, m] of failures) console.log(`FAIL ${n} — ${m}`);

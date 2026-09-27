@@ -29,7 +29,7 @@
  *      runs on every request and answers `kitchen_add_only` to anything off its
  *      list. /api/restock was not on it, so the queue's own calls were refused
  *      before the capability layer got a look. That gate is gone now (decisions
- *      §277), so there is no list left for the queue to be missing from.
+ *      §278), so there is no list left for the queue to be missing from.
  *
  * What is asserted below is the real preset and the real migration logic
  * against a real sqlite database.

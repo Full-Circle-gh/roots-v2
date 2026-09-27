@@ -322,7 +322,7 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// THE STOCK-ONLY LOCKDOWN IS GONE (decisions §277, Ash, 2026-09-27). It sat
+// THE STOCK-ONLY LOCKDOWN IS GONE (decisions §278, Ash, 2026-09-27). It sat
 // here and kept a role carrying `stock_app_only` (kitchen, store_stock) inside
 // a short list of endpoints, first for the /stock app and, after §48 deleted
 // that app, for a corner of Tacet Mobile. Ash removed it knowing what that

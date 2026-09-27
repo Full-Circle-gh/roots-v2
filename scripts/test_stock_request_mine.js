@@ -28,7 +28,7 @@
  *           asker has no business reading.
  *   PART E  the screen and its DOOR went in together — the row, its capability
  *           gate and its SUBS entry. (The confined-role allowlist this also
- *           checked is gone, decisions §277.)
+ *           checked is gone, decisions §278.)
  */
 'use strict';
 

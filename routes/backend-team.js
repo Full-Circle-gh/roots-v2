@@ -856,7 +856,7 @@ router.delete('/api/backend/roles/:key', requireCap('team:permissions'), express
 //
 // A 'store_stock' operator is pinned to ONE store, and retail-inventory.js
 // refuses them another store's stock. (The server.js lockdown that also kept
-// them out of the rest of the backend is gone — decisions §277.) They are
+// them out of the rest of the backend is gone — decisions §278.) They are
 // created and removed here, from inside the store they belong to — never from
 // the Team page. All rows are scoped to the caller's tenant
 // (req.session.tenantId) and the :storeId in the path.

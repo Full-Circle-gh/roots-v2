@@ -64,7 +64,7 @@ t('a nameless role falls back to More rather than to nothing', () => {
 /* WAS: "a stock-app-only role gets no door — /m would redirect it straight
    back." True while server.js bounced that role out of Tacet Mobile; §48 step 3
    re-points the confinement AT this app, so /m is now where the role lives and
-   the door is the truest one on the page. §277 then removed the lockdown
+   the door is the truest one on the page. §278 then removed the lockdown
    altogether. It is a FLAT role — it holds none of the four tab capabilities —
    so it is named for itself, exactly as the warehouse clerk above is. */
 t('a stock clerk gets the door into Tacet Mobile, named for its role', () => {

@@ -4,7 +4,7 @@
  *
  *   node scripts/test_confined_role_home.js
  *
- * Decisions §277 (Ash, 2026-09-27) removed the stock-only lockdown: the gate in
+ * Decisions §278 (Ash, 2026-09-27) removed the stock-only lockdown: the gate in
  * server.js that kept `kitchen` and `store_stock` inside a short list of
  * endpoints, and lib/stock-app-only.js that held the list. Ash accepted what
  * that means while `tenants.rbac_enforce` is off — those roles reach the
@@ -14,7 +14,7 @@
  *
  *   1. THE GATE IS GONE, and stays gone. No second confinement grows back in
  *      server.js; when enforcement is switched on, the capability layer is what
- *      confines these roles (§277).
+ *      confines these roles (§278).
  *   2. THE BOOT DOES NOT ASK FOR A BOARD IT HAS NO SCREEN FOR. An operator on
  *      the flat tool list (kitchen, store_stock: none of the tab capabilities)
  *      has no Home board, so `loadLive` stops before the revenue read, and the
@@ -38,7 +38,7 @@ function check(label, fn) {
 function section(t) { console.log(`\n${t}`); }
 
 // ── 1. The lockdown is gone ────────────────────────────────────────────────
-section('The stock-only lockdown is gone (§277)');
+section('The stock-only lockdown is gone (§278)');
 
 const SERVER = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 

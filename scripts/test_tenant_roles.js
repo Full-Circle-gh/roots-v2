@@ -146,7 +146,7 @@ function versionOf(tid) {
   is(roles.recordFor(tB, 'store_stock').roster, 'store',
     'Store stock is managed inside its store, so it stays off the People roster');
   is(roles.recordFor(tB, 'store_stock').stockAppOnly, undefined,
-    'and it carries no stock-only lockdown — §277 removed it');
+    'and it carries no stock-only lockdown — §278 removed it');
   is(roles.seedTenant(tB), 0, 'seeding twice creates nothing (idempotent)');
 
   section('3 · resolution reads the record');
@@ -419,7 +419,7 @@ function versionOf(tid) {
   truthy(r.body.roleName && r.body.roleName.en, 'and the role’s own name travels with it');
 
   // ─────────────────────────────────────────────────────────────────────
-  section('17 · the stock-only lockdown is gone (§277)');
+  section('17 · the stock-only lockdown is gone (§278)');
   // It was a switch on the role editor and a gate in server.js that kept
   // kitchen and store_stock inside a short list of endpoints. Ash removed it:
   // with enforcement off those roles reach the backend like any other, and the
