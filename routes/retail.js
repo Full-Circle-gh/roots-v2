@@ -27476,6 +27476,9 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.channel_preorder_at,
                     o.fulfillment_short_pids, o.reroute_short_pids,
                     o.preorder_pids, o.moved_from_store,
+                    -- Read only through orderWaitingPids, which gates it on the
+                    -- live status; the column outlives the park as an audit trail.
+                    o.awaiting_restock_pids,
                     (SELECT COUNT(*) FROM retail_order_addons ad
                        WHERE ad.order_id = o.id AND ad.status = 'success') AS addon_count,
                     o.scheduled_for, o.delivery_slot_label, o.delivery_slot_kind,
@@ -27556,6 +27559,24 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     r.stock_pending = inventory.isStockPending(r.id, r.status, r.channel);
     annotateShipBy(r);   // adds ship_by_mode + dispatch_deadline for out-of-GZ ASAP orders
     annotateShipTo(r);   // adds ship_city + ship_district (or ship_pickup) for the list "Ship to" column
+    /* WHAT A PARKED ORDER IS WAITING ON, by name, so the list row can say it.
+       The row showed "Awaiting restock" and nothing else, and the only way to
+       find the short product was to open each order. The lines, not just the
+       pids, because a list row has no items to look them up in. Gated through
+       orderWaitingPids, so an order that has released reads as waiting on
+       nothing whatever the audit column still holds. A pid with no line left is
+       carried as a bare product_id so the row can say so rather than drop it. */
+    const waitPids = orderWaitingPids(r);
+    if (waitPids.size) {
+      const ids = [...waitPids];
+      const lines = tdb().prepare(
+        `SELECT product_id, name_en, name_cn, size, qty FROM retail_order_items
+          WHERE order_id = ? AND product_id IN (${ids.map(() => '?').join(',')}) ORDER BY id`
+      ).all(r.id, ...ids);
+      const seen = new Set(lines.map((l) => l.product_id));
+      r.awaiting_restock_items = lines.concat(
+        ids.filter((pid) => !seen.has(pid)).map((pid) => ({ product_id: pid })));
+    }
   }
   // Same-city courier (Qingyun) live stage for the list. Meituan mirror rows are
   // fulfilled by a Qingyun rider (Wave A links them), so the "Out for delivery"

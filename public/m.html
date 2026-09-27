@@ -4969,6 +4969,9 @@ function screenOrders(){
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
         ${o.payNote?`<div style="display:flex;align-items:center;gap:7px;color:var(--${o.payNote.sev});font-size:13px">${ic(o.payNote.icon,15)}<span>${T(...o.payNote.label)}</span></div>`:''}
+        ${o.waitingList?`<div style="display:flex;align-items:flex-start;gap:7px;color:var(--amber-ink);font-size:13px;line-height:1.45">
+          <span style="flex:none;display:flex;margin-top:1px">${ic('clock',15)}</span>
+          <span style="min-width:0;overflow-wrap:anywhere"><span style="font-weight:500">${T('Waiting on stock','等待补货')}</span> · ${escAttr(o.waitingList.map(p=>T(p[0],p[1])).join(T(', ','、')))}</span></div>`:''}
         ${o.notes?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.notes.map(nt=>
           `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${nt.sev==='muted'?PILL.muted[0]:'var(--'+nt.sev+'-tint)'};color:${nt.sev==='muted'?PILL.muted[1]:'var(--'+nt.sev+')'}">${ic(nt.icon,12)}${nt.label}</span>`).join('')}</div>`:''}
         ${o.parcels?`<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap">
@@ -24075,6 +24078,21 @@ function routingNotePair(reason){
    what the operator does next: items were added after the slip printed; the
    shipping store is short; the stock has not actually come off yet; a fapiao is
    owed. The phone showed the pill alone. */
+/* The list row's answer to "waiting on WHAT?" — the lines the server names in
+   `awaiting_restock_items` (gated there on the live status, so a released order
+   carries none). Kept as [en, zh] pairs and resolved at paint, so the language
+   toggle reaches it. A pid whose line was removed after the park shows as its
+   id rather than vanishing, the same rule as the drawer's card. */
+function listWaitingOn(r){
+  const L=Array.isArray(r&&r.awaiting_restock_items)?r.awaiting_restock_items:[];
+  if(!L.length) return null;
+  return L.map(l=>{
+    if(l.name_en==null&&l.name_cn==null) return ['#'+l.product_id,'#'+l.product_id];
+    const q=Number(l.qty)>1?' ×'+Number(l.qty):'';
+    const sz=l.size?' '+l.size:'';
+    return [(l.name_en||l.name_cn)+sz+q, (l.name_cn||l.name_en)+sz+q];
+  });
+}
 function orderNotes(r){
   const out=[];
   if(Number(r.addon_count)) out.push({sev:'amber',icon:'plus',label:T('Items added after paying','下单后加购')});
@@ -24253,6 +24271,7 @@ function mapOrderRow(r){
     // The Status cell's stack of note lines. Each is a fact about the order that
     // changes what an operator does with it, and none of them were here.
     notes: orderNotes(r),
+    waitingList: listWaitingOn(r),
     pickup: r.fulfillment_type==='pickup',
     counter: r.fulfillment_type==='counter',
     // Multi-parcel rollup, from the list query's own counts. Without it a
