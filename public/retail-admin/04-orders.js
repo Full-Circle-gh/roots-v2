@@ -514,6 +514,8 @@ function refundBadge(o) {
 const ICON_INV_OWED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><line x1="8" y1="9" x2="16" y2="9"/></svg>';
 const ICON_INV_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><polyline points="8 12 11 15 16 9"/></svg>';
 const ICON_STOCK_PENDING = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
+// The awaiting-restock line on a list row — a clock, like the phone's.
+const ICON_WAIT_STOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 // A receipt the printer never produced — on the drawer's marks line, brick.
 const ICON_PRINT_FAILED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 3 18 3 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><line x1="9" y1="15" x2="15" y2="21"/><line x1="15" y1="15" x2="9" y2="21"/></svg>';
 
@@ -1720,7 +1722,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">${acMoney(o.total)}</td>
-        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${paymentCheckLine(o)}${stockPendingBadge(o)}${invoiceLine(o)}</td>
+        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${paymentCheckLine(o)}${awaitingRestockLine(o)}${stockPendingBadge(o)}${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted oc-placed" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
@@ -2634,6 +2636,26 @@ function addonBadge(o) {
   if (!Number(o.addon_count)) return '';
   return `<span class="pill st-paid" title="${cuT('Items were added after this order was placed','下单后又加购了商品')}">`
     + `<span class="dot"></span>${cuT('Updated · 加单','加单 · Updated')}</span>`;
+}
+// List-row line: WHAT an awaiting-restock order is waiting on, so it can be
+// read without opening the drawer (awaitingRestockCard answers it there). The
+// list endpoint sends `awaiting_restock_items` only for an order parked right
+// now — it is gated server-side on the live status (orderWaitingPids), because
+// the pids column outlives the park as an audit trail. A pid whose line was
+// removed after the park arrives as a bare product_id and shows as its id,
+// the same rule as the drawer card. Brass like the other owed lines; the
+// wording is the drawer card's own pair, so no new string.
+function awaitingRestockLine(o) {
+  const L = Array.isArray(o && o.awaiting_restock_items) ? o.awaiting_restock_items : [];
+  if (!L.length) return '';
+  const names = L.map((l) => {
+    if (l.name_en == null && l.name_cn == null) return '#' + l.product_id;
+    const q = Number(l.qty) > 1 ? ' ×' + Number(l.qty) : '';
+    const sz = l.size ? ' ' + l.size : '';
+    return cuT(l.name_en || l.name_cn, l.name_cn || l.name_en) + sz + q;
+  }).join(cuT(', ', '、'));
+  return `<div class="ord-note-line is-owed is-wait" title="${escapeAttr(names)}">`
+    + `${ICON_WAIT_STOCK}<span>${cuT('Waiting on stock', '等待补货')} · ${escapeHtml(names)}</span></div>`;
 }
 // List-row / drawer badge: order is 'paid' but its real stock hasn't been
 // decremented yet — an out-of-GZ order that skipped the checkout reserve gate
