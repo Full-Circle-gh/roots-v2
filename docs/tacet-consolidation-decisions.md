@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.447
+# Tacet shared-core consolidation — decisions record, v4.448
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.448 — **§281 · A SAVE BUTTON NEVER SCROLLS OFF THE SCREEN — DECIDED BY ASH:** *"the save button if there is any and it's not auto save , the button should be in reach at any giving moment on the screen. I don't want the user to scroll finding the save button . it's not efficient"*, then *"go ahead"* to Claude's survey and three-PR plan (phone; desktop pages; desktop pop-ups). **PART 1, THE PHONE.** One shared pinned bar — `.footbar`, written by `footBar()` in `public/m.html` — replaces the inline button at the end of six long forms: New order, New broadcast (every step), Expense, Add someone, Permissions, and Confirm receipt from another shop. The role screen's autosave foot (status, Undo, Version history) is pinned the same way; *Delete role* stays at the end of the page, because a destructive button riding under the thumb is the opposite of what pinning is for. Short forms whose button already sits under two or three fields, and sheets whose foot is already outside their scroller, are left as they are. **THE KEYBOARD.** The viewport now carries `interactive-widget=resizes-content`, so on Android Chrome the keyboard shrinks the app rather than covering its bottom and the pinned bar rides above it; while the keyboard is up the tab bar steps aside (`html.kb-up`, set where `kbViewport` already decides the keyboard is up). Browsers that do not know the key ignore it and behave as before. No new words: every label moved, none was written. No schema change; no change to `.gitignore` or CI. **A CHANGE TO HOW TESTS ARE SHARDED, CALLED OUT:** the new browser suite `scripts/test_mobile_footbar.js` is listed in `scripts/run-suites.js`'s SLOW set, as every m-probe suite is.
 
 2026-09-27 · v4.447 — **§279 BATCH 5 · THE MIXED SCREENS: THREE SPLIT, THREE KEEP THEIR SAVE — ASH's *"keep going"*.** **SPLIT.** (1) The shared "Save settings" bar used to save three panels at once. Shop layout & filters and Customer service now save themselves (`SHOP_CARD`, `CS_CARD`); the bar stays on **Notifications only** — the WeChat template id, the two WeCom webhook addresses (each carries its key) and the manual-Alipay payment card — and is hidden elsewhere. (2) Store pickup: the hours and lead time save themselves (`PICKUP_CARD`); the pickup packing fee beside them keeps the view's Save, which now sends the fees alone. **KEPT, AND WHY — Claude's call under rule 2, reported to Ash rather than assumed.** *Affiliate settings*: every field but the referral-code prefix is a commission rule (rewards, share rate, duration, who earns), so there is nothing worth splitting out. *Membership tiers* and *Fresh batches*: each is ONE stored record mixing wording with money or schedule — a tier's name with its spend threshold and multiplier; a batch's popup wording with its order cut-off hours, pre-order cap and delivery platforms. Autosaving the wording would write the whole record, carrying any half-edited number beside it; splitting the record is a data change, not an autosave one. They keep their Save. Nothing new in Chinese. No schema change; no change to `.gitignore` or CI.
 
@@ -20761,3 +20763,24 @@ waiting claims whose goods have not arrived and approve them together onto one
 purchase order, one line per claim, for one shop. The approver chooses which go
 together. Claims approved one at a time still raise one order each (§114).
 Orders already raised are not merged. See the v4.441 changelog entry.
+
+## §281 — A SAVE BUTTON NEVER SCROLLS OFF THE SCREEN
+
+**Decided 2026-09-27 by Ash** (*"the button should be in reach at any giving
+moment on the screen. I don't want the user to scroll finding the save
+button"*, then *"go ahead"*).
+
+1. **Where a screen still has a button that commits** — it creates a record,
+   moves money or stock, or is not one of §279's self-saving screens — that
+   button is on the glass wherever the page is scrolled. On the phone it sits
+   in the pinned bar (`.footbar`, `footBar()`); on the desktop, in a bar pinned
+   to the bottom of the page, or a pop-up's foot outside its scrolling body.
+2. **A short form is already compliant** when its button sits directly under
+   its few fields; it is not given a bar. A bar under three fields only costs
+   room.
+3. **Destructive buttons are not pinned.** Delete stays in the page.
+4. **The keyboard is part of "on the glass".** On the phone the pinned bar
+   rides above the on-screen keyboard (`interactive-widget=resizes-content`),
+   and the tab bar steps aside while it is up.
+5. **One area per PR**, as §279 rule 5: the phone first, then the desktop's
+   pages, then its pop-ups.

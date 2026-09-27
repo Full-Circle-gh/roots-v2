@@ -11,7 +11,12 @@
      bought nothing here: the layout is already sized for a phone and the
      double-tap-zoom it was guarding against is not a hazard on any screen in
      this app. -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- interactive-widget=resizes-content (§281): on Android Chrome the keyboard
+     SHRINKS the page instead of covering its bottom, so the pinned bar holding
+     a form's button (.footbar) rides above the keyboard. The viewport script
+     below already re-measures the app when the height changes; this is what
+     makes the height change. Browsers that do not know the key ignore it. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" id="mThemeColor" content="#FBF9F4">
 <meta name="color-scheme" content="light dark">
 <!-- Order numbers and SKUs are not phone numbers. iOS Safari turns anything
@@ -544,6 +549,26 @@ input.qsnum:focus{outline:none;border-color:var(--accent);}
    see --dock-h above. Nothing about the layout changes: both children were
    already flex:none siblings of the scroller and still are, one level down. */
 .dock{flex:none}
+/* THE BUTTON NEVER LEAVES THE SCREEN (§281). Ash: *"the button should be in
+   reach at any giving moment on the screen. I don't want the user to scroll
+   finding the save button."* A form whose commit button sat at the end of a
+   long page draws it in this bar instead: stuck to the bottom of the scroller,
+   so it is on the glass wherever the page is scrolled. It must be the LAST
+   thing a screen returns, outside any padded wrapper — sticky holds only while
+   its parent is still on screen, and a bar in the middle of a page would
+   scroll away with the part above it. footBar() writes it; see there. A bar
+   with nothing in it (a screen that has nothing to commit for this person)
+   draws nothing. */
+.footbar{position:sticky;bottom:0;z-index:4;display:flex;align-items:center;gap:12px;
+  background:var(--surface-card);border-top:1px solid var(--border-default);padding:12px 16px}
+.footbar.col{flex-direction:column;align-items:stretch;gap:10px}
+.footbar:empty{display:none}
+/* A field focused near the bottom is scrolled clear of the bar, not under it. */
+.content:has(.footbar){scroll-padding-bottom:132px}
+/* WHILE THE KEYBOARD IS UP THE TAB BAR STEPS ASIDE, so the room left above the
+   keyboard goes to the field and the bar holding its button, not to five tabs
+   nobody can press mid-sentence. html.kb-up is set by kbViewport(). */
+html.kb-up .dock{display:none}
 input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-card);
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
@@ -1544,17 +1569,20 @@ function kbFocusIn(e){
   const vv=window.visualViewport; if(!vv) return;
   kbBase=vv.height; kbUp=false;
 }
+/* The page's own note that the keyboard is up — html.kb-up, which lets the tab
+   bar step aside for the pinned button bar (§281). Only ever follows kbUp. */
+function kbMark(){ const d=document.documentElement; if(d&&d.classList) d.classList.toggle('kb-up',kbUp); }
 function kbFocusOut(e){
   const t=e&&e.target;
   if(!kbPainting&&state.focus&&t&&t.id&&t.id===state.focus.id) state.focus=null;
   // Asked after the move settles: a hop to the next field is still typing.
-  setTimeout(()=>{ if(!kbField(document.activeElement)){ kbBase=null; kbUp=false; } },0);
+  setTimeout(()=>{ if(!kbField(document.activeElement)){ kbBase=null; kbUp=false; kbMark(); } },0);
 }
 function kbViewport(h){
   if(kbBase==null||!(h>0)) return;
-  if(h<kbBase-KB_OPEN_PX){ kbUp=true; return; }
+  if(h<kbBase-KB_OPEN_PX){ kbUp=true; kbMark(); return; }
   if(kbUp&&h>=kbBase-KB_SHUT_PX){
-    kbUp=false;
+    kbUp=false; kbMark();
     const on=kbField(document.activeElement);
     if(on&&on.blur) on.blur();
   }
@@ -1563,7 +1591,7 @@ document.addEventListener('focusin', kbFocusIn, true);
 document.addEventListener('focusout', kbFocusOut, true);
 if(window.visualViewport) window.visualViewport.addEventListener('resize',()=>kbViewport(window.visualViewport.height));
 // A turned phone has a different full height; measure again on the next field.
-window.addEventListener('orientationchange',()=>{ kbBase=null; kbUp=false; });
+window.addEventListener('orientationchange',()=>{ kbBase=null; kbUp=false; kbMark(); });
 
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
 /* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch for the defect this
@@ -5967,8 +5995,7 @@ function screenBcNew(){
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${bcfDots()}
     ${bodyHtml}
-    <div id="mBcfFoot" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">${bcfFootHtml()}</div>
-  </div>`;
+  </div>${footBar(bcfFootHtml(),'mBcfFoot',true)}`;
 }
 function screenPopups(){
   const list=cfgGet('popups.list',null);
@@ -7996,8 +8023,7 @@ function screenNewOrder(){
     ${onwSection(T('Order came from','订单来源'),from,'from')}
     ${onwSection(T('Payment','付款'),pay,'pay')}
     ${onwSection(T('Notes','备注'),notes,'notes')}
-    <div id="mOnwFoot" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">${onwFootHtml()}</div>
-  </div>`;
+  </div>${footBar(onwFootHtml(),'mOnwFoot',true)}`;
 }
 
 /* ---- the commands ------------------------------------------------------ */
@@ -12490,9 +12516,8 @@ function screenReceiveTransfer(){
             <span class="num" style="color:var(--amber-ink)">${xfrCount(it)} / ${xfrSent(it)}</span></div>`).join('')}</div>`:''}
         <div style="padding:0 16px 20px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
           T('Confirming puts these counts on the shelf.','确认后将按此数量入库。')}</div>
-        <div style="padding:0 16px calc(env(safe-area-inset-bottom,0px) + 16px)">
-          <button class="btn2" style="width:auto;padding:11px 26px"${x.busy?' disabled':''}
-            onclick="APP.cmd('xfrConfirm')">${x.busy?T('Saving…','保存中…'):T('Confirm receipt','确认收货')}</button></div>`;
+        ${footBar(`<button class="btn2" style="width:auto;padding:11px 26px"${x.busy?' disabled':''}
+            onclick="APP.cmd('xfrConfirm')">${x.busy?T('Saving…','保存中…'):T('Confirm receipt','确认收货')}</button>`)}`;
     }
     /* TYPING IS NO LONGER THE ONLY WAY IN (§209). Ash, off the live screen
        with a single banana on it: *"need to write manually ? not efficient"*.
@@ -14357,10 +14382,12 @@ function screenExpense(){
 
     ${storeField}
     ${x.metaErr?`<div style="font-size:13px;color:var(--brick-ink)">${x.metaErr}</div>`:''}
+  </div>${list}${/* §281: the button, the refusal it drew and the sentence under
+       it are pinned — on a phone the note and the date put Submit below the
+       fold, and "what you have sent" puts it further. */''}${footBar(`
     ${x.err?`<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:12px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',16)}</span>
       <span style="font-size:13.5px;color:var(--brick-ink)">${x.err}</span></div>`:''}
-
     <button class="cta" ${expReady()?'':'disabled style="opacity:.55"'} onclick="APP.cmd('expSend')">
       ${x.busy?T('Sending…','提交中…'):T('Submit','提交')}</button>
     ${/* THE ONE SENTENCE THAT KEEPS THIS SCREEN HONEST. §87 part one is a
@@ -14368,8 +14395,7 @@ function screenExpense(){
          pressing the button, and it is under the button rather than in a help
          page for the same reason the draft note is on the purchase request. */''}
     <span style="font-size:12px;color:var(--text-secondary);text-align:center">${T(
-      'This is not recorded in the accounts until it is approved.','审批通过后才会记入账目。')}</span>
-  </div>${list}`;
+      'This is not recorded in the accounts until it is approved.','审批通过后才会记入账目。')}</span>`,'',true)}`;
 }
 
 /* ── The commands ───────────────────────────────────────────────────────── */
@@ -19720,10 +19746,9 @@ function screenTeamPerms(){
     ${locked?tmCaption(p.isOwner
         ? T('Owner always has full access. It cannot be narrowed.','负责人始终拥有完整权限，不可缩减。')
         : p.isSelf ? T('Somebody else with permission to set permissions can change yours.','其他拥有“设置权限”许可的成员可以修改你的权限。')
-        : T('Changing this needs permission to set permissions.','修改此项需要“设置权限”的许可。'))
-      : `<button class="cta" ${t.permBusy?'disabled':''} onclick="APP.cmd('permSave')">${
-          t.permBusy?T('Saving…','保存中…'):T('Save permissions','保存权限')}</button>`}
-  </div>`;
+        : T('Changing this needs permission to set permissions.','修改此项需要“设置权限”的许可。')):''}
+  </div>${locked?'':footBar(`<button class="cta" style="flex:1" ${t.permBusy?'disabled':''} onclick="APP.cmd('permSave')">${
+          t.permBusy?T('Saving…','保存中…'):T('Save permissions','保存权限')}</button>`)}`;
 }
 /* How far this person stands from their role, counted the way the server
    counts it when it writes the override rows: a grant is something on that the
@@ -19810,8 +19835,8 @@ function screenTeamInvite(){
       tmList([tmRow({label:f.storeId?escAttr(tmStoreName(f.storeId)):T('Pick a store','请选择门店'),cmd:"APP.cmd('invStore')"})]),
       T('This is the store they run — their home and data stay on it.','这是其负责的门店——首页与数据仅限本店。')):''}
     ${roles.length?'':tmCaption(T('No roles to give yet — make one under Roles first.','暂无可分配的角色 — 请先在“角色”中创建。'))}
-    <button class="cta" ${t.invBusy?'disabled':''} onclick="APP.cmd('invSubmit')">${
-      t.invBusy?T('Adding…','添加中…'):T('Add them','添加成员')}</button></div>`;
+  </div>${footBar(`<button class="cta" style="flex:1" ${t.invBusy?'disabled':''} onclick="APP.cmd('invSubmit')">${
+      t.invBusy?T('Adding…','添加中…'):T('Add them','添加成员')}</button>`)}`;
 }
 function tmRoleDesc(key){
   const r=tmRoleRec(key);
@@ -19995,7 +20020,7 @@ function screenTeamRole(){
       hide:TM_HOISTED,
       why:true,
     })}
-    <div id="mTmRoleFoot">${tmRoleFoot()}</div></div>`;
+    ${tmRoleDeleteBtn()}</div>${footBar(tmRoleFoot(),'mTmRoleFoot')}`;
 }
 /* The footer, patched in place rather than re-rendered: every keystroke in a
    name field changes what it says, and rebuilding the screen underneath would
@@ -20014,12 +20039,20 @@ function tmRoleFoot(){
     : T('All changes saved','已自动保存');
   const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
   const undo=a&&a.canUndo();
-  return `<div style="display:flex;flex-direction:column;gap:10px">
-    <div style="font-size:12.5px;color:${tone};text-align:center">${line}</div>
-    <div style="display:flex;gap:8px">
-      ${undo?`<button class="btn2" style="flex:1" onclick="APP.cmd('roleUndo')">${T('Undo','撤销')}</button>`:''}
-      <button class="btn2" style="flex:1" onclick="APP.cmd('roleHistory')">${T('Version history','历史版本')}</button></div>
-    <button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" onclick="APP.cmd('roleDelete')">${T('Delete role','删除角色')}</button></div>`;
+  /* PINNED (§281): the role screen is the longest page on the phone and its
+     way back was at the very end of it. One row — where the role stands, then
+     the two ways back — so the bar costs one line of the screen. */
+  return `<div style="flex:1;min-width:0;font-size:12.5px;line-height:1.35;color:${tone}">${line}</div>
+    ${undo?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('roleUndo')">${T('Undo','撤销')}</button>`:''}
+    <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('roleHistory')">${T('Version history','历史版本')}</button>`;
+}
+/* Delete stays at the end of the page, NOT in the pinned bar: it is not a way
+   back, and a destructive button riding under the thumb the whole visit is the
+   opposite of what pinning is for. */
+function tmRoleDeleteBtn(){
+  const t=tmS(), r=tmRoleFind(t.roleKey);
+  if(!r||!t.canEdit) return '';
+  return `<button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" onclick="APP.cmd('roleDelete')">${T('Delete role','删除角色')}</button>`;
 }
 function tmRepaintFoot(){
   const el=document.getElementById('mTmRoleFoot');
@@ -22483,6 +22516,16 @@ function navTabs(){
   if(moreRowsFlat().length) out.push({key:'more',icon:TAB_META.more.icon,en:TAB_META.more.en,zh:TAB_META.more.zh,
                                       cmd:"APP.cmd('tab','more')",tab:'more'});
   return out;
+}
+/* THE PINNED BUTTON BAR (§281) — see .footbar in the stylesheet. The room for
+   the phone's gesture area is paid ONLY when no tab bar is drawn under it: the
+   dock already holds that room open when it is there, and paying twice leaves
+   the bar floating (the reasoning kqBackBar carries). `id` is kept on the bar
+   itself so a screen that patches its foot in place patches the CONTENT — the
+   bar element stays, and with it the sticky position mid-scroll. */
+function footBar(inner,id,col){
+  return `<div${id?` id="${id}"`:''} class="footbar${col?' col':''}" style="padding-bottom:${
+    navTabs().length?'12px':'calc(env(safe-area-inset-bottom,0px) + 12px)'}">${inner||''}</div>`;
 }
 function tabOn(t){ return state.tab===t.tab && !state.stack.length; }
 function tabbar(){
