@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.449
+# Tacet shared-core consolidation — decisions record, v4.450
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.450 — **§283 · A 发票 FOR A ONE-OFF PURCHASE NEEDS NO SUPPLIER — ASH:** staff *"它必须设置供应商才能添加发票。仅仅购买一次的物品不需要设置供应商信息。"*, then *"go"* on Claude's plan. **CAUSE.** On Purchasing → Invoices the `未指定 Unspecified` group offered only `设置供应商`, and both the add-invoice form and `POST`/`PUT /api/retail-admin/purchasing/invoices` refused an empty supplier (`supplier_required`). A 发票 for something bought once could only be recorded after inventing a supplier for it. **THE CHANGE.** The Unspecified row gains `添加发票` beside `设置供应商`. The form's supplier is optional: left empty, it offers the Unspecified lines to tick; emptying a picked supplier switches the form to them. The server files an empty supplier under the literal `未指定 Unspecified` (`invSupplierOrUnspecified`), the same string the grouping falls back to. Coverage keys on `invoice_lines`, never on `invoices.supplier`, so nothing else moves. **KEPT:** a typed name that matches no supplier is still refused — grouping keys on the string, and a free-typed name would open a near-duplicate supplier. The seller's name goes in the Note. `标记不开发票` is unchanged and remains the answer for a purchase that will never have a 发票. Tested by scripts/test_invoice_no_supplier.js and scripts/test_invoice_supplier_search.js §16–21. Chinese: vocabulary v1.195.
 
 2026-09-27 · v4.449 — **§282 · A SAVE BUTTON NEVER SCROLLS OFF THE SCREEN — DECIDED BY ASH:** *"the save button if there is any and it's not auto save , the button should be in reach at any giving moment on the screen. I don't want the user to scroll finding the save button . it's not efficient"*, then *"go ahead"* to Claude's survey and three-PR plan (phone; desktop pages; desktop pop-ups). **PART 1, THE PHONE.** One shared pinned bar — `.footbar`, written by `footBar()` in `public/m.html` — replaces the inline button at the end of six long forms: New order, New broadcast (every step), Expense, Add someone, Permissions, and Confirm receipt from another shop. The role screen's autosave foot (status, Undo, Version history) is pinned the same way; *Delete role* stays at the end of the page, because a destructive button riding under the thumb is the opposite of what pinning is for. Short forms whose button already sits under two or three fields, and sheets whose foot is already outside their scroller, are left as they are. **THE KEYBOARD.** The viewport now carries `interactive-widget=resizes-content`, so on Android Chrome the keyboard shrinks the app rather than covering its bottom and the pinned bar rides above it; while the keyboard is up the tab bar steps aside (`html.kb-up`, set where `kbViewport` already decides the keyboard is up). Browsers that do not know the key ignore it and behave as before. No new words: every label moved, none was written. No schema change; no change to `.gitignore` or CI. **A CHANGE TO HOW TESTS ARE SHARDED, CALLED OUT:** the new browser suite `scripts/test_mobile_footbar.js` is listed in `scripts/run-suites.js`'s SLOW set, as every m-probe suite is. (Written as §281 on its branch; §281 went to the salad write-off, v4.448, first.)
 
@@ -20797,3 +20799,11 @@ button"*, then *"go ahead"*).
    and the tab bar steps aside while it is up.
 5. **One area per PR**, as §279 rule 5: the phone first, then the desktop's
    pages, then its pop-ups.
+
+## §283 — A 发票 FOR A ONE-OFF PURCHASE NEEDS NO SUPPLIER
+
+**Decided 2026-09-27 by Ash.** On Purchasing → Invoices a 发票 can be recorded
+against lines in the Unspecified group without naming a supplier; it is filed
+under `未指定 Unspecified`. A typed name that matches no supplier is still
+refused, so no near-duplicate suppliers are created. See the v4.450 changelog
+entry.
