@@ -10281,6 +10281,16 @@
   #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-chips,
   #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-foot { column-span: all; }
   #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-chips { margin: 0 0 8px; }
+  /* §282 — the channel screens' Save / Next stays on screen. The foot sticks to
+     the bottom of whatever scrolls it: the overlay's .cfg-host, or the window
+     when the same card renders inline on Sales. In the card it reaches out over
+     the card's 24px padding; in the overlay's two-column layout the card has no
+     padding or ground of its own, so it sits flush on the sheet's paper. */
+  :is(#tab-sales, .cfg-host) .mc-wiz > .mc-foot {
+    position: sticky; bottom: 0; z-index: 3; background: var(--td-surface);
+    margin: 20px -24px -24px; padding: 16px 24px 20px; border-radius: 0 0 14px 14px; }
+  #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-foot {
+    margin: 0; padding: 14px 0 16px; background: var(--td-paper); border-radius: 0; }
   #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-sec {
     break-inside: avoid;
     margin: 0 0 16px; padding: 16px 18px;
@@ -10918,6 +10928,15 @@
   #prod-view-purchasing .pu2-modal-head h2 { font-size: 17px; font-weight: 500; }
   #prod-view-purchasing .pu2-modal-body { padding: 18px 22px; }
   #prod-view-purchasing .pu2-modal-foot { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--td-border); }
+  /* §282 — EVERY purchasing pop-up keeps its foot on screen: the body scrolls
+     inside the shell, the head and the foot do not. It was only the two
+     kitchen pickers below; the invoice, set-supplier and re-match pop-ups
+     scrolled as one block, so a long allocation list carried Save off the
+     bottom. Every .pu2-modal is head / body / foot as direct children. */
+  #prod-view-purchasing .pu2-modal { display: flex; flex-direction: column; overflow: hidden; }
+  #prod-view-purchasing .pu2-modal > .pu2-modal-head,
+  #prod-view-purchasing .pu2-modal > .pu2-modal-foot { flex: none; }
+  #prod-view-purchasing .pu2-modal > .pu2-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
   #prod-view-purchasing .pu2-fgrid.three { grid-template-columns: 1fr 1fr 1fr; }
   #prod-view-purchasing .pu2-alloc-head { display: flex; align-items: center; margin: 20px 0 8px; }
   #prod-view-purchasing .pu2-alloclist { border: 1px solid var(--td-border); border-radius: 10px; overflow: hidden; }
