@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.188 · 2026-09-27 · §278 THE TWO STOCK ROLES STOP NAMING THE DELETED APP — TWO OPERATOR DESCRIPTIONS REWORDED BY CLAUDE, BY DELETION ONLY.** The seeded descriptions of `kitchen` and `store_stock` (`lib/roles.js`) named the Add Stock / Quick Stock app §48 deleted. Each new string is the old one with the app's name taken out and nothing added: `一家门店的“加库存”,以及待制作队列。` and `盘点本店货架。在门店内管理,不出现在团队页。`. `加库存` stays because it is the phone's own Add stock screen, not the app. See *The stock roles' descriptions (§278)*.
+
 **v1.187 · 2026-09-26 · §274 THE WEB SHOP TAB'S SORT MENU — FIVE CUSTOMER PAIRS COPIED FROM THE MINI APP, NOTHING COMPOSED.** `Featured · 推荐`, `Newest · 最新`, `Price ↑ · 价格 ↑`, `Price ↓ · 价格 ↓`, `Popular · 热门` are `miniapp/pages/shop/shop.js`'s own `SORT_OPTIONS`, title-cased for the web where the app's are upper-case chips; the web's older `推荐排序` and `Price: low to high` forms are retired for them, so both surfaces say the same thing. See *The web Shop tab (§274)*.
 
 **v1.186 · 2026-09-26 · §273 ADDENDUM THE PRODUCT EDITOR'S STAGE — NOTHING COMPOSED.** The product page editor's new Desktop ⇄ Phone switch reuses v1.183's `Desktop · 电脑`, `Phone · 手机` and their two tooltips, as `EN · 中文` text nodes the global pass splits. Its frame's address line is `draft · 草稿`, live in the Mini App Editor's own drawer.
@@ -8988,3 +8990,15 @@ Shop tab, phone and PC (`public/shop.html`, `SHOP_SORT_LABELS`).
 | Price ↓ | 价格 ↓ | **COPIED** — same source | sort menu |
 | Popular | 热门 | **COPIED** — same source | sort menu |
 | Sort | 排序 | **COPIED** — the aria-label on the phone list's control; `排序` is live in the back office (`精选(手动排序)`) | phone sort control |
+
+## The stock roles' descriptions (§278)
+
+Register: OPERATOR — the one-line description under a role's name on the
+role screen and the invite picker (`lib/roles.js` CARRIED_ROLES; carried onto
+already-seeded tenants by `migrateStockRoleDescriptions`, only where the
+tenant never typed over the old text).
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| Add stock for one store, and the queue of what has been asked for. | 一家门店的“加库存”,以及待制作队列。 | **COMPOSED by Claude, by deletion** — the old live `一家门店的“加库存”应用,以及待制作队列。` minus `应用` (app). `加库存` is the phone's Add stock screen title, live. Rejected: keeping `应用`, which names the deleted app | kitchen role |
+| Counts one store’s shelves. Managed inside that store, not on the Team page. | 盘点本店货架。在门店内管理,不出现在团队页。 | **COMPOSED by Claude, by deletion** — the old live `在“快速库存”中盘点本店货架。在门店内管理,不出现在团队页。` minus `在“快速库存”中`; `盘点本店货架` was already lifted the same way (*One staff app, one card*, 2026-09-08). Rejected: `在“手机库存”中…`, which swaps one app name for another | store_stock role |

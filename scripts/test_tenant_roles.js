@@ -559,6 +559,49 @@ function versionOf(tid) {
   falsy(heldAsk(), 'so a tenant’s decision to take it away survives the restart');
 
   // ─────────────────────────────────────────────────────────────────────
+  section('20 · the stock roles stop naming the deleted app (§278)');
+  // Old tenants were seeded with "the Add Stock app" / "the Quick Stock app".
+  // A description nobody typed over gets the new words; one a tenant wrote is
+  // theirs, per field and per language.
+  const tD = mkTenant('Stock description test');
+  mkUser(tD, 'd_owner', 'owner');
+  mkUser(tD, 'd_cook', 'kitchen');
+  mkUser(tD, 'd_clerk', 'store_stock');
+  roles.seedTenant(tD);
+  const OLD_K_EN = 'The Add Stock app for one store, and the queue of what has been asked for.';
+  const OLD_K_CN = '一家门店的“加库存”应用,以及待制作队列。';
+  const OLD_S_CN = '在“快速库存”中盘点本店货架。在门店内管理,不出现在团队页。';
+  const setDesc = db.prepare('UPDATE tenant_roles SET desc_en = ?, desc_cn = ? WHERE tenant_id = ? AND role_key = ?');
+  // kitchen: both fields still the old seed. store_stock: English typed by the
+  // tenant, Chinese still the old seed.
+  setDesc.run(OLD_K_EN, OLD_K_CN, tD, 'kitchen');
+  setDesc.run('Our shelf counter', OLD_S_CN, tD, 'store_stock');
+  db.prepare('DELETE FROM _migrations WHERE name = ?').run(roles.STOCK_DESC_MIGRATION);
+  roles.invalidate(tD);
+  const vBefore = db.prepare('SELECT roles_version v FROM tenants WHERE id = ?').get(tD).v || 0;
+
+  truthy(roles.migrateStockRoleDescriptions() > 0, 'the boot migration rewrites');
+  roles.invalidate(tD);
+  const k = roles.recordFor(tD, 'kitchen');
+  const st = roles.recordFor(tD, 'store_stock');
+  is(k.descEn, 'Add stock for one store, and the queue of what has been asked for.', 'the kitchen English no longer names an app');
+  is(k.descCn, '一家门店的“加库存”,以及待制作队列。', 'nor does its Chinese');
+  is(st.descEn, 'Our shelf counter', 'a description the tenant typed is left exactly as typed');
+  is(st.descCn, '盘点本店货架。在门店内管理,不出现在团队页。', 'while the untouched Chinese beside it is reworded');
+  truthy((db.prepare('SELECT roles_version v FROM tenants WHERE id = ?').get(tD).v || 0) > vBefore,
+    'and the tenant is bumped, so open screens read the new words');
+  falsy(/app\b|应用|快速库存/i.test([k.descEn, k.descCn, st.descCn].join(' ')), 'no trace of the app is left');
+
+  setDesc.run(OLD_K_EN, OLD_K_CN, tD, 'kitchen');
+  roles.invalidate(tD);
+  is(roles.migrateStockRoleDescriptions(), 0, 'a second boot rewrites nothing — the ledger says done');
+
+  // The seed itself: a tenant seeded from today gets the new words directly.
+  const fresh = roles.CARRIED_ROLES.filter(r => r.key === 'kitchen' || r.key === 'store_stock');
+  falsy(fresh.some(r => /Add Stock app|Quick Stock app|应用|快速库存/.test(r.descEn + r.descCn)),
+    'and the seed no longer carries the old words');
+
+  // ─────────────────────────────────────────────────────────────────────
   server.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

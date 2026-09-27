@@ -346,6 +346,10 @@ try {
   // rows that already hold the finance/approval capabilities this rides beside.
   const voids = roles.migrateExpenseCancelCap();
   if (voids) console.log('[backend-auth] granted expenses:cancel to ' + voids + ' role(s)');
+  // §278: the kitchen and store-stock descriptions stop naming the deleted
+  // app, on every row whose description nobody has typed over.
+  const descs = roles.migrateStockRoleDescriptions();
+  if (descs) console.log('[backend-auth] reworded ' + descs + ' stock role description(s)');
 } catch (e) {
   // Seeding is best-effort by design. An unseeded tenant resolves from
   // presetCapsFor exactly as it did before roles became data.
