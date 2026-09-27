@@ -93,6 +93,7 @@ class El {
     this.parentEl = null;
     this.blurs = 0;
   }
+  get id() { return this._a.id || ''; }   // a real element reflects the attribute
   getAttribute(k) { return k in this._a ? this._a[k] : null; }
   setAttribute(k, v) { this._a[k] = String(v); }
   hasAttribute(k) { return k in this._a; }
@@ -297,6 +298,90 @@ for (const [id, what] of [['mExpNote', 'the expense claim note'], ['mTmPass', 't
   ok(!/type="(date|file|checkbox|radio)"/.test(tag),
      `...and is a typed field, so the Done-key pass reaches it`);
 }
+
+console.log('\n══ 7 · a keyboard the phone put away lets go of its field ══');
+/* "the keyboard sometimes pops up with no reason at all" — Settings → Team, and
+   a role. Android's down-arrow hides the keyboard and leaves the field focused,
+   and a focused field is one the phone hands the keyboard back to by itself. */
+const timers = [];
+const vv = { height: 800 };
+Object.assign(sandbox, { window: { visualViewport: vv }, setTimeout: (f) => timers.push(f), state: { focus: null } });
+const settle = () => { while (timers.length) timers.shift()(); };
+const kbVar = (n) => vm.runInContext(n, sandbox);
+vm.runInContext(SRC.match(/^const KB_OPEN_PX=.*$/m)[0], sandbox, { filename: 'm.html#KB_OPEN_PX' });
+vm.runInContext(sliceLet('kbBase'), sandbox, { filename: 'm.html#kbBase' });
+for (const fn of ['kbFocusIn', 'kbFocusOut', 'kbViewport']) {
+  vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });
+}
+const { kbFocusIn, kbFocusOut, kbViewport } = sandbox;
+const enter = (el) => { doc.activeElement = el; kbFocusIn({ target: el }); return el; };
+const leave = (el, to) => { doc.activeElement = to || body; kbFocusOut({ target: el }); settle(); };
+
+const roleName = enter(input({ id: 'mTmRoleEn' }));
+eq(kbVar('kbBase'), 800, 'the full height is read when the field takes focus, before the keyboard rises');
+kbViewport(480);
+eq(roleName.blurs, 0, 'the keyboard rising takes nothing away');
+kbViewport(470);
+eq(roleName.blurs, 0, '...nor does it changing height while up (a pinyin candidate bar)');
+kbViewport(800);
+eq(roleName.blurs, 1, 'the keyboard put away by the phone blurs the field it left behind');
+leave(roleName);   // the focusout a real blur fires
+eq(kbVar('kbBase'), null, '...and with nothing focused there is nothing left to measure');
+
+const noKb = enter(input({ id: 'mTmRoleCn' }));
+kbViewport(760);
+kbViewport(800);
+eq(noKb.blurs, 0, 'a view that never shrank past a keyboard (toolbar, floating keyboard) blurs nothing');
+leave(noKb);
+
+vv.height = 800;
+const first = enter(input({ id: 'mTmRoleEn' }));
+kbViewport(480);
+vv.height = 480;
+const second = input({ id: 'mTmRoleCn' });
+leave(first, second); kbFocusIn({ target: second });
+eq(kbVar('kbBase'), 800, 'hopping to the next field keeps the height measured before the keyboard rose');
+kbViewport(800);
+eq(second.blurs, 1, '...so putting the keyboard away from the second field still lets go of it');
+leave(second);
+
+const sel = new El('select'); doc.activeElement = sel; kbFocusIn({ target: sel });
+eq(kbVar('kbBase'), null, 'a <select> opens a picker, not a keyboard, and is not measured');
+doc.activeElement = body;
+
+console.log('\n══ 8 · a caret request dies with its field ══');
+/* Five search boxes arm state.focus on every keystroke and repaint only their
+   results. Left armed after the keyboard was put away, the next full paint of
+   the screen put the caret back and opened the keyboard. */
+const rcpQ = enter(input({ id: 'mRcpQ' }));
+sandbox.state.focus = { id: 'mRcpQ', pos: 2 };
+leave(rcpQ);
+eq(sandbox.state.focus, null, 'leaving the field cancels its caret request');
+
+const wstQ = enter(input({ id: 'mWstQ' }));
+sandbox.state.focus = { id: 'mWstQ', pos: 1 };
+vm.runInContext('kbPainting=true', sandbox);
+kbFocusOut({ target: wstQ });
+vm.runInContext('kbPainting=false', sandbox);
+eq(JSON.stringify(sandbox.state.focus), '{"id":"mWstQ","pos":1}',
+   'render() tearing the field down is NOT leaving it — that is the paint the request exists to survive');
+settle();
+
+sandbox.state.focus = { id: 'mOrdNote' };
+const other = enter(input({ id: 'mOnwCustQ' }));
+leave(other);
+eq(JSON.stringify(sandbox.state.focus), '{"id":"mOrdNote"}',
+   'leaving a different field leaves a request for a field about to be drawn alone');
+
+console.log('\n══ 9 · both rules are wired into the shipped app ══');
+ok(/document\.addEventListener\('focusin',\s*kbFocusIn,\s*true\)/.test(SRC)
+   && /document\.addEventListener\('focusout',\s*kbFocusOut,\s*true\)/.test(SRC),
+   'focus in and out are watched once, for the whole app');
+ok(/visualViewport\.addEventListener\('resize',\s*\(\)=>kbViewport\(/.test(SRC),
+   'the visible height is what tells the keyboard went away');
+const rsrc = sliceFn('render');
+ok(/kbPainting=true;\s*app\.innerHTML = html;[^]*?kbPainting=false;/.test(rsrc),
+   "render() flags its own teardown, so the field it rebuilds keeps its caret");
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
