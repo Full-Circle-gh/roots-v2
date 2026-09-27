@@ -775,6 +775,88 @@ document.addEventListener('visibilitychange', () => {
   AUTOSAVE_ENGINES.forEach(g => { const a = g(); if (a && a.busy()) a.flush(); });
 });
 
+// ── A settings card that saves itself (decisions §279) ───────────────────────
+// For the cards that write a handful of shop-settings keys through
+// PUT /api/retail-admin/config. The card's Save button is replaced by a foot
+// (<div data-as-foot="CARD">) showing the status, Undo and Version history; the
+// history is kept per card on the server (`?history=CARD`).
+//
+//   const c = autosaveCard({
+//     card:  'delivery.holiday',             // the history key; one per card
+//     root:  element holding the fields      // input/change inside it = an edit
+//     read:  () => ({ 'key.a': …, 'key.b': … }),   // fixed key order
+//     apply: (body) => { …put body back into the fields… },  // Undo / restore
+//     hold:  (body) => '' | 'why not yet',   // optional
+//     after: (body) => { … },                // optional, once a save lands
+//   });
+//   …then, ONCE THE FIELDS HAVE BEEN FILLED FROM THE SERVER, c.start().
+//
+// NOTHING IS SENT BEFORE start(). A card whose load failed shows empty boxes,
+// and a card that saved on the first keystroke over empty boxes would write
+// those blanks over the real settings — the shape of the §144 race that cost
+// 43 paid lines. A text box saves on the pause; a number, a date, a select, a
+// switch, or any field marked data-as-commit saves when it is left or flipped,
+// so a half-typed number is never sent.
+function autosaveCard(o) {
+  const card = { engine: null };
+  const foot = () => document.querySelector('[data-as-foot="' + o.card + '"]');
+  const paint = () => {
+    const el = foot(); if (!el) return;
+    const a = card.engine, st = a ? a.state : 'saved';
+    if (!el._built) {
+      el._built = true;
+      el.classList.add('as-foot');
+      el.innerHTML = `<span class="muted as-stat"></span>`
+        + `<button type="button" class="btn btn-sm as-undo" hidden>${escapeHtml(cuT('Undo', '撤销'))}</button>`
+        + `<button type="button" class="btn btn-sm as-hist">${escapeHtml(cuT('Version history', '历史版本'))}</button>`;
+      el.querySelector('.as-undo').addEventListener('click', () => card.undo());
+      el.querySelector('.as-hist').addEventListener('click', () => card.history());
+    }
+    const stat = el.querySelector('.as-stat');
+    stat.textContent = !a ? ''
+      : st === 'saving' || st === 'pending' ? cuT('Saving…', '保存中…')
+      : st === 'hold' ? a.message
+      : st === 'error' ? cuT('Save failed: ', '保存失败:') + (a.message || '')
+      : cuT('All changes saved', '已自动保存');
+    stat.classList.toggle('is-bad', st === 'error');
+    stat.classList.toggle('is-held', st === 'hold');
+    el.querySelector('.as-undo').hidden = !(a && a.canUndo());
+  };
+  const commits = (t) => t.matches('input[type="number"], input[type="date"], input[type="time"], input[type="checkbox"], input[type="radio"], select, [data-as-commit]');
+  const root = typeof o.root === 'string' ? document.querySelector(o.root) : o.root;
+  if (root && !root._asWired) {
+    root._asWired = true;
+    root.addEventListener('input', (e) => { if (!commits(e.target) && card.engine) card.engine.touch(); });
+    root.addEventListener('change', (e) => { if (commits(e.target) && card.engine) card.engine.touch(); });
+  }
+  card.start = () => {
+    if (typeof TacetAutosave === 'undefined') return;
+    if (card.engine) card.engine.stop();
+    card.engine = TacetAutosave.create({
+      read: o.read,
+      hold: o.hold,
+      send: (body, note) => api('/api/retail-admin/config?history=' + encodeURIComponent(o.card) + (note ? '&note=' + note : ''),
+        { method: 'PUT', body }).then(() => { if (o.after) o.after(body); }),
+      onChange: paint,
+    });
+    card.engine.start();
+    paint();
+  };
+  card.touch = () => { if (card.engine) card.engine.touch(); };
+  card.flush = (note) => (card.engine ? card.engine.flush(note) : Promise.resolve());
+  card.undo = () => { if (card.engine) card.engine.undo((b) => o.apply(b)); };
+  card.history = async () => {
+    if (!card.engine) return;
+    const v = await autosavePickVersion(card.engine, '/api/retail-admin/config/history?card=' + encodeURIComponent(o.card), null);
+    if (!v || !card.engine) return;
+    o.apply(v.snapshot || {});
+    await card.engine.flush('restore');
+    if (card.engine.state === 'saved') toast(cuT('Restored to the chosen version.', '已还原到所选版本。'), 'ok');
+  };
+  autosaveRegister(() => card.engine);
+  return card;
+}
+
 // ── Tenant display currency ────────────────────────────────────────────────
 // The tenant's currency is a stored setting, not a constant: storefront_config
 // key `currency`, normalised server-side by routes/retail.js normalizeCurrency()

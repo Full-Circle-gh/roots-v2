@@ -243,8 +243,9 @@ it('every field the server reads has a box on the card', () => {
   }
 });
 
+// §279: the card saves itself; preorderBody() is what every save sends.
 it('the save writes one key, whole, with every field on it', () => {
-  const fn = grab(DELIVERY, 'savePreorderNotice');
+  const fn = grab(DELIVERY, 'preorderBody');
   assert.ok(/'notice\.preorder': \{/.test(fn), 'one key, matching batch.schedule');
   for (const f of ['kicker_en', 'kicker_cn', 'title_en', 'title_cn',
     'message_en', 'message_cn', 'min_days', 'max_days']) {
@@ -260,8 +261,10 @@ it('the load fills the card from the same key the save writes', () => {
 });
 
 it('the card warns when {window} is typed with no days behind it', () => {
-  const fn = grab(DELIVERY, 'savePreorderNotice');
-  assert.ok(/wantsWindow/.test(fn) && /lo == null/.test(fn),
+  const at = DELIVERY.indexOf("DLV_CARDS.preorder = autosaveCard(");
+  assert.ok(at > -1, 'the pre-order card is an autosaving card');
+  const fn = DELIVERY.slice(at, DELIVERY.indexOf('\n});', at));
+  assert.ok(/wantsWindow/.test(fn) && /p\.min_days == null/.test(fn),
     'the operator learns it here, not from a customer at a checkout');
 });
 
