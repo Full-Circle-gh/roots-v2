@@ -208,5 +208,35 @@ it("the staff screens number the photos — never 'Rider 1 / Rider 2', which rea
   assert.ok(/`Photo · 照片`/.test(read('docs/tacet-delivery-vocabulary.md')), 'Photo · 照片 not declared');
 });
 
-console.log(`\n${pass} passed, ${fails.length} failed`);
-if (fails.length) process.exit(1);
+// ── 6. The phone can actually open one ─────────────────────────────────────
+// The phone's api() strips the route's {success, data} envelope; the desktop's
+// does not. The phone's viewers were written in the desktop's shape
+// (j.data.data), so every tap on a chip said "Photo not found" while the photo
+// sat in the database. This runs the phone's REAL api() against the route's
+// REAL answer and then the viewers' own read of it.
+async function phoneOpensPhoto() {
+  const src = read('public/m.html');
+  const at = src.indexOf('async function api(path){');
+  assert.ok(at > 0, 'phone api() not found');
+  const apiSrc = src.slice(at, src.indexOf('\n}\n', at) + 2);
+  const URI = 'data:image/jpeg;base64,/9j/AA==';
+  const fetch = async () => ({ status: 200, ok: true,
+    json: async () => ({ success: true, data: { data: URI } }) });   // the route's shape
+  const api = new Function('fetch', 'apiURL', 'location', `${apiSrc}; return api;`)(fetch, (p) => p, {});
+  const j = await api('/orders/1/delivery-photo?key=r1');
+  for (const cmd of ["reg('dphView'", "reg('dcViewEv'"]) {
+    const i = src.indexOf(cmd);
+    assert.ok(i > 0, cmd);
+    const m = /const data=([^;]+);/.exec(src.slice(i, src.indexOf('\n});', i)));
+    assert.ok(m, `${cmd}: no "const data=" read`);
+    const got = new Function('j', `return (${m[1]});`)(j);
+    assert.strictEqual(got, URI, `${cmd}: reads ${m[1]} and finds no picture`);
+  }
+}
+
+phoneOpensPhoto().then(() => { pass++; console.log('  ✓ the phone opens a stored photo (dphView, dcViewEv)'); },
+  (e) => { fails.push(['phone opens photo', e.message]); console.log('  ✗ the phone opens a stored photo\n      ' + e.message); })
+  .then(() => {
+    console.log(`\n${pass} passed, ${fails.length} failed`);
+    if (fails.length) process.exit(1);
+  });
