@@ -2059,7 +2059,10 @@ reg('dcViewEv', (sid,fid)=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null) return;
   api('/orders/'+o._id+'/delay-case/evidence/'+fid+'?shipment_id='+sid).then(j=>{
-    const data=j&&j.data&&j.data.data;
+    // api() has already taken the route's {success,data} envelope off, so the
+    // picture is j.data. Reading j.data.data (the desktop's shape, whose api()
+    // keeps the envelope) found nothing and said "Photo not found" every time.
+    const data=j&&j.data;
     if(!data){ state.orderErr=E('Photo not found.','未找到照片。'); render(); return; }
     state.imgZoom=data; render();   // the generic full-screen viewer, not a new one
   }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
@@ -2128,7 +2131,7 @@ reg('dphView', key=>{
   const o=dphOrder();
   if(!o||o._id==null) return;
   api('/orders/'+o._id+'/delivery-photo?key='+encodeURIComponent(key||'s')).then(j=>{
-    const data=j&&j.data&&j.data.data;
+    const data=j&&j.data;   // envelope already off — see dcViewEv above
     if(!data){ state.orderErr=E('Photo not found.','未找到照片。'); render(); return; }
     state.imgZoom=data; render();   // the generic full-screen viewer
   }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
