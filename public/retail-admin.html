@@ -9490,7 +9490,9 @@
                 </div>
               </div>
             </div>
-          </div>
+            <!-- §279: the shop layout and filters save themselves. -->
+          <div data-as-foot="shop.display" style="margin-top: var(--s4);"></div>
+        </div>
 
           <!-- Categories moved to their own top-level "Categories" tab (2-level
                tree editor). Nothing category-related lives in Settings → Shop. -->
@@ -10062,6 +10064,8 @@
               </div>
             </div>
           </div>
+          <!-- §279: customer service saves itself. -->
+          <div data-as-foot="customer_service" style="margin-top: var(--s4);"></div>
         </div>
 
         <!-- ────── DELIVERY ────── (§79, 2026-09-09 — moved here from the left
@@ -10598,6 +10602,8 @@
                     One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。<br>
                     "Earliest pickup" is how many minutes after ordering the first slot opens, so staff have time to pack. 0 = customers can collect right away. · "最早可取"是下单后多少分钟才可取货,方便备货。填 0 表示可立即自取。
                   </div>
+                  <!-- §279: the hours and lead time save themselves; the packing fee below is money and keeps Save. -->
+                  <div data-as-foot="pickup" style="margin-top: 10px;"></div>
                 </div>
               </div>
             </div>
@@ -11814,7 +11820,7 @@
         </div>
 
         <!-- ────── shared save bar ────── -->
-        <div class="save-bar">
+        <div class="save-bar" style="display: none;"><!-- §279: Notifications only; the Settings switcher shows it there. -->
           <button class="btn btn-primary" onclick="saveConfig()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             Save settings · 保存设置

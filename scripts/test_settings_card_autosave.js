@@ -222,6 +222,28 @@ const run = (src) => vm.runInContext(src, sandbox);
       type + ' route: recorded around its write, only when the editor asks (?history)');
   }
 
+  section('4d · mixed screens split (batch 5)');
+  {
+    const MK = read('public/retail-admin/05-marketing.js');
+    const DV = read('public/retail-admin/06-delivery.js');
+    const CORE2 = read('public/retail-admin/01-core.js');
+    const H = read('public/retail-admin.html');
+    const sc = MK.slice(MK.indexOf('async function saveConfig() {'), MK.indexOf('// §279 — Shop layout & filters, and Customer service, save themselves.'));
+    yes(!/'shop\./.test(sc) && !/'customer_service\./.test(sc), 'the shared Save no longer sends the shop or customer-service keys');
+    yes(/'notifications\.order_status_template_id'/.test(sc) && /saveAlipayManualInline/.test(sc) && /'system_alerts\.wecom_webhook'/.test(sc),
+      'it keeps the template id, the webhooks and the manual-Alipay card — keys and money');
+    yes(/_saveBar\.style\.display = sub === 'push' \? '' : 'none'/.test(CORE2) && /<div class="save-bar" style="display: none;">/.test(H),
+      'the bar shows on Notifications only, and starts hidden (Shop is the panel open on arrival)');
+    for (const c of ['shop.display', 'customer_service', 'pickup']) {
+      yes(H.includes('data-as-foot="' + c + '"') && MK.includes("card: '" + c + "'"), c + ' saves itself');
+    }
+    yes(/function CFG_CARDS\(\) \{ return \[LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD\]; \}/.test(MK),
+      'and all three start only when loadConfig has filled them');
+    const df = DV.slice(DV.indexOf('async function saveDeliveryFees() {'), DV.indexOf('\n}\n', DV.indexOf('async function saveDeliveryFees() {')));
+    yes(!/pickup\.window|pickup\.leadMinutes/.test(df) && /fees\.pickupPackingFee/.test(df), 'the fees Save sends money only — the pickup hours left it');
+    yes(/CS_CARD\.touch\(\)/.test(MK), 'a customer-service QR upload or clear counts as an edit');
+  }
+
   section('5 · the server keeps each card’s history');
   const RETAIL = read('routes/retail.js');
   const put = RETAIL.slice(RETAIL.indexOf("router.put('/api/retail-admin/config'"));

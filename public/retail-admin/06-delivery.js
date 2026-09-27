@@ -1446,11 +1446,8 @@ async function saveDeliveryFees() {
     // Minimum-order checkout gate — moved here from Settings → Checkout & fees so
     // it saves alongside the other cart money rules (2026-06-08).
     'fees.minOrder':               Number($('#cfg-fees-minOrder').value) || 0,
-    'pickup.window':               {
-      open:  $('#cfg-pickup-open').value  || '10:00',
-      close: $('#cfg-pickup-close').value || '20:00',
-    },
-    'pickup.leadMinutes':          Math.max(0, Number($('#cfg-pickup-lead')?.value) || 0),
+    // Pickup hours and lead time left this Save for their own card (§279,
+    // PICKUP_CARD); what is sent here is money only.
   };
   const status = $('#dlv-fees-status');
   try {

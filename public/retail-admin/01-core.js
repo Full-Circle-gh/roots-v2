@@ -2961,8 +2961,10 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // itself (saveDeliveryZones, saveHolidayMode, the carrier forms), so a shared
   // "Save settings" over them would either do nothing or claim to have saved
   // something it never touched.
-  if (_saveBar) _saveBar.style.display =
-    (sub === 'ops' || sub === 'sku' || sub === 'history' || sub === 'sent' || sub === 'delivery') ? 'none' : '';
+  // §279: the Shop and Customer-service panels save themselves now, so the
+  // shared bar belongs to Notifications alone (template id, webhooks, the
+  // manual-Alipay card) — keys and money, which keep their button.
+  if (_saveBar) _saveBar.style.display = sub === 'push' ? '' : 'none';
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
   // Delivery opens on its hub with fresh status lines, never on whichever
