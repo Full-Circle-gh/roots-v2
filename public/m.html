@@ -1138,7 +1138,7 @@ const state = {
      own, so it has to survive the re-renders this screen does for other reasons
      — opening a receipt, another row's decision landing. Held in the DOM alone,
      checking the photo before approving would silently throw the pick away. */
-  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[],cats:[],cat:{},paid:{}},
+  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[],cats:[],cat:{},paid:{},join:{}},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -13591,6 +13591,41 @@ reg('aprDecide', (id,decision)=>{
    goes with the Approve tap. No render — the <select> already shows the choice,
    and redrawing the queue under a wheel somebody has just closed is a jump this
    screen does not need. */
+/* §270 — TICK A NOT-ARRIVED CLAIM TO GO ON ONE ORDER WITH OTHERS. */
+reg('aprJoin', (id)=>{
+  const a=state.apr; const k=Number(id);
+  if(a.join[k]) delete a.join[k]; else a.join[k]=true;
+  render();
+});
+/* §270 — APPROVE THE TICKED CLAIMS ONTO ONE PURCHASE ORDER. The per-claim picks
+   travel keyed by claim id, exactly as each would on its own Approve; the server
+   refuses a batch that does not fit (two shops, one already decided) whole. */
+reg('aprTogether', ()=>{
+  const a=state.apr;
+  if(a.busy) return;
+  const ids=Object.keys(a.join).map(Number);
+  if(ids.length<2) return;
+  const categories={}, paid_by={};
+  for(const id of ids){
+    if(a.cat[id]) categories[id]=a.cat[id];
+    const row=(a.rows||[]).find(x=>x.id===id);
+    if(a.paid[id]&&row&&a.paid[id]!==row.paid_by) paid_by[id]=a.paid[id];
+  }
+  a.busy=-1; a.err=''; render();
+  apiWrite('/staff-expenses/approve-together',{ids,categories,paid_by}).then((j)=>{
+    a.busy=0; a.tried=false; a.shot=null; a.shotFor=null;
+    for(const id of ids){ delete a.cat[id]; delete a.paid[id]; }
+    a.join={};
+    aprLoad();
+    if(window.toast) toast(T('Approved','已通过')+' · '+((j&&j.data&&j.data.po_number)||''));
+  }).catch(e=>{
+    a.busy=0;
+    if(String(e.message)==='auth') return;
+    a.err=e.message||E('Could not do that.','操作失败。');
+    render();
+  });
+});
+
 reg('aprCatPick', (id,value)=>{ state.apr.cat[Number(id)]=String(value==null?'':value); });
 
 /* §207 — WHO PAID, CHOSEN ON A CLAIM STILL WAITING. Same mechanism as the
@@ -13859,7 +13894,11 @@ function aprRow(r){
         onclick="APP.cmd('aprDecide',${r.id},'approve')">${busy?T('Working…','处理中…'):T('Approve','通过')}</button>
       <button class="btn2" style="padding:0 18px" ${busy?'disabled':''}
         onclick="APP.cmd('aprDecide',${r.id},'reject')">${T('Reject','拒绝')}</button>
-    </div>`:''}
+    </div>
+    ${/* §270 — A NOT-ARRIVED CLAIM CAN BE TICKED TO GO ON ONE ORDER WITH
+         OTHERS. Only those: a claim whose goods arrived raises no order. */''}
+    ${Number(r.awaiting_delivery)&&!r.po_id?`<button class="chip ${state.apr.join[r.id]?'on':''}" style="align-self:flex-start"
+        onclick="APP.cmd('aprJoin',${r.id})">${state.apr.join[r.id]?'✓ ':''}${T('Combine','合并')}</button>`:''}`:''}
   </div>`;
 }
 
@@ -13875,6 +13914,11 @@ function screenApprovals(){
 
   const waiting=a.rows.filter(r=>r.status==='submitted');
   const done=a.rows.filter(r=>r.status!=='submitted');
+  // §270: ticks for claims no longer waiting and not-arrived are dropped.
+  for(const k of Object.keys(a.join)){
+    if(!waiting.some(r=>r.id===Number(k)&&Number(r.awaiting_delivery)&&!r.po_id)) delete a.join[k];
+  }
+  const joinN=Object.keys(a.join).length;
 
   /* §1.12 — an empty queue is a COMPLIMENT, not a gap. There is nothing to
      retry and nothing to configure; everything that was sent has been decided. */
@@ -13922,6 +13966,7 @@ function screenApprovals(){
     ${owedBlock}
     ${waiting.length?`<div style="display:flex;flex-direction:column;gap:8px">
       <span style="font-size:12.5px;color:var(--text-secondary)">${T('Waiting','待审批')} · ${waiting.length}</span>
+      ${joinN>=2?`<button class="cta" ${a.busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('aprTogether')">${T('Approve on one purchase order','合并为一张采购单')} (${joinN})</button>`:''}
       ${block(waiting)}
       ${/* THE SENTENCE THAT MAKES THE BUTTON HONEST. It is the mirror of the one
            under Submit on the other screen: there, nothing is in the accounts
