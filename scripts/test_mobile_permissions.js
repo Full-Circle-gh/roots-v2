@@ -272,19 +272,23 @@ const CASES = [
       ['the tally counts what is on', `txt('content').includes('of 4 on')`],
       ['the dashboard is one block',  `txt('content').includes('Has a dashboard') && txt('content').includes('Dashboard layout')`],
     ], { settle: 60 }],
+  /* §279: the role saves itself. Leaving the screen sends the edit still
+     waiting on its pause, so the tick and the back are the whole gesture. */
   ['editing a role writes the whole record', STUB + AS_OWNER + TEAM +
     `APP.cmd('push','team'); APP.cmd('teamTab','roles');`, [
-      ['saving is a PUT to that role', `(function(){ APP.cmd('roleOpen','store_manager');
-         APP.cmd('tmGroup','run'); APP.cmd('roleCap','orders:refund'); APP.cmd('roleSave');
+      ['leaving sends a PUT to that role', `(function(){ APP.cmd('roleOpen','store_manager');
+         APP.cmd('tmGroup','run'); APP.cmd('roleCap','orders:refund'); APP.cmd('back');
          return ${sentWith('/api/backend/roles/store_manager', 'PUT')}; })()`],
       ['carrying the capability just added', body('"orders:refund"')],
       ['and the dashboard field, so an unset one stays unset', body('"dashboard_cards":null')],
     ], { settle: 60 }],
-  ['nothing to save is not a button that saves nothing', STUB + AS_OWNER + TEAM +
+  ['a role saves itself — there is no Save button', STUB + AS_OWNER + TEAM +
     `APP.cmd('push','team'); APP.cmd('teamTab','roles');`, [
-      ['it says so', `(function(){ APP.cmd('roleOpen','warehouse'); return txt('content').includes('No unsaved changes'); })()`],
-      ['and one tick makes it dirty', `(function(){ APP.cmd('tmGroup','sell'); APP.cmd('roleCap','products:edit');
-         return txt('content').includes('Unsaved changes'); })()`],
+      ['it says it is saved', `(function(){ APP.cmd('roleOpen','warehouse'); return txt('content').includes('All changes saved'); })()`],
+      ['with no Save button to press', `!txt('content').includes('Save ·') && !txt('content').includes('Unsaved changes')`],
+      ['and a version history', `txt('content').includes('Version history')`],
+      ['one tick and it is saving', `(function(){ APP.cmd('tmGroup','sell'); APP.cmd('roleCap','products:edit');
+         return txt('content').includes('Saving…'); })()`],
     ], { settle: 60 }],
   ['deleting a role nobody holds just asks', STUB + AS_OWNER + TEAM +
     `APP.cmd('push','team'); APP.cmd('teamTab','roles');`, [

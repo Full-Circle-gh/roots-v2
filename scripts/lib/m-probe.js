@@ -33,6 +33,7 @@ const { execFileSync } = require('child_process');
 
 const APP = path.join(__dirname, '..', '..', 'public', 'm.html');
 const TD_DATETIME = path.join(__dirname, '..', '..', 'public', 'td-datetime.js');
+const TACET_AUTOSAVE = path.join(__dirname, '..', '..', 'public', 'tacet-autosave.js');
 
 /**
  * m.html has exactly one LOCAL script dependency — /assets/td-datetime.js,
@@ -54,10 +55,15 @@ const TD_DATETIME = path.join(__dirname, '..', '..', 'public', 'td-datetime.js')
  */
 function inlineTdDatetime(src) {
   const js = fs.readFileSync(TD_DATETIME, 'utf8');
+  const auto = fs.readFileSync(TACET_AUTOSAVE, 'utf8');
   // Function replacement: `$&`/`$1` in the inlined source would otherwise be
   // read as substitution patterns.
   return src.replace(/<script src="\/assets\/td-datetime\.js"><\/script>/,
-    () => `<script data-vendor="td-datetime">${js}</script>`);
+    () => `<script data-vendor="td-datetime">${js}</script>`)
+    // The second local dependency (decisions §279): the autosave engine the
+    // Role screen saves through. Inlined for the same reason and the same way.
+    .replace(/<script src="\/assets\/tacet-autosave\.js"><\/script>/,
+      () => `<script data-vendor="tacet-autosave">${auto}</script>`);
 }
 
 function findChrome() {

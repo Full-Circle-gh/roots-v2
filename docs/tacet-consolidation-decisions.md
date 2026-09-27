@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.439
+# Tacet shared-core consolidation — decisions record, v4.440
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.440 — **§279 · SETTINGS SAVE THEMSELVES, WITH UNDO AND A HISTORY, THE SAME ON PHONE AND DESKTOP — DECIDED BY ASH:** *"all those setting should be auto save . no need to keep going to save button and click save . should have auto save and undo to previous version overall all app should be the same method mobile and PC"*, then *"ok"* to Claude's narrower recommendation: settings screens only, actions keep their button, the role screen first. **THE LINE CLAUDE DREW, AND WHY.** Autosave is right where the thing on screen IS the record (a name, a description, a switch). It is wrong where the screen CREATES a record or moves money or stock — a cost, an order, a refund — because a half-typed amount becomes a real row; §144 is what an autosave race already cost on products (43 paid lines sent out without their questions). Those screens keep their button. **THE PILOT.** Settings → Team → Roles, on `public/m.html` and `public/retail-admin/02-settings-ops.js`: Save and Revert are gone; an edit is sent 0.8s after the last change; the footer says Saving… / All changes saved / what failed; *Undo my changes* puts the role back as it was when this visit opened; *History* lists earlier versions and restores one. **BUILT ONCE.** `public/tacet-autosave.js` is the one engine both surfaces load (debounce, one write in flight, hold-while-invalid, visit-start undo); `lib/edit-history.js` is the one store (`edit_history`, keyed by tenant, type and key; created on first use, no migration). Other screens convert one PR at a time. **A CHANGE TO HOW BUILDS WORK, CALLED OUT:** `public/sw.js` pre-caches the new engine for the phone, and `scripts/lib/m-probe.js` inlines it the way it inlines td-datetime. No change to `.gitignore` or CI.
 
 2026-09-27 · v4.439 — **§278 · THE STOCK-ONLY LOCKDOWN IS REMOVED; EVERY ROLE REACHES THE BACKEND UNTIL ENFORCEMENT IS ON — DECIDED BY ASH:** *"only the add stock app - can we delete this already? we don't have only a stock app anymore right"*, then, told the switch was still the only thing keeping kitchen and stock staff out of the rest of the back office while `rbac_enforce` is off: *"I don't mind that everyone have all permissions for now, it's ok, you can switch whatever you need to fix it"*. **WHAT WENT.** The `Only the Add Stock app` switch on both role editors (`public/m.html` Team → role, `public/retail-admin/02-settings-ops.js` Roles), the gate in `server.js` that kept a role carrying `stock_app_only` inside a list of endpoints and bounced it from `/retail-admin` and `/backend/*` to `/m`, and `lib/stock-app-only.js`, the list. The team API no longer reads, writes or returns the flag; a client still posting `stock_app_only` is ignored rather than refused, and the `RBAC_FIRST` 400 ("turn enforcement on first") is gone with the only edit that could trigger it. The seed no longer sets it on `kitchen` and `store_stock`. The store picker's hint for a pinned role is the one sentence for every pinned role. **WHAT THIS MEANS, SAID PLAINLY BECAUSE IT WIDENS ACCESS:** with `tenants.rbac_enforce` off (every tenant), `kitchen` and `store_stock` operators now reach the whole backend on the server, like every other role — orders, customers, revenue, refunds, settings — and can open the desktop back office. What they SEE is still shaped by their capabilities on the client (`flatNav`, `applyCapGates`), so a kitchen phone looks the same as before. The store pin still holds where a route checks it (stock writes, production). **THE COLUMN STAYS, DORMANT.** `tenant_roles.stock_app_only` is left in place and unread, so this needed no migration; existing rows keep their 1s, which nothing consults. **WHAT CONFINES THESE ROLES NEXT** is the capability layer, once enforcement is on (`PERMISSIONS_PLAN.md` §11, shadow mode first); no second gate is to be rebuilt in `server.js`. This retires what §48's step-3 amendment left standing — *"it retires when enforcement can carry the confinement"* — ahead of that condition, by Ash's choice. **NOT CHANGED:** the `/stock` → `/m` 302 and its manifest and icon (§48 step 4); the `kitchen_add_only` answer in `routes/retail-inventory.js`, which is capability-driven (`quickstock:recount`) and was never this gate. **THE ROLE DESCRIPTIONS FOLLOW, on Ash's *"fix it"*.** The seeded descriptions of `kitchen` and `store_stock` named "the Add Stock app" / "the Quick Stock app"; the seed now says `Add stock for one store, and the queue of what has been asked for.` / `Counts one store’s shelves. …`, and `migrateStockRoleDescriptions` (boot, once-only via `_migrations`) carries the new words onto already-seeded tenants — per field and per language, and only where the row still reads exactly as the old seed wrote it, so a description a tenant typed is never touched. Both Chinese strings are the old live ones with the app's name deleted, declared in `docs/tacet-delivery-vocabulary.md` v1.188. Tests: `test_confined_role_home` now asserts the gate is gone and keeps its boot checks; `test_tenant_roles` §17 asserts the editor saves with enforcement off and ignores the old field; the allowlist checks in `test_kitchen_queue_reachable`, `test_kitchen_stock_visibility`, `test_production_log`, `test_stock_request_mine` and `test_transfer_stays_visible` went with the module they tested. Chinese: two strings removed with the switch; the two role descriptions reworded by deletion only (vocabulary v1.188). No schema change, no CI or `.gitignore` change.
 
@@ -20704,3 +20706,31 @@ allows. The capability layer confines them once enforcement is on; no second
 gate is rebuilt. `tenant_roles.stock_app_only` stays in the schema, dormant.
 The two roles' seeded descriptions stop naming the app, carried onto old
 tenants only where nobody typed over them. See the v4.439 changelog entry.
+
+## §279 — SETTINGS SAVE THEMSELVES, WITH UNDO AND A HISTORY
+
+**Decided 2026-09-27 by Ash** (*"should have auto save and undo to previous
+version overall all app should be the same method mobile and PC"*, then *"ok"*
+to the narrower form below).
+
+1. **A settings screen saves itself.** Where the thing on screen is the record
+   — a name, a description, a switch, a pick — there is no Save button. An
+   edit is sent after a short pause (0.8s); leaving the screen sends what is
+   pending. A value the server would refuse (an empty name) is held, and the
+   footer says why, rather than sent.
+2. **A screen that creates a record, or moves money or stock, keeps its
+   button.** Recording a cost, placing an order, a refund, a delivery booked to
+   stock. Autosave there turns a half-typed amount into a real row (§144 is the
+   race it already cost on products). The receive screen (§70) is the one
+   deliberate exception and keeps its own rules.
+3. **Undo and History, the same on both surfaces.** The footer's *Undo my
+   changes* puts the thing back as it was when this visit opened. *History*
+   lists earlier versions — the Original, then one per editing session — and
+   restores any of them. A restore is itself a version, so it can be undone.
+4. **Built once.** `public/tacet-autosave.js` is the one client engine, loaded
+   by the phone and the desktop; `lib/edit-history.js` and its `edit_history`
+   table are the one store. A screen converted later brings a type name and a
+   snapshot, not a new mechanism. Products keep their own older history
+   (`retail_product_versions`) until someone chooses to move them.
+5. **One screen per PR.** The role screen is first. See the v4.440 changelog
+   entry.

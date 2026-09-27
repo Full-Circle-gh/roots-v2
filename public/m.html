@@ -175,6 +175,7 @@
      A hard dependency, so it is precached with the shell in sw.js — an
      installed app whose date module is missing does not degrade, it stops. -->
 <script src="/assets/td-datetime.js"></script>
+<script src="/assets/tacet-autosave.js"></script>
 <style>
 /* ===========================================================================
    Tacet Mobile — monitoring-first phone companion.
@@ -1349,6 +1350,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
 function pop(){
   const top=state.stack.length?state.stack[state.stack.length-1].route:null;
   if(top==='receive') recvFlush();
+  if(top==='teamrole'&&tmAuto) tmAuto.flush();
   forgetScroll(); state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
@@ -18250,8 +18252,10 @@ function sheetAsk(){
        </label>`).join('')}
        ${state.askErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.askErr}</div>`:''}
      </div>`:''}
+     ${/* Capped and scrolled: a role's version history can run to thirty rows,
+          which is taller than the phone. Short lists never reach the cap. */''}
      ${a.options
-       ? a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')
+       ? `<div style="max-height:62vh;overflow:auto">${a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')}</div>`
        : `<div style="display:flex;gap:8px;padding:16px 20px 0">
             <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>
             <button class="btn2" style="flex:1;${a.danger?'color:var(--brick-ink);border-color:var(--brick-ink)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
@@ -19043,6 +19047,7 @@ function tmBlank(){
     roles:null, rolesTried:false, rolesErr:null, canEdit:false,
     layouts:['default'], dashCards:[],
     roleKey:null, draft:null, roleBusy:false, roleErr:null,
+    hist:null, histFor:null,
     inv:null, invBusy:false, invErr:null, invDone:null,
     busy:null, err:null,
   };
@@ -19644,20 +19649,47 @@ function tmDraftFrom(r){
     dashboardCards:Array.isArray(r.dashboardCards)?r.dashboardCards.slice():null};
 }
 function tmDraftHas(k){ const d=tmS().draft; return !!(d&&d.caps.indexOf(k)!==-1); }
-function tmDirty(){
-  const t=tmS(), d=t.draft, r=tmRoleFind(t.roleKey);
-  if(!d||!r) return false;
-  if(d.nameEn!==(r.nameEn||'')||d.nameCn!==(r.nameCn||'')) return true;
-  if(d.descEn!==(r.descEn||'')||d.descCn!==(r.descCn||'')) return true;
-  if(d.layout!==(r.layout||'default')) return true;
-  const was=r.dashboardCards||null, now=d.dashboardCards||null;
-  if((was===null)!==(now===null)) return true;
-  if(was&&now&&(was.length!==now.length||was.some(k=>now.indexOf(k)===-1))) return true;
-  const had=r.caps||[];
-  if(had.length!==d.caps.length) return true;
-  if(d.caps.some(k=>had.indexOf(k)===-1)) return true;
-  return false;
+/* WHAT GOES ON THE WIRE, normalised the way the server stores it, in a fixed
+   key order — the autosave engine compares two of these as JSON. Caps and
+   cards are sorted so ticking a box on and off again reads as no change. */
+function tmPayload(d){
+  return {name_en:d.nameEn.trim(), name_cn:d.nameCn.trim(), desc_en:d.descEn.trim(), desc_cn:d.descCn.trim(),
+    layout:d.layout, caps:d.caps.slice().sort(),
+    dashboard_cards:Array.isArray(d.dashboardCards)?d.dashboardCards.slice().sort():null};
 }
+/* THE ROLE SAVES ITSELF (decisions §279). One engine per visit, holding the
+   very draft object it was opened on, so a write still in flight when the
+   operator opens another role can only ever send the role it was typed into.
+   The engine is public/tacet-autosave.js — the same one the desktop runs. */
+let tmAuto=null;
+function tmAutoOpen(key){
+  if(tmAuto) tmAuto.flush();
+  const d=tmS().draft;
+  if(!d||typeof TacetAutosave==='undefined'){ tmAuto=null; return; }
+  tmAuto=TacetAutosave.create({
+    read:()=>tmPayload(d),
+    hold:p=>(!p.name_en&&!p.name_cn)?T('Add a name to start autosaving','填写名称后自动保存'):'',
+    send:(p,note)=>apiWrite('/api/backend/roles/'+encodeURIComponent(key),
+      Object.assign({},p,note?{history_note:note}:{}),'PUT').then(res=>tmRoleLanded(key,res&&res.role)),
+    onChange:()=>{ if(tmS().roleKey===key) tmRepaintFoot(); },
+  });
+  tmAuto.start();
+}
+/* A save landed. The record is swapped for the server's answer IN PLACE, and
+   nothing re-renders: the operator may be mid-word in a name field, and
+   render() rebuilds every input on the screen. The roster's copy of the name
+   is patched the same way rather than re-read. */
+function tmRoleLanded(key,role){
+  const t=tmS(); t.hist=null; t.histFor=null;
+  if(!role) return;
+  const i=(t.roles||[]).findIndex(r=>r.key===key);
+  if(i!==-1) t.roles[i]=role;
+  (state.roles||[]).forEach(r=>{ if(r.key!==key) return;
+    r.nameEn=role.nameEn; r.nameCn=role.nameCn; r.descEn=role.descEn; r.descCn=role.descCn; r.layout=role.layout; });
+}
+/* The server's refusals arrive as "English · 中文"; show the half this
+   operator reads. */
+function tmOneLang(m){ const s=String(m||''); const i=s.indexOf(' · '); return i===-1?s:T(s.slice(0,i),s.slice(i+3)); }
 function tmMoneyLine(keys){
   const cat=(tmS().cat&&tmS().cat.capabilities)||[];
   let moves=0,shows=0;
@@ -19748,22 +19780,27 @@ function screenTeamRole(){
     <div id="mTmRoleFoot">${tmRoleFoot()}</div></div>`;
 }
 /* The footer, patched in place rather than re-rendered: every keystroke in a
-   name field changes whether there is anything to save, and rebuilding the
-   screen underneath would take the caret with it. Same call bcfRepaintFoot
-   makes on the broadcast composer. */
+   name field changes what it says, and rebuilding the screen underneath would
+   take the caret with it. Same call bcfRepaintFoot makes on the broadcast
+   composer.
+   NO SAVE BUTTON (§279). It says where the role stands — saving, saved, held
+   and why, or what the server refused — and offers the two ways back: Undo,
+   to the role as this visit found it, and History, to any earlier version. */
 function tmRoleFoot(){
   const t=tmS(), r=tmRoleFind(t.roleKey);
   if(!r||!t.canEdit) return '';
-  const dirty=tmDirty();
-  const save=r.people
-    ? T(r.people===1?'Save · affects 1 person':'Save · affects '+r.people+' people','保存 · 影响 '+r.people+' 人')
-    : T('Save','保存');
+  const a=tmAuto, st=a?a.state:'saved';
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…')
+    : st==='hold'?escAttr(a.message)
+    : st==='error'?escAttr(T('Save failed: ','保存失败:')+tmOneLang(a.message))
+    : T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  const undo=a&&a.canUndo();
   return `<div style="display:flex;flex-direction:column;gap:10px">
-    <div style="font-size:12.5px;color:${dirty?'var(--amber-ink)':'var(--text-secondary)'};text-align:center">${
-      dirty?T('Unsaved changes','有未保存的更改'):T('No unsaved changes','没有未保存的更改')}</div>
-    <button class="cta" ${(!dirty||t.roleBusy)?'disabled':''} style="${(!dirty||t.roleBusy)?'opacity:.55;':''}" onclick="APP.cmd('roleSave')">${
-      t.roleBusy?T('Saving…','保存中…'):escAttr(save)}</button>
-    ${dirty?`<button class="btn2" style="width:100%" onclick="APP.cmd('roleRevert')">${T('Revert','撤销')}</button>`:''}
+    <div style="font-size:12.5px;color:${tone};text-align:center">${line}</div>
+    <div style="display:flex;gap:8px">
+      ${undo?`<button class="btn2" style="flex:1" onclick="APP.cmd('roleUndo')">${T('Undo','撤销')}</button>`:''}
+      <button class="btn2" style="flex:1" onclick="APP.cmd('roleHistory')">${T('Version history','历史版本')}</button></div>
     <button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" onclick="APP.cmd('roleDelete')">${T('Delete role','删除角色')}</button></div>`;
 }
 function tmRepaintFoot(){
@@ -20038,16 +20075,31 @@ reg('invSubmit', ()=>{
 /* ── Roles ────────────────────────────────────────────────────────────── */
 reg('roleOpen', key=>{
   const t=tmS(); const r=tmRoleFind(key); if(!r) return;
-  t.roleKey=key; t.draft=r.isFixed?null:tmDraftFrom(r); t.roleErr=null;
+  t.roleErr=null; t.hist=null; t.histFor=null;
+  /* Back on a role whose last edit is still on its way: carry on with the same
+     draft. Rebuilding it from t.roles, which that write has not reached yet,
+     would put the old values back on screen and send them next. */
+  const carry=tmAuto&&tmAuto.busy()&&t.draft&&t.draft.key===key;
+  t.roleKey=key;
+  if(!carry){ t.draft=r.isFixed?null:tmDraftFrom(r); tmAutoOpen(key); }
   push('teamrole');
 });
-reg('roleRevert', ()=>{ const t=tmS(); const r=tmRoleFind(t.roleKey); if(!r) return; t.draft=tmDraftFrom(r); render(); });
-reg('roleField', (k,v)=>{ const d=tmS().draft; if(!d) return; d[k]=String(v==null?'':v); tmRepaintFoot(); });
+/* Every edit ends on tmTouch: the engine decides whether there is anything
+   to send and sends it after the pause. */
+function tmTouch(){ if(tmAuto&&tmS().canEdit) tmAuto.touch(); }
+/* UNDO puts the role back as this visit opened it — every field, in one
+   write, filed as an undo so History keeps the edit it took back. */
+reg('roleUndo', ()=>{
+  const t=tmS(), d=t.draft; if(!d||!tmAuto) return;
+  tmAuto.undo(p=>{ d.nameEn=p.name_en; d.nameCn=p.name_cn; d.descEn=p.desc_en; d.descCn=p.desc_cn;
+    d.layout=p.layout; d.caps=p.caps.slice(); d.dashboardCards=p.dashboard_cards?p.dashboard_cards.slice():null; render(); });
+});
+reg('roleField', (k,v)=>{ const d=tmS().draft; if(!d) return; d[k]=String(v==null?'':v); tmTouch(); });
 reg('roleCap', k=>{
   const d=tmS().draft; if(!d||!tmS().canEdit) return;
   const i=d.caps.indexOf(k);
   if(i===-1) d.caps.push(k); else d.caps.splice(i,1);
-  render();
+  render(); tmTouch();
 });
 reg('roleLayout', ()=>{
   const t=tmS(), d=t.draft; if(!d||!t.canEdit) return;
@@ -20059,7 +20111,7 @@ reg('roleLayout', ()=>{
       // Cards has no override yet — its ticks are showing the OLD board's
       // default set, so they follow the new one. Once overridden the picks are
       // the owner's own and stop following the board entirely.
-      render();
+      render(); tmTouch();
     }};
   render();
 });
@@ -20071,32 +20123,54 @@ reg('roleDash', k=>{
   const set=(d.dashboardCards||tmDashDefaults(d.layout)).slice();
   const i=set.indexOf(k);
   if(i===-1) set.push(k); else set.splice(i,1);
-  d.dashboardCards=set; render();
+  d.dashboardCards=set; render(); tmTouch();
 });
-reg('roleDashReset', ()=>{ const d=tmS().draft; if(!d) return; d.dashboardCards=null; render(); });
-reg('roleSave', ()=>{
-  const t=tmS(), d=t.draft, r=tmRoleFind(t.roleKey);
-  if(!d||!r||t.roleBusy||!t.canEdit) return;
-  if(!d.nameEn.trim()&&!d.nameCn.trim()){ t.roleErr=E('Give the role a name','请为角色命名'); render(); return; }
-  t.roleBusy=true; t.roleErr=null; render();
-  apiWrite('/api/backend/roles/'+encodeURIComponent(r.key),{
-    name_en:d.nameEn.trim(),name_cn:d.nameCn.trim(),desc_en:d.descEn.trim(),desc_cn:d.descCn.trim(),
-    layout:d.layout,caps:d.caps,dashboard_cards:d.dashboardCards,
-  },'PUT').then(()=>{
-    t.roleBusy=false;
-    showToast(r.people
-      ? T(r.people===1?'Saved · 1 person moves with it':'Saved · '+r.people+' people move with it','已保存 · '+r.people+' 人随之变更')
-      : T('Saved','已保存'));
-    loadRoles(true);
-    // The roster's role chips and both pickers read the same records.
-    loadTeam(true);
-  }).catch(e=>{
-    t.roleBusy=false;
-    if(String(e.message)==='auth') return;
-    t.roleErr=E(e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'),
-                e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'));
+reg('roleDashReset', ()=>{ const d=tmS().draft; if(!d) return; d.dashboardCards=null; render(); tmTouch(); });
+/* HISTORY — the Original, then one version per editing session, newest
+   first. Tapping one restores it, and the restore is itself a version, so it
+   can be taken back the same way. */
+function tmVerLine(v){
+  const when=tdWhen(v.at,'dateTime',_tdL());
+  const head=v.isBaseline?T('Original','原始版本'):v.note==='undo'?T('Undo','撤销'):v.note==='restore'?T('Restore','还原'):'';
+  const c=v.changed||{}, bits=[];
+  if(c.name) bits.push(T('name','名称'));
+  if(c.desc) bits.push(T('description','说明'));
+  if(c.dash) bits.push(T('dashboard','仪表盘'));
+  if(c.added) bits.push(T('+'+c.added+' permission'+(c.added===1?'':'s'),'+'+c.added+' 项权限'));
+  if(c.removed) bits.push(T('−'+c.removed+' permission'+(c.removed===1?'':'s'),'−'+c.removed+' 项权限'));
+  const top=[head,when,v.by?escAttr(v.by):''].filter(Boolean).join(' · ');
+  return top+(bits.length?`<div style="font-size:13px;color:var(--text-secondary);margin-top:3px">${bits.join(' · ')}</div>`:'');
+}
+reg('roleHistory', ()=>{
+  const t=tmS(), key=t.roleKey; if(!key||!tmAuto) return;
+  const open=list=>{
+    if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+    state.ask={title:T('Version history','历史版本'),
+      options:list.map((v,i)=>({key:String(v.id),label:(i===0?T('Current','当前')+' · ':'')+tmVerLine(v)})),
+      run:id=>{
+        const v=list.find(x=>String(x.id)===String(id));
+        if(!v||v===list[0]) return;
+        /* Asked first, the way the product editor's history asks. */
+        state.ask={title:T('Restore this version?','还原此版本?'),confirmLabel:T('Restore','还原'),
+          run:()=>{
+            const d=t.draft; if(!d||t.roleKey!==key||!tmAuto) return;
+            const p=v.snapshot;
+            d.nameEn=p.nameEn||''; d.nameCn=p.nameCn||''; d.descEn=p.descEn||''; d.descCn=p.descCn||'';
+            d.layout=p.layout||'default'; d.caps=(p.caps||[]).slice();
+            d.dashboardCards=Array.isArray(p.dashboardCards)?p.dashboardCards.slice():null;
+            render();
+            tmAuto.flush('restore').then(()=>{ if(tmAuto&&tmAuto.state==='saved') showToast(T('Restored to the chosen version.','已还原到所选版本。')); });
+          }};
+        render();
+      }};
     render();
-  });
+  };
+  if(t.hist&&t.histFor===key){ open(t.hist); return; }
+  const go=()=>api('/api/backend/roles/'+encodeURIComponent(key)+'/history').then(j=>{
+    t.hist=Array.isArray(j&&j.versions)?j.versions:[]; t.histFor=key; open(t.hist);
+  }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+  /* What is on screen first, so the list ends on it rather than a step behind. */
+  Promise.resolve(tmAuto.flush()).then(go);
 });
 reg('roleAdd', ()=>{
   const t=tmS(); if(!t.canEdit) return;
@@ -20117,7 +20191,7 @@ reg('roleAdd', ()=>{
           t.layouts=Array.isArray(d&&d.layouts)&&d.layouts.length?d.layouts:t.layouts;
           t.dashCards=Array.isArray(d&&d.dashCards)?d.dashCards:t.dashCards;
           loadTeam(true);
-          if(key){ const rec=tmRoleFind(key); if(rec){ t.roleKey=key; t.draft=tmDraftFrom(rec); push('teamrole'); } }
+          if(key){ const rec=tmRoleFind(key); if(rec){ t.roleKey=key; t.draft=tmDraftFrom(rec); tmAutoOpen(key); push('teamrole'); } }
           showToast(T('Role added — now choose what it reaches','角色已创建 — 请设置其权限'));
           render();
         }).catch(()=>render());
@@ -20138,8 +20212,11 @@ reg('roleDelete', ()=>{
   const name=T(r.nameEn||r.nameCn,r.nameCn||r.nameEn);
   const go=(moveTo)=>{
     t.roleBusy=true; t.roleErr=null; render();
+    /* An edit still waiting on its pause is to a role about to go; sending it
+       would only earn a "not found". */
+    if(tmAuto) tmAuto.stop();
     apiWrite('/api/backend/roles/'+encodeURIComponent(r.key),moveTo?{move_to:moveTo}:{},'DELETE').then(()=>{
-      t.roleBusy=false; t.roleKey=null; t.draft=null;
+      t.roleBusy=false; t.roleKey=null; t.draft=null; tmAuto=null;
       loadRoles(true); loadTeam(true);
       pop();
       showToast(r.people
@@ -20147,6 +20224,8 @@ reg('roleDelete', ()=>{
         : T('Role deleted','角色已删除'));
     }).catch(e=>{
       t.roleBusy=false;
+      // Still here, so the paused edit is still owed.
+      if(tmAuto) tmAuto.touch();
       if(String(e.message)==='auth') return;
       t.roleErr=E(e.message||T('Could not delete','删除失败'),e.message||T('Could not delete','删除失败'));
       render();
@@ -22969,6 +23048,8 @@ function mUnsavedWork(){
        a second or so in which rcvToSend has emptied on nothing. A reload landing
        in it would take the screen out from under a delivery mid-write. */
     if(state.recvPo&&(rcvToSend().length||state.recvBusy)) return true;
+    /* A role edit waiting on its pause or on the wire (§279). */
+    if(tmAuto&&tmAuto.busy()) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
     const f=state.qs&&state.qs.inflight; for(const k in f) if(f[k]) return true;
   }catch(e){}

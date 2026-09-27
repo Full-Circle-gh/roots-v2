@@ -27,6 +27,10 @@
  *      and no "Add a role" — not disabled ones.
  *   7. FORCED-ON AND FORCED-OFF ARE DIFFERENT. The per-person matrix used to
  *      paint one tint for both.
+ *  10. THE ROLE SAVES ITSELF (decisions §279). No Save button; an edit goes
+ *      out as one PUT after the pause, through the real engine
+ *      (public/tacet-autosave.js); an unnamed role is held, not sent; Undo
+ *      sends the role back as the visit found it, filed as an undo.
  */
 
 'use strict';
@@ -82,16 +86,24 @@ function mkEl() {
   };
 }
 const ELS = {};
+const SENT = [];                                     // every api() write, in order
 const sandbox = {
   console,
-  window: { confirm: () => true, prompt: () => null },
+  window: { confirm: () => true, prompt: () => null, addEventListener() {} },
+  document: { addEventListener() {}, visibilityState: 'visible' },
+  setTimeout, clearTimeout,
+  // The real engine, not a stub: §279 is only as good as the thing that sends.
+  TacetAutosave: require('../public/tacet-autosave.js'),
   $: (sel) => (ELS[sel] = ELS[sel] || mkEl()),
   $$: () => [],
   cuT: (en) => en,                                   // assert against English
   escapeHtml: (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;'),
   escapeAttr: (v) => String(v == null ? '' : v).replace(/"/g, '&quot;'),
   toast: () => {},
-  api: async () => ({}),
+  api: async (path, opts) => {
+    if (opts && opts.method) SENT.push({ path, method: opts.method, body: opts.body });
+    return {};
+  },
   TM_CATALOG: null,
 };
 sandbox.globalThis = sandbox;
@@ -206,6 +218,7 @@ hasnt(html, 'id="rlSave"', 'and no Save button');
 section('6 · hide, never grey');
 html = selectRole(stockroom, false);
 hasnt(html, 'id="rlSave"', 'an operator who can’t edit gets no Save button at all');
+hasnt(html, 'id="rlHistory"', 'nor a history they could restore from');
 hasnt(html, 'id="rlDelete"', 'no Delete');
 has(html, 'Stockroom', 'they still see the role');
 has(html, 'type="checkbox"', 'and what it reaches, read-only');
@@ -277,5 +290,45 @@ has(html, 'id="rlDashOn" checked disabled', 'with the switch inert');
 hasnt(html, 'id="rlLayout"', 'and the layout as text rather than a dead select');
 has(html, 'Stock and deliveries', 'naming the board');
 
-console.log('\n' + pass + ' passed, ' + fail + ' failed');
-process.exit(fail ? 1 : 0);
+section('10 · the role saves itself (§279)');
+(async () => {
+  html = selectRole(stockroom, true);
+  hasnt(html, 'id="rlSave"', 'there is no Save button for an editor either');
+  hasnt(html, 'Unsaved changes', 'and no "unsaved changes" to worry about');
+  has(html, 'id="rlHistory"', 'there is a version history');
+  has(html, 'id="rlUndo" style="display:none"', 'and an Undo, hidden until there is something to take back');
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // An edit, the way the pane's own handler makes it.
+  SENT.length = 0;
+  vm.runInContext('RL_DRAFT.descEn = "Deliveries and counts"; rlEdited();', sandbox);
+  is(SENT.length, 0, 'nothing is sent while the pause is still running');
+  await wait(900);
+  is(SENT.length, 1, 'one PUT once the pause is over');
+  is(SENT[0] && SENT[0].path, '/api/backend/roles/warehouse', 'to that role');
+  is(SENT[0] && SENT[0].body.desc_en, 'Deliveries and counts', 'carrying the edit');
+  is(SENT[0] && SENT[0].body.history_note, undefined, 'filed as an ordinary edit');
+  is(vm.runInContext('RL_AUTO.canUndo()', sandbox), true, 'and now there is something to undo');
+  // Toggling a box on and off again is no change at all.
+  SENT.length = 0;
+  vm.runInContext('RL_DRAFT.caps.add("orders:refund"); rlEdited(); RL_DRAFT.caps.delete("orders:refund"); rlEdited();', sandbox);
+  await wait(900);
+  is(SENT.length, 0, 'ticking a box on and off again sends nothing');
+  // An unnamed role is held, and says why.
+  vm.runInContext('RL_DRAFT.nameEn = ""; RL_DRAFT.nameCn = ""; rlEdited();', sandbox);
+  await wait(900);
+  is(SENT.length, 0, 'a role with no name is not sent');
+  is(vm.runInContext('RL_AUTO.state', sandbox), 'hold', 'it is held');
+  has(ELS['#rlStatus'].textContent, 'Add a name', 'and the footer says what it is waiting for');
+  // Undo: the role as the visit found it, in one write, filed as an undo.
+  SENT.length = 0;
+  vm.runInContext('rlUndo()', sandbox);
+  await wait(50);
+  is(SENT.length, 1, 'Undo is one write');
+  is(SENT[0] && SENT[0].body.history_note, 'undo', 'filed as an undo, so History keeps what it took back');
+  is(SENT[0] && SENT[0].body.name_en, 'Stockroom', 'with the name the visit opened on');
+  is(SENT[0] && SENT[0].body.desc_en, 'Deliveries, counts and stock pushes.', 'and the description');
+  is(vm.runInContext('RL_AUTO.canUndo()', sandbox), false, 'after which there is nothing left to undo');
+
+  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  process.exit(fail ? 1 : 0);
+})();
