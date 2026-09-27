@@ -378,7 +378,9 @@ check('and no rest timer, for the same reason', () => {
 });
 
 check('the sheet belongs to its screen and cannot paint over the record', () => {
-  assert.match(MHTML, /if\(state\.rcp\.step!=null && rcpMakeOnTop\(\)\) html \+= sheetRecipeStep\(\);/);
+  // Through layer() since the popups stopped replaying their entrance on every
+  // repaint (test_mobile_sheet_still.js); the gate on the route is unchanged.
+  assert.match(MHTML, /if\(state\.rcp\.step!=null && rcpMakeOnTop\(\)\) html \+= layer\('rcp', sheetRecipeStep\(\)\);/);
   assert.match(MHTML, /function rcpMakeOnTop\(\)\{[\s\S]{0,200}top\.route==='recipemake'/);
 });
 
