@@ -1205,6 +1205,12 @@ const state = {
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
+  /* The Account screen's own reads and writes (screenAccount): the recovery
+     contacts and two-step switches, the signed-in devices, the per-person
+     alert switches, and which write is in flight. One key, so the screen's
+     state cannot collide with a name another screen takes later. */
+  acct:{rec:null, recTried:false, recErr:false, sess:null, sessTried:false, sessErr:false,
+        alerts:null, alertsTried:false, alertsErr:false, alertsMsg:null, busy:null},
   /* The order sheet, when the thing that opened it was the customer record.
      detailFetch says the sheet has nothing to draw yet and must hold the
      screen; orderOverCust says which of the two sheets is on top, which
@@ -15134,6 +15140,9 @@ function NOTIFICATION_ROWS(){
   /* Only once it is on, and only then: a test that cannot arrive is a button
      that teaches the operator to distrust the ones that can. */
   if(state.push==='on') rows.push({label:T('Send a test alert','发送测试提醒'),cmd:"APP.cmd('pushTest')",chev:true});
+  /* WHICH alerts, not only whether — the desktop's per-person switches. A door
+     to the Account screen's list, not a copy of its switches here. */
+  rows.push({label:T('Which alerts','接收哪些通知'),cmd:"APP.cmd('acctOpen','alerts')",chev:true});
   return rows;
 }
 function screenSettings(){
@@ -15225,6 +15234,402 @@ function screenSettings(){
     <button onclick="APP.cmd('signout')" style="width:100%;padding:15px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card);color:var(--danger);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Sign out','退出登录')}</button>
     <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding:2px 0 6px">tacet · v1.0 · ${T('runs in silence','静默运行')}</div></div>`;
 }
+
+/* ==========================================================================
+   Account (desktop: public/backend-account.html)
+   --------------------------------------------------------------------------
+   The signed-in operator's OWN record — not the shop's. Asked for from a phone
+   on 2026-09-27: "can't change picture profile inside account mobile?" It
+   could not. The header button drew the photo and nothing anywhere let you
+   change it; the menu row called "Account" opened the SHOP's settings, so the
+   one screen about the person was a door to a different screen.
+
+   Everything the desktop's four tabs do, in the shapes a phone has (§97: the
+   same capabilities, not the same layout):
+     • My Info — photo, name, recovery email, phone
+     • Security — password, two-step verification by email or SMS
+     • Devices — where you are signed in, and signing them out
+     • Notifications — which alerts reach you
+   Sound and "alert me when Tacet is closed" are not repeated here: they are
+   this handset's own switches and already sit in Settings and the menu.
+
+   NO CAPABILITY GATES THIS. Every endpoint below acts on req.session's own
+   user and nobody else, so there is no role that should be refused its own
+   password. That is why the menu row now opens this for everyone, where it
+   used to push a capability-gated Settings and draw no door at all for the
+   operators without it.
+
+   EVERY WRITE IS THE DESKTOP'S, byte for byte: the same endpoint, method and
+   body, and the same guards in front of it (the ten-character floor, the
+   matching confirm, +86 only). Nothing on the server changed for this.
+
+   Every string is a live pair lifted from backend-account.html or already on
+   this app — none was composed.
+   ========================================================================== */
+const ACCT_CC=['86','1','852','853','886','65','44','61'];   // backend-account.html PHONE_CC
+/* The server writes a refusal as "English · 中文". Show the half this screen
+   speaks; a network failure or a bare status gets the screen's own sentence. */
+function acctWords(e,en,zh){
+  if(!e||e.name==='TypeError') return T('Network error — please try again','网络错误，请重试');
+  const s=String(e.message||'');
+  if(!s||/^HTTP \d+$/.test(s)) return T(en,zh);
+  const i=s.indexOf(' · ');
+  return i<0?s:(LANG==='en'?s.slice(0,i):s.slice(i+3));
+}
+/* One write path for the whole screen. `again` reopens the sheet the write
+   came from with the server's reason on it — a sheet that closes on a wrong
+   password and then toasts has thrown away what was typed and the place to
+   fix it. */
+function acctWrite(busy,path,body,method,ok,again,en,zh){
+  const a=state.acct; a.busy=busy; render();
+  return apiWrite(path,body,method).then(j=>{ a.busy=null; ok(j||{}); render(); })
+    .catch(e=>{ a.busy=null; if(String(e&&e.message)==='auth') return;
+      const msg=acctWords(e,en||'Couldn’t save — please try again',zh||'保存失败，请重试');
+      if(again){ again(msg); } else showToast(msg);
+      render(); });
+}
+function acctLoadRec(){
+  const a=state.acct; if(a.recTried) return; a.recTried=true; a.recErr=false;
+  api('/api/backend/recovery').then(j=>{ a.rec=j||{}; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; a.recErr=true; render(); });
+}
+function acctLoadSess(){
+  const a=state.acct; if(a.sessTried) return; a.sessTried=true; a.sessErr=false;
+  api('/api/backend/sessions').then(j=>{ a.sess=(j&&j.sessions)||[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; a.sessErr=true; render(); });
+}
+function acctLoadAlerts(){
+  const a=state.acct; if(a.alertsTried) return; a.alertsTried=true; a.alertsErr=false;
+  api('/api/backend/push/pref').then(j=>{ a.alerts=(j&&j.events)||[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; a.alertsErr=true; render(); });
+}
+/* Every door in re-reads. A device signed in elsewhere, or an email verified
+   on the laptop a minute ago, must show without a reload — the desktop refetches
+   its Devices tab on every open for the same reason. */
+reg('acctOpen', route=>{
+  const a=state.acct, r=route||'account';
+  if(r==='account'){ a.recTried=false; a.sessTried=false; }
+  if(r==='devices') a.sessTried=false;
+  if(r==='alerts'){ a.alertsTried=false; a.alertsMsg=null; }
+  push(r);
+});
+const acctEyebrow=t=>`<div class="eyebrow" style="padding:2px 4px 8px">${t}</div>`;
+const acctMuted=t=>`<span style="font-size:13px;color:var(--text-secondary)">${t}</span>`;
+
+function screenAccount(){
+  acctLoadRec(); acctLoadSess();
+  const a=state.acct, me=state.me||{}, r=a.rec, busy=a.busy;
+  const loading=T('Loading…','加载中…');
+  /* Photo and name lead, as they do on the desktop's My Info. The photo is the
+     header button's own drawing at a size you can see, so what you change here
+     is exactly what the header shows the moment it saves. */
+  const head=`<div class="list" style="display:flex;align-items:center;gap:16px;padding:18px 16px">
+      <span style="position:relative;width:72px;height:72px;border-radius:20px;overflow:hidden;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:500;flex:none">${acctMark()}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">
+        <span style="font-size:18px;font-weight:500;overflow-wrap:anywhere">${escAttr(me.name||'—')}</span>
+        <span style="display:flex;gap:8px;flex-wrap:wrap">
+          <label class="btn2" style="min-height:38px;padding:0 12px;font-size:14px;${busy==='photo'?'opacity:.55;pointer-events:none':''}">${ic('camera',16)}<span>${busy==='photo'?T('Saving…','保存中…'):T('Change photo','更换照片')}</span>
+            ${/* No `capture`: with it Android opens the camera and nothing else,
+                 and a photo already on the phone could not be chosen. Without
+                 it the OS offers its own chooser — camera or gallery. */''}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/*" style="display:none" onchange="APP.cmd('acctPhoto',this)"></label>
+          ${me.avatarUrl?`<button class="btn2" style="min-height:38px;padding:0 12px;font-size:14px" ${busy?'disabled':''} onclick="APP.cmd('acctPhotoClear')">${T('Remove photo','移除照片')}</button>`:''}
+        </span></span></div>`;
+
+  const emailRow = !r ? tmRow({label:T('Email','邮箱'),value:a.recErr?T('Couldn’t load.','无法加载。'):loading})
+    : (r.email&&r.verified) ? tmRow({label:T('Email','邮箱'),value:escAttr(r.email),note:T('Verified','已验证'),cmd:"APP.cmd('acctEmailMenu')"})
+    : r.emailConfigured===false ? tmRow({label:T('Email','邮箱'),note:T('Email isn’t set up on this workspace yet, so password reset by email isn’t available.','此工作区尚未配置邮件功能，暂不支持邮箱重置密码。')})
+    : tmRow({label:T('Email','邮箱'),value:T('Add email','添加邮箱'),note:T('If you forget your password, we’ll email a reset code here.','忘记密码时，我们会将重置验证码发送到此邮箱。'),cmd:"APP.cmd('acctEmailAdd')"});
+  const phoneRow = !r ? tmRow({label:T('Phone','手机号'),value:a.recErr?'':loading})
+    : (r.phone&&r.phoneVerified) ? tmRow({label:T('Phone','手机号'),value:escAttr(r.phone),note:T('Verified','已验证'),cmd:"APP.cmd('acctPhoneMenu')"})
+    : !r.smsConfigured ? tmRow({label:T('Phone','手机号'),note:T('Text messaging isn’t set up on this workspace yet.','此工作区尚未启用短信功能。')})
+    : tmRow({label:T('Phone','手机号'),value:T('Add a phone','添加手机号'),note:T('Add a mobile to receive sign-in codes by text message.','添加手机号，即可通过短信接收登录验证码。'),cmd:"APP.cmd('acctPhoneAdd')"});
+
+  /* Two independent switches, as on the desktop. A switch is drawn only where
+     flipping it can change something: a channel with no verified address gets
+     the sentence saying what to do instead of a switch that springs back. */
+  let twofa='';
+  if(r){
+    const chE=!!(r.verified&&r.emailConfigured!==false), chS=!!(r.phoneVerified&&r.smsConfigured);
+    if(!chE&&!chS){
+      twofa=tmCaption(T('Add and verify an email or phone under My Info to turn this on.','请先在“我的信息”中设置并验证邮箱或手机号，才能开启此功能。'));
+    } else {
+      const sw=(ch,on,avail)=>!avail?'':busy==='tfa:'+ch?acctMuted(T('Saving…','保存中…')):toggle(!!on,`APP.cmd('acctTwofa','${ch}')`);
+      const e=!!r.twofaEmail, s=!!r.twofaSms;
+      const status = !e&&!s ? T('Off — no code required at sign-in.','未开启 — 登录无需验证码。')
+        : e&&s ? T('On — email and SMS, choose one at sign-in.','已开启 — 邮箱和短信均可，登录时选择其一。')
+        : e ? T('On — email code required at sign-in.','已开启 — 登录需邮箱验证码。')
+        : T('On — SMS code required at sign-in.','已开启 — 登录需短信验证码。');
+      twofa=tmList([
+        tmRow({label:T('Email','邮箱'),note:chE?T('Code sent to ','验证码发送至 ')+escAttr(r.email||''):T('Verify a recovery email under My Info to use this.','请先在“我的信息”中验证恢复邮箱。'),right:sw('email',e,chE),dim:!chE}),
+        tmRow({label:T('SMS','短信'),note:chS?T('Code texted to ','验证码发送至 ')+escAttr(r.phone||''):T('Verify a phone under My Info to use this.','请先在“我的信息”中验证手机号。'),right:sw('sms',s,chS),dim:!chS}),
+      ])+`<div style="margin-top:8px">${tmCaption(status)}</div>`;
+    }
+  }
+
+  const sess=a.sess;
+  return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:18px">
+    ${head}
+    <div>${acctEyebrow(T('My Info','我的信息'))}${tmList([
+      tmRow({label:T('Name','姓名'),value:escAttr(me.name||''),cmd:"APP.cmd('acctName')"}),
+      emailRow, phoneRow])}</div>
+    <div>${acctEyebrow(T('Security','安全'))}${tmList([
+      tmRow({label:T('Change password','修改密码'),cmd:"APP.cmd('acctPass')"})])}</div>
+    ${r?`<div>${acctEyebrow(T('Two-step verification','两步验证'))}${twofa}</div>`:''}
+    <div>${acctEyebrow(T('Devices','设备'))}${tmList([
+      tmRow({label:T('Devices','设备'),
+        value: sess ? (sess.length+' '+(sess.length===1?T('device signed in','台设备已登录'):T('devices signed in','台设备已登录'))) : a.sessErr?'':loading,
+        cmd:"APP.cmd('acctOpen','devices')"})])}</div>
+    <div>${acctEyebrow(T('Notifications','通知'))}${tmList([
+      tmRow({label:T('Which alerts','接收哪些通知'),cmd:"APP.cmd('acctOpen','alerts')"})])}</div>
+  </div>`;
+}
+
+/* ── Photo: pick → 256px square → PUT /api/backend/avatar ─────────────────
+   The desktop's own downscale, to the pixel: a centred cover crop to 256 and
+   JPEG 0.85. The server caps the data URL at 700KB; a phone camera's original
+   is several megabytes, so it is never sent. */
+function acctSaveAvatar(data){
+  acctWrite('photo','/api/backend/avatar',{avatar:data},'PUT',j=>{
+    state.me=state.me||{}; state.me.avatarUrl=j.avatarUrl||null;
+    showToast(data?T('Photo updated','照片已更新'):T('Photo removed','照片已移除'));
+  },null,'Couldn’t save photo','无法保存照片');
+}
+reg('acctPhoto', input=>{
+  const f=input&&input.files&&input.files[0];
+  if(!f) return;
+  input.value='';                                   // so the same file can be re-picked
+  if(state.acct.busy) return;
+  if(!/^image\//.test(f.type||'')){ showToast(T('Please choose an image file','请选择图片文件')); return; }
+  const bad=()=>showToast(T('Couldn’t read that image','无法读取该图片'));
+  const rd=new FileReader(), img=new Image();
+  rd.onload=()=>{
+    img.onload=()=>{
+      let data=null;
+      try{
+        const S=256, cv=document.createElement('canvas'); cv.width=S; cv.height=S;
+        const sc=Math.max(S/(img.width||1),S/(img.height||1)), w=(img.width||1)*sc, h=(img.height||1)*sc;
+        cv.getContext('2d').drawImage(img,(S-w)/2,(S-h)/2,w,h);
+        data=cv.toDataURL('image/jpeg',0.85);
+      }catch(e){ data=null; }
+      if(!data){ bad(); return; }
+      acctSaveAvatar(data);
+    };
+    img.onerror=bad;
+    img.src=String(rd.result||'');
+  };
+  rd.onerror=()=>showToast(T('Couldn’t read that file','无法读取该文件'));
+  rd.readAsDataURL(f);
+});
+reg('acctPhotoClear', ()=>{ if(state.acct.busy) return; acctSaveAvatar(null); });
+
+/* ── Name ────────────────────────────────────────────────────────────────── */
+function acctNameAsk(val){
+  return {title:T('Edit name','修改姓名'),
+    fields:[{id:'name',label:T('Your display name','您的显示名称'),value:val}],
+    confirmLabel:T('Save','保存'),
+    validate:v=>!v.name?T('Enter a display name','请输入显示名称'):'',
+    run:v=>acctWrite('name','/api/backend/profile',{display_name:v.name},'PUT',j=>{
+      state.me=state.me||{}; state.me.name=j.displayName||v.name; showToast(T('Saved','已保存'));
+    },msg=>{ state.ask=acctNameAsk(v.name); state.askErr=msg; })};
+}
+reg('acctName', ()=>{ state.askErr=null; state.ask=acctNameAsk((state.me&&state.me.name)||''); render(); });
+
+/* ── Password ────────────────────────────────────────────────────────────────
+   The desktop's three checks, before anything is sent. Nothing typed is put
+   back into a reopened sheet: a password does not belong in a value attribute. */
+function acctPassAsk(){
+  return {title:T('Change password','修改密码'), body:T('Minimum 10 characters.','至少 10 位。'),
+    fields:[{id:'cur',label:T('Current password','当前密码'),type:'password'},
+            {id:'nw',label:T('New password','新密码'),type:'password'},
+            {id:'nw2',label:T('Confirm new password','确认新密码'),type:'password'}],
+    confirmLabel:T('Update password','更新密码'),
+    validate:v=> (!v.cur||!v.nw||!v.nw2) ? T('Fill in all password fields','请填写所有密码字段')
+      : v.nw.length<10 ? T('New password must be at least 10 characters','新密码至少 10 位')
+      : v.nw!==v.nw2 ? T('New passwords don’t match','两次输入的新密码不一致') : '',
+    run:v=>acctWrite('pass','/api/backend/password',{current_password:v.cur,new_password:v.nw},'PUT',
+      ()=>showToast(T('Password updated','密码已更新')),
+      msg=>{ state.ask=acctPassAsk(); state.askErr=msg; },'Couldn’t update password','无法更新密码')};
+}
+reg('acctPass', ()=>{ state.askErr=null; state.ask=acctPassAsk(); render(); });
+
+/* ── Email and phone: address → code → verified ─────────────────────────────
+   Two sheets in a row, the desktop's two steps. The code sheet names where the
+   code went, exactly as the desktop does, using the MASKED address the server
+   hands back. */
+function acctCodeAsk(kind,masked){
+  const isEmail=kind==='email';
+  return {title:isEmail?T('Email','邮箱'):T('Phone','手机号'),
+    body:(isEmail?T('Enter the 6-digit code we emailed to ','我们已将 6 位验证码发送至 ')
+                 :T('Enter the 6-digit code we texted to ','我们已将 6 位验证码发送至 '))+'<b>'+escAttr(masked||'')+'</b>.',
+    fields:[{id:'code',label:'',type:'tel',placeholder:'000000'}],
+    confirmLabel:T('Verify','验证'),
+    validate:v=>!v.code?T('Incorrect code','验证码不正确'):'',
+    run:v=>acctWrite('code',isEmail?'/api/backend/recovery/confirm':'/api/backend/phone/confirm',{code:v.code},'POST',j=>{
+      const r=state.acct.rec=state.acct.rec||{};
+      if(isEmail){ r.email=j.email||masked; r.verified=true; }
+      else { r.phone=j.phone||masked; r.phoneVerified=true; }
+      showToast(T('Verified','已验证'));
+    },msg=>{ state.ask=acctCodeAsk(kind,masked); state.askErr=msg; },'Incorrect code','验证码不正确')};
+}
+function acctEmailAsk(val){
+  return {title:T('Email','邮箱'),
+    body:T('If you forget your password, we’ll email a reset code here.','忘记密码时，我们会将重置验证码发送到此邮箱。'),
+    fields:[{id:'email',label:T('Email','邮箱'),type:'email',placeholder:'you@example.com',value:val}],
+    confirmLabel:T('Send code','发送验证码'),
+    validate:v=>!v.email?T('Enter a valid email','请输入有效邮箱'):'',
+    run:v=>acctWrite('send','/api/backend/recovery/start',{email:v.email},'POST',j=>{
+      state.askErr=null; state.ask=acctCodeAsk('email',j.email||v.email);
+    },msg=>{ state.ask=acctEmailAsk(v.email); state.askErr=msg; },'Couldn’t send — please try again','发送失败，请重试')};
+}
+function acctPhoneAsk(cc,val){
+  return {title:T('Phone','手机号'),
+    body:T('Add a mobile to receive sign-in codes by text message.','添加手机号，即可通过短信接收登录验证码。'),
+    fields:[{id:'cc',label:'',choices:ACCT_CC.map(c=>[c,'+'+c]),value:cc||'86'},
+            {id:'phone',label:T('Mobile number','手机号'),type:'tel',value:val}],
+    confirmLabel:T('Send code','发送验证码'),
+    /* SMS runs on Aliyun and reaches mainland numbers only. The desktop lists
+       the other codes and refuses them before sending, with this sentence;
+       sending would fail against the CN-only backend with a vaguer one. */
+    validate:v=>v.cc!=='86'?T('That region isn’t supported yet — only +86 numbers can receive codes','该地区暂不支持，目前仅 +86 号码可接收验证码'):'',
+    run:v=>acctWrite('send','/api/backend/phone/start',{phone:v.phone},'POST',j=>{
+      state.askErr=null; state.ask=acctCodeAsk('phone',j.phone||v.phone);
+    },msg=>{ state.ask=acctPhoneAsk(v.cc,v.phone); state.askErr=msg; },'Couldn’t send — please try again','发送失败，请重试')};
+}
+reg('acctEmailAdd', ()=>{ state.askErr=null; state.ask=acctEmailAsk(''); render(); });
+reg('acctPhoneAdd', ()=>{ state.askErr=null; state.ask=acctPhoneAsk('86',''); render(); });
+/* Change or Remove — the desktop's two links under a verified address. Remove
+   asks nothing first, as there: the address can be added back, and the server
+   turns that channel's two-step off with it rather than leave a switch pointed
+   at nothing, which the row then shows. */
+function acctContactMenu(kind){
+  const r=state.acct.rec||{}, isEmail=kind==='email';
+  state.askErr=null;
+  state.ask={title:escAttr(isEmail?r.email:r.phone),
+    options:[{key:'change',label:T('Change','更换')},{key:'remove',label:T('Remove','移除')}],
+    run:k=>{
+      if(k==='change'){ state.ask=isEmail?acctEmailAsk(''):acctPhoneAsk('86',''); render(); return; }
+      if(k!=='remove') return;
+      acctWrite('remove',isEmail?'/api/backend/recovery':'/api/backend/phone',{},'DELETE',j=>{
+        const rr=state.acct.rec=state.acct.rec||{};
+        if(isEmail){ rr.email=null; rr.verified=false; if(j.twofaDisabled) rr.twofaEmail=false; }
+        else { rr.phone=null; rr.phoneVerified=false; if(j.twofaDisabled) rr.twofaSms=false; }
+      },null);
+    }};
+  render();
+}
+reg('acctEmailMenu', ()=>acctContactMenu('email'));
+reg('acctPhoneMenu', ()=>acctContactMenu('phone'));
+
+reg('acctTwofa', ch=>{
+  const a=state.acct, r=a.rec; if(!r||a.busy) return;
+  const sms=ch==='sms', on=sms?!!r.twofaSms:!!r.twofaEmail;
+  acctWrite('tfa:'+ch,'/api/backend/twofa/toggle',{channel:sms?'sms':'email',enabled:!on},'POST',()=>{
+    if(sms) r.twofaSms=!on; else r.twofaEmail=!on;
+  },null,'Couldn’t update — please try again','更新失败，请重试');
+});
+
+/* ── Devices ──────────────────────────────────────────────────────────────── */
+function acctAgo(s){
+  if(!s) return '';
+  const t=new Date(String(s).replace(' ','T')+(/[zZ]|[+\-]\d\d:?\d\d$/.test(s)?'':'Z'));
+  const sec=Math.max(0,(Date.now()-t.getTime())/1000);
+  if(sec<90) return T('Active now','当前活动');
+  const m=Math.round(sec/60); if(m<60) return T(m+' min ago',m+' 分钟前');
+  const h=Math.round(m/60); if(h<24) return T(h+(h>1?' hours ago':' hour ago'),h+' 小时前');
+  const d=Math.round(h/24); if(d<30) return T(d+(d>1?' days ago':' day ago'),d+' 天前');
+  return T('over a month ago','一个月前');
+}
+function screenDevices(){
+  acctLoadSess();
+  const a=state.acct, list=a.sess;
+  if(a.sessErr) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Couldn’t load devices.','无法加载设备。')}</div>`;
+  if(!list) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const kind=k=>k==='phone'?T('Phone','手机'):k==='tablet'?T('Tablet','平板'):T('Desktop','桌面');
+  const icon=k=>k==='phone'?'smartphone':k==='tablet'?'tablet':'monitor';
+  const others=list.filter(d=>!d.current).length;
+  const rows=list.map(d=>{
+    const meta=[d.current?T('Active now','当前活动'):acctAgo(d.lastSeen), kind(d.kind)];
+    if(d.location||d.ip) meta.push(escAttr(d.location||d.ip));
+    const b=a.busy==='sid:'+d.id;
+    return `<div style="display:flex;align-items:center;gap:14px;padding:13px 16px">
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic(icon(d.kind))}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(d.label||'')}${d.current?` <span style="font-size:12px;color:var(--text-secondary)">· ${T('This device','当前设备')}</span>`:''}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${meta.join(' · ')}</span></span>
+      <button class="btn2" style="min-height:36px;padding:0 12px;font-size:13.5px;flex:none" ${a.busy?'disabled':''}
+        onclick="APP.cmd('acctRevoke','${escAttr(d.id)}')">${b?T('Signing out…','正在登出…'):T('Sign out','登出')}</button></div>`;
+  });
+  return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:16px">
+    ${tmCaption(T('Where you\'re signed in. Sign out anything you don\'t recognize.','您的登录设备。如有不认识的设备，请将其登出。'))}
+    ${rows.length?tmList(rows):tmCaption(T('No other devices signed in.','没有其他已登录的设备。'))}
+    ${others?`<div style="display:flex;flex-direction:column;gap:10px">
+      ${tmCaption(list.length+' '+(list.length===1?T('device signed in','台设备已登录'):T('devices signed in','台设备已登录')))}
+      <button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" ${a.busy?'disabled':''}
+        onclick="APP.cmd('acctRevokeOthers')">${a.busy==='others'?T('Signing out…','正在登出…'):T('Sign out of all other devices','登出所有其他设备')}</button></div>`:''}
+  </div>`;
+}
+/* Signing out THIS device ends the session this app is running on, so it goes
+   where the desktop sends it: the sign-in page. The server says which it was
+   (wasCurrent) rather than this screen guessing from the row. */
+reg('acctRevoke', sid=>{
+  const a=state.acct; if(a.busy||!sid) return;
+  acctWrite('sid:'+sid,'/api/backend/sessions/revoke',{sid},'POST',j=>{
+    if(j.wasCurrent){ location.href='/backend/login'; return; }
+    a.sess=(a.sess||[]).filter(d=>d.id!==sid);
+  },null,'Couldn’t save — please try again','保存失败，请重试');
+});
+/* The desktop confirms this one, with the count, and so does the phone. */
+reg('acctRevokeOthers', ()=>{
+  const a=state.acct, n=(a.sess||[]).filter(d=>!d.current).length; if(!n||a.busy) return;
+  state.askErr=null;
+  state.ask={title:T('Sign out '+n+' other device'+(n===1?'':'s')+'?','登出其他 '+n+' 台设备？'),
+    confirmLabel:T('Confirm','确认'), danger:true,
+    run:()=>acctWrite('others','/api/backend/sessions/revoke-others',{},'POST',()=>{
+      a.sess=(a.sess||[]).filter(d=>d.current);
+    },null)};
+  render();
+});
+
+/* ── Which alerts (audit E-10) ─────────────────────────────────────────────
+   Per PERSON, not per device, so they are drawn even while this phone has push
+   off — they still decide what reaches the person's other devices, and the
+   line above them says so. Repainted from the SERVER's answer after every
+   change, never from the tap: a switch showing "off" over a preference that
+   did not save is the failure this pane exists to remove. */
+function screenAlerts(){
+  acctLoadAlerts();
+  const a=state.acct, list=a.alerts;
+  if(a.alertsErr) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Couldn’t load.','无法加载。')}</div>`;
+  if(!list) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=list.map(e=>{
+    /* An event this person's job never reaches is shown, dimmed, and says why.
+       Hiding it would leave somebody hunting for a switch that was never the
+       reason they hear nothing. */
+    const off=!e.reaches;
+    return tmRow({label:escAttr(LANG==='en'?e.labelEn:(e.labelCn||e.labelEn)),
+      note:escAttr(LANG==='en'?e.descEn:(e.descCn||e.descEn))+(off?T(' Your role doesn’t receive these.',' 您的角色不会收到此类通知。'):''),
+      dim:off,
+      right:off?'':a.busy==='ev:'+e.key?acctMuted(T('Saving…','保存中…')):toggle(!!e.on,`APP.cmd('acctAlert','${escAttr(e.key)}')`)});
+  });
+  return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    ${tmCaption(T('All of these are on until you turn one off.','默认全部开启，可自行关闭。'))}
+    ${state.push!=='on'?noteBar(T('Push is off on this device — these still apply anywhere else you have it on.','此设备已关闭推送 — 以下设置仍适用于您开启推送的其他设备。')):''}
+    ${a.alertsMsg?`<div style="font-size:14px;color:var(--brick-ink);padding:0 4px">${a.alertsMsg}</div>`:''}
+    ${tmList(rows)}
+  </div>`;
+}
+reg('acctAlert', key=>{
+  const a=state.acct; if(a.busy) return;
+  const ev=(a.alerts||[]).find(e=>e.key===key); if(!ev||!ev.reaches) return;
+  a.alertsMsg=null;
+  acctWrite('ev:'+key,'/api/backend/push/events',{event:key,on:!ev.on},'POST',j=>{
+    if(Array.isArray(j.events)) a.alerts=j.events;
+  },()=>{ a.alertsMsg=T('Couldn’t save that — please try again.','保存失败，请重试。'); });
+});
+SUBS.account={title:['Account','账户'],render:()=>screenAccount()};
+SUBS.devices={title:['Devices','设备'],render:()=>screenDevices()};
+SUBS.alerts={title:['Which alerts','接收哪些通知'],render:()=>screenAlerts()};
 
 /* ==========================================================================
    Sheets
@@ -19856,15 +20261,17 @@ function sheetOverflow(){
           header, so the row naming the account was the fourth thing in it, under
           two preferences and a second door to the search that button sits beside.
           Who you are signed in as, then the two things you might change about the
-          view, then the way out. */''}
-     ${canRoute('settings')
-        ? row('circle-user-round',T('Account','账户'),
+          view, then the way out.
+
+          IT OPENS THE ACCOUNT NOW, FOR EVERYONE (2026-09-27). It used to push
+          the SHOP's Settings — a different screen under this row's name — and
+          drew no door at all for an operator without Settings. The Account
+          screen is the person's own photo, name, password, contacts, devices
+          and alerts; nobody's role takes those away, so nothing gates it.
+          Settings is still More → Settings. */''}
+     ${row('circle-user-round',T('Account','账户'),
             val(ROLE_WORD(state.me))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,
-            "APP.cmd('closeOverflow');APP.cmd('push','settings')",true)
-        : `<div class="row" style="gap:14px;min-height:52px;padding:12px 20px;cursor:default">
-            <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic('circle-user-round')}</span>
-            <span style="flex:1;font-size:15px">${T('Account','账户')}</span>${val(ROLE_WORD(state.me))}</div>
-           <div class="sep" style="margin-left:54px"></div>`}
+            "APP.cmd('closeOverflow');APP.cmd('acctOpen','account')",true)}
      ${/* NO SEARCH ROW. The header this sheet opens from carries the magnifier
           itself (headControls), so the row was a second door to the same screen,
           one tap further away than the door beside the one you just opened. */''}

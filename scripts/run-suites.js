@@ -107,6 +107,11 @@ const SLOW = new Set([
   'test_mobile_activity.js', 'test_mobile_categories.js', 'test_mobile_club.js',
   'test_mobile_voting.js', 'test_mobile_settings.js', 'test_mobile_sales.js',
   'test_mobile_team.js', 'test_mobile_permissions.js', 'test_mobile_trend.js', 'test_mobile_dots.js',
+  /* The operator's own Account screen (photo, name, password, contacts,
+     two-step, devices, alerts). Same reason as the rest of this block: it
+     drives Chromium through scripts/lib/m-probe and defines no findChrome() of
+     its own, so isSlow() cannot see the browser in it. */
+  'test_mobile_account.js',
   /* §113's probe, listed here for the reason the block comment above gives and
      test_mobile_live_guards.js repeats: it drives Chromium through
      scripts/lib/m-probe, so it defines no findChrome() of its own and prints no
