@@ -28,10 +28,11 @@
  *   3. THE REQUEST NEVER REACHED THE ROUTE. The stock-app-only gate in server.js
  *      runs on every request and answers `kitchen_add_only` to anything off its
  *      list. /api/restock was not on it, so the queue's own calls were refused
- *      before the capability layer got a look.
+ *      before the capability layer got a look. That gate is gone now (decisions
+ *      §277), so there is no list left for the queue to be missing from.
  *
- * What is asserted below is the real preset, the real migration logic against a
- * real sqlite database, and the real allowlist predicate.
+ * What is asserted below is the real preset and the real migration logic
+ * against a real sqlite database.
  */
 'use strict';
 
@@ -43,7 +44,6 @@ const Database = require('better-sqlite3');
 
 const ROOT = path.join(__dirname, '..');
 const caps = require(path.join(ROOT, 'lib', 'capabilities.js'));
-const { stockAppOnlyAllows } = require(path.join(ROOT, 'lib', 'stock-app-only.js'));
 
 let failures = 0, passed = 0;
 function check(label, fn) {
@@ -256,72 +256,6 @@ check('running it twice changes nothing the second time', () => {
 
 db.close();
 fs.rmSync(dir, { recursive: true, force: true });
-
-// ── 3. The gate the request has to pass first ──────────────────────────────
-section('A stock-app-only role can reach the queue, and only the queue');
-
-check('the queue’s list', () => {
-  assert.strictEqual(stockAppOnlyAllows('GET', '/api/restock'), true);
-});
-check('one request, opened', () => {
-  assert.strictEqual(stockAppOnlyAllows('GET', '/api/restock/91'), true);
-});
-check('and moving it along — sent → received → prepared', () => {
-  assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/status'), true);
-});
-// The kitchen queue split (decisions §61): one line at a time, not the whole
-// order. Left off this list the queue's own per-item button would 403 before
-// the route ever ran — the exact failure this file's whole history is about.
-check('and moving ONE ITEM along on its own — the queue split (§61)', () => {
-  assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/item/4/status'), true);
-});
-
-// METHOD IS THE WHOLE DISTINCTION on the first of those URLs. Admitting the path
-// would hand a confined role the create route, and cap-routes only refuses that
-// on a tenant with rbac_enforce switched on — a flag that is dark for most.
-check('but NOT raising a transfer — same path, different method', () => {
-  assert.strictEqual(stockAppOnlyAllows('POST', '/api/restock'), false);
-});
-check('nor settling a receipt', () => {
-  assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/receive'), false);
-});
-check('nor retrying a dispatch', () => {
-  assert.strictEqual(stockAppOnlyAllows('POST', '/api/restock/91/retry-dispatch'), false);
-});
-check('nor editing a line', () => {
-  assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/item/4'), false);
-});
-check('nor deleting one', () => {
-  assert.strictEqual(stockAppOnlyAllows('DELETE', '/api/restock/91'), false);
-});
-check('nor archiving', () => {
-  assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/archive'), false);
-});
-// The "what the kitchen has finished" count, which is the ASKING side's dot.
-// The route answers this role a zero anyway (_kitchenScopedSession), and it has
-// no screen in /stock that reads it — so it has no business on this list.
-check('nor the count of what the kitchen has finished — that is the ASKER\'s dot', () => {
-  assert.strictEqual(stockAppOnlyAllows('GET', '/api/restock/kitchen-ready'), false);
-});
-// Reading the news is the asker's act. A confined kitchen role has no screen
-// that shows it, and letting this through would let the maker put the
-// warehouse's dot out on their behalf — for a warehouse still not told.
-check('nor marking that news read on the asker\'s behalf', () => {
-  assert.strictEqual(stockAppOnlyAllows('POST', '/api/restock/kitchen-ready/seen'), false);
-});
-
-check('the three the Add Stock app already had still work', () => {
-  assert.strictEqual(stockAppOnlyAllows('GET', '/api/retail-admin/quick-stock/context'), true);
-  assert.strictEqual(stockAppOnlyAllows('PUT', '/api/retail-admin/stores/3/stock/7'), true);
-  assert.strictEqual(stockAppOnlyAllows('POST', '/api/backend/logout'), true);
-});
-
-check('and the rest of the backend is still shut', () => {
-  for (const p of ['/api/retail-admin/products', '/api/retail-admin/orders',
-                   '/api/backend/roles', '/api/retail-admin/customers']) {
-    assert.strictEqual(stockAppOnlyAllows('GET', p), false, `${p} was let through`);
-  }
-});
 
 console.log(`\n${passed} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

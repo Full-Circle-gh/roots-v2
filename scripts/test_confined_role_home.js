@@ -1,38 +1,26 @@
 #!/usr/bin/env node
 /**
- * A confined role's home is Tacet Mobile, and the confinement still holds.
+ * A flat-list role's home is Tacet Mobile, and the stock-only lockdown is gone.
  *
  *   node scripts/test_confined_role_home.js
  *
- * Decisions §48 step 3, as amended 2026-09-08. §48 ruled the standalone stock
- * app retired and worded step 3 as "drop `stock_app_only` from both presets and
- * retire the gate". It cannot run as written: `lib/cap-routes.js` `capDenied`
- * returns ALLOW whenever `tenants.rbac_enforce` is off, `requiredCapFor`
- * returns null for every GET by design, and `rbac_enforce` is 0 on every
- * tenant. Retiring the gate today hands a kitchen phone the whole back office.
+ * Decisions §277 (Ash, 2026-09-27) removed the stock-only lockdown: the gate in
+ * server.js that kept `kitchen` and `store_stock` inside a short list of
+ * endpoints, and lib/stock-app-only.js that held the list. Ash accepted what
+ * that means while `tenants.rbac_enforce` is off — those roles reach the
+ * backend like any other, and their capabilities shape what they SEE.
  *
- * So the gate SURVIVES and is re-pointed at `/m`. This file is what says the
- * re-point did not quietly widen it.
+ * TWO THINGS ARE ASSERTED:
  *
- * FOUR THINGS ARE ASSERTED, and each fails silently on its own:
- *
- *   1. THE APP CAN BOOT. Tacet Mobile asks who the operator is and what the
- *      store is called before it draws anything. Miss either and the app opens
- *      into a session it cannot describe.
- *   2. THE BACK OFFICE STAYS SHUT. Revenue, orders, customers, team. This is
- *      the whole reason the gate was not retired, so it is the assertion that
- *      matters most and it is written as a sweep rather than a list.
- *   3. THE TWO ROLES GET DIFFERENT DOORS. `store_stock` raises requests and
- *      counts deliveries in; `kitchen` does neither. A path-only allowlist had
- *      to refuse those URLs to both — which is why "Ask for stock" was offered
- *      to the one role that holds `restock:request` and died before its route.
- *   4. THE BOOT DOES NOT ASK FOR WHAT THE GATE WILL REFUSE. `loadLive` fetches
- *      the revenue board unconditionally; `api()` turns a 403 into a redirect
- *      to /backend/login, which server.js bounces back to /m. That is a boot
- *      loop, and the only thing standing between this app and one is the
- *      `flatNav()` early return. The board now also REFRESHES ITSELF — a 60s
- *      backstop poll and a live stream, neither of them an operator's tap — so
- *      that early return is no longer the only door and this file watches both.
+ *   1. THE GATE IS GONE, and stays gone. No second confinement grows back in
+ *      server.js; when enforcement is switched on, the capability layer is what
+ *      confines these roles (§277).
+ *   2. THE BOOT DOES NOT ASK FOR A BOARD IT HAS NO SCREEN FOR. An operator on
+ *      the flat tool list (kitchen, store_stock: none of the tab capabilities)
+ *      has no Home board, so `loadLive` stops before the revenue read, and the
+ *      60s backstop poll and the live stream stay behind the same answer. Under
+ *      the lockdown that early return also stopped a boot loop; without it, it
+ *      still stops a phone fetching a board nobody on it can see.
  */
 'use strict';
 
@@ -41,8 +29,6 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const caps = require(path.join(ROOT, 'lib', 'capabilities.js'));
-const { stockAppOnlyAllows: allows } = require(path.join(ROOT, 'lib', 'stock-app-only.js'));
 
 let failures = 0, passed = 0;
 function check(label, fn) {
@@ -51,144 +37,29 @@ function check(label, fn) {
 }
 function section(t) { console.log(`\n${t}`); }
 
-const KITCHEN = caps.PRESETS.kitchen;          // add / fulfil / production:log
-const CLERK = caps.PRESETS.store_stock;        // recount / request / receive
-
-// ── 1. The app can boot ────────────────────────────────────────────────────
-section('Tacet Mobile can open for a confined operator');
-
-check('it may ask who the operator is — the role names their home screen', () => {
-  assert.strictEqual(allows('GET', '/api/backend/me', KITCHEN), true);
-});
-
-check('and what the store is called, which is where the timezone comes from', () => {
-  assert.strictEqual(allows('GET', '/api/retail-admin/config', KITCHEN), true);
-});
-
-check('it may set its own language and register for push', () => {
-  assert.strictEqual(allows('PUT', '/api/backend/language', KITCHEN), true);
-  assert.strictEqual(allows('GET', '/api/backend/push/pref', KITCHEN), true);
-  assert.strictEqual(allows('POST', '/api/backend/push/subscribe', KITCHEN), true);
-});
-
-check('and sign out', () => {
-  assert.strictEqual(allows('POST', '/api/backend/logout', KITCHEN), true);
-});
-
-// ── 2. The back office stays shut ──────────────────────────────────────────
-section('The back office is still refused — the reason the gate was kept');
-
-/* A SWEEP, NOT A LIST. The failure this guards against is a future line
-   widening a pattern rather than adding a URL somebody thought about, and a
-   sweep catches that where an enumeration of four does not. /dashboard leads
-   because it is the revenue endpoint and the one the boot used to fetch
-   unconditionally. */
-const FORBIDDEN = [
-  '/api/retail-admin/dashboard', '/api/retail-admin/dashboard/ops',
-  '/api/retail-admin/orders', '/api/retail-admin/orders/1',
-  '/api/retail-admin/customers', '/api/retail-admin/products',
-  '/api/retail-admin/purchases', '/api/retail-admin/invoices',
-  '/api/retail-admin/sales/summary', '/api/retail-admin/finance',
-  '/api/retail-admin/vouchers', '/api/retail-admin/waste',
-  '/api/retail-admin/stores', '/api/retail-admin/setup',
-  '/api/backend/team', '/api/backend/team/4',
-];
-for (const p of FORBIDDEN) {
-  check(`GET ${p} is refused`, () => {
-    assert.strictEqual(allows('GET', p, KITCHEN), false, `${p} was let through`);
-    assert.strictEqual(allows('GET', p, CLERK), false, `${p} was let through`);
-  });
-}
-
-check('and the shelf pattern is still anchored — no future segment rides in on it', () => {
-  assert.strictEqual(allows('GET', '/api/retail-admin/stores/3/stock', KITCHEN), true);
-  assert.strictEqual(allows('GET', '/api/retail-admin/stores/3/stock/7', KITCHEN), true);
-  assert.strictEqual(allows('GET', '/api/retail-admin/stores/3/stock/7/history', KITCHEN), false);
-  assert.strictEqual(allows('GET', '/api/retail-admin/stores/3/orders', KITCHEN), false);
-});
-
-// ── 3. The two roles get different doors ───────────────────────────────────
-section('The clerk raises requests; the cook does not');
-
-check('store_stock may raise a request — the defect this closes', () => {
-  assert.ok(CLERK.includes('restock:request'), 'preset changed: clerk lost restock:request');
-  assert.strictEqual(allows('POST', '/api/restock', CLERK), true);
-});
-
-check('kitchen may not — it holds no restock:request and never did', () => {
-  assert.ok(!KITCHEN.includes('restock:request'), 'preset changed: kitchen gained restock:request');
-  assert.strictEqual(allows('POST', '/api/restock', KITCHEN), false);
-});
-
-check('store_stock may count a delivery in; kitchen may not', () => {
-  assert.strictEqual(allows('PUT', '/api/restock/91/receive', CLERK), true);
-  assert.strictEqual(allows('PUT', '/api/restock/91/receive', KITCHEN), false);
-});
-
-check('the ready list belongs to whoever asked, never to whoever made it', () => {
-  assert.strictEqual(allows('GET', '/api/restock/kitchen-ready/lines', CLERK), true);
-  assert.strictEqual(allows('POST', '/api/restock/kitchen-ready/seen', CLERK), true);
-  assert.strictEqual(allows('GET', '/api/restock/kitchen-ready/lines', KITCHEN), false);
-  assert.strictEqual(allows('POST', '/api/restock/kitchen-ready/seen', KITCHEN), false);
-});
-
-check('the queue belongs to the cook, and both roles still read the shelf', () => {
-  assert.ok(KITCHEN.includes('restock:fulfil'));
-  assert.strictEqual(allows('PUT', '/api/restock/91/status', KITCHEN), true);
-  assert.strictEqual(allows('POST', '/api/retail-admin/production', KITCHEN), true);
-  assert.strictEqual(allows('PATCH', '/api/retail-admin/stores/3/stock/7', KITCHEN), true);
-  assert.strictEqual(allows('PATCH', '/api/retail-admin/stores/3/stock/7', CLERK), true);
-});
-
-section('An unresolved capability set fails CLOSED, alone in this layer');
-
-/* The rest of the confinement fails OPEN so a control-plane hiccup never locks
-   an operator out of the app they use all day, and counting a shelf still does.
-   A confinement must not WIDEN when a read fails, so the gated entries refuse.
-   This is also what keeps every two-argument caller in the older suites honest:
-   they pass no caps and must still read `false` here. */
-for (const [m, p] of [['POST', '/api/restock'], ['PUT', '/api/restock/91/receive'],
-  ['GET', '/api/restock/kitchen-ready/lines'], ['POST', '/api/restock/kitchen-ready/seen']]) {
-  check(`${m} ${p} is refused when caps are null`, () => {
-    assert.strictEqual(allows(m, p, null), false);
-    assert.strictEqual(allows(m, p), false);
-  });
-}
-
-check('but counting the shelf survives the same hiccup', () => {
-  assert.strictEqual(allows('PATCH', '/api/retail-admin/stores/3/stock/7', null), true);
-  assert.strictEqual(allows('GET', '/api/retail-admin/quick-stock/context', null), true);
-  assert.strictEqual(allows('GET', '/api/restock', null), true);
-});
-
-// ── 4. The server sends them to /m, and the app does not ask for the board ──
-section('The door is Tacet Mobile, and the boot knows not to ask');
+// ── 1. The lockdown is gone ────────────────────────────────────────────────
+section('The stock-only lockdown is gone (§277)');
 
 const SERVER = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 
-check('a backend page bounces a confined role to /m, not to the retired app', () => {
-  assert.ok(/p === '\/retail-admin' \|\| p\.startsWith\('\/backend\/'\)\) return res\.redirect\('\/m'\)/.test(SERVER),
-    'the confined-role redirect does not name /m');
-  assert.ok(!/return res\.redirect\('\/stock'\)/.test(SERVER),
-    'a redirect to /stock survives — step 3 re-points the confinement at /m');
+check('lib/stock-app-only.js is deleted', () => {
+  assert.ok(!fs.existsSync(path.join(ROOT, 'lib', 'stock-app-only.js')),
+    'the allowlist module is back');
 });
 
-check('/m and its manifest are let through the gate', () => {
-  const branch = SERVER.slice(SERVER.indexOf('Pages/assets'), SERVER.indexOf('Pages/assets') + 1400);
-  assert.ok(branch.includes("p === '/m'"), '/m is not admitted');
-  assert.ok(branch.includes("p === '/m-manifest.webmanifest'"), 'the install manifest is not admitted');
+check('server.js no longer confines a role to a list of endpoints', () => {
+  assert.ok(!/stockAppOnlyAllows/.test(SERVER), 'server.js still consults the allowlist');
+  assert.ok(!/error: 'kitchen_add_only'/.test(SERVER), 'server.js still refuses with kitchen_add_only');
+  assert.ok(!/p === '\/retail-admin' \|\| p\.startsWith\('\/backend\/'\)\) return res\.redirect\('\/m'\)/.test(SERVER),
+    'a backend page still bounces a role to /m');
 });
 
-check('/stock stays open too — migrate before delete, §48 step 4 closes it', () => {
-  const branch = SERVER.slice(SERVER.indexOf('Pages/assets'), SERVER.indexOf('Pages/assets') + 1400);
-  assert.ok(branch.includes("p === '/stock'"),
-    'an installed home-screen shortcut would die mid-shift');
+check('/stock still forwards to /m — installed shortcuts land somewhere', () => {
+  assert.ok(/app\.get\('\/stock'/.test(SERVER), 'the /stock redirect is gone');
 });
 
-check('the gate is given the capabilities it now decides with', () => {
-  assert.ok(/stockAppOnlyAllows\(req\.method, p, roleCaps\)/.test(SERVER),
-    'server.js still calls the allowlist without capabilities');
-});
+// ── 2. The app does not ask for the board ──────────────────────────────────
+section('The boot does not ask for a board a flat-list role has no screen for');
 
 const MHTML = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
 
@@ -207,7 +78,7 @@ const BOOT = (() => {
    it through a CALL rather than inline — the backstop poll refreshes those tiles
    without re-running the rest of the boot, and both callers have to be gated.
    Following the call instead of the fetch is what keeps this check about the
-   guarantee (a confined role never reaches /dashboard) rather than about the
+   guarantee (a flat-list role never reaches /dashboard) rather than about the
    shape loadLive happened to have on the day it was written. The fetch is
    asserted to live in loadToday and nowhere else in the boot, so there is one
    door to watch rather than two. */
@@ -226,31 +97,28 @@ check('the revenue read has exactly one door, and it is loadToday', () => {
 
 check('the boot stops before the revenue board for an operator with no tabs', () => {
   const stop = BOOT.indexOf('if(flatNav()) return;');
-  assert.ok(stop > 0, 'loadLive has no flat-role early return — a confined role boot-loops');
+  assert.ok(stop > 0, 'loadLive has no flat-role early return — a kitchen phone fetches a board it cannot see');
   const dash = BOOT.indexOf('loadToday()');
   assert.ok(dash > 0, 'the dashboard call moved — re-check which side of it the return sits on');
   assert.ok(stop < dash, 'the early return sits AFTER the dashboard call, so it prevents nothing');
 });
 
-/* THE BOARD NOW KEEPS ITSELF CURRENT, which is a SECOND way to reach the same
+/* THE BOARD KEEPS ITSELF CURRENT, which is a SECOND way to reach the same
    revenue endpoint — a 60s backstop poll and a live SSE subscription, neither
-   of them started by an operator's tap. `/api/retail-admin/stream` is not on
-   the allowlist either (it is absent from lib/stock-app-only.js on purpose),
-   so a confined phone that opened it would hold a socket the gate refuses and
-   poll a board its role exists to exclude. Both are shut by the same answer
+   of them started by an operator's tap. Both are shut by the same answer
    flatNav gives the boot: mLiveInit is only REACHED past the early return, and
    every automatic refresh asks mAutoOK first. */
 check('and the refresh that needs no tap is behind the same gate', () => {
   const stop = BOOT.indexOf('if(flatNav()) return;');
   const wire = BOOT.indexOf('mLiveInit()');
   assert.ok(wire > 0, 'the live refresh is no longer wired from the boot — re-check what starts it');
-  assert.ok(stop < wire, 'the stream is opened before the flat-role return, so a confined phone subscribes');
+  assert.ok(stop < wire, 'the stream is opened before the flat-role return, so a kitchen phone subscribes');
 
   const from = MHTML.indexOf('function mAutoOK()');
   assert.ok(from > 0, 'mAutoOK is gone — re-check what refuses an automatic refresh');
   const gate = MHTML.slice(from, MHTML.indexOf('\n}', from));
   assert.ok(/flatNav\(\)/.test(gate),
-    'an automatic refresh does not ask flatNav — the poll reaches the revenue board a confined role cannot');
+    'an automatic refresh does not ask flatNav — the poll fetches a board with no screen');
 });
 
 check('and it stops AFTER /config, which names their home screen', () => {

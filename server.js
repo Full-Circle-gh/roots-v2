@@ -322,79 +322,14 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// Stock-only lockdown. A backend operator with a RESTRICTED role may use ONLY
-// the Quick Stock app — the /stock PWA, its assets, and the stock endpoints it
-// calls. Everything else in the backend (the retail-admin shell, /backend/*
-// pages, every other API) is blocked here in ONE place, so it can't be reached
-// by a stray requireBackend copy that doesn't check the role. Full-access
-// sessions skip instantly.
-//
-// WHICH ROLES ARE RESTRICTED IS DATA, NOT A LITERAL. This used to test
-// `role !== 'kitchen' && role !== 'store_stock'`, which is the same rename
-// hazard as the dashboard boards and the store pins, and the most dangerous of
-// the three: rename "Kitchen" and a stock clerk silently gains the whole
-// backend, on every request, with nothing on screen to say so. The answer now
-// comes off the role record's stock_app_only flag, through the same
-// version-keyed cache as everything else — so this middleware still costs
-// exactly ONE query, the tenant_users read below.
-//
-// That read stays deliberately: role is not in the session (see loadCaller), so
-// re-reading it per request is what makes a demotion or a deactivation take
-// effect immediately instead of when the cookie expires.
-app.use((req, res, next) => {
-  if (!req.session?.backendUserId) return next();
-  let u;
-  try { u = require('./database').prepare('SELECT role, tenant_id FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId); }
-  catch (e) { return next(); }   // tables not ready — fail open to existing gates
-  if (!u) return next();
-  const role = u.role;
-  // Fail OPEN on an unreadable record, as every other read in this layer does:
-  // an operator who should be locked down and isn't is a bug, but an operator
-  // locked out of the app they use all day by a resolution hiccup is an outage.
-  let restricted = false;
-  // THE ROLE'S OWN CAPABILITIES COME OFF THE SAME RECORD, at no extra cost —
-  // recordFor is already being called, and its `caps` decides the handful of
-  // endpoints the two confined roles do NOT share (raising a request is the
-  // clerk's job, not the cook's). §46's principle, applied one layer earlier:
-  // decide by capability, never by job title. Null when the record is
-  // unreadable, and lib/stock-app-only.js refuses the gated entries on null —
-  // the one place in this layer that fails CLOSED, with the reasoning there.
-  let roleCaps = null;
-  try {
-    const rec = require('./lib/roles').recordFor(u.tenant_id, role);
-    restricted = rec ? rec.stockAppOnly : (role === 'kitchen' || role === 'store_stock');
-    roleCaps = rec ? rec.caps : null;
-  } catch (e) { restricted = (role === 'kitchen' || role === 'store_stock'); }
-  if (!restricted) return next();
-  const p = req.path;
-  if (p.startsWith('/api/')) {
-    // The list lives in lib/stock-app-only.js, with the reasoning for what is on
-    // it — including why the kitchen queue's three calls had to be added, why
-    // they are scoped by METHOD rather than path, and why four of them are
-    // scoped by CAPABILITY on top of that.
-    return require('./lib/stock-app-only').stockAppOnlyAllows(req.method, p, roleCaps)
-      ? next() : res.status(403).json({ error: 'kitchen_add_only' });
-  }
-  /* Pages/assets. THE APP THIS CONFINES TO IS TACET MOBILE (§48 step 3, as
-     amended 2026-09-08): `/m` and its manifest and icons go through, and every
-     backend page bounces THERE rather than to the separate app.
-
-     `/stock` IS STILL ADMITTED, and it is now the REDIRECT rather than an app:
-     step 4 deleted the page and left the door forwarding to `/m`. A confined
-     role tapping an installed home-screen shortcut has to be let as far as that
-     redirect, or the gate would bounce them to `/backend/*` — which this same
-     middleware then bounces back to `/m` anyway, by a longer road and with a
-     login page flashing past on the way. Its manifest and icon stay admitted
-     for the same reason they still exist: the shortcut is installed, and it
-     resolves them on launch. */
-  if (p === '/m' || p === '/m-manifest.webmanifest'
-      || p === '/stock' || p === '/stock-manifest.webmanifest'
-      || p === '/stock-icon.svg' || p === '/apple-touch-icon.png' || p === '/favicon.ico') return next();
-  if (p.startsWith('/tacet-icon-') || p === '/tacet-icon.svg'
-      || p === '/tacet-apple-touch-icon.png') return next();
-  if (p === '/retail-admin' || p.startsWith('/backend/')) return res.redirect('/m');
-  return next();   // fonts/css/img and other static assets
-});
+// THE STOCK-ONLY LOCKDOWN IS GONE (decisions §277, Ash, 2026-09-27). It sat
+// here and kept a role carrying `stock_app_only` (kitchen, store_stock) inside
+// a short list of endpoints, first for the /stock app and, after §48 deleted
+// that app, for a corner of Tacet Mobile. Ash removed it knowing what that
+// means while tenants.rbac_enforce is off: those roles reach the backend like
+// every other role, and what they SEE is shaped by their capabilities on the
+// client, not refused by the server. When enforcement is switched on, the
+// capability layer is what confines them. Do not rebuild a second gate here.
 
 // Routes
 //

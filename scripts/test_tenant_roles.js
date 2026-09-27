@@ -145,8 +145,8 @@ function versionOf(tid) {
   truthy(!bKeys.includes('customer_service'), 'Customer service is NOT created either');
   is(roles.recordFor(tB, 'store_stock').roster, 'store',
     'Store stock is managed inside its store, so it stays off the People roster');
-  truthy(roles.recordFor(tB, 'store_stock').stockAppOnly,
-    'and it carries stock_app_only — the server.js lockdown reads this, not a name');
+  is(roles.recordFor(tB, 'store_stock').stockAppOnly, undefined,
+    'and it carries no stock-only lockdown — §277 removed it');
   is(roles.seedTenant(tB), 0, 'seeding twice creates nothing (idempotent)');
 
   section('3 · resolution reads the record');
@@ -419,16 +419,14 @@ function versionOf(tid) {
   truthy(r.body.roleName && r.body.roleName.en, 'and the role’s own name travels with it');
 
   // ─────────────────────────────────────────────────────────────────────
-  section('17 · the Quick Stock lockdown is writable, and only one way is free');
-  // The flag has been a column since roles became data, the seeder sets it on
-  // the two stocker roles, and server.js refuses every other route for a role
-  // carrying it — but no create or edit path could ever write it. So a kitchen
-  // role could be granted purchasing:receive, save cleanly, and keep its 403,
-  // with the permissions screen showing a tick that meant nothing.
+  section('17 · the stock-only lockdown is gone (§277)');
+  // It was a switch on the role editor and a gate in server.js that kept
+  // kitchen and store_stock inside a short list of endpoints. Ash removed it:
+  // with enforcement off those roles reach the backend like any other, and the
+  // editor no longer carries a switch that could refuse to turn off.
   const tS = mkTenant('Lockdown test');
   const sOwner = mkUser(tS, 's_owner', 'owner');
-  // kitchen is a CARRIED role: it is only seeded where somebody holds it (§2),
-  // which is exactly the tenant this change is for.
+  // kitchen is a CARRIED role: it is only seeded where somebody holds it (§2).
   mkUser(tS, 's_cook', 'kitchen', 3);
   roles.seedTenant(tS);
   SESSION = { tenantId: tS, backendUserId: sOwner };
@@ -436,38 +434,20 @@ function versionOf(tid) {
   r = await call('GET', '/api/backend/roles');
   const kitchenRole = (r.body.roles || []).find(x => x.key === 'kitchen');
   truthy(kitchenRole, 'the seeded tenant has a kitchen role');
-  is(kitchenRole.stockAppOnly, true, 'and the editor is TOLD it is locked to the app — it never used to be');
+  is(kitchenRole.stockAppOnly, undefined, 'and the editor is no longer sent a lockdown to show');
   is(r.body.rbacEnforce, false, 'enforcement is off, as it is for every tenant by default');
 
-  // The refusal. Unlocking while enforcement is off does not hand the role the
-  // tools that were ticked — it hands it every route, because the cap map is
-  // only consulted under rbac_enforce.
-  r = await call('PUT', '/api/backend/roles/kitchen', { stock_app_only: 0 });
-  is(r.status, 400, 'unlocking is refused while capability enforcement is off');
-  is(r.body.need, 'rbac_enforce', 'and the refusal names what is missing');
-  is(roles.recordFor(tS, 'kitchen').stockAppOnly, true, 'the role is unchanged — a refused write writes nothing');
-
-  // Locking DOWN is a narrowing, so it needs no precondition at all.
-  r = await call('PUT', '/api/backend/roles/warehouse', { stock_app_only: 1 });
-  is(r.status, 200, 'locking a role DOWN is free — narrowing never waits on enforcement');
-  is(roles.recordFor(tS, 'warehouse').stockAppOnly, true, 'and it took');
-
-  // With enforcement on, the unlock goes through and the ticks start meaning
-  // something. This is the whole point of the change.
-  await call('PUT', '/api/backend/rbac-enforce', { enforce: 1 });
+  // The edit that used to come back 400 "turn enforcement on first".
   r = await call('PUT', '/api/backend/roles/kitchen',
     { stock_app_only: 0, caps: ['quickstock:add', 'purchasing:view', 'purchasing:receive'] });
-  is(r.status, 200, 'with enforcement on, the kitchen role can be let out of the app');
-  is(roles.recordFor(tS, 'kitchen').stockAppOnly, false, 'the lockdown is off');
+  is(r.status, 200, 'the kitchen role saves with enforcement off — nothing to unlock first');
   is(r.body.role.caps.sort(), ['purchasing:receive', 'purchasing:view', 'quickstock:add'],
     'and it holds the two permissions that let it book a delivery in');
 
-  // A role created locked stays locked; the default is still unlocked.
+  // An old client still posting the field is ignored, not refused.
   r = await call('POST', '/api/backend/roles', { name_en: 'Prep kitchen', name_cn: '备餐', stock_app_only: 1 });
-  is(r.status, 200, 'a new role can be created locked to the app');
-  is(r.body.role.stockAppOnly, true, 'and it is');
-  r = await call('POST', '/api/backend/roles', { name_en: 'Buyer', name_cn: '采购员' });
-  is(r.body.role.stockAppOnly, false, 'while a role that does not ask for it is unlocked, as before');
+  is(r.status, 200, 'a create that still sends stock_app_only is accepted');
+  is(r.body.role.stockAppOnly, undefined, 'and the field is ignored');
 
   // ─────────────────────────────────────────────────────────────────────
   section('18 · the counter till’s one-time grant');
