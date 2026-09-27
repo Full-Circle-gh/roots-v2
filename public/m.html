@@ -1979,6 +1979,23 @@ reg('clearAirDelay', sid=>{
     render();
   });
 });
+/* §284 — "I called the customer" (1) and its undo (0). Order-level on the
+   server: one customer, one call, however many parcels. */
+reg('ackNoContact', on=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.parcelBusy='nc'; state.orderErr=null; render();
+  apiWrite('/orders/'+o._id+'/no-contact/ack',{cleared:!!Number(on)}).then(()=>{
+    state.parcelBusy=null;
+    api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+    loadOps();
+  }).catch(e=>{
+    state.parcelBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=E(orderErrorText(e),orderErrorText(e));
+    render();
+  });
+});
 /* One step of a late-parcel case (§98). Every step goes through here so the
    phone cannot grow its own idea of what the steps are; the server validates
    each one and lib/delay-case.js owns the rule about what may close. */
@@ -16570,10 +16587,14 @@ function opsFires(){
      Guarded on the item actually being there. `count` is exact while `items` is
      a preview, so the two agree at 1 by construction — but a payload that ever
      disagreed would otherwise open a sheet onto nothing. */
+  /* §284 — the ones where the courier couldn't get through are a customer to
+     ring now, so the row says so instead of an age. Exact, from the server. */
+  const daNc=Number((o.delivery_alerts&&o.delivery_alerts.no_contact)||0);
   const daIt=items('delivery_alerts');
   const daGo=(c('delivery_alerts')===1&&daIt.length===1&&daIt[0]&&daIt[0].id!=null)
     ?"APP.cmd('openDeliveryAlert')":"APP.cmd('ordersGo','delayed')";
-  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),daIt,'',daGo);
+  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),daIt,
+    daNc>0?T(daNc+" can't reach the customer",daNc+' 单联系不上顾客'):'',daGo);
   add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),items('payment_mismatch'),'',"APP.cmd('ordersGo','pending')");
   // The brick fire's sibling: a proof IS on file, it was not rejected, and the
   // order is still unpaid — verified with auto-flip off, unreadable, or never
@@ -17734,6 +17755,23 @@ function delayCaseCard(o,sp){
     <div style="padding:2px 12px 12px">${body}</div>
     <div style="padding:11px 12px;border-top:1px solid var(--hairline)">${foot}</div></div>`;
 }
+/* §284 — THE COURIER COULD NOT REACH THE CUSTOMER. Red with the carrier's own
+   line while nobody has rung them; one quiet line with an undo once somebody
+   has. The server holds the line past the scans after it, so this stays up
+   after the newest event has moved on. */
+function noContactCard(sp){
+  const nc=sp&&sp.noContact;
+  if(!nc) return '';
+  const busy=state.parcelBusy==='nc';
+  if(!nc.open) return `<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}<span style="flex:1">${T('Customer contacted','已联系客户')}${nc.cleared_by?' · '+escAttr(nc.cleared_by):''}</span>
+    <button class="btn2" style="width:auto;padding:4px 10px;flex:none" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',0)">${T('Undo','撤销')}</button></div>`;
+  const line=LANG==='en'?(nc.text_en||nc.text_cn||''):(nc.text_cn||nc.text_en||'');
+  return `<div style="padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);display:flex;flex-direction:column;gap:8px">
+    <div style="font-size:13.5px;font-weight:600">${T("Courier can't reach the customer",'快递员联系不上顾客')}</div>
+    ${line?`<div style="font-size:12.5px;line-height:1.5;color:var(--text-secondary)"><span class="num">${escAttr(evTime(nc.event_time))}</span> · ${escAttr(line)}</div>`:''}
+    <button class="cta" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',1)">${busy?T('Saving…','保存中…'):T('I called the customer','已联系客户')}</button>
+  </div>`;
+}
 function trackingCard(o,sp,label){
   const t=sp.trk;
   const has=!!(t&&t.number);
@@ -17763,6 +17801,7 @@ function trackingCard(o,sp,label){
       ${st||lateFor?`<span style="display:flex;align-items:center;gap:7px;flex:none">
         ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}
         ${lateFor?`<span style="font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--brick-tint);color:var(--brick-ink)">${T(lateFor+' day'+(lateFor===1?'':'s')+' late','晚到 '+lateFor+' 天')}</span>`:''}</span>`:''}</div>
+    ${noContactCard(sp)}
     ${sp.airCleared==null&&(sp.lateDays>0)?delayCaseCard(o,sp):''}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
     ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${
@@ -24182,6 +24221,8 @@ function deliveryLine(r){
   const moving = r.status==='dispatched'||r.status==='delivered'||r.tracking_number||r.local_eta;
   if(moving&&r.fulfillment_type!=='pickup'){
     if(r.air_delivery_delayed) return {text:T('Delivery delayed · call the customer','配送延误 · 请联系顾客'),tone:'brick'};
+    // §284 — held until someone rings them, so it outlives "Out for delivery".
+    if(r.no_contact_open) return {text:T("Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客'),tone:'brick'};
     const live=courierLine(r); if(live) return live;
     if(r.is_local){
       if(r.local_eta) return {text:T('arrival '+r.local_eta,'预计 '+r.local_eta),tone:'plain'};
@@ -24285,6 +24326,7 @@ function orderNotes(r){
     out.push({sev:issued?'muted':'amber',icon:'receipt',label:issued?T('Invoice issued','已开票'):T('Invoice to issue','待开票')});
   }
   if(r.air_delivery_delayed) out.push({sev:'brick',icon:'truck',label:T('Delivery delayed · call the customer','配送延误 · 请联系顾客')});
+  if(r.no_contact_open) out.push({sev:'brick',icon:'phone',label:T("Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客')});
   return out.length?out:null;
 }
 /* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is
@@ -24579,6 +24621,7 @@ function mapDetail(o){
     localEta:sp.local_eta||null, etaSource:sp.eta_source||null,
     airCleared:sp.air_delay_cleared_at||null, airClearedBy:sp.air_delay_cleared_by||null,
     dcase:sp.delay_case||null,   // §98 — the four steps behind that stamp; null = none taken yet
+    noContact:sp.no_contact||null, // §284 — the courier's held "couldn't reach them" line; null = never
     // How late this parcel was, computed server-side in lib/delay-case.js.
     // This screen used to gate on mode==='air' and never saw a late land
     // parcel — which is every Guangdong order, ice packs included.

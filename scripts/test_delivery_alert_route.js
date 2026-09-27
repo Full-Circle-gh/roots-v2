@@ -95,12 +95,14 @@ function fixture() {
       id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, channel TEXT,
       tracking_status TEXT, tracking_scenario TEXT, channel_eta TEXT,
       channel_status_at TEXT, placed_at TEXT, fulfillment_type TEXT,
-      scheduled_for TEXT, customer_id INTEGER, recipient_name TEXT, recipient_phone TEXT);
+      scheduled_for TEXT, customer_id INTEGER, recipient_name TEXT, recipient_phone TEXT,
+      tracking_no_contact_event TEXT, tracking_no_contact_cleared TEXT);
     CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, nickname TEXT, phone TEXT);
     CREATE TABLE retail_shipments (
       id INTEGER PRIMARY KEY, order_id INTEGER, mode TEXT, dispatched_at TEXT,
       delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
-      local_eta TEXT, eta_source TEXT, air_delay_cleared_at TEXT);
+      local_eta TEXT, eta_source TEXT, air_delay_cleared_at TEXT,
+      tracking_no_contact_event TEXT, tracking_no_contact_cleared TEXT);
     CREATE TABLE retail_delay_cases (id INTEGER PRIMARY KEY, shipment_id INTEGER, order_id INTEGER);
     CREATE TABLE delivery_jobs (id INTEGER PRIMARY KEY, retail_order_id INTEGER,
       order_status INTEGER, updated_at TEXT);`);

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.451
+# Tacet shared-core consolidation — decisions record, v4.452
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.452 — **§284 · "THE COURIER COULDN'T REACH THE CUSTOMER" STAYS ON THE CARD UNTIL SOMEONE RINGS THEM — DECIDED BY ASH:** *"if delivery guy try to contact the customer by phone and there is no answer, it shows in delivery tracking info. we should get an alert also in such situation and try to contact the customer ourselves. it should show in need you dashboard and order info as an alert, similar to delay in order"*, then *"both yes"* to Claude's two questions (add an *I called the customer* button; clear on the button or on delivery). **THE ALERT ALREADY EXISTED AND ALMOST NEVER SHOWED.** `carrierAlertSql` counted `tracking_scenario = 'no_contact'`, but the scenario is classified from the NEWEST carrier line only, and a courier who cannot get through writes 无人接听 and then, minutes later, 再次派送 or 妥投 — so the order left the card before anyone looked. Separately, the pattern missed 电话未接通, 联系客户未果, 联系不到 and a phone that is 关机, which raised nothing at all. **THE FIX HOLDS THE LINE.** One pattern (`NO_CONTACT_RE`, `lib/tracking.js`) now feeds the status, the scenario and the English translation. Every writer of a trace (the JD pull and the kd100 push) stamps the newest matching line on the tracking row (`tracking_no_contact_event`, the carrier's own time). The order is on the card while that line is unanswered and the parcel has not landed. *I called the customer* is order-level and answers the line it saw — a LATER failed call raises it again. Lines before 2026-09-26 are ignored, so the first sync does not light up old history (the CASES_FROM lesson). Shown on the Needs-you row (*N can't reach customer*), the orders list, and a red banner on the parcel card with the carrier's line quoted, on desktop and phone. Five strings composed by Claude; see the vocabulary's v1.196. **Deliberately not done:** nothing is sent to the customer (the carrier's own scenario push already tells them), and the running-late alert is a separate PR.
 
 2026-09-27 · v4.451 — **§282 PART 2 · THE DESKTOP'S PAGES: THE BUTTON STAYS ON SCREEN.** Two shared classes in `public/retail-admin.css`: `.pin-foot`, a form's button row that sticks to the bottom of the screen while its form is on it, and `.pin-head`, a header holding a page's buttons that sticks to the top. **PINNED FOOTS:** Fresh batches (the schedule and the checkout pop-up), Cloud printers' *Save all*, a new store, Broadcasts' *Send*, and Purchasing — order steps 1–3, a new supplier, the supplier import, and *Confirm delivery*. **PINNED HEADS:** Orders → New order (its running total now stops under the header), Material record, and the poll editor (stopping under the 56px topbar, since that page scrolls the window). Sticky, not fixed: a bar holds only while its own form is in view, so a page never shows two, and a short form's row sits where it always did. Every one was checked in a browser with the page made far taller than the screen — each held at the edge, each as wide as the box it sits in; the one on the receive screen sat on the page rather than in a card and was narrowed to it. **RULE 3 SHARPENED:** a destructive button is never MOVED into a bar; one that already shared the commit's row (Delete draft, Disable, the poll's Delete) stays beside it. New fast suite `scripts/test_pin_bars.js` guards the classes and the shared rules (it fails 14 of 14 on the old files). No new words; no schema change; no change to `.gitignore` or CI.
 
@@ -20811,3 +20813,17 @@ against lines in the Unspecified group without naming a supplier; it is filed
 under `未指定 Unspecified`. A typed name that matches no supplier is still
 refused, so no near-duplicate suppliers are created. See the v4.450 changelog
 entry.
+
+## §284 — THE COURIER COULDN'T REACH THE CUSTOMER: HELD UNTIL SOMEONE RINGS THEM
+
+**Decided 2026-09-27 by Ash** (*"we should get an alert also in such situation
+and try to contact the customer ourselves"*, then *"both yes"*).
+
+1. **Any** carrier line saying the courier could not reach the customer raises
+   the alert, not only the newest line. One pattern, `NO_CONTACT_RE` in
+   `lib/tracking.js`, is the only definition.
+2. It stays on *Delivery needs a call* until an operator taps **I called the
+   customer**, or that parcel is delivered.
+3. The tap answers the line it saw. A later failed call is a new alert.
+4. Lines older than 2026-09-26 never raise it (`NO_CONTACT_FROM`).
+5. Nothing new is sent to the customer.

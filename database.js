@@ -4085,6 +4085,29 @@ addColumn('retail_shipments', 'prepared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
 
+// §284 — THE COURIER COULD NOT REACH THE CUSTOMER, KEPT UNTIL SOMEONE ANSWERS
+// FOR IT. `tracking_scenario` is classified from the NEWEST carrier line only,
+// so a courier's "无人接听" was overwritten by his next scan ("再次派送",
+// "妥投") minutes later and the alert it raised was gone before anyone looked.
+// These hold the newest such line for as long as it matters, on BOTH tracking
+// tables (the order row is the legacy mirror of the primary parcel):
+//   _event    — the carrier's own time on that line, "YYYY-MM-DD HH:MM:SS",
+//               Beijing wall clock as the carrier printed it. The identity of
+//               the incident: a later failed call has a later time.
+//   _seen_at  — when WE first saw it (UTC), which is what the Needs-you row
+//               ages from.
+//   _cleared  — the _event value an operator answered with "I called the
+//               customer". Open while _cleared is NULL or older than _event,
+//               so a NEW failed call after the tap raises it again.
+//   _cleared_by / _cleared_at — who tapped, and when (UTC).
+for (const t of ['retail_orders', 'retail_shipments']) {
+  addColumn(t, 'tracking_no_contact_event',      'TEXT');
+  addColumn(t, 'tracking_no_contact_seen_at',    'DATETIME');
+  addColumn(t, 'tracking_no_contact_cleared',    'TEXT');
+  addColumn(t, 'tracking_no_contact_cleared_by', 'TEXT');
+  addColumn(t, 'tracking_no_contact_cleared_at', 'DATETIME');
+}
+
 /* §189 — A BOX THAT WENT OUT ON AN ORDER THAT WAS THEN CANCELLED.
  *
  * §187 let a parked order send the parcels its shortage does not touch, and

@@ -13646,6 +13646,9 @@ function _jdApplyTrace(table, rowId, fetchRes) {
     scenario ? JSON.stringify(scenario) : null,
     rowId,
   );
+  // §284 — hold the newest "courier couldn't reach the customer" line, which
+  // the scenario above loses the moment a newer scan lands.
+  deliveryAlerts.stampNoContact(tdb(), table, rowId, norm.events);
   return { delivered: norm.delivered, scenario };
 }
 
@@ -17726,9 +17729,19 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // three this card counts, because the orders list has to filter on exactly
     // the same set — see that file's header for what went wrong when it didn't.
     const ALERT_WHERE = deliveryAlerts.carrierAlertSql('o');
+    // §284 — `no_contact` says WHICH problem this is, so both screens can name
+    // it; `no_contact_since` is the one honest clock a carrier item has: when
+    // we first saw the courier fail to get through. (A plain exception still
+    // ships no age — see the note above delivery_alerts.)
+    const NC_ORDER = deliveryAlerts.noContactOrderSql('o');
     const daItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_status, o.tracking_scenario,
              o.tracking_carrier, o.tracking_number, o.tracking_synced_at,
+             CASE WHEN ${NC_ORDER} THEN 1 ELSE 0 END AS no_contact,
+             CASE WHEN ${NC_ORDER} THEN COALESCE(
+               (SELECT MIN(snt.tracking_no_contact_seen_at) FROM retail_shipments snt
+                 WHERE snt.order_id = o.id AND ${deliveryAlerts.noContactOpenSql('snt')}),
+               o.tracking_no_contact_seen_at) END AS no_contact_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -17846,12 +17859,18 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const alertTotal = deliveryAlerts.alertCount(tdb(), daFilter);
     delivery_alerts = {
       count: alertTotal,
+      // §284 — how many of the count are "the courier couldn't reach them",
+      // counted over the whole set like the total, never off the preview.
+      no_contact: tdb().prepare(
+        `SELECT COUNT(*) AS n FROM retail_orders o WHERE o.status = 'dispatched' AND ${NC_ORDER}`
+      ).get().n,
       items: daItems.map(r => ({
         id:               r.id,
         order_no:         r.order_no,
         tracking_status:  r.tracking_status,
         tracking_scenario: r.tracking_scenario,
         synced_at:        r.tracking_synced_at,
+        ...(r.no_contact ? { no_contact: 1, waiting_since: r.no_contact_since || undefined } : {}),
         buyer:            r.buyer,
       })).concat(airItems.map(r => ({
         id:         r.id,
@@ -27629,6 +27648,10 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                          AND ${delayCase.lateShipmentSql('sha')}
                          AND sha.air_delay_cleared_at IS NULL
                        LIMIT 1) AS air_delivery_delayed,
+                    -- §284 — the courier could not reach the customer and nobody
+                    -- has called them yet. Same predicate as the Needs-you card.
+                    CASE WHEN o.status = 'dispatched'
+                          AND ${deliveryAlerts.noContactOrderSql('o')} THEN 1 ELSE 0 END AS no_contact_open,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -28109,6 +28132,15 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     delivered_at:  s.delivered_at,
     air_delay_cleared_at: s.air_delay_cleared_at || null,  // late-air food-safety alert marked handled
     air_delay_cleared_by: s.air_delay_cleared_by || null,
+    // §284 — the newest "courier couldn't reach the customer" line on this
+    // parcel, held past the scans after it; null when there never was one.
+    no_contact: (() => {
+      let evs = [];
+      try { evs = JSON.parse(s.tracking_events_json || '[]') || []; } catch { evs = []; }
+      return deliveryAlerts.noContactView(s, evs.map(e => ({
+        ...e, description_en: e && e.description_cn ? tracking.translateEventDescription(e.description_cn) : null,
+      })));
+    })(),
     // The four steps behind that stamp (§98). READ ONLY HERE, NEVER CREATED:
     // a GET that writes a row for every drawer opened would mint a case for
     // parcels nobody ever had a problem with. NULL means "nothing done yet",
@@ -28147,6 +28179,14 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   }));
   // Order-level fulfillment rollup (drives the "Partially shipped" badge).
   o.fulfillment = buildOrderFulfillment(id);
+  // §284 — the list's flag, on the drawer too, so a screen that maps both
+  // through one function reads the same field off each.
+  try {
+    o.no_contact_open = tdb().prepare(
+      `SELECT CASE WHEN o.status = 'dispatched' AND ${deliveryAlerts.noContactOrderSql('o')}
+              THEN 1 ELSE 0 END AS v FROM retail_orders o WHERE o.id = ?`
+    ).get(id).v;
+  } catch (e) { o.no_contact_open = 0; }
 
   o.timeline = orderTimeline(o);
   // Keep legacy `o.tracking` populated from the primary shipment so older
@@ -29493,6 +29533,65 @@ router.post('/api/retail-admin/orders/:id/air-delay/ack',
     clear ? 'air_delay_cleared' : 'air_delay_reopened', 'retail_order', id,
     { shipments: info.changes }, req.ip);
   res.json({ success: true, data: { cleared: clear, shipments: info.changes } });
+});
+
+// §284 — "I CALLED THE CUSTOMER": the answer to "the courier couldn't reach
+// them". Order-level, because it is one customer and one phone call however
+// many parcels the order is in, so it answers every open no-answer line on the
+// order row and on each parcel. It answers the line it SAW, not the order for
+// ever: `_cleared` takes the value of `_event`, and a later failed call carries
+// a later time and raises the alert again. `cleared:false` is the undo.
+router.post('/api/retail-admin/orders/:id/no-contact/ack',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const clear = req.body?.cleared !== false;
+  const who = req.user.username || null;
+  let changes = 0;
+  const tx = tdb().transaction(() => {
+    const rows = [
+      ...tdb().prepare(`SELECT 'retail_orders' AS t, id, tracking_scenario, tracking_events_json,
+                               tracking_no_contact_event FROM retail_orders WHERE id = ?`).all(id),
+      ...tdb().prepare(`SELECT 'retail_shipments' AS t, id, tracking_scenario, tracking_events_json,
+                               tracking_no_contact_event FROM retail_shipments WHERE order_id = ?`).all(id),
+    ];
+    for (const r of rows) {
+      if (clear && !r.tracking_no_contact_event && r.tracking_scenario === 'no_contact') {
+        // A pre-§284 alert: the newest line is the no-answer and nothing was
+        // stamped. Stamp it now so the tap has something to answer.
+        let evs = [];
+        try { evs = JSON.parse(r.tracking_events_json || '[]') || []; } catch { evs = []; }
+        const newest = evs.map(e => String((e && e.time) || '')).filter(Boolean).sort().pop();
+        if (newest) {
+          tdb().prepare(`UPDATE ${r.t} SET tracking_no_contact_event = ?,
+                           tracking_no_contact_seen_at = COALESCE(tracking_no_contact_seen_at, CURRENT_TIMESTAMP)
+                         WHERE id = ?`).run(newest, r.id);
+        }
+      }
+      const info = clear
+        ? tdb().prepare(
+            `UPDATE ${r.t}
+                SET tracking_no_contact_cleared    = tracking_no_contact_event,
+                    tracking_no_contact_cleared_by = ?,
+                    tracking_no_contact_cleared_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND ${deliveryAlerts.noContactOpenSql()}`
+          ).run(who, r.id)
+        : tdb().prepare(
+            `UPDATE ${r.t}
+                SET tracking_no_contact_cleared    = NULL,
+                    tracking_no_contact_cleared_by = NULL,
+                    tracking_no_contact_cleared_at = NULL
+              WHERE id = ? AND tracking_no_contact_cleared IS NOT NULL`
+          ).run(r.id);
+      changes += info.changes;
+    }
+  });
+  tx();
+  logActivity(req.user.id, req.user.username,
+    clear ? 'no_contact_cleared' : 'no_contact_reopened', 'retail_order', id,
+    { rows: changes }, req.ip);
+  res.json({ success: true, data: { cleared: clear, rows: changes } });
 });
 
 // One step of a late-parcel case (§98). The steps are named in lib/delay-case.js
@@ -32638,6 +32737,10 @@ function handleKd100Callback(req, res, tid) {
                   updated_at                 = CURRENT_TIMESTAMP
             WHERE id = ?`
         ).run(liveStatus, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
+        // §284 — same hold as the JD pull: a no-answer line outlives the scan
+        // after it. Never allowed to fail the callback the carrier is waiting on.
+        try { deliveryAlerts.stampNoContact(tdb(), 'retail_orders', order.id, parsed.events); }
+        catch (e) { console.error('[kd100.callback] no-contact stamp failed:', e); }
       }
 
       // Mirror onto the matching shipment row(s). The admin order drawer and the
@@ -32658,6 +32761,11 @@ function handleKd100Callback(req, res, tid) {
                   updated_at                  = CURRENT_TIMESTAMP
             WHERE order_id = ? AND tracking_number = ?`
         ).run(liveStatus, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id, parsed.number);
+        for (const sh of tdb().prepare(
+          'SELECT id FROM retail_shipments WHERE order_id = ? AND tracking_number = ?'
+        ).all(order.id, parsed.number)) {
+          deliveryAlerts.stampNoContact(tdb(), 'retail_shipments', sh.id, parsed.events);
+        }
       } catch (e) { console.error('[kd100.callback] shipment mirror failed:', e); }
       console.log(`[kd100.callback] tenant=${tid} order=${order.id} number=${parsed.number} state=${parsed.state_code} scenario=${scenarioCode || '-'} events=${parsed.events.length}`);
 

@@ -2915,9 +2915,13 @@ function tdAttnRender() {
   // already having a bad day.
   const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
   if (da.count && dashCardWants('delivery')) {
+    // §284 — name the ones where the courier couldn't get through: those are a
+    // customer to ring now, not a parcel to watch. Exact, from the server.
+    const nc = Number(da.no_contact || 0);
     fires.push({
       sev: 'brick', icon: 'truck',
       label: cuT('Delivery needs a call', '配送需要跟进'),
+      state: nc > 0 ? cuT(`${nc} can't reach customer`, `${nc} 单联系不上客户`) : null,
       n: da.count,
       // The oldest across every kind of delivery trouble. Each sub-list arrives
       // oldest-first, so the true oldest is always inside the preview even when
