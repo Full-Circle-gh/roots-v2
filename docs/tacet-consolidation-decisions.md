@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.447
+# Tacet shared-core consolidation — decisions record, v4.448
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.448 — **§281 · AN EXPIRED OR SPOILED SALAD IS WRITTEN OFF WITHOUT THE DRESSING THE SHOP KEPT — REPORTED BY ASH, REOPENING THE WASTE HALF OF §166.** From the live waste screen: *"the beet salad and tabbouleh bowl expires. but not the sauce. it seems the waste include the dressing as well"*. It did. **WHAT THE LIVE DATA SAID** (`scripts/diagnose_dressing_waste.js`, read-only, 2026-09-27): every wasted product is now costed by its build list, and three carry a dressing line — Beet Salad ¥3.11 of ¥8.91 (35%), Quinoa Salad ¥2.92 of ¥10.12 (29%), Tabbouleh Bowl ¥0.34 of ¥10.60 (3%). From 4 to 26 September about ¥52 of ¥338 written off was dressing that went back on the shelf. Beet Salad's second dressing (Ginger Tahini, §166's data fault) is gone from the list, so its SALE cost is now right; **waste is the one reader still wrong.** **WHY §166's ROUTE WAS NOT TAKEN.** §166 withdrew the waste fix in favour of making each dressing its own stocked product. Ten days on no dressing is a product, and that route now costs a customer question with one answer on every fixed-dressing salad plus margin work, to fix a figure only waste reads. Proposed to Ash and agreed: *"go ahead, expired and spoiled both"*. **THE RULE.** A build-list line can be ticked *Packed separately — kept if it expires or spoils* (`product_build_lines.packed_separately`). A write-off whose reason is **Expired or Spoiled** leaves ticked lines out; every other reason (Damaged, Preparation error, Staff consumption, Sampling, Other) charges in full, because the dressing goes in the bin with the box. **No question is asked on the waste sheet** — the tick is set once on the product, not answered by staff on every entry. **WHAT DOES NOT MOVE.** The product's cost, margin and every sale still count the line — every salad sold goes out with its dressing. Stock moves the whole product exactly as before. Past write-offs keep their stored figure (§32 rule 9). Packaging rows get no tick. **EDGES, EACH TOWARD UNKNOWN RATHER THAN A GUESS.** A blocked build list, a bundle, or a product with no build list falls through to today's figure. Every costed line ticked is UNCOSTED, never a ¥0 loss (§32 rule 10). **ONE READER.** `lib/waste-record.js` `wasteUnitCostYuan()` is used by both the write and `GET /waste/preview`, which now takes the selected reason and names what it left out, so the figure shown before Record is the figure stored. Production's shortfall losses go through the same function and are unaffected unless their reason is expired or spoiled. **FLAGGED, NOT FIXED:** the Tabbouleh bowl dressing material is costed ¥0.0067/g, about a tenth of the other dressings — Ash to check the figure. Two strings COMPOSED, declared in `docs/tacet-delivery-vocabulary.md` v1.194. Covered by `scripts/test_waste_kept_lines.js` (32 checks, red-proofed against the tree without the subtraction).
 
 2026-09-27 · v4.447 — **§279 BATCH 5 · THE MIXED SCREENS: THREE SPLIT, THREE KEEP THEIR SAVE — ASH's *"keep going"*.** **SPLIT.** (1) The shared "Save settings" bar used to save three panels at once. Shop layout & filters and Customer service now save themselves (`SHOP_CARD`, `CS_CARD`); the bar stays on **Notifications only** — the WeChat template id, the two WeCom webhook addresses (each carries its key) and the manual-Alipay payment card — and is hidden elsewhere. (2) Store pickup: the hours and lead time save themselves (`PICKUP_CARD`); the pickup packing fee beside them keeps the view's Save, which now sends the fees alone. **KEPT, AND WHY — Claude's call under rule 2, reported to Ash rather than assumed.** *Affiliate settings*: every field but the referral-code prefix is a commission rule (rewards, share rate, duration, who earns), so there is nothing worth splitting out. *Membership tiers* and *Fresh batches*: each is ONE stored record mixing wording with money or schedule — a tier's name with its spend threshold and multiplier; a batch's popup wording with its order cut-off hours, pre-order cap and delivery platforms. Autosaving the wording would write the whole record, carrying any half-edited number beside it; splitting the record is a data change, not an autosave one. They keep their Save. Nothing new in Chinese. No schema change; no change to `.gitignore` or CI.
 
@@ -17953,6 +17955,8 @@ optional group never counts toward the floor, and the two nulls (nothing linked 
 nothing priceable) are told apart by `linked`. Every case red-proofed against the tree
 before the fix.
 
+**REOPENED IN PART BY §281 (2026-09-27).** The waste half of this section — *"withdrawn, not deferred"* — is reversed in a smaller form: a build-list line ticked *packed separately* is left out of an expired or spoiled write-off, with no question asked. The rest of §166 stands.
+
 ## §167 — MAKING ONE: SCALE IT, GATHER IT, WORK THE STEPS — AND WRITE NOTHING
 
 Asked by Ash, 2026-09-17, after stage one shipped: *"do it"* — option C of the
@@ -20761,3 +20765,12 @@ waiting claims whose goods have not arrived and approve them together onto one
 purchase order, one line per claim, for one shop. The approver chooses which go
 together. Claims approved one at a time still raise one order each (§114).
 Orders already raised are not merged. See the v4.441 changelog entry.
+
+## §281 — AN EXPIRED OR SPOILED PRODUCT IS WRITTEN OFF WITHOUT WHAT THE SHOP KEPT
+
+**Decided 2026-09-27 by Ash**, reopening the waste half of §166. A build-list
+line can be ticked *packed separately* — a salad's dressing in its own pot. A
+write-off whose reason is Expired or Spoiled leaves ticked lines out of its cost;
+every other reason charges in full. No question is asked when writing off. The
+product's cost, margin, sales and stock are unchanged. See the v4.448 changelog
+entry.

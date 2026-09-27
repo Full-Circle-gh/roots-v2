@@ -545,7 +545,10 @@
       if (!showMoney()) { preview = null; return; }
       const seq = ++previewSeq;
       try {
-        const j = await api('/api/retail-admin/waste/preview?store_product_id=' + picked.id + '&qty=' + qty);
+        // The reason goes too: expired or spoiled leaves out a line the shop
+        // keeps, such as a salad's dressing (§281), so the figure depends on it.
+        const j = await api('/api/retail-admin/waste/preview?store_product_id=' + picked.id + '&qty=' + qty
+          + '&reason_code=' + encodeURIComponent(reasonSel.value || ''));
         if (seq !== previewSeq) return;      // a later keystroke already won
         preview = j.data || null;
       } catch (e) { if (seq === previewSeq) preview = null; }
@@ -575,13 +578,19 @@
       if (!reason && preview && showMoney()) {
         text = preview.is_uncosted
           ? T('No cost on file for this product — it will be recorded without one.', '该产品暂无成本,此条将不计成本。')
-          : T('Cost', '成本') + ' ' + money(preview.cost_total_cents);
+          : T('Cost', '成本') + ' ' + money(preview.cost_total_cents)
+            // Say what was left out, or the figure silently disagrees with the
+            // product's own cost. Chinese composed, declared in the vocabulary doc.
+            + ((preview.kept_lines || []).length
+              ? ' · ' + T('Kept, not counted: ', '保留，不计入：')
+                + preview.kept_lines.map(k => T(k.name_en, k.name_cn || k.name_en)).join(', ')
+              : '');
       }
       hint.textContent = text;
       hint.className = 'wst-hint' + (reason ? ' warn' : '');
     }
     qtyIn.addEventListener('input', () => { refresh(); loadPreview(); });
-    reasonSel.addEventListener('change', refresh);
+    reasonSel.addEventListener('change', () => { refresh(); loadPreview(); });
     noteIn.addEventListener('input', refresh);
     refresh();
 

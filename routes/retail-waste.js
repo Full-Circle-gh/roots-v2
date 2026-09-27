@@ -34,10 +34,9 @@
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
-const { productUnitCostYuan } = require('../lib/product-cost');
 // The loss-writing itself, shared with Production so a batch that comes up short
 // lands in this same ledger by the same path rather than a second copy of it.
-const { recordProductWaste, resolveCostCents, linkLedgerToWaste } = require('../lib/waste-record');
+const { recordProductWaste, resolveCostCents, linkLedgerToWaste, wasteUnitCostYuan } = require('../lib/waste-record');
 const { businessDateForLocation } = require('../lib/business-date');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
@@ -251,16 +250,24 @@ router.get('/api/retail-admin/waste/preview', requireRetailAdmin, requireWasteEn
   if (!canSeeCosts(req)) {
     return res.json({ success: true, costs_hidden: true, data: { store_product_id: productId, qty } });
   }
-  const unitYuan = productUnitCostYuan(db, productId);
-  const cost = resolveCostCents(unitYuan, qty);
+  // The reason changes the figure (§281): expired or spoiled leaves out a line
+  // packed separately, because the shop keeps it. So the screen sends the
+  // reason it has selected, and asks again when it changes. No reason yet reads
+  // as the full cost, which is what every other reason charges.
+  const reason = String(req.query.reason_code || '');
+  const w = wasteUnitCostYuan(db, productId, reason);
+  const cost = resolveCostCents(w.unitYuan, qty);
   res.json({
     success: true,
     data: {
       store_product_id: productId,
       qty,
-      unit_cost_yuan: unitYuan,
+      unit_cost_yuan: w.unitYuan,
       cost_total_cents: cost.cents,
       is_uncosted: cost.uncosted ? 1 : 0,
+      // Names only: what was left out, so the screen can say it. Its money
+      // is already inside the total above.
+      kept_lines: w.kept.map(k => ({ name_en: k.name_en, name_cn: k.name_cn })),
     },
   });
 });
