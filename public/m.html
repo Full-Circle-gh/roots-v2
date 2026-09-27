@@ -430,6 +430,12 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
   border-top-left-radius:14px;border-top-right-radius:14px;
   box-shadow:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
   animation:tSheetUp .4s var(--ease-settle) both;display:flex;flex-direction:column}
+/* A LAYER THAT WAS ALREADY UP DOES NOT ARRIVE AGAIN. render() rewrites the
+   whole app, so every repaint builds a fresh .sheet and .scrim, and each one
+   replays its entrance — the sheet slid up from the bottom again on every tap
+   inside it and on every background poll. render() adds this class to the
+   layers that were on screen the paint before (see keepStill()). */
+.stay{animation:none!important}
 .grabber{width:38px;height:5px;border-radius:999px;background:var(--border-default);margin:6px auto 8px}
 .pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
 .stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
@@ -18301,7 +18307,7 @@ function sheetAsk(){
    (install, at 61): a zoomed photo is meant to sit over anything already open. */
 function sheetImgZoom(){
   const src=state.imgZoom; if(!src) return '';
-  return `<div style="position:absolute;inset:0;z-index:70;background:rgba(10,14,22,.92);display:flex;align-items:center;justify-content:center;animation:tFade .15s ease both"
+  return `<div class="overlay" style="position:absolute;inset:0;z-index:70;background:rgba(10,14,22,.92);display:flex;align-items:center;justify-content:center;animation:tFade .15s ease both"
        onclick="APP.cmd('closeZoom')">
      <img src="${src}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onclick="event.stopPropagation()">
      <button class="iconbtn" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;background:rgba(17,26,43,.55);color:#fff"
@@ -20386,7 +20392,7 @@ function searchIndex(){
 }
 function sheetSearch(){
   const results=searchIndex();
-  return `<div style="position:absolute;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;animation:tFade .2s ease both">
+  return `<div class="overlay" style="position:absolute;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;animation:tFade .2s ease both">
     <div style="flex:none;padding:calc(env(safe-area-inset-top,0px) + 16px) 10px 12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-default)">
       ${searchBox(`<input id="mSearch" autofocus inputmode="search" enterkeyhint="search"
         placeholder="${T('Search orders — number, name, phone','搜索订单 — 单号、姓名、手机')}"
@@ -22358,6 +22364,22 @@ window.addEventListener('pagehide',saveScrollForReturn);
    the lock to show it. */
 window.addEventListener('pagehide',()=>{ if(state.recvPo) recvFlush(); });
 document.addEventListener('visibilitychange',()=>{ if(document.hidden&&state.recvPo) recvFlush(); });
+/* THE POPUPS MUST NOT FLICKER. render() replaces the whole app in one
+   innerHTML, so an open sheet is destroyed and rebuilt on every paint, and its
+   slide-up entrance plays again each time: a tap on the Menu's Sound switch, or
+   the 60-second home poll answering behind it, and the sheet rose from the
+   bottom of the screen once more. Seven sheets had grown their own guard
+   (poMounted, custMounted, wst.mounted and the rest), one at a time; eleven had
+   not. This is the guard for all of them, in the one place every layer passes
+   through, so the next sheet is born without the flicker.
+   _layersUp is which layers the LAST paint drew, by key. A layer drawn again
+   under the same key gets .stay and appears where it already was; a layer that
+   is new this paint keeps its entrance. A key carries the thing shown where a
+   different one should arrive afresh — another order, another question. */
+let _layersUp={};
+function keepStill(html){
+  return html.replace(/class="(scrim|sheet|overlay|dialrow|toast)(?=[ "])/g,'class="$1 stay');
+}
 function render(){
   /* THE LIST MUST NOT JUMP BACK TO THE TOP. render() replaces the whole app in
      one innerHTML, which destroys the scroller and takes its position with it.
@@ -22397,40 +22419,44 @@ function render(){
   const _qkeep=_qb?_qb.scrollTop:0;
   if(!state.capsLoaded){
     app.innerHTML = bootHold();
+    _layersUp={};
     return;
   }
+  const _was=_layersUp, _now={};
+  const layer=(key,out)=>{ if(!out) return ''; _now[key]=1; return _was[key]?keepStill(out):out; };
   /* Order matters: the pull ring is painted first so the content sits on top of
      it, the install strip is a sibling BETWEEN the scroller and the tab bar so
      it takes its own room instead of covering the last row of a list. */
   let html = pullRing()
     + `<div class="content" id="content"${state.refreshing?' style="transform:translateY(var(--pull-gap));transition:transform .3s var(--ease-settle)"':''}>${bodyHtml()}</div>`
     + `<div class="dock" id="mDock">${installStrip()}${tabbar()}</div>`
-    + fabHtml();
-  if(state.installSheet) html += sheetInstall();
-  if(state.overflow) html += sheetOverflow();
-  if(state.ask) html += sheetAsk();
-  if(state.custId) html += sheetCustomer();
-  if(state.caddr) html += sheetCustAddr();
-  if(state.detailId) html += sheetOrderDetail();
-  if(state.detailActions) html += sheetActions();
-  if(state.productSku) html += sheetProduct();
-  if(state.oosSku) html += sheetOos();
-  if(state.reply!=null) html += sheetReply();
-  if(state.poId!=null) html += sheetPO();
-  if(state.chanSheet) html += sheetChannel();
-  if(state.quickSheet) html += sheetQuick();
+    + (state.quickFab ? layer('dial', fabHtml()) : fabHtml());
+  if(state.installSheet) html += layer('install', sheetInstall());
+  if(state.overflow) html += layer('overflow', sheetOverflow());
+  if(state.ask) html += layer('ask:'+state.ask.title, sheetAsk());
+  if(state.custId) html += layer('cust:'+state.custId, sheetCustomer());
+  if(state.caddr) html += layer('caddr', sheetCustAddr());
+  if(state.detailId) html += layer('detail:'+state.detailId, sheetOrderDetail());
+  if(state.detailActions) html += layer('actions', sheetActions());
+  if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
+  if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
+  if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
+  if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
+  if(state.chanSheet) html += layer('chan', sheetChannel());
+  if(state.quickSheet) html += layer('quick', sheetQuick());
   /* THE STEP SHEET BELONGS TO ONE SCREEN. `step` survives a Back out of
      Making one — pop() is generic and clears nothing — so without the route in
      this condition the sheet would paint over the record screen underneath,
      with no way to tell where it had come from. Asked of the CURRENT top of the
      stack rather than cleared in pop(), so returning to the screen returns to
      the step somebody was on. */
-  if(state.rcp.step!=null && rcpMakeOnTop()) html += sheetRecipeStep();
-  if(state.wst.open) html += sheetWaste();
-  if(state.search) html += sheetSearch();
-  if(state.imgZoom) html += sheetImgZoom();
-  if(state.toast) html += `<div class="toast">${state.toast}</div>`;
+  if(state.rcp.step!=null && rcpMakeOnTop()) html += layer('rcp', sheetRecipeStep());
+  if(state.wst.open) html += layer('wst', sheetWaste());
+  if(state.search) html += layer('search', sheetSearch());
+  if(state.imgZoom) html += layer('zoom:'+state.imgZoom, sheetImgZoom());
+  if(state.toast) html += layer('toast:'+state.toast, `<div class="toast">${state.toast}</div>`);
   app.innerHTML = html;
+  _layersUp=_now;
   /* WHERE THE FLOATING BUTTON SITS, measured off the dock that was just
      written — the install strip plus the tab bar, whichever of the two are
      actually on screen. Read HERE rather than on a frame of its own: this is
