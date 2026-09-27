@@ -72,6 +72,18 @@ const CASES = [
     ['Submit is pinned, below the list of what was sent', pinned('Submit')],
     ['the approval sentence rides with it', pinned('until it is approved')],
   ]],
+  /* Ash's screenshot, the day it shipped: the bar above the keyboard, and
+     Submit in it still grey after an amount was typed. The field stores and
+     never repaints the screen, so the bar has to be redrawn on its own. */
+  ['Expense — typing an amount lights Submit', STUB + `APP.cmd('push','expense');
+     var el=document.getElementById('mExpAmt'); el.value='25'; el.dispatchEvent(new Event('input',{bubbles:true}));`, [
+    ['Submit is live without another tap', `(function(){ var b=[...document.querySelectorAll('#mExpFoot button')].find(function(b){return b.textContent.includes('Submit')});
+       if(!b) throw new Error('no Submit in the bar'); if(b.disabled) throw new Error('still disabled'); return true; })()`],
+    ['and typing never rebuilds the field under the thumb', `(function(){ var f=document.getElementById('mExpAmt');
+       APP.cmd('expAmt','30'); return document.getElementById('mExpAmt')===f; })()`],
+    ['clearing it greys Submit again', `(function(){ el.value=''; el.dispatchEvent(new Event('input',{bubbles:true}));
+       var b=[...document.querySelectorAll('#mExpFoot button')].find(function(b){return b.textContent.includes('Submit')}); return !!b&&b.disabled; })()`],
+  ]],
   ['Add someone', STUB + `APP.cmd('push','team'); APP.cmd('teamInvite');`, [
     ['Add them is pinned', pinned('Add them')],
   ]],
