@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.449
+# Tacet shared-core consolidation — decisions record, v4.450
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-09-27 · v4.449 — **§282 · A 发票 FOR A ONE-OFF PURCHASE NEEDS NO SUPPLIER — ASH:** staff *"它必须设置供应商才能添加发票。仅仅购买一次的物品不需要设置供应商信息。"*, then *"go"* on Claude's plan. **CAUSE.** On Purchasing → Invoices the `未指定 Unspecified` group offered only `设置供应商`, and both the add-invoice form and `POST`/`PUT /api/retail-admin/purchasing/invoices` refused an empty supplier (`supplier_required`). A 发票 for something bought once could only be recorded after inventing a supplier for it. **THE CHANGE.** The Unspecified row gains `添加发票` beside `设置供应商`. The form's supplier is optional: left empty, it offers the Unspecified lines to tick; emptying a picked supplier switches the form to them. The server files an empty supplier under the literal `未指定 Unspecified` (`invSupplierOrUnspecified`), the same string the grouping falls back to. Coverage keys on `invoice_lines`, never on `invoices.supplier`, so nothing else moves. **KEPT:** a typed name that matches no supplier is still refused — grouping keys on the string, and a free-typed name would open a near-duplicate supplier. The seller's name goes in the Note. `标记不开发票` is unchanged and remains the answer for a purchase that will never have a 发票. Tested by scripts/test_invoice_no_supplier.js and scripts/test_invoice_supplier_search.js §16–21. Chinese: vocabulary v1.195.
+2026-09-27 · v4.450 — **§283 · A 发票 FOR A ONE-OFF PURCHASE NEEDS NO SUPPLIER — ASH:** staff *"它必须设置供应商才能添加发票。仅仅购买一次的物品不需要设置供应商信息。"*, then *"go"* on Claude's plan. **CAUSE.** On Purchasing → Invoices the `未指定 Unspecified` group offered only `设置供应商`, and both the add-invoice form and `POST`/`PUT /api/retail-admin/purchasing/invoices` refused an empty supplier (`supplier_required`). A 发票 for something bought once could only be recorded after inventing a supplier for it. **THE CHANGE.** The Unspecified row gains `添加发票` beside `设置供应商`. The form's supplier is optional: left empty, it offers the Unspecified lines to tick; emptying a picked supplier switches the form to them. The server files an empty supplier under the literal `未指定 Unspecified` (`invSupplierOrUnspecified`), the same string the grouping falls back to. Coverage keys on `invoice_lines`, never on `invoices.supplier`, so nothing else moves. **KEPT:** a typed name that matches no supplier is still refused — grouping keys on the string, and a free-typed name would open a near-duplicate supplier. The seller's name goes in the Note. `标记不开发票` is unchanged and remains the answer for a purchase that will never have a 发票. Tested by scripts/test_invoice_no_supplier.js and scripts/test_invoice_supplier_search.js §16–21. Chinese: vocabulary v1.195.
+
+2026-09-27 · v4.449 — **§282 · A SAVE BUTTON NEVER SCROLLS OFF THE SCREEN — DECIDED BY ASH:** *"the save button if there is any and it's not auto save , the button should be in reach at any giving moment on the screen. I don't want the user to scroll finding the save button . it's not efficient"*, then *"go ahead"* to Claude's survey and three-PR plan (phone; desktop pages; desktop pop-ups). **PART 1, THE PHONE.** One shared pinned bar — `.footbar`, written by `footBar()` in `public/m.html` — replaces the inline button at the end of six long forms: New order, New broadcast (every step), Expense, Add someone, Permissions, and Confirm receipt from another shop. The role screen's autosave foot (status, Undo, Version history) is pinned the same way; *Delete role* stays at the end of the page, because a destructive button riding under the thumb is the opposite of what pinning is for. Short forms whose button already sits under two or three fields, and sheets whose foot is already outside their scroller, are left as they are. **THE KEYBOARD.** The viewport now carries `interactive-widget=resizes-content`, so on Android Chrome the keyboard shrinks the app rather than covering its bottom and the pinned bar rides above it; while the keyboard is up the tab bar steps aside (`html.kb-up`, set where `kbViewport` already decides the keyboard is up). Browsers that do not know the key ignore it and behave as before. No new words: every label moved, none was written. No schema change; no change to `.gitignore` or CI. **A CHANGE TO HOW TESTS ARE SHARDED, CALLED OUT:** the new browser suite `scripts/test_mobile_footbar.js` is listed in `scripts/run-suites.js`'s SLOW set, as every m-probe suite is. (Written as §281 on its branch; §281 went to the salad write-off, v4.448, first.)
 
 2026-09-27 · v4.448 — **§281 · AN EXPIRED OR SPOILED SALAD IS WRITTEN OFF WITHOUT THE DRESSING THE SHOP KEPT — REPORTED BY ASH, REOPENING THE WASTE HALF OF §166.** From the live waste screen: *"the beet salad and tabbouleh bowl expires. but not the sauce. it seems the waste include the dressing as well"*. It did. **WHAT THE LIVE DATA SAID** (`scripts/diagnose_dressing_waste.js`, read-only, 2026-09-27): every wasted product is now costed by its build list, and three carry a dressing line — Beet Salad ¥3.11 of ¥8.91 (35%), Quinoa Salad ¥2.92 of ¥10.12 (29%), Tabbouleh Bowl ¥0.34 of ¥10.60 (3%). From 4 to 26 September about ¥52 of ¥338 written off was dressing that went back on the shelf. Beet Salad's second dressing (Ginger Tahini, §166's data fault) is gone from the list, so its SALE cost is now right; **waste is the one reader still wrong.** **WHY §166's ROUTE WAS NOT TAKEN.** §166 withdrew the waste fix in favour of making each dressing its own stocked product. Ten days on no dressing is a product, and that route now costs a customer question with one answer on every fixed-dressing salad plus margin work, to fix a figure only waste reads. Proposed to Ash and agreed: *"go ahead, expired and spoiled both"*. **THE RULE.** A build-list line can be ticked *Packed separately — kept if it expires or spoils* (`product_build_lines.packed_separately`). A write-off whose reason is **Expired or Spoiled** leaves ticked lines out; every other reason (Damaged, Preparation error, Staff consumption, Sampling, Other) charges in full, because the dressing goes in the bin with the box. **No question is asked on the waste sheet** — the tick is set once on the product, not answered by staff on every entry. **WHAT DOES NOT MOVE.** The product's cost, margin and every sale still count the line — every salad sold goes out with its dressing. Stock moves the whole product exactly as before. Past write-offs keep their stored figure (§32 rule 9). Packaging rows get no tick. **EDGES, EACH TOWARD UNKNOWN RATHER THAN A GUESS.** A blocked build list, a bundle, or a product with no build list falls through to today's figure. Every costed line ticked is UNCOSTED, never a ¥0 loss (§32 rule 10). **ONE READER.** `lib/waste-record.js` `wasteUnitCostYuan()` is used by both the write and `GET /waste/preview`, which now takes the selected reason and names what it left out, so the figure shown before Record is the figure stored. Production's shortfall losses go through the same function and are unaffected unless their reason is expired or spoiled. **FLAGGED, NOT FIXED:** the Tabbouleh bowl dressing material is costed ¥0.0067/g, about a tenth of the other dressings — Ash to check the figure. Two strings COMPOSED, declared in `docs/tacet-delivery-vocabulary.md` v1.194. Covered by `scripts/test_waste_kept_lines.js` (32 checks, red-proofed against the tree without the subtraction).
 
@@ -20777,10 +20779,31 @@ every other reason charges in full. No question is asked when writing off. The
 product's cost, margin, sales and stock are unchanged. See the v4.448 changelog
 entry.
 
-## §282 — A 发票 FOR A ONE-OFF PURCHASE NEEDS NO SUPPLIER
+## §282 — A SAVE BUTTON NEVER SCROLLS OFF THE SCREEN
+
+**Decided 2026-09-27 by Ash** (*"the button should be in reach at any giving
+moment on the screen. I don't want the user to scroll finding the save
+button"*, then *"go ahead"*).
+
+1. **Where a screen still has a button that commits** — it creates a record,
+   moves money or stock, or is not one of §279's self-saving screens — that
+   button is on the glass wherever the page is scrolled. On the phone it sits
+   in the pinned bar (`.footbar`, `footBar()`); on the desktop, in a bar pinned
+   to the bottom of the page, or a pop-up's foot outside its scrolling body.
+2. **A short form is already compliant** when its button sits directly under
+   its few fields; it is not given a bar. A bar under three fields only costs
+   room.
+3. **Destructive buttons are not pinned.** Delete stays in the page.
+4. **The keyboard is part of "on the glass".** On the phone the pinned bar
+   rides above the on-screen keyboard (`interactive-widget=resizes-content`),
+   and the tab bar steps aside while it is up.
+5. **One area per PR**, as §279 rule 5: the phone first, then the desktop's
+   pages, then its pop-ups.
+
+## §283 — A 发票 FOR A ONE-OFF PURCHASE NEEDS NO SUPPLIER
 
 **Decided 2026-09-27 by Ash.** On Purchasing → Invoices a 发票 can be recorded
 against lines in the Unspecified group without naming a supplier; it is filed
 under `未指定 Unspecified`. A typed name that matches no supplier is still
-refused, so no near-duplicate suppliers are created. See the v4.449 changelog
+refused, so no near-duplicate suppliers are created. See the v4.450 changelog
 entry.

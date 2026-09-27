@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.195 · 2026-09-27 · §282 A 发票 WITH NO SUPPLIER — TWO OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** Purchasing → Invoices. The Unspecified row's new `Add invoice · 添加发票` button is copied whole from the other groups' rows. The add-invoice form's supplier placeholder and the toast for a cleared supplier are composed. See *A 发票 with no supplier (§282)*.
+**v1.195 · 2026-09-27 · §283 A 发票 WITH NO SUPPLIER — TWO OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** Purchasing → Invoices. The Unspecified row's new `Add invoice · 添加发票` button is copied whole from the other groups' rows. The add-invoice form's supplier placeholder and the toast for a cleared supplier are composed. See *A 发票 with no supplier (§283)*.
 
 **v1.194 · 2026-09-27 · §281 A LINE PACKED SEPARATELY — TWO STRINGS COMPOSED BY CLAUDE, EVERY WORD LIVE.** The build-list tick and the waste screen's note of what it left out. See *Packed separately — kept on expiry (§281)*.
 **v1.193 · 2026-09-27 · §279 BATCH 3 · THE SHOP WORDING PAGES SAVE THEMSELVES — NOTHING COMPOSED, THREE TOASTS TRIMMED BY DELETION.** With no Save to press, three upload toasts stop telling the operator to press it: `Photo uploaded — remember to Save · 图片已上传 — 记得点保存` → `Photo uploaded · 图片已上传` (About), `Uploaded — Save to apply · 已上传 — 保存后生效` → `Uploaded · 已上传` and `Picture removed — Save to apply · 已移除图片 — 保存后生效` → `Picture removed · 已移除图片` (Share cards). Each is the old pair with its tail deleted and nothing added. The held-save lines on Review tags and FAQ are the old refusal toasts, unchanged.
@@ -9085,7 +9085,7 @@ write-off's cost (desktop and phone waste screens).
   dressing costs money and is still counted on every sale; it is only left out
   of an expired or spoiled write-off.
 
-## A 发票 with no supplier (§282)
+## A 发票 with no supplier (§283)
 
 **Composed by Claude, 2026-09-27, under the 2026-09-06 amendment.** Operator-only:
 the add-invoice form on Purchasing → Invoices (`public/retail-admin/16-purchasing.js`).
