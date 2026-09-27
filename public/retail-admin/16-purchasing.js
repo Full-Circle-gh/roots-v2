@@ -162,6 +162,7 @@
   let _wstep = 1;            // wizard step 1..3
   let _po = null;            // PO open on the receive screen
   let _sup = null;           // supplier open on the form
+  let _supCard = null;   // §279 — the open supplier form's autosave card
   let _imp = null;           // parsed CSV preview { rows, headers }
 
   const root = () => document.getElementById('pu2-root');
@@ -435,6 +436,9 @@
   // ── paint dispatch ────────────────────────────────────────────────────────
   function paint() {
     if (!root()) return;
+    // §279 — the supplier form open on screen is sent before it is repainted
+    // away; its card reads the form synchronously, so this lands its edit.
+    if (_supCard) { _supCard.flush(); _supCard = null; }
     // The suggestion menu lives on <body>, so a repaint would otherwise leave
     // it floating beside a field that no longer exists.
     if (typeof puSuggestClose === 'function') puSuggestClose();
@@ -4366,6 +4370,8 @@
     if (input) { input.value = label == null ? v : label; input.focus(); }
     if (dyn && dyn.commit) dyn.commit(v);
     puSuggestClose();
+    // A pick sets the box without an input event, so the supplier card is told.
+    if (_supCard) _supCard.touch();
   };
   window.puSuggestClose = function () {
     const menu = document.getElementById('pu2-suggest-menu');
@@ -4496,11 +4502,38 @@
         <div class="pu2-wizfoot">
           ${s.id ? `<button class="pu2-btn ${s.is_active ? 'danger' : ''}" data-cap="purchasing:edit" onclick="puSupToggle()">${s.is_active ? esc(T('Disable', '停用')) : esc(T('Enable', '启用'))}</button>` : `<button class="pu2-btn ghost" onclick="puBackSuppliers()">${esc(T('Cancel', '取消'))}</button>`}
           <span class="spacer"></span>
-          <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puSupSave()">${esc(T('Save supplier', '保存'))}</button>
+          ${s.id
+            ? `<div data-as-foot="supplier.${s.id}" style="flex:1"></div>`
+            : `<button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puSupSave()">${esc(T('Save supplier', '保存'))}</button>`}
         </div>
       </div>
 
       ${s.id ? supplierExtras(s) : ''}`;
+    // §279 — an EXISTING supplier saves itself; a new one keeps Save, which
+    // creates it. A name is the one thing the record needs, so a blank one
+    // holds the save and says so.
+    if (s.id && typeof can === 'function' && can('purchasing:edit')) {
+      const id = s.id;
+      _supCard = autosaveCard({
+        card: 'supplier.' + id, root: root().querySelector('.pu2-formcard'),
+        url: '/api/retail-admin/suppliers/' + id, method: 'PUT',
+        historyUrl: '/api/retail-admin/suppliers/' + id + '/history',
+        read: supBody,
+        hold: (b) => (b.name ? '' : T('Name is required', '名称必填')),
+        apply: supApply,
+        after: (b) => { if (_sup && _sup.id === id) Object.assign(_sup, b); },
+      });
+      _supCard.start();
+    }
+  }
+  function supApply(b) {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : v; };
+    set('pu2-s-name', b.name); set('pu2-s-namecn', b.name_cn); set('pu2-s-supplies', b.products_supplied);
+    set('pu2-s-contact', b.contact_name); set('pu2-s-phone', b.contact_phone); set('pu2-s-wechat', b.contact_wechat);
+    set('pu2-s-terms', b.payment_terms); set('pu2-s-method', b.payment_method);
+    set('pu2-s-chtype', b.channel_type || ''); set('pu2-s-chlink', b.channel_link);
+    if (document.getElementById('pu2-s-rating')) set('pu2-s-rating', b.rating || 0);
+    set('pu2-s-notes', b.notes);
   }
   function supplierScorecard(s) {
     const sc = s.scorecard || {};
@@ -4588,6 +4621,7 @@
       notes: v('pu2-s-notes') || null,
     };
   }
+  // CREATES a supplier (an existing one saves itself — see paintSupplier).
   window.puSupSave = async function () {
     const body = supBody();
     if (!body.name) { toast(T('Name is required', '名称必填'), 'err'); return; }

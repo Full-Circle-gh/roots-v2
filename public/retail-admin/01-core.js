@@ -791,6 +791,13 @@ document.addEventListener('visibilitychange', () => {
 //     url, method:                           // optional — a card whose route is
 //                                            // its own (default PUT /config);
 //                                            // the route must pass ?history on
+//     historyUrl:                            // optional — where the card's versions
+//                                            // are read (default /config/history)
+//     sub: (version) => 'what changed',      // optional — the history row's 2nd line
+//     foot:                                  // optional — the data-as-foot name, when
+//                                            // `card` is a function
+//     beforeSend: (body) => body,            // optional — stamp what is SENT without
+//                                            // it counting as a change (a timestamp)
 //     fromSnapshot: (stored) => body,        // optional — when the route stores
 //                                            // a different shape than it is sent,
 //                                            // how a restored version becomes a body
@@ -805,7 +812,11 @@ document.addEventListener('visibilitychange', () => {
 // so a half-typed number is never sent.
 function autosaveCard(o) {
   const card = { engine: null };
-  const foot = () => document.querySelector('[data-as-foot="' + o.card + '"]');
+  // card, url and historyUrl may be functions, for ONE drawer reused for many
+  // records (the photo drawer, the pop-up editor): each is asked at the moment
+  // it is needed, so a flush on the way to the next record still names this one.
+  const val = (x) => (typeof x === 'function' ? x() : x);
+  const foot = () => document.querySelector('[data-as-foot="' + (o.foot || val(o.card)) + '"]');
   const paint = () => {
     const el = foot(); if (!el) return;
     const a = card.engine, st = a ? a.state : 'saved';
@@ -845,8 +856,8 @@ function autosaveCard(o) {
     card.engine = TacetAutosave.create({
       read: o.read,
       hold: o.hold,
-      send: (body, note) => api((o.url || '/api/retail-admin/config') + '?history=' + encodeURIComponent(o.card) + (note ? '&note=' + note : ''),
-        { method: o.method || 'PUT', body }).then((j) => { if (o.after) o.after(body, j); }),
+      send: (body, note) => api((val(o.url) || '/api/retail-admin/config') + '?history=' + encodeURIComponent(val(o.card)) + (note ? '&note=' + note : ''),
+        { method: o.method || 'PUT', body: o.beforeSend ? o.beforeSend(body) : body }).then((j) => { if (o.after) o.after(body, j); }),
       onChange: paint,
     });
     card.engine.start();
@@ -855,11 +866,13 @@ function autosaveCard(o) {
   // For a page that redraws the foot's element itself (the share-card stage).
   card.paint = paint;
   card.touch = () => { if (card.engine) card.engine.touch(); };
+  // The record went (deleted): nothing more may be sent for it.
+  card.stop = () => { if (card.engine) card.engine.stop(); card.engine = null; paint(); };
   card.flush = (note) => (card.engine ? card.engine.flush(note) : Promise.resolve());
   card.undo = () => { if (card.engine) card.engine.undo((b) => o.apply(b)); };
   card.history = async () => {
     if (!card.engine) return;
-    const v = await autosavePickVersion(card.engine, '/api/retail-admin/config/history?card=' + encodeURIComponent(o.card), null);
+    const v = await autosavePickVersion(card.engine, val(o.historyUrl) || ('/api/retail-admin/config/history?card=' + encodeURIComponent(val(o.card))), o.sub || null);
     if (!v || !card.engine) return;
     o.apply(o.fromSnapshot ? o.fromSnapshot(v.snapshot || {}) : (v.snapshot || {}));
     await card.engine.flush('restore');

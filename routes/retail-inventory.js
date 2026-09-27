@@ -14,7 +14,8 @@ const express = require('express');
 // request-scoped tdb(); for Roots/kitchen sessions tdb()===db so this is a
 // no-op today, and it closes the cross-tenant leak before data isolation is on.
 const db = require('../database');
-const { tdb } = require('../lib/tenant-db');
+const { tdb, currentTenantId, ROOTS_TENANT_ID } = require('../lib/tenant-db');
+const editHistory = require('../lib/edit-history');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 // Shared pin-write statement + provenance mapping, so a geocoded pin is never
@@ -183,14 +184,44 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   }
   if (!sets.length) return res.json({ success: true, data: existing });
   vals.push(id);
-  tdb().prepare(`UPDATE retail_stores SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...vals);
-  // If the address-shaped fields changed AND no explicit lat/lng was sent,
-  // re-geocode in the background so coordinates stay in sync.
-  const touchedAddr = ['address','city','district'].some(k => k in req.body);
+  const write = () => tdb().prepare(`UPDATE retail_stores SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...vals);
+  // §279 — the store editor saves itself and asks to be recorded (?history=1).
+  const hist = editHistory.fromQuery(req.query);
+  if (hist.on) {
+    editHistory.around(tdb(), storeHistoryTid(), 'store', id, () => storeSnapshot(inventory.getStore(id)),
+      { id: req.user && req.user.id, name: req.user && req.user.username }, hist.note, write);
+  } else write();
+  // Re-geocode in the background when the ADDRESS CHANGED (and no explicit
+  // lat/lng was sent), or when the store has no coordinates yet. It used to
+  // fire whenever an address field was merely present in the body — which,
+  // once the editor saves itself and sends the whole form, would have been a
+  // map lookup on every pause in typing the store's NAME (§279).
+  const touchedAddr = ['address','city','district'].some(k => k in req.body && String(req.body[k] ?? '') !== String(existing[k] ?? ''))
+    || (['address','city','district'].some(k => k in req.body) && (existing.lat == null || existing.lng == null));
   const explicitLatLng = ('lat' in req.body) || ('lng' in req.body);
   if (touchedAddr && !explicitLatLng) geocodeStoreAsync(id, tdb());
   logActivity(req.user.id, req.user.username, 'update', 'retail_store', id, req.body, req.ip);
   res.json({ success: true, data: inventory.getStore(id) });
+});
+
+// §279 — a store's history: the fields its editor saves, fixed order.
+function storeSnapshot(s) {
+  s = s || {};
+  return {
+    name_en: s.name_en || '', name_cn: s.name_cn || '', phone: s.phone || '',
+    city: s.city || '', district: s.district || '', address: s.address || '',
+    open_time: s.open_time || '', close_time: s.close_time || '', sync_start_time: s.sync_start_time || '',
+    sort_order: s.sort_order ?? 0, low_stock_threshold: s.low_stock_threshold ?? null,
+    pickup_enabled: !!s.pickup_enabled,
+  };
+}
+function storeHistoryTid() { try { return currentTenantId() || ROOTS_TENANT_ID; } catch (e) { return ROOTS_TENANT_ID; } }
+router.get('/api/retail-admin/stores/:id/history', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!inventory.getStore(id)) return res.status(404).json({ success: false, error: 'not_found' });
+  let rows = [];
+  try { rows = editHistory.list(tdb(), storeHistoryTid(), 'store', id); } catch (e) { rows = []; }
+  res.json({ success: true, versions: editHistory.versionsOf(rows) });
 });
 
 // On-demand geocode for the setup wizard's map-pin confirmation: turn a typed
