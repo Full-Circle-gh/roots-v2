@@ -23,6 +23,7 @@ const db = require('../database');
 const capabilities = require('../lib/capabilities');
 const features = require('../lib/features');
 const roles = require('../lib/roles');
+const editHistory = require('../lib/edit-history');
 const { requireBackend, requireCap, roleAboveCaps, loadCaller } = require('../lib/require-cap');
 const router = express.Router();
 
@@ -693,6 +694,64 @@ router.post('/api/backend/roles', requireCap('team:permissions'), express.json()
   res.json({ success: true, role: roleDetail(tid, rec, roleCounts(tid), ent, true) });
 });
 
+// ── History (decisions §279) ─────────────────────────────────────────────
+// The role screen saves itself, so its way back is here. A role's snapshot is
+// what the editor edits, in a FIXED key order — lib/edit-history compares two
+// snapshots as JSON strings. Store pinning and scoping are left out: the editor
+// does not show them, and an Undo must not quietly move people's stores.
+function roleSnapshot(rec) {
+  return {
+    nameEn: rec.nameEn || '', nameCn: rec.nameCn || '',
+    descEn: rec.descEn || '', descCn: rec.descCn || '',
+    layout: rec.layout || 'default',
+    caps: [...(rec.caps || [])].sort(),
+    dashboardCards: Array.isArray(rec.dashboardCards) ? [...rec.dashboardCards] : null,
+  };
+}
+function whoIs(req) {
+  const id = req.session.backendUserId;
+  let name = null;
+  try {
+    const u = db.prepare('SELECT display_name, username FROM tenant_users WHERE id = ? AND tenant_id = ?').get(id, req.session.tenantId);
+    name = u ? (u.display_name || u.username) : null;
+  } catch (e) { name = null; }
+  return { id, name };
+}
+const HISTORY_NOTES = new Set(['undo', 'restore']);
+
+router.get('/api/backend/roles/:key/history', requireCap('team:permissions'), (req, res) => {
+  const tid = req.session.tenantId;
+  const key = String(req.params.key || '');
+  const rec = roleRec(tid, key);
+  if (!rec) return res.status(404).json({ error: 'Role not found · 未找到角色' });
+  const ent = entitledKeys(tid);
+  let rows = [];
+  try { rows = editHistory.list(db, tid, 'role', key); } catch (e) { rows = []; }
+  // What each version changed, against the one before it. Permissions are
+  // counted only among those this tenant can see — the editor never shows the
+  // rest, so a count that included them would name changes nobody can find.
+  const out = rows.map((r, i) => {
+    const s = r.snapshot, prev = rows[i + 1] ? rows[i + 1].snapshot : null;
+    const caps = (s.caps || []).filter(k => ent.has(k));
+    const changed = { name: false, desc: false, dash: false, added: 0, removed: 0 };
+    if (prev) {
+      changed.name = s.nameEn !== prev.nameEn || s.nameCn !== prev.nameCn;
+      changed.desc = s.descEn !== prev.descEn || s.descCn !== prev.descCn;
+      changed.dash = s.layout !== prev.layout
+        || JSON.stringify(s.dashboardCards) !== JSON.stringify(prev.dashboardCards);
+      const was = new Set((prev.caps || []).filter(k => ent.has(k)));
+      const now = new Set(caps);
+      for (const k of now) if (!was.has(k)) changed.added++;
+      for (const k of was) if (!now.has(k)) changed.removed++;
+    }
+    return {
+      id: r.id, at: r.at, by: r.by, isBaseline: r.isBaseline, note: r.note, changed,
+      snapshot: Object.assign({}, s, { caps }),
+    };
+  });
+  res.json({ success: true, versions: out });
+});
+
 // ── Edit a role, in place ────────────────────────────────────────────────
 router.put('/api/backend/roles/:key', requireCap('team:permissions'), express.json(), (req, res) => {
   const tid = req.session.tenantId;
@@ -756,6 +815,10 @@ router.put('/api/backend/roles/:key', requireCap('team:permissions'), express.js
   if (!sets.length) return res.status(400).json({ error: 'Nothing to update · 无可更新内容' });
   sets.push('updated_at = CURRENT_TIMESTAMP');
   args.push(tid, key);
+  // History is best-effort: a failure to record must never fail the save it
+  // describes, the rule retail_product_versions already follows.
+  try { editHistory.before(db, tid, 'role', key, roleSnapshot(rec)); }
+  catch (e) { console.error('[role history before]', e); }
   try {
     const write = db.transaction(() => {
       db.prepare(`UPDATE tenant_roles SET ${sets.join(', ')} WHERE tenant_id = ? AND role_key = ?`).run(...args);
@@ -770,6 +833,10 @@ router.put('/api/backend/roles/:key', requireCap('team:permissions'), express.js
     write();
   } catch (e) { return res.status(500).json({ error: 'Couldn’t save the role · 无法保存角色' }); }
   const fresh = roleRec(tid, key);
+  try {
+    const note = HISTORY_NOTES.has(body.history_note) ? body.history_note : null;
+    editHistory.after(db, tid, 'role', key, roleSnapshot(fresh), whoIs(req), { note });
+  } catch (e) { console.error('[role history after]', e); }
   res.json({ success: true, role: roleDetail(tid, fresh, roleCounts(tid), ent, true) });
 });
 
@@ -848,6 +915,8 @@ router.delete('/api/backend/roles/:key', requireCap('team:permissions'), express
     });
     write();
   } catch (e) { return res.status(500).json({ error: 'Couldn’t delete the role · 无法删除角色' }); }
+  // A new role that reuses this key must not inherit its Original.
+  try { editHistory.forget(db, tid, 'role', key); } catch (e) { console.error('[role history forget]', e); }
   res.json({ success: true, moved: holders.length, movedTo: moveTo || null });
 });
 

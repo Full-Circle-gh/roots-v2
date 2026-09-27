@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.189 · 2026-09-27 · §279 THE ROLE SCREEN SAVES ITSELF — EVERY LABEL COPIED LIVE BUT FIVE, COMPOSED BY CLAUDE.** The role screen (phone and desktop) loses Save / Revert and gains a save status, *Undo* and *Version history*. Every label except five is an existing live pair, most of them from the product editor's own autosave and history: `All changes saved · 已自动保存`, `Saving… · 保存中…`, `Save failed: · 保存失败:`, `Add a name to start autosaving · 填写名称后自动保存`, `Undo · 撤销`, `Version history · 历史版本`, `Original · 原始版本`, `Current · 当前`, `Restore · 还原`, `Restore this version? · 还原此版本?`, `Restored to the chosen version. · 已还原到所选版本。`, `No versions yet — they’re saved automatically as you edit. · 暂无历史版本 — 编辑时会自动保存。`, `Close · 关闭`. The five composed are the history row's change words and its load error. See *The role screen's history (§279)*.
+
 **v1.188 · 2026-09-27 · §278 THE TWO STOCK ROLES STOP NAMING THE DELETED APP — TWO OPERATOR DESCRIPTIONS REWORDED BY CLAUDE, BY DELETION ONLY.** The seeded descriptions of `kitchen` and `store_stock` (`lib/roles.js`) named the Add Stock / Quick Stock app §48 deleted. Each new string is the old one with the app's name taken out and nothing added: `一家门店的“加库存”,以及待制作队列。` and `盘点本店货架。在门店内管理,不出现在团队页。`. `加库存` stays because it is the phone's own Add stock screen, not the app. See *The stock roles' descriptions (§278)*.
 
 **v1.187 · 2026-09-26 · §274 THE WEB SHOP TAB'S SORT MENU — FIVE CUSTOMER PAIRS COPIED FROM THE MINI APP, NOTHING COMPOSED.** `Featured · 推荐`, `Newest · 最新`, `Price ↑ · 价格 ↑`, `Price ↓ · 价格 ↓`, `Popular · 热门` are `miniapp/pages/shop/shop.js`'s own `SORT_OPTIONS`, title-cased for the web where the app's are upper-case chips; the web's older `推荐排序` and `Price: low to high` forms are retired for them, so both surfaces say the same thing. See *The web Shop tab (§274)*.
@@ -9002,3 +9004,20 @@ tenant never typed over the old text).
 |---|---|---|---|
 | Add stock for one store, and the queue of what has been asked for. | 一家门店的“加库存”,以及待制作队列。 | **COMPOSED by Claude, by deletion** — the old live `一家门店的“加库存”应用,以及待制作队列。` minus `应用` (app). `加库存` is the phone's Add stock screen title, live. Rejected: keeping `应用`, which names the deleted app | kitchen role |
 | Counts one store’s shelves. Managed inside that store, not on the Team page. | 盘点本店货架。在门店内管理,不出现在团队页。 | **COMPOSED by Claude, by deletion** — the old live `在“快速库存”中盘点本店货架。在门店内管理,不出现在团队页。` minus `在“快速库存”中`; `盘点本店货架` was already lifted the same way (*One staff app, one card*, 2026-09-08). Rejected: `在“手机库存”中…`, which swaps one app name for another | store_stock role |
+
+## The role screen's history (§279)
+
+Register: OPERATOR — the second line of a row in *Version history* on the role
+screen (`public/m.html` tmVerLine, `public/retail-admin/02-settings-ops.js`
+rlVerLine), saying what that version changed; and the toast when the list
+cannot be read. Composed under Rule 4's standing delegation; not yet shown to
+Ash, so every composed row carries the "Ash should correct this if it reads
+wrong" standing.
+
+| EN | CN | provenance | where |
+|---|---|---|---|
+| name | 名称 | **COMPOSED by Claude, lifted** — the noun of the live field label `Name (English) · 名称（英文）` on the same screen. Rejected: `姓名`, which is a person's name | history row |
+| description | 说明 | **COMPOSED by Claude, lifted** — the noun of the live `Description (Chinese) · 说明（中文）` on the same screen. Rejected: `描述`, not used on this screen | history row |
+| dashboard | 仪表盘 | **COMPOSED by Claude, lifted** — from the live `Has a dashboard · 拥有仪表盘` and `Dashboard layout · 仪表盘布局` on the same screen | history row |
+| +N permission(s) / −N permission(s) | +N 项权限 / −N 项权限 | **COMPOSED by Claude** — the counter `N 项` is live on the same screen (`N 项涉及资金`, `N 项中已开启`); `权限` is live (`Permissions · 权限`). Rejected: `新增 N 项权限`, longer than the row allows | history row |
+| Could not load the history | 无法加载历史版本 | **COMPOSED by Claude** — `无法加载…` is the live shape (`Could not load the roles. · 无法加载角色。`); `历史版本` is the live title of the list. Rejected: the recipe screen's `无法加载修改记录`, whose `修改记录` is that screen's own word, not this list's | toast |

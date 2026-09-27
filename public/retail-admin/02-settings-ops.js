@@ -3045,7 +3045,8 @@ let RL_OPEN = {};             // group key → expanded
 let RL_CAN_EDIT = false;
 let RL_LAYOUTS = ['default'];
 let RL_DASH_CATALOG = [];    // dashboard-card keys, in display order (from the server — lib/roles.DASH_CARDS)
-let RL_BUSY = false;
+let RL_AUTO = null;           // this visit's autosave engine (public/tacet-autosave.js, §279)
+let RL_HIST = null, RL_HIST_FOR = null;
 
 function rlRole(key) { return RL_ROLES.find(r => r.key === key) || null; }
 
@@ -3176,7 +3177,6 @@ function rlRenderPane() {
 
   const keys = RL_DRAFT ? RL_DRAFT.caps : new Set(r.caps || []);
   const total = r.capTotal || (TM_CATALOG ? TM_CATALOG.capabilities.length : 0);
-  const dirty = rlDirty();
   const ro = !RL_CAN_EDIT;
 
   let html = '';
@@ -3258,23 +3258,20 @@ function rlRenderPane() {
   });
   html += `</div>`;
 
+  // NO SAVE BUTTON (§279). The footer says where the role stands and offers
+  // the two ways back; the same footer the phone draws (m.html tmRoleFoot).
   if (RL_CAN_EDIT) {
-    const affected = r.people
-      ? cuT(r.people === 1 ? 'Save · affects 1 person' : 'Save · affects ' + r.people + ' people',
-            '保存 · 影响 ' + r.people + ' 人')
-      : cuT('Save', '保存');
     html += `<div class="rl-foot">`
-      + `<span class="rl-dirty${dirty ? ' on' : ''}">${escapeHtml(dirty
-          ? cuT('Unsaved changes', '有未保存的更改')
-          : cuT('No unsaved changes', '没有未保存的更改'))}</span>`
+      + `<span class="rl-dirty" id="rlStatus"></span>`
       + `<span class="rl-spacer"></span>`
       + `<button type="button" class="tm-btn-line" id="rlDelete">${escapeHtml(cuT('Delete role', '删除角色'))}</button>`
-      + `<button type="button" class="tm-btn-line" id="rlRevert"${dirty ? '' : ' style="display:none"'}>${escapeHtml(cuT('Revert', '撤销'))}</button>`
-      + `<button type="button" class="tm-btn-primary" id="rlSave"${dirty ? '' : ' disabled'}>${escapeHtml(affected)}</button>`
+      + `<button type="button" class="tm-btn-line" id="rlHistory">${escapeHtml(cuT('Version history', '历史版本'))}</button>`
+      + `<button type="button" class="tm-btn-line" id="rlUndo" style="display:none">${escapeHtml(cuT('Undo', '撤销'))}</button>`
       + `</div>`;
   }
   el.innerHTML = html;
   rlBindPane();
+  rlPaintFoot();
 }
 
 // ── Dashboard cards — per-role, admin-picked ────────────────────────────────
@@ -3316,13 +3313,6 @@ const RL_DASH_LAYOUT_DEFAULT = {
 function rlDashCardDefaults(layout) {
   return RL_DASH_LAYOUT_DEFAULT[layout] || RL_DASH_LAYOUT_DEFAULT.default;
 }
-function rlDashCardsEqual(a, b) {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
-  const sa = new Set(a);
-  return b.every(k => sa.has(k));
-}
-
 function rlLayoutLabel(key) {
   return cuT({
     default: 'The full view',
@@ -3422,24 +3412,69 @@ function rlDashCardsField(src, inert) {
         + `<input type="checkbox"${effective.includes(key) ? ' checked' : ''}${dis}>`
         + `<label>${escapeHtml(rlDashCardLabel(key))}</label></div>`).join('')
     + `</div>`
-    // Shown/hidden by inline display, like #rlRevert — the `hidden` attribute
+    // Shown/hidden by inline display, like #rlUndo — the `hidden` attribute
     // loses to .tm-btn-line's own display rule and the button stayed on screen.
     + `<button type="button" class="tm-btn-line" id="rlDashReset" style="margin-top:8px${overridden && !inert ? '' : ';display:none'}"${dis}>`
     + escapeHtml(cuT('Use this board’s default', '恢复为该看板的默认设置')) + `</button>`
     + `</div>`;
 }
 
-function rlDirty() {
-  const r = rlRole(RL_SEL);
-  if (!r || !RL_DRAFT) return false;
-  if (RL_DRAFT.nameEn !== r.nameEn || RL_DRAFT.nameCn !== r.nameCn) return true;
-  if (RL_DRAFT.descEn !== (r.descEn || '') || RL_DRAFT.descCn !== (r.descCn || '')) return true;
-  if (RL_DRAFT.layout !== r.layout) return true;
-  if (!rlDashCardsEqual(RL_DRAFT.dashboardCards, r.dashboardCards || null)) return true;
-  const was = new Set(r.caps || []);
-  if (was.size !== RL_DRAFT.caps.size) return true;
-  for (const k of RL_DRAFT.caps) if (!was.has(k)) return true;
-  return false;
+// WHAT GOES ON THE WIRE, normalised the way the server stores it, in a fixed
+// key order — the autosave engine compares two of these as JSON. The phone
+// builds the identical object (m.html tmPayload), so a role edited on one and
+// then the other is compared like for like.
+function rlPayload(d) {
+  return {
+    name_en: d.nameEn.trim(), name_cn: d.nameCn.trim(), desc_en: d.descEn.trim(), desc_cn: d.descCn.trim(),
+    layout: d.layout, caps: [...d.caps].sort(),
+    dashboard_cards: Array.isArray(d.dashboardCards) ? [...d.dashboardCards].sort() : null,
+  };
+}
+// THE ROLE SAVES ITSELF (decisions §279). One engine per visit, holding the
+// very draft it was opened on, so a write still in flight when the operator
+// picks another role can only ever send the role it was typed into.
+function rlAutoOpen(key) {
+  if (RL_AUTO) RL_AUTO.flush();
+  const d = RL_DRAFT;
+  if (!d || !RL_CAN_EDIT || typeof TacetAutosave === 'undefined') { RL_AUTO = null; return; }
+  RL_AUTO = TacetAutosave.create({
+    read: () => rlPayload(d),
+    hold: p => (!p.name_en && !p.name_cn) ? cuT('Add a name to start autosaving', '填写名称后自动保存') : '',
+    send: (p, note) => api('/api/backend/roles/' + encodeURIComponent(key), {
+      method: 'PUT', body: Object.assign({}, p, note ? { history_note: note } : {}),
+    }).then(j => rlLanded(key, j && j.role)),
+    onChange: () => { if (RL_SEL === key) rlPaintFoot(); },
+  });
+  RL_AUTO.start();
+}
+// A save landed. The record is swapped for the server's answer and the LIST
+// repainted — not the pane, which holds the operator's caret and scroll.
+function rlLanded(key, role) {
+  RL_HIST = null; RL_HIST_FOR = null;
+  if (!role) return;
+  const i = RL_ROLES.findIndex(r => r.key === key);
+  if (i !== -1) RL_ROLES[i] = role;
+  rlRenderList();
+  // The roster's role chips and both pickers read the same records.
+  if (typeof tmLoad === 'function') tmLoad();
+}
+function rlOneLang(m) { const s = String(m || ''); const i = s.indexOf(' · '); return i === -1 ? s : cuT(s.slice(0, i), s.slice(i + 3)); }
+function rlPaintFoot() {
+  const st = $('#rlStatus');
+  if (!st) return;
+  const a = RL_AUTO, state = a ? a.state : 'saved';
+  st.textContent = state === 'saving' || state === 'pending' ? cuT('Saving…', '保存中…')
+    : state === 'hold' ? a.message
+    : state === 'error' ? cuT('Save failed: ', '保存失败:') + rlOneLang(a.message)
+    : cuT('All changes saved', '已自动保存');
+  st.classList.toggle('on', state === 'hold' || state === 'error');
+  const undo = $('#rlUndo'); if (undo) undo.style.display = a && a.canUndo() ? '' : 'none';
+}
+// Every edit ends here: the counts repaint and the engine decides whether
+// there is anything to send.
+function rlEdited() {
+  rlSyncCounts();
+  if (RL_AUTO) RL_AUTO.touch();
 }
 
 // Repaint only the parts a tick changes — the tallies, the group counts and the
@@ -3463,14 +3498,6 @@ function rlSyncCounts() {
       ? cuT(on + ' of ' + g.caps.length + ' on', g.caps.length + ' 项中开启 ' + on + ' 项')
       : cuT('nothing on', '未开启');
   });
-  const dirty = rlDirty();
-  const d = $('#rlPane .rl-dirty');
-  if (d) {
-    d.classList.toggle('on', dirty);
-    d.textContent = dirty ? cuT('Unsaved changes', '有未保存的更改') : cuT('No unsaved changes', '没有未保存的更改');
-  }
-  const save = $('#rlSave'); if (save) save.disabled = !dirty || RL_BUSY;
-  const rev = $('#rlRevert'); if (rev) rev.style.display = dirty ? '' : 'none';
 }
 
 function rlBindPane() {
@@ -3492,12 +3519,12 @@ function rlBindPane() {
     cb.addEventListener('change', function () {
       const key = this.closest('.rl-p').getAttribute('data-key');
       if (this.checked) RL_DRAFT.caps.add(key); else RL_DRAFT.caps.delete(key);
-      rlSyncCounts();
+      rlEdited();
     });
   });
   const bindText = (id, field) => {
     const el = $('#' + id);
-    if (el) el.addEventListener('input', () => { RL_DRAFT[field] = el.value; rlSyncCounts(); });
+    if (el) el.addEventListener('input', () => { RL_DRAFT[field] = el.value; rlEdited(); });
   };
   bindText('rlNameEn', 'nameEn'); bindText('rlNameCn', 'nameCn');
   bindText('rlDescEn', 'descEn'); bindText('rlDescCn', 'descCn');
@@ -3513,7 +3540,7 @@ function rlBindPane() {
         row.querySelector('input').checked = defaults.has(row.getAttribute('data-dcard'));
       });
     }
-    rlSyncCounts();
+    rlEdited();
   });
   $$('#rlPane .rl-dcards [data-dcard] input').forEach(cb => {
     cb.addEventListener('change', function () {
@@ -3526,7 +3553,7 @@ function rlBindPane() {
       if (this.checked) set.add(key); else set.delete(key);
       RL_DRAFT.dashboardCards = [...set];
       const reset = $('#rlDashReset'); if (reset) reset.style.display = '';
-      rlSyncCounts();
+      rlEdited();
     });
   });
   const dreset = $('#rlDashReset');
@@ -3537,7 +3564,7 @@ function rlBindPane() {
       row.querySelector('input').checked = defaults.has(row.getAttribute('data-dcard'));
     });
     dreset.style.display = 'none';
-    rlSyncCounts();
+    rlEdited();
   });
   // THE DASHBOARD SWITCH. Its cap add/remove already happened in the generic
   // [data-key] handler above (the row carries data-key="dashboard:view"); this
@@ -3557,24 +3584,15 @@ function rlBindPane() {
     });
     if (dreset) { dreset.disabled = !on; dreset.style.display = (on && RL_DRAFT.dashboardCards !== null) ? '' : 'none'; }
   });
-  const save = $('#rlSave'); if (save) save.addEventListener('click', rlSave);
-  const rev = $('#rlRevert'); if (rev) rev.addEventListener('click', () => rlSelect(RL_SEL, true));
+  const undo = $('#rlUndo'); if (undo) undo.addEventListener('click', rlUndo);
+  const hist = $('#rlHistory'); if (hist) hist.addEventListener('click', rlHistory);
   const del = $('#rlDelete'); if (del) del.addEventListener('click', rlDeleteRole);
 }
 
-// async ONLY for the unsaved-changes question below. Both internal callers pass
-// force=true, which skips it, so their bodies still run to completion
-// synchronously before the promise is returned — the click handler is
-// fire-and-forget either way.
-async function rlSelect(key, force) {
+// No "leave without saving?" question any more (§279): the role being left
+// is sent on the way out by rlAutoOpen, so there is nothing to lose.
+function rlSelect(key, force) {
   if (!force && RL_SEL === key && RL_DRAFT) { rlRenderPane(); return; }
-  if (!force && rlDirty() && !(await askConfirm({
-    titleEn: 'Leave this role without saving?', titleCn: '未保存就离开该角色？',
-    bodyEn: 'Your changes to it will be lost.', bodyCn: '对该角色的更改将丢失。',
-    confirmEn: 'Discard changes', confirmCn: '放弃更改',
-    cancelEn: 'Keep editing', cancelCn: '继续编辑',
-    danger: true,
-  }))) return;
   RL_SEL = key;
   const r = rlRole(key);
   RL_DRAFT = r && !r.isFixed
@@ -3582,12 +3600,18 @@ async function rlSelect(key, force) {
         caps: new Set(r.caps || []), layout: r.layout || 'default',
         dashboardCards: Array.isArray(r.dashboardCards) ? [...r.dashboardCards] : null }
     : null;
+  RL_HIST = null; RL_HIST_FOR = null;
+  rlAutoOpen(key);
   rlRenderList();
   rlRenderPane();
 }
 
 async function rlLoad(keepSel) {
   try {
+    // An edit still waiting on its pause goes first, so the read below already
+    // holds it — a draft rebuilt from a read that predates it would put the old
+    // values back on screen and send them with the next tick.
+    if (RL_AUTO) await RL_AUTO.flush();
     await tmLoadCatalog();
     const j = await api('/api/backend/roles');
     RL_ROLES = j.roles || [];
@@ -3604,35 +3628,85 @@ async function rlLoad(keepSel) {
   }
 }
 
-async function rlSave() {
-  const r = rlRole(RL_SEL);
-  if (!r || !RL_DRAFT || RL_BUSY) return;
-  if (!RL_DRAFT.nameEn.trim() && !RL_DRAFT.nameCn.trim()) {
-    toast(cuT('Give the role a name', '请为角色命名'), 'err'); return;
-  }
-  const btn = $('#rlSave');
-  RL_BUSY = true; if (btn) { btn.disabled = true; btn.classList.add('loading'); }
-  try {
-    await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'PUT', body: {
-      name_en: RL_DRAFT.nameEn.trim(), name_cn: RL_DRAFT.nameCn.trim(),
-      desc_en: RL_DRAFT.descEn.trim(), desc_cn: RL_DRAFT.descCn.trim(),
-      layout: RL_DRAFT.layout, caps: [...RL_DRAFT.caps],
-      dashboard_cards: RL_DRAFT.dashboardCards,
-    } });
-    toast(r.people
-      ? cuT(r.people === 1 ? 'Saved · 1 person moves with it' : 'Saved · ' + r.people + ' people move with it',
-            '已保存 · ' + r.people + ' 人随之变更')
-      : cuT('Saved', '已保存'), 'ok');
-    await rlLoad(r.key);
-    // The roster's role chips and both pickers read the same records.
-    tmLoad();
-  } catch (e) {
-    toast(e.message || cuT('Couldn’t save', '保存失败'), 'err');
-  } finally {
-    RL_BUSY = false; if (btn) btn.classList.remove('loading');
-    rlSyncCounts();
-  }
+// UNDO puts the role back as this visit opened it — every field, in one
+// write, filed as an undo so History keeps the edit it took back.
+function rlUndo() {
+  if (!RL_AUTO || !RL_DRAFT) return;
+  const d = RL_DRAFT;
+  RL_AUTO.undo(p => {
+    d.nameEn = p.name_en; d.nameCn = p.name_cn; d.descEn = p.desc_en; d.descCn = p.desc_cn;
+    d.layout = p.layout; d.caps = new Set(p.caps);
+    d.dashboardCards = p.dashboard_cards ? [...p.dashboard_cards] : null;
+    rlRenderPane();
+  });
 }
+// HISTORY — the Original, then one version per editing session, newest first.
+// Restoring one is itself a version, so it can be taken back the same way.
+// The same list the phone shows (m.html roleHistory).
+function rlVerLine(v) {
+  const head = v.isBaseline ? cuT('Original', '原始版本') : v.note === 'undo' ? cuT('Undo', '撤销') : v.note === 'restore' ? cuT('Restore', '还原') : '';
+  const c = v.changed || {}, bits = [];
+  if (c.name) bits.push(cuT('name', '名称'));
+  if (c.desc) bits.push(cuT('description', '说明'));
+  if (c.dash) bits.push(cuT('dashboard', '仪表盘'));
+  if (c.added) bits.push(cuT('+' + c.added + ' permission' + (c.added === 1 ? '' : 's'), '+' + c.added + ' 项权限'));
+  if (c.removed) bits.push(cuT('−' + c.removed + ' permission' + (c.removed === 1 ? '' : 's'), '−' + c.removed + ' 项权限'));
+  return { top: [head, tdWhen(v.at, 'dateTime'), v.by || ''].filter(Boolean).join(' · '), sub: bits.join(' · ') };
+}
+async function rlHistory() {
+  const key = RL_SEL;
+  if (!key || !RL_AUTO) return;
+  let list = RL_HIST_FOR === key ? RL_HIST : null;
+  if (!list) {
+    // What is on screen first, so the list ends on it rather than a step behind.
+    await RL_AUTO.flush();
+    try {
+      const j = await api('/api/backend/roles/' + encodeURIComponent(key) + '/history');
+      list = Array.isArray(j && j.versions) ? j.versions : [];
+      RL_HIST = list; RL_HIST_FOR = key;
+    } catch (e) { toast(cuT('Could not load the history', '无法加载历史版本'), 'err'); return; }
+  }
+  if (!list.length) { toast(cuT('No versions yet — they’re saved automatically as you edit.', '暂无历史版本 — 编辑时会自动保存。')); return; }
+  const rows = list.map((v, i) => {
+    const l = rlVerLine(v);
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border-subtle,rgba(0,0,0,.08))">`
+      + `<div style="flex:1;min-width:0"><div>${escapeHtml(l.top)}${i === 0 ? ` <span class="rl-coin shows">${escapeHtml(cuT('Current', '当前'))}</span>` : ''}</div>`
+      + (l.sub ? `<div class="tm-fhint" style="margin:2px 0 0">${escapeHtml(l.sub)}</div>` : '') + `</div>`
+      + (i === 0 ? '' : `<button type="button" class="tm-btn-line" data-restore="${v.id}">${escapeHtml(cuT('Restore', '还原'))}</button>`)
+      + `</div>`;
+  }).join('');
+  const bodyHtml = `<h3 class="tdlg-title">${escapeHtml(cuT('Version history', '历史版本'))}</h3>`
+    + `<div style="max-height:60vh;overflow:auto">${rows}</div>`;
+  const footHtml = `<button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${escapeHtml(cuT('Close', '关闭'))}</button>`;
+  const { scrim, closer, ready } = askCustom('tdlg-neutral', bodyHtml, footHtml, '[data-restore], [data-cancel]');
+  scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => closer(null)));
+  scrim.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', () => closer(b.getAttribute('data-restore'))));
+  const picked = await ready;
+  if (!picked || RL_SEL !== key || !RL_AUTO || !RL_DRAFT) return;
+  const v = list.find(x => String(x.id) === String(picked));
+  if (!v) return;
+  if (!(await askConfirm({
+    titleEn: 'Restore this version?', titleCn: '还原此版本?',
+    confirmEn: 'Restore', confirmCn: '还原',
+  }))) return;
+  if (RL_SEL !== key || !RL_AUTO || !RL_DRAFT) return;
+  const p = v.snapshot, d = RL_DRAFT;
+  d.nameEn = p.nameEn || ''; d.nameCn = p.nameCn || ''; d.descEn = p.descEn || ''; d.descCn = p.descCn || '';
+  d.layout = p.layout || 'default'; d.caps = new Set(p.caps || []);
+  d.dashboardCards = Array.isArray(p.dashboardCards) ? [...p.dashboardCards] : null;
+  rlRenderPane();
+  await RL_AUTO.flush('restore');
+  if (RL_AUTO && RL_AUTO.state === 'saved') toast(cuT('Restored to the chosen version.', '已还原到所选版本。'), 'ok');
+}
+// Closing the tab mid-pause is the one way to lose an edit now; the browser's
+// own question stands in for the Save button that is gone. Switching away
+// sends it rather than waiting out the timer — the recipe record's rule.
+window.addEventListener('beforeunload', (e) => {
+  if (RL_AUTO && RL_AUTO.busy()) { e.preventDefault(); e.returnValue = ''; }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && RL_AUTO && RL_AUTO.busy()) RL_AUTO.flush();
+});
 
 async function rlAddRole() {
   const name = await askPrompt({

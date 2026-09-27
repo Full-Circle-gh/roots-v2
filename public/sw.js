@@ -42,7 +42,10 @@ const CACHE = 'roots-v2-shell-unstamped';
 // buys nothing — the destination is not ours to cache and the redirect itself
 // is one request — and an install that pre-caches it would pin a forwarding
 // response into every device's shell cache for the life of the deploy stamp.
-const SHELL = ['/login', '/m', '/assets/td-datetime.js'];
+// '/assets/tacet-autosave.js' likewise, for '/m': the engine its settings
+// screens save through (decisions §279). Missing offline, the Role screen
+// could not open its footer — nothing saves offline anyway, but it must draw.
+const SHELL = ['/login', '/m', '/assets/td-datetime.js', '/assets/tacet-autosave.js'];
 
 // Heuristic — request that wants HTML?
 function isHTMLRequest(req) {
