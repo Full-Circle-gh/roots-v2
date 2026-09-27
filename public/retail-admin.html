@@ -6038,6 +6038,11 @@
 
       /* foot — preview + start */
       .fsc-foot { border-top: 1px solid var(--line); padding-top: 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      /* §282 — in the pop-up the form scrolls (.fsd-cols) and Start / Schedule
+         stays on screen: the foot sticks to the bottom of the scroller, reaching
+         out over the form's 28px/26px padding so nothing shows beside or below it. */
+      .fsd-drawer .fsc-foot { position: sticky; bottom: 0; z-index: 2; background: var(--bg-pane);
+        margin: 0 -28px -26px; padding: 16px 28px 20px; }
       .fsc-prev { font-size: 12.5px; color: var(--text-3); font-family: var(--f-mono); line-height: 1.5; min-width: 0; }
       .fsc-prev .f { color: var(--text-1); font-weight: 600; }
       .fsc-prev .r { text-decoration: line-through; }
