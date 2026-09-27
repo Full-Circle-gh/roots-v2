@@ -161,6 +161,9 @@ let _zoneEditId = null;
 let _zoneEditType = 'gz_district';
 
 async function loadDeliveryZones() {
+  // An edit still waiting on its pause goes BEFORE the fields are refilled
+  // from the server, or the refill would put the old value back over it.
+  await Promise.all(Object.values(DLV_CARDS).map(c => c.flush()));
   await loadChinaRegions();
   try {
     const cfg = await api('/api/retail-admin/config');
@@ -357,6 +360,9 @@ async function loadDeliveryZones() {
         if (dlbl) dlbl.textContent = dcb.checked ? 'ON · 开启' : 'OFF · 关闭';
       });
     }
+    // §279 — every field above is filled from the server, so the cards may now
+    // save. Not before: see autosaveCard's note on a card whose load failed.
+    Object.values(DLV_CARDS).forEach(c => c.start());
   } catch {}
 
   const r = await api('/api/retail-admin/delivery-zones');
@@ -365,63 +371,76 @@ async function loadDeliveryZones() {
   dzRenderKpis(true);
 }
 
-async function saveHolidayMode() {
-  const body = {
-    'delivery.holidayMode':    !!$('#dlv-holiday-mode').checked,
-    'delivery.holidayMessage': {
-      en: ($('#dlv-holiday-msg-en').value || '').trim(),
-      cn: ($('#dlv-holiday-msg-cn').value || '').trim(),
+// ── The delivery settings cards save themselves (decisions §279) ─────────
+// Each card is one autosaveCard (01-core): the keys it always wrote, read in a
+// fixed order; its Save button is now a foot with the status, Undo and Version
+// history. Switch labels are painted by the loader's own change listeners.
+const dlvSwitch = (id, on) => {
+  const el = $('#' + id); if (el) el.checked = !!on;
+  const lbl = $('#' + id + '-status-label'); if (lbl) lbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+};
+const dlvVal = (sel) => ((($(sel) && $(sel).value) || '')).trim();
+const dlvSet = (sel, v) => { const el = $(sel); if (el) el.value = v == null ? '' : v; };
+const DLV_CARDS = {
+  kitchen: autosaveCard({
+    card: 'delivery.kitchen', root: '#dlv-card-kitchen',
+    read: () => ({ 'delivery.kitchenAddress': dlvVal('#dlv-kitchen-address') }),
+    apply: (b) => dlvSet('#dlv-kitchen-address', b['delivery.kitchenAddress']),
+  }),
+  holiday: autosaveCard({
+    card: 'delivery.holiday', root: '#dlv-card-holiday',
+    read: () => ({
+      'delivery.holidayMode': !!($('#dlv-holiday-mode') && $('#dlv-holiday-mode').checked),
+      'delivery.holidayMessage': { en: dlvVal('#dlv-holiday-msg-en'), cn: dlvVal('#dlv-holiday-msg-cn') },
+    }),
+    apply: (b) => {
+      dlvSwitch('dlv-holiday-mode', b['delivery.holidayMode']);
+      const m = b['delivery.holidayMessage'] || {};
+      dlvSet('#dlv-holiday-msg-en', m.en); dlvSet('#dlv-holiday-msg-cn', m.cn);
     },
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    toast('Saved · 已保存');
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
-}
-
-// Same-day cutoff — minutes-before-close buffer, with an optional bilingual
-// message override (blank = server keeps using its auto-built "closes at
-// Xpm" copy). Clamp minutes to a sane range so a typo can't swallow the
-// whole business day or send a negative value to the server.
-async function saveCutoffSettings() {
-  let mins = Math.round(Number($('#dlv-cutoff-minutes').value));
-  if (!Number.isFinite(mins) || mins < 0) mins = 0;
-  if (mins > 180) mins = 180;
-  $('#dlv-cutoff-minutes').value = mins;
-  const body = {
-    'delivery.sameDayCutoffMinutes': mins,
-    'delivery.sameDayCutoffMessage': {
-      en: ($('#dlv-cutoff-msg-en').value || '').trim(),
-      cn: ($('#dlv-cutoff-msg-cn').value || '').trim(),
+    after: () => { if (typeof dlvHubRender === 'function') dlvHubRender(); },
+  }),
+  // Same-day cutoff — minutes-before-close buffer, with an optional bilingual
+  // message override (blank = server keeps using its auto-built "closes at
+  // Xpm" copy). Minutes are clamped to 0–180 so a typo can't swallow the whole
+  // business day or send a negative value; the box saves when it is left.
+  cutoff: autosaveCard({
+    card: 'delivery.cutoff', root: '#dlv-card-cutoff',
+    read: () => {
+      let mins = Math.round(Number(dlvVal('#dlv-cutoff-minutes')));
+      if (!Number.isFinite(mins) || mins < 0) mins = 0;
+      if (mins > 180) mins = 180;
+      return {
+        'delivery.sameDayCutoffMinutes': mins,
+        'delivery.sameDayCutoffMessage': { en: dlvVal('#dlv-cutoff-msg-en'), cn: dlvVal('#dlv-cutoff-msg-cn') },
+      };
     },
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    toast('Saved · 已保存');
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
-}
-
-// Bulk attach tracking — persist the on/off flag and flip the Orders toolbar
-// button live via the same body class loadConfig() sets on boot.
-async function saveBulkTrackingSetting() {
-  const on = !!$('#dlv-bulk-trk').checked;
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body: { 'delivery.bulkTracking': on } });
-    document.body.classList.toggle('ord-bulk-tracking', on);
-    toast('Saved · 已保存');
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
-}
-
-// Box label — persist the on/off flag and flip the order-drawer sticker
-// controls live (same body-class pattern as bulk tracking).
-async function saveBoxLabelSetting() {
-  const on = !!$('#dlv-box-label').checked;
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body: { 'delivery.boxLabel': on } });
-    document.body.classList.toggle('ord-box-label', on);
-    toast('Saved · 已保存');
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
-}
+    apply: (b) => {
+      dlvSet('#dlv-cutoff-minutes', b['delivery.sameDayCutoffMinutes']);
+      const m = b['delivery.sameDayCutoffMessage'] || {};
+      dlvSet('#dlv-cutoff-msg-en', m.en); dlvSet('#dlv-cutoff-msg-cn', m.cn);
+    },
+    after: (b) => dlvSet('#dlv-cutoff-minutes', b['delivery.sameDayCutoffMinutes']),
+  }),
+  // Bulk attach tracking and the box label flip the Orders toolbar and the
+  // order drawer live, through the same body classes loadConfig() sets on boot.
+  bulktracking: autosaveCard({
+    card: 'delivery.bulktracking', root: '#dlv-card-bulktrk',
+    read: () => ({ 'delivery.bulkTracking': !!($('#dlv-bulk-trk') && $('#dlv-bulk-trk').checked) }),
+    apply: (b) => dlvSwitch('dlv-bulk-trk', b['delivery.bulkTracking']),
+    after: (b) => document.body.classList.toggle('ord-bulk-tracking', !!b['delivery.bulkTracking']),
+  }),
+  boxlabel: autosaveCard({
+    card: 'delivery.boxlabel', root: '#dlv-card-boxlabel',
+    read: () => ({ 'delivery.boxLabel': !!($('#dlv-box-label') && $('#dlv-box-label').checked) }),
+    apply: (b) => dlvSwitch('dlv-box-label', b['delivery.boxLabel']),
+    after: (b) => document.body.classList.toggle('ord-box-label', !!b['delivery.boxLabel']),
+  }),
+  preorder: null,   // below, beside the rest of the pre-order card
+};
+// The hub's holiday switch and the setup flow still call this by name: it now
+// sends whatever the holiday card holds, at once.
+function saveHolidayMode() { return DLV_CARDS.holiday.flush(); }
 
 /* §194 — THE PRE-ORDER POPUP, WHICH UNTIL NOW COULD ONLY BE CHANGED BY A
    DEPLOY. Writes `notice.preorder` WHOLESALE, the way saveBatchSchedule writes
@@ -431,7 +450,7 @@ async function saveBoxLabelSetting() {
    blank as "use the built-in wording", so clearing a box has to be able to
    UNDO an override — skipping empties would make a custom line unremovable
    from this screen, which is the state this whole card exists to get out of. */
-async function savePreorderNotice() {
+function preorderBody() {
   const txt = (sel) => (($(sel) && $(sel).value) || '').trim();
   // Whole days, 0–365. A blank box is null — no window — and NOT zero: zero
   // is a real answer ("back today") and must be typeable.
@@ -452,15 +471,7 @@ async function savePreorderNotice() {
   if (lo == null) lo = hi;
   if (hi == null) hi = lo;
   if (lo != null && hi != null && lo > hi) { const t = lo; lo = hi; hi = t; }
-  if ($('#po-min-days')) $('#po-min-days').value = lo != null ? lo : '';
-  if ($('#po-max-days')) $('#po-max-days').value = hi != null ? hi : '';
-
-  // Copy that ASKS for a window we no longer have would reach a customer as a
-  // half-sentence, so the server falls back to its built-in text whole in that
-  // case. Say so here rather than letting the operator discover it at a
-  // checkout — the save still goes through; this is a warning, not a gate.
-  const wantsWindow = /\{window\}/.test(txt('#po-msg-en') + txt('#po-msg-cn'));
-  const body = {
+  return {
     'notice.preorder': {
       kicker_en: txt('#po-kicker-en'),
       kicker_cn: txt('#po-kicker-cn'),
@@ -472,18 +483,37 @@ async function savePreorderNotice() {
       max_days: hi,
     },
   };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
+}
+let _poWarned = false;
+DLV_CARDS.preorder = autosaveCard({
+  card: 'delivery.preorder', root: '.dlv-view[data-dlv="preorder"]',
+  read: preorderBody,
+  apply: (b) => {
+    const p = b['notice.preorder'] || {};
+    dlvSet('#po-kicker-en', p.kicker_en); dlvSet('#po-kicker-cn', p.kicker_cn);
+    dlvSet('#po-title-en', p.title_en);   dlvSet('#po-title-cn', p.title_cn);
+    dlvSet('#po-msg-en', p.message_en);   dlvSet('#po-msg-cn', p.message_cn);
+    dlvSet('#po-min-days', p.min_days);   dlvSet('#po-max-days', p.max_days);
     poSync();
-    if (wantsWindow && lo == null) {
+  },
+  after: (b) => {
+    const p = b['notice.preorder'];
+    // The day boxes show what was normalised, once it has been saved.
+    dlvSet('#po-min-days', p.min_days); dlvSet('#po-max-days', p.max_days);
+    poSync();
+    // Copy that ASKS for a window we no longer have would reach a customer as a
+    // half-sentence, so the server falls back to its built-in text whole in that
+    // case. Say so — once per time it becomes true, not on every save.
+    const wantsWindow = /\{window\}/.test((p.message_en || '') + (p.message_cn || ''));
+    const warn = wantsWindow && p.min_days == null;
+    if (warn && !_poWarned) {
       toast(cuT('Saved — but {window} has no days to fill it, so the default wording is used.',
                 '已保存 — 但 {window} 没有天数可填，因此使用默认文案。'), 'warn');
-    } else {
-      toast('Saved · 已保存');
     }
+    _poWarned = warn;
     if (typeof dlvHubRender === 'function') dlvHubRender();
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
-}
+  },
+});
 
 // The pre-order popup preview — same contract as fbRenderPreview: each input
 // falls back to its own placeholder, and those placeholders ARE the server's
@@ -1404,16 +1434,6 @@ async function deleteZone(id, label) {
     toast('Zone deleted · 配送区已删除');
     loadDeliveryZones();
   } catch (e) { toast('Delete failed · 删除失败: '+e.message, 'err'); }
-}
-
-async function saveDeliveryDefaults() {
-  const body = {
-    'delivery.kitchenAddress':       $('#dlv-kitchen-address').value.trim(),
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    toast('Saved · 已保存');
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }
 
 // Delivery & pickup fees — moved here from Settings → Checkout & fees (2026-06-02).

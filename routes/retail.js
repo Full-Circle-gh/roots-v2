@@ -23188,6 +23188,19 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
     }
   }
 
+  /* ── A settings card's version history (decisions §279) ──────────────────
+     A card that saves itself names itself in `?history=<card>`, and this write
+     is then recorded around, the way the role and customer writes are: the
+     values of exactly the keys in the body, before and after. The card always
+     sends the same keys, so its versions are comparable. `note` is filed only
+     when it is one this knows. Best-effort on both sides of the write. */
+  const q = req.query || {};
+  const histCard = /^[a-z0-9._-]{1,60}$/i.test(String(q.history || '')) ? String(q.history) : null;
+  const histNote = histCard && CONFIG_HISTORY_NOTES.has(q.note) ? q.note : null;
+  if (histCard) {
+    try { editHistory.before(tdb(), historyTenantId(), 'config', histCard, configSnapshot(entries.map(e => e[0]))); }
+    catch (e) { console.error('[config history before]', e.message); }
+  }
   // Await inside the try — the update_failed 500 below is only reachable there.
   try {
     await withTransaction(tdb(), (tx) => {
@@ -23203,8 +23216,42 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
     });
   }
   catch (e) { console.error('[retail-admin/config PUT]', e); return res.status(500).json({ success: false, error: 'update_failed' }); }
+  if (histCard) {
+    try {
+      editHistory.after(tdb(), historyTenantId(), 'config', histCard, configSnapshot(entries.map(e => e[0])),
+        { id: req.user && req.user.id, name: req.user && req.user.username }, { note: histNote });
+    } catch (e) { console.error('[config history after]', e.message); }
+  }
   logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: entries.map(e => e[0]) }, req.ip);
   res.json({ success: true, data: loadConfig() });
+});
+
+// The stored values of `keys`, in the order given — null for a key never
+// written. Read straight from the table, so what is recorded is what is held.
+function configSnapshot(keys) {
+  const get = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?');
+  const out = {};
+  for (const k of keys) {
+    const row = get.get(k);
+    let v = null;
+    if (row) { try { v = JSON.parse(row.value_json); } catch (_) { v = null; } }
+    out[k] = v;
+  }
+  return out;
+}
+const CONFIG_HISTORY_NOTES = new Set(['undo', 'restore']);
+
+router.get('/api/retail-admin/config/history', requireRetailAdmin, (req, res) => {
+  const card = String(req.query.card || '');
+  if (!/^[a-z0-9._-]{1,60}$/i.test(card)) return res.status(400).json({ success: false, error: 'bad_card' });
+  let rows = [];
+  try { rows = editHistory.list(tdb(), historyTenantId(), 'config', card); } catch (e) { rows = []; }
+  const versions = rows.map((r, i) => {
+    const s = r.snapshot || {}, prev = rows[i + 1] ? rows[i + 1].snapshot || {} : null;
+    const changed = prev ? Object.keys(s).filter(k => JSON.stringify(s[k]) !== JSON.stringify(prev[k])) : [];
+    return { id: r.id, at: r.at, by: r.by, isBaseline: r.isBaseline, note: r.note, changed, snapshot: s };
+  });
+  res.json({ success: true, versions });
 });
 
 // System Alerts — send a test message to a WeCom group-bot webhook so the operator
