@@ -5475,6 +5475,12 @@
   /* Brick, one step past brass: brass is "still owed", this is "the money
      doesn't add up" — the payment-mismatch line on a pending row. */
   .ord-note-line.is-alert { color: var(--tacet-brick); font-weight: 600; }
+  /* The awaiting-restock line names products, so it may run long: it wraps
+     (up to two lines, the full list in its title) instead of stretching the
+     status column the way a nowrap line would. */
+  .ord-note-line.is-wait { align-items: flex-start; white-space: normal; max-width: 240px; }
+  .ord-note-line.is-wait svg { margin-top: 2px; }
+  .ord-note-line.is-wait span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   /* Inline among a row of pills — no top offset needed there, the row's
      align-items:center already handles vertical placement. The order drawer
      shows these on its .od-marks line now (the pinned header carries the ONE

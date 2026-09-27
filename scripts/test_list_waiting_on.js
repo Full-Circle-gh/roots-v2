@@ -159,6 +159,43 @@ vm.runInContext(M.slice(start, M.indexOf('\n}\n', start) + 3), phone);
       assert.ok(/\$\{o\.waitingList\?`[\s\S]{0,400}T\('Waiting on stock','等待补货'\)/.test(M),
         'screenOrders does not print it');
     });
+
+    console.log('\n5. the PC list row reads it too');
+    // awaitingRestockLine, sliced from the shipped 04-orders.js and fed the
+    // same payload the real route just returned.
+    const D = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
+    const ds = D.indexOf('\nfunction awaitingRestockLine(');
+    let lang = 'en';
+    const pc = vm.createContext({
+      ICON_WAIT_STOCK: '<svg></svg>',
+      cuT: (en, cn) => (lang === 'cn' ? cn : en),
+      escapeHtml: (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+      escapeAttr: (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+    });
+    vm.runInContext(D.slice(ds, D.indexOf('\n}\n', ds) + 3), pc);
+    await it('a parked row names its lines, in English', () => {
+      const html = pc.awaitingRestockLine(row(parked));
+      assert.ok(html.includes('Waiting on stock · Almonds 500g, Rice ×3'), html);
+    });
+    await it('and in Chinese', () => {
+      lang = 'cn';
+      const html = pc.awaitingRestockLine(row(parked));
+      lang = 'en';
+      assert.ok(html.includes('等待补货 · 杏仁 500g、大米 ×3'), html);
+    });
+    await it('🔴 a released row draws nothing', () => {
+      assert.strictEqual(pc.awaitingRestockLine(row(released)), '');
+    });
+    await it('an orphan pid shows as its id', () => {
+      assert.ok(pc.awaitingRestockLine(row(orphan)).includes('#' + P_GONE));
+    });
+    await it('the row calls it, in the status cell', () => {
+      assert.ok(/\$\{paymentCheckLine\(o\)\}\$\{awaitingRestockLine\(o\)\}/.test(D), 'not called from the list row');
+    });
+    await it('it wraps instead of stretching the status column', () => {
+      const css = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
+      assert.ok(/\.ord-note-line\.is-wait\s*\{[^}]*white-space:\s*normal/.test(css), 'no .is-wait wrap rule');
+    });
   } finally {
     server.close();
     cleanup();
