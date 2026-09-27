@@ -16103,3 +16103,12 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 .ppg-sw:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
 .ppg-setnote { font-size: 13px; color: var(--td-text2); margin-top: 12px; line-height: 1.55; }
 .ppg-setfoot { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+
+/* §279 — the foot a self-saving settings card wears where its Save button was
+   (01-core autosaveCard). Its Undo is a .btn, whose display beats the UA
+   [hidden] rule — the trap .acct-item[hidden] names — so it carries its own. */
+.as-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; align-self: flex-end; }
+.as-foot .as-stat { font-size: 12.5px; margin-right: auto; }
+.as-foot .as-stat.is-bad { color: var(--danger); }
+.as-foot .as-stat.is-held { color: var(--warn); }
+.as-foot .btn[hidden] { display: none; }
