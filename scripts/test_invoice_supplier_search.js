@@ -101,6 +101,13 @@ async function api(p, opts) {
   if (q.startsWith('/api/retail-admin/suppliers')) return { success: true, data: SUPPLIERS };
   if (q === '/api/retail-admin/purchasing/invoices/outstanding') return { success: true, data: OUTSTANDING };
   if (q === '/api/retail-admin/purchasing/invoices') { if (opts && opts.method) { sent.push(opts.body); return { success: true, id: 7 }; } return { success: true, data: [] }; }
+  // A 发票 already recorded with no supplier, as the server files one: under
+  // the Unspecified literal, covering line 11.
+  if (q === '/api/retail-admin/purchasing/invoices/9') {
+    if (opts && opts.method) { sent.push(opts.body); return { success: true }; }
+    return { success: true, data: { id: 9, supplier: UNSPEC, invoice_number: null, date: '2026-08-28', due_date: null,
+      amount: 19, notes: 'market stall', lines: [{ line_id: 11, allocated_amount: 19, name_en: 'Apple Banana', po_number: 'RPO-0001' }] } };
+  }
   return { success: true, data: [] };
 }
 
@@ -266,6 +273,66 @@ async function main() {
   await sandbox.puInvSave();
   ok(sent.length === 1 && toasts.some(t => t.kind === 'err' && /pick one from the list/i.test(t.msg)),
      'nothing sent, and the same message as the other field');
+
+  // ── A ONE-OFF PURCHASE NEEDS NO SUPPLIER ──────────────────────────────
+  // Staff: 它必须设置供应商才能添加发票。仅仅购买一次的物品不需要设置供应商信息。
+  // The Unspecified group offered only "Set supplier", and the form refused an
+  // empty supplier — so a 发票 for something bought once could not be recorded
+  // without inventing a supplier first.
+  console.log('\n16. the Unspecified group offers "Add invoice" beside "Set supplier"');
+  const groupsHtml = node('pu2-invgroups').innerHTML;
+  ok(groupsHtml.includes('onclick="puInvAssign()"'), 'Set supplier is still there');
+  ok(groupsHtml.includes('onclick="puInvNew(0)"'), 'and Add invoice sits beside it on the same row');
+
+  console.log('\n17. opened from that row, the supplier is empty and the Unspecified lines are offered');
+  sent.length = 0; toasts.length = 0;
+  sandbox.puInvNew(0);
+  invField().value = '';
+  ok(modal().includes('Optional — type to search your suppliers'), 'the field says it is optional');
+  ok(modal().includes('puInvToggle(11)') && modal().includes('puInvToggle(12)'),
+     'both Unspecified lines can be ticked with no supplier picked');
+
+  console.log('\n18. it saves with the field empty');
+  sandbox.puInvToggle(11);
+  invField().value = '';
+  sandbox.puInvField('amount', '19');
+  await sandbox.puInvSave();
+  ok(sent.length === 1, 'one request went out');
+  ok(sent[0] && sent[0].supplier === '', 'with no supplier — the server files it under Unspecified');
+  ok(sent[0] && sent[0].links.length === 1 && sent[0].links[0].line_id === 11 && sent[0].links[0].allocated_amount === 19,
+     'covering the ticked line');
+  ok(!toasts.some(t => t.kind === 'err'), 'and nothing was refused');
+
+  console.log('\n19. a typed name that is nobody is STILL refused — no near-duplicate suppliers');
+  sent.length = 0; toasts.length = 0;
+  sandbox.puInvNew(0);
+  invField().value = 'Zhang Fruit Stall';
+  sandbox.puInvField('amount', '19');
+  await sandbox.puInvSave();
+  ok(sent.length === 0 && toasts.some(t => t.kind === 'err' && /pick one from the list/i.test(t.msg)),
+     'nothing sent, told to pick from the list');
+
+  console.log('\n20. clearing a picked supplier switches the form to the Unspecified lines');
+  sent.length = 0; toasts.length = 0;
+  sandbox.puInvNew();
+  invField().value = '';        // the stub keeps the last test's text; a fresh form would not
+  sandbox.puSuggestOpen('pu2-inv-sup', 'invsuppliers');
+  sandbox.puSuggestPick('Nut House 坚果屋', 'Nut House');
+  ok(modal().includes('No open lines for this supplier'), 'Nut House has nothing open');
+  invField().value = '';
+  await sandbox.puInvSave();
+  ok(sent.length === 0, 'nothing is filed on that press');
+  ok(toasts.some(t => /supplier cleared/i.test(t.msg)), 'the operator is told the supplier was cleared');
+  ok(modal().includes('puInvToggle(11)'), 'and the Unspecified lines are now offered');
+
+  console.log('\n21. an invoice recorded with no supplier edits with the field empty');
+  sent.length = 0; toasts.length = 0;
+  await sandbox.puInvEdit(9);
+  ok(/id="pu2-inv-sup"[^>]*value=""/.test(modal()), 'the field is not filled with the bucket name');
+  ok(modal().includes('puInvToggle(11)'), 'its line arrives ticked alongside the other open ones');
+  invField().value = '';
+  await sandbox.puInvSave();
+  ok(sent.length === 1 && sent[0].supplier === '', 'and re-saves with no supplier, not a switch');
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

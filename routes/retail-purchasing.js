@@ -2120,9 +2120,18 @@ function writeLinks(invoiceId, links, skipInvoiceId) {
   }
 }
 
+// A 发票 for a one-off purchase needs no supplier. Something bought once — a
+// market stall, a shop passed on the way — is left Unspecified on purpose, and
+// making the buyer name a supplier first put a name on the book that would
+// never be used again. An empty supplier is filed under the same literal the
+// grouping falls back to, so the invoice reads the same as the lines it covers.
+// Coverage never keys on this column — it is the invoice_lines allocations —
+// so the name is a label, not a link.
+const invSupplierOrUnspecified = (v) => String(v == null ? '' : v).trim() || INV_UNSPECIFIED;
+
 router.post('/api/retail-admin/purchasing/invoices', requireRetailAdmin, express.json(), (req, res) => {
-  const { supplier, invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
-  if (!supplier || !String(supplier).trim()) return res.status(400).json({ success: false, error: 'supplier_required' });
+  const { invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
+  const supplier = invSupplierOrUnspecified(req.body && req.body.supplier);
   if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
   if (!date) return res.status(400).json({ success: false, error: 'date_required' });
   const tid = Number(currentTenantId()) || 1;
@@ -2154,8 +2163,8 @@ router.put('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, expr
   const tid = Number(currentTenantId()) || 1;
   const inv = tdb().prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
-  const { supplier, invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
-  if (!supplier || !String(supplier).trim()) return res.status(400).json({ success: false, error: 'supplier_required' });
+  const { invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
+  const supplier = invSupplierOrUnspecified(req.body && req.body.supplier);
   if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
   if (!date) return res.status(400).json({ success: false, error: 'date_required' });
   try {

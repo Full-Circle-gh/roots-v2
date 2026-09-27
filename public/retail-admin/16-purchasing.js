@@ -3288,7 +3288,14 @@
             ${cell(g.no_invoice_expected, 'no_invoice_expected')}
             <td class="right" onclick="event.stopPropagation()">
               ${g.supplier === INV_UNSPECIFIED
-                ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Nothing on these lines said who they came from — name the supplier and they move into that supplier’s group', '这些明细未记录来源 —— 指定供应商后即归入该供应商'))}" onclick="puInvAssign()">${esc(T('Set supplier', '设置供应商'))}</button>`
+                // A ONE-OFF PURCHASE NEEDS NO SUPPLIER. Something bought once —
+                // a market stall, a shop passed on the way — can still come with
+                // a 发票, and making the buyer invent a supplier before it could
+                // be recorded put a name on the book that will never be used
+                // again. So this row offers both: attribute the lines, or record
+                // the 发票 against them as they stand.
+                ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Nothing on these lines said who they came from — name the supplier and they move into that supplier’s group', '这些明细未记录来源 —— 指定供应商后即归入该供应商'))}" onclick="puInvAssign()">${esc(T('Set supplier', '设置供应商'))}</button>${chase > 0.005
+                    ? ` <button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvNew(${i})">${esc(T('Add invoice', '添加发票'))}</button>` : ''}`
                 : (chase > 0.005
                     ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvNew(${i})">${esc(T('Add invoice', '添加发票'))}</button>`
                     : `<span class="pu2-mut sm">${esc(T('All invoiced', '已全部开票'))}</span>`)}
@@ -3718,7 +3725,7 @@
       const alloc = {};
       (inv.lines || []).forEach(l => { alloc[l.line_id] = Number((l.allocated_amount || 0).toFixed(2)); });
       _invDraft = {
-        id: inv.id, supplier: inv.supplier, invoice_number: inv.invoice_number || '',
+        id: inv.id, supplier: inv.supplier === INV_UNSPECIFIED ? '' : inv.supplier, invoice_number: inv.invoice_number || '',
         date: inv.date, due_date: inv.due_date || '', amount: inv.amount, notes: inv.notes || '',
         alloc, ownLines: inv.lines || [],
       };
@@ -3754,7 +3761,9 @@
   // vanish from the form the moment you opened it to edit).
   function invModalLines() {
     const d = _invDraft; if (!d) return [];
-    const open = invLinesFor(d.supplier).filter(l => l.status !== 'no_invoice_expected');
+    // An empty supplier is a one-off purchase: the lines it can cover are the
+    // ones nobody attributed, the Unspecified bucket.
+    const open = invLinesFor(d.supplier || INV_UNSPECIFIED).filter(l => l.status !== 'no_invoice_expected');
     const seen = new Set(open.map(l => l.line_id));
     const own = (d.ownLines || []).filter(l => !seen.has(l.line_id)).map(l => ({
       line_id: l.line_id, name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
@@ -3803,7 +3812,7 @@
             <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span>
               <span class="pu2-suggestwrap">
                 <input class="pu2-input" id="pu2-inv-sup" autocomplete="off" value="${esc(supVal)}"
-                  placeholder="${esc(T('Type to search your suppliers', '输入文字搜索供应商'))}"
+                  placeholder="${esc(T('Optional — type to search your suppliers', '可选 —— 输入文字搜索供应商'))}"
                   role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
                   onfocus="puSuggestOpen('pu2-inv-sup','invsuppliers')" oninput="puSuggestOpen('pu2-inv-sup','invsuppliers')"
                   onkeydown="puSuggestKey(event,'pu2-inv-sup','invsuppliers')" onblur="puSuggestBlur('pu2-inv-sup')">
@@ -3892,10 +3901,13 @@
   window.puInvSave = async function () {
     const d = _invDraft; if (!d) return;
     const sup = invDraftSupplier();
-    if (!sup.name) {
-      toast(sup.typed
-        ? T('No supplier matches that — pick one from the list.', '没有匹配的供应商 —— 请从列表中选择。')
-        : T('Choose a supplier', '请选择供应商'), 'err');
+    // An EMPTY field is allowed — a one-off purchase has no supplier worth
+    // keeping, and the server files it under Unspecified. A name typed that
+    // matches nobody is still refused: grouping keys on the string, so a
+    // free-typed name would quietly open a near-duplicate supplier. The
+    // seller's name, if worth keeping, goes in the note.
+    if (!sup.name && sup.typed) {
+      toast(T('No supplier matches that — pick one from the list.', '没有匹配的供应商 —— 请从列表中选择。'), 'err');
       const el = document.getElementById('pu2-inv-sup');
       if (el && el.focus) el.focus();
       return;
@@ -3904,9 +3916,13 @@
     // below belong to. Filing against those lines would attribute one
     // supplier's goods to another's invoice, so switch the form to what the
     // field says and let them tick the right lines.
+    // Emptying the field counts too: the lines below were the old supplier's,
+    // and an empty one covers the Unspecified lines instead.
     if (sup.name !== d.supplier) {
       puInvField('supplier', sup.name);
-      toast(T('Switched to that supplier — tick the lines it covers, then save.', '已切换到该供应商 —— 请勾选其对应明细后保存。'), 'ok');
+      toast(sup.name
+        ? T('Switched to that supplier — tick the lines it covers, then save.', '已切换到该供应商 —— 请勾选其对应明细后保存。')
+        : T('Supplier cleared — tick the lines it covers, then save.', '已清空供应商 —— 请勾选其对应明细后保存。'), 'ok');
       return;
     }
     if (!(parseFloat(d.amount) > 0)) { toast(T('Enter the invoice amount', '请输入发票金额'), 'err'); return; }

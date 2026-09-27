@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.195 · 2026-09-27 · §282 A 发票 WITH NO SUPPLIER — TWO OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** Purchasing → Invoices. The Unspecified row's new `Add invoice · 添加发票` button is copied whole from the other groups' rows. The add-invoice form's supplier placeholder and the toast for a cleared supplier are composed. See *A 发票 with no supplier (§282)*.
+
 **v1.194 · 2026-09-27 · §281 A LINE PACKED SEPARATELY — TWO STRINGS COMPOSED BY CLAUDE, EVERY WORD LIVE.** The build-list tick and the waste screen's note of what it left out. See *Packed separately — kept on expiry (§281)*.
 **v1.193 · 2026-09-27 · §279 BATCH 3 · THE SHOP WORDING PAGES SAVE THEMSELVES — NOTHING COMPOSED, THREE TOASTS TRIMMED BY DELETION.** With no Save to press, three upload toasts stop telling the operator to press it: `Photo uploaded — remember to Save · 图片已上传 — 记得点保存` → `Photo uploaded · 图片已上传` (About), `Uploaded — Save to apply · 已上传 — 保存后生效` → `Uploaded · 已上传` and `Picture removed — Save to apply · 已移除图片 — 保存后生效` → `Picture removed · 已移除图片` (Share cards). Each is the old pair with its tail deleted and nothing added. The held-save lines on Review tags and FAQ are the old refusal toasts, unchanged.
 **v1.192 · 2026-09-27 · §269 ADDENDUM THE RETURN DIALOG — ONE LINE COMPOSED BY CLAUDE.** The hint under the amount; `Net · 净额` and `amount must be positive · 金额必须大于零` are copied whole. See *A return on money out (§269)*.
@@ -9082,3 +9084,22 @@ write-off's cost (desktop and phone waste screens).
 - `免费` / `按设计免费`: **rejected.** Those mean the line costs nothing. The
   dressing costs money and is still counted on every sale; it is only left out
   of an expired or spoiled write-off.
+
+## A 发票 with no supplier (§282)
+
+**Composed by Claude, 2026-09-27, under the 2026-09-06 amendment.** Operator-only:
+the add-invoice form on Purchasing → Invoices (`public/retail-admin/16-purchasing.js`).
+Ash should correct either line if it reads wrong.
+
+| shipped | built from |
+|---|---|
+| `Add invoice · 添加发票` (the Unspecified row) | **copied whole** — the same button every other supplier row carries |
+| `Optional — type to search your suppliers · 可选 —— 输入文字搜索供应商` (supplier placeholder) | **composed from two live strings.** `可选` is live as the same form's `Optional` placeholder (Invoice no., Note); `输入文字搜索供应商` is the placeholder this field already carried, unchanged. Joined with the ` —— ` the form's toasts use |
+| `Supplier cleared — tick the lines it covers, then save. · 已清空供应商 —— 请勾选其对应明细后保存。` (toast) | **composed on the live sibling** `Switched to that supplier — tick the lines it covers, then save. · 已切换到该供应商 —— 请勾选其对应明细后保存。`, with `已切换到该供应商` → `已清空供应商`. `已清空` is live on its own; `供应商` is the field's own label. The tail is unchanged |
+
+**Live candidates rejected.**
+
+- `未指定供应商` (live, five uses) in the toast: **rejected**. It names the bucket
+  the invoice lands in, not what the operator just did, and reads as an error.
+- `清空` alone: **rejected**. It is a live BUTTON word (a command); a toast reports
+  what happened, so it takes the `已` form.
