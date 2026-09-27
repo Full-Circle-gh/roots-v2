@@ -137,5 +137,24 @@ console.log('\n6. the sheet actually draws it');
 has(src, '${waitingOnCard(o)}', 'sheetOrderDetail calls waitingOnCard');
 has(src, 'base.waitingOn=orderWaitingOn(o);', 'mapDetail fills it');
 
+console.log('\n7. every order status has a name on the phone');
+{
+  // The pill printed the raw column ("awaiting_restock") because ORDER_STATUS
+  // had no entry for it and falls back to r.status. Checked against the locked
+  // operator register, so a status added there and not here goes red.
+  const at = src.indexOf('\nconst ORDER_STATUS={');
+  const map = vm.runInNewContext('(' + src.slice(src.indexOf('{', at), src.indexOf('\n};', at) + 2) + ')');
+  const vocab = fs.readFileSync(path.join(__dirname, '..', 'docs', 'tacet-delivery-vocabulary.md'), 'utf8');
+  const reg = vocab.slice(vocab.indexOf('## Order status — operator register'));
+  const table = reg.slice(0, reg.indexOf('\n## ', 5));
+  const keys = [...new Set([...table.matchAll(/^\| `([a-z_]+)` \|/gm)].map((m) => m[1]))];
+  if (keys.length < 8) bad('the operator register table was found', 'parsed ' + keys.length + ' statuses');
+  for (const k of keys) {
+    if (map[k]) ok('ORDER_STATUS names ' + k); else bad('ORDER_STATUS names ' + k, 'missing — the pill prints the raw word');
+  }
+  is(map.awaiting_restock, ['restock', 'Awaiting restock', '等待补货'], 'awaiting_restock: the locked pair, amber');
+  is(map.rider_pickup.slice(1), ['Rider coming', '骑手前往取货'], 'rider_pickup: the locked pair');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
