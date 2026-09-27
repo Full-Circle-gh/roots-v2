@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.446
+# Tacet shared-core consolidation — decisions record, v4.447
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-27 · v4.447 — **§279 BATCH 5 · THE MIXED SCREENS: THREE SPLIT, THREE KEEP THEIR SAVE — ASH's *"keep going"*.** **SPLIT.** (1) The shared "Save settings" bar used to save three panels at once. Shop layout & filters and Customer service now save themselves (`SHOP_CARD`, `CS_CARD`); the bar stays on **Notifications only** — the WeChat template id, the two WeCom webhook addresses (each carries its key) and the manual-Alipay payment card — and is hidden elsewhere. (2) Store pickup: the hours and lead time save themselves (`PICKUP_CARD`); the pickup packing fee beside them keeps the view's Save, which now sends the fees alone. **KEPT, AND WHY — Claude's call under rule 2, reported to Ash rather than assumed.** *Affiliate settings*: every field but the referral-code prefix is a commission rule (rewards, share rate, duration, who earns), so there is nothing worth splitting out. *Membership tiers* and *Fresh batches*: each is ONE stored record mixing wording with money or schedule — a tier's name with its spend threshold and multiplier; a batch's popup wording with its order cut-off hours, pre-order cap and delivery platforms. Autosaving the wording would write the whole record, carrying any half-edited number beside it; splitting the record is a data change, not an autosave one. They keep their Save. Nothing new in Chinese. No schema change; no change to `.gitignore` or CI.
 
 2026-09-27 · v4.446 — **§279 BATCH 4 · THE RECORDS YOU EDIT SAVE THEMSELVES — ASH's *"keep going"*.** An EXISTING store, supplier, photo or pop-up saves itself; a NEW one keeps its Save, because saving it creates the record (rule 2). Each gets Undo and Version history. **STORES.** The address, city and district save when left, and `PATCH /stores/:id` now re-locates the store on the map only when the address CHANGED or the store has no coordinates — it used to re-geocode whenever an address field was merely present, which with a self-saving form would have been a map lookup on every pause in typing the store's name. The manual GPS pin keeps its own Save (rule 6's shape: sending it stops the address re-locating the store). The store list no longer pulls the caret into its search box on every repaint unless the caret was already there. **SUPPLIERS.** A blank name holds the save; a pick from the payment suggestions counts as an edit; a repaint sends the open form first. **PHOTOS.** One card for the one drawer, naming whichever photo is open at the moment it sends; the previous photo is sent before the drawer refills; a tag still being typed is not a tag yet. **POP-UPS.** Stored as ONE list and written whole — the §144 shape — so the card sends the list as loaded with only this pop-up swapped for the form, a delete stops it before the list loses the pop-up, and a restored version takes only this pop-up from the stored list. `updated_at` is stamped on what is SENT, never on what is compared. Server: `lib/edit-history.js` gains `around`, `versionsOf` and `fromQuery`; the store, supplier and media routes record around their write only when the editor asks (`?history`), and each has a `/history` read. `autosaveCard` gains `historyUrl`, `sub`, `beforeSend`, `stop`, and function-valued `card`/`url`/`historyUrl`. Chinese: nothing new. No schema change; no change to `.gitignore` or CI.
 
@@ -20733,6 +20735,9 @@ to the narrower form below).
    stock. Autosave there turns a half-typed amount into a real row (§144 is the
    race it already cost on products). The receive screen (§70) is the one
    deliberate exception and keeps its own rules.
+   Screens where settings and money share ONE stored record (membership tiers,
+   fresh batches) keep their Save too: splitting the record comes first
+   (v4.447).
 3. **Undo and History, the same on both surfaces.** The footer's *Undo my
    changes* puts the thing back as it was when this visit opened. *History*
    lists earlier versions — the Original, then one per editing session — and

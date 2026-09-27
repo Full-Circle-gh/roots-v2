@@ -1282,11 +1282,12 @@ async function uploadCsQr(file) {
     const j = await r.json();
     if (!j.success) { toast('Upload failed · 上传失败: ' + (j.error || ''), 'err'); return; }
     $('#cfg-cs-qr_image_url').value = j.data.url;
+    CS_CARD.touch();
     renderCsQrPreview();
     toast('QR uploaded — remember to Save · 二维码已上传 — 记得点保存');
   } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
 }
-function clearCsQr() { $('#cfg-cs-qr_image_url').value = ''; renderCsQrPreview(); }
+function clearCsQr() { $('#cfg-cs-qr_image_url').value = ''; renderCsQrPreview(); CS_CARD.touch(); }
 document.addEventListener('change', e => {
   if (e.target.id === 'cfg-cs-qr-file' && e.target.files?.[0]) uploadCsQr(e.target.files[0]);
 });
@@ -1913,27 +1914,57 @@ async function _testSystemAlert() {
   } catch (e) { if (st) st.textContent = '⚠ ' + e.message; }
 }
 
+// §279 — the shared Save bar now serves ONE panel: Notifications. It holds the
+// WeChat template id, the two WeCom webhook addresses (each carries its key)
+// and, through saveAlipayManualInline, the manual-Alipay payment card — keys
+// and money, which keep their button (rule 2). The Shop and Customer-service
+// panels it used to save as well now save themselves (SHOP_CARD, CS_CARD).
 async function saveConfig() {
   const status = $('#cfg-status');
   status.textContent = 'Saving…';
   const body = {
-    // Brand & theme (accent / notification colour / language / mascots) moved to
-    // the Mini App Editor (/cms) 2026-06-09 — it writes those keys to config itself.
-    // Fees — shipping, free-shipping threshold, pickup packing/hours, and the
-    // minimum-order gate — all live in the Delivery tab now (saveDeliveryFees).
-    'shop.layout':                 $('#cfg-shop-layout').value,
-    'shop.defaultSort':            $('#cfg-shop-defaultSort').value,
-    'shop.showSort':               $('#cfg-shop-showSort').checked,
-    'shop.showDietary':            $('#cfg-shop-showDietary').checked,
-    'shop.showStockFilter':        $('#cfg-shop-showStockFilter').checked,
-    'shop.showBadgeFilter':        $('#cfg-shop-showBadgeFilter').checked,
-    'shop.showPriceFilter':        $('#cfg-shop-showPriceFilter').checked,
-    'shop.hideOutOfStock':         $('#cfg-shop-hideOutOfStock').checked,
-    'shop.lockLayout':             $('#cfg-shop-lockLayout').checked,
     'notifications.order_status_template_id': $('#cfg-notifications-order_status_template_id').value.trim(),
     'notifications.wecom_order_webhook': $('#cfg-notifications-wecom_order_webhook').value.trim(),
     'system_alerts.enabled':         $('#cfg-system_alerts-enabled').checked,
     'system_alerts.wecom_webhook':   $('#cfg-system_alerts-wecom_webhook').value.trim(),
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    // The manual-Alipay 收款码 card shares this Save bar now (it no longer has
+    // its own button). Save it too; it throws a friendly message on failure.
+    if (typeof saveAlipayManualInline === 'function') await saveAlipayManualInline();
+    status.innerHTML = '<span class="ok">Saved ✓</span>';
+    toast('Settings saved · 设置已保存');
+  } catch (e) {
+    status.innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
+    toast('Save failed · 保存失败: ' + e.message, 'err');
+  }
+}
+
+// §279 — Shop layout & filters, and Customer service, save themselves.
+const SHOP_KEYS = [['layout', 'value'], ['defaultSort', 'value'], ['showSort', 'checked'], ['showDietary', 'checked'],
+  ['showStockFilter', 'checked'], ['showBadgeFilter', 'checked'], ['showPriceFilter', 'checked'],
+  ['hideOutOfStock', 'checked'], ['lockLayout', 'checked']];
+const SHOP_CARD = autosaveCard({
+  card: 'shop.display', root: '#sub-shop',
+  read: () => {
+    const b = {};
+    for (const [k, prop] of SHOP_KEYS) b['shop.' + k] = $('#cfg-shop-' + k)[prop];
+    return b;
+  },
+  apply: (b) => {
+    for (const [k, prop] of SHOP_KEYS) { const el = $('#cfg-shop-' + k); if (el && ('shop.' + k) in b) el[prop] = b['shop.' + k]; }
+    if (typeof syncAllPickers === 'function') syncAllPickers();
+    if (typeof applyShopFiltersPreview === 'function') applyShopFiltersPreview();
+    if (typeof applySortPreview === 'function') applySortPreview();
+  },
+});
+const CS_TEXT = ['corp_id', 'url', 'label_en', 'label_cn', 'hours_en', 'hours_cn', 'phone', 'fab_icon_emoji'];
+const CS_SHOW = ['show_me', 'show_home', 'show_product', 'show_checkout', 'show_order'];
+const CS_PICK = ['mode', 'fab_size', 'fab_shape', 'fab_color', 'fab_icon', 'fab_side'];
+const CS_CARD = autosaveCard({
+  card: 'customer_service', root: '#sub-cs',
+  read: () => ({
     'customer_service.mode':         $('#cfg-cs-mode').value,
     'customer_service.corp_id':      $('#cfg-cs-corp_id').value.trim(),
     'customer_service.url':          $('#cfg-cs-url').value.trim(),
@@ -1955,24 +1986,31 @@ async function saveConfig() {
     'customer_service.fab_icon_emoji': $('#cfg-cs-fab_icon_emoji').value.trim(),
     'customer_service.fab_side':       $('#cfg-cs-fab_side').value,
     'customer_service.fab_bottom':     parseInt($('#cfg-cs-fab_bottom').value, 10) || 220,
-    // Legal pages moved to the Content group (Content → Legal pages) and save on
-    // their own card (LEGAL_CARD, §279) — no longer ride along here (2026-06-08).
-    // Mini-app footer + Me-page menu moved to the Mini App Editor (/cms) 2026-06-09.
-    // Social proof moved to the Marketing group 2026-06-09 — it saves on its own
-    // card (SOCIAL_CARD, §279) and no longer rides along here.
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    // The manual-Alipay 收款码 card shares this Save bar now (it no longer has
-    // its own button). Save it too; it throws a friendly message on failure.
-    if (typeof saveAlipayManualInline === 'function') await saveAlipayManualInline();
-    status.innerHTML = '<span class="ok">Saved ✓</span>';
-    toast('Settings saved · 设置已保存');
-  } catch (e) {
-    status.innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
-}
+  }),
+  apply: (b) => {
+    const g = (k) => b['customer_service.' + k];
+    for (const k of CS_TEXT.concat(CS_PICK)) { const el = $('#cfg-cs-' + k); if (el) el.value = g(k) == null ? '' : g(k); }
+    for (const k of CS_SHOW) { const el = $('#cfg-cs-' + k); if (el) el.checked = g(k) !== false; }
+    $('#cfg-cs-qr_image_url').value = g('qr_image_url') || '';
+    $('#cfg-cs-fab_bottom').value = g('fab_bottom') != null ? g('fab_bottom') : 220;
+    renderCsQrPreview(); applyCsModeUI(); applyCsFabIconUI();
+  },
+});
+// Pickup hours and lead time (Settings → Delivery → Store pickup) save
+// themselves; the pickup PACKING FEE beside them is money and keeps the view's
+// Save, which now sends the fees alone (saveDeliveryFees).
+const PICKUP_CARD = autosaveCard({
+  card: 'pickup', root: '.dlv-view[data-dlv="pickup"]',
+  read: () => ({
+    'pickup.window': { open: $('#cfg-pickup-open').value || '10:00', close: $('#cfg-pickup-close').value || '20:00' },
+    'pickup.leadMinutes': Math.max(0, Number($('#cfg-pickup-lead') && $('#cfg-pickup-lead').value) || 0),
+  }),
+  apply: (b) => {
+    const w = b['pickup.window'] || {};
+    $('#cfg-pickup-open').value = w.open || '10:00'; $('#cfg-pickup-close').value = w.close || '20:00';
+    if ($('#cfg-pickup-lead')) $('#cfg-pickup-lead').value = b['pickup.leadMinutes'] ?? 0;
+  },
+});
 
 // ── Social proof — own partial save (moved to the Marketing group 2026-06-09). ──
 // Reads the same cfg-social-* fields and writes a single nested social_proof blob,
@@ -2081,7 +2119,7 @@ const LEGAL_CARD = autosaveCard({
 });
 // The cards loadConfig fills. A function, so it is read when called — by then
 // every card below has been made.
-function CFG_CARDS() { return [LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD]; }
+function CFG_CARDS() { return [LEGAL_CARD, UPSELL_CARD, SOCIAL_CARD, SHOP_CARD, CS_CARD, PICKUP_CARD]; }
 const SOCIAL_CARD = autosaveCard({
   card: 'social_proof', root: '#tab-social',
   read: () => ({ 'social_proof': buildSocialProof() }),
