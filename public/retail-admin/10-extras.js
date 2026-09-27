@@ -1308,9 +1308,8 @@ function scRenderStage() {
     +   '<div class="sc-stitle">' + scEsc(scT(SC_META[key].name.en, SC_META[key].name.cn)) + '</div>'
     +   '<div class="sc-ssub">' + scEsc(scT(SC_META[key].blurb.en, SC_META[key].blurb.cn)) + '</div>'
     +   fields + inviteNote + drop
-    +   '<div class="sc-savebar"><button class="sc-save" onclick="scSave()">' + scT('Save card', '保存卡片') + '</button>'
-    +     removeBtn
-    +     '<span class="sc-saved" id="sc-saved"></span></div>'
+    // §279: the card saves itself; its foot is the autosave foot.
+    +   '<div class="sc-savebar">' + removeBtn + '<div data-as-foot="share.' + key + '" style="flex:1"></div></div>'
     + '</div>'
     + '<div class="sc-spreview"><div class="sc-pv-capt">' + scT('Live preview', '实时预览') + '</div>'
     +   '<div id="sc-pv"></div>'
@@ -1320,6 +1319,7 @@ function scRenderStage() {
 
   scPaintPreview();
   if (d.img) { const el = $('#sc-drop-thumb'); if (el) el.style.backgroundImage = 'url("' + scUrl(d.img) + '")'; }
+  if (SC_CARDS[key]) SC_CARDS[key].paint();
 }
 
 function scSelect(key) {
@@ -1337,6 +1337,7 @@ function scOnTitle(lang, val) {
   d.title[lang] = val;
   const c = $('#sc-c-' + lang); if (c) c.textContent = val.length + ' / 60';
   scPaintPreview();
+  SC_CARDS[SC_SEL].touch();
 }
 
 async function scUpload(file) {
@@ -1349,14 +1350,16 @@ async function scUpload(file) {
     if (!j.success) { toast('Upload failed · 上传失败: ' + (j.error || ''), 'err'); return; }
     SC_DATA[SC_SEL].img = j.data.url;
     scRenderList(); scRenderStage();
-    toast('Uploaded — Save to apply · 已上传 — 保存后生效');
+    SC_CARDS[SC_SEL].touch();
+    toast('Uploaded · 已上传');
   } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
 }
 
 function scClear() {
   if (SC_DATA[SC_SEL]) SC_DATA[SC_SEL].img = '';
   scRenderList(); scRenderStage();
-  toast(scT('Picture removed — Save to apply', '已移除图片 — 保存后生效'));
+  SC_CARDS[SC_SEL].touch();
+  toast(scT('Picture removed', '已移除图片'));
 }
 
 function scSeed(key, img, title) {
@@ -1367,6 +1370,8 @@ function scSeed(key, img, title) {
 }
 
 async function scLoad() {
+  // A pending edit on any card goes before the cards are re-seeded.
+  await Promise.all(SC_KEYS.map(k => SC_CARDS[k].flush()));
   // Seed empty + paint immediately so the workspace shows even if a fetch
   // fails; then hydrate the two sources INDEPENDENTLY.
   SC_KEYS.forEach(k => scSeed(k, '', null));
@@ -1377,35 +1382,54 @@ async function scLoad() {
     scSeed('home',    sharing.home,    sharing.homeTitle);
     scSeed('product', sharing.product, null);
     scSeed('voting',  sharing.voting,  sharing.votingTitle);
+    // §279 — these three cards hold what is stored, so they may save. A card
+    // whose source failed stays inert: its empty box is not the truth.
+    ['home', 'product', 'voting'].forEach(k => SC_CARDS[k].start());
   } catch (e) { toast('Couldn’t load page cards · 页面卡片加载失败: ' + e.message, 'err'); }
   try {
     const afR = await api('/api/retail-admin/affiliate/settings');
     const af = afR.data || {};
     scSeed('invite', af.shareImage, af.shareTitle);
+    SC_CARDS.invite.start();
   } catch (e) { toast('Couldn’t load invite card · 邀请卡片加载失败: ' + e.message, 'err'); }
   scRenderList(); scRenderStage();
 }
 
-async function scSave() {
-  const key = SC_SEL;
-  const d = SC_DATA[key];
+// §279 — each card saves itself: the three page cards as their `sharing.*`
+// settings, the invite card through the affiliate settings route (which stores
+// `affiliate.shareImage` / `affiliate.shareTitle`, and is sent nothing else).
+function scCardBody(key) {
+  const d = SC_DATA[key] || {};
   const img = String(d.img || '').trim();
-  const titleObj = SC_CFG[key].titled
-    ? { en: String(d.title.en || '').trim(), cn: String(d.title.cn || '').trim() }
+  const title = SC_CFG[key].titled
+    ? { en: String((d.title && d.title.en) || '').trim(), cn: String((d.title && d.title.cn) || '').trim() }
     : { en: '', cn: '' };
-  const saved = $('#sc-saved');
-  try {
-    if (SC_CFG[key].ep === 'affiliate') {
-      await api('/api/retail-admin/affiliate/settings', { method: 'PATCH', body: { shareImage: img, shareTitle: titleObj } });
-    } else {
-      const body = {}; body['sharing.' + key] = img;
-      if (SC_CFG[key].titled) body['sharing.' + key + 'Title'] = titleObj;
-      await api('/api/retail-admin/config', { method: 'PUT', body });
-    }
-    toast('Card saved · 卡片已保存');
-    if (saved) saved.textContent = scT('Saved just now', '刚刚已保存');
-  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
+  if (SC_CFG[key].ep === 'affiliate') return { shareImage: img, shareTitle: title };
+  const body = {}; body['sharing.' + key] = img;
+  if (SC_CFG[key].titled) body['sharing.' + key + 'Title'] = title;
+  return body;
 }
+const SC_CARDS = {};
+SC_KEYS.forEach(key => {
+  const aff = SC_CFG[key].ep === 'affiliate';
+  SC_CARDS[key] = autosaveCard({
+    card: 'share.' + key, root: null,
+    url: aff ? '/api/retail-admin/affiliate/settings' : undefined,
+    method: aff ? 'PATCH' : undefined,
+    read: () => scCardBody(key),
+    apply: (b) => {
+      const img = aff ? b.shareImage : b['sharing.' + key];
+      const title = aff ? b.shareTitle : b['sharing.' + key + 'Title'];
+      scSeed(key, img, title);
+      scRenderList();
+      if (SC_SEL === key) scRenderStage();
+    },
+    fromSnapshot: aff
+      ? (snap) => ({ shareImage: snap['affiliate.shareImage'] || '', shareTitle: snap['affiliate.shareTitle'] || { en: '', cn: '' } })
+      : undefined,
+    after: () => scRenderList(),
+  });
+});
 
 document.addEventListener('change', e => {
   if (e.target.id === 'sc-file' && e.target.files && e.target.files[0]) {
@@ -2099,15 +2123,18 @@ function lbGenerateSeed() {
   if (box) box.checked = true;                              // generating implies "use it"
   lbUpdateSeedSummary();
   lbRenderPreview();
+  LB_CARD.touch();
   toast(cuT('Placeholder members generated', '已生成占位会员'));
 }
 
 async function lbLoad() {
+  await LB_CARD.flush();      // a pending edit goes before the form is refilled
   try {
     const r = await fetch('/api/retail-admin/leaderboard/config', { credentials: 'same-origin' });
     const body = await r.json();
     if (!body.success) throw new Error(body.error || 'load_failed');
     lbApplyConfigToForm(body.data);
+    LB_CARD.start();          // §279 — the form holds the stored board now
   } catch (e) {
     console.warn('[lb] config load failed', e);
     toast('Failed to load leaderboard config · 加载排行榜配置失败: ' + e.message);
@@ -2266,40 +2293,20 @@ function lbRenderPreview() {
 }
 function updateLeaderboardPreview() { lbRenderPreview(); }
 
-// The Visibility switch is the master on/off — flipping it must persist
-// immediately (the rest of the form still saves via the Save button). Without
-// this, a flip was preview-only and reverted to the stored value on refresh.
+// §279 — the leaderboard saves itself, through its own route (which stores it
+// as the one key `leaderboard.config`). The Visibility switch is a switch like
+// any other now: flipping it saves at once.
 async function lbToggleEnabled() {
   lbRenderPreview();          // reflect the new state in the pill + preview now
-  await saveLeaderboardConfig();
 }
-
-async function saveLeaderboardConfig() {
-  const body = lbReadForm();
-  const status = $('#lb-save-status');
-  if (status) status.textContent = 'Saving…';
-  try {
-    const r = await fetch('/api/retail-admin/leaderboard/config', {
-      method: 'PUT',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await r.json();
-    if (!data.success) throw new Error(data.error || 'save_failed');
-    lbApplyConfigToForm(data.data);
-    // The store's clock and the product's one time format — this printed the
-    // OS locale's idea of a time, which is neither.
-    if (status) status.textContent = cuT('Saved', '已保存') + ' · ' + tdWhen(new Date(), 'time');
-    toast('Leaderboard saved · 排行榜已保存');
-    await lbLoadPreview();
-    lbRenderPreview();
-  } catch (e) {
-    console.warn('[lb] save failed', e);
-    if (status) status.textContent = 'Save failed · 保存失败: ' + e.message;
-    toast('Save failed · 保存失败: ' + e.message);
-  }
-}
+const LB_CARD = autosaveCard({
+  card: 'leaderboard', root: '#tab-leaderboard',
+  url: '/api/retail-admin/leaderboard/config',
+  read: lbReadForm,
+  apply: (b) => { lbApplyConfigToForm(b); lbRenderPreview(); },
+  fromSnapshot: (snap) => snap['leaderboard.config'] || {},
+  after: async () => { await lbLoadPreview(); lbRenderPreview(); },
+});
 
 document.querySelector('[data-tab="leaderboard"]').addEventListener('click', () => {
   if (!LB_LOADED) { LB_LOADED = true; lbLoad(); }
@@ -2418,6 +2425,10 @@ async function votLoad() {
     if (err) { err.hidden = true; err.innerHTML = ''; }
     votUpdateNavState();
     votRenderAll();
+    // §279 — the page settings save themselves, but only once the stored ones
+    // arrived: this read is allowed to fail quietly, and a card started on the
+    // defaults would write them over the real wording.
+    if (cfgRes && cfgRes.data) VOT_CARD.start();
   } catch (e) {
     // The region says it failed and stays saying it. A page that empties
     // itself on a failed read is indistinguishable from a page with no polls.
@@ -2605,29 +2616,23 @@ function votCountsStateSync() {
     : votT('Off. Customers see which option leads, never the numbers.', '关闭。顾客只看到哪个选项领先,看不到数字。');
 }
 
-async function votSaveConfig(ev) {
-  // Captured synchronously: `currentTarget` is null once dispatch ends, so a
-  // handler that awaits before reading it disables nothing (§1.12, shape C).
-  const btn = ev && ev.currentTarget;
-  const body = {
+// §279 — the page settings save themselves through their own route.
+const VOT_CARD = autosaveCard({
+  card: 'voting', root: '#vot-set-body',
+  url: '/api/retail-admin/voting/config',
+  read: () => ({
     intro_en: ($('#vot-intro-en').value || '').trim(),
     intro_cn: ($('#vot-intro-cn').value || '').trim(),
     show_counts: !!($('#vot-show-counts') && $('#vot-show-counts').checked),
-  };
-  try {
-    await adminWrite({
-      btn, url: '/api/retail-admin/voting/config', method: 'PUT', body,
-      errLabelEn: 'Save failed', errLabelCn: '保存失败',
-    });
-    _votCfg = { ..._votCfg, ...body };
-    toast(votT('Saved', '已保存'));
-    votRenderStage();   // the meta line carries "counts hidden from customers"
-  } catch (e) { /* adminWrite has already said so */ }
-}
+  }),
+  apply: (b) => { _votCfg = { ..._votCfg, ...b }; votRenderSettingsFields(); },
+  fromSnapshot: (snap) => snap['voting.config'] || {},
+  after: (b) => { _votCfg = { ..._votCfg, ...b }; votRenderStage(); },   // the meta line carries "counts hidden"
+});
 
 // ── Lifecycle writes ──────────────────────────────────────────────────────
 async function votSetStatus(id, status, ev) {
-  const btn = ev && ev.currentTarget;   // before any await — see votSaveConfig
+  const btn = ev && ev.currentTarget;   // before any await — §1.12, shape C
   const poll = _polls.find(p => p.id === id);
   const was = poll ? poll.status : null;
   if (status === 'open' && was !== 'open') {
@@ -3071,7 +3076,7 @@ function votCollect() {
 }
 
 async function votSavePoll(ev, publishAs) {
-  const btn = ev && ev.currentTarget;   // synchronously — see votSaveConfig
+  const btn = ev && ev.currentTarget;   // synchronously — §1.12, shape C
   if (!_ed) return;
   const body = votCollect();
 
@@ -3133,7 +3138,7 @@ async function votSavePoll(ev, publishAs) {
 }
 
 async function votDeletePoll(ev) {
-  const btn = ev && ev.currentTarget;   // synchronously — see votSaveConfig
+  const btn = ev && ev.currentTarget;   // synchronously — §1.12, shape C
   if (!_ed || !_ed.id) return;
   const { total } = votTally(_ed);
   if (!(await askConfirm({
@@ -3233,6 +3238,7 @@ const ABOUT_MAX_STATS = 4;
 let ABOUT_READY = false;
 
 async function loadAbout() {
+  await ABOUT_CARD.flush();   // a pending edit goes before the form is refilled
   try {
     const { data } = await api('/api/retail/config');
     const stored = data?.about?.content;
@@ -3245,6 +3251,9 @@ async function loadAbout() {
     if (!Array.isArray(ABOUT_STATE.out_items)) ABOUT_STATE.out_items = [];
     ABOUT_READY = true;
     paintAbout();
+    // §279 — only a form that LOADED may save: an empty one would erase a real
+    // About page, the case the old Save refused in so many words.
+    ABOUT_CARD.start();
   } catch (e) {
     console.warn('about load failed', e);
     ABOUT_STATE = { ...ABOUT_EMPTY };
@@ -3332,10 +3341,12 @@ function aboutAddStat() {
   if (ABOUT_STATE.stats.length >= ABOUT_MAX_STATS) return;
   ABOUT_STATE.stats.push({ value_en: '', value_cn: '', label_en: '', label_cn: '' });
   paintAboutStats();
+  ABOUT_CARD.touch();
 }
 function aboutRemoveStat(i) {
   ABOUT_STATE.stats.splice(i, 1);
   paintAboutStats();
+  ABOUT_CARD.touch();
 }
 
 function paintAboutBullets() {
@@ -3356,10 +3367,12 @@ function paintAboutBullets() {
 function aboutAddBullet(which) {
   ABOUT_STATE[`${which}_items`].push({ en: '', cn: '' });
   paintAboutBullets();
+  ABOUT_CARD.touch();
 }
 function aboutRemoveBullet(which, i) {
   ABOUT_STATE[`${which}_items`].splice(i, 1);
   paintAboutBullets();
+  ABOUT_CARD.touch();
 }
 
 function collectAbout() {
@@ -3400,30 +3413,20 @@ function collectAbout() {
   };
 }
 
-async function saveAbout() {
-  const status = document.getElementById('about-save-status');
-  /* A form that never loaded is an EMPTY form, and saving it would erase a
-     real About page. Refused rather than attempted. */
-  if (!ABOUT_READY) {
-    status.textContent = 'Could not load — reload the page · 加载失败 — 请刷新页面';
-    toast('Could not load — reload the page · 加载失败 — 请刷新页面', 'err');
-    return;
-  }
-  status.textContent = 'Saving…';
-  try {
-    const next = collectAbout();
-    ABOUT_STATE = { ...ABOUT_STATE, ...next };
-    await api('/api/retail-admin/config', {
-      method: 'PUT',
-      body: { 'about.content': next },
-    });
-    status.textContent = 'Saved · ' + tdWhen(new Date(), 'time');
-    toast('About page saved · 已保存');
-  } catch (e) {
-    status.textContent = 'Save failed · 保存失败: ' + e.message;
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
-}
+// §279 — the About page saves itself, as the one key it always was.
+const ABOUT_CARD = autosaveCard({
+  card: 'about', root: '#tab-about',
+  read: () => ({ 'about.content': collectAbout() }),
+  apply: (b) => {
+    const c = b['about.content'] || {};
+    ABOUT_STATE = { ...ABOUT_EMPTY, ...c };
+    if (!Array.isArray(ABOUT_STATE.stats))     ABOUT_STATE.stats     = [];
+    if (!Array.isArray(ABOUT_STATE.in_items))  ABOUT_STATE.in_items  = [];
+    if (!Array.isArray(ABOUT_STATE.out_items)) ABOUT_STATE.out_items = [];
+    paintAbout();
+  },
+  after: (b) => { ABOUT_STATE = { ...ABOUT_STATE, ...b['about.content'] }; },
+});
 
 /* Image upload — the CMS media endpoint (multipart, field 'file'). Both the
    founder photo and the hero go through it, so they are wired from one table
@@ -3450,7 +3453,8 @@ for (const f of ABOUT_IMAGE_FIELDS) {
         if (!j.success) throw new Error(j.error || 'upload_failed');
         ABOUT_STATE[f.key] = j.data.url || ('/api/retail/media/' + j.data.id);
         f.paint();
-        toast('Photo uploaded — remember to Save · 图片已上传 — 记得点保存');
+        ABOUT_CARD.touch();
+        toast('Photo uploaded · 图片已上传');
       } catch (err) {
         toast('Upload failed · 上传失败: ' + err.message, 'err');
       }
@@ -3459,7 +3463,7 @@ for (const f of ABOUT_IMAGE_FIELDS) {
   }
   const clear = document.getElementById(f.clear);
   if (clear) {
-    clear.addEventListener('click', () => { ABOUT_STATE[f.key] = ''; f.paint(); });
+    clear.addEventListener('click', () => { ABOUT_STATE[f.key] = ''; f.paint(); ABOUT_CARD.touch(); });
   }
 }
 

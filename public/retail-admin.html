@@ -6085,12 +6085,8 @@
     </div>
     <div id="snippets-mount"></div>
     <div style="margin-top: var(--s5); display: flex; align-items: center; gap: var(--s4); position: sticky; bottom: 0; background: var(--bg-app); padding: var(--s3) 0;">
-      <button class="btn btn-primary" onclick="saveSnippets()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save all copy · 保存全部文案
-      </button>
-      <button class="btn" onclick="loadSnippets()">Reset to saved · 重置为已保存</button>
-      <span id="snip-status" style="font-size: 12px;"></span>
+      <!-- §279: the page saves itself. -->
+      <div data-as-foot="copy.snippets" style="flex:1"></div>
     </div>
   </section>
 
@@ -7977,9 +7973,9 @@
         </table>
       </div>
       <div class="rvw-set-foot">
-        <button class="rvw-set-save" type="button" onclick="saveReviewTags()">Save tags · 保存标签</button>
+        <!-- §279: the tags save themselves; Undo replaces Reset. -->
         <button class="rvw-set-act" type="button" onclick="addReviewTag()">+ Add tag · 添加标签</button>
-        <button class="rvw-set-act" type="button" onclick="loadReviewTags()">Reset · 重置</button>
+        <div data-as-foot="reviews.tags" style="flex:1"></div>
       </div>
     </div>
   </section>
@@ -8321,11 +8317,8 @@
         </div>
 
         <div class="lb-save-bar">
-          <button class="btn btn-primary" onclick="saveLeaderboardConfig()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save leaderboard · 保存排行榜
-          </button>
-          <span id="lb-save-status" style="font-size: 12px; color: var(--text-3);"></span>
+          <!-- §279: the board saves itself. -->
+          <div data-as-foot="leaderboard" style="flex:1"></div>
         </div>
       </div>
 
@@ -8739,7 +8732,8 @@
           </div>
 
           <div>
-            <button class="btn" id="vot-set-save" onclick="votSaveConfig(event)">Save · 保存</button>
+            <!-- §279: saves itself. -->
+            <div data-as-foot="voting"></div>
           </div>
         </div>
       </div>
@@ -9116,9 +9110,11 @@
         </div>
       </details>
 
+      <!-- §279: the page saves itself. about-save-status stays for the
+           could-not-load line loadAbout() writes. -->
       <div class="about-actions">
         <span class="muted" id="about-save-status"></span>
-        <button class="btn btn-primary" onclick="saveAbout()">Save changes · 保存</button>
+        <div data-as-foot="about" style="flex:1"></div>
       </div>
     </div>
 
@@ -11828,7 +11824,7 @@
 
   <!-- ────── SOCIAL PROOF ────── (moved out of Settings into the Marketing
        group 2026-06-09; same cfg-social-* fields, now saved by its own
-       saveSocialProof() partial PUT. A top-level feature tab like membership /
+       SOCIAL_CARD (§279, saves itself). A top-level feature tab like membership /
        reviews, so its on/off switch (mountFeatureControls) + gates work the
        same way.) Five live engagement widgets on the mini-app; each card has an
        enable toggle + tuning fields writing to storefront_config.social_proof,
@@ -11842,7 +11838,7 @@
           <!-- Checkout upsell pop-up — the "before you pay" offer popup. Gates the
                server /checkout/offers tiers; saves to storefront_config 'checkout.upsell'.
                Applies instantly to web + mini-app (no republish). -->
-          <div class="group-card">
+          <div class="group-card" id="upsell-card">
             <div class="group-card-head">
               <h3>Checkout upsell pop-up · 结账推荐弹窗</h3>
               <div class="muted">The "before you pay" pop-up that suggests add-ons. Turn it off entirely, or choose which content it may offer. Shows only when a chosen tier has something relevant; hides itself otherwise. Applies instantly to web + mini-app. · 结账付款前推荐加购商品的弹窗。可整体关闭,或选择允许展示的内容类型。仅在所选类型有相关内容时显示。即时生效,无需重新发布。</div>
@@ -11869,8 +11865,8 @@
                 <label for="cfg-upsell-max" class="stacked">Max items shown · 最多展示数量</label>
                 <input type="number" min="1" max="6" id="cfg-upsell-max" style="width: 90px;">
               </div>
-              <button class="btn btn-primary" onclick="saveCheckoutUpsell()" style="margin: 0;">Save · 保存</button>
-              <span id="upsell-status" style="font-size: 12px;"></span>
+              <!-- §279: saves itself. -->
+              <div data-as-foot="checkout.upsell" style="flex:1"></div>
             </div>
           </div>
 
@@ -12101,16 +12097,13 @@
 
     <!-- ────── save bar ────── -->
     <div class="save-bar">
-      <button class="btn btn-primary" onclick="saveSocialProof()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save · 保存
-      </button>
-      <span id="social-status" style="font-size: 12px;"></span>
+      <!-- §279: the page saves itself. -->
+      <div data-as-foot="social_proof" style="flex:1"></div>
     </div>
   </section>
 
   <!-- ─── LEGAL PAGES ─── (moved out of Settings into the Content group 2026-06-08;
-       same cfg-legal-* fields, now saved by its own saveLegal() partial PUT). -->
+       same cfg-legal-* fields, saved by LEGAL_CARD since §279). -->
   <section id="tab-legal">
     <h2>Legal pages · 法律条款</h2>
 
@@ -12190,16 +12183,13 @@
     </div>
 
     <div class="row" style="gap: 12px; margin-top: var(--s4);">
-      <button class="btn btn-primary" onclick="saveLegal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save legal pages · 保存法律条款
-      </button>
-      <span id="legal-status" style="font-size: 12px; align-self: center;"></span>
+      <!-- §279: the pages save themselves. -->
+      <div data-as-foot="legal" style="flex:1"></div>
     </div>
   </section>
 
   <!-- ─── FAQ & HELP CENTRE ─── (moved out of Settings into the Content group
-       2026-06-08; keeps its own loadFaq()/saveFaq()). -->
+       2026-06-08; keeps its own loadFaq(), and saves itself since §279). -->
   <section id="tab-faq" data-feat="faq">
     <h2>FAQ &amp; help centre · 常见问题与帮助中心</h2>
     <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
@@ -12242,16 +12232,12 @@
       </div>
       <div class="row" style="gap: 12px; margin-top: 12px;">
         <button class="btn" onclick="addFaqQuestion()">+ Add question · 添加问题</button>
-        <button class="btn" onclick="loadFaq()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
       </div>
     </div>
 
     <div class="row" style="gap: 12px; margin-top: var(--s4);">
-      <button class="btn btn-primary" onclick="saveFaq()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save FAQ · 保存常见问题
-      </button>
-      <span id="faq-status" style="font-size: 12px; align-self: center;"></span>
+      <!-- §279: the FAQ saves itself. -->
+      <div data-as-foot="faq" style="flex:1"></div>
     </div>
   </section>
 
