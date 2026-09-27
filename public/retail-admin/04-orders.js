@@ -3419,8 +3419,14 @@ function renderTrackingCell(o) {
   const noContactBadge = o.no_contact_open
     ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT("COURIER CAN'T REACH CUSTOMER · contact customer", '快递员联系不上客户 · 联系客户')}</div>`
     : '';
+  // §285 — still on the road past its due day. The early half of the late
+  // badge below, which only appears once the parcel has landed late.
+  const rlDays = Number(o.running_late_days) || 0;
+  const runningLateBadge = rlDays > 0
+    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT(`RUNNING LATE · ${rlDays} day${rlDays === 1 ? '' : 's'} · contact customer`, `配送逾期 ${rlDays} 天 · 联系客户`)}</div>`
+    : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
-          <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${noContactBadge}${airDelayBadge}`;
+          <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${noContactBadge}${runningLateBadge}${airDelayBadge}`;
 }
 
 // For multi-parcel (split) orders, a two-line summary: "N parcels" + a breakdown
@@ -8637,12 +8643,25 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   }
 
   const noContactBanner = renderNoContactBanner(o, s);
+  // §285 — this parcel's due day has passed and it has not landed. Said here,
+  // on the parcel, while there is still time to ring the customer first.
+  const rlD = Number(s.running_late_days) || 0;
+  const runningLateBanner = rlD > 0 ? `
+    <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; margin-bottom:12px;
+                background: var(--td-brick-tint, #F6E4DF); border:1px solid var(--td-brick-ink, #B4533E);
+                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.45; color: var(--td-brick-ink, #B4533E);">
+      <span style="flex-shrink:0;">⚠</span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700;">${cuT(`Running late · ${rlD} day${rlD === 1 ? '' : 's'}`, `配送逾期 ${rlD} 天`)}</div>
+        <div style="margin-top:2px; color: var(--text-2);">${cuT('Not delivered yet · contact customer', '尚未送达 · 联系客户')}</div>
+      </div>
+    </div>` : '';
 
   return `
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
       ${renderGzMethodToggle(o, s)}
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">${cuT('Tracking', '物流')}</div>
-      ${sfBanner}${noContactBanner}${delayBanner}${reuseBanner}
+      ${sfBanner}${noContactBanner}${runningLateBanner}${delayBanner}${reuseBanner}
       ${has ? `
         <div class="od-trk-panel">
           <div class="od-trk-top">

@@ -1,5 +1,6 @@
 # Tacet delivery vocabulary — locked
 
+**v1.197 · 2026-09-27 · §285 RUNNING LATE — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *Running late (§285)*.
 **v1.196 · 2026-09-27 · §284 THE COURIER COULDN'T REACH THE CUSTOMER — FIVE OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *The courier couldn't reach the customer (§284)*.
 **v1.195 · 2026-09-27 · §283 A 发票 WITH NO SUPPLIER — TWO OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** Purchasing → Invoices. The Unspecified row's new `Add invoice · 添加发票` button is copied whole from the other groups' rows. The add-invoice form's supplier placeholder and the toast for a cleared supplier are composed. See *A 发票 with no supplier (§283)*.
 
@@ -9127,3 +9128,25 @@ register only. Desktop says 客户 and the phone says 顾客, as each screen's l
   banner and speaks to *you*.
 - `无人接听`: **rejected.** It is one of the courier's wordings, not ours, and
   the alert also fires on 关机, 联系未果 and the rest.
+
+## Running late (§285)
+
+**Composed by Claude, 2026-09-27, under the 2026-09-06 amendment.** Operator
+register only. A parcel still on the road after its due day.
+
+| shipped | built from |
+|---|---|
+| `Running late · N day(s) · 配送逾期 N 天` (parcel banner) | **composed.** `配送` from the live `配送延误`; `逾期` live (`late · 逾期`); `N 天` from the live `晚到 N 天` |
+| `RUNNING LATE · N day(s) · contact customer · 配送逾期 N 天 · 联系客户` (desktop list) / `Running late · N day(s) · call the customer · 配送逾期 N 天 · 请联系顾客` (phone list) | **composed.** Tails copied from the sibling late badges `配送延误 · 联系客户` and `配送延误 · 请联系顾客` |
+| `N running late · N 单配送逾期` (Needs-you line) | **composed.** `N 单…` is the live counter shape (`N 单待处理`) |
+| `Not delivered yet · contact customer · 尚未送达 · 联系客户` (desktop) / `· call the customer · 尚未送达 · 请联系顾客` (phone) | **composed.** `尚未送达` lifted from the live error `That has not been delivered yet. · 尚未送达。` |
+
+**Live candidates rejected.**
+
+- `已逾期`: **rejected.** Live on the same list cell for an order not SHIPPED
+  on time (`overdue · 已逾期`). Reusing it for a parcel not DELIVERED on time
+  would make two different problems read the same.
+- `配送延误`: **rejected.** It already means a parcel that ARRIVED late, and it
+  opens the §98 case. This state comes before that one.
+- `晚到 N 天`: **rejected** as the label. `晚到` says it arrived; this parcel
+  has not.

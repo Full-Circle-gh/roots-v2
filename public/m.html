@@ -16604,11 +16604,15 @@ function opsFires(){
   /* §284 — the ones where the courier couldn't get through are a customer to
      ring now, so the row says so instead of an age. Exact, from the server. */
   const daNc=Number((o.delivery_alerts&&o.delivery_alerts.no_contact)||0);
+  /* §285 — and the ones still on the road past their due day. */
+  const daRl=Number((o.delivery_alerts&&o.delivery_alerts.running_late)||0);
+  const daMeta=[daNc>0?T(daNc+" can't reach the customer",daNc+' 单联系不上顾客'):'',
+                daRl>0?T(daRl+' running late',daRl+' 单配送逾期'):''].filter(Boolean).join(' · ');
   const daIt=items('delivery_alerts');
   const daGo=(c('delivery_alerts')===1&&daIt.length===1&&daIt[0]&&daIt[0].id!=null)
     ?"APP.cmd('openDeliveryAlert')":"APP.cmd('ordersGo','delayed')";
   add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),daIt,
-    daNc>0?T(daNc+" can't reach the customer",daNc+' 单联系不上顾客'):'',daGo);
+    daMeta,daGo);
   add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),items('payment_mismatch'),'',"APP.cmd('ordersGo','pending')");
   // The brick fire's sibling: a proof IS on file, it was not rejected, and the
   // order is still unpaid — verified with auto-flip off, unreadable, or never
@@ -17809,6 +17813,7 @@ function trackingCard(o,sp,label){
      which is a screen arguing with itself. The desktop has carried the lateness
      in its heading since §98; the phone had nowhere saying it at all. */
   const lateFor=(sp.airCleared==null&&sp.lateDays>0)?sp.lateDays:0;
+  const rl=Number(sp.runningLate)||0;
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${label?label:T('Tracking','物流')}</span>
@@ -17816,6 +17821,9 @@ function trackingCard(o,sp,label){
         ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}
         ${lateFor?`<span style="font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--brick-tint);color:var(--brick-ink)">${T(lateFor+' day'+(lateFor===1?'':'s')+' late','晚到 '+lateFor+' 天')}</span>`:''}</span>`:''}</div>
     ${noContactCard(sp)}
+    ${rl>0?`<div style="padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:13.5px;font-weight:600">${T('Running late · '+rl+' day'+(rl===1?'':'s'),'配送逾期 '+rl+' 天')}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('Not delivered yet · call the customer','尚未送达 · 请联系顾客')}</div></div>`:''}
     ${sp.airCleared==null&&(sp.lateDays>0)?delayCaseCard(o,sp):''}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
     ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${
@@ -24237,6 +24245,9 @@ function deliveryLine(r){
     if(r.air_delivery_delayed) return {text:T('Delivery delayed · call the customer','配送延误 · 请联系顾客'),tone:'brick'};
     // §284 — held until someone rings them, so it outlives "Out for delivery".
     if(r.no_contact_open) return {text:T("Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客'),tone:'brick'};
+    // §285 — past its due day and still on the road: the warning before it lands.
+    if(Number(r.running_late_days)>0){ const d=Number(r.running_late_days);
+      return {text:T('Running late · '+d+' day'+(d===1?'':'s')+' · call the customer','配送逾期 '+d+' 天 · 请联系顾客'),tone:'brick'}; }
     const live=courierLine(r); if(live) return live;
     if(r.is_local){
       if(r.local_eta) return {text:T('arrival '+r.local_eta,'预计 '+r.local_eta),tone:'plain'};
@@ -24341,6 +24352,8 @@ function orderNotes(r){
   }
   if(r.air_delivery_delayed) out.push({sev:'brick',icon:'truck',label:T('Delivery delayed · call the customer','配送延误 · 请联系顾客')});
   if(r.no_contact_open) out.push({sev:'brick',icon:'phone',label:T("Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客')});
+  if(Number(r.running_late_days)>0){ const d=Number(r.running_late_days);
+    out.push({sev:'brick',icon:'truck',label:T('Running late · '+d+' day'+(d===1?'':'s')+' · call the customer','配送逾期 '+d+' 天 · 请联系顾客')}); }
   return out.length?out:null;
 }
 /* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is
@@ -24640,6 +24653,8 @@ function mapDetail(o){
     // This screen used to gate on mode==='air' and never saw a late land
     // parcel — which is every Guangdong order, ice packs included.
     lateDays:sp.late_days||0,
+    // §285 — days past its due day while still on the road; 0 once it lands.
+    runningLate:sp.running_late_days||0,
     // The raw carrier CODE, kept beside the worded tracking view above because
     // a claim is filed against the company that carried this parcel and the
     // server validates the code against lib/tracking.js.
