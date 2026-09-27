@@ -31,6 +31,7 @@
 
 const express = require('express');
 const { tdb, currentTenantId } = require('../lib/tenant-db');
+const editHistory = require('../lib/edit-history');
 // The shared control-plane handle. Used for EXACTLY ONE statement in this file
 // — the activity_log read in planPOReversal — because activity_log is never
 // cloned into an account's database. Every other read and write here is account
@@ -833,11 +834,32 @@ router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json()
   if ('is_active' in b) { sets.push('is_active = ?'); vals.push(b.is_active ? 1 : 0); }
   if (!sets.length) return res.json({ success: true });
   vals.push(s.id);
-  tdb().prepare(`UPDATE suppliers SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?`).run(...vals, currentTenantId());
+  const write = () => tdb().prepare(`UPDATE suppliers SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?`).run(...vals, currentTenantId());
+  // §279 — the supplier record saves itself and asks to be recorded.
+  const hist = editHistory.fromQuery(req.query);
+  if (hist.on) {
+    editHistory.around(tdb(), currentTenantId(), 'supplier', s.id, () => supplierSnapshot(s.id),
+      { id: req.user && req.user.id, name: req.user && req.user.username }, hist.note, write);
+  } else write();
   // Historical POs keep the old supplier name on purpose — they're a snapshot
   // of what was ordered from whom at the time (same rule as the kitchen side).
   logActivity(req.user.id, req.user.username, 'update', 'supplier', s.id, b, req.ip);
   res.json({ success: true });
+});
+
+// §279 — a supplier's history: the fields its editor saves, in SUPPLIER_FIELDS order.
+function supplierSnapshot(id) {
+  const row = tdb().prepare(`SELECT ${SUPPLIER_FIELDS.join(', ')} FROM suppliers WHERE id = ?`).get(id) || {};
+  const out = {};
+  for (const k of SUPPLIER_FIELDS) out[k] = row[k] ?? null;
+  return out;
+}
+router.get('/api/retail-admin/suppliers/:id/history', requireRetailAdmin, (req, res) => {
+  const s = tdb().prepare('SELECT id FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, currentTenantId());
+  if (!s) return res.status(404).json({ success: false, error: 'not_found' });
+  let rows = [];
+  try { rows = editHistory.list(tdb(), currentTenantId(), 'supplier', s.id); } catch (e) { rows = []; }
+  res.json({ success: true, versions: editHistory.versionsOf(rows) });
 });
 
 // Soft-delete: keep the row (and its name) so historical POs stay attributable.

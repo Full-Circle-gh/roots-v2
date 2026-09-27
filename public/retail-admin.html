@@ -6621,8 +6621,11 @@
     </div>
     <div class="drawer-foot">
       <button class="btn btn-danger" id="pu-delete-btn" onclick="deletePopup()" style="margin-right: auto;">Delete · 删除</button>
-      <button class="btn" onclick="closeDrawer('#pu-editor-bg')">Cancel · 取消</button>
-      <button class="btn btn-primary" onclick="savePopup()">
+      <!-- §279: an existing pop-up saves itself (the foot); a new one keeps
+           Save, which creates it. openPopupEditor shows one or the other. -->
+      <div id="pu-autosave-foot" data-as-foot="popup" style="flex: 1; display: none;"></div>
+      <button class="btn" onclick="closeDrawer('#pu-editor-bg')">Close · 关闭</button>
+      <button class="btn btn-primary" id="pu-save-btn" onclick="savePopup()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         Save · 保存
       </button>
@@ -8879,8 +8882,9 @@
     <div class="drawer-foot">
       <button class="btn" onclick="deleteMediaFromDrawer()" style="color: var(--st-cancelled);">Delete · 删除</button>
       <div style="flex: 1;"></div>
-      <button class="btn" onclick="closeDrawer('#ml-edit-bg')">Cancel · 取消</button>
-      <button class="btn btn-primary" onclick="saveMediaDrawer()">Save · 保存</button>
+      <!-- §279: the details save themselves; Close is leaving. -->
+      <div data-as-foot="media" style="flex: 2;"></div>
+      <button class="btn" onclick="closeDrawer('#ml-edit-bg')">Close · 关闭</button>
     </div>
   </aside>
 

@@ -315,6 +315,9 @@ async function uploadMediaFiles(files) {
 function openMediaDrawer(id) {
   const m = _mlRows.find(r => r.id === id);
   if (!m) return;
+  // §279 — the photo open before this one is sent before the drawer is
+  // refilled; the card reads the fields and names the record right now.
+  ML_CARD.flush();
   _mlEditId = id;
   _mlEditTags = (m.tags || []).slice();
   $('#ml-edit-title').textContent = m.filename || `Media #${id}`;
@@ -335,11 +338,18 @@ function openMediaDrawer(id) {
   $('#ml-edit-info').innerHTML = `<span class="muted">Uploaded · 上传于</span> ${new Date((m.uploaded_at || '').replace(' ', 'T') + 'Z').toLocaleString()}`;
   renderEditTags();
   $('#ml-edit-tag-input').value = '';
+  ML_CARD.start();
   openDrawer('#ml-edit-bg');
 }
 
 function closeMediaDrawer() { closeDrawer('#ml-edit-bg'); }
-onDrawerClose('#ml-edit-bg', () => { _mlEditId = null; });
+onDrawerClose('#ml-edit-bg', () => {
+  // Closing is leaving: the pending edit goes first, while it still knows
+  // which photo it belongs to.
+  ML_CARD.flush();
+  _mlEditId = null;
+  loadMedia();
+});
 
 function renderEditTags() {
   const row = $('#ml-edit-tags-row');
@@ -350,7 +360,7 @@ function renderEditTags() {
     const chip = document.createElement('span');
     chip.className = 'ml-tag';
     chip.innerHTML = `${escapeHtml(t)} <button type="button" class="x" title="Remove · 移除">×</button>`;
-    chip.querySelector('.x').onclick = () => { _mlEditTags = _mlEditTags.filter(x => x !== t); renderEditTags(); };
+    chip.querySelector('.x').onclick = () => { _mlEditTags = _mlEditTags.filter(x => x !== t); renderEditTags(); ML_CARD.touch(); };
     row.insertBefore(chip, input);
   }
 }
@@ -364,31 +374,39 @@ function onTagInputKey(ev) {
     if (t && !_mlEditTags.includes(t)) _mlEditTags.push(t);
     ev.target.value = '';
     renderEditTags();
+    ML_CARD.touch();
   } else if (ev.key === 'Backspace' && !ev.target.value && _mlEditTags.length) {
     _mlEditTags.pop();
     renderEditTags();
+    ML_CARD.touch();
   }
 }
 
-async function saveMediaDrawer() {
-  if (!_mlEditId) return;
-  // Flush any tag still typed-in-progress.
-  const stub = $('#ml-edit-tag-input').value.trim().toLowerCase().replace(/\s+/g,'-');
-  if (stub && !_mlEditTags.includes(stub)) _mlEditTags.push(stub);
-  const folderVal = $('#ml-edit-folder').value;
-  const body = {
-    filename: $('#ml-edit-filename').value.trim() || null,
-    alt_text: $('#ml-edit-alt').value.trim() || null,
-    tags: _mlEditTags.slice(),
-    folder_id: folderVal === '' ? null : parseInt(folderVal, 10),
-  };
-  try {
-    await api(`/api/retail-admin/media/${_mlEditId}`, { method: 'PATCH', body });
-    toast('Saved · 已保存');
-    closeMediaDrawer();
-    loadMedia();
-  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
-}
+// §279 — the photo's details save themselves: name and alt text on the pause,
+// the folder when picked, a tag when it is added or removed (a tag still being
+// typed is not a tag yet). ONE card for the one drawer, naming whichever photo
+// is open at the moment it sends.
+const ML_CARD = autosaveCard({
+  card: () => 'media.' + _mlEditId, foot: 'media', root: '#ml-edit-bg',
+  url: () => '/api/retail-admin/media/' + _mlEditId, method: 'PATCH',
+  historyUrl: () => '/api/retail-admin/media/' + _mlEditId + '/history',
+  read: () => {
+    const folderVal = $('#ml-edit-folder').value;
+    return {
+      filename: $('#ml-edit-filename').value.trim() || null,
+      alt_text: $('#ml-edit-alt').value.trim() || null,
+      tags: _mlEditTags.slice(),
+      folder_id: folderVal === '' ? null : parseInt(folderVal, 10),
+    };
+  },
+  apply: (b) => {
+    $('#ml-edit-filename').value = b.filename || '';
+    $('#ml-edit-alt').value = b.alt_text || '';
+    $('#ml-edit-folder').value = b.folder_id == null ? '' : String(b.folder_id);
+    _mlEditTags = Array.isArray(b.tags) ? b.tags.slice() : [];
+    renderEditTags();
+  },
+});
 
 async function deleteMediaFromDrawer() {
   if (!_mlEditId) return;

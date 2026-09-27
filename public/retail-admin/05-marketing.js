@@ -3222,8 +3222,12 @@ function blankPopup() {
 }
 
 function openPopupEditor(id) {
+  // §279 — the pop-up open before this one is sent before the drawer refills.
+  PU_CARD.flush();
+  PU_CARD.stop();
   const p = id ? _popups.find(x => x.id === id) : blankPopup();
   if (!p) return;
+  _puOpenStamp = p.updated_at || null;
   $('#pu-editor-title').textContent = id ? 'Edit pop-up · 编辑弹窗' : 'New pop-up · 新建弹窗';
   $('#pu-delete-btn').style.display = id ? '' : 'none';
   $('#pu-id').value         = p.id;
@@ -3251,9 +3255,18 @@ function openPopupEditor(id) {
   // Reset the staged rows: only "Where" opens; the rest collapse to summaries.
   document.querySelectorAll('#pu-editor-bg .pg-step').forEach(s => s.classList.toggle('open', s.dataset.step === 'where'));
   refreshPopupStepSummaries();
+  // An EXISTING pop-up saves itself; a new one keeps Save, which creates it.
+  $('#pu-save-btn').style.display = id ? 'none' : '';
+  $('#pu-autosave-foot').style.display = id ? '' : 'none';
+  if (id) PU_CARD.start();
   openDrawer('#pu-editor-bg');
 }
 function closePopupEditor() { closeDrawer('#pu-editor-bg'); }
+// Closing is leaving: the pending edit goes, then the list shows it.
+onDrawerClose('#pu-editor-bg', () => {
+  PU_CARD.flush().then(() => renderPopups());
+  PU_CARD.stop();
+});
 
 // ─── CTA destination picker ───────────────────────────────────────
 const SIMPLE_TARGETS = new Set(['shop','cart','home','me','membership','promotions','about','categories']);
@@ -3405,6 +3418,7 @@ function renderPopupPageChips(selected) {
         wrap.querySelector('.pu-page-chip[data-page="all"]').classList.remove('on');
       }
       refreshPopupStepSummaries();
+      PU_CARD.touch();
     });
   });
 }
@@ -3435,6 +3449,7 @@ async function uploadPopupImage(file) {
     $('#pu-image_url').value = j.data.url;
     renderPopupImagePreview();
     updatePopupPreview();
+    PU_CARD.touch();
     toast('Uploaded · 已上传');
   } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
 }
@@ -3447,6 +3462,7 @@ function renderPopupImagePreview() {
 }
 function clearPopupImage() {
   $('#pu-image_url').value = ''; renderPopupImagePreview(); updatePopupPreview();
+  PU_CARD.touch();
 }
 
 function updatePopupPreview() {
@@ -3488,16 +3504,13 @@ document.addEventListener('change', e => {
   if (e.target.id === 'pu-image-file' && e.target.files?.[0]) uploadPopupImage(e.target.files[0]);
 });
 
-async function savePopup() {
-  const id = $('#pu-id').value;
-  const existingIdx = _popups.findIndex(x => x.id === id);
-  const pages = selectedPopupPages();
-  if (!pages.length) { toast('Pick at least one page · 至少选择一个页面', 'err'); return; }
-  const next = {
-    id,
+// The pop-up the form holds, as the list stores it.
+function popupFromForm() {
+  return {
+    id:         $('#pu-id').value,
     enabled:    $('#pu-enabled').checked,
     name:       $('#pu-name').value.trim(),
-    pages,
+    pages:      selectedPopupPages(),
     trigger:    $('#pu-trigger').value,
     delay_seconds: Number($('#pu-delay').value) || 0,
     frequency:  $('#pu-frequency').value,
@@ -3513,6 +3526,71 @@ async function savePopup() {
     cta_target: $('#pu-cta_target').value.trim(),
     dismissible: $('#pu-dismissible').checked,
   };
+}
+function popupToForm(p) {
+  $('#pu-name').value = p.name || ''; $('#pu-enabled').checked = !!p.enabled;
+  $('#pu-dismissible').checked = p.dismissible !== false;
+  $('#pu-trigger').value = p.trigger || 'on_load'; $('#pu-delay').value = p.delay_seconds ?? 3;
+  $('#pu-frequency').value = p.frequency || 'once';
+  $('#pu-start_at').value = (p.start_at || '').slice(0, 10); $('#pu-end_at').value = (p.end_at || '').slice(0, 10);
+  $('#pu-image_url').value = p.image_url || '';
+  $('#pu-title_en').value = p.title_en || ''; $('#pu-title_cn').value = p.title_cn || '';
+  $('#pu-body_en').value = p.body_en || ''; $('#pu-body_cn').value = p.body_cn || '';
+  $('#pu-cta_label_en').value = p.cta_label_en || ''; $('#pu-cta_label_cn').value = p.cta_label_cn || '';
+  $('#pu-cta_target').value = p.cta_target || '';
+  hydrateCtaTargetPicker(p.cta_target || '');
+  renderPopupPageChips(p.pages || []);
+  renderPopupImagePreview();
+  updatePopupPreview();
+  refreshPopupStepSummaries();
+}
+
+/* §279 — AN EXISTING POP-UP SAVES ITSELF. The pop-ups are stored as ONE list
+   (`popups.list`) and every save writes all of it — the replace-all shape
+   §144 is about. So the card sends the list AS LOADED with only this pop-up
+   swapped for the form, it starts only for a pop-up that is in the loaded
+   list (opening one needs the list to have loaded), and a delete stops it.
+   `updated_at` is stamped on what is SENT, not on what is compared: a
+   timestamp that changed on every read would look like an edit forever. */
+let _puOpenStamp = null;
+const PU_CARD = autosaveCard({
+  card: () => 'popup.' + $('#pu-id').value, foot: 'popup', root: '#pu-editor-bg',
+  read: () => {
+    const next = { ...popupFromForm(), updated_at: _puOpenStamp };
+    return { 'popups.list': _popups.map(p => (p.id === next.id ? next : p)) };
+  },
+  hold: () => (selectedPopupPages().length ? '' : cuT('Pick at least one page', '至少选择一个页面')),
+  beforeSend: (b) => {
+    const id = $('#pu-id').value, now = Date.now();
+    return { 'popups.list': b['popups.list'].map(p => (p.id === id ? { ...p, updated_at: now } : p)) };
+  },
+  after: (b) => {
+    const id = $('#pu-id').value;
+    const mine = b['popups.list'].find(p => p.id === id);
+    const i = _popups.findIndex(p => p.id === id);
+    if (mine && i !== -1) _popups[i] = { ...mine };
+  },
+  apply: (b) => {
+    const id = $('#pu-id').value;
+    const p = (b['popups.list'] || []).find(x => x.id === id);
+    if (p) popupToForm(p);
+  },
+  // A restored version is the whole stored list; only THIS pop-up is taken
+  // from it — the others stay as they are now.
+  fromSnapshot: (snap) => {
+    const id = $('#pu-id').value;
+    const old = (snap['popups.list'] || []).find(x => x.id === id);
+    return { 'popups.list': _popups.map(p => (p.id === id && old ? old : p)) };
+  },
+});
+
+// CREATES a pop-up (an existing one saves itself — PU_CARD).
+async function savePopup() {
+  const id = $('#pu-id').value;
+  const existingIdx = _popups.findIndex(x => x.id === id);
+  const pages = selectedPopupPages();
+  if (!pages.length) { toast('Pick at least one page · 至少选择一个页面', 'err'); return; }
+  const next = popupFromForm();
   puStamp(next);
   if (existingIdx === -1) _popups.unshift(next);
   else _popups[existingIdx] = next;
@@ -3527,6 +3605,10 @@ async function savePopup() {
 async function deletePopup() {
   const id = $('#pu-id').value;
   if (!(await askConfirm({ title: 'Delete this pop-up? · 删除此弹窗?', confirmLabel: 'Delete · 删除', danger: true }))) return;
+  // Whatever was waiting goes first, then the card stops: a pop-up that is gone
+  // must not be written back into the list by a pause that outlived it.
+  await PU_CARD.flush();
+  PU_CARD.stop();
   _popups = _popups.filter(p => p.id !== id);
   try {
     await savePopupsArray();

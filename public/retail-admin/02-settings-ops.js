@@ -570,6 +570,10 @@ function _opsStoreMatches(s, q) {
 function _opsPaintStores() {
   const box = document.getElementById('ops-stores-list');
   if (!box) return;
+  // Put the caret back only if it WAS in the search box. Restoring it after
+  // every repaint pulled focus out of the store form below whenever the list
+  // was refreshed — which, once that form saves itself (§279), is every pause.
+  const typing = document.activeElement && document.activeElement.id === 'ops-store-q';
   const q = _opsStoreQ.trim();
   const shown = _opsStores.filter(s => _opsStoreMatches(s, q));
   const searchBar = _opsStores.length >= OPS_SEARCH_FROM
@@ -580,7 +584,7 @@ function _opsPaintStores() {
     : '';
   if (!shown.length) {
     box.innerHTML = searchBar + `<div style="padding:10px 0;color:var(--text-3)">No store matches “${escapeHtml(q)}”. · 没有匹配的门店。</div>`;
-    _opsRestoreFocus();
+    if (typing) _opsRestoreFocus();
     return;
   }
   box.innerHTML = searchBar
@@ -603,7 +607,7 @@ function _opsPaintStores() {
         </div>
       </div>`;
     }).join('');
-  _opsRestoreFocus();
+  if (typing) _opsRestoreFocus();
 }
 
 // Typing rebuilds the list, which throws away the input the operator is typing
@@ -625,16 +629,54 @@ function _opsStoreEdit(id) {
   if (s) _opsStoreForm(s);
 }
 
+// §279 — an EXISTING store's form saves itself; a new one keeps Save, because
+// saving it creates the store. One card per opening, wired to the form's own
+// element, so a store opened after another cannot be written by the first.
+let _opsStoreCard = null;
+function _opsStoreBody() {
+  const v = sel => ((document.getElementById(sel) || {}).value || '').trim();
+  return {
+    name_en: v('osf_name_en'), name_cn: v('osf_name_cn'),
+    city: v('osf_city'), district: v('osf_district'),
+    address: v('osf_address'), phone: v('osf_phone'),
+    sort_order: +((document.getElementById('osf_sort') || {}).value) || 0,
+    pickup_enabled: !!(document.getElementById('osf_pickup') || {}).checked,
+    open_time: v('osf_open') || null, close_time: v('osf_close') || null,
+    // Blank clears it → the daemons fall back to their default pre-open lead.
+    sync_start_time: v('osf_sync_start') || null,
+    // Blank clears the override → store falls back to the tenant-wide default.
+    low_stock_threshold: v('osf_low_stock') === '' ? null : (parseInt(v('osf_low_stock'), 10) || 0),
+  };
+}
+function _opsStoreApply(b) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val == null ? '' : val; };
+  set('osf_name_en', b.name_en); set('osf_name_cn', b.name_cn); set('osf_city', b.city); set('osf_district', b.district);
+  set('osf_address', b.address); set('osf_phone', b.phone); set('osf_sort', b.sort_order ?? 0);
+  set('osf_open', b.open_time); set('osf_close', b.close_time); set('osf_sync_start', b.sync_start_time);
+  set('osf_low_stock', b.low_stock_threshold);
+  const pk = document.getElementById('osf_pickup'); if (pk) pk.checked = !!b.pickup_enabled;
+}
+// Leaving the form sends what is still waiting, then clears it.
+function _opsStoreClose() {
+  if (_opsStoreCard) _opsStoreCard.flush();
+  _opsStoreCard = null;
+  const box = document.getElementById('ops-store-form');
+  if (box) box.innerHTML = '';
+}
+window._opsStoreClose = _opsStoreClose;
+
 function _opsStoreForm(s) {
   const isEdit = !!s;
   const box = document.getElementById('ops-store-form');
   if (!box) return;
+  // The store open before this one is sent before its form is replaced.
+  if (_opsStoreCard) { _opsStoreCard.flush(); _opsStoreCard = null; }
   const val = v => escapeAttr(v == null ? '' : v);
   box.innerHTML = `
     <div style="margin-top:14px;padding:16px;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <strong style="color:var(--text-1)">${isEdit ? 'Edit store · 编辑门店' : 'New store · 新建门店'}</strong>
-        <button class="btn" style="flex:none" onclick="document.getElementById('ops-store-form').innerHTML=''">✕</button>
+        <button class="btn" style="flex:none" onclick="_opsStoreClose()">✕</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div${isEdit ? '' : ''}>
@@ -644,11 +686,11 @@ function _opsStoreForm(s) {
         <div><label class="field-label">Phone · 电话</label><input type="text" id="osf_phone" value="${val(s?.phone)}" placeholder="020-XXXXXXXX"></div>
         <div><label class="field-label">Name (EN)</label><input type="text" id="osf_name_en" value="${val(s?.name_en)}" placeholder="Roots — Tianhe"></div>
         <div><label class="field-label">名称 (CN)</label><input type="text" id="osf_name_cn" value="${val(s?.name_cn)}" placeholder="Roots · 天河店"></div>
-        <div><label class="field-label">City · 城市</label><input type="text" id="osf_city" value="${val(s?.city)}" placeholder="广州"></div>
-        <div><label class="field-label">District · 区</label><input type="text" id="osf_district" value="${val(s?.district)}" placeholder="天河区"></div>
+        <div><label class="field-label">City · 城市</label><input type="text" id="osf_city" data-as-commit value="${val(s?.city)}" placeholder="广州"></div>
+        <div><label class="field-label">District · 区</label><input type="text" id="osf_district" data-as-commit value="${val(s?.district)}" placeholder="天河区"></div>
         <div style="grid-column:1 / -1">
           <label class="field-label">Street address · 详细地址 <span style="color:var(--text-3);font-weight:400">— sets the store GPS, auto-geocoded on save · 决定门店 GPS,保存时自动定位</span></label>
-          <input type="text" id="osf_address" value="${val(s?.address)}" placeholder="新塘大街3号新塘科创园2栋">
+          <input type="text" id="osf_address" data-as-commit value="${val(s?.address)}" placeholder="新塘大街3号新塘科创园2栋">
         </div>
         <div style="display:flex;gap:10px">
           <div style="flex:1"><label class="field-label">Opens · 开门</label><input type="time" id="osf_open" value="${val(s?.open_time)}"></div>
@@ -669,30 +711,61 @@ function _opsStoreForm(s) {
         <div style="display:flex;gap:10px;margin-top:6px">
           <input type="number" step="0.000001" id="osf_lat" value="" placeholder="Latitude 纬度 23.1519" style="flex:1">
           <input type="number" step="0.000001" id="osf_lng" value="" placeholder="Longitude 经度 113.4061" style="flex:1">
+          ${/* A manual pin is a one-off override, not a field: it keeps its own
+               Save on an autosaving form, and sending it stops the address
+               re-locating the store. */ isEdit ? `<button class="btn" style="flex:none" onclick="_opsStorePin(${s.id})">Save · 保存</button>` : ''}
         </div>
       </div>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn btn-primary" onclick="_opsStoreSave(${isEdit ? s.id : 'null'})">Save · 保存</button>
-        <button class="btn" onclick="document.getElementById('ops-store-form').innerHTML=''">Cancel · 取消</button>
+      <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
+        ${isEdit
+          ? `<div data-as-foot="store.${s.id}" style="flex:1"></div>
+             <button class="btn" onclick="_opsStoreClose()">Close · 关闭</button>`
+          : `<button class="btn btn-primary" onclick="_opsStoreSave(null)">Save · 保存</button>
+             <button class="btn" onclick="_opsStoreClose()">Cancel · 取消</button>`}
       </div>
     </div>`;
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (isEdit) {
+    const id = s.id;
+    _opsStoreCard = autosaveCard({
+      card: 'store.' + id, root: box.firstElementChild,
+      url: '/api/retail-admin/stores/' + id, method: 'PATCH',
+      historyUrl: '/api/retail-admin/stores/' + id + '/history',
+      read: _opsStoreBody,
+      apply: _opsStoreApply,
+      // The list row and the open/closed panel follow the saved record, and the
+      // address re-locates in the background — so look again shortly for the
+      // GPS badge, as the old Save did.
+      after: (b, j) => {
+        const i = _opsStores.findIndex(x => x.id === id);
+        if (i !== -1 && j && j.data) _opsStores[i] = j.data;
+        _opsPaintStores();
+        loadOpenClose();
+        setTimeout(loadOpsStores, 2500);
+      },
+    });
+    _opsStoreCard.start();
+  }
 }
+// The manual GPS pin on an existing store: sent alone, when asked.
+async function _opsStorePin(id) {
+  const lat = parseFloat((document.getElementById('osf_lat') || {}).value);
+  const lng = parseFloat((document.getElementById('osf_lng') || {}).value);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return toast('Invalid coordinates · 坐标无效', 'error');
+  }
+  try {
+    await api('/api/retail-admin/stores/' + id, { method: 'PATCH', body: { lat, lng } });
+    toast('Saved · 已保存', 'success');
+    loadOpsStores();
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
+}
+window._opsStorePin = _opsStorePin;
 
+// CREATES a store (an existing one saves itself — see _opsStoreForm).
 async function _opsStoreSave(id) {
   const v = sel => (document.getElementById(sel).value || '').trim();
-  const body = {
-    name_en: v('osf_name_en'), name_cn: v('osf_name_cn'),
-    city: v('osf_city'), district: v('osf_district'),
-    address: v('osf_address'), phone: v('osf_phone'),
-    sort_order: +document.getElementById('osf_sort').value || 0,
-    pickup_enabled: document.getElementById('osf_pickup').checked,
-    open_time: v('osf_open') || null, close_time: v('osf_close') || null,
-    // Blank clears it → the daemons fall back to their default pre-open lead.
-    sync_start_time: v('osf_sync_start') || null,
-    // Blank clears the override → store falls back to the tenant-wide default.
-    low_stock_threshold: v('osf_low_stock') === '' ? null : (parseInt(v('osf_low_stock'), 10) || 0),
-  };
+  const body = _opsStoreBody();
   const latRaw = v('osf_lat'), lngRaw = v('osf_lng');
   if (latRaw && lngRaw) {
     // Manual override supplied → send explicit coords (backend skips geocoding).
@@ -712,7 +785,7 @@ async function _opsStoreSave(id) {
   try {
     await api(id ? `/api/retail-admin/stores/${id}` : '/api/retail-admin/stores', { method: id ? 'PATCH' : 'POST', body });
     toast('Saved · 已保存', 'success');
-    document.getElementById('ops-store-form').innerHTML = '';
+    _opsStoreClose();
     loadOpsStores();
     // A new or renamed shop is a new row in the open/closed panel above it.
     loadOpenClose();
@@ -735,7 +808,7 @@ async function _opsStoreStaff(storeId) {
   if (box.dataset.store === String(storeId) && box.innerHTML) { box.innerHTML = ''; box.dataset.store = ''; return; }
   box.dataset.store = String(storeId);
   box.innerHTML = '<div style="margin-top:14px;color:var(--text-3)">Loading…</div>';
-  document.getElementById('ops-store-form').innerHTML = '';
+  _opsStoreClose();   // sends the open form's pending edit, then clears it
   try {
     const j = await api(`/api/backend/stores/${storeId}/staff`);
     _opsStoreStaffRender(store, j.staff || []);

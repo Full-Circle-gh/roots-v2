@@ -35546,9 +35546,25 @@ router.patch('/api/retail-admin/media/:id', requireRetailAdmin, express.json(), 
   if ('folder_id' in b) { sets.push('folder_id = ?'); params.push(b.folder_id == null ? null : parseInt(b.folder_id, 10)); }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   params.push(id);
-  const r = tdb().prepare(`UPDATE retail_media SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const write = () => tdb().prepare(`UPDATE retail_media SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  // §279 — the photo drawer saves itself and asks to be recorded.
+  const hist = editHistory.fromQuery(req.query);
+  const r = hist.on
+    ? editHistory.around(tdb(), historyTenantId(), 'media', id, () => mediaSnapshot(id),
+        { id: req.user && req.user.id, name: req.user && req.user.username }, hist.note, write)
+    : write();
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true });
+});
+function mediaSnapshot(id) {
+  const m = tdb().prepare('SELECT filename, alt_text, tags, folder_id FROM retail_media WHERE id = ?').get(id) || {};
+  return { filename: m.filename || null, alt_text: m.alt_text || null, tags: parseTags(m.tags), folder_id: m.folder_id ?? null };
+}
+router.get('/api/retail-admin/media/:id/history', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  let rows = [];
+  try { rows = editHistory.list(tdb(), historyTenantId(), 'media', id); } catch (e) { rows = []; }
+  res.json({ success: true, versions: editHistory.versionsOf(rows) });
 });
 
 router.post('/api/retail-admin/media/bulk-delete', requireRetailAdmin, express.json(), async (req, res) => {

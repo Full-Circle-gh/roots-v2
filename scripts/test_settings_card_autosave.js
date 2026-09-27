@@ -178,6 +178,50 @@ const run = (src) => vm.runInContext(src, sandbox);
   yes(/data-as-commit value="\$\{escapeAttr\(t\.id\)\}"/.test(CONTENT), 'a review tag’s id saves when it is left, not mid-word');
   yes((CONTENT.match(/data-as-commit value="\$\{escapeAttr\((c|q)\.id\)\}"/g) || []).length === 2, 'and so do the FAQ category and question ids');
 
+  section('4c · records you edit (batch 4)');
+  const OPS = read('public/retail-admin/02-settings-ops.js');
+  const PUR = read('public/retail-admin/16-purchasing.js');
+  const INV = read('routes/retail-inventory.js');
+  const RETAIL_SRC = read('routes/retail.js');
+  const PURR = read('routes/retail-purchasing.js');
+  // Each editor saves itself only for a record that EXISTS; a new one keeps Save.
+  yes(/isEdit\s*\?\s*`<div data-as-foot="store\.\$\{s\.id\}"/.test(OPS) && /_opsStoreSave\(null\)/.test(OPS),
+    'store: an existing store saves itself, a new one keeps Save (it creates the store)');
+  yes(/data-as-commit value="\$\{val\(s\?\.address\)\}"/.test(OPS) && /id="osf_city" data-as-commit/.test(OPS) && /id="osf_district" data-as-commit/.test(OPS),
+    'store: the address fields save when left — each save of them can re-locate the store');
+  yes(/_opsStorePin\(/.test(OPS) && !/lat:/.test(OPS.slice(OPS.indexOf('function _opsStoreBody'), OPS.indexOf('function _opsStoreApply'))),
+    'store: the manual GPS pin is its own Save, and never rides the autosave');
+  yes(/const typing = document\.activeElement && document\.activeElement\.id === 'ops-store-q'/.test(OPS) && (OPS.match(/if \(typing\) _opsRestoreFocus\(\)/g) || []).length === 2,
+    'store: repainting the list no longer pulls the caret out of the form');
+  yes(/String\(req\.body\[k\] \?\? ''\) !== String\(existing\[k\] \?\? ''\)/.test(INV),
+    'store route: the address is re-located only when it CHANGED (or the store has no coordinates) — not on every save that carries it');
+  yes(/data-as-foot="supplier\.\$\{s\.id\}"/.test(PUR) && /onclick="puSupSave\(\)"/.test(PUR),
+    'supplier: an existing supplier saves itself, a new one keeps Save');
+  yes(/hold: \(b\) => \(b\.name \? '' : T\('Name is required', '名称必填'\)\)/.test(PUR), 'supplier: a blank name holds the save');
+  yes(/if \(_supCard\) \{ _supCard\.flush\(\); _supCard = null; \}/.test(PUR), 'supplier: a repaint sends the open form first');
+  yes(/if \(_supCard\) _supCard\.touch\(\);/.test(PUR), 'supplier: a pick from the payment suggestions counts as an edit');
+  const ML = CONTENT.slice(CONTENT.indexOf('function openMediaDrawer'), CONTENT.indexOf('async function deleteMediaFromDrawer'));
+  yes(ML.indexOf('ML_CARD.flush()') < ML.indexOf('_mlEditId = id;') && ML.indexOf('ML_CARD.start()') > ML.indexOf("$('#ml-edit-tag-input').value = '';"),
+    'photo: the previous photo is sent before the drawer refills, and the card starts after it is filled');
+  yes(/url: \(\) => '\/api\/retail-admin\/media\/' \+ _mlEditId/.test(CONTENT), 'photo: every send names the photo open at that moment');
+  const PU = MKT.slice(MKT.indexOf('function openPopupEditor'), MKT.indexOf('function closePopupEditor'));
+  yes(PU.indexOf('PU_CARD.flush()') !== -1 && PU.indexOf('PU_CARD.flush()') < PU.indexOf("_popups.find(x => x.id === id)"),
+    'pop-up: the one open before is sent before the drawer refills');
+  yes(/if \(id\) PU_CARD\.start\(\);/.test(PU), 'pop-up: only an existing pop-up saves itself');
+  yes(/updated_at: _puOpenStamp/.test(MKT) && /beforeSend: \(b\) => \{/.test(MKT),
+    'pop-up: the timestamp is stamped on what is SENT, never on what is compared (or every read is an edit)');
+  const DEL = MKT.slice(MKT.indexOf('async function deletePopup'), MKT.indexOf('async function savePopupsArray'));
+  yes(DEL.indexOf('PU_CARD.stop()') !== -1 && DEL.indexOf('PU_CARD.stop()') < DEL.indexOf('_popups = _popups.filter'),
+    'pop-up: a delete stops the card before the list loses it — a late pause cannot write it back');
+  yes(/fromSnapshot: \(snap\) => \{[\s\S]*?_popups\.map\(p => \(p\.id === id && old \? old : p\)\)/.test(MKT),
+    'pop-up: restoring a version takes only THIS pop-up from it; the others stay as they are');
+  yes(/router\.get\('\/api\/retail-admin\/stores\/:id\/history'/.test(INV) && /router\.get\('\/api\/retail-admin\/suppliers\/:id\/history'/.test(PURR)
+    && /router\.get\('\/api\/retail-admin\/media\/:id\/history'/.test(RETAIL_SRC), 'the three records read their history back');
+  for (const [src, type] of [[INV, 'store'], [PURR, 'supplier'], [RETAIL_SRC, 'media']]) {
+    yes(new RegExp("editHistory\\.around\\(tdb\\(\\), [^,]+, '" + type + "'").test(src) && /editHistory\.fromQuery\(req\.query\)/.test(src),
+      type + ' route: recorded around its write, only when the editor asks (?history)');
+  }
+
   section('5 · the server keeps each card’s history');
   const RETAIL = read('routes/retail.js');
   const put = RETAIL.slice(RETAIL.indexOf("router.put('/api/retail-admin/config'"));
