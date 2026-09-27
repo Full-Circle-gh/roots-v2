@@ -17005,6 +17005,41 @@ function orderHeadMarks(o){
     ${o.printFailed?`<span style="width:100%;font-size:12.5px;color:var(--brick-ink)">${escAttr(o.printFailed)}</span>`:''}
   </div>`;
 }
+/* The card that answers "what is this order parked on?" — the desktop's
+   awaitingRestockCard, word for word, so no string here is new. It sits at the
+   top of the sheet, under the marks, because it explains the pill in the title
+   bar and has to be read before any scrolling.
+   Amber names the shortage; the line under it says the release is automatic —
+   stock landing at the store flips the order back to Paid by itself — so the
+   card is not read as a job to chase. The pre-order case has no
+   fallback_choice, so it does not claim the customer chose to wait. */
+function waitingOnCard(o){
+  const w=o.waitingOn; if(!w) return '';
+  const title=w.store
+    ?T('Waiting on stock at '+w.store[0], w.store[1]+'等待补货')
+    :T('Waiting on stock','等待补货');
+  const chose=w.chose?T('The customer chose to wait. ','顾客选择了等待补货。'):'';
+  const releases=w.store
+    ?T('Releases to Paid on its own once '+w.store[0]+' can cover the order.',
+       w.store[1]+'备齐订单全部商品后,订单会自动转为已支付。')
+    :T('Releases to Paid on its own once the store can cover the order.',
+       '门店备齐订单全部商品后,订单会自动转为已支付。');
+  const row=it=>{
+    const img=it[4], opts=it[5], qty=Number(it[0])||0;
+    return `<div style="display:flex;align-items:center;gap:10px">
+      <span style="width:36px;height:36px;border-radius:8px;flex:none;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('package',18)}</span>
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(it[1][0],it[1][1]))}</span>
+        ${opts?`<span style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px;white-space:pre-line;overflow-wrap:anywhere">${escAttr(T(...opts))}</span>`:''}</span>
+      ${qty?`<span class="num" style="flex:none;font-size:${qty>1?'15px':'13px'};font-weight:${qty>1?'500':'400'}">×${qty}</span>`:''}</div>`;
+  };
+  return `<div class="card" style="padding:14px;border-color:var(--amber-ink)">
+    <div style="display:flex;align-items:center;gap:8px;color:var(--amber-ink)">${ic('clock',16)}<span class="eyebrow" style="color:var(--amber-ink)">${escAttr(title)}</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${w.lines.map(row).join('')}</div>
+    <div style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-default);font-size:12.5px;line-height:1.5;color:var(--text-secondary)">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--text-secondary);flex:none;margin-top:6px"></span>
+      <span>${escAttr(chose+releases)}</span></div></div>`;
+}
 /* WHAT was added and WHEN — the slip was very likely printed before any of it
    existed, which is the whole reason the desktop time-stamps each one. */
 function addonTimeline(o){
@@ -17103,6 +17138,7 @@ function sheetOrderDetail(){
          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick-ink)">${state.orderErr}</span></div>`:''}
        ${orderHeadMarks(o)}
+       ${waitingOnCard(o)}
        ${refundPanel(o)}
        ${(o.custStanding||(o.custTags&&o.custTags.length))?`<div class="card" style="padding:14px;border-color:var(--amber-ink)">
          <div style="display:flex;align-items:center;gap:8px;color:var(--amber-ink)">${ic('pencil',16)}<span class="eyebrow" style="color:var(--amber-ink)">${T('About this customer','关于该顾客的备注')}</span>
@@ -24124,6 +24160,33 @@ const ITEM_TUPLE=it=>[it.qty||it.quantity||1,
      only ever send the whole parcel. Appended, never inserted — itemRow and
      every other reader index 0–5 positionally. */
   it.id!=null?it.id:null];
+/* WHAT an awaiting-restock order is waiting on. The status pill said
+   "awaiting_restock" and nothing else, so staff read every line and then went
+   to Products to find the short one. The desktop drawer names them
+   (awaitingRestockCard in 04-orders.js); this is the same answer off the same
+   column.
+   🔴 GATED ON THE LIVE STATUS. awaiting_restock_pids is KEPT after the order
+   releases to Paid (it is the audit trail — checkAwaitingRestockForRestock in
+   lib/inventory.js), so reading the column alone would have a long-shipped
+   order still claiming to wait on stock.
+   Every line of a waited-on product is listed, so two sizes of one product
+   both show with their variant. A pid with no line left (the item was removed
+   after it parked) shows as its id rather than vanishing — a silent omission
+   would make the card disagree with the pill. */
+function orderWaitingOn(o){
+  if(o.status!=='awaiting_restock') return null;
+  let pids=[]; try{ pids=JSON.parse(o.awaiting_restock_pids||'[]')||[]; }catch(e){}
+  if(!Array.isArray(pids)||!pids.length) return null;
+  const store=(o.store_name_en||o.store_name_cn||o.store_code)
+    ?[o.store_name_en||o.store_code||o.store_name_cn, o.store_name_cn||o.store_code||o.store_name_en]:null;
+  const lines=[];
+  pids.forEach(pid=>{
+    const its=(o.items||[]).filter(it=>it.product_id!=null&&String(it.product_id)===String(pid));
+    if(its.length) its.forEach(it=>lines.push(ITEM_TUPLE(it)));
+    else lines.push([null,['#'+pid,'#'+pid],'','','',null,null]);
+  });
+  return {lines, store, chose:o.fallback_choice==='wait_for_restock'};
+}
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);
@@ -24294,6 +24357,7 @@ function mapDetail(o){
     return pids.map(pid=>{ const it=by.get(pid);
       // [en, zh] pair, resolved by T() at render — see ITEM_TUPLE.
       return it?[it.name_en||it.name_cn||('#'+pid), it.name_cn||it.name_en||('#'+pid)]:[('#'+pid),('#'+pid)]; }); })();
+  base.waitingOn=orderWaitingOn(o);
   base.routedByArea=o.routed_by_distance===0;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
