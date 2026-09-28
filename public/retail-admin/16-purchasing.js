@@ -119,6 +119,9 @@
   let _invDraft = null;      // the add/edit invoice modal's working state
   let _invAssign = null;     // the "set supplier" modal's working state
   let _invRematch = null;    // the "re-match stranded 发票" modal's working state
+  let _acct = null;          // §286 the open supplier's credit account, from the server
+  let _acctDraft = null;     // §286 the record-payment / starting-balance / correction modal
+  let _owedList = null;      // §286 the Suppliers screen's "Suppliers we owe" card
   let _invMonth = '';        // 'YYYY-MM' or '' for all
   let _invSearch = '';       // supplier / item / SKU / PO number
   let _invSearchTimer = null;
@@ -4107,6 +4110,8 @@
         </span>
       </div>
 
+      <div id="pu2-owed"></div>
+
       <div class="pu2-card">
         <table class="pu2-tbl">
           <thead><tr>
@@ -4120,6 +4125,7 @@
         </table>
       </div>`;
     renderSupplierRows();
+    loadOwedList();
   }
   function rateDots(n) {
     n = Math.min(5, Math.max(0, parseInt(n, 10) || 0));
@@ -4188,7 +4194,7 @@
       _sup = r.data; _screen = 'supplier'; paint();
     } catch (e) { toast(e.message, 'err'); }
   };
-  window.puBackSuppliers = async function () { _sup = null; _screen = 'suppliers'; await loadSuppliers(); paint(); };
+  window.puBackSuppliers = async function () { _sup = null; _acct = null; _screen = 'suppliers'; await loadSuppliers(); paint(); };
 
   // ── Payment-field suggestions (our own menu, not a native <datalist>) ──────
   // "When" and "How" used to be <input list=…> + <datalist>. The popup a
@@ -4462,6 +4468,7 @@
       </div>
 
       ${s.id && s.scorecard ? supplierScorecard(s) : ''}
+      ${s.id ? '<div id="pu2-acct"></div>' : ''}
 
       <div class="pu2-card pu2-formcard">
         <div class="pu2-fgroup">
@@ -4541,6 +4548,7 @@
       });
       _supCard.start();
     }
+    if (s.id) loadAccount(s.id);
   }
   function supApply(b) {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : v; };
@@ -4559,6 +4567,217 @@
       ${tile(T('Spend, all time', '累计采购'), money(sc.spend || 0), '')}
       ${tile(T('Awaiting 发票', '待开票'), money(sc.awaiting || 0), (sc.awaiting_lines || 0) + ' ' + T('lines', '条明细'))}
       ${tile(T('Products', '商品'), sc.product_count || 0, T('bought before', '曾采购'))}
+    </div>`;
+  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  §286 — A SUPPLIER WHO GIVES US CREDIT HAS AN ACCOUNT
+  //  What we owe is COMPUTED on the server (supplierAccount() in
+  //  routes/retail-purchasing.js): starting balance + delivered orders −
+  //  payments ± corrections. Nothing here adds money up for itself. A payment is
+  //  NOT an expense — the order already put the purchase in the books.
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function loadAccount(id) {
+    const host = () => document.getElementById('pu2-acct');
+    if (!host()) return;
+    try {
+      const r = await api('/api/retail-admin/suppliers/' + id + '/account');
+      if (!_sup || _sup.id !== id) return;   // the buyer moved on while it loaded
+      _acct = r.data; renderAccount();
+    } catch (e) { _acct = null; if (host()) host().innerHTML = ''; }
+  }
+  // "We owe" above zero, "We paid ahead" below it, "Nothing owed" at zero —
+  // never a bare minus sign on the headline.
+  function owedWords(n) {
+    if (n > 0.005) return { lab: T('We owe', '欠款'), val: money(n), tone: '' };
+    if (-n > 0.005) return { lab: T('We paid ahead', '已多付'), val: money(-n), tone: ' pu2-mut' };
+    return { lab: T('Nothing owed', '无欠款'), val: money(0), tone: ' pu2-mut' };
+  }
+  const ACCT_KIND = {
+    opening:    () => T('Starting balance', '期初欠款'),
+    payment:    () => T('Payment', '付款'),
+    adjustment: () => T('Correction', '调整'),
+  };
+  function renderAccount() {
+    const host = document.getElementById('pu2-acct');
+    const a = _acct;
+    if (!host || !a) return;
+    const edit = typeof can !== 'function' || can('purchasing:edit');
+    if (!a.on_credit) {
+      // Off: one quiet line, and only for someone who could turn it on.
+      host.innerHTML = edit ? `<div class="pu2-card pu2-block" style="max-width:none;margin:0 0 16px;display:flex;align-items:center;gap:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" onchange="puAcctSwitch(this.checked)">
+          <b>${esc(T('We pay them later (credit)', '先货后款'))}</b></label>
+        <span class="sub pu2-mut">${esc(T('Turn on for a supplier who delivers now and is paid later. What you owe is worked out from delivered orders.', '适用于先送货、后付款的供应商。欠款按已收货的采购单自动计算。'))}</span>
+      </div>` : '';
+      return;
+    }
+    const w = owedWords(a.owed);
+    const sign = (n) => (n < 0 ? '− ' : '+ ') + money(Math.abs(n));
+    const parts = [
+      a.opening ? `${esc(T('Starting balance', '期初欠款'))} ${money(a.opening.amount)} <span class="pu2-mut">(${esc(a.opening.date)})</span>` : '',
+      `${a.opening ? '+ ' : ''}${esc(T('Delivered orders', '已收货采购单'))} ${money(a.goods)}`,
+      a.paid ? `− ${esc(T('Paid', '已付'))} ${money(a.paid)}` : '',
+      a.adjusted ? `${sign(a.adjusted).slice(0, 2)}${esc(T('Correction', '调整'))} ${money(Math.abs(a.adjusted))}` : '',
+    ].filter(Boolean).join(' &nbsp; ');
+    const live = (a.entries || []).filter(e => !e.voided_at);
+    const entryRow = (e) => `<tr>
+        <td class="pu2-num">${esc(e.date)}</td>
+        <td>${esc(ACCT_KIND[e.kind] ? ACCT_KIND[e.kind]() : e.kind)}</td>
+        <td class="right pu2-num">${e.kind === 'payment' ? '− ' + money(e.amount) : (e.kind === 'adjustment' ? sign(e.amount) : money(e.amount))}</td>
+        <td>${esc([e.method, e.note].filter(Boolean).join(' · ') || '—')}${e.created_by_name ? `<div class="sub pu2-mut">${esc(e.created_by_name)}</div>` : ''}</td>
+        <td class="right">${edit ? `<button class="pu2-btn ghost sm" onclick="puAcctVoid(${e.id})">${esc(T('Void', '作废'))}</button>` : ''}</td>
+      </tr>`;
+    const orders = a.orders || [];
+    const SHOW = 12;
+    // A kitchen order has no page here (puOpenPO reads retail orders only), so
+    // only the shop's own orders are links.
+    const orderRow = (o) => `<div class="pu2-recentpo"${o.scope === 'retail' ? ` onclick="puOpenPO(${o.po_id})"` : ' style="cursor:default"'}>
+        <b class="pu2-mono">${esc(o.po_number)}</b><span class="sub pu2-num">${esc(o.date || '')}</span>
+        <span style="flex:1;text-align:right" class="pu2-num">${money(o.amount)}</span>
+        ${o.delivered ? '' : `<span class="pu2-pill grey">${esc(T('On its way', '在途'))}</span>`}
+      </div>`;
+    host.innerHTML = `<div class="pu2-card pu2-block" style="max-width:none;margin:0 0 16px">
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div>
+          <div class="pu2-kicker" style="margin:0 0 4px">${esc(T('We pay them later (credit)', '先货后款'))}</div>
+          <div class="sub${w.tone}">${esc(w.lab)}</div>
+          <div class="big pu2-num${w.tone}" style="font-size:28px;font-weight:600">${w.val}</div>
+          <div class="sub pu2-num" style="margin-top:4px">${parts}</div>
+          ${a.on_the_way ? `<div class="sub pu2-mut pu2-num">${esc(T('On its way', '在途'))} ${money(a.on_the_way)}</div>` : ''}
+        </div>
+        <span class="spacer" style="flex:1"></span>
+        ${edit ? `<div class="pu2-actions" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="pu2-btn primary" onclick="puAcctNew('payment')">${esc(T('Record payment', '记录付款'))}</button>
+          <button class="pu2-btn" onclick="puAcctNew('adjustment')">${esc(T('Correction', '调整'))}</button>
+          <button class="pu2-btn" onclick="puAcctNew('opening')">${esc(T('Starting balance', '期初欠款'))}</button>
+        </div>` : ''}
+      </div>
+      ${live.length ? `<table class="pu2-tbl" style="margin-top:12px">
+        <thead><tr><th>${esc(T('Date', '日期'))}</th><th></th><th class="right">${esc(T('Amount', '金额'))}</th><th>${esc(T('Note', '备注'))}</th><th></th></tr></thead>
+        <tbody>${live.map(entryRow).join('')}</tbody></table>` : ''}
+      ${orders.length ? `<div class="pu2-kicker" style="margin:14px 0 4px">${esc(T('Orders', '采购单'))}</div>
+        <div class="pu2-recentpos">${orders.slice(0, SHOW).map(orderRow).join('')}</div>
+        ${orders.length > SHOW ? `<div class="sub pu2-mut">+ ${orders.length - SHOW}</div>` : ''}` : ''}
+      ${edit ? `<div style="margin-top:12px"><label class="sub" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" checked onchange="puAcctSwitch(this.checked)">${esc(T('We pay them later (credit)', '先货后款'))}</label></div>` : ''}
+    </div>`;
+  }
+  window.puAcctSwitch = async function (on) {
+    if (!_sup || !_sup.id) return;
+    try {
+      const r = await api('/api/retail-admin/suppliers/' + _sup.id + '/account', { method: 'PUT', body: { on_credit: !!on } });
+      _acct = r.data; renderAccount();
+    } catch (e) { toast(e.message, 'err'); renderAccount(); }
+  };
+  window.puAcctNew = function (kind) {
+    if (!_acct) return;
+    _acctDraft = {
+      kind, busy: false, err: '', date: todayShop(),
+      // A starting balance opens on the figure it would replace, so re-entering
+      // one starts from what is there rather than from nothing.
+      amount: kind === 'opening' && _acct.opening ? String(_acct.opening.amount) : '',
+      method: kind === 'payment' ? ((_sup && _sup.payment_method) || '') : '', note: '',
+    };
+    renderAcctModal();
+  };
+  window.puAcctField = function (k, v) {
+    if (!_acctDraft) return;
+    _acctDraft[k] = v;
+    if (_acctDraft.err) { _acctDraft.err = ''; renderAcctModal(); }
+  };
+  function renderAcctModal() {
+    const d = _acctDraft; if (!d) return;
+    const title = d.kind === 'payment' ? T('Record payment', '记录付款') : ACCT_KIND[d.kind]();
+    const hint = d.kind === 'payment'
+      ? T('This lowers what we owe. It is not a new expense — the order is already in the books.', '仅减少欠款，不是新的支出——采购单已记账。')
+      : d.kind === 'opening'
+        ? T('What we owed them on this date, from the old sheet. Orders dated on or before it are taken as already in it.', '此日期的欠款（来自原表格）。此日期（含）之前的采购单视为已计入。')
+        : T('Type a minus for a discount.', '折扣请输入负数。');
+    billHost().innerHTML = `
+      <div class="pu2-scrim" onclick="puAcctClose()"></div>
+      <div class="pu2-modal">
+        <div class="pu2-modal-head">
+          <div><h2>${esc(title)}</h2><div class="sub">${esc(_sup ? supName(_sup.name, _sup.name_cn) : '')}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puAcctClose()">✕</button>
+        </div>
+        <div class="pu2-modal-body">
+          <div class="pu2-fgrid">
+            <label class="pu2-f"><span class="lbl">${esc(T('Amount', '金额') + ' ' + cur())}</span>
+              <input class="pu2-input pu2-num" id="pu2-acct-amt" type="number" step="0.01" ${d.kind === 'payment' ? 'min="0"' : ''} value="${esc(d.amount)}" oninput="puAcctField('amount', this.value)"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Date', '日期'))}</span>
+              <input class="pu2-input" type="date" value="${esc(d.date)}" onchange="puAcctField('date', this.value)"></label>
+            ${d.kind === 'payment' ? `<label class="pu2-f"><span class="lbl">${esc(T('How', '付款渠道'))}</span>
+              <input class="pu2-input" value="${esc(d.method)}" placeholder="${esc(T('Optional', '可选'))}" oninput="puAcctField('method', this.value)"></label>` : ''}
+            <label class="pu2-f"><span class="lbl">${esc(T('Note', '备注'))}</span>
+              <input class="pu2-input" value="${esc(d.note)}" placeholder="${esc(T('Optional', '可选'))}" oninput="puAcctField('note', this.value)"></label>
+          </div>
+          <div class="sub pu2-mut" style="margin-top:10px">${esc(hint)}</div>
+          ${d.err ? `<div class="sub" style="margin-top:8px;color:var(--danger,#b42318)">${esc(d.err)}</div>` : ''}
+        </div>
+        <div class="pu2-modal-foot">
+          <span class="spacer"></span>
+          <button class="pu2-btn ghost" onclick="puAcctClose()">${esc(T('Cancel', '取消'))}</button>
+          <button class="pu2-btn primary" ${d.busy ? 'disabled' : ''} onclick="puAcctSave()">${esc(T('Save', '保存'))}</button>
+        </div>
+      </div>`;
+    const f = document.getElementById('pu2-acct-amt'); if (f && !d.amount) f.focus();
+  }
+  window.puAcctClose = function () {
+    _acctDraft = null;
+    const h = document.getElementById('pu2-modal-host'); if (h) h.innerHTML = '';
+  };
+  window.puAcctSave = async function () {
+    const d = _acctDraft; if (!d || d.busy || !_sup) return;
+    const n = Number(String(d.amount).trim());
+    if (String(d.amount).trim() === '' || !Number.isFinite(n) || (d.kind === 'payment' && !(n > 0)) || (d.kind === 'adjustment' && n === 0)) {
+      d.err = d.kind === 'payment' ? T('amount must be positive', '金额必须大于零') : T('Enter an amount first.', '请先填写金额。');
+      renderAcctModal(); return;
+    }
+    d.busy = true; renderAcctModal();
+    try {
+      const r = await api('/api/retail-admin/suppliers/' + _sup.id + '/account/entries', { method: 'POST',
+        body: { kind: d.kind, amount: n, date: d.date, method: d.method, note: d.note } });
+      _acct = r.data;
+      puAcctClose(); renderAccount();
+      toast(d.kind === 'payment' ? T('Payment recorded', '已记录付款') : T('Saved', '已保存'), 'ok');
+    } catch (e) { d.busy = false; d.err = e.message; renderAcctModal(); }
+  };
+  window.puAcctVoid = async function (entryId) {
+    if (!_sup) return;
+    if (!(await askConfirm({
+      title: T('Void this entry?', '作废这条记录？'),
+      body: T('It stops counting and stays on record.', '作废后不再计入，但会保留记录。'),
+      confirmLabel: T('Void', '作废'),
+      danger: true,
+    }))) return;
+    try {
+      const r = await api('/api/retail-admin/suppliers/' + _sup.id + '/account/entries/' + entryId + '/void', { method: 'POST', body: {} });
+      _acct = r.data; renderAccount();
+      toast(T('Voided', '已作废'), 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  // The Suppliers screen's card: every supplier on credit, most owed first.
+  // Absent entirely while nobody is on credit — the pay-first shop never sees it.
+  async function loadOwedList() {
+    try {
+      const r = await api('/api/retail-admin/supplier-accounts');
+      _owedList = r.data;
+    } catch (e) { _owedList = null; }
+    const host = document.getElementById('pu2-owed');
+    if (!host) return;
+    const rows = (_owedList && _owedList.suppliers) || [];
+    if (!rows.length) { host.innerHTML = ''; return; }
+    host.innerHTML = `<div class="pu2-card pu2-block" style="max-width:none;margin:0 0 16px">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <b>${esc(T('Suppliers we owe', '供应商欠款'))}</b><span class="spacer" style="flex:1"></span>
+        <span class="pu2-num"><span class="sub">${esc(T('Total', '合计'))}</span> <b>${money(_owedList.total_owed)}</b></span>
+      </div>
+      <table class="pu2-tbl" style="margin-top:8px"><tbody>${rows.map(r => {
+        const w = owedWords(r.owed);
+        return `<tr onclick="puOpenSupplier(${r.supplier_id})">
+          <td><b>${esc(supName(r.name, r.name_cn))}</b>${r.last_payment ? `<div class="sub pu2-num">${esc(T('Last payment', '最近付款'))} ${esc(r.last_payment.date)} · ${money(r.last_payment.amount)}</div>` : ''}</td>
+          <td class="right pu2-num${w.tone}"><div class="sub">${esc(w.lab)}</div>${w.val}</td>
+        </tr>`; }).join('')}</tbody></table>
     </div>`;
   }
   function supplierPriceList(s) {

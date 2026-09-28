@@ -13,6 +13,7 @@
     "verify:fulfilment": "node scripts/verify-fulfilment-types.js",
     "verify:i18n-banners": "node scripts/check-i18n-banners.js",
     "test:money": "node scripts/test_money.js",
+    "test:supplier-account": "node scripts/test_supplier_account.js",
     "test:money-boundaries": "node scripts/test_money_boundaries.js",
     "test:business-day": "node scripts/test_business_day.js",
     "test:csv-import": "node scripts/test_csv_import.js",

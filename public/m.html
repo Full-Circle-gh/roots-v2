@@ -958,6 +958,9 @@ const state = {
   storeF:'all', stores:null, orderQ:'',
   reply:null, thread:null,
   poList:null, posErr:null, posTried:false, poSeg:'open', poId:null,
+  /* §286 — Suppliers we owe: the list, and the one account open in its sheet. */
+  supOwed:null, supOwedErr:null, supOwedTried:false, supOwedId:null,
+  supAcct:null, supAcctErr:null, supAcctBusy:false, supAcctMounted:false,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
@@ -5419,6 +5422,9 @@ const MORE_GROUPS=[
     ['delivery','truck','Delivery settings','配送设置']]},
   {h:['Stock coming in','入库'],rows:[
     ['purchasing','shopping-cart','Purchasing','采购'],
+    /* §286 — THE FEW SUPPLIERS WHO DELIVER NOW AND ARE PAID LATER, and what we
+       owe each. Beside Purchasing because the debt is counted from its orders. */
+    ['supowed','wallet','Suppliers we owe','供应商欠款'],
     /* THE PAIR §119 SEPARATED, now adjacent for the first time. They shared
        `收货` in both labels, both screen titles and three of the transfer
        screen's own buttons; side by side under one heading, the two names are
@@ -8543,6 +8549,197 @@ function poFact(label,value){
 }
 
 /* ==========================================================================
+   §286 — Suppliers we owe
+   --------------------------------------------------------------------------
+   The few suppliers who deliver now and are paid later. WHAT WE OWE IS THE
+   SERVER'S FIGURE (supplierAccount() in routes/retail-purchasing.js): starting
+   balance + delivered orders − payments ± corrections. This screen adds nothing
+   up for itself, so it cannot disagree with the desktop.
+
+   A PAYMENT IS NOT AN EXPENSE. The order already put the purchase in the books;
+   a payment only lowers what we owe, and the sheet says so under its button.
+   A supplier is switched to credit on the desktop's supplier page — the phone
+   reads and records, it does not configure.
+   ========================================================================== */
+/* Two decimals, always: a debt settled to the fen must read to the fen, which
+   money0's whole-yuan rounding would not. */
+const supMoney=n=>(CUR||'¥')+Math.abs(Number(n||0)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+/* "We owe" above zero, "We paid ahead" below it, "Nothing owed" at zero — never
+   a bare minus sign on the headline. The desktop's supOwedWords(), same words. */
+function supOwedWords(n){
+  n=Number(n||0);
+  if(n>0.005) return {lab:T('We owe','欠款'),muted:false};
+  if(n<-0.005) return {lab:T('We paid ahead','已多付'),muted:true};
+  return {lab:T('Nothing owed','无欠款'),muted:true};
+}
+const SUP_ACCT_KIND={opening:['Starting balance','期初欠款'],payment:['Payment','付款'],adjustment:['Correction','调整']};
+function loadSupOwed(force){
+  if(state.supOwedTried&&!force) return;
+  state.supOwedTried=true;
+  api('/supplier-accounts').then(d=>{ state.supOwed=d||{suppliers:[],total_owed:0}; state.supOwedErr=null; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      state.supOwedErr=E('Could not load this.','无法加载。'); render(); });
+}
+function statusSupOwed(){
+  const d=state.supOwed; if(!d||!(d.suppliers||[]).length) return '';
+  return supMoney(d.total_owed);
+}
+function screenSupOwed(){
+  loadSupOwed();
+  if(state.supOwedErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.supOwedErr}</span></div></div>`;
+  const d=state.supOwed;
+  if(!d) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=d.suppliers||[];
+  if(!rows.length) return nothingYet(T('No suppliers on credit yet','暂无先货后款供应商'),
+    T('Turn it on in the supplier’s page on the computer.','请在电脑端的供应商页面开启。'));
+  const row=r=>{ const w=supOwedWords(r.owed);
+    const name=LANG==='en'?r.name:(r.name_cn||r.name);
+    return `<button class="row" style="min-height:64px;padding:12px 16px" onclick="APP.cmd('openSupOwed',${r.supplier_id})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span>
+        ${r.last_payment?`<span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Last payment','最近付款')} ${escAttr(fmtDateOnly(r.last_payment.date))} · ${supMoney(r.last_payment.amount)}</span>`:''}</span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
+        <span style="font-size:12px;color:var(--text-secondary)">${w.lab}</span>
+        <span class="num" style="font-size:16px;font-weight:500;${w.muted?'color:var(--text-secondary)':''}">${supMoney(r.owed)}</span></span>
+    </button>`; };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div class="card" style="padding:16px;display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span>
+      <span class="num" style="font-size:24px;font-weight:600">${supMoney(d.total_owed)}</span></div>
+    <div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}${row(r)}`).join('')}</div></div>`;
+}
+function sheetSupOwed(){
+  const a=state.supAcct;
+  const noAnim=state.supAcctMounted?'animation:none;':'';
+  const head=title=>`<div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeSupOwed')">${ic('x',22,2)}</button>
+      <span style="flex:1;font-size:17px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</span></div></div>`;
+  if(!a) return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closeSupOwed')"></div>
+    <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">${head(T('Loading…','加载中…'))}
+      <div style="flex:1;min-height:0;padding:40px 16px;text-align:center;font-size:15px;color:var(--text-secondary);background:var(--bg)">${
+        state.supAcctErr||T('Loading…','加载中…')}</div></div>`;
+  const edit=mCan('purchasing:edit');
+  const w=supOwedWords(a.owed);
+  const name=LANG==='en'?a.name:(a.name_cn||a.name);
+  const live=(a.entries||[]).filter(e=>!e.voided_at);
+  const signed=(e)=>e.kind==='payment'?'− '+supMoney(e.amount)
+    :e.kind==='adjustment'?(Number(e.amount)<0?'− ':'+ ')+supMoney(e.amount):supMoney(e.amount);
+  const entryRow=e=>`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span style="font-size:14.5px">${T(...(SUP_ACCT_KIND[e.kind]||[e.kind,e.kind]))}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(fmtDateOnly(e.date))}${
+          [e.method,e.note].filter(Boolean).length?' · '+escAttr([e.method,e.note].filter(Boolean).join(' · ')):''}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none">
+        <span class="num" style="font-size:14.5px;font-weight:500">${signed(e)}</span>
+        ${edit?`<button style="border:none;background:none;padding:4px 0;font-family:inherit;font-size:13px;color:var(--brick-ink);cursor:pointer" onclick="APP.cmd('supAcctVoid',${e.id})">${T('Void','作废')}</button>`:''}</span></div>`;
+  const orders=a.orders||[];
+  const SHOW=10;
+  const orderRow=o=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span class="num" style="font-size:14.5px">${escAttr(o.po_number)}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(fmtDateOnly(o.date))}${o.delivered?'':' · '+T('On its way','在途')}</span></span>
+      <span class="num" style="font-size:14.5px;${o.delivered?'':'color:var(--text-secondary)'}">${supMoney(o.amount)}</span></div>`;
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closeSupOwed')"></div>
+   <div class="sheet" style="top:76px;z-index:46;overflow:hidden;${noAnim}">
+     ${head(escAttr(name))}
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
+       ${state.supAcctErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.supAcctErr}</span></div>`:''}
+       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+         <div style="display:flex;flex-direction:column;gap:2px">
+           <span style="font-size:13px;color:var(--text-secondary)">${w.lab}</span>
+           <span class="num" style="font-size:30px;font-weight:600;${w.muted?'color:var(--text-secondary)':''}">${supMoney(a.owed)}</span></div>
+         ${a.opening?poFact(T('Starting balance','期初欠款'),`<span class="num">${supMoney(a.opening.amount)} · ${escAttr(fmtDateOnly(a.opening.date))}</span>`):''}
+         ${poFact(T('Delivered orders','已收货采购单'),`<span class="num">+ ${supMoney(a.goods)}</span>`)}
+         ${a.paid?poFact(T('Paid','已付'),`<span class="num">− ${supMoney(a.paid)}</span>`):''}
+         ${a.adjusted?poFact(T('Correction','调整'),`<span class="num">${Number(a.adjusted)<0?'− ':'+ '}${supMoney(a.adjusted)}</span>`):''}
+         ${a.on_the_way?poFact(T('On its way','在途'),`<span class="num" style="color:var(--text-secondary)">${supMoney(a.on_the_way)}</span>`):''}
+       </div>
+       ${edit?`<div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1" onclick="APP.cmd('supAcctNew','adjustment')">${T('Correction','调整')}</button>
+         <button class="btn2" style="flex:1" onclick="APP.cmd('supAcctNew','opening')">${T('Starting balance','期初欠款')}</button></div>`:''}
+       ${live.length?`<div><div class="eyebrow" style="padding:0 2px 8px">${T('Payment','付款')} · ${T('Correction','调整')}</div>
+         <div class="list">${live.map((e,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${entryRow(e)}`).join('')}</div></div>`:''}
+       ${orders.length?`<div><div class="eyebrow" style="padding:0 2px 8px">${T('Orders','采购单')}</div>
+         <div class="list">${orders.slice(0,SHOW).map((o,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${orderRow(o)}`).join('')}</div>
+         ${orders.length>SHOW?`<div class="num" style="padding:8px 2px 0;font-size:12.5px;color:var(--text-secondary)">+ ${orders.length-SHOW}</div>`:''}</div>`:''}
+     </div>
+     ${edit?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:8px">
+       <button class="cta" ${state.supAcctBusy?'disabled':''} onclick="APP.cmd('supAcctNew','payment')">${state.supAcctBusy?T('Saving…','保存中…'):T('Record payment','记录付款')}</button>
+       <span style="font-size:12px;color:var(--text-secondary);text-align:center">${T(
+         'This lowers what we owe. It is not a new expense — the order is already in the books.','仅减少欠款，不是新的支出——采购单已记账。')}</span></div>`:''}
+   </div>`;
+}
+function supOwedFetch(id){
+  api('/suppliers/'+Number(id)+'/account').then(d=>{ if(state.supOwedId!==Number(id)) return; state.supAcct=d; state.supAcctErr=null; render(); })
+    .catch(e=>{ if(state.supOwedId!==Number(id)||String(e.message)==='auth') return;
+      state.supAcctErr=E('Could not load this.','无法加载。'); render(); });
+}
+reg('openSupOwed', id=>{ state.supOwedId=Number(id); state.supAcct=null; state.supAcctErr=null; state.supAcctBusy=false;
+  state.supAcctMounted=false; render(); state.supAcctMounted=true; supOwedFetch(id); });
+/* Closing re-reads the list, so a payment made in the sheet is on the row the
+   sheet was opened from. */
+reg('closeSupOwed', ()=>{ state.supOwedId=null; state.supAcct=null; state.supAcctErr=null; render(); loadSupOwed(true); });
+function supOwedWrite(path, body, done){
+  const id=state.supOwedId; if(id==null||state.supAcctBusy) return;
+  state.supAcctBusy=true; state.supAcctErr=null; render();
+  apiWrite(path, body).then(j=>{
+    state.supAcctBusy=false;
+    if(state.supOwedId===id&&j&&j.data) state.supAcct=j.data;
+    render(); if(done) showToast(done);
+  }).catch(e=>{
+    state.supAcctBusy=false;
+    if(String(e.message)==='auth') return;
+    state.supAcctErr=e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
+      :e.code==='invalid_amount'?E('Enter an amount first.','请先填写金额。')
+      :E('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
+/* One ask sheet for all three: the fields differ only in that a payment says
+   how it was paid. The amount is read as the string typed — "3o" is refused,
+   not quietly read as 3 — the Expense screen's rule. */
+reg('supAcctNew', kind=>{
+  const a=state.supAcct; if(!a||!mCan('purchasing:edit')) return;
+  const title=kind==='payment'?T('Record payment','记录付款'):T(...SUP_ACCT_KIND[kind]);
+  const body=kind==='payment'
+    ? T('This lowers what we owe. It is not a new expense — the order is already in the books.','仅减少欠款，不是新的支出——采购单已记账。')
+    : kind==='opening'
+      ? T('What we owed them on this date, from the old sheet. Orders dated on or before it are taken as already in it.','此日期的欠款（来自原表格）。此日期（含）之前的采购单视为已计入。')
+      : T('Type a minus for a discount.','折扣请输入负数。');
+  const fields=[
+    {id:'amount',label:T('Amount','金额'),numeric:true,placeholder:'0.00',
+      value:kind==='opening'&&a.opening?String(a.opening.amount):''},
+    {id:'date',label:T('Date','日期'),type:'date',value:shopToday()},
+  ];
+  if(kind==='payment') fields.push({id:'method',label:T('How','付款渠道'),placeholder:T('Optional','可选'),value:a.payment_method||''});
+  fields.push({id:'note',label:T('Note','备注'),placeholder:T('Optional','可选'),value:''});
+  state.ask={title, body, fields, confirmLabel:T('Save','保存'),
+    validate:v=>{
+      const s=String(v.amount||'').trim(), n=Number(s);
+      if(kind==='payment') return (s&&Number.isFinite(n)&&n>0)?'':T('Enter an amount above zero.','请输入大于零的金额。');
+      return (s&&Number.isFinite(n)&&(kind==='opening'||n!==0))?'':T('Enter an amount first.','请先填写金额。');
+    },
+    run:v=>supOwedWrite('/suppliers/'+state.supOwedId+'/account/entries',
+      {kind, amount:Number(String(v.amount).trim()), date:v.date||shopToday(), method:v.method||'', note:v.note||''},
+      kind==='payment'?T('Payment recorded','已记录付款'):T('Saved','已保存'))};
+  render();
+});
+reg('supAcctVoid', eid=>{
+  if(state.supOwedId==null||!mCan('purchasing:edit')) return;
+  state.ask={title:T('Void this entry?','作废这条记录？'),
+    body:T('It stops counting and stays on record.','作废后不再计入，但会保留记录。'),
+    confirmLabel:T('Void','作废'), danger:true,
+    run:()=>supOwedWrite('/suppliers/'+state.supOwedId+'/account/entries/'+Number(eid)+'/void',{},T('Voided','已作废'))};
+  render();
+});
+
+/* ==========================================================================
    Pushed sub-screens
    ========================================================================== */
 function settingsGroupCard(rows){
@@ -9592,6 +9789,7 @@ const SUBS={
   products:{title:['Products','产品'],render:()=>screenProductCatalogue()},
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),render:()=>screenPurchasing()},
+  supowed:{title:['Suppliers we owe','供应商欠款'],status:()=>statusSupOwed(),render:()=>screenSupOwed()},
   activity:{title:['Stock activity','库存流水'],render:()=>screenActivity()},
   /* No `status` — see the block comment on screenWaste. The CTA carries
      waste:record on its own: the SCREEN is waste:view (a ledger reads fine
@@ -22057,6 +22255,10 @@ const ROUTE_CAP={
   // never touch.
   inbox:['reviews:view','feedback:view'], sales:'dashboard:view', trend:'dashboard:view',
   delivery:'delivery:view', invoices:'invoices:view', purchasing:'purchasing:view',
+  /* §286 — a read of the same orders Purchasing shows, so the same key. Its
+     writes (a payment, a correction) are purchasing:edit on the server and the
+     buttons that make them are drawn only for a holder of it. */
+  supowed:'purchasing:view',
   /* RECEIVING IS GATED ON RECEIVE, NOT ON VIEW. It is a screen whose entire
      purpose is the save at the bottom of it, and that save is gated on
      purchasing:receive server-side (lib/cap-routes.js). Showing it to a holder
@@ -22965,6 +23167,7 @@ function render(){
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
+  if(state.supOwedId!=null) html += layer('supowed:'+state.supOwedId, sheetSupOwed());
   if(state.chanSheet) html += layer('chan', sheetChannel());
   if(state.quickSheet) html += layer('quick', sheetQuick());
   /* THE STEP SHEET BELONGS TO ONE SCREEN. `step` survives a Back out of
