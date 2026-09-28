@@ -4006,7 +4006,7 @@ function vaLabelInput(el, id, lang) {
   if (/[\r\n]/.test(el.value)) {
     const at = el.selectionStart;
     el.value = el.value.replace(/\r\n|[\r\n]/g, ' ');
-    try { el.setSelectionRange(at, at); } catch {}
+    try { el.setSelectionRange(at, at); } catch { /* caret restore is cosmetic; the text is already fixed */ }
   }
   vaGrow(el);
   vaLabel(id, lang, el.value);
