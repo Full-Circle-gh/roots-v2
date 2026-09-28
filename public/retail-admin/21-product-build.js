@@ -344,7 +344,7 @@
     const kept = blGroupOf(l) === 'materials'
       ? '<label class="bl-kept"><input type="checkbox"' + (l.packed_separately ? ' checked' : '')
         + ' onchange="blField(' + idx + ',\'packed_separately\',this.checked)"> '
-        + escapeHtml(cuT('Packed separately — kept if it expires or spoils', '单独包装 — 过期或变质时保留'))
+        + escapeHtml(cuT('Packed separately — kept if it expires or spoils', '过期或变质报废时不计损耗'))
         + '</label>'
       : '';
 

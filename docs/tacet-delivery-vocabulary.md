@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.199 · 2026-09-28 · §281 THE BUILD-LIST TICK'S CHINESE — SUPPLIED BY ASH, NOTHING COMPOSED.** `单独包装 — 过期或变质时保留` → `过期或变质报废时不计损耗`, Ash's wording word for word. The English label and the waste screen's `Kept, not counted: · 保留，不计入：` are unchanged. See *Packed separately — kept on expiry (§281)*.
+
 **v1.198 · 2026-09-28 · A NEW ORDER WITH AN UNANSWERED PRODUCT QUESTION — NOTHING COMPOSED, ONE PAIR LIFTED.** The desktop and phone New order forms now name the line when the server refuses it for an unanswered product question, instead of the catch-all. See *An unanswered product question on a new order*.
 
 **v1.197 · 2026-09-27 · §285 RUNNING LATE — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *Running late (§285)*.
@@ -9078,7 +9080,7 @@ write-off's cost (desktop and phone waste screens).
 
 | shipped | built from |
 |---|---|
-| `Packed separately — kept if it expires or spoils · 单独包装 — 过期或变质时保留` | **composed.** `过期` and `变质` **copied** from the waste reasons `Expired · 过期` and `Spoiled · 变质` (routes/retail-waste.js), so the tick names the same two reasons the operator picks from; `包装` live (`KIND_LABEL.packaging`, 18-materials.js); `单独` live (`单独加载`, `单独设置`); `保留` live in many places (`归档后仍永久保留。`) |
+| `Packed separately — kept if it expires or spoils · 过期或变质报废时不计损耗` | **supplied by Ash, 2026-09-28 (v1.199)**, word for word, replacing Claude's composed `单独包装 — 过期或变质时保留`. Every word is live: `损耗` is the Waste tab's own name (`Waste · 损耗`, 20-waste.js); `过期` / `变质` are the waste reasons; `不计` as in `不计入`. The Chinese now says what the tick does (*not counted as a loss when written off as expired or spoiled*) and drops *packed separately*; the English is unchanged. **Superseded composition, kept for the record:** `单独包装 — 过期或变质时保留`, composed. `过期` and `变质` **copied** from the waste reasons `Expired · 过期` and `Spoiled · 变质` (routes/retail-waste.js), so the tick names the same two reasons the operator picks from; `包装` live (`KIND_LABEL.packaging`, 18-materials.js); `单独` live (`单独加载`, `单独设置`); `保留` live in many places (`归档后仍永久保留。`) |
 | `Kept, not counted: · 保留，不计入：` + the line's name | **composed.** `保留` as above; `不计入` live (`不计入营业费用`, `破损数量不计入库存。`) |
 
 **Live candidates rejected.**
