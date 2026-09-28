@@ -129,7 +129,7 @@ for (const fn of ['searchBox', 'footBar']) {
 }
 vm.runInContext(BLOCK + '\nglobalThis.__ONW={onwBlank,onwReset,onwBlocked,onwBody,onwAddress,onwHasWork,'
   + 'onwSubtotal,onwTotal,onwDistrictRequired,onwErrText,onwFeeNote,onwLinesHtml,onwFootHtml,'
-  + 'screenNewOrder,ONW_WHERE,ONW_ORIGINS,ONW_FULS,onwSyncStore};', ctx);
+  + 'screenNewOrder,ONW_WHERE,ONW_ORIGINS,ONW_FULS,onwSyncStore,onwUnit,onwItem,onwOptHtml,onwOptsMissing};', ctx);
 const A = ctx.__ONW;
 
 // A form with one line, a name and an origin — everything a delivery needs bar
@@ -316,6 +316,70 @@ section('4 · adding, counting and removing a line');
   is(o.lines[0].qty, 1, 'and stops at one — removing a line is the × , not a quantity of zero');
   ctx.CMD.onwDropLine(0);
   is(o.lines.length, 0, 'and the × removes it');
+}
+
+// ── §4b · a product's own questions ("Heat up?") ─────────────────────────
+// The order that would not save on 2026-09-28: two wraps whose required
+// question this form never asked. The desktop's copy is driven in
+// scripts/test_new_order_options.js; this is the phone's, through its commands.
+section('4b · a product with questions is asked them before its line is made');
+
+{
+  const WRAP = {
+    id: 21, name_en: 'Falafel wrap', name_cn: '法拉费卷', sell_price: 44,
+    options: [
+      { id: 1, q_en: 'Heat up?', q_cn: '加热吗?', multi: 0, req: 1, min: 0, max: 0,
+        choices: [{ id: 11, en: 'Yes', cn: '是', d: 0, def: 0, out: 0 },
+                  { id: 12, en: 'No', cn: '否', d: 0, def: 0, out: 0 }] },
+      { id: 2, q_en: 'Extras', q_cn: '加料', multi: 1, req: 0, min: 0, max: 1,
+        choices: [{ id: 21, en: 'Oat', cn: '燕麦', d: 3, def: 1, out: 0 },
+                  { id: 22, en: 'Soy', cn: '豆奶', d: 3, def: 0, out: 1 }] },
+    ],
+  };
+  const pick = (o, p) => { o.picks = [p]; ctx.CMD.onwAddLine(p.id); };
+  const o = form({ ful: 'pickup' });
+  o.lines = [];
+  pick(o, WRAP);
+  is(o.lines.length, 0, 'tapping it adds no line yet');
+  yes(o.opt && o.opt.p.id === 21, 'it opens the question panel');
+  is(JSON.stringify(o.opt.sel[2]), '[21]', 'with the default extra already ticked');
+  yes(A.onwOptHtml().indexOf('Heat up?') >= 0 && A.onwOptHtml().indexOf('Required') >= 0,
+      'the panel asks the question and says it is required');
+  ctx.CMD.onwOptAdd();
+  is(o.lines.length, 0, 'Add with the required question unanswered adds nothing');
+  yes(A.onwOptHtml().indexOf('Please choose: Heat up?') >= 0, 'and names the question');
+  ctx.CMD.onwOptTick(2, 22);
+  is(JSON.stringify(o.opt.sel[2]), '[21]', 'a sold-out extra cannot be ticked');
+  ctx.CMD.onwOptTick(1, 12); ctx.CMD.onwOptTick(1, 11);
+  is(JSON.stringify(o.opt.sel[1]), '[11]', 'a single answer replaces');
+  ctx.CMD.onwOptAdd();
+  is(o.opt, null, 'answered, the panel closes');
+  is(o.lines.length, 1, 'and the line is made');
+  is(JSON.stringify(o.lines[0].choices), '[11,21]', 'carrying its answers');
+  is(A.onwUnit(o.lines[0]), 47, 'it reads base + extras');
+  is(A.onwItem(o.lines[0]).unit_price, 44, 'but posts the BASE — the server adds the extras itself');
+  is(JSON.stringify(A.onwItem(o.lines[0]).choices), '[11,21]', 'with the choice ids');
+  yes(A.onwLinesHtml().indexOf('Heat up?: Yes') >= 0, 'the line shows its answers under the name');
+  is(A.onwSubtotal(), 47, 'and the total counts them');
+  pick(o, WRAP); ctx.CMD.onwOptTick(1, 11); ctx.CMD.onwOptAdd();
+  is(o.lines.length, 1, 'the same answers again are the same line');
+  is(o.lines[0].qty, 2, 'with two on it');
+  pick(o, WRAP); ctx.CMD.onwOptTick(1, 12); ctx.CMD.onwOptTick(2, 21); ctx.CMD.onwOptAdd();
+  is(o.lines.length, 2, 'different answers are a line of their own');
+  pick(o, WRAP); ctx.CMD.onwOptClose();
+  is(o.opt, null, 'Cancel closes the panel');
+  is(o.lines.length, 2, 'and adds nothing');
+  const body = A.onwBody();
+  is(JSON.stringify(body.items.map((it) => it.choices)), '[[11,21],[12]]', 'the create body carries every line’s answers');
+
+  const GONE = { id: 23, name_en: 'Flat white', name_cn: '馥芮白', sell_price: 30, options_unanswerable: true,
+                 options: [{ id: 3, q_en: 'Milk?', q_cn: '奶?', multi: 0, req: 1, min: 0, max: 0,
+                             choices: [{ id: 31, en: 'Soy', cn: '豆奶', d: 0, def: 0, out: 1 }] }] };
+  pick(o, GONE);
+  is(o.lines.length, 2, 'a product whose required question has no answer left is not added');
+  is(o.opt, null, 'and opens no panel');
+  is(o.err && o.err.where, 'what', 'it says so on the lines');
+  is(String(o.err && o.err.msg), 'Flat white — Out of stock', 'naming the product');
 }
 
 // ── §5 · every refusal the server can answer with has a home ──────────────
