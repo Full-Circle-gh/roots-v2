@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.199 · 2026-09-28 · THE NEW ORDER FORMS ASK A PRODUCT'S QUESTIONS — NOTHING COMPOSED, THE TILL'S SHEET LIFTED WHOLE.** The desktop and phone New order forms now ask "Heat up?"-type questions before a line is made, in the counter till's own words. See *A product's questions on the New order forms*.
+
 **v1.198 · 2026-09-28 · A NEW ORDER WITH AN UNANSWERED PRODUCT QUESTION — NOTHING COMPOSED, ONE PAIR LIFTED.** The desktop and phone New order forms now name the line when the server refuses it for an unanswered product question, instead of the catch-all. See *An unanswered product question on a new order*.
 
 **v1.197 · 2026-09-27 · §285 RUNNING LATE — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *Running late (§285)*.
@@ -9170,4 +9172,24 @@ created. · 未能保存,未创建任何内容。` in the customer block.
 **Nothing composed.** A sentence for a server crash was considered and not
 written: no live pair exists for it, and carrying the code beside the existing
 catch-all tells a crash apart from every other refusal without minting one.
+
+## A product's questions on the New order forms
+
+The desktop (`public/retail-admin/04-orders.js`) and phone (`public/m.html`)
+New order forms now ask a product's questions before its line is made — the
+counter till's sheet (`public/till.html` openOpts … commitOpts), as a panel.
+
+| shipped | built from |
+|---|---|
+| `Choose your options · 选择选项` | **lifted.** till.html `chooseOpts` |
+| `Required · 必选` | **lifted.** till.html `optRequired` |
+| `Please choose: <question> · 请选择 <question>` | **lifted.** till.html `pleaseChoose`, with its own ` (` / `（` limit suffix |
+| `Choose N · 选 N 项`, `At least N · 至少 N 项`, `Up to N · 最多 N 项` | **lifted.** till.html `optChoose` / `optAtLeast` / `optUpTo` / `optCount` (§153) |
+| `Add ¥X · 添加 ¥X` | **lifted.** till.html `optAdd` |
+| `Cancel · 取消` | **lifted.** till.html `cancel` |
+| `Out of stock · 缺货` (on a sold-out extra) | **lifted.** till.html `outOfStock` |
+| `<product> — Out of stock · <product> — 缺货` (a product whose required question has no answer left at this store) | **lifted.** The same pair after the product's name, on v1.198's ` — ` join. No new words |
+| `<question>: <answer>` under a line | **not a string.** The till's own line (`optsHtml`), the product's own data |
+
+**Nothing composed.**
 
