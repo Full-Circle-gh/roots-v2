@@ -586,7 +586,7 @@ check('the new page\'s CSS block was found (the slice anchors still match)',
   ONW_CSS.length > 4000, true);
 const ONW_WANTED = ['ordNewFulChange', 'ordNewChannelChange', 'ordNewPhoneBlur',
                     'ordNewPaintPhoneNote', 'ordNewPaintCustResults', 'ordNewRenderLines',
-                    'ordNewSubtotal', 'ordNewRecalc'];
+                    'ordNewSubtotal', 'ordNewRecalc', 'onwLineUnit'];
 const onwSrc = {};
 for (const n of ONW_WANTED) onwSrc[n] = extractFn(n);
 const onwMissing = ONW_WANTED.filter(n => !onwSrc[n]);
@@ -895,6 +895,7 @@ check('a failing line total renders an em dash, never a false zero',
 // override falls back to the sum rather than to zero — the em-dash placeholder
 // must not read as a typed 0.
 const totalHarness = new Function(`
+  ${onwSrc.onwLineUnit}
   ${onwSrc.ordNewSubtotal}
   ${onwSrc.ordNewRecalc}
   return function (lines, ship, override) {
