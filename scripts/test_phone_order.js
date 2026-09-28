@@ -338,6 +338,16 @@ section('5 · the server’s vocabulary, covered');
   // outside the slice above. Named here so a rename of one is caught too.
   for (const c of ['invalid_item', 'product_unavailable', 'bad_unit_price',
                    'name_or_phone_required', 'bad_email']) codes.push(c);
+  // The line helper also passes through every refusal of lib/product-options'
+  // resolveAnswers — a product's own questions. Those six were missing from this
+  // list, so a required "Hot or iced?" reached the operator as the catch-all
+  // sentence with no line named. Read off the module, so a seventh is caught too.
+  const OPT = fs.readFileSync(path.join(ROOT, 'lib/product-options.js'), 'utf8');
+  const optAt = OPT.indexOf('function resolveAnswers(');
+  const optCodes = [...new Set([...OPT.slice(optAt, OPT.indexOf('\nfunction ', optAt + 10))
+    .matchAll(/error:\s*'([a-z_0-9]+)'/g)].map((m) => m[1]))];
+  yes(optCodes.length >= 6, `found the ${optCodes.length} refusals a product's questions can answer with`);
+  codes.push(...optCodes);
   const missing = codes.filter((c) => !A.ONW_WHERE[c]).sort();
   yes(missing.length === 0,
       `all ${codes.length} refusals the create route can answer with land on a section of the form`,
@@ -365,6 +375,21 @@ section('5 · the server’s vocabulary, covered');
   is(chinese, Object.keys(A.ONW_WHERE).length, 'and every one of them answers in Chinese too');
   yes(String(A.onwErrText('something_new_next_year', null)).indexOf('Nothing was created') >= 0,
       'a code nobody has written a sentence for still says nothing was created');
+  // …and carries the code, so a crash and a new refusal stop reading alike.
+  is(String(A.onwErrText('server_error', null)), 'That did not save. Nothing was created. (server_error)',
+     'an unmapped code is named beside the catch-all');
+}
+
+{
+  // A product's question, unanswered: the refusal names the line it is about.
+  form({ ful: 'pickup' });
+  is(String(A.onwErrText('choice_required', null, 7)), 'Oat milk 1L — Choose this item’s options.',
+     'a required question names the line, by the product id the server sends back');
+  ctx.LANG = 'zh';
+  is(String(A.onwErrText('choice_required', null, 7)), '燕麦奶 1L — 请选择商品选项。', 'and in Chinese');
+  ctx.LANG = 'en';
+  is(String(A.onwErrText('choice_required', null, 999)), 'Choose this item’s options.',
+     'a product id not on the form still gets the sentence, without a name');
 }
 
 // ── §6 · the create, driven ───────────────────────────────────────────────
@@ -406,6 +431,17 @@ async function pressTheButton() {
   ctx.LANG = 'zh';
   yes(/[一-鿿]/.test(String(ctx.state.onw.err.msg)), 'and in Chinese for whoever is reading it in Chinese');
   ctx.LANG = 'en';
+
+  // The refusal that started this: a line with an unanswered required question.
+  form({ ful: 'pickup' });
+  calls.write.length = 0; later.length = 0;
+  ctx.CMD.onwCreate();
+  const e2 = new Error('choice_required'); e2.code = 'choice_required';
+  e2.body = { success: false, error: 'choice_required', product_id: 7 };
+  later.shift().reject(e2);
+  await new Promise((r) => setTimeout(r, 5));
+  is(ctx.state.onw.err.where, 'what', 'an unanswered question lands on the lines, not the customer');
+  is(String(ctx.state.onw.err.msg), 'Oat milk 1L — Choose this item’s options.', 'naming the line');
 }
 
 // ── §7 · the screen, painted ──────────────────────────────────────────────
