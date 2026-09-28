@@ -7458,7 +7458,7 @@ function sheetWaste(){
               /* §281: say what an expired or spoiled write-off left out, or the
                  figure silently disagrees with the product's cost. */
               +((w.preview.kept_lines||[]).length
-                ? `<br>${T('Kept, not counted: ','保留，不计入：')}${w.preview.kept_lines.map(k=>escAttr(T(k.name_en,k.name_cn||k.name_en))).join(', ')}`
+                ? `<br>${T('Not counted as waste: ','不计损耗：')}${w.preview.kept_lines.map(k=>escAttr(T(k.name_en,k.name_cn||k.name_en))).join(', ')}`
                 : ''))
         : '&nbsp;';
   /* Animate on the way IN and never again. Every tap in this sheet — a store

@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.201 · 2026-09-28 · §281 THE BUILD-LIST TICK'S CHINESE — SUPPLIED BY ASH, NOTHING COMPOSED.** `单独包装 — 过期或变质时保留` → `过期或变质报废时不计损耗`, Ash's wording word for word. The English label and the waste screen's `Kept, not counted: · 保留，不计入：` are unchanged. See *Packed separately — kept on expiry (§281)*.
+**v1.201 · 2026-09-28 · §281 THE BUILD-LIST TICK AND THE WASTE NOTE SAY THE SAME THING — CHINESE SUPPLIED BY ASH, ONE NOTE TRIMMED FROM IT.** Ash's `过期或变质报废时不计损耗` replaces the composed `单独包装 — 过期或变质时保留` on the tick. With Ash's go-ahead, the English follows the Chinese: `Packed separately — kept if it expires or spoils` → `Not counted as waste if it expires or spoils`, and the waste screen's note `Kept, not counted: · 保留，不计入：` → `Not counted as waste: · 不计损耗：` (desktop and phone), so the tick and the note use one phrase. See *Packed separately — kept on expiry (§281)*.
 
 **v1.200 · 2026-09-28 · THE NEW ORDER FORMS ASK A PRODUCT'S QUESTIONS — NOTHING COMPOSED, THE TILL'S SHEET LIFTED WHOLE.** The desktop and phone New order forms now ask "Heat up?"-type questions before a line is made, in the counter till's own words. See *A product's questions on the New order forms*.
 
@@ -9083,8 +9083,8 @@ write-off's cost (desktop and phone waste screens).
 
 | shipped | built from |
 |---|---|
-| `Packed separately — kept if it expires or spoils · 过期或变质报废时不计损耗` | **supplied by Ash, 2026-09-28 (v1.201)**, word for word, replacing Claude's composed `单独包装 — 过期或变质时保留`. Every word is live: `损耗` is the Waste tab's own name (`Waste · 损耗`, 20-waste.js); `过期` / `变质` are the waste reasons; `不计` as in `不计入`. The Chinese now says what the tick does (*not counted as a loss when written off as expired or spoiled*) and drops *packed separately*; the English is unchanged. **Superseded composition, kept for the record:** `单独包装 — 过期或变质时保留`, composed. `过期` and `变质` **copied** from the waste reasons `Expired · 过期` and `Spoiled · 变质` (routes/retail-waste.js), so the tick names the same two reasons the operator picks from; `包装` live (`KIND_LABEL.packaging`, 18-materials.js); `单独` live (`单独加载`, `单独设置`); `保留` live in many places (`归档后仍永久保留。`) |
-| `Kept, not counted: · 保留，不计入：` + the line's name | **composed.** `保留` as above; `不计入` live (`不计入营业费用`, `破损数量不计入库存。`) |
+| `Not counted as waste if it expires or spoils · 过期或变质报废时不计损耗` | **Chinese supplied by Ash, 2026-09-28 (v1.201)**, word for word. `损耗` is the Waste tab's own name (`Waste · 损耗`, 20-waste.js); `过期` / `变质` are the waste reasons; `不计` as in `不计入`. `报废` is new to the product, Ash's own word. English rewritten to say what the Chinese says; *packed separately* is dropped from both. **Superseded, kept for the record:** `Packed separately — kept if it expires or spoils · 单独包装 — 过期或变质时保留`, composed by Claude 2026-09-27.
+| `Not counted as waste: · 不计损耗：` + the line's name | **trimmed from Ash's tick string** (v1.201): `不计损耗` is its last four characters, nothing added. **Superseded, kept for the record:** `Kept, not counted: · 保留，不计入：`, composed by Claude 2026-09-27.
 
 **Live candidates rejected.**
 
