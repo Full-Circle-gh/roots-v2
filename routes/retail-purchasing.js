@@ -1742,6 +1742,172 @@ function awaitingForSupplier(tid, name) {
   return { awaiting: round2(awaiting), awaiting_lines: lines };
 }
 
+// ═══ SUPPLIER ACCOUNTS — WHAT WE OWE A SUPPLIER WHO GIVES US CREDIT (§286) ═══
+// NOT A RETURN OF THE PAYABLES ABOVE. NO PAYABLES stands for every supplier
+// Roots pays first; this is a per-supplier switch (suppliers.on_credit) for the
+// few who deliver now and are paid later, which the shop tracked on a
+// spreadsheet until this existed.
+//
+// WHAT WE OWE IS COMPUTED, NEVER TYPED:
+//   starting balance + goods DELIVERED after its date − payments + corrections
+// The goods are the invoice screen's own amount per line — billableQty × unit
+// cost, the supplier resolved by SUPPLIER_EXPR, tenant-scoped and never
+// scope-scoped, superseded originals stood down — so this account, the
+// supplier page and the Invoices tab can never value the same line two ways.
+// An order that is placed but not yet Delivered is reported as on_the_way and
+// is NOT in the figure: nothing is owed for goods that have not come.
+//
+// A PAYMENT IS NOT AN EXPENSE. The purchase is expensed from its order
+// (postPOExpenses / postRetailPOExpenses); a payment only lowers what we owe
+// and writes nothing to expense_entries. Writing one there would count the
+// same goods twice. scripts/test_supplier_account.js holds that.
+const ACCT_KINDS = new Set(['opening', 'payment', 'adjustment']);
+const ACCT_DELIVERED = new Set(['Delivered', 'Confirmed']);
+
+function supplierAccount(tid, sup) {
+  const entries = tdb().prepare(`
+    SELECT id, kind, date, amount, method, note, created_by_name, created_at, voided_at, voided_by_name
+      FROM supplier_account_entries
+     WHERE COALESCE(tenant_id,1) = ? AND supplier_id = ?
+     ORDER BY date DESC, id DESC`).all(tid, sup.id);
+  const live = entries.filter(e => !e.voided_at);
+  // One live starting balance at a time: recording a new one voids the old in
+  // the same write. The newest wins if an older database ever holds two.
+  const opening = live.find(e => e.kind === 'opening') || null;
+  const lines = tdb().prepare(`
+    SELECT pli.qty, pli.qty_received, pli.returned_qty, pli.cost_per_unit,
+           po.id AS po_id, po.po_number, po.date, po.status, COALESCE(po.scope,'kitchen') AS scope
+      FROM po_line_items pli
+      JOIN purchase_orders po ON po.id = pli.po_id
+      LEFT JOIN ingredients ing ON ing.id = pli.ingredient_id
+     WHERE COALESCE(po.tenant_id,1) = ${Number(tid) || 1} AND po.status IN ${INV_PO_STATUSES}
+       AND ${notSupersededByCopySql('po')} AND ${SUPPLIER_EXPR} = ?
+       ${opening ? 'AND po.date > ?' : ''}`).all(...(opening ? [sup.name, opening.date] : [sup.name]));
+  const byPo = new Map();
+  for (const l of lines) {
+    if (!byPo.has(l.po_id)) {
+      byPo.set(l.po_id, { po_id: l.po_id, po_number: l.po_number, date: l.date, status: l.status, scope: l.scope,
+                          delivered: ACCT_DELIVERED.has(l.status), amount: 0 });
+    }
+    byPo.get(l.po_id).amount += billableQty(l) * (l.cost_per_unit || 0);
+  }
+  const orders = [...byPo.values()].map(o => ({ ...o, amount: round2(o.amount) }))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.po_id - a.po_id);
+  const sum = (arr) => round2(arr.reduce((a, x) => a + (Number(x.amount) || 0), 0));
+  const goods      = sum(orders.filter(o => o.delivered));
+  const on_the_way = sum(orders.filter(o => !o.delivered));
+  const paid       = sum(live.filter(e => e.kind === 'payment'));
+  const adjusted   = sum(live.filter(e => e.kind === 'adjustment'));
+  const start      = opening ? round2(opening.amount) : 0;
+  const lastPay    = live.find(e => e.kind === 'payment') || null;
+  return {
+    supplier_id: sup.id, name: sup.name, name_cn: sup.name_cn || null,
+    payment_method: sup.payment_method || null, on_credit: !!sup.on_credit,
+    owed: round2(start + goods - paid + adjusted),
+    opening: opening ? { id: opening.id, date: opening.date, amount: start } : null,
+    goods, paid, adjusted, on_the_way,
+    last_payment: lastPay ? { date: lastPay.date, amount: round2(lastPay.amount) } : null,
+    orders, entries,
+  };
+}
+
+function acctSupplier(req, res) {
+  const s = tdb().prepare('SELECT id, name, name_cn, payment_method, on_credit FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?')
+    .get(req.params.id, currentTenantId());
+  if (!s) { res.status(404).json({ success: false, error: 'not_found' }); return null; }
+  return s;
+}
+
+// Every supplier switched to credit, with what we owe each — the Suppliers
+// screen's card and the phone's list. Most owed first.
+router.get('/api/retail-admin/supplier-accounts', requireRetailAdmin, (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const sups = tdb().prepare(`SELECT id, name, name_cn, on_credit FROM suppliers
+                               WHERE COALESCE(tenant_id,1) = ? AND COALESCE(on_credit,0) = 1
+                               ORDER BY name COLLATE NOCASE`).all(tid);
+  const rows = sups.map(s => {
+    const a = supplierAccount(tid, s);
+    return { supplier_id: a.supplier_id, name: a.name, name_cn: a.name_cn, owed: a.owed,
+             on_the_way: a.on_the_way, last_payment: a.last_payment };
+  }).sort((a, b) => b.owed - a.owed);
+  res.json({ success: true, data: { suppliers: rows, total_owed: round2(rows.reduce((a, r) => a + r.owed, 0)) } });
+});
+
+router.get('/api/retail-admin/suppliers/:id/account', requireRetailAdmin, (req, res) => {
+  const s = acctSupplier(req, res);
+  if (!s) return;
+  res.json({ success: true, data: supplierAccount(Number(currentTenantId()) || 1, s) });
+});
+
+// The switch. Turning it off hides the account and keeps every entry, so
+// turning it back on finds the account exactly as it was.
+router.put('/api/retail-admin/suppliers/:id/account', requireRetailAdmin, express.json(), (req, res) => {
+  const s = acctSupplier(req, res);
+  if (!s) return;
+  const on = !!(req.body || {}).on_credit;
+  tdb().prepare('UPDATE suppliers SET on_credit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?')
+    .run(on ? 1 : 0, s.id, currentTenantId());
+  logActivity(req.user.id, req.user.username, 'update', 'supplier', s.id, { on_credit: on }, req.ip);
+  res.json({ success: true, data: supplierAccount(Number(currentTenantId()) || 1, { ...s, on_credit: on ? 1 : 0 }) });
+});
+
+// Record a payment, a correction or the starting balance.
+router.post('/api/retail-admin/suppliers/:id/account/entries', requireRetailAdmin, express.json(), (req, res) => {
+  const s = acctSupplier(req, res);
+  if (!s) return;
+  if (!s.on_credit) return res.status(409).json({ success: false, error: 'not_on_credit' });
+  const b = req.body || {};
+  const kind = String(b.kind || '');
+  if (!ACCT_KINDS.has(kind)) return res.status(400).json({ success: false, error: 'invalid_kind' });
+  const date = String(b.date || gzToday()).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'invalid_date' });
+  const raw = typeof b.amount === 'string' ? b.amount.trim() : b.amount;
+  const amount = round2(raw);
+  if (raw === '' || raw == null || !Number.isFinite(Number(raw))) {
+    return res.status(400).json({ success: false, error: 'invalid_amount' });
+  }
+  // A payment is money that left us, so it is positive. A correction of zero
+  // corrects nothing. A starting balance may be anything, zero and below
+  // included — a supplier can carry a credit in our favour.
+  if (kind === 'payment' && !(amount > 0)) return res.status(400).json({ success: false, error: 'amount_must_be_positive' });
+  if (kind === 'adjustment' && amount === 0) return res.status(400).json({ success: false, error: 'invalid_amount' });
+  const text = (v) => { const t = String(v == null ? '' : v).trim().slice(0, 200); return t || null; };
+  const tid = Number(currentTenantId()) || 1;
+  const who = req.user && req.user.username || null;
+  let id;
+  const write = () => {
+    if (kind === 'opening') {
+      tdb().prepare(`UPDATE supplier_account_entries SET voided_at = CURRENT_TIMESTAMP, voided_by_name = ?
+                      WHERE COALESCE(tenant_id,1) = ? AND supplier_id = ? AND kind = 'opening' AND voided_at IS NULL`)
+        .run(who, tid, s.id);
+    }
+    id = tdb().prepare(`INSERT INTO supplier_account_entries
+        (tenant_id, supplier_id, kind, date, amount, method, note, created_by, created_by_name)
+        VALUES (?,?,?,?,?,?,?,?,?)`)
+      .run(tid, s.id, kind, date, amount, kind === 'payment' ? text(b.method) : null, text(b.note),
+           req.user && req.user.id || null, who).lastInsertRowid;
+  };
+  tdb().transaction(write)();
+  logActivity(req.user.id, req.user.username, 'create', 'supplier_account_entry', id,
+              { supplier_id: s.id, kind, date, amount }, req.ip);
+  res.json({ success: true, id, data: supplierAccount(tid, s) });
+});
+
+// Void a wrong entry. The row stays, marked, with who voided it.
+router.post('/api/retail-admin/suppliers/:id/account/entries/:entryId/void', requireRetailAdmin, (req, res) => {
+  const s = acctSupplier(req, res);
+  if (!s) return;
+  const tid = Number(currentTenantId()) || 1;
+  const e = tdb().prepare(`SELECT id, voided_at FROM supplier_account_entries
+                            WHERE id = ? AND supplier_id = ? AND COALESCE(tenant_id,1) = ?`).get(req.params.entryId, s.id, tid);
+  if (!e) return res.status(404).json({ success: false, error: 'not_found' });
+  if (e.voided_at) return res.status(409).json({ success: false, error: 'already_voided' });
+  tdb().prepare('UPDATE supplier_account_entries SET voided_at = CURRENT_TIMESTAMP, voided_by_name = ? WHERE id = ?')
+    .run(req.user && req.user.username || null, e.id);
+  logActivity(req.user.id, req.user.username, 'void', 'supplier_account_entry', e.id, { supplier_id: s.id }, req.ip);
+  res.json({ success: true, data: supplierAccount(tid, s) });
+});
+
 // ── 发票 MONEY THE FOUR STATES CANNOT SEE ───────────────────────────────────
 // A recorded 发票 is only counted by this screen through the PO LINE it was
 // allocated to: lineStatus() reads `covered`, and `covered` comes from the

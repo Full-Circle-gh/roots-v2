@@ -70,7 +70,10 @@ it('eight groups, each with a heading in both languages', () => {
   }
 });
 
-/* TWENTY-FIVE SINCE 2026-09-20, and the count moved for the one reason it may:
+/* TWENTY-SIX SINCE 2026-09-28, for the same one reason: `supowed` (§286, the
+   suppliers who give us credit and what we owe each) joins Stock coming in,
+   beside the Purchasing whose orders it counts.
+   It was twenty-five from 2026-09-20, and the count moved for the one reason it may:
    a row was ADDED, not lost, duplicated or swapped. `askstocksent` (§198, what
    became of what you asked ANOTHER SHOP for) joins Ask someone else as the
    group's third "answer coming back", beside `kitchenready` and `askbuysent`.
@@ -84,12 +87,12 @@ it('eight groups, each with a heading in both languages', () => {
    or not at all. */
 it('the same rows came out as went in — a regroup is a move, not an edit', () => {
   const keys = groups().flatMap((g) => g.keys);
-  assert.strictEqual(keys.length, 25, `expected 25 Operations rows, found ${keys.length}`);
-  assert.strictEqual(new Set(keys).size, 25, 'a row key appears in two groups');
+  assert.strictEqual(keys.length, 26, `expected 26 Operations rows, found ${keys.length}`);
+  assert.strictEqual(new Set(keys).size, 26, 'a row key appears in two groups');
   /* Named in full rather than counted, so a row SWAPPED for another still
      fails. A count alone would pass a rename of the set. */
   const expected = ['neworder', 'till', 'sales', 'trend', 'invoices', 'pick', 'delivery',
-    'purchasing', 'receiving', 'receivexfer', 'stockapp', 'kitchenqueue', 'logbatch',
+    'purchasing', 'supowed', 'receiving', 'receivexfer', 'stockapp', 'kitchenqueue', 'logbatch',
     'askkitchen', 'askstock', 'askstocksent', 'askbuy', 'kitchenready', 'askbuysent',
     'waste', 'expense',
     'approvals', 'inbox', 'channelsync', 'recipes'];
@@ -172,7 +175,7 @@ it('three pill values, and no pill is the default', () => {
     .concat([...PILLS.matchAll(/[,{]\s*([a-z]+):\[/g)].map((m) => m[1]));
   const pilled = new Set(keys);
   assert.ok(pilled.size <= 6,
-    `${pilled.size} of 25 rows carry a pill — past a handful it is a column, not a mark`);
+    `${pilled.size} of 26 rows carry a pill — past a handful it is a column, not a mark`);
 });
 
 it('the pill is on the rows that earn it, and on no others', () => {
