@@ -11599,7 +11599,17 @@ const ONW_ERR_WHERE = {
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
   shipping_fee_not_allowed_for_pickup: 'money', shipping_fee_not_allowed_for_counter: 'money',
+  /* A product's own questions ("Hot or iced?"). The server refuses a line whose
+     required question is unanswered, and THIS FORM DOES NOT ASK THEM YET — so
+     until it does, any product with a required question is refused here, and
+     the refusal used to land in the customer block as the catch-all sentence,
+     naming nothing. All six land on the product block; ordNewErrText names the
+     line from the product_id the server sends back. */
+  choice_required: 'prod', too_few_answers: 'prod', too_many_answers: 'prod',
+  bad_choice: 'prod', choice_wrong_product: 'prod', too_many_choices: 'prod',
 };
+const ONW_OPTION_CODES = ['choice_required', 'too_few_answers', 'too_many_answers',
+  'bad_choice', 'choice_wrong_product', 'too_many_choices'];
 function ordNewClearErrors() {
   ONW_ERR_SLOTS.forEach(k => {
     const el = document.getElementById('onw-err-' + k);
@@ -11619,7 +11629,17 @@ function ordNewShowError(where, message) {
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 // One sentence per code: what happened, and what to do about it.
-function ordNewErrText(code, detail) {
+function ordNewErrText(code, detail, productId) {
+  // The product's questions, prefixed with the line's own name so the operator
+  // knows which of the lines is the one. The pair is the web storefront's live
+  // one for the same six codes (public/shop.html), copied, with the full stop
+  // this catalogue's sentences end in.
+  if (ONW_OPTION_CODES.includes(code)) {
+    const line = productId != null ? ONW.lines.find(l => l.product_id === productId) : null;
+    const nm = line ? cuT(line.name_en || line.name_cn, line.name_cn || line.name_en) : '';
+    const say = cuT('Choose this item’s options.', '请选择商品选项。');
+    return nm ? nm + ' — ' + say : say;
+  }
   const M = {
     recipient_name_required: cuT('Enter a name for the order.', '请填写订单姓名。'),
     bad_phone: cuT('That phone number is not a valid number.', '电话号码格式不正确。'),
@@ -11719,7 +11739,15 @@ function ordNewErrText(code, detail) {
     district_required_for_gz: cuT('Pick the Guangzhou district — it decides whether this goes by rider or by courier.',
                                   '请选择广州的区 — 该选择决定走同城骑手还是快递。'),
   };
-  return M[code] || (detail || cuT('That did not save. Nothing was created.', '未能保存,未创建任何内容。'));
+  // A code with no sentence here — a server crash (`server_error`), a reply that
+  // was not JSON, or a refusal added to the endpoint after this map — keeps the
+  // catch-all sentence and carries the code beside it. Without it, every one of
+  // those read identically, and the report that reached us was a screenshot
+  // that could not say which.
+  if (M[code]) return M[code];
+  if (detail) return detail;
+  const generic = cuT('That did not save. Nothing was created.', '未能保存,未创建任何内容。');
+  return code ? generic + ' (' + code + ')' : generic;
 }
 
 // ── Gather the form ────────────────────────────────────────────────────
@@ -11928,9 +11956,15 @@ async function ordNewCreate(ev) {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) {
-      const code = j.error || 'unknown';
+      // No JSON code at all (a proxy's error page, a timeout) is named by its
+      // HTTP status, so it still reads differently from every coded refusal.
+      const code = j.error || ('HTTP ' + r.status);
+      const pid = j.product_id != null ? Number(j.product_id) : null;
       ordNewSetBusy(btn, false, cuT('Create order', '创建订单'));
-      ordNewShowError(ONW_ERR_WHERE[code] || 'cust', ordNewErrText(code, j.message));
+      // An unmapped code that names a product goes to the product block, as the
+      // note above ONW_ERR_WHERE has always said it would; the rest to the top.
+      ordNewShowError(ONW_ERR_WHERE[code] || (pid != null ? 'prod' : 'cust'),
+                      ordNewErrText(code, j.message, pid));
       return;
     }
     btn.textContent = cuT('Created', '已创建');

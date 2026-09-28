@@ -1166,15 +1166,27 @@ const BUILT_PREFIXES = {
   'address_not_allowed_for_':      ['address_not_allowed_for_pickup', 'address_not_allowed_for_counter'],
   'shipping_fee_not_allowed_for_': ['shipping_fee_not_allowed_for_pickup', 'shipping_fee_not_allowed_for_counter'],
 };
+// The line resolver passes through every refusal of lib/product-options'
+// resolveAnswers — a product's own questions — from outside the handler, so the
+// scrape above never saw them and a required "Hot or iced?" reached the operator
+// as the catch-all sentence. They are read off the module and added here.
+const OPT_SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'product-options.js'), 'utf8');
+const optAt = OPT_SRC.indexOf('function resolveAnswers(');
+const OPTION_CODES = [...new Set(
+  (OPT_SRC.slice(optAt, OPT_SRC.indexOf('\nfunction ', optAt + 10)).match(/error: '([a-z_]+)'/g) || [])
+    .map(m => m.slice(8, -1)))];
+check('the product-options scrape found its codes (not vacuously empty)', OPTION_CODES.length >= 6, true);
 const SERVER_CODES = [...new Set(
   (ordersPost.match(/error: '([a-z_]+)'/g) || []).map(m => m.slice(8, -1))
-)].flatMap(c => BUILT_PREFIXES[c] || [c]);
+)].flatMap(c => BUILT_PREFIXES[c] || [c]).concat(OPTION_CODES);
 check('the error-code scrape found the handler\'s codes (not vacuously empty)',
   SERVER_CODES.length >= 10, true);
 check('every error the order endpoint returns has a slot on the page',
   SERVER_CODES.filter(c => !errWhere.includes(c + ':')), []);
+// The six question codes share one sentence, keyed off ONW_OPTION_CODES.
 check('every error the order endpoint returns has a sentence',
-  SERVER_CODES.filter(c => !errText.includes(c + ':')), []);
+  SERVER_CODES.filter(c => !errText.includes(c + ':')
+    && !(errText.includes('ONW_OPTION_CODES') && errWhere.includes("'" + c + "'"))), []);
 
 check('dynamic regions are shielded from the walker',
   ['onw-cust-results', 'onw-cust-chiprow', 'onw-phone-note', 'onw-prod-results', 'onw-lines-wrap']
