@@ -1,6 +1,8 @@
 # Tacet delivery vocabulary — locked
 
-**v1.198 · 2026-09-28 · §286 SUPPLIERS WE OWE — TWENTY OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY CHINESE FRAGMENT LIVE BUT ONE (期初).** The credit account on the desktop supplier page, the *Suppliers we owe* card, and the phone's new *Suppliers we owe* screen. See *Suppliers we owe (§286)*.
+**v1.199 · 2026-09-28 · §286 SUPPLIERS WE OWE — TWENTY-ONE OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY CHINESE FRAGMENT LIVE BUT ONE (期初).** The credit account on the desktop supplier page, the *Suppliers we owe* card, and the phone's new *Suppliers we owe* screen. See *Suppliers we owe (§286)*.
+**v1.198 · 2026-09-28 · A NEW ORDER WITH AN UNANSWERED PRODUCT QUESTION — NOTHING COMPOSED, ONE PAIR LIFTED.** The desktop and phone New order forms now name the line when the server refuses it for an unanswered product question, instead of the catch-all. See *An unanswered product question on a new order*.
+
 **v1.197 · 2026-09-27 · §285 RUNNING LATE — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *Running late (§285)*.
 **v1.196 · 2026-09-27 · §284 THE COURIER COULDN'T REACH THE CUSTOMER — FIVE OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *The courier couldn't reach the customer (§284)*.
 **v1.195 · 2026-09-27 · §283 A 发票 WITH NO SUPPLIER — TWO OPERATOR LINES COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** Purchasing → Invoices. The Unspecified row's new `Add invoice · 添加发票` button is copied whole from the other groups' rows. The add-invoice form's supplier placeholder and the toast for a cleared supplier are composed. See *A 发票 with no supplier (§283)*.
@@ -9151,6 +9153,24 @@ register only. A parcel still on the road after its due day.
   opens the §98 case. This state comes before that one.
 - `晚到 N 天`: **rejected** as the label. `晚到` says it arrived; this parcel
   has not.
+
+## An unanswered product question on a new order
+
+The desktop New order page (`public/retail-admin/04-orders.js`) and the phone's
+(`public/m.html`) do not ask a product's questions yet. The server refuses such a
+line with one of six codes (`choice_required`, `too_few_answers`,
+`too_many_answers`, `bad_choice`, `choice_wrong_product`, `too_many_choices`),
+and both forms used to show the catch-all `That did not save. Nothing was
+created. · 未能保存,未创建任何内容。` in the customer block.
+
+| shipped | built from |
+|---|---|
+| `<line name> — Choose this item’s options. · <line name> — 请选择商品选项。` | **lifted.** The web storefront's live pair for the same six codes (`public/shop.html`), with the full stop this catalogue's sentences end in. The ` — ` join and the name add no words |
+| `That did not save. Nothing was created. (<code>) · 未能保存,未创建任何内容。(<code>)` | **unchanged sentence.** The server's own code is appended in brackets for any code with no sentence (e.g. `server_error`). No new words in either language |
+
+**Nothing composed.** A sentence for a server crash was considered and not
+written: no live pair exists for it, and carrying the code beside the existing
+catch-all tells a crash apart from every other refusal without minting one.
 
 ## Suppliers we owe (§286)
 

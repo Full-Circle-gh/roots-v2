@@ -7564,6 +7564,13 @@ const ONW_WHERE={
      is nowhere near the control that caused it. 'from' is the channel block. */
   bad_shop_entry_method:'from', shop_entry_method_required:'from',
   shop_entry_method_not_allowed:'from',
+  /* A product's own questions ("Hot or iced?"). The server refuses a line whose
+     required question is unanswered and this form does not ask them yet, so the
+     refusal used to land on 'who' as the catch-all sentence, naming nothing.
+     'what' is the lines block; onwErrText names the line from the product_id the
+     server sends back — the desktop's own placement (04-orders.js). */
+  choice_required:'what', too_few_answers:'what', too_many_answers:'what',
+  bad_choice:'what', choice_wrong_product:'what', too_many_choices:'what',
   /* §93's store credit. Unreachable from this form for the same reason — it
      sends neither points_to_use nor use_balance — and mapped for the same
      reason: the endpoint answers with them to any caller, and an unmapped code
@@ -7576,7 +7583,16 @@ const ONW_WHERE={
    surfaces answering the same refusal with the same words. E(), not T(): this
    is stored from a .catch and resolved when the screen next paints, so a
    Chinese operator does not read an English failure. */
-function onwErrText(code,msg){
+const ONW_OPTION_CODES=['choice_required','too_few_answers','too_many_answers',
+  'bad_choice','choice_wrong_product','too_many_choices'];
+function onwErrText(code,msg,pid){
+  /* The product's questions, prefixed with the line's own name — the desktop's
+     sentence, which is the web storefront's live pair for the same six codes. */
+  if(ONW_OPTION_CODES.includes(code)){
+    const l=pid!=null?(state.onw.lines||[]).find(x=>x.id===pid):null;
+    const en='Choose this item’s options.', cn='请选择商品选项。';
+    return l?E(l.en+' — '+en,l.cn+' — '+cn):E(en,cn);
+  }
   const M={
     recipient_name_required:E('Enter a name for the order.','请填写订单姓名。'),
     bad_phone:E('That phone number is not a valid number.','电话号码格式不正确。'),
@@ -7612,7 +7628,13 @@ function onwErrText(code,msg){
     address_not_allowed_for_pickup:E('A pickup order cannot carry a delivery address.','自提订单不能填写收货地址。'),
     shipping_fee_not_allowed_for_pickup:E('A pickup order cannot carry a shipping fee. Clear it or set it to 0.','自提订单不能收取运费,请清空或设为 0。'),
   };
-  return M[code]||msg||E('That did not save. Nothing was created.','未能保存,未创建任何内容。');
+  /* A code with no sentence here — a server crash (`server_error`), or a
+     refusal added to the endpoint after this map — keeps the catch-all and
+     carries the code beside it, so those stop reading identically. */
+  if(M[code]) return M[code];
+  if(msg) return msg;
+  const en='That did not save. Nothing was created.', cn='未能保存,未创建任何内容。';
+  return code?E(en+' ('+code+')',cn+' ('+code+')'):E(en,cn);
 }
 /* The form, empty. A FUNCTION rather than a literal because two callers need
    the same shape — the state literal at the top of this file and Clear — and a
@@ -8185,7 +8207,8 @@ reg('onwCreate', ()=>{
     /* The server's CODE where there is one, its own words only where there is
        not: a code has a sentence written for it here, and e.message for a coded
        failure is the raw field name. */
-    state.onw.err={where:ONW_WHERE[e.code]||'who',msg:onwErrText(e.code,e.code?null:e.message)};
+    const pid=e.body&&e.body.product_id!=null?Number(e.body.product_id):null;
+    state.onw.err={where:ONW_WHERE[e.code]||(pid!=null?'what':'who'),msg:onwErrText(e.code,e.code?null:e.message,pid)};
     render();
   });
 });
@@ -16152,7 +16175,7 @@ async function apiWrite(path, body, method){
     headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body||{})});
   if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
   let j=null; try{ j=await r.json(); }catch(e){}
-  if(!r.ok){ const e=new Error((j&&(j.message||j.error))||('HTTP '+r.status)); e.code=j&&j.error; throw e; }
+  if(!r.ok){ const e=new Error((j&&(j.message||j.error))||('HTTP '+r.status)); e.code=j&&j.error; e.body=j; throw e; }
   return j;
 }
 function orderErrorText(e){
