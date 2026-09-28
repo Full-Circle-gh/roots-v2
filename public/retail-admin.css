@@ -3756,10 +3756,11 @@
      This is the tag ("Big" / "大"), not the row's product name — that is
      .va-rowname, the column to the left. */
   .va-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  /* Each label box is a one-line textarea that wraps and grows to fit, so the
-     whole label always shows in the narrow column (09-products.js vaGrow). */
-  .va-name textarea.va-label { display: block; min-height: 0; height: auto; resize: none; overflow: hidden;
-                               line-height: 1.35; white-space: pre-wrap; overflow-wrap: break-word; field-sizing: content; }
+  /* One-line text that wraps and grows to fit (class "grow1"): variant labels,
+     option questions and option choices. A cut-off name is worse than a taller
+     row, so these never clip (09-products.js pdGrow). */
+  textarea.grow1 { display: block; min-height: 0; height: auto; resize: none; overflow: hidden;
+                   line-height: 1.35; white-space: pre-wrap; overflow-wrap: break-word; field-sizing: content; }
   .va-name .va-label-cn { font-size: 13px; }
   .va-name .va-label-cn::placeholder { color: var(--text-4); }
   .va-num { width: 100%; box-sizing: border-box; text-align: right; font-variant-numeric: tabular-nums; }
@@ -3840,12 +3841,13 @@
     color: var(--td-text2); font-family: var(--f-sans); padding-bottom: 8px;
   }
   .pd-stock-matrix tr + tr td, .pd-stock-matrix tr + tr th { border-top: 1px solid var(--td-border); }
-  /* Size-name cell — the column has a fixed width, so a long name truncates
-     rather than widening the table and squeezing the count boxes. */
+  /* Size-name cell — the column has a fixed width so it never squeezes the
+     count boxes; a long name WRAPS inside it (the row grows) rather than
+     ending in "…". */
   .pd-stock-matrix th.vh {
     color: var(--td-text); font-weight: 500; text-transform: none;
-    letter-spacing: 0; font-family: var(--f-sans); white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis;
+    letter-spacing: 0; font-family: var(--f-sans); white-space: normal;
+    overflow-wrap: break-word; line-height: 1.35;
   }
   .pd-stock-matrix tr:first-child th.vh { color: var(--td-text2); font-weight: 400; }
   /* The box FILLS its column's content box in both layouts, so the heading
@@ -3945,8 +3947,9 @@
      search picker. No bundle SKU; items keep their own price/stock. */
   .bu-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
   .bu-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
-  .bu-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 12px; color: var(--text-1); max-width: 220px; }
-  .bu-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bu-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 12px; color: var(--text-1); max-width: 100%; }
+  /* The full name, wrapped if it must — never "…". */
+  .bu-chip span { min-width: 0; white-space: normal; overflow-wrap: break-word; }
   .bu-chip-x { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 13px; line-height: 1; padding: 0 2px; flex: none; }
   .bu-chip-x:hover { color: var(--brass); }
   .bu-search { width: 100%; margin-top: 8px; box-sizing: border-box; }
@@ -3959,7 +3962,9 @@
      product name truncates while the qty stepper + remove stay fixed-width and
      never get clipped (the bu-chip span ellipsis rule was squeezing the qty). */
   .bp-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px 8px 3px 12px; font-size: 12px; color: var(--text-1); }
-  .bp-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+  .bp-chip { max-width: 100%; }
+  /* The full name, wrapped if it must — never "…". */
+  .bp-chip-name { min-width: 0; white-space: normal; overflow-wrap: break-word; }
   .bp-chip-qty { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); flex: none; }
   /* Scope under the container #id so this beats the base input[type=number] rule
      (equal specificity, but that one is later in the file → it would otherwise
@@ -3990,12 +3995,12 @@
   .opt-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 2px; }
   .opt-block { border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 10px 12px; background: var(--bg-app); }
   .opt-qrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .opt-q { flex: 1 1 160px; min-width: 120px; }
+  .opt-q { flex: 1 1 160px; min-width: 120px; width: auto; }
   .opt-type { flex: none; }
   .opt-req { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; cursor: pointer; }
   .opt-req input { margin: 0; }
   .opt-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line-soft); }
-  .opt-choice { display: flex; align-items: center; gap: 8px; }
+  .opt-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   /* Drag-to-reorder grip — choices within an option, and whole option blocks. */
   .opt-drag { flex: none; display: inline-flex; align-items: center; justify-content: center;
     width: 18px; height: 24px; color: var(--text-3); cursor: grab; border-radius: 4px;
@@ -4007,7 +4012,7 @@
   .opt-choice.opt-dragover { box-shadow: inset 0 2px 0 0 var(--brass); }
   .opt-block.opt-dragover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--brass) 55%, transparent); }
   .opt-choice > input[type="radio"], .opt-choice > input[type="checkbox"] { margin: 0; flex: none; }
-  .opt-clab { flex: 1 1 120px; min-width: 90px; }
+  .opt-clab { flex: 1 1 120px; min-width: 90px; width: auto; }
   .opt-cdelta { display: inline-flex; align-items: center; gap: 2px; color: var(--text-3); font-size: 12px; flex: none; }
   #pd-options .opt-cdelta input {
     width: 64px; height: 28px; box-sizing: border-box; padding: 0 6px;
@@ -4028,10 +4033,15 @@
   }
   /* Stock-product link on a paid add-on choice. */
   .opt-link-btn { flex: none; white-space: nowrap; }
-  .opt-link { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 220px;
+  .opt-link-slot { flex: 1 1 200px; min-width: 0; display: flex; }
+  /* Shows the WHOLE linked name, its size and its stock, wrapping onto more
+     lines if it must. It used to stop at 220px and clip, which hid the stock
+     count and the chip's own unlink ✕ along with the end of the name. It takes
+     the room left in the row and drops to its own line when there is too little. */
+  .opt-link { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 200px; min-width: 0;
     font-size: 12px; color: var(--text-1); background: color-mix(in srgb, var(--brass) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--brass) 40%, transparent); border-radius: 14px; padding: 3px 6px 3px 10px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    border: 1px solid color-mix(in srgb, var(--brass) 40%, transparent); border-radius: 10px; padding: 4px 6px 4px 10px;
+    white-space: normal; overflow-wrap: break-word; line-height: 1.35; }
   .opt-unlink { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 12px; line-height: 1; padding: 0 2px; flex: none; }
   .opt-unlink:hover { color: var(--brass); }
   .opt-picker { flex-basis: 100%; margin-top: 6px; }
@@ -16021,6 +16031,8 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 .ppg .va-row input[type=text], .ppg .va-row input[type=number] { height: 36px; padding: 0 8px; font-size: 14px; }
 /* Label boxes: same look as the 36px inputs beside them, but they wrap and grow. */
 .ppg .va-row textarea.va-label { height: auto; min-height: 36px; padding: 8px; font-size: 14px; line-height: 18px; resize: none; }
+/* Other grow-to-fit boxes (option question / choice): the 40px input look. */
+.ppg textarea.grow1 { height: auto; min-height: 40px; padding: 9px 12px; line-height: 20px; resize: none; }
 .ppg .va-actions .btn, .ppg .bu-chips + .btn { margin-top: 4px; }
 .ppg .bp-mode { display: flex; gap: 11px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface); cursor: pointer; }
 .ppg .bp-mode.is-on { border-color: var(--td-text); }
