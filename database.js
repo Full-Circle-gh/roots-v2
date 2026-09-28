@@ -1313,6 +1313,36 @@ db.exec(`CREATE TABLE IF NOT EXISTS supplier_documents (
   FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
 )`);
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_supplier_docs_sup ON supplier_documents(supplier_id)'); } catch {}
+// §286 — A SUPPLIER WHO GIVES US CREDIT HAS AN ACCOUNT. Off for every supplier
+// until somebody turns it on; the pay-first suppliers keep NO PAYABLES (the
+// SUPPLIER INVOICES header in routes/retail-purchasing.js).
+addColumn('suppliers', 'on_credit', 'INTEGER DEFAULT 0');
+// What we did about the debt, never the debt itself: the debt is computed from
+// the supplier's delivered orders (supplierAccount() in retail-purchasing.js).
+//   opening     the starting balance carried over from the old sheet — signed;
+//               orders dated on or before `date` are taken as already in it
+//   payment     money we sent them — positive, lowers what we owe
+//   adjustment  a correction — signed, added to what we owe (a discount is −)
+// NOT AN EXPENSE. The purchase is expensed from its order (postPOExpenses);
+// nothing here is summed by any Finance surface, and writing a payment into
+// expense_entries would count the same goods twice. A wrong row is VOIDED —
+// voided_at set, the row kept — never edited or deleted.
+db.exec(`CREATE TABLE IF NOT EXISTS supplier_account_entries (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id       INTEGER DEFAULT 1,
+  supplier_id     INTEGER NOT NULL,
+  kind            TEXT NOT NULL,                -- 'opening' | 'payment' | 'adjustment'
+  date            DATE NOT NULL,
+  amount          REAL NOT NULL,
+  method          TEXT,                         -- how it was paid (payments only)
+  note            TEXT,
+  created_by      INTEGER,
+  created_by_name TEXT,
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  voided_at       DATETIME,
+  voided_by_name  TEXT
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_supplier_acct_sup ON supplier_account_entries(tenant_id, supplier_id)'); } catch {}
 try {
   const ranBF = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('backfill_supplier_documents_v1');
   if (!ranBF) {
