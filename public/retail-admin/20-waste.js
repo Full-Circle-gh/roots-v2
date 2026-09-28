@@ -582,7 +582,7 @@
             // Say what was left out, or the figure silently disagrees with the
             // product's own cost. Chinese composed, declared in the vocabulary doc.
             + ((preview.kept_lines || []).length
-              ? ' · ' + T('Kept, not counted: ', '保留，不计入：')
+              ? ' · ' + T('Not counted as waste: ', '不计损耗：')
                 + preview.kept_lines.map(k => T(k.name_en, k.name_cn || k.name_en)).join(', ')
               : '');
       }

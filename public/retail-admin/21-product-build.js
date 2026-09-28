@@ -340,11 +340,11 @@
     // waste entry charges; the cost on this screen still counts it, because
     // every one sold goes out with it. Contents only: a box is binned with the
     // salad, so a packaging row has nothing to keep and gets no tick.
-    // Chinese composed by Claude, declared in docs/tacet-delivery-vocabulary.md.
+    // Chinese supplied by Ash, declared in docs/tacet-delivery-vocabulary.md.
     const kept = blGroupOf(l) === 'materials'
       ? '<label class="bl-kept"><input type="checkbox"' + (l.packed_separately ? ' checked' : '')
         + ' onchange="blField(' + idx + ',\'packed_separately\',this.checked)"> '
-        + escapeHtml(cuT('Packed separately — kept if it expires or spoils', '单独包装 — 过期或变质时保留'))
+        + escapeHtml(cuT('Not counted as waste if it expires or spoils', '过期或变质报废时不计损耗'))
         + '</label>'
       : '';
 
