@@ -52,16 +52,24 @@ const REPO = path.join(__dirname, '..');
    bug, so the budget is 0 and stays 0.
 
    ORPHAN — Chinese in a node that is not a pair and is not shielded, so it
-   renders whatever language the operator chose. Most of the standing 234 are
+   renders whatever language the operator chose. Most of the standing 161 are
    real (a Chinese-only hint on the Reviews page, a label pair glued with no
    separator at all), and a few are correct by §1.11's scope note: a preview of
    a WeCom card or a quoted WeChat menu path carries Chinese because the reader
    of THAT surface cannot choose a language. Telling those apart needs a person
    per string and, where the string is genuinely missing its English half, a new
    string written. So the backlog is counted rather than failed — but it cannot
-   GROW, which is the half that matters for new work. */
+   GROW, which is the half that matters for new work.
+
+   234 → 161 on 2026-09-28, and nothing was fixed to get there: the scan was.
+   Its backtick-counting read of the .js modules had drifted out of step, so 73
+   of the 234 were lines of CODE read as page text, while real page text in the
+   same stretches went unread. A new panel landing in one of those stretches
+   "added" three orphans that were its own JavaScript. Literals are now found by
+   acorn (parsedTemplateLiterals); 161 is the backlog as it really stands, and
+   the ratchet starts again from there. */
 const BUDGET = 0;
-const ORPHAN_BUDGET = 234;
+const ORPHAN_BUDGET = 161;
 
 const CJK = /[一-鿿]/;
 const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'source',
@@ -143,13 +151,40 @@ function templateLiterals(src) {
   return out;
 }
 
+/* The same literals, found by a real parser. The scan above pairs backticks
+   by counting them, so ONE backtick it misreads — inside a comment, a string
+   or a regex — flips every pairing after it: from there it reads code as page
+   text and page text as code, hiding real orphans and inventing others. acorn
+   (already a dev dependency, for this repo's own lint) knows which backticks
+   open a template. Each literal's `${…}` holes become X, exactly as above. The
+   counting scan stays as the fallback for a file acorn cannot parse. */
+function parsedTemplateLiterals(src) {
+  let ast;
+  try { ast = require('acorn').parse(src, { ecmaVersion: 'latest', sourceType: 'script', locations: true }); }
+  catch (e) { return null; }
+  const out = [];
+  (function walk(node) {
+    if (!node || typeof node.type !== 'string') return;
+    if (node.type === 'TemplateLiteral') {
+      const body = node.quasis.map(q => q.value.raw).join('X');
+      if (body.includes('<')) out.push({ body, line: node.loc.start.line });
+    }
+    for (const k of Object.keys(node)) {
+      const v = node[k];
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object' && typeof v.type === 'string') walk(v);
+    }
+  })(ast);
+  return out;
+}
+
 const findings = [];
 for (const rel of FILES) {
   const abs = path.join(REPO, rel);
   if (!fs.existsSync(abs)) continue;
   const src = fs.readFileSync(abs, 'utf8');
   if (rel.endsWith('.js')) {
-    for (const lit of templateLiterals(src)) scanChunk(lit.body, rel, lit.line, findings);
+    for (const lit of parsedTemplateLiterals(src) || templateLiterals(src)) scanChunk(lit.body, rel, lit.line, findings);
   } else {
     scanChunk(src, rel, 0, findings);
   }

@@ -10650,8 +10650,11 @@ function ordNewRender() {
     customer: null,          // { id, nickname, phone } when linked
     saveCust: true,          // "Also save as a customer" — on by default (frame C)
     ful: 'delivery',
-    lines: [],               // [{ product_id, name_en, name_cn, sku, qty, unit_price }]
+    // unit_price is the BASE; choices/opts/delta are the product's answered
+    // questions, and a line's price on the page is base + delta (onwLineUnit).
+    lines: [],               // [{ product_id, name_en, name_cn, sku, qty, unit_price, choices, opts, delta }]
     custResults: [], prodResults: [],
+    opt: null,               // the open question panel: { p, sel: {optionId: [choiceIds]}, err }
     draftId: null,           // set once Save draft has written one (commit 4 opens them)
     customersOnFile: null,   // from the roster response — tells (c) from (d)
     custQuery: '',
@@ -10705,6 +10708,7 @@ function ordNewRender() {
   ordNewLoadStores();
   ordNewPaintCustState();
   ordNewHideResults('onw-cust-results'); ordNewHideResults('onw-prod-results');
+  ordNewRenderOpts();
   ordNewPaintPhoneNote();
   ordNewFulChange();
   ordNewRenderLines();
@@ -10960,7 +10964,12 @@ function ordNewProdSearch() {
   if (!q) { ordNewHideResults('onw-prod-results'); return; }
   onwProdTimer = setTimeout(async () => {
     try {
-      const j = await api('/api/retail-admin/products?limit=10&q=' + encodeURIComponent(q));
+      // with_options: each product's own questions, so a line that needs an
+      // answer is asked for it here rather than refused at Create. The store
+      // decides which stock-backed extras are sold out.
+      const store = (document.getElementById('onw-store')?.value || '').trim();
+      const j = await api('/api/retail-admin/products?limit=10&with_options=1&q=' + encodeURIComponent(q)
+        + (store ? '&store_id=' + encodeURIComponent(store) : ''));
       ONW.prodResults = (j.data || []).slice(0, 10);
       const box = document.getElementById('onw-prod-results');
       if (!box) return;
@@ -10980,12 +10989,165 @@ function ordNewProdSearch() {
 function ordNewAddLine(i) {
   const p = ONW.prodResults[i];
   if (!p) return;
-  const existing = ONW.lines.find(l => l.product_id === p.id);
-  if (existing) existing.qty += 1;
-  else ONW.lines.push({ product_id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, qty: 1, unit_price: Number(p.sell_price) || 0 });
   const q = document.getElementById('onw-prod-q'); if (q) q.value = '';
   ordNewHideResults('onw-prod-results');
+  // A required question with every answer sold out at this store: the product
+  // cannot be made, so it is not added — the till greys the same tile (§120 1A).
+  if (p.options_unanswerable) {
+    ordNewShowError('prod', cuT(p.name_en || p.name_cn, p.name_cn || p.name_en) + ' — ' + cuT('Out of stock', '缺货'));
+    return;
+  }
+  if (Array.isArray(p.options) && p.options.length) { ordNewOpenOpts(p); return; }
+  ordNewAddAnswered(p, [], []);
+}
+// ── A product's own questions ("Heat up?") ─────────────────────────────
+// THE COUNTER TILL'S SHEET, as an inline panel under the search (till.html
+// openOpts … commitOpts): the same pre-ticked defaults, the same single/multi
+// rules, the same floor and ceiling, and the same words — every string below is
+// a live pair the till already carries. The server re-checks all of it
+// (lib/product-options resolveAnswers); this is what lets the operator answer
+// before pressing Create rather than be refused after.
+function onwLineUnit(l) {
+  const u = Math.round(((Number(l.unit_price) || 0) + (Number(l.delta) || 0)) * 100) / 100;
+  return u >= 0 ? u : 0;
+}
+// What a line posts. unit_price is the BASE: the server adds the answers'
+// deltas itself, so posting base + delta would charge each extra twice.
+function onwLineItem(l) {
+  const it = { product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) };
+  if (Array.isArray(l.choices) && l.choices.length) it.choices = l.choices.slice();
+  return it;
+}
+function onwLineKey(pid, choices) {
+  return pid + '|' + (choices || []).slice().sort((a, b) => a - b).join(',');
+}
+// Same product, same answers → one line, qty + 1. Different answers are a
+// different line, exactly as on the till.
+function ordNewAddAnswered(p, choices, opts) {
+  const key = onwLineKey(p.id, choices);
+  const existing = ONW.lines.find(l => onwLineKey(l.product_id, l.choices) === key);
+  if (existing) existing.qty += 1;
+  else {
+    const delta = Math.round(opts.reduce((s, o) => s + (Number(o.delta) || 0), 0) * 100) / 100;
+    ONW.lines.push({ product_id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, qty: 1,
+                     unit_price: Number(p.sell_price) || 0, choices: choices.slice(), opts, delta });
+  }
   ordNewRenderLines();
+}
+function ordNewOpenOpts(p) {
+  const sel = {};
+  (p.options || []).forEach(o => {
+    let pre = [];
+    (o.choices || []).forEach(c => {
+      if (!c.def || c.out) return;
+      if (!o.multi && pre.length) return;
+      pre.push(c.id);
+    });
+    if (o.max && pre.length > o.max) pre = pre.slice(0, o.max);
+    sel[o.id] = pre;
+  });
+  ONW.opt = { p, sel, err: false };
+  ordNewRenderOpts();
+}
+function ordNewCloseOpts() { ONW.opt = null; ordNewRenderOpts(); }
+function ordNewTickOpt(oid, cid) {
+  if (!ONW.opt) return;
+  const o = (ONW.opt.p.options || []).find(x => x.id === oid);
+  const c = o && (o.choices || []).find(x => x.id === cid);
+  if (!c || c.out) return;
+  const cur = ONW.opt.sel[oid] || [];
+  if (!o.multi) ONW.opt.sel[oid] = (cur.length === 1 && cur[0] === cid && !o.req) ? [] : [cid];
+  else {
+    const at = cur.indexOf(cid);
+    if (at >= 0) cur.splice(at, 1);
+    else if (o.max && cur.length >= o.max) return;
+    else cur.push(cid);
+    ONW.opt.sel[oid] = cur;
+  }
+  ONW.opt.err = false;
+  ordNewRenderOpts();
+}
+function ordNewOptsMissing() {
+  if (!ONW.opt) return null;
+  for (const o of (ONW.opt.p.options || [])) {
+    const n = (ONW.opt.sel[o.id] || []).length;
+    if (o.min && n < o.min) return o;
+    if (o.req && !n) return o;
+  }
+  return null;
+}
+// "Choose 2" / "选 2 项" — the till's pieces (§153), same order.
+function ordNewOptsLimit(o) {
+  const n = cuT('', ' 项');
+  if (o.min && o.max && o.min === o.max) return cuT('Choose ', '选 ') + o.min + n;
+  if (o.min) return cuT('At least ', '至少 ') + o.min + n;
+  if (o.max) return cuT('Up to ', '最多 ') + o.max + n;
+  return '';
+}
+// The ticked answers in the order the questions were asked — the order they
+// are posted in and the ticket prints them. Same snapshot shape as the till's.
+function ordNewChosenOpts() {
+  const out = [];
+  if (!ONW.opt) return out;
+  (ONW.opt.p.options || []).forEach(o => {
+    (ONW.opt.sel[o.id] || []).forEach(cid => {
+      const c = (o.choices || []).find(x => x.id === cid);
+      if (!c) return;
+      out.push({ option_id: o.id, choice_id: c.id, label: c.en, label_cn: c.cn,
+                 question_en: o.q_en, question_cn: o.q_cn, delta: Number(c.d) || 0 });
+    });
+  });
+  return out;
+}
+function ordNewCommitOpts() {
+  if (!ONW.opt) return;
+  if (ordNewOptsMissing()) { ONW.opt.err = true; ordNewRenderOpts(); return; }
+  const p = ONW.opt.p, opts = ordNewChosenOpts();
+  ONW.opt = null;
+  ordNewRenderOpts();
+  ordNewAddAnswered(p, opts.map(o => o.choice_id), opts);
+}
+function ordNewRenderOpts() {
+  const el = document.getElementById('onw-opt-pick');
+  if (!el) return;
+  if (!ONW || !ONW.opt) { el.hidden = true; el.innerHTML = ''; return; }
+  const p = ONW.opt.p;
+  const miss = ordNewOptsMissing();
+  const unit = onwLineUnit({ unit_price: p.sell_price, delta: ordNewChosenOpts().reduce((s, o) => s + o.delta, 0) });
+  let h = `<div class="onw-opt-hd">${escapeHtml(cuT('Choose your options', '选择选项'))}</div>`
+        + `<div class="onw-opt-nm">${escapeHtml(cuT(p.name_en || p.name_cn, p.name_cn || p.name_en))}</div>`;
+  (p.options || []).forEach(o => {
+    const lim = ordNewOptsLimit(o);
+    h += `<div class="onw-opt-q">${escapeHtml(cuT(o.q_en, o.q_cn))}`
+       + (o.req ? `<i>${escapeHtml(cuT('Required', '必选'))}</i>` : '')
+       + (lim ? `<i>${escapeHtml(lim)}</i>` : '') + '</div><div class="onw-opt-cs">';
+    (o.choices || []).forEach(c => {
+      const on = (ONW.opt.sel[o.id] || []).includes(c.id);
+      const d = Number(c.d) || 0;
+      const tail = c.out ? escapeHtml(cuT('Out of stock', '缺货'))
+                 : (d ? (d > 0 ? '+' : '\u2212') + onwMoney(Math.abs(d)) : '');
+      h += `<button type="button" class="onw-opt-c${on ? ' on' : ''}" aria-pressed="${on}"`
+         + (c.out ? ' disabled' : ` onclick="ordNewTickOpt(${Number(o.id)},${Number(c.id)})"`) + '>'
+         + `<span>${escapeHtml(cuT(c.en, c.cn))}</span>` + (tail ? '<span class="od">' + tail + '</span>' : '') + '</button>';
+    });
+    h += '</div>';
+  });
+  if (ONW.opt.err && miss) {
+    h += `<div class="onw-err">${onwIc(ONW_ICONS.warn, 2)}<span>${escapeHtml(cuT('Please choose: ', '请选择 ') + cuT(miss.q_en, miss.q_cn)
+       + (ordNewOptsLimit(miss) ? cuT(' (', '（') + ordNewOptsLimit(miss) + cuT(')', '）') : ''))}</span></div>`;
+  }
+  h += `<div class="onw-opt-ft"><button type="button" class="onw-btn onw-ghost" onclick="ordNewCloseOpts()">${escapeHtml(cuT('Cancel', '取消'))}</button>`
+     + `<button type="button" class="onw-btn onw-sec" onclick="ordNewCommitOpts()">${escapeHtml(cuT('Add', '添加'))} ${onwMoney(unit)}</button></div>`;
+  el.innerHTML = h;
+  el.hidden = false;
+}
+// "Heat up?: Yes" under the line's name — the till's own line (optsHtml).
+function onwOptsText(opts) {
+  return (opts || []).map(o => {
+    const a = cuT(o.label || '', o.label_cn || o.label || '');
+    const q = cuT(o.question_en || '', o.question_cn || o.question_en || '');
+    return a ? (q ? q + ': ' + a : a) : '';
+  }).filter(Boolean);
 }
 function ordNewLineQty(i, d) {
   const l = ONW.lines[i];
@@ -11009,13 +11171,14 @@ function ordNewRenderLines() {
     const bad = !(Number(l.qty) > 0);
     const nm = escapeHtml(cuT(l.name_en || l.name_cn, l.name_cn || l.name_en) || ('#' + l.product_id));
     const sku = l.sku ? `<span class="ps">SKU ${escapeHtml(l.sku)}</span>` : '';
+    const ans = onwOptsText(l.opts).map(t => `<span class="ps">${escapeHtml(t)}</span>`).join('');
     // A failing line shows an em dash, never a false ¥0.00 (frame G).
-    const lineTotal = bad ? '—' : onwMoney((Number(l.qty) || 0) * (Number(l.unit_price) || 0));
+    const lineTotal = bad ? '—' : onwMoney((Number(l.qty) || 0) * onwLineUnit(l));
     const err = bad ? `<div class="onw-inerr">${onwIc(ONW_ICONS.warn, 2)}${escapeHtml(cuT('Enter 1 or more', '请输入 1 或以上'))}</div>` : '';
     return `<tr>
-      <td class="pd"><span class="pn">${nm}</span>${sku}</td>
+      <td class="pd"><span class="pn">${nm}</span>${ans}${sku}</td>
       <td class="qt"><div class="onw-step${bad ? ' bad' : ''}"><button type="button" onclick="ordNewLineQty(${i},-1)">–</button><span>${Number(l.qty) || 0}</span><button type="button" onclick="ordNewLineQty(${i},1)">+</button></div>${err}</td>
-      <td class="mo">${onwMoney(l.unit_price)}</td>
+      <td class="mo">${onwMoney(onwLineUnit(l))}</td>
       <td class="mo">${lineTotal}</td>
       <td class="rm"><button type="button" onclick="ordNewRemoveLine(${i})" title="${escapeHtml(cuT('Remove line', '移除此行'))}">${onwIc(ONW_ICONS.trash, 1.6)}</button></td></tr>`;
   }).join('');
@@ -11113,7 +11276,7 @@ function ordNewFulChange() {
 function ordNewSubtotal() {
   return Math.round(ONW.lines.reduce((s, l) => {
     const q = Number(l.qty) || 0;
-    return q > 0 ? s + q * (Number(l.unit_price) || 0) : s;
+    return q > 0 ? s + q * onwLineUnit(l) : s;
   }, 0) * 100) / 100;
 }
 function ordNewRecalc() {
@@ -11341,7 +11504,7 @@ async function ordNewFees() {
   const body = {
     fulfillment_type: ft,
     items: ONW.lines.filter(l => Number(l.qty) > 0)
-      .map(l => ({ product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) })),
+      .map(onwLineItem),
   };
   if (ft === 'delivery') {
     // Identical shape to ordNewCollect's — the cart a fee is quoted for must be
@@ -11600,9 +11763,10 @@ const ONW_ERR_WHERE = {
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
   shipping_fee_not_allowed_for_pickup: 'money', shipping_fee_not_allowed_for_counter: 'money',
   /* A product's own questions ("Hot or iced?"). The server refuses a line whose
-     required question is unanswered, and THIS FORM DOES NOT ASK THEM YET — so
-     until it does, any product with a required question is refused here, and
-     the refusal used to land in the customer block as the catch-all sentence,
+     required question is unanswered. This form asks them now (ordNewOpenOpts),
+     so these are reached by a line that predates its product's question — a
+     restored draft — or a stock-backed extra that sold out between the pick and
+     Create. They used to land in the customer block as the catch-all sentence,
      naming nothing. All six land on the product block; ordNewErrText names the
      line from the product_id the server sends back. */
   choice_required: 'prod', too_few_answers: 'prod', too_many_answers: 'prod',
@@ -11762,7 +11926,7 @@ function ordNewCollect() {
     customer_id: ONW.customer ? ONW.customer.id : null,
     recipient_name: ONW.cust === 'linked' ? (ONW.customer.nickname || val('onw-guest-name')) : val('onw-guest-name'),
     recipient_phone: ONW.cust === 'linked' ? (ONW.customer.phone || '') : val('onw-guest-phone'),
-    items: ONW.lines.map(l => ({ product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) })),
+    items: ONW.lines.map(onwLineItem),
     shipping_fee: Number(val('onw-ship')) || 0,
     packing_fee: Number(val('onw-pack')) || 0,
     status: val('onw-status') || 'pending_payment',

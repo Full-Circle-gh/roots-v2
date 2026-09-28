@@ -25943,6 +25943,32 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // Which of these rows show a cost that is missing ingredients, because the
   // recipe behind it carries a unit its material is not stocked in.
   markRecipeUnitMismatch(tdb(), rows);
+  // A product's own questions ("Heat up?", "Hot or iced?") — only when asked,
+  // by the two hand-keyed New order forms (desktop 04-orders.js, phone m.html).
+  // The order route refuses a line whose required question is unanswered, and
+  // those forms can only ask what they are told exists. Same read helper and
+  // same shape the counter till's catalogue carries (routes/retail-shops.js),
+  // so the three surfaces ask the same questions. With a store_id, a
+  // stock-backed extra that store has run out of is marked `out` — the same
+  // shelf the create route re-reads at submit (manualOrderAddonSoldOut);
+  // without one, nothing is sold out, which is right for a read that is not
+  // location-scoped. `options` is absent on a product with no questions.
+  if (req.query.with_options === '1' && rows.length) {
+    const optStore = parseInt(req.query.store_id, 10) || null;
+    const byProduct = productOptions.questionsForProducts(
+      tdb(), rows.map(r => r.id),
+      optStore ? { isChoiceSoldOut: manualOrderAddonSoldOut(optStore) } : {}
+    );
+    for (const r of rows) {
+      const qs = byProduct.get(r.id);
+      if (qs && qs.length) {
+        r.options = qs;
+        // §120's rule 1A: a required question with every answer sold out
+        // cannot be satisfied, so the product cannot be ordered here now.
+        r.options_unanswerable = productOptions.requiredQuestionIsUnanswerable(qs);
+      }
+    }
+  }
   // Trailing-30-day units, batched in one extra query keyed off the rows just
   // fetched — only when asked (the command search palette's typeahead), never
   // on the full 500-row grid load. One query regardless of row count, not a

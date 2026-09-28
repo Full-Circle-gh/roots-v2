@@ -3911,11 +3911,17 @@ function vaRender() {
     const rowName = v.self
       ? `<span class="va-rowname va-rowname-self" title="${escapeAttr(v.name)}">${nameLines}</span>`
       : `<button type="button" class="va-rowname" title="${escapeAttr(v.name + '\n' + cuT('Edit this variant', '编辑此规格'))}" onclick="paOpenEdit(${v.id})">${nameLines}</button>`;
-    // Variant option LABEL is split EN/CN (never glued) — one input per language,
+    // Variant option LABEL is split EN/CN (never glued) — one field per language,
     // stacked, so "Big 200g" and "大" are stored & shown separately.
+    //
+    // A one-line TEXTAREA, not an input, so the whole label is always readable:
+    // the column is narrow and an input can only cut "Set of 5 pita pockets" off
+    // at "Set of !". The box wraps and grows taller instead (vaGrow). It is still
+    // a single-line value — Enter is swallowed and pasted line breaks become
+    // spaces (vaLabelInput), so nothing that reaches the shop has a newline.
     const label = `<div class="va-name">` +
-      `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('English · e.g. Big 200g', '英文 · 如 Big 200g')}" oninput="vaLabel(${v.id}, 'en', this.value)">` +
-      `<input class="va-label va-label-cn" type="text" value="${escapeAttr(v.label_cn || '')}" placeholder="${cuT('中文 · 如 大 200克', '中文 · 如 大 200克')}" oninput="vaLabel(${v.id}, 'cn', this.value)">` +
+      `<textarea class="va-label" rows="1" placeholder="${cuT('English · e.g. Big 200g', '英文 · 如 Big 200g')}" onkeydown="vaLabelKey(event)" oninput="vaLabelInput(this, ${v.id}, 'en')">${escapeHtml(v.label || '')}</textarea>` +
+      `<textarea class="va-label va-label-cn" rows="1" placeholder="${cuT('中文 · 如 大 200克', '中文 · 如 大 200克')}" onkeydown="vaLabelKey(event)" oninput="vaLabelInput(this, ${v.id}, 'cn')">${escapeHtml(v.label_cn || '')}</textarea>` +
       `</div>`;
     // STOCK is read-only on every row — it's a per-store total, edited in the
     // Stock-by-location grid (right). A flat field here would clash with the
@@ -3970,9 +3976,41 @@ function vaRender() {
     `<div class="va-actions">` +
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add variant', '+ 新增规格')}</button>` +
     `</div>`;
+  vaGrowAll();
   pdRenderSummaries();
 }
 function vaLabel(id, lang, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) { if (lang === 'cn') v.label_cn = val; else v.label = val; pdSyncMatrixLabels(); } }
+// Label boxes grow to fit their text so a long label is never cut off. CSS
+// `field-sizing: content` does this on its own in current Chromium; this sizes
+// them everywhere else, and again whenever the column width changes.
+function vaGrow(el) {
+  if (!el || !el.scrollHeight) return;   // hidden (collapsed / off-screen) — nothing to measure
+  el.style.height = 'auto';
+  const cs = getComputedStyle(el);
+  el.style.height = (el.scrollHeight + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0)) + 'px';
+}
+let _vaGrowTimer = null, _vaGrowOnResize = false;
+function vaGrowAll() {
+  document.querySelectorAll('#pd-variants textarea.va-label').forEach(vaGrow);
+  // Re-fit when the window (so the column) changes width. Hooked on first
+  // render rather than at load, so loading this file stays side-effect free.
+  if (!_vaGrowOnResize) {
+    _vaGrowOnResize = true;
+    window.addEventListener('resize', () => { clearTimeout(_vaGrowTimer); _vaGrowTimer = setTimeout(vaGrowAll, 100); });
+  }
+}
+// A label is one line of text: Enter does nothing, and a pasted line break
+// becomes a space.
+function vaLabelKey(e) { if (e.key === 'Enter') e.preventDefault(); }
+function vaLabelInput(el, id, lang) {
+  if (/[\r\n]/.test(el.value)) {
+    const at = el.selectionStart;
+    el.value = el.value.replace(/\r\n|[\r\n]/g, ' ');
+    try { el.setSelectionRange(at, at); } catch { /* caret restore is cosmetic; the text is already fixed */ }
+  }
+  vaGrow(el);
+  vaLabel(id, lang, el.value);
+}
 // Variant-axis noun — mutates the model only (no re-render, keeps input focus);
 // persisted to every member by vaPersist on the main Save.
 function vaNoun(lang, val) { if (lang === 'cn') VA_NOUN_CN = val; else VA_NOUN_EN = val; }

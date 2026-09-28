@@ -958,6 +958,9 @@ const state = {
   storeF:'all', stores:null, orderQ:'',
   reply:null, thread:null,
   poList:null, posErr:null, posTried:false, poSeg:'open', poId:null,
+  /* §286 — Suppliers we owe: the list, and the one account open in its sheet. */
+  supOwed:null, supOwedErr:null, supOwedTried:false, supOwedId:null,
+  supAcct:null, supAcctErr:null, supAcctBusy:false, supAcctMounted:false,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
@@ -5419,6 +5422,9 @@ const MORE_GROUPS=[
     ['delivery','truck','Delivery settings','配送设置']]},
   {h:['Stock coming in','入库'],rows:[
     ['purchasing','shopping-cart','Purchasing','采购'],
+    /* §286 — THE FEW SUPPLIERS WHO DELIVER NOW AND ARE PAID LATER, and what we
+       owe each. Beside Purchasing because the debt is counted from its orders. */
+    ['supowed','wallet','Suppliers we owe','供应商欠款'],
     /* THE PAIR §119 SEPARATED, now adjacent for the first time. They shared
        `收货` in both labels, both screen titles and three of the transfer
        screen's own buttons; side by side under one heading, the two names are
@@ -7637,7 +7643,10 @@ function onwErrText(code,msg,pid){
    still being evaluated, where `state` does not exist yet. */
 function onwBlank(stores){
   const st=stores||[];
-  return {lines:[],cust:null,name:'',phone:'',saveCust:false,
+  /* A line is {id,en,cn,price,qty} plus, for a product with questions,
+     {choices,opts,delta}: price is the BASE and the line reads base + delta
+     (onwUnit). `opt` is the open question panel — onwOpenOpts. */
+  return {lines:[],cust:null,name:'',phone:'',saveCust:false,opt:null,
     q:'',picks:null,pickErr:null,pickSeq:0,pickTimer:null,
     custQ:'',custPicks:null,custErr:null,custSeq:0,custTimer:null,
     /* One store, no question — §1.9, a picker that can only pick one thing is
@@ -7672,7 +7681,80 @@ function onwAddress(){
   return {province:o.province||'',city:o.city||'',district:o.district||'',
           address:o.street.trim(),detail:'',postal_code:''};
 }
-function onwSubtotal(){ return state.onw.lines.reduce((s,l)=>s+(Number(l.qty)||0)*(Number(l.price)||0),0); }
+function onwSubtotal(){ return state.onw.lines.reduce((s,l)=>s+(Number(l.qty)||0)*onwUnit(l),0); }
+/* A product's own questions ("Heat up?") — the desktop's panel (04-orders.js
+   ordNewOpenOpts), which is the counter till's sheet: same defaults, same
+   single/multi rules, same floor and ceiling, same live words. */
+function onwUnit(l){
+  const u=Math.round(((Number(l.price)||0)+(Number(l.delta)||0))*100)/100;
+  return u>=0?u:0;
+}
+/* What a line posts. unit_price is the BASE: the server adds the answers'
+   deltas itself, so posting base + delta would charge each extra twice. */
+function onwItem(l){
+  const it={product_id:l.id,qty:Number(l.qty),unit_price:Number(l.price)};
+  if(Array.isArray(l.choices)&&l.choices.length) it.choices=l.choices.slice();
+  return it;
+}
+function onwLineKey(id,choices){ return String(id)+'|'+(choices||[]).slice().sort((a,b)=>a-b).join(','); }
+function onwOptsMissing(){
+  const x=state.onw.opt; if(!x) return null;
+  for(const o of (x.p.options||[])){
+    const n=(x.sel[o.id]||[]).length;
+    if(o.min&&n<o.min) return o;
+    if(o.req&&!n) return o;
+  }
+  return null;
+}
+function onwOptsLimit(o){
+  const n=T('',' 项');
+  if(o.min&&o.max&&o.min===o.max) return T('Choose ','选 ')+o.min+n;
+  if(o.min) return T('At least ','至少 ')+o.min+n;
+  if(o.max) return T('Up to ','最多 ')+o.max+n;
+  return '';
+}
+function onwChosenOpts(){
+  const x=state.onw.opt, out=[]; if(!x) return out;
+  (x.p.options||[]).forEach(o=>(x.sel[o.id]||[]).forEach(cid=>{
+    const c=(o.choices||[]).find(y=>y.id===cid); if(!c) return;
+    out.push({option_id:o.id,choice_id:c.id,label:c.en,label_cn:c.cn,
+              question_en:o.q_en,question_cn:o.q_cn,delta:Number(c.d)||0});
+  }));
+  return out;
+}
+/* "Heat up?: Yes" under the line's name — the till's own line (optsHtml). */
+function onwOptsText(opts){
+  return (opts||[]).map(o=>{
+    const a=T(o.label||'',o.label_cn||o.label||''), q=T(o.question_en||'',o.question_cn||o.question_en||'');
+    return a?(q?q+': '+a:a):'';
+  }).filter(Boolean);
+}
+function onwOptHtml(){
+  const x=state.onw.opt; if(!x) return '';
+  const p=x.p, miss=onwOptsMissing();
+  const unit=onwUnit({price:p.sell_price,delta:onwChosenOpts().reduce((s,o)=>s+o.delta,0)});
+  let h=`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <span style="display:flex;flex-direction:column;gap:2px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Choose your options','选择选项')}</span>
+      <span style="font-size:15.5px;font-weight:500">${escAttr(T(p.name_en||p.name_cn||'',p.name_cn||p.name_en||''))}</span></span>`;
+  (p.options||[]).forEach(o=>{
+    const lim=onwOptsLimit(o);
+    h+=`<span style="font-size:14px;font-weight:500;margin-top:4px">${escAttr(T(o.q_en,o.q_cn))}${
+      o.req?` <span style="font-weight:400;font-size:12.5px;color:var(--text-secondary)">${T('Required','必选')}</span>`:''}${
+      lim?` <span style="font-weight:400;font-size:12.5px;color:var(--text-secondary)">${escAttr(lim)}</span>`:''}</span>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${(o.choices||[]).map(c=>{
+        const on=(x.sel[o.id]||[]).includes(c.id), d=Number(c.d)||0;
+        const tail=c.out?T('Out of stock','缺货'):(d?(d>0?'+':'\u2212')+money(CUR,Math.abs(d)):'');
+        return `<button class="chip ${on?'on':''}" ${c.out?'disabled style="opacity:.5"':`onclick="APP.cmd('onwOptTick',${Number(o.id)},${Number(c.id)})"`}><span>${escAttr(T(c.en,c.cn))}</span>${tail?`<span class="num" style="color:var(--text-secondary)">${tail}</span>`:''}</button>`;
+      }).join('')}</div>`;
+  });
+  if(x.err&&miss) h+=`<span style="font-size:14px;color:var(--brick-ink)">${escAttr(T('Please choose: ','请选择 ')+T(miss.q_en,miss.q_cn)
+      +(onwOptsLimit(miss)?T(' (','（')+onwOptsLimit(miss)+T(')','）'):''))}</span>`;
+  h+=`<div style="display:flex;gap:10px">
+      <button class="btn2" style="flex:1" onclick="APP.cmd('onwOptClose')">${T('Cancel','取消')}</button>
+      <button class="btn2" style="flex:1" onclick="APP.cmd('onwOptAdd')">${T('Add','添加')} <span class="num">${money(CUR,unit)}</span></button></div></div>`;
+  return h;
+}
 function onwTotal(){ const o=state.onw;
   return onwSubtotal()+(o.ful==='delivery'?(Number(o.ship)||0):0)+(Number(o.pack)||0)
     + (o.tax?(Number(o.tax.added)||0):0); }
@@ -7717,7 +7799,7 @@ function onwBody(){
     customer_id:o.cust?o.cust.id:null,
     recipient_name:o.name.trim(),
     recipient_phone:o.phone.trim(),
-    items:o.lines.map(l=>({product_id:l.id,qty:Number(l.qty),unit_price:Number(l.price)})),
+    items:o.lines.map(onwItem),
     shipping_fee:o.ful==='delivery'?(Number(o.ship)||0):0,
     packing_fee:Number(o.pack)||0,
     status:o.paid?'paid':'pending_payment',
@@ -7779,7 +7861,10 @@ function loadOnwProducts(){
   const o=state.onw, q=o.q.trim();
   if(!q){ o.picks=null; onwRepaint('mOnwProdBox',onwProdPicksHtml); return; }
   const seq=++o.pickSeq;
-  api('/products?limit=10&q='+encodeURIComponent(q)).then(rows=>{
+  /* with_options: each product's own questions, so a line that needs an
+     answer is asked for it here rather than refused at Create. The store
+     decides which stock-backed extras are sold out. */
+  api('/products?limit=10&with_options=1&q='+encodeURIComponent(q)+(o.storeId?'&store_id='+encodeURIComponent(o.storeId):'')).then(rows=>{
     if(seq!==state.onw.pickSeq) return;            // a later keystroke already won
     state.onw.picks=(Array.isArray(rows)?rows:[]).slice(0,10); state.onw.pickErr=null;
     onwRepaint('mOnwProdBox',onwProdPicksHtml);
@@ -7810,7 +7895,7 @@ function loadOnwCustomers(){
    like an answer. */
 function loadOnwFees(){
   const o=state.onw;
-  const items=o.lines.filter(l=>Number(l.qty)>0).map(l=>({product_id:l.id,qty:Number(l.qty),unit_price:Number(l.price)}));
+  const items=o.lines.filter(l=>Number(l.qty)>0).map(onwItem);
   if(!items.length) return;
   const body={fulfillment_type:o.ful,items};
   if(o.ful==='delivery'){
@@ -7962,10 +8047,12 @@ function onwLinesHtml(){
   return `<div style="display:flex;flex-direction:column;gap:10px">${o.lines.map((l,i)=>`
     <div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:flex-start;gap:10px">
-        <span style="flex:1;min-width:0;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(l.en||l.cn||'',l.cn||l.en||''))}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(l.en||l.cn||'',l.cn||l.en||''))}</span>
+          ${onwOptsText(l.opts).map(t=>`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(t)}</span>`).join('')}</span>
         <button class="iconbtn" style="width:32px;height:32px;margin:-4px -6px 0 0" onclick="APP.cmd('onwDropLine',${i})" aria-label="${T('Remove line','移除此行')}">${ic('x',18,2)}</button></div>
       <div style="display:flex;align-items:center;gap:12px">
-        <span class="num" style="flex:1;min-width:0;font-size:12.5px;color:var(--text-secondary)">${money(CUR,l.price)} · ${money(CUR,(Number(l.qty)||0)*(Number(l.price)||0))}</span>
+        <span class="num" style="flex:1;min-width:0;font-size:12.5px;color:var(--text-secondary)">${money(CUR,onwUnit(l))} · ${money(CUR,(Number(l.qty)||0)*onwUnit(l))}</span>
         <button class="stepbtn" onclick="APP.cmd('onwQty',${i},-1)" ${Number(l.qty)<=1?'disabled':''} aria-label="${T('Less','减少')}">${ic('minus',20)}</button>
         <span class="num" style="min-width:30px;text-align:center;font-size:18px;font-weight:500">${Number(l.qty)||0}</span>
         <button class="stepbtn" onclick="APP.cmd('onwQty',${i},1)" aria-label="${T('More','增加')}">${ic('plus',20)}</button></div>
@@ -8017,6 +8104,7 @@ function screenNewOrder(){
       searchBox(`<input id="mOnwProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.q)}"
          placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('onwProdQ',this.value)">`,'mOnwProdClr',!!o.q)+`
        <div id="mOnwProdBox">${onwProdPicksHtml()}</div>`)
+    + onwOptHtml()
     + onwLinesHtml();
   /* HOW. Two answers, not three: a walk-in rings up at the till, which is a
      purpose-built screen and three server rules this form would have to grow to
@@ -8142,14 +8230,63 @@ reg('onwPickCust', id=>{
 });
 reg('onwUnpickCust', ()=>{ const o=state.onw; o.cust=null; o.custPicks=null; o.custQ=''; render(); });
 reg('onwSaveCust', ()=>{ const o=state.onw; o.saveCust=!o.saveCust; render(); });
+/* Same product, same answers → one line, qty + 1; different answers are a
+   different line, exactly as on the till. */
+function onwAddAnswered(p,choices,opts){
+  const o=state.onw, key=onwLineKey(p.id,choices);
+  const have=o.lines.find(l=>onwLineKey(l.id,l.choices)===key);
+  if(have) have.qty=Number(have.qty)+1;
+  else o.lines.push({id:p.id,en:p.name_en||p.name_cn||'',cn:p.name_cn||p.name_en||'',
+                     price:Number(p.sell_price)||0,qty:1,choices:choices.slice(),opts,
+                     delta:Math.round(opts.reduce((s,x)=>s+(Number(x.delta)||0),0)*100)/100});
+}
 reg('onwAddLine', id=>{
   const o=state.onw, p=(o.picks||[]).find(x=>String(x.id)===String(id));
   if(!p) return;
-  const have=o.lines.find(l=>String(l.id)===String(p.id));
-  if(have) have.qty=Number(have.qty)+1;
-  else o.lines.push({id:p.id,en:p.name_en||p.name_cn||'',cn:p.name_cn||p.name_en||'',
-                     price:Number(p.sell_price)||0,qty:1});
-  o.q=''; o.picks=null; render(); onwFeesSoon();
+  o.q=''; o.picks=null;
+  /* A required question with every answer sold out at this store: the product
+     cannot be made, so it is not added — the till greys the same tile. */
+  if(p.options_unanswerable){
+    o.err={where:'what',msg:E((p.name_en||p.name_cn||'')+' — Out of stock',(p.name_cn||p.name_en||'')+' — 缺货')};
+    render(); return;
+  }
+  if(Array.isArray(p.options)&&p.options.length){
+    const sel={};
+    p.options.forEach(q=>{
+      let pre=[];
+      (q.choices||[]).forEach(c=>{ if(!c.def||c.out) return; if(!q.multi&&pre.length) return; pre.push(c.id); });
+      if(q.max&&pre.length>q.max) pre=pre.slice(0,q.max);
+      sel[q.id]=pre;
+    });
+    o.opt={p,sel,err:false}; render(); return;
+  }
+  onwAddAnswered(p,[],[]);
+  render(); onwFeesSoon();
+});
+reg('onwOptTick', (oid,cid)=>{
+  const x=state.onw.opt; if(!x) return;
+  oid=Number(oid); cid=Number(cid);
+  const q=(x.p.options||[]).find(y=>y.id===oid), c=q&&(q.choices||[]).find(y=>y.id===cid);
+  if(!c||c.out) return;
+  const cur=x.sel[oid]||[];
+  if(!q.multi) x.sel[oid]=(cur.length===1&&cur[0]===cid&&!q.req)?[]:[cid];
+  else {
+    const at=cur.indexOf(cid);
+    if(at>=0) cur.splice(at,1);
+    else if(q.max&&cur.length>=q.max) return;
+    else cur.push(cid);
+    x.sel[oid]=cur;
+  }
+  x.err=false; render();
+});
+reg('onwOptClose', ()=>{ state.onw.opt=null; render(); });
+reg('onwOptAdd', ()=>{
+  const x=state.onw.opt; if(!x) return;
+  if(onwOptsMissing()){ x.err=true; render(); return; }
+  const opts=onwChosenOpts();
+  state.onw.opt=null;
+  onwAddAnswered(x.p,opts.map(y=>y.choice_id),opts);
+  render(); onwFeesSoon();
 });
 reg('onwQty', (i,d)=>{ const l=state.onw.lines[Number(i)]; if(!l) return;
   l.qty=Math.max(1,(Number(l.qty)||0)+Number(d)); render(); onwFeesSoon(); });
@@ -8410,6 +8547,197 @@ function poFact(label,value){
     <span style="font-size:13px;color:var(--text-secondary);flex:none">${label}</span>
     <span style="font-size:14px;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis">${value}</span></div>`;
 }
+
+/* ==========================================================================
+   §286 — Suppliers we owe
+   --------------------------------------------------------------------------
+   The few suppliers who deliver now and are paid later. WHAT WE OWE IS THE
+   SERVER'S FIGURE (supplierAccount() in routes/retail-purchasing.js): starting
+   balance + delivered orders − payments ± corrections. This screen adds nothing
+   up for itself, so it cannot disagree with the desktop.
+
+   A PAYMENT IS NOT AN EXPENSE. The order already put the purchase in the books;
+   a payment only lowers what we owe, and the sheet says so under its button.
+   A supplier is switched to credit on the desktop's supplier page — the phone
+   reads and records, it does not configure.
+   ========================================================================== */
+/* Two decimals, always: a debt settled to the fen must read to the fen, which
+   money0's whole-yuan rounding would not. */
+const supMoney=n=>(CUR||'¥')+Math.abs(Number(n||0)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+/* "We owe" above zero, "We paid ahead" below it, "Nothing owed" at zero — never
+   a bare minus sign on the headline. The desktop's supOwedWords(), same words. */
+function supOwedWords(n){
+  n=Number(n||0);
+  if(n>0.005) return {lab:T('We owe','欠款'),muted:false};
+  if(n<-0.005) return {lab:T('We paid ahead','已多付'),muted:true};
+  return {lab:T('Nothing owed','无欠款'),muted:true};
+}
+const SUP_ACCT_KIND={opening:['Starting balance','期初欠款'],payment:['Payment','付款'],adjustment:['Correction','调整']};
+function loadSupOwed(force){
+  if(state.supOwedTried&&!force) return;
+  state.supOwedTried=true;
+  api('/supplier-accounts').then(d=>{ state.supOwed=d||{suppliers:[],total_owed:0}; state.supOwedErr=null; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      state.supOwedErr=E('Could not load this.','无法加载。'); render(); });
+}
+function statusSupOwed(){
+  const d=state.supOwed; if(!d||!(d.suppliers||[]).length) return '';
+  return supMoney(d.total_owed);
+}
+function screenSupOwed(){
+  loadSupOwed();
+  if(state.supOwedErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.supOwedErr}</span></div></div>`;
+  const d=state.supOwed;
+  if(!d) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=d.suppliers||[];
+  if(!rows.length) return nothingYet(T('No suppliers on credit yet','暂无先货后款供应商'),
+    T('Turn it on in the supplier’s page on the computer.','请在电脑端的供应商页面开启。'));
+  const row=r=>{ const w=supOwedWords(r.owed);
+    const name=LANG==='en'?r.name:(r.name_cn||r.name);
+    return `<button class="row" style="min-height:64px;padding:12px 16px" onclick="APP.cmd('openSupOwed',${r.supplier_id})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span>
+        ${r.last_payment?`<span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Last payment','最近付款')} ${escAttr(fmtDateOnly(r.last_payment.date))} · ${supMoney(r.last_payment.amount)}</span>`:''}</span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
+        <span style="font-size:12px;color:var(--text-secondary)">${w.lab}</span>
+        <span class="num" style="font-size:16px;font-weight:500;${w.muted?'color:var(--text-secondary)':''}">${supMoney(r.owed)}</span></span>
+    </button>`; };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div class="card" style="padding:16px;display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span>
+      <span class="num" style="font-size:24px;font-weight:600">${supMoney(d.total_owed)}</span></div>
+    <div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}${row(r)}`).join('')}</div></div>`;
+}
+function sheetSupOwed(){
+  const a=state.supAcct;
+  const noAnim=state.supAcctMounted?'animation:none;':'';
+  const head=title=>`<div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeSupOwed')">${ic('x',22,2)}</button>
+      <span style="flex:1;font-size:17px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</span></div></div>`;
+  if(!a) return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closeSupOwed')"></div>
+    <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">${head(T('Loading…','加载中…'))}
+      <div style="flex:1;min-height:0;padding:40px 16px;text-align:center;font-size:15px;color:var(--text-secondary);background:var(--bg)">${
+        state.supAcctErr||T('Loading…','加载中…')}</div></div>`;
+  const edit=mCan('purchasing:edit');
+  const w=supOwedWords(a.owed);
+  const name=LANG==='en'?a.name:(a.name_cn||a.name);
+  const live=(a.entries||[]).filter(e=>!e.voided_at);
+  const signed=(e)=>e.kind==='payment'?'− '+supMoney(e.amount)
+    :e.kind==='adjustment'?(Number(e.amount)<0?'− ':'+ ')+supMoney(e.amount):supMoney(e.amount);
+  const entryRow=e=>`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span style="font-size:14.5px">${T(...(SUP_ACCT_KIND[e.kind]||[e.kind,e.kind]))}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(fmtDateOnly(e.date))}${
+          [e.method,e.note].filter(Boolean).length?' · '+escAttr([e.method,e.note].filter(Boolean).join(' · ')):''}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none">
+        <span class="num" style="font-size:14.5px;font-weight:500">${signed(e)}</span>
+        ${edit?`<button style="border:none;background:none;padding:4px 0;font-family:inherit;font-size:13px;color:var(--brick-ink);cursor:pointer" onclick="APP.cmd('supAcctVoid',${e.id})">${T('Void','作废')}</button>`:''}</span></div>`;
+  const orders=a.orders||[];
+  const SHOW=10;
+  const orderRow=o=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span class="num" style="font-size:14.5px">${escAttr(o.po_number)}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(fmtDateOnly(o.date))}${o.delivered?'':' · '+T('On its way','在途')}</span></span>
+      <span class="num" style="font-size:14.5px;${o.delivered?'':'color:var(--text-secondary)'}">${supMoney(o.amount)}</span></div>`;
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closeSupOwed')"></div>
+   <div class="sheet" style="top:76px;z-index:46;overflow:hidden;${noAnim}">
+     ${head(escAttr(name))}
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
+       ${state.supAcctErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.supAcctErr}</span></div>`:''}
+       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+         <div style="display:flex;flex-direction:column;gap:2px">
+           <span style="font-size:13px;color:var(--text-secondary)">${w.lab}</span>
+           <span class="num" style="font-size:30px;font-weight:600;${w.muted?'color:var(--text-secondary)':''}">${supMoney(a.owed)}</span></div>
+         ${a.opening?poFact(T('Starting balance','期初欠款'),`<span class="num">${supMoney(a.opening.amount)} · ${escAttr(fmtDateOnly(a.opening.date))}</span>`):''}
+         ${poFact(T('Delivered orders','已收货采购单'),`<span class="num">+ ${supMoney(a.goods)}</span>`)}
+         ${a.paid?poFact(T('Paid','已付'),`<span class="num">− ${supMoney(a.paid)}</span>`):''}
+         ${a.adjusted?poFact(T('Correction','调整'),`<span class="num">${Number(a.adjusted)<0?'− ':'+ '}${supMoney(a.adjusted)}</span>`):''}
+         ${a.on_the_way?poFact(T('On its way','在途'),`<span class="num" style="color:var(--text-secondary)">${supMoney(a.on_the_way)}</span>`):''}
+       </div>
+       ${edit?`<div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1" onclick="APP.cmd('supAcctNew','adjustment')">${T('Correction','调整')}</button>
+         <button class="btn2" style="flex:1" onclick="APP.cmd('supAcctNew','opening')">${T('Starting balance','期初欠款')}</button></div>`:''}
+       ${live.length?`<div><div class="eyebrow" style="padding:0 2px 8px">${T('Payment','付款')} · ${T('Correction','调整')}</div>
+         <div class="list">${live.map((e,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${entryRow(e)}`).join('')}</div></div>`:''}
+       ${orders.length?`<div><div class="eyebrow" style="padding:0 2px 8px">${T('Orders','采购单')}</div>
+         <div class="list">${orders.slice(0,SHOW).map((o,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${orderRow(o)}`).join('')}</div>
+         ${orders.length>SHOW?`<div class="num" style="padding:8px 2px 0;font-size:12.5px;color:var(--text-secondary)">+ ${orders.length-SHOW}</div>`:''}</div>`:''}
+     </div>
+     ${edit?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:8px">
+       <button class="cta" ${state.supAcctBusy?'disabled':''} onclick="APP.cmd('supAcctNew','payment')">${state.supAcctBusy?T('Saving…','保存中…'):T('Record payment','记录付款')}</button>
+       <span style="font-size:12px;color:var(--text-secondary);text-align:center">${T(
+         'This lowers what we owe. It is not a new expense — the order is already in the books.','仅减少欠款，不是新的支出——采购单已记账。')}</span></div>`:''}
+   </div>`;
+}
+function supOwedFetch(id){
+  api('/suppliers/'+Number(id)+'/account').then(d=>{ if(state.supOwedId!==Number(id)) return; state.supAcct=d; state.supAcctErr=null; render(); })
+    .catch(e=>{ if(state.supOwedId!==Number(id)||String(e.message)==='auth') return;
+      state.supAcctErr=E('Could not load this.','无法加载。'); render(); });
+}
+reg('openSupOwed', id=>{ state.supOwedId=Number(id); state.supAcct=null; state.supAcctErr=null; state.supAcctBusy=false;
+  state.supAcctMounted=false; render(); state.supAcctMounted=true; supOwedFetch(id); });
+/* Closing re-reads the list, so a payment made in the sheet is on the row the
+   sheet was opened from. */
+reg('closeSupOwed', ()=>{ state.supOwedId=null; state.supAcct=null; state.supAcctErr=null; render(); loadSupOwed(true); });
+function supOwedWrite(path, body, done){
+  const id=state.supOwedId; if(id==null||state.supAcctBusy) return;
+  state.supAcctBusy=true; state.supAcctErr=null; render();
+  apiWrite(path, body).then(j=>{
+    state.supAcctBusy=false;
+    if(state.supOwedId===id&&j&&j.data) state.supAcct=j.data;
+    render(); if(done) showToast(done);
+  }).catch(e=>{
+    state.supAcctBusy=false;
+    if(String(e.message)==='auth') return;
+    state.supAcctErr=e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
+      :e.code==='invalid_amount'?E('Enter an amount first.','请先填写金额。')
+      :E('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
+/* One ask sheet for all three: the fields differ only in that a payment says
+   how it was paid. The amount is read as the string typed — "3o" is refused,
+   not quietly read as 3 — the Expense screen's rule. */
+reg('supAcctNew', kind=>{
+  const a=state.supAcct; if(!a||!mCan('purchasing:edit')) return;
+  const title=kind==='payment'?T('Record payment','记录付款'):T(...SUP_ACCT_KIND[kind]);
+  const body=kind==='payment'
+    ? T('This lowers what we owe. It is not a new expense — the order is already in the books.','仅减少欠款，不是新的支出——采购单已记账。')
+    : kind==='opening'
+      ? T('What we owed them on this date, from the old sheet. Orders dated on or before it are taken as already in it.','此日期的欠款（来自原表格）。此日期（含）之前的采购单视为已计入。')
+      : T('Type a minus for a discount.','折扣请输入负数。');
+  const fields=[
+    {id:'amount',label:T('Amount','金额'),numeric:true,placeholder:'0.00',
+      value:kind==='opening'&&a.opening?String(a.opening.amount):''},
+    {id:'date',label:T('Date','日期'),type:'date',value:shopToday()},
+  ];
+  if(kind==='payment') fields.push({id:'method',label:T('How','付款渠道'),placeholder:T('Optional','可选'),value:a.payment_method||''});
+  fields.push({id:'note',label:T('Note','备注'),placeholder:T('Optional','可选'),value:''});
+  state.ask={title, body, fields, confirmLabel:T('Save','保存'),
+    validate:v=>{
+      const s=String(v.amount||'').trim(), n=Number(s);
+      if(kind==='payment') return (s&&Number.isFinite(n)&&n>0)?'':T('Enter an amount above zero.','请输入大于零的金额。');
+      return (s&&Number.isFinite(n)&&(kind==='opening'||n!==0))?'':T('Enter an amount first.','请先填写金额。');
+    },
+    run:v=>supOwedWrite('/suppliers/'+state.supOwedId+'/account/entries',
+      {kind, amount:Number(String(v.amount).trim()), date:v.date||shopToday(), method:v.method||'', note:v.note||''},
+      kind==='payment'?T('Payment recorded','已记录付款'):T('Saved','已保存'))};
+  render();
+});
+reg('supAcctVoid', eid=>{
+  if(state.supOwedId==null||!mCan('purchasing:edit')) return;
+  state.ask={title:T('Void this entry?','作废这条记录？'),
+    body:T('It stops counting and stays on record.','作废后不再计入，但会保留记录。'),
+    confirmLabel:T('Void','作废'), danger:true,
+    run:()=>supOwedWrite('/suppliers/'+state.supOwedId+'/account/entries/'+Number(eid)+'/void',{},T('Voided','已作废'))};
+  render();
+});
 
 /* ==========================================================================
    Pushed sub-screens
@@ -9461,6 +9789,7 @@ const SUBS={
   products:{title:['Products','产品'],render:()=>screenProductCatalogue()},
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),render:()=>screenPurchasing()},
+  supowed:{title:['Suppliers we owe','供应商欠款'],status:()=>statusSupOwed(),render:()=>screenSupOwed()},
   activity:{title:['Stock activity','库存流水'],render:()=>screenActivity()},
   /* No `status` — see the block comment on screenWaste. The CTA carries
      waste:record on its own: the SCREEN is waste:view (a ledger reads fine
@@ -21926,6 +22255,10 @@ const ROUTE_CAP={
   // never touch.
   inbox:['reviews:view','feedback:view'], sales:'dashboard:view', trend:'dashboard:view',
   delivery:'delivery:view', invoices:'invoices:view', purchasing:'purchasing:view',
+  /* §286 — a read of the same orders Purchasing shows, so the same key. Its
+     writes (a payment, a correction) are purchasing:edit on the server and the
+     buttons that make them are drawn only for a holder of it. */
+  supowed:'purchasing:view',
   /* RECEIVING IS GATED ON RECEIVE, NOT ON VIEW. It is a screen whose entire
      purpose is the save at the bottom of it, and that save is gated on
      purchasing:receive server-side (lib/cap-routes.js). Showing it to a holder
@@ -22834,6 +23167,7 @@ function render(){
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
+  if(state.supOwedId!=null) html += layer('supowed:'+state.supOwedId, sheetSupOwed());
   if(state.chanSheet) html += layer('chan', sheetChannel());
   if(state.quickSheet) html += layer('quick', sheetQuick());
   /* THE STEP SHEET BELONGS TO ONE SCREEN. `step` survives a Back out of
