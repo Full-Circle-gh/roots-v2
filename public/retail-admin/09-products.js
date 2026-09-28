@@ -3916,12 +3916,12 @@ function vaRender() {
     //
     // A one-line TEXTAREA, not an input, so the whole label is always readable:
     // the column is narrow and an input can only cut "Set of 5 pita pockets" off
-    // at "Set of !". The box wraps and grows taller instead (vaGrow). It is still
+    // at "Set of !". The box wraps and grows taller instead (pdGrow). It is still
     // a single-line value — Enter is swallowed and pasted line breaks become
-    // spaces (vaLabelInput), so nothing that reaches the shop has a newline.
+    // spaces (pdOneLine), so nothing that reaches the shop has a newline.
     const label = `<div class="va-name">` +
-      `<textarea class="va-label" rows="1" placeholder="${cuT('English · e.g. Big 200g', '英文 · 如 Big 200g')}" onkeydown="vaLabelKey(event)" oninput="vaLabelInput(this, ${v.id}, 'en')">${escapeHtml(v.label || '')}</textarea>` +
-      `<textarea class="va-label va-label-cn" rows="1" placeholder="${cuT('中文 · 如 大 200克', '中文 · 如 大 200克')}" onkeydown="vaLabelKey(event)" oninput="vaLabelInput(this, ${v.id}, 'cn')">${escapeHtml(v.label_cn || '')}</textarea>` +
+      `<textarea class="va-label grow1" rows="1" placeholder="${cuT('English · e.g. Big 200g', '英文 · 如 Big 200g')}" onkeydown="pdOneLineKey(event)" oninput="vaLabelInput(this, ${v.id}, 'en')">${escapeHtml(v.label || '')}</textarea>` +
+      `<textarea class="va-label va-label-cn grow1" rows="1" placeholder="${cuT('中文 · 如 大 200克', '中文 · 如 大 200克')}" onkeydown="pdOneLineKey(event)" oninput="vaLabelInput(this, ${v.id}, 'cn')">${escapeHtml(v.label_cn || '')}</textarea>` +
       `</div>`;
     // STOCK is read-only on every row — it's a per-store total, edited in the
     // Stock-by-location grid (right). A flat field here would clash with the
@@ -3976,39 +3976,45 @@ function vaRender() {
     `<div class="va-actions">` +
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add variant', '+ 新增规格')}</button>` +
     `</div>`;
-  vaGrowAll();
+  pdGrowAll();
   pdRenderSummaries();
 }
 function vaLabel(id, lang, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) { if (lang === 'cn') v.label_cn = val; else v.label = val; pdSyncMatrixLabels(); } }
-// Label boxes grow to fit their text so a long label is never cut off. CSS
-// `field-sizing: content` does this on its own in current Chromium; this sizes
-// them everywhere else, and again whenever the column width changes.
-function vaGrow(el) {
+// ONE-LINE TEXT THAT GROWS (class "grow1"). Variant labels, option questions
+// and option choices are short one-line values in narrow columns; an <input>
+// can only cut them off ("Whole-Wh"), so they are rows=1 textareas that wrap
+// and grow taller to fit. CSS `field-sizing: content` does the growing on its
+// own in current Chromium; pdGrow does it everywhere else, and again whenever
+// the column width changes. Every render that paints one calls pdGrowAll.
+function pdGrow(el) {
   if (!el || !el.scrollHeight) return;   // hidden (collapsed / off-screen) — nothing to measure
   el.style.height = 'auto';
   const cs = getComputedStyle(el);
   el.style.height = (el.scrollHeight + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0)) + 'px';
 }
-let _vaGrowTimer = null, _vaGrowOnResize = false;
-function vaGrowAll() {
-  document.querySelectorAll('#pd-variants textarea.va-label').forEach(vaGrow);
+let _pdGrowTimer = null, _pdGrowOnResize = false;
+function pdGrowAll() {
+  document.querySelectorAll('textarea.grow1').forEach(pdGrow);
   // Re-fit when the window (so the column) changes width. Hooked on first
   // render rather than at load, so loading this file stays side-effect free.
-  if (!_vaGrowOnResize) {
-    _vaGrowOnResize = true;
-    window.addEventListener('resize', () => { clearTimeout(_vaGrowTimer); _vaGrowTimer = setTimeout(vaGrowAll, 100); });
+  if (!_pdGrowOnResize) {
+    _pdGrowOnResize = true;
+    window.addEventListener('resize', () => { clearTimeout(_pdGrowTimer); _pdGrowTimer = setTimeout(pdGrowAll, 100); });
   }
 }
-// A label is one line of text: Enter does nothing, and a pasted line break
-// becomes a space.
-function vaLabelKey(e) { if (e.key === 'Enter') e.preventDefault(); }
-function vaLabelInput(el, id, lang) {
+// The value stays one line: Enter does nothing, and a pasted line break
+// becomes a space. Call pdOneLine first in an oninput, then read el.value.
+function pdOneLineKey(e) { if (e.key === 'Enter') e.preventDefault(); }
+function pdOneLine(el) {
   if (/[\r\n]/.test(el.value)) {
     const at = el.selectionStart;
     el.value = el.value.replace(/\r\n|[\r\n]/g, ' ');
     try { el.setSelectionRange(at, at); } catch { /* caret restore is cosmetic; the text is already fixed */ }
   }
-  vaGrow(el);
+  pdGrow(el);
+}
+function vaLabelInput(el, id, lang) {
+  pdOneLine(el);
   vaLabel(id, lang, el.value);
 }
 // Variant-axis noun — mutates the model only (no re-render, keeps input focus);
@@ -4657,8 +4663,8 @@ function optRender() {
     return `<div class="opt-block" data-oi="${oi}" ondragover="optDragOver(event,'block',${oi})" ondrop="optDrop(event,'block',${oi})" ondragleave="optDragLeave(event)">` +
       `<div class="opt-qrow">` +
         `<span class="opt-drag opt-drag-block" draggable="true" title="${cuT('Drag to reorder', '拖动排序')}" ondragstart="optDragStart(event,'block',${oi})" ondragend="optDragEnd()">${OPT_GRIP}</span>` +
-        `<input type="text" class="opt-q" value="${escapeAttr(o.question_en)}" placeholder="${cuT('Question EN (e.g. Choose your dressing)', '问题(英文,如:选择酱料)')}" oninput="optQ(${oi}, 'question_en', this.value)">` +
-        `<input type="text" class="opt-q" value="${escapeAttr(o.question_cn)}" placeholder="${cuT('Question 中文', '问题(中文)')}" oninput="optQ(${oi}, 'question_cn', this.value)">` +
+        `<textarea class="opt-q grow1" rows="1" placeholder="${cuT('Question EN (e.g. Choose your dressing)', '问题(英文,如:选择酱料)')}" onkeydown="pdOneLineKey(event)" oninput="pdOneLine(this); optQ(${oi}, 'question_en', this.value)">${escapeHtml(o.question_en || '')}</textarea>` +
+        `<textarea class="opt-q grow1" rows="1" placeholder="${cuT('Question 中文', '问题(中文)')}" onkeydown="pdOneLineKey(event)" oninput="pdOneLine(this); optQ(${oi}, 'question_cn', this.value)">${escapeHtml(o.question_cn || '')}</textarea>` +
         typeSel(oi, o.type) +
         limBoxes(oi, o) +
         `<label class="opt-req" title="${cuT('Customer must choose before adding to cart', '加入购物车前必须选择')}"><input type="checkbox"${o.is_required ? ' checked' : ''} onchange="optReq(${oi}, this.checked)"> ${cuT('Required', '必选')}</label>` +
@@ -4676,6 +4682,7 @@ function optRender() {
       `<button type="button" class="btn btn-sm" onclick="optAddOption()">${cuT('+ Add a pick (free)', '+ 添加选择(免费)')}</button>` +
       `<button type="button" class="btn btn-sm" onclick="optAddExtras()">${cuT('+ Add paid extras', '+ 添加付费加项')}</button>` +
     `</div>`;
+  pdGrowAll();
   if (OPT_PICK) { const s = document.getElementById('opt-search'); if (s) s.focus(); optPickerList(); }
   pdRenderSummaries();
 }
@@ -4702,7 +4709,9 @@ function _optChoiceRow(o, oi, c, ci) {
     link = `<span class="opt-link on" data-no-i18n title="${cuT('Draws from this product’s stock', '占用该商品库存')}">🔗 ${nm}${stk}` +
       `<button type="button" class="opt-unlink" title="${cuT('Unlink', '取消关联')}" onclick="optUnlink(${oi}, ${ci})">✕</button></span>`;
   } else if (paid) {
-    link = `<button type="button" class="btn btn-sm opt-link-btn" title="${cuT('Link a product so this extra uses its stock', '关联商品,使此加项占用其库存')}" onclick="optLinkPick(${oi}, ${ci})">${cuT('+ Stock product', '+ 关联库存商品')}</button>`;
+    // In a slot the same width as a linked chip, so a row with no link lines up
+    // with the linked rows above and below it.
+    link = `<span class="opt-link-slot"><button type="button" class="btn btn-sm opt-link-btn" title="${cuT('Link a product so this extra uses its stock', '关联商品,使此加项占用其库存')}" onclick="optLinkPick(${oi}, ${ci})">${cuT('+ Stock product', '+ 关联库存商品')}</button></span>`;
   }
   const picking = OPT_PICK && OPT_PICK.oi === oi && OPT_PICK.ci === ci;
   const picker = picking ? `<div class="opt-picker">` +
@@ -4711,8 +4720,8 @@ function _optChoiceRow(o, oi, c, ci) {
   return `<div class="opt-choice" data-oi="${oi}" data-ci="${ci}" ondragover="optDragOver(event,'choice',${oi})" ondrop="optDrop(event,'choice',${oi},${ci})" ondragleave="optDragLeave(event)">` +
     `<span class="opt-drag" draggable="true" title="${cuT('Drag to reorder', '拖动排序')}" ondragstart="optDragStart(event,'choice',${oi},${ci})" ondragend="optDragEnd()">${OPT_GRIP}</span>` +
     def +
-    `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
-    `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
+    `<textarea class="opt-clab grow1" rows="1" placeholder="${cuT('Choice EN', '选项(英文)')}" onkeydown="pdOneLineKey(event)" oninput="pdOneLine(this); optC(${oi}, ${ci}, 'label_en', this.value)">${escapeHtml(c.label_en || '')}</textarea>` +
+    `<textarea class="opt-clab grow1" rows="1" placeholder="${cuT('Choice 中文', '选项(中文)')}" onkeydown="pdOneLineKey(event)" oninput="pdOneLine(this); optC(${oi}, ${ci}, 'label_cn', this.value)">${escapeHtml(c.label_cn || '')}</textarea>` +
     (paid ? `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+${acCurrencySymbol()}<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` : '') +
     link +
     `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="optRemoveChoice(${oi}, ${ci})">✕</button>` +
