@@ -1,5 +1,6 @@
 # Tacet delivery vocabulary — locked
 
+**v1.199 · 2026-09-28 · §286 SUPPLIERS WE OWE — TWENTY-ONE OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY CHINESE FRAGMENT LIVE BUT ONE (期初).** The credit account on the desktop supplier page, the *Suppliers we owe* card, and the phone's new *Suppliers we owe* screen. See *Suppliers we owe (§286)*.
 **v1.198 · 2026-09-28 · A NEW ORDER WITH AN UNANSWERED PRODUCT QUESTION — NOTHING COMPOSED, ONE PAIR LIFTED.** The desktop and phone New order forms now name the line when the server refuses it for an unanswered product question, instead of the catch-all. See *An unanswered product question on a new order*.
 
 **v1.197 · 2026-09-27 · §285 RUNNING LATE — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE.** The Needs-you line, the list badge and the parcel banner on desktop and phone. See *Running late (§285)*.
@@ -9170,4 +9171,51 @@ created. · 未能保存,未创建任何内容。` in the customer block.
 **Nothing composed.** A sentence for a server crash was considered and not
 written: no live pair exists for it, and carrying the code beside the existing
 catch-all tells a crash apart from every other refusal without minting one.
+
+## Suppliers we owe (§286)
+
+**Composed by Claude, 2026-09-28, under the 2026-09-06 amendment.** Operator
+register only. Desktop (`public/retail-admin/16-purchasing.js`, the supplier
+page's account card and the Suppliers screen's card) and phone (`public/m.html`,
+the `supowed` screen and its sheet). Ash reads English only, so a Chinese reader
+on staff should correct any line that reads wrong.
+
+| shipped | built from |
+|---|---|
+| `We pay them later (credit) · 先货后款` (the switch, and the card's kicker) | **composed.** 先货后款 is the ordinary trade phrase for goods first, payment after. No live string names the arrangement |
+| `Turn on for a supplier who delivers now and is paid later. What you owe is worked out from delivered orders. · 适用于先送货、后付款的供应商。欠款按已收货的采购单自动计算。` | **composed.** 已收货 is the live Delivered word (`Received · 已收货`); 采购单 and 供应商 live throughout |
+| `We owe · 欠款` | **composed.** 欠款 is live once (the kitchen's batch debt) |
+| `We paid ahead · 已多付` / `Nothing owed · 无欠款` | **composed.** 已付 live (`Paid · 已付`); 无 + the 欠款 above |
+| `Suppliers we owe · 供应商欠款` (card title, phone row and screen title) | **composed** from 供应商 + 欠款 |
+| `Starting balance · 期初欠款` | **composed.** 期初 is the bookkeeping word for an opening figure and is NOT live anywhere; 欠款 as above |
+| `Correction · 调整` | **Chinese copied** from the live `Adjustment failed · 调整失败`; the English is new |
+| `Payment · 付款` | **Chinese copied** from the live `You pay · 付款` |
+| `Delivered orders · 已收货采购单` | **composed** from the live 已收货 and 采购单 |
+| `Record payment · 记录付款` / `Payment recorded · 已记录付款` | **composed.** 记录 live (`Record · 记录`, the waste CTA); 付款 as above |
+| `Last payment · 最近付款` | **composed.** 最近 live (`last · 最近`, the supplier scorecard) |
+| `This lowers what we owe. It is not a new expense — the order is already in the books. · 仅减少欠款，不是新的支出——采购单已记账。` | **composed.** 支出 live (Finance); 记账 live (the Expense screen's `记账人`) |
+| `What we owed them on this date, from the old sheet. Orders dated on or before it are taken as already in it. · 此日期的欠款（来自原表格）。此日期（含）之前的采购单视为已计入。` | **composed.** 计入 live (`尚未记入账目` family, and the re-match modal's `重新计入`) |
+| `Type a minus for a discount. · 折扣请输入负数。` | **composed.** 请输入 live throughout; 负数 live (`该操作会使余额变为负数。`) |
+| `Void this entry? · 作废这条记录？` | **composed on the live sibling** `Void this claim? · 作废这条费用申请？`, with 费用申请 → 记录 |
+| `It stops counting and stays on record. · 作废后不再计入，但会保留记录。` | **composed** |
+| `No suppliers on credit yet · 暂无先货后款供应商` | **composed.** 暂无 live (`Nothing on its way · 暂无在途`) + the switch's 先货后款 |
+| `Turn it on in the supplier's page on the computer. · 请在电脑端的供应商页面开启。` | **composed.** 电脑端 live (the phone's Purchasing empty state `在电脑端创建后`) |
+| `Could not load this. · 无法加载。` (phone) | **composed** on the live `无法加载…。` shape (`无法加载采购单。`, `无法加载订单。`) |
+
+Copied whole: `Void · 作废`, `Voided · 已作废`, `On its way · 在途`, `Paid · 已付`,
+`Total · 合计`, `Orders · 采购单`, `Amount · 金额`, `Date · 日期`, `Note · 备注`,
+`Optional · 可选`, `How · 付款渠道`, `Save · 保存`, `Saved · 已保存`, `Cancel · 取消`,
+`Saving… · 保存中…`, `Loading… · 加载中…`, `amount must be positive · 金额必须大于零`,
+`Enter an amount above zero. · 请输入大于零的金额。`, `Enter an amount first. · 请先填写金额。`,
+`That did not go through. Nothing has changed — try again. · 没有成功。数据没有变化 — 请重试。`.
+
+**Live candidates rejected.**
+
+- `应付` (live, *Owed to your team*): **rejected.** It is the staff-claims word,
+  and 应付账款 is the accounts-payable apparatus NO PAYABLES removed; reusing it
+  here would make this account read as that one coming back.
+- `赊账`: **rejected.** Not live, and colloquial for buying on tick; 先货后款
+  says the arrangement without implying the shop is behind.
+- `余额` (live, the customer wallet): **rejected** for the headline. It is the
+  customer's stored money; a debt we owe is not a balance we hold.
 

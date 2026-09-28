@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.455
+# Tacet shared-core consolidation — decisions record, v4.456
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-28 · v4.456 — **§286 · A SUPPLIER WHO GIVES US CREDIT HAS AN ACCOUNT: WHAT WE OWE THEM, IN THE SYSTEM — DECIDED BY ASH:** *"we still using an excel sheet that show some debt for supplier we didn't pay yet . it's only few suppliers that we work with some credit . I don't want to use this excel sheet I want it to be integrate in the system"*, then *"1. purchase order 2.lump 3 both"* to Claude's three questions (count the debt from purchase orders, not 发票; payments are lump sums against the supplier, not per order; phone and desktop). **NO PAYABLES STILL STANDS** (`routes/retail-purchasing.js`, the SUPPLIER INVOICES header; `scripts/test_invoice_no_payables.js`): Roots pays most suppliers before the 发票 exists, and the due-date / Mark paid / aging apparatus reported ¥5,246.48 of settled money as debt. **This is not that apparatus coming back.** It is a per-supplier switch, `suppliers.on_credit`, off for every supplier until someone turns it on, and nothing on the Invoices tab changes. **WHAT WE OWE IS COMPUTED, NEVER TYPED:** the starting balance, plus the goods of every DELIVERED order from that supplier dated after the starting balance, less the payments recorded, plus any corrections. Goods are the invoice screen's own amount — billable quantity (received less returned) × unit cost, tenant-scoped and never scope-scoped, superseded kitchen originals stood down, the supplier resolved by the invoice screen's chain — so the supplier page, the Invoices tab and this account can never disagree about what a line was worth. Orders placed but not yet delivered are shown beside the figure as *on the way* and are not in it. **A PAYMENT IS NOT AN EXPENSE.** The purchase is already in the books from the day it was ordered (`postPOExpenses`); recording a payment only lowers what we owe, and writes nothing to `expense_entries` — writing one would count the purchase twice (held by a test). New table `supplier_account_entries` (starting balance, payment, correction); a wrong entry is removed by voiding, which keeps the row. Writes are `purchasing:edit` (the /suppliers rule in `lib/cap-routes.js`). Desktop: an account card on the supplier page and a *Suppliers we owe* card on Suppliers. Phone: a new *Suppliers we owe* row under *Stock coming in*. Strings composed by Claude; see the vocabulary's v1.199.
 
 2026-09-27 · v4.455 — **§285 · A LATE PARCEL IS FLAGGED WHILE IT IS STILL ON THE ROAD — DECIDED BY ASH:** *"delay order should be noticible to us not when the delivery already reach the customer, we should know it before"*, then *"both yes"* to Claude's proposal (a separate "running late" alert on the morning of the first late day, not a change to the late rule). **THE LATE ALERT COULD ONLY FIRE AFTER DELIVERY.** `lateShipmentSql` asks whether a parcel ARRIVED after `dispatched_at` + `LATE_AFTER_DAYS` (air 1, local 1, land 3), which has no answer until it arrives. **THE FIX ASKS THE SAME QUESTION EARLIER.** `runningLateSql` (`lib/delay-case.js`) is a parcel that has left, has not landed, and whose due day has passed — the same deadline and the same UTC day arithmetic, so a parcel "running late N days" that lands today is exactly N days late to the §98 case (held by a test). It is a fifth part of *Delivery needs a call* (`runningLateAlertSql`), so the count, the list behind it and its CSV include it. It fires at UTC midnight (08:00 Shanghai) of the first late day, and clears itself when the parcel lands; a late landing then becomes the §98 case exactly as before. Due days before 2026-09-26 are out of scope (`RUNNING_LATE_FROM`), for CASES_FROM's reason. Shown on the Needs-you row (*N running late*), the orders list, and a banner on the parcel, desktop and phone. **Deliberately not changed:** the late rule itself, the customer's *配送延误送达* message and the case flow — all still start on delivery. Changing the late rule instead would have told customers a parcel "arrived late" before it arrived. No button: the alert is a fact about the parcel and goes when the parcel lands. Four strings composed by Claude; see the vocabulary's v1.197.
 
@@ -20846,3 +20848,27 @@ yes"*).
    case and the customer's late-delivery message still start on delivery.
 3. It clears itself when the parcel lands. There is no button.
 4. Due days before 2026-09-26 are ignored (`RUNNING_LATE_FROM`).
+
+## §286 — A SUPPLIER WHO GIVES US CREDIT HAS AN ACCOUNT
+
+**Decided 2026-09-28 by Ash** (*"I don't want to use this excel sheet I want
+it to be integrate in the system"*, then *"1. purchase order 2.lump 3 both"*).
+
+1. **Only suppliers switched to credit have an account** (`suppliers.on_credit`).
+   Every other supplier is untouched, and NO PAYABLES (the Invoices tab) stands:
+   no due dates, no Mark paid, no aging, anywhere.
+2. **What we owe is computed:** starting balance + goods delivered after the
+   starting balance's date − payments + corrections. Goods are counted from
+   purchase orders, not 发票, with the invoice screen's own amount per line
+   (billable qty × unit cost; superseded originals stood down; tenant-scoped,
+   never scope-scoped). An order counts from the day it is Delivered; until then
+   it is shown as *on the way* and is not in the figure.
+3. **Payments are lump sums against the supplier**, never tied to an order.
+4. **A payment writes no expense.** The purchase is already expensed from its
+   order (`postPOExpenses`). A payment only lowers what we owe.
+5. **One starting balance per supplier**, dated. Orders dated on or before it
+   are taken as already in it. Entering a new one replaces the old.
+6. **A wrong entry is voided, not edited or deleted.** The row stays with who
+   voided it and when.
+7. Writes need `purchasing:edit`. Desktop and phone both read and write.
+
