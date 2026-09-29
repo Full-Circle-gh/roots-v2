@@ -1326,6 +1326,9 @@
   .canvas.stage-desktop #focus-toggle,
   .canvas.stage-desktop .link-status { display: none !important; }
   .desktop-stage { width: 100%; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  /* `display: flex` above overrides `[hidden] { display:none }`; restore, or
+     the Phone stage shows the website frame under the phone. */
+  .desktop-stage[hidden] { display: none; }
   .ds-bar {
     display: flex; align-items: center; gap: 12px; min-height: 34px; margin-bottom: 10px;
     font: 500 12px var(--f-sans); color: var(--text-2);
