@@ -986,8 +986,11 @@ function _paStatusCell(u) {
 
 // Inline "available on the shop" switch — flips is_published (the same flag the
 // storefront filters on) straight from the catalogue, no need to open the
-// editor. For a variant family the toggle is On when ANY size is live; flipping
-// it sets every size at once. Persists via the per-product PATCH endpoint.
+// editor. For a variant family the toggle is On when ANY size is live. §294:
+// switching it off remembers which sizes were on and switching it back on
+// brings back only those, so a size kept off the online store on purpose stays
+// off. That rule is the server's (POST /products/family-publish,
+// lib/family-publish.js), shared with bulk, the page designer and the phone.
 function _paShopToggle(u) {
   const members = u.group ? u.members : [u.p];
   const on = members.some(m => m.is_published === 1);
@@ -1000,24 +1003,35 @@ function _paShopToggle(u) {
     + `<input type="checkbox" ${on ? 'checked' : ''} onchange="paToggleShop('${ids}', this.checked)">`
     + `<span class="pa-shop-knob"></span></label>`;
 }
-// Optimistically flip the cached rows + repaint, then PATCH each id. Revert on
-// failure so the switch never lies about the live state.
+// Optimistically flip the cached rows + repaint, then ask the server, whose
+// answer is final (switching on may leave a size off on purpose — §294).
+// Revert on failure so the switch never lies about the live state.
 async function paToggleShop(ids, on) {
   const list = String(ids).split(',').map(Number).filter(Boolean);
-  const val = on ? 1 : 0;
-  const set = v => list.forEach(id => {
+  const before = new Map(list.map(id => {
+    const p = PA_PRODUCTS.find(x => x.id === id);
+    return [id, p ? p.is_published : 0];
+  }));
+  const set = pick => list.forEach(id => {
     const i = PA_PRODUCTS.findIndex(x => x.id === id);
-    if (i >= 0) PA_PRODUCTS[i].is_published = v;
+    if (i >= 0) PA_PRODUCTS[i].is_published = pick(id);
   });
-  set(val); paRender(); paRenderKpis(false);
+  set(() => (on ? 1 : 0)); paRender(); paRenderKpis(false);
   try {
-    for (const id of list) {
-      await api('/api/retail-admin/products/' + id, { method: 'PATCH', body: { is_published: val } });
-    }
+    const j = await api('/api/retail-admin/products/family-publish', { method: 'POST', body: { ids: list, on: !!on } });
+    paApplyFamilyRows(j && j.data && j.data.rows);
+    paRender(); paRenderKpis(false);
   } catch (e) {
-    set(on ? 0 : 1); paRender(); paRenderKpis(false);
+    set(id => before.get(id)); paRender(); paRenderKpis(false);
     toast(cuT('Could not update availability — ', '无法更新上架状态 — ') + (e.message || e), 'err');
   }
+}
+// Write the server's answer from family-publish into the cached rows.
+function paApplyFamilyRows(rows) {
+  (rows || []).forEach(r => {
+    const i = PA_PRODUCTS.findIndex(x => x.id === r.id);
+    if (i >= 0) PA_PRODUCTS[i].is_published = r.is_published;
+  });
 }
 
 // ── Overview list (full-width "products on the go" table) cell helpers ──
@@ -2329,7 +2343,15 @@ async function paBulkApply(patch, kind) {
   }))) return;
   toast(cuT('Working…', '处理中…'));
   let done = 0, fail = 0;
-  for (const id of ids) {
+  // §294 — on/off the online store goes through the family rule, not a PATCH
+  // per size: a PATCH of 1 to every size would bring back a size kept off on
+  // purpose. One request; all-or-nothing, so it reports as all done or all failed.
+  if (kind === 'shop-on' || kind === 'shop-off') {
+    try {
+      await api('/api/retail-admin/products/family-publish', { method: 'POST', body: { ids, on: kind === 'shop-on' } });
+      done = ids.length;
+    } catch (e) { fail = ids.length; }
+  } else for (const id of ids) {
     try {
       const r = await fetch('/api/retail-admin/products/' + id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },

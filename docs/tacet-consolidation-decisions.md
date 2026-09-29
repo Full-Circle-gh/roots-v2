@@ -21028,3 +21028,46 @@ row the dot meant.
    ask keeps the number shown instead of zeroing it, and an answer that lands
    after the Inbox was opened is thrown away.
 5. **No new string.** The badge is a numeral.
+
+## §294 — THE FAMILY SWITCH BRINGS BACK ONLY THE SIZES THAT WERE ON
+
+**Decided 2026-09-29 by Ash** (*"I want a variant to be disabled in mini app .
+not on the menu store"*, then *"build the guard, merge and deploy live"*). One
+size of a product can already be kept off the online store: the per-size tick
+box in the Variants table (*Show this variant in the shop*) sets that size's
+own `is_published`, and every mini app read (list, product page, size picker,
+checkout) filters on it per row. The QR menu is not affected by any of this;
+it reads shop listings (§42).
+
+**The trap this closes.** Four controls switch a whole variant family at once:
+the switch on the Products list, bulk *Turn on / Turn off*, the page designer's
+*Online store* button, and the phone admin's switch. Each one wrote the same
+value to every size. So a size hidden on purpose came back the next time anyone
+switched the family off and on again, with nothing on screen saying so.
+
+1. **Switching a family off remembers which sizes were on.** New column
+   `store_products.kept_off_online`. When a family that is partly on is switched
+   off, each size that was off is marked `1` and each size that was on is marked
+   `0`; then every size goes off. A family that is fully on clears every mark. A
+   family that is already fully off keeps its marks.
+2. **Switching it back on brings back only the unmarked sizes.** If every size
+   is marked, all of them come on and the marks clear, because the operator
+   asked for the product and there would be nothing to show.
+3. **Turning on a family that already has a size live changes nothing.** A size
+   that is off while a sibling is on is off on purpose, by definition, so bulk
+   *Turn on* never overrides it, even for a family switched off before this
+   shipped and so never marked.
+4. **One server action holds the rule**:
+   `POST /api/retail-admin/products/family-publish { ids, on }`. It widens the
+   ids to their whole families and is gated as `products:edit`, like the PATCH
+   it replaces for these four controls. Each size it changes gets the same
+   version checkpoint and activity entry as the PATCH.
+5. **Not changed:** the per-size tick box, the mini app, the QR menu and the
+   PATCH route. A family switched off before this shipped comes back fully on,
+   as it did before. No backfill is needed: the mark is taken at the moment of
+   switching off, so it works the same in every tenant's database.
+6. **The page designer's button now reads the family**, not the size open on
+   screen. Otherwise, standing on the hidden size, it would say *Hidden* and a
+   click would publish the siblings and leave that size hidden: a button that
+   seems to do nothing.
+7. **No new string** in either language.

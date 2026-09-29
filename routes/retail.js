@@ -444,6 +444,8 @@ const tax = require('../lib/tax');
 // §230 — the QR menu's per-type allow-list, so the editor's eye and the
 // live counter menu resolve a block from the same list.
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
+// §294 — the family on/off switch that remembers which sizes were on.
+const familyPublish = require('../lib/family-publish');
 // ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
 // Thirty-five day-boundary calculations in this file were the literal string
 // '+8 hours', so today's takings, the dashboard, the finance window and "new
@@ -24093,6 +24095,31 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
   tx();
   logActivity(req.user.id, req.user.username, 'restore_version', 'product_retail', id, { version_id: versionId }, req.ip);
   res.json({ success: true });
+});
+
+// §294 — SWITCH WHOLE VARIANT FAMILIES ON OR OFF THE ONLINE STORE. The one
+// write behind the four family switches (Products list, bulk Turn on/off, the
+// page designer's Online store button, the phone admin's switch). The rule —
+// off remembers which sizes were on, on brings back only those — lives in
+// lib/family-publish.js. Each size it writes gets the checkpoint and activity
+// entry the PATCH below gives an is_published edit. Gated as products:edit by
+// lib/cap-routes.js, the same as that PATCH.
+router.post('/api/retail-admin/products/family-publish', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const ids = Array.isArray(b.ids) ? b.ids : [];
+  if (!ids.length) return res.status(400).json({ success: false, error: 'ids_required' });
+  if (!('on' in b)) return res.status(400).json({ success: false, error: 'on_required' });
+  const db = tdb();
+  const who = req.user && req.user.username;
+  const { rows, changed } = familyPublish.setFamiliesPublished(db, ids, !!b.on,
+    id => ensureProductBaselineVersion(db, id, who));
+  if (!rows.length) return res.status(404).json({ success: false, error: 'not_found' });
+  for (const id of changed) {
+    recordProductVersion(db, id, who);
+    logActivity(req.user.id, req.user.username, 'update', 'product_retail', id,
+      { fields: ['is_published'], family_publish: !!b.on }, req.ip);
+  }
+  res.json({ success: true, data: { rows, changed } });
 });
 
 router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), async (req, res) => {

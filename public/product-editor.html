@@ -3414,10 +3414,11 @@ function peMount(p) {
 // THE FIRST PILL IS ALSO THE MISSING CONTROL. There was no way to publish from
 // this editor at all — you composed the page here and then went back to the
 // catalogue to make it real. It flips the same is_published the catalogue's
-// shop switch flips, across the whole variant family, exactly as
-// public/retail-admin/09-products.js paToggleShop does: a 250g live and a 500g
-// hidden is a shelf with a hole in it, and neither screen should be able to
-// make one by accident.
+// shop switch flips, across the whole variant family, through the same server
+// rule public/retail-admin/09-products.js paToggleShop uses (§294): switching
+// off remembers which sizes were on, switching back on brings back only those.
+// A 250g live and a 500g hidden is then something only the per-size tick box
+// makes, on purpose, and no family switch undoes it by accident.
 //
 // THE SECOND PILL IS NOT A CONTROL. Adding a product to a shop menu is the shop
 // screen's job and prices and fulfilment mode are decided there; this reports.
@@ -3446,7 +3447,7 @@ function _peBadgePair(kEn, kCn, vEn, vCn) {
 function peRenderBadges() {
   const badge = document.getElementById('pe-badge');
   if (!badge || !PA_CURRENT) return;
-  const pub = PA_CURRENT.is_published === 1;
+  const pub = peFamilyLive();
   badge.style.display = '';
   badge.disabled = _pePublishBusy;
   badge.className = 'pe-badge ' + (pub ? 'pub' : 'draft');
@@ -3489,10 +3490,24 @@ async function peLoadShopListings(id) {
     peRenderBadges();
   } catch (e) { /* the pill simply does not appear — it is a report, not a gate */ }
 }
+// Is any size of this family in the online store? §294: the button speaks for
+// the FAMILY, not for the size open on screen. Read per size, standing on a
+// size kept off on purpose it would say Hidden, and a click would bring back
+// its siblings and leave it off: a button that seems to do nothing.
+function peFamilyLive() {
+  if (!PA_CURRENT) return false;
+  return peFamilyIds().some(pid => {
+    if (pid === PA_CURRENT.id) return PA_CURRENT.is_published === 1;
+    const p = PA_ALL_PRODUCTS.find(x => x.id === pid);
+    return !!p && p.is_published === 1;
+  });
+}
 // Publish or hide the whole variant family, the flag the storefront filters on.
+// §294: the server holds the rule — off remembers which sizes were on, on
+// brings back only those (lib/family-publish.js) — and its answer is final.
 async function peTogglePublish() {
   if (!PA_CURRENT || _pePublishBusy) return;
-  const turningOn = PA_CURRENT.is_published !== 1;
+  const turningOn = !peFamilyLive();
   // PUBLISHING MEANS WHAT YOU ARE LOOKING AT. is_published is a flag, not
   // content, so a publish with unsaved edits would put the LAST SAVED page in
   // front of customers while this screen shows a newer one. Save first, and
@@ -3504,9 +3519,17 @@ async function peTogglePublish() {
   }
   const ids = peFamilyIds();
   const val = turningOn ? 1 : 0;
-  const apply = (v) => {
-    PA_CURRENT.is_published = v;
+  const readPub = pid => {
+    if (pid === PA_CURRENT.id) return PA_CURRENT.is_published;
+    const p = PA_ALL_PRODUCTS.find(x => x.id === pid);
+    return p ? p.is_published : 0;
+  };
+  const before = new Map(ids.map(pid => [pid, readPub(pid)]));
+  const apply = (pick) => {
     ids.forEach(pid => {
+      const v = pick(pid);
+      if (v === undefined) return;
+      if (pid === PA_CURRENT.id) PA_CURRENT.is_published = v;
       const i = PA_ALL_PRODUCTS.findIndex(x => x.id === pid);
       if (i >= 0) PA_ALL_PRODUCTS[i].is_published = v;
     });
@@ -3515,23 +3538,23 @@ async function peTogglePublish() {
     if (!document.getElementById('pe-switcher-panel').hidden) peRenderSwitcherList();
   };
   _pePublishBusy = true;
-  apply(val);                     // optimistic, like the catalogue's own switch
+  apply(() => val);               // optimistic, like the catalogue's own switch
   try {
-    for (const pid of ids) {
-      const r = await fetch('/api/retail-admin/products/' + pid, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ is_published: val }),
-      });
-      if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.success) throw new Error(j.error || 'publish_failed');
-    }
+    const r = await fetch('/api/retail-admin/products/family-publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ ids, on: !!val }),
+    });
+    if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.error || 'publish_failed');
+    const got = new Map(((j.data && j.data.rows) || []).map(x => [x.id, x.is_published]));
+    apply(pid => got.get(pid));
     toast(cuT(val ? 'In the online store ✓' : 'Hidden from the online store ✓',
               val ? '线上商城 · 已上架 ✓'      : '线上商城 · 已下架 ✓'));
   } catch (e) {
-    apply(val ? 0 : 1);           // the switch must never lie about the live state
+    apply(pid => before.get(pid));   // the switch must never lie about the live state
     toast(cuT('Could not update availability — ', '无法更新上架状态 — ') + (e.message || e), 'err');
   } finally {
     _pePublishBusy = false;
