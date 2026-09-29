@@ -376,7 +376,7 @@ function dashInit() {
   // the charts themselves re-render on dashLoad.
   if (window.onLangChange) onLangChange(() => {
     dashRangeLabel(); dashWinMeta();
-    if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); }
+    if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); dashRenderSplits(); }
     dashReadRender(); dashNotesRender(); dashAskChipsRender(); dashAskRender();
   });
   // Initial 30d window. The deep Reports build (~28 aggregate queries) is
@@ -3937,35 +3937,61 @@ function dashRenderFunnel() {
 
 function dashRenderSplits() {
   const pay = DASH_DATA.payments || [], del = DASH_DATA.delivery || [];
+  /* EVERY LABEL HERE IS CHOSEN THROUGH `cuT`, AND THE HOST IS `data-no-i18n`.
+     The labels used to be "EN · CN" strings left for the i18n walker to split,
+     and the walker's block-pair rule (`tagBlockPair`, 10-extras.js) hid rows:
+     a channel named only in English (`gzgrocery ERP · gzgrocery`, or a raw key
+     like `wechat_chat`) sat beside an all-Chinese row, the pair was read as one
+     sentence in two languages, and one side went `display:none`. Reported from
+     August: the Mini app (¥98,147), Meituan and Manual rows were missing, every
+     second row, while Finance listed all seven. Finance hit the same rule and
+     took the same fix (`finRevBreakdown`, 22-finance.js). The card is redrawn
+     on the language toggle from dashInit's hook, so the labels follow it by
+     being rebuilt, not rewritten in place. */
   // meituan/eleme: the channel orders' own payment_method (routes/meituan-internal.js,
   // routes/eleme-internal.js write it literally) — money settled on that
   // platform, never touching our own gateways. offline: the pre-existing
   // generic tender (routes/retail.js ALLOWED_PAY) predating the five specific
   // off-app methods below it, for a counter payment not tied to a wallet.
-  const payLabel = m => ({ wechat: 'WeChat Pay · 微信支付', alipay: 'Alipay · 支付宝', points: 'Points · 积分', cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', meituan: 'Meituan · 美团', eleme: 'Eleme · 饿了么', offline: 'Offline · 线下', other: 'Other · 其他', unknown: 'Unknown · 未知' }[m] || m);
-  const delLabel = m => ({ standard: 'Standard · 标准', max: 'Max speed · 极速', fixed: 'Same-city · 同城', sameday: 'Same-day · 当日', pickup: 'Pickup · 自提', unknown: 'Unknown · 未知' }[m] || m);
-  // Two quiet bar groups (the mockup has no group headers): payment methods by
-  // revenue, then delivery modes by order count with dimmed fills.
-  let html = pay.length ? dashBarList(pay.map(p => ({ k: payLabel(p.method), value: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
-  html += '<div class="db-bars-gap"></div>';
-  html += del.length ? dashBarList(del.map(p => ({ k: delLabel(p.mode), value: `${dashNum(p.orders)} ${cuT(Number(p.orders) === 1 ? 'order' : 'orders', '单')}`, frac: p.orders, muted: true }))) : '<div class="db-muted">—</div>';
+  const PAY_LBL = { wechat: ['WeChat Pay', '微信支付'], alipay: ['Alipay', '支付宝'], points: ['Points', '积分'], cash: ['Cash', '现金'], bank_transfer: ['Bank transfer', '银行转账'], wechat_offline: ['WeChat off-app', '微信(线下)'], alipay_offline: ['Alipay off-app', '支付宝(线下)'], meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], offline: ['Offline', '线下'], other: ['Other', '其他'], unknown: ['Unknown', '未知'] };
+  const DEL_LBL = { standard: ['Standard', '标准'], max: ['Max speed', '极速'], fixed: ['Same-city', '同城'], sameday: ['Same-day', '当日'], pickup: ['Pickup', '自提'], unknown: ['Unknown', '未知'] };
+  const lbl = (map, k) => (map[k] ? cuT(map[k][0], map[k][1]) : String(k));
+  /* Three bar groups, each under its own small heading. The mockup had none,
+     and without them one card showed Eleme twice — once as how the money was
+     paid, once as where the order came from — with nothing to say which was
+     which. The three headings are live pairs, none composed: `Pay method ·
+     付款方式` (the New order form), `Delivery · 配送` and `Channel · 渠道`
+     (the Customers channel filter). */
+  const head = (en, cn) => `<div class="db-bars-h">${escapeHtml(cuT(en, cn))}</div>`;
+  let html = head('Pay method', '付款方式');
+  html += pay.length ? dashBarList(pay.map(p => ({ k: lbl(PAY_LBL, p.method), value: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
+  html += '<div class="db-bars-gap"></div>' + head('Delivery', '配送');
+  html += del.length ? dashBarList(del.map(p => ({ k: lbl(DEL_LBL, p.mode), value: `${dashNum(p.orders)} ${cuT(Number(p.orders) === 1 ? 'order' : 'orders', '单')}`, frac: p.orders, muted: true }))) : '<div class="db-muted">—</div>';
   /* A third group: WHERE THE ORDER CAME FROM. The two above split the same money
      by how it arrived and how it travelled; neither says which channel sold it,
      and until now nothing did for a window — /sales/summary has a channel split
      and is pinned to today. Named from the same table the phone reads, so a
      channel reads identically on both. A till sale gets its own row: counter
      fulfilment can carry a storefront channel, and grouped naively every one of
-     them would count as a mini-app sale. */
+     them would count as a mini-app sale.
+
+     The staff-keyed origins (`pickup`, `wechat_chat`, `shop`, `wholesale`,
+     `other`) printed as raw keys here until this card was fixed; they carry the
+     pairs Finance's `finChannelLabel` already copied from `ordChannelLabel`
+     (04-orders.js), so a channel reads the same on both money screens. An
+     unknown key still prints as itself: it is inside a total, so it shows. */
   const ch = (DASH_DATA.revenue_by_channel || {}).rows || [];
-  const chLabel = c => ({ wechat: 'Mini app · 小程序', web: 'Web store · 网店', meituan: 'Meituan · 美团',
-    eleme: 'Eleme · 饿了么', gzgrocery: 'gzgrocery ERP · gzgrocery', pos: 'In store · 门店',
+  const CH_LBL = { wechat: ['Mini app', '小程序'], web: ['Web store', '网店'], meituan: ['Meituan', '美团'],
+    eleme: ['Eleme', '饿了么'], gzgrocery: ['gzgrocery ERP', 'gzgrocery'], pos: ['In store', '门店'],
     // A typed-in order shares channel='manual' with a till sale; the till is
     // split out by fulfillment_type, and what remains keeps the name the Orders
     // filter already gives it.
-    manual: 'Manual · 手动' }[c] || c);
+    manual: ['Manual', '手动'],
+    shop: ['Shop', '门店'], pickup: ['Pick up', '到店自取'], wechat_chat: ['WeChat message', '微信消息'],
+    wholesale: ['Wholesale', '批发'], other: ['Other', '其他'] };
   if (ch.length) {
-    html += '<div class="db-bars-gap"></div>';
-    html += dashBarList(ch.map(c => ({ k: chLabel(c.channel), value: dashMoney(c.revenue), frac: c.revenue })));
+    html += '<div class="db-bars-gap"></div>' + head('Channel', '渠道');
+    html += dashBarList(ch.map(c => ({ k: lbl(CH_LBL, c.channel), value: dashMoney(c.revenue), frac: c.revenue })));
   }
   $('#db-splits').innerHTML = html;
 }
