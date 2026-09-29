@@ -3007,15 +3007,16 @@ function catQrDrop(kind, from, to) {
 
 // ── The products standing on this shelf ────────────────────────────────────
 // Read against the LAST-SAVED name (products carry saved names, so an unsaved
-// rename wouldn't match until the tree lands). Twelve rows at a time, more
-// revealed as the operator scrolls — the pane answers "is this shelf right?",
-// not "manage stock", so it never has to send them away to see the rest.
-const CAT_PROD_PAGE = 12;
+// rename wouldn't match until the tree lands). Drawn the way the mini app
+// draws the shelf (miniapp/pages/shop/shop.js _buildSections): one group per
+// section heading in the tree's order, then any heading the tree no longer
+// names, then the products with no heading last. Inside a group the rows are
+// in the shop's own order, and every row is drawn so any of them can be
+// dragged to any place in its group.
 let _catMoveTargets = [];    // flattened [{ top, sub }]; the <select> value is the index
 let _catProdReq = 0;
-let _catProdRows = [];       // all rows for the current shelf, fetched once
-let _catProdShown = 0;       // how many of _catProdRows are currently rendered
-let _catProdObserver = null;
+let _catProdRows = [];       // all rows for the current shelf, in the shop's order
+let _catProdGroups = [];     // [{ sub, units }] as drawn; a unit is [row, …]
 
 function catCleanTree() { try { return JSON.parse(catClean); } catch (e) { return []; } }
 // The saved name of the selected top, matched by stable id. Null for a node
@@ -3043,50 +3044,156 @@ function catMoveOptions(curTop, curSub) {
   }).join('');
 }
 
-function catProdRowHtml(p) {
+// A variant group is ONE card in the mini app, so it is one unit here: its
+// sizes are drawn together, at the place of the first one, and move together.
+function catProdUnits(rows) {
+  const units = [], byGid = new Map();
+  for (const p of rows) {
+    const g = p.variant_group_id;
+    if (g && byGid.has(g)) { byGid.get(g).push(p); continue; }
+    const u = [p];
+    if (g) byGid.set(g, u);
+    units.push(u);
+  }
+  return units;
+}
+function catProdBuildGroups() {
+  const t = catModel[catSel];
+  const saved = t && t.id ? catCleanTree().find(x => x.id === t.id) : null;
+  const subs = (saved && saved.subs) || [];
+  const bySub = new Map();
+  for (const p of _catProdRows) {
+    const k = p.subcategory || '';
+    if (!bySub.has(k)) bySub.set(k, []);
+    bySub.get(k).push(p);
+  }
+  const order = subs.map(x => x.name).filter(k => k && bySub.has(k));
+  for (const k of bySub.keys()) if (k && order.indexOf(k) < 0) order.push(k);
+  if (bySub.has('')) order.push('');
+  _catProdGroups = order.map(sub => ({
+    sub,
+    sub_cn: (subs.find(x => x.name === sub) || {}).name_cn || '',
+    units: catProdUnits(bySub.get(sub)),
+  }));
+}
+
+function catProdRowHtml(p, grip) {
   const name = escapeHtml(p.name_en || p.name_cn || ('#' + p.id));
   const thumb = p.image_data
     ? `<img class="cat2-thumb" src="${escapeAttr(p.image_data)}" alt="" loading="lazy">`
     : `<span class="cat2-thumb">${CAT_ICON.box}</span>`;
-  const sub = (p.subcategory || '').trim();
   return `<div class="cat2-prod">
+    ${grip}
     ${thumb}
     <span class="pn">${name}${p.is_published ? '' : ` <span class="psub">· ${escapeHtml(cuT('draft', '未上架'))}</span>`}</span>
-    <span class="psub">${escapeHtml(sub || cuT('no heading', '无区块'))}</span>
     <select title="${escapeAttr(cuT('Move to another shelf', '移动到其他分类'))}" onchange="catMoveProduct(${p.id}, this)">
       ${catMoveOptions(p.top_category, p.subcategory)}
     </select>
   </div>`;
 }
-function catProdStopWatching() {
-  if (_catProdObserver) { _catProdObserver.disconnect(); _catProdObserver = null; }
+// Dragging sets the MINI APP's order (store_products.sort_order), so it is
+// offered in the mini app view only. The QR menus order their products per
+// shop, on the Shops page, which this list does not show.
+function catProdUnitHtml(u, gi, ui) {
+  const drag = catMode === 'miniapp';
+  const grip = drag
+    ? `<span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
+            ondragstart="catProdDragStart(event,${gi},${ui})" ondragend="catProdDragEnd()">${CAT_ICON.grip}</span>`
+    : '';
+  return `<div class="cat2-prod-unit" data-fk="p${u[0].id}">${u.map((p, k) => catProdRowHtml(p, k ? (drag ? '<span class="cat2-grip-sp"></span>' : '') : grip)).join('')}</div>`;
 }
-// Render however many rows are currently revealed, plus a sentinel that
-// reveals the next page once it scrolls into view. No click, no leaving
-// the shelf — the list just keeps growing as the operator scrolls down.
+function catProdGroupListHtml(gi) {
+  return _catProdGroups[gi].units.map((u, ui) => catProdUnitHtml(u, gi, ui)).join('');
+}
 function catRenderProdList() {
   const host = document.getElementById('cat2-prods');
   if (!host) return;
-  catProdStopWatching();
-  const shown = _catProdRows.slice(0, _catProdShown);
-  let html = shown.map(catProdRowHtml).join('');
-  if (_catProdShown < _catProdRows.length) html += `<div class="cat2-more" id="cat2-more"></div>`;
-  host.innerHTML = html;
-  const sentinel = document.getElementById('cat2-more');
-  if (sentinel) {
-    _catProdObserver = new IntersectionObserver((entries) => {
-      if (!entries.some(e => e.isIntersecting)) return;
-      _catProdShown = Math.min(_catProdShown + CAT_PROD_PAGE, _catProdRows.length);
-      catRenderProdList();
-    }, { rootMargin: '300px' });
-    _catProdObserver.observe(sentinel);
+  // A heading over each group only when there is more than one, or the one
+  // group is a named section; a shelf with no sections reads as one list.
+  const heads = _catProdGroups.length > 1 || (_catProdGroups[0] && _catProdGroups[0].sub);
+  host.innerHTML = _catProdGroups.map((g, gi) => {
+    const label = g.sub ? cuT(g.sub, g.sub_cn || g.sub) : cuT('no heading', '无区块');
+    return (heads ? `<div class="cat2-prod-head">${escapeHtml(label)}</div>` : '') +
+      `<div class="cat2-prod-list" id="cat2-pg-${gi}"
+            ondragover="catProdDragOver(event,${gi})" ondrop="catProdDrop(event,${gi})" ondragleave="catProdDragLeave(event)">${catProdGroupListHtml(gi)}</div>`;
+  }).join('');
+}
+
+// ── Drag a product within its heading ──
+// Same gap-and-line mechanics as the rail (catGapAt / catGapToPlace), on its
+// own state so a product can never land in the rail or a subcategory list. A
+// drop only lands inside the group it started in; moving a product to another
+// heading stays with the row's dropdown.
+let catProdDrag = null;   // { gi, ui, gap }
+function catProdDragStart(ev, gi, ui) {
+  catProdDrag = { gi, ui, gap: null };
+  ev.dataTransfer.effectAllowed = 'move';
+  // Firefox will not start a drag without data; nothing reads it back.
+  try { ev.dataTransfer.setData('text/plain', 'product'); } catch (e) { /* a browser that refuses still drags */ }
+  const unit = ev.target.closest('.cat2-prod-unit');
+  if (unit && ev.dataTransfer.setDragImage) {
+    try {
+      const r = unit.getBoundingClientRect();
+      ev.dataTransfer.setDragImage(unit, ev.clientX - r.left, ev.clientY - r.top);
+    } catch (e) { /* the browser's own ghost image is a fine fallback */ }
+  }
+  setTimeout(() => { if (catProdDrag && unit) unit.classList.add('cat2-dragging'); }, 0);
+}
+function catProdDragEnd() {
+  catProdDrag = null;
+  document.querySelectorAll('.cat2-dragging').forEach(el => el.classList.remove('cat2-dragging'));
+  catClearDropCues();
+}
+function catProdDragLeave(ev) {
+  if (ev.relatedTarget && ev.currentTarget.contains(ev.relatedTarget)) return;
+  if (catProdDrag) catProdDrag.gap = null;
+  catClearDropCues();
+}
+function catProdUnitsIn(host) { return host ? Array.from(host.querySelectorAll(':scope > .cat2-prod-unit')) : []; }
+function catProdDragOver(ev, gi) {
+  if (!catProdDrag || catProdDrag.gi !== gi) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+  const rows = catProdUnitsIn(ev.currentTarget);
+  const g = catGapAt(rows, ev.clientY);
+  if (g === catProdDrag.gap) return;
+  catProdDrag.gap = g;
+  catClearDropCues();
+  if (catGapToPlace(catProdDrag.ui, g) === catProdDrag.ui) return;
+  if (g < rows.length) rows[g].classList.add('cat2-drop-before');
+  else if (rows.length) rows[rows.length - 1].classList.add('cat2-drop-after');
+}
+function catProdDrop(ev, gi) {
+  if (!catProdDrag || catProdDrag.gi !== gi) return;
+  ev.preventDefault();
+  const from = catProdDrag.ui;
+  const to = catGapToPlace(from, catGapAt(catProdUnitsIn(ev.currentTarget), ev.clientY));
+  catProdDragEnd();
+  if (from === to) return;
+  const units = _catProdGroups[gi].units;
+  catFlip('cat2-pg-' + gi, () => {
+    units.splice(to, 0, units.splice(from, 1)[0]);
+    const host = document.getElementById('cat2-pg-' + gi);
+    if (host) host.innerHTML = catProdGroupListHtml(gi);
+  });
+  catProdSaveOrder(units.flat().map(p => p.id));
+}
+// The same write the Products page's drag makes: the ids in their new order,
+// and the server hands the group's own sort_order slots back out.
+async function catProdSaveOrder(ids) {
+  if (ids.length < 2) return;
+  try {
+    await api('/api/retail-admin/products/reorder', { method: 'POST', body: { ids } });
+  } catch (e) {
+    toast((e && e.message) ? (cuT('Reorder failed: ', '排序失败:') + e.message) : 'Reorder failed · 排序未保存', 'err');
+    catLoadProducts();   // resync, so the list can't drift from what is saved
   }
 }
 
 async function catLoadProducts() {
   const host = document.getElementById('cat2-prods');
   if (!host) return;
-  catProdStopWatching();
+  catProdDrag = null;
   const top = catSavedTopName();
   if (!top) {
     host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Save this category, then its products can stand here.', '保存该分类后，产品即可归入此处。'))}</div>`;
@@ -3103,7 +3210,7 @@ async function catLoadProducts() {
       return;
     }
     _catProdRows = rows;
-    _catProdShown = Math.min(CAT_PROD_PAGE, rows.length);
+    catProdBuildGroups();
     catRenderProdList();
   } catch (e) {
     if (req !== _catProdReq) return;

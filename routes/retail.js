@@ -19,6 +19,7 @@ const db = require('../database');
 const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup');
 const { bundleOwnsProductCost, bundleUnitCostYuan } = require('../lib/bundle-cost');
 const { productUnitCostYuan } = require('../lib/product-cost');
+const { reorderSlots } = require('../lib/reorder-slots');
 // The cost half of a product option — see lib/option-cost.js for why a chosen
 // extra's cost had nowhere to land until this existed.
 const { chosenOptionCostYuan, requiredOptionFloorYuan } = require('../lib/option-cost');
@@ -664,6 +665,7 @@ router.get('/api/retail-admin/category-products', requireRetailAdmin, (req, res)
   const hasSub = 'sub' in req.query;
   const sub = String(req.query.sub == null ? '' : req.query.sub).trim();
   let sql = `SELECT id, name_en, name_cn, sku, top_category, subcategory, is_published, updated_at,
+                    variant_group_id,
                     ${hasImageFallbackSql('store_products')} AS has_image_data
                FROM store_products
               WHERE COALESCE(is_active, 1) = 1 AND top_category = ?`;
@@ -672,7 +674,9 @@ router.get('/api/retail-admin/category-products', requireRetailAdmin, (req, res)
     if (sub) { sql += ' AND subcategory = ?'; params.push(sub); }
     else { sql += " AND (subcategory IS NULL OR subcategory = '')"; }
   }
-  sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC LIMIT 500';
+  // The shop's own order (the catalog's ORDER BY), drafts included in place:
+  // the Categories pane drags these rows, so they must read the way the shop does.
+  sql += ' ORDER BY sort_order ASC, name_en ASC LIMIT 500';
   const rows = tdb().prepare(sql).all(...params).map(r => {
     r.image_data = r.has_image_data
       ? `/api/retail-admin/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`
@@ -25652,7 +25656,9 @@ router.post('/api/retail-admin/categories/reorder', requireRetailAdmin, express.
 // relative order WITHIN this set changes — the slots (and thus where this set
 // sits among every other product) are preserved, so arranging one category never
 // shuffles another. (If the set was never sorted — all slots equal/zero — fall
-// back to a 1..n ramp so a virgin catalogue still gets a stable order.)
+// back to a 1..n ramp so a virgin catalogue still gets a stable order.) The
+// slots also come out distinct — see lib/reorder-slots.js for why a tie there
+// made a drag appear not to stick.
 router.post('/api/retail-admin/products/reorder', requireRetailAdmin, express.json(), async (req, res) => {
   const ids = Array.isArray(req.body?.ids)
     ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isFinite)
@@ -25664,8 +25670,7 @@ router.post('/api/retail-admin/products/reorder', requireRetailAdmin, express.js
       `SELECT id, sort_order FROM store_products WHERE id IN (${placeholders})`
     ).all(...ids);
     if (rows.length !== ids.length) return res.status(400).json({ success: false, error: 'unknown_ids' });
-    let slots = rows.map(r => Number(r.sort_order) || 0).sort((a, b) => a - b);
-    if (slots[0] === slots[slots.length - 1]) slots = ids.map((_, i) => i + 1);
+    const slots = reorderSlots(rows.map(r => r.sort_order), ids.length);
     // Await inside the try — outside it the reorder_failed 500 below would never
     // be reached. The slot SELECT above stays OUTSIDE the transaction, where it
     // was; widening it is a behaviour change, not a conversion.
