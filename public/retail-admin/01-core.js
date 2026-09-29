@@ -2976,6 +2976,7 @@ function catDrop(ev, kind) {
       const host = document.getElementById('cat2-subs');
       if (host) host.innerHTML = subs.map((s, si) => catSubRowHtml(s, si)).join('');
     });
+    catProdRegroup();
   }
   catUpdateDirty();
 }
@@ -3006,6 +3007,7 @@ function catQrDrop(kind, from, to) {
       const host = document.getElementById('cat2-subs');
       if (host) host.innerHTML = catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('');
     });
+    catProdRegroup();
   }
   catRenderStatus();
   catQrScheduleSave();
@@ -3022,7 +3024,7 @@ function catQrDrop(kind, from, to) {
 let _catMoveTargets = [];    // flattened [{ top, sub }]; the <select> value is the index
 let _catProdReq = 0;
 let _catProdRows = [];       // all rows for the current shelf, in the shop's order
-let _catProdGroups = [];     // [{ sub, sub_cn, nodeId, units }] as drawn; a unit is [row, …]
+let _catProdGroups = [];     // [{ sub, label, label_cn, nodeId, units }] as drawn; a unit is [row, …]
 let _catProdListed = null;   // Set of product ids on any QR menu; the QR view shows only these
 
 function catCleanTree() { try { return JSON.parse(catClean); } catch (e) { return []; } }
@@ -3074,12 +3076,21 @@ function catProdUnits(rows) {
 //   in the QR menu's own product order, then the mini app's for the rest.
 // `nodeId` is the node the QR product order is kept under — the subcategory,
 // or the top category for the no-heading group.
+// The headings come from the subcategory list AS IT IS DRAWN above
+// (catSubList: the live tree, in the view's order, unsaved drags included), so
+// the two lists always read in the same order. Each heading is matched to its
+// products by the node's stable id → its SAVED name, which is what products
+// carry until a rename is saved.
 function catProdBuildGroups() {
   const t = catModel[catSel];
   const saved = t && t.id ? catCleanTree().find(x => x.id === t.id) : null;
-  const subs = (saved && saved.subs) || [];
+  const savedSubs = (saved && saved.subs) || [];
   const qr = catMode === 'qr';
-  const known = new Set(subs.map(x => x.name));
+  const live = catSubList(catSel).map(({ s }) => {
+    const sv = s.id ? savedSubs.find(x => x.id === s.id) : null;
+    return { key: sv ? sv.name : null, node: s };
+  }).filter(x => x.key);
+  const known = new Set(live.map(x => x.key));
   const rows = qr && _catProdListed ? _catProdRows.filter(p => _catProdListed.has(p.id)) : _catProdRows;
   const bySub = new Map();
   for (const p of rows) {
@@ -3088,22 +3099,33 @@ function catProdBuildGroups() {
     if (!bySub.has(k)) bySub.set(k, []);
     bySub.get(k).push(p);
   }
-  let order;
-  if (qr) {
-    const qs = t && t.id ? catQrOrdered(subs, catQr.subs[t.id], x => x) : subs;
-    order = (bySub.has('') ? [''] : []).concat(qs.map(x => x.name).filter(k => k && bySub.has(k)));
-  } else {
-    order = subs.map(x => x.name).filter(k => k && bySub.has(k));
-    for (const k of bySub.keys()) if (k && order.indexOf(k) < 0) order.push(k);
-    if (bySub.has('')) order.push('');
+  const heads = live.filter(x => bySub.has(x.key));
+  const order = heads.map(x => ({ sub: x.key, node: x.node }));
+  if (!qr) for (const k of bySub.keys()) if (k && !known.has(k)) order.push({ sub: k, node: null });
+  if (bySub.has('')) {
+    // The no-heading group: last in the mini app, first on the QR menu.
+    const none = { sub: '', node: saved };
+    if (qr) order.unshift(none); else order.push(none);
   }
-  _catProdGroups = order.map(sub => {
-    const node = sub ? subs.find(x => x.name === sub) : saved;
+  _catProdGroups = order.map(({ sub, node }) => {
     const nodeId = (node && node.id) || '';
     let units = catProdUnits(bySub.get(sub));
     if (qr) units = catQrOrderUnits(units, nodeId ? catQr.products[nodeId] : null);
-    return { sub, sub_cn: sub && node ? (node.name_cn || '') : '', nodeId, units };
+    return {
+      sub,
+      label: sub && node ? node.name : sub,
+      label_cn: sub && node ? (node.name_cn || '') : '',
+      nodeId,
+      units,
+    };
   });
+}
+// Redraw the products under the headings without fetching again — after a
+// subcategory is dragged, so the two lists never disagree.
+function catProdRegroup() {
+  if (!_catProdRows.length || !document.getElementById('cat2-prods')) return;
+  catProdBuildGroups();
+  catRenderProdList();
 }
 // The QR menu's stored order laid over the mini app's: units the list names
 // first, in its order (a variant group ranks by whichever size it names
@@ -3152,7 +3174,7 @@ function catRenderProdList() {
   // group is a named section; a shelf with no sections reads as one list.
   const heads = _catProdGroups.length > 1 || (_catProdGroups[0] && _catProdGroups[0].sub);
   host.innerHTML = _catProdGroups.map((g, gi) => {
-    const label = g.sub ? cuT(g.sub, g.sub_cn || g.sub) : cuT('no heading', '无区块');
+    const label = g.sub ? cuT(g.label, g.label_cn || g.label) : cuT('no heading', '无区块');
     return (heads ? `<div class="cat2-prod-head">${escapeHtml(label)}</div>` : '') +
       `<div class="cat2-prod-list" id="cat2-pg-${gi}"
             ondragover="catProdDragOver(event,${gi})" ondrop="catProdDrop(event,${gi})" ondragleave="catProdDragLeave(event)">${catProdGroupListHtml(gi)}</div>`;

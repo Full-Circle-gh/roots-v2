@@ -12,6 +12,10 @@
 //   · A variant group is one unit — its sizes stay together and move together.
 //   · A drop reorders only its own group and sends that group's ids in the
 //     new order; a drop on another group's list does nothing.
+//   · The headings follow the subcategory list AS DRAWN — the live tree,
+//     unsaved drags and renames included — matched to products by the node's
+//     saved name. Ash, 2026-09-29: the product list must read in the same order
+//     as the subcategory list above it.
 //   · The QR menu view is grouped the way the QR menu draws the shelf: only
 //     products on a QR menu, no heading FIRST with any heading the tree no
 //     longer names folded into it, the headings in the QR menu's order, rows in
@@ -42,7 +46,7 @@ try {
     if (a < 0 || b < a) throw new Error(`anchors "${from}" … "${to}" not found in 01-core.js — they have drifted`);
     return core.slice(a, b);
   };
-  src = cut('function catQrOrdered(', '// The rail as it is drawn')
+  src = cut('function catQrOrdered(', 'function catQrHidden(')
     + cut('// ── Drag to reorder ──', 'function catDragOver(')
     + cut('// ── The products standing on this shelf ──', 'async function catMoveProduct(');
   ({ reorderSlots } = require('../lib/reorder-slots'));
@@ -124,7 +128,7 @@ const sandbox = {
   CAT_ICON: { grip: '<grip>', box: '<box>' },
   catMode: 'miniapp',
   catSel: 0,
-  catModel: [{ id: 't1', name: 'Coffee & Milks', subs: [] }],
+  catModel: [{ id: 't1', name: 'Coffee & Milks', subs: [{ id: 'sh', name: 'Hot' }, { id: 'sc', name: 'Cold' }] }],
   catClean: JSON.stringify([{ id: 't1', name: 'Coffee & Milks', subs: [{ id: 'sh', name: 'Hot' }, { id: 'sc', name: 'Cold' }] }]),
   catQr: { tops: null, subs: {}, hidden: [], products: {} },
   catRenderStatus() {}, catQrScheduleSave() { qrSaves++; },
@@ -136,6 +140,7 @@ vm.runInContext(src + `
 this.t = {
   load(rows, listed) { _catProdRows = rows; _catProdListed = listed ? new Set(listed) : null; catProdBuildGroups(); catRenderProdList(); },
   groups: () => _catProdGroups.map(g => ({ sub: g.sub, units: g.units.map(u => u.map(p => p.id)) })),
+  labels: () => _catProdGroups.map(g => g.label),
   catProdDragStart, catProdDragOver, catProdDrop,
 };`, sandbox);
 const t = sandbox.t;
@@ -159,6 +164,24 @@ check('the mini app view draws a grip per unit, none on a second size', () => {
   t.load(ROWS);
   eq((prods.innerHTML.match(/<grip>/g) || []).length, 7, 'grips');
   eq((prods.innerHTML.match(/cat2-grip-sp/g) || []).length, 1, 'spacers');
+});
+
+check('an unsaved subcategory drag reorders the product groups with it', () => {
+  const live = sandbox.catModel[0].subs;
+  sandbox.catModel[0].subs = [live[1], live[0]];
+  try {
+    t.load(ROWS);
+    eq(t.groups().map(g => g.sub), ['Cold', 'Hot', 'Gone', ''], 'groups');
+  } finally { sandbox.catModel[0].subs = live; }
+});
+check('an unsaved rename shows the new name over the products that carry the old one', () => {
+  const live = sandbox.catModel[0].subs;
+  sandbox.catModel[0].subs = [{ id: 'sh', name: 'Hot drinks' }, live[1]];
+  try {
+    t.load(ROWS);
+    eq(t.labels().slice(0, 2), ['Hot drinks', 'Cold'], 'labels');
+    eq(t.groups()[0].units, [[3], [4, 7], [6]], 'Hot');
+  } finally { sandbox.catModel[0].subs = live; }
 });
 
 // A drag within Hot: take unit 0 (id 3) and drop it at the end.
