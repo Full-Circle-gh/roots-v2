@@ -5560,7 +5560,8 @@
           <button type="button" data-mode="qr" onclick="catSetMode('qr')">QR menu · 二维码菜单</button>
         </div>
         <div class="cat2-railcap">Shop rail · 店面左栏</div>
-        <div id="cat2-rail" data-no-i18n></div>
+        <div id="cat2-rail" data-no-i18n
+             ondragover="catDragOver(event,'top')" ondrop="catDrop(event,'top')" ondragleave="catDragLeave(event)"></div>
         <div class="cat2-railfoot">
           <button class="cat2-btn cat2-btn-ghost cat2-btn-wide" type="button" onclick="catAddTop()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>

@@ -2600,8 +2600,7 @@ function catRenderRail() {
             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();catQrToggleHide(${ti})}">${off ? CAT_ICON.eyeOff : CAT_ICON.eye}</span>`
       : '';
     return `<button type="button" class="cat2-railrow cat2-row${ti === catSel ? ' on' : ''}${off ? ' qr-off' : ''}" data-fk="t${catFk(t)}"
-        onclick="catSelect(${ti})"
-        ondragover="catDragOver(event,'top',${p})" ondrop="catDrop(event,'top',${p})" ondragleave="catDragLeave(event)">
+        onclick="catSelect(${ti})">
       <span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
             onclick="event.stopPropagation()"
             ondragstart="catDragStart(event,'top',${p})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
@@ -2648,7 +2647,7 @@ function catRenderPane() {
     <div id="cat2-tophead-rename"></div>
 
     <div class="cat2-sec">${escapeHtml(cuT('Subcategories — the section headings', '子分类 — 区块标题'))}</div>
-    <div id="cat2-subs">${catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('')
+    <div id="cat2-subs" ondragover="catDragOver(event,'sub')" ondrop="catDrop(event,'sub')" ondragleave="catDragLeave(event)">${catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('')
       || `<div class="cat2-empty">${escapeHtml(cuT('No section headings yet. Products land straight under the category.', '暂无区块标题。产品将直接归入该主分类。'))}</div>`}</div>
     <button class="cat2-btn cat2-btn-ghost" type="button" style="margin-top:10px" onclick="catAddSub(${catSel})">${CAT_ICON.plus}<span>${escapeHtml(cuT('Add subcategory', '新增子分类'))}</span></button>
 
@@ -2665,8 +2664,7 @@ function catSubRowHtml(s, si, p) {
   if (p == null) p = si;
   const c = catCount(s);
   const hidden = c && !c.published;
-  return `<div class="cat2-sub cat2-row" id="cat2-sub-${si}" data-fk="s${catFk(s)}"
-       ondragover="catDragOver(event,'sub',${p})" ondrop="catDrop(event,'sub',${p})" ondragleave="catDragLeave(event)">
+  return `<div class="cat2-sub cat2-row" id="cat2-sub-${si}" data-fk="s${catFk(s)}">
     <span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
           ondragstart="catDragStart(event,'sub',${p})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
     <span class="cat2-subname" tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('sub',${catSel},${si})">${escapeHtml(s.name || cuT('Untitled', '未命名'))}<button class="cat2-icon cat2-pen-inline" type="button" title="${escapeAttr(cuT('Rename', '重命名'))}" onclick="event.stopPropagation();catOpenRename('sub',${catSel},${si})">${CAT_ICON.pen}</button></span>
@@ -2870,9 +2868,9 @@ function catFlip(hostId, swap) {
     });
   });
 }
-let catDrag = null;   // { kind:'top'|'sub', i }
+let catDrag = null;   // { kind:'top'|'sub', i, gap }
 function catDragStart(ev, kind, i) {
-  catDrag = { kind, i };
+  catDrag = { kind, i, gap: null };
   ev.dataTransfer.effectAllowed = 'move';
   try { ev.dataTransfer.setData('text/plain', kind); } catch (e) {}
   const row = ev.target.closest('.cat2-row');
@@ -2894,19 +2892,48 @@ function catDragEnd() {
   document.querySelectorAll('.cat2-dragging').forEach(el => el.classList.remove('cat2-dragging'));
   catClearDropCues();
 }
-function catDragOver(ev, kind, i) {
+// The list, not the row under the cursor, decides where the row lands: the
+// cursor picks the nearest gap between rows (above a row's middle is the gap
+// before it), and the line is drawn in that gap. It used to be the hovered
+// row's far edge, so dragging down onto a row's top half drew the line below
+// it and the row landed one place further than the cursor pointed; crossing a
+// row's name or buttons also blinked the line off.
+function catDragRows(host) { return host ? Array.from(host.querySelectorAll(':scope > .cat2-row')) : []; }
+function catGapAt(rows, y) {
+  for (let g = 0; g < rows.length; g++) {
+    const r = rows[g].getBoundingClientRect();
+    if (y < r.top + r.height / 2) return g;
+  }
+  return rows.length;
+}
+// Gap g (0..n) as a place to splice into once the row is lifted out: the gaps
+// either side of the dragged row both mean "stay put".
+function catGapToPlace(from, g) { return g > from ? g - 1 : g; }
+function catDragOver(ev, kind) {
   if (!catDrag || catDrag.kind !== kind) return;
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
+  const rows = catDragRows(ev.currentTarget);
+  const g = catGapAt(rows, ev.clientY);
+  if (g === catDrag.gap) return;
+  catDrag.gap = g;
   catClearDropCues();
-  if (i === catDrag.i) return;
-  ev.currentTarget.classList.add(i < catDrag.i ? 'cat2-drop-before' : 'cat2-drop-after');
+  if (catGapToPlace(catDrag.i, g) === catDrag.i) return;
+  if (g < rows.length) rows[g].classList.add('cat2-drop-before');
+  else if (rows.length) rows[rows.length - 1].classList.add('cat2-drop-after');
 }
-function catDragLeave(ev) { ev.currentTarget.classList.remove('cat2-drop-before', 'cat2-drop-after'); }
-function catDrop(ev, kind, i) {
+// dragleave also fires when the cursor crosses into a child of the list; only
+// leaving the list itself clears the line.
+function catDragLeave(ev) {
+  if (ev.relatedTarget && ev.currentTarget.contains(ev.relatedTarget)) return;
+  if (catDrag) catDrag.gap = null;
+  catClearDropCues();
+}
+function catDrop(ev, kind) {
   if (!catDrag || catDrag.kind !== kind) return;
   ev.preventDefault();
   const from = catDrag.i;
+  const i = catGapToPlace(from, catGapAt(catDragRows(ev.currentTarget), ev.clientY));
   catDrag = null;
   catClearDropCues();
   if (from === i) { catDragEnd(); return; }
