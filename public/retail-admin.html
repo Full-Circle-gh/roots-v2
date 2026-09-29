@@ -5552,7 +5552,7 @@
     </div>
 
     <div class="cat2-shelf">
-      <aside class="cat2-rail">
+      <aside class="cat2-rail" ondragover="catDragOver(event,'top')" ondrop="catDrop(event,'top')" ondragleave="catDragLeave(event)">
         <!-- §288 — which rail the drag list is arranging. The tree is one; the
              QR menu keeps its own order and its own hidden categories. -->
         <div class="cat2-mode" id="cat2-mode" role="group">
@@ -5560,8 +5560,7 @@
           <button type="button" data-mode="qr" onclick="catSetMode('qr')">QR menu · 二维码菜单</button>
         </div>
         <div class="cat2-railcap">Shop rail · 店面左栏</div>
-        <div id="cat2-rail" data-no-i18n
-             ondragover="catDragOver(event,'top')" ondrop="catDrop(event,'top')" ondragleave="catDragLeave(event)"></div>
+        <div id="cat2-rail" data-no-i18n></div>
         <div class="cat2-railfoot">
           <button class="cat2-btn cat2-btn-ghost cat2-btn-wide" type="button" onclick="catAddTop()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
