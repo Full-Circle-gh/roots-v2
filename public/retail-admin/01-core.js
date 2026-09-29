@@ -2646,10 +2646,12 @@ function catRenderPane() {
     </div>
     <div id="cat2-tophead-rename"></div>
 
+    <div ondragover="catDragOver(event,'sub')" ondrop="catDrop(event,'sub')" ondragleave="catDragLeave(event)">
     <div class="cat2-sec">${escapeHtml(cuT('Subcategories — the section headings', '子分类 — 区块标题'))}</div>
-    <div id="cat2-subs" ondragover="catDragOver(event,'sub')" ondrop="catDrop(event,'sub')" ondragleave="catDragLeave(event)">${catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('')
+    <div id="cat2-subs">${catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('')
       || `<div class="cat2-empty">${escapeHtml(cuT('No section headings yet. Products land straight under the category.', '暂无区块标题。产品将直接归入该主分类。'))}</div>`}</div>
     <button class="cat2-btn cat2-btn-ghost" type="button" style="margin-top:10px" onclick="catAddSub(${catSel})">${CAT_ICON.plus}<span>${escapeHtml(cuT('Add subcategory', '新增子分类'))}</span></button>
+    </div>
 
     <div class="cat2-sec" style="margin-top:34px">${escapeHtml(cuT('Products on this shelf', '货架上的产品'))}</div>
     <div id="cat2-prods"><div class="cat2-empty">${escapeHtml(cuT('Loading…', '加载中…'))}</div></div>
@@ -2898,7 +2900,16 @@ function catDragEnd() {
 // row's far edge, so dragging down onto a row's top half drew the line below
 // it and the row landed one place further than the cursor pointed; crossing a
 // row's name or buttons also blinked the line off.
-function catDragRows(host) { return host ? Array.from(host.querySelectorAll(':scope > .cat2-row')) : []; }
+//
+// The drop area is the whole box around the list (the rail, the subcategory
+// section), not just the rows: letting go below the last row puts the row last,
+// above the first puts it first. When the area stopped at the rows, moving a
+// row to the end meant hitting the bottom half of the last row, and a little
+// lower did nothing at all.
+function catDragRows(kind) {
+  const host = document.getElementById(kind === 'top' ? 'cat2-rail' : 'cat2-subs');
+  return host ? Array.from(host.querySelectorAll(':scope > .cat2-row')) : [];
+}
 function catGapAt(rows, y) {
   for (let g = 0; g < rows.length; g++) {
     const r = rows[g].getBoundingClientRect();
@@ -2913,7 +2924,7 @@ function catDragOver(ev, kind) {
   if (!catDrag || catDrag.kind !== kind) return;
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
-  const rows = catDragRows(ev.currentTarget);
+  const rows = catDragRows(kind);
   const g = catGapAt(rows, ev.clientY);
   if (g === catDrag.gap) return;
   catDrag.gap = g;
@@ -2933,7 +2944,7 @@ function catDrop(ev, kind) {
   if (!catDrag || catDrag.kind !== kind) return;
   ev.preventDefault();
   const from = catDrag.i;
-  const i = catGapToPlace(from, catGapAt(catDragRows(ev.currentTarget), ev.clientY));
+  const i = catGapToPlace(from, catGapAt(catDragRows(kind), ev.clientY));
   catDrag = null;
   catClearDropCues();
   if (from === i) { catDragEnd(); return; }

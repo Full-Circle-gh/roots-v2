@@ -14,6 +14,11 @@
 // very top, the very end, and "no move" when the gap is either side of the
 // dragged row itself.
 //
+// AND, 2026-09-29, the same day: the drop area is the whole box around the
+// list, not just the rows. With the area stopping at the last row, moving
+// "Snacks & Treats" below "Dry & Pantry" (the last category) only worked by
+// letting go on the bottom half of that one row; a little lower did nothing.
+//
 // The drag section is sliced out of the real file and run in a sandbox, so this
 // tests the shipped code, not a copy of it.
 //
@@ -53,7 +58,7 @@ const host = {
 const sandbox = {
   window: { matchMedia: () => ({ matches: true }) },   // reduced motion: no FLIP
   document: {
-    getElementById: () => null,
+    getElementById: id => (id === 'cat2-rail' || id === 'cat2-subs') ? host : null,
     querySelectorAll: sel => {
       const want = sel.split(',').map(s => s.trim().replace(/^\./, ''));
       return rows.filter(r => want.some(c => r.classList.has(c)));
@@ -133,6 +138,20 @@ check('Plant Protein onto the top half of Yogurts lands first', () => {
   const r = drag(3, topHalf(0));
   eq(r.cue, ['before0'], 'line');
   eq(r.order, ['Plant Protein', 'Yogurts', 'Spreads & Dips', 'Pickles & Olives', 'Cheese'], 'order');
+});
+
+console.log('\nthe box around the list catches the drop');
+check('second-to-last, let go below the list, lands last', () => {
+  fresh();
+  const r = drag(3, TOP + 5 * ROW_H + 25);    // on the "Add" button under the list
+  eq(r.cue, ['after4'], 'line');
+  eq(r.order, ['Yogurts', 'Spreads & Dips', 'Pickles & Olives', 'Cheese', 'Plant Protein'], 'order');
+});
+check('second, let go above the list, lands first', () => {
+  fresh();
+  const r = drag(1, TOP - 20);                // on the heading above the list
+  eq(r.cue, ['before0'], 'line');
+  eq(r.order, ['Spreads & Dips', 'Yogurts', 'Pickles & Olives', 'Plant Protein', 'Cheese'], 'order');
 });
 
 console.log('\nno move');
