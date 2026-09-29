@@ -480,6 +480,20 @@
     </div>`;
   }
 
+  // ADD EVERY ONLINE-STORE PRODUCT (Ash, 2026-09-29). How many products the
+  // mini app shows that this menu does not list yet — counted from the
+  // unfiltered candidate list, the only one that sees all of them, and kept
+  // while a search narrows the rows below. Zero hides the button: there is
+  // nothing for it to do.
+  let _pubMissing = 0;
+  function addAllRow() {
+    if (!_pubMissing || RO()) return '';
+    const n = _pubMissing;
+    return `<div class="shp-pick-all">
+        <button type="button" class="shp-btn sm" id="shp-add-all" data-cap="stores:edit" onclick="shpAddAllPublished(this)">${esc(T(`+ Add all ${n} Online store products`, `+ 添加全部 ${n} 个线上商城商品`))}</button>
+      </div>`;
+  }
+
   // Everything below the search box, in one patchable box.
   //
   // THE LOADING LINE ONLY WHEN THERE IS NOTHING TO KEEP. This panel is a card
@@ -496,7 +510,7 @@
   function pickList() {
     if (_pickLoading && !_pick.length) return `<div class="shp-note sm">${esc(T('Loading…', '加载中…'))}</div>`;
     if (!_pick.length) return `<div class="shp-note sm">${esc(_pickQ ? T('No products match this filter', '没有匹配此筛选条件的产品') : T('No products yet', '还没有商品'))}</div>`;
-    return `<ul class="shp-pick-list">` + _pick.map(p => `<li>
+    return addAllRow() + `<ul class="shp-pick-list">` + _pick.map(p => `<li>
         <span class="shp-pick-name">${nameOf(p.name_en, p.name_cn)}</span>
         <span class="shp-pick-sku">${esc(p.sku || '')}</span>
         <span class="shp-pick-price">${esc(money(p.sell_price))}</span>
@@ -774,6 +788,7 @@
       const j = await api('/api/retail-admin/shops/' + _shop.id + '/candidates?q=' + encodeURIComponent(_pickQ));
       if (seq !== _pickSeq) return;   // a later keystroke already asked; this answer is stale
       _pick = j.data || [];
+      if (!_pickQ) _pubMissing = _pick.filter(p => p.is_published === 1).length;
     } catch (e) {
       if (seq !== _pickSeq) return;
       _pick = []; toast(errText(e, 'load_failed'), 'err');
@@ -795,6 +810,39 @@
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = T('+ Add product', '+ 添加商品'); }
       toast(errText(e, 'save_failed'), 'err');
+    }
+  };
+
+  // One tap for everything the mini app shows and this menu does not list.
+  // Confirmed first, because it can add hundreds of rows, and because what it
+  // adds as Stocked shows SOLD OUT on the QR menu until this shop has counted
+  // it (§47) — the operator is told that before, not after.
+  window.shpAddAllPublished = async function (btn) {
+    if (!_shop || !_pubMissing || RO()) return;
+    if (typeof askConfirm !== 'function') return;
+    const n = _pubMissing;
+    const agreed = await askConfirm({
+      titleEn: `Add ${n} product${n === 1 ? '' : 's'} to this menu?`,
+      titleCn: `添加 ${n} 个商品到此菜单？`,
+      bodyEn: 'Every Online store product not on this menu is added at its catalogue price, as Stocked. Anything this shop has never counted shows as sold out on the QR menu. Remove what this shop does not sell.',
+      bodyCn: '所有尚未在此菜单上的线上商城商品将按商品价格添加,类型为备货。此门店从未盘点过的商品会在二维码菜单上显示为售罄。请移除此门店不卖的商品。',
+      confirmEn: 'Add', confirmCn: '添加',
+      cancelEn: 'Cancel', cancelCn: '取消',
+    });
+    if (!agreed) return;
+    if (btn) { btn.disabled = true; btn.textContent = T('Adding…', '添加中…'); }
+    try {
+      const j = await api('/api/retail-admin/shops/' + _shop.id + '/listings/add-published', { method: 'POST' });
+      _rows = j.data.listings || _rows;
+      toast(T('Saved', '已保存'), 'ok');
+      // Re-ask the candidates: what was added is no longer one, and the count
+      // on the button has to come from the server, not from arithmetic here.
+      _pubMissing = 0; _pickQ = ''; _pick = [];
+      paint(); fetchPick();
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      toast(errText(e, 'save_failed'), 'err');
+      renderPickList();
     }
   };
 

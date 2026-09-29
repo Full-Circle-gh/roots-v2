@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.204 · 2026-09-29 · §291 ADD EVERY ONLINE-STORE PRODUCT TO A SHOP MENU — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE BUT 盘点过.** The new button on Sales → Locations → Shop menu's Add product panel and its confirm. See *Add every Online store product to a shop menu (§291)*.
+
 **v1.203 · 2026-09-29 · §288 THE QR MENU'S OWN CATEGORY ORDER — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The Mini app / QR menu switch on Products → Categories, its hint, and its status line. See *The QR menu's own category order (§288)*.
 
 **v1.202 · 2026-09-29 · §287 A MADE-HERE ITEM CAN BE MARKED SOLD OUT FROM THE TILL — NOTHING COMPOSED, TWO PAIRS LIFTED.** `Sold out · 售罄` is lifted from the QR menu's own pill for this exact state (`routes/shop-menu.js`, the `.sold` label), so the till, the Shops screen and the customer's menu use one word for one state. `Done · 完成` is lifted from the admin (`public/retail-admin/05-marketing.js`, the Manage/Done toggle). **Rejected: `缺货`** (live on the till as `Out of stock` and on the admin's product grid) for this state — it stays on the till for a shelf that is empty, but a made-here item switched off is what the customer already sees as 售罄, and the cashier should read the same word the customer does. Rules 1 to 7 unchanged.
@@ -9277,3 +9279,29 @@ Chinese reader on staff should correct any line that reads wrong.
   would leave the operator guessing what "default" is.
 - `扫码点单`: rejected again, for the reason in *A section taken off the QR menu (2026-09-15)* — it appears nowhere in this
   product, and 二维码菜单 is the live name for this surface.
+
+## Add every Online store product to a shop menu (§291)
+
+**Composed by Claude, 2026-09-29, under the 2026-09-06 amendment.** Operator
+register only (Rule 1): the desktop Shop menu screen
+(`public/retail-admin/28-shops.js`). Nothing reaches a customer. Ash reads
+English only, so a Chinese reader on staff should correct any line that reads
+wrong.
+
+| shipped | built from |
+|---|---|
+| `+ Add all N Online store products · + 添加全部 N 个线上商城商品` (button) | **composed.** `+ 添加` from the live `+ 添加商品` beside it; `全部` live (`全部门店`); `线上商城` from the product editor's live `Online store · 线上商城`; `N 个…商品` the move dialog's live counter (`移动 N 个商品到…`) |
+| `Add N products to this menu? · 添加 N 个商品到此菜单？` (confirm title) | **composed on the live sibling** `Move N products to X? · 移动 N 个商品到X？`, with 移动 → 添加 and the place → 此菜单 |
+| `Every Online store product not on this menu is added at its catalogue price, as Stocked. Anything this shop has never counted shows as sold out on the QR menu. Remove what this shop does not sell. · 所有尚未在此菜单上的线上商城商品将按商品价格添加,类型为备货。此门店从未盘点过的商品会在二维码菜单上显示为售罄。请移除此门店不卖的商品。` (confirm body) | **composed.** `线上商城`, `类型`, `备货` (this screen's own Kind column and mode), `二维码菜单`, `售罄` (the QR menu's own pill) and `移除` (this screen's Remove) are all live; `盘点过` (counted) is composed, and this session did not confirm `盘点` as a live pair — a Chinese reader should check it. Halfwidth comma, as the move dialog beside it |
+| `Add · 添加` (confirm button) | **composed** by trimming the live `+ 添加商品` to its verb |
+
+`Adding… · 添加中…`, `Cancel · 取消` and `Saved · 已保存` are copied whole from this screen.
+
+**Live candidates rejected.**
+
+- `上架` (live, the In shop switch): **rejected** for the button. It is the
+  per-row on/off state on this screen, and a button reading 全部上架 would read
+  as "switch every row on", which it does not do.
+- `小程序` for the source: **rejected** in favour of `线上商城`, the name the
+  product editor gives the `is_published` switch this button reads.
+

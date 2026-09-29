@@ -439,6 +439,44 @@ router.post('/api/retail-admin/shops/:id/listings', requireRetailAdmin, requireS
   ok(res, getListing(id, info.lastInsertRowid), 201);
 });
 
+// ADD EVERY ONLINE-STORE PRODUCT IN ONE GO (Ash, 2026-09-29: "make all products
+// on mini app available also on the qr menu"). The same thing the per-product
+// POST above does, once for each product the mini app shows — is_published and
+// active, the filter GET /api/retail/products applies — that this shop does not
+// list yet. Same defaults as one at a time: catalogue price, stocked, at the
+// end of the menu, in the mini app's own order.
+//
+// §42 IS UNCHANGED BY THIS. A listing is still what puts a product on a shop's
+// menu; this only writes the listings a person would otherwise add one by one.
+// It is a one-off per tap, not a sync: a product published tomorrow is not
+// added until someone taps again, and anything removed afterwards stays off.
+router.post('/api/retail-admin/shops/:id/listings/add-published', requireRetailAdmin, requireStoresEdit, (req, res) => {
+  const id = intParam(req.params.id);
+  if (!id || !getShop(id)) return bad(res, 404, 'not_found');
+  const db = tdb();
+  let added = 0;
+  db.transaction(() => {
+    const todo = db.prepare(`
+      SELECT p.id, p.sell_price FROM store_products p
+       WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+         AND p.id NOT IN (SELECT store_product_id FROM shop_listings WHERE shop_id = ?)
+       ORDER BY p.sort_order ASC, p.name_en ASC, p.id ASC
+    `).all(id);
+    const last = db.prepare('SELECT COALESCE(MAX(sort_position), -1) AS m FROM shop_listings WHERE shop_id = ?').get(id);
+    let sort = (last ? last.m : -1) + 1;
+    const ins = db.prepare(
+      "INSERT INTO shop_listings (shop_id, store_product_id, price, fulfilment_mode, sort_position) VALUES (?, ?, ?, 'stocked', ?)"
+    );
+    for (const p of todo) ins.run(id, p.id, coercePrice(p.sell_price) ?? 0, sort++);
+    added = todo.length;
+  })();
+  if (added) {
+    logActivity(req.user.id, req.user.username, 'create', 'shop_listing', id,
+      { shop_id: id, added, via: 'add_published' }, req.ip);
+  }
+  ok(res, { added, listings: listListings(id) });
+});
+
 router.patch('/api/retail-admin/shops/:id/listings/:lid', requireRetailAdmin, requireStoresEdit, express.json(), (req, res) => {
   const id = intParam(req.params.id);
   const lid = intParam(req.params.lid);
