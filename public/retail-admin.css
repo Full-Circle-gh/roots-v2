@@ -10575,9 +10575,18 @@
   .cat2-prod select { font: 400 13px var(--f-sans); color: var(--td-text, #111A2B);
     background-color: var(--td-surface, #fff); border: 1px solid var(--td-border, #E4E0D5);
     border-radius: 8px; padding: 6px 28px 6px 10px; cursor: pointer; max-width: 200px; }
-  /* invisible trigger row: the IntersectionObserver reveals the next page
-     when this scrolls into view, so the list just keeps growing */
-  .cat2-more { height: 1px; }
+  /* a heading over each section's products, as the mini app groups them;
+     a product drags only within its own group */
+  .cat2-prod-head { font: 500 12px var(--f-sans); color: var(--td-text2, #58606E);
+    margin: 18px 0 2px; }
+  .cat2-prod-head:first-child { margin-top: 0; }
+  .cat2-prod-unit { border-bottom: 1px solid var(--td-border, #E4E0D5); }
+  .cat2-prod-unit:last-child { border-bottom: 0; }
+  .cat2-prod-unit .cat2-prod { border-bottom: 0; }
+  .cat2-prod-unit:hover .cat2-grip,
+  .cat2-prod-unit:focus-within .cat2-grip { opacity: 1; }
+  /* the second and later sizes of a variant sit under the first one's grip */
+  .cat2-grip-sp { width: 21px; flex: none; }
 
   @media (max-width: 880px) {
     .cat2-shelf { grid-template-columns: 1fr; }
