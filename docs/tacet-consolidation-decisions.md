@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.458
+# Tacet shared-core consolidation — decisions record, v4.459
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-29 · v4.459 — **§289 · THE TILL'S TILES CARRY THE PRODUCT'S PHOTO — DECIDED BY ASH:** *"we have garlic dill sour cream in spreads cateogry and garlic dill sour cream in toast category , both have the same name , i dont want the staff to havem istake at the till"*, then, after Claude recommended renaming the toast and argued against a category line on the tile, *"why we dont add the productp icture ?"* and *"i want photos in the till"*. Claude's view, given before the build and recorded here: the photo helps at the till, but it does not fix the name. Two products still share it on the receipt, the kitchen ticket and the reports, so the rename of the toast to *…Toast* is still owed as a data change. **THE PHOTO GOES ACROSS THE TOP OF THE TILE, NOT BESIDE THE NAME**: at 140px an iPad column has no room for a thumbnail and a name that still ends in *Toast*. The grid's rows grow from 100px to 168px only when the till has at least one photo, so a tenant with none keeps today's grid exactly. A product with no photo is the ordinary tile, just taller. **THE ADMIN IMAGE ROUTE, NOT THE PUBLIC ONE**: the till sells products that were never published (§150), and the public route refuses those. `/api/retail-admin/products/:id/image` now takes `?w`, the same downscale the public route does, through one shared `sendProductImage()`. **THE CACHE KEYS ARE KEPT APART**: the public route reads the shared thumbnail cache before its published check, so the admin route's keys start `admin|`. The new suite asks the public route for the exact thumbnail a till just fetched and expects 404, and it goes red when the prefix is removed. `hasImageFallbackSql()` moved to `lib/product-image-sql.js` so `routes/retail-shops.js` can use it without the suites that stub `routes/retail.js` losing it. A photo that fails to load is dropped and remembered, so it does not flash back as a broken icon on every re-render. New suite `scripts/test_till_photos.js` **7/7**; `scripts/test_counter_catalogue.js` gains four checks. No new UI string in either language (the image's alt is empty on purpose, since the name is printed under it), so nothing to declare in `docs/tacet-delivery-vocabulary.md`. No schema, no migration, no change to `.gitignore` or CI.
 
 2026-09-29 · v4.458 — **§288 · THE QR MENU HAS ITS OWN CATEGORY ORDER, AND CAN HIDE A CATEGORY — DECIDED BY ASH:** *"main menu qr - tenenat sohuld be aboe to organize the left menu as he pleased regardless the way its organized on the mini app"*, then *"its not about hotels ,it about locations . same order in every location, thats the plan"*, *"2. yes"* (hide a category on the QR menu only) and *"3. yes"* (a Mini app / QR menu switch on Products → Categories). **BEFORE THIS, ONE ORDER FOR EVERY SURFACE.** The QR menu (`routes/shop-menu.js` buildMenu), the mini app and the web shop all drew `storefront_config['category.tree']` in its array order; dragging a row on the Categories screen moved all three. **ONLY THE ORDER IS SPLIT, NOT THE TREE.** New key `storefront_config['qrMenu.categoryOrder']` (`lib/qr-menu-category-order.js`): `{ tops, subs, hidden }`, stable node ids, one value for the tenant so every location's QR menu matches. `tops: null` and an absent `subs` entry mean *follow the mini app*, so nothing moved the day this shipped. A node the order does not name (a category added later) is drawn after the named ones; an id the tree no longer has is skipped. A hidden top category is left off the QR menu **with its products** — they do not fall into OTHER. A second QR-only tree was considered and rejected: two copies drift, and a rename on one side would orphan products on the other. Write: `PUT /api/retail-admin/category-tree/qr-order`, under the tree's own prefix so `lib/cap-routes.js` gates it on `categories:edit`. Desktop: a *Mini app · 小程序 / QR menu · 二维码菜单* switch above the rail on Products → Categories; in QR mode dragging reorders the QR menu only, an eye on each row hides it there, and the status line offers *Reset to mini app order*. Names, subcategories and products stay shared and are still edited in either mode. **Not changed:** the mini app, the web shop, the phone admin (read-only on categories, as before), and the order endpoint — hiding is what the menu draws, not what it will accept. Held by `scripts/test_qr_menu_category_order.js`. Four strings composed by Claude; see the vocabulary's v1.203. No schema change; no change to `.gitignore` or CI.
 
@@ -20915,3 +20917,21 @@ menu as he pleased regardless the way its organized on the mini app"*, then
    `categories:edit`.
 6. **Hiding is display only.** The order endpoint does not refuse a hidden
    category's product; it is simply not on the menu.
+
+## §289 — THE TILL'S TILES CARRY THE PRODUCT'S PHOTO
+
+**Decided 2026-09-29 by Ash** (*"i want photos in the till"*, raised by two
+products with one name, a toast and a jar).
+
+1. **The photo is the product's own primary photo** (with the usual variant
+   fallback to a sibling's). There is no separate till photo.
+2. **Across the top of the tile.** The name keeps the tile's full width.
+3. **Rows grow only when the till has any photo.** A tenant with none keeps
+   today's grid.
+4. **A product without a photo is the ordinary tile.** No placeholder.
+5. **The admin image route serves it, as a thumbnail (`?w`).** The till sells
+   unpublished products (§150), which the public route refuses. The two
+   routes' cache entries never share a key.
+6. **A photo does not replace a clear name.** Two products that share a name
+   still share it on the receipt, the kitchen ticket and the reports; that is
+   fixed by renaming, not here.
