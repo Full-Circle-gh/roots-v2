@@ -104,6 +104,11 @@ const LISTING_SELECT = `
   SELECT sl.id, sl.shop_id, sl.store_product_id, sl.price, sl.fulfilment_mode,
          sl.is_available, sl.sort_position, sl.created_at, sl.updated_at,
          p.name_en, p.name_cn, p.sku, p.sell_price,
+         -- The size. Variants are separate product rows carrying the SAME name,
+         -- so without it two sizes of one product read identically on the Shop
+         -- menu list and the add picker, and the one removed or added was a
+         -- guess at the SKU. The till (§183) and the QR menu (§129) already read it.
+         p.variant_label, p.variant_label_cn,
          COALESCE(p.is_active, 1) AS product_is_active,
          COALESCE(p.is_published, 0) AS product_is_published
     FROM shop_listings sl
@@ -386,7 +391,8 @@ router.get('/api/retail-admin/shops/:id/candidates', requireRetailAdmin, (req, r
   // put every Chinese-only product at the top in a block, under an empty sort
   // key, which is where a reader looks last.
   const rows = tdb().prepare(`
-    SELECT p.id, p.name_en, p.name_cn, p.sku, p.sell_price, COALESCE(p.is_published, 0) AS is_published
+    SELECT p.id, p.name_en, p.name_cn, p.sku, p.sell_price, COALESCE(p.is_published, 0) AS is_published,
+           p.variant_label, p.variant_label_cn
       FROM store_products p
      WHERE COALESCE(p.is_active, 1) = 1
        AND p.id NOT IN (SELECT store_product_id FROM shop_listings WHERE shop_id = ?)

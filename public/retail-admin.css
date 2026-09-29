@@ -15367,6 +15367,11 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   font: 400 15px/1.4 var(--f-sans); color: var(--td-text);
 }
 #tab-shop-menu .shp-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Name, then the size of a variant. The name ellipses; the size never shrinks,
+   because it is what tells two rows of the same product apart. */
+#tab-shop-menu .shp-name-line { display: flex; gap: 6px; min-width: 0; align-items: baseline; }
+#tab-shop-menu .shp-name-line > :first-child { min-width: 0; }
+#tab-shop-menu .shp-size { flex: none; white-space: nowrap; }
 #tab-shop-menu .shp-pick-sku { font-size: 13px; color: var(--td-text2); }
 #tab-shop-menu .shp-pick-price { font-variant-numeric: tabular-nums; color: var(--td-text2); }
 
