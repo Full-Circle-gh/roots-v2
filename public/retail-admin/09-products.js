@@ -917,9 +917,7 @@ function paPickCat(val) {
 // Hidden when "All categories" is selected (nothing to narrow). Options = the
 // canonical tree's subs that actually have products here, plus any stray
 // subcategory string present on a product but missing from the tree (catches
-// post-rename drift). Lets the operator isolate one subcategory and drag-to-
-// reorder within just it — the reorder endpoint is slot-preserving, so shuffling
-// only a subcategory's ids never disturbs the rest of the category.
+// post-rename drift). Lets the operator isolate one subcategory.
 function paFillSubFilter() {
   const top = document.getElementById('pa-filter');
   const sub = document.getElementById('pa-subfilter');
@@ -2039,118 +2037,11 @@ function _paVariantTag(m) {
   return escapeHtml((m.variant_label || '').trim() || m.size || m.sku || '—');
 }
 
-// ── Drag-to-reorder (list overview, single category) ───────────────────────
-// PA_REORDER_UNITS mirrors the rows on screen as lists of product ids (a variant
-// group is one entry holding all its sibling ids). paRowDrop splices that array
-// into the new order, flattens it to ids, and reorders the matching slots inside
-// PA_PRODUCTS so the re-render shows the move immediately; the server then
-// redistributes sort_order across the same ids (POST …/products/reorder).
-let PA_REORDER_UNITS = null;
-let _paDragFrom = null;
-
-// ── Edge auto-scroll while dragging a row ───────────────────────────────────
-// Native HTML5 drag barely auto-scrolls (and not at all when the drag began on
-// the tiny grip), so dropping a product at the TOP of a long list meant manual
-// scrolling first. We drive our own scroll: a generous 160px band near the top
-// / bottom edge ramps speed by how close the cursor is, so "scroll up" engages
-// easily the moment you near the top.
-let _paScrollRAF = null, _paScrollDir = 0, _paScrollSpeed = 0;
-function _paScrollTarget() {
-  // Use an inner scroller wrapped around the list if there is one; otherwise the
-  // whole page scrolls — fall back to the document scroller.
-  let el = document.getElementById('tab-products');
-  while (el && el !== document.body) {
-    const s = getComputedStyle(el);
-    if (/(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 4) return el;
-    el = el.parentElement;
-  }
-  return document.scrollingElement || document.documentElement;
-}
-function _paAutoScrollTick() {
-  if (!_paScrollDir) { _paScrollRAF = null; return; }
-  _paScrollTarget().scrollTop += _paScrollDir * _paScrollSpeed;
-  _paScrollRAF = requestAnimationFrame(_paAutoScrollTick);
-}
-function _paDragAutoScroll(clientY) {
-  const BAND = 160, MAX = 26;            // big band + brisk max = easy to trigger
-  const top = BAND, bot = window.innerHeight - BAND;
-  let dir = 0, frac = 0;
-  if (clientY < top)      { dir = -1; frac = (top - clientY) / BAND; }
-  else if (clientY > bot) { dir =  1; frac = (clientY - bot) / BAND; }
-  _paScrollDir = dir;
-  _paScrollSpeed = dir ? Math.max(5, Math.min(1, frac) * MAX) : 0;
-  if (dir && !_paScrollRAF) _paScrollRAF = requestAnimationFrame(_paAutoScrollTick);
-}
-function _paStopAutoScroll() {
-  _paScrollDir = 0; _paScrollSpeed = 0;
-  if (_paScrollRAF) { cancelAnimationFrame(_paScrollRAF); _paScrollRAF = null; }
-}
-// Document-level so the band still works in the row gaps and off to the side,
-// not only when the cursor is directly over a row.
-function _paDocDragOver(ev) { if (_paDragFrom !== null) _paDragAutoScroll(ev.clientY); }
-
-function paRowDragStart(ev, idx) {
-  _paDragFrom = idx;
-  ev.dataTransfer.effectAllowed = 'move';
-  try { ev.dataTransfer.setData('text/plain', String(idx)); } catch (e) {}
-  document.addEventListener('dragover', _paDocDragOver);
-  const row = ev.target.closest('.pa-row');
-  // Drag the whole row, not just the tiny grip, as the ghost image.
-  if (row) { try { ev.dataTransfer.setDragImage(row, 24, 18); } catch (e) {}
-             setTimeout(() => row.classList.add('pa-row-dragging'), 0); }
-}
-function paRowDragEnd() {
-  _paDragFrom = null;
-  document.removeEventListener('dragover', _paDocDragOver);
-  _paStopAutoScroll();
-  document.querySelectorAll('.pa-row-dragging').forEach(el => el.classList.remove('pa-row-dragging'));
-  document.querySelectorAll('.pa-row-drop').forEach(el => el.classList.remove('pa-row-drop'));
-}
-function paRowDragOver(ev, idx) {
-  if (_paDragFrom === null) return;
-  ev.preventDefault();
-  ev.dataTransfer.dropEffect = 'move';
-  const row = ev.currentTarget;
-  document.querySelectorAll('.pa-row-drop').forEach(el => { if (el !== row) el.classList.remove('pa-row-drop'); });
-  if (idx !== _paDragFrom) row.classList.add('pa-row-drop');
-}
-function paRowDragLeave(ev) { ev.currentTarget.classList.remove('pa-row-drop'); }
-function paRowDrop(ev, idx) {
-  if (_paDragFrom === null || !Array.isArray(PA_REORDER_UNITS)) return;
-  ev.preventDefault();
-  const from = _paDragFrom, to = idx;
-  paRowDragEnd();
-  if (from === to) return;
-  const units = PA_REORDER_UNITS;
-  const moved = units.splice(from, 1)[0];
-  units.splice(to, 0, moved);
-  const newIds = units.flat();
-  // Reorder ONLY these ids' slots within PA_PRODUCTS — every other product (and
-  // category) keeps its place, mirroring the server's slot-preserving write.
-  const catIds = new Set(newIds);
-  const byId = new Map(PA_PRODUCTS.map(p => [p.id, p]));
-  let k = 0;
-  PA_PRODUCTS = PA_PRODUCTS.map(p => catIds.has(p.id) ? byId.get(newIds[k++]) : p);
-  paRender();
-  paPersistOrder(newIds);
-}
-async function paPersistOrder(ids) {
-  if (!Array.isArray(ids) || ids.length < 2) return;
-  try {
-    await api('/api/retail-admin/products/reorder', { method: 'POST', body: { ids } });
-  } catch (e) {
-    toast((e && e.message) ? (cuT('Reorder failed: ', '排序失败:') + e.message) : 'Reorder failed · 排序未保存', 'err');
-    paLoad();   // resync from the server so the screen can't drift from the DB
-  }
-}
-
 // Full Circle brand glyphs for the product cards — inline so they inherit
 // currentColor from the badge / empty-state. Sparkle marks a DESIGNED card;
 // the broken-image glyph is the honest empty state for unphotographed products.
 const PA_ICON_SPARKLE = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z"/><circle cx="19" cy="5" r="1.2"/><circle cx="6" cy="18" r="1"/></svg>';
 const PA_ICON_BROKEN  = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 17l5-4 4 3 4-5 5 5"/><path d="M3 5l18 14"/></svg>';
-// Six-dot drag grip for the reorder column.
-const PA_ICON_GRIP    = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.4"/><circle cx="10" cy="4" r="1.4"/><circle cx="6" cy="8" r="1.4"/><circle cx="10" cy="8" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="10" cy="12" r="1.4"/></svg>';
 
 // The per-operator View tweaks (photo crop / status display / empty-photo
 // style) are gone with their popover. They had been display:none for most of
@@ -2529,20 +2420,13 @@ function paRender() {
   const _uShown = _paUnits(rows).length, _uTotal = _paUnits(PA_PRODUCTS).length;
   count.textContent = `${_uShown} of ${_uTotal} · 共 ${_uTotal} 件,显示 ${_uShown} 件`;
 
-  // Drag-to-reorder is offered only when the picture is unambiguous: the list
-  // overview (editor closed), one real category picked, and no search/status
-  // filter narrowing the set. Under those conditions the rows on screen ARE the
-  // category's full storefront sequence, so dragging one maps cleanly onto its
-  // sort_order. (Any of those filters could hide siblings → a drag would reorder
-  // an incomplete set, so we don't arm it then.)
-  const reorderActive = PA_VIEW === 'list' && !_paEditorOpen && !PA_SELECT_MODE
-    && filter && filter !== 'all' && !q && PA_STATUS === 'all';
+  // No drag-to-reorder here any more (2026-09-29). Ash: all product
+  // organisation is done on Products → Categories — the mini app's order and
+  // the QR menu's — so this list only shows the order, it does not set it.
 
   // Collapse variant siblings into display units, then paginate the units so
   // only one page of cards renders at a time (keeps the grid fast on the full
-  // catalogue). Variant groups are kept whole — they count as one unit. While
-  // arranging we show the whole category on one page so a row can be dragged
-  // anywhere in its order, not just within the current page.
+  // catalogue). Variant groups are kept whole — they count as one unit.
   const units = _paUnits(rows);
   const total = units.length;
   // Ordered ids of the on-screen list — drives the editor's "Save & next".
@@ -2573,7 +2457,7 @@ function paRender() {
   // Docked editor → fixed 18-row pages (list ends near the editor's bottom edge,
   // no dead gap / extra scroll). Overview → operator's "Per page" choice.
   const effSize = _paEditorOpen ? PA_DOCK_PAGE_SIZE : PA_PAGE_SIZE;
-  const paged = !reorderActive && effSize !== 'all' && total > 0;
+  const paged = effSize !== 'all' && total > 0;
   const size  = paged ? effSize : total;
   const pages = paged ? Math.max(1, Math.ceil(total / size)) : 1;
   if (PA_PAGE > pages) PA_PAGE = pages;
@@ -2586,9 +2470,7 @@ function paRender() {
   paRenderBulkBar();
   const pager = document.getElementById('pa-pager');
   if (pager) {
-    pager.innerHTML = reorderActive
-      ? (total ? `<div class="pa-reorder-hint">${PA_ICON_GRIP}${cuT('Drag the grip to set the order products show on the store page', '拖动手柄调整商品在门店页的显示顺序')}</div>` : '')
-      : (total ? _paPagerHtml(total, pages, start, pageUnits.length, !_paEditorOpen) : '');
+    pager.innerHTML = total ? _paPagerHtml(total, pages, start, pageUnits.length, !_paEditorOpen) : '';
   }
 
   // Reflect the active layout in the toolbar segmented control. Nothing is
@@ -2626,14 +2508,8 @@ function paRender() {
     const nStock = listStores.length || 1;
     const tblCls = [
       listStores.length ? 'pa-multistock' : '',
-      reorderActive ? 'pa-reorder' : '',
       PA_SELECT_MODE ? 'pa-selecting' : '',
     ].filter(Boolean).join(' ');
-    // Snapshot the on-screen unit order as lists of product ids (a variant group
-    // moves as one block). paRowDrop reads this to compute the new sequence.
-    PA_REORDER_UNITS = reorderActive
-      ? pageUnits.map(u => u.group ? u.members.map(m => m.id) : [u.p.id])
-      : null;
     // Nothing to show: drop the card chrome too, so #pa-empty owns the screen
     // rather than sitting under an empty bordered box.
     if (!pageUnits.length) { grid.className = ''; grid.innerHTML = ''; return; }
@@ -2651,7 +2527,7 @@ function paRender() {
     // into Product by the `[data-nocost]` rules in retail-admin.css.
     const withCost = paShowMoney();
     const cols = '<colgroup>'
-      + '<col class="pa-c-sel">' + (reorderActive ? '<col class="pa-c-grip">' : '') + '<col class="pa-c-name">'
+      + '<col class="pa-c-sel"><col class="pa-c-name">'
       + '<col class="pa-c-cat"><col class="pa-c-sku">'
       + Array.from({ length: nStock }, () => '<col class="pa-c-stock">').join('')
       + '<col class="pa-c-price">' + (withCost ? '<col class="pa-c-margin">' : '') + '<col class="pa-c-status">'
@@ -2661,7 +2537,6 @@ function paRender() {
     // drag handle has no name, and the column only exists while reordering.
     const head = `<thead><tr>
         <th class="pa-c-sel"><span class="pa-selbox"><input type="checkbox" ${allVisSel ? 'checked' : ''} onclick="paSelectAllVisible(this.checked)" title="${cuT('Select all on this page', '全选本页')}"></span></th>
-        ${reorderActive ? '<th class="pa-c-grip"></th>' : ''}
         <th class="pa-c-name">${cuT('Product', '产品')}</th>
         <th class="pa-c-cat">${cuT('Category', '分类')}</th>
         <th class="pa-c-sku">SKU</th>
@@ -2682,12 +2557,6 @@ function paRender() {
         ? `<span class="pa-sizes-pill">${u.members.length} ${cuT('sizes', '规格')}</span>`
         : '';
       const sku = u.group ? '—' : escapeHtml(p.sku || '—');
-      const gripCell = reorderActive
-        ? `<td class="pa-c-grip"><span class="pa-grip" draggable="true" title="${cuT('Drag to reorder', '拖动排序')}" onclick="event.stopPropagation()" ondragstart="paRowDragStart(event, ${ui})" ondragend="paRowDragEnd()">${PA_ICON_GRIP}</span></td>`
-        : '';
-      const rowDrag = reorderActive
-        ? ` ondragover="paRowDragOver(event, ${ui})" ondragleave="paRowDragLeave(event)" ondrop="paRowDrop(event, ${ui})"`
-        : '';
       const memberIds = (u.group ? u.members.map(m => m.id) : [p.id]).join(',');
       const selRow = memberIds.split(',').every(id => PA_SELECTED.has(Number(id)));
       // In select mode the whole row toggles the tick (the box is display-only,
@@ -2702,8 +2571,8 @@ function paRender() {
       // one language and the "N sizes" tag is rendered through cuT, so the DOM
       // walker must not have a second go at either.
       return `
-        <tr class="pa-row${selRow ? ' is-sel' : ''}" onclick="${rowClick}"${rowDrag}>
-          <td class="pa-c-sel">${selCell}</td>${gripCell}
+        <tr class="pa-row${selRow ? ' is-sel' : ''}" onclick="${rowClick}">
+          <td class="pa-c-sel">${selCell}</td>
           <td class="pa-c-name">
             <div class="pa-prod" data-no-i18n>
               <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>

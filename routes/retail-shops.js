@@ -710,6 +710,17 @@ router.get('/api/retail-admin/products/:id/shops', requireRetailAdmin, (req, res
   });
 });
 
+// Which products stand on at least one QR menu — Products → Categories draws
+// only these in its QR menu view, where dragging sets the QR menu's product
+// order (lib/qr-menu-category-order.js `products`). One list for the tenant,
+// because that order is one value for every location. It lives in this file
+// for the reason /products/:id/shops gives above: a reader anywhere else would
+// widen the shop_listings containment allowlist.
+router.get('/api/retail-admin/shop-listings/product-ids', requireRetailAdmin, (req, res) => {
+  const rows = tdb().prepare('SELECT DISTINCT store_product_id AS id FROM shop_listings').all();
+  ok(res, rows.map(r => r.id));
+});
+
 // ─── What the counter may sell — §150 ───────────────────────────────────
 // THE COUNTER SELLS WHAT THE SHOP PHYSICALLY HAS, PLUS WHAT THE SHOP MAKES.
 // Reported by Ash from a Tianhe till: a product listed on that location's menu

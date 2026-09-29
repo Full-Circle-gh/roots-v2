@@ -479,7 +479,11 @@ function buildMenu(shop) {
       FROM shop_listings sl
       JOIN store_products p ON p.id = sl.store_product_id
      WHERE sl.shop_id = ? AND COALESCE(p.is_active, 1) = 1
-     ORDER BY sl.sort_position ASC, sl.id ASC
+     -- The mini app's product order (the catalog's own ORDER BY). The QR
+     -- menu's own product order, set on Products → Categories, is laid over it
+     -- per section below. sl.sort_position no longer orders anything: the
+     -- Shops page's Sort number that set it is gone (2026-09-29).
+     ORDER BY p.sort_order ASC, p.name_en ASC, sl.id ASC
   `).all(shop.id);
   if (!listings.length) return [];
 
@@ -558,13 +562,14 @@ function buildMenu(shop) {
   // only the order is the QR menu's, and a top category the tenant hid on the
   // QR menu is left out WITH its products (they do not fall into OTHER). One
   // setting for every location. Unset, this is the mini app's order exactly.
-  const qr = qrCatOrder.applyToTree(getCategoryTree(tdb()), qrCatOrder.readOrder(tdb()));
+  const qrOrder = qrCatOrder.readOrder(tdb());
+  const qr = qrCatOrder.applyToTree(getCategoryTree(tdb()), qrOrder);
   const tree = qr.tree;
   if (qr.hiddenNames.size) listings = listings.filter(r => !qr.hiddenNames.has(r.top_category));
   const cats = [];
   const byTop = new Map();
   for (const t of tree) {
-    const cat = { id: 'c' + cats.length, en: t.name, cn: t.name_cn || '', subs: t.subs || [], sections: [] };
+    const cat = { id: 'c' + cats.length, nodeId: t.id || '', en: t.name, cn: t.name_cn || '', subs: t.subs || [], sections: [] };
     byTop.set(t.name, cat);
     cats.push(cat);
   }
@@ -578,6 +583,9 @@ function buildMenu(shop) {
     if (!sec) {
       sec = {
         key,
+        // The node the QR product order is kept under: the subcategory, or
+        // the top category for the products with no heading.
+        nodeId: subNode ? (subNode.id || '') : (cat.nodeId || ''),
         en: subNode ? subNode.name : (cat === other ? '' : cat.en),
         cn: subNode ? (subNode.name_cn || '') : (cat === other ? '' : cat.cn),
         items: [],
@@ -591,6 +599,15 @@ function buildMenu(shop) {
   for (const cat of cats) {
     const order = new Map(cat.subs.map((x, i) => [x.name, i]));
     cat.sections.sort((a, b) => (order.has(a.key) ? order.get(a.key) : -1) - (order.has(b.key) ? order.get(b.key) : -1));
+    // Inside a section, the QR menu's own product order (set by dragging on
+    // Products → Categories in its QR menu view); unnamed products keep the
+    // mini app's order after the named ones. A variant card answers for every
+    // size it holds.
+    for (const sec of cat.sections) {
+      if (!sec.nodeId) continue;
+      sec.items = qrCatOrder.orderProducts(sec.items, qrOrder.products[sec.nodeId],
+        r => (r.variants ? r.variants.map(v => v.store_product_id) : [r.store_product_id]));
+    }
   }
   const out = cats.filter(c => c.sections.length);
   if (other.sections.length) out.push(other);

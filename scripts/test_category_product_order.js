@@ -12,7 +12,13 @@
 //   · A variant group is one unit — its sizes stay together and move together.
 //   · A drop reorders only its own group and sends that group's ids in the
 //     new order; a drop on another group's list does nothing.
-//   · The mini app view offers the grip; the QR menu view does not.
+//   · The QR menu view is grouped the way the QR menu draws the shelf: only
+//     products on a QR menu, no heading FIRST with any heading the tree no
+//     longer names folded into it, the headings in the QR menu's order, rows in
+//     the QR menu's own product order. A drop there sets that order and never
+//     writes the mini app's.
+//   · lib/qr-menu-category-order.js keeps the QR product order and lays it
+//     over a section: named products first, the rest after in the order given.
 //   · The slots handed back are distinct. A new product lands on sort_order 0,
 //     so [0, 0, 3] is common, and two equal slots left the drag not sticking.
 //
@@ -28,7 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-let src, reorderSlots;
+let src, reorderSlots, qrOrder;
 try {
   const core = fs.readFileSync(path.join(__dirname, '..', 'public', 'retail-admin', '01-core.js'), 'utf8');
   const cut = (from, to) => {
@@ -36,9 +42,11 @@ try {
     if (a < 0 || b < a) throw new Error(`anchors "${from}" … "${to}" not found in 01-core.js — they have drifted`);
     return core.slice(a, b);
   };
-  src = cut('// ── Drag to reorder ──', 'function catDragOver(')
+  src = cut('function catQrOrdered(', '// The rail as it is drawn')
+    + cut('// ── Drag to reorder ──', 'function catDragOver(')
     + cut('// ── The products standing on this shelf ──', 'async function catMoveProduct(');
   ({ reorderSlots } = require('../lib/reorder-slots'));
+  qrOrder = require('../lib/qr-menu-category-order');
 } catch (e) { console.error('could not run:', e.message); process.exit(2); }
 
 let fails = 0, passes = 0;
@@ -57,6 +65,16 @@ check('ties come out distinct, first slot kept', () => eq(reorderSlots([0, 3, 0]
 check('a run of ties climbs past what follows', () => eq(reorderSlots([0, 0, 0, 1], 4), [0, 1, 2, 3], 'slots'));
 check('a never-sorted set gets 1..n', () => eq(reorderSlots([0, 0, 0], 3), [1, 2, 3], 'slots'));
 check('null and text read as numbers', () => eq(reorderSlots([null, '4', 2], 3), [0, 2, 4], 'slots'));
+
+console.log('\n1b. the QR product order (lib/qr-menu-category-order.js)');
+check('normalise keeps positive integer ids, once each, and drops empty lists', () =>
+  eq(qrOrder.normalise({ tops: null, products: { s1: [3, '2', 2, -1, 'x', 0], s2: [] } }).products, { s1: [3, 2] }, 'products'));
+check('an order with no products key reads as none', () =>
+  eq(qrOrder.normalise({ tops: null }).products, {}, 'products'));
+check('named first in the stored order, the rest after as given', () =>
+  eq(qrOrder.orderProducts([{ i: [1] }, { i: [2, 5] }, { i: [3] }], [5, 3], x => x.i).map(x => x.i[0]), [2, 3, 1], 'order'));
+check('no stored order leaves the section as given', () =>
+  eq(qrOrder.orderProducts([{ i: [2] }, { i: [1] }], undefined, x => x.i).map(x => x.i[0]), [2, 1], 'order'));
 
 // ── 2. The shelf list ──────────────────────────────────────────────────────
 console.log('\n2. the shelf list');
@@ -84,6 +102,7 @@ function hostStub(id) {
 }
 const prods = hostStub('cat2-prods');
 const sent = [];
+let qrSaves = 0;
 const sandbox = {
   window: { matchMedia: () => ({ matches: true }) },   // reduced motion: no FLIP
   document: {
@@ -106,14 +125,16 @@ const sandbox = {
   catMode: 'miniapp',
   catSel: 0,
   catModel: [{ id: 't1', name: 'Coffee & Milks', subs: [] }],
-  catClean: JSON.stringify([{ id: 't1', name: 'Coffee & Milks', subs: [{ name: 'Hot' }, { name: 'Cold' }] }]),
+  catClean: JSON.stringify([{ id: 't1', name: 'Coffee & Milks', subs: [{ id: 'sh', name: 'Hot' }, { id: 'sc', name: 'Cold' }] }]),
+  catQr: { tops: null, subs: {}, hidden: [], products: {} },
+  catRenderStatus() {}, catQrScheduleSave() { qrSaves++; },
   api: async (url, opts) => { sent.push({ url, ids: opts && opts.body && opts.body.ids }); return { data: [] }; },
   WeakMap, Array, Map, JSON, String, Number,
 };
 vm.createContext(sandbox);
 vm.runInContext(src + `
 this.t = {
-  load(rows) { _catProdRows = rows; catProdBuildGroups(); catRenderProdList(); },
+  load(rows, listed) { _catProdRows = rows; _catProdListed = listed ? new Set(listed) : null; catProdBuildGroups(); catRenderProdList(); },
   groups: () => _catProdGroups.map(g => ({ sub: g.sub, units: g.units.map(u => u.map(p => p.id)) })),
   catProdDragStart, catProdDragOver, catProdDrop,
 };`, sandbox);
@@ -139,16 +160,10 @@ check('the mini app view draws a grip per unit, none on a second size', () => {
   eq((prods.innerHTML.match(/<grip>/g) || []).length, 7, 'grips');
   eq((prods.innerHTML.match(/cat2-grip-sp/g) || []).length, 1, 'spacers');
 });
-check('the QR menu view draws no grip', () => {
-  sandbox.catMode = 'qr';
-  t.load(ROWS);
-  sandbox.catMode = 'miniapp';
-  eq((prods.innerHTML.match(/<grip>|cat2-grip-sp/g) || []).length, 0, 'grips');
-});
 
 // A drag within Hot: take unit 0 (id 3) and drop it at the end.
-function drag(gi, ui, dropGi, y) {
-  t.load(ROWS);
+function drag(gi, ui, dropGi, y, listed) {
+  t.load(ROWS, listed);
   const host = sandbox.document.getElementById('cat2-pg-' + dropGi);
   const dt = { setData() {}, setDragImage() {} };
   t.catProdDragStart({ target: { closest: () => null }, dataTransfer: dt }, gi, ui);
@@ -179,6 +194,49 @@ check('a drop on another heading does nothing', () => {
   eq(t.groups()[0].units, [[3], [4, 7], [6]], 'Hot');
   eq(sent, [], 'write');
 });
+
+// ── 3. The QR menu view ────────────────────────────────────────────────────
+console.log('\n3. the QR menu view');
+const LISTED = [1, 3, 4, 5, 6, 7, 8];   // 2 (Cold) is on no QR menu
+function qr(fn) {
+  sandbox.catMode = 'qr';
+  sandbox.catQr.products = {}; sandbox.catQr.subs = {};
+  try { fn(); } finally { sandbox.catMode = 'miniapp'; }
+}
+check('only products on a QR menu; no heading first, an unknown heading folded in', () => qr(() => {
+  t.load(ROWS, LISTED);
+  eq(t.groups(), [
+    { sub: '', units: [[1], [5]] },
+    { sub: 'Hot', units: [[3], [4, 7], [6]] },
+    { sub: 'Cold', units: [[8]] },
+  ], 'groups');
+}));
+check('the headings follow the QR menu\'s own subcategory order', () => qr(() => {
+  sandbox.catQr.subs = { t1: ['sc', 'sh'] };
+  t.load(ROWS, LISTED);
+  eq(t.groups().map(g => g.sub), ['', 'Cold', 'Hot'], 'headings');
+}));
+check('the stored QR order is laid over the mini app\'s', () => qr(() => {
+  sandbox.catQr.products = { sh: [6, 7] };
+  t.load(ROWS, LISTED);
+  eq(t.groups()[1].units, [[6], [4, 7], [3]], 'Hot');
+}));
+check('a QR drop sets the QR order and never writes the mini app\'s', () => qr(() => {
+  sent.length = 0; qrSaves = 0;
+  drag(1, 0, 1, TOP + 3 * ROW_H - 1, LISTED);
+  eq(t.groups()[1].units, [[4, 7], [6], [3]], 'Hot');
+  eq(sandbox.catQr.products, { sh: [4, 7, 6, 3] }, 'QR order');
+  eq(qrSaves, 1, 'QR saves');
+  eq(sent, [], 'mini app writes');
+}));
+check('the no-heading group keeps its order under the top category', () => qr(() => {
+  drag(0, 1, 0, TOP + 1, LISTED);
+  eq(sandbox.catQr.products, { t1: [5, 1] }, 'QR order');
+}));
+check('the QR view draws a grip on every unit', () => qr(() => {
+  t.load(ROWS, LISTED);
+  eq((prods.innerHTML.match(/<grip>/g) || []).length, 6, 'grips');
+}));
 
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

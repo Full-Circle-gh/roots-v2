@@ -23,6 +23,12 @@
  *     an id the tree no longer has is skipped rather than breaking the menu.
  *  6. THE ADMIN WRITE is gated on categories:edit and refuses a body with no
  *     `tops` — `tops: null` is "follow the mini app", a real answer.
+ *  7. PRODUCTS INSIDE A SECTION (added 2026-09-29, Ash: all product
+ *     organisation on Products → Categories, the QR menu's apart from the mini
+ *     app's). Unset, a section is in the MINI APP's order (sort_order) — the
+ *     per-shop sort_position no longer orders anything, and the fixture sets
+ *     the two against each other to prove it. A stored `products` list for the
+ *     section's node puts the products it names first.
  */
 'use strict';
 
@@ -107,7 +113,7 @@ check('PUT is gated on categories:edit, GET is a read', () => {
 // ── Real database, real routers ────────────────────────────────────────────
 const LOC = 8871;
 const OP = 8891;     // the operator the admin half signs in as
-const P = { sweet: 8881, savoury: 8882, drink: 8883, well: 8884, later: 8885 };
+const P = { sweet: 8881, savoury: 8882, drink: 8883, well: 8884, later: 8885, drink2: 8886 };
 const PRODS = Object.values(P);
 const CODE = 'QRXRDER2';   // no O or I: lib/shop-code.js's alphabet leaves them out
 const KEYS = ['category.tree', O.CONFIG_KEY];
@@ -134,13 +140,16 @@ function seed() {
   db.prepare(`INSERT INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order)
               VALUES (?, '__test_qr_order', 'QR order fixture', '测试顺序店', 1, 97)`).run(LOC);
   const prod = db.prepare(`INSERT INTO store_products
-    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category, subcategory)
-    VALUES (?, ?, ?, ?, 10, 1, 1, ?, ?)`);
-  prod.run(P.sweet,   'Fixture QRO sweet',   '测试甜品', '__QRO-1', 'QRO Toasts',   'QRO Sweet');
-  prod.run(P.savoury, 'Fixture QRO savoury', '测试咸品', '__QRO-2', 'QRO Toasts',   'QRO Savoury');
-  prod.run(P.drink,   'Fixture QRO drink',   '测试饮料', '__QRO-3', 'QRO Drinks',   null);
-  prod.run(P.well,    'Fixture QRO well',    '测试健康品', '__QRO-4', 'QRO Wellness', null);
-  prod.run(P.later,   'Fixture QRO later',   '测试新品', '__QRO-5', 'QRO Later',    null);
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category, subcategory, sort_order)
+    VALUES (?, ?, ?, ?, 10, 1, 1, ?, ?, ?)`);
+  prod.run(P.sweet,   'Fixture QRO sweet',   '测试甜品', '__QRO-1', 'QRO Toasts',   'QRO Sweet', 0);
+  prod.run(P.savoury, 'Fixture QRO savoury', '测试咸品', '__QRO-2', 'QRO Toasts',   'QRO Savoury', 0);
+  // drink is listed BEFORE drink2 (sort_position 2 < 5) but sits AFTER it in the
+  // mini app (sort_order 2 > 1): the menu must follow the mini app.
+  prod.run(P.drink,   'Fixture QRO drink',   '测试饮料', '__QRO-3', 'QRO Drinks',   null, 2);
+  prod.run(P.well,    'Fixture QRO well',    '测试健康品', '__QRO-4', 'QRO Wellness', null, 0);
+  prod.run(P.later,   'Fixture QRO later',   '测试新品', '__QRO-5', 'QRO Later',    null, 0);
+  prod.run(P.drink2,  'Fixture QRO second',  '测试饮料二', '__QRO-6', 'QRO Drinks',   null, 1);
   db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, 1)').run(LOC, CODE);
   const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
   const add = db.prepare(`INSERT INTO shop_listings
@@ -197,6 +206,16 @@ async function rail() {
       assert.ok(!html.includes('Fixture QRO drink'), 'a product of a hidden category is still on the page');
       assert.ok(html.includes('Fixture QRO later'), 'OTHER lost its own product');
     });
+    await checkAsync('unset: a section\'s products are in the mini app\'s order, not the listing\'s', async () => {
+      setCfg(O.CONFIG_KEY, { tops: null, subs: {}, hidden: [] });
+      const { html } = await rail();
+      assert.ok(html.indexOf('Fixture QRO second') < html.indexOf('Fixture QRO drink'), 'sort_position still orders the menu');
+    });
+    await checkAsync('a stored product order puts the products it names first', async () => {
+      setCfg(O.CONFIG_KEY, { tops: null, subs: {}, hidden: [], products: { qb: [P.drink] } });
+      const { html } = await rail();
+      assert.ok(html.indexOf('Fixture QRO drink') < html.indexOf('Fixture QRO second'), 'QR product order not applied');
+    });
     await checkAsync('a category added after the order was set shows at the bottom', async () => {
       setCfg('category.tree', TREE.concat([{ id: 'qd', name: 'QRO Later', name_cn: '测试新类', subs: [] }]));
       setCfg(O.CONFIG_KEY, { tops: ['qc', 'qb', 'qa'], subs: {}, hidden: [] });
@@ -216,10 +235,10 @@ async function rail() {
     SESSION = { backendUserId: OP };
     await checkAsync('PUT stores the order and GET reads it back, normalised', async () => {
       const put = await http('PUT', '/api/retail-admin/category-tree/qr-order',
-        { tops: ['qb', 'qb', ' qa '], subs: { qa: ['qa2'] }, hidden: ['qc'] });
+        { tops: ['qb', 'qb', ' qa '], subs: { qa: ['qa2'] }, hidden: ['qc'], products: { qb: [P.drink2, 'x', P.drink2, P.drink] } });
       assert.strictEqual(put.status, 200, put.text);
       const got = JSON.parse((await http('GET', '/api/retail-admin/category-tree/qr-order')).text).data;
-      assert.deepStrictEqual(got, { tops: ['qb', 'qa'], subs: { qa: ['qa2'] }, hidden: ['qc'] });
+      assert.deepStrictEqual(got, { tops: ['qb', 'qa'], subs: { qa: ['qa2'] }, hidden: ['qc'], products: { qb: [P.drink2, P.drink] } });
     });
     await checkAsync('tops: null is accepted; a body with no tops is refused', async () => {
       assert.strictEqual((await http('PUT', '/api/retail-admin/category-tree/qr-order', { tops: null, hidden: [] })).status, 200);
