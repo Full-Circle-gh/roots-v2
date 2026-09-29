@@ -15346,6 +15346,11 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-shop-menu .shp-sw.is-on .shp-knob { transform: translateX(18px); }
 #tab-shop-menu .shp-sw:has(input[disabled]) { opacity: .55; cursor: default; }
 #tab-shop-menu .shp-sw:has(input:focus-visible) { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+/* §287 — a made-here listing switched off is SOLD OUT, not hidden: the till and
+   the QR menu both still draw it, greyed. The word says so beside the switch,
+   because "In shop" off reads as "not on the menu", which it is not. */
+#tab-shop-menu .shp-so { display: inline-block; margin-left: 8px; vertical-align: middle;
+  font: 500 12px/1.4 var(--f-sans); color: var(--td-brick-ink); }
 
 /* ── picker (in-flow panel above the table — grows with the search) ───────── */
 #tab-shop-menu .shp-picker {

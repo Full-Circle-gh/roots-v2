@@ -23,8 +23,11 @@
  *      counted, and still sellable, because that is what "made here" means.
  *   2. It is never stock-gated. `stock: null`, so no shelf figure is invented
  *      for a thing that is built when it is ordered.
- *   3. A listing governs its product absolutely: switched off for the day, the
- *      row is ABSENT rather than reappearing two rows down at catalogue price.
+ *   3. A listing governs its product absolutely: a STOCKED listing switched
+ *      off is ABSENT rather than reappearing two rows down at catalogue price.
+ *      A MADE-HERE listing switched off is SOLD OUT (§287): on the glass,
+ *      greyed, at the listing's price — and a cashier can switch it from the
+ *      till, through a write that touches that one switch and nothing else.
  *   4. The price is the LISTING's (§42), not the product's.
  *   5. The change is ADDITIVE — every tile a cashier could see before is still
  *      there, including a published product with nothing on the shelf.
@@ -66,9 +69,10 @@ const P_NEITHER = 9966;  // unpublished, uncounted, unlisted — in the catalogu
 const P_RESTOCK = 9967;  // published, in stock, and a receiving record, not a sale
 const P_FREE    = 9968;  // published, in stock, no price — not a thing to ring up
 const P_BUFFER  = 9969;  // published, 10 on the shelf, 4 of them held back
+const P_STK_OFF = 9970;  // on the menu, STOCKED, switched off — and published
 
 const ALL_PRODUCTS = [P_MADE, P_OFF, P_STOCKED, P_PUB, P_LOCAL, P_NEITHER,
-                      P_RESTOCK, P_FREE, P_BUFFER];
+                      P_RESTOCK, P_FREE, P_BUFFER, P_STK_OFF];
 
 let failures = 0;
 function check(label, fn) {
@@ -105,6 +109,7 @@ insProduct.run(P_NEITHER, 'Fixture elsewhere',   '测试他处',     '__C-9966',
 insProduct.run(P_RESTOCK, 'Fixture ingredient',  '测试原料',     '__C-9967', 9,  'Dry & Pantry', 1, 1);
 insProduct.run(P_FREE,    'Fixture priceless',   '测试无价',     '__C-9968', 0,  'Dry & Pantry', 1, 0);
 insProduct.run(P_BUFFER,  'Fixture buffered',    '测试预留',     '__C-9969', 40, 'Snacks & Treats', 1, 0);
+insProduct.run(P_STK_OFF, 'Fixture jar',         '测试罐装',     '__C-9970', 20, 'Dry & Pantry', 1, 0);
 
 const insStock = db.prepare(`INSERT INTO retail_store_stock (store_id, product_id, physical_qty, safety_buffer)
                              VALUES (?, ?, ?, ?)`);
@@ -113,6 +118,7 @@ insStock.run(LOC_A, P_LOCAL,   3, 0);
 insStock.run(LOC_A, P_RESTOCK, 5, 0);
 insStock.run(LOC_A, P_FREE,    5, 0);
 insStock.run(LOC_A, P_BUFFER, 10, 4);
+insStock.run(LOC_A, P_STK_OFF, 4, 0);
 // The same unpublished product, counted at the OTHER location. It must not
 // reach A's till on B's shelf.
 insStock.run(LOC_B, P_NEITHER, 9, 0);
@@ -123,17 +129,36 @@ const insListing = db.prepare(`
 insListing.run(SHOP_A, P_STOCKED, 25,   'stocked',   1, 0);   // 25 on the menu, 18 in the catalogue
 insListing.run(SHOP_A, P_MADE,    32,   'made_here', 1, 1);
 insListing.run(SHOP_A, P_OFF,     30,   'made_here', 0, 2);
+insListing.run(SHOP_A, P_STK_OFF, 21,   'stocked',   0, 3);
+const listingId = (pid) => db.prepare('SELECT id FROM shop_listings WHERE shop_id = ? AND store_product_id = ?').get(SHOP_A, pid).id;
 
 // ── Harness ────────────────────────────────────────────────────────────────
 const app = express();
-app.use((req, res, next) => { req.user = { id: 3, username: 'mei' }; req.caps = null; next(); });
+// x-caps names the operator's capability set (absent = null, the kitchen
+// shape); x-scope names their stores (absent = unscoped).
+app.use((req, res, next) => {
+  req.user = { id: 3, username: 'mei' };
+  const c = req.headers['x-caps'];
+  req.caps = c == null ? null : new Set(String(c).split(',').filter(Boolean));
+  const sc = req.headers['x-scope'];
+  req.scopeStores = sc ? String(sc).split(',').map(Number) : null;
+  next();
+});
 app.use(router);
 
 let server, PORT;
-function call(url) {
-  return fetch(`http://127.0.0.1:${PORT}${url}`)
+function call(url, opts) {
+  return fetch(`http://127.0.0.1:${PORT}${url}`, opts)
     .then(async r => ({ status: r.status, json: await r.json().catch(() => null) }));
 }
+function soldOut(lid, body, headers) {
+  return call(`/api/retail-admin/shops/${SHOP_A}/listings/${lid}/sold-out`, {
+    method: 'PUT',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+const isAvail = (pid) => db.prepare('SELECT is_available FROM shop_listings WHERE shop_id = ? AND store_product_id = ?').get(SHOP_A, pid).is_available;
 const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
 
 (async () => {
@@ -177,14 +202,29 @@ const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
     check('a stocked listing still counts the shelf', () => {
       assert.strictEqual(rowFor(rowsA, P_STOCKED).stock, 7);
     });
-    check('switched off for the day is ABSENT, not shown at catalogue price', () => {
-      // P_OFF is published, so a merge that simply concatenated the two halves
-      // would put it back on the screen at 26 — the price nobody chose.
-      assert.strictEqual(rowFor(rowsA, P_OFF), null);
+    check('a STOCKED listing switched off is ABSENT, not shown at catalogue price', () => {
+      // P_STK_OFF is published and counted, so a merge that simply
+      // concatenated the two halves would put it back on the screen at 20 —
+      // the price nobody chose.
+      assert.strictEqual(rowFor(rowsA, P_STK_OFF), null);
+    });
+    check('§287 — a MADE-HERE listing switched off is SOLD OUT: there, greyed', () => {
+      const r = rowFor(rowsA, P_OFF);
+      assert.ok(r, 'a made-here item switched off vanished from the till — it must show as sold out');
+      assert.strictEqual(r.stock, 0, 'sold out is stock 0, the state the tile greys on');
+      assert.strictEqual(r.switched_off, true);
+      assert.strictEqual(r.on_menu, true);
+      assert.strictEqual(r.price, 30, 'at the listing price, not the catalogue 26');
+      assert.strictEqual(r.listing_id, listingId(P_OFF));
+    });
+    check('§287 — a made-here item switched ON is not flagged', () => {
+      assert.strictEqual(rowFor(rowsA, P_MADE).switched_off, false);
+      assert.strictEqual(rowFor(rowsA, P_MADE).listing_id, listingId(P_MADE));
+      assert.strictEqual(rowFor(rowsA, P_PUB).listing_id, null, 'an off-menu row has no switch');
     });
     check('menu rows come first, in the order the operator arranged them', () => {
       const menu = rowsA.filter(r => r.on_menu).map(r => r.product_id);
-      assert.deepStrictEqual(menu, [P_STOCKED, P_MADE], 'menu order is sort_position');
+      assert.deepStrictEqual(menu, [P_STOCKED, P_MADE, P_OFF], 'menu order is sort_position');
       const firstShelf = rowsA.findIndex(r => !r.on_menu);
       assert.ok(firstShelf >= menu.length, 'a shelf row sorted above a menu row');
     });
@@ -254,6 +294,80 @@ const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
       // before it existed, and for every line that answered nothing.
       assert.match(till, /if \(l\.menu\) it\.unit_price = \(l\.base != null \? l\.base : l\.price\);/);
       assert.doesNotMatch(till, /product_id: l\.id, qty: l\.qty, unit_price/);
+    });
+
+    console.log('\n§287 — marking a made-here item sold out from the till');
+    {
+      const lMade = listingId(P_MADE);
+      const r1 = await soldOut(lMade, { sold_out: true }, { 'x-caps': 'till:use' });
+      check('a cashier with till:use marks it sold out', () => {
+        assert.strictEqual(r1.status, 200, JSON.stringify(r1.json));
+        assert.strictEqual(r1.json.data.sold_out, true);
+        assert.strictEqual(isAvail(P_MADE), 0, 'the office switch did not move');
+      });
+      const mid = await call(`/api/retail-admin/stores/${LOC_A}/counter-catalogue`);
+      check('and the till reads it back sold out', () => {
+        const r = rowFor(mid.json.data.rows, P_MADE);
+        assert.ok(r); assert.strictEqual(r.stock, 0); assert.strictEqual(r.switched_off, true);
+      });
+      const r2 = await soldOut(lMade, { sold_out: false }, { 'x-caps': 'till:use' });
+      check('and back on, with no stock gate again', () => {
+        assert.strictEqual(r2.status, 200);
+        assert.strictEqual(isAvail(P_MADE), 1);
+      });
+      const back = await call(`/api/retail-admin/stores/${LOC_A}/counter-catalogue`);
+      check('back on reads stock null, not 0', () => {
+        assert.strictEqual(rowFor(back.json.data.rows, P_MADE).stock, null);
+      });
+      const r3 = await soldOut(lMade, { sold_out: true }, { 'x-caps': 'stores:edit' });
+      check('the office\'s stores:edit may write it too', () => {
+        assert.strictEqual(r3.status, 200);
+        assert.strictEqual(isAvail(P_MADE), 0);
+      });
+      db.prepare('UPDATE shop_listings SET is_available = 1 WHERE shop_id = ? AND store_product_id = ?').run(SHOP_A, P_MADE);
+      const r4 = await soldOut(lMade, { sold_out: true }, { 'x-caps': 'orders:view' });
+      check('neither cap: refused, and nothing moved', () => {
+        assert.strictEqual(r4.status, 403);
+        assert.strictEqual(isAvail(P_MADE), 1);
+      });
+      const r5 = await soldOut(lMade, { sold_out: true }, { 'x-caps': 'till:use', 'x-scope': String(LOC_B) });
+      check('a cashier scoped to another store is refused', () => {
+        assert.strictEqual(r5.status, 403);
+        assert.strictEqual(isAvail(P_MADE), 1);
+      });
+      const r6 = await soldOut(listingId(P_STOCKED), { sold_out: true }, { 'x-caps': 'till:use' });
+      check('a STOCKED listing is refused — its shelf is counted, not switched', () => {
+        assert.strictEqual(r6.status, 409);
+        assert.strictEqual(r6.json.error, 'not_made_here');
+        assert.strictEqual(isAvail(P_STOCKED), 1);
+      });
+      const r7 = await soldOut(lMade, { sold_out: 'yes' }, { 'x-caps': 'till:use' });
+      check('a body that is not a yes or no is refused, not guessed at', () => {
+        assert.strictEqual(r7.status, 400);
+        assert.strictEqual(isAvail(P_MADE), 1);
+      });
+      const r8 = await soldOut(99999991, { sold_out: true }, { 'x-caps': 'till:use' });
+      check('a listing that is not this shop\'s is 404', () => {
+        assert.strictEqual(r8.status, 404);
+      });
+      check('the central permission map gates it on till:use OR stores:edit', () => {
+        const capRoutes = require(path.join(ROOT, 'lib', 'cap-routes.js'));
+        assert.deepStrictEqual(
+          capRoutes.requiredCapFor('PUT', `/api/retail-admin/shops/${SHOP_A}/listings/${lMade}/sold-out`),
+          ['till:use', 'stores:edit']);
+        assert.strictEqual(capRoutes.requiredCapFor('PATCH', `/api/retail-admin/shops/${SHOP_A}/listings/${lMade}`), null,
+          'the rest of /shops is unchanged by this rule');
+      });
+    }
+
+    console.log('\n§287 — the till draws it');
+    check('the till writes through the sold-out route and names no table', () => {
+      assert.match(till, /\/sold-out'/);
+      assert.match(till, /data-somode/);
+    });
+    check('a switched-off tile says Sold out, the QR menu\'s word', () => {
+      assert.match(till, /soldOut:\s+\['Sold out', '售罄'\]/);
+      assert.match(till, /T\(p\.switched_off \? 'soldOut' : 'outOfStock'\)/);
     });
 
     console.log('\nContainment — the till still never names the table');

@@ -2598,8 +2598,10 @@ check('the stepper does not sit on the line above it',
 // something that cannot be sold is not a number anyone acts on, and the slot
 // itself is unchanged, which is the rule that actually matters: the tile stays
 // where the thumb expects it, dimmed, dashed and not tappable.
+// §287 — the reason is "Sold out" when a made-here item's switch is off and
+// "Out of stock" otherwise; either way it is a reason in the price's slot.
 check('a sold-out tile shows the reason instead of a price it would crowd',
-  /\? '<span class="lo">' \+ esc\(T\('outOfStock'\)\)/.test(POS_TILL_SRC), true);
+  /\? '<span class="lo">' \+ esc\(T\((p\.switched_off \? 'soldOut' : )?'outOfStock'\)\)/.test(POS_TILL_SRC), true);
 check('and carries no product code, which identifies something unsellable',
   /: \(p\.sku \? '<span class="sku">'/.test(POS_TILL_SRC), true);
 // A pill that wraps is not a pill.

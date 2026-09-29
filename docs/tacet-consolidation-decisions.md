@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.456
+# Tacet shared-core consolidation — decisions record, v4.457
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-29 · v4.457 — **§287 · A MADE-HERE ITEM CAN BE MARKED SOLD OUT, AND THE TILL SAYS SO — DECIDED BY ASH:** *"made here products might sometimes be out of stock ( for example tomoatoes areo ut of stock to make a speocific item . ) we need to have n option to disable ( out of sotck) item for " made here" products"*, then *"1.yes 2. greyed out 3. no"* to Claude's three questions (cashiers may mark it from the till; the till greys it rather than hiding it; it never switches itself back on). **THE SWITCH ALREADY EXISTED and was not recognised as one**: §42's manual switch (`shop_listings.is_available`, the Shops screen's *In shop · 上架*) is the whole of a made-here item's availability per §47, and the QR menu already drew it off as *Sold out · 售罄*. Claude argued against a second "Out of stock" switch beside it — two switches that both stop a sale, and nobody can tell which one is blocking an item — and Ash went with one switch reached from two places. **§150 IS NARROWED, NOT REVERSED**: a STOCKED listing switched off is still absent from the till, for §150's reason; a MADE-HERE listing switched off is now on the glass, greyed, at the listing price, reading *Sold out · 售罄*. **The cashier's write is narrower than the office's**: `PUT /api/retail-admin/shops/:id/listings/:lid/sold-out` changes `is_available` and nothing else, on made-here rows only (a stocked row is 409 `not_made_here`), and needs `till:use` or `stores:edit` — gated in the handler and in `lib/cap-routes.js`, with a store-scoped cashier held to their own location. **No schema, no migration, no new table.** No Chinese composed: `Sold out · 售罄` and `Done · 完成` are lifted (vocabulary v1.202). `scripts/test_counter_catalogue.js` 21 → 36 checks, proven non-vacuous by two mutations; `scripts/verify-fulfilment-types.js`'s tile-footer pattern widened to accept the new label, its assertion unchanged in meaning; `npm run test:fast` 361/361. No change to `.gitignore` or CI.
 
 2026-09-28 · v4.456 — **§286 · A SUPPLIER WHO GIVES US CREDIT HAS AN ACCOUNT: WHAT WE OWE THEM, IN THE SYSTEM — DECIDED BY ASH:** *"we still using an excel sheet that show some debt for supplier we didn't pay yet . it's only few suppliers that we work with some credit . I don't want to use this excel sheet I want it to be integrate in the system"*, then *"1. purchase order 2.lump 3 both"* to Claude's three questions (count the debt from purchase orders, not 发票; payments are lump sums against the supplier, not per order; phone and desktop). **NO PAYABLES STILL STANDS** (`routes/retail-purchasing.js`, the SUPPLIER INVOICES header; `scripts/test_invoice_no_payables.js`): Roots pays most suppliers before the 发票 exists, and the due-date / Mark paid / aging apparatus reported ¥5,246.48 of settled money as debt. **This is not that apparatus coming back.** It is a per-supplier switch, `suppliers.on_credit`, off for every supplier until someone turns it on, and nothing on the Invoices tab changes. **WHAT WE OWE IS COMPUTED, NEVER TYPED:** the starting balance, plus the goods of every DELIVERED order from that supplier dated after the starting balance, less the payments recorded, plus any corrections. Goods are the invoice screen's own amount — billable quantity (received less returned) × unit cost, tenant-scoped and never scope-scoped, superseded kitchen originals stood down, the supplier resolved by the invoice screen's chain — so the supplier page, the Invoices tab and this account can never disagree about what a line was worth. Orders placed but not yet delivered are shown beside the figure as *on the way* and are not in it. **A PAYMENT IS NOT AN EXPENSE.** The purchase is already in the books from the day it was ordered (`postPOExpenses`); recording a payment only lowers what we owe, and writes nothing to `expense_entries` — writing one would count the purchase twice (held by a test). New table `supplier_account_entries` (starting balance, payment, correction); a wrong entry is removed by voiding, which keeps the row. Writes are `purchasing:edit` (the /suppliers rule in `lib/cap-routes.js`). Desktop: an account card on the supplier page and a *Suppliers we owe* card on Suppliers. Phone: a new *Suppliers we owe* row under *Stock coming in*. Strings composed by Claude; see the vocabulary's v1.199.
 
@@ -20872,3 +20874,20 @@ it to be integrate in the system"*, then *"1. purchase order 2.lump 3 both"*).
    voided it and when.
 7. Writes need `purchasing:edit`. Desktop and phone both read and write.
 
+## §287 — A MADE-HERE ITEM CAN BE MARKED SOLD OUT FROM THE TILL
+
+**Decided 2026-09-29 by Ash** (*"we need to have n option to disable ( out of
+sotck) item for " made here" products"*, then *"1.yes 2. greyed out 3. no"*).
+
+1. **One switch.** A made-here item's availability is still §42's manual
+   switch (`shop_listings.is_available`), and nothing else. There is no second
+   "out of stock" flag.
+2. **Switched off, a made-here item is SOLD OUT, not gone.** The till shows it
+   greyed at the listing price, reading *Sold out · 售罄*; the QR menu already
+   did. A STOCKED listing switched off is still absent from the till (§150).
+3. **A cashier can switch it from the till** (the *Sold out* control beside the
+   categories; tap a tile to flip it, *Done* to leave). The write needs
+   `till:use` or `stores:edit`, touches `is_available` only, refuses stocked
+   rows, and holds a store-scoped operator to their own location.
+4. **It never switches itself back on.** An ingredient can be out for days.
+5. The Shops screen labels a made-here row that is switched off *Sold out*.

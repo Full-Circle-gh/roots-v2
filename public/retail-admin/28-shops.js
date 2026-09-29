@@ -570,7 +570,12 @@
       const busy = _busy.has(r.id);
       const dis = (busy || RO()) ? ' disabled' : '';
       const on = r.is_available === 1;
-      const title = on ? T('On the shop · tap to hide', '已上架 · 点按下架') : T('Off the shop · tap to show', '未上架 · 点按上架');
+      // §287 — made here and switched off is SOLD OUT: still on the till and
+      // the QR menu, greyed, until someone switches it back. It never resets
+      // by itself. The word is the QR menu's own pill for the same state.
+      const soldOut = !on && r.fulfilment_mode === 'made_here';
+      const title = soldOut ? T('Sold out', '售罄')
+        : on ? T('On the shop · tap to hide', '已上架 · 点按下架') : T('Off the shop · tap to show', '未上架 · 点按上架');
       return `<tr data-id="${r.id}"${busy ? ' class="is-busy"' : ''}>
         <td class="num"><input type="number" min="0" step="1" class="shp-in shp-in-n" value="${esc(r.sort_position)}"
               onchange="shpSaveField(${r.id}, 'sort_position', this)"${dis}></td>
@@ -585,7 +590,7 @@
             </select></td>
         <td><label class="shp-sw${on ? ' is-on' : ''}" title="${esc(title)}">
               <input type="checkbox" ${on ? 'checked' : ''}${dis} onchange="shpToggleAvail(${r.id}, this.checked)">
-              <span class="shp-knob"></span></label></td>
+              <span class="shp-knob"></span></label>${soldOut ? `<span class="shp-so">${esc(T('Sold out', '售罄'))}</span>` : ''}</td>
         <td class="act"><button type="button" class="shp-btn ghost sm" data-cap="stores:edit" onclick="shpRemove(${r.id}, this)"${dis}>${esc(T('Remove', '移除'))}</button></td>
       </tr>`;
     }).join('');

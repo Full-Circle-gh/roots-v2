@@ -467,6 +467,51 @@ router.patch('/api/retail-admin/shops/:id/listings/:lid', requireRetailAdmin, re
   ok(res, getListing(id, lid));
 });
 
+// §287 — SOLD OUT FROM THE COUNTER. The person who finds the tomatoes gone is
+// at the till, not at the office screen, so a cashier may flip a made-here
+// listing's switch from there. It is the SAME column the office's "In shop"
+// switch writes (is_available): one switch, two places to reach it, so the
+// till, the QR menu and the office can never disagree about whether the
+// sour cream can be made.
+//
+// NARROWER THAN THE PATCH ABOVE, ON PURPOSE. That one needs stores:edit and
+// can change the price; this one needs till:use (or stores:edit) and can change
+// exactly one thing on exactly one kind of row. A stocked listing is refused —
+// its availability is counted on the shelf, and a cashier turning it off would
+// hide stock the mini app is selling (§150).
+//
+// It never turns itself back on (Ash, 2026-09-29): an ingredient can be out
+// for days, and a switch that reset every morning would sell what cannot be
+// made.
+function requireTillOrStoresEdit(req, res, next) {
+  if (req.caps instanceof Set && !req.caps.has('till:use') && !req.caps.has('stores:edit')) {
+    return res.status(403).json({ success: false, error: 'forbidden' });
+  }
+  next();
+}
+
+router.put('/api/retail-admin/shops/:id/listings/:lid/sold-out', requireRetailAdmin, requireTillOrStoresEdit, express.json(), (req, res) => {
+  const id = intParam(req.params.id);
+  const lid = intParam(req.params.lid);
+  const shop = id ? getShop(id) : null;
+  const listing = shop && lid ? getListing(id, lid) : null;
+  if (!listing) return bad(res, 404, 'not_found');
+  // A store-scoped cashier works their own counter. The choke point cannot
+  // check this — the id in the path is a shop, not a store.
+  if (Array.isArray(req.scopeStores) && req.scopeStores.indexOf(shop.location_id) === -1) {
+    return res.status(403).json({ success: false, error: 'forbidden_store' });
+  }
+  if (listing.fulfilment_mode !== 'made_here') return bad(res, 409, 'not_made_here');
+  const b = req.body || {};
+  if (typeof b.sold_out !== 'boolean') return bad(res, 400, 'sold_out_required');
+  const avail = b.sold_out ? 0 : 1;
+  tdb().prepare('UPDATE shop_listings SET is_available = ?, updated_at = CURRENT_TIMESTAMP WHERE shop_id = ? AND id = ?')
+    .run(avail, id, lid);
+  logActivity(req.user.id, req.user.username, 'update', 'shop_listing', lid,
+    { shop_id: id, is_available: avail, via: 'till_sold_out' }, req.ip);
+  ok(res, { listing_id: lid, sold_out: b.sold_out });
+});
+
 // Re-sequence the whole menu in one write: ids in the order they should read.
 // Ids not on this shop are ignored rather than refused, so a stale client that
 // still names a just-removed row cannot block the reorder of the rest.
@@ -675,7 +720,7 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
   const shop = tdb().prepare('SELECT id FROM shops WHERE location_id = ?').get(locationId) || null;
   const listings = shop
     ? tdb().prepare(`
-        SELECT store_product_id, price, fulfilment_mode, is_available, sort_position
+        SELECT id, store_product_id, price, fulfilment_mode, is_available, sort_position
           FROM shop_listings WHERE shop_id = ?`).all(shop.id)
     : [];
   const byProduct = new Map(listings.map(l => [l.store_product_id, l]));
@@ -717,13 +762,23 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     const onShelf = counted ? Number(counted.available) || 0 : null;
 
     let price, mode, stock;
+    let soldOut = false;
     if (listed) {
-      if (!listed.is_available) continue;            // switched off for the day
-      price = Number(listed.price) || 0;
       mode  = listed.fulfilment_mode;
+      // §287 — A MADE-HERE ROW SWITCHED OFF IS SOLD OUT, NOT GONE. The switch
+      // is the whole of its availability (§42, §47), and switched off it means
+      // "we cannot make it right now" — the tomatoes ran out. The tile stays
+      // on the glass, greyed, so a cashier asked for it can say so instead of
+      // hunting for a product that seems never to have existed, and can switch
+      // it back from the till. A stocked row switched off is still absent: its
+      // stock is counted, and §150's reason for hiding it is unchanged.
+      if (!listed.is_available && mode !== 'made_here') continue;
+      soldOut = mode === 'made_here' && !listed.is_available;
+      price = Number(listed.price) || 0;
       // Made here: built at the moment of sale, so there is no shelf to run out
-      // of and null tells the till not to draw one.
-      stock = mode === 'made_here' ? null : (onShelf == null ? 0 : onShelf);
+      // of and null tells the till not to draw one. Sold out is 0 — the one
+      // "cannot sell this" the till's tiles already draw.
+      stock = mode === 'made_here' ? (soldOut ? 0 : null) : (onShelf == null ? 0 : onShelf);
     } else {
       price = Number(p.sell_price) || 0;
       mode  = null;
@@ -751,7 +806,14 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
       // that posted its own figure for everything would charge a stale one every
       // time the office corrected a catalogue price.
       on_menu: !!listed,
+      // §287 — what the till's Sold out control writes to. Null off the menu:
+      // only a listing has a switch.
+      listing_id: listed ? listed.id : null,
       fulfilment_mode: mode,
+      // §287 — the made-here switch is off. Distinct from stock 0, which a
+      // required question with no answer left can also produce (below): only
+      // this one is a switch a cashier can turn back on.
+      switched_off: soldOut,
       // null = nothing to count (made here). A number = the shelf, already net.
       stock,
       sort_position: listed ? listed.sort_position : null,
