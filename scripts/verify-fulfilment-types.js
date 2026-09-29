@@ -58,7 +58,8 @@ db.exec(`
     refund_status TEXT,
     reminder_ship_sent_at DATETIME, reminder_pickup_sent_at DATETIME,
     sms_delivered_sent_at DATETIME,
-    wx_shipping_uploaded_at DATETIME, wx_shipping_status TEXT, wx_shipping_attempts INTEGER DEFAULT 0
+    wx_shipping_uploaded_at DATETIME, wx_shipping_status TEXT, wx_shipping_attempts INTEGER DEFAULT 0,
+    source TEXT   -- read by commitUnreservedOrder (see test_platform_order_single_deduct.js)
   );
   CREATE TABLE retail_payments (
     id INTEGER PRIMARY KEY, order_id INTEGER, method TEXT, status TEXT,
