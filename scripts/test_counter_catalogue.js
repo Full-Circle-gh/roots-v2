@@ -379,7 +379,7 @@ const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
       // The admin route, because this product was never published and the
       // public route answers 404 for it (§150 is why the till sells it at all).
       assert.strictEqual(rowFor(rowsA, P_LOCAL).image,
-        `/api/retail-admin/products/${P_LOCAL}/image?w=400&v=${encodeURIComponent('2026-09-29 10:00:00')}`);
+        `/api/retail-admin/products/${P_LOCAL}/image?w=200&v=${encodeURIComponent('2026-09-29 10:00:00')}`);
     });
     check('a product with no photo carries null, not a URL that will 404', () => {
       assert.strictEqual(rowFor(rowsA, P_PUB).image, null);

@@ -806,10 +806,11 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
       // §289 — THE PHOTO ON THE TILE. A small thumbnail URL, or null when
       // neither this product nor a variant sibling has one. The admin route,
       // not the public one: the till sells products that were never published
-      // (§150) and the public route refuses those. ?v busts the browser's
-      // cache when the photo changes.
+      // (§150) and the public route refuses those. 200px wide: the tile shows
+      // it at about 72px, so this is sharp on a 2x screen. ?v busts the
+      // browser's cache when the photo changes.
       image: p.has_image
-        ? `/api/retail-admin/products/${p.id}/image?w=400&v=${encodeURIComponent(p.updated_at || '')}`
+        ? `/api/retail-admin/products/${p.id}/image?w=200&v=${encodeURIComponent(p.updated_at || '')}`
         : null,
       price,
       // The till posts unit_price on these and only these: the listing price is

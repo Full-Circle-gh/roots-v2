@@ -323,24 +323,28 @@ button{font:inherit;color:inherit;margin:0}
 /* §287 — while marking sold out, a switched-off tile is still tappable (it is
    how it comes back), so it keeps the dashed look without the disabled one. */
 .tile.so-busy{opacity:.5}
-/* §289 — THE PHOTO. Across the top of the tile, edge to edge, because a
-   picture is read before a word is: two products with the same name are told
-   apart by what they look like. Across the top rather than beside the name,
-   because the name has to keep the tile's full width — at 140px an iPad column
-   has no room for a thumbnail AND a name that still ends with "Toast".
+/* §289 — THE PHOTO. Across the top of the tile, because a picture is read
+   before a word is: two products with the same name are told apart by what
+   they look like. Across the top rather than beside the name, because the
+   name has to keep the tile's full width — at 140px an iPad column has no
+   room for a thumbnail AND a name that still ends with "Toast".
+   THE WHOLE PHOTO, NEVER CROPPED. Product photos are square (the shop and the
+   editor show them 1:1), and a full-width strip cut them to a band across the
+   middle. So the photo keeps its own shape, centred in the strip, and the
+   strip's tint fills the sides.
    The rows grow to fit it only when this till has any photos at all (.pics),
    so a tenant with none keeps today's grid exactly. A product with no photo in
    a grid that has them is the ordinary tile, just taller. */
-.grid.pics{grid-auto-rows:168px}
+.grid.pics{grid-auto-rows:180px}
 .tile.has-ph{justify-content:flex-start}
 .tile.has-ph .ft{margin-top:auto}
 .tile .ph{
-  display:block;flex:none;height:72px;margin:-12px -12px 8px;
-  background:var(--td-raised);overflow:hidden;
+  display:flex;justify-content:center;flex:none;height:84px;margin:-12px -12px 8px;
+  padding:6px 0;background:var(--td-raised);overflow:hidden;
 }
-.tile .ph img{display:block;width:100%;height:100%;object-fit:cover}
+.tile .ph img{display:block;height:100%;width:auto;max-width:100%;object-fit:contain;border-radius:6px}
 .tile.out .ph img{opacity:.45;filter:grayscale(1)}
-/* The question dot sits on the photo now; a ring keeps it visible on a dark one. */
+/* The question dot sits on the photo strip now; a ring keeps it visible. */
 .tile.has-ph .ask{box-shadow:0 0 0 2px var(--td-surface)}
 .gempty{
   grid-column:1/-1;padding:32px;text-align:center;color:var(--td-text2);font-size:14px;
