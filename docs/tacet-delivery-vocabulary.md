@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.206 · 2026-09-29 · THE SHOP MENU SWITCH'S HOVER NAMES ITS STATE — NOTHING COMPOSED, TWO PAIRS REUSED.** Sales → Locations → Shop menu. The per-row switch's hover said `On the shop · tap to hide · 已上架 · 点按下架` / `Off the shop · tap to show · 未上架 · 点按上架`; off never hides a listing from the QR menu, so both were wrong. It now reads `Available · 有货` when on and `Sold out · 售罄` when off. See *The Shop menu's Available column*.
+
 **v1.205 · 2026-09-29 · THE SHOP MENU'S AVAILABILITY COLUMN SAYS AVAILABLE, NOT IN SHOP — NOTHING COMPOSED, ONE PAIR LIFTED.** Sales → Locations → Shop menu. The column header over each row's switch was `In shop · 上架`, which reads as "on or off the menu"; a made-here row switched off is sold out and still on the menu, greyed. It now reads `Available · 有货`. See *The Shop menu's Available column*.
 
 **v1.204 · 2026-09-29 · §291 ADD EVERY ONLINE-STORE PRODUCT TO A SHOP MENU — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE BUT 盘点过.** The new button on Sales → Locations → Shop menu's Add product panel and its confirm. See *Add every Online store product to a shop menu (§291)*.
@@ -9318,6 +9320,16 @@ header over the per-row switch on the desktop Shop menu screen
 | `Available · 有货` (column header) | **lifted whole** from the product list's supplier-direct badge (`public/retail-admin/09-products.js`, `_paStockCell`), where it is the on-state of the operator's can-we-sell-this switch, the same meaning as here. Also live on the phone (`public/m.html`) |
 
 The switch, its tooltips and the `Sold out · 售罄` word beside it are unchanged.
+
+**v1.206, the same day: the switch's hover.** It now names the state and
+nothing else: `Available · 有货` (this column's header, above) when on, and
+`Sold out · 售罄` (the QR menu's own pill, `routes/shop-menu.js`, already the
+hover for a made-here row switched off) when off, for every kind. The old
+`已上架 · 点按下架` / `未上架 · 点按上架` pair is **retired from this switch**: off
+never takes a listing off the QR menu, where any kind shows greyed as sold out.
+The pair stays live on the product page's publish switch, where it is true.
+Restructured rather than composed: a switch needs no "tap to", so no new
+Chinese was needed.
 
 **Live candidates rejected.**
 
