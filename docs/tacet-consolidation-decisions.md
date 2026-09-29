@@ -20949,3 +20949,27 @@ building §289.
    cut; the size under it never is.
 2. **The tile does not grow for it.** Its padding tightened by 2px top and
    bottom instead.
+
+## §291 — ONE TAP PUTS EVERY ONLINE-STORE PRODUCT ON A SHOP'S MENU
+
+**Decided 2026-09-29 by Ash** (*"make all products on mini app available also
+on the qr menu"*, then option 1 of three put to Ash).
+
+1. **§42 and §150 stand.** A listing is still what puts a product on a shop's
+   menu, and `is_published` still governs only the online store. The QR menu
+   does not read `is_published`.
+2. **Sales → Locations → Shop menu → + Add product** carries one more button,
+   *Add all N Online store products*, shown only while N is above zero. N is
+   the products the mini app shows (published and active) that this shop does
+   not list yet.
+3. **It adds them as one at a time would:** catalogue price, Stocked, at the
+   end of the menu, in the mini app's order. Rows already on the menu are not
+   touched. Writes need `stores:edit`. A confirm names the count first.
+4. **One tap, not a sync.** A product published later is not added until
+   someone taps again; one removed afterwards stays off.
+5. **§47 is unchanged**, and the confirm says so: a Stocked row this shop has
+   never counted shows as sold out on the QR menu. Staff remove what the shop
+   does not sell, and switch made-here rows to *Made here*.
+6. **Rejected:** an automatic sync on publish (no per-shop control), and the QR
+   menu reading `is_published` directly (breaks §42; ordering, prices and
+   photos all gate on the listing).

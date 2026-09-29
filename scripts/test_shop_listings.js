@@ -427,6 +427,44 @@ function call(method, url, body) {
       await call('DELETE', `/api/retail-admin/shops/${shopA.id}/listings/${lid}`);
     });
 
+    console.log('\nAdd every Online store product in one tap (Ash, 2026-09-29)');
+    await checkAsync('adds exactly what the mini app shows and this menu lacks, at catalogue price, stocked, at the end', async () => {
+      const before = (await call('GET', `/api/retail-admin/shops/${shopA.id}`)).json.data.listings;
+      const had = new Set(before.map(l => l.store_product_id));
+      const maxSort = before.reduce((m, l) => Math.max(m, l.sort_position), -1);
+      CAPS = new Set(['stores:view']);
+      let r = await call('POST', `/api/retail-admin/shops/${shopA.id}/listings/add-published`);
+      assert.strictEqual(r.status, 403, 'a read-only operator cannot bulk-add');
+      CAPS = null;
+      r = await call('POST', `/api/retail-admin/shops/${shopA.id}/listings/add-published`);
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const after = r.json.data.listings;
+      const byProduct = new Map(after.map(l => [l.store_product_id, l]));
+      for (const id of [P4, P_UNLISTED, P_CN, V1, ...BULK_IDS]) {
+        assert.ok(byProduct.has(id), `published product ${id} was not added`);
+      }
+      assert.ok(!byProduct.has(P3), 'an inactive, unpublished product is not added');
+      assert.ok(!byProduct.has(V2), 'an unpublished size is not added — the mini app does not show it either');
+      const fresh = after.filter(l => !had.has(l.store_product_id));
+      assert.strictEqual(r.json.data.added, fresh.length);
+      assert.ok(fresh.every(l => l.fulfilment_mode === 'stocked'), 'every added row is stocked');
+      assert.ok(fresh.every(l => l.sort_position > maxSort), 'every added row lands after what was there');
+      assert.strictEqual(byProduct.get(P4).price, 68, 'price is the catalogue price');
+      const p1 = before.find(l => l.store_product_id === P1);
+      if (p1) assert.strictEqual(byProduct.get(P1).price, p1.price, 'a row already on the menu keeps its own price');
+    });
+    await checkAsync('a second tap adds nothing and the published candidates are gone', async () => {
+      let r = await call('POST', `/api/retail-admin/shops/${shopA.id}/listings/add-published`);
+      assert.strictEqual(r.status, 200);
+      assert.strictEqual(r.json.data.added, 0, 'nothing left to add');
+      r = await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=`);
+      assert.ok(!r.json.data.some(x => x.is_published === 1), 'no published product is still a candidate');
+      r = await call('POST', '/api/retail-admin/shops/99999999/listings/add-published');
+      assert.strictEqual(r.status, 404, 'an unknown shop is 404');
+      // Left as the rest of the run expects it: only the rows it had before.
+      db.prepare(`DELETE FROM shop_listings WHERE shop_id = ? AND store_product_id NOT IN (?, ?)`).run(shopA.id, P1, P2);
+    });
+
     console.log('\nThe gate — writes need stores:edit for a backend operator');
     await checkAsync('a backend operator without stores:edit reads but cannot write', async () => {
       CAPS = new Set(['stores:view']);

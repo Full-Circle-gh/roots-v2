@@ -15382,6 +15382,7 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
    stays put; the right-hand padding keeps that scrollbar off the Add buttons. */
 #tab-shop-menu #shp-pick-list { max-height: 52vh; overflow-y: auto; padding-right: 4px; }
 #tab-shop-menu .shp-pick-list { list-style: none; margin: 12px 0 0; padding: 0; }
+#tab-shop-menu .shp-pick-all { margin: 12px 0 0; display: flex; justify-content: flex-end; }
 #tab-shop-menu .shp-pick-list li {
   display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center;
   padding: 10px 0; border-top: 1px solid var(--td-border);
