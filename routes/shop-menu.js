@@ -65,6 +65,7 @@ const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { isShopCode } = require('../lib/shop-code');
 const { getCategoryTree } = require('../lib/category-tree');
+const qrCatOrder = require('../lib/qr-menu-category-order');
 const { themeToCssVars, sanitizeTheme,
         DIGIT_SUBSTITUTE, DIGIT_RANGE } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
@@ -552,7 +553,14 @@ function buildMenu(shop) {
   // band, exactly as the shop's own orphan handling does. Nothing is
   // invented for either: OTHER / 其他 and ALL / 全部 are the shop's own
   // labels, copied.
-  const tree = getCategoryTree(tdb());
+  //
+  // §288 — THE QR MENU'S OWN ORDER. Same tree, same names, same subcategories;
+  // only the order is the QR menu's, and a top category the tenant hid on the
+  // QR menu is left out WITH its products (they do not fall into OTHER). One
+  // setting for every location. Unset, this is the mini app's order exactly.
+  const qr = qrCatOrder.applyToTree(getCategoryTree(tdb()), qrCatOrder.readOrder(tdb()));
+  const tree = qr.tree;
+  if (qr.hiddenNames.size) listings = listings.filter(r => !qr.hiddenNames.has(r.top_category));
   const cats = [];
   const byTop = new Map();
   for (const t of tree) {

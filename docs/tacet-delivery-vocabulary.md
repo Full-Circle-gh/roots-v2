@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.203 · 2026-09-29 · §288 THE QR MENU'S OWN CATEGORY ORDER — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The Mini app / QR menu switch on Products → Categories, its hint, and its status line. See *The QR menu's own category order (§288)*.
+
 **v1.202 · 2026-09-29 · §287 A MADE-HERE ITEM CAN BE MARKED SOLD OUT FROM THE TILL — NOTHING COMPOSED, TWO PAIRS LIFTED.** `Sold out · 售罄` is lifted from the QR menu's own pill for this exact state (`routes/shop-menu.js`, the `.sold` label), so the till, the Shops screen and the customer's menu use one word for one state. `Done · 完成` is lifted from the admin (`public/retail-admin/05-marketing.js`, the Manage/Done toggle). **Rejected: `缺货`** (live on the till as `Out of stock` and on the admin's product grid) for this state — it stays on the till for a shelf that is empty, but a made-here item switched off is what the customer already sees as 售罄, and the cashier should read the same word the customer does. Rules 1 to 7 unchanged.
 
 **v1.201 · 2026-09-28 · §281 THE BUILD-LIST TICK AND THE WASTE NOTE SAY THE SAME THING — CHINESE SUPPLIED BY ASH, ONE NOTE TRIMMED FROM IT.** Ash's `过期或变质报废时不计损耗` replaces the composed `单独包装 — 过期或变质时保留` on the tick. With Ash's go-ahead, the English follows the Chinese: `Packed separately — kept if it expires or spoils` → `Not counted as waste if it expires or spoils`, and the waste screen's note `Kept, not counted: · 保留，不计入：` → `Not counted as waste: · 不计损耗：` (desktop and phone), so the tick and the note use one phrase. See *Packed separately — kept on expiry (§281)*.
@@ -9245,3 +9247,33 @@ counter till's sheet (`public/till.html` openOpts … commitOpts), as a panel.
 
 **Nothing composed.**
 
+## The QR menu's own category order (§288)
+
+**Composed by Claude, 2026-09-29, under the 2026-09-06 amendment.** Operator
+register only (Rule 1): the desktop Categories screen
+(`public/retail-admin.html`, `public/retail-admin/01-core.js`). Nothing reaches
+a customer; the QR menu itself gains no string. Ash reads English only, so a
+Chinese reader on staff should correct any line that reads wrong.
+
+| shipped | built from |
+|---|---|
+| `Mini app · 小程序` (switch) | **copied whole.** Live as `T('Mini app','小程序')` and as static `Mini app · 小程序` |
+| `QR menu · 二维码菜单` (switch) | **copied whole.** `peChannelQr`, *A section taken off the QR menu (2026-09-15)* |
+| `Shows on the QR menu — click to hide · 在二维码菜单显示,点击隐藏` / `Hidden on the QR menu — click to show · 二维码菜单已隐藏,点击显示` (the eye) | **copied whole** from the product editor's per-block eye (`public/product-editor.html`) |
+| `Hidden on the QR menu · 二维码菜单已隐藏` (pane pill) and `N hidden on the QR menu · N 二维码菜单已隐藏` (status line, number bold before it) | **copied whole** — the §135 marker's own title |
+| `Reset to mini app order · 重置为小程序顺序` | **composed on the live sibling** `Reset to default order · 重置为默认顺序`, with 默认 → 小程序 |
+| `Same order as the mini app · 与小程序顺序相同` | **composed.** 小程序 and 顺序 live; 相同 is not live anywhere |
+| `Own order for the QR menu · 二维码菜单独立顺序` | **composed.** 独立 live (`各有独立价格与库存`, variants) + 二维码菜单 + 顺序 |
+| `The QR menu's own order, for every location. Drag a row to reorder it, or tap the eye to hide it. The mini app is unchanged. · 二维码菜单自己的顺序,所有门店相同。拖动行即可排序,点眼睛可隐藏。小程序不变。` (hint under the rail) | **composed.** `拖动行即可排序` lifted from the mini app hint beside it; `小程序不变` lifted from `peChannelOffNote`; 所有门店 live (`其权限适用于所有门店。`); 点眼睛 is new. Halfwidth commas, as the lines it lifts from |
+
+`Save failed · 保存失败` is copied whole.
+
+**Live candidates rejected.**
+
+- `自定义排序` (custom sort): **rejected.** Not live, and *custom* says nothing
+  about which surface is custom; 二维码菜单独立顺序 names it.
+- `Default sort · 默认排序` (live, a list's sort menu): **rejected** for the
+  reset. It is a sort key on a list, not the mini app's arrangement, and 默认
+  would leave the operator guessing what "default" is.
+- `扫码点单`: rejected again, for the reason in *A section taken off the QR menu (2026-09-15)* — it appears nowhere in this
+  product, and 二维码菜单 is the live name for this surface.

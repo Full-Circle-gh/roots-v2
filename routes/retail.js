@@ -85,6 +85,7 @@ const flashsales = require('../lib/flashsales');
 const reviewTopup = require('../lib/review-topup');
 const { imageAspect } = require('../lib/image-dims');
 const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
+const qrCatOrder = require('../lib/qr-menu-category-order');
 // What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
 const { isCounter, shipsNothing, isTerminalOnPaid, isMirroredChannel } = require('../lib/fulfilment');
@@ -775,6 +776,35 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
       return migrated;
     });
     res.json({ success: true, data: incoming, migrated });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'save_failed', message: e.message });
+  }
+});
+
+// §288 — THE QR MENU'S OWN ORDER (Products → Categories, "QR menu" switch).
+// The tree itself is untouched: this is only the order the QR menu draws it in
+// and the top categories it leaves out, one value for every location. Under
+// /category-tree so lib/cap-routes.js gates the write on categories:edit like
+// the tree's own PUT.
+router.get('/api/retail-admin/category-tree/qr-order', requireRetailAdmin, (req, res) => {
+  res.json({ success: true, data: qrCatOrder.readOrder(tdb()) });
+});
+router.put('/api/retail-admin/category-tree/qr-order', requireRetailAdmin, express.json({ limit: '64kb' }), (req, res) => {
+  const body = req.body || {};
+  // `tops: null` is a real answer — follow the mini app — so it is only a
+  // malformed body when the key is missing altogether.
+  if (!('tops' in body) || (body.tops !== null && !Array.isArray(body.tops))) {
+    return res.status(400).json({ success: false, error: 'bad_order' });
+  }
+  const order = qrCatOrder.normalise(body);
+  try {
+    tdb().prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+    ).run(qrCatOrder.CONFIG_KEY, JSON.stringify(order), (req.user && req.user.id) || null);
+    res.json({ success: true, data: order });
   } catch (e) {
     res.status(500).json({ success: false, error: 'save_failed', message: e.message });
   }

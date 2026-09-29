@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.457
+# Tacet shared-core consolidation — decisions record, v4.458
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-29 · v4.458 — **§288 · THE QR MENU HAS ITS OWN CATEGORY ORDER, AND CAN HIDE A CATEGORY — DECIDED BY ASH:** *"main menu qr - tenenat sohuld be aboe to organize the left menu as he pleased regardless the way its organized on the mini app"*, then *"its not about hotels ,it about locations . same order in every location, thats the plan"*, *"2. yes"* (hide a category on the QR menu only) and *"3. yes"* (a Mini app / QR menu switch on Products → Categories). **BEFORE THIS, ONE ORDER FOR EVERY SURFACE.** The QR menu (`routes/shop-menu.js` buildMenu), the mini app and the web shop all drew `storefront_config['category.tree']` in its array order; dragging a row on the Categories screen moved all three. **ONLY THE ORDER IS SPLIT, NOT THE TREE.** New key `storefront_config['qrMenu.categoryOrder']` (`lib/qr-menu-category-order.js`): `{ tops, subs, hidden }`, stable node ids, one value for the tenant so every location's QR menu matches. `tops: null` and an absent `subs` entry mean *follow the mini app*, so nothing moved the day this shipped. A node the order does not name (a category added later) is drawn after the named ones; an id the tree no longer has is skipped. A hidden top category is left off the QR menu **with its products** — they do not fall into OTHER. A second QR-only tree was considered and rejected: two copies drift, and a rename on one side would orphan products on the other. Write: `PUT /api/retail-admin/category-tree/qr-order`, under the tree's own prefix so `lib/cap-routes.js` gates it on `categories:edit`. Desktop: a *Mini app · 小程序 / QR menu · 二维码菜单* switch above the rail on Products → Categories; in QR mode dragging reorders the QR menu only, an eye on each row hides it there, and the status line offers *Reset to mini app order*. Names, subcategories and products stay shared and are still edited in either mode. **Not changed:** the mini app, the web shop, the phone admin (read-only on categories, as before), and the order endpoint — hiding is what the menu draws, not what it will accept. Held by `scripts/test_qr_menu_category_order.js`. Four strings composed by Claude; see the vocabulary's v1.203. No schema change; no change to `.gitignore` or CI.
 
 2026-09-29 · v4.457 — **§287 · A MADE-HERE ITEM CAN BE MARKED SOLD OUT, AND THE TILL SAYS SO — DECIDED BY ASH:** *"made here products might sometimes be out of stock ( for example tomoatoes areo ut of stock to make a speocific item . ) we need to have n option to disable ( out of sotck) item for " made here" products"*, then *"1.yes 2. greyed out 3. no"* to Claude's three questions (cashiers may mark it from the till; the till greys it rather than hiding it; it never switches itself back on). **THE SWITCH ALREADY EXISTED and was not recognised as one**: §42's manual switch (`shop_listings.is_available`, the Shops screen's *In shop · 上架*) is the whole of a made-here item's availability per §47, and the QR menu already drew it off as *Sold out · 售罄*. Claude argued against a second "Out of stock" switch beside it — two switches that both stop a sale, and nobody can tell which one is blocking an item — and Ash went with one switch reached from two places. **§150 IS NARROWED, NOT REVERSED**: a STOCKED listing switched off is still absent from the till, for §150's reason; a MADE-HERE listing switched off is now on the glass, greyed, at the listing price, reading *Sold out · 售罄*. **The cashier's write is narrower than the office's**: `PUT /api/retail-admin/shops/:id/listings/:lid/sold-out` changes `is_available` and nothing else, on made-here rows only (a stocked row is 409 `not_made_here`), and needs `till:use` or `stores:edit` — gated in the handler and in `lib/cap-routes.js`, with a store-scoped cashier held to their own location. **No schema, no migration, no new table.** No Chinese composed: `Sold out · 售罄` and `Done · 完成` are lifted (vocabulary v1.202). `scripts/test_counter_catalogue.js` 21 → 36 checks, proven non-vacuous by two mutations; `scripts/verify-fulfilment-types.js`'s tile-footer pattern widened to accept the new label, its assertion unchanged in meaning; `npm run test:fast` 361/361. No change to `.gitignore` or CI.
 
@@ -20891,3 +20893,25 @@ sotck) item for " made here" products"*, then *"1.yes 2. greyed out 3. no"*).
    rows, and holds a store-scoped operator to their own location.
 4. **It never switches itself back on.** An ingredient can be out for days.
 5. The Shops screen labels a made-here row that is switched off *Sold out*.
+
+## §288 — THE QR MENU HAS ITS OWN CATEGORY ORDER, AND CAN HIDE A CATEGORY
+
+**Decided 2026-09-29 by Ash** (*"tenant should be able to organize the left
+menu as he pleased regardless the way its organized on the mini app"*, then
+*"same order in every location"*, *"2. yes"*, *"3. yes"*).
+
+1. **One category tree, two orders.** Names, subcategories and which product
+   sits where stay shared (§19). The QR menu keeps its own order of top
+   categories and of each category's subcategories
+   (`storefront_config['qrMenu.categoryOrder']`, `lib/qr-menu-category-order.js`).
+   There is no second tree.
+2. **One QR order for every location** of the tenant. Not per shop.
+3. **Until it is set, the QR menu follows the mini app.** A category the QR
+   order does not name — one added later — shows at the bottom of the QR menu.
+4. **A category can be hidden on the QR menu only.** Its products go with it;
+   they do not fall into OTHER. Top categories only.
+5. **Set on Products → Categories**, with a *Mini app / QR menu* switch over the
+   same drag list, an eye per row, and *Reset to mini app order*. Writes need
+   `categories:edit`.
+6. **Hiding is display only.** The order endpoint does not refuse a hidden
+   category's product; it is simply not on the menu.
