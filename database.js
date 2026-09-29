@@ -5740,6 +5740,10 @@ try {
   // save so any rep row carries it. EN/CN split, each independent (never glued).
   addColumn('store_products', 'variant_noun_en', 'TEXT');
   addColumn('store_products', 'variant_noun_cn', 'TEXT');
+  // Store-only: §294 — this size was OFF while a sibling was on when its family
+  // was last switched off the online store, so switching the family back on
+  // leaves it off. Written only by lib/family-publish.js; nothing else reads it.
+  addColumn('store_products', 'kept_off_online', 'INTEGER DEFAULT 0');
   // Store-only: per-product low-stock alert threshold. NULL = use the tenant
   // global default (storefront_config 'inventory.lowStockThreshold', default 5).
   // A product gets flagged "low" when its stock is >0 and ≤ this number — drives

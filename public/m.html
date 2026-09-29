@@ -3005,8 +3005,10 @@ reg('prodSearch', v=>{
 /* On the shop, or not. The desktop puts this switch on every card because it is
    the one product decision that is urgent — something is wrong with a line and
    it has to stop selling NOW — and that is a phone job if anything is. It flips
-   every size of a family at once, the way the desktop's does, and puts the
-   switch back if the server refuses. */
+   a whole family at once through the desktop's own rule (§294, POST
+   /products/family-publish): off remembers which sizes were on, on brings back
+   only those, so a size kept off the online store on purpose stays off. The
+   server's answer is final, and the switch goes back if it refuses. */
 reg('toggleShop', ids=>{
   const list=String(ids).split(',').map(Number).filter(Boolean);
   if(!list.length||state.prodBusy) return;
@@ -3014,12 +3016,17 @@ reg('toggleShop', ids=>{
   if(!rows.length) return;
   const next=!rows.some(p=>p.pub);
   state.prodBusy='shop'+list[0]; state.prodErr=null;
+  const before=new Map(rows.map(p=>[p._id,p.pub]));
   rows.forEach(p=>{ p.pub=next; reKindProduct(p); });   // optimistic
   render();
-  Promise.all(list.map(id=>apiWrite('/products/'+id,{is_published:next?1:0},'PATCH')))
-    .then(()=>{ state.prodBusy=null; render(); showToast(next?T('On the shop','已上架'):T('Off the shop','已下架')); })
+  apiWrite('/products/family-publish',{ids:list,on:next},'POST')
+    .then(j=>{
+      const got=new Map(((j&&j.data&&j.data.rows)||[]).map(x=>[x.id,x.is_published===1]));
+      rows.forEach(p=>{ if(got.has(p._id)){ p.pub=got.get(p._id); reKindProduct(p); } });
+      state.prodBusy=null; render(); showToast(next?T('On the shop','已上架'):T('Off the shop','已下架'));
+    })
     .catch(e=>{
-      rows.forEach(p=>{ p.pub=!next; reKindProduct(p); });   // the switch must never lie
+      rows.forEach(p=>{ p.pub=before.get(p._id); reKindProduct(p); });   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
       state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');

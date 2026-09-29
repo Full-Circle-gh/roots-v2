@@ -466,7 +466,18 @@ check('the badge is a control, and it publishes the whole variant family', () =>
   assert.ok(/peFamilyIds\(\)/.test(t), 'publishing one size leaves its siblings behind');
   const f = anchored('peFamilyIds');
   assert.ok(/variant_group_id/.test(f), 'the family is not resolved by variant group');
-  assert.ok(/is_published: val/.test(t), 'the toggle does not write the flag the storefront filters on');
+  // §294 — the write goes through the family rule, never a PATCH of one value
+  // to every size, which would bring back a size kept off the store on purpose.
+  assert.ok(/\/api\/retail-admin\/products\/family-publish/.test(t) && /on: !!val/.test(t),
+    'the toggle does not go through the family rule (POST /products/family-publish)');
+  assert.ok(!/is_published: val/.test(t), 'the toggle writes one value to every size again (§294)');
+});
+
+check('the badge reads the FAMILY, not the size open on screen (§294)', () => {
+  assert.ok(/const pub = peFamilyLive\(\);/.test(anchored('peRenderBadges')),
+    'the pill reads the open size — on a size kept off on purpose it would say Hidden and a click would seem to do nothing');
+  assert.ok(/const turningOn = !peFamilyLive\(\);/.test(anchored('peTogglePublish')),
+    'the toggle decides on/off from the open size, not the family');
 });
 
 check('publishing saves first, and abandons the publish if that save failed', () => {
@@ -481,7 +492,7 @@ check('publishing saves first, and abandons the publish if that save failed', ()
 
 check('a failed publish puts the switch back rather than lying', () => {
   const t = anchored('peTogglePublish');
-  assert.ok(/apply\(val \? 0 : 1\)/.test(t), 'a failed PATCH leaves the pill claiming the wrong state');
+  assert.ok(/apply\(pid => before\.get\(pid\)\)/.test(t), 'a failed publish leaves the pill claiming the wrong state');
   assert.ok(/peAuthBail\(\)/.test(t), 'a lost session during publish is not handled');
 });
 
