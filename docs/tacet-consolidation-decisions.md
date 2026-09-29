@@ -21003,3 +21003,28 @@ page"*). Builds on §288 and on the product drag shipped in #896.
 6. **Rejected:** a per-shop QR product order (§288 rule 2 already chose one QR
    order for every location), and keeping the Sort numbers as a hidden
    fallback (an order nobody can see or edit).
+
+## §293 — THE INBOX ROW ON MORE SHOWS HOW MANY ARE NEW
+
+**Decided 2026-09-29 by Ash** (*"if there is unread messages it should show on
+the inbox line how many unread messages inside a dot"*, then *"build it"* on the
+mockup). Before this the More tab lit its dot for a new review or feedback, but
+the Inbox row inside More carried nothing, so the operator had to guess which
+row the dot meant.
+
+1. **The Inbox row shows a round Sage-ink badge with the number**: reviews plus
+   feedback that arrived since this phone last opened the Inbox. That is the
+   count the More dot already read (`/reviews/unseen-count` and
+   `/feedback/unseen-count` since the `tacet.m.inboxSeen` stamp), so no server
+   change. Over 99 reads *99+*. Zero is no badge.
+2. **It is a count of NEW, not of UNANSWERED.** Opening the Inbox clears it,
+   answered or not. What still needs a reply is Home's *Needs you* list (§271).
+3. **The exception is the Inbox row only.** The More tab keeps its plain 6px
+   dot, and every other row keeps its dot: a number in the tab bar is on every
+   screen and turns arriving work into an alarm, while a number on a row is
+   read only by someone who came to look.
+4. **The count is re-asked every time More is opened**, not only at app start,
+   because a printed number that is out of date is worse than a dot. A failed
+   ask keeps the number shown instead of zeroing it, and an answer that lands
+   after the Inbox was opened is thrown away.
+5. **No new string.** The badge is a numeral.

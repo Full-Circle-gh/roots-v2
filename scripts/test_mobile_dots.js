@@ -75,6 +75,12 @@ const rowDot = (label) =>
   `[].slice.call(document.querySelectorAll('#content .row')).some(function(b){` +
   `return b.innerText.trim().indexOf(${JSON.stringify(label)})===0 && b.querySelector('span[style*="border-radius:50%"]');})`;
 
+// §293 — the number in the Inbox row's badge, or '' when there is none.
+const rowCount = (label) =>
+  `(function(){var r=[].slice.call(document.querySelectorAll('#content .row')).filter(function(b){` +
+  `return b.innerText.trim().indexOf(${JSON.stringify(label)})===0;})[0];` +
+  `var s=r&&r.querySelector('.num');return s?s.innerText.trim():'';})()`;
+
 const CASES = [
   /* Seeded on Home, because standing on Orders is what puts it out — the case
      below. `ordersUnseen` is the server's count of un-actioned, non-mirror
@@ -147,6 +153,51 @@ const CASES = [
      `window.__sent.some(function(u){return u.indexOf('/reviews/unseen-count?since=2026-08-22')>=0})`],
     ['feedback too — the dot covers both, and the old Set covered only reviews',
      `window.__sent.some(function(u){return u.indexOf('/feedback/unseen-count?since=2026-08-22')>=0})`],
+  ]],
+
+  /* ── §293: the Inbox ROW shows how many ──────────────────────────────────
+     Ash, 2026-09-29: "if there is unread messages it should show on the inbox
+     line how many unread messages inside a dot." The folder keeps its plain
+     dot; the number lives on the row, where only someone who came to look
+     reads it. Painted with state.tab set directly, so opening More does not
+     start a re-ask that would overwrite the seeded count. */
+  ['the Inbox row on More shows the count',
+   `state.inboxUnseen=3; state.stack=[]; state.tab='more'; render();`, [
+    ['the row reads 3',                 `${rowCount('Inbox')} === '3'`],
+    ['the folder keeps a plain dot',    dotOn('More')],
+    ['and the tab bar carries no number', `!document.querySelector('.tabbar .num')`],
+  ]],
+  ['a big count stays one short word',
+   `state.inboxUnseen=150; state.stack=[]; state.tab='more'; render();`, [
+    ['it reads 99+', `${rowCount('Inbox')} === '99+'`],
+  ]],
+  ['nothing new is no badge, and no other row ever carries a number',
+   `state.inboxUnseen=0; state.kitchenReady=2; state.stack=[]; state.tab='more'; render();`, [
+    ['no badge on the Inbox row', `${rowCount('Inbox')} === ''`],
+    ['no number on any row',      `document.querySelectorAll('#content .row .num').length === 0`],
+  ]],
+  ['an operator who cannot open the Inbox is never given a count',
+   `state.caps=['dashboard:view']; state.inboxUnseen=3;`, [
+    ['moreRowCount answers zero', `moreRowCount('inbox') === 0`],
+  ]],
+  ['opening More asks the server again, so the number is today\'s',
+   `window.fetch=function(u){ var n=String(u).indexOf('/reviews/')>=0?2:1;
+      return Promise.resolve({ok:true,json:function(){return Promise.resolve({success:true,data:{count:n}})}}); };
+    state.inboxUnseen=0; APP.cmd('tab','more');`, [
+    ['reviews and feedback are added', `state.inboxUnseen === 3`],
+    ['and the row shows it',           `${rowCount('Inbox')} === '3'`],
+  ]],
+  ['a failed ask keeps the number shown rather than zeroing it',
+   `window.fetch=function(){ return Promise.reject(new Error('offline')); };
+    state.inboxUnseen=4; loadInboxUnseen(true);`, [
+    ['still 4', `state.inboxUnseen === 4`],
+  ]],
+  ['an answer that lands after the Inbox was opened is thrown away',
+   `window.fetch=function(){
+      return Promise.resolve({ok:true,json:function(){return Promise.resolve({success:true,data:{count:5}})}}); };
+    state.inboxUnseen=0; loadInboxUnseen(true);
+    localStorage.setItem('tacet.m.inboxSeen','2099-01-01T00:00:00.000Z');`, [
+    ['the visit\'s zero stands', `state.inboxUnseen === 0`],
   ]],
 
   /* ── The third dot: the kitchen finished what the warehouse asked for ─────
