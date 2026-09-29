@@ -5553,6 +5553,12 @@
 
     <div class="cat2-shelf">
       <aside class="cat2-rail">
+        <!-- §288 — which rail the drag list is arranging. The tree is one; the
+             QR menu keeps its own order and its own hidden categories. -->
+        <div class="cat2-mode" id="cat2-mode" role="group">
+          <button type="button" data-mode="miniapp" class="on" onclick="catSetMode('miniapp')">Mini app · 小程序</button>
+          <button type="button" data-mode="qr" onclick="catSetMode('qr')">QR menu · 二维码菜单</button>
+        </div>
         <div class="cat2-railcap">Shop rail · 店面左栏</div>
         <div id="cat2-rail" data-no-i18n></div>
         <div class="cat2-railfoot">
@@ -5561,8 +5567,14 @@
             <span>Add top category · 新增主分类</span>
           </button>
         </div>
-        <p class="cat2-railhint" data-lang-block="en">This is the rail your customers see. Drag a row to reorder it.</p>
-        <p class="cat2-railhint" data-lang-block="cn">这就是顾客看到的左栏。拖动行即可排序。</p>
+        <div id="cat2-hint-miniapp">
+          <p class="cat2-railhint" data-lang-block="en">This is the rail your customers see. Drag a row to reorder it.</p>
+          <p class="cat2-railhint" data-lang-block="cn">这就是顾客看到的左栏。拖动行即可排序。</p>
+        </div>
+        <div id="cat2-hint-qr" hidden>
+          <p class="cat2-railhint" data-lang-block="en">The QR menu's own order, for every location. Drag a row to reorder it, or tap the eye to hide it. The mini app is unchanged.</p>
+          <p class="cat2-railhint" data-lang-block="cn">二维码菜单自己的顺序,所有门店相同。拖动行即可排序,点眼睛可隐藏。小程序不变。</p>
+        </div>
       </aside>
       <!-- a DIV, not a <section>: the global `section{display:none}` tab-switch
            rule would hide any nested <section> that isn't .active -->

@@ -2321,6 +2321,14 @@ let catCounts = {};       // nodeId -> { n, published }, from /category-counts
 let catSel = 0;           // index of the top category the pane is showing
 let catEdit = null;       // open rename card: { kind:'top'|'sub', ti, si, name, name_cn }
 let _catLangHooked = false;
+// §288 — the QR menu's own order. The tree (catModel) is still the one tree:
+// names, subcategories and products are shared. In 'qr' mode the rail and the
+// subcategory list are drawn in the QR menu's order, dragging rearranges that
+// order and not the tree, and the eye hides a category on the QR menu only.
+// Same shape the server stores (lib/qr-menu-category-order.js).
+let catMode = 'miniapp';  // 'miniapp' | 'qr'
+let catQr = { tops: null, subs: {}, hidden: [] };
+let catQrClean = JSON.stringify(catQr);
 
 const CAT_ICON = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg>',
@@ -2329,6 +2337,8 @@ const CAT_ICON = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
   box:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
 };
 
 // Counts arrive keyed by the node's stable id, so an unsaved rename in the
@@ -2338,13 +2348,16 @@ function catCount(node) { return (node && node.id && catCounts[node.id]) || null
 
 async function catLoad() {
   try {
-    const [tree, counts] = await Promise.all([
+    const [tree, counts, qr] = await Promise.all([
       api('/api/retail-admin/category-tree'),
       api('/api/retail-admin/category-counts').catch(() => ({ counts: {} })),
+      api('/api/retail-admin/category-tree/qr-order').catch(() => ({ data: null })),
     ]);
     catModel = Array.isArray(tree.data) ? JSON.parse(JSON.stringify(tree.data)) : [];
     catClean = JSON.stringify(catModel);
     catCounts = counts.counts || {};
+    catQr = catQrNormalise(qr && qr.data);
+    catQrClean = JSON.stringify(catQr);
     catLoaded = true;
     catEdit = null;
     if (catSel >= catModel.length) catSel = 0;
@@ -2389,6 +2402,8 @@ function catUpdateDirty() {
 async function catSave(opts) {
   const auto = !!(opts && opts.auto);
   if (!catLoaded) return;
+  // Publish now also sends a waiting QR-menu order change (§288) straight away.
+  if (!auto && _catQrTimer) { clearTimeout(_catQrTimer); _catQrTimer = null; catQrSave(); }
   for (const t of catModel) {
     if (!String(t.name || '').trim()) { if (!auto) toast(cuT('Every top category needs an English name', '主分类需填英文名'), 'err'); return; }
     for (const s of (t.subs || [])) {
@@ -2423,6 +2438,92 @@ async function catSave(opts) {
   }
 }
 
+// ── §288 · The QR menu's own order ─────────────────────────────────────────
+// Mirrors lib/qr-menu-category-order.js: ids the order names come first, in
+// its order; anything it does not name (a category added later, or one never
+// saved) follows in the tree's order. `tops: null` = follow the mini app.
+function catQrNormalise(v) {
+  const o = v && typeof v === 'object' ? v : {};
+  const subs = {};
+  if (o.subs && typeof o.subs === 'object') for (const k of Object.keys(o.subs)) if (Array.isArray(o.subs[k])) subs[k] = o.subs[k].slice();
+  return {
+    tops: Array.isArray(o.tops) && o.tops.length ? o.tops.slice() : null,
+    subs,
+    hidden: Array.isArray(o.hidden) ? o.hidden.slice() : [],
+  };
+}
+function catQrOrdered(items, ids, nodeOf) {
+  if (!ids || !ids.length) return items;
+  const pos = new Map(ids.map((id, i) => [id, i]));
+  const has = (x) => { const n = nodeOf(x); return !!(n.id && pos.has(n.id)); };
+  return items.filter(has).sort((a, b) => pos.get(nodeOf(a).id) - pos.get(nodeOf(b).id))
+    .concat(items.filter(x => !has(x)));
+}
+// The rail as it is drawn: [{ t, ti }], ti being the index in catModel, so
+// selecting, renaming and removing keep working on the one tree.
+function catRailList() {
+  const all = catModel.map((t, ti) => ({ t, ti }));
+  return catMode === 'qr' ? catQrOrdered(all, catQr.tops, x => x.t) : all;
+}
+function catSubList(ti) {
+  const t = catModel[ti];
+  const all = ((t && t.subs) || []).map((s, si) => ({ s, si }));
+  return catMode === 'qr' && t && t.id ? catQrOrdered(all, catQr.subs[t.id], x => x.s) : all;
+}
+function catQrHidden(t) { return !!(t && t.id && catQr.hidden.indexOf(t.id) >= 0); }
+function catQrIsCustom() {
+  return !!catQr.tops || Object.keys(catQr.subs).some(k => (catQr.subs[k] || []).length);
+}
+
+function catSetMode(mode) {
+  if (mode !== 'miniapp' && mode !== 'qr') return;
+  catMode = mode;
+  catEdit = null;
+  document.querySelectorAll('#cat2-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  const hm = document.getElementById('cat2-hint-miniapp');
+  const hq = document.getElementById('cat2-hint-qr');
+  if (hm) hm.hidden = mode !== 'miniapp';
+  if (hq) hq.hidden = mode !== 'qr';
+  catRenderAll();
+}
+
+function catQrToggleHide(ti) {
+  const t = catModel[ti];
+  if (!t || !t.id) return;          // a category never saved has no id yet
+  const i = catQr.hidden.indexOf(t.id);
+  if (i >= 0) catQr.hidden.splice(i, 1); else catQr.hidden.push(t.id);
+  catRenderStatus(); catRenderRail();
+  if (ti === catSel) catRenderPane();
+  catQrScheduleSave();
+}
+function catQrReset() {
+  catQr.tops = null;
+  catQr.subs = {};
+  catRenderAll();
+  catQrScheduleSave();
+}
+
+let _catQrTimer = null;
+let _catQrSaving = false;
+function catQrScheduleSave() {
+  if (_catQrTimer) clearTimeout(_catQrTimer);
+  _catQrTimer = setTimeout(() => { _catQrTimer = null; catQrSave(); }, 800);
+}
+async function catQrSave() {
+  if (JSON.stringify(catQr) === catQrClean) return;
+  if (_catQrSaving) { catQrScheduleSave(); return; }
+  _catQrSaving = true;
+  const sent = JSON.stringify(catQr);
+  try {
+    await api('/api/retail-admin/category-tree/qr-order', { method: 'PUT', body: JSON.parse(sent) });
+    catQrClean = sent;
+  } catch (e) {
+    toast((e && e.message) ? cuT('Save failed: ' + e.message, '保存失败: ' + e.message) : cuT('Save failed', '保存失败'), 'err');
+  } finally {
+    _catQrSaving = false;
+  }
+}
+
 // ── The status line — one sentence where three KPI tiles used to be ────────
 // Tops, subs, and the one fact that costs money: which shelves the shop is
 // hiding because nothing published stands on them.
@@ -2430,6 +2531,16 @@ function catRenderStatus() {
   const facts = document.getElementById('cat2-facts');
   const save = document.getElementById('cat2-save');
   if (!facts) return;
+  if (catMode === 'qr') {
+    const sep = '<span class="cat2-fact-sep"></span>';
+    const nHidden = catModel.filter(catQrHidden).length;
+    facts.innerHTML = catQrIsCustom()
+      ? `<span class="cat2-fact"><span class="cat2-fact-dot"></span><span class="k">${escapeHtml(cuT('Own order for the QR menu', '二维码菜单独立顺序'))}</span></span>` +
+        `<button class="cat2-btn cat2-btn-ghost" type="button" onclick="catQrReset()">${escapeHtml(cuT('Reset to mini app order', '重置为小程序顺序'))}</button>`
+      : `<span class="cat2-fact"><span class="cat2-fact-dot"></span><span class="k">${escapeHtml(cuT('Same order as the mini app', '与小程序顺序相同'))}</span></span>`;
+    if (nHidden) facts.innerHTML += sep + `<span class="cat2-fact warn"><span class="cat2-fact-dot"></span><b>${fcNum(nHidden)}</b>&nbsp;<span class="k">${escapeHtml(cuT('hidden on the QR menu', '二维码菜单已隐藏'))}</span></span>`;
+    return;
+  }
   let subs = 0;
   const hidden = [];   // saved nodes with nothing published under them
   for (const t of catModel) {
@@ -2474,17 +2585,29 @@ function catRenderRail() {
     host.innerHTML = `<div class="cat2-empty" style="padding:10px 18px">${escapeHtml(cuT('No categories yet', '暂无分类'))}</div>`;
     return;
   }
-  host.innerHTML = catModel.map((t, ti) => {
+  // `p` is the row's place in the rail as drawn — what a drag moves. `ti` is
+  // its index in catModel — what selecting and renaming act on. In the mini
+  // app's rail the two are the same number; in the QR menu's they are not.
+  const qr = catMode === 'qr';
+  host.innerHTML = catRailList().map(({ t, ti }, p) => {
     const c = catCount(t);
     const dark = c && !c.published;
-    return `<button type="button" class="cat2-railrow cat2-row${ti === catSel ? ' on' : ''}" data-fk="t${catFk(t)}"
+    const off = qr && catQrHidden(t);
+    const eye = qr && t.id
+      ? `<span class="cat2-icon cat2-eye" role="button" tabindex="0" aria-pressed="${off ? 'true' : 'false'}"
+            title="${escapeAttr(off ? cuT('Hidden on the QR menu — click to show', '二维码菜单已隐藏,点击显示') : cuT('Shows on the QR menu — click to hide', '在二维码菜单显示,点击隐藏'))}"
+            onclick="event.stopPropagation();catQrToggleHide(${ti})"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();catQrToggleHide(${ti})}">${off ? CAT_ICON.eyeOff : CAT_ICON.eye}</span>`
+      : '';
+    return `<button type="button" class="cat2-railrow cat2-row${ti === catSel ? ' on' : ''}${off ? ' qr-off' : ''}" data-fk="t${catFk(t)}"
         onclick="catSelect(${ti})"
-        ondragover="catDragOver(event,'top',${ti})" ondrop="catDrop(event,'top',${ti})" ondragleave="catDragLeave(event)">
+        ondragover="catDragOver(event,'top',${p})" ondrop="catDrop(event,'top',${p})" ondragleave="catDragLeave(event)">
       <span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
             onclick="event.stopPropagation()"
-            ondragstart="catDragStart(event,'top',${ti})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
+            ondragstart="catDragStart(event,'top',${p})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
       <span class="nm">${escapeHtml(t.name || cuT('Untitled', '未命名'))}</span>
       ${dark ? '<span class="cat2-fact-dot" title="' + escapeAttr(cuT('Hidden — nothing published', '已隐藏 — 无上架产品')) + '"></span>' : ''}
+      ${eye}
       <span class="n">${c ? fcNum(c.n) : '—'}</span>
     </button>`;
   }).join('');
@@ -2504,6 +2627,8 @@ function catRenderPane() {
   const pill = !c ? `<span class="cat2-pill cat2-pill-new">${escapeHtml(cuT('new — not saved yet', '新建 — 尚未保存'))}</span>`
     : c.published ? `<span class="cat2-pill cat2-pill-live">${escapeHtml(cuT('visible in the shop', '显示在店面'))}</span>`
     : `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('hidden — nothing published', '已隐藏 — 无上架产品'))}</span>`;
+  const qrPill = catMode === 'qr' && catQrHidden(t)
+    ? `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('Hidden on the QR menu', '二维码菜单已隐藏'))}</span>` : '';
 
   host.innerHTML = `
     <div class="cat2-panehead cat2-row" id="cat2-tophead">
@@ -2513,7 +2638,7 @@ function catRenderPane() {
           <span>${escapeHtml(cuT(`${fcNum(subs.length)} subcategories`, `${fcNum(subs.length)} 个子分类`))}</span>
           <span>·</span>
           <span>${escapeHtml(c ? cuT(`${fcNum(c.n)} products`, `${fcNum(c.n)} 件产品`) : cuT('no products yet', '暂无产品'))}</span>
-          ${pill}
+          ${pill}${qrPill}
         </div>
       </div>
       <div class="end">
@@ -2523,7 +2648,7 @@ function catRenderPane() {
     <div id="cat2-tophead-rename"></div>
 
     <div class="cat2-sec">${escapeHtml(cuT('Subcategories — the section headings', '子分类 — 区块标题'))}</div>
-    <div id="cat2-subs">${subs.map((s, si) => catSubRowHtml(s, si)).join('')
+    <div id="cat2-subs">${catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('')
       || `<div class="cat2-empty">${escapeHtml(cuT('No section headings yet. Products land straight under the category.', '暂无区块标题。产品将直接归入该主分类。'))}</div>`}</div>
     <button class="cat2-btn cat2-btn-ghost" type="button" style="margin-top:10px" onclick="catAddSub(${catSel})">${CAT_ICON.plus}<span>${escapeHtml(cuT('Add subcategory', '新增子分类'))}</span></button>
 
@@ -2534,13 +2659,16 @@ function catRenderPane() {
   catLoadProducts();
 }
 
-function catSubRowHtml(s, si) {
+// `p` is the row's place as drawn (what a drag moves); `si` its index in the
+// tree (what rename and remove act on). Equal except in the QR menu's order.
+function catSubRowHtml(s, si, p) {
+  if (p == null) p = si;
   const c = catCount(s);
   const hidden = c && !c.published;
   return `<div class="cat2-sub cat2-row" id="cat2-sub-${si}" data-fk="s${catFk(s)}"
-       ondragover="catDragOver(event,'sub',${si})" ondrop="catDrop(event,'sub',${si})" ondragleave="catDragLeave(event)">
+       ondragover="catDragOver(event,'sub',${p})" ondrop="catDrop(event,'sub',${p})" ondragleave="catDragLeave(event)">
     <span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
-          ondragstart="catDragStart(event,'sub',${si})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
+          ondragstart="catDragStart(event,'sub',${p})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
     <span class="cat2-subname" tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('sub',${catSel},${si})">${escapeHtml(s.name || cuT('Untitled', '未命名'))}<button class="cat2-icon cat2-pen-inline" type="button" title="${escapeAttr(cuT('Rename', '重命名'))}" onclick="event.stopPropagation();catOpenRename('sub',${catSel},${si})">${CAT_ICON.pen}</button></span>
     ${hidden ? `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('hidden', '已隐藏'))}</span>` : ''}
     <span class="n">${escapeHtml(c ? cuT(`${fcNum(c.n)} products`, `${fcNum(c.n)} 件产品`) : cuT('new', '新建'))}</span>
@@ -2782,6 +2910,7 @@ function catDrop(ev, kind, i) {
   catDrag = null;
   catClearDropCues();
   if (from === i) { catDragEnd(); return; }
+  if (catMode === 'qr') { catQrDrop(kind, from, i); return; }
   if (kind === 'top') {
     catEdit = null;
     catFlip('cat2-rail', () => {
@@ -2805,6 +2934,37 @@ function catDrop(ev, kind, i) {
     });
   }
   catUpdateDirty();
+}
+
+// §288 — a drop in the QR menu's rail rearranges the QR menu's order and
+// leaves the tree alone. `from` and `to` are places as drawn. The whole list
+// is stored, so from then on the QR menu keeps its own order; a category added
+// later is not in it and shows at the bottom until dragged in.
+function catQrDrop(kind, from, to) {
+  catEdit = null;
+  if (kind === 'top') {
+    catFlip('cat2-rail', () => {
+      const list = catRailList();
+      const moved = list.splice(from, 1)[0];
+      list.splice(to, 0, moved);
+      catQr.tops = list.map(x => x.t.id).filter(Boolean);
+      catRenderRail();
+    });
+    catRenderPane();
+  } else {
+    const t = catModel[catSel];
+    if (!t || !t.id) return;
+    catFlip('cat2-subs', () => {
+      const list = catSubList(catSel);
+      const moved = list.splice(from, 1)[0];
+      list.splice(to, 0, moved);
+      catQr.subs[t.id] = list.map(x => x.s.id).filter(Boolean);
+      const host = document.getElementById('cat2-subs');
+      if (host) host.innerHTML = catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('');
+    });
+  }
+  catRenderStatus();
+  catQrScheduleSave();
 }
 
 // ── The products standing on this shelf ────────────────────────────────────
