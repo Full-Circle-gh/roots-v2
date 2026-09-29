@@ -2102,6 +2102,7 @@
      spanning the full row beneath. Muted fills (delivery modes) drop to 40%. */
   .db-bars { display: grid; gap: 10px; }
   .db-bars-gap { height: 8px; }
+  .db-bars-h { color: var(--td-text2); font-size: 12px; margin: 0 0 8px; }
   .db-bar-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: baseline; font-size: 13.5px; }
   .db-bar-row .k { color: var(--td-text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: baseline; gap: 8px; }
   .db-bar-row .v { color: var(--td-text2); font-variant-numeric: tabular-nums; font-size: 13px; text-align: right; white-space: nowrap; }
