@@ -133,6 +133,17 @@
     return lang() === 'cn' ? esc(cn) : esc(en);
   };
   const locName = () => _loc ? nameOf(_loc.name_en || _loc.code, _loc.name_cn || _loc.code) : '';
+  // A product's name and, for one size of a variant family, that size — the
+  // till's own rule (till.html): each language falls back to the other, since
+  // many sizes carry an English label only. The size sits in its own span that
+  // never shrinks, so a long name ellipses and the size, the one thing that
+  // tells two rows of the same name apart, is never what gets cut.
+  const prodName = (p, cls) => {
+    const size = (T(p.variant_label || p.variant_label_cn || '',
+                    p.variant_label_cn || p.variant_label || '') || '').trim();
+    return `<span class="shp-name-line"><span class="${cls}">${nameOf(p.name_en, p.name_cn)}</span>` +
+      (size ? `<span class="shp-size">· ${esc(size)}</span>` : '') + `</span>`;
+  };
 
   // WHERE THIS MENU COULD GO — §177. A destination is any OTHER location whose
   // shop carries no listings, including one with no shop at all, which the
@@ -374,15 +385,15 @@
     return details() + (_pickerOpen ? picker() : '') + filterBar() + `<div id="shp-table-box">${table()}</div>`;
   }
 
-  // Does this listing answer the term? Name in either language, or the SKU —
-  // the three things the row actually shows, so a match is always visible in
+  // Does this listing answer the term? Name in either language, the size, or
+  // the SKU — the things the row actually shows, so a match is always visible in
   // the row it lands on. Case-folded; a Chinese term is unaffected by that and
   // an English one should not care which way the catalogue happens to be typed.
   function hit(r) {
     if (!_menuQ) return true;
     const q = _menuQ.trim().toLowerCase();
     if (!q) return true;
-    return (String(r.name_en || '') + ' ' + String(r.name_cn || '') + ' ' + String(r.sku || ''))
+    return [r.name_en, r.name_cn, r.variant_label, r.variant_label_cn, r.sku].map(v => String(v || '')).join(' ')
       .toLowerCase().includes(q);
   }
   const shown = () => _rows.filter(hit);
@@ -511,7 +522,7 @@
     if (_pickLoading && !_pick.length) return `<div class="shp-note sm">${esc(T('Loading…', '加载中…'))}</div>`;
     if (!_pick.length) return `<div class="shp-note sm">${esc(_pickQ ? T('No products match this filter', '没有匹配此筛选条件的产品') : T('No products yet', '还没有商品'))}</div>`;
     return addAllRow() + `<ul class="shp-pick-list">` + _pick.map(p => `<li>
-        <span class="shp-pick-name">${nameOf(p.name_en, p.name_cn)}</span>
+        ${prodName(p, 'shp-pick-name')}
         <span class="shp-pick-sku">${esc(p.sku || '')}</span>
         <span class="shp-pick-price">${esc(money(p.sell_price))}</span>
         <button type="button" class="shp-btn sm" data-cap="stores:edit" onclick="shpAdd(${p.id}, this)">${esc(T('+ Add product', '+ 添加商品'))}</button>
@@ -595,7 +606,7 @@
       // out (routes/shop-menu.js). Only the till drops a stocked one.
       const title = on ? T('Available', '有货') : T('Sold out', '售罄');
       return `<tr data-id="${r.id}"${busy ? ' class="is-busy"' : ''}>
-        <td><div class="shp-ell shp-prod">${nameOf(r.name_en, r.name_cn)}</div>
+        <td><div class="shp-prod">${prodName(r, 'shp-ell')}</div>
             <div class="shp-sku">${esc(r.sku || '')}</div></td>
         <td class="num"><span class="shp-money"><span class="shp-sym">${esc(sym())}</span>
               <input type="number" min="0" step="0.01" class="shp-in shp-in-n" value="${esc(Number(r.price).toFixed(2))}"

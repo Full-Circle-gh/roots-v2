@@ -400,6 +400,18 @@ function call(method, url, body) {
       assert.strictEqual(rows[0].lists_this_product, false,
         'THIS row is not listed; only its sibling is, and the two are different answers');
     });
+    await checkAsync('the Shop menu list and the add picker both carry the SIZE of a variant', async () => {
+      // Two sizes share one name, so without the label the rows read "Fixture
+      // jar" and "Fixture jar" and removing or adding the right one was a guess.
+      const listing = (await call('GET', `/api/retail-admin/shops/${shopA.id}`)).json.data.listings
+        .find(l => l.store_product_id === V1);
+      assert.strictEqual(listing.variant_label, '250g', 'the listed size must name itself on the menu list');
+      const cand = (await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=__T-9996`)).json.data
+        .find(x => x.id === V2);
+      assert.ok(cand, 'the unlisted sibling is a candidate');
+      assert.strictEqual(cand.variant_label, '500g', 'the add picker must name the size it would add');
+      assert.ok('variant_label_cn' in listing && 'variant_label_cn' in cand, 'the Chinese label is read too');
+    });
     await checkAsync('a shop switched off is returned but not reachable', async () => {
       await call('PATCH', `/api/retail-admin/shops/${shopA.id}`, { is_active: 0 });
       const r = await call('GET', `/api/retail-admin/products/${V1}/shops`);
