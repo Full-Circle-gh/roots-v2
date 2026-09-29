@@ -2871,21 +2871,13 @@
   #pa-table[data-stores="5"] col.pa-c-name { width: 14%; }
   #pa-table[data-stores="5"] col.pa-c-cat  { width: 10%; }
   #pa-table[data-stores="5"] col.pa-c-sku  { width:  8%; }
-  /* Reordering slides a grip column in at the front. Product funds it, so the
-     stock block does not move as the mode is flipped on and off. */
-  #pa-table.pa-reorder col.pa-c-grip { width: 3%; }
-  #pa-table.pa-reorder col.pa-c-name { width: 21%; }
-  #pa-table.pa-reorder[data-stores="1"] col.pa-c-name { width: 30%; }
-  #pa-table.pa-reorder[data-stores="3"] col.pa-c-name { width: 18%; }
-  #pa-table.pa-reorder[data-stores="4"] col.pa-c-name { width: 15%; }
-  #pa-table.pa-reorder[data-stores="5"] col.pa-c-name { width: 11%; }
 
   /* ── No Margin column (an operator without products:costs) ───────────────
      The column is removed outright — col, header and cells — so its 13% has
      to go somewhere or the percentages stop summing to 100 (§1.19) and the
      browser distributes the slack across every column instead of the one that
      wants it. PRODUCT TAKES IT, which is this table's own established answer:
-     the single-store and reorder rules above already fund Product from
+     the single-store rules above already fund Product from
      whatever the shape frees up.
 
      One rule per case the matrix above states, and no case invented — each is
@@ -2897,11 +2889,6 @@
   #pa-table[data-nocost][data-stores="3"] col.pa-c-name { width: 34%; }
   #pa-table[data-nocost][data-stores="4"] col.pa-c-name { width: 31%; }
   #pa-table[data-nocost][data-stores="5"] col.pa-c-name { width: 27%; }
-  #pa-table.pa-reorder[data-nocost] col.pa-c-name { width: 34%; }
-  #pa-table.pa-reorder[data-nocost][data-stores="1"] col.pa-c-name { width: 43%; }
-  #pa-table.pa-reorder[data-nocost][data-stores="3"] col.pa-c-name { width: 31%; }
-  #pa-table.pa-reorder[data-nocost][data-stores="4"] col.pa-c-name { width: 28%; }
-  #pa-table.pa-reorder[data-nocost][data-stores="5"] col.pa-c-name { width: 24%; }
 
   /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component and Orders is its
      anchor (§1.13a rule 3). Every value here is the spec's, not a per-page
@@ -2949,7 +2936,6 @@
   /* The two control columns pay their own padding: 4% is 40px, and the band's
      12px each side would leave a 16px box exactly 16px, with no slack at all. */
   #pa-table :is(th, td).pa-c-sel  { padding-left: 10px; padding-right: 4px; }
-  #pa-table :is(th, td).pa-c-grip { padding-left: 0; padding-right: 0; }
   #pa-table td.pa-c-name { overflow: hidden; }
   #pa-table td.pa-c-cat {
     color: var(--td-text);
@@ -3210,21 +3196,6 @@
   .pa-stock-input.is-low:not(.is-saved):not(.is-err) { border-color: var(--td-amber); color: var(--td-amber); }
   .pa-stock-input.is-out:not(.is-saved):not(.is-err) { border-color: var(--td-brick); color: var(--td-brick); }
 
-  /* ── Drag-to-reorder (single category, list overview) ──────────────────────
-     A grip column slides in at the front; dragging a row's grip rewrites the
-     store-page order (store_products.sort_order, which the shop grid sorts by).
-     Only the grip starts a drag — the rest of the row still clicks to edit. */
-  .pa-grip {
-    display: flex; align-items: center; justify-content: center;
-    cursor: grab; color: var(--td-text2); user-select: none; align-self: center;
-  }
-  .pa-grip svg { width: 13px; height: 14px; display: block; }
-  .pa-grip:hover { color: var(--td-text); }
-  .pa-grip:active { cursor: grabbing; }
-  .pa-row.pa-row-dragging { opacity: .45; }
-  /* Drop line = ink. The row you're about to land on, not an alarm. */
-  .pa-row.pa-row-drop { box-shadow: inset 0 2px 0 0 var(--td-text); }
-
   /* ── Multi-select (bulk edit) ──────────────────────────────────────────────
      The leading checkbox column is always on screen (ticking one is itself
      what arms select mode). Once armed, clicking anywhere on a row toggles
@@ -3357,12 +3328,6 @@
   .pa-bulk-grp { display: inline-flex; align-items: center; gap: 6px; }
   .pa-bulk-grp .pa-bulk-lbl { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--td-text2); font-weight: 600; }
   .pa-bulk-sep { width: 1px; align-self: stretch; background: var(--td-border); margin: 0 2px; }
-
-  .pa-reorder-hint {
-    display: flex; align-items: center; gap: 7px;
-    padding: 9px 4px 2px; font-size: 12px; color: var(--td-text2);
-  }
-  .pa-reorder-hint svg { width: 14px; height: 14px; opacity: .6; flex: none; }
 
   /* Variants ("sizes") — sits in the main column between name and description,
      so the most-edited control is reachable without scrolling past the long
@@ -15437,8 +15402,7 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   background: var(--td-surface);
   border: 1px solid var(--td-border); border-radius: 14px;
 }
-#tab-shop-menu col.shp-c-pos   { width: 8%; }
-#tab-shop-menu col.shp-c-prod  { width: 38%; }
+#tab-shop-menu col.shp-c-prod  { width: 46%; }
 #tab-shop-menu col.shp-c-price { width: 16%; }
 #tab-shop-menu col.shp-c-mode  { width: 16%; }
 #tab-shop-menu col.shp-c-avail { width: 12%; }

@@ -20973,3 +20973,33 @@ on the qr menu"*, then option 1 of three put to Ash).
 6. **Rejected:** an automatic sync on publish (no per-shop control), and the QR
    menu reading `is_published` directly (breaks §42; ordering, prices and
    photos all gate on the listing).
+
+## §292 — ALL PRODUCT ORDER IS SET ON PRODUCTS → CATEGORIES
+
+**Decided 2026-09-29 by Ash** (*"i want the product organization will be done
+only on this page"*, then *"qr menu and mini app might have different
+organization of products but all of the organization should be done in the
+page"*). Builds on §288 and on the product drag shipped in #896.
+
+1. **One page sets product order: Products → Categories**, by dragging a
+   product within its heading under *Products on this shelf*. The *Mini app /
+   QR menu* switch picks which order the drag sets, as it already does for
+   categories (§288). Moving a product to another heading stays with the row's
+   dropdown.
+2. **The mini app's order is `store_products.sort_order`**, written through
+   `POST /products/reorder`. The drag on the Products page is removed.
+3. **The QR menu keeps its own product order, one for every location**, in the
+   same value as its category order (`qrMenu.categoryOrder.products`, keyed by
+   the section's node: the subcategory, or the top category for products with
+   no heading). The QR view lists only products that are on a QR menu.
+4. **Until it is set, the QR menu follows the mini app's product order.** A
+   product the QR order does not name follows the named ones, in the mini app's
+   order. *Reset to mini app order* clears it along with the category order.
+5. **The Shops page's per-shop *Sort* number is removed, and
+   `shop_listings.sort_position` no longer orders the QR menu.** Live QR menus
+   re-order once, to the mini app's order, when this ships. The column stays in
+   the database (the till's catalogue still reads it, and adding a product
+   still sets it); nothing an operator sees is ordered by it on the QR menu.
+6. **Rejected:** a per-shop QR product order (§288 rule 2 already chose one QR
+   order for every location), and keeping the Sort numbers as a hidden
+   fallback (an order nobody can see or edit).

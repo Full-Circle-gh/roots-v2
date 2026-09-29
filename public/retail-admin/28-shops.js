@@ -558,9 +558,10 @@
 
   /* Table — §1.19: fixed layout, classed cols, percentages summing to 100.
      Measured at the 996px reference against the widest header and value in
-     both languages:
-       pos    8%  — header Sort/排序 ~34px; a 2-digit number input ~56px
-       prod  38%  — SLACK COLUMN: product name ellipses, SKU beneath
+     both languages. The Sort column is gone (2026-09-29): the QR menu's
+     product order is set by dragging on Products → Categories, in its QR menu
+     view, and a number here no longer orders anything. Its 8% went to prod.
+       prod  46%  — SLACK COLUMN: product name ellipses, SKU beneath
        price 16%  — a "¥ 1,234.56" input ~120px incl. the symbol
        mode  16%  — select holding "Made here"/"现做" ~110px incl. chevron
        avail 12%  — header "In shop"/上架 ~54px; the switch is 40px
@@ -591,8 +592,6 @@
       const title = soldOut ? T('Sold out', '售罄')
         : on ? T('On the shop · tap to hide', '已上架 · 点按下架') : T('Off the shop · tap to show', '未上架 · 点按上架');
       return `<tr data-id="${r.id}"${busy ? ' class="is-busy"' : ''}>
-        <td class="num"><input type="number" min="0" step="1" class="shp-in shp-in-n" value="${esc(r.sort_position)}"
-              onchange="shpSaveField(${r.id}, 'sort_position', this)"${dis}></td>
         <td><div class="shp-ell shp-prod">${nameOf(r.name_en, r.name_cn)}</div>
             <div class="shp-sku">${esc(r.sku || '')}</div></td>
         <td class="num"><span class="shp-money"><span class="shp-sym">${esc(sym())}</span>
@@ -609,9 +608,8 @@
       </tr>`;
     }).join('');
     return `<div class="shp-tablewrap"><table class="shp-table">
-      <colgroup><col class="shp-c-pos"><col class="shp-c-prod"><col class="shp-c-price"><col class="shp-c-mode"><col class="shp-c-avail"><col class="shp-c-act"></colgroup>
+      <colgroup><col class="shp-c-prod"><col class="shp-c-price"><col class="shp-c-mode"><col class="shp-c-avail"><col class="shp-c-act"></colgroup>
       <thead><tr>
-        <th class="num">${esc(T('Sort', '排序'))}</th>
         <th>${esc(T('Product', '产品'))}</th>
         <th class="num">${esc(T('Price', '价格'))}</th>
         <th>${esc(T('Kind', '类型'))}</th>
@@ -863,9 +861,9 @@
     _busy.delete(id); renderTable();
   };
 
-  // price · fulfilment_mode · sort_position — one PATCH per change, the control
-  // disabled meanwhile, the row re-read from the server's answer. A refused
-  // value (bad_price, bad_sort_position) repaints the last saved one.
+  // price · fulfilment_mode — one PATCH per change, the control disabled
+  // meanwhile, the row re-read from the server's answer. A refused value
+  // (bad_price) repaints the last saved one.
   window.shpSaveField = async function (id, field, input) {
     const r = _rows.find(x => x.id === id);
     if (!r || !_shop) return;
@@ -874,7 +872,6 @@
     try {
       const j = await api('/api/retail-admin/shops/' + _shop.id + '/listings/' + id, { method: 'PATCH', body: { [field]: val } });
       Object.assign(r, j.data);
-      if (field === 'sort_position') _rows.sort((a, b) => (a.sort_position - b.sort_position) || (a.id - b.id));
     } catch (e) { toast(errText(e, 'save_failed'), 'err'); }
     _busy.delete(id); renderTable();
   };

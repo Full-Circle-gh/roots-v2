@@ -665,7 +665,7 @@ router.get('/api/retail-admin/category-products', requireRetailAdmin, (req, res)
   const hasSub = 'sub' in req.query;
   const sub = String(req.query.sub == null ? '' : req.query.sub).trim();
   let sql = `SELECT id, name_en, name_cn, sku, top_category, subcategory, is_published, updated_at,
-                    variant_group_id,
+                    variant_group_id, variant_label, variant_label_cn,
                     ${hasImageFallbackSql('store_products')} AS has_image_data
                FROM store_products
               WHERE COALESCE(is_active, 1) = 1 AND top_category = ?`;
