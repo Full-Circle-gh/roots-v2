@@ -10473,10 +10473,13 @@
      actions rather than only when the name itself is hovered */
   .cat2-pen-inline { opacity: 0; padding: 3px; vertical-align: middle; }
 
-  /* drag cues: one insertion line on the edge the row will land against */
+  /* drag cues: one insertion line on the edge the row will land against.
+     An INSET shadow shows on the edge its offset points AWAY from: +2px
+     paints the top edge, -2px the bottom. These had the signs swapped, so
+     "before" drew under the row and every line sat one row too low. */
   .cat2-dragging { opacity: .45; }
-  .cat2-drop-before { box-shadow: 0 -2px 0 var(--td-text, #111A2B) inset; }
-  .cat2-drop-after  { box-shadow: 0  2px 0 var(--td-text, #111A2B) inset; }
+  .cat2-drop-before { box-shadow: 0  2px 0 var(--td-text, #111A2B) inset; }
+  .cat2-drop-after  { box-shadow: 0 -2px 0 var(--td-text, #111A2B) inset; }
 
   /* shelf layout: the shop's rail, then the pane for the one category picked */
   .cat2-shelf { display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start; }
