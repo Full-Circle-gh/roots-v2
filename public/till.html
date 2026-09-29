@@ -273,7 +273,7 @@ button{font:inherit;color:inherit;margin:0}
 @media (max-width:700px){ .grid{grid-template-columns:repeat(2,1fr)} }
 .tile{
   border-radius:var(--r-card);border:1px solid var(--td-border);
-  background:var(--td-surface);padding:12px;display:flex;flex-direction:column;
+  background:var(--td-surface);padding:10px 12px;display:flex;flex-direction:column;
   justify-content:space-between;text-align:left;overflow:hidden;
 }
 .tile:active{background:var(--td-raised)}
@@ -284,10 +284,18 @@ button{font:inherit;color:inherit;margin:0}
 /* §183 — the size, under the name. Its own line rather than appended, because
    .tile .nm clips at two lines and a long product name would otherwise eat the
    one word that tells two tiles apart. Same weight as the name, dimmer, so the
-   pair reads as one label and not as two facts. */
+   pair reads as one label and not as two facts.
+   §290 — AND OUTSIDE THE CLAMP. It used to sit INSIDE .nm, so the two-line
+   clamp counted it as a third line and cut it: on an iPad column "Organic
+   Matcha Latte" wrapped to two lines and "Large" vanished — the exact word it
+   exists to show. .hd holds the pair; only the name is clamped.
+   Two name lines, the size and the price row are then 6px taller than a
+   100px row, so the tile's top and bottom padding went 12px -> 10px and the
+   size line was tightened, rather than making every row in the grid taller. */
+.tile .hd{display:block;min-width:0}
 .tile .vl{
-  display:block;font-style:normal;font-size:13px;font-weight:400;
-  color:var(--td-text2);margin-top:2px;
+  display:block;font-style:normal;font-size:13px;font-weight:400;line-height:1.25;
+  color:var(--td-text2);margin-top:1px;
 }
 .tile.out .vl{color:var(--td-text2)}
 /* A product that asks something before it can be made. The dot is the whole
@@ -339,7 +347,7 @@ button{font:inherit;color:inherit;margin:0}
 .tile.has-ph{justify-content:flex-start}
 .tile.has-ph .ft{margin-top:auto}
 .tile .ph{
-  display:flex;justify-content:center;flex:none;height:84px;margin:-12px -12px 8px;
+  display:flex;justify-content:center;flex:none;height:84px;margin:-10px -12px 8px;
   padding:6px 0;background:var(--td-raised);overflow:hidden;
 }
 .tile .ph img{display:block;height:100%;width:auto;max-width:100%;object-fit:contain;border-radius:6px}
@@ -2018,7 +2026,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         var ph = photo(p);
         h += '<button class="tile' + (off ? ' out' : '') + (busy ? ' so-busy' : '') + (ph ? ' has-ph' : '') + '" type="button" data-so="' + p.id + '"' + (busy ? ' disabled' : '') + '>'
            + ph
-           + '<span class="nm">' + esc(pname(p))
+           + '<span class="hd"><span class="nm">' + esc(pname(p)) + '</span>'
            + (vlabel(p) ? '<i class="vl">' + esc(vlabel(p)) + '</i>' : '') + '</span>'
            + '<span class="ft">'
            + (off ? '<span class="lo">' + esc(T('soldOut')) + '</span>'
@@ -2040,10 +2048,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
          + (inc > 0 ? '<span class="incart">' + inc + '</span>' : '')
          // §183 — this one asks something before it can be made.
          + (!out && asks(p) ? '<span class="ask"></span>' : '')
-         + '<span class="nm">' + esc(pname(p))
+         + '<span class="hd"><span class="nm">' + esc(pname(p)) + '</span>'
          // §183 — THE SIZE, ON ITS OWN LINE. Not appended to the name: a tile
          // clips at two lines and a long product name would eat the one word
-         // that tells two tiles apart. Its own row is the row that survives.
+         // that tells two tiles apart. §290 — and outside .nm, so the name's
+         // clamp cannot cut it. Its own row is the row that survives.
          + (vlabel(p) ? '<i class="vl">' + esc(vlabel(p)) + '</i>' : '') + '</span>'
          + '<span class="ft">'
          + (out
