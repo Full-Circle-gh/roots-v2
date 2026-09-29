@@ -107,7 +107,11 @@ db.exec(`
     -- §187 behaviour is owned by test_restock_parcel_dispatch.js; what this
     -- suite needs is the column, and one assertion that the hold-back does not
     -- disturb the §58 rules above.
-    awaiting_restock_pids TEXT
+    awaiting_restock_pids TEXT,
+    -- commitUnreservedOrder reads it to tell a replacement parcel from a
+    -- Meituan/Eleme order the ingest already deducted. Owned by
+    -- test_platform_order_single_deduct.js; here it only has to exist.
+    source TEXT
   );
   CREATE TABLE retail_order_items (
     id INTEGER PRIMARY KEY, order_id INTEGER, product_id INTEGER, qty INTEGER,

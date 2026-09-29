@@ -130,7 +130,8 @@ db.exec(`
   CREATE TABLE retail_orders (
     id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, fulfillment_type TEXT,
     store_id INTEGER, channel TEXT, paid_at DATETIME, updated_at DATETIME,
-    awaiting_restock_pids TEXT
+    awaiting_restock_pids TEXT,
+    source TEXT   -- read by commitUnreservedOrder (see test_platform_order_single_deduct.js)
   );
   CREATE TABLE retail_order_items (
     id INTEGER PRIMARY KEY, order_id INTEGER, product_id INTEGER, qty INTEGER,
