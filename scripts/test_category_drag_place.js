@@ -186,6 +186,24 @@ check('leaving the list clears the line', () => {
   api.catDragEnd();
 });
 
+console.log('\nthe line is painted on the edge the code names');
+// The code can pick the right gap and the page still lie about it: the line is
+// an INSET box-shadow, and an inset shadow shows on the edge its offset points
+// AWAY from (+y paints the top edge, -y the bottom). With the signs swapped,
+// "before" was drawn under the row, so every line sat one row too low. Seen in
+// Chromium on the real page, 2026-09-29; checked here from the stylesheet so
+// the fast shard catches a flip without a browser.
+check('drop-before paints the top edge, drop-after the bottom', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'retail-admin.css'), 'utf8');
+  const y = cls => {
+    const m = css.match(new RegExp('\\.' + cls + '\\s*\\{\\s*box-shadow:\\s*0\\s+(-?\\d+)px\\s+0[^;]*inset'));
+    if (!m) throw new Error(`.${cls} box-shadow rule not found — the anchor has drifted`);
+    return Number(m[1]);
+  };
+  eq(y('cat2-drop-before') > 0, true, 'drop-before offset is positive (top edge)');
+  eq(y('cat2-drop-after') < 0, true, 'drop-after offset is negative (bottom edge)');
+});
+
 console.log('\nthe pane follows the category it was showing');
 check('the selected category stays selected after moving past it', () => {
   fresh();
