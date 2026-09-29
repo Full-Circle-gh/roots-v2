@@ -1841,6 +1841,9 @@ reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack
      the next poll fifteen seconds later. */
   if(t==='orders') markOrdersSeen();
   render();
+  /* §293 — the Inbox row on More prints a number, and it was only asked for
+     once at app start. Re-asked on every visit so the number is today's. */
+  if(t==='more') loadInboxUnseen(true);
   if(t==='customers' && !state.custLoaded && !state.custLoading) loadCustomers();
   if(t==='orders' && !state.ordersView && !state.ordersLoading) loadOrdersPage(); });
 reg('back', ()=>{ if(state.stack.length) pop(); });
@@ -6537,8 +6540,14 @@ function screenMore(){
         ${/* §121. Before the dot, so an arriving-work marker is never pushed off
              the edge by a pill that says the same thing every time. */''}
         ${r.pill?`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary);margin-right:8px">${T(...r.pill)}</span>`:''}
+        ${/* §293. The Inbox row says HOW MANY arrived since it was last opened,
+             in a round Sage-ink badge. A row, not the chrome: the More tab
+             keeps its plain dot, so the count is only read by someone who
+             came here to look. 99+ keeps it one short word wide. */''}
+        ${moreRowCount(r.key)>0?`<span class="num" style="min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:999px;background:var(--sage-ink);color:var(--surface-card);font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;margin-right:8px">${moreRowCount(r.key)>99?'99+':moreRowCount(r.key)}</span>`:''}
         ${/* Same 6px Sage dot as the tab bar's, on the row that opens the work.
-             Never a count: the number lives on the screen it points at. */''}
+             Never a count on the other rows: the number lives on the screen it
+             points at. */''}
         ${moreRowDot(r.key)?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none;margin-right:8px"></span>`:''}
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
     <div style="padding:24px 20px 8px;text-align:center;font-size:12px;color:var(--text-secondary)">tacet · ${T('runs in silence','静默运行')}</div>
@@ -22441,11 +22450,17 @@ function markInboxSeen(){
 function loadInboxUnseen(force){
   if(state.inboxPolled&&!force) return;
   state.inboxPolled=true;
-  const since=encodeURIComponent(inboxSeenAt());
+  const stamp=inboxSeenAt(), since=encodeURIComponent(stamp);
   Promise.all([
     api('/reviews/unseen-count?since='+since).catch(()=>null),
     api('/feedback/unseen-count?since='+since).catch(()=>null),
   ]).then(([rv,fb])=>{
+    /* §293 — the More row prints this number, so two answers are refused.
+       Both calls failing is "don't know", not zero: keep what is shown. And an
+       answer counted from an older stamp than the one now stored arrived after
+       the Inbox was opened, and would bring back what that visit put out. */
+    if(!rv && !fb) return;
+    if(inboxSeenAt()!==stamp) return;
     const n=Number((rv&&rv.count)||0)+Number((fb&&fb.count)||0);
     state.inboxUnseen=n; render();
   }).catch(()=>{});
@@ -22787,6 +22802,9 @@ function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('kitchenrea
 function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0
                                : key==='pick'         ? waitingToPick()>0
                                : false; }
+/* §293 — the one More row that shows a NUMBER: reviews and feedback that
+   arrived since the Inbox was last opened. Same gate as the folder's dot. */
+function moreRowCount(key){ return key==='inbox' && canRoute('inbox') ? unseenReviews() : 0; }
 /* The More dot counts unseen REVIEWS, so it must not light for an operator who
    cannot open the Inbox: a dot promising work, over a folder that does not
    contain it. Unknown keys (a flattened bar's rows) carry no dot. */
