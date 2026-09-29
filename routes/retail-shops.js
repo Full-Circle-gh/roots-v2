@@ -509,7 +509,7 @@ router.patch('/api/retail-admin/shops/:id/listings/:lid', requireRetailAdmin, re
 
 // §287 — SOLD OUT FROM THE COUNTER. The person who finds the tomatoes gone is
 // at the till, not at the office screen, so a cashier may flip a made-here
-// listing's switch from there. It is the SAME column the office's "In shop"
+// listing's switch from there. It is the SAME column the office's "Available"
 // switch writes (is_available): one switch, two places to reach it, so the
 // till, the QR menu and the office can never disagree about whether the
 // sour cream can be made.

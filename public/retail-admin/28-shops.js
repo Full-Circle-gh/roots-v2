@@ -564,7 +564,7 @@
        prod  46%  — SLACK COLUMN: product name ellipses, SKU beneath
        price 16%  — a "¥ 1,234.56" input ~120px incl. the symbol
        mode  16%  — select holding "Made here"/"现做" ~110px incl. chevron
-       avail 12%  — header "In shop"/上架 ~54px; the switch is 40px
+       avail 12%  — header "Available"/有货 ~64px; the switch is 40px
        act   10%  — "Remove"/移除 ghost button ~70px incl. padding
                     ────
                     100 */
@@ -613,7 +613,7 @@
         <th>${esc(T('Product', '产品'))}</th>
         <th class="num">${esc(T('Price', '价格'))}</th>
         <th>${esc(T('Kind', '类型'))}</th>
-        <th>${esc(T('In shop', '上架'))}</th>
+        <th>${esc(T('Available', '有货'))}</th>
         <th></th>
       </tr></thead>
       <tbody>${rows}</tbody>

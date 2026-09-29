@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.205 · 2026-09-29 · THE SHOP MENU'S AVAILABILITY COLUMN SAYS AVAILABLE, NOT IN SHOP — NOTHING COMPOSED, ONE PAIR LIFTED.** Sales → Locations → Shop menu. The column header over each row's switch was `In shop · 上架`, which reads as "on or off the menu"; a made-here row switched off is sold out and still on the menu, greyed. It now reads `Available · 有货`. See *The Shop menu's Available column*.
+
 **v1.204 · 2026-09-29 · §291 ADD EVERY ONLINE-STORE PRODUCT TO A SHOP MENU — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, EVERY FRAGMENT LIVE BUT 盘点过.** The new button on Sales → Locations → Shop menu's Add product panel and its confirm. See *Add every Online store product to a shop menu (§291)*.
 
 **v1.203 · 2026-09-29 · §288 THE QR MENU'S OWN CATEGORY ORDER — FOUR OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The Mini app / QR menu switch on Products → Categories, its hint, and its status line. See *The QR menu's own category order (§288)*.
@@ -9305,3 +9307,23 @@ wrong.
 - `小程序` for the source: **rejected** in favour of `线上商城`, the name the
   product editor gives the `is_published` switch this button reads.
 
+## The Shop menu's Available column
+
+**Nothing composed, 2026-09-29.** Operator register only (Rule 1): the column
+header over the per-row switch on the desktop Shop menu screen
+(`public/retail-admin/28-shops.js`). Nothing reaches a customer.
+
+| shipped | built from |
+|---|---|
+| `Available · 有货` (column header) | **lifted whole** from the product list's supplier-direct badge (`public/retail-admin/09-products.js`, `_paStockCell`), where it is the on-state of the operator's can-we-sell-this switch, the same meaning as here. Also live on the phone (`public/m.html`) |
+
+The switch, its tooltips and the `Sold out · 售罄` word beside it are unchanged.
+
+**Live candidates rejected.**
+
+- `上架` / *In shop* (the old header): **retired from this column.** Off reads
+  as "not on the menu", which is false for a made-here row: it stays on the
+  till and the QR menu, greyed, as sold out (§287). It stays live on the
+  phone's product card, a different switch.
+- `可售`: **not live** anywhere in the product; minting it was unnecessary with
+  `有货` already carrying this meaning.
