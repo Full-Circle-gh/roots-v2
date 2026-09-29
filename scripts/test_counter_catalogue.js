@@ -130,6 +130,10 @@ insListing.run(SHOP_A, P_STOCKED, 25,   'stocked',   1, 0);   // 25 on the menu,
 insListing.run(SHOP_A, P_MADE,    32,   'made_here', 1, 1);
 insListing.run(SHOP_A, P_OFF,     30,   'made_here', 0, 2);
 insListing.run(SHOP_A, P_STK_OFF, 21,   'stocked',   0, 3);
+// §289 — one photo, on a product the public image route would refuse: counted
+// here and never published.
+db.prepare(`UPDATE store_products SET image_data = 'data:image/png;base64,iVBORw0KGgo=',
+                                      updated_at = '2026-09-29 10:00:00' WHERE id = ?`).run(P_LOCAL);
 const listingId = (pid) => db.prepare('SELECT id FROM shop_listings WHERE shop_id = ? AND store_product_id = ?').get(SHOP_A, pid).id;
 
 // ── Harness ────────────────────────────────────────────────────────────────
@@ -368,6 +372,27 @@ const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
     check('a switched-off tile says Sold out, the QR menu\'s word', () => {
       assert.match(till, /soldOut:\s+\['Sold out', '售罄'\]/);
       assert.match(till, /T\(p\.switched_off \? 'soldOut' : 'outOfStock'\)/);
+    });
+
+    console.log('\n§289 — the photo on the tile');
+    check('a product with a photo carries a thumbnail URL on the ADMIN image route', () => {
+      // The admin route, because this product was never published and the
+      // public route answers 404 for it (§150 is why the till sells it at all).
+      assert.strictEqual(rowFor(rowsA, P_LOCAL).image,
+        `/api/retail-admin/products/${P_LOCAL}/image?w=200&v=${encodeURIComponent('2026-09-29 10:00:00')}`);
+    });
+    check('a product with no photo carries null, not a URL that will 404', () => {
+      assert.strictEqual(rowFor(rowsA, P_PUB).image, null);
+      assert.strictEqual(rowFor(rowsA, P_MADE).image, null);
+    });
+    check('the till keeps it and draws it on both kinds of tile', () => {
+      assert.match(till, /image: row\.image \|\| null/);
+      // Once on the selling tile and once on the sold-out switch tile.
+      assert.strictEqual((till.match(/var ph = photo\(p\);/g) || []).length, 2);
+    });
+    check('a photo that fails to load is dropped and remembered, not left broken', () => {
+      assert.match(till, /\$\('grid'\)\.addEventListener\('error',[\s\S]*?S\.imgBad\[/);
+      assert.match(till, /if \(!p\.image \|\| S\.imgBad\[p\.id\]\) return '';/);
     });
 
     console.log('\nContainment — the till still never names the table');

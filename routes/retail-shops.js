@@ -38,6 +38,8 @@ const inventory = require('../lib/inventory');
 // with the QR menu so the counter and the phone ask the same things.
 const productOptions = require('../lib/product-options');
 const { requireRetailAdmin } = require('./retail');
+// §289 — which rows have a photo, the same test the shop lists use.
+const { hasImageFallbackSql } = require('../lib/product-image-sql');
 const { logActivity } = require('../middleware/auth');
 
 const router = express.Router();
@@ -746,7 +748,8 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     SELECT id, name_en, name_cn, sku, top_category, sell_price,
            variant_group_id, variant_label, variant_label_cn, variant_sort,
            COALESCE(is_published, 0)    AS is_published,
-           COALESCE(is_restock_only, 0) AS is_restock_only
+           COALESCE(is_restock_only, 0) AS is_restock_only,
+           updated_at, ${hasImageFallbackSql('store_products')} AS has_image
       FROM store_products
      WHERE COALESCE(is_active, 1) = 1
      ORDER BY COALESCE(NULLIF(name_en, ''), name_cn) COLLATE NOCASE ASC,
@@ -800,6 +803,15 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
       variant_label_cn: p.variant_label_cn || null,
       variant_group_id: p.variant_group_id || null,
       top_category: p.top_category,
+      // §289 — THE PHOTO ON THE TILE. A small thumbnail URL, or null when
+      // neither this product nor a variant sibling has one. The admin route,
+      // not the public one: the till sells products that were never published
+      // (§150) and the public route refuses those. 200px wide: the tile shows
+      // it at about 72px, so this is sharp on a 2x screen. ?v busts the
+      // browser's cache when the photo changes.
+      image: p.has_image
+        ? `/api/retail-admin/products/${p.id}/image?w=200&v=${encodeURIComponent(p.updated_at || '')}`
+        : null,
       price,
       // The till posts unit_price on these and only these: the listing price is
       // the only price the order endpoint cannot resolve for itself, and a till

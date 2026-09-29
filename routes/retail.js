@@ -143,6 +143,8 @@ const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
 // than crashing — the image endpoint just skips the resize branch when null.
+// SQL flag: does this row, or an active variant sibling, have a photo?
+const { hasImageFallbackSql } = require('../lib/product-image-sql');
 let sharp = null;
 try { sharp = require('sharp'); } catch (e) { console.warn('[retail] sharp not available — image thumbnails disabled:', e.message); }
 const router = express.Router();
@@ -2441,20 +2443,9 @@ function optionsCostAtSale(handle, options) {
 // the variant's own photo → the group owner (id = variant_group_id) → lowest
 // variant_sort/id among active siblings that have a photo.
 //
-// SQL flag (1 when this row OR an active sibling has any stored photo) — pass
-// the products-table alias used in the surrounding query.
-function hasImageFallbackSql(alias) {
-  return `(
-    (${alias}.image_data IS NOT NULL AND ${alias}.image_data != '')
-    OR (${alias}.image_url IS NOT NULL AND ${alias}.image_url != '')
-    OR (${alias}.variant_group_id IS NOT NULL AND EXISTS(
-         SELECT 1 FROM store_products vsib
-          WHERE vsib.variant_group_id = ${alias}.variant_group_id
-            AND COALESCE(vsib.is_active, 1) = 1
-            AND ((vsib.image_data IS NOT NULL AND vsib.image_data != '')
-              OR (vsib.image_url IS NOT NULL AND vsib.image_url != ''))))
-  )`;
-}
+// hasImageFallbackSql() — the SQL flag for the same fallback — lives in
+// lib/product-image-sql.js (required at the top of this file), so the till's
+// counter catalogue can use it too (§289).
 // Resolve the effective primary photo (a data: URI or plain URL string), with
 // sibling fallback for variants. Returns null when neither this row nor any
 // sibling has one. Used by the two /image byte-streaming endpoints.
@@ -2765,30 +2756,12 @@ router.get('/api/retail/products', (req, res) => {
 // Bounded LRU-ish (oldest key evicted at the cap); thumbnails are a few kB each.
 const THUMB_CACHE = new Map();
 const THUMB_CACHE_MAX = 800;
-router.get('/api/retail/products/:id/image', async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).end();
-  // Optional thumbnail width — clamp to a sane range; only ever downsizes.
-  let w = parseInt(req.query.w, 10);
-  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
-  const ver  = String(req.query.v || '');
-  // Cache full-res reads too (not just thumbnails) — a client re-loading a
-  // product grid without ?w hammers the DB + base64-decode on every request
-  // otherwise, which was enough to stall the event loop under a burst (2026-07-13).
-  const ckey = `${tenantCacheKey()}|${id}|w${w || 0}|${ver}`;
-  const hit = THUMB_CACHE.get(ckey);
-  if (hit) {
-    res.set('Content-Type', hit.mime);
-    res.set('Cache-Control', 'public, max-age=31536000, immutable');
-    return res.send(hit.buf);
-  }
-  const gate = tdb().prepare(
-    `SELECT id FROM store_products
-      WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
-  ).get(id);
-  // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
-  const data = gate && resolveProductImage(id);
-  if (!data) return res.status(404).end();
+// Decode a stored photo (a data: URI, or a plain URL which is redirected to)
+// and send it, downscaled to width w when w is set. The result is kept in
+// THUMB_CACHE under ckey. THE KEY IS THE CALLER'S, and it carries the caller's
+// gate: the public route reads the cache BEFORE its published check, so a key
+// the admin route writes must never be one the public route can read.
+async function sendProductImage(res, data, w, ckey, cacheControl) {
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
   const mime = m[1] || 'application/octet-stream';
@@ -2813,8 +2786,34 @@ router.get('/api/retail/products/:id/image', async (req, res) => {
   if (THUMB_CACHE.size >= THUMB_CACHE_MAX) THUMB_CACHE.delete(THUMB_CACHE.keys().next().value);
   THUMB_CACHE.set(ckey, { buf, mime: outMime });
   res.set('Content-Type', outMime);
-  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.set('Cache-Control', cacheControl);
   res.send(buf);
+}
+router.get('/api/retail/products/:id/image', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).end();
+  // Optional thumbnail width — clamp to a sane range; only ever downsizes.
+  let w = parseInt(req.query.w, 10);
+  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
+  const ver  = String(req.query.v || '');
+  // Cache full-res reads too (not just thumbnails) — a client re-loading a
+  // product grid without ?w hammers the DB + base64-decode on every request
+  // otherwise, which was enough to stall the event loop under a burst (2026-07-13).
+  const ckey = `${tenantCacheKey()}|${id}|w${w || 0}|${ver}`;
+  const hit = THUMB_CACHE.get(ckey);
+  if (hit) {
+    res.set('Content-Type', hit.mime);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(hit.buf);
+  }
+  const gate = tdb().prepare(
+    `SELECT id FROM store_products
+      WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+  ).get(id);
+  // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
+  const data = gate && resolveProductImage(id);
+  if (!data) return res.status(404).end();
+  return sendProductImage(res, data, w, ckey, 'public, max-age=31536000, immutable');
 });
 
 // GET /api/retail/products/:productId/substitute-options?store_id=N
@@ -26103,11 +26102,28 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
 // as real image bytes so the catalogue list can ship a small URL per row
 // instead of an inline base64 blob. image_data is a data: URI: decode and send
 // with a long cache window (?v=updated_at busts it). Plain-URL images redirect.
-router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, (req, res) => {
+//
+// ?w=<px> (optional) sends a downscaled thumbnail, the same one the public route
+// makes. The till asks for it: its tiles show products that were never
+// published (§150), which the public route refuses, and a full-size photo per
+// tile would be megabytes on a shop's Wi-Fi.
+router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  let w = parseInt(req.query.w, 10);
+  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
+  // 'admin|' first, so the public route (which reads the cache before its
+  // published check) can never be served an unpublished product's photo.
+  const ckey = w ? `admin|${tenantCacheKey()}|${id}|w${w}|${String(req.query.v || '')}` : null;
+  const hit = ckey && THUMB_CACHE.get(ckey);
+  if (hit) {
+    res.set('Content-Type', hit.mime);
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    return res.send(hit.buf);
+  }
   // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
   const data = resolveProductImage(id);
   if (!data) return res.status(404).end();
+  if (w) return sendProductImage(res, data, w, ckey, 'private, max-age=31536000, immutable');
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
   const mime = m[1] || 'application/octet-stream';
