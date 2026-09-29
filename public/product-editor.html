@@ -812,6 +812,9 @@
     border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; background: #fff;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
   }
+  /* `display: flex` above overrides `[hidden] { display:none }`, so without
+     this the Phone button left the website frame painted under the phone. */
+  .pe-desktop-stage[hidden] { display: none; }
   .pe-ds-chrome { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: var(--bg-elev-2); border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
   .pe-ds-chrome > span:not(.pe-ds-url) { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong, #c9c4bb); }
   .pe-ds-url { flex: 1; margin-left: 8px; height: 18px; border-radius: 6px; background: var(--bg-pane); font-size: 10.5px; color: var(--text-3); padding: 0 10px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

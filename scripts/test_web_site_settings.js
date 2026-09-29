@@ -27,6 +27,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const ROUTE = read('routes/integrations-admin.js');
 const SHOP = read('public/shop.html');
 const CMS = read('public/cms.html');
+const PE = read('public/product-editor.html');
 const ADMIN = read('public/retail-admin/15-integrations.js');
 const BLOCKS = read('public/shop/blocks.js');
 
@@ -137,6 +138,8 @@ yes(/applyStage\(\);\n  \/\/ Keep the live-mirror iframe in sync/.test(CMS) && /
   'the stage is applied on first load and on every page switch');
 yes(/const STAGE_KEY = 'cms_stage';/.test(CMS) && CMS.indexOf("const STAGE_KEY") < CMS.indexOf("localStorage.getItem(STAGE_KEY)"),
   'STAGE_KEY is declared before the boot code that reads it');
+yes(/\n  \.desktop-stage\[hidden\] \{ display: none; \}/.test(CMS) && /\n  \.pe-desktop-stage\[hidden\] \{ display: none; \}/.test(PE),
+  'the Phone stage really hides the website frame — its display:flex would otherwise beat [hidden] (Mini App Editor and product editor)');
 
 // ─────────────────────────────────────────────────────────────────────────
 section('4 · the web shop as a stage');
