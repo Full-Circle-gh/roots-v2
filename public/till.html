@@ -236,6 +236,13 @@ button{font:inherit;color:inherit;margin:0}
   color:var(--td-text2);border-radius:var(--r-control);font-size:20px;
 }
 .cats{display:flex;gap:8px;flex:none;overflow-x:auto;padding-bottom:2px}
+/* §287 — the Sold out control sits at the end of the category row, pinned, so
+   the categories scroll under it and it never scrolls off. */
+.catrow{display:flex;gap:8px;align-items:center;flex:none}
+.catrow .cats{flex:1;min-width:0}
+.cat.so{border-style:dashed}
+.cat.so.on{background:var(--td-brick-tint);border-color:var(--td-brick-ink);border-style:solid;color:var(--td-brick-ink)}
+.cat.so[hidden]{display:none}
 .cats::-webkit-scrollbar{display:none}
 .cat{
   height:44px;padding:0 16px;flex:none;display:inline-flex;align-items:center;
@@ -313,6 +320,9 @@ button{font:inherit;color:inherit;margin:0}
 .tile.out{background:var(--td-raised);border-style:dashed}
 .tile.out .nm{color:var(--td-text2)}
 .tile.out .lo{color:var(--td-brick-ink);background:var(--td-brick-tint)}
+/* §287 — while marking sold out, a switched-off tile is still tappable (it is
+   how it comes back), so it keeps the dashed look without the disabled one. */
+.tile.so-busy{opacity:.5}
 .gempty{
   grid-column:1/-1;padding:32px;text-align:center;color:var(--td-text2);font-size:14px;
 }
@@ -918,7 +928,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
           <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">
           <button class="clr" id="q-clr" type="button" hidden aria-label="clear">&times;</button>
         </div>
-        <div class="cats" id="cats"></div>
+        <div class="catrow">
+          <div class="cats" id="cats"></div>
+          <button class="cat so" id="so-btn" type="button" data-somode hidden></button>
+        </div>
         <div class="grid" id="grid"></div>
       </div>
       <div class="pane" id="pane-pend" hidden></div>
@@ -1010,6 +1023,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     searchAdd:    ['Search a product to add…', '搜索商品以添加…'], // admin: 04-orders/products picker
     all:          ['All', '全部'],                     // admin: i18n EN_ONLY_MAP
     outOfStock:   ['Out of stock', '缺货'],            // admin: products grid
+    // §287 — marking a made-here item sold out from the counter. Both LIFTED,
+    // nothing composed: `Sold out · 售罄` is the QR menu's own pill for this
+    // exact state (routes/shop-menu.js, the .sold label), which is what a
+    // customer sees the moment the cashier taps; `Done · 完成` is the admin's
+    // (05-marketing.js:2471, the same Manage/Done toggle shape).
+    soldOut:      ['Sold out', '售罄'],                // shop-menu.js: .sold pill
+    done:         ['Done', '完成'],                    // admin: 05-marketing.js:2471
     noItems:      ['No items', '无商品'],              // admin
     // order rail
     guest:        ['Guest', '访客'],                   // admin: 04-orders.js customer state
@@ -1183,6 +1203,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     opts: null,
     sheetOpen: false,          // phone only: is the order sheet up?
     products: [], stock: {}, cats: [], cat: '', q: '',
+    /* §287 — marking made-here items sold out. shopId is the listing's shop
+       (the write names it); soMode is the grid showing only made-here menu
+       items, where a tap flips the switch instead of adding a line; soBusy
+       holds the product ids with a write in flight. */
+    shopId: null, soMode: false, soBusy: {},
     lines: [], sel: null,
     customer: null, custBusy: false,
     view: 'till',              // till | settle | done
@@ -1629,6 +1654,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     return api('/api/retail-admin/stores/' + S.storeId + '/counter-catalogue')
       .then(function (r) {
       var rows = (r && r.data && r.data.rows) || [];
+      S.shopId = (r && r.data && r.data.shop_id) || null;
       S.stock = {};
       S.products = rows.map(function (row) {
         if (row.stock != null) S.stock[row.product_id] = Number(row.stock) || 0;
@@ -1646,6 +1672,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
           price: Number(row.price) || 0,
           on_menu: !!row.on_menu,
           fulfilment_mode: row.fulfilment_mode || null,
+          // §287 — the made-here switch: which listing it is, and whether it
+          // is off. Off is also stock 0, which is what greys the tile.
+          listing_id: row.listing_id || null,
+          switched_off: !!row.switched_off,
           // §183 — THE QUESTIONS. Hot or iced, extra shot, how much sugar, in
           // the shape routes/shop-menu.js hands its own picker, clamped by the
           // server against what is still on this shelf. Absent on the great
@@ -1753,6 +1783,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (!st || String(st.id) === String(S.storeId)) return render();
     setStore(st);
     S.stock = {}; S.products = []; S.cats = []; S.cat = ''; S.q = '';
+    S.shopId = null; S.soMode = false; S.soBusy = {};   // §287 — another shop's menu
     // Another shop's queue, and its numbers restart at 1 just the same.
     S.pend = null; S.pane = 'menu'; S.paneTouched = false; S.recall = null;
     render();
@@ -1899,11 +1930,26 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       h += '<button class="cat' + (S.cat === c ? ' on' : '') + '" type="button" data-cat="' + esc(c) + '">' + esc(c) + '</button>';
     });
     $('cats').innerHTML = h;
+    // §287 — only where there is something it could switch: a made-here item
+    // on this shop's menu. A shop that sells only shelf stock never sees it.
+    var so = $('so-btn');
+    if (so) {
+      so.hidden = !S.shopId || !S.products.some(canSoldOut);
+      so.classList.toggle('on', S.soMode);
+      so.textContent = T(S.soMode ? 'done' : 'soldOut');
+    }
+  }
+
+  // §287 — the rows a cashier may mark sold out: made-here, on this menu.
+  // Stocked rows are counted on the shelf and are not a switch.
+  function canSoldOut(p) {
+    return !!(p && p.on_menu && p.fulfilment_mode === 'made_here' && p.listing_id);
   }
 
   function visibleProducts() {
     var q = S.q.trim().toLowerCase();
     return S.products.filter(function (p) {
+      if (S.soMode && !canSoldOut(p)) return false;
       if (S.cat && (p.top_category || '') !== S.cat) return false;
       if (!q) return true;
       return (p.name_en || '').toLowerCase().indexOf(q) >= 0
@@ -1921,6 +1967,26 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var list = visibleProducts();
     if (!list.length) { $('grid').innerHTML = '<div class="gempty">' + esc(T('noItems')) + '</div>'; return; }
     var h = '';
+    if (S.soMode) {
+      /* §287 — MARKING SOLD OUT. Every tile here is a switch: tap to mark it
+         sold out, tap again to bring it back. The word on the tile is the
+         state, in the same place the price normally sits, so the cashier can
+         read the whole list at a glance before tapping Done. */
+      list.forEach(function (p) {
+        var off = p.switched_off;
+        var busy = !!S.soBusy[p.id];
+        h += '<button class="tile' + (off ? ' out' : '') + (busy ? ' so-busy' : '') + '" type="button" data-so="' + p.id + '"' + (busy ? ' disabled' : '') + '>'
+           + '<span class="nm">' + esc(pname(p))
+           + (vlabel(p) ? '<i class="vl">' + esc(vlabel(p)) + '</i>' : '') + '</span>'
+           + '<span class="ft">'
+           + (off ? '<span class="lo">' + esc(T('soldOut')) + '</span>'
+                  : (p.sku ? '<span class="sku">' + esc(p.sku) + '</span>' : '')
+                    + '<span class="pr">' + money(p.price) + '</span>')
+           + '</span></button>';
+      });
+      $('grid').innerHTML = h;
+      return;
+    }
     list.forEach(function (p) {
       var st = stockOf(p.id);
       var left = st == null ? null : st - inCart(p.id);
@@ -1938,7 +2004,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
          + '<span class="ft">'
          + (out
               // Sold out: the reason replaces the price it would have crowded.
-              ? '<span class="lo">' + esc(T('outOfStock')) + '</span>'
+              // §287 — a made-here item switched off says Sold out, the word
+              // the QR menu shows the customer for the same state.
+              ? '<span class="lo">' + esc(T(p.switched_off ? 'soldOut' : 'outOfStock')) + '</span>'
               // In stock: code, price, and a single digit when the shelf is low.
               : (p.sku ? '<span class="sku">' + esc(p.sku) + '</span>' : '')
                 + '<span class="pr">' + money(p.price) + '</span>'
@@ -2580,6 +2648,40 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   }
 
   /* ---- actions --------------------------------------------------------- */
+  /* §287 — MARK A MADE-HERE ITEM SOLD OUT, OR BACK ON. The same switch the
+     office's "In shop" writes, so the QR menu greys it the moment this lands.
+     It stays as set until someone taps it back — it does not reset overnight
+     (Ash, 2026-09-29: an ingredient can be out for days).
+
+     THE SCREEN MOVES ONLY WHEN THE SERVER SAYS YES. A tile that flipped first
+     and flipped back on a failure would tell a cashier, for a second, that a
+     customer can order something they cannot. A line already in the basket is
+     left alone: the cashier who just marked it sold out is the one person who
+     knows, and removing it for them would be a surprise. */
+  function toggleSoldOut(id) {
+    var p = null;
+    S.products.forEach(function (x) { if (x.id === id) p = x; });
+    if (!canSoldOut(p) || !S.shopId || S.soBusy[id]) return;
+    var want = !p.switched_off;
+    S.soBusy[id] = true; S.err = ''; render();
+    api('/api/retail-admin/shops/' + S.shopId + '/listings/' + p.listing_id + '/sold-out', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sold_out: want })
+    }).then(function (j) {
+      delete S.soBusy[id];
+      if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
+      p.switched_off = want;
+      // Sold out is stock 0, which greys the tile; back on is no gate at all,
+      // which is what a made-here row always is.
+      if (want) S.stock[id] = 0; else delete S.stock[id];
+      render();
+    }).catch(function (e) {
+      delete S.soBusy[id];
+      S.err = e && e.auth ? T('noPermission') : T('didNotSave');
+      render();
+    });
+  }
+
   function addLine(id) {
     // Belt to renderLines' braces. The product grid is behind the other pane
     // while a recall is open, but a stray tap must not be able to put a walk-in
@@ -3226,7 +3328,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // Tapping away from the questions is cancelling the line — nothing has
       // been added yet, so the safe answer a stray tap gives is "no line".
       if (S.opts && ev.target.id === 'optpick') return closeOpts();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order],[data-opt]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order],[data-opt],[data-somode],[data-so]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -3265,6 +3367,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         return render();
       }
       if (t.hasAttribute('data-pick'))  return switchStore(t.getAttribute('data-pick'));
+      if (t.hasAttribute('data-somode')) { S.soMode = !S.soMode; S.err = ''; return render(); }
+      if (t.hasAttribute('data-so'))    return toggleSoldOut(Number(t.getAttribute('data-so')));
       if (t.hasAttribute('data-add'))   return addLine(Number(t.getAttribute('data-add')));
       if (t.hasAttribute('data-cat'))   { S.cat = t.getAttribute('data-cat'); return render(); }
       if (t.hasAttribute('data-line'))  { var i = Number(t.getAttribute('data-line')); S.sel = (S.sel === i ? null : i); return render(); }
