@@ -589,8 +589,11 @@
       // the QR menu, greyed, until someone switches it back. It never resets
       // by itself. The word is the QR menu's own pill for the same state.
       const soldOut = !on && r.fulfilment_mode === 'made_here';
-      const title = soldOut ? T('Sold out', '售罄')
-        : on ? T('On the shop · tap to hide', '已上架 · 点按下架') : T('Off the shop · tap to show', '未上架 · 点按上架');
+      // The hover names the state, the header's own word or the QR menu's.
+      // The old "On the shop · tap to hide" was wrong for every row: off never
+      // takes a listing off the QR menu — any kind shows there greyed, sold
+      // out (routes/shop-menu.js). Only the till drops a stocked one.
+      const title = on ? T('Available', '有货') : T('Sold out', '售罄');
       return `<tr data-id="${r.id}"${busy ? ' class="is-busy"' : ''}>
         <td><div class="shp-ell shp-prod">${nameOf(r.name_en, r.name_cn)}</div>
             <div class="shp-sku">${esc(r.sku || '')}</div></td>
