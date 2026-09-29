@@ -489,6 +489,15 @@ function answer(lines) {
       assert.match(TILL, /variant_label \|\| ''\)\.toLowerCase\(\)\.indexOf\(q\)/);
       assert.match(TILL, /variant_label_cn \|\| ''\)\.indexOf\(S\.q\.trim\(\)\)/);
     });
+    check('§290 — the size sits OUTSIDE the name\'s two-line clamp, on both kinds of tile', () => {
+      // Inside .nm it counted as a third line and was cut: "Organic Matcha
+      // Latte" wrapped on an iPad column and "Large" vanished. The name span
+      // must close before the size is written.
+      const closed = TILL.match(/'<span class="hd"><span class="nm">' \+ esc\(pname\(p\)\) \+ '<\/span>'/g) || [];
+      assert.strictEqual(closed.length, 2, 'the selling tile and the sold-out tile both close .nm before .vl');
+      assert.doesNotMatch(TILL, /'<span class="nm">' \+ esc\(pname\(p\)\)\s*\n\s*(\/\/[^\n]*\n\s*)*\+ \(vlabel/,
+        'the size is inside the clamped name again');
+    });
     check('a product that asks something opens its sheet instead of adding', () => {
       assert.match(TILL, /if \(asks\(p\)\) return openOpts\(p\);/);
     });
