@@ -210,6 +210,14 @@
         <block wx:else>
           <view wx:for="{{visibleSections}}" wx:key="id" wx:for-item="section"
                 id="{{section.id}}" class="cat-section">
+            <!-- §297 — the category's banner, first in its section. A FIXED
+                 5:2 box (padding-top), so the section's height is known before
+                 the picture loads and the rail highlight (measured once, just
+                 after render) is not thrown off. Hidden while searching. -->
+            <view wx:if="{{section.banner && !query}}" class="cat-banner"
+                  data-target="{{section.banner.target}}" bindtap="onBannerTap">
+              <view class="cat-banner-box"><image class="cat-banner-img" src="{{section.banner.img}}" mode="aspectFill" lazy-load/></view>
+            </view>
             <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group"
                   id="g-{{group.id}}" class="cat-group">
               <view wx:if="{{group.label}}" class="list-section-head">
@@ -336,6 +344,11 @@
     <view wx:else>
       <view wx:for="{{visibleSections}}" wx:key="id" wx:for-item="section"
             id="{{section.id}}" class="cat-section">
+        <!-- §297 — the category's banner; see the rail layouts above. -->
+        <view wx:if="{{section.banner && !query}}" class="cat-banner cat-banner-gal"
+              data-target="{{section.banner.target}}" bindtap="onBannerTap">
+          <view class="cat-banner-box"><image class="cat-banner-img" src="{{section.banner.img}}" mode="aspectFill" lazy-load/></view>
+        </view>
         <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group"
               id="g-{{group.id}}" class="cat-group">
           <view wx:if="{{group.label}}" class="grid-section-head">

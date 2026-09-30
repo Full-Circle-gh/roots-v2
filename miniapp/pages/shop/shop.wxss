@@ -105,6 +105,21 @@
 }
 .promo-wrap.tucked { max-height: 0; opacity: 0; }
 
+/* ─── Category banner (§297) ─────────────────────────────────────── */
+/* A fixed 5:2 box: height comes from the width (padding-top: 40%), never
+   from the picture, so measuring the sections right after render is right
+   even before the picture arrives. */
+.cat-banner {
+  margin: 24rpx 24rpx 4rpx;
+  border: 3rpx solid var(--ink);
+  background: #EFE5DC;
+}
+.cat-banner-gal { margin: 24rpx 44rpx 8rpx; }
+/* The ratio box sits INSIDE the margins, so 40% is of the banner's own
+   width and the picture box is exactly 5:2. */
+.cat-banner-box { position: relative; height: 0; padding-top: 40%; overflow: hidden; }
+.cat-banner-img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+
 /* ─── Tool row — search button / box + layout buttons (§295) ─────── */
 .tool-row {
   display: flex; align-items: center; gap: 16rpx;
