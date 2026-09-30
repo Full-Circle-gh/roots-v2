@@ -1291,6 +1291,12 @@ const state = {
           is what re-reads the parent rather than showing the child under the
           parent's name. */
        openId:null,rec:null,recTried:false,recErr:null,recFor:null,tab:'ingredients',
+       /* §300 R2 — the editor. `ed` is the draft being edited (null when the
+          record is only being read); it belongs to one record frame, by id, or
+          'new' for a recipe not yet created. `pick*` is the material picker
+          under the ingredient lines: what is typed, what came back, and the
+          ticket that lets the last-asked answer win. */
+       ed:null,pickQ:'',pickRows:null,pickErr:null,pickSeq:0,
        /* MAKING ONE (stage two). `scale` multiplies every quantity on screen
           and is never written anywhere — the recipe on the server is the
           recipe, and doubling it for one afternoon is a fact about this
@@ -1469,6 +1475,9 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
    already fired. */
 function pop(){
   const top=state.stack.length?state.stack[state.stack.length-1].route:null;
+  /* A recipe being edited asks before it is dropped, and only when it cannot
+     be saved (§300 R2, rcpMayLeave). */
+  if(top==='recipeone'&&!rcpMayLeave()) return;
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   forgetScroll(); state.stack.pop(); render(); }
@@ -1735,6 +1744,7 @@ reg('rqSearch', v=>{
  ['mMbQ','mMbClr','mbSearch'],
  ['mProdQ','mProdClr','prodSearch'],
  ['mRcpQ','mRcpClr','rcpSearch'],
+ ['mRcpPickQ','mRcpPickClr','rcpPickQ'],
  ['mExpQ','mExpClr','expQ'],
  ['mRcvQ','mRcvClr','rcvQuery'],
  ['mRcvToQ','mRcvToClr','rcvToQuery'],
@@ -14545,9 +14555,15 @@ function rcpBodyHtml(){
   const chips=(all||r.arch)?`<div style="padding:4px 0 4px">${chipRow(rcpChips(),r.type,'rcpType')}</div>`:'';
   if(err) return chips+`<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${err}</div>`;
   if(!all) return chips+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  /* §300 R2: a recipe is written here now, so the empty list no longer sends
+     anybody to the desktop. The desktop's own empty sentence for somebody who
+     may add one (New recipe is in the head); the old one for somebody who may
+     not. */
   if(!all.length&&!r.arch) return nothingYet(T('No recipes yet','暂无食谱'),
-    T('A recipe is what you make and what goes into it. They are written on desktop.',
-      '食谱记录你制作的东西及其用料。请在电脑端创建。'));
+    mCan('recipes:edit')
+      ? T('A recipe is what you make and what it costs — ingredients, steps, batch size. Add the first one.',
+          '食谱是你制作的东西及其成本 —— 原料、步骤、批量大小。新建第一份。')
+      : T('A recipe is what you make and what goes into it.','食谱记录你制作的东西及其用料。'));
   const rows=rcpRows();
   return `${chips}
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
@@ -14567,7 +14583,7 @@ function rcpBodyHtml(){
         </span>
         <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>
       </button>`;}).join('')}</div>`:''}
-    ${rows.length?desktopNote():''}</div>`;
+    </div>`;
 }
 /* ── One recipe ──────────────────────────────────────────────────────────── */
 const RCP_STORAGE={freezer:['Freezer','冷冻'],fridge:['Fridge','冷藏'],room_temp:['Room temperature','常温']};
@@ -14597,7 +14613,12 @@ function rcpShelfText(raw){
 function rcpCurId(){
   const st=state.stack||[];
   for(let i=st.length-1;i>=0;i--){
-    if(st[i]&&st[i].route==='recipeone') return st[i].rid!=null?Number(st[i].rid):state.rcp.openId;
+    if(st[i]&&st[i].route==='recipeone'){
+      /* A recipe not yet created has no id; its frame is 'new' until the first
+         save claims one (rcpSend). */
+      if(st[i].isNew&&st[i].rid==null) return 'new';
+      return st[i].rid!=null?Number(st[i].rid):state.rcp.openId;
+    }
   }
   return state.rcp.openId;
 }
@@ -14608,7 +14629,7 @@ function rcpCurId(){
 function rcpRec(){ const r=state.rcp; return (r.rec&&r.recFor===rcpCurId())?r.rec:null; }
 function loadRecipeOne(){
   const r=state.rcp, id=rcpCurId();
-  if(id==null) return;
+  if(id==null||id==='new') return;
   if(r.recFor!==id){ r.rec=null; r.recTried=false; r.recErr=null; r.recFor=id; }
   if(r.recTried) return;
   r.recTried=true; r.recErr=null;
@@ -14755,6 +14776,9 @@ function rcpDetailsHtml(rec){
 function screenRecipeOne(){
   const r=state.rcp;
   loadRecipeOne();
+  /* The editor, when this frame's recipe is being edited (§300 R2). */
+  const ed=rcpEditing();
+  if(ed) return rcpEditorHtml(ed);
   if(r.recErr) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${r.recErr}</div>`;
   const rec=rcpRec();
   if(!rec) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
@@ -14819,9 +14843,11 @@ function screenRecipeOne(){
   return (warns?`<div style="padding:12px 16px 0;display:flex;flex-direction:column;gap:8px">${warns}</div>`:'')
     + strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
     ${body}
-    ${desktopNote()}</div>`;
+    <button class="btn2" style="width:100%" onclick="APP.cmd('rcpHistory')">${T('Version history','历史版本')}</button></div>`;
 }
 SUBS.recipes={title:['Recipes','食谱'],
+  /* New recipe, drawn only for `recipes:edit` — the desktop's data-cap. */
+  cta:()=>mCan('recipes:edit')?`<button class="cta inhead" onclick="APP.cmd('rcpNew')">${T('New recipe','新建食谱')}</button>`:'',
   status:()=>{ const all=rcpAll(); if(!all) return '';
     const n=all.length;
     return LANG==='en' ? (n+(n===1?' recipe':' recipes')) : (n+' 个食谱'); },
@@ -14831,12 +14857,19 @@ SUBS.recipeone={title:['Recipes','食谱'],
      lines and no steps has nothing to gather and nothing to follow, and a CTA
      there would open onto an empty screen. The print card sits beside it as an
      icon — the desktop's Print, which is offered once a recipe exists. */
-  cta:()=>{ const rec=rcpRec();
+  cta:()=>{
+    /* Editing: Done, and nothing else — Making one and the card read the
+       record as it is saved, not the draft. */
+    if(rcpEditing()) return `<button class="cta inhead" onclick="APP.cmd('rcpEdDone')">${T('Done','完成')}</button>`;
+    const rec=rcpRec();
     if(!rec) return '';
     const has=rec&&((Array.isArray(rec.ingredients)&&rec.ingredients.length)||(Array.isArray(rec.steps)&&rec.steps.length));
-    return `<button class="iconbtn" aria-label="${T('Print','打印')}" onclick="APP.cmd('rcpPrint')">${ic('printer',20)}</button>`
+    return (mCan('recipes:edit')?`<button class="iconbtn" aria-label="${T('Edit','编辑')}" onclick="APP.cmd('rcpEdit')">${ic('pencil',20)}</button>`:'')
+      + `<button class="iconbtn" aria-label="${T('Print','打印')}" onclick="APP.cmd('rcpPrint')">${ic('printer',20)}</button>`
       + (has?`<button class="cta inhead" onclick="APP.cmd('rcpMake')">${T('Make it','开始制作')}</button>`:''); },
-  titleOf:()=>escAttr(rcpName(rcpRec())||T('Recipes','食谱')),
+  titleOf:()=>{ const d=rcpEditing();
+    if(d&&d.id==null) return T('New recipe','新建食谱');
+    return escAttr(rcpName(rcpRec())||T('Recipes','食谱')); },
   /* Back names what it goes back to: the list, or — for a recipe opened from
      one of another recipe's lines — that recipe, whose name the frame carries
      (rcpOpenSub). */
@@ -14846,7 +14879,12 @@ SUBS.recipeone={title:['Recipes','食谱'],
      about to make the thing opened it to find out. Silent when neither is
      recorded rather than printing a dash — §1.7's status line is a fact or it
      is nothing. */
-  status:()=>{ const rec=rcpRec(); if(!rec) return '';
+  status:()=>{
+    /* Editing: whether the work is in, which is what this line is for while
+       the record is a document being worked on. Never empty — the line is
+       patched in place as the save moves, so it has to exist to be patched. */
+    if(rcpEditing()){ const t=rcpEdStateText(); return t?escAttr(t):'\u00a0'; }
+    const rec=rcpRec(); if(!rec) return '';
     const bits=[];
     if(rec.batch_size) bits.push(rcpNum(rec.batch_size)+' g');
     if(rec.servings) bits.push(LANG==='en'
@@ -15008,6 +15046,582 @@ reg('rcpPrintNow', ()=>{
   window.print();
 });
 
+/* ── Editing a recipe (§300 step R2) ─────────────────────────────────────────
+   The desktop record's Details, Ingredients and Steps, written from a phone:
+   a new recipe, every field, the material picker, quantity and unit, counts
+   toward the batch weight, the line note, reorder and remove, steps added,
+   moved and removed — saved as the desktop saves it, on a pause, through the
+   one engine both surfaces use (public/tacet-autosave.js), with the version
+   history behind it that makes an autosave safe to have.
+
+   THE ONE THING THIS CODE MUST NEVER DO IS SEND A COST FIELD. §164's addendum
+   is why: the desktop's autosave once read the Cost & Pricing inputs out of a
+   tab it no longer drew, turned the absent inputs into zeros, and an ordinary
+   save after a NAME correction wiped labour, overhead and sell price.
+   Omitting the keys does not make that safe — lib/recipe-cost-data-write.js
+   writes 0 and 30 for an absent labour and target food cost — so the desktop
+   makes the cost request ONLY for somebody holding `recipes:costs`, from a tab
+   it drew. This screen has no cost tab yet (R3), so it loaded no cost inputs,
+   and it therefore makes NO cost request, for anybody, whatever they hold.
+   The body below is the desktop's writeRecord() body key for key — details,
+   lines, steps and save_source — and the draft it is built from is copied off
+   the record WITHOUT the money keys the server may have sent, so there is
+   nothing in hand that could leak into it. scripts/test_mobile_recipes_edit.js
+   holds the key list to the desktop's own readDetails() and proves both halves:
+   no cost key reaches the wire for either kind of user, and a cost holder's
+   figures are never blanked because they are never touched.
+
+   AN EDIT MODE, NOT A FORM ON EVERY READ. The desktop record is always its
+   editor; a phone held over a bench is read far more than it is typed into,
+   and a stray thumb on a quantity field is a changed recipe. So the record
+   opens as it always has, and the pencil (for `recipes:edit` only — the server
+   refuses the write to anybody else, and a refusal here is a trip to the login
+   page) turns it into the editor; Done puts it back. */
+/* The desktop's unit list (19-recipes.js RECIPE_UNITS) is lib/ingredient-cost.js's
+   DIVISIBLE_RECIPE_UNITS + PER_PIECE_RECIPE_UNITS. The phone does not load that
+   file for six words, so they are listed here and the test holds them to it. */
+const RCP_UNITS=['g','ml','pcs','bag','bottle','box'];
+/* The desktop record's timings, exactly: a save settles 1.2s after the last
+   keystroke, and never waits more than 8s however long the typing goes on. */
+const RCP_AUTOSAVE_IDLE_MS=1200, RCP_AUTOSAVE_MAX_MS=8000;
+let rcpAuto=null, rcpAgoTimer=null, rcpPickTimer=null;
+const rcpIsAuto = v => v===1||v===true||v==='1';
+const rcpInYield = l => !(l && (l.in_yield===0||l.in_yield===false||l.in_yield==='0'));
+/* THE DRAFT. Copied field by field off the record, and the list of what is
+   copied IS the guarantee above: master_cost, costData, cost and the rest of
+   what a `recipes:costs` holder's read carries are simply not in it. */
+function rcpDraftFrom(rec, forId){
+  const s=v=>v==null?'':String(v);
+  const sl=rcpShelfParse(rec.shelf_life);
+  return {forId, id:rec.id!=null?Number(rec.id):null, savedAt:0,
+    name_en:s(rec.name_en), name_cn:s(rec.name_cn), sku:s(rec.sku), category:s(rec.category),
+    recipe_type:rec.recipe_type||'made',
+    batch_size:s(rec.batch_size), servings:s(rec.servings), serving_size:s(rec.serving_size),
+    batch_size_auto:rcpIsAuto(rec.batch_size_auto)?1:0, servings_auto:rcpIsAuto(rec.servings_auto)?1:0,
+    /* Shelf life is a number and a unit on screen and "6 months" on the row;
+       free text that does not parse is carried through untouched until the
+       number or the unit is actually changed — the desktop's readShelfLife(). */
+    shelf_n:sl.n, shelf_u:sl.unit, shelf_raw:s(rec.shelf_life), shelf_touched:false,
+    storage:s(rec.storage), notes:s(rec.notes),
+    lines:(rec.ingredients||[]).map(l=>({ingredient_id:l.ingredient_id==null?null:l.ingredient_id,
+      name_en:l.name_en, name_cn:l.name_cn, sku:l.sku, qty:l.qty==null?'':String(l.qty), unit:l.unit||'g',
+      in_yield:rcpInYield(l)?1:0, notes:s(l.notes), substitutes:l.substitutes==null?null:l.substitutes,
+      master_unit:l.master_unit, master_free:l.master_free, master_name_en:l.master_name_en, master_sku:l.master_sku})),
+    steps:(rec.steps||[]).map(st=>({name:s(st.name), instructions:s(st.instructions)}))};
+}
+/* What the two yield fields resolve to — lib/recipe-cost.js's resolveYield,
+   the function the server stamps the row with, never a sum of this screen's. */
+function rcpEdYield(d){
+  const C=window.RootsRecipeCost;
+  if(!C||typeof C.resolveYield!=='function') return null;
+  return C.resolveYield({batch_size:d.batch_size||null, servings:d.servings||null, serving_size:d.serving_size||null,
+    batch_size_auto:d.batch_size_auto, servings_auto:d.servings_auto}, d.lines);
+}
+function rcpEdSum(d){
+  const C=window.RootsRecipeCost;
+  return (C&&typeof C.computeYield==='function')?C.computeYield(d.lines):null;
+}
+function rcpEdShelf(d){
+  const n=String(d.shelf_n==null?'':d.shelf_n).trim();
+  if(n==='') return d.shelf_touched?'':String(d.shelf_raw||'');
+  const num=Number(n), u=d.shelf_u||'months';
+  /* English unit words whatever the language — rcpShelfParse reads them back. */
+  const w=u==='days'?'day':(u==='years'?'year':'month');
+  return `${num} ${w}${num===1?'':'s'}`;
+}
+/* THE BODY — the desktop's writeRecord(): readDetails() in its key order, then
+   the lines, then the steps. Nothing else. A derived batch size or serving
+   count is sent as the figure it resolves to, as the desktop's read-only field
+   holds it; with the cost module absent (offline) the stored figure stands. */
+function rcpPayload(d){
+  const y=rcpEdYield(d);
+  const num=v=>(v===''||v==null)?null:Number(v);
+  const autoB=!!d.batch_size_auto, autoS=!!d.servings_auto;
+  return {
+    name_en:String(d.name_en||'').trim(), name_cn:String(d.name_cn||'').trim(), sku:String(d.sku||'').trim(),
+    category:d.category||'', recipe_type:d.recipe_type||'made',
+    batch_size:(autoB&&y)?(y.batchSize>0?y.batchSize:null):num(d.batch_size),
+    servings:(autoS&&y)?(y.servings>0?y.servings:null):num(d.servings),
+    serving_size:num(d.serving_size),
+    batch_size_auto:autoB?1:0, servings_auto:autoS?1:0,
+    shelf_life:rcpEdShelf(d), storage:d.storage||'', notes:d.notes||'',
+    ingredients:d.lines.map(l=>({ingredient_id:l.ingredient_id, name_en:l.name_en, name_cn:l.name_cn, sku:l.sku,
+      qty:Number(l.qty)||0, unit:l.unit||'g', in_yield:rcpInYield(l)?1:0,
+      notes:l.notes||null, substitutes:l.substitutes||null})),
+    steps:d.steps.map(st=>({name:st.name||null, instructions:st.instructions||null})),
+  };
+}
+/* One save. PUT for a recipe that exists; POST for a new one, whose id is
+   claimed at once so the next save updates it rather than creating a second.
+   Then the record is read back — what the server knows that the screen cannot
+   (the material it made, the products, the rates) — into `rec`, never into the
+   draft the operator is typing into. The list behind is marked stale, so the
+   row they land back on reads the new way. */
+function rcpSend(d, p, note){
+  const r=state.rcp;
+  const body=Object.assign({}, p, {save_source:note==='manual'?'manual':'auto'});
+  const write=d.id!=null
+    ? apiWrite('/api/retail-admin/recipes/'+Number(d.id), body, 'PUT')
+    : apiWrite('/api/retail-admin/recipes', body, 'POST').then(j=>{
+        const id=Number(j&&j.id);
+        if(!id) throw new Error(T('Save failed','保存失败'));
+        d.id=id; d.forId=id;
+        const f=(state.stack||[]).find(x=>x&&x.route==='recipeone'&&x.isNew);
+        if(f){ f.rid=id; f.isNew=false; }
+        r.openId=id; r.recFor=id; r.recTried=true;
+      });
+  return write.then(()=>{
+    d.savedAt=Date.now(); r.tried=false;
+    const id=d.id;
+    return api('/api/retail-admin/recipes/'+Number(id)).then(fresh=>{
+      if(fresh&&r.recFor===id) r.rec=fresh;
+      if(state.rcp.ed===d) rcpEdPaintState();
+    }).catch(()=>{});
+  });
+}
+function rcpEdStart(d){
+  const prev=rcpAuto; rcpAuto=null;
+  if(prev) prev.flush();
+  if(typeof TacetAutosave==='undefined') return;
+  const auto=TacetAutosave.create({delay:RCP_AUTOSAVE_IDLE_MS, maxWait:RCP_AUTOSAVE_MAX_MS,
+    read:()=>rcpPayload(d),
+    /* The server refuses a recipe with no English name, so one is not sent —
+       held, not failed: the operator has not finished typing. */
+    hold:p=>p.name_en?'':T('this recipe still needs an English name','该食谱还需要填写英文名称'),
+    send:(p,note)=>rcpSend(d,p,note),
+    onChange:()=>{ if(rcpAuto===auto) rcpEdPaintState(); }});
+  auto.start();
+  rcpAuto=auto;
+  /* "Saved · 4 min ago" has to go on being true while nobody touches it. */
+  clearInterval(rcpAgoTimer); rcpAgoTimer=setInterval(rcpEdPaintState, 30000);
+}
+function rcpEdEnd(){ state.rcp.ed=null; clearInterval(rcpAgoTimer); rcpAgoTimer=null; }
+/* The draft this screen is editing, or null — only ever the draft for the
+   recipe on this frame. */
+function rcpEditing(){ const d=state.rcp.ed; return (d&&d.forId===rcpCurId())?d:null; }
+function rcpAgo(ms){
+  const s=Math.round(ms/1000);
+  if(s<45) return T('just now','刚刚');
+  const m=Math.round(s/60);
+  if(m<60) return T(`${m} min ago`, `${m} 分钟前`);
+  const h=Math.round(m/60);
+  return T(`${h} h ago`, `${h} 小时前`);
+}
+/* The desktop bar's save line, word for word: whether the work is in, at any
+   moment. The server's refusal is said as the server said it, in the half this
+   operator reads. */
+function rcpEdStateText(){
+  const d=rcpEditing(), A=rcpAuto;
+  if(!d||!A) return '';
+  if(A.state==='error') return T('Not saved','未保存')+' — '+tmOneLang(A.message||'');
+  if(A.state==='saving') return T('Saving…','保存中…');
+  if(A.state==='hold') return T('Unsaved changes','有未保存的更改')+' — '+A.message;
+  if(A.state==='pending'||A.dirty()) return T('Unsaved changes','有未保存的更改');
+  if(d.savedAt) return T('Saved','已保存')+' · '+rcpAgo(Date.now()-d.savedAt);
+  return '';
+}
+/* Written in place — the operator may be mid-word two fields away. */
+function rcpEdPaintState(){
+  const el=document.getElementById('mHeadStatus');
+  if(el&&SUBS.recipeone) el.innerHTML=SUBS.recipeone.status();
+  const bad=document.getElementById('mRcpEdErr');
+  if(bad){ const on=!!(rcpAuto&&rcpAuto.state==='error');
+    bad.style.display=on?'':'none'; bad.textContent=on?rcpEdStateText():''; }
+}
+/* ── The yield fields' hints, the desktop's batchHint()/servHint() ─────────── */
+const RCP_BATCH_OVER=0.05, RCP_SERV_SPAN=0.10;
+const rcpYBtn=(which,on,label)=>`<button type="button" class="btn2" style="width:auto;min-height:36px;padding:6px 12px;margin-top:6px;font-size:13px" onclick="APP.cmd('rcpYieldAuto','${which}',${on?1:0})">${escAttr(label)}</button>`;
+const rcpWarnSpan=t=>`<span style="color:var(--amber-ink)">${escAttr(t)}</span>`;
+function rcpBatchHint(d){
+  const sum=rcpEdSum(d), y=rcpEdYield(d), sep=' · ', g=n=>rcpNum(n);
+  if(d.batch_size_auto){
+    if(sum&&sum.ok){
+      const ex=sum.excludedLines?sep+T(`${sum.excludedLines} left out of the batch`,`${sum.excludedLines} 项不计入产出`):'';
+      return escAttr(T('Auto','自动')+sep+T(`${sum.countedLines} ingredient line${sum.countedLines===1?'':'s'} added up`,`按 ${sum.countedLines} 项原料合计`)+ex)
+        +'<br>'+rcpYBtn('batch',0,T('Type it myself','手动填写'));
+    }
+    const blocked=(sum&&sum.blockingLines)||[];
+    if(blocked.length){
+      const names=blocked.slice(0,3).map(b=>`${b.name||'?'} (${b.unit||'—'})`).join(', ');
+      const more=blocked.length>3?` +${blocked.length-3}`:'';
+      return rcpWarnSpan(T(`Can't add these up: ${names}${more} — only grams can be weighed together. `
+          +`Change the line's unit, or type the batch size yourself.`,
+        `以下原料无法按克合计:${names}${more} —— 仅可合计以克计量的原料。`
+          +`请修改该条的单位,或手动填写批量大小。`))+'<br>'+rcpYBtn('batch',0,T('Type it myself','手动填写'));
+    }
+    return escAttr(T('Auto — add ingredient lines and this fills in.','自动 —— 添加原料后自动填写。'))
+      +'<br>'+rcpYBtn('batch',0,T('Type it myself','手动填写'));
+  }
+  const offer=(sum&&sum.ok)?'<br>'+rcpYBtn('batch',1,T(`Use the ingredient total (${g(sum.grams)} g)`,`按原料合计填写(${g(sum.grams)} 克)`)):'';
+  const typed=y?y.batchSize:(Number(d.batch_size)||0);
+  const oversize=!!(sum&&sum.ok&&sum.grams>0&&typed>sum.grams*(1+RCP_BATCH_OVER));
+  return (oversize
+    ? rcpWarnSpan(T(`Typed ${g(typed)} g — bigger than the ingredient total (${g(sum.grams)} g). `
+        +`Cost per gram divides by ${g(typed)} g.`,
+      `手动填写 ${g(typed)} 克,大于原料合计 ${g(sum.grams)} 克。`+`每克成本按 ${g(typed)} 克折算。`))
+    : escAttr(T('Total grams the whole batch makes. Needed to work out cost per gram.','整批的总克数,用于折算每克成本。')))+offer;
+}
+function rcpServHint(d){
+  const y=rcpEdYield(d), sep=' · ', g=n=>rcpNum(n);
+  const batch=y?y.batchSize:(Number(d.batch_size)||0), size=y?y.servingSize:(Number(d.serving_size)||0);
+  if(d.servings_auto){
+    if(batch>0&&size>0){
+      if(!(y&&y.servings>0)) return rcpWarnSpan(T(`One serving (${g(size)} g) is bigger than the whole batch (${g(batch)} g).`,
+          `每份 ${g(size)} 克大于整批 ${g(batch)} 克。`))+'<br>'+rcpYBtn('servings',0,T('Type it myself','手动填写'));
+      const left=y.servingsLeftover>0?sep+T(`${g(y.servingsLeftover)} g left over`,`剩余 ${g(y.servingsLeftover)} 克`):'';
+      return escAttr(T('Auto','自动')+sep+`${g(batch)} g ÷ ${g(size)} g`+left)+'<br>'+rcpYBtn('servings',0,T('Type it myself','手动填写'));
+    }
+    return escAttr(T('Auto — fill in a serving size and this works itself out.','自动 —— 填写每份克数后自动算出。'))
+      +'<br>'+rcpYBtn('servings',0,T('Type it myself','手动填写'));
+  }
+  const canDerive=batch>0&&size>0;
+  const n=canDerive?Math.floor(Number((batch/size).toFixed(6))):0;
+  const offer=canDerive?'<br>'+rcpYBtn('servings',1,T(`Work it out (${n})`,`自动算出(${n})`)):'';
+  const sv=y?y.servings:(Number(d.servings)||0);
+  const claimed=(sv>0&&size>0)?sv*size:0;
+  const adrift=claimed>0&&batch>0&&Math.abs(claimed-batch)/batch>RCP_SERV_SPAN;
+  return (adrift
+    ? rcpWarnSpan(T(`${sv} × ${g(size)} g = ${g(claimed)} g — the batch is ${g(batch)} g.`,
+        `${sv} 份 × ${g(size)} 克 = ${g(claimed)} 克 —— 整批 ${g(batch)} 克。`))
+    : escAttr(T('Needed to work out cost per serving.','用于折算每份成本。')))+offer;
+}
+/* The yield fields and their hints, refreshed in place after a keystroke
+   anywhere that moves them — a quantity, a unit, the serving size. */
+function rcpEdPatch(){
+  const d=rcpEditing(); if(!d) return;
+  const y=rcpEdYield(d);
+  const put=(id,v)=>{ const el=document.getElementById(id); if(el&&el.value!==v) el.value=v; };
+  if(y&&d.batch_size_auto) put('mRcpF-batch_size', y.batchSize>0?String(y.batchSize):'');
+  if(y&&d.servings_auto) put('mRcpF-servings', y.servings>0?String(y.servings):'');
+  const h1=document.getElementById('mRcpYB'); if(h1) h1.innerHTML=rcpBatchHint(d);
+  const h2=document.getElementById('mRcpYS'); if(h2) h2.innerHTML=rcpServHint(d);
+}
+/* ── The editor ────────────────────────────────────────────────────────────── */
+const rcpLbl=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
+const rcpHint=(t,id)=>`<div${id?` id="${id}"`:''} style="font-size:12.5px;line-height:1.5;color:var(--text-secondary);margin-top:6px">${t}</div>`;
+const rcpIn=(k,v,attrs)=>`<input id="mRcpF-${k}" value="${escAttr(v)}" style="width:100%" ${attrs||''} oninput="APP.cmd('rcpEdSet','${k}',this.value)">`;
+const rcpSel=(k,v,opts)=>`<select id="mRcpF-${k}" style="width:100%" onchange="APP.cmd('rcpEdSet','${k}',this.value)">${opts.map(([ov,lab])=>
+  `<option value="${escAttr(ov)}"${String(v)===String(ov)?' selected':''}>${escAttr(lab)}</option>`).join('')}</select>`;
+function rcpEdDetailsHtml(d){
+  const y=rcpEdYield(d);
+  const cats=(state.rcp.cats||[]).slice();
+  /* The stored category is always an option, even when the category list did
+     not load — a select that cannot show the stored value shows its first
+     option instead, and the next save would clear the category. */
+  if(d.category&&cats.indexOf(d.category)===-1) cats.unshift(d.category);
+  const bVal=(d.batch_size_auto&&y)?(y.batchSize>0?String(y.batchSize):''):d.batch_size;
+  const sVal=(d.servings_auto&&y)?(y.servings>0?String(y.servings):''):d.servings;
+  const ro=on=>on?'readonly style="width:100%;opacity:.7"':'';
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    <label>${rcpLbl(T('Name (English)','名称(英文)'))}${rcpIn('name_en',d.name_en,'maxlength="120"')}</label>
+    <label>${rcpLbl(T('Name (中文)','名称(中文)'))}${rcpIn('name_cn',d.name_cn,'maxlength="120"')}</label>
+    <div><label>${rcpLbl(T('SKU','货号'))}${rcpIn('sku',d.sku,'maxlength="60"')}</label>
+      ${rcpHint(escAttr(T('Kept forever, even after archiving.','归档后仍永久保留。')))}</div>
+    <label>${rcpLbl(T('Category','分类'))}${rcpSel('category',d.category,[['',T('None','无')]].concat(cats.map(c=>[c,c])))}</label>
+    <div><label>${rcpLbl(T('Type','类型'))}${rcpSel('recipe_type',d.recipe_type,[['made',T('Made','自制')],['repacked',T('Repacked','分装')]])}</label>
+      ${rcpHint(escAttr(T('Made here, or bulk bought in and repacked. Filing only — it changes nothing about cost.',
+        '自制,或整批采购后分装。仅用于归类 —— 不影响成本。')))}</div>
+    <div><label>${rcpLbl(T('Batch size (g)','批量大小(克)'))}<input id="mRcpF-batch_size" inputmode="decimal" value="${escAttr(bVal)}"
+        ${d.batch_size_auto?ro(true):'style="width:100%"'} oninput="APP.cmd('rcpEdSet','batch_size',this.value)"></label>
+      ${rcpHint(rcpBatchHint(d),'mRcpYB')}</div>
+    <div><label>${rcpLbl(T('Servings','份数'))}<input id="mRcpF-servings" inputmode="numeric" value="${escAttr(sVal)}"
+        ${d.servings_auto?ro(true):'style="width:100%"'} oninput="APP.cmd('rcpEdSet','servings',this.value)"></label>
+      ${rcpHint(rcpServHint(d),'mRcpYS')}</div>
+    <div><label>${rcpLbl(T('Serving size (g)','每份克数'))}${rcpIn('serving_size',d.serving_size,'inputmode="decimal"')}</label>
+      ${rcpHint(escAttr(T('How much one serving weighs. With this filled in, the serving count works itself out.',
+        '每份的克数。填写后,份数会自动算出。')))}</div>
+    <div>${rcpLbl(T('Shelf life','保质期'))}<div style="display:flex;gap:8px">
+      <input id="mRcpF-shelf_n" inputmode="numeric" value="${escAttr(d.shelf_n)}" style="flex:1;min-width:0" oninput="APP.cmd('rcpEdSet','shelf_n',this.value)">
+      <select id="mRcpF-shelf_u" style="flex:1;min-width:0" onchange="APP.cmd('rcpEdSet','shelf_u',this.value)">${RCP_SHELF.map(([v,en,zh])=>
+        `<option value="${v}"${d.shelf_u===v?' selected':''}>${T(en,zh)}</option>`).join('')}</select></div></div>
+    <label>${rcpLbl(T('Storage','储存方式'))}${rcpSel('storage',d.storage,[['',T('None','无')]].concat(Object.keys(RCP_STORAGE).map(k=>[k,T(...RCP_STORAGE[k])])))}</label>
+    <label>${rcpLbl(T('Notes','备注'))}<textarea id="mRcpF-notes" style="width:100%;min-height:96px" oninput="APP.cmd('rcpEdSet','notes',this.value)">${escAttr(d.notes)}</textarea></label>
+  </div>`;
+}
+function rcpEdLinesHtml(d){
+  const unitOpts=u=>RCP_UNITS.concat(u&&RCP_UNITS.indexOf(u)===-1?[u]:[]).map(x=>
+    `<option value="${escAttr(x)}"${x===u?' selected':''}>${escAttr(x)}</option>`).join('');
+  const n=d.lines.length;
+  const cards=d.lines.map((l,i)=>{
+    const bad=rcpUnitMismatch(l), sku=rcpLineSku(l), other=rcpLineOther(l);
+    return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:flex-start;gap:6px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding-top:4px">
+          <span style="display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px"><span style="font-size:15px;font-weight:500">${escAttr(rcpLineName(l))}</span>
+            ${bad?pill('restock',T('UNIT MISMATCH','单位不符')):''}</span>
+          ${(sku||other)?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr([sku,other].filter(Boolean).join(' · '))}</span>`:''}
+          ${l.ingredient_id==null?`<span style="font-size:12.5px;color:var(--amber-ink)">${T('material deleted','物料已删除')}</span>`:''}
+        </span>
+        <button class="iconbtn" style="width:38px;height:38px" aria-label="${T('Move up','上移')}" ${i?'':'disabled'} onclick="APP.cmd('rcpLineMove',${i},-1)">${ic('chevron-up',18)}</button>
+        <button class="iconbtn" style="width:38px;height:38px" aria-label="${T('Move down','下移')}" ${i<n-1?'':'disabled'} onclick="APP.cmd('rcpLineMove',${i},1)">${ic('chevron-down',18)}</button>
+        <button class="iconbtn" style="width:38px;height:38px;color:var(--brick-ink)" aria-label="${T('Remove','移除')}" onclick="APP.cmd('rcpLineRm',${i})">${ic('x',18)}</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input inputmode="decimal" value="${escAttr(l.qty)}" placeholder="${T('qty','数量')}" style="flex:1;min-width:0" oninput="APP.cmd('rcpLineSet',${i},'qty',this.value)">
+        <select style="width:112px;flex:none" onchange="APP.cmd('rcpLineUnit',${i},this.value)">${unitOpts(l.unit||'g')}</select>
+      </div>
+      <input value="${escAttr(l.notes||'')}" placeholder="${T('Note','备注')}" style="width:100%" oninput="APP.cmd('rcpLineSet',${i},'notes',this.value)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:13.5px;color:var(--text-secondary)">${T('Counts toward the batch weight','计入批量重量')}</span>
+        ${toggle(rcpInYield(l), `APP.cmd('rcpLineYield',${i})`)}
+      </div>
+      ${bad?`<span style="font-size:12.5px;line-height:1.5;color:var(--amber-ink)">${escAttr(rcpMismatchText(l))}</span>`:''}
+    </div>`;
+  }).join('');
+  const r=state.rcp;
+  return `${cards||`<div style="padding:18px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No ingredients yet.','暂无原料。')}</div>`}
+    <div style="position:relative">
+      <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+      ${searchBox(`<input id="mRcpPickQ" inputmode="search" value="${escAttr(r.pickQ)}" style="padding-left:42px;width:100%"
+        placeholder="${T('Search materials to add…','搜索要添加的物料…')}" oninput="APP.cmd('rcpPickQ',this.value)">`,'mRcpPickClr',!!r.pickQ)}</div>
+    <div id="mRcpPickRes">${rcpPickHtml()}</div>`;
+}
+/* The picker's answer — GET /materials?for_recipe=1, the desktop's own query
+   (packaging-kind materials never offered). No rate beside a candidate: that is
+   money, and this step draws none. */
+function rcpPickHtml(){
+  const r=state.rcp;
+  if(!String(r.pickQ||'').trim()) return '';
+  if(r.pickErr) return `<div style="padding:12px 4px;font-size:14px;color:var(--brick-ink)">${r.pickErr}</div>`;
+  if(!r.pickRows) return `<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!r.pickRows.length) return `<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('Nothing matches','没有匹配项')}</div>`;
+  return `<div class="list">${r.pickRows.slice(0,20).map((m,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('rcpPickAdd',${Number(m.id)})" style="min-height:52px;align-items:center">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px">${escAttr(rcpName(m))}</span>
+        ${(m.sku||rcpOther(m))?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr([m.sku,rcpOther(m)].filter(Boolean).join(' · '))}</span>`:''}</span>
+      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${escAttr(m.unit||'')}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('plus',18)}</span></button>`).join('')}</div>`;
+}
+function rcpEdStepsHtml(d){
+  const n=d.steps.length;
+  const cards=d.steps.map((st,i)=>`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="num" style="flex:none;width:26px;height:26px;border-radius:8px;background:var(--surface-raised);color:var(--text-secondary);
+          display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${i+1}</span>
+        <span style="flex:1"></span>
+        <button class="iconbtn" style="width:38px;height:38px" aria-label="${T('Move up','上移')}" ${i?'':'disabled'} onclick="APP.cmd('rcpStepMove',${i},-1)">${ic('chevron-up',18)}</button>
+        <button class="iconbtn" style="width:38px;height:38px" aria-label="${T('Move down','下移')}" ${i<n-1?'':'disabled'} onclick="APP.cmd('rcpStepMove',${i},1)">${ic('chevron-down',18)}</button>
+        <button class="iconbtn" style="width:38px;height:38px;color:var(--brick-ink)" aria-label="${T('Remove','移除')}" onclick="APP.cmd('rcpStepRm',${i})">${ic('x',18)}</button>
+      </div>
+      <input value="${escAttr(st.name)}" placeholder="${T('Step name (optional)','步骤名称(可选)')}" style="width:100%" oninput="APP.cmd('rcpStepSet',${i},'name',this.value)">
+      <textarea placeholder="${T('Instructions','操作说明')}" style="width:100%;min-height:84px" oninput="APP.cmd('rcpStepSet',${i},'instructions',this.value)">${escAttr(st.instructions)}</textarea>
+    </div>`).join('');
+  return `${cards||`<div style="padding:18px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No steps yet.','暂无步骤。')}</div>`}
+    <button class="btn2" style="width:100%" onclick="APP.cmd('rcpStepAdd')">${ic('plus',18)} ${T('Add step','添加步骤')}</button>`;
+}
+function rcpEditorHtml(d){
+  const r=state.rcp;
+  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
+    ${[['ingredients','Ingredients','原料',d.lines.length],['steps','Steps','步骤',d.steps.length],['details','Details','基本信息',0]].map(([k,en,zh,n])=>{
+      const on=r.tab===k;
+      return `<button onclick="APP.cmd('rcpTab','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
+        font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
+        box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}${n?` <span class="num" style="font-size:12px;opacity:.7">${n}</span>`:''}</button>`;
+    }).join('')}</div>`;
+  const body=r.tab==='details'?rcpEdDetailsHtml(d):(r.tab==='steps'?rcpEdStepsHtml(d):rcpEdLinesHtml(d));
+  const err=!!(rcpAuto&&rcpAuto.state==='error');
+  /* A refusal renders where the operator is looking and stays until the next
+     save clears it — the SKU another recipe already has, a line that would make
+     the recipe depend on itself. */
+  return `<div id="mRcpEdErr" style="${err?'':'display:none;'}margin:12px 16px 0;padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${err?escAttr(rcpEdStateText()):''}</div>`
+    + strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">${body}
+      ${d.id!=null?`<button class="btn2" style="width:100%" onclick="APP.cmd('rcpHistory')">${T('Version history','历史版本')}</button>`:''}</div>`;
+}
+/* ── Commands ─────────────────────────────────────────────────────────────── */
+reg('rcpEdit', ()=>{
+  const rec=rcpRec(); if(!rec||!mCan('recipes:edit')) return;
+  const r=state.rcp;
+  r.ed=rcpDraftFrom(rec, Number(rec.id)); r.pickQ=''; r.pickRows=null; r.pickErr=null;
+  rcpEdStart(r.ed); render();
+});
+/* NEW RECIPE: an empty draft on a record frame of its own. It is created by
+   the first save that carries an English name (POST), and from then on it is
+   that recipe — the frame takes its id, and every later save is a PUT. Both
+   yield figures start derived, the desktop's rcpRecordNew(): nobody should
+   have to add up their own lines. */
+reg('rcpNew', ()=>{
+  if(!mCan('recipes:edit')) return;
+  const r=state.rcp;
+  push('recipeone');
+  const t=state.stack[state.stack.length-1];
+  if(!t||t.route!=='recipeone') return;
+  t.isNew=true; t.rid=null;
+  r.ed=rcpDraftFrom({batch_size_auto:1, servings_auto:1, recipe_type:'made'}, 'new');
+  r.tab='details'; r.pickQ=''; r.pickRows=null; r.pickErr=null;
+  rcpEdStart(r.ed); render();
+});
+/* Done: whatever is still waiting goes now — as a deliberate save, which files
+   its own restore point, the desktop's Save — and the record goes back to how
+   it reads. A draft the server would not take (no English name, a refusal)
+   stays open with the reason on it. */
+reg('rcpEdDone', ()=>{
+  const d=rcpEditing(), A=rcpAuto; if(!d||!A) return;
+  Promise.resolve(A.flush(A.dirty()?'manual':null)).then(()=>{
+    if(A.state==='hold'||A.state==='error'||A.dirty()){ rcpEdPaintState(); return; }
+    const r=state.rcp;
+    rcpEdEnd(); r.recTried=false; r.tried=false; render();
+  });
+});
+reg('rcpEdSet', (k,v)=>{
+  const d=rcpEditing(); if(!d) return;
+  const key=String(k);
+  if(['name_en','name_cn','sku','category','recipe_type','batch_size','servings','serving_size','shelf_n','shelf_u','storage','notes'].indexOf(key)===-1) return;
+  d[key]=String(v==null?'':v);
+  if(key==='shelf_n'||key==='shelf_u') d.shelf_touched=true;
+  if(rcpAuto) rcpAuto.touch();
+  rcpEdPatch();
+});
+/* Take the derivation over, or hand it back. Taking it over keeps the figure
+   the field was showing, as the desktop's unlocked input does. */
+reg('rcpYieldAuto', (which,on)=>{
+  const d=rcpEditing(); if(!d) return;
+  const k=which==='batch'?'batch_size':'servings';
+  if(!Number(on)){ const y=rcpEdYield(d);
+    if(y){ const v=which==='batch'?y.batchSize:y.servings; if(v>0) d[k]=String(v); } }
+  d[k+'_auto']=Number(on)?1:0;
+  if(rcpAuto) rcpAuto.touch(); render();
+});
+reg('rcpLineSet', (i,k,v)=>{
+  const d=rcpEditing(), l=d&&d.lines[Number(i)]; if(!l||(k!=='qty'&&k!=='notes')) return;
+  l[k]=String(v==null?'':v);
+  if(rcpAuto) rcpAuto.touch();
+  rcpEdPatch();
+});
+reg('rcpLineUnit', (i,v)=>{ const d=rcpEditing(), l=d&&d.lines[Number(i)]; if(!l) return;
+  l.unit=String(v||'g'); if(rcpAuto) rcpAuto.touch(); render(); });
+reg('rcpLineYield', i=>{ const d=rcpEditing(), l=d&&d.lines[Number(i)]; if(!l) return;
+  l.in_yield=rcpInYield(l)?0:1; if(rcpAuto) rcpAuto.touch(); render(); });
+reg('rcpLineMove', (i,dir)=>{ const d=rcpEditing(); if(!d) return;
+  const a=Number(i), b=a+Number(dir); if(b<0||b>=d.lines.length) return;
+  const [m]=d.lines.splice(a,1); d.lines.splice(b,0,m); if(rcpAuto) rcpAuto.touch(); render(); });
+reg('rcpLineRm', i=>{ const d=rcpEditing(); if(!d||!d.lines[Number(i)]) return;
+  d.lines.splice(Number(i),1); if(rcpAuto) rcpAuto.touch(); render(); });
+reg('rcpStepSet', (i,k,v)=>{ const d=rcpEditing(), st=d&&d.steps[Number(i)]; if(!st||(k!=='name'&&k!=='instructions')) return;
+  st[k]=String(v==null?'':v); if(rcpAuto) rcpAuto.touch(); rcpEdPatch(); });
+reg('rcpStepAdd', ()=>{ const d=rcpEditing(); if(!d) return;
+  d.steps.push({name:'', instructions:''}); if(rcpAuto) rcpAuto.touch(); render(); });
+reg('rcpStepMove', (i,dir)=>{ const d=rcpEditing(); if(!d) return;
+  const a=Number(i), b=a+Number(dir); if(b<0||b>=d.steps.length) return;
+  const [m]=d.steps.splice(a,1); d.steps.splice(b,0,m); if(rcpAuto) rcpAuto.touch(); render(); });
+reg('rcpStepRm', i=>{ const d=rcpEditing(); if(!d||!d.steps[Number(i)]) return;
+  d.steps.splice(Number(i),1); if(rcpAuto) rcpAuto.touch(); render(); });
+/* The picker searches as it is typed into, patching its own results only — the
+   field keeps its keyboard. Last asked wins. A material already on the recipe
+   is not offered twice, the desktop's filter. */
+reg('rcpPickQ', v=>{
+  const r=state.rcp, el=document.getElementById('mRcpPickQ');
+  r.pickQ=String(v||''); state.focus={id:'mRcpPickQ',pos:el?el.selectionStart:null};
+  searchClearShow('mRcpPickClr', !!r.pickQ);
+  clearTimeout(rcpPickTimer);
+  const q=r.pickQ.trim();
+  r.pickRows=null; r.pickErr=null;
+  const paint=()=>{ const b=document.getElementById('mRcpPickRes'); if(b) b.innerHTML=rcpPickHtml(); };
+  paint();
+  if(!q) return;
+  const seq=++r.pickSeq;
+  rcpPickTimer=setTimeout(()=>{
+    api('/api/retail-admin/materials?for_recipe=1&search='+encodeURIComponent(q)).then(rows=>{
+      if(seq!==r.pickSeq) return;
+      const d=rcpEditing(), on=new Set(((d&&d.lines)||[]).map(l=>l.ingredient_id));
+      r.pickRows=(Array.isArray(rows)?rows:[]).filter(m=>!on.has(m.id)); paint();
+    }).catch(e=>{ if(seq!==r.pickSeq||String(e.message)==='auth') return;
+      r.pickErr=E('Could not load materials','无法加载物料'); paint(); });
+  }, 220);
+});
+reg('rcpPickAdd', id=>{
+  const r=state.rcp, d=rcpEditing(); if(!d) return;
+  const m=(r.pickRows||[]).find(x=>Number(x.id)===Number(id)); if(!m) return;
+  d.lines.push({ingredient_id:m.id, name_en:m.name_en, name_cn:m.name_cn, sku:m.sku,
+    qty:'', unit:m.unit||'g', in_yield:1, notes:'', substitutes:null,
+    master_unit:m.unit, master_free:m.free_by_design, master_name_en:m.name_en, master_sku:m.sku});
+  r.pickQ=''; r.pickRows=null; r.pickErr=null;
+  if(rcpAuto) rcpAuto.touch(); render();
+});
+/* ── Version history, and putting one back ────────────────────────────────
+   The half of autosave that lets a change be taken back. What is on screen goes
+   to the server first, so the "now" row really is now. Anyone who can read the
+   recipe can read its history; putting a version back is an edit and is offered
+   only with `recipes:edit` (the server gates it the same way). */
+const RCP_HIST_SOURCE={manual:['saved','保存'], auto:['autosaved','自动保存'], restore:['restored an older version','恢复了旧版本']};
+reg('rcpHistory', ()=>{
+  const id=Number(rcpCurId()); if(!id) return;
+  const d=rcpEditing(), rec=rcpRec()||{};
+  Promise.resolve(d&&rcpAuto?rcpAuto.flush():null)
+    .then(()=>api('/api/retail-admin/recipes/'+id+'/versions')).then(rows=>{
+      const list=Array.isArray(rows)?rows:[];
+      if(!list.length){ showToast(T('No earlier versions yet — this recipe has not been changed since it was created.',
+        '暂无更早的版本 —— 该食谱自创建以来未被修改。')); return; }
+      const lc=(d?d.lines:(rec.ingredients||[])).length, sc=(d?d.steps:(rec.steps||[])).length;
+      const items=[{id:'now', label:T('Now — the live recipe','当前 —— 正在使用的版本'), lc, sc}]
+        .concat(list.map(v=>({id:v.id, at:v.created_at, until:true, by:v.actor||T('unknown','未知'),
+          lc:Number(v.line_count)||0, sc:Number(v.step_count)||0, source:v.source})));
+      liveHistorySheet(items,
+        v=>{ const w=RCP_HIST_SOURCE[v.source];
+          return [T(`${v.lc} ingredients · ${v.sc} steps`, `${v.lc} 项原料 · ${v.sc} 个步骤`), w?T(w[0],w[1]):''].filter(Boolean).join(' · '); },
+        mCan('recipes:edit')?(v=>rcpRestore(id,v)):null,
+        {confirmTitle:T('Restore this version?','恢复该版本?'), confirmLabel:T('Restore','恢复'),
+         failText:T('Restore failed','恢复失败')+': ',
+         body:v=>{ const w=tdWhen(v.at,'dateTime',_tdL());
+           return escAttr(T(`The recipe goes back to how it stood until ${w} — its details, `
+             +`ingredient lines, steps and cost inputs, all four. What is on the record now is filed `
+             +`first, so this can itself be undone.`,
+             `该食谱将恢复为直到 ${w} 时的内容 —— 基本信息、原料明细、步骤与成本输入,四者一并恢复。`
+             +`当前内容会先被存档,因此本次恢复同样可以撤销。`)); }});
+    }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load history','无法加载修改记录')); });
+});
+/* THE RESTORE IS THE AUTHORITY FOR THE NEXT MOMENT: the autosave is stopped
+   before the write so the draft on screen cannot be saved over the state being
+   put back, and the editor restarts from the server's copy afterwards. `held`
+   names what could not go back — today only a SKU another recipe has taken —
+   because a silent partial restore is a lie about what the record holds. */
+function rcpRestore(id, v){
+  const r=state.rcp, prev=rcpAuto;
+  rcpAuto=null; if(prev) prev.stop();
+  return apiWrite('/api/retail-admin/recipes/'+Number(id)+'/versions/'+Number(v.id)+'/restore', {}, 'POST').then(j=>{
+    const held=(j&&j.held)||[];
+    r.tried=false;
+    return api('/api/retail-admin/recipes/'+Number(id)).then(fresh=>{
+      if(fresh&&r.recFor===Number(id)) r.rec=fresh;
+      if(r.ed&&r.ed.forId===Number(id)&&fresh){ r.ed=rcpDraftFrom(fresh, Number(id)); rcpEdStart(r.ed); r.ed.savedAt=Date.now(); }
+      render();
+      return held.length
+        ? T(`Restored — except ${held.join(', ')}, which another recipe now owns.`, `已恢复 —— 但 ${held.join('、')} 现已被其他食谱占用,未一并恢复。`)
+        : T('Restored','已恢复');
+    });
+  }).catch(e=>{ if(r.ed&&!rcpAuto) rcpEdStart(r.ed); throw e; });
+}
+/* ── Leaving ───────────────────────────────────────────────────────────────
+   The app's Back asks only when the work genuinely cannot be saved — no
+   English name, or a refusal — and says why, the desktop's leaveGuard. Every
+   other leave (Back that can save, the phone's edge swipe, the app going to
+   the background) puts the work on the wire on the way out: the engine starts
+   the request in the same task, so the frame can come down behind it. */
+function rcpLeaveNow(discard){
+  const r=state.rcp;
+  if(!r.ed||r.ed.forId!==rcpCurId()) return;
+  if(rcpAuto){ if(discard) rcpAuto.stop(); else rcpAuto.flush(); }
+  rcpEdEnd(); r.tried=false; r.recTried=false;
+}
+function rcpMayLeave(){
+  const d=rcpEditing(), A=rcpAuto;
+  if(!d) return true;
+  if(A&&(A.state==='hold'||A.state==='error')&&A.dirty()){
+    const why=A.state==='hold'?A.message:tmOneLang(A.message||'');
+    state.ask={title:T('Leave without saving?','未保存就离开?'),
+      body:escAttr(T(`This recipe could not be saved — ${why}. Your changes will be lost.`,
+        `该食谱无法保存 —— ${why}。你的更改将丢失。`)),
+      confirmLabel:T('Leave','离开'), danger:true,
+      run:()=>{ rcpLeaveNow(true); forgetScroll(); state.stack.pop(); render(); }};
+    render();
+    return false;
+  }
+  rcpLeaveNow(false);
+  return true;
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden'&&rcpAuto&&state.rcp.ed) rcpAuto.flush();
+});
 /* ── Making one (§167) ────────────────────────────────────────────────────
    Scale the batch, tick things off as you gather them, then work the steps one
    screen at a time. NOTHING HERE IS WRITTEN. The scale and the ticks are facts
@@ -18233,20 +18847,30 @@ reg('editCustNote', ()=>custLiveOpen(T('Note','备注'),
   [{id:'note',label:T('Note','备注'),multiline:true,placeholder:T('Anything your team should know','团队需要知道的事')}]));
 /* VERSION HISTORY as a sheet, for any live record: newest first, the current
    one first of all; tapping an older one asks, then `restore(v)` writes it —
-   filed as a restore, so it can be taken back the same way. */
-function liveHistorySheet(list, sub, restore){
-  const top=v=>[v.isBaseline?T('Original','原始版本'):v.note==='undo'?T('Undo','撤销'):v.note==='restore'?T('Restore','还原'):'',
-    tdWhen(v.at,'dateTime',_tdL()), v.by?escAttr(v.by):''].filter(Boolean).join(' · ');
+   filed as a restore, so it can be taken back the same way.
+   §300 (the Recipes record) added what a recipe's history needs and nothing a
+   caller that passes none of it will notice: a row may carry its own `label`
+   (the recipe's "Now — the live recipe" row) and `until` (a recipe version is
+   the state a save DISPLACED, so its time is when it stopped being current);
+   `restore` may be null, for a reader who may look and not put back; `opts`
+   carries the record's own confirm words and failure line; and a `restore`
+   that resolves to a sentence is said instead of the stock one — a restore
+   that could not put everything back must say what it held. */
+function liveHistorySheet(list, sub, restore, opts){
+  const o=opts||{};
+  const top=v=>v.label?v.label:[v.isBaseline?T('Original','原始版本'):v.note==='undo'?T('Undo','撤销'):v.note==='restore'?T('Restore','还原'):'',
+    (v.until?T('until ','直到 '):'')+tdWhen(v.at,'dateTime',_tdL()), v.by?escAttr(v.by):''].filter(Boolean).join(' · ');
   state.ask={title:T('Version history','历史版本'),
     options:list.map((v,i)=>{ const w=sub(v);
-      return {key:String(v.id),label:(i===0?T('Current','当前')+' · ':'')+top(v)
+      return {key:String(v.id),label:(i===0&&!v.label?T('Current','当前')+' · ':'')+top(v)
         +(w?`<div style="font-size:13px;color:var(--text-secondary);margin-top:3px">${escAttr(w)}</div>`:'')}; }),
     run:vid=>{
       const v=list.find(x=>String(x.id)===String(vid));
-      if(!v||v===list[0]) return;
-      state.ask={title:T('Restore this version?','还原此版本?'),confirmLabel:T('Restore','还原'),
-        run:()=>{ Promise.resolve(restore(v)).then(()=>showToast(T('Restored to the chosen version.','已还原到所选版本。')))
-          .catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Save failed: ','保存失败:')+(e.message||'')); }); }};
+      if(!v||v===list[0]||!restore) return;
+      state.ask={title:o.confirmTitle||T('Restore this version?','还原此版本?'),confirmLabel:o.confirmLabel||T('Restore','还原'),
+        body:o.body?o.body(v):undefined,
+        run:()=>{ Promise.resolve(restore(v)).then(m=>showToast(typeof m==='string'&&m?m:T('Restored to the chosen version.','已还原到所选版本。')))
+          .catch(e=>{ if(String(e.message)==='auth') return; showToast((o.failText||T('Save failed: ','保存失败:'))+(e.message||'')); }); }};
       render();
     }};
   render();
@@ -25225,7 +25849,11 @@ function layers(){
   // about to render anyway. One repaint per Back press.
   // forgetScroll() for the same reason pop() calls it: Back CLOSES this screen,
   // and the one underneath is the one with a place to go back to.
-  for(let i=0;i<state.stack.length;i++) L.push(()=>{ forgetScroll(); state.stack.pop(); });
+  /* A recipe being edited puts its work on the wire on the way out (§300 R2) —
+     the edge swipe cannot wait for an answer, the desktop's browser Back. */
+  for(let i=0;i<state.stack.length;i++) L.push(()=>{
+    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false);
+    forgetScroll(); state.stack.pop(); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
   // record is what opened the ORDER — a Recent orders row — the pair is stacked
@@ -25404,6 +26032,8 @@ function mUnsavedWork(){
     if(state.recvPo&&(rcvToSend().length||state.recvBusy)) return true;
     /* A role edit waiting on its pause or on the wire (§279). */
     if(tmAuto&&tmAuto.busy()) return true;
+    /* A recipe edit waiting on its pause or on the wire (§300 R2). */
+    if(rcpAuto&&rcpAuto.busy()) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
     const f=state.qs&&state.qs.inflight; for(const k in f) if(f[k]) return true;
   }catch(e){}

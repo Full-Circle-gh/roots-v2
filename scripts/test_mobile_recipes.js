@@ -247,9 +247,14 @@ check('a failed load says so, and does not read as an empty catalogue', () => {
   assert.ok(errAt !== -1 && errAt < emptyAt, 'the error branch must come before the empty state');
 });
 
-check('an empty catalogue points at the desktop rather than offering a create', () => {
+// §300 R2: a recipe is written on the phone now. The create is the list's head
+// button, drawn only for `recipes:edit`, and the empty list no longer sends
+// anybody to the desktop.
+check('an empty catalogue offers the create to those who may, and to nobody else', () => {
   assert.match(BODY, /No recipes yet','暂无食谱'/);
-  assert.doesNotMatch(BODY, /cta|APP\.cmd\('rcpNew'/, 'there is no create on this screen');
+  assert.doesNotMatch(BODY, /written on desktop|电脑端创建/);
+  const sub = slice('SUBS.recipes={', 'SUBS.recipeone={');
+  assert.match(sub, /cta:\(\)=>mCan\('recipes:edit'\)\?`<button class="cta inhead" onclick="APP\.cmd\('rcpNew'\)">\$\{T\('New recipe','新建食谱'\)\}/);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -295,9 +300,12 @@ check('Back names what it came from', () => {
   assert.match(sub, /return \(t&&t\.back\)\?escAttr\(t\.back\):T\('Recipes','食谱'\); \}/);
 });
 
-check('both screens say where a recipe is actually edited', () => {
-  assert.match(BODY, /desktopNote\(\)/);
-  assert.match(RECORD, /desktopNote\(\)/);
+// Overturned by §300 R2: "Best edited on desktop" is no longer true of
+// either screen, so neither says it. The editor is behind the pencil.
+check('neither screen sends the reader to the desktop any more; the pencil is for recipes:edit', () => {
+  assert.doesNotMatch(codeOnly(BODY), /desktopNote\(\)/);
+  assert.doesNotMatch(codeOnly(RECORD), /desktopNote\(\)/);
+  assert.match(slice('SUBS.recipeone=', "reg('rcpSearch'"), /mCan\('recipes:edit'\)\?`<button class="iconbtn" aria-label="\$\{T\('Edit','编辑'\)\}" onclick="APP\.cmd\('rcpEdit'\)">/);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -429,7 +437,7 @@ check('offered only to somebody who could actually use it', () => {
 
 check('the way in is offered only when there is something to work through', () => {
   const sub = slice('SUBS.recipeone=', 'reg(\'rcpSearch\'');
-  assert.match(sub, /cta:\(\)=>\{ const rec=rcpRec\(\);/);
+  assert.match(sub, /const rec=rcpRec\(\);\s*if\(!rec\) return '';/);
   assert.match(sub, /ingredients\.length\)\|\|\(Array\.isArray\(rec\.steps\)&&rec\.steps\.length\)/);
 });
 
