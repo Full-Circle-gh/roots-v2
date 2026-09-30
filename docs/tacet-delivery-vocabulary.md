@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.226 · 2026-09-30 · §319 MATERIALS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP MATERIALS SCREEN.** See *Materials on the phone (§319)*.
+
+**v1.225 · 2026-09-30 · §317 REPORTS ON THE PHONE — ONE NOTE COMPOSED BY CLAUDE, EVERYTHING ELSE COPIED WHOLE FROM THE DESKTOP.** See *Reports on the phone (§317)*.
+
+**v1.224 · 2026-09-30 · §315 PURCHASING'S INVOICES ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Purchasing's invoices (发票) on the phone (§315)*.
+
 **v1.223 · 2026-09-30 · §314 发票 ISSUING ON THE PHONE — ONE CONFIRM TITLE COMPOSED BY CLAUDE, EVERYTHING ELSE COPIED WHOLE.** See *Issuing a 发票 from the phone's order sheet (§314)*.
 
 **v1.222 · 2026-09-30 · §313 THE PHONE'S RECEIVE EXTRAS — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Tracking, 发票 and returns on the phone's receive screen (§313)*.
@@ -9994,3 +10000,147 @@ Live candidates rejected: `edit · 修改` (the desktop's link text) names the
 control rather than what it does, and would have read "修改?" over a sheet that
 changes nothing but the status; `Undo · 撤销` is live on the phone but for
 dispatch, where it means something else.
+
+## Purchasing's invoices (发票) on the phone (§315)
+
+**One pair composed by Claude, 2026-09-30, under the 2026-09-06 amendment.**
+Operator register only (Rule 1): the Invoices tab on the phone's Purchasing
+screen and its sheets (`public/m.html`).
+
+| shipped | built from |
+|---|---|
+| `That is more than the line has left to invoice. · 超出该明细的待开票金额。` (a line allocated past its headroom) | **composed.** The desktop shows the server's raw `line N over-allocated`, which is English only and names a row id nobody can see. The English is built on the shape of the live `That is more than the line accepted. …` (the return refusal); `待开票` is this tab's own word for awaiting, and `超出` is the badge's live `超出发票` |
+
+**Copied whole from the desktop** (`16-purchasing.js`): `Invoices · 发票`;
+`By supplier · 按供应商`, `Recorded · 已登记`, `All months · 全部月份`,
+`Supplier, item or SKU · 供应商、产品或货号`; `Total purchases · 采购总额`,
+`Fully invoiced · 已开票`, `Partial · 部分开票`, `Awaiting · 待开票`,
+`No invoice · 不开发票`, `chase these · 需跟进`, `lines · 条明细`, `orders · 张采购单`;
+the off-chase strip (`Recorded, not counted above · 已登记发票，未计入上方`, its
+three reasons, `; also: · ；另有：`, `more · 个采购单`, `Re-match… · 重新匹配…`); the
+credit strip (`Returned after invoicing`, `credit due`, `ask the supplier for a credit note`,
+locked 2026-09-01); the reach chip's channel names and `Scan to reach them · 扫码联系`,
+`No QR on file · 暂无二维码`; the drill (`replaces · 替代`,
+`already invoiced · 已登记发票`, `also N other supplier(s) on this order · 本单还含 N 个其他供应商的明细`,
+`invoiced · 已开票`, `Mark whole order as no-invoice`, `Restore whole order to awaiting`,
+`Mark as no-invoice`, `Restore to awaiting`, `by whole-order mark · 由整单标记`,
+`Set supplier`, `Set supplier for this order`, `Add invoice`, `All invoiced`); the
+empty states (`No invoices yet`, its body, `Nothing matches those filters.`,
+`Nothing awaiting an invoice.`, `No invoices match those filters.`,
+`No invoices recorded yet.`); the ledger (`unallocated · 未分配`, `over · 超出`,
+`Edit · 编辑`, `Delete · 删除`) and the delete confirm; the 发票 sheet
+(`Add invoice`, `Edit invoice`, its subtitle, `Invoice no. · 发票号`, `Optional · 可选`,
+`Amount · 金额`, `Invoice date · 开票日期`, `Note · 备注`, `What it covers · 涵盖内容`,
+`Match to amount · 按金额匹配`, `open · 待开`, the two empty lines, `Allocated · 已分配`,
+`nothing left over · 正好`, `over the invoice · 超出发票`, `Save invoice`, `Save changes`,
+`Enter the invoice amount · 请输入发票金额`); Set supplier's sheet (its subtitle,
+`Choose a supplier · 请选择供应商`, `Lines to move`, `Tick all`, `Untick all`,
+`Nothing ticked`, `of · /`, `Tick at least one line`, the no-suppliers hint, the
+`unknown_supplier` sentence); Re-match's sheet (title, subtitle,
+`Orders to re-match`, `lines pair`, `can’t be paired — left alone`, `Show lines`,
+`Hide lines`, `matched on`, `SKU · 货号`, `name · 名称`, the stays-put line, the footnote,
+`Move · 移动`, `Moving… · 移动中…`, the moved / could-not-move sentences).
+
+**Copied whole, the tick dropped** (the phone's toasts carry none): `Saved`,
+`Invoice recorded · 发票已登记`, `Deleted · 已删除`, `Supplier set · 已设置供应商`, and
+the six no-invoice mark toasts.
+
+**Copied whole from elsewhere:** `Enter an amount first.`, `Choose a date first.`,
+`Choose a supplier first.`, `Add at least one line first.` (the desktop's error
+catalogue, `01-core.js`); `No supplier · 未指定供应商`, `Could not load this. · 无法加载。`,
+`Try again · 重试`, `Loading… · 加载中…`, `Saving… · 保存中…`, `Close · 关闭`,
+`That did not save. Nothing has changed — try again.` (the phone's own).
+
+**Live candidates rejected** for the composed pair: the server's
+`line N over-allocated` (English only, and it names an id); the badge's
+`over the invoice · 超出发票` (it is about the 发票's total, not a line's headroom).
+
+## Reports on the phone (§317)
+
+Operator register only (Rule 1): the phone admin's Trend screen (`public/m.html`,
+the §300 F5 block). Copied whole from the desktop's Reports
+(`public/retail-admin/03-dashboard.js` and its markup in
+`public/retail-admin.html`):
+
+- **The window and the store** — `Custom · 自定义`, `From · 从`, `To · 至`,
+  `Apply · 应用`, `Pick a date · 选日期` and `From is after to · 起始日期晚于结束日期`
+  exactly as Finance uses them (F1); `Store · 门店` and `All stores · 全部门店`
+  (the desktop's store select).
+- **The heatmap** — `Demand heatmap · 需求热力图`, `orders by hour · 按小时订单`,
+  `Busiest: <day> HH:00 · 最忙：<周x> HH:00` with the desktop's weekday names,
+  the day letters `S M T W T F S · 日 一 二 三 四 五 六`, `fewer · 少`, `more · 多`,
+  `No orders in range · 区间内无订单`.
+- **Retention** — `Retention · 留存`, `weighted, all cohorts · 加权，全部批次`,
+  `month 1 / 3 / 6 / 12 · 第1/3/6/12个月`, `Not enough history yet · 暂无足够留存数据`.
+- **The read and Ask** — `The read · 解读`, `written at … · 写于 …`,
+  `written from this period's numbers · 由本期数据生成`, the foot `Drawn from the
+  numbers in this report — nothing else. Refreshes with the range, at most twice
+  a day. · 内容仅依据本报表数据。随区间刷新，每天最多两次。`, `Reading the numbers… ·
+  正在读取数据…`, `Ask about your numbers · 问问你的数据`, `Ask · 提问`, the
+  placeholder `e.g. Why did the average order drop? · 例如：平均客单为什么下降？`,
+  the three suggested questions, `That's the day's questions used up — ask
+  again tomorrow. · 今天的提问次数已用完，明天再来。`, `That one didn’t go through.
+  Try again. · 这次没有成功，请再试一次。`.
+
+| Composed | Built from | Why |
+|---|---|---|
+| `Hover charts are on desktop. · 悬停图表在电脑端。` | the retired phone note `Hover charts, the cohort grid and the written read are on desktop. · 悬停图表、留存矩阵与文字解读在电脑端。`, cut to its first item | Two of the note's three items are on the phone now, so it would be wrong as it stood. The shortened note still tells the operator what only the desktop has. |
+
+Retired: `Hover charts, the cohort grid and the written read are on desktop. ·
+悬停图表、留存矩阵与文字解读在电脑端。` — no longer true.
+
+## Materials on the phone (§319)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone's
+Materials list and record (`public/m.html`). Every label is copied whole from
+the desktop Materials screen (`public/retail-admin/18-materials.js`), which
+already holds all of them, or is the phone's own live pair:
+
+- **The row and the list:** `Materials · 物料`, `Bought · 采购`, `Made · 自制`,
+  `All · 全部`, the kinds (`Food · 食品`, `Packaging · 包装`,
+  `Equipment · 设备`, `Retail · 零售`, `Other · 其他`), `Category · 分类`,
+  `All categories · 全部分类`, `Supplier · 供应商`, `All suppliers · 全部供应商`,
+  `Archived · 已归档`, `Search name or SKU · 搜索名称或货号`,
+  `Could not load materials · 无法加载物料`, `Nothing matches · 没有匹配项`,
+  `No materials yet · 暂无物料`, both empty sentences,
+  `N in Made → · 自制中有 N 条 →`, `Clear the filters · 清除筛选`,
+  `Add your first material · 新建第一条物料`, `New material · 新建物料`, and the
+  row-ceiling sentence with `materials / 条物料` (the desktop's
+  `tdShowTruncation` call), up to its first full stop, as the recipes list
+  uses it.
+- **The record:** `Identity · 基本信息`, `Kind · 类别`, `Name (English) · 名称(英文)`,
+  `Name (中文) · 名称(中文)`, `SKU · 货号` and its hint,
+  `Finance category · 财务分类`, `Units & cost · 单位与成本`,
+  `Recipe unit · 配方单位` and `Buy unit · 采购单位` with their hints,
+  `Packs per order · 每次采购包数`, `Buy price · 采购价` and its hint,
+  `Contents per pack · 每包内容量`, `Contents unit · 内容量单位` and its hint,
+  `Free by design (tap water, peel — never costed) · 按设计免费(自来水、果皮等 — 不计成本)`,
+  the cost line's four reasons, `Free by design · 按设计免费`,
+  `Cost per unit · 单位成本`, `Made by recipe: · 产出自食谱:`,
+  `archived · 已归档`, `Cost frozen at its last computed value. · 成本已冻结为最近一次计算的值。`
+  (with the recipes' own reason sentences), `Allergens · 过敏原` and its
+  example, `Notes · 备注`, `Cost history · 价格历史`,
+  `No price changes recorded. · 暂无价格变动记录。`, `Bought in · 采购记录`,
+  `Not on any purchase order yet. · 尚未出现在任何采购单中。`,
+  `Could not open that material · 无法打开该物料`.
+- **Supplier:** `Type to search your suppliers · 输入以搜索供应商`, the
+  not-in-the-book sentence, `New supplier · 新建供应商` and its sub-line,
+  `Name · 名称`, `e.g. Dry Fruit 果干 · 例如:Dry Fruit 果干`, `Add supplier · 添加`,
+  `Supplier added · 已添加供应商`, both "already" sentences,
+  `Could not add supplier · 添加供应商失败`.
+- **SKU:** the four advisory sentences (`Will be saved as … · 将自动生成为 …`,
+  the automatic-SKU-off line, `Matches this category's codes. · 符合此分类的编码规则。`,
+  `Saved as typed. … · 将按输入内容保存。…`).
+- **Saving and leaving:** `An English name is required · 英文名称必填`,
+  `Leave without saving? · 未保存就离开?`,
+  `Your changes to this material will be lost. · 你对该物料的更改将丢失。`,
+  `Leave · 离开`, the recipe editor's save line (R2), `Undo · 撤销` (the phone's).
+- **Archive:** `Archive this material? · 归档该物料?`, the used-by body,
+  `Archive anyway · 仍然归档`, the unused body, `Bring this material back? · 恢复该物料?`,
+  `Restore · 恢复`, `Archive · 归档`, `Archived · 已归档`, `Restored · 已恢复`,
+  `Failed · 操作失败`.
+
+**Live candidates rejected.** None needed. The mockup's `Name, SKU or supplier`
+search placeholder and its `4 without a price` status are not used: the first
+promises a search the server does not run (it searches name and SKU), and the
+second would be composed.

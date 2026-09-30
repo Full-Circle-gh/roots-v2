@@ -22170,3 +22170,306 @@ link and a number, a PDF or a photo, Mark issued, and un-issue.
    - the mapping's three derived values.
 
    It caught one defect while being written: both writes had gone out as POST, not PUT.
+
+## §315 — PURCHASING'S INVOICES (发票) COME TO THE PHONE
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P5 of the purchasing lane (survey build-order row 15). The phone had nothing
+of the desktop's Invoices tab. It now has all of it (`16-purchasing.js`,
+INVOICES) as a third tab on Purchasing's strip: the chase by supplier down to
+the order and the line, the 发票 already recorded, the no-invoice marks, Set
+supplier, the add and edit sheet with its allocation, Re-match, and the reach
+chip. There are no new server routes; every write is the desktop's request and
+body.
+
+1. **The tab is behind `purchasing:invoices` AND `purchasing:view`, and both fail
+   closed.** The first is the key every `/purchasing/*` write carries on the
+   server; the second because every figure on the screen is money. Before
+   capabilities are known there is no tab and no screen. The header button reads
+   *Add invoice* while the tab is open.
+2. **Organised around the chase, as on the desktop.** It shows *By supplier* and
+   *Recorded*, a month picker (months drawn from what came back, so it never
+   offers an empty one), and a server search. There are five figures: total
+   purchases, fully invoiced, partial, awaiting ("chase these") and no invoice.
+   Two strips follow. One names 发票 money that is recorded against an order that
+   has since stood down, with the orders and a *Re-match…*. The other shows the
+   credit due on returns made after invoicing, with the instruction to ask for a
+   credit note. Every figure is the server's (`lineStatus`); the screen adds
+   nothing up for itself.
+3. **A supplier opens to its orders and their lines.** Each order shows its date,
+   which kitchen order it replaced and what was already invoiced there, and how
+   many other suppliers share it (the order-level buttons cover them too). Each
+   line shows its status, what is invoiced, and any credit due. A search opens
+   every group. The reach chip dials, opens the link, or shows the WeChat QR in a
+   sheet; a stored link with a script scheme is shown as a word, never as a link.
+4. **The no-invoice mark at both levels.** Whole order is
+   `PUT /purchasing/po/:id/no-invoice`; one line is
+   `PUT /purchasing/po/:id/line/:lineId/no-invoice`. The pill states the fact and
+   the button, which starts with a verb, acts. Restoring an order says how many
+   lines keep their own mark. A line under the order's mark reads *by whole-order
+   mark* and offers no toggle. One mark is sent at a time; a failure is said on
+   the screen and stays there.
+5. **Add / edit a 发票** uses the desktop's form and body, including handing back
+   the due date it loaded. The lines on offer are that supplier's open lines plus
+   the ones this 发票 already covers; none marked no-invoice are offered.
+   Ticking a line takes what is still open on it. The badge follows every
+   keystroke without a repaint. *Match to amount* pours the amount down the open
+   lines in order. Changing the supplier clears the allocation. No supplier means
+   a one-off buy, covering the Unspecified lines. A line allocated past its
+   headroom is refused in words (see the vocabulary entry), and the form stays
+   open.
+6. **The two supplier fields are native selects**, not the desktop's search
+   boxes. A phone draws its own wheel. The list is the same book: the names on the
+   chase plus the active suppliers. It shows one language and stores the whole
+   name.
+7. **Set supplier** (the way out of the Unspecified bucket) opens on the line,
+   the order or the whole bucket it was pressed from, with every line ticked. It
+   sends `PUT /purchasing/lines/supplier` and then opens the group the lines moved
+   into.
+8. **Re-match shows the pairing before anything moves.** The plans are read-only
+   GETs, and an order is ticked by default only when its whole order pairs. The
+   orders are then sent one at a time, so a failure part-way leaves the moved ones
+   alone, and each order that failed is named in the sheet.
+9. **Recorded 发票** show supplier, number, day, orders, amount, and any shortfall
+   between the lines ticked and the total. *Edit* opens the sheet with the 发票's
+   own lines ticked. *Delete* goes behind the desktop's confirm.
+
+## §316 — UPLOADING A 发票 FILE NEEDS A PERMISSION ON THE SERVER
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Found while building F4. `POST /api/retail-admin/invoice-file` stores the PDF or photo of an
+issued fapiao and returns the address that Mark issued then attaches to the order. It matched
+no rule in `lib/cap-routes.js`, because `invoice-file` does not start with `invoices`, so it
+was an unmapped write and fell through open: any signed-in operator could store a file there,
+whether or not enforcement was on. It now needs `invoices:manage` **or** `orders:edit`.
+
+1. **Why any-of, not `invoices:manage` alone.** The builder first gated it on
+   `invoices:manage` ("Issue / upload invoices" in the role editor). That would have taken the
+   upload away from the `staff` and `dispatch` presets, which hold `orders:edit` without it and
+   can upload today. The coordinating session narrowed the change rather than remove working
+   access overnight: the upload is the first half of issuing, so it takes the same key as Mark
+   issued (`PUT /orders/:id/invoice`, `orders:edit`) or the invoices key. What this closes is an
+   account that holds neither.
+2. **Every caller was checked.** Exactly two: the desktop order drawer's PDF / image button
+   (`07-content-billing.js`, `uploadInvoicePdf`) and the phone order sheet's (`m.html`,
+   `invFile`, §314). The phone draws its button only for `invoices:manage` together with
+   `orders:edit`.
+3. **Open for Ash, not decided here:** whether issuing a 发票 (upload and Mark issued) should be
+   `invoices:manage` only. If yes, both this rule and the `/orders/:id/invoice` rule narrow
+   together, and the desktop drawer's upload button should gain a `data-cap`.
+4. **Nothing changes** for the owner, for a shop with enforcement off, or while an operator's
+   permissions cannot be resolved.
+5. **Tests.** `scripts/test_invoice_file_gate.js` (fast shard, 21 checks): the rule and its
+   exact path, neighbouring routes unchanged, who gets through (either key, the owner,
+   enforcement off, unresolved permissions) and who is refused (invoice read-only, orders
+   read-only, nothing held), through a copy of the permission check that is itself checked
+   against `routes/retail.js`, and that the two callers are the only callers.
+
+## §317 — TREND GAINS WHAT THE DESKTOP'S REPORTS HAD: A CUSTOM WINDOW, A STORE, THE HEATMAP, RETENTION, THE READ AND ASK
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 5 of the finance lane (survey build order #19). The phone's Trend and the desktop's
+Reports read the same `/dashboard` payload. The survey listed what only the desktop did with
+it; each item is now on the phone, built from `03-dashboard.js`, on the Trend screen rather
+than a new one.
+
+1. **A custom window.** A fourth chip, Custom, beside 7 / 30 / 90 days. It opens the
+   ask-sheet with From and To, as Finance's does (F1). An empty day or From after To is
+   refused before anything is read. A custom pick that equals a preset lights the preset. The
+   status line names the chosen days, and "vs prior N days" counts them.
+2. **A store select**, following `dashEnsureStoreFilter` and `dashStoreId`:
+   - It is shown only when there is more than one store, and never to a store-scoped operator.
+   - A store-scoped operator is pinned to their own store on every read, following the
+     desktop's `RA_STORE_LOCK` rule: the first of `/me`'s `scopeStores`, which the phone now
+     keeps.
+   - **This also closes a leak.** Before this, Trend sent no store at all, so a store-scoped
+     operator read every store's figures on the phone.
+   - The status line names the store.
+3. **The demand heatmap** (`dashRenderHeatmap`): weekday × hour, 7 × 24, tinted by orders,
+   with the busiest hour named and a fewer → more legend. It shows orders only; the desktop
+   puts revenue in a hover tip, and there is nothing to hover on a phone.
+4. **Retention** (`dashRenderCohorts`): months 1, 3, 6 and 12, and the weighted curve, computed
+   the desktop's way (`trendRetCurve`).
+5. **The read and Ask** (`dashReadMaybeLoad`, `dashAskSubmit`):
+   - **Requests.** They send the desktop's requests, `POST /reports/read {from, to, store_id,
+     digest}` and `POST /reports/ask {q, from, to, store_id, digest}`. The digest is
+     `dashAiDigest` field for field over the same payload; a test compares its keys and scene
+     names with the desktop's source.
+   - **When the read is fetched.** At most once per window, and only while Trend is on screen:
+     it is a billed call, and this is the desktop's rule of fetching it only once Reports is
+     opened.
+   - **When there is no read.** If the server reports that no AI is configured, neither the
+     read nor Ask appears and nothing is asked again. A failed read is hidden rather than
+     apologised for, as on the desktop.
+   - **Ask** offers the three suggested questions, handles one question at a time, and shows
+     the daily-limit and failure lines.
+   - **What the read looks like.** The phone shows the read as words: the desktop's "Read it as
+     words" version, with its head and foot. The desktop's picture cards are not built (see 7).
+6. **Gates.** Trend's own gates are unchanged (`dashboard:view`; revenue off on the no-money
+   boards).
+   - The heatmap and retention carry no money (counts and percentages), so they show wherever
+     Trend does.
+   - The read and Ask talk about revenue and belong to the Reports tab. They need
+     `reports:view`, which the phone refuses while permissions are unknown (F0), and they never
+     appear on the three no-money boards.
+7. **Deliberately not built:**
+   - the desktop's hover charts;
+   - the Reports "Today" preset (Home is today's screen on the phone);
+   - the read's picture cards (verdict, flow, retention and channel captions);
+   - the chapter notes;
+   - the Reports tiles the mockup draws above the line (Trend already shows its total, busiest,
+     quietest and typical day).
+8. **The desktop note.** The old note sent operators to the desktop for "hover charts, the
+   cohort grid and the written read". Two of those three are now here, so it names only the
+   one that is not; that is the one composed string (see the vocab entry).
+9. **Not changed, noted.** `/reports/read` and `/reports/ask` have no rule in
+   `lib/cap-routes.js`, so on the server they are open to any signed-in operator. The phone
+   gates them on `reports:view`. Closing them on the server is a separate step.
+10. **Tests.** `scripts/test_mobile_trend_reports.js` (fast shard) checks:
+    - both requests and the digest against the desktop's source;
+    - the gates: `reports:view`, unknown permissions, the no-money board, and a store-scoped
+      operator;
+    - the empty states;
+    - the strings.
+
+## §318 — THE AI READ AND ASK ON REPORTS ARE GATED ON THE SERVER, WITHOUT TAKING THEM FROM ANYONE
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Found while building F5. `POST /api/retail-admin/reports/read` and `/reports/ask` are billed
+model calls that read the period's figures back, revenue included. Neither matched a rule in
+`lib/cap-routes.js`, so both fell through open: any signed-in operator could make them,
+whether or not enforcement was on. Both are now gated.
+
+1. **The same people as before.** The gate accepts either of the two permissions that open a
+   screen calling these routes today: `reports:view`, which opens the desktop's Reports tab
+   (`01-core.js` `TAB_CAP`), and `dashboard:view`, which opens the phone's Trend (`m.html`
+   `ROUTE_CAP`). Anyone who can reach either screen keeps the read and Ask. The accounts
+   refused are those who could reach neither screen and so had no page that called these
+   routes. This follows the rule for this lane's server changes: no working access is removed
+   while Ash is asleep.
+2. **The paths must match exactly**, so nothing else under `/reports` inherits the gate. The
+   reads behind both screens (`GET /dashboard`) stay open, as every read does.
+3. **The phone is narrower than the server, on purpose and on the record.** F5 shows the read
+   and Ask only for `reports:view`, and never on the no-money boards. The server stays at the
+   wider of the two keys until Ash decides whether a Trend-only (`dashboard:view`) account
+   should have the AI read at all. That question is left open.
+4. **Unchanged:** the owner, a shop with enforcement off, and an operator whose permissions
+   cannot be resolved, all as before.
+5. **Tests.** `scripts/test_reports_ai_gate.js` (fast shard) checks:
+   - the rule;
+   - who gets through (either key, the owner, enforcement off, unresolved permissions) and who
+     is refused (orders-only, warehouse, nothing held), through a copy of the permission check
+     that is itself checked against `routes/retail.js`;
+   - that the two screens still open on the keys the rule names;
+   - that the phone Trend and desktop Reports are the only callers.
+
+## §319 — MATERIALS ON THE PHONE, AND A PRICE IS SENT EXACTLY WHEN IT WAS RECEIVED
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step R5 of the recipes lane (the survey's PR 9). The desktop's Materials screen
+(`18-materials.js`) comes to the phone (`public/m.html`). It is a new More row
+beside Recipes, in Making things, behind the same `production` switch as the
+desktop's Materials tab.
+- **List:** Bought / Made / All with live counts, kind chips with counts,
+  search, category, supplier and Archived, all sent to the server as the
+  desktop sends them, plus the row-ceiling notice. The empty list points to
+  matches on the other tab and offers Clear the filters.
+- **Record:** read, edited, created and archived.
+
+1. **Gates.** The list and the record open on `materials:view`. Every write
+   (edit, New material, archive) needs `materials:edit`, which is the
+   desktop's `data-cap`. New supplier needs `purchasing:edit`, as on the
+   desktop.
+2. **Money is shown only with `materials:costs`**, and it fails closed in the
+   same three ways as the recipe costs: the capability (closed while the caps
+   load), a warehouse / dispatch / customer-service board (`recapNoMoney`), and
+   the payload (the server deletes the keys). Money here means the buy price,
+   the cost per unit, the cost history, and what each PO line cost. The pack
+   diagnosis ("this pack has no recorded contents") stays for everyone. It is
+   worked out with a stand-in price, so a reader the server stripped is never
+   told "no price entered", which is a fact about money they cannot know. The
+   desktop does tell them; see the report.
+3. **A price is sent exactly when it was received.** `PUT /materials/:id`
+   carries the stored price through for a caller *without* the capability, but
+   writes an *absent* `buy_price` as 0 for a caller *with* it. So "the surface
+   did not load it" is decided by the payload, not the screen:
+   - the draft holds `buy_price` exactly when the server sent one;
+   - the field is drawn only where money may be shown;
+   - the body carries the price exactly when the draft holds it.
+
+   A board that hides money from someone who holds the capability therefore
+   sends the stored price back untouched instead of wiping it. A reader the
+   server stripped sends no price, and the server keeps its own. A new
+   material carries the price key only where the field was drawn.
+4. **Autosave, with one field that does not save on a pause.** The desktop
+   saves this record with a Save button. On the phone it saves itself, like the
+   recipe record, through the same engine at the same timings (1.2 s / 8 s),
+   with Done as a deliberate save. The exception is the buy price. Every price
+   change files a price-history row, raises a price alert past 5%, and re-costs
+   every recipe built on the material. A pause in the middle of typing "12.50"
+   would have done all three for "1". So the price is sent when its field is
+   left (`onchange`), never on a pause.
+5. **Undo instead of version history.** Materials keep no version history, so
+   the editor offers Undo back to how the record was opened. It uses the
+   engine's own `undo`, which saves that state.
+6. **The body is the desktop's `readForm()`, key for key**, apart from the
+   `buy_price` rule above. The rules the desktop keeps are kept:
+   - allergens are sent even while the block is hidden (it shows for food
+     only), so they are not wiped;
+   - changing the kind drops a subcategory that belongs to the old kind, and
+     only on that deliberate change;
+   - the record's own subcategory and units are always offered as choices;
+   - a container buy unit asks for its contents.
+
+   The cost line is `lib/ingredient-cost.js`'s `deriveCostPerUnit`, with its
+   arithmetic shown.
+7. **Supplier and finance category come from sheets, not native combos.** The
+   pick sheet lists the book (split by language for reading; the whole stored
+   name is what lands in the field). *New supplier* posts the name to the
+   shared book (`POST /suppliers`); one already there, or archived there
+   (`name_taken`), is simply set. A name nobody in the book has is flagged under
+   the field, in the desktop's sentence.
+8. **The automatic SKU is advisory, as on the desktop.** On a new material the
+   code the rules would issue is shown as a peek; nothing is claimed. A typed
+   code that does not fit the category's pattern is flagged and saved anyway.
+   An existing material is never renumbered. The code the server actually
+   issues is taken into the draft, so the next save cannot blank it.
+9. **Archive and Restore use the desktop's three confirms.** A material used by
+   recipes gets its true consequence spelled out: it is hidden from the list
+   and the recipe picker, not frozen. The write is
+   `PUT /materials/:id/archive {restore}`. While it runs, the ⋯ is disabled and
+   the status line says *Saving…*; a refusal stays on the record.
+10. **Two supporting changes, called out.**
+    - `lib/ingredient-cost.js` is now wrapped in an IIFE, as
+      `lib/recipe-cost.js` already was. Its top-level `const API` would
+      otherwise collide with the phone's own `const API` in the browser.
+      Nothing reads its names except through `module.exports` /
+      `window.RootsIngredientCost`, and its suites pass.
+    - The phone loads it deferred, not precached; `sw.js` already lets it
+      through to the network. `scripts/lib/m-probe.js` inlines it for the
+      browser probes.
+11. **Not done here, on purpose.** Materials CSV import and export exist on
+    neither the desktop screen nor the phone. The desktop's per-field keyboard
+    combo (arrow keys) is replaced by a pick sheet.
+
+**Coverage.** New `scripts/test_mobile_materials.js` (fast shard, 36 cases).
+It runs the code with the app's real `mCan`, the real engine and both cost
+modules. It covers:
+- every list read and filter, the empty and failed states, and the row
+  ceiling;
+- money shown and hidden under each fail-closed case;
+- the record read;
+- the edit body against the desktop's `readForm()` for a cost holder, for a
+  stripped reader, and for a no-money board holding the capability;
+- the price committed on leaving the field;
+- the kind and allergens rule, the contents row, the supplier book and a new
+  supplier, Undo, a refused save and the leave guard;
+- a reader with no edit rights;
+- New material with the SKU peek and the issued code, and with no price key
+  for a reader without money;
+- all three archive confirms.
+
+`test_mobile_ops_groups.js` and `test_mobile_ask_strip.js` were deliberately
+updated from 27 to 28 Operations rows, with the new row named.
+`test_mobile_recipes_edit.js` was updated for the materials line in the Back
+gesture.

@@ -925,6 +925,14 @@ const state = {
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
   trend:null, trendFull:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
+  /* §300 F5 — Reports on the phone: the custom days, the store picked, whether
+     the stores were asked for, the AI read (per window key) and the Ask log. */
+  trendFrom:null, trendTo:null, trendStore:'', trendStoresTried:false,
+  trendRead:{key:null,data:null,loading:false,unavailable:false,error:false},
+  trendAsk:{log:[],busy:false,q:''},
+  /* The operator's own store when they are store-scoped (/me scopeStores): every
+     store-scoped read is pinned to it, as the desktop's RA_STORE_LOCK is. */
+  storeLock:null,
   trendOpen:{},          // which Trend fact section is expanded, by key
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   /* The role's Dashboard cards, from the Roles editor — null until /me
@@ -1061,6 +1069,10 @@ const state = {
   /* §300 P3 — what the kitchen is waiting on (the pending lines, their read's
      failure, whether it was asked for) and the From-the-kitchen sheet. */
   pkLines:null, pkErr:null, pkTried:false, pk:null,
+  /* §300 P5 — Purchasing's Invoices (发票) view: which half, the month and
+     search, the two reads and their failure, which supplier groups are open,
+     a mark/delete in flight and its refusal, and the one sheet over it. */
+  pinv:{view:'suppliers',month:'',q:'',out:null,list:null,err:null,tried:false,seq:0,open:{},busy:false,actErr:null,sheet:null},
   /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
      one. Two prefixes because they are two screens with two lifetimes — the
      list survives opening a delivery, the receive screen is thrown away the
@@ -1814,6 +1826,7 @@ reg('rqSearch', v=>{
  ['mPoQ','mPoClr','poQuery'],
  ['mPwQ','mPwClr','pwQ'],
  ['mPkQ','mPkClr','pkQ'],
+ ['mPinvQ','mPinvClr','pinvQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
@@ -4061,7 +4074,10 @@ reg('toggleFeature', k=>toggleFeature(k));
    teamLockReason(), which live there, and a handler sitting four hundred
    lines from the only screen that draws it is a handler nobody reviews
    beside the rules it enforces. */
-reg('trendRange', v=>{ state.trendRange=v; render(); loadTrend(); });
+reg('trendRange', v=>{
+  // §300 F5 — Custom asks for its two days before anything is read.
+  if(v==='custom'){ trendCustomAsk(); return; }
+  state.trendRange=v; state.trendFrom=null; state.trendTo=null; render(); loadTrend(); });
 reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('trendSection', k=>{ state.trendOpen[k]=!state.trendOpen[k]; render(); });
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
@@ -8804,6 +8820,8 @@ function poRow(p){
    The desktop got the identical test in 16-purchasing.js (puPartial). */
 function statusPurchasing(){
   if(state.poView==='supowed'&&canRoute('supowed')) return statusSupOwed();
+  if(state.poView==='invoices'&&pinvOn()){ const t=state.pinv.out&&state.pinv.out.totals;
+    return t?T('Total purchases','采购总额')+' '+money(CUR,t.total||0):''; }
   const all=state.poList; if(!all||!all.length) return '';
   const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p)).length;
   const late=all.filter(poLate).length;
@@ -8822,11 +8840,13 @@ function statusPurchasing(){
 function poViewTabs(){
   const t=[['orders','Orders','采购单']];
   if(canRoute('supowed')) t.push(['supowed','Suppliers we owe','供应商欠款']);
+  // §300 P5 — the desktop's Invoices tab, for whoever may read its money and write its marks.
+  if(pinvOn()) t.push(['invoices','Invoices','发票']);
   return t;
 }
 function poViewStrip(){
   const tabs=poViewTabs(); if(tabs.length<2) return '';
-  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':'orders';
+  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':state.poView==='invoices'&&pinvOn()?'invoices':'orders';
   return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">${tabs.map(([k,en,zh])=>{
     const on=cur===k;
     return `<button onclick="APP.cmd('poView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
@@ -8900,6 +8920,7 @@ function screenPurchasing(){
   loadPOs(); loadPkLines();
   const strip=poViewStrip();
   if(state.poView==='supowed'&&canRoute('supowed')) return strip+screenSupOwed();
+  if(state.poView==='invoices'&&pinvOn()) return strip+screenPoInvoices();
   if(state.posErr) return strip+`<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -8929,7 +8950,7 @@ function screenPurchasing(){
     ${filters.length?`<div style="display:flex;gap:8px">${filters.join('')}</div>`:''}
     <div id="mPoBody">${poBodyHtml()}</div></div>`;
 }
-reg('poView', v=>{ state.poView=v==='supowed'?'supowed':'orders'; render(); });
+reg('poView', v=>{ state.poView=v==='supowed'||v==='invoices'?v:'orders'; render(); });
 reg('poQuery', v=>{
   state.poQ=String(v||'');
   searchClearShow('mPoClr', !!state.poQ);
@@ -10199,6 +10220,514 @@ reg('pkMake', ()=>{
     if(e.code==='already_sourced'||e.code==='line_declined') loadPkLines(true);
     render();
   });
+});
+
+/* ==========================================================================
+   §300 P5 — Invoices (发票) on the phone (desktop: 16-purchasing.js, INVOICES)
+   --------------------------------------------------------------------------
+   ORGANISED AROUND THE CHASE, as the desktop is: who still owes us a 发票, and
+   for how much — by supplier, down to the order and the line — and the 发票
+   already recorded. Every figure is the server's, computed per line at read
+   time (routes/retail-purchasing.js lineStatus); nothing here adds up a state
+   of its own.
+
+   ONE KEY: purchasing:invoices — the key every /purchasing/* write carries on
+   the server (lib/cap-routes.js) — with purchasing:view, since every figure
+   here is money. Both fail closed (mCan's money-only set holds the first,
+   poMoney the second): a tab that cannot be shown for certain is not shown.
+
+   Every write is the desktop's request and body; every confirm is the
+   desktop's. The desktop's two search-box supplier fields are native selects
+   here — a phone draws its own wheel for them — offering the same book: the
+   names on the chase plus the active supplier book.
+   ========================================================================== */
+const PINV_UNSPEC='未指定 Unspecified';
+const PINV_META={fully_invoiced:['Fully invoiced','已开票','success'],partially_invoiced:['Partial','部分开票','warning'],
+  awaiting:['Awaiting','待开票','danger'],no_invoice_expected:['No invoice','不开发票','muted']};
+const pinvOn=()=>mCan('purchasing:invoices')&&poMoney();
+function pinvPill(status){ const m=PINV_META[status]; if(!m) return ''; const [bg,fg]=PILL[m[2]]; return `<span class="pill" style="background:${bg};color:${fg}">${T(m[0],m[1])}</span>`; }
+function pinvSup(name,cn){
+  if(!name) return '';
+  const h=catSplit(name);
+  return LANG==='en'?(h?h.en:name):((cn&&String(cn).trim())||(h?h.cn:name));
+}
+function pinvLoad(force){
+  const v=state.pinv; if(!pinvOn()||(v.tried&&!force)) return;
+  v.tried=true;
+  const qs=[]; if(v.month) qs.push('month='+encodeURIComponent(v.month)); if(v.q.trim()) qs.push('q='+encodeURIComponent(v.q.trim()));
+  const seq=++v.seq, q=qs.length?'?'+qs.join('&'):'';
+  Promise.all([api('/purchasing/invoices/outstanding'+q),api('/purchasing/invoices'+q)]).then(([out,list])=>{
+    if(seq!==v.seq) return;
+    v.out=out&&out.groups?out:{groups:[],totals:{},recorded_elsewhere:{}}; v.list=Array.isArray(list)?list:[]; v.err=null; pinvPatch();
+  }).catch(e=>{ if(seq!==v.seq||String(e.message)==='auth') return;
+    v.err=E('Could not load this.','无法加载。'); pinvPatch(); });
+  if(!state.pwc.sups&&!state.pwc.tried.sups){ state.pwc.tried.sups=1;
+    api('/suppliers').then(r=>{ state.pwc.sups=(Array.isArray(r)?r:[]).filter(s=>s.is_active==null||s.is_active); })
+      .catch(()=>{ state.pwc.sups=[]; }); }
+}
+function pinvPatch(){
+  const b=document.getElementById('mPinvBody');
+  if(b){ b.innerHTML=pinvBodyHtml(); return; }
+  render();
+}
+const pinvGroup=sup=>((state.pinv.out&&state.pinv.out.groups)||[]).find(g=>g.supplier===sup)||null;
+/* The supplier book the two pickers offer: the names on the chase, the active
+   book, and whatever the open form already carries. Stored name = value. */
+function pinvSupList(extra){
+  const cn=new Map(), names=new Set();
+  ((state.pinv.out&&state.pinv.out.groups)||[]).forEach(g=>{ if(g.supplier_cn) cn.set(g.supplier,g.supplier_cn); if(g.supplier&&g.supplier!==PINV_UNSPEC) names.add(g.supplier); });
+  (state.pwc.sups||[]).forEach(s=>{ if(s.name_cn) cn.set(s.name,s.name_cn); if(s.name) names.add(s.name); });
+  if(extra) names.add(extra);
+  return [...names].sort((a,b)=>a.localeCompare(b)).map(n=>({v:n,label:pinvSup(n,cn.get(n))}));
+}
+function pinvMonths(){
+  const v=state.pinv, seen=new Set();
+  ((v.out&&v.out.groups)||[]).forEach(g=>g.lines.forEach(l=>{ if(l.date) seen.add(String(l.date).slice(0,7)); }));
+  (v.list||[]).forEach(i=>{ if(i.date) seen.add(String(i.date).slice(0,7)); });
+  if(v.month) seen.add(v.month);
+  return [...seen].sort().reverse();
+}
+function pinvReachHtml(r){
+  if(!r||!r.type) return '';
+  const name={taobao:['Taobao','淘宝'],alibaba:['Alibaba','阿里巴巴'],website:['Website','网站'],phone:['Phone','电话'],
+    wechat:['WeChat','微信'],other:['Channel','渠道']}[r.type]||[r.type,r.type];
+  const st='font-size:12.5px;color:var(--text-primary);border:1px solid var(--border-default);border-radius:999px;padding:3px 10px;white-space:nowrap;text-decoration:none;background:none;font-family:inherit;cursor:pointer';
+  if(r.type==='wechat'||(!r.link&&r.has_qr))
+    return r.has_qr?`<button type="button" style="${st}" onclick="event.stopPropagation();APP.cmd('pinvQr',${Number(r.supplier_id)})">${T(...name)} →</button>`
+                   :`<span style="${st};cursor:default">${T(...name)}</span>`;
+  if(r.link){
+    let href=String(r.link).trim();
+    if(r.type==='phone') href='tel:'+href.replace(/[^\d+]/g,'');
+    else if(!/^[a-z][a-z0-9+.\-]*:/i.test(href)) href='https://'+href.replace(/^\/+/,'');
+    if(/^(javascript|data|vbscript):/i.test(href)) return `<span style="${st};cursor:default">${T(...name)}</span>`;
+    return `<a style="${st}" href="${escAttr(href)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${T(...name)} →</a>`;
+  }
+  return `<span style="${st};cursor:default">${T(...name)}</span>`;
+}
+function pinvKpis(){
+  const t=(state.pinv.out&&state.pinv.out.totals)||{};
+  const tile=(label,val,foot,tone)=>`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0">
+    <span style="font-size:12.5px;color:${tone||'var(--text-secondary)'}">${label}</span>
+    <span class="num" style="font-size:17px;font-weight:500">${money(CUR,val||0)}</span>${foot?`<span style="font-size:12px;color:var(--text-secondary)">${foot}</span>`:''}</div>`;
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="grid-column:1 / -1">${tile(T('Total purchases','采购总额'),t.total,(t.line_count||0)+' '+T('lines','条明细'))}</div>
+    ${tile(T('Fully invoiced','已开票'),t.fully_invoiced,'','var(--sage-ink)')}${tile(T('Partial','部分开票'),t.partially_invoiced,'','var(--amber-ink)')}
+    ${tile(T('Awaiting','待开票'),t.awaiting,T('chase these','需跟进'),'var(--brick-ink)')}${tile(T('No invoice','不开发票'),t.no_invoice_expected)}</div>`;
+}
+/* 发票 money the figures above cannot account for — recorded against an order
+   that has since stood down — said out loud, with the orders named and the
+   way out offered (the desktop's offChaseStrip). */
+function pinvOffChase(){
+  const off=(state.pinv.out&&state.pinv.out.recorded_elsewhere)||{};
+  if(!(off.amount>0.005)) return '';
+  const WHY={superseded:['the orders they were recorded against have been replaced by copies — open the 发票 under Recorded and tick the copy’s lines instead','对应采购单已被副本替代 —— 请在“已登记”中打开该发票，改为勾选副本的明细'],
+    not_placed:['recorded against an order that is no longer placed — a draft, or cancelled since','对应采购单已不是已下单状态 —— 草稿或已取消'],
+    other_tenant:['recorded against an order belonging to another business','对应采购单属于其他商户']};
+  const why=Object.entries(off.by_reason||{}).sort((a,b)=>b[1]-a[1]).map(([k])=>T(...(WHY[k]||WHY.not_placed))).join(T('; also: ','；另有：'));
+  const orders=off.orders||[];
+  const shown=orders.slice(0,4).map(o=>escAttr(o.po_number)+(o.copy_po_number?' → '+escAttr(o.copy_po_number):'')+' '+money(CUR,o.amount)).join(' · ');
+  return `<div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;background:var(--amber-tint);font-size:13px;line-height:1.5">
+    <span style="color:var(--amber-ink)"><b style="font-weight:500">${T('Recorded, not counted above','已登记发票，未计入上方')}: ${money(CUR,off.amount)}</b> — ${why}</span>
+    <span class="num" style="color:var(--amber-ink)">${shown}${orders.length>4?' · +'+(orders.length-4)+' '+T('more','个采购单'):''}</span>
+    ${orders.some(o=>o.po_id)?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 14px" onclick="APP.cmd('pinvRematchOpen')">${T('Re-match…','重新匹配…')}</button>`:''}</div>`;
+}
+function pinvCredit(){
+  const t=(state.pinv.out&&state.pinv.out.totals)||{};
+  if(!(t.credit_due>0.005)) return '';
+  return `<div style="padding:12px 14px;border-radius:14px;background:var(--amber-tint);font-size:13px;line-height:1.5;color:var(--amber-ink)">
+    ${T('Returned after invoicing','开票后退货')}: <b class="num" style="font-weight:500">${T('credit due','应退')} ${money(CUR,t.credit_due)}</b> — ${T('ask the supplier for a credit note','需向供应商索取红字发票')}</div>`;
+}
+function pinvLinesHtml(g){
+  const v=state.pinv, unspec=g.supplier===PINV_UNSPEC, busy=!!v.busy;
+  const byPo=new Map();
+  g.lines.forEach(l=>{ if(!byPo.has(l.po_number)) byPo.set(l.po_number,{po_id:l.po_id,po_number:l.po_number,date:l.date,
+    no:l.po_no_invoice,sup:l.supersedes_po_number||null,supInv:l.supersedes_invoiced||0,lines:[]}); byPo.get(l.po_number).lines.push(l); });
+  const others=po=>((v.out&&v.out.groups)||[]).filter(x=>x.supplier!==g.supplier&&x.lines.some(l=>l.po_number===po)).length;
+  const btn=(label,cmd)=>`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" ${busy?'disabled':''} onclick="${cmd}">${label}</button>`;
+  return [...byPo.values()].map(po=>{ const n=others(po.po_number);
+    return `<div style="padding:10px 14px 4px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border-default)">
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <span class="num" style="font-size:13.5px;font-weight:500">${escAttr(po.po_number)}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(po.date?fmtDateOnly(po.date):'')}</span>
+        ${po.sup?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('replaces','替代')} ${escAttr(po.sup)}${po.supInv>0.005?' · '+T('already invoiced','已登记发票')+' '+money(CUR,po.supInv):''}</span>`:''}
+        ${n?`<span style="font-size:12.5px;color:var(--text-secondary)">${T(`also ${n} other supplier${n===1?'':'s'} on this order`,`本单还含 ${n} 个其他供应商的明细`)}</span>`:''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${po.no?pinvPill('no_invoice_expected')+btn(T('Restore whole order to awaiting','整单恢复待开票'),`APP.cmd('pinvMarkPo',${Number(po.po_id)},0)`)
+               :btn(T('Mark whole order as no-invoice','整单标记不开发票'),`APP.cmd('pinvMarkPo',${Number(po.po_id)},1)`)}
+        ${unspec?btn(T('Set supplier for this order','为整单设置供应商'),`APP.cmd('pinvAssign','${po.lines.map(l=>Number(l.line_id)).join(',')}')`):''}</div>
+      ${po.lines.map(l=>`<div style="display:flex;flex-direction:column;gap:5px;padding:8px 0;border-top:1px dashed var(--border-default)">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+          <span style="min-width:0;font-size:14px">${escAttr(pwName(l))}${l.sku?` <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr(l.sku)}</span>`:''}</span>
+          <span class="num" style="flex:none;font-size:14px">${money(CUR,l.amount)}</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pinvPill(l.status)}
+          ${l.covered>0.005?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('invoiced','已开票')} ${money(CUR,l.covered)}</span>`:''}
+          ${l.credit_due>0.005?pill('restock',T('credit due','应退')+' '+money(CUR,l.credit_due)):''}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          ${unspec?btn(T('Set supplier','设置供应商'),`APP.cmd('pinvAssign','${Number(l.line_id)}')`):''}
+          ${l.po_no_invoice?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('by whole-order mark','由整单标记')}</span>`
+            :l.line_no_invoice?btn(T('Restore to awaiting','恢复待开票'),`APP.cmd('pinvMarkLine',${Number(l.po_id)},${Number(l.line_id)},0)`)
+            :btn(T('Mark as no-invoice','标记不开发票'),`APP.cmd('pinvMarkLine',${Number(l.po_id)},${Number(l.line_id)},1)`)}</div></div>`).join('')}</div>`; }).join('');
+}
+function pinvGroupsHtml(){
+  const v=state.pinv, groups=(v.out&&v.out.groups)||[];
+  if(!groups.length) return `<div style="padding:28px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    v.month||v.q.trim()?T('Nothing matches those filters.','没有匹配的内容。'):T('Nothing awaiting an invoice.','没有待开票内容。')}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:10px">${groups.map((g,i)=>{
+    const open=!!v.q.trim()||!!v.open[g.supplier], chase=(g.awaiting||0)+(g.partially_invoiced||0);
+    const top=g.awaiting>0.005?'awaiting':g.partially_invoiced>0.005?'partially_invoiced':g.fully_invoiced>0.005?'fully_invoiced':'no_invoice_expected';
+    const unspec=g.supplier===PINV_UNSPEC;
+    return `<div class="card" style="padding:0;overflow:hidden">
+      <button class="row" style="min-height:64px;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('pinvToggle',${i})">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pinvSup(g.supplier,g.supplier_cn))}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${g.line_count} ${T('lines','条明细')} · ${(g.po_numbers||[]).length} ${T('orders','张采购单')}${chase>0.005?' · '+T('Awaiting','待开票')+' '+money(CUR,chase):''}</span></span>
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+          <span class="num" style="font-size:15px;font-weight:500">${money(CUR,g.total)}</span>${pinvPill(top)}</span>
+        <span style="color:var(--text-secondary);display:flex;padding-top:2px">${ic(open?'chevron-up':'chevron-down',18)}</span></button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0 14px 12px">
+        ${pinvReachHtml(g.reach)}
+        ${unspec?`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvAssign','')">${T('Set supplier','设置供应商')}</button>`:''}
+        ${chase>0.005?`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvNew',${i})">${T('Add invoice','添加发票')}</button>`
+          :(unspec?'':`<span style="font-size:12.5px;color:var(--text-secondary)">${T('All invoiced','已全部开票')}</span>`)}</div>
+      ${open?pinvLinesHtml(g):''}</div>`; }).join('')}</div>`;
+}
+function pinvLedgerHtml(){
+  const v=state.pinv, list=v.list||[];
+  if(!list.length) return `<div style="padding:28px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    v.month||v.q.trim()?T('No invoices match those filters.','没有匹配的发票。'):T('No invoices recorded yet.','还没有登记发票。')}</div>`;
+  return `<div class="list">${list.map((inv,i)=>{
+    const pos=(inv.pos||[]).map(p=>p.po_number).join(', ');
+    const gap=Math.abs(inv.unallocated||0)>0.005?pill('restock',money(CUR,Math.abs(inv.unallocated))+' '+(inv.unallocated>0?T('unallocated','未分配'):T('over','超出'))):'';
+    return `${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:15px;font-weight:500">${escAttr(pinvSup(inv.supplier,inv.supplier_cn))}</span>
+        ${inv.invoice_number?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(inv.invoice_number)}</span>`:''}
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(inv.date?fmtDateOnly(inv.date):'')}${pos?' · '+escAttr(pos):''}</span>
+        ${gap?`<span>${gap}</span>`:''}</span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none">
+        <span class="num" style="font-size:15px;font-weight:500">${money(CUR,inv.amount)}</span>
+        <span style="display:flex;gap:4px">
+          <button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvEdit',${Number(inv.id)})">${T('Edit','编辑')}</button>
+          <button class="iconbtn" style="width:34px;height:34px" aria-label="${T('Delete','删除')}" onclick="APP.cmd('pinvDelete',${Number(inv.id)})">${ic('x',16,2)}</button></span></span></div>`; }).join('')}</div>`;
+}
+function pinvBodyHtml(){
+  const v=state.pinv;
+  if(v.err&&!v.out) return `<div><div style="font-size:14px;color:var(--brick-ink)">${v.err}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:12px" onclick="APP.cmd('pinvRetry')">${T('Try again','重试')}</button></div>`;
+  if(!v.out) return `<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const groups=v.out.groups||[];
+  if(!groups.length&&!(v.list||[]).length&&!v.month&&!v.q.trim())
+    return nothingYet(T('No invoices yet','暂无发票'),T('When a supplier sends a 发票, record it here and match it to the lines it covers. Until then, anything you’ve ordered shows as awaiting one.','供应商开票后,在此登记并与对应采购明细匹配。在此之前,已下单内容会显示为待开票。'))
+      +`<div style="display:flex;justify-content:center"><button class="cta" style="width:auto" onclick="APP.cmd('pinvNew',-1)">${T('Add invoice','添加发票')}</button></div>`;
+  const segBtn=(k,label,n)=>`<button onclick="APP.cmd('pinvView','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${v.view===k?'var(--surface-card)':'transparent'};color:${v.view===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${v.view===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
+  return `<div style="display:flex;flex-direction:column;gap:12px">
+    ${v.actErr?`<div style="padding:12px 14px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${v.actErr}</div>`:''}
+    <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+      ${segBtn('suppliers',T('By supplier','按供应商'),groups.length)}${segBtn('recorded',T('Recorded','已登记'),(v.list||[]).length)}</div>
+    ${pinvKpis()}${pinvOffChase()}${pinvCredit()}
+    ${v.view==='recorded'?pinvLedgerHtml():pinvGroupsHtml()}</div>`;
+}
+function screenPoInvoices(){
+  pinvLoad();
+  const v=state.pinv;
+  const months=pinvMonths();
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;gap:8px">
+      <select onchange="APP.cmd('pinvMonth',this.value)" style="flex:none;width:42%;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0">
+        <option value="">${T('All months','全部月份')}</option>${months.map(m=>`<option value="${m}"${v.month===m?' selected':''}>${escAttr(tdWhen(m+'-01','month',_tdL()))}</option>`).join('')}</select>
+      ${searchBox(`<input id="mPinvQ" inputmode="search" enterkeyhint="search" value="${escAttr(v.q)}" placeholder="${T('Supplier, item or SKU','供应商、产品或货号')}" oninput="APP.cmd('pinvQ',this.value)">`,'mPinvClr',!!v.q,'flex:1;min-width:0')}</div>
+    <div id="mPinvBody">${pinvBodyHtml()}</div></div>`;
+}
+let pinvQTimer=null;
+reg('pinvQ', v=>{ const s=state.pinv; s.q=String(v||''); searchClearShow('mPinvClr',!!s.q);
+  clearTimeout(pinvQTimer); pinvQTimer=setTimeout(()=>pinvLoad(true),250); });
+reg('pinvMonth', m=>{ const s=state.pinv; s.month=String(m||''); s.out=null; render(); pinvLoad(true); });
+reg('pinvView', k=>{ state.pinv.view=k==='recorded'?'recorded':'suppliers'; pinvPatch(); });
+reg('pinvRetry', ()=>{ const s=state.pinv; s.err=null; s.out=null; pinvPatch(); pinvLoad(true); });
+reg('pinvToggle', i=>{ const g=((state.pinv.out&&state.pinv.out.groups)||[])[Number(i)]; if(!g) return;
+  state.pinv.open[g.supplier]=!state.pinv.open[g.supplier]; pinvPatch(); });
+
+/* ── the no-invoice mark, both levels (the desktop's two routes) ──────────── */
+function pinvAct(req,ok){
+  const v=state.pinv; if(v.busy||!mCan('purchasing:invoices')) return;
+  v.busy=true; v.actErr=null; pinvPatch();
+  apiWrite(req[0],req[1],req[2]).then(r=>{ v.busy=false; showToast(typeof ok==='function'?ok(r):ok); pinvLoad(true); })
+    .catch(e=>{ v.busy=false; if(String(e.message)==='auth') return;
+      v.actErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
+}
+reg('pinvMarkPo', (poId,flag)=>{ flag=!!Number(flag);
+  pinvAct(['/purchasing/po/'+Number(poId)+'/no-invoice',{no_invoice_expected:flag},'PUT'], r=>{
+    /* WHAT THE PRESS DID NOT DO, said out loud: lines with their own mark keep it. */
+    const n=Number(r&&r.lines_still_marked)||0;
+    return flag?T('Whole order marked as no-invoice','整单已标记不开发票')
+      :(n?T(n===1?'Order restored — 1 line keeps its own no-invoice mark':`Order restored — ${n} lines keep their own no-invoice mark`,`整单已恢复待开票 —— ${n} 条明细仍自行标记不开发票`)
+         :T('Order restored to awaiting','整单已恢复待开票')); }); });
+reg('pinvMarkLine', (poId,lineId,flag)=>{ flag=!!Number(flag);
+  pinvAct(['/purchasing/po/'+Number(poId)+'/line/'+Number(lineId)+'/no-invoice',{no_invoice_expected:flag},'PUT'],
+    flag?T('Line marked as no-invoice','该明细已标记不开发票'):T('Line restored to awaiting','该明细已恢复待开票')); });
+
+/* ── the sheets: add / edit a 发票, set supplier, re-match, a QR ────────── */
+function pinvSheetLines(){
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return [];
+  const g=pinvGroup(d.supplier||PINV_UNSPEC);
+  const open=((g&&g.lines)||[]).filter(l=>l.status!=='no_invoice_expected');
+  const seen=new Set(open.map(l=>l.line_id));
+  const own=(d.ownLines||[]).filter(l=>!seen.has(l.line_id)).map(l=>({line_id:l.line_id,name_en:l.name_en,name_cn:l.name_cn,sku:l.sku,
+    po_number:l.po_number,date:l.po_date,amount:Math.round(((l.qty||0)*(l.cost_per_unit||0))*100)/100,outstanding:0}));
+  return open.concat(own);
+}
+const pinvAllocated=d=>Object.values(d.alloc).reduce((s,x)=>s+(parseFloat(x)||0),0);
+function pinvBadge(){
+  const d=state.pinv.sheet; if(!d) return '';
+  const a=pinvAllocated(d), diff=(parseFloat(d.amount)||0)-a;
+  if(Math.abs(diff)<0.01) return `${pill('delivered',T('Allocated','已分配')+' '+money(CUR,a))} <span style="font-size:12.5px;color:var(--text-secondary)">${T('nothing left over','正好')}</span>`;
+  if(diff>0) return `${pill('draft',T('Allocated','已分配')+' '+money(CUR,a))} <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${money(CUR,diff)} ${T('unallocated','未分配')}</span>`;
+  return `${pill('restock',T('Allocated','已分配')+' '+money(CUR,a))} <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${money(CUR,-diff)} ${T('over the invoice','超出发票')}</span>`;
+}
+function pinvInvSheet(d){
+  const lines=pinvSheetLines(), byPo=new Map();
+  lines.forEach(l=>{ if(!byPo.has(l.po_number)) byPo.set(l.po_number,[]); byPo.get(l.po_number).push(l); });
+  const sups=pinvSupList(d.supplier);
+  const fld=(label,inner)=>`<label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${label}</span>${inner}</label>`;
+  const rows=lines.length?[...byPo.entries()].map(([po,ls])=>`<div class="num" style="padding:10px 20px 4px;font-size:12.5px;font-weight:500;color:var(--text-secondary)">${escAttr(po)}</div>${ls.map(l=>{
+      const on=d.alloc[l.line_id]!=null, own=(d.ownLines||[]).some(x=>x.line_id===l.line_id);
+      const head=(l.outstanding||0)+(own?(parseFloat(d.alloc[l.line_id])||0):0);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 20px">
+        <button onclick="APP.cmd('pinvTick',${Number(l.line_id)})" aria-pressed="${on}" style="flex:none;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+          ${on?'background:var(--text-primary);border:none':'border:1.5px solid var(--edge);background:var(--surface-card)'}">${on?`<span style="display:flex;color:var(--bg)">${ic('check',16,2.5)}</span>`:''}</button>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pwName(l))}</span>
+          <span class="num" style="font-size:12px;color:var(--text-secondary)">${money(CUR,head)} ${T('open','待开')}</span></span>
+        <input class="num" inputmode="decimal" id="mPinvA${l.line_id}" value="${on?escAttr(d.alloc[l.line_id]):''}" placeholder="0" style="width:92px;text-align:right;flex:none" oninput="APP.cmd('pinvAlloc',${Number(l.line_id)},this.value)"></div>`; }).join('')}`).join('')
+    :`<div style="padding:14px 20px;font-size:13.5px;color:var(--text-secondary)">${d.supplier?T('No open lines for this supplier — you can still record the invoice.','该供应商暂无待开票明细 —— 仍可登记发票。'):T('Pick a supplier to see what’s open.','选择供应商以查看待开票明细。')}</div>`;
+  return {title:d.id?T('Edit invoice','编辑发票'):T('Add invoice','添加发票'), sub:T('Match a supplier’s invoice to the lines it covers.','将供应商发票匹配到对应采购明细。'),
+    body:`<div style="padding:0 20px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:10px">${fld(T('Supplier','供应商'),`<select onchange="APP.cmd('pinvField','supplier',this.value)" style="width:100%"><option value="">${T('No supplier','未指定供应商')}</option>${
+          sups.map(s=>`<option value="${escAttr(s.v)}"${s.v===d.supplier?' selected':''}>${escAttr(s.label)}</option>`).join('')}</select>`)}
+          ${fld(T('Invoice no.','发票号'),`<input value="${escAttr(d.invoice_number)}" placeholder="${T('Optional','可选')}" oninput="APP.cmd('pinvField','invoice_number',this.value)">`)}</div>
+        <div style="display:flex;gap:10px">${fld(T('Amount','金额')+' '+escAttr(CUR),`<input class="num" inputmode="decimal" value="${escAttr(d.amount)}" oninput="APP.cmd('pinvField','amount',this.value)">`)}
+          ${fld(T('Invoice date','开票日期'),`<input type="date" value="${escAttr(d.date)}" onchange="APP.cmd('pinvField','date',this.value)">`)}</div>
+        ${fld(T('Note','备注'),`<input value="${escAttr(d.notes)}" placeholder="${T('Optional','可选')}" oninput="APP.cmd('pinvField','notes',this.value)">`)}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:14px;font-weight:500">${T('What it covers','涵盖内容')}</span>
+          <button class="btn2" style="width:auto;min-height:36px;padding:0 14px" onclick="APP.cmd('pinvMatch')">${T('Match to amount','按金额匹配')}</button></div></div>
+      <div>${rows}</div>`,
+    foot:`<div id="mPinvBadge" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${pinvBadge()}</div>
+      <button class="cta" ${d.busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pinvSave')">${d.busy?T('Saving…','保存中…'):(d.id?T('Save changes','保存更改'):T('Save invoice','保存发票'))}</button>`};
+}
+function pinvAssignSheet(d){
+  const byPo=new Map(); d.lines.forEach(l=>{ if(!byPo.has(l.po_number)) byPo.set(l.po_number,[]); byPo.get(l.po_number).push(l); });
+  const picked=d.lines.filter(l=>d.picked.indexOf(l.line_id)>=0), all=picked.length===d.lines.length;
+  const sups=pinvSupList();
+  return {title:T('Set supplier','设置供应商'), sub:T('Say who these lines came from. They move into that supplier’s group, ready to chase a 发票 for.','指明这些明细的来源。设置后将归入该供应商,可开始跟进发票。'),
+    body:`<div style="padding:0 20px;display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${T('Supplier','供应商')}</span>
+          <select onchange="APP.cmd('pinvAssignSup',this.value)" style="width:100%"><option value="">${T('Choose a supplier','请选择供应商')}</option>${
+            sups.map(s=>`<option value="${escAttr(s.v)}"${s.v===d.supplier?' selected':''}>${escAttr(s.label)}</option>`).join('')}</select>
+          ${sups.length?'':`<span style="font-size:12.5px;color:var(--text-secondary)">${T('No suppliers on file yet — add one on the Suppliers tab, then come back.','还没有供应商 —— 请先在“供应商”中添加,然后返回。')}</span>`}</label>
+        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:14px;font-weight:500">${T('Lines to move','要设置的明细')}</span>
+          <button class="btn2" style="width:auto;min-height:36px;padding:0 14px" onclick="APP.cmd('pinvAssignAll')">${all?T('Untick all','全部取消'):T('Tick all','全选')}</button></div></div>
+      <div>${[...byPo.entries()].map(([po,ls])=>`<div class="num" style="padding:10px 20px 4px;font-size:12.5px;font-weight:500;color:var(--text-secondary)">${escAttr(po)}</div>${ls.map(l=>{
+        const on=d.picked.indexOf(l.line_id)>=0;
+        return `<button class="row" style="min-height:52px;padding:8px 20px;gap:12px" onclick="APP.cmd('pinvAssignTick',${Number(l.line_id)})">
+          <span style="flex:none;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;${on?'background:var(--text-primary)':'border:1.5px solid var(--edge);background:var(--surface-card)'}">${on?`<span style="display:flex;color:var(--bg)">${ic('check',16,2.5)}</span>`:''}</span>
+          <span style="flex:1;min-width:0;font-size:14px;text-align:left">${escAttr(pwName(l))}</span>${pinvPill(l.status)}<span class="num" style="flex:none;font-size:14px">${money(CUR,l.amount)}</span></button>`; }).join('')}`).join('')}</div>`,
+    foot:`<div style="font-size:13px;color:var(--text-secondary)">${picked.length?`${picked.length} ${T('of','/')} ${d.lines.length} ${T('lines','条明细')} · <span class="num">${money(CUR,picked.reduce((s,l)=>s+(l.amount||0),0))}</span>`:T('Nothing ticked','未勾选')}</div>
+      <button class="cta" ${d.busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pinvAssignSave')">${d.busy?T('Saving…','保存中…'):T('Set supplier','设置供应商')}</button>`};
+}
+function pinvRematchSheet(d){
+  const picked=pinvRematchPicked(d), sum=picked.reduce((s,x)=>s+(x.plan.movable||0),0);
+  const loading=d.orders.some(o=>!d.plans[o.po_id]);
+  const rows=d.orders.map(o=>{
+    const plan=d.plans[o.po_id], on=d.picked.indexOf(o.po_id)>=0, head=escAttr(o.po_number)+' → '+escAttr(o.copy_po_number||'');
+    if(!plan) return `<div style="padding:10px 20px;font-size:14px">${head} <span style="color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
+    if(plan.error) return `<div style="padding:10px 20px;font-size:14px">${head} <span style="color:var(--brick-ink)">${T('Could not load this.','无法加载。')}</span></div>`;
+    const credit=(plan.moves||[]).reduce((s,m)=>s+(m.credit_due||0),0);
+    const detail=d.lines.indexOf(o.po_id)>=0?`<div style="padding:4px 20px 8px 58px;display:flex;flex-direction:column;gap:6px;font-size:12.5px">${
+      (plan.moves||[]).map(m=>`<div>${escAttr(pwName(m.from||{}))} → ${escAttr(pwName(m.to||{}))} <span style="color:var(--text-secondary)">${T('matched on','匹配依据')} ${m.basis==='sku'?T('SKU','货号'):T('name','名称')}</span> <span class="num">${money(CUR,m.amount)}</span></div>`).join('')}${
+      (plan.unmatched||[]).map(u=>`<div style="color:var(--text-secondary)">${escAttr(pwName(u.from||{}))} → ${T('nothing on the copy matches — stays put','副本中无匹配项 —— 保持不动')} <span class="num">${money(CUR,u.amount)}</span></div>`).join('')}</div>`:'';
+    return `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 20px">
+        <button onclick="APP.cmd('pinvRematchTick',${Number(o.po_id)})" ${plan.moves&&plan.moves.length?'':'disabled'} style="flex:none;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+          ${on?'background:var(--text-primary);border:none':'border:1.5px solid var(--edge);background:var(--surface-card)'}">${on?`<span style="display:flex;color:var(--bg)">${ic('check',16,2.5)}</span>`:''}</button>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span class="num" style="font-size:14px">${head} · ${money(CUR,plan.movable||0)}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary)">${plan.moves.length} ${T('of','/')} ${plan.moves.length+plan.unmatched.length} ${T('lines pair','条明细可匹配')}</span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap">${plan.unmatched.length?pill('restock',plan.unmatched.length+' '+T('can’t be paired — left alone','无法匹配，保持不动')):''}${credit>0.005?pill('restock',T('credit due','应退')+' '+money(CUR,credit)):''}</span>
+          <button class="btn2" style="width:auto;align-self:flex-start;min-height:32px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvRematchLines',${Number(o.po_id)})">${d.lines.indexOf(o.po_id)>=0?T('Hide lines','收起明细'):T('Show lines','查看明细')}</button></span></div>${detail}`; }).join('');
+  return {title:T('Re-match recorded 发票','重新匹配已登记发票'),
+    sub:T('These 发票 were recorded against orders that have since been replaced by copies. Move each one onto the copy’s matching lines and it counts again.','这些发票登记在已被副本替代的采购单上。将其移到副本的对应明细后，即可重新计入。'),
+    body:`<div style="padding:0 20px 6px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:14px;font-weight:500">${T('Orders to re-match','要重新匹配的采购单')}</span>
+        <button class="btn2" style="width:auto;min-height:36px;padding:0 14px" onclick="APP.cmd('pinvRematchAll')">${T('Tick all','全选')}</button></div>${rows}
+      <div style="padding:8px 20px;font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Lines are paired by SKU and name — never by their position on the order — so a quantity you corrected on the copy is safe. Anything that cannot be paired is listed and left exactly where it is.','明细按货号与名称匹配，不按顺序匹配，因此您在副本上修改的数量不受影响。无法匹配的明细会列出并保持不动。')}</div>`,
+    foot:`<div class="num" style="font-size:13px;color:var(--text-secondary)">${loading?T('Loading…','加载中…'):picked.length?`${picked.length} ${T('of','/')} ${d.orders.length} ${T('orders','个采购单')} · ${money(CUR,sum)}`:T('Nothing ticked','未勾选')}</div>
+      <button class="cta" ${d.busy||!picked.length?'disabled style="opacity:.55"':''} onclick="APP.cmd('pinvRematchSave')">${d.busy?T('Moving…','移动中…'):T('Move','移动')}</button>`};
+}
+function sheetPinv(){
+  const d=state.pinv.sheet; if(!d) return '';
+  let s;
+  if(d.kind==='inv') s=pinvInvSheet(d);
+  else if(d.kind==='assign') s=pinvAssignSheet(d);
+  else if(d.kind==='rematch') s=pinvRematchSheet(d);
+  else s={title:escAttr(d.name||''),sub:T('Scan to reach them','扫码联系'),
+    body:`<div style="padding:8px 20px;text-align:center">${d.err?`<span style="font-size:14px;color:var(--text-secondary)">${T('No QR on file','暂无二维码')}</span>`
+      :d.qr?`<img src="${escAttr(d.qr)}" alt="" style="max-width:280px;width:100%;border-radius:10px">`:`<span style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`}</div>`,foot:''};
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('pinvClose')"></div>
+   <div class="sheet" style="top:48px;z-index:46;overflow:hidden">
+     <div style="flex:none;padding:8px 20px 12px"><div class="grabber"></div>
+       <div style="display:flex;align-items:flex-start;gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-size:18px;font-weight:500">${s.title}</span>
+         <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${s.sub}</span></span>
+         <button class="iconbtn" style="width:36px;height:36px;margin-right:-6px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('pinvClose')">${ic('x',20,2)}</button></div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto">${s.body}</div>
+     ${s.foot||d.err&&d.kind!=='qr'?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
+       ${d.err&&d.kind!=='qr'?`<div style="font-size:14px;color:var(--brick-ink);line-height:1.5">${d.err}</div>`:''}${s.foot}</div>`:''}</div>`;
+}
+reg('pinvClose', ()=>{ state.pinv.sheet=null; render(); });
+reg('pinvNew', i=>{
+  if(!pinvOn()) return;
+  const g=((state.pinv.out&&state.pinv.out.groups)||[])[Number(i)];
+  const sup=g&&g.supplier!==PINV_UNSPEC?g.supplier:'';
+  state.pinv.sheet={kind:'inv',id:null,supplier:sup,invoice_number:'',date:shopToday(),due_date:'',amount:'',notes:'',alloc:{},busy:false,err:null};
+  render();
+});
+/* Editing loads the 发票's OWN allocations, so the lines it covers arrive ticked
+   and its headroom counts them back in (the server ignores its own rows). */
+reg('pinvEdit', id=>{
+  if(!pinvOn()) return;
+  state.pinv.actErr=null;
+  api('/purchasing/invoices/'+Number(id)).then(inv=>{
+    const alloc={}; (inv.lines||[]).forEach(l=>{ alloc[l.line_id]=Number((l.allocated_amount||0).toFixed(2)); });
+    state.pinv.sheet={kind:'inv',id:inv.id,supplier:inv.supplier===PINV_UNSPEC?'':(inv.supplier||''),invoice_number:inv.invoice_number||'',
+      date:inv.date,due_date:inv.due_date||'',amount:inv.amount,notes:inv.notes||'',alloc,ownLines:inv.lines||[],busy:false,err:null};
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return; state.pinv.actErr=T('Could not load this.','无法加载。'); pinvPatch(); });
+});
+reg('pinvField', (f,val)=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv'||!['supplier','invoice_number','amount','date','notes'].includes(f)) return;
+  d[f]=String(val==null?'':val);
+  if(f==='supplier'){ d.alloc={}; render(); return; }   // the lines on offer are that supplier's
+  const b=document.getElementById('mPinvBadge'); if(b) b.innerHTML=pinvBadge();
+});
+reg('pinvTick', id=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return; id=Number(id);
+  if(d.alloc[id]!=null) delete d.alloc[id];
+  else { const l=pinvSheetLines().find(x=>Number(x.line_id)===id); if(!l) return; d.alloc[id]=Number((l.outstanding||0).toFixed(2)); }
+  render();
+});
+reg('pinvAlloc', (id,val)=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return;
+  if(val===''||val==null) delete d.alloc[Number(id)]; else d.alloc[Number(id)]=String(val);
+  const b=document.getElementById('mPinvBadge'); if(b) b.innerHTML=pinvBadge();
+});
+/* The desktop's Match to amount: the amount poured down the open lines in
+   order, each taking what it still has open, until it runs out. */
+reg('pinvMatch', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return;
+  let target=parseFloat(d.amount)||0; d.alloc={};
+  if(target>0) for(const l of pinvSheetLines()){ if(target<=0.01) break;
+    const take=Math.min(target,l.outstanding||0); if(take>0.01){ d.alloc[l.line_id]=Number(take.toFixed(2)); target-=take; } }
+  render();
+});
+function pinvErrFor(e){
+  const c=e&&e.code;
+  if(c==='amount_required') return T('Enter an amount first.','请先填写金额。');
+  if(c==='date_required') return T('Choose a date first.','请先选择日期。');
+  if(c==='supplier_required') return T('Choose a supplier first.','请先选择供应商。');
+  if(c==='lines_required') return T('Add at least one line first.','请至少添加一行。');
+  if(c==='unknown_supplier') return T('That supplier isn’t on file — add them on the Suppliers tab first.','该供应商不在名录中 —— 请先在“供应商”中添加。');
+  if(c==='not_found') return T('This order has already moved on. Close and open it again to see where it is now.','这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
+  return T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+}
+reg('pinvSave', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv'||d.busy||!mCan('purchasing:invoices')) return;
+  if(!(parseFloat(d.amount)>0)){ d.err=T('Enter the invoice amount','请输入发票金额'); render(); return; }
+  const links=Object.entries(d.alloc).map(([line_id,a])=>({line_id:parseInt(line_id,10),allocated_amount:parseFloat(a)||0})).filter(l=>l.allocated_amount>0);
+  const body={supplier:d.supplier,invoice_number:d.invoice_number||null,amount:parseFloat(d.amount),
+    date:d.date,due_date:d.due_date||null,notes:d.notes||null,links};
+  d.busy=true; d.err=null; render();
+  (d.id?apiWrite('/purchasing/invoices/'+d.id,body,'PUT'):apiWrite('/purchasing/invoices',body,'POST')).then(()=>{
+    state.pinv.sheet=null; showToast(d.id?T('Saved','已保存'):T('Invoice recorded','发票已登记')); pinvLoad(true); render();
+  }).catch(e=>{ d.busy=false; if(String(e.message)==='auth') return;
+    /* The allocation refusal comes back as the server's own sentence ("line N
+       over-allocated"), which names no line a buyer can see; said in words. */
+    d.err=/over-allocated/.test(String(e.message))?T('That is more than the line has left to invoice.','超出该明细的待开票金额。'):pinvErrFor(e); render(); });
+});
+reg('pinvDelete', id=>{
+  if(!mCan('purchasing:invoices')) return;
+  state.ask={title:T('Delete this invoice?','确定删除该发票?'),body:T('The lines it covers go back to awaiting an invoice.','其涵盖的采购明细将恢复为待开票。'),
+    confirmLabel:T('Delete invoice','删除发票'),danger:true,
+    run:()=>pinvAct(['/purchasing/invoices/'+Number(id),{},'DELETE'],T('Deleted','已删除'))};
+  render();
+});
+/* "Set supplier" — the way out of the Unspecified bucket: one line, one order,
+   or the whole bucket, every line ticked. */
+reg('pinvAssign', ids=>{
+  if(!pinvOn()) return;
+  const g=pinvGroup(PINV_UNSPEC); if(!g) return;
+  const want=String(ids||'').split(',').map(Number).filter(Boolean);
+  const lines=g.lines.filter(l=>!want.length||want.indexOf(Number(l.line_id))>=0);
+  if(!lines.length) return;
+  state.pinv.sheet={kind:'assign',supplier:'',lines,picked:lines.map(l=>l.line_id),busy:false,err:null};
+  render();
+});
+reg('pinvAssignSup', v=>{ const d=state.pinv.sheet; if(d&&d.kind==='assign') d.supplier=String(v||''); });
+reg('pinvAssignTick', id=>{ const d=state.pinv.sheet; if(!d||d.kind!=='assign') return; id=Number(id);
+  const i=d.picked.indexOf(id); if(i>=0) d.picked.splice(i,1); else if(d.lines.some(l=>Number(l.line_id)===id)) d.picked.push(id); render(); });
+reg('pinvAssignAll', ()=>{ const d=state.pinv.sheet; if(!d||d.kind!=='assign') return;
+  d.picked=d.picked.length===d.lines.length?[]:d.lines.map(l=>l.line_id); render(); });
+reg('pinvAssignSave', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='assign'||d.busy||!mCan('purchasing:invoices')) return;
+  if(!d.supplier){ d.err=T('Choose a supplier','请选择供应商'); render(); return; }
+  if(!d.picked.length){ d.err=T('Tick at least one line','请至少勾选一条明细'); render(); return; }
+  d.busy=true; d.err=null; render();
+  apiWrite('/purchasing/lines/supplier',{supplier:d.supplier,line_ids:d.picked.slice()},'PUT').then(()=>{
+    state.pinv.sheet=null; state.pinv.open[d.supplier]=true;   // open where they landed
+    showToast(T('Supplier set','已设置供应商')); pinvLoad(true); render();
+  }).catch(e=>{ d.busy=false; if(String(e.message)==='auth') return; d.err=pinvErrFor(e); render(); });
+});
+/* Re-match: the pairing is SHOWN before anything moves (plans are read-only
+   GETs); only a whole-order pairing is ticked by default. */
+function pinvRematchPicked(d){
+  return d.orders.filter(o=>d.picked.indexOf(o.po_id)>=0).map(o=>({o,plan:d.plans[o.po_id]}))
+    .filter(x=>x.plan&&!x.plan.error&&x.plan.moves&&x.plan.moves.length);
+}
+reg('pinvRematchOpen', ()=>{
+  if(!pinvOn()) return;
+  const off=(state.pinv.out&&state.pinv.out.recorded_elsewhere)||{};
+  const orders=(off.orders||[]).filter(o=>o.po_id); if(!orders.length) return;
+  const d={kind:'rematch',orders,plans:{},picked:[],lines:[],busy:false,err:null};
+  state.pinv.sheet=d; render();
+  orders.forEach(o=>api('/purchasing/invoices/rematch/'+Number(o.po_id)).then(p=>{
+    d.plans[o.po_id]=p||{error:true};
+    if(p&&!(p.unmatched||[]).length&&(p.moves||[]).length&&d.picked.indexOf(o.po_id)<0) d.picked.push(o.po_id);
+  }).catch(()=>{ d.plans[o.po_id]={error:true}; }).then(()=>{ if(state.pinv.sheet===d) render(); }));
+});
+reg('pinvRematchTick', id=>{ const d=state.pinv.sheet; if(!d||d.kind!=='rematch'||d.busy) return; id=Number(id);
+  const i=d.picked.indexOf(id); if(i>=0) d.picked.splice(i,1); else d.picked.push(id); render(); });
+reg('pinvRematchLines', id=>{ const d=state.pinv.sheet; if(!d||d.kind!=='rematch') return; id=Number(id);
+  const i=d.lines.indexOf(id); if(i>=0) d.lines.splice(i,1); else d.lines.push(id); render(); });
+reg('pinvRematchAll', ()=>{ const d=state.pinv.sheet; if(!d||d.kind!=='rematch'||d.busy) return;
+  const ok=d.orders.filter(o=>{ const p=d.plans[o.po_id]; return p&&!p.error&&p.moves&&p.moves.length; }).map(o=>o.po_id);
+  d.picked=ok.every(id=>d.picked.indexOf(id)>=0)?[]:ok; render(); });
+/* One order at a time — each is its own transaction on the server, so a
+   failure part-way leaves the ones already moved alone, and is named. */
+reg('pinvRematchSave', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='rematch'||d.busy||!mCan('purchasing:invoices')) return;
+  const picked=pinvRematchPicked(d); if(!picked.length) return;
+  d.busy=true; d.err=null; render();
+  let moved=0, amount=0; const failed=[];
+  picked.reduce((p,{o})=>p.then(()=>apiWrite('/purchasing/invoices/rematch/'+Number(o.po_id),{},'POST')
+    .then(r=>{ moved+=(r&&r.data&&r.data.moved)||0; amount+=(r&&r.data&&r.data.amount)||0; })
+    .catch(e=>{ if(String(e.message)==='auth') throw e; failed.push(o.po_number); })),Promise.resolve()).then(()=>{
+    d.busy=false;
+    const what=money(CUR,amount)+T(` across ${moved} line${moved===1?'':'s'}`,` · ${moved} 条明细`);
+    if(failed.length){ d.err=T('Moved ','已移动 ')+what+T('; these could not be moved: ','；以下未能移动：')+failed.map(escAttr).join(', '); render(); }
+    else { state.pinv.sheet=null; showToast(T('Moved ','已移动 ')+what+T(' onto the replacing orders',' 到替代采购单')); render(); }
+    pinvLoad(true);
+  }).catch(()=>{});
+});
+reg('pinvQr', id=>{
+  const d={kind:'qr',name:'',qr:null,err:false}; state.pinv.sheet=d; render();
+  api('/suppliers/'+Number(id)+'/channel-qr').then(r=>{ d.name=(r&&r.name)||''; d.qr=r&&r.qr; if(!d.qr) d.err=true; })
+    .catch(()=>{ d.err=true; }).then(()=>{ if(state.pinv.sheet===d) render(); });
 });
 
 /* ==========================================================================
@@ -11589,7 +12118,9 @@ const SUBS={
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),
     /* §300 P2 — the desktop's New order, on its own key (data-cap="purchasing:edit"). */
-    cta:()=>state.poView!=='supowed'&&canRoute('newpo')
+    cta:()=>state.poView==='invoices'&&pinvOn()
+      ? `<button class="cta inhead" onclick="APP.cmd('pinvNew',-1)">${T('Add invoice','添加发票')}</button>`
+      : state.poView!=='supowed'&&state.poView!=='invoices'&&canRoute('newpo')
       ? `<button class="cta inhead" onclick="APP.cmd('pwNew')">${T('New order','新建采购单')}</button>` : '',
     render:()=>screenPurchasing()},
   newpo:{title:['New order','新建采购单'],
@@ -25078,30 +25609,20 @@ function trendMetric(){
   return (m==='revenue'&&recapNoMoney()) ? 'orders' : m;
 }
 function loadTrend(force){
-  const key=state.trendRange;
+  /* §300 F5 — the key is the preset (as it always was) or the custom days,
+     plus the store when one is scoped; see trendReadKey. */
+  const key=trendReadKey();
   if(state.trendKey===key&&!force) return;
   state.trendKey=key; state.trend=null; state.trendFull=null; state.trendErr=null;
-  const to=shopToday().slice(0,10);
   /* THE WINDOW WAS ONE DAY TOO LONG IN GUANGZHOU, which is to say everywhere it
      actually runs. `new Date(to+'T00:00:00')` is LOCAL midnight and setDate
      steps back in LOCAL days — but the result was serialised with
      toISOString(), which is UTC. At UTC+8 local midnight is 16:00 the PREVIOUS
-     day in UTC, so the from-date came back a day early: "last 7 days" asked for
-     eight and "30 days" asked for thirty-one. Every figure on the screen was
-     computed over that window — the total, the busiest day, and the mean, which
-     divides by a day-count that did not match what was fetched.
-
-     It read correctly at UTC offset 0, where local midnight and UTC midnight
-     are the same instant, so it survived every run on a UTC box. The suite that
-     catches it only does so because the runner pins TZ=Asia/Shanghai to match
-     production.
-
-     Formatted from the local fields now, so the string that goes out is the
+     day in UTC, so the from-date came back a day early. Formatted from the
+     local fields now (trendPresetWindow), so the string that goes out is the
      same day the arithmetic was done in. */
-  const from=(()=>{ const d=new Date(to+'T00:00:00'); d.setDate(d.getDate()-(Number(key)-1));
-    const p=n=>String(n).padStart(2,'0');
-    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); })();
-  api('/dashboard?from='+from+'&to='+to).then(d=>{
+  const {from,to}=trendWindow();
+  api('/dashboard?from='+from+'&to='+to+trendStoreQS()).then(d=>{
     if(state.trendKey!==key) return;   // a later range won the race
     state.trend=Array.isArray(d&&d.trend)?d.trend:[];
     /* The WHOLE reply is kept now, not just its `trend` array. Everything the
@@ -25436,7 +25957,10 @@ function statusTrend(){
   const lbl=TREND_METRICS.find(x=>x[0]===m);
   return (m==='revenue'?money0(CUR,total):Math.round(total).toLocaleString())
     + ' ' + T(lbl[1],lbl[2]).toLowerCase()
-    + ' · ' + T('last '+state.trendRange+' days','近 '+state.trendRange+' 天');
+    + ' · ' + (state.trendRange==='custom'
+        ? (()=>{ const w=trendWindow(), f=x=>tdWhen(x,'date',_tdL())||x; return w.from===w.to?f(w.from):f(w.from)+' – '+f(w.to); })()
+        : T('last '+state.trendRange+' days','近 '+state.trendRange+' 天'))
+    + (trendStoreName()?' · '+escAttr(trendStoreName()):'');
 }
 function screenTrend(){
   loadTrend();
@@ -25445,8 +25969,15 @@ function screenTrend(){
   const chips=(list,cur,cmd)=>`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
     ${list.map(([k,en,zh])=>`<button onclick="APP.cmd('${cmd}','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
       background:${cur===k?'var(--surface-card)':'transparent'};color:${cur===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${cur===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${T(en,zh)}</button>`).join('')}</div>`;
+  /* §300 F5 — the stores for the picker, read once if the board has not. */
+  if(state.stores==null&&!state.trendStoresTried){ state.trendStoresTried=true;
+    api('/stores').then(r=>{ if(Array.isArray(r)){ state.stores=r.filter(s=>s.is_active==null||s.is_active); render(); } }).catch(()=>{}); }
+  const storeSel=trendStorePicker()?`<select aria-label="${T('Store','门店')}" style="width:100%" onchange="APP.cmd('trendStore',this.value)">
+      <option value=""${state.trendStore?'':' selected'}>${T('All stores','全部门店')}</option>
+      ${state.stores.map(st=>`<option value="${escAttr(String(st.id))}"${String(st.id)===String(state.trendStore)?' selected':''}>${escAttr(mStoreName(st))}</option>`).join('')}</select>`:'';
   const head=`<div style="padding:14px 16px 0;display:flex;flex-direction:column;gap:8px">
-    ${chips(TREND_RANGES,state.trendRange,'trendRange')}
+    ${chips(TREND_RANGES.concat([['custom','Custom','自定义']]),state.trendRange,'trendRange')}
+    ${storeSel}
     ${metrics.length>1?chips(metrics,m,'trendMetric'):''}</div>`;
   if(state.trendErr) return `${head}<div style="padding:16px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
@@ -25454,6 +25985,7 @@ function screenTrend(){
       <span style="font-size:14px;color:var(--brick-ink)">${state.trendErr}</span></div></div>`;
   if(!state.trend) return `${head}<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const t=state.trend;
+  trendReadLoad();   // §300 F5 — once per window, while this screen is on
   if(!t.length) return head+nothingYet(T('Nothing in this window','该时段没有数据'),
     T('No day in this range has anything on it yet. A shorter window may.','所选时段内还没有任何数据，可以试试更短的区间。'));
   const vals=t.map(p=>Number(p[m])||0);
@@ -25486,7 +26018,7 @@ function screenTrend(){
       <span style="display:flex;transform:rotate(${up?0:180}deg)">${ic('arrow-up',13,2.5)}</span>
       ${(up?'+':'−')+Math.abs(Number(dl))+'%'}</span>
     <span style="font-size:13px;color:var(--text-secondary)">${
-      T('vs prior '+state.trendRange+' days','对比前 '+state.trendRange+' 天')}</span></div>`;
+      T('vs prior '+trendSpan()+' days','对比前 '+trendSpan()+' 天')}</span></div>`;
 
   /* VISITS ARE ONE CHANNEL'S, SITTING IN A CHIP ROW BESIDE TWO THAT ARE EVERY
      CHANNEL'S. retail_visits has exactly one writer — the mini app's tracker via
@@ -25548,9 +26080,312 @@ function screenTrend(){
       ${bestDow?fact(T('Best day of the week','一周中最旺的一天'),bestDow,T('on average','平均')):''}
       ${fact(T('Days counted','统计天数'),String(days))}
     </div>
+    ${trendReadCard()}
     ${sections.map(section).join('')}
+    ${trendHeatCard()}
+    ${trendRetCard()}
+    ${trendAskCard()}
     ${recapNoMoney()?noteBar(T('Revenue is not shown on this account.','此账号不显示营收。')):''}
-    ${noteBar(T('Hover charts, the cohort grid and the written read are on desktop.','悬停图表、留存矩阵与文字解读在电脑端。'))}</div>`;
+    ${/* §300 F5 — the old note named three things on desktop; the read and the
+          retention figures are here now, so it names the one that is not. */''}
+    ${noteBar(T('Hover charts are on desktop.','悬停图表在电脑端。'))}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   §300 — WHAT THE DESKTOP'S REPORTS HAS THAT TREND LACKED (step F5)
+   --------------------------------------------------------------------------
+   Trend reads the same /dashboard payload the desktop's Reports reads. What
+   it was missing, per the parity survey, is built here from 03-dashboard.js:
+
+     • a CUSTOM window (dashSetRange's inputs) — a fourth chip opening From/To;
+     • a STORE select (dashStoreId / dashEnsureStoreFilter) — shown only with
+       more than one store, and never to a store-scoped operator, who is pinned
+       to their own store on every read (RA_STORE_LOCK). Trend sent no store at
+       all before, so a store-scoped operator was reading every store's figures;
+     • the DEMAND HEATMAP (dashRenderHeatmap) — orders by weekday and hour;
+     • RETENTION (dashRenderCohorts) — month 1/3/6/12 and the weighted curve;
+     • THE READ and ASK (dashReadMaybeLoad / dashAskSubmit) — the AI's plain-
+       words reading of the period, and questions about it.
+
+   GATES, AS TREND'S AND THE DESKTOP'S. The heatmap and retention carry no
+   money (counts and percentages) and show wherever Trend does. The read and
+   Ask speak about revenue and are the Reports tab's own, so they need
+   `reports:view` (which mCan fails CLOSED while caps are unknown) and are
+   never offered on the three no-money boards (recapNoMoney). The read is a
+   billed call, cached by the server per window, and is fetched only when this
+   screen is on — the desktop's "only once Reports is opened" rule.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* The window Trend reads: a preset counted back from the store's today (the
+   arithmetic loadTrend has always done), or the two custom days. */
+function trendPresetWindow(k){
+  const to=shopToday().slice(0,10);
+  const d=new Date(to+'T00:00:00'); d.setDate(d.getDate()-(Number(k)-1));
+  const p=n=>String(n).padStart(2,'0');
+  return {from:d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()),to};
+}
+function trendWindow(){
+  if(state.trendRange==='custom'&&state.trendFrom&&state.trendTo) return {from:state.trendFrom,to:state.trendTo};
+  return trendPresetWindow(state.trendRange==='custom'?'7':state.trendRange);
+}
+/* The store every read is scoped to: the operator's own when they are
+   store-scoped, else the one picked, else '' for all. */
+const trendStoreId=()=>String(state.storeLock||state.trendStore||'');
+const trendStoreQS=()=>{ const s=trendStoreId(); return s?'&store_id='+encodeURIComponent(s):''; };
+/* The key a read is made for. A preset with no store is just the preset — the
+   key Trend has always used — so nothing that seeds it had to change. */
+function trendReadKey(){
+  const w=trendWindow();
+  const base=state.trendRange==='custom'?('custom:'+w.from+':'+w.to):String(state.trendRange);
+  return base+(trendStoreId()?'@'+trendStoreId():'');
+}
+/* The picker: more than one store, and not a store-scoped operator. */
+const trendStorePicker=()=>!state.storeLock&&Array.isArray(state.stores)&&state.stores.length>1;
+function trendStoreName(){
+  const sid=trendStoreId(); if(!sid) return '';
+  const s=(state.stores||[]).find(x=>String(x.id)===sid);
+  return s?mStoreName(s):'';
+}
+/* The span a preset or custom window covers, for the "vs prior N days" line. */
+function trendSpan(){
+  const w=trendWindow();
+  return Math.round((new Date(w.to)-new Date(w.from))/86400000)+1;
+}
+
+/* ── The demand heatmap (dashRenderHeatmap) ─────────────────────────────── */
+const TREND_DOW_1=[['S','日'],['M','一'],['T','二'],['W','三'],['T','四'],['F','五'],['S','六']];
+const TREND_DOW_EN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const TREND_DOW_CN=['周日','周一','周二','周三','周四','周五','周六'];
+function trendHeatCard(){
+  const d=state.trendFull; if(!d) return '';
+  const heat=d.heat||[];
+  const head=`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px">
+    <span style="font-size:15.5px;font-weight:500">${T('Demand heatmap','需求热力图')}</span>
+    <span style="font-size:12px;color:var(--text-secondary)">${T('orders by hour','按小时订单')}</span></div>`;
+  if(!heat.length) return `<div class="card" style="padding:14px 16px">${head}
+    <div style="font-size:13.5px;color:var(--text-secondary)">${T('No orders in range','区间内无订单')}</div></div>`;
+  const grid={}; let max=1, busiest=null;
+  heat.forEach(h=>{ grid[h.dow+'-'+h.hour]=h; if(h.orders>max) max=h.orders; if(!busiest||h.orders>busiest.orders) busiest=h; });
+  let rows='';
+  for(let dw=0;dw<7;dw++){
+    let cells='';
+    for(let hr=0;hr<24;hr++){
+      const c=grid[dw+'-'+hr]; const k=c?c.orders/max:0;
+      cells+=`<i style="flex:1;height:12px;border-radius:2px;background:${k===0?'var(--surface-raised)':'var(--text-primary)'};${k===0?'':'opacity:'+(0.1+k*0.75).toFixed(2)}"></i>`;
+    }
+    rows+=`<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;flex:none;font-size:11px;color:var(--text-secondary);text-align:center">${T(...TREND_DOW_1[dw])}</span>
+      <span style="display:flex;gap:1px;flex:1;min-width:0">${cells}</span></div>`;
+  }
+  const hh=busiest?String(busiest.hour).padStart(2,'0'):'';
+  const busy=busiest?T(`Busiest: ${TREND_DOW_EN[busiest.dow]} ${hh}:00`,`最忙：${TREND_DOW_CN[busiest.dow]} ${hh}:00`):'';
+  return `<div class="card" style="padding:14px 16px">${head}
+    <div style="display:flex;flex-direction:column;gap:2px">${rows}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:12px;color:var(--text-secondary)">
+      <span class="num">${busy}</span>
+      <span style="display:flex;align-items:center;gap:4px;flex:none">${T('fewer','少')}
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--surface-raised)"></i>
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--text-primary);opacity:.18"></i>
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--text-primary);opacity:.45"></i>
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--text-primary);opacity:.8"></i>${T('more','多')}</span></div></div>`;
+}
+
+/* ── Retention (dashRenderCohorts) ──────────────────────────────────────── */
+/* The weighted curve: for each month since a first order, the share of every
+   cohort old enough to have that month who ordered in it. */
+function trendRetCurve(d){
+  const sizes=(d&&d.cohortSizes)||[], rows=(d&&d.cohorts)||[];
+  if(!sizes.length) return [];
+  const byMonth={};
+  rows.forEach(c=>{ (byMonth[c.cohort_month]=byMonth[c.cohort_month]||{})[c.active_month]=c.active_customers; });
+  const sizeMap={}; sizes.forEach(c=>{ sizeMap[c.cohort_month]=c.size; });
+  const months=sizes.map(c=>c.cohort_month);
+  const monthAdd=(mo,n)=>{ const p=mo.split('-').map(Number); const t=(p[1]-1)+n;
+    return (p[0]+Math.floor(t/12))+'-'+String(((t%12)+12)%12+1).padStart(2,'0'); };
+  const between=(a,b)=>{ const x=a.split('-').map(Number), y=b.split('-').map(Number); return (y[0]-x[0])*12+(y[1]-x[1]); };
+  const todayYM=shopToday().slice(0,7);
+  const age={}; months.forEach(m=>{ age[m]=between(m,todayYM); });
+  const maxOff=Math.max(0,...Object.values(age));
+  const curve=[];
+  for(let m=0;m<=maxOff;m++){
+    let active=0,size=0;
+    for(const cm of months){
+      if(age[cm]<m) continue;
+      const s=sizeMap[cm]||0; if(!s) continue;
+      active+=(byMonth[cm]&&byMonth[cm][monthAdd(cm,m)])||0; size+=s;
+    }
+    if(size>0) curve.push({offset:m,pct:Math.round(active/size*1000)/10});
+  }
+  return curve;
+}
+function trendRetCard(){
+  const d=state.trendFull; if(!d) return '';
+  const head=`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px">
+    <span style="font-size:15.5px;font-weight:500">${T('Retention','留存')}</span>
+    <span style="font-size:12px;color:var(--text-secondary)">${T('weighted, all cohorts','加权，全部批次')}</span></div>`;
+  if(!(d.cohortSizes||[]).length) return `<div class="card" style="padding:14px 16px">${head}
+    <div style="font-size:13.5px;color:var(--text-secondary)">${T('Not enough history yet','暂无足够留存数据')}</div></div>`;
+  const curve=trendRetCurve(d);
+  const kpi=m=>{ const c=curve.find(x=>x.offset===m); return c?c.pct:null; };
+  const tile=(m,en,zh)=>{ const v=kpi(m); return `<div style="min-width:0;text-align:center">
+    <div class="num" style="font-size:18px;font-weight:500">${v==null?'—':Math.round(v)+'%'}</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${T(en,zh)}</div></div>`; };
+  let svg='';
+  if(curve.length>1){
+    const W=320,H=70,pt=6,pb=8,ih=H-pt-pb;
+    const pts=curve.map((c,i)=>`${(i/(curve.length-1)*W).toFixed(1)},${(pt+ih-(c.pct/100)*ih).toFixed(1)}`).join(' ');
+    svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" aria-hidden="true" style="display:block;margin-top:12px">
+      <line x1="0" y1="${H-pb}" x2="${W}" y2="${H-pb}" stroke="var(--border-default)"/>
+      <polyline points="${pts}" fill="none" stroke="var(--text-primary)" stroke-width="1.75" stroke-linejoin="round"/></svg>`;
+  }
+  return `<div class="card" style="padding:14px 16px">${head}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${tile(1,'month 1','第1个月')}${tile(3,'month 3','第3个月')}${tile(6,'month 6','第6个月')}${tile(12,'month 12','第12个月')}</div>${svg}</div>`;
+}
+
+/* ── The read and Ask (dashReadMaybeLoad / dashAskSubmit) ───────────────── */
+const trendAiOn=()=>mCan('reports:view')&&!recapNoMoney();
+/* The digest the model reads — dashAiDigest, field for field, over the same
+   payload: rounded, top-N, and nothing the screen does not already hold. The
+   server writes the read from this and caches it per window. */
+const TREND_SCENE_EN={1001:'Mini-program list',1005:'Search',1006:'Search result',1007:'Single chat card',1008:'Group chat card',
+  1011:'Scan QR',1012:'Long-press QR',1013:'Album QR',1014:'Template msg',1017:'Trial version',1019:'Wallet',1020:'Card package',
+  1023:'Home screen',1027:'Search recents',1035:'Official-account menu',1036:'App share',1037:'From mini-program',
+  1038:'Back from mini-program',1047:'Scan code (Discover)',1048:'Long-press code',1058:'Official article',1065:'URL link',
+  1074:'Official-account card',1089:'Chat tools',1101:'Dev preview',1106:'Chat pull-down search',1107:'Subscription msg',
+  1131:'Floating window',1271:'Chat pull-down favourites'};
+function trendDigest(){
+  const D=state.trendFull; if(!D) return null;
+  const r2=n=>Math.round(Number(n||0)*100)/100;
+  const k=D.kpis||{};
+  const status={};
+  Object.entries(D.funnel||{}).forEach(([st,v])=>{ status[st]={orders:v.n,revenue:r2(v.revenue)}; });
+  const mk=D.marketing||{};
+  const vouchers=mk.vouchers||[];
+  return {
+    currency:CUR||'¥',
+    window:D.window,
+    kpis:{revenue:r2(k.revenue),orders:k.orders,average_order:r2(k.aov),buyers:k.buyers,
+      new_customers:k.new_customers,visits:k.visits,sessions:k.sessions,unique_visitors:k.visitors,
+      mini_app_orders:k.mini_app_orders,
+      conversion_rate_pct:r2(k.conversion_rate),refund_rate_pct:r2(k.refund_rate),
+      cancelled_orders:k.cancelled_orders,refunded_orders:k.refunded_orders},
+    change_vs_prior_window_pct:D.deltas,
+    order_status:status,
+    payments:(D.payments||[]).slice(0,6).map(p=>({method:p.method,orders:p.orders,revenue:r2(p.revenue)})),
+    delivery_modes:(D.delivery||[]).slice(0,5).map(x=>({mode:x.mode,orders:x.orders})),
+    revenue_composition:D.composition?{products:r2(D.composition.product_total),delivery_fees:r2(D.composition.delivery_fee),
+      voucher_discounts:r2(D.composition.voucher_total),point_discounts:r2(D.composition.points_total),
+      store_credit_used:r2(D.composition.balance_total),net:r2(D.composition.net_total)}:null,
+    wallet:D.topups?{topups_received:r2(D.topups.received),store_credit_redeemed:r2(D.topups.redeemed)}:null,
+    busiest_hours:(D.heat||[]).slice().sort((a,b)=>b.orders-a.orders).slice(0,3)
+      .map(h=>({weekday:TREND_DOW_EN[h.dow],hour:h.hour,orders:h.orders})),
+    top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue)})),
+    top_customers:(D.topCustomers||[]).slice(0,5).map(c=>({name:c.nickname||('#'+c.customer_id),orders:c.orders,revenue:r2(c.revenue)})),
+    buyers_new_vs_returning:D.new_vs_returning,
+    top_cities:(D.geoCities||[]).slice(0,6).map(g=>({city:g.city_en||g.city,city_cn:g.city,orders:g.orders,revenue:r2(g.revenue)})),
+    vouchers:{orders_with_voucher:vouchers.reduce((s,v)=>s+Number(v.uses||0),0),
+      discount_given:r2(vouchers.reduce((s,v)=>s+Number(v.discount||0),0))},
+    points:mk.points?{orders:mk.points.orders,value:r2(mk.points.points_value)}:null,
+    checkout:D.checkout?{started:D.checkout.started,converted:D.checkout.converted,
+      abandoned:D.checkout.abandoned,checkout_to_paid_pct:D.checkout.conversion_rate}:null,
+    retention_pct_by_months_since_first_order:trendRetCurve(D).slice(0,7).map(c=>({month:c.offset,pct:c.pct})),
+    traffic_scenes:((D.traffic&&D.traffic.scenes)||[]).slice(0,6).map(sc=>({source:TREND_SCENE_EN[sc.scene]||('scene '+sc.scene),visits:sc.visits})),
+    article_views:(D.articleViews||[]).slice(0,3).map(a=>({title:a.title_en||a.title_cn||'(removed)',seen:a.impressions,reads:a.reads})),
+  };
+}
+/* Once per window, only while this screen is on, and never again once the
+   server says the AI is not configured — "quietly a reports page without AI". */
+function trendReadLoad(){
+  const r=state.trendRead;
+  if(!trendAiOn()||!state.trendFull||r.unavailable) return;
+  const key=trendReadKey();
+  if(r.key===key) return;
+  r.key=key; r.loading=true; r.data=null; r.error=false;
+  const w=trendWindow();
+  apiWrite('/reports/read',{from:w.from,to:w.to,store_id:trendStoreId(),digest:trendDigest()}).then(j=>{
+    if(r.key!==key) return;
+    r.loading=false;
+    const d=j&&j.data;
+    if(!d||d.available===false) r.unavailable=true; else r.data=d;
+    render();
+  }).catch(e=>{
+    if(r.key!==key||String(e.message)==='auth') return;
+    r.loading=false; r.error=true; render();   // hidden rather than apologised for, as on the desktop
+  });
+}
+const TREND_ASK_CHIPS=[['Why did the average order change?','平均客单为什么变化？'],
+  ['What should I restock first?','我该先补什么货？'],
+  ['How does this period compare with the one before?','这个区间和上一个相比怎么样？']];
+const trendDot=`<span style="width:7px;height:7px;border-radius:50%;background:var(--dusk-ink);flex:none;display:inline-block"></span>`;
+function trendReadCard(){
+  const r=state.trendRead;
+  if(!trendAiOn()||r.unavailable||r.error) return '';
+  if(r.loading&&!r.data) return `<div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-secondary)">${trendDot}${T('Reading the numbers…','正在读取数据…')}</div>`;
+  const d=r.data; if(!d||!d.read) return '';
+  const text=String(LANG==='en'?(d.read.read_en||d.read.read_cn):(d.read.read_cn||d.read.read_en)||'');
+  const paras=text.split(/\n+/).map(x=>x.trim()).filter(Boolean).map(x=>`<p style="margin:0;font-size:14.5px;line-height:1.6">${escAttr(x)}</p>`).join('');
+  const when=d.generated_at?tdWhen(d.generated_at,'time',_tdL()):'';
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">${trendDot}<span style="font-size:15.5px;font-weight:500">${T('The read','解读')}</span>
+      <span style="font-size:12px;color:var(--text-secondary);margin-left:auto">${escAttr(when?T('written at '+when,'写于 '+when):T("written from this period's numbers",'由本期数据生成'))}</span></div>
+    ${paras}
+    <div style="font-size:12px;line-height:1.5;color:var(--text-secondary)">${T('Drawn from the numbers in this report — nothing else. Refreshes with the range, at most twice a day.','内容仅依据本报表数据。随区间刷新，每天最多两次。')}</div></div>`;
+}
+function trendAskCard(){
+  const r=state.trendRead, a=state.trendAsk;
+  // As dashAskEnsure: offered once the read has had its answer, unless the
+  // server said there is no AI here at all.
+  if(!trendAiOn()||r.unavailable||r.loading||(!r.data&&!r.error)) return '';
+  const log=a.log.map(x=>{
+    const body=x.pending?`<div style="display:flex;gap:8px;align-items:flex-start;color:var(--text-secondary)">${trendDot}<span>${T('Reading the numbers…','正在读取数据…')}</span></div>`
+      : x.error?`<div style="color:var(--text-secondary)">${x.error==='ask_limit'?T("That's the day's questions used up — ask again tomorrow.",'今天的提问次数已用完，明天再来。')
+          :T('That one didn’t go through. Try again.','这次没有成功，请再试一次。')}</div>`
+      : `<div style="display:flex;gap:8px;align-items:flex-start">${trendDot}<span>${escAttr(LANG==='en'?x.a_en:x.a_cn)}</span></div>`;
+    return `<div style="border-top:1px solid var(--border-default);padding-top:10px;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.55">
+      <div style="font-weight:500">${escAttr(x.q)}</div>${body}</div>`;
+  }).join('');
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">${trendDot}<span style="font-size:15.5px;font-weight:500">${T('Ask about your numbers','问问你的数据')}</span></div>
+    <div style="display:flex;gap:8px">
+      <input id="mTrendAsk" maxlength="300" enterkeyhint="send" value="${escAttr(a.q)}" placeholder="${T('e.g. Why did the average order drop?','例如：平均客单为什么下降？')}" style="flex:1;min-width:0"
+        oninput="APP.cmd('trendAskSet',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();APP.cmd('trendAsk','')}">
+      <button class="btn2" style="flex:none;width:auto;padding:0 16px" ${a.busy?'disabled':''} onclick="APP.cmd('trendAsk','')">${T('Ask','提问')}</button></div>
+    <div class="hscroll" style="display:flex;gap:8px">${TREND_ASK_CHIPS.map((c,i)=>`<button class="chip" ${a.busy?'disabled':''} onclick="APP.cmd('trendAskChip',${i})"><span>${T(c[0],c[1])}</span></button>`).join('')}</div>
+    ${log}</div>`;
+}
+reg('trendAskSet', v=>{ state.trendAsk.q=String(v==null?'':v); });
+reg('trendAskChip', i=>{ const c=TREND_ASK_CHIPS[Number(i)]; if(c) CMD.trendAsk(T(c[0],c[1])); });
+/* One question at a time; the box empties when it was the box that asked. */
+reg('trendAsk', qArg=>{
+  const a=state.trendAsk;
+  const q=String(qArg||a.q||'').trim();
+  if(!q||a.busy||!state.trendFull||!trendAiOn()) return;
+  a.busy=true; if(!qArg) a.q='';
+  const row={q,pending:true}; a.log.push(row); render();
+  const w=trendWindow();
+  apiWrite('/reports/ask',{q,from:w.from,to:w.to,store_id:trendStoreId(),digest:trendDigest()}).then(j=>{
+    row.pending=false;
+    const ans=(j&&j.data&&j.data.answer)||{};
+    row.a_en=ans.answer_en; row.a_cn=ans.answer_cn;
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    row.pending=false; row.error=(e&&e.code==='ask_limit')?'ask_limit':'failed';
+  }).then(()=>{ a.busy=false; render(); });
+});
+reg('trendStore', v=>{ if(state.storeLock) return; state.trendStore=String(v||''); render(); loadTrend(); });
+/* Custom asks for two days in the ask-sheet, as Finance's does (F1); a pick
+   that is a preset lights the preset. */
+function trendCustomAsk(){
+  const w=trendWindow();
+  state.ask={title:T('Custom','自定义'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:w.from},{id:'to',label:T('To','至'),type:'date',value:w.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(!v.from||!v.to)?T('Pick a date','选日期'):v.from>v.to?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{
+      const hit=TREND_RANGES.map(r=>r[0]).find(k=>{ const x=trendPresetWindow(k); return x.from===v.from&&x.to===v.to; });
+      if(hit){ state.trendRange=hit; state.trendFrom=null; state.trendTo=null; }
+      else { state.trendRange='custom'; state.trendFrom=v.from; state.trendTo=v.to; }
+      render(); loadTrend();
+    }};
+  render();
 }
 
 /* ==========================================================================
@@ -29111,6 +29946,7 @@ function render(){
   if(state.poId!=null&&state.poPrint&&state.poDetail) html += layer('poprint:'+state.poId, sheetPOPrint());
   if(state.pwSheet&&state.pw&&pwOnTop()) html += layer('pw:'+state.pwSheet.kind, sheetPW());
   if(state.pk) html += layer('pk', sheetPK());
+  if(state.pinv.sheet) html += layer('pinv:'+state.pinv.sheet.kind, sheetPinv());
   if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());
   if(state.fin.txRow) html += layer('fintx:'+state.fin.txRow, sheetFinTxRow());
   if(state.fin.form) html += layer('fintxform', sheetFinTxForm());
@@ -29565,6 +30401,7 @@ function layers(){
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
   if(state.pwSheet&&state.pw&&pwOnTop()) L.push(()=>{ state.pwSheet=null; });
   if(state.pk) L.push(()=>{ state.pk=null; });
+  if(state.pinv.sheet) L.push(()=>{ state.pinv.sheet=null; });
   if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });
   if(state.fin.txRow) L.push(()=>{ state.fin.txRow=null; state.fin.txActErr=''; });
   if(state.fin.form) L.push(()=>{ state.fin.form=null; });
@@ -31601,6 +32438,8 @@ async function loadMe(){
        FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */
     state.caps=Array.isArray(u.caps)?u.caps:null;
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null};
+    // §300 F5 — RA_STORE_LOCK's rule: the first of the operator's scoped stores.
+    state.storeLock=(Array.isArray(u.scopeStores)&&u.scopeStores.length)?String(u.scopeStores[0]):null;
     /* The operator's own language, from their account (audit M-01 / M-02). It
        wins over whatever this handset had — that is the point. null means they
        have never chosen, and then the handset's value stands: nobody who has
