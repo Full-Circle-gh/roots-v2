@@ -21139,3 +21139,40 @@ only from a button linking to it.
    appear only if placed on Home.
 9. **Strings:** the editor's labels, declared in the vocabulary document
    (v1.208), most copied, some composed.
+
+## §297 — A CATEGORY'S BANNER, AT THE TOP OF ITS SECTION
+
+**Decided 2026-09-30 by Ash** (*"what about middle of page between categories
+advertising banners?"*, then *"go do all"* on the mockup). Claude's
+conditions, drawn on the mockup and taken with it, are what make this a
+banner and not an ad wall:
+
+1. **One banner per TOP category, set on the category itself** (Products →
+   Categories), not free-floating in the page editor. Stored on the tree node
+   (`category.tree`, `banner: { image_url, target, start_at, end_at }`), so it
+   moves with its category when it is dragged or renamed and can never land in
+   the wrong place. A subcategory has none: it is a heading inside a section.
+2. **One fixed shape, 5:2**, drawn first in the category's section on the mini
+   app's Shop tab (rail layouts and gallery). The box takes its height from its
+   width, never from the picture, because the rail's highlight is measured once
+   just after render: a picture that changed the section's height when it
+   loaded would light the wrong category.
+3. **No swiping inside the list.** One still picture per category; the swipe
+   row belongs at the top (§296).
+4. **Use it on two or three categories at a time**, not all of them. This is
+   guidance, not a limit the code enforces: a banner on every category turns the
+   list into an ad wall customers scroll past to reach products.
+5. **Hidden while a search is typed**, and outside its start / end days on
+   China's day, the promo cards' own rule.
+6. **The tree keeps only a usable banner** (`lib/category-tree.js`
+   `sanitizeBanner`): an uploaded path or http(s) picture, a bounded link that
+   is never a script scheme, well-formed days. A banner without a picture is
+   dropped whole.
+7. **Both writers of the tree carry it.** The product wizard's *add category*
+   rebuilt every node from three named fields and PUT the whole tree, so it
+   would have deleted every banner the first time anyone added a category from
+   it. It now sends every node back whole.
+8. **Not changed:** the web shop, the QR menu (reads the same tree and ignores
+   the field), subcategories.
+9. **Strings:** the category pane's labels, declared in the vocabulary
+   document (v1.209).

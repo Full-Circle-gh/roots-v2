@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.209 · 2026-09-30 · §297 A CATEGORY'S BANNER — SIX OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The banner section on Products → Categories. See *A category's banner (§297)*.
+
 **v1.208 · 2026-09-30 · §296 PROMO CARDS — OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The page editor's new promo cards block: its name, description, note, form labels and hints, and the Shop landing page's corrected description. The cards themselves carry no text. See *Promo cards (§296)*.
 
 **v1.207 · 2026-09-30 · §295 THE SHOP TAB'S SEARCH BUTTON — NOTHING COMPOSED, ONE PAIR COPIED.** The mini app Shop tab's search becomes an icon; its screen-reader label `Search · 搜索` is copied whole from the web shop's search button. See *The Shop tab's search button (§295)*.
@@ -9390,3 +9392,37 @@ same start / end fields.
   which the coupon block already is.
 - `横幅` (banner): **rejected** for this block; it is the hero banner's word
   (`主图横幅`), a single wide picture, and §297 uses it for the category banner.
+
+## A category's banner (§297)
+
+**Composed by Claude, 2026-09-30, under the 2026-09-06 amendment.** Operator
+register only (Rule 1): the category pane on Products → Categories
+(`public/retail-admin/01-core.js`). Nothing reaches a customer: the banner is
+a picture.
+
+| shipped | built from |
+|---|---|
+| `Banner (optional) · 横幅(可选)` (section heading) | **composed.** `横幅` from the editor's live `Hero banner · 主图横幅` and `Video banner · 视频横幅`, the same thing: one wide picture; `(可选)` the editor's live suffix (`链接(可选)`) |
+| `A wide picture, 5 : 2, shown at the top of this category on the mini app's Shop tab. Hidden while a customer is searching. · 宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。` | **composed** |
+| `Add banner · 添加横幅` | **composed** on this pane's live `Add subcategory · 新增子分类` shape, with the editor's `添加` |
+| `Picture only · 仅图片` (link list: no link) | **composed** |
+| `Remove banner · 删除横幅` | **composed** on this pane's live `Remove category · 删除主分类` |
+| `Leave both empty to show it always. Outside its dates it hides by itself. · 两者留空则一直显示。不在日期内时会自动隐藏。` | **composed**, the promo cards' hint (§296) with the subject dropped |
+| `Tap link · 点击跳转` | **Chinese copied whole** from the editor's `Tap target · 点击跳转`; the English says *link*, as the promo card's `Tap link (optional)` does |
+
+**Copied whole:** `Start · 开始`, `End · 结束` and the state words `Live · 进行中`,
+`Starts · 待开始`, `Ended · 已结束` (the pop-ups, `05-marketing.js`, same start /
+end fields); `Replace picture · 更换图片` (`10-extras.js`); `Pages · 页面` and
+the page names `Promotions page · 促销页面`, `Coupons · 优惠券`,
+`Membership · 会员`, `Shop · 商店` (the editor's link picker);
+`Products on this shelf · 货架上的产品` (this pane's own heading);
+`Uploading… · 上传中…` and `Upload failed · 上传失败` (the admin's uploads).
+
+**Live candidates rejected.**
+
+- `新增` (this pane's verb, *Add subcategory · 新增子分类*) for *Add banner*:
+  **rejected** in favour of `添加`, the verb every picture and card in the
+  editor uses (`添加卡片`, `+ 添加门店`), so adding a banner reads like adding
+  the other pictures.
+- `主图` (hero) for the banner: **rejected**; it names the page editor's block,
+  and this is not that block.
