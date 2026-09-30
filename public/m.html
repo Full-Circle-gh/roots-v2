@@ -193,6 +193,12 @@
      without the per-line marks. It is wrapped in its own IIFE, so its names
      cannot collide with this file's. -->
 <script src="/lib/recipe-cost.js" defer></script>
+<!-- The material cost module (lib/ingredient-cost.js), the same way and for the
+     same reasons as the recipe module above (§300 R5): the Materials record's
+     cost line and its unit menus are the shared derivation's, never a second
+     copy. Wrapped in its own IIFE since R5 so its `API` cannot collide with
+     this file's. -->
+<script src="/lib/ingredient-cost.js" defer></script>
 <style>
 /* ===========================================================================
    Tacet Mobile — monitoring-first phone companion.
@@ -1321,6 +1327,19 @@ const state = {
           open. All three reset on entry: a half-ticked list carried over from
           yesterday's batch is worse than no list. */
        scale:1,got:{},step:null},
+  /* MATERIALS (§300 R5). The list's filters are the desktop's — search, kind,
+     category, supplier, archived, and the Bought / Made / All source (Bought
+     by default, the job the screen's own description names) — all sent to the
+     server, which counts each chip row with every other filter applied. The
+     four pickers (kinds, subcategories with their kind pairing, finance
+     categories, suppliers) are read once. `rec` is the open record's whole
+     answer (row, price history, purchases, what uses it, what makes it); `ed`
+     is the draft while it is edited; `busy`/`actErr` the archive's write. */
+  mat:{rows:null,tried:false,err:null,seq:0,meta:null,counts:{},srcCounts:{bought:0,made:0},
+       source:'bought',kind:'',cat:'',sup:'',q:'',arch:false,
+       kinds:null,cats:null,catsByKind:{},finCats:null,sups:null,pickTried:false,
+       openId:null,isNew:false,rec:null,recTried:false,recErr:null,ed:null,busy:null,actErr:null,supErr:null,
+       skuRule:null,skuHint:'',skuNote:''},
   wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
        range:'week',reason:'',store:'',reasons:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
@@ -1452,6 +1471,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      left over from last time is a list that opens looking empty. The category
      and the Archived switch go with it (§300) for the same reason: a list that
      reopens on the archive looks as if the live recipes had gone. */
+  /* Materials: a list re-entered opens on its default place — Bought, nothing
+     narrowed — and is read again (the desktop re-reads it on every visit). A
+     record is read fresh every time. */
+  if(route==='materials'){ const m=state.mat; m.q=''; m.kind=''; m.cat=''; m.sup=''; m.arch=false; m.source='bought'; m.tried=false; }
+  if(route==='materialone'){ const m=state.mat; m.rec=null; m.recTried=false; m.recErr=null; m.actErr=null; m.supErr=null; m.ed=null; m.isNew=false; m.busy=null; }
   if(route==='recipes'){ const r=state.rcp; r.q=''; r.type=''; r.cat=''; r.arch=false; }
   /* A RECORD IS RE-READ EVERY TIME. Recipes are written on desktop, so the
      copy in hand may be an hour old and the person holding the phone is about
@@ -1495,6 +1519,7 @@ function pop(){
   /* A recipe being edited asks before it is dropped, and only when it cannot
      be saved (§300 R2, rcpMayLeave). */
   if(top==='recipeone'&&!rcpMayLeave()) return;
+  if(top==='materialone'&&!matMayLeave()) return;
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   forgetScroll(); state.stack.pop(); render(); }
@@ -1763,6 +1788,7 @@ reg('rqSearch', v=>{
  ['mRcpQ','mRcpClr','rcpSearch'],
  ['mRcpPickQ','mRcpPickClr','rcpPickQ'],
  ['mRcpMzQ','mRcpMzClr','rcpMzQ'],
+ ['mMatQ','mMatClr','matSearch'],
  ['mExpQ','mExpClr','expQ'],
  ['mRcvQ','mRcvClr','rcvQuery'],
  ['mRcvToQ','mRcvToClr','rcvToQuery'],
@@ -5588,15 +5614,16 @@ const MORE_GROUPS=[
        arrive, carrying lines with them, and a row that opened it cold would
        open it empty. */
     ['logbatch','clipboard-list','Log a batch','登记批次'],
-    /* WHAT A THING IS MADE FROM, for the person making it. Read-only: the
-       ingredients, the quantities and the steps, and no money at all — this
-       screen holds no cost figure for anyone, whatever they hold, so §164's
-       split decides what the SERVER sends it and never what it draws.
+    /* WHAT A THING IS MADE FROM. Since §300 the whole desktop Recipes screen —
+       editing for `recipes:edit`, costs for `recipes:costs` only.
        BORN GATED on `production`, the same Features switch that gates Materials
        and Recipes on the desktop and `askbuy` four rows down. A new row may be
        born gated; an old one may not be gated retroactively, which is why this
        carries the switch and `logbatch` above it still does not. */
-    ['recipes','book-open','Recipes','食谱',null,'production']]},
+    ['recipes','book-open','Recipes','食谱',null,'production'],
+    /* §300 R5 — Materials, beside Recipes and behind the same Features switch
+       (the desktop's Materials tab is data-feat="production"). */
+    ['materials','package','Materials','物料',null,'production']]},
   /* THE THREE REQUEST SCREENS, AND THE ONE GROUP THAT EARNED ITS HEADING MOST.
      Each asks somebody else to act and moves nothing on its own; each was
      previously scattered among the rows that DO the thing being asked for.
@@ -17136,6 +17163,627 @@ reg('rcpGot', i=>{ const r=state.rcp, k=Number(i);
 reg('rcpStep', i=>{ state.rcp.step=Number(i); render(); });
 reg('rcpStepClose', ()=>{ state.rcp.step=null; render(); });
 reg('rcpMake', ()=>{ push('recipemake'); });
+/* ==========================================================================
+   Materials (§300 step R5) — the desktop's 18-materials.js, on the phone.
+   ==========================================================================
+   What a business buys and holds but does not sell. The list — Bought / Made /
+   All, the kind chips with their counts, search, category, supplier and
+   Archived, the row ceiling — and the record: read, edited, created and
+   archived, with the desktop's used-by warning.
+
+   MONEY: the buy price, the cost per unit, the cost history and what each PO
+   line cost — shown only with `materials:costs`, failing closed three ways, as
+   the recipes cost block does: mCan fails closed for the key while the caps
+   load, a warehouse / dispatch / customer-service board never sees money
+   (recapNoMoney), and a figure is drawn only when the server SENT it
+   (routes/retail-materials.js deletes the keys for a caller without the
+   capability).
+
+   THE PRICE IS NEVER SENT FROM A SURFACE THAT DID NOT LOAD IT, and here that
+   rule has a second half the recipes did not. PUT /materials/:id carries the
+   stored price through for a caller WITHOUT the capability — but for a caller
+   WITH it, an absent buy_price is written as 0. So "did not load" is decided by
+   the PAYLOAD, not by the screen: the draft holds `buy_price` exactly when the
+   server sent one, the field is DRAWN only when money may be shown, and the
+   body carries it exactly when the draft holds it. A board that hides money
+   from someone who holds the capability therefore sends the stored price back
+   untouched rather than wiping it; a reader the server stripped sends nothing
+   and the server keeps its own.
+
+   AUTOSAVE, AND THE ONE FIELD THAT DOES NOT SAVE ON A PAUSE. The desktop saves
+   this record with a Save button; the phone's recipe record saves itself, and
+   so does this one, through the same engine at the same timings. But a buy
+   price is not a name: every change of it files a price-history row, raises a
+   price alert past 5% and re-costs every recipe built on it — and a pause in
+   the middle of typing "12.50" would have done all three for "1". So the price
+   is sent when the field is LEFT (onchange), never on a pause, and the rest of
+   the record saves as it is typed. Materials keep no version history, so the
+   editor offers Undo back to how the record was opened. */
+const MAT_KIND={food:['Food','食品'],packaging:['Packaging','包装'],equipment:['Equipment','设备'],retail:['Retail','零售'],other:['Other','其他']};
+const matKindLabel=k=>MAT_KIND[k]?T(...MAT_KIND[k]):String(k||'');
+function matMoney(){ return mCan('materials:costs') && !recapNoMoney(); }
+const matHas=(o,k)=>!!o&&typeof o==='object'&&Object.prototype.hasOwnProperty.call(o,k);
+/* A cost PER UNIT is not a price: below a fen it needs its places, or sesame at
+   ¥0.0316/g reads as ¥0.03 (the desktop's unitMoney). */
+const matUnitMoney=n=>{ const v=Math.abs(Number(n)||0);
+  if(v===0||v>=0.1) return money(CUR,n);
+  const p=v>=0.01?4:5; return (CUR||'¥')+Number(n).toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p}); };
+const matIC=()=>window.RootsIngredientCost||null;
+/* The unit menus, the shared module's when it is loaded (the desktop's
+   RECIPE_UNITS / BUY_UNITS and their fallbacks). */
+const matRecipeUnits=()=>{ const c=matIC(); return c?[].concat(c.DIVISIBLE_RECIPE_UNITS,c.PER_PIECE_RECIPE_UNITS):['g','ml','pcs']; };
+const matBuyUnits=()=>{ const c=matIC(); return c?[].concat(c.MEASURE_BUY_UNITS,c.CONTAINER_BUY_UNITS):['kg','g','L','ml','pcs','box','bag','bottle']; };
+const matIsContainer=u=>{ const c=matIC(); return c?c.CONTAINER_BUY_UNITS.indexOf(c.normaliseUnit(u))>=0:false; };
+/* A supplier is ONE free-text name, often both languages glued ("Dry Fruit
+   果干") — split at the language boundary for display only (supSplit). */
+function matSupSplit(name){
+  const raw=String(name==null?'':name).trim(), CJK=/[　-〿㐀-䶿一-鿿豈-﫿＀-￯]/;
+  let first=-1, last=-1;
+  for(let i=0;i<raw.length;i++){ if(CJK.test(raw[i])){ if(first<0) first=i; last=i; } }
+  if(first<0) return {en:raw, cn:raw};
+  const trim=t=>t.replace(/^[\s·\-–—/,|]+|[\s·\-–—/,|]+$/g,'').trim();
+  const cn=trim(raw.slice(first,last+1)), en=trim((raw.slice(0,first)+' '+raw.slice(last+1)).replace(/\s{2,}/g,' '));
+  return {en:en||raw, cn:cn||raw};
+}
+const matSupLabel=s=>{ const h=matSupSplit(s.name), cn=String(s.name_cn||'').trim()||h.cn; return T(h.en,cn); };
+/* The subcategory list follows the kind — catsFor(): the kind's own, or every
+   one when the kind has none yet (a kind added this morning must not leave
+   only "None"). */
+function matCatsFor(kind){ const m=state.mat, own=kind?(m.catsByKind||{})[kind]:null; return own&&own.length?own:(m.cats||[]); }
+/* ── The list ─────────────────────────────────────────────────────────────── */
+function matQuery(){
+  const m=state.mat, qs=[], add=(k,v)=>qs.push(k+'='+encodeURIComponent(v));
+  if(m.q) add('search',m.q); if(m.kind) add('kind',m.kind); if(m.cat) add('category',m.cat);
+  if(m.sup) add('supplier',m.sup); if(m.arch) add('archived','1'); if(m.source) add('source',m.source);
+  return '/api/retail-admin/materials'+(qs.length?'?'+qs.join('&'):'');
+}
+function loadMaterials(force){
+  const m=state.mat;
+  loadMatPickers();
+  if(m.tried&&!force) return;
+  m.tried=true; m.err=null;
+  const seq=++m.seq;
+  apiRaw(matQuery()).then(j=>{
+    if(seq!==m.seq) return;
+    m.rows=Array.isArray(j&&j.data)?j.data:[]; m.counts=(j&&j.counts)||{};
+    m.srcCounts=(j&&j.sourceCounts)||{bought:0,made:0}; m.meta=rcpMetaOf(j); m.err=null; matRepaint();
+  }).catch(e=>{
+    if(seq!==m.seq||String(e.message)==='auth') return;
+    m.rows=null; m.err=E('Could not load materials','无法加载物料'); matRepaint();
+  });
+}
+/* The four pickers, read once — they change on a scale of months, and a failed
+   one must not stop the list (the desktop's matInit). */
+function loadMatPickers(){
+  const m=state.mat; if(m.pickTried) return; m.pickTried=true;
+  const get=p=>apiRaw(p).catch(()=>({data:[]}));
+  Promise.all([get('/api/retail-admin/materials/meta/kinds'), get('/api/retail-admin/materials/meta/categories'),
+    get('/api/retail-admin/materials/meta/accounting-categories'), get('/api/retail-admin/suppliers')]).then(([k,c,f,s])=>{
+    m.kinds=(k&&k.data)||[]; m.cats=(c&&c.data)||[]; m.catsByKind=(c&&c.byKind)||{};
+    m.finCats=(f&&f.data)||[]; m.sups=(s&&s.data)||[]; matRepaint();
+  });
+}
+function matRepaint(){ const b=document.getElementById('mMatBody'); if(b) b.innerHTML=matBodyHtml(); else render(); }
+function screenMaterials(){
+  if(!featOn('production')) return flagGate('production');
+  loadMaterials();
+  const m=state.mat;
+  return `<div style="padding:12px 16px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    ${searchBox(`<input id="mMatQ" inputmode="search" enterkeyhint="search" value="${escAttr(m.q)}" style="padding-left:42px"
+      placeholder="${T('Search name or SKU','搜索名称或货号')}" oninput="APP.cmd('matSearch',this.value)">`,'mMatClr',!!m.q)}</div>
+    <div id="mMatBody">${matBodyHtml()}</div>`;
+}
+function matChips(){
+  const m=state.mat, sc=m.srcCounts||{bought:0,made:0};
+  const src=[{key:'bought',en:'Bought',zh:'采购',count:sc.bought},{key:'made',en:'Made',zh:'自制',count:sc.made},
+    {key:'all',en:'All',zh:'全部',count:(sc.bought||0)+(sc.made||0),on:!m.source}];
+  src[0].on=m.source==='bought'; src[1].on=m.source==='made';
+  const counts=m.counts||{}, total=Object.keys(counts).reduce((s,k)=>s+counts[k],0);
+  /* Kinds are the tenant's own names, so they are keyed by POSITION. */
+  const kinds=[{key:'',en:'All',zh:'全部',count:total,on:!m.kind}].concat((m.kinds||[]).map((k,i)=>({key:String(i),
+    en:escAttr(matKindLabel(k)),zh:escAttr(matKindLabel(k)),count:counts[k]||0,on:m.kind===k})));
+  const f=[];
+  if((m.cats&&m.cats.length)||m.cat) f.push({key:'',cmd:'matCatPick',on:!!m.cat,ic:'chevron-down',en:m.cat?escAttr(m.cat):'Category',zh:m.cat?escAttr(m.cat):'分类'});
+  if((m.sups&&m.sups.length)||m.sup) f.push({key:'',cmd:'matSupPick',on:!!m.sup,ic:'chevron-down',en:m.sup?escAttr(m.sup):'Supplier',zh:m.sup?escAttr(m.sup):'供应商'});
+  f.push({key:'',cmd:'matArch',on:!!m.arch,en:'Archived',zh:'已归档'});
+  return `<div style="display:flex;flex-direction:column;gap:8px;padding:4px 0">${chipRow(src,'','matSource')}${chipRow(kinds,'','matKind')}${chipRow(f,'','matArch')}</div>`;
+}
+/* A row's money: the buy price per buy unit, and the cost per unit — only with
+   money, only if sent. */
+function matRowMoney(x){
+  if(!matMoney()||!matHas(x,'buy_price')) return '';
+  const cpu=Number(x.cost_per_unit)||0;
+  const per=x.free_by_design?T('free','免费'):(cpu>0?escAttr(matUnitMoney(cpu))+'/'+escAttr(x.unit||''):'—');
+  return `<span class="num" style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+    <span style="font-size:15px;font-weight:500">${Number(x.buy_price)>0?escAttr(money(CUR,x.buy_price))+`<span style="font-size:12px;font-weight:400;color:var(--text-secondary)">/${escAttr(x.buy_unit||'')}</span>`:'—'}</span>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${per}</span></span>`;
+}
+function matBodyHtml(){
+  const m=state.mat;
+  const chips=matChips();
+  if(m.err) return chips+`<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${m.err}</div>`;
+  if(!m.rows) return chips+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!m.rows.length){
+    const blank=m.q||m.kind||m.cat||m.sup;
+    const sc=m.srcCounts||{};
+    /* The real number of matches one tab over — "there is no such material"
+       and "it is filed under the other job" told apart. */
+    const elsewhere=m.source==='bought'?sc.made:(m.source==='made'?sc.bought:0);
+    const other=m.source==='bought'?'made':'bought';
+    const otherLabel=other==='made'?T('Made','自制'):T('Bought','采购');
+    return chips+`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
+      <div style="font-size:18px;font-weight:500">${blank?T('Nothing matches','没有匹配项'):T('No materials yet','暂无物料')}</div>
+      <div style="font-size:15px;color:var(--text-secondary);max-width:290px;line-height:1.55">${blank
+        ? T('Try a different search, or clear the filters.','换个搜索词,或清除筛选条件。')
+        : T('A material is anything you buy and keep — flour, cups, a mixer. Add the first one and its cost per unit is worked out for you.','物料是你采购并留存的任何东西 —— 面粉、杯子、搅拌机。新建第一条,单位成本会自动算好。')}</div>
+      ${elsewhere?`<button class="btn2" style="width:auto;padding:8px 14px" onclick="APP.cmd('matSource','${other}')">${escAttr(T(`${elsewhere} in ${otherLabel} →`,`${otherLabel}中有 ${elsewhere} 条 →`))}</button>`:''}
+      ${blank?`<button class="btn2" style="width:auto;padding:8px 14px" onclick="APP.cmd('matClear')">${T('Clear the filters','清除筛选')}</button>`
+        :(mCan('materials:edit')?`<button class="cta" style="width:auto;padding:10px 18px" onclick="APP.cmd('matNew')">${T('Add your first material','新建第一条物料')}</button>`:'')}
+    </div>`;
+  }
+  const n=m.meta?Number(m.meta.limit).toLocaleString():'', t=m.meta?Number(m.meta.total).toLocaleString():'';
+  return chips+`<div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
+    ${m.meta?`<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:var(--amber-tint);color:var(--amber-ink)">
+      <span style="flex:none;display:flex">${ic('triangle-alert',18)}</span><span style="font-size:12.5px;line-height:1.5">${T(
+      `Showing the first ${n} of ${t} materials.`,`仅显示前 ${n} 条,共 ${t} 条物料。`)}</span></div>`:''}
+    <div class="list">${m.rows.map((x,i)=>{
+      const other=rcpOther(x);
+      const meta=[matKindLabel(x.item_kind||'food'), x.sku, x.category, x.supplier].filter(Boolean).join(' · ');
+      return `${i?'<div class="sep"></div>':''}
+      <button class="row" onclick="APP.cmd('matOpen',${Number(x.id)})" style="min-height:64px;align-items:center">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcpName(x))}</span>
+            ${x.source_recipe_id!=null?pill('draft',T('Made','自制')):''}</span>
+          ${other?`<span style="font-size:13.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(other)}</span>`:''}
+          ${meta?`<span style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(meta)}</span>`:''}
+        </span>
+        ${matRowMoney(x)}
+        <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>
+      </button>`;}).join('')}</div></div>`;
+}
+SUBS.materials={title:['Materials','物料'],
+  cta:()=>mCan('materials:edit')?`<button class="cta inhead" onclick="APP.cmd('matNew')">${T('New material','新建物料')}</button>`:'',
+  status:()=>{ const m=state.mat; if(!m.rows) return '';
+    return LANG==='en'?(m.rows.length+(m.rows.length===1?' material':' materials')):(m.rows.length+' 条物料'); },
+  render:()=>screenMaterials()};
+/* A search settles for 250ms before it asks, as the desktop's does, and then
+   repaints only the body under the field. */
+let matSearchTimer=null;
+reg('matSearch', v=>{ const m=state.mat, el=document.getElementById('mMatQ');
+  m.q=String(v||''); state.focus={id:'mMatQ',pos:el?el.selectionStart:null};
+  searchClearShow('mMatClr', !!m.q);
+  clearTimeout(matSearchTimer); matSearchTimer=setTimeout(()=>loadMaterials(true), 250); });
+reg('matSource', k=>{ const m=state.mat; m.source=k==='all'?'':String(k||''); loadMaterials(true); render(); });
+reg('matKind', i=>{ const m=state.mat; m.kind=i===''?'':String((m.kinds||[])[Number(i)]||'');
+  /* A subcategory that does not belong to the kind now picked is dropped rather
+     than carried into a filter that can match nothing. */
+  if(m.cat&&matCatsFor(m.kind).indexOf(m.cat)<0) m.cat='';
+  loadMaterials(true); render(); });
+reg('matCatPick', ()=>{ const m=state.mat, cats=matCatsFor(m.kind);
+  state.ask={title:T('Category','分类'), options:[{key:'all',label:T('All categories','全部分类')+(m.cat?'':' ✓')}]
+    .concat(cats.map((c,i)=>({key:String(i),label:escAttr(c)+(c===m.cat?' ✓':'')}))),
+    run:k=>{ if(k==null||k==='') return; m.cat=k==='all'?'':String(cats[Number(k)]||''); loadMaterials(true); render(); }};
+  render(); });
+reg('matSupPick', ()=>{ const m=state.mat, sups=m.sups||[];
+  state.ask={title:T('Supplier','供应商'), options:[{key:'all',label:T('All suppliers','全部供应商')+(m.sup?'':' ✓')}]
+    .concat(sups.map((s,i)=>({key:String(i),label:escAttr(s.name)+(s.name===m.sup?' ✓':'')}))),
+    run:k=>{ if(k==null||k==='') return; m.sup=k==='all'?'':String((sups[Number(k)]||{}).name||''); loadMaterials(true); render(); }};
+  render(); });
+reg('matArch', ()=>{ const m=state.mat; m.arch=!m.arch; loadMaterials(true); render(); });
+/* Widen the list back out — but the archive and the Bought/Made tab are places,
+   not filters, and stay (matClearFilters). */
+reg('matClear', ()=>{ const m=state.mat; m.q=''; m.kind=''; m.cat=''; m.sup='';
+  const q=document.getElementById('mMatQ'); if(q) q.value=''; loadMaterials(true); render(); });
+reg('matOpen', id=>{ state.mat.openId=Number(id); push('materialone'); });
+/* ── One material ─────────────────────────────────────────────────────────── */
+function loadMaterialOne(){
+  const m=state.mat, id=m.openId;
+  if(id==null||m.recTried||m.isNew) return;
+  m.recTried=true; m.recErr=null;
+  apiRaw('/api/retail-admin/materials/'+Number(id)).then(j=>{
+    if(m.openId!==id) return;
+    m.rec=matRecFrom(j); render();
+  }).catch(e=>{ if(String(e.message)==='auth'||m.openId!==id) return;
+    m.rec=null; m.recErr=E('Could not open that material','无法打开该物料'); render(); });
+}
+function matRecFrom(j){
+  return {row:(j&&j.data)||{}, priceHistory:(j&&j.priceHistory)||[], purchases:(j&&j.purchases)||[], derived:(j&&j.derived)||null,
+    usedByRecipes:(j&&j.usedByRecipes)||[], sourceRecipe:(j&&j.sourceRecipe)||null, sourceRecipeBlock:(j&&j.sourceRecipeBlock)||null};
+}
+/* THE COST LINE, costPreviewHtml(): the figure where money may be shown, the
+   DIAGNOSIS for everyone — "this pack has no recorded contents" is pack maths,
+   not money, and it is what gets a material costed at all. Without money the
+   derivation is asked with a stand-in price, so it can only ever answer about
+   the pack: "no price entered" is a fact about money, and a reader the server
+   stripped cannot know it. */
+function matCostLine(row, price, withMoney){
+  const c=matIC(); if(!c) return '';
+  const d=c.deriveCostPerUnit(row, withMoney?price:1);
+  if(!withMoney&&d.cpu!==null) return '';
+  if(d.cpu===null){
+    const why={no_price:T('No price entered yet.','尚未填写价格。'),
+      no_pack_size:T('Packs per order must be more than zero.','每次采购包数需大于零。'),
+      no_pack_contents:T('This pack has no recorded contents, so a per-unit cost can’t be worked out.','未记录本包内容量,无法折算单位成本。'),
+      unsupported_recipe_unit:T('That recipe unit can’t be divided into.','该配方单位无法折算。')}[d.reason]||T('Cost can’t be worked out yet.','暂时无法折算成本。');
+    return `<span style="color:var(--amber-ink)">${why}</span>`;
+  }
+  if(d.reason==='free_by_design') return `<b style="font-weight:600">${T('Free by design','按设计免费')}</b>`;
+  const line=`<span>${T('Cost per unit','单位成本')}</span> <b class="num" style="font-weight:600">${escAttr(matUnitMoney(d.cpu))}/${escAttr(row.unit||'')}</b>`;
+  return d.divisor>1?line+` <span class="num" style="color:var(--text-secondary)">${escAttr(money(CUR,price))} ÷ ${+Number(d.divisor).toFixed(3)}</span>`:line;
+}
+const matKV=(kv)=>`<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">${kv.map(([k,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+  <span style="font-size:14.5px;color:var(--text-secondary);flex:none">${k}</span><span style="font-size:14.5px;font-weight:500;text-align:right;min-width:0;overflow-wrap:anywhere">${v}</span></div>`).join('')}</div>`;
+const matEyebrow=t=>`<div class="eyebrow" style="padding:6px 4px 0">${t}</div>`;
+/* Made by a recipe — the recipe, and when its rollup is blocked, why the cost
+   is frozen (the recipes' own reason words). */
+function matSourceHtml(rec){
+  const s=rec.sourceRecipe; if(!s) return '';
+  const b=rec.sourceRecipeBlock, blocked=b&&!b.ok;
+  return `<div class="card" style="padding:13px 16px;font-size:14px;line-height:1.55;${blocked?'background:var(--amber-tint);color:var(--amber-ink)':''}">
+    ${T('Made by recipe: ','产出自食谱:')}<b style="font-weight:600">${escAttr(rcpName(s))}</b>${s.is_active===0?' — '+T('archived','已归档'):''}
+    ${blocked?`<div>${T('Cost frozen at its last computed value.','成本已冻结为最近一次计算的值。')} ${escAttr(rcpBlockText(b.reason,b.unpriced))}</div>`:''}</div>`;
+}
+/* Cost history is nothing but prices, so the whole block goes without money —
+   never "No price changes recorded", which would be a lie. Bought in stays: the
+   PO, the day and how many is purchasing history; only its money is withheld. */
+function matHistHtml(rec){
+  const h=rec.priceHistory||[];
+  return matEyebrow(T('Cost history','价格历史'))+(h.length?`<div class="list">${h.map((r,i)=>`${i?'<div class="sep"></div>':''}
+    <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 16px"><span class="num" style="font-size:14.5px;font-weight:500">${escAttr(money(CUR,r.price))}/${escAttr(r.buy_unit||'')}</span>
+    <span style="font-size:13px;color:var(--text-secondary)">${escAttr(String(r.recorded_at||'').slice(0,10))}${r.source&&r.source!=='manual'?' · '+escAttr(r.source):''}</span></div>`).join('')}</div>`
+    :`<div style="padding:10px 4px;font-size:14px;color:var(--text-secondary)">${T('No price changes recorded.','暂无价格变动记录。')}</div>`);
+}
+function matPurchHtml(rec, withMoney){
+  const p=rec.purchases||[];
+  return matEyebrow(T('Bought in','采购记录'))+(p.length?`<div class="list">${p.map((r,i)=>`${i?'<div class="sep"></div>':''}
+    <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 16px"><span class="num" style="font-size:14.5px;font-weight:500">${escAttr(r.po_number||'')}</span>
+    <span class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(String(r.date||'').slice(0,10))} · ${escAttr(String(r.qty||0))} ${escAttr(r.unit||'')}${withMoney&&matHas(r,'total_cost')&&r.total_cost!=null?' · '+escAttr(money(CUR,r.total_cost)):''}</span></div>`).join('')}</div>`
+    :`<div style="padding:10px 4px;font-size:14px;color:var(--text-secondary)">${T('Not on any purchase order yet.','尚未出现在任何采购单中。')}</div>`);
+}
+function screenMaterialOne(){
+  const m=state.mat;
+  loadMaterialOne();
+  const d=matEditing(); if(d) return matEditorHtml(d);
+  if(m.recErr) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${m.recErr}</div>`;
+  const rec=m.rec;
+  if(!rec) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const row=rec.row, withMoney=matMoney()&&matHas(row,'buy_price');
+  const other=LANG==='en'?row.name_cn:row.name_en;
+  const id=[[T('Kind','类别'), escAttr(matKindLabel(row.item_kind||'food'))]];
+  if(row.category) id.push([T('Category','分类'), escAttr(row.category)]);
+  if(other) id.push([LANG==='en'?T('Name (中文)','名称(中文)'):T('Name (English)','名称(英文)'), escAttr(other)]);
+  if(row.sku) id.push([T('SKU','货号'), escAttr(row.sku)]);
+  if(row.accounting_category) id.push([T('Finance category','财务分类'), escAttr(row.accounting_category)]);
+  const units=[[T('Recipe unit','配方单位'), escAttr(row.unit||'')],[T('Buy unit','采购单位'), escAttr(row.buy_unit||'')],
+    [T('Packs per order','每次采购包数'), escAttr(rcpNum(row.buy_pack_size))]];
+  if(withMoney) units.push([T('Buy price','采购价'), Number(row.buy_price)>0?escAttr(money(CUR,row.buy_price)):'—']);
+  if(matIsContainer(row.buy_unit)||row.pack_contents_qty) units.push([T('Contents per pack','每包内容量'), row.pack_contents_qty?escAttr(rcpNum(row.pack_contents_qty)+' '+(row.pack_contents_unit||'')):'—']);
+  const cost=matCostLine(row, row.buy_price, withMoney);
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:10px">
+    ${m.actErr?`<div style="padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${escAttr(m.actErr)}</div>`:''}
+    ${matEyebrow(T('Identity','基本信息'))}${matKV(id)}
+    ${matEyebrow(T('Units & cost','单位与成本'))}${matKV(units)}
+    ${row.free_by_design?`<div style="font-size:14px">${T('Free by design (tap water, peel — never costed)','按设计免费(自来水、果皮等 — 不计成本)')}</div>`:''}
+    ${cost?`<div style="font-size:14px;padding:0 4px">${cost}</div>`:''}
+    ${matSourceHtml(rec)}
+    ${matEyebrow(T('Supplier','供应商'))}<div class="card" style="padding:13px 16px;font-size:14.5px">${row.supplier?escAttr(row.supplier):T('None','无')}</div>
+    ${(row.item_kind||'food')==='food'&&row.allergens?matEyebrow(T('Allergens','过敏原'))+`<div class="card" style="padding:13px 16px;font-size:14.5px">${escAttr(row.allergens)}</div>`:''}
+    ${row.notes?matEyebrow(T('Notes','备注'))+`<div class="card" style="padding:13px 16px;font-size:14.5px;white-space:pre-line">${escAttr(row.notes)}</div>`:''}
+    ${withMoney?matHistHtml(rec):''}
+    ${matPurchHtml(rec, withMoney)}
+  </div>`;
+}
+SUBS.materialone={title:['Materials','物料'],
+  titleOf:()=>{ const m=state.mat, d=matEditing();
+    if(d&&d.id==null) return T('New material','新建物料');
+    return escAttr((m.rec&&rcpName(m.rec.row))||T('Material','物料')); },
+  backLabel:()=>T('Materials','物料'),
+  cta:()=>{
+    if(matEditing()) return `<button class="cta inhead" onclick="APP.cmd('matDone')">${T('Done','完成')}</button>`;
+    const m=state.mat; if(!m.rec||!mCan('materials:edit')) return '';
+    return `<button class="iconbtn" aria-label="${T('Edit','编辑')}" onclick="APP.cmd('matEdit')">${ic('pencil',20)}</button>`
+      + `<button class="iconbtn" aria-label="${T('More actions','更多操作')}" ${m.busy?'disabled':''} onclick="APP.cmd('matActs')">${ic('ellipsis',20)}</button>`; },
+  status:()=>{
+    if(matEditing()){ const t=matEdStateText(); return t?escAttr(t):' '; }
+    const m=state.mat; if(m.busy) return T('Saving…','保存中…');
+    const row=m.rec&&m.rec.row; if(!row) return '';
+    return escAttr([matKindLabel(row.item_kind||'food'), row.sku].filter(Boolean).join(' · ')); },
+  render:()=>screenMaterialOne()};
+/* ── Editing (and New material) ─────────────────────────────────────────── */
+let matAuto=null;
+/* The draft: every field of the desktop's readForm(), as text — and
+   `buy_price` ONLY if the server sent one (see the head of this block). */
+function matDraftFrom(row, forId){
+  const s=v=>v==null?'':String(v);
+  const d={forId, id:row.id!=null?Number(row.id):null, savedAt:0,
+    name_en:s(row.name_en), name_cn:s(row.name_cn), sku:s(row.sku), category:s(row.category),
+    unit:row.unit||'g', buy_unit:row.buy_unit||'kg', buy_pack_size:s(row.buy_pack_size),
+    pack_contents_qty:s(row.pack_contents_qty), pack_contents_unit:s(row.pack_contents_unit),
+    free_by_design:row.free_by_design?1:0, supplier:s(row.supplier), allergens:s(row.allergens), notes:s(row.notes),
+    accounting_category:s(row.accounting_category), item_kind:row.item_kind||'food'};
+  if(matHas(row,'buy_price')) d.buy_price=s(row.buy_price);
+  return d;
+}
+/* readForm(), key for key and in its order. `buy_price` rides only when the
+   draft holds it. */
+function matPayload(d){
+  const num=v=>(v===''||v==null)?null:Number(v);
+  const p={name_en:String(d.name_en||'').trim(), name_cn:String(d.name_cn||'').trim(), sku:String(d.sku||'').trim(),
+    category:d.category||'', unit:d.unit||'g', buy_unit:d.buy_unit||'kg', buy_pack_size:num(d.buy_pack_size),
+    pack_contents_qty:num(d.pack_contents_qty), pack_contents_unit:d.pack_contents_unit||null};
+  if(matHas(d,'buy_price')) p.buy_price=num(d.buy_price)||0;
+  Object.assign(p,{free_by_design:d.free_by_design?1:0, supplier:d.supplier||'', allergens:d.allergens||'', notes:d.notes||'',
+    accounting_category:d.accounting_category||'', item_kind:d.item_kind||'food'});
+  return p;
+}
+function matEditing(){ const d=state.mat.ed; if(!d) return null;
+  const t=state.stack[state.stack.length-1];
+  return (t&&t.route==='materialone')?d:null; }
+function matSend(d, p){
+  const m=state.mat;
+  const write=d.id!=null
+    ? apiWrite('/api/retail-admin/materials/'+Number(d.id), p, 'PUT')
+    : apiWrite('/api/retail-admin/materials', p, 'POST').then(j=>{
+        const id=Number(j&&j.id); if(!id) throw new Error(T('Save failed','保存失败'));
+        d.id=id; m.openId=id; m.isNew=false; m.recTried=true;
+        /* The server issues the code, not the preview — take what came back, or
+           the next save would send a blank SKU over it. */
+        if(j.sku){ d.sku=String(j.sku); const el=document.getElementById('mMatF-sku'); if(el) el.value=d.sku; }
+      });
+  return write.then(()=>{
+    d.savedAt=Date.now(); m.tried=false;
+    return apiRaw('/api/retail-admin/materials/'+Number(d.id)).then(j=>{ if(m.openId===d.id) m.rec=matRecFrom(j); matEdPaint(); }).catch(()=>{});
+  });
+}
+function matEdStart(d){
+  const prev=matAuto; matAuto=null; if(prev) prev.flush();
+  if(typeof TacetAutosave==='undefined') return;
+  const auto=TacetAutosave.create({delay:RCP_AUTOSAVE_IDLE_MS, maxWait:RCP_AUTOSAVE_MAX_MS,
+    read:()=>matPayload(d),
+    hold:p=>p.name_en?'':T('An English name is required','英文名称必填'),
+    send:p=>matSend(d,p),
+    onChange:()=>{ if(matAuto===auto) matEdPaint(); }});
+  auto.start(); matAuto=auto;
+}
+function matEdStateText(){
+  const d=matEditing(), A=matAuto; if(!d||!A) return '';
+  if(A.state==='error') return T('Not saved','未保存')+' — '+tmOneLang(A.message||'');
+  if(A.state==='saving') return T('Saving…','保存中…');
+  if(A.state==='hold') return T('Unsaved changes','有未保存的更改')+' — '+A.message;
+  if(A.state==='pending'||A.dirty()) return T('Unsaved changes','有未保存的更改');
+  if(d.savedAt) return T('Saved','已保存')+' · '+rcpAgo(Date.now()-d.savedAt);
+  return '';
+}
+function matEdPaint(){
+  const el=document.getElementById('mHeadStatus'); if(el&&SUBS.materialone) el.innerHTML=SUBS.materialone.status();
+  const bad=document.getElementById('mMatEdErr');
+  if(bad){ const on=!!(matAuto&&matAuto.state==='error'); bad.style.display=on?'':'none'; bad.textContent=on?matEdStateText():''; }
+  const u=document.getElementById('mMatUndo'); if(u) u.style.display=(matAuto&&matAuto.canUndo())?'':'none';
+  const c=document.getElementById('mMatCost'); const d=matEditing();
+  if(c&&d) c.innerHTML=matCostLine(matPayload(d), d.buy_price, matMoney()&&matHas(d,'buy_price'));
+}
+const matIn=(k,v,attrs,commit)=>`<input id="mMatF-${k}" value="${escAttr(v)}" style="width:100%" ${attrs||''} ${commit?'onchange':'oninput'}="APP.cmd('matSet','${k}',this.value)">`;
+const matSel=(k,v,opts,re)=>`<select id="mMatF-${k}" style="width:100%" onchange="APP.cmd('${re?'matSetRe':'matSet'}','${k}',this.value)">${opts.map(([ov,lab])=>
+  `<option value="${escAttr(ov)}"${String(v)===String(ov)?' selected':''}>${escAttr(lab)}</option>`).join('')}</select>`;
+/* The supplier field's note: a name nobody in the book buys nothing — no orders
+   group under it (supNoteHtml). */
+function matSupNote(v){
+  const name=String(v==null?'':v).trim(); if(!name) return '';
+  const known=(state.mat.sups||[]).some(s=>String(s.name||'').trim().toLowerCase()===name.toLowerCase());
+  return known?'':T('Not in your supplier book yet — purchasing won’t group orders under this name until it is added.','尚未加入供应商名录 —— 添加后采购才会按该名称归集。');
+}
+function matEditorHtml(d){
+  const m=state.mat;
+  const kinds=(m.kinds&&m.kinds.length?m.kinds:['food','packaging','equipment','retail','other']).map(k=>[k,matKindLabel(k)]);
+  if(d.item_kind&&!kinds.some(([k])=>k===d.item_kind)) kinds.push([d.item_kind, matKindLabel(d.item_kind)]);
+  /* The record's own subcategory is always offered, so a save cannot quietly
+     rewrite it to blank. */
+  const cats=matCatsFor(d.item_kind).slice(); if(d.category&&cats.indexOf(d.category)<0) cats.push(d.category);
+  const runits=matRecipeUnits(); if(d.unit&&runits.indexOf(d.unit)<0) runits.push(d.unit);
+  const bunits=matBuyUnits(); if(d.buy_unit&&bunits.indexOf(d.buy_unit)<0) bunits.push(d.buy_unit);
+  const withMoney=matMoney()&&matHas(d,'buy_price');
+  const err=!!(matAuto&&matAuto.state==='error');
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div id="mMatEdErr" style="${err?'':'display:none;'}padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${err?escAttr(matEdStateText()):''}</div>
+    ${matEyebrow(T('Identity','基本信息'))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+      <label>${rcpLbl(T('Kind','类别'))}${matSel('item_kind',d.item_kind,kinds,true)}</label>
+      <label>${rcpLbl(T('Category','分类'))}${matSel('category',d.category,[['',T('None','无')]].concat(cats.map(c=>[c,c])),true)}</label>
+      <label>${rcpLbl(T('Name (English)','名称(英文)'))}${matIn('name_en',d.name_en,'maxlength="120" onblur="APP.cmd(\'matSku\')"')}</label>
+      <label>${rcpLbl(T('Name (中文)','名称(中文)'))}${matIn('name_cn',d.name_cn,'maxlength="120"')}</label>
+      <div><label>${rcpLbl(T('SKU','货号'))}${matIn('sku',d.sku,`maxlength="60" placeholder="${escAttr(m.skuHint||'')}"`)}</label>
+        ${rcpHint(escAttr(T('Kept forever, even after archiving — so old orders keep pointing at the right thing.','归档后仍永久保留 — 以免历史订单指向错误。')))}
+        <div id="mMatSkuNote" style="font-size:12.5px;margin-top:4px;color:var(--text-secondary)">${escAttr(m.skuNote||'')}</div></div>
+      <div><label>${rcpLbl(T('Finance category','财务分类'))}${matIn('accounting_category',d.accounting_category,'maxlength="80"')}</label>
+        ${(m.finCats||[]).length?`<button class="btn2" style="width:auto;min-height:36px;padding:6px 12px;margin-top:8px;font-size:13px" onclick="APP.cmd('matFinPick')">${ic('chevron-down',15)} ${T('Finance category','财务分类')}</button>`:''}</div>
+    </div>
+    ${matEyebrow(T('Units & cost','单位与成本'))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+      <div><label>${rcpLbl(T('Recipe unit','配方单位'))}${matSel('unit',d.unit,runits.map(u=>[u,u]))}</label>${rcpHint(escAttr(T('The unit you measure it out in.','实际使用时的计量单位。')))}</div>
+      <div><label>${rcpLbl(T('Buy unit','采购单位'))}${matSel('buy_unit',d.buy_unit,bunits.map(u=>[u,u]),true)}</label>${rcpHint(escAttr(T('The unit you buy it by.','采购时的计量单位。')))}</div>
+      <label>${rcpLbl(T('Packs per order','每次采购包数'))}${matIn('buy_pack_size',d.buy_pack_size,'inputmode="decimal"')}</label>
+      ${withMoney?`<div><label>${rcpLbl(T('Buy price','采购价'))}${matIn('buy_price',d.buy_price,'inputmode="decimal"',true)}</label>${rcpHint(escAttr(T('What one pack costs.','一包的价格。')))}</div>`:''}
+      ${matIsContainer(d.buy_unit)?`<label>${rcpLbl(T('Contents per pack','每包内容量'))}${matIn('pack_contents_qty',d.pack_contents_qty,'inputmode="decimal"')}</label>
+      <div><label>${rcpLbl(T('Contents unit','内容量单位'))}${matSel('pack_contents_unit',d.pack_contents_unit,[['','—']].concat(['g','kg','ml','L','pcs'].map(u=>[u,u])))}</label>
+        ${rcpHint(escAttr(T('A box or bottle has no size of its own — say what’s inside, or the cost can’t be worked out.','箱/瓶本身没有容量 — 需填写内容量,否则无法折算成本。')))}</div>`:''}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:14px">${T('Free by design (tap water, peel — never costed)','按设计免费(自来水、果皮等 — 不计成本)')}</span>
+        ${toggle(!!d.free_by_design, "APP.cmd('matFree')")}</div>
+      <div id="mMatCost" style="font-size:14px">${matCostLine(matPayload(d), d.buy_price, withMoney)}</div>
+    </div>
+    ${m.rec&&d.id!=null?matSourceHtml(m.rec):''}
+    ${matEyebrow(T('Supplier','供应商'))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      ${matIn('supplier',d.supplier,`maxlength="160" placeholder="${T('Type to search your suppliers','输入以搜索供应商')}"`)}
+      ${m.supErr?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(m.supErr)}</div>`:''}
+      <div id="mMatSupNote" style="font-size:12.5px;color:var(--amber-ink)">${escAttr(matSupNote(d.supplier))}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn2" style="width:auto;padding:8px 14px" onclick="APP.cmd('matSupChoose')">${ic('chevron-down',15)} ${T('Supplier','供应商')}</button>
+        ${mCan('purchasing:edit')?`<button class="btn2" style="width:auto;padding:8px 14px" onclick="APP.cmd('matSupNew')">${ic('plus',15)} ${T('New supplier','新建供应商')}</button>`:''}</div>
+    </div>
+    ${d.item_kind==='food'?`${matEyebrow(T('Allergens','过敏原'))}<div class="card" style="padding:16px">${matIn('allergens',d.allergens,`maxlength="240" placeholder="${T('e.g. nuts, soy','例如:坚果、大豆')}"`)}</div>`:''}
+    ${matEyebrow(T('Notes','备注'))}<div class="card" style="padding:16px"><textarea id="mMatF-notes" style="width:100%;min-height:84px" oninput="APP.cmd('matSet','notes',this.value)">${escAttr(d.notes)}</textarea></div>
+    <button id="mMatUndo" class="btn2" style="width:100%;${matAuto&&matAuto.canUndo()?'':'display:none'}" onclick="APP.cmd('matUndo')">${T('Undo','撤销')}</button>
+  </div>`;
+}
+const MAT_KEYS=['name_en','name_cn','sku','category','unit','buy_unit','buy_pack_size','pack_contents_qty','pack_contents_unit','buy_price','supplier','allergens','notes','accounting_category','item_kind'];
+reg('matSet', (k,v)=>{ const d=matEditing(); if(!d||MAT_KEYS.indexOf(k)<0) return;
+  /* A price field that was never loaded is never written, whatever calls this. */
+  if(k==='buy_price'&&!matHas(d,'buy_price')) return;
+  d[k]=String(v==null?'':v);
+  if(k==='supplier'){ const n=document.getElementById('mMatSupNote'); if(n) n.textContent=matSupNote(d.supplier); }
+  if(k==='sku') matSkuTyped();
+  if(matAuto) matAuto.touch(); matEdPaint(); });
+/* A change that re-cuts the form: the kind (the subcategories under it, the
+   allergens block), the subcategory (the SKU preview), the buy unit (the
+   contents row). Changing the kind drops a subcategory that belongs to the
+   kind just left — here, on the deliberate act, never on a repaint. */
+reg('matSetRe', (k,v)=>{ const d=matEditing(); if(!d||['item_kind','category','buy_unit'].indexOf(k)<0) return;
+  d[k]=String(v==null?'':v);
+  if(k==='item_kind'&&d.category&&matCatsFor(d.item_kind).indexOf(d.category)<0) d.category='';
+  if(matAuto) matAuto.touch(); render(); if(k!=='buy_unit') CMD.matSku(); });
+reg('matFree', ()=>{ const d=matEditing(); if(!d) return; d.free_by_design=d.free_by_design?0:1; if(matAuto) matAuto.touch(); render(); });
+reg('matUndo', ()=>{ const d=matEditing(), A=matAuto; if(!d||!A) return;
+  A.undo(p=>{ Object.keys(p).forEach(k=>{ if(k==='free_by_design') d[k]=p[k]; else d[k]=p[k]==null?'':String(p[k]); }); });
+  render(); });
+reg('matFinPick', ()=>{ const d=matEditing(), cats=state.mat.finCats||[]; if(!d) return;
+  state.ask={title:T('Finance category','财务分类'), options:[{key:'none',label:T('None','无')}].concat(cats.map((c,i)=>({key:String(i),label:escAttr(c)}))),
+    run:k=>{ if(k==null||k==='') return; d.accounting_category=k==='none'?'':String(cats[Number(k)]||''); if(matAuto) matAuto.touch(); render(); }};
+  render(); });
+reg('matSupChoose', ()=>{ const d=matEditing(), sups=(state.mat.sups||[]).filter(s=>s.is_active!==0); if(!d) return;
+  /* The WHOLE stored name is what lands in the field — every supplier screen
+     groups on that exact string; the split is only how the row reads. */
+  state.ask={title:T('Supplier','供应商'), options:[{key:'none',label:T('None','无')}].concat(sups.map((s,i)=>({key:String(i),label:escAttr(matSupLabel(s))}))),
+    run:k=>{ if(k==null||k==='') return; d.supplier=k==='none'?'':String((sups[Number(k)]||{}).name||''); if(matAuto) matAuto.touch(); render(); }};
+  render(); });
+/* A new supplier goes into the shared book at once (POST /suppliers — the same
+   master Purchasing keeps), name only, and is set on this material. One that
+   is already in the book, or archived there, is simply set. */
+reg('matSupNew', ()=>{ const d=matEditing(); if(!d||!mCan('purchasing:edit')) return;
+  state.ask={title:T('New supplier','新建供应商'), body:T('Added to Purchasing → Suppliers straight away, and set on this material.','立即加入「采购 → 供应商」,并设为该物料的供应商。'),
+    fields:[{id:'name',label:T('Name','名称'),value:d.supplier,placeholder:T('e.g. Dry Fruit 果干','例如:Dry Fruit 果干')}],
+    confirmLabel:T('Add supplier','添加'),
+    run:v=>{ const name=String(v.name||'').trim(), m=state.mat; if(!name) return; m.supErr=null;
+      const set=()=>{ d.supplier=name; if(matAuto) matAuto.touch(); render(); };
+      const already=(m.sups||[]).find(s=>String(s.name||'').trim().toLowerCase()===name.toLowerCase());
+      if(already){ d.supplier=already.name; if(matAuto) matAuto.touch(); render(); showToast(T('Already in your supplier book — set on this material.','该供应商已在名录中 —— 已设为本物料供应商。')); return; }
+      apiWrite('/api/retail-admin/suppliers', {name}, 'POST').then(j=>{
+        (m.sups=m.sups||[]).push({id:j&&j.id, name, is_active:1});
+        m.sups.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+        set(); showToast(T('Supplier added','已添加供应商'));
+      }).catch(e=>{ if(String(e.message)==='auth') return;
+        if(e.code==='name_taken'){ set(); showToast(T('That supplier already exists (archived) — set on this material.','该供应商已存在(已归档)—— 已设为本物料供应商。')); return; }
+        m.supErr=T('Could not add supplier','添加供应商失败')+': '+(e.message||''); render(); }); }};
+  render(); });
+/* THE AUTOMATIC SKU, advisory only: on a NEW material with the field empty,
+   the code the tenant's rules would issue is shown — a peek, nothing claimed;
+   a typed code that does not fit the category's pattern is flagged and saved
+   anyway; an existing material is never renumbered, so nothing is suggested. */
+let matSkuSeq=0;
+reg('matSku', ()=>{ const d=matEditing(), m=state.mat; if(!d) return;
+  if(d.id!=null){ m.skuRule=null; matSkuTyped(); return; }
+  if(String(d.sku||'').trim()){ matSkuTyped(); return; }
+  const mine=++matSkuSeq;
+  api('/api/retail-admin/sku/material/next?category='+encodeURIComponent(d.item_kind||'food')+'&subcategory='+encodeURIComponent(d.category||'')+'&name='+encodeURIComponent(d.name_en||'')).then(j=>{
+    if(mine!==matSkuSeq) return;
+    m.skuRule=(j&&j.ok)?j:null;
+    m.skuHint=m.skuRule?String(m.skuRule.sku||''):'';
+    m.skuNote=m.skuRule?T(`Will be saved as ${m.skuRule.sku} — type your own to override.`,`将自动生成为 ${m.skuRule.sku} —— 如需自定义请直接输入。`)
+      :((j&&j.reason==='disabled')?T('Automatic SKUs are off — type one, or leave it blank.','自动编码已关闭 —— 可手动填写或留空。'):'');
+    matSkuPaint();
+  }).catch(()=>{ if(mine===matSkuSeq){ m.skuRule=null; m.skuHint=''; m.skuNote=''; matSkuPaint(); } });
+});
+function matSkuTyped(){
+  const d=matEditing(), m=state.mat; if(!d) return;
+  const typed=String(d.sku||'').trim();
+  if(!typed){ m.skuNote=''; if(d.id==null) CMD.matSku(); else matSkuPaint(); return; }
+  if(!m.skuRule||!m.skuRule.match_re){ m.skuNote=''; matSkuPaint(); return; }
+  let fits=true; try{ fits=new RegExp(m.skuRule.match_re).test(typed.toUpperCase()); }catch(e){ return; }
+  m.skuNote=fits?T('Matches this category\'s codes.','符合此分类的编码规则。')
+    :T(`Saved as typed. Codes in this category normally look like ${m.skuRule.sku}.`,`将按输入内容保存。此分类的编码通常形如 ${m.skuRule.sku}。`);
+  matSkuPaint();
+}
+function matSkuPaint(){ const m=state.mat;
+  const n=document.getElementById('mMatSkuNote'); if(n) n.textContent=m.skuNote||'';
+  const f=document.getElementById('mMatF-sku'); if(f) f.placeholder=m.skuHint||''; }
+reg('matEdit', ()=>{ const m=state.mat; if(!m.rec||!mCan('materials:edit')) return;
+  m.ed=matDraftFrom(m.rec.row, Number(m.rec.row.id)); m.actErr=null; m.skuRule=null; m.skuHint=''; m.skuNote='';
+  matEdStart(m.ed); render(); });
+/* New material: the desktop's defaults — g, bought by the kg, one pack, the
+   kind the list is filtered to — and the price field only where money may be
+   shown, since a POST without it files a price of nothing. */
+reg('matNew', ()=>{ if(!mCan('materials:edit')) return;
+  const m=state.mat;
+  m.openId=null; push('materialone');
+  m.isNew=true; m.rec=null;
+  const row={unit:'g', buy_unit:'kg', buy_pack_size:1, item_kind:m.kind||'food'};
+  if(matMoney()) row.buy_price='';
+  m.ed=matDraftFrom(row, 'new'); m.skuRule=null; m.skuHint=''; m.skuNote='';
+  matEdStart(m.ed); render(); CMD.matSku(); });
+reg('matDone', ()=>{ const d=matEditing(), A=matAuto; if(!d||!A) return;
+  Promise.resolve(A.flush((A.dirty()||d.id==null)?'manual':null)).then(()=>{
+    if(A.state==='hold'||A.state==='error'||A.dirty()){ matEdPaint(); return; }
+    const m=state.mat; m.ed=null; m.recTried=false; m.tried=false; render();
+  }); });
+/* Leaving: what can be saved goes on the way out; what cannot asks first
+   (the desktop's "Leave without saving?"). */
+function matMayLeave(){
+  const d=matEditing(), A=matAuto; if(!d) return true;
+  if(A&&(A.state==='hold'||A.state==='error')&&A.dirty()){
+    state.ask={title:T('Leave without saving?','未保存就离开?'), body:T('Your changes to this material will be lost.','你对该物料的更改将丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true,
+      run:()=>{ matLeaveNow(true); forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  matLeaveNow(false); return true;
+}
+function matLeaveNow(discard){ const m=state.mat; if(!m.ed) return;
+  if(matAuto){ if(discard) matAuto.stop(); else matAuto.flush(); }
+  m.ed=null; m.tried=false; m.recTried=false; }
+/* ── Archive / Restore — matArchive() and archiveWarningBody() ───────────── */
+reg('matActs', ()=>{ const m=state.mat; if(!m.rec||!mCan('materials:edit')||m.busy) return;
+  const row=m.rec.row;
+  state.ask={title:T('More actions','更多操作'),
+    options:[{key:'arch',label:row.is_active?T('Archive','归档'):T('Restore','恢复')}],
+    run:k=>{ if(k==='arch') matArchiveAsk(); }};
+  render(); });
+function matArchiveAsk(){
+  const m=state.mat, rec=m.rec; if(!rec||!mCan('materials:edit')) return;
+  const row=rec.row, restoring=!row.is_active;
+  const cons=rec.usedByRecipes||[], n=cons.length;
+  const run=()=>matArchiveRun(row, restoring);
+  if(restoring){
+    state.ask={title:T('Bring this material back?','恢复该物料?'), confirmLabel:T('Restore','恢复'), run};
+  } else if(n>0){
+    /* The TRUE consequence, not the recipe side's: archiving a material freezes
+       nothing — recipes keep costing with it — but hides it from this list and
+       from the recipe picker. */
+    const namesEn=cons.slice(0,4).map(c=>c.name_en).join(', ')+(n>4?`, +${n-4}`:'');
+    const namesCn=cons.slice(0,4).map(c=>c.name_cn||c.name_en).join('、')+(n>4?`等 ${n} 个`:'');
+    state.ask={title:T('Archive this material?','归档该物料?'),
+      body:escAttr(T(`Used by ${n} recipe${n===1?'':'s'}${namesEn?' ('+namesEn+')':''}. Archiving hides "${row.name_en}" from the materials list and the recipe picker — ${n===1?'that recipe keeps':'those recipes keep'} costing with it exactly as before, but you won't be able to add it to a new recipe until you bring it back.`,
+        `被 ${n} 个食谱使用${namesCn?'('+namesCn+')':''}。归档后"${row.name_en}"会从物料列表和食谱原料选择器中隐藏 —— ${n===1?'该食谱':'这些食谱'}仍会照常使用其成本,但在你恢复它之前无法将其添加到新食谱中。`)),
+      confirmLabel:T('Archive anyway','仍然归档'), danger:true, run};
+  } else {
+    state.ask={title:T('Archive this material?','归档该物料?'),
+      body:T('It keeps its SKU and stays on old purchase orders. You can bring it back later.','其货号会保留,历史采购单不受影响。之后可以恢复。'),
+      confirmLabel:T('Archive','归档'), danger:true, run};
+  }
+  render();
+}
+function matArchiveRun(row, restoring){
+  const m=state.mat, id=Number(row.id);
+  m.busy='arch'; m.actErr=null; render();
+  apiWrite('/api/retail-admin/materials/'+id+'/archive', {restore:restoring}, 'PUT').then(()=>{
+    m.busy=null; m.tried=false; m.recTried=false;
+    showToast(restoring?T('Restored','已恢复'):T('Archived','已归档'));
+    const t=state.stack[state.stack.length-1];
+    if(t&&t.route==='materialone'){ forgetScroll(); state.stack.pop(); }
+    render();
+  }).catch(e=>{ m.busy=null; if(String(e.message)==='auth') return;
+    m.actErr=T('Failed','操作失败')+': '+(e.message||''); render(); });
+}
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive from another shop','调拨收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
@@ -26377,6 +27025,10 @@ const ROUTE_CAP={
      list's other half, not a second permission — and the print card has no
      money in it for anybody, by construction. */
   recipes:'recipes:view', recipeone:'recipes:view', recipemake:'recipes:view', recipeprint:'recipes:view', recipemz:'recipes:edit',
+  /* Materials — the list and the record open on `materials:view`, the desktop's
+     tab gate; every write inside carries `materials:edit`, and every price
+     `materials:costs` (failing closed). */
+  materials:'materials:view', materialone:'materials:view',
   /* `till` is deliberately ABSENT from this table — it is the one route that
      needs ALL of a pair rather than any of it, and an array here means any-of.
      Its gate is the named branch in canRoute() below. */
@@ -27739,6 +28391,7 @@ function layers(){
      the edge swipe cannot wait for an answer, the desktop's browser Back. */
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false);
+    if(t&&t.route==='materialone') matLeaveNow(false);
     forgetScroll(); state.stack.pop(); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
@@ -27925,6 +28578,8 @@ function mUnsavedWork(){
     if(tmAuto&&tmAuto.busy()) return true;
     /* A recipe edit waiting on its pause or on the wire (§300 R2). */
     if(rcpAuto&&rcpAuto.busy()) return true;
+    /* A material edit likewise (§300 R5). */
+    if(matAuto&&matAuto.busy()) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
     const f=state.qs&&state.qs.inflight; for(const k in f) if(f[k]) return true;
   }catch(e){}
