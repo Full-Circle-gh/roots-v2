@@ -21838,3 +21838,113 @@ Summary · Transactions · Approvals; Categories comes in F3.
     code against a fake server. It checks every write's method, path and body, and that nothing
     is sent before its confirm. `test_mobile_finance_summary.js` now expects Transactions in the
     tab strip.
+
+## §309 — A RECIPE'S COST ON THE PHONE, TO EXACTLY THE PEOPLE THE DESKTOP SHOWS IT TO
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step R3 of the recipes lane (the survey's PR 7). The phone Recipes screens
+(`public/m.html`) now show all the money the desktop Recipes screen shows:
+- the list's cost and cost per gram;
+- the record's summary strip, including a single product's price and margin;
+- each line's cost and its material's rate, with "no cost" where there is
+  none;
+- the Cost & Pricing tab, with its four inputs and the breakdown;
+- the margin beside each of several products;
+- the linked material's rate.
+
+A `recipes:costs` holder can also edit the four cost inputs, which are saved
+through `PUT /:id/cost` exactly as the desktop saves them.
+
+1. **It fails closed in three ways.** First, the capability: `mCan('recipes:costs')`
+   says no while the caps are loading (`MCAN_MONEY_ONLY`, §300's fix).
+   Second, the board: warehouse, dispatch and customer-service boards never
+   see a figure, whatever their caps say (`recapNoMoney`). Third, the data: a
+   figure is drawn only when the server actually sent it. A cap list that says
+   yes over a payload the server stripped is a stale cap list, and the payload
+   wins.
+2. **All of it lives in one block.** Every cost key the recipes code reads is
+   read in the cost block. Each figure function there starts with its gate,
+   and the rest of the code only calls them. `scripts/test_mobile_recipes.js`
+   checks that no cost key appears anywhere else in the recipes code.
+3. **The cost request is made only where the inputs were loaded.** A draft
+   carries the four inputs and the lines' rates only for a reader who may see
+   money, taken from a read that carried them; otherwise both are null, and
+   there is no Cost tab and no cost request. That is the whole of §164's
+   addendum. When the inputs were loaded, every save makes the desktop's
+   second request after the recipe write: exactly `labour`, `overhead_pct`,
+   `sell_price` and `target_food_cost`, parsed as `draftCostData()` parses
+   them (an empty field is 0, an empty target is 30), plus `save_source`, and
+   never `packaging` (whose stored figure is kept only when the key is
+   absent). So a cost holder who corrects a name sends their figures back
+   exactly as loaded, never blanked. A new recipe made by a cost holder gets
+   the desktop's empty cost row (target 30); anybody else's new recipe gets no
+   cost row at all.
+4. **The live figures are the shared derivation's.** In the editor, the strip,
+   the breakdown and each line's cost are recomputed by `lib/recipe-cost.js`'s
+   `computeRecipeCost` from the draft's details, its lines at their rates, and
+   the inputs. They are repainted in place, so the field being typed in is
+   never rebuilt. A material picked in the editor brings its rate, where the
+   materials read sent one, and that rate never rides the recipe write.
+5. **The strip follows the desktop's rule on margin.** With one product that
+   still takes its cost from this recipe, the strip shows that product's price
+   and margin. When the product is costed by its build list, it shows the
+   recipe's own sell price against its own cost per serving, labelled
+   *Margin (recipe)*. Selling below cost is said in words.
+6. **Not drawn: the struck "packaging — no longer counted" row.** The desktop
+   paints its breakdown from a live draft that never carries packaging, so
+   that row does not appear there either.
+7. **Not drawn: money in version history.** The phone has no per-version
+   detail panel (R2), and that panel is where the desktop shows a version's
+   sell price and labour.
+
+**Coverage.** New `scripts/test_mobile_recipes_cost.js` (fast shard, 20 cases).
+It uses the R2 harness with the app's real `mCan`. It covers every figure; all
+three fail-closed paths (no capability, caps still loading, a no-money board)
+plus the stale-caps case; the fall-back from the Cost tab; and both write
+bodies for new and existing recipes, from an autosave and from Done.
+`test_mobile_recipes_edit.js` was deliberately updated: for a cost holder the
+second request is now the cost PUT with the inputs as loaded, and for everyone
+else there is still none. `test_mobile_recipes.js` now confines cost keys to
+the cost block.
+
+## §310 — THE KITCHEN'S ASKS ARE TURNED INTO A DRAFT ORDER FROM THE PHONE
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P3 of the purchasing lane (survey build-order row 13), the buyer's side of
+§86. A cook could already ask for materials on the phone (*Ask to buy*), but the
+buyer could only see and act on those asks at a desktop. The phone's Purchasing
+screen now has the desktop's *From the kitchen* (`16-purchasing.js`, `puMrOpen` …
+`puMrMake`). The server is unchanged; §301 had already moved the ✕ onto the
+buyer's key.
+
+1. **A card on the orders list, only when something is waiting**: *From the
+   kitchen*, the count, and *Urgent* when any line carries the mark. It is drawn
+   for `purchasing:edit` with the Production switch on, as the desktop button is
+   (`data-cap`, `data-feat`), and nothing is read without both. It also shows on an
+   empty ledger, since the kitchen can ask before anything has ever been ordered. A
+   failed read leaves the list standing with no card, as the desktop's does.
+2. **The sheet reads the list again on opening**, because another buyer may have
+   drafted or struck off lines since the count. Each line shows what and how much
+   (the kitchen's quantity and buy unit, not editable here), the request, who
+   asked and when, and §176's two marks, both printed and never merged: *Urgent*
+   and *by 30 Sep*. The lines arrive in the server's urgency order. Search covers
+   material, SKU, request number and who asked. *Select all shown* ticks only what
+   the search shows, and pressed again unticks it.
+3. **Make draft** sends `POST /purchases/from-material-requests` with the ticked
+   `line_ids`, the chosen `store_id`, and the optional `supplier`: free text, as
+   on the desktop, trimmed, `null` when empty. What lands is always a **draft**,
+   and the sheet says so before the press. The draft then opens where drafts are
+   written (P2), because the buyer's next act is choosing a supplier and a price.
+4. **Its refusals are said in the sheet and stay**: lines already ordered are
+   named with the order they went onto; a line another buyer struck off gets the
+   desktop catalogue's sentence. After either, the list is read again, so the
+   refused rows are not pressed twice. With nothing ticked, or no store, the button
+   is disabled and nothing is sent.
+5. **The ✕ strikes one line off for good** (§174), behind the desktop's confirm,
+   which says it does not come back. It sends
+   `PUT /material-requests/lines/:id/decline`, unticks the line and reads the list
+   again. A line already on an order is refused in words. There is no ✕ without
+   `purchasing:edit`.
+6. **Not built:** the desktop's older *Copy from kitchen* picker. §78 retired the
+   app that produced its source orders, and the survey lists it as dead on the
+   desktop.

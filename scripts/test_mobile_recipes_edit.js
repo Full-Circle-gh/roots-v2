@@ -68,6 +68,8 @@ const HELPERS = [
   between(M, 'const escAttr=v=>', '\n') + '\n',
   between(M, 'const money=(cur,n)=>', '\n// Whole yuan'),
   between(M, 'function tmOneLang(m){', '\n') + '\n',
+  between(M, "const RECAP_NO_MONEY=", '\n') + '\n',
+  between(M, 'function recapNoMoney(){', '\n') + '\n',
   between(M, 'function liveHistorySheet(list, sub, restore, opts){', "reg('adjustPoints'"),
 ].join('\n');
 const RCP_LIT = between(M, '  rcp:{rows:null', 'scale:1,got:{},step:null}') + 'scale:1,got:{},step:null}';
@@ -222,30 +224,42 @@ it('the key list is the desktop\'s (read out of 19-recipes.js)', () => {
     'serving_size', 'batch_size_auto', 'servings_auto', 'shelf_life', 'storage', 'notes']);
   assert.deepStrictEqual(DESK_LINE, ['ingredient_id', 'name_en', 'name_cn', 'sku', 'qty', 'unit', 'in_yield', 'notes', 'substitutes']);
 });
-for (const [who, rec, caps] of [
-  ['without recipes:costs (the server\'s stripped read)', stripped(), ['recipes:view', 'recipes:edit']],
-  ['WITH recipes:costs (a read full of cost figures)', J(FULL), ['recipes:view', 'recipes:edit', 'recipes:costs']],
+// R3 changed ONE thing here, deliberately: a `recipes:costs` holder's draft now
+// loads the Cost & Pricing inputs, so their save makes the desktop's second
+// request — PUT /:id/cost with exactly the four inputs AS LOADED. Their figures
+// go back as they were: never blanked, never zeroed, packaging never named.
+for (const [who, rec, caps, cost] of [
+  ['without recipes:costs (the server\'s stripped read)', stripped(), ['recipes:view', 'recipes:edit'], null],
+  ['WITH recipes:costs (a read full of cost figures)', J(FULL), ['recipes:view', 'recipes:edit', 'recipes:costs'],
+    { labour: 12, overhead_pct: 8, sell_price: 18, target_food_cost: 30, save_source: 'auto' }],
 ]) {
-  it(`a name corrected by somebody ${who}: one PUT, the desktop's keys, no cost key at any depth, no cost request`, async () => {
-    const t = await ready(openEdit(rec, { caps }));
+  it(`a name corrected by somebody ${who}: the recipe PUT carries the desktop's keys and no cost key at any depth`, async () => {
+    const t = await ready(openEdit(rec, { caps, handlers: { 'PUT /api/retail-admin/recipes/1/cost': { success: true } } }));
     assert.strictEqual(t.writes().length, 0, 'opening the editor writes nothing');
     t.ctx.CMD.rcpEdSet('name_en', 'Garlic dill sour cream 2');
     await t.advance(1199);
     assert.strictEqual(t.writes().length, 0, 'not before the pause');
     await t.advance(1);
     const w = t.writes();
-    assert.strictEqual(w.length, 1, JSON.stringify(w.map((x) => x.method + ' ' + x.p)));
     assert.strictEqual(w[0].method + ' ' + w[0].p, 'PUT /api/retail-admin/recipes/1');
     assert.deepStrictEqual(Object.keys(w[0].body), BODY_KEYS);
     w[0].body.ingredients.forEach((l) => assert.deepStrictEqual(Object.keys(l), DESK_LINE));
     w[0].body.steps.forEach((s) => assert.deepStrictEqual(Object.keys(s), ['name', 'instructions']));
     const deep = keysDeep(w[0].body);
-    for (const k of MONEY_KEYS) assert.ok(!deep.has(k), `${k} is on the wire`);
-    assert.ok(!t.calls.req.some((r) => /\/cost$/.test(r.p)), 'the cost endpoint is never called');
+    for (const k of MONEY_KEYS) assert.ok(!deep.has(k), `${k} is on the recipe write`);
     assert.strictEqual(w[0].body.save_source, 'auto');
+    if (!cost) {
+      assert.strictEqual(w.length, 1, JSON.stringify(w.map((x) => x.method + ' ' + x.p)));
+      assert.ok(!t.calls.req.some((r) => /\/cost$/.test(r.p)), 'the cost endpoint is never called for this reader');
+    } else {
+      assert.strictEqual(w.length, 2);
+      assert.strictEqual(w[1].method + ' ' + w[1].p, 'PUT /api/retail-admin/recipes/1/cost', 'after the recipe, as the desktop orders them');
+      assert.deepStrictEqual(J(w[1].body), cost, 'the four inputs exactly as loaded — nothing blanked');
+      assert.ok(!('packaging' in w[1].body), 'packaging is never named, so the stored figure is kept');
+    }
   });
   it(`…and nothing else about the recipe is blanked (${who.split(' (')[0]})`, async () => {
-    const t = await ready(openEdit(rec, { caps }));
+    const t = await ready(openEdit(rec, { caps, handlers: { 'PUT /api/retail-admin/recipes/1/cost': { success: true } } }));
     t.ctx.CMD.rcpEdSet('notes', 'Label with the date. Keep cold.');
     await t.advance(1200);
     const b = t.writes()[0].body;
@@ -264,12 +278,24 @@ for (const [who, rec, caps] of [
     });
   });
 }
-it('the draft is built without the money the read carried', async () => {
-  const t = await ready(openEdit(J(FULL), { caps: ['recipes:view', 'recipes:edit', 'recipes:costs'] }));
-  const deep = keysDeep(J(t.ctx.state.rcp.ed));
-  for (const k of MONEY_KEYS) assert.ok(!deep.has(k), `${k} is in the draft`);
+it('the draft carries no money for a reader without recipes:costs, and only the four inputs and the rates for one with it', async () => {
+  let t = await ready(openEdit(stripped(), { caps: ['recipes:view', 'recipes:edit'] }));
+  let deep = keysDeep(J(t.ctx.state.rcp.ed));
+  // `cost` is the draft's own slot for the inputs, asserted null just below.
+  for (const k of MONEY_KEYS.filter((x) => x !== 'cost')) assert.ok(!deep.has(k), `${k} is in the draft`);
+  assert.deepStrictEqual([t.ctx.state.rcp.ed.cost, t.ctx.state.rcp.ed.rates], [null, null]);
+  t = await ready(openEdit(J(FULL), { caps: ['recipes:view', 'recipes:edit', 'recipes:costs'] }));
+  const d = J(t.ctx.state.rcp.ed);
+  assert.deepStrictEqual(d.cost, { labour: '12', overhead_pct: '8', sell_price: '18', target_food_cost: '30' });
+  d.lines.forEach((l) => assert.ok(!('master_cost' in l), 'the rates live beside the lines, never on them'));
+  // A cost holder whose read came back stripped (a stale cap list): no inputs,
+  // no rates, no cost request. The payload wins over the caps.
+  t = await ready(openEdit(stripped(), { caps: ['recipes:view', 'recipes:edit', 'recipes:costs'] }));
+  assert.deepStrictEqual([t.ctx.state.rcp.ed.cost, t.ctx.state.rcp.ed.rates], [null, null]);
+  t.ctx.CMD.rcpEdSet('sku', 'X'); await t.advance(1200);
+  assert.ok(!t.calls.req.some((r) => /\/cost$/.test(r.p)));
   assert.doesNotMatch(codeOnly(between(M, '/* ── Editing a recipe (§300 step R2)', '/* ── Making one (§167)')),
-    /\/cost['`]|labour|overhead|sell_price|target_food_cost|costData|master_cost/, 'the editor never names a cost key or the cost route');
+    /labour|overhead|sell_price|target_food_cost|costData|master_cost/, 'the editor names no cost key — those live in the cost block');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
