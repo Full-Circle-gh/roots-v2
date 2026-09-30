@@ -22577,3 +22577,114 @@ unchanged fields. It now reads the live draft; the suite pins both.
 shard), running the real autosave engine and history sheet, with every write
 asserted on its request. The purchasing orders and invoices suites were updated
 for the renamed tab.
+
+## §322 — A PRODUCT'S COST & PRICING ON THE PHONE: THE RECIPE LINK AND THE BUILD LIST
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step R6 of the recipes lane, the last one. The desktop product editor's
+*Cost & Pricing* tab comes to the phone (`public/m.html`, mockup R11):
+
+- where the product's cost comes from (`09-products.js` `pdApplyCostSource`);
+- the recipe it is linked to, with Link, Change and Unlink
+  (`pdRecipeLinkOpen`, `pdRecipeUnlink`) and the recipe's warnings
+  (`pdRecipeHealthPaint`);
+- the build list (`21-product-build.js`): its lines, the recipe bridge, the
+  material picker, quantity and unit, remove, and Save.
+
+1. **Where it lives.** The product sheet gets one new row, *Cost & Pricing ·
+   成本与定价* (the desktop tab's own name). It opens a screen of its own, not
+   more sheet: the screen has a search, an input per line and its own Save,
+   and a sheet rebuilt on each keystroke takes the keyboard with it. Back
+   closes the screen and puts the product sheet back up, with anything typed
+   on the sheet still in it. The screen opens on `products:view`.
+2. **Money fails closed, key by key.**
+   - The whole cost block (the figure, where it comes from, the recipe link,
+     the recipe's warnings, and the figures under the list) needs
+     `products:costs`. This is the desktop's `paShowMoney`, which hides that
+     block as one piece.
+   - A line's rate and cost also need `materials:costs`. They are a
+     material's price, and that key is what the phone's Materials screen
+     shows prices on.
+   - A recipe's cost in the link picker needs `recipes:costs`.
+   - None of it is drawn while the caps are still loading, or on a board
+     that never sees money (`recapNoMoney`).
+   - A cost the server did not send is shown as a dash, never as ¥0. The
+     catalogue row now keeps an absent `unit_cost` absent.
+3. **Writes carry the key the server checks, and nothing more is offered.**
+   - Save and Link/Change need `products:edit`. Both routes are
+     `products:edit` in `lib/cap-routes.js`.
+   - Unlink needs `products:delete`, because `DELETE
+     /products/:id/recipe-link` is mapped to it there.
+   - The link picker (`productrecipe`) also needs `products:costs`, no
+     no-money board, and Production on. The desktop only ever offers it
+     inside the cost block.
+   - Without `products:edit` the list can be read but not changed: there are
+     no inputs, no picker, no Remove, no Add and no Save.
+4. **The cost source, in the desktop's order.**
+   - A bundle is *added up from what's inside*.
+   - A product with a build list shows its recipe as a row of its own
+     (*Recipe*, its name, Change, Unlink). The recipe link survives the build
+     list because it still carries the allergens.
+   - Otherwise the cost comes *from recipe* (name, Change, Unlink), or the
+     screen offers *Link a recipe*.
+
+   The recipe's name opens the recipe, stacked over this screen, where the
+   recipe screen may open. The list is read again on the way back unless it
+   holds unsaved changes. The four warning pills are the desktop's words,
+   *UNIT MISMATCH · 单位不符* copied. A health check that could not run says
+   so.
+5. **Link and Change.** The picker opens prefilled with the product's stored
+   SKU and searches at once, as the desktop's does. The recipe already linked
+   is not offered. Link sends `PUT /products/:id/recipe-link {recipe_id}` and
+   nothing else. The answer is folded into the product in hand; a cost comes
+   in only where this reader may hold one. The build list is read again,
+   because its recipe bridge answers from the link. The server's warning is
+   passed on as it came, as the desktop does. A refusal stays on the picker.
+6. **Unlink** asks in the desktop's words, then sends `DELETE
+   /products/:id/recipe-link`. While it runs the buttons are disabled and
+   say *Saving…*. A refusal stays on the screen.
+7. **The build list is the desktop's, rule for rule.**
+   - Lines are grouped Materials then Packaging, read from the material's
+     kind.
+   - A deleted material is flagged. The §281 tick (*Not counted as waste…*)
+     appears on contents lines.
+   - A line's cost is null, never 0, when its material has no unit cost. One
+     null line makes the total a dash; a partial sum is never shown. A list
+     that is all packaging has no cost.
+   - The picker is the build list's own endpoint
+     (`/product-build/materials`), not `for_recipe=1`, because the jar
+     belongs here. What is already on the list drops out. A recipe's stand-in
+     material is labelled.
+   - A new packaging line opens at 1. The first contents line opens at the
+     product's net weight when the units agree, and says so until it is typed
+     over. Every other line opens at 0.
+   - The recipe bridge: *ready* and *repack* offer to add the recipe's
+     material (a repack at the recipe's own quantity). *Unbuilt* says the
+     recipe is not a material yet and offers *Open recipe*. The bridge goes
+     away once the list has contents.
+   - Save sends `PUT /products/:id/build-lines` with `blSave()`'s body, key
+     for key. It sends no cost field; the server's recompute writes the cost.
+     A quantity of zero is refused before the wire. After a save the list is
+     read again, so the figures on screen are the server's.
+8. **Typing moves the figures in place.** A quantity keystroke repaints the
+   line's cost, the totals, the margin and the Save button, and nothing else,
+   so the keyboard stays up.
+9. **Two differences from the desktop, both on the side of not losing work.**
+   - A failed read of the list says so and offers it again, with no editing
+     drawn. The desktop falls back to an empty list, and a Save from there
+     would write the empty list over the real one.
+   - An unsaved list asks *Leave without saving?* before it is dropped: by
+     Back, by the edge swipe, and when another product's list is opened over
+     it. A reload waits for it too (`mUnsavedWork`). The desktop has
+     `blIsDirty()` but nothing reads it.
+10. **Not brought across, and why.**
+    - The editable Cost field: the phone never wrote `unit_cost`, and does
+      not start now.
+    - The *cost is not complete* tag.
+    - The margin change in points after an add: its Chinese is `CN PENDING`
+      and it is decoration.
+    - The blocked note's second sentence, and the per-line *no unit cost —
+      ¥X recorded on the material*: the line shows *no cost*.
+    - The *From the build list* sentence: the list is on the same screen.
+    - The price field stays on the product sheet. The margin here uses the
+      saved price.

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.229 · 2026-09-30 · §322 A PRODUCT'S COST & PRICING ON THE PHONE — SIX STRINGS COMPOSED BY CLAUDE, THE BUILD LIST STILL UNNAMED IN CHINESE.** See *A product's Cost & Pricing on the phone (§322)*.
+
 **v1.228 · 2026-09-30 · §321 SUPPLIERS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, ONE TRIMMED, ONE §286 STRING RETIRED; EVERY OTHER LABEL COPIED.** See *Suppliers on the phone (§321)*.
 
 **v1.227 · 2026-09-30 · §320 REORDER AND PRICE HISTORY ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Reorder and Price history on the phone (§320)*.
@@ -10206,3 +10208,75 @@ The phone's own, already live: `Could not load this. · 无法加载。`, `Try a
 `Loading… · 加载中…`, the autosave foot (`Saving… · 保存中…`,
 `All changes saved · 已自动保存`, `Undo · 撤销`, `Version history · 历史版本`) and
 `That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`.
+
+## A product's Cost & Pricing on the phone (§322)
+
+**Six strings composed by Claude Opus 5.5 on 2026-09-30, under the 2026-09-06
+amendment. Everything else copied.** Operator register (Rule 1): the phone's
+product sheet row and its Cost & Pricing screen (`public/m.html`).
+
+**Copied whole.** From the desktop product editor (`09-products.js`,
+`21-product-build.js`, `retail-admin.html`), or the phone's own live pairs:
+
+- `Cost & Pricing · 成本与定价`
+- The cost source: `Cost · 成本`, `From recipe · 来自配方`, `Recipe · 配方`,
+  `Change · 更换`, `Unlink · 取消关联`, `Link a recipe · 关联配方`, both
+  *Added up from what's inside* lines.
+- The four health pills, *UNIT MISMATCH · 单位不符* (locked) with its locked
+  sentence, and `Couldn't load the recipe · 无法加载配方`.
+- The link picker's every string, *Cost now comes from the recipe*,
+  `Could not link · 关联失败`, and the unlink confirmation with its toast and
+  failure.
+- The list: `Materials · 物料`, `Packaging · 包装`, `material deleted · 物料已删除`,
+  `free · 免费`, `no cost · 无成本`, `from recipe · 配方自制`,
+  `Not counted as waste if it expires or spoils · 过期或变质报废时不计损耗`,
+  `qty · 数量`, `Unit · 单位`, `Remove · 移除`, `Add · 添加`,
+  `Open recipe · 打开配方`, `Price · 价格`, `Margin · 毛利`.
+- Save: `Save build list · 保存` (the desktop button; the Chinese says only
+  *save*), `Build list saved · 已保存`, `Saving… · 保存中…`.
+- The phone's live pairs:
+  - `No materials yet · 暂无物料`
+  - `Search materials to add… · 搜索要添加的物料…`
+  - `No materials match · 没有匹配的物料`
+  - `Could not load materials · 无法加载物料`
+  - `Searching… · 搜索中…`
+  - `Could not load this. · 无法加载。`
+  - `Try again · 重试`
+  - `Could not load recipes. · 无法加载食谱。`
+  - `That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`
+  - `Leave without saving? · 未保存就离开?`
+  - `Leave · 离开`
+
+**THE BUILD LIST STILL HAS NO CHINESE NAME, AND THE PHONE DOES NOT NEED ONE.**
+The labels are arranged so that no Chinese name for the list is needed. The
+screen is called by the desktop tab's name, `成本与定价`. The list sits under
+its two group headings, `物料` and `包装`, as the desktop's does. Its empty
+state is the live `暂无物料`. The desktop's *From the build list* line is not
+drawn, because the list is on the same screen. `物料清单` stays unminted, as
+`21-product-build.js` asks.
+
+| EN | CN | Where | How |
+|---|---|---|---|
+| Not available as a material yet | 尚未设为可用物料 | the recipe bridge, a recipe with no material | **composed.** `设为可用物料` is the live *Make available as material* (the recipe's own action that fixes this), `尚未` is live (`尚未保存`, `尚未创建`). Replaces the desktop's three-sentence *"…" is not available as a material yet…* (`CN PENDING`); the *Open recipe* button beside it says where the fix is. |
+| “X” has no unit cost. | “X”没有单位成本。 | the figures, one unpriced line | **composed.** `单位成本` is the live *Cost per unit*. The English is the desktop's first sentence (`CN PENDING`). |
+| “X” and N more have no unit cost. | “X”等 N 项没有单位成本。 | the figures, several unpriced lines | **composed.** The desktop says *N lines have no unit cost, starting with "X".*; the phone names the first line in both languages. `等 N 项` follows the live `等 N 个` of the archive warning, with `项` as in the live `N 项原料缺少成本`. The Chinese N is the whole count, the English N the rest. |
+| Every line here is packaging. Nothing is recorded as the contents, so this product has no cost yet. Add what goes inside and the margin appears. | 这里每一行都是包装,没有记录内容,因此本产品暂无成本。添加内容后即显示毛利。 | the figures, a list of packaging only | **composed.** The English is the desktop's (`CN PENDING`). `包装`, `暂无成本` and `毛利` are live, and `内容` is live (`这里没有内容`). |
+| “X” needs a quantity greater than zero. | “X”的数量必须大于 0。 | Save, a line at zero | **composed.** The English is the desktop's and the server's (`CN PENDING`). The Chinese is the live `数量必须大于 0。` with the line named. |
+| from the product’s net weight (…) | 取自产品净重(…) | a first contents line's quantity | **composed.** The English is the desktop's (`CN PENDING`). `净重` is live (`规格选择器上显示的规格 / 净重`), and the full-width brackets are the house's. |
+
+### Live candidates considered and rejected
+
+- **`物料清单`** for the list itself. Rejected, as `21-product-build.js` asks:
+  the labels were arranged so that no name is needed.
+- **`无法换算`** anywhere near the unit-cost sentences. Rejected for the reason
+  the unit-mismatch lock gives. This is a different fact (no unit cost), and
+  it must not borrow that wording.
+- **`暂无成本`** for *has no unit cost*. Rejected: that pair means the whole
+  thing has no cost yet, and the sentence is about one material's per-unit
+  figure. `单位成本` names the figure.
+- **`重量`** for *net weight*. Rejected in favour of `净重`, the word the size
+  field's own hint uses for the same text.
+- **`食谱`** in the copied link strings. Not used: the product editor writes
+  配方 throughout, and those pairs are copied as they are. The recipe-search
+  failure is the phone's own live `无法加载食谱。`, which is the one place the
+  two words meet on this screen.
