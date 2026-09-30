@@ -35,6 +35,7 @@ const APP = path.join(__dirname, '..', '..', 'public', 'm.html');
 const TD_DATETIME = path.join(__dirname, '..', '..', 'public', 'td-datetime.js');
 const TACET_AUTOSAVE = path.join(__dirname, '..', '..', 'public', 'tacet-autosave.js');
 const RECIPE_COST = path.join(__dirname, '..', '..', 'lib', 'recipe-cost.js');
+const INGREDIENT_COST = path.join(__dirname, '..', '..', 'lib', 'ingredient-cost.js');
 
 /**
  * m.html has exactly one LOCAL script dependency — /assets/td-datetime.js,
@@ -63,6 +64,7 @@ function inlineTdDatetime(src) {
   // inside // comments, so the angle bracket is changed there and nowhere else
   // that runs.
   const cost = fs.readFileSync(RECIPE_COST, 'utf8').replace(/<(\/?)script/gi, '&lt;$1script');
+  const icost = fs.readFileSync(INGREDIENT_COST, 'utf8').replace(/<(\/?)script/gi, '&lt;$1script');
   // Function replacement: `$&`/`$1` in the inlined source would otherwise be
   // read as substitution patterns.
   return src.replace(/<script src="\/assets\/td-datetime\.js"><\/script>/,
@@ -77,7 +79,10 @@ function inlineTdDatetime(src) {
     // script load as an error on EVERY screen — so it is inlined like the other
     // two, from the file the server sends at /lib/recipe-cost.js.
     .replace(/<script src="\/lib\/recipe-cost\.js" defer><\/script>/,
-      () => `<script data-vendor="recipe-cost">${cost}</script>`);
+      () => `<script data-vendor="recipe-cost">${cost}</script>`)
+    // The fourth (§300 R5): the material cost module, for the same reason.
+    .replace(/<script src="\/lib\/ingredient-cost\.js" defer><\/script>/,
+      () => `<script data-vendor="ingredient-cost">${icost}</script>`);
 }
 
 function findChrome() {
