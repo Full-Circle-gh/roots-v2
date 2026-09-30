@@ -153,7 +153,7 @@ section('1 · the tab, and who sees it');
 {
   it('Invoices joins the strip for purchasing:invoices with purchasing:view', () => {
     const e = mk();
-    assert.deepStrictEqual(plain(e.ctx.poViewTabs().map((t) => t[0])), ['orders', 'supowed', 'invoices']);
+    assert.deepStrictEqual(plain(e.ctx.poViewTabs().map((t) => t[0])), ['orders', 'supowed', 'invoices', 'reorder']);
   });
   it('without purchasing:invoices, or before capabilities are known, there is no tab and no screen', () => {
     for (const caps of [['purchasing:view', 'purchasing:edit'], null]) {
