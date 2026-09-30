@@ -1055,6 +1055,10 @@ const state = {
   /* §300 P3 — what the kitchen is waiting on (the pending lines, their read's
      failure, whether it was asked for) and the From-the-kitchen sheet. */
   pkLines:null, pkErr:null, pkTried:false, pk:null,
+  /* §300 P5 — Purchasing's Invoices (发票) view: which half, the month and
+     search, the two reads and their failure, which supplier groups are open,
+     a mark/delete in flight and its refusal, and the one sheet over it. */
+  pinv:{view:'suppliers',month:'',q:'',out:null,list:null,err:null,tried:false,seq:0,open:{},busy:false,actErr:null,sheet:null},
   /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
      one. Two prefixes because they are two screens with two lifetimes — the
      list survives opening a delivery, the receive screen is thrown away the
@@ -1779,6 +1783,7 @@ reg('rqSearch', v=>{
  ['mPoQ','mPoClr','poQuery'],
  ['mPwQ','mPwClr','pwQ'],
  ['mPkQ','mPkClr','pkQ'],
+ ['mPinvQ','mPinvClr','pinvQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
@@ -8768,6 +8773,8 @@ function poRow(p){
    The desktop got the identical test in 16-purchasing.js (puPartial). */
 function statusPurchasing(){
   if(state.poView==='supowed'&&canRoute('supowed')) return statusSupOwed();
+  if(state.poView==='invoices'&&pinvOn()){ const t=state.pinv.out&&state.pinv.out.totals;
+    return t?T('Total purchases','采购总额')+' '+money(CUR,t.total||0):''; }
   const all=state.poList; if(!all||!all.length) return '';
   const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p)).length;
   const late=all.filter(poLate).length;
@@ -8786,11 +8793,13 @@ function statusPurchasing(){
 function poViewTabs(){
   const t=[['orders','Orders','采购单']];
   if(canRoute('supowed')) t.push(['supowed','Suppliers we owe','供应商欠款']);
+  // §300 P5 — the desktop's Invoices tab, for whoever may read its money and write its marks.
+  if(pinvOn()) t.push(['invoices','Invoices','发票']);
   return t;
 }
 function poViewStrip(){
   const tabs=poViewTabs(); if(tabs.length<2) return '';
-  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':'orders';
+  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':state.poView==='invoices'&&pinvOn()?'invoices':'orders';
   return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">${tabs.map(([k,en,zh])=>{
     const on=cur===k;
     return `<button onclick="APP.cmd('poView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
@@ -8864,6 +8873,7 @@ function screenPurchasing(){
   loadPOs(); loadPkLines();
   const strip=poViewStrip();
   if(state.poView==='supowed'&&canRoute('supowed')) return strip+screenSupOwed();
+  if(state.poView==='invoices'&&pinvOn()) return strip+screenPoInvoices();
   if(state.posErr) return strip+`<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -8893,7 +8903,7 @@ function screenPurchasing(){
     ${filters.length?`<div style="display:flex;gap:8px">${filters.join('')}</div>`:''}
     <div id="mPoBody">${poBodyHtml()}</div></div>`;
 }
-reg('poView', v=>{ state.poView=v==='supowed'?'supowed':'orders'; render(); });
+reg('poView', v=>{ state.poView=v==='supowed'||v==='invoices'?v:'orders'; render(); });
 reg('poQuery', v=>{
   state.poQ=String(v||'');
   searchClearShow('mPoClr', !!state.poQ);
@@ -10163,6 +10173,514 @@ reg('pkMake', ()=>{
     if(e.code==='already_sourced'||e.code==='line_declined') loadPkLines(true);
     render();
   });
+});
+
+/* ==========================================================================
+   §300 P5 — Invoices (发票) on the phone (desktop: 16-purchasing.js, INVOICES)
+   --------------------------------------------------------------------------
+   ORGANISED AROUND THE CHASE, as the desktop is: who still owes us a 发票, and
+   for how much — by supplier, down to the order and the line — and the 发票
+   already recorded. Every figure is the server's, computed per line at read
+   time (routes/retail-purchasing.js lineStatus); nothing here adds up a state
+   of its own.
+
+   ONE KEY: purchasing:invoices — the key every /purchasing/* write carries on
+   the server (lib/cap-routes.js) — with purchasing:view, since every figure
+   here is money. Both fail closed (mCan's money-only set holds the first,
+   poMoney the second): a tab that cannot be shown for certain is not shown.
+
+   Every write is the desktop's request and body; every confirm is the
+   desktop's. The desktop's two search-box supplier fields are native selects
+   here — a phone draws its own wheel for them — offering the same book: the
+   names on the chase plus the active supplier book.
+   ========================================================================== */
+const PINV_UNSPEC='未指定 Unspecified';
+const PINV_META={fully_invoiced:['Fully invoiced','已开票','success'],partially_invoiced:['Partial','部分开票','warning'],
+  awaiting:['Awaiting','待开票','danger'],no_invoice_expected:['No invoice','不开发票','muted']};
+const pinvOn=()=>mCan('purchasing:invoices')&&poMoney();
+function pinvPill(status){ const m=PINV_META[status]; if(!m) return ''; const [bg,fg]=PILL[m[2]]; return `<span class="pill" style="background:${bg};color:${fg}">${T(m[0],m[1])}</span>`; }
+function pinvSup(name,cn){
+  if(!name) return '';
+  const h=catSplit(name);
+  return LANG==='en'?(h?h.en:name):((cn&&String(cn).trim())||(h?h.cn:name));
+}
+function pinvLoad(force){
+  const v=state.pinv; if(!pinvOn()||(v.tried&&!force)) return;
+  v.tried=true;
+  const qs=[]; if(v.month) qs.push('month='+encodeURIComponent(v.month)); if(v.q.trim()) qs.push('q='+encodeURIComponent(v.q.trim()));
+  const seq=++v.seq, q=qs.length?'?'+qs.join('&'):'';
+  Promise.all([api('/purchasing/invoices/outstanding'+q),api('/purchasing/invoices'+q)]).then(([out,list])=>{
+    if(seq!==v.seq) return;
+    v.out=out&&out.groups?out:{groups:[],totals:{},recorded_elsewhere:{}}; v.list=Array.isArray(list)?list:[]; v.err=null; pinvPatch();
+  }).catch(e=>{ if(seq!==v.seq||String(e.message)==='auth') return;
+    v.err=E('Could not load this.','无法加载。'); pinvPatch(); });
+  if(!state.pwc.sups&&!state.pwc.tried.sups){ state.pwc.tried.sups=1;
+    api('/suppliers').then(r=>{ state.pwc.sups=(Array.isArray(r)?r:[]).filter(s=>s.is_active==null||s.is_active); })
+      .catch(()=>{ state.pwc.sups=[]; }); }
+}
+function pinvPatch(){
+  const b=document.getElementById('mPinvBody');
+  if(b){ b.innerHTML=pinvBodyHtml(); return; }
+  render();
+}
+const pinvGroup=sup=>((state.pinv.out&&state.pinv.out.groups)||[]).find(g=>g.supplier===sup)||null;
+/* The supplier book the two pickers offer: the names on the chase, the active
+   book, and whatever the open form already carries. Stored name = value. */
+function pinvSupList(extra){
+  const cn=new Map(), names=new Set();
+  ((state.pinv.out&&state.pinv.out.groups)||[]).forEach(g=>{ if(g.supplier_cn) cn.set(g.supplier,g.supplier_cn); if(g.supplier&&g.supplier!==PINV_UNSPEC) names.add(g.supplier); });
+  (state.pwc.sups||[]).forEach(s=>{ if(s.name_cn) cn.set(s.name,s.name_cn); if(s.name) names.add(s.name); });
+  if(extra) names.add(extra);
+  return [...names].sort((a,b)=>a.localeCompare(b)).map(n=>({v:n,label:pinvSup(n,cn.get(n))}));
+}
+function pinvMonths(){
+  const v=state.pinv, seen=new Set();
+  ((v.out&&v.out.groups)||[]).forEach(g=>g.lines.forEach(l=>{ if(l.date) seen.add(String(l.date).slice(0,7)); }));
+  (v.list||[]).forEach(i=>{ if(i.date) seen.add(String(i.date).slice(0,7)); });
+  if(v.month) seen.add(v.month);
+  return [...seen].sort().reverse();
+}
+function pinvReachHtml(r){
+  if(!r||!r.type) return '';
+  const name={taobao:['Taobao','淘宝'],alibaba:['Alibaba','阿里巴巴'],website:['Website','网站'],phone:['Phone','电话'],
+    wechat:['WeChat','微信'],other:['Channel','渠道']}[r.type]||[r.type,r.type];
+  const st='font-size:12.5px;color:var(--text-primary);border:1px solid var(--border-default);border-radius:999px;padding:3px 10px;white-space:nowrap;text-decoration:none;background:none;font-family:inherit;cursor:pointer';
+  if(r.type==='wechat'||(!r.link&&r.has_qr))
+    return r.has_qr?`<button type="button" style="${st}" onclick="event.stopPropagation();APP.cmd('pinvQr',${Number(r.supplier_id)})">${T(...name)} →</button>`
+                   :`<span style="${st};cursor:default">${T(...name)}</span>`;
+  if(r.link){
+    let href=String(r.link).trim();
+    if(r.type==='phone') href='tel:'+href.replace(/[^\d+]/g,'');
+    else if(!/^[a-z][a-z0-9+.\-]*:/i.test(href)) href='https://'+href.replace(/^\/+/,'');
+    if(/^(javascript|data|vbscript):/i.test(href)) return `<span style="${st};cursor:default">${T(...name)}</span>`;
+    return `<a style="${st}" href="${escAttr(href)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${T(...name)} →</a>`;
+  }
+  return `<span style="${st};cursor:default">${T(...name)}</span>`;
+}
+function pinvKpis(){
+  const t=(state.pinv.out&&state.pinv.out.totals)||{};
+  const tile=(label,val,foot,tone)=>`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0">
+    <span style="font-size:12.5px;color:${tone||'var(--text-secondary)'}">${label}</span>
+    <span class="num" style="font-size:17px;font-weight:500">${money(CUR,val||0)}</span>${foot?`<span style="font-size:12px;color:var(--text-secondary)">${foot}</span>`:''}</div>`;
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="grid-column:1 / -1">${tile(T('Total purchases','采购总额'),t.total,(t.line_count||0)+' '+T('lines','条明细'))}</div>
+    ${tile(T('Fully invoiced','已开票'),t.fully_invoiced,'','var(--sage-ink)')}${tile(T('Partial','部分开票'),t.partially_invoiced,'','var(--amber-ink)')}
+    ${tile(T('Awaiting','待开票'),t.awaiting,T('chase these','需跟进'),'var(--brick-ink)')}${tile(T('No invoice','不开发票'),t.no_invoice_expected)}</div>`;
+}
+/* 发票 money the figures above cannot account for — recorded against an order
+   that has since stood down — said out loud, with the orders named and the
+   way out offered (the desktop's offChaseStrip). */
+function pinvOffChase(){
+  const off=(state.pinv.out&&state.pinv.out.recorded_elsewhere)||{};
+  if(!(off.amount>0.005)) return '';
+  const WHY={superseded:['the orders they were recorded against have been replaced by copies — open the 发票 under Recorded and tick the copy’s lines instead','对应采购单已被副本替代 —— 请在“已登记”中打开该发票，改为勾选副本的明细'],
+    not_placed:['recorded against an order that is no longer placed — a draft, or cancelled since','对应采购单已不是已下单状态 —— 草稿或已取消'],
+    other_tenant:['recorded against an order belonging to another business','对应采购单属于其他商户']};
+  const why=Object.entries(off.by_reason||{}).sort((a,b)=>b[1]-a[1]).map(([k])=>T(...(WHY[k]||WHY.not_placed))).join(T('; also: ','；另有：'));
+  const orders=off.orders||[];
+  const shown=orders.slice(0,4).map(o=>escAttr(o.po_number)+(o.copy_po_number?' → '+escAttr(o.copy_po_number):'')+' '+money(CUR,o.amount)).join(' · ');
+  return `<div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;background:var(--amber-tint);font-size:13px;line-height:1.5">
+    <span style="color:var(--amber-ink)"><b style="font-weight:500">${T('Recorded, not counted above','已登记发票，未计入上方')}: ${money(CUR,off.amount)}</b> — ${why}</span>
+    <span class="num" style="color:var(--amber-ink)">${shown}${orders.length>4?' · +'+(orders.length-4)+' '+T('more','个采购单'):''}</span>
+    ${orders.some(o=>o.po_id)?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 14px" onclick="APP.cmd('pinvRematchOpen')">${T('Re-match…','重新匹配…')}</button>`:''}</div>`;
+}
+function pinvCredit(){
+  const t=(state.pinv.out&&state.pinv.out.totals)||{};
+  if(!(t.credit_due>0.005)) return '';
+  return `<div style="padding:12px 14px;border-radius:14px;background:var(--amber-tint);font-size:13px;line-height:1.5;color:var(--amber-ink)">
+    ${T('Returned after invoicing','开票后退货')}: <b class="num" style="font-weight:500">${T('credit due','应退')} ${money(CUR,t.credit_due)}</b> — ${T('ask the supplier for a credit note','需向供应商索取红字发票')}</div>`;
+}
+function pinvLinesHtml(g){
+  const v=state.pinv, unspec=g.supplier===PINV_UNSPEC, busy=!!v.busy;
+  const byPo=new Map();
+  g.lines.forEach(l=>{ if(!byPo.has(l.po_number)) byPo.set(l.po_number,{po_id:l.po_id,po_number:l.po_number,date:l.date,
+    no:l.po_no_invoice,sup:l.supersedes_po_number||null,supInv:l.supersedes_invoiced||0,lines:[]}); byPo.get(l.po_number).lines.push(l); });
+  const others=po=>((v.out&&v.out.groups)||[]).filter(x=>x.supplier!==g.supplier&&x.lines.some(l=>l.po_number===po)).length;
+  const btn=(label,cmd)=>`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" ${busy?'disabled':''} onclick="${cmd}">${label}</button>`;
+  return [...byPo.values()].map(po=>{ const n=others(po.po_number);
+    return `<div style="padding:10px 14px 4px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border-default)">
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <span class="num" style="font-size:13.5px;font-weight:500">${escAttr(po.po_number)}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(po.date?fmtDateOnly(po.date):'')}</span>
+        ${po.sup?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('replaces','替代')} ${escAttr(po.sup)}${po.supInv>0.005?' · '+T('already invoiced','已登记发票')+' '+money(CUR,po.supInv):''}</span>`:''}
+        ${n?`<span style="font-size:12.5px;color:var(--text-secondary)">${T(`also ${n} other supplier${n===1?'':'s'} on this order`,`本单还含 ${n} 个其他供应商的明细`)}</span>`:''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${po.no?pinvPill('no_invoice_expected')+btn(T('Restore whole order to awaiting','整单恢复待开票'),`APP.cmd('pinvMarkPo',${Number(po.po_id)},0)`)
+               :btn(T('Mark whole order as no-invoice','整单标记不开发票'),`APP.cmd('pinvMarkPo',${Number(po.po_id)},1)`)}
+        ${unspec?btn(T('Set supplier for this order','为整单设置供应商'),`APP.cmd('pinvAssign','${po.lines.map(l=>Number(l.line_id)).join(',')}')`):''}</div>
+      ${po.lines.map(l=>`<div style="display:flex;flex-direction:column;gap:5px;padding:8px 0;border-top:1px dashed var(--border-default)">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+          <span style="min-width:0;font-size:14px">${escAttr(pwName(l))}${l.sku?` <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr(l.sku)}</span>`:''}</span>
+          <span class="num" style="flex:none;font-size:14px">${money(CUR,l.amount)}</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pinvPill(l.status)}
+          ${l.covered>0.005?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('invoiced','已开票')} ${money(CUR,l.covered)}</span>`:''}
+          ${l.credit_due>0.005?pill('restock',T('credit due','应退')+' '+money(CUR,l.credit_due)):''}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          ${unspec?btn(T('Set supplier','设置供应商'),`APP.cmd('pinvAssign','${Number(l.line_id)}')`):''}
+          ${l.po_no_invoice?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('by whole-order mark','由整单标记')}</span>`
+            :l.line_no_invoice?btn(T('Restore to awaiting','恢复待开票'),`APP.cmd('pinvMarkLine',${Number(l.po_id)},${Number(l.line_id)},0)`)
+            :btn(T('Mark as no-invoice','标记不开发票'),`APP.cmd('pinvMarkLine',${Number(l.po_id)},${Number(l.line_id)},1)`)}</div></div>`).join('')}</div>`; }).join('');
+}
+function pinvGroupsHtml(){
+  const v=state.pinv, groups=(v.out&&v.out.groups)||[];
+  if(!groups.length) return `<div style="padding:28px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    v.month||v.q.trim()?T('Nothing matches those filters.','没有匹配的内容。'):T('Nothing awaiting an invoice.','没有待开票内容。')}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:10px">${groups.map((g,i)=>{
+    const open=!!v.q.trim()||!!v.open[g.supplier], chase=(g.awaiting||0)+(g.partially_invoiced||0);
+    const top=g.awaiting>0.005?'awaiting':g.partially_invoiced>0.005?'partially_invoiced':g.fully_invoiced>0.005?'fully_invoiced':'no_invoice_expected';
+    const unspec=g.supplier===PINV_UNSPEC;
+    return `<div class="card" style="padding:0;overflow:hidden">
+      <button class="row" style="min-height:64px;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('pinvToggle',${i})">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pinvSup(g.supplier,g.supplier_cn))}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${g.line_count} ${T('lines','条明细')} · ${(g.po_numbers||[]).length} ${T('orders','张采购单')}${chase>0.005?' · '+T('Awaiting','待开票')+' '+money(CUR,chase):''}</span></span>
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+          <span class="num" style="font-size:15px;font-weight:500">${money(CUR,g.total)}</span>${pinvPill(top)}</span>
+        <span style="color:var(--text-secondary);display:flex;padding-top:2px">${ic(open?'chevron-up':'chevron-down',18)}</span></button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0 14px 12px">
+        ${pinvReachHtml(g.reach)}
+        ${unspec?`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvAssign','')">${T('Set supplier','设置供应商')}</button>`:''}
+        ${chase>0.005?`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvNew',${i})">${T('Add invoice','添加发票')}</button>`
+          :(unspec?'':`<span style="font-size:12.5px;color:var(--text-secondary)">${T('All invoiced','已全部开票')}</span>`)}</div>
+      ${open?pinvLinesHtml(g):''}</div>`; }).join('')}</div>`;
+}
+function pinvLedgerHtml(){
+  const v=state.pinv, list=v.list||[];
+  if(!list.length) return `<div style="padding:28px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    v.month||v.q.trim()?T('No invoices match those filters.','没有匹配的发票。'):T('No invoices recorded yet.','还没有登记发票。')}</div>`;
+  return `<div class="list">${list.map((inv,i)=>{
+    const pos=(inv.pos||[]).map(p=>p.po_number).join(', ');
+    const gap=Math.abs(inv.unallocated||0)>0.005?pill('restock',money(CUR,Math.abs(inv.unallocated))+' '+(inv.unallocated>0?T('unallocated','未分配'):T('over','超出'))):'';
+    return `${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:15px;font-weight:500">${escAttr(pinvSup(inv.supplier,inv.supplier_cn))}</span>
+        ${inv.invoice_number?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(inv.invoice_number)}</span>`:''}
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(inv.date?fmtDateOnly(inv.date):'')}${pos?' · '+escAttr(pos):''}</span>
+        ${gap?`<span>${gap}</span>`:''}</span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none">
+        <span class="num" style="font-size:15px;font-weight:500">${money(CUR,inv.amount)}</span>
+        <span style="display:flex;gap:4px">
+          <button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvEdit',${Number(inv.id)})">${T('Edit','编辑')}</button>
+          <button class="iconbtn" style="width:34px;height:34px" aria-label="${T('Delete','删除')}" onclick="APP.cmd('pinvDelete',${Number(inv.id)})">${ic('x',16,2)}</button></span></span></div>`; }).join('')}</div>`;
+}
+function pinvBodyHtml(){
+  const v=state.pinv;
+  if(v.err&&!v.out) return `<div><div style="font-size:14px;color:var(--brick-ink)">${v.err}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:12px" onclick="APP.cmd('pinvRetry')">${T('Try again','重试')}</button></div>`;
+  if(!v.out) return `<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const groups=v.out.groups||[];
+  if(!groups.length&&!(v.list||[]).length&&!v.month&&!v.q.trim())
+    return nothingYet(T('No invoices yet','暂无发票'),T('When a supplier sends a 发票, record it here and match it to the lines it covers. Until then, anything you’ve ordered shows as awaiting one.','供应商开票后,在此登记并与对应采购明细匹配。在此之前,已下单内容会显示为待开票。'))
+      +`<div style="display:flex;justify-content:center"><button class="cta" style="width:auto" onclick="APP.cmd('pinvNew',-1)">${T('Add invoice','添加发票')}</button></div>`;
+  const segBtn=(k,label,n)=>`<button onclick="APP.cmd('pinvView','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${v.view===k?'var(--surface-card)':'transparent'};color:${v.view===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${v.view===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
+  return `<div style="display:flex;flex-direction:column;gap:12px">
+    ${v.actErr?`<div style="padding:12px 14px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${v.actErr}</div>`:''}
+    <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+      ${segBtn('suppliers',T('By supplier','按供应商'),groups.length)}${segBtn('recorded',T('Recorded','已登记'),(v.list||[]).length)}</div>
+    ${pinvKpis()}${pinvOffChase()}${pinvCredit()}
+    ${v.view==='recorded'?pinvLedgerHtml():pinvGroupsHtml()}</div>`;
+}
+function screenPoInvoices(){
+  pinvLoad();
+  const v=state.pinv;
+  const months=pinvMonths();
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;gap:8px">
+      <select onchange="APP.cmd('pinvMonth',this.value)" style="flex:none;width:42%;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0">
+        <option value="">${T('All months','全部月份')}</option>${months.map(m=>`<option value="${m}"${v.month===m?' selected':''}>${escAttr(tdWhen(m+'-01','month',_tdL()))}</option>`).join('')}</select>
+      ${searchBox(`<input id="mPinvQ" inputmode="search" enterkeyhint="search" value="${escAttr(v.q)}" placeholder="${T('Supplier, item or SKU','供应商、产品或货号')}" oninput="APP.cmd('pinvQ',this.value)">`,'mPinvClr',!!v.q,'flex:1;min-width:0')}</div>
+    <div id="mPinvBody">${pinvBodyHtml()}</div></div>`;
+}
+let pinvQTimer=null;
+reg('pinvQ', v=>{ const s=state.pinv; s.q=String(v||''); searchClearShow('mPinvClr',!!s.q);
+  clearTimeout(pinvQTimer); pinvQTimer=setTimeout(()=>pinvLoad(true),250); });
+reg('pinvMonth', m=>{ const s=state.pinv; s.month=String(m||''); s.out=null; render(); pinvLoad(true); });
+reg('pinvView', k=>{ state.pinv.view=k==='recorded'?'recorded':'suppliers'; pinvPatch(); });
+reg('pinvRetry', ()=>{ const s=state.pinv; s.err=null; s.out=null; pinvPatch(); pinvLoad(true); });
+reg('pinvToggle', i=>{ const g=((state.pinv.out&&state.pinv.out.groups)||[])[Number(i)]; if(!g) return;
+  state.pinv.open[g.supplier]=!state.pinv.open[g.supplier]; pinvPatch(); });
+
+/* ── the no-invoice mark, both levels (the desktop's two routes) ──────────── */
+function pinvAct(req,ok){
+  const v=state.pinv; if(v.busy||!mCan('purchasing:invoices')) return;
+  v.busy=true; v.actErr=null; pinvPatch();
+  apiWrite(req[0],req[1],req[2]).then(r=>{ v.busy=false; showToast(typeof ok==='function'?ok(r):ok); pinvLoad(true); })
+    .catch(e=>{ v.busy=false; if(String(e.message)==='auth') return;
+      v.actErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
+}
+reg('pinvMarkPo', (poId,flag)=>{ flag=!!Number(flag);
+  pinvAct(['/purchasing/po/'+Number(poId)+'/no-invoice',{no_invoice_expected:flag},'PUT'], r=>{
+    /* WHAT THE PRESS DID NOT DO, said out loud: lines with their own mark keep it. */
+    const n=Number(r&&r.lines_still_marked)||0;
+    return flag?T('Whole order marked as no-invoice','整单已标记不开发票')
+      :(n?T(n===1?'Order restored — 1 line keeps its own no-invoice mark':`Order restored — ${n} lines keep their own no-invoice mark`,`整单已恢复待开票 —— ${n} 条明细仍自行标记不开发票`)
+         :T('Order restored to awaiting','整单已恢复待开票')); }); });
+reg('pinvMarkLine', (poId,lineId,flag)=>{ flag=!!Number(flag);
+  pinvAct(['/purchasing/po/'+Number(poId)+'/line/'+Number(lineId)+'/no-invoice',{no_invoice_expected:flag},'PUT'],
+    flag?T('Line marked as no-invoice','该明细已标记不开发票'):T('Line restored to awaiting','该明细已恢复待开票')); });
+
+/* ── the sheets: add / edit a 发票, set supplier, re-match, a QR ────────── */
+function pinvSheetLines(){
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return [];
+  const g=pinvGroup(d.supplier||PINV_UNSPEC);
+  const open=((g&&g.lines)||[]).filter(l=>l.status!=='no_invoice_expected');
+  const seen=new Set(open.map(l=>l.line_id));
+  const own=(d.ownLines||[]).filter(l=>!seen.has(l.line_id)).map(l=>({line_id:l.line_id,name_en:l.name_en,name_cn:l.name_cn,sku:l.sku,
+    po_number:l.po_number,date:l.po_date,amount:Math.round(((l.qty||0)*(l.cost_per_unit||0))*100)/100,outstanding:0}));
+  return open.concat(own);
+}
+const pinvAllocated=d=>Object.values(d.alloc).reduce((s,x)=>s+(parseFloat(x)||0),0);
+function pinvBadge(){
+  const d=state.pinv.sheet; if(!d) return '';
+  const a=pinvAllocated(d), diff=(parseFloat(d.amount)||0)-a;
+  if(Math.abs(diff)<0.01) return `${pill('delivered',T('Allocated','已分配')+' '+money(CUR,a))} <span style="font-size:12.5px;color:var(--text-secondary)">${T('nothing left over','正好')}</span>`;
+  if(diff>0) return `${pill('draft',T('Allocated','已分配')+' '+money(CUR,a))} <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${money(CUR,diff)} ${T('unallocated','未分配')}</span>`;
+  return `${pill('restock',T('Allocated','已分配')+' '+money(CUR,a))} <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${money(CUR,-diff)} ${T('over the invoice','超出发票')}</span>`;
+}
+function pinvInvSheet(d){
+  const lines=pinvSheetLines(), byPo=new Map();
+  lines.forEach(l=>{ if(!byPo.has(l.po_number)) byPo.set(l.po_number,[]); byPo.get(l.po_number).push(l); });
+  const sups=pinvSupList(d.supplier);
+  const fld=(label,inner)=>`<label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${label}</span>${inner}</label>`;
+  const rows=lines.length?[...byPo.entries()].map(([po,ls])=>`<div class="num" style="padding:10px 20px 4px;font-size:12.5px;font-weight:500;color:var(--text-secondary)">${escAttr(po)}</div>${ls.map(l=>{
+      const on=d.alloc[l.line_id]!=null, own=(d.ownLines||[]).some(x=>x.line_id===l.line_id);
+      const head=(l.outstanding||0)+(own?(parseFloat(d.alloc[l.line_id])||0):0);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 20px">
+        <button onclick="APP.cmd('pinvTick',${Number(l.line_id)})" aria-pressed="${on}" style="flex:none;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+          ${on?'background:var(--text-primary);border:none':'border:1.5px solid var(--edge);background:var(--surface-card)'}">${on?`<span style="display:flex;color:var(--bg)">${ic('check',16,2.5)}</span>`:''}</button>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pwName(l))}</span>
+          <span class="num" style="font-size:12px;color:var(--text-secondary)">${money(CUR,head)} ${T('open','待开')}</span></span>
+        <input class="num" inputmode="decimal" id="mPinvA${l.line_id}" value="${on?escAttr(d.alloc[l.line_id]):''}" placeholder="0" style="width:92px;text-align:right;flex:none" oninput="APP.cmd('pinvAlloc',${Number(l.line_id)},this.value)"></div>`; }).join('')}`).join('')
+    :`<div style="padding:14px 20px;font-size:13.5px;color:var(--text-secondary)">${d.supplier?T('No open lines for this supplier — you can still record the invoice.','该供应商暂无待开票明细 —— 仍可登记发票。'):T('Pick a supplier to see what’s open.','选择供应商以查看待开票明细。')}</div>`;
+  return {title:d.id?T('Edit invoice','编辑发票'):T('Add invoice','添加发票'), sub:T('Match a supplier’s invoice to the lines it covers.','将供应商发票匹配到对应采购明细。'),
+    body:`<div style="padding:0 20px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:10px">${fld(T('Supplier','供应商'),`<select onchange="APP.cmd('pinvField','supplier',this.value)" style="width:100%"><option value="">${T('No supplier','未指定供应商')}</option>${
+          sups.map(s=>`<option value="${escAttr(s.v)}"${s.v===d.supplier?' selected':''}>${escAttr(s.label)}</option>`).join('')}</select>`)}
+          ${fld(T('Invoice no.','发票号'),`<input value="${escAttr(d.invoice_number)}" placeholder="${T('Optional','可选')}" oninput="APP.cmd('pinvField','invoice_number',this.value)">`)}</div>
+        <div style="display:flex;gap:10px">${fld(T('Amount','金额')+' '+escAttr(CUR),`<input class="num" inputmode="decimal" value="${escAttr(d.amount)}" oninput="APP.cmd('pinvField','amount',this.value)">`)}
+          ${fld(T('Invoice date','开票日期'),`<input type="date" value="${escAttr(d.date)}" onchange="APP.cmd('pinvField','date',this.value)">`)}</div>
+        ${fld(T('Note','备注'),`<input value="${escAttr(d.notes)}" placeholder="${T('Optional','可选')}" oninput="APP.cmd('pinvField','notes',this.value)">`)}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:14px;font-weight:500">${T('What it covers','涵盖内容')}</span>
+          <button class="btn2" style="width:auto;min-height:36px;padding:0 14px" onclick="APP.cmd('pinvMatch')">${T('Match to amount','按金额匹配')}</button></div></div>
+      <div>${rows}</div>`,
+    foot:`<div id="mPinvBadge" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${pinvBadge()}</div>
+      <button class="cta" ${d.busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pinvSave')">${d.busy?T('Saving…','保存中…'):(d.id?T('Save changes','保存更改'):T('Save invoice','保存发票'))}</button>`};
+}
+function pinvAssignSheet(d){
+  const byPo=new Map(); d.lines.forEach(l=>{ if(!byPo.has(l.po_number)) byPo.set(l.po_number,[]); byPo.get(l.po_number).push(l); });
+  const picked=d.lines.filter(l=>d.picked.indexOf(l.line_id)>=0), all=picked.length===d.lines.length;
+  const sups=pinvSupList();
+  return {title:T('Set supplier','设置供应商'), sub:T('Say who these lines came from. They move into that supplier’s group, ready to chase a 发票 for.','指明这些明细的来源。设置后将归入该供应商,可开始跟进发票。'),
+    body:`<div style="padding:0 20px;display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${T('Supplier','供应商')}</span>
+          <select onchange="APP.cmd('pinvAssignSup',this.value)" style="width:100%"><option value="">${T('Choose a supplier','请选择供应商')}</option>${
+            sups.map(s=>`<option value="${escAttr(s.v)}"${s.v===d.supplier?' selected':''}>${escAttr(s.label)}</option>`).join('')}</select>
+          ${sups.length?'':`<span style="font-size:12.5px;color:var(--text-secondary)">${T('No suppliers on file yet — add one on the Suppliers tab, then come back.','还没有供应商 —— 请先在“供应商”中添加,然后返回。')}</span>`}</label>
+        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:14px;font-weight:500">${T('Lines to move','要设置的明细')}</span>
+          <button class="btn2" style="width:auto;min-height:36px;padding:0 14px" onclick="APP.cmd('pinvAssignAll')">${all?T('Untick all','全部取消'):T('Tick all','全选')}</button></div></div>
+      <div>${[...byPo.entries()].map(([po,ls])=>`<div class="num" style="padding:10px 20px 4px;font-size:12.5px;font-weight:500;color:var(--text-secondary)">${escAttr(po)}</div>${ls.map(l=>{
+        const on=d.picked.indexOf(l.line_id)>=0;
+        return `<button class="row" style="min-height:52px;padding:8px 20px;gap:12px" onclick="APP.cmd('pinvAssignTick',${Number(l.line_id)})">
+          <span style="flex:none;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;${on?'background:var(--text-primary)':'border:1.5px solid var(--edge);background:var(--surface-card)'}">${on?`<span style="display:flex;color:var(--bg)">${ic('check',16,2.5)}</span>`:''}</span>
+          <span style="flex:1;min-width:0;font-size:14px;text-align:left">${escAttr(pwName(l))}</span>${pinvPill(l.status)}<span class="num" style="flex:none;font-size:14px">${money(CUR,l.amount)}</span></button>`; }).join('')}`).join('')}</div>`,
+    foot:`<div style="font-size:13px;color:var(--text-secondary)">${picked.length?`${picked.length} ${T('of','/')} ${d.lines.length} ${T('lines','条明细')} · <span class="num">${money(CUR,picked.reduce((s,l)=>s+(l.amount||0),0))}</span>`:T('Nothing ticked','未勾选')}</div>
+      <button class="cta" ${d.busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pinvAssignSave')">${d.busy?T('Saving…','保存中…'):T('Set supplier','设置供应商')}</button>`};
+}
+function pinvRematchSheet(d){
+  const picked=pinvRematchPicked(d), sum=picked.reduce((s,x)=>s+(x.plan.movable||0),0);
+  const loading=d.orders.some(o=>!d.plans[o.po_id]);
+  const rows=d.orders.map(o=>{
+    const plan=d.plans[o.po_id], on=d.picked.indexOf(o.po_id)>=0, head=escAttr(o.po_number)+' → '+escAttr(o.copy_po_number||'');
+    if(!plan) return `<div style="padding:10px 20px;font-size:14px">${head} <span style="color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
+    if(plan.error) return `<div style="padding:10px 20px;font-size:14px">${head} <span style="color:var(--brick-ink)">${T('Could not load this.','无法加载。')}</span></div>`;
+    const credit=(plan.moves||[]).reduce((s,m)=>s+(m.credit_due||0),0);
+    const detail=d.lines.indexOf(o.po_id)>=0?`<div style="padding:4px 20px 8px 58px;display:flex;flex-direction:column;gap:6px;font-size:12.5px">${
+      (plan.moves||[]).map(m=>`<div>${escAttr(pwName(m.from||{}))} → ${escAttr(pwName(m.to||{}))} <span style="color:var(--text-secondary)">${T('matched on','匹配依据')} ${m.basis==='sku'?T('SKU','货号'):T('name','名称')}</span> <span class="num">${money(CUR,m.amount)}</span></div>`).join('')}${
+      (plan.unmatched||[]).map(u=>`<div style="color:var(--text-secondary)">${escAttr(pwName(u.from||{}))} → ${T('nothing on the copy matches — stays put','副本中无匹配项 —— 保持不动')} <span class="num">${money(CUR,u.amount)}</span></div>`).join('')}</div>`:'';
+    return `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 20px">
+        <button onclick="APP.cmd('pinvRematchTick',${Number(o.po_id)})" ${plan.moves&&plan.moves.length?'':'disabled'} style="flex:none;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+          ${on?'background:var(--text-primary);border:none':'border:1.5px solid var(--edge);background:var(--surface-card)'}">${on?`<span style="display:flex;color:var(--bg)">${ic('check',16,2.5)}</span>`:''}</button>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span class="num" style="font-size:14px">${head} · ${money(CUR,plan.movable||0)}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary)">${plan.moves.length} ${T('of','/')} ${plan.moves.length+plan.unmatched.length} ${T('lines pair','条明细可匹配')}</span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap">${plan.unmatched.length?pill('restock',plan.unmatched.length+' '+T('can’t be paired — left alone','无法匹配，保持不动')):''}${credit>0.005?pill('restock',T('credit due','应退')+' '+money(CUR,credit)):''}</span>
+          <button class="btn2" style="width:auto;align-self:flex-start;min-height:32px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('pinvRematchLines',${Number(o.po_id)})">${d.lines.indexOf(o.po_id)>=0?T('Hide lines','收起明细'):T('Show lines','查看明细')}</button></span></div>${detail}`; }).join('');
+  return {title:T('Re-match recorded 发票','重新匹配已登记发票'),
+    sub:T('These 发票 were recorded against orders that have since been replaced by copies. Move each one onto the copy’s matching lines and it counts again.','这些发票登记在已被副本替代的采购单上。将其移到副本的对应明细后，即可重新计入。'),
+    body:`<div style="padding:0 20px 6px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:14px;font-weight:500">${T('Orders to re-match','要重新匹配的采购单')}</span>
+        <button class="btn2" style="width:auto;min-height:36px;padding:0 14px" onclick="APP.cmd('pinvRematchAll')">${T('Tick all','全选')}</button></div>${rows}
+      <div style="padding:8px 20px;font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Lines are paired by SKU and name — never by their position on the order — so a quantity you corrected on the copy is safe. Anything that cannot be paired is listed and left exactly where it is.','明细按货号与名称匹配，不按顺序匹配，因此您在副本上修改的数量不受影响。无法匹配的明细会列出并保持不动。')}</div>`,
+    foot:`<div class="num" style="font-size:13px;color:var(--text-secondary)">${loading?T('Loading…','加载中…'):picked.length?`${picked.length} ${T('of','/')} ${d.orders.length} ${T('orders','个采购单')} · ${money(CUR,sum)}`:T('Nothing ticked','未勾选')}</div>
+      <button class="cta" ${d.busy||!picked.length?'disabled style="opacity:.55"':''} onclick="APP.cmd('pinvRematchSave')">${d.busy?T('Moving…','移动中…'):T('Move','移动')}</button>`};
+}
+function sheetPinv(){
+  const d=state.pinv.sheet; if(!d) return '';
+  let s;
+  if(d.kind==='inv') s=pinvInvSheet(d);
+  else if(d.kind==='assign') s=pinvAssignSheet(d);
+  else if(d.kind==='rematch') s=pinvRematchSheet(d);
+  else s={title:escAttr(d.name||''),sub:T('Scan to reach them','扫码联系'),
+    body:`<div style="padding:8px 20px;text-align:center">${d.err?`<span style="font-size:14px;color:var(--text-secondary)">${T('No QR on file','暂无二维码')}</span>`
+      :d.qr?`<img src="${escAttr(d.qr)}" alt="" style="max-width:280px;width:100%;border-radius:10px">`:`<span style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`}</div>`,foot:''};
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('pinvClose')"></div>
+   <div class="sheet" style="top:48px;z-index:46;overflow:hidden">
+     <div style="flex:none;padding:8px 20px 12px"><div class="grabber"></div>
+       <div style="display:flex;align-items:flex-start;gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-size:18px;font-weight:500">${s.title}</span>
+         <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${s.sub}</span></span>
+         <button class="iconbtn" style="width:36px;height:36px;margin-right:-6px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('pinvClose')">${ic('x',20,2)}</button></div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto">${s.body}</div>
+     ${s.foot||d.err&&d.kind!=='qr'?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
+       ${d.err&&d.kind!=='qr'?`<div style="font-size:14px;color:var(--brick-ink);line-height:1.5">${d.err}</div>`:''}${s.foot}</div>`:''}</div>`;
+}
+reg('pinvClose', ()=>{ state.pinv.sheet=null; render(); });
+reg('pinvNew', i=>{
+  if(!pinvOn()) return;
+  const g=((state.pinv.out&&state.pinv.out.groups)||[])[Number(i)];
+  const sup=g&&g.supplier!==PINV_UNSPEC?g.supplier:'';
+  state.pinv.sheet={kind:'inv',id:null,supplier:sup,invoice_number:'',date:shopToday(),due_date:'',amount:'',notes:'',alloc:{},busy:false,err:null};
+  render();
+});
+/* Editing loads the 发票's OWN allocations, so the lines it covers arrive ticked
+   and its headroom counts them back in (the server ignores its own rows). */
+reg('pinvEdit', id=>{
+  if(!pinvOn()) return;
+  state.pinv.actErr=null;
+  api('/purchasing/invoices/'+Number(id)).then(inv=>{
+    const alloc={}; (inv.lines||[]).forEach(l=>{ alloc[l.line_id]=Number((l.allocated_amount||0).toFixed(2)); });
+    state.pinv.sheet={kind:'inv',id:inv.id,supplier:inv.supplier===PINV_UNSPEC?'':(inv.supplier||''),invoice_number:inv.invoice_number||'',
+      date:inv.date,due_date:inv.due_date||'',amount:inv.amount,notes:inv.notes||'',alloc,ownLines:inv.lines||[],busy:false,err:null};
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return; state.pinv.actErr=T('Could not load this.','无法加载。'); pinvPatch(); });
+});
+reg('pinvField', (f,val)=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv'||!['supplier','invoice_number','amount','date','notes'].includes(f)) return;
+  d[f]=String(val==null?'':val);
+  if(f==='supplier'){ d.alloc={}; render(); return; }   // the lines on offer are that supplier's
+  const b=document.getElementById('mPinvBadge'); if(b) b.innerHTML=pinvBadge();
+});
+reg('pinvTick', id=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return; id=Number(id);
+  if(d.alloc[id]!=null) delete d.alloc[id];
+  else { const l=pinvSheetLines().find(x=>Number(x.line_id)===id); if(!l) return; d.alloc[id]=Number((l.outstanding||0).toFixed(2)); }
+  render();
+});
+reg('pinvAlloc', (id,val)=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return;
+  if(val===''||val==null) delete d.alloc[Number(id)]; else d.alloc[Number(id)]=String(val);
+  const b=document.getElementById('mPinvBadge'); if(b) b.innerHTML=pinvBadge();
+});
+/* The desktop's Match to amount: the amount poured down the open lines in
+   order, each taking what it still has open, until it runs out. */
+reg('pinvMatch', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv') return;
+  let target=parseFloat(d.amount)||0; d.alloc={};
+  if(target>0) for(const l of pinvSheetLines()){ if(target<=0.01) break;
+    const take=Math.min(target,l.outstanding||0); if(take>0.01){ d.alloc[l.line_id]=Number(take.toFixed(2)); target-=take; } }
+  render();
+});
+function pinvErrFor(e){
+  const c=e&&e.code;
+  if(c==='amount_required') return T('Enter an amount first.','请先填写金额。');
+  if(c==='date_required') return T('Choose a date first.','请先选择日期。');
+  if(c==='supplier_required') return T('Choose a supplier first.','请先选择供应商。');
+  if(c==='lines_required') return T('Add at least one line first.','请至少添加一行。');
+  if(c==='unknown_supplier') return T('That supplier isn’t on file — add them on the Suppliers tab first.','该供应商不在名录中 —— 请先在“供应商”中添加。');
+  if(c==='not_found') return T('This order has already moved on. Close and open it again to see where it is now.','这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
+  return T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+}
+reg('pinvSave', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='inv'||d.busy||!mCan('purchasing:invoices')) return;
+  if(!(parseFloat(d.amount)>0)){ d.err=T('Enter the invoice amount','请输入发票金额'); render(); return; }
+  const links=Object.entries(d.alloc).map(([line_id,a])=>({line_id:parseInt(line_id,10),allocated_amount:parseFloat(a)||0})).filter(l=>l.allocated_amount>0);
+  const body={supplier:d.supplier,invoice_number:d.invoice_number||null,amount:parseFloat(d.amount),
+    date:d.date,due_date:d.due_date||null,notes:d.notes||null,links};
+  d.busy=true; d.err=null; render();
+  (d.id?apiWrite('/purchasing/invoices/'+d.id,body,'PUT'):apiWrite('/purchasing/invoices',body,'POST')).then(()=>{
+    state.pinv.sheet=null; showToast(d.id?T('Saved','已保存'):T('Invoice recorded','发票已登记')); pinvLoad(true); render();
+  }).catch(e=>{ d.busy=false; if(String(e.message)==='auth') return;
+    /* The allocation refusal comes back as the server's own sentence ("line N
+       over-allocated"), which names no line a buyer can see; said in words. */
+    d.err=/over-allocated/.test(String(e.message))?T('That is more than the line has left to invoice.','超出该明细的待开票金额。'):pinvErrFor(e); render(); });
+});
+reg('pinvDelete', id=>{
+  if(!mCan('purchasing:invoices')) return;
+  state.ask={title:T('Delete this invoice?','确定删除该发票?'),body:T('The lines it covers go back to awaiting an invoice.','其涵盖的采购明细将恢复为待开票。'),
+    confirmLabel:T('Delete invoice','删除发票'),danger:true,
+    run:()=>pinvAct(['/purchasing/invoices/'+Number(id),{},'DELETE'],T('Deleted','已删除'))};
+  render();
+});
+/* "Set supplier" — the way out of the Unspecified bucket: one line, one order,
+   or the whole bucket, every line ticked. */
+reg('pinvAssign', ids=>{
+  if(!pinvOn()) return;
+  const g=pinvGroup(PINV_UNSPEC); if(!g) return;
+  const want=String(ids||'').split(',').map(Number).filter(Boolean);
+  const lines=g.lines.filter(l=>!want.length||want.indexOf(Number(l.line_id))>=0);
+  if(!lines.length) return;
+  state.pinv.sheet={kind:'assign',supplier:'',lines,picked:lines.map(l=>l.line_id),busy:false,err:null};
+  render();
+});
+reg('pinvAssignSup', v=>{ const d=state.pinv.sheet; if(d&&d.kind==='assign') d.supplier=String(v||''); });
+reg('pinvAssignTick', id=>{ const d=state.pinv.sheet; if(!d||d.kind!=='assign') return; id=Number(id);
+  const i=d.picked.indexOf(id); if(i>=0) d.picked.splice(i,1); else if(d.lines.some(l=>Number(l.line_id)===id)) d.picked.push(id); render(); });
+reg('pinvAssignAll', ()=>{ const d=state.pinv.sheet; if(!d||d.kind!=='assign') return;
+  d.picked=d.picked.length===d.lines.length?[]:d.lines.map(l=>l.line_id); render(); });
+reg('pinvAssignSave', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='assign'||d.busy||!mCan('purchasing:invoices')) return;
+  if(!d.supplier){ d.err=T('Choose a supplier','请选择供应商'); render(); return; }
+  if(!d.picked.length){ d.err=T('Tick at least one line','请至少勾选一条明细'); render(); return; }
+  d.busy=true; d.err=null; render();
+  apiWrite('/purchasing/lines/supplier',{supplier:d.supplier,line_ids:d.picked.slice()},'PUT').then(()=>{
+    state.pinv.sheet=null; state.pinv.open[d.supplier]=true;   // open where they landed
+    showToast(T('Supplier set','已设置供应商')); pinvLoad(true); render();
+  }).catch(e=>{ d.busy=false; if(String(e.message)==='auth') return; d.err=pinvErrFor(e); render(); });
+});
+/* Re-match: the pairing is SHOWN before anything moves (plans are read-only
+   GETs); only a whole-order pairing is ticked by default. */
+function pinvRematchPicked(d){
+  return d.orders.filter(o=>d.picked.indexOf(o.po_id)>=0).map(o=>({o,plan:d.plans[o.po_id]}))
+    .filter(x=>x.plan&&!x.plan.error&&x.plan.moves&&x.plan.moves.length);
+}
+reg('pinvRematchOpen', ()=>{
+  if(!pinvOn()) return;
+  const off=(state.pinv.out&&state.pinv.out.recorded_elsewhere)||{};
+  const orders=(off.orders||[]).filter(o=>o.po_id); if(!orders.length) return;
+  const d={kind:'rematch',orders,plans:{},picked:[],lines:[],busy:false,err:null};
+  state.pinv.sheet=d; render();
+  orders.forEach(o=>api('/purchasing/invoices/rematch/'+Number(o.po_id)).then(p=>{
+    d.plans[o.po_id]=p||{error:true};
+    if(p&&!(p.unmatched||[]).length&&(p.moves||[]).length&&d.picked.indexOf(o.po_id)<0) d.picked.push(o.po_id);
+  }).catch(()=>{ d.plans[o.po_id]={error:true}; }).then(()=>{ if(state.pinv.sheet===d) render(); }));
+});
+reg('pinvRematchTick', id=>{ const d=state.pinv.sheet; if(!d||d.kind!=='rematch'||d.busy) return; id=Number(id);
+  const i=d.picked.indexOf(id); if(i>=0) d.picked.splice(i,1); else d.picked.push(id); render(); });
+reg('pinvRematchLines', id=>{ const d=state.pinv.sheet; if(!d||d.kind!=='rematch') return; id=Number(id);
+  const i=d.lines.indexOf(id); if(i>=0) d.lines.splice(i,1); else d.lines.push(id); render(); });
+reg('pinvRematchAll', ()=>{ const d=state.pinv.sheet; if(!d||d.kind!=='rematch'||d.busy) return;
+  const ok=d.orders.filter(o=>{ const p=d.plans[o.po_id]; return p&&!p.error&&p.moves&&p.moves.length; }).map(o=>o.po_id);
+  d.picked=ok.every(id=>d.picked.indexOf(id)>=0)?[]:ok; render(); });
+/* One order at a time — each is its own transaction on the server, so a
+   failure part-way leaves the ones already moved alone, and is named. */
+reg('pinvRematchSave', ()=>{
+  const d=state.pinv.sheet; if(!d||d.kind!=='rematch'||d.busy||!mCan('purchasing:invoices')) return;
+  const picked=pinvRematchPicked(d); if(!picked.length) return;
+  d.busy=true; d.err=null; render();
+  let moved=0, amount=0; const failed=[];
+  picked.reduce((p,{o})=>p.then(()=>apiWrite('/purchasing/invoices/rematch/'+Number(o.po_id),{},'POST')
+    .then(r=>{ moved+=(r&&r.data&&r.data.moved)||0; amount+=(r&&r.data&&r.data.amount)||0; })
+    .catch(e=>{ if(String(e.message)==='auth') throw e; failed.push(o.po_number); })),Promise.resolve()).then(()=>{
+    d.busy=false;
+    const what=money(CUR,amount)+T(` across ${moved} line${moved===1?'':'s'}`,` · ${moved} 条明细`);
+    if(failed.length){ d.err=T('Moved ','已移动 ')+what+T('; these could not be moved: ','；以下未能移动：')+failed.map(escAttr).join(', '); render(); }
+    else { state.pinv.sheet=null; showToast(T('Moved ','已移动 ')+what+T(' onto the replacing orders',' 到替代采购单')); render(); }
+    pinvLoad(true);
+  }).catch(()=>{});
+});
+reg('pinvQr', id=>{
+  const d={kind:'qr',name:'',qr:null,err:false}; state.pinv.sheet=d; render();
+  api('/suppliers/'+Number(id)+'/channel-qr').then(r=>{ d.name=(r&&r.name)||''; d.qr=r&&r.qr; if(!d.qr) d.err=true; })
+    .catch(()=>{ d.err=true; }).then(()=>{ if(state.pinv.sheet===d) render(); });
 });
 
 /* ==========================================================================
@@ -11553,7 +12071,9 @@ const SUBS={
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),
     /* §300 P2 — the desktop's New order, on its own key (data-cap="purchasing:edit"). */
-    cta:()=>state.poView!=='supowed'&&canRoute('newpo')
+    cta:()=>state.poView==='invoices'&&pinvOn()
+      ? `<button class="cta inhead" onclick="APP.cmd('pinvNew',-1)">${T('Add invoice','添加发票')}</button>`
+      : state.poView!=='supowed'&&state.poView!=='invoices'&&canRoute('newpo')
       ? `<button class="cta inhead" onclick="APP.cmd('pwNew')">${T('New order','新建采购单')}</button>` : '',
     render:()=>screenPurchasing()},
   newpo:{title:['New order','新建采购单'],
@@ -27747,6 +28267,7 @@ function render(){
   if(state.poId!=null&&state.poPrint&&state.poDetail) html += layer('poprint:'+state.poId, sheetPOPrint());
   if(state.pwSheet&&state.pw&&pwOnTop()) html += layer('pw:'+state.pwSheet.kind, sheetPW());
   if(state.pk) html += layer('pk', sheetPK());
+  if(state.pinv.sheet) html += layer('pinv:'+state.pinv.sheet.kind, sheetPinv());
   if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());
   if(state.fin.txRow) html += layer('fintx:'+state.fin.txRow, sheetFinTxRow());
   if(state.fin.form) html += layer('fintxform', sheetFinTxForm());
@@ -28199,6 +28720,7 @@ function layers(){
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
   if(state.pwSheet&&state.pw&&pwOnTop()) L.push(()=>{ state.pwSheet=null; });
   if(state.pk) L.push(()=>{ state.pk=null; });
+  if(state.pinv.sheet) L.push(()=>{ state.pinv.sheet=null; });
   if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });
   if(state.fin.txRow) L.push(()=>{ state.fin.txRow=null; state.fin.txActErr=''; });
   if(state.fin.form) L.push(()=>{ state.fin.form=null; });
