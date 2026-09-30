@@ -21545,3 +21545,63 @@ confirm, same refusal.
     the file. A literal one in the document swallowed the harness, and every probe
     suite read the page title instead. Every closing tag in the document is now
     written escaped, and the new suite pins the file to one closing body tag.
+
+## §305 — THE FINANCE SUMMARY IS ON THE PHONE, READ-ONLY
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 1 of the parity survey's build order. The phone gains a Finance screen (More → Money and
+numbers → Finance) that shows the desktop's money staircase for any window. A category's
+figure opens the ledger rows behind it in a sheet, and a purchase-order row opens its items. It
+calls the same three read endpoints as `22-finance.js`, with the same parameters, and draws the
+same rows, states and notes. It writes nothing. Transactions and Categories are later steps
+(F2, F3).
+
+1. **Gated on `finance:view`, and closed while that is unknown.** The route is in `ROUTE_CAP`,
+   and F0's `mCan` refuses money-only keys while caps are unknown. `canRoute` also refuses it on
+   the three boards that never see money (`recapNoMoney()`: warehouse, dispatch, customer
+   service), whatever their caps, which is the rule Trend and Home already follow. The server
+   leaves reads open by design (`lib/cap-routes.js`), so this is the gate.
+2. **The staircase is the desktop's, row for row.** The rows run in this order:
+   - Revenue, with its channels, open by default and with no chevron when there are none, then
+     the revenue note (§182).
+   - "of which tax", only when the shop charges tax.
+   - Cost of goods and Gross profit, in the server's three states: Not recorded plus one
+     sentence; the figures plus the floored coverage sentence; or the figures alone.
+   - Operating expenses, with its categories, open by default.
+   - Net.
+   - Below the card, the excluded money (§87): closed by default, absent at zero, with no minus.
+
+   Figures are whole yuan on the staircase and exact to the fen inside a drill-down, per §36 and
+   §88. Category labels use the phone's existing `catLabel`/`catLabels` split and collision
+   rule, which match the desktop's.
+3. **A category opens in a sheet, not in place** (§97: same capability, not same layout). It
+   reads `/finance/summary/category` over the window the figures came from (`data.window`), not
+   over the chips, which may have moved. The uncategorised line asks with an empty category. A
+   purchase-order row with items opens them inside the sheet (`/finance/summary/po-lines`); a
+   landed-cost row with no items does not. Each level has loading, empty and failed states, one
+   open at a time, and a slow answer is discarded when it arrives late.
+4. **The window.** The desktop's four presets (Today, 7, 30, 90 days) run on the store's own day,
+   plus a Custom chip that opens the ask-sheet with From and To. There is no minimum date (§36).
+   The sheet refuses an empty day or an inverted window before the server would. A custom pick
+   that equals a preset lights that preset, as `finSyncRangeButtons` does. The status line
+   reads like `finRangeLabel`. Moving the window closes an open category. A failed first read
+   shows the desktop's sentence with Try again. A failed refresh keeps the figures with the
+   banner above them.
+5. **The sub-view strip shows only what exists: Summary, plus Approvals** for an operator who
+   holds `expenses:approve`. The Approvals tab shows the Approvals screen this app already has,
+   starting from a fresh queue (the route's own reset, now `aprFresh()`). With one sub-view
+   there is no strip, as on the desktop. Transactions and Categories are not drawn until their
+   steps build them, so no tab leads nowhere. The separate Approvals row under Record and review
+   stays, for approvers who do not hold `finance:view`.
+6. **Deliberately not built:**
+   - the mockup's extra date chips (This month / Last month / This quarter / Since 1 Aug);
+   - its "Finance starts on 1 August" note, which contradicts §36;
+   - its "all stores" suffix. The desktop has no store dimension on this screen, and naming one
+     would be a claim.
+7. **Nothing composed.** Every string is copied from 22-finance.js, the desktop markup, or an
+   existing phone or desktop pair. One refusal is the server's own sentence with its first
+   letter capitalised. The details are in the vocab entry.
+8. **Tests.** `scripts/test_mobile_finance_summary.js` (fast shard) runs the sliced phone code
+   against a fake server. `test_mobile_ops_groups.js` and `test_mobile_ask_strip.js` pin the
+   Operations row count and set; they move from 26 to 27 for the one reason they allow, a row
+   added.
