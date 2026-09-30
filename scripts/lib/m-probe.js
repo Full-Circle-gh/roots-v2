@@ -34,6 +34,7 @@ const { execFileSync } = require('child_process');
 const APP = path.join(__dirname, '..', '..', 'public', 'm.html');
 const TD_DATETIME = path.join(__dirname, '..', '..', 'public', 'td-datetime.js');
 const TACET_AUTOSAVE = path.join(__dirname, '..', '..', 'public', 'tacet-autosave.js');
+const RECIPE_COST = path.join(__dirname, '..', '..', 'lib', 'recipe-cost.js');
 
 /**
  * m.html has exactly one LOCAL script dependency — /assets/td-datetime.js,
@@ -56,6 +57,12 @@ const TACET_AUTOSAVE = path.join(__dirname, '..', '..', 'public', 'tacet-autosav
 function inlineTdDatetime(src) {
   const js = fs.readFileSync(TD_DATETIME, 'utf8');
   const auto = fs.readFileSync(TACET_AUTOSAVE, 'utf8');
+  // Its header COMMENT says "<script src=…>" and "every other <script>", and
+  // an inlined copy would hand every suite that lifts the app's source with
+  // /<script>([\s\S]*?)<\/script>/ the middle of this file instead. Both are
+  // inside // comments, so the angle bracket is changed there and nowhere else
+  // that runs.
+  const cost = fs.readFileSync(RECIPE_COST, 'utf8').replace(/<(\/?)script/gi, '&lt;$1script');
   // Function replacement: `$&`/`$1` in the inlined source would otherwise be
   // read as substitution patterns.
   return src.replace(/<script src="\/assets\/td-datetime\.js"><\/script>/,
@@ -63,7 +70,14 @@ function inlineTdDatetime(src) {
     // The second local dependency (decisions §279): the autosave engine the
     // Role screen saves through. Inlined for the same reason and the same way.
     .replace(/<script src="\/assets\/tacet-autosave\.js"><\/script>/,
-      () => `<script data-vendor="tacet-autosave">${auto}</script>`);
+      () => `<script data-vendor="tacet-autosave">${auto}</script>`)
+    // The third (§300): the recipe cost module, which the recipe record reads
+    // its UNIT MISMATCH rule out of. Over file:// its absolute path 404s, and
+    // test_mobile_screens.js's capture-phase error listener counts a failed
+    // script load as an error on EVERY screen — so it is inlined like the other
+    // two, from the file the server sends at /lib/recipe-cost.js.
+    .replace(/<script src="\/lib\/recipe-cost\.js" defer><\/script>/,
+      () => `<script data-vendor="recipe-cost">${cost}</script>`);
 }
 
 function findChrome() {
