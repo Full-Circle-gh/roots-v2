@@ -156,7 +156,7 @@ section('1 · who gets the screen');
   });
   it('the push resets to Summary and re-reads, keeping the window', () => {
     const push = M.slice(M.indexOf('function push(route){'), M.indexOf('function pop(){'));
-    assert.ok(/if\(route==='finance'\)\{ const f=state\.fin; f\.view='summary'; f\.tried=false; f\.err=''; f\.cat=null; f\.pol=null; \}/.test(push));
+    assert.ok(/if\(route==='finance'\)\{ const f=state\.fin; f\.view='summary'; f\.tried=false; f\.err=''; f\.cat=null; f\.pol=null;/.test(push));
     assert.ok(/if\(route==='approvals'\) aprFresh\(\);/.test(push), 'Approvals still starts from nothing');
   });
   it('Back closes the category sheet before the screen', () => {
@@ -474,12 +474,12 @@ const ROWS = [
 /* ─────────────────────────────────────────────────────────────────────── */
 section('5 · the sub-view strip');
 {
-  it('Summary and Approvals — and nothing that does not exist yet', () => {
+  it('Summary, Transactions and Approvals — and nothing that does not exist yet', () => {
     const h = mk();
     const t = h.text(h.screen());
-    assert.ok(t.startsWith('Summary Approvals'));
-    assert.ok(!/Transactions|Categories/.test(t));
-    assert.ok(DESK.includes('Summary · 汇总') && DESK.includes('Approvals · 审批'));
+    assert.ok(t.startsWith('Summary Transactions Approvals'));
+    assert.ok(!/Categories/.test(t));
+    assert.ok(DESK.includes('Summary · 汇总') && DESK.includes('Transactions · 交易记录') && DESK.includes('Approvals · 审批'));
   });
   it('Approvals renders the Approvals screen this app has, from a fresh queue', () => {
     const h = mk();
@@ -492,10 +492,10 @@ section('5 · the sub-view strip');
     h.CMD.finView('summary');
     assert.ok(h.text(h.screen()).includes('Loading…'));
   });
-  it('without expenses:approve: no strip at all, and the tab cannot be forced', () => {
+  it('without expenses:approve: no Approvals tab, and it cannot be forced', () => {
     const h = mk({ caps: ['finance:view'] });
     assert.ok(!h.text(h.screen()).includes('Approvals'));
-    assert.ok(!h.text(h.screen()).startsWith('Summary'), 'one sub-view is no strip');
+    assert.ok(h.text(h.screen()).startsWith('Summary Transactions Today'));
     h.CMD.finView('approvals');
     assert.strictEqual(h.f.view, 'summary');
   });
