@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.208 · 2026-09-30 · §296 PROMO CARDS — OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The page editor's new promo cards block: its name, description, note, form labels and hints, and the Shop landing page's corrected description. The cards themselves carry no text. See *Promo cards (§296)*.
+
 **v1.207 · 2026-09-30 · §295 THE SHOP TAB'S SEARCH BUTTON — NOTHING COMPOSED, ONE PAIR COPIED.** The mini app Shop tab's search becomes an icon; its screen-reader label `Search · 搜索` is copied whole from the web shop's search button. See *The Shop tab's search button (§295)*.
 
 **v1.206 · 2026-09-29 · THE SHOP MENU SWITCH'S HOVER NAMES ITS STATE — NOTHING COMPOSED, TWO PAIRS REUSED.** Sales → Locations → Shop menu. The per-row switch's hover said `On the shop · tap to hide · 已上架 · 点按下架` / `Off the shop · tap to show · 未上架 · 点按上架`; off never hides a listing from the QR menu, so both were wrong. It now reads `Available · 有货` when on and `Sold out · 售罄` when off. See *The Shop menu's Available column*.
@@ -9353,3 +9355,38 @@ screen-reader label only.
 | `Search · 搜索` (search button, `aria-label`) | **copied whole** from the web shop's search button (`public/shop.html`, `mpSearchBtn`): customer register, same action |
 
 The open box keeps its placeholder, `Search the pantry… · 搜索…`, unchanged.
+
+## Promo cards (§296)
+
+**Composed by Claude, 2026-09-30, under the 2026-09-06 amendment.** Operator
+register only (Rule 1): the page editor (`public/cms.html`) and the phone
+admin's block list (`public/m.html`). Nothing reaches a customer: the cards
+carry no text, their words are in the pictures. Ash reads English only, so a
+Chinese reader on staff should correct any line that reads wrong.
+
+| shipped | built from |
+|---|---|
+| `Promo cards · 促销卡片` (block name, editor + phone admin) | **composed.** `促销` from the link picker's live `Promotions page · 促销页面`; `卡片` live (`Card corners · 卡片圆角`) |
+| `Tall picture cards customers swipe sideways — up to 5, each with its own link and dates · 可左右滑动的竖版图片卡片 · 最多 5 张 · 每张可设链接和日期` (palette description) | **composed**, in the palette's own ` · ` list shape |
+| `On the Shop landing page these cards also show at the top of the mini app's Shop tab. A card outside its dates is hidden by itself. · 放在「商品」页时,这些卡片也会显示在小程序「商品」标签页顶部。不在日期内的卡片会自动隐藏。` (editor note) | **composed.** `「商品」` is the page's own live Chinese name; `「商品」标签页` live in the editor's category-tabs hint (*Leave empty for the Shop tab*) |
+| `Opens from buttons that link to it. Its promo cards also show at the top of the Shop tab · 从链接到此页的按钮打开。页内的促销卡片也会显示在「商品」标签页顶部` (the Shop landing page's description) | **composed**, replacing `Intro / banners shown on the Shop tab above the category browser · 「商品」标签页分类浏览上方的介绍 / 横幅`, which described something that never happened |
+| `Cards · 卡片`, `Card N · 卡片 N` | **composed** on the stores repeater's live `Store N · 门店 N` |
+| `Tall pictures, 3 : 4. Put the words in the picture itself. Customers swipe the row sideways, in this order. · 竖版图片,比例 3 : 4。文字请直接做在图片里。顾客按此顺序左右滑动浏览。` | **composed** |
+| `Start / End (optional) · 开始 / 结束(可选)` | **built from live pairs**: the pop-ups' `Start · 开始` / `End · 结束` and the editor's `(可选)` |
+| `Leave both empty to show it always. Outside its dates the card hides by itself. · 两者留空则一直显示。不在日期内的卡片会自动隐藏。` | **composed** on the editor's live `两者留空则隐藏按钮。` |
+| `+ Add card (n of 5) · + 添加卡片(n / 5)` | **composed** on the live `+ Add store · + 添加门店` |
+
+**Copied whole:** `Picture · 图片`, `Tap link (optional) · 点击跳转(可选)`,
+`Remove · 删除`, `Content · 内容` (all this editor's own);
+`Move up · 上移` / `Move down · 下移` (the recipe editor); and the state words
+`Live · 进行中`, `Starts · 待开始`, `Ended · 已结束` from the pop-ups' status pill
+(`public/retail-admin/05-marketing.js` `puStatus`), because a card carries the
+same start / end fields.
+
+**Live candidates rejected.**
+
+- `优惠` (the Promotions page's own short name) for the block: **rejected**,
+  it names the page, and a block named 优惠卡片 would read as "coupon cards",
+  which the coupon block already is.
+- `横幅` (banner): **rejected** for this block; it is the hero banner's word
+  (`主图横幅`), a single wide picture, and §297 uses it for the category banner.
