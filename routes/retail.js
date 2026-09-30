@@ -24553,7 +24553,8 @@ router.put('/api/retail-admin/products/:id/recipe-link', requireRetailAdmin, exp
             (SELECT r.name_cn FROM recipes r WHERE r.id = store_products.recipe_id) AS recipe_name_cn
        FROM store_products WHERE id = ?`
   ).get(id);
-  res.json({ success: true, data: row, warning });
+  // §300 R7 — unit_cost only for products:costs, as every other product read.
+  res.json({ success: true, data: stripProductCosts(req, row), warning });
 });
 
 // Unlink — the product stops tracking the recipe and the Cost field is handed
@@ -24574,7 +24575,7 @@ router.delete('/api/retail-admin/products/:id/recipe-link', requireRetailAdmin, 
       { fields: ['recipe_id'], name: p.name_en, unlinked_recipe_id: p.recipe_id }, req.ip);
   }
   const row = tdb().prepare('SELECT id, recipe_id, unit_cost FROM store_products WHERE id = ?').get(id);
-  res.json({ success: true, data: { ...row, recipe_name_en: null, recipe_name_cn: null } });
+  res.json({ success: true, data: stripProductCosts(req, { ...row, recipe_name_en: null, recipe_name_cn: null }) });
 });
 
 // ═══ Is the recipe behind this cost actually healthy? ══════════════════════
