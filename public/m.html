@@ -971,6 +971,9 @@ const state = {
      exists because Safari has no prompt to fire. refreshing is the pull-to-
      refresh spinner — see wirePull(). */
   canInstall:false, installBar:false, installSheet:false, refreshing:false, refreshedAt:0,
+  /* §300 F4 — the fapiao being issued from the open order: the link and number
+     typed so far, an upload in flight, and a refusal said before any request. */
+  inv:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   /* prodStock is keyed by PRODUCT ID, not a single list, because the sheet now
@@ -21134,14 +21137,54 @@ function addonTimeline(o){
         <span class="num" style="flex:none;font-size:14px">+${money(CUR,a.amount)}</span></div>`).join('')}
     </div></div>`;
 }
-/* The fapiao the customer asked for. Issuing it is a desktop job, but WHAT was
-   requested — the title, the tax id, where it goes — is exactly what someone
-   away from their desk gets asked to read out. */
+/* The fapiao the customer asked for — WHAT was requested (the title, the tax
+   id, where it goes), and, since §300 F4, issuing it, which used to be "a
+   desktop job". The desktop's block (renderInvoiceBlock, 07-content-billing.js)
+   is the spec: Copy for accounting, a link and a number, a PDF or a photo, Mark
+   issued, and the way back from a mistake.
+
+   WHO MAY ISSUE: `invoices:manage` — "Issue / upload invoices", the key the
+   role editor offers for exactly this — AND `orders:edit`, the key
+   lib/cap-routes.js actually puts on PUT /orders/:id/invoice. The desktop draws
+   the block for everyone; the phone draws nothing the server would refuse, and
+   nothing an account was not given the job of. Without both, the block reads
+   and offers nothing. */
+const invCanIssue=()=>mCan('invoices:manage')&&mCan('orders:edit');
+/* invoiceAccountingText, line for line: a clipboard payload for a
+   Chinese-speaking accountant, so it stays bilingual whatever this screen
+   reads in, and it carries the goods total only — no items, no delivery. */
+function invAccountingText(o){
+  const v=o.invoice;
+  const L=['开票申请 Invoice request','订单号 Order: '+(v.orderNo||o.id),
+    '类型 Type: '+(v.company?'企业 Company':'个人 Personal'),'抬头 Title: '+(v.title||'')];
+  if(v.company) L.push('税号 Tax ID: '+(v.taxId||''));
+  if(v.email) L.push('邮箱 Email: '+v.email);
+  L.push('————————————');
+  L.push('商品总额 Products total: '+finExact(v.goods));
+  return L.join('\n');
+}
+/* The link and number typed for THIS order; another order starts empty. */
+function invDraft(o){
+  const d=state.inv;
+  if(!d||d.orderId!==o.id) state.inv={orderId:o.id,url:'',number:'',busy:'',err:''};
+  return state.inv;
+}
 function invoiceBlock(o){
   const v=o.invoice; if(!v) return '';
   const issued=v.status==='issued';
+  const can=invCanIssue();
   const row=(l,val)=>val?`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:13.5px;margin-top:6px">
     <span style="color:var(--text-secondary);flex:none">${l}</span><span class="num" style="min-width:0;text-align:right;word-break:break-all">${escAttr(val)}</span></div>`:'';
+  const d=can?invDraft(o):null;
+  const busy=!!(d&&d.busy)||!!state.orderBusy;
+  const issue=can&&!issued?`<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-default)">
+      <input id="mInvUrl" autocomplete="off" value="${escAttr(d.url)}" placeholder="${T('Fapiao link (or attach PDF)','发票链接(或上传 PDF)')}" style="width:100%" oninput="APP.cmd('invSet','url',this.value)">
+      <input id="mInvNo" autocomplete="off" value="${escAttr(d.number)}" placeholder="${T('Invoice no. (optional)','发票号码(可选)')}" style="width:100%" oninput="APP.cmd('invSet','number',this.value)">
+      ${d.err?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(d.err)}</div>`:''}
+      <div style="display:flex;gap:8px">
+        <label class="btn2" style="flex:1;gap:6px;${busy?'opacity:.5;pointer-events:none':''}">${ic('paperclip',16)}${d.busy==='upload'?T('Uploading…','上传中…'):T('PDF / image','PDF / 图片')}
+          <input type="file" accept="application/pdf,image/*" style="display:none" onchange="APP.cmd('invFile',this)"></label>
+        <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('invIssue')">${state.orderBusy==='invoice'?T('Saving…','保存中…'):T('Mark issued','标记已开')}</button></div></div>`:'';
   return `<div class="card" style="padding:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${T('Fapiao','发票')}</span>
@@ -21152,9 +21195,85 @@ function invoiceBlock(o){
     ${row(T('Send to','发送至'),v.email)}
     ${row(T('Number','发票号'),v.number)}
     ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;text-decoration:none">${ic('download',15)} ${T('Open the fapiao','打开发票')}</a>`:''}
-    ${!issued?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:10px">${T('Issuing it is a desktop job.','开具发票请在电脑端。')}</div>`:''}
+    ${can?`<button class="btn2" style="width:100%;margin-top:12px;gap:6px" onclick="APP.cmd('invCopy')">${ic('clipboard',16)}${T('Copy for accounting','复制开票信息')}</button>`:''}
+    ${issue}
+    ${can&&issued?`<div style="display:flex;justify-content:flex-end;margin-top:8px"><button style="border:none;background:none;padding:4px 0;font-family:inherit;font-size:13px;color:var(--text-secondary);cursor:pointer" ${busy?'disabled':''} onclick="APP.cmd('invUnissue')">${T('edit','修改')}</button></div>`:''}
   </div>`;
 }
+reg('invSet', (k,v)=>{ const d=state.inv; if(!d||(k!=='url'&&k!=='number')) return; d[k]=String(v==null?'':v); });
+/* The real clipboard, through copyText — the same helper the waybill uses. */
+reg('invCopy', ()=>{ const o=currentOrder(); if(!o||!o.invoice||!invCanIssue()) return; copyText(invAccountingText(o)); });
+/* A PDF goes as it is. A photo is shrunk first — 2400px on the long side,
+   JPEG — as the phone's other uploads are: the desktop sends the original, but
+   the route takes a data URL under a 12 MB body limit, which a camera original
+   plus base64's third can pass, and a fapiao read at 2400px is still legible.
+   A browser that cannot decode it sends the original. */
+async function invShrink(file){
+  if(!/^image\//.test(file.type||'')) return file;
+  try{
+    const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});
+    const k=Math.min(1,2400/Math.max(bmp.width,bmp.height));
+    const c=document.createElement('canvas');
+    c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k);
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.88));
+    return blob||file;
+  }catch(e){ return file; }
+}
+const invDataUrl=file=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result||'')); r.onerror=()=>rej(new Error('read')); r.readAsDataURL(file); });
+/* uploadInvoicePdf: PDF or image only, 10 MB at most, both said before the
+   upload; the stored file's URL fills the link box, and Mark issued is still
+   the operator's tap. */
+reg('invFile', async input=>{
+  const o=currentOrder(); const d=state.inv;
+  const file=input&&input.files&&input.files[0];
+  if(input) input.value='';
+  if(!file||!o||!d||d.orderId!==o.id||d.busy||!invCanIssue()) return;
+  const isPdf=file.type==='application/pdf', isImg=/^image\//.test(file.type||'');
+  if(!isPdf&&!isImg){ d.err=T('PDF or image only','仅限 PDF 或图片'); render(); return; }
+  d.busy='upload'; d.err=''; render();
+  try{
+    const send=await invShrink(file);
+    if(send.size>10*1024*1024){ d.busy=''; d.err=T('File too large (max 10MB)','文件过大'); render(); return; }
+    const j=await apiWrite('/invoice-file',{data:await invDataUrl(send)});
+    const url=j&&j.data&&j.data.url;
+    d.busy='';
+    if(url) d.url=url;
+    render(); showToast(T('Attached — tap Mark issued','已附加,点击标记已开'));
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    d.busy=''; d.err=T('Upload failed: ','上传失败:')+(e.message||''); render();
+  }
+});
+/* markInvoiceIssued: a link or a number, at least one, said before the
+   request; then the desktop's body. Marking it issued tells the customer. */
+reg('invIssue', ()=>{
+  const o=currentOrder(); const d=state.inv;
+  if(!o||!o.invoice||!d||d.orderId!==o.id||d.busy||!invCanIssue()) return;
+  const url=String(d.url||'').trim(), number=String(d.number||'').trim();
+  if(!url&&!number){ d.err=T('Add a fapiao link/PDF or invoice number','请填写发票链接或号码'); render(); return; }
+  d.err='';
+  orderWrite('invoice', async()=>{
+    await apiWrite('/orders/'+o._id+'/invoice',{action:'issue',file_url:url,number},'PUT');
+    state.inv=null;
+    return T('Invoice marked issued','已标记开票');
+  });
+});
+/* unissueInvoice. The desktop's "edit" link reverts with no question asked;
+   the phone asks first (§300 F4, the approved mockup: "Un-issue … asks
+   first"), because on a phone it sits one thumb away from Open the fapiao, and
+   the customer's record changes with it. */
+reg('invUnissue', ()=>{
+  const o=currentOrder();
+  if(!o||!o.invoice||o.invoice.status!=='issued'||!invCanIssue()||state.orderBusy) return;
+  state.ask={title:T('Back to requested?','恢复待开？'),
+    confirmLabel:T('Confirm','确认'),
+    run:()=>orderWrite('invoice', async()=>{
+      await apiWrite('/orders/'+o._id+'/invoice',{action:'unissue'},'PUT');
+      return T('Back to requested','已恢复待开');
+    })};
+  render();
+});
 /* The sheet's chrome around a read that has not landed yet.
    Every other way into an order goes through a row the app already holds, so
    there has always been something to paint on the first frame. An order opened
@@ -28671,6 +28790,15 @@ function mapDetail(o){
     status:o.invoice_status||'requested', type:o.invoice_type||'',
     title:o.invoice_title||'', taxId:o.invoice_tax_id||'', email:o.invoice_email||'',
     number:o.invoice_number||'', file:o.invoice_file_url||'', issuedAt:o.invoice_issued_at||'',
+    /* §300 F4 — what Copy for accounting needs, computed the desktop's way
+       (invoiceAccountingText / invoiceIsCompany): the order number, company
+       inferred from a tax id on a legacy row with no type, and the GOODS total —
+       the stored subtotal, else the lines, else total less delivery. */
+    orderNo:o.order_no||o.id,
+    company:o.invoice_type?o.invoice_type==='company':!!o.invoice_tax_id,
+    goods:(o.subtotal!=null)?Number(o.subtotal)
+      :(Array.isArray(o.items)&&o.items.length?o.items.reduce((a,it)=>a+Number(it.line_total||0),0)
+        :Number(o.total||0)-Number(o.shipping_fee||0)),
   }:null;
   // [en, zh] pair like the rest — "自提门店 Tianhe Store" read half-translated.
   base.pickupStore=(o.fulfillment_type==='pickup')
