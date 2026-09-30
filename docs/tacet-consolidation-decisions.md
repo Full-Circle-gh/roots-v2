@@ -22799,3 +22799,32 @@ section §300 did not cover. The survey, the gap list and the build order are
    test account); §112 (team devices); product spreadsheet import; the product
    page designer; §97's three exceptions and the box-label printer; billing;
    §302.7.
+
+## §326 — THE HOLDS §325 LEFT OPEN, ANSWERED
+
+**Decided 2026-10-01 by Ash** (*"as you advice"*, on the nine recommendations
+put to him after the §325 survey). Each overturns or settles a named hold.
+
+1. **Coupons and flash sales are created and edited on the phone.** §63's
+   "coupons and flash sales are NOT moved" is overturned by name.
+2. **Holiday mode ON (with its two-language message), closing a channel at
+   every store, turning Meituan or Eleme off, and the online-store / all-shops
+   open-close come to the phone**, each behind a strong confirm that says what
+   stops and what does not. The parity doc's §4 holds and the `sheetChannel` /
+   `resumeDelivery` comments are retired.
+3. **Per-item channel sync on/off and product matching repairs come to the
+   phone.** §124's "the switch stays on the desktop" is overturned by name;
+   turning sync off asks first and says it is a lasting change.
+4. **Customer statement print and reset test account come to the phone.**
+   §116's two holds are overturned (both stated reasons were already false);
+   reset keeps the desktop's typed RESET confirm and `customers:block`.
+5. **Team devices (see and sign out) come to the phone.** §112's hold is
+   overturned.
+6. **Product spreadsheet import is NOT built on the phone** — the §300.4
+   reasoning (setup work; a phone rarely holds the file).
+7. **The product page designer comes to the phone later, after a phone design**
+   — it joins §97's exceptions until that design exists.
+8. **Billing and plans come to the phone, last.**
+9. **A receive-only account may NOT mark a draft purchase order Delivered**
+   (§302 item 7): only an order already placed (Ordered) can be marked
+   Delivered by `purchasing:receive` alone.
