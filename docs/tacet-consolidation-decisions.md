@@ -21605,3 +21605,236 @@ same rows, states and notes. It writes nothing. Transactions and Categories are 
    against a fake server. `test_mobile_ops_groups.js` and `test_mobile_ask_strip.js` pin the
    Operations row count and set; they move from 26 to 27 for the one reason they allow, a row
    added.
+
+## §306 — THE PHONE EDITS RECIPES, AND NEVER SENDS A COST FIELD IT DID NOT LOAD
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step R2 of the recipes lane (the survey's PR 6, marked **High** for §164's
+addendum). The phone record (`public/m.html`) can now create a recipe and edit
+its Details, Ingredients and Steps. It saves itself after a pause, as the
+desktop record does, shows the save state in the status line, and can put an
+earlier version back. Cost & Pricing is still not on the phone (R3), so this
+step writes no money.
+
+1. **No cost request, for anybody.** The desktop makes its cost request
+   (`PUT /recipes/:id/cost`) only for `recipes:costs` holders, and only from a
+   tab it has drawn, because an absent labour or target-food-cost is written
+   as 0 and 30 (`lib/recipe-cost-data-write.js`). The phone draws no cost tab,
+   so it makes no cost request, whatever the reader holds. The body is the
+   desktop's `writeRecord()` body key for key (`readDetails()` in its order,
+   the lines, the steps, `save_source`). The draft is copied off the record
+   without the cost fields a `recipes:costs` holder's read carries, so there is
+   nothing in hand that could leak. `scripts/test_mobile_recipes_edit.js`
+   reads the key list out of `19-recipes.js` and proves both halves for a
+   reader with and without the capability: no cost key at any depth, no cost
+   route called, and every non-edited field sent back unchanged.
+2. **An edit mode, not a form on every read.** The desktop record is always
+   its editor. A phone over a bench is read far more than typed into, and a
+   stray thumb on a quantity is a changed recipe. So the record opens read-only
+   as before. A pencil, drawn only for `recipes:edit` (the server refuses
+   anybody else, and on the phone a refused write logs you out), turns it into
+   the editor. **Done** sends what is waiting as a deliberate save
+   (`save_source: 'manual'`, which files its own restore point, the desktop's
+   Save) and returns to the read view. While editing, Making one and the print
+   card are not offered: they read the saved record, not the draft.
+3. **The desktop's timings, through the shared engine.** It saves 1.2 s after
+   the last keystroke and never holds an edit longer than 8 s
+   (`AUTOSAVE_IDLE_MS` / `AUTOSAVE_MAX_MS`). `public/tacet-autosave.js` gained
+   an optional `maxWait` for the second number. Without it the engine
+   behaves exactly as before, which is every other screen that uses it; that
+   screen's three suites still pass, and the new suite checks it.
+4. **A new recipe is POSTed by its first save that has an English name, and
+   then it is that recipe.** Until then it is held, not failed: the server
+   refuses a recipe with no English name. The frame takes the new id, and every
+   later save is a PUT. Both yield figures start derived, as the desktop's
+   `rcpRecordNew()` does.
+5. **Details:** every field of the desktop's sheet, with its hints: the two
+   names, SKU, category (the stored one is always a choice, so a list that did
+   not load cannot silently clear it on the next save), type, batch size and
+   servings (derived through `lib/recipe-cost.js`'s `resolveYield`, the
+   desktop's hints and take-over switches, and its oversize and adrift
+   warnings), serving size, shelf life (number and unit; untouched free text is
+   carried through), storage, notes. **Ingredients:** the material picker (the
+   desktop's `/materials?for_recipe=1` query, debounced, no money beside a
+   candidate, nothing offered twice), quantity, unit (the desktop's six, plus a
+   stored legacy unit shown as itself), counts toward the batch weight, the
+   line note, move up / down (where the desktop drags), remove, and UNIT
+   MISMATCH as the line is edited. **Steps:** add, name, instructions, move,
+   remove.
+6. **The save state** is the desktop bar's line in the phone's status line,
+   patched in place: *Unsaved changes*, *Saving…*, *Saved · just now*,
+   *Not saved — reason*. A refusal (a SKU another recipe has, a line that would
+   make a recipe depend on itself) is also written in red above the tabs and
+   stays until a save clears it. It is not retried on its own. The server's
+   "English · 中文" refusals are shown in the reader's half.
+7. **Leaving.** The app's Back asks only when the work cannot be saved (no
+   English name, or a refusal), in the desktop's `leaveGuard` words. Every
+   other exit sends the work on the way out: Back that can save, the phone's
+   edge swipe (which cannot wait for an answer, like the desktop's browser
+   Back), and the app going to the background. A reload waits while a save is
+   pending (`mUnsavedWork`).
+8. **Version history uses the phone's `liveHistorySheet`.** It gained optional
+   fields that the customer record, which passes none of them, never sees: a
+   row's own label, "until" (a recipe version is the state a save replaced),
+   a null restore for a reader who may look but not restore, the record's own
+   confirm words, and a restore that resolves to a sentence. What is on screen
+   is sent first. The list shows **Now — the live recipe** and each filed
+   state, *until* when, who, its counts, and how it was filed. Anyone who can
+   read the recipe can open it; putting one back needs `recipes:edit`. Restore
+   asks in the desktop's words, stops the autosave before it writes (so the
+   draft on screen cannot be saved over the restore), POSTs with an empty
+   body, reads back, restarts the editor from the server's copy, and says
+   *Restored*, or names what it could not put back (a SKU another recipe now
+   owns).
+9. **"Best edited on desktop" is gone from the list and the record**, and the
+   empty list no longer sends anybody to the desktop. **New recipe** is in the
+   list's head for `recipes:edit`.
+10. **Not done here, on purpose:** the Cost & Pricing tab, cost columns and the
+    summary strip (R3); Duplicate, Archive and Make available as material (R4).
+    The desktop's per-version detail panel (a version's name, category and
+    lines before restoring) is not on the phone. The history rows carry each
+    version's counts and how it was filed instead. Reading the detail is a
+    third request per tap, and the desktop's own confirm already says what a
+    restore puts back.
+
+**Coverage.** `scripts/test_mobile_recipes_edit.js` (fast shard, 35 cases). It
+runs the real engine, the real cost module and a fake clock. It checks every
+request body for both kinds of reader, the timings, POST then PUT, holds and
+refusals, Done, leaving, each Details field, the picker (empty and failed
+results), each line and step edit, history with restore (including a held SKU
+and a reader who cannot restore), and that every Chinese half is the desktop's.
+`test_mobile_recipes.js` and `test_mobile_recipes_read.js` were updated where
+R2 overturned them: the create and the pencil exist, and the only writes are
+the editor's save and restore.
+
+## §307 — A PURCHASE ORDER IS WRITTEN ON THE PHONE: THE DESKTOP'S THREE STEPS, A DRAFT REOPENED IN THEM, AND ORDER AGAIN
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P2 of the purchasing lane (survey build-order row 12). The phone could read
+and manage an order but not write one. It now has the desktop's new-order wizard
+(`public/retail-admin/16-purchasing.js`) as one pushed screen, *New order*, opened
+from Purchasing's header and from an empty ledger. A draft now opens in that screen,
+as it does on the desktop. *Order again*, deferred from P1, is on a received order's
+⋯ menu.
+
+1. **Three steps, the desktop's.** *From & to*: the supplier (from the book, or none
+   for a mixed or one-off buy), the store, the order date, a note for the receiver.
+   *What to buy*: a search over the store's products and, with Production on, its
+   materials; the lines; save or delete the draft. *Review & place*: the desktop's
+   summary sentence and its Finance note, then Place order.
+2. **The same requests.** Save as draft is `POST /purchases` (new) or
+   `PUT /purchases/:id` (a draft already saved, each line carrying its own id so the
+   save updates it and a 发票 allocation on it survives). Place order is that save,
+   then `PUT /purchases/:id/status {status:'Ordered'}`, then the order opens. Delete
+   draft is `DELETE /purchases/:id`, behind the desktop's confirm. The body is the
+   desktop's `wizBody`, field for field.
+3. **One thing the desktop does not do.** A Place that saved a new draft and then
+   failed to mark it ordered keeps the new draft's id. Pressing Place again PUTs that
+   draft instead of making a second one. On the desktop a retry POSTs again.
+4. **A supplier is picked from the book in a sheet, not typed into a box.** The
+   desktop's box refuses a name that is nobody, so a list says the same thing with
+   less typing on a phone. It is searchable in either language (the master's 中文
+   name first, then the split half). One language is shown and the whole stored name
+   is kept, as on the desktop. A line's supplier sheet also takes a one-off name
+   typed in full, as the desktop's line box does, and resolves a name that matches a
+   supplier in either language to the stored one.
+5. **Picking a product bought before opens its price list**: preferred, cheapest,
+   last paid, average, how often and when. *Use* brings that supplier and that price
+   onto the line. A product never bought before goes straight onto the order with no
+   invented vendor. A material brings its own buy unit (never `pcs`, or the price
+   write-back refuses it), price, supplier and category.
+6. **The typed line** (gloves, a chair, a repair) is the last row of every search,
+   named by the buyer, split by language. Its unit and category are the buyer's.
+   The category is a list of the tenant's own categories when the tenant has any,
+   and a free-text box when it has none. The desktop box is free text with that list
+   behind it; the server snaps either onto the list.
+7. **Running low here** (the tenant's own switch, §178) suggests the four products
+   furthest under their buffer that are not already on the order. **Sort** has the
+   desktop's four chips. **Drag to reorder is not built**: it is a mouse gesture, and
+   the chips already put the order in supplier or price order.
+8. **Typing never repaints the screen.** A quantity or price keystroke repaints its
+   line's total and the order's in place. The search results and the supplier list
+   patch their own box, so the keyboard stays up.
+9. **Gates.** The screen needs BOTH `purchasing:view` and `purchasing:edit`
+   (Ash, on the coordinator's question): edit is the desktop's `data-cap` on its
+   saves, and view is the Purchasing tab's own key, without which nobody reaches
+   the wizard on the desktop. An account with edit but not view must never see a
+   price, and this screen shows every one. `canRoute()` asks for the pair by name,
+   as it already does for the till; no other route changes. Place order and Delete
+   draft are `purchasing:edit`. Without the pair, a draft still opens read-only in
+   P1's order sheet. Refusals are said on the screen and stay: an empty order and a typed line
+   with no name are caught before the round trip; the server's `date_required`,
+   `store_required` and `name_required` get the desktop catalogue's sentences.
+10. **Order again writes nothing and asks nothing.** It opens a new order dated today,
+    with the received order's supplier, store and lines, without their ids, suppliers
+    or notes. That is the desktop's `puReorder`.
+11. **Leaving the screen with Back drops an unsaved order**, as the desktop's Cancel
+    does. Save as draft is how to keep it.
+
+## §308 — FINANCE TRANSACTIONS ON THE PHONE: THE LEDGER, ITS WRITES, AND ITS EXPORT
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 2 of the parity survey's build order. Finance on the phone gains a Transactions tab: the
+desktop's ledger of typed rows, meaning money in and out that is not an order, over the same
+window as Summary. It carries every write the desktop has on it, each calling the same endpoint
+with the same body, behind the same permission check and confirm. The tab strip now reads
+Summary · Transactions · Approvals; Categories comes in F3.
+
+1. **The list.** It uses the desktop's tiles (Money out, Money in, and the "Sales revenue is on
+   Summary" note), the All / Money in / Money out chips with counts, and a search that narrows
+   the rows on screen. The search redraws the list only, so the keyboard stays up. Each row
+   shows its subject (a category in this operator's language, a typed note as written), its date,
+   and the desktop's line of labels: Posted by Purchasing with the category-subtotal hint; Staff
+   claim, marking own money; Carrier claim; Return with its reason and "Owes the shop"; Returned
+   ¥x · Net ¥y; Entered by / Approved by; Note. Amounts are whole yuan with the direction as the
+   sign, and a return reads +¥. States: loading; an empty ledger; filtered to nothing with Clear;
+   a failed read with Try again; the desktop's "Showing the first N of M ledger rows" when the
+   server cut the list short.
+2. **A desktop table row becomes a phone row that opens a sheet** of what may be done to it
+   (§97). A row with nothing that may be done to it is not a control: a carrier claim, a
+   purchase order the phone's Purchasing cannot open, or anything when the operator holds none
+   of the keys. A purchase order, claim, carrier claim or return is never offered Edit; that is
+   §36's rule, and the server refuses it anyway.
+3. **New, Edit and Delete, on `finance:record`.** The header button is "New transaction". The
+   form has Direction (on a new row only, because an edit cannot move a row between tables),
+   Date with no earliest day (§36), Amount, Category and Note.
+   - **Category** offers the tenant's list under the box, filtered as typed. For money in it
+     appears only once an income category exists, or when the row already has one.
+   - **Saving a category** saves the whole stored value: typing either half of a known category
+     saves its full stored name (`Rent` → `Rent 房租`), as `finTxCatStored` does.
+   - **Writes:** `POST /finance/transactions` or `PUT /finance/transactions/:kind/:id` with
+     `{kind, date, amount, category, note}`. Delete asks first, in the desktop's words, then
+     sends `DELETE`.
+4. **Return and Delete return, on `finance:record`.** Return is offered on a typed or claim row
+   that still has something left to return. The amount starts empty with the ceiling as its
+   placeholder, and the hint line is shown (§269 addendum). A reason is required. Both checks
+   run before the request, in the server's and Purchasing's own words. It sends
+   `POST /finance/transactions/out/:id/return {date, amount, reason, note}`. A return row
+   offers only Delete, which asks first.
+5. **Claims.**
+   - **Void** needs `expenses:cancel`, and is not offered on a settled claim or one with a return
+     against it. It asks first, then sends `POST /staff-expenses/:claim/void`.
+   - **Re-file** needs `expenses:approve` or `:cancel`. It uses the claim's own
+     `POST /staff-expenses/:claim/category {category}`, with no confirm, as on the desktop.
+     Picking the blank option does nothing.
+   - **After a write:** anything a claim owns, and every return, also refreshes the Approvals
+     queue.
+6. **Open purchase order** opens this app's own purchase-order sheet, and is offered only to
+   an operator who can open Purchasing.
+7. **Export CSV** downloads the desktop's URL for the window on screen
+   (`/finance/transactions/export.csv?from=&to=`), not for the search. It is a plain page
+   navigation, as the phone's customer export already is.
+8. **One window governs both tabs.** Changing the range re-reads the ledger and marks the
+   Summary figures out of date. Every write re-reads the ledger and the Summary figures.
+9. **How each write behaves.** The button that pressed it is disabled and says "Saving…". A
+   server refusal (the server sends "English · 中文") shows in this operator's language on the
+   form or sheet where it happened, and stays. A network failure shows the phone's "nothing has
+   changed" sentence. A toast only ever confirms a success.
+10. **Not built from the mockups:** the row sheet's explanatory subtitles ("Re-files the claim",
+    "Money back on this, up to ¥38"), the form's "Your own list, from Categories." hint, and the
+    longer caption under the list. None is on the desktop and each would have needed new
+    Chinese. The desktop's own pointer, "Sales revenue is on Summary", is used instead.
+11. **Tests.** `scripts/test_mobile_finance_transactions.js` (fast shard) runs the sliced phone
+    code against a fake server. It checks every write's method, path and body, and that nothing
+    is sent before its confirm. `test_mobile_finance_summary.js` now expects Transactions in the
+    tab strip.

@@ -120,6 +120,7 @@ function mk(opts = {}) {
       createElement: () => ({ id: '', innerHTML: '' }),
       body: { appendChild: (el) => { els[el.id] = el; calls.appended.push(el); } },
       documentElement: docEl,
+      addEventListener: () => {},
     },
     window: {
       RootsRecipeCost: opts.noCostModule ? undefined : RecipeCost,
@@ -131,6 +132,9 @@ function mk(opts = {}) {
   ctx.T = (en, zh) => (ctx.LANG === 'en' ? en : zh);
   ctx.reg = (n, f) => { ctx.CMD[n] = f; };
   ctx.canRoute = (k) => (opts.denied || []).indexOf(k) === -1;
+  // R2's editor is in the same region; this suite reads, so every edit key is
+  // simply absent unless a case grants it.
+  ctx.mCan = (k) => (opts.caps || []).indexOf(k) !== -1;
   ctx.push = null;
   vm.createContext(ctx);
   vm.runInContext(HELPERS, ctx);
@@ -626,8 +630,16 @@ it('the print icon is on the record, gated with it', async () => {
 // ════════════════════════════════════════════════════════════════════════════
 section('8 · what R1 does not do');
 // ════════════════════════════════════════════════════════════════════════════
-it('nothing in the recipes region writes — the editor is its own step', () => {
-  assert.doesNotMatch(codeOnly(REGION), /apiWrite|apiPost|method:\s*'(POST|PUT|PATCH|DELETE)'/);
+// §300 R2 put the editor in this region; its writes are held to their own
+// suite (test_mobile_recipes_edit.js). What stays true here is that the READ
+// screens make none: every write lives in the two functions that save.
+it('the only writes in the recipes region are the editor\'s save and restore', () => {
+  const writes = codeOnly(REGION).match(/apiWrite\([^)]*/g) || [];
+  assert.strictEqual(writes.length, 3, writes.join(' | '));
+  const saver = codeOnly(between(M, 'function rcpSend(d, p, note){', 'function rcpEdStart(d){'));
+  const restore = codeOnly(between(M, 'function rcpRestore(id, v){', 'function rcpLeaveNow(discard){'));
+  assert.strictEqual((saver.match(/apiWrite\(/g) || []).length + (restore.match(/apiWrite\(/g) || []).length, 3);
+  assert.doesNotMatch(codeOnly(REGION), /apiPost|method:\s*'(POST|PUT|PATCH|DELETE)'/);
 });
 it('the shared cost module is loaded, deferred, and the service worker still lets it through to the network', () => {
   assert.match(M, /<script src="\/lib\/recipe-cost\.js" defer><\/script>/);
