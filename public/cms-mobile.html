@@ -240,6 +240,26 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 .desk-note div{font:400 12px var(--f-sans);color:var(--text-2);line-height:1.4;}
 .desk-note b{color:var(--text-1);font-weight:600;}
 .desk-note a{color:var(--brass-hi);font-weight:600;text-decoration:none;}
+/* §299 — promo cards, edited on the phone: one small card per promo card */
+.pc-card{border:1px solid var(--line);border-radius:var(--r-lg);padding:12px;margin-bottom:12px;background:var(--bg-elev-1);}
+.pc-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.pc-head b{flex:1;font:600 11px var(--f-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);}
+.pc-stat{font:500 11px var(--f-sans);padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-hi);white-space:nowrap;}
+.pc-stat.off{background:var(--bg-elev-2);color:var(--text-3);}
+.pc-pic{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;}
+.pc-thumb{flex:0 0 84px;height:112px;border-radius:var(--r-md);overflow:hidden;background:var(--bg-elev-2);border:1px solid var(--line);}
+.pc-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.pc-btn{min-height:40px;padding:0 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--bg-input);
+  font:500 13px var(--f-sans);color:var(--text-1);cursor:pointer;}
+.pc-btn:disabled{opacity:.45;cursor:default;}
+.pc-btn.danger{color:var(--danger);}
+.pc-btn.sq{min-width:40px;padding:0;}
+.pc-card select,.pc-card input[type=date]{width:100%;background:var(--bg-input);border:1px solid var(--line);border-radius:var(--r-md);
+  padding:10px 12px;font:400 14px var(--f-sans);color:var(--text-1);}
+.pc-two{display:flex;gap:10px;}
+.pc-two .fld{flex:1;min-width:0;}
+.pc-hint{font:400 12px var(--f-sans);color:var(--text-3);line-height:1.45;margin:-6px 0 4px;}
+.pc-err{font:400 12.5px var(--f-sans);color:var(--danger);margin:0 0 10px;}
 .edit-foot{display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line-soft);flex:0 0 auto;}
 .edit-foot button{flex:1;height:44px;border-radius:var(--r-lg);font:600 14px var(--f-sans);cursor:pointer;}
@@ -807,6 +827,7 @@ const F = {
 /* ── EDIT sheet ───────────────────────────────────────────────────── */
 function openEdit(id) {
   M.editId = id;
+  _promoErr = '';   // §299 — an upload error belongs to the block it happened on
   send('getSelected', { id });          // ask for fresh field values
   renderEdit();
   openSheet('edit');
@@ -821,6 +842,8 @@ function renderEdit() {
   const fields = F[type];
   if (!blk) {
     body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);padding:8px 0">' + cuT('Loading…', '加载中…') + '</div>';
+  } else if (type === 'promo_cards') {
+    renderPromoEdit(body, blk);   // §299 — pictures, links and dates, on the phone
   } else if (fields && fields.length) {
     fields.forEach(f => {
       const k = f[0], label = M.lang === 'cn' ? f[2] : f[1], ml = f[3], inputType = f[4] || 'text';
@@ -844,10 +867,137 @@ function renderEdit() {
   // sits over the fields. Shown here instead of inline in the preview canvas.
   const note = M.lang === 'cn' ? (m.note_cn || m.note) : m.note;
   if (note) body.insertAdjacentHTML('afterbegin', '<div class="edit-note">' + esc(note) + '</div>');
+  // Promo cards ARE pictures, edited right here — the "images are tuned on
+  // desktop" note would tell the operator the opposite of what the sheet does.
+  if (type === 'promo_cards') return;
   body.insertAdjacentHTML('beforeend',
     '<div class="desk-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' +
     '<div>' + cuT('<b>Images, colours &amp; advanced options</b> for this block are tuned on desktop. ', '此模块的<b>图片、配色与高级选项</b>请在电脑上调整。') +
     '<a href="/cms?desktop=1">' + cuT('Open on a computer ↗', '在电脑上打开 ↗') + '</a></div></div>');
+}
+
+/* ── §299 · PROMO CARDS, ON THE PHONE ─────────────────────────────────
+   The quick-edit sheet above handles flat text fields, and sends pictures to
+   desktop. A promo card IS a picture (§296), so this block gets its own small
+   editor: per card the picture, its tap link and its start / end day, plus
+   move, remove and add (five at most, as on desktop). Every change sends the
+   whole `cards` list through the same 'patch' the text fields use, so the
+   desktop editor running underneath saves it and redraws the preview exactly
+   as if it had been typed there. Same words as the desktop form. */
+const PROMO_MAX = 5;
+const PROMO_PAGES = [['promotions', 'Promotions page', '促销页面'], ['coupons', 'Coupons', '优惠券'],
+  ['membership', 'Membership', '会员'], ['shop', 'Shop', '商店']];
+function promoToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
+function promoStatus(c) {
+  const today = promoToday();
+  if (c.start_at && today < c.start_at) return { off: true, text: cuT('Starts ', '待开始 ') + c.start_at };
+  if (c.end_at && today > c.end_at) return { off: true, text: cuT('Ended ', '已结束 ') + c.end_at };
+  return { off: false, text: cuT('Live', '进行中') };
+}
+// Top categories for the link list, read once.
+let PROMO_TOPS = null;
+function loadPromoTops() {
+  if (PROMO_TOPS) return;
+  PROMO_TOPS = [];
+  fetch('/api/retail-admin/category-tree', { credentials: 'same-origin' })
+    .then(r => r.json()).then(j => { PROMO_TOPS = (j && Array.isArray(j.data)) ? j.data : []; if (M.editId != null) renderEdit(); })
+    .catch(() => {});
+}
+function promoLinkOptions(cur) {
+  cur = cur || '';
+  const opt = (v, l) => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>';
+  const tops = (PROMO_TOPS || []).filter(t => t && t.id);
+  const known = [''].concat(PROMO_PAGES.map(p => p[0]), tops.map(t => 'category:' + t.id));
+  // A link set on desktop that is in neither list — a product, a page this
+  // list leaves out — is kept as it is, never swapped for another.
+  let keep = '';
+  if (cur && !known.includes(cur)) keep = opt(cur, /^product:/.test(cur) ? cuT('Product #', '商品 #') + cur.slice(8) : cur);
+  return opt('', cuT('Picture only', '仅图片')) + keep +
+    '<optgroup label="' + esc(cuT('Pages', '页面')) + '">' + PROMO_PAGES.map(p => opt(p[0], cuT(p[1], p[2]))).join('') + '</optgroup>' +
+    (tops.length ? '<optgroup label="' + esc(cuT('Category', '分类')) + '">' +
+      tops.map(t => opt('category:' + t.id, (M.lang === 'cn' ? (t.name_cn || t.name) : t.name) || t.id)).join('') + '</optgroup>' : '');
+}
+let _promoBusy = null, _promoErr = '';
+function promoWrite(blk, next) {
+  blk.cards = next;
+  send('patch', { id: blk.id, patch: { cards: next } });
+  renderEdit();
+}
+/* A phone photo is often past the upload's 5 MB limit: shrink it first (1600px
+   long side, JPEG), then send it to the editor's own upload, as desktop does. */
+async function promoShrink(file) {
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.88));
+    return blob || file;
+  } catch (e) { return file; }
+}
+async function promoUpload(blk, idx, file) {
+  _promoBusy = idx; _promoErr = ''; renderEdit();
+  try {
+    const fd = new FormData(); fd.append('file', await promoShrink(file), 'card.jpg');
+    const r = await fetch('/api/retail-admin/cms/media', { method: 'POST', credentials: 'same-origin', body: fd });
+    if (r.status === 401) { location.href = '/backend/login'; return; }
+    const j = await r.json().catch(() => ({}));
+    if (!j || !j.success || !j.data || !j.data.url) { _promoErr = cuT('Upload failed', '上传失败') + (j && j.error ? ': ' + j.error : ''); return; }
+    const next = (blk.cards || []).slice();
+    if (!next[idx]) return;
+    next[idx] = Object.assign({}, next[idx], { image_url: j.data.url });
+    promoWrite(blk, next);
+  } catch (e) {
+    _promoErr = cuT('Upload failed', '上传失败');
+  } finally {
+    _promoBusy = null; renderEdit();
+  }
+}
+function renderPromoEdit(body, blk) {
+  loadPromoTops();
+  const cards = Array.isArray(blk.cards) ? blk.cards : [];
+  body.innerHTML = '<div class="pc-hint" style="margin:0 0 12px">' +
+    esc(cuT('Tall pictures, 3 : 4. Put the words in the picture itself. Customers swipe the row sideways, in this order.', '竖版图片,比例 3 : 4。文字请直接做在图片里。顾客按此顺序左右滑动浏览。')) + '</div>' +
+    (_promoErr ? '<div class="pc-err">' + esc(_promoErr) + '</div>' : '');
+  cards.forEach((c, idx) => {
+    const st = promoStatus(c), busy = _promoBusy === idx;
+    const el = document.createElement('div'); el.className = 'pc-card';
+    el.innerHTML =
+      '<div class="pc-head"><b>' + esc(cuT('Card ' + (idx + 1), '卡片 ' + (idx + 1))) + '</b>' +
+        '<span class="pc-stat' + (st.off ? ' off' : '') + '">' + esc(st.text) + '</span>' +
+        '<button class="pc-btn sq" data-a="up" aria-label="' + esc(cuT('Move up', '上移')) + '"' + (idx === 0 ? ' disabled' : '') + '>↑</button>' +
+        '<button class="pc-btn sq" data-a="down" aria-label="' + esc(cuT('Move down', '下移')) + '"' + (idx === cards.length - 1 ? ' disabled' : '') + '>↓</button></div>' +
+      '<div class="pc-pic"><div class="pc-thumb">' + (c.image_url ? '<img src="' + esc(c.image_url) + '" alt="">' : '') + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px">' +
+          '<button class="pc-btn" data-a="pic"' + (busy ? ' disabled' : '') + '>' + esc(busy ? cuT('Uploading…', '上传中…') : (c.image_url ? cuT('Replace picture', '更换图片') : cuT('Picture', '图片'))) + '</button>' +
+          '<button class="pc-btn danger" data-a="rm">' + esc(cuT('Remove', '删除')) + '</button></div></div>' +
+      '<div class="fld"><label>' + esc(cuT('Tap link (optional)', '点击跳转(可选)')) + '</label><select data-a="link">' + promoLinkOptions(c.target) + '</select></div>' +
+      '<div class="pc-two"><div class="fld"><label>' + esc(cuT('Start', '开始')) + '</label><input type="date" data-a="start" value="' + esc(c.start_at || '') + '"></div>' +
+        '<div class="fld"><label>' + esc(cuT('End', '结束')) + '</label><input type="date" data-a="end" value="' + esc(c.end_at || '') + '"></div></div>' +
+      '<div class="pc-hint">' + esc(cuT('Leave both empty to show it always. Outside its dates the card hides by itself.', '两者留空则一直显示。不在日期内的卡片会自动隐藏。')) + '</div>';
+    const set = (patch) => { const next = cards.slice(); next[idx] = Object.assign({}, next[idx], patch); promoWrite(blk, next); };
+    const move = (d) => { const to = idx + d; if (to < 0 || to >= cards.length) return; const next = cards.slice(); [next[idx], next[to]] = [next[to], next[idx]]; promoWrite(blk, next); };
+    el.querySelector('[data-a=up]').onclick = () => move(-1);
+    el.querySelector('[data-a=down]').onclick = () => move(1);
+    el.querySelector('[data-a=rm]').onclick = () => { const next = cards.slice(); next.splice(idx, 1); promoWrite(blk, next); };
+    el.querySelector('[data-a=link]').onchange = (e) => set({ target: e.target.value || '' });
+    el.querySelector('[data-a=start]').onchange = (e) => set({ start_at: e.target.value || '' });
+    el.querySelector('[data-a=end]').onchange = (e) => set({ end_at: e.target.value || '' });
+    el.querySelector('[data-a=pic]').onclick = () => {
+      const f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*';
+      f.onchange = () => { const file = f.files && f.files[0]; if (file) promoUpload(blk, idx, file); };
+      f.click();
+    };
+    body.appendChild(el);
+  });
+  if (cards.length < PROMO_MAX) {
+    const add = document.createElement('button');
+    add.className = 'pc-btn'; add.style.width = '100%';
+    add.textContent = cuT('+ Add card (' + cards.length + ' of ' + PROMO_MAX + ')', '+ 添加卡片(' + cards.length + ' / ' + PROMO_MAX + ')');
+    add.onclick = () => promoWrite(blk, cards.concat([{ id: 'c' + Math.random().toString(36).slice(2, 9), image_url: '', target: '', start_at: '', end_at: '' }]));
+    body.appendChild(add);
+  }
 }
 
 /* ── DESIGN sheet (page background) ───────────────────────────────── */
