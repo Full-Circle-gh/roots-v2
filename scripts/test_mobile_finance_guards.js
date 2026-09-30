@@ -61,6 +61,10 @@ const SRC = [
   slice('function expStatusPill(r){', 'function expMineRow('),
   slice("reg('poReceive', ()=>{", '/* Marking a delivery in writes stock'),
   slice("reg('poStatus', st=>{", "reg('invSeg'"),
+  // §300 P1 put the order's management into the sheet; it calls these two
+  // helpers, which sit just above it in the same region.
+  slice('const poMoney=', 'function loadPOs('),
+  slice('function poSupNames(p){', 'function poRow(p){'),
   slice('function sheetPO(){', '/* =========='),
   slice('const MCAN_MONEY_ONLY=', 'function canRoute('),
 ].join('\n');
@@ -95,7 +99,7 @@ function mk(opts = {}) {
     poPill: () => '<span class="pill">pill</span>',
     poStore: () => '', poLate: () => false, poLineRow: () => '<div>line</div>', poDeliveries: () => '',
     poFact: (l, v) => `<div>${l} ${v}</div>`,
-    fmtDateOnly: (s) => s, money0: (c, n) => c + n,
+    fmtDateOnly: (s) => s, money0: (c, n) => c + n, money: (c, n) => c + n, catLabel: (v) => String(v || ''),
     Object, Promise, Math, Number, String, Array, JSON, Error, Set,
   };
   ctx.T = (en, zh) => (ctx.LANG === 'en' ? en : (zh || en));

@@ -1039,6 +1039,12 @@ const state = {
   lb:null, lbErr:null, lbTried:false,
   polls:null, pollsErr:null, pollsTried:false, pollOpen:null, pollBusy:null,
   poDetail:null, poErr:null, poBusy:false,
+  /* §300 P1 — the orders list's sub-view (orders | supowed), its search, month
+     and store (poFound is the server's answer while any of the three is set,
+     poFoundErr its failure); and on the open order: a refused write's words
+     (poRefusal), the landed-cost editor (poLc) and the print view (poPrint). */
+  poView:'orders', poQ:'', poMonth:'', poStoreF:'', poFound:null, poFoundErr:null,
+  poRefusal:null, poLc:null, poPrint:false,
   /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
      one. Two prefixes because they are two screens with two lifetimes — the
      list survives opening a delivery, the receive screen is thrown away the
@@ -1723,6 +1729,7 @@ reg('rqSearch', v=>{
  ['mExpQ','mExpClr','expQ'],
  ['mRcvQ','mRcvClr','rcvQuery'],
  ['mRcvToQ','mRcvToClr','rcvToQuery'],
+ ['mPoQ','mPoClr','poQuery'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
  ['mOnwProdQ','mOnwProdClr','onwProdQ'],
@@ -3431,6 +3438,7 @@ reg('wstSave', ()=>{
   });
 });
 reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false;
+  state.poRefusal=null; state.poLc=null; state.poPrint=false;   // §300: one order's, never the next one's
   state.poMounted=false; render(); state.poMounted=true;
   // The arrivals booked against this order, so the order and its deliveries
   // are one tap apart — the cost of putting Receiving on its own screen, paid.
@@ -3438,7 +3446,8 @@ reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null
   api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return; state.poDetail=d; render(); })
     .catch(e=>{ if(state.poId!==Number(id)||String(e.message)==='auth') return;
       state.poErr=E('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
-reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null; render(); });
+reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null;
+  state.poRefusal=null; state.poLc=null; state.poPrint=false; render(); });
 /* From the order straight into receiving it. The sheet closes first — leaving
    it open behind a full screen is how a Back button ends up with two things
    to mean. */
@@ -8598,10 +8607,19 @@ function onwOpenCreated(d){
    could never find. It is now the real ledger: /purchases, the desktop's three
    segments, its statline, and the row it draws.
 
-   The wizard, per-line receive with damaged counts, suppliers, bills and
-   reorder stay on the desktop. What moves here is the part you do standing at
-   the delivery door: read the order, and tick the whole delivery in.
+   §300 (P1) brings the desktop's order management across: a server search
+   with month and store, the row's order date / mixed-supplier / copied-from
+   facts, and on the order itself the lifecycle, each line's supplier and cost,
+   Back to draft, Undo receiving, Back-order, Cancel, landed cost, the Finance
+   panel and the printed PO — each behind the desktop's own confirm, refusal
+   and capability. The new-order wizard (and with it Order again, which on the
+   desktop only pre-fills that wizard) is the next step, not this one.
+
+   MONEY FAILS CLOSED HERE (poMoney). The order sheet is also reached from
+   Receiving, which purchasing:receive opens on its own; the desktop shows an
+   order's money only inside Purchasing, which is purchasing:view.
    ========================================================================== */
+const poMoney=()=>Array.isArray(state.caps)&&state.caps.indexOf('purchasing:view')!==-1;
 function loadPOs(force){
   if(state.posTried&&!force) return;
   state.posTried=true;
@@ -8638,6 +8656,23 @@ function poPill(p){
 }
 function poStore(p){ return LANG==='en' ? (p.store_name_en||p.store_name_cn||'')
                                         : (p.store_name_cn||p.store_name_en||''); }
+/* WHO THE ORDER IS FROM, the desktop's supplierLabel(): po.supplier is blank on
+   a consolidated order that mixes suppliers per line, and "No supplier" there
+   reads as unspecified rather than mixed. One line supplier is the order's
+   supplier in practice; more than one says how many. The list row carries
+   line_suppliers; the open order carries its items. */
+function poSupNames(p){
+  const raw=Array.isArray(p.items)?p.items.map(i=>i.supplier_name)
+    :(p.line_suppliers?String(p.line_suppliers).split(','):[]);
+  return Array.from(new Set(raw.map(x=>String(x||'').trim()).filter(Boolean)));
+}
+function poSupLabel(p){
+  if(p.supplier) return p.supplier;
+  const names=poSupNames(p);
+  if(!names.length) return T('No supplier','未指定供应商');
+  if(names.length===1) return names[0];
+  return names.length+' '+T('suppliers','家供应商');
+}
 function poRow(p){
   const lines=Number(p.line_count||0), rcv=Number(p.received_lines||0);
   // No ' · late' here: the Late pill sits nine pixels above this line, so the
@@ -8645,11 +8680,18 @@ function poRow(p){
   const arrives = p.delivery_date
     ? `<span class="num"${poLate(p)?' style="color:var(--amber-ink)"':''}>${fmtDateOnly(p.delivery_date)}</span>`
     : '';
+  /* §300 — THE ROW'S OTHER FACTS, the desktop's: the day it was ordered (two
+     orders to one supplier otherwise read the same), and the kitchen order a
+     copy was pulled from. That one is words, not a link: it is a kitchen-scope
+     order, which the retail order route does not open. */
+  const when=[p.date?fmtDateOnly(p.date):'',
+    p.copied_from_po_number?T('from','来自')+' '+p.copied_from_po_number:''].filter(Boolean);
   return `<button class="card" onclick="APP.cmd('openPO',${p.id})" style="display:flex;flex-direction:column;gap:9px;text-align:left;cursor:pointer;padding:14px;width:100%">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
       <span style="display:flex;flex-direction:column;min-width:0">
-        <span class="num" style="font-size:14.5px;font-weight:500">${escAttr(p.po_number||('#'+p.id))}</span>
-        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(p.supplier||T('No supplier','未指定供应商'))}${poStore(p)?' · '+escAttr(poStore(p)):''}</span></span>
+        <span class="num" style="font-size:14.5px;font-weight:500">${escAttr(p.po_number||('#'+p.id))}${when.length?`<span style="font-weight:400;color:var(--text-secondary)"> · ${escAttr(when.join(' · '))}</span>`:''}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(poSupLabel(p))}${poStore(p)?' · '+escAttr(poStore(p)):''}</span>
+        ${rcvMatched(p)}</span>
       <span class="num" style="font-size:16px;font-weight:500;flex:none">${money0(CUR,p.total_cost)}</span></div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${lines} ${T(lines===1?'line':'lines','项')}${rcv?' · '+rcv+' '+T('in','入库'):''}</span>
@@ -8664,6 +8706,7 @@ function poRow(p){
    "1 open" about the same three orders Receiving was calling "To receive 3".
    The desktop got the identical test in 16-purchasing.js (puPartial). */
 function statusPurchasing(){
+  if(state.poView==='supowed'&&canRoute('supowed')) return statusSupOwed();
   const all=state.poList; if(!all||!all.length) return '';
   const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p)).length;
   const late=all.filter(poLate).length;
@@ -8674,45 +8717,146 @@ function statusPurchasing(){
     late?`<span style="color:var(--amber-ink)">${late+' '+T('late','逾期')}</span>`:'',
     money0(CUR,spend)+' '+T('this month','本月')].filter(Boolean).join(' · ');
 }
+/* §300 — THE SUB-VIEW STRIP, the desktop's Orders / Suppliers / Invoices /
+   Reorder. ONLY THE TABS THAT WORK ARE DRAWN: a tab with nothing behind it is a
+   dead control, and one tab alone is not a strip. Suppliers-we-owe (§286) is
+   the phone's supplier screen until the directory lands; the later steps add
+   theirs here. */
+function poViewTabs(){
+  const t=[['orders','Orders','采购单']];
+  if(canRoute('supowed')) t.push(['supowed','Suppliers we owe','供应商欠款']);
+  return t;
+}
+function poViewStrip(){
+  const tabs=poViewTabs(); if(tabs.length<2) return '';
+  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':'orders';
+  return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">${tabs.map(([k,en,zh])=>{
+    const on=cur===k;
+    return `<button onclick="APP.cmd('poView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
+      font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
+      box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}</button>`;
+  }).join('')}</div>`;
+}
+/* Any of the three narrowing the list. While one is set the rows are the
+   server's answer (poFound), because only the server can see inside the lines
+   — "which order is bringing the mint?" is a product name, not a row field. */
+const poFiltering=()=>!!(String(state.poQ||'').trim()||state.poMonth||state.poStoreF);
+let poFindSeq=0, poQTimer=null;
+function loadPOFound(){
+  const q=String(state.poQ||'').trim(), qs=[];
+  if(q) qs.push('search='+encodeURIComponent(q));
+  if(state.poMonth) qs.push('month='+encodeURIComponent(state.poMonth));
+  if(state.poStoreF) qs.push('store_id='+encodeURIComponent(state.poStoreF));
+  const seq=++poFindSeq;
+  if(!qs.length){ state.poFound=null; state.poFoundErr=null; poPatch(); return; }
+  api('/purchases?'+qs.join('&')).then(rows=>{ if(seq!==poFindSeq) return;
+    state.poFound=Array.isArray(rows)?rows:[]; state.poFoundErr=null; poPatch();
+  }).catch(e=>{ if(seq!==poFindSeq||String(e.message)==='auth') return;
+    state.poFoundErr=E('Could not load purchase orders.','无法加载采购单。'); poPatch(); });
+}
+/* The month and store choices come from the ledger already in hand, so the
+   two filters cost no extra read; each is drawn only when there is a choice. */
+function poMonths(){
+  const m=new Set((state.poList||[]).map(p=>String(p.date||'').slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)));
+  if(state.poMonth) m.add(state.poMonth);
+  return Array.from(m).sort().reverse();
+}
+function poStores(){
+  const m=new Map();
+  (state.poList||[]).forEach(p=>{ if(p.store_id!=null&&!m.has(String(p.store_id))) m.set(String(p.store_id),poStore(p)||('#'+p.store_id)); });
+  return Array.from(m.entries());
+}
+function poSegCounts(all){
+  return {open:all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p)),
+          received:all.filter(p=>p.status==='Delivered'&&!rcvPartial(p)), all};
+}
+function poSegsHtml(){
+  const base=(poFiltering()?state.poFound:state.poList)||[];
+  const c=poSegCounts(base), seg=state.poSeg;
+  const segBtn=(k,label,n)=>`<button onclick="APP.cmd('poSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${seg===k?'var(--surface-card)':'transparent'};color:${seg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${seg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
+  return `<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+      ${segBtn('open',T('Open','进行中'),c.open.length)}${segBtn('received',T('Received','已收货'),c.received.length)}${segBtn('all',T('All','全部'),c.all.length)}</div>`;
+}
+function poBodyHtml(){
+  const filtering=poFiltering();
+  if(filtering&&state.poFoundErr) return `<div><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.poFoundErr}</span></div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('poFindRetry')">${T('Try again','重试')}</button></div>`;
+  const base=filtering?state.poFound:state.poList;
+  if(!base) return `<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const c=poSegCounts(base);
+  const rows=state.poSeg==='open'?c.open:state.poSeg==='received'?c.received:c.all;
+  return rows.length?`<div style="display:flex;flex-direction:column;gap:10px">${rows.map(poRow).join('')}</div>`
+    :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')}</div>`;
+}
+/* A keystroke, and the answer it provokes, repaint the segments and the list
+   and nothing else: the search field above them must not be rebuilt under a
+   typing thumb (the keyboard would drop back to letters). */
+function poPatch(){
+  const segs=document.getElementById('mPoSegs'), body=document.getElementById('mPoBody');
+  if(!segs||!body) return render();
+  segs.innerHTML=poSegsHtml(); body.innerHTML=poBodyHtml();
+}
 function screenPurchasing(){
   loadPOs();
-  if(state.posErr) return `<div style="padding:14px 16px 24px">
+  const strip=poViewStrip();
+  if(state.poView==='supowed'&&canRoute('supowed')) return strip+screenSupOwed();
+  if(state.posErr) return strip+`<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.posErr}</span></div></div>`;
-  if(!state.poList) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!state.poList) return strip+`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const all=state.poList;
-  if(!all.length) return nothingYet(T('No purchase orders yet','还没有采购单'),
+  if(!all.length) return strip+nothingYet(T('No purchase orders yet','还没有采购单'),
     T('An order is what you are buying from one supplier for one store. They are written on desktop; once one exists you can read it and tick it in from here.',
       '采购单记录你向某个供应商、为某家门店采购的内容。在电脑端创建后，可在此查看并收货。'));
-  const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p));
-  const rcvd=all.filter(p=>p.status==='Delivered'&&!rcvPartial(p));
-  const late=all.filter(poLate);
-  const m=shopToday().slice(0,7);
-  const spend=all.filter(p=>String(p.date||'').slice(0,7)===m&&(p.status==='Ordered'||p.status==='Delivered'))
-    .reduce((a,p)=>a+(Number(p.total_cost)||0),0);
-  const seg=state.poSeg;
-  const rows = seg==='open'?open : seg==='received'?rcvd : all;
-  const segBtn=(k,label,n)=>`<button onclick="APP.cmd('poSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
-    background:${seg===k?'var(--surface-card)':'transparent'};color:${seg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${seg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
-  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
-      ${segBtn('open',T('Open','进行中'),open.length)}${segBtn('received',T('Received','已收货'),rcvd.length)}${segBtn('all',T('All','全部'),all.length)}</div>
-    ${rows.length?`<div style="display:flex;flex-direction:column;gap:10px">${rows.map(poRow).join('')}</div>`
-      :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')}</div>`}</div>`;
+  const search=`<div style="position:relative">
+    <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
+    ${searchBox(`<input id="mPoQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.poQ)}" style="padding-left:42px"
+      placeholder="${T('Find an order, supplier or product','搜索采购单、供应商或商品')}" oninput="APP.cmd('poQuery',this.value)">`,'mPoClr',!!state.poQ)}</div>`;
+  const months=poMonths(), stores=poStores();
+  const sel=(cmd,cur,first,opts)=>`<select onchange="APP.cmd('${cmd}',this.value)" style="flex:1;min-width:0;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0">
+      <option value="">${first}</option>${opts.map(([v,l])=>`<option value="${escAttr(v)}"${String(cur)===String(v)?' selected':''}>${escAttr(l)}</option>`).join('')}</select>`;
+  const filters=[
+    months.length>1||state.poMonth?sel('poMonth',state.poMonth,T('All months','全部月份'),months.map(m=>[m,tdWhen(m+'-01','month',_tdL())])):'',
+    stores.length>1||state.poStoreF?sel('poStoreF',state.poStoreF,T('All stores','全部门店'),stores):''].filter(Boolean);
+  return strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div id="mPoSegs">${poSegsHtml()}</div>
+    ${search}
+    ${filters.length?`<div style="display:flex;gap:8px">${filters.join('')}</div>`:''}
+    <div id="mPoBody">${poBodyHtml()}</div></div>`;
 }
+reg('poView', v=>{ state.poView=v==='supowed'?'supowed':'orders'; render(); });
+reg('poQuery', v=>{
+  state.poQ=String(v||'');
+  searchClearShow('mPoClr', !!state.poQ);
+  clearTimeout(poQTimer); poQTimer=setTimeout(loadPOFound,320); });
+reg('poMonth', v=>{ state.poMonth=String(v||''); state.poFound=null; state.poFoundErr=null; render(); loadPOFound(); });
+reg('poStoreF', v=>{ state.poStoreF=String(v||''); state.poFound=null; state.poFoundErr=null; render(); loadPOFound(); });
+reg('poFindRetry', ()=>{ state.poFoundErr=null; state.poFound=null; poPatch(); loadPOFound(); });
 function poLineRow(it){
   const name=(LANG==='en'?(it.name_en||it.name_cn):(it.name_cn||it.name_en))||'—';
   const got=it.qty_received;
   const short=got!=null&&Number(got)<Number(it.qty||0);
+  const sup=String(it.supplier_name||'').trim();
+  const each=poMoney()&&it.cost_per_unit!=null?money(CUR,it.cost_per_unit)+' '+T('each','每件'):'';
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0">
       <span style="font-size:14.5px">${escAttr(name)}</span>
       <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku||'')}${it.sku&&it.current_stock!=null?' · ':''}${it.current_stock!=null?T('on shelf ','在架 ')+it.current_stock:''}</span>
       ${got!=null?`<span class="num" style="font-size:12px;margin-top:3px;color:${short?'var(--amber-ink)':'var(--text-secondary)'}">${T('received','已收')} ${got}${short?' '+T('of','/')+' '+it.qty:''}${Number(it.damaged_qty||0)?' · '+it.damaged_qty+' '+T('damaged','损坏'):''}</span>`:''}
+      ${/* §300 — the desktop's receive row: which supplier this line is from
+            (a consolidated order's header names none), what each costs, and a
+            grey tag on a material line, the only thing that tells the two
+            kinds apart on one order. Cost only with the money key. */''}
+      ${sup||each||it.ingredient_id?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center">${
+        it.ingredient_id?`<span class="pill" style="background:${PILL.clear[0]};color:${PILL.clear[1]}">${T('Material','物料')}</span>`:''}${
+        sup?`<span>${escAttr(sup)}</span>`:''}${each?`<span>${each}</span>`:''}</span>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
-      <span class="num" style="font-size:14.5px;font-weight:500">${money0(CUR,it.total_cost)}</span>
+      ${poMoney()?`<span class="num" style="font-size:14.5px;font-weight:500">${money0(CUR,it.total_cost)}</span>`:''}
       <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${it.qty||0}${it.unit?' '+escAttr(it.unit):''}</span></span></div>`;
 }
 function sheetPO(){
@@ -8746,17 +8890,19 @@ function sheetPO(){
       : null;
   return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closePO')"></div>
    <div class="sheet" style="top:76px;z-index:46;overflow:hidden;${noAnim}">
-     ${head(escAttr(d.po_number||('#'+d.id)),poPill(d))}
+     ${head(escAttr(d.po_number||('#'+d.id)),`<span style="display:flex;align-items:center;gap:2px;flex:none">${poPill(d)}${poHeadBtns(d)}</span>`)}
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        ${state.poErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick-ink)">${state.poErr}</span></div>`:''}
+       ${poRefusalHtml(d)}
+       ${poLifeStepper(d)}
        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
-         ${poFact(T('Supplier','供应商'),escAttr(d.supplier||T('No supplier','未指定供应商')))}
+         ${poFact(T('Supplier','供应商'),escAttr(poSupLabel(d)))}
          ${poStore(d)?poFact(T('Store','门店'),escAttr(poStore(d))):''}
          ${d.date?poFact(T('Ordered','下单'),`<span class="num">${escAttr(fmtDateOnly(d.date))}</span>`):''}
          ${d.delivery_date?poFact(T('Arrives','到货'),`<span class="num" style="${poLate(d)?'color:var(--amber-ink)':''}">${escAttr(fmtDateOnly(d.delivery_date))}${poLate(d)?' · '+T('late','逾期'):''}</span>`):''}
-         ${poFact(T('Total','金额'),`<span class="num" style="font-weight:500">${money0(CUR,d.total_cost!=null?d.total_cost:items.reduce((a,i)=>a+(Number(i.total_cost)||0),0))}</span>`)}
+         ${poMoney()?poFact(T('Total','金额'),`<span class="num" style="font-weight:500">${money0(CUR,d.total_cost!=null?d.total_cost:items.reduce((a,i)=>a+(Number(i.total_cost)||0),0))}</span>`):''}
        </div>
        ${lines?`<div><div class="eyebrow" style="padding:0 2px 8px">${lines} ${T(lines===1?'line':'lines','项')}</div>
          <div class="list">${items.map((it,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${poLineRow(it)}`).join('')}</div></div>`:''}
@@ -8769,6 +8915,7 @@ function sheetPO(){
              the common case; this is the way in when something is wrong. */''}
        ${done||!canRcv?'':`<button class="btn2" style="width:100%" onclick="APP.cmd('poReceive')">${ic('package',18)}${T('Receive line by line','逐项收货')}</button>`}
        ${poDeliveries(d.id)}
+       ${poManageHtml(d)}
      </div>
      ${cta?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('poStatus','${cta.status}')">${busy?T('Saving…','保存中…'):cta.label}</button></div>`:''}</div>`;
@@ -8778,6 +8925,370 @@ function poFact(label,value){
     <span style="font-size:13px;color:var(--text-secondary);flex:none">${label}</span>
     <span style="font-size:14px;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis">${value}</span></div>`;
 }
+
+/* ── §300 P1 — managing an order (desktop: 16-purchasing.js paintReceive) ───
+   THE ORDER'S JOURNEY, the desktop's lifeStepper: Draft → Sent → Part received
+   → Received, read off the stored status and how much has been ticked in.
+   Drawn only for the four statuses the server stores; an order that failed to
+   load has none and gets no journey rather than a wrong one. */
+function poLifeStepper(p){
+  const st=p&&p.status;
+  if(st==='Cancelled') return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)">
+    <span style="width:8px;height:8px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 2px var(--text-primary)"></span>${T('Cancelled','已取消')}</div>`;
+  if(!['Requested','Ordered','Delivered'].includes(st)) return '';
+  const items=p.items||[];
+  const anyRcv=items.some(i=>i.qty_received!=null);
+  const allRcv=items.length>0&&items.every(i=>i.qty_received!=null);
+  const step=st==='Delivered'?3:st==='Ordered'?((anyRcv&&!allRcv)?2:1):0;
+  const steps=[T('Draft','草稿'),T('Sent','已下单'),T('Part received','部分收货'),T('Received','已收货')];
+  return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)">${steps.map((s,i)=>{
+    const dot=i<step?'background:var(--text-primary)':i===step?'box-shadow:inset 0 0 0 2px var(--text-primary)':'background:var(--border-default)';
+    return `<span style="width:8px;height:8px;border-radius:50%;flex:none;${dot}"></span><span style="flex:none;${i===step?'color:var(--text-primary);font-weight:500':''}">${s}</span>${
+      i<steps.length-1?'<span style="flex:1;min-width:6px;height:1px;background:var(--border-default)"></span>':''}`;
+  }).join('')}</div>`;
+}
+/* The desktop's manage buttons, on the desktop's own conditions, each with the
+   capability its button carries (data-cap="purchasing:edit"). A draft is not
+   among them: on the desktop a draft opens in the wizard, which is P2's.
+   ORDER AGAIN IS NOT HERE YET, deliberately: on the desktop it only pre-fills
+   the new-order wizard and writes nothing, so it arrives with that wizard. */
+function poActions(p){
+  if(!p||!mCan('purchasing:edit')) return [];
+  const a=[];
+  if(p.status==='Ordered') a.push({key:'draft',label:T('Back to draft','退回草稿')});
+  if(p.status==='Delivered') a.push({key:'undo',label:T('Undo receiving','撤销收货')});
+  if(p.status==='Ordered') a.push({key:'cancel',label:T('Cancel order','取消采购单')});
+  return a;
+}
+const poShortN=p=>(p.items||[]).filter(i=>i.qty_received!=null&&Number(i.qty_received)<Number(i.qty)).length;
+function poHeadBtns(p){
+  const b=[];
+  // The printed order carries every price on it, so it goes where money goes.
+  if(poMoney()&&p.status) b.push(`<button class="iconbtn" style="width:36px;height:36px" aria-label="${T('Print / send','打印 / 发送')}" onclick="APP.cmd('poPrint')">${ic('printer',20)}</button>`);
+  if(poActions(p).length) b.push(`<button class="iconbtn" style="width:36px;height:36px" aria-label="${T('More actions','更多操作')}" ${state.poBusy?'disabled':''} onclick="APP.cmd('poActs')">${ic('ellipsis',20)}</button>`);
+  return b.join('');
+}
+/* A REFUSED WRITE IS SAID WHERE THE OPERATOR IS LOOKING, AND STAYS. The
+   desktop's two stock/cost refusals are dialogs with the goods named under
+   them (puShowUndoBlocked, puShowCostBlocked); here they are the same words in
+   a band at the top of the order, until the next action or the sheet closes.
+   Both headlines are LOCKED in docs/tacet-delivery-vocabulary.md and carried
+   whole — refused AND nothing was written. */
+const poLineName=l=>(LANG==='en'?(l.name_en||l.name_cn):(l.name_cn||l.name_en))||'';
+function poRefusalFor(e){
+  const c=e&&e.code, b=(e&&e.body)||{};
+  if(c==='undo_blocked') return {title:T('Cannot undo this delivery','无法撤销此次收货'),
+    msg:T('Some of these goods have already left stock, so this delivery cannot be undone — nothing was changed.',
+          '部分货品已出库，此次收货无法撤销 — 未作任何更改。'),
+    rows:(b.blocking||[]).map(x=>[poLineName(x)||('#'+x.product_id),T(`${x.short} short`,`${x.short} 短少`)])};
+  if(c==='cost_not_recoverable') return {title:T('This order cannot go back yet','该采购单暂时无法退回'),
+    msg:T('These materials still carry the price this order set, and nothing recorded what they cost before it — nothing was changed.',
+          '这些物料当前的价格仍是本采购单写入的，而系统没有记录写入前的价格 — 未作任何更改。'),
+    rows:(b.ingredients||[]).map(g=>[poLineName(g)||('#'+g.ingredient_id),poMoney()&&g.buy_price!=null?money(CUR,g.buy_price):'']),
+    tail:T('Set their price yourself under Materials, then try again.','请先在「物料」中手动设置这些物料的价格，然后再试。')};
+  if(c==='nothing_outstanding') return {msg:T('No short items to back-order','没有缺货项目')};
+  if(c==='not_delivered'||c==='invalid_status'||c==='not_found')
+    return {msg:T('This order has already moved on. Close and open it again to see where it is now.','这个订单已经进入下一步。请关闭后重新打开查看当前状态。')};
+  return {msg:T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。')};
+}
+function poRefusalHtml(p){
+  const r=state.poRefusal;
+  // A write from the ⋯ menu has no control left on screen to say so; this does.
+  if((state.poBusy==='draft'||state.poBusy==='undo'||state.poBusy==='cancel')&&!r) return `<div style="font-size:13.5px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`;
+  if(!r||r.id!==p.id) return '';
+  return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);color:var(--brick-ink)">
+    <span style="flex:none;display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.5">
+      ${r.title?`<span style="font-weight:500">${r.title}</span>`:''}<span>${r.msg}</span>
+      ${(r.rows||[]).map(([n,v])=>`<span style="display:flex;justify-content:space-between;gap:12px"><span style="min-width:0">${escAttr(n)}</span><span class="num" style="flex:none">${escAttr(v)}</span></span>`).join('')}
+      ${r.tail?`<span>${r.tail}</span>`:''}</span></div>`;
+}
+/* The four writes, each the desktop's request exactly: Back to draft and Cancel
+   are the status route (puSetStatus), Undo receiving its own route
+   (puUndoReceive), Back-order a POST whose answer is the new draft
+   (puBackorder), which the desktop then opens — and so does this. */
+function poWrite(kind){
+  const d=state.poDetail; if(!d||state.poBusy) return;
+  const id=d.id;
+  const req=kind==='undo'?['/purchases/'+id+'/undo-receive',{},'PUT']
+    :kind==='backorder'?['/purchases/'+id+'/backorder',{},'POST']
+    :['/purchases/'+id+'/status',{status:kind==='cancel'?'Cancelled':'Requested'},'PUT'];
+  state.poBusy=kind; state.poErr=null; state.poRefusal=null; render();
+  apiWrite(req[0],req[1],req[2]).then(r=>{
+    state.poBusy=false;
+    showToast(kind==='undo'?T('Undone','已撤销'):kind==='backorder'?T('Back-order created','已生成缺货补单'):T('Saved','已保存'));
+    poReloadLists();
+    if(kind==='backorder'&&r&&r.id!=null){ APP.cmd('openPO',r.id); return; }
+    return api('/purchases/'+id).then(x=>{ if(state.poId===id){ state.poDetail=x; render(); } });
+  }).catch(e=>{
+    state.poBusy=false;
+    if(String(e.message)==='auth') return;
+    state.poRefusal=Object.assign({id},poRefusalFor(e)); render();
+  });
+}
+function poReloadLists(){
+  state.posTried=false; loadPOs(true);
+  if(poFiltering()) loadPOFound();
+}
+reg('poActs', ()=>{
+  const d=state.poDetail, acts=poActions(d);
+  if(!acts.length||state.poBusy) return;
+  state.ask={title:T('More actions','更多操作'), options:acts, run:k=>APP.cmd('poAct',k)};
+  render();
+});
+/* The desktop's confirms, word for word. Back to draft has none on the desktop;
+   it is asked here because on the phone it sits in the same menu as Cancel,
+   and its body is the desktop's own sentence for what a draft does. */
+reg('poAct', k=>{
+  const d=state.poDetail; if(!d||!poActions(d).some(a=>a.key===k)) return;
+  if(k==='draft') state.ask={title:T('Back to draft?','退回草稿？'),
+    body:T('Posts to Expenses when the order is placed.','下单后自动记入支出。'),
+    confirmLabel:T('Back to draft','退回草稿'), run:()=>poWrite('draft')};
+  else if(k==='undo') state.ask={title:T('Undo receiving?','撤销收货？'),
+    body:T('Pulls back any stock this delivery added and returns the order to Sent.','撤回该次收货已入库的数量，订单退回"已下单"状态。')
+      +' '+T('The arrived and damaged counts are cleared — the delivery stays in Receiving.','实收与破损数量将被清空 —— 该次收货记录仍保留在「已收货」中。'),
+    confirmLabel:T('Undo receiving','撤销收货'), danger:true, run:()=>poWrite('undo')};
+  else if(k==='cancel') state.ask={title:T('Cancel this order?','确定取消该采购单？'),
+    confirmLabel:T('Cancel order','取消采购单'), danger:true, run:()=>poWrite('cancel')};
+  else return;
+  render();
+});
+reg('poBackorder', ()=>{ const d=state.poDetail; if(!d||!mCan('purchasing:edit')||!poShortN(d)) return; poWrite('backorder'); });
+
+/* LANDED COST — freight, tax and handling on top of the goods (the desktop's
+   landedPanel). Saving posts the extras to Finance as one line and re-runs the
+   cost write-back on a received order (routes/retail-purchasing.js /landed).
+   Goods is the desktop's own sum, ordered qty × cost each. The editor keeps
+   what is typed in poLc and repaints only its total, so the keyboard stays. */
+const poGoods=p=>(p.items||[]).reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.cost_per_unit)||0),0);
+const poLcNum=v=>parseFloat(v)||0;
+function poLcTotal(p,lc){
+  const f=lc?lc.f:p.extra_freight, t=lc?lc.t:p.extra_tax, h=lc?lc.h:p.extra_handling;
+  return poGoods(p)+poLcNum(f)+poLcNum(t)+poLcNum(h);
+}
+function poLandedHtml(p){
+  const lc=state.poLc&&state.poLc.id===p.id?state.poLc:null;
+  const edit=mCan('purchasing:edit');
+  const part=(label,v)=>label+' '+(Number(v)?money(CUR,v):'—');
+  const row=`<button class="row" style="min-height:60px;padding:12px 14px" onclick="APP.cmd('poLcOpen')">
+      <span class="rowico">${ic('wallet',18)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:14.5px">${T('True landed cost','到手成本')}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${[part(T('Freight','运费'),p.extra_freight),part(T('Tax','税费'),p.extra_tax),part(T('Handling','杂费'),p.extra_handling)].join(' · ')}</span></span>
+      <span class="num" style="font-size:14.5px;font-weight:500;flex:none">${money(CUR,poLcTotal(p,null))}</span>
+      <span style="color:var(--text-secondary);display:flex">${ic(lc?'chevron-up':'chevron-down',18)}</span></button>`;
+  if(!lc) return row;
+  const fld=(k,label)=>`<label style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="font-size:14px;color:var(--text-secondary)">${label}</span>${edit
+        ?`<input id="mPoLc_${k}" inputmode="decimal" value="${escAttr(lc[k])}" placeholder="0" style="width:120px;text-align:right" ${lc.busy?'disabled':''} oninput="APP.cmd('poLcInput','${k}',this.value)">`
+        :`<span class="num" style="font-size:14px">${poLcNum(lc[k])?money(CUR,lc[k]):'—'}</span>`}</label>`;
+  return row+`<div style="padding:4px 14px 14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;gap:12px"><span style="font-size:14px;color:var(--text-secondary)">${T('Goods','货款')}</span><span class="num" style="font-size:14px">${money(CUR,poGoods(p))}</span></div>
+      ${fld('f',T('Freight','运费'))}${fld('t',T('Tax','税费'))}${fld('h',T('Handling','杂费'))}
+      <div style="display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border-default);padding-top:10px">
+        <span style="font-size:14px;font-weight:500">${T('Landed total','到手合计')}</span>
+        <span class="num" id="mPoLcTotal" style="font-size:14px;font-weight:500">${money(CUR,poLcTotal(p,lc))}</span></div>
+      ${lc.err?`<div style="font-size:14px;color:var(--brick-ink)">${lc.err}</div>`:''}
+      ${edit?`<button class="btn2" style="width:100%" ${lc.busy?'disabled':''} onclick="APP.cmd('poLcSave')">${lc.busy?T('Saving…','保存中…'):T('Save — posts freight & fees to Finance','保存 —— 运杂费记入财务')}</button>`:''}</div>`;
+}
+reg('poLcOpen', ()=>{ const d=state.poDetail; if(!d||!poMoney()) return;
+  if(state.poLc&&state.poLc.id===d.id){ if(!state.poLc.busy){ state.poLc=null; render(); } return; }
+  const v=n=>Number(n)?String(n):'';
+  state.poLc={id:d.id,f:v(d.extra_freight),t:v(d.extra_tax),h:v(d.extra_handling),busy:false,err:null}; render(); });
+reg('poLcInput', (k,v)=>{ const lc=state.poLc, d=state.poDetail; if(!lc||!d||!['f','t','h'].includes(k)) return;
+  lc[k]=String(v==null?'':v);
+  const el=document.getElementById('mPoLcTotal'); if(el) el.textContent=money(CUR,poLcTotal(d,lc)); });
+reg('poLcSave', ()=>{
+  const lc=state.poLc, d=state.poDetail;
+  if(!lc||!d||lc.id!==d.id||lc.busy||!mCan('purchasing:edit')) return;
+  lc.busy=true; lc.err=null; render();
+  apiWrite('/purchases/'+d.id+'/landed',{freight:poLcNum(lc.f),tax:poLcNum(lc.t),handling:poLcNum(lc.h)},'PUT').then(()=>{
+    state.poLc=null;
+    showToast(T('Landed cost saved','到手成本已保存'));
+    poReloadLists();
+    return api('/purchases/'+d.id).then(x=>{ if(state.poId===d.id){ state.poDetail=x; render(); } });
+  }).catch(e=>{
+    lc.busy=false;
+    if(String(e.message)==='auth') return;
+    lc.err=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+  });
+});
+/* WHAT THE ORDER PUT IN THE BOOKS, the desktop's Finance panel: the expense
+   rows this order posted, by category, or the sentence for an order that has
+   posted nothing yet; and what a return took off (returnedNote), dated to the
+   order because that is the day the books use (docs/purchase-returns.md). */
+function poFinanceHtml(p){
+  const ex=p.expenses||[];
+  const tot=ex.reduce((s,x)=>s+(Number(x.amount)||0),0);
+  const items=p.items||[];
+  const retUnits=items.reduce((n,i)=>n+(Number(i.returned_qty)||0),0);
+  const retVal=items.reduce((n,i)=>n+(Number(i.returned_qty)||0)*(Number(i.cost_per_unit)||0),0);
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
+    <div class="eyebrow">${T('Finance','财务')}</div>
+    ${ex.length?ex.map(x=>`<div style="display:flex;justify-content:space-between;gap:12px;font-size:14px"><span style="min-width:0">${escAttr(catLabel(x.category))}</span><span class="num" style="flex:none">${money(CUR,x.amount)}</span></div>`).join('')
+      +`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Posted to Expenses','已记入支出')} · ${money(CUR,tot)}</div>`
+      :`<div style="font-size:13.5px;color:var(--text-secondary)">${T('Posts to Expenses when the order is placed.','下单后自动记入支出。')}</div>`}
+    ${retUnits?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Returned to supplier','已退回供应商')} · ${money(CUR,retVal)} — ${T('already taken off the total above, dated to the order','已从上方合计中扣除，记在采购单原日期')} ${escAttr(p.date?fmtDateOnly(p.date):'')}</div>`:''}</div>`;
+}
+/* The card under the order: Back-order the short lines, Landed cost, and the
+   Finance panel — where the desktop's receive screen has them, which is every
+   placed order (a draft opens in the wizard there). */
+function poManageHtml(p){
+  if(!p||!['Ordered','Delivered','Cancelled'].includes(p.status)) return '';
+  const shortN=poShortN(p), busy=state.poBusy;
+  const rows=[];
+  if(shortN&&mCan('purchasing:edit')) rows.push(`<button class="row" style="min-height:56px;padding:12px 14px" ${busy?'disabled':''} onclick="APP.cmd('poBackorder')">
+      <span class="rowico">${ic('rotate-ccw',18)}</span>
+      <span style="flex:1;min-width:0;font-size:14.5px">${busy==='backorder'?T('Saving…','保存中…'):T(`Back-order ${shortN} short`,`${shortN} 项缺货补单`)}</span>
+      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span></button>`);
+  if(poMoney()&&p.status!=='Cancelled') rows.push(poLandedHtml(p));
+  return (rows.length?`<div class="list">${rows.join('<div class="sep" style="margin-left:14px"></div>')}</div>`:'')
+    +(poMoney()?poFinanceHtml(p):'');
+}
+
+/* PRINT / SEND — the desktop's purchase-order sheet (puPrintPO), ported: the
+   desktop builds it inside its own module and opens it with window.open, which
+   a phone's in-app browser often refuses. The document is the same — masthead,
+   bilingual facts, the lines with cost each, totals, notes, the shop's own
+   name — in BOTH languages whatever the phone is set to, because it goes to
+   the supplier. Shown in a frame over the order; Print hands it to the phone's
+   print sheet, which is also where "Save as PDF" and sharing live. */
+const PO_UNIT_CN={kg:'公斤',g:'克',L:'升',ml:'毫升',lb:'磅',oz:'盎司',
+  bottle:'瓶',bag:'包',box:'盒',can:'罐',jar:'罐',case:'箱',pack:'包',tub:'桶',pcs:'件'};
+/* EVERY CLOSING TAG OF THE PAGE IS WRITTEN <\/…> BELOW. This document sits
+   inside m.html's own script, and the phone's render harnesses find the app's
+   closing body tag by its first occurrence to inject themselves; a literal one here
+   swallowed the harness into this string and every probe suite went blind. */
+function poPrintDoc(p){
+  const items=p.items||[];
+  const total=p.total_cost||items.reduce((s,i)=>s+(i.qty||0)*(i.cost_per_unit||0),0);
+  const e2=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const n2=v=>(parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const STATUS_BOTH={Requested:'Requested 已下单',Ordered:'Ordered 已下单',Delivered:'Delivered 已收货',Cancelled:'Cancelled 已取消'};
+  const unitCN=u=>(u?(PO_UNIT_CN[u]||u):'');
+  const store=[p.store_name_en,p.store_name_cn].filter(Boolean).join(' · ')||'—';
+  const rows=items.map((i,idx)=>`
+      <tr>
+        <td class="idx num">${idx+1}</td>
+        <td>
+          <div class="item-name">${e2(i.name_en||'')}${i.name_cn?` <span class="cn">${e2(i.name_cn)}</span>`:''}</div>
+          ${i.sku?`<div class="item-sub num">SKU ${e2(i.sku)}</div>`:''}
+          ${i.note?`<div class="item-note">${e2(i.note)}</div>`:''}
+        </td>
+        <td class="qty num">${n2(i.qty)}${i.unit?`<span class="unit">${e2(unitCN(i.unit))}</span>`:''}</td>
+        <td class="rate num">${n2(i.cost_per_unit)}</td>
+        <td class="amt num">${n2((i.qty||0)*(i.cost_per_unit||0))}</td>
+      </tr>`).join('');
+  const metaRow=(lbl,val)=>val?`<dt>${lbl}</dt><dd class="num">${val}</dd>`:'';
+  const metaRows=[
+    metaRow('Date 日期',e2(p.date||'')),
+    metaRow('Delivery 交货',e2(p.delivery_date||'')),
+    metaRow('Supplier 供应商',e2(poSupLabel(p))),
+    metaRow('Deliver to 收货',e2(store)),
+    metaRow('Status 状态',STATUS_BOTH[p.status]||e2(p.status||'')),
+    `<dt>Items 项目</dt><dd class="num">${items.length}</dd>`,
+  ].join('');
+  return `<!DOCTYPE html>
+<html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e2(p.po_number)}${state.storeName?' — '+e2(state.storeName):''}<\/title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  :root { --ink:#000; --graphite:#000; --hair:#C9C4B6;
+          --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','IBM Plex Sans',sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#F2F1EC; font-family:var(--sans); color:var(--ink); font-weight:400; -webkit-font-smoothing:antialiased; }
+  .num { font-variant-numeric:tabular-nums; }
+  .sheet { background:#fff; max-width:210mm; margin:24px auto; padding:18mm 16mm; box-shadow:0 4px 16px rgba(17,26,43,0.04); }
+  .masthead { display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-bottom:18px; }
+  .doc-title h1 { margin:0; font-size:27px; font-weight:400; letter-spacing:-0.01em; line-height:1.1; }
+  .doc-title .cn { font-size:13px; color:var(--graphite); letter-spacing:.22em; margin-top:8px; }
+  .meta { font-size:12px; line-height:1.5; flex:none; }
+  .meta dl { margin:0; display:grid; grid-template-columns:auto auto; gap:6px 22px; }
+  .meta dt { color:var(--graphite); }
+  .meta dd { margin:0; text-align:right; font-weight:500; }
+  table.items { width:100%; border-collapse:collapse; margin-top:12px; }
+  table.items thead th { color:var(--ink); border-bottom:1.5px solid var(--ink); font-weight:500; font-size:11px; letter-spacing:.02em; padding:10px 12px; text-align:left; white-space:nowrap; }
+  table.items thead th.r { text-align:right; }
+  table.items thead th .cn { color:var(--ink); margin-left:5px; font-weight:400; }
+  table.items tbody td { border-bottom:1px solid var(--hair); padding:13px 12px; font-size:12.5px; vertical-align:top; }
+  table.items tbody tr:last-child td { border-bottom:none; }
+  td.idx { color:var(--graphite); font-size:11px; width:26px; }
+  td.qty, td.rate, td.amt { text-align:right; white-space:nowrap; }
+  td.rate { width:92px; }
+  td.amt { width:104px; font-weight:500; }
+  .item-name { line-height:1.45; font-weight:500; }
+  .item-name .cn { color:var(--graphite); font-weight:400; }
+  .item-sub { font-size:10.5px; color:var(--graphite); margin-top:3px; line-height:1.5; }
+  .item-note { font-size:11.5px; margin-top:4px; line-height:1.5; font-weight:500; }
+  .unit { display:block; font-size:10.5px; color:var(--graphite); margin-top:3px; font-weight:400; }
+  .totals { margin-top:4px; display:flex; justify-content:flex-end; }
+  .totals table { border-collapse:collapse; min-width:300px; }
+  .totals td { padding:8px 12px; font-size:12.5px; text-align:right; }
+  .totals td.lbl { color:var(--graphite); }
+  .totals tr.grand td { border-top:1px solid var(--hair); font-weight:500; font-size:14px; padding-top:11px; }
+  .notes { margin-top:26px; padding:12px 14px; border-left:2px solid var(--hair); font-size:12px; line-height:1.6; color:var(--graphite); }
+  .notes b { color:var(--ink); font-weight:500; }
+  .foot { margin-top:40px; padding-top:10px; border-top:1px solid var(--hair); display:flex; justify-content:space-between; font-size:10px; color:var(--graphite); }
+  @media screen and (max-width:600px) { .sheet { margin:0; padding:18px 14px; } .masthead { flex-direction:column; align-items:flex-start; gap:16px; }
+    .totals table { min-width:0; width:100%; } table.items thead th, table.items tbody td { padding-left:6px; padding-right:6px; } }
+  @media print { body { background:#fff; } .sheet { box-shadow:none; margin:0; padding:10mm; max-width:none; } }
+<\/style><\/head><body>
+<div class="sheet">
+  <div class="masthead">
+    <div class="doc-title">
+      <h1>Purchase Order <span class="num">${e2(p.po_number)}</span></h1>
+      <div class="cn">采购单</div>
+    </div>
+    <div class="meta"><dl>${metaRows}</dl></div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:26px">#</th>
+        <th>Product <span class="cn">商品</span></th>
+        <th class="r" style="width:86px">Qty <span class="cn">数量</span></th>
+        <th class="r" style="width:92px">Cost each <span class="cn">单价</span></th>
+        <th class="r" style="width:104px">Line <span class="cn">金额</span></th>
+      </tr>
+    </thead>
+    <tbody>${rows||'<tr><td colspan="5" style="padding:24px;text-align:center;color:#000">No items · 暂无物料</td></tr>'}</tbody>
+  </table>
+
+  <div class="totals">
+    <table>
+      <tr><td class="lbl">Sub Total 小计</td><td class="num">${n2(total)}</td></tr>
+      <tr class="grand"><td class="lbl">Total 总计</td><td class="num">CNY ${n2(total)}</td></tr>
+    </table>
+  </div>
+
+  ${p.notes?`<div class="notes"><b>Notes 备注</b> ${e2(p.notes)}</div>`:''}
+
+  <div class="foot">
+    <span>${e2(state.storeName||'')}</span>
+    <span class="num">${e2(tdWhen(new Date(),'dateTime',_tdL()))}</span>
+  </div>
+</div>
+<\/body><\/html>`;
+}
+function sheetPOPrint(){
+  const d=state.poDetail; if(!d) return '';
+  return `<div class="scrim" style="z-index:51" onclick="APP.scrimClose('poPrintClose')"></div>
+   <div class="sheet" style="top:40px;z-index:52;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('poPrintClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Print / send','打印 / 发送')}</span>
+         <button class="btn2" style="width:auto;padding:0 18px;flex:none" onclick="APP.cmd('poPrintGo')">${ic('printer',18)}${T('Print','打印')}</button></div>
+       ${state.poPrint==='failed'?`<div style="font-size:13.5px;color:var(--brick-ink);margin-top:8px">${T('Print failed','打印失败')}</div>`:''}</div>
+     <iframe id="mPoPrintFrame" title="${escAttr(d.po_number||'')}" srcdoc="${escAttr(poPrintDoc(d))}" style="flex:1;min-height:0;width:100%;border:0;background:#fff"></iframe></div>`;
+}
+reg('poPrint', ()=>{ if(!state.poDetail||!poMoney()) return; state.poPrint=true; render(); });
+reg('poPrintClose', ()=>{ state.poPrint=false; render(); });
+reg('poPrintGo', ()=>{
+  const f=document.getElementById('mPoPrintFrame');
+  try{ f.contentWindow.focus(); f.contentWindow.print(); if(state.poPrint==='failed'){ state.poPrint=true; render(); } }
+  catch(e){ state.poPrint='failed'; render(); }
+});
 
 /* ==========================================================================
    §286 — Suppliers we owe
@@ -23930,6 +24441,7 @@ function render(){
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
+  if(state.poId!=null&&state.poPrint&&state.poDetail) html += layer('poprint:'+state.poId, sheetPOPrint());
   if(state.supOwedId!=null) html += layer('supowed:'+state.supOwedId, sheetSupOwed());
   if(state.chanSheet) html += layer('chan', sheetChannel());
   if(state.quickSheet) html += layer('quick', sheetQuick());
@@ -24370,6 +24882,8 @@ function layers(){
   if(state.oosSku) L.push(()=>{ state.oosSku=null; });
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
+  // Over the order it prints, so Back closes the print view first (§300).
+  if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
   /* AN OPEN KITCHEN JOB (§115). It is a STATE of the queue screen rather than a
      screen of its own, so the stack loop above cannot see it — and without this
      line an edge swipe threw the whole screen away and landed on More, straight
