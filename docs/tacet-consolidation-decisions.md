@@ -21322,3 +21322,286 @@ stale Purchasing record (defect 7) is not touched here.
    voided pill, the PO sheet for view-only / edit-only / receive-only accounts, and `mCan` with
    unknown, empty and known caps. One assertion in `test_staff_expenses.js` pinned the broken
    `askConfirm` shape; it now pins the ask-sheet and the absence of `askConfirm`.
+
+## §302 — TWO PURCHASING WRITES NOW NEED THE BUYER'S KEY ON THE SERVER
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 0b of the parity survey's build order (`docs/tacet-phone-parity-recipes-purchasing-finance.md`
+§3 defects 1 and 2). Two server permission gates in purchasing let the wrong person in. Both are
+closed in `lib/cap-routes.js` and one handler, with no screen change. The desktop and the phone
+already drew these buttons for the right people (the phone since F0); the server now agrees with
+them. As with every gate in that file, nothing changes for a shop that has not switched
+enforcement on, for the owner, or while an operator's permissions cannot be resolved.
+
+1. **A receive-only account may mark an order "everything arrived", and nothing else.**
+   `PUT /purchases/:id/status` accepted `purchasing:receive` for any status, so a store manager who
+   can only receive could cancel an order, or send it back to draft, through the API. Now only
+   `Delivered` takes either key; `Ordered`, `Requested` and `Cancelled` need `purchasing:edit`,
+   matching the desktop's Place order / Back to draft / Cancel order buttons.
+2. **The rule lives in the handler, because the path cannot carry it.** The target status is in the
+   body, and the choke point (`requiredCapFor`) sees only method and path, so the path still lets
+   either key through. The handler then asks `purchaseStatusCap(status)` (new, in
+   `lib/cap-routes.js`) and refuses through `capDenied`, before it reads or writes anything. This is
+   the pattern the order-status route already uses for a full refund. The refusal has the choke
+   point's own shape: `403 {error:'forbidden_capability', need:'purchasing:edit'}`.
+3. **`capDenied` now takes a list as well as one key** (hold any one), which are the two shapes
+   `requiredCapFor` returns, read the way the choke point reads them. Every existing caller passes a
+   single key, and those behave exactly as before.
+4. **The phone's "Everything arrived" still works for a receive-only account.** It sends
+   `PUT {status:'Delivered'}`, which is the one status left open to that key. It is tested end to
+   end.
+5. **Striking a kitchen-request line off needs `purchasing:edit`.**
+   `PUT /material-requests/lines/:id/decline` sat under the kitchen's `production:request`, so the
+   buyer the desktop draws the ✕ for was refused and any cook was allowed. It is the buyer's answer
+   to the ask ("we are not buying this one", §174), so it takes the buyer's key. The rule matches
+   that one path exactly and comes before the general material-requests rule.
+6. **The cook keeps their own way to take an ask back.** Withdrawing the whole request
+   (`PUT /material-requests/:id/archive`) and editing a draft (`PUT /material-requests/:id`) stay
+   `production:request`, and so do raising and sending one. No screen calls withdraw today (the
+   route exists; the phone's "Mine" list does not offer it), so nothing a cook uses was taken away.
+   Striking a single line off was never theirs to do: §86's rule is that the kitchen withdraws and
+   raises again.
+7. **Deliberately not done:** a receive-only account may still mark a DRAFT (`Requested`) order
+   Delivered, as the brief asked ("Delivered and nothing else"). No screen offers that — the phone
+   and the desktop only draw "Everything arrived" on an order already placed — but the server does
+   not refuse it either. Narrowing it to orders already placed would be a further, separate rule,
+   and it is Ash's to ask for.
+8. **Tests.** `scripts/test_purchasing_cap_gates.js` (fast shard) runs the real purchasing and
+   material-request routers behind a copy of the choke point, and checks that copy against
+   `routes/retail.js`'s source. It covers allow and refuse for the receiver, the buyer, a view-only
+   account and a cook; the owner, enforcement off and unresolved permissions; the order untouched
+   and the line still standing after each refusal; and the desktop's `data-cap` on the same controls.
+9. **Nothing composed.** No operator strings were added.
+
+## §303 — THE PHONE'S RECIPES SHOW EVERYTHING THE DESKTOP'S SHOW, BEFORE THEY WRITE ANYTHING
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step R1 of the recipes lane — the survey's PR 5, "recipes read gaps". The phone
+list and record (`public/m.html`, `screenRecipes` / `screenRecipeOne`) gain what
+the desktop Recipes screen shows and the phone did not: the category filter,
+Archived, the row-ceiling notice, the other language's name, the not-money
+warnings, what a recipe makes and the material it stocks, a Details tab, lines
+that are other recipes, and the printed recipe card. Nothing on the phone writes
+a recipe yet; that is R2, and the screen's "Best edited on desktop" stays until
+then. No cost figure is drawn for anybody yet either; that is R3.
+
+1. **The list.** A Category chip opens the desktop's own category list
+   (`GET /recipes/meta/categories`), one choice at a time, and the lit chip names
+   the category; it filters the rows in hand, and the Made/Repacked counts count
+   the category, as the desktop's do. A failed category read draws no chip and
+   leaves the list working ("categories are optional", the desktop's words). An
+   **Archived** chip reads `?archived=1` — the desktop's query — and shows that
+   list instead of the live one; the live catalogue is kept, because the record
+   reads it. Entering the list again drops the category and the archive with the
+   search word.
+2. **The row ceiling (audit J-01)** is said when the server cut the list, in the
+   desktop's own first sentence. Its second sentence ("search or filter to reach
+   the rest") is left off: the phone searches the rows in hand, so it would be a
+   promise this list cannot keep.
+3. **Each row names the recipe in the screen's language and the other name under
+   it**, as the desktop's second line does, and writes on the row what the desktop
+   keeps in a tooltip: the missing-cost COUNT, UNIT MISMATCH (the locked pair, no
+   count), a Material badge, and — only when the material's cost is frozen — the
+   desktop's reason, word for word. On live data that is a handful of rows; every
+   other row stays two lines.
+4. **The record** opens on Ingredients, not on Details as the desktop does: the
+   person holding a phone at a bench opened it to see what goes in, and §167's
+   Making one starts there. Three tabs — Ingredients, Steps, Details; Cost &
+   Pricing is R3's. The missing-cost count and UNIT MISMATCH sit above the tabs,
+   from the server's counts, so they read on every tab like the desktop's pinned
+   card.
+5. **UNIT MISMATCH is marked on the line it is about**, with the desktop's locked
+   explanation written under it (a phone has no tooltip). The rule is read out of
+   `lib/recipe-cost.js` itself — loaded into the phone with a deferred
+   `<script src="/lib/recipe-cost.js">`, the file the server and the desktop run,
+   no-store and deliberately not precached (sw.js already lets it through). A
+   second copy of the rule is how a line's mark and a recipe's count come to
+   disagree. Offline the module is absent and only the count shows.
+6. **Per-line "no cost" is NOT drawn.** On the desktop it lives in the line's rate
+   slot, which is money-gated, and the server strips `master_cost` for anybody
+   without `recipes:costs`; it comes with R3.
+7. **A line that is another recipe** is marked `Recipe · 食谱` and opens that
+   recipe, stacked over this one, with this one's name on its Back. Which line is
+   which is answered from the live list's `backsMaterial` — no new read and no
+   server change. A line whose recipe is archived, or past the list's ceiling, is
+   not marked and still reads as the material it is. Each record's id rides on
+   its own stack frame, so Back — the app's or the phone's edge swipe — lands on
+   the parent and re-reads it rather than showing the child under the parent's
+   name.
+8. **Details** holds what the desktop's Details sheet holds, as facts: the other
+   name, SKU, category, type, batch size, servings, serving size, shelf life (read
+   back in the screen's language rather than printed raw), storage, notes. Under
+   them, what the recipe becomes: **Makes** (each product by name and size,
+   opening the phone's product sheet when that sheet can find it and the reader
+   holds `products:view`; with several products, each one's sell price, as the
+   desktop's Sells column does for every `recipes:view` holder — never the margin,
+   which is the cost by subtraction), and **Also stocked as a material**, with the
+   frozen-cost reason when blocked and without the rate.
+9. **The recipe card.** A printer icon on the record opens the card on the phone,
+   then prints it with the phone's own print sheet (which is also where Save as
+   PDF and Share live on a phone). The desktop's builder could not be run as it
+   stands: its data half is private to `19-recipes.js`'s closure, and its document
+   half opens a pop-up and `document.write`s into it, which an installed phone app
+   cannot rely on and whose blocked-pop-up path calls the desktop's toast. So the
+   data half is **ported line for line** and the new suite runs the desktop's own
+   `recipePrintCard()` beside the phone's across four shapes of recipe and requires
+   the same answer; the document is drawn in `tdPrintRecipe`'s order with its
+   bilingual headings. Printing hides everything but the card. No money is read on
+   the card's path, for anybody. Names that will print in English only are said
+   above the card, before printing — the desktop says it in a toast after.
+10. **Two defects fixed on the way, both inside this screen.** A failed recipe read
+    threw instead of saying *Could not load recipes*: the message was an `E()`
+    pair and the screen spread it as an array, so the error state never painted.
+    And `chipRow` gained three optional per-chip fields (`cmd`, `on`, `ic`) so a
+    filter row can carry a chip that opens a choice; a chip without them is drawn
+    byte for byte as before.
+11. **One test-harness change, called out:** `scripts/lib/m-probe.js` inlines
+    `lib/recipe-cost.js` the way it inlines the date module, because over file://
+    the new script tag 404s and `test_mobile_screens.js` counts a failed script
+    load as an error on every screen.
+12. **Not done here, on purpose:** any write (R2–R4); cost figures, the summary
+    strip and per-line rates (R3); the "more" sheet the mockup draws (Duplicate,
+    Version history, Archive) — R4 adds those actions, and R1 had only Print to put
+    in it; the mockup's composed row wording ("2 lines have no cost", "Unit
+    mismatch on 1 line"), rejected for the desktop's live and locked pairs.
+
+**Coverage.** `scripts/test_mobile_recipes_read.js` (fast shard, 42 cases, runs
+the sliced code): every read path, the category and archive filters, empty /
+loading / failed for the list, the archive, the categories and the record, the
+row ceiling, both languages, the sub-recipe stack and Back, product links with
+and without `products:view`, no cost figure from a payload full of them, the
+card against the desktop's own function, and the print. `scripts/test_mobile_recipes.js`
+updated where §300 overturned it — the "no money for anybody" list keeps every
+COST key and now admits `sell_price` in the one products function only.
+
+## §304 — A PURCHASE ORDER IS MANAGED FROM THE PHONE: FOUND, READ, SENT BACK, UNDONE, BACK-ORDERED, CANCELLED, COSTED AND PRINTED
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P1 of the purchasing lane (survey build-order row 11, with row 18's print).
+The phone's Purchasing screen could list orders and open one read-only, with Mark
+ordered, Everything arrived and Receive line by line. It now does what the desktop's
+order ledger and receive-and-manage screen do, except build an order (the wizard is
+P2). The desktop module (`public/retail-admin/16-purchasing.js`) is the spec for
+every control: same endpoint, same body, same condition, same capability, same
+confirm, same refusal.
+
+1. **The search goes to the server** (`GET /purchases?search=&month=&store_id=`),
+   not the desktop's in-page filter, because the server's search also looks inside
+   the lines, and the row names the products that matched. Typing waits for the
+   pause; the answer repaints the list and the segment counts only, never the
+   field. Month and store choices come from the orders already loaded, so they cost
+   no extra read, and each is drawn only when there is a choice to make.
+2. **The sub-view strip shows only tabs that work**: Orders, and Suppliers we owe
+   (§286's screen, drawn inside Purchasing). Invoices, Reorder and the supplier
+   directory join it when they are built. One tab alone is not drawn as a strip.
+3. **The row carries the desktop's facts**: the order date, "N suppliers" for an
+   order mixing suppliers per line (not "No supplier"), and "from PO-####" for a
+   copy pulled from a kitchen order. That last one is **words, not a link**: it is a
+   kitchen-scope order, which the retail order route does not open.
+4. **The order stays a sheet**, not the pushed screen mockup P06 draws. Same
+   capabilities, not same layout (§97). The three buttons the finance lane's F0
+   gates (Mark ordered, Everything arrived, Receive line by line) are untouched.
+5. **Money on the order fails closed.** Line totals, cost each, the order total,
+   landed cost, the Finance panel and the printed order show only when
+   `purchasing:view` is known to be held. The sheet is also reached from Receiving,
+   which `purchasing:receive` opens on its own; the desktop shows an order's money
+   only inside Purchasing. The list's own figures are unchanged: that screen is
+   already gated on `purchasing:view`, and making `mCan` fail closed is F0's job.
+6. **Back to draft, Undo receiving and Cancel sit under ⋯**, on the desktop's
+   conditions (Sent: back to draft, cancel; Received: undo) and its capability
+   (`purchasing:edit`). Cancel and Undo ask the desktop's own questions, and Undo
+   says what it clears before the confirm. **Back to draft gains a confirm the
+   desktop does not have**, because on the phone it sits one row from Cancel in the
+   same menu, and mockup P06 puts every ⋯ action behind one. Its body is the
+   desktop's own sentence (*Posts to Expenses when the order is placed.*); only its
+   title is new.
+7. **A refused write is said where the operator is looking, and stays.** The
+   desktop's two stock and cost refusals (`undo_blocked`, `cost_not_recoverable`)
+   are dialogs listing the goods; on the phone they are the same locked words in a
+   band at the top of the order, with the goods listed, until the next action or
+   until the order is closed. A toast only ever confirms.
+8. **Back-order N short** has no confirm, as on the desktop (it makes a draft,
+   which can be deleted), and opens the new draft, as the desktop does.
+9. **Landed cost** reads to `purchasing:view` and saves to `purchasing:edit`, with
+   the desktop's body (`freight`, `tax`, `handling`). Goods is the desktop's own sum,
+   ordered quantity × cost each. The per-unit figure the desktop removed stays
+   removed. Typing repaints the total alone.
+10. **The Finance panel** lists what the order posted by category, or says it posts
+    when placed, and names what a return took off, dated to the order.
+11. **The printed order is the desktop's sheet, ported.** The desktop builder lives
+    inside its own module and opens with `window.open`, which a phone's in-app
+    browser often refuses. So the same document (both languages whatever the phone
+    is set to, because it goes to the supplier) is shown in a frame over the order.
+    Print hands it to the phone's print sheet, which is also where Save as PDF and
+    sharing are. The shop name at its foot is the phone's own (the store wordmark),
+    because the phone does not load the desktop's tenant brand name.
+12. **Not built in this step, deliberately.** *Order again*: on the desktop it only
+    pre-fills the new-order wizard and writes nothing, so there is no request to
+    make until P2 builds the wizard. It arrives with it. *Managing a draft*: the
+    desktop opens a draft in the wizard (with Delete draft) and offers it none of
+    these actions, so the phone offers none either until P2.
+13. **Found on the way.** The printed document lives inside `m.html`'s script, and
+    the phone's render harnesses inject themselves at the first closing body tag in
+    the file. A literal one in the document swallowed the harness, and every probe
+    suite read the page title instead. Every closing tag in the document is now
+    written escaped, and the new suite pins the file to one closing body tag.
+
+## §305 — THE FINANCE SUMMARY IS ON THE PHONE, READ-ONLY
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 1 of the parity survey's build order. The phone gains a Finance screen (More → Money and
+numbers → Finance) that shows the desktop's money staircase for any window. A category's
+figure opens the ledger rows behind it in a sheet, and a purchase-order row opens its items. It
+calls the same three read endpoints as `22-finance.js`, with the same parameters, and draws the
+same rows, states and notes. It writes nothing. Transactions and Categories are later steps
+(F2, F3).
+
+1. **Gated on `finance:view`, and closed while that is unknown.** The route is in `ROUTE_CAP`,
+   and F0's `mCan` refuses money-only keys while caps are unknown. `canRoute` also refuses it on
+   the three boards that never see money (`recapNoMoney()`: warehouse, dispatch, customer
+   service), whatever their caps, which is the rule Trend and Home already follow. The server
+   leaves reads open by design (`lib/cap-routes.js`), so this is the gate.
+2. **The staircase is the desktop's, row for row.** The rows run in this order:
+   - Revenue, with its channels, open by default and with no chevron when there are none, then
+     the revenue note (§182).
+   - "of which tax", only when the shop charges tax.
+   - Cost of goods and Gross profit, in the server's three states: Not recorded plus one
+     sentence; the figures plus the floored coverage sentence; or the figures alone.
+   - Operating expenses, with its categories, open by default.
+   - Net.
+   - Below the card, the excluded money (§87): closed by default, absent at zero, with no minus.
+
+   Figures are whole yuan on the staircase and exact to the fen inside a drill-down, per §36 and
+   §88. Category labels use the phone's existing `catLabel`/`catLabels` split and collision
+   rule, which match the desktop's.
+3. **A category opens in a sheet, not in place** (§97: same capability, not same layout). It
+   reads `/finance/summary/category` over the window the figures came from (`data.window`), not
+   over the chips, which may have moved. The uncategorised line asks with an empty category. A
+   purchase-order row with items opens them inside the sheet (`/finance/summary/po-lines`); a
+   landed-cost row with no items does not. Each level has loading, empty and failed states, one
+   open at a time, and a slow answer is discarded when it arrives late.
+4. **The window.** The desktop's four presets (Today, 7, 30, 90 days) run on the store's own day,
+   plus a Custom chip that opens the ask-sheet with From and To. There is no minimum date (§36).
+   The sheet refuses an empty day or an inverted window before the server would. A custom pick
+   that equals a preset lights that preset, as `finSyncRangeButtons` does. The status line
+   reads like `finRangeLabel`. Moving the window closes an open category. A failed first read
+   shows the desktop's sentence with Try again. A failed refresh keeps the figures with the
+   banner above them.
+5. **The sub-view strip shows only what exists: Summary, plus Approvals** for an operator who
+   holds `expenses:approve`. The Approvals tab shows the Approvals screen this app already has,
+   starting from a fresh queue (the route's own reset, now `aprFresh()`). With one sub-view
+   there is no strip, as on the desktop. Transactions and Categories are not drawn until their
+   steps build them, so no tab leads nowhere. The separate Approvals row under Record and review
+   stays, for approvers who do not hold `finance:view`.
+6. **Deliberately not built:**
+   - the mockup's extra date chips (This month / Last month / This quarter / Since 1 Aug);
+   - its "Finance starts on 1 August" note, which contradicts §36;
+   - its "all stores" suffix. The desktop has no store dimension on this screen, and naming one
+     would be a claim.
+7. **Nothing composed.** Every string is copied from 22-finance.js, the desktop markup, or an
+   existing phone or desktop pair. One refusal is the server's own sentence with its first
+   letter capitalised. The details are in the vocab entry.
+8. **Tests.** `scripts/test_mobile_finance_summary.js` (fast shard) runs the sliced phone code
+   against a fake server. `test_mobile_ops_groups.js` and `test_mobile_ask_strip.js` pin the
+   Operations row count and set; they move from 26 to 27 for the one reason they allow, a row
+   added.

@@ -31,6 +31,7 @@
 
 const express = require('express');
 const { tdb, currentTenantId } = require('../lib/tenant-db');
+const capRoutes = require('../lib/cap-routes');
 const editHistory = require('../lib/edit-history');
 // The shared control-plane handle. Used for EXACTLY ONE statement in this file
 // — the activity_log read in planPOReversal — because activity_log is never
@@ -2833,6 +2834,14 @@ router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) 
 router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express.json(), (req, res) => {
   const { status } = req.body || {};
   if (!PO_STATUSES.has(status)) return res.status(400).json({ success: false, error: 'invalid_status' });
+  // §300 — THE CHOKE POINT LET EITHER KEY THROUGH, because the target is in the
+  // body. Only Delivered ("everything arrived") is the receiver's; every other
+  // status is the buyer's. Refused before anything is read or written, in the
+  // choke point's own shape, the way the order-status route gates a refund.
+  const need = capRoutes.purchaseStatusCap(status);
+  if (capRoutes.capDenied(req, need)) {
+    return res.status(403).json({ success: false, error: 'forbidden_capability', need });
+  }
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   // LEAVING A POSTABLE STATE GIVES THE GOODS BACK, OR IT DOES NOT HAPPEN.
