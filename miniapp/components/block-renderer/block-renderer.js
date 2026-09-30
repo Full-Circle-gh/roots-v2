@@ -25,6 +25,10 @@ function absUrl(u) {
   return u;
 }
 
+// §296 — which promo cards show today. Shared with the Shop tab
+// (utils/promo-cards.js) so the tab and this block can never disagree.
+const { promoCardsToShow } = require('../../utils/promo-cards');
+
 // Rich descriptions are TinyMCE HTML (e.g. "<!-- x-tinymce/html --><p><strong>…").
 // When we fall back to one as a short tagline, flatten it to readable plain text
 // first so raw tags/comments never leak into the card snippet.
@@ -1981,6 +1985,19 @@ Component({
           };
           break;
         }
+        case 'promo_cards': {
+          // §296 — tall 3:4 picture cards, swiped sideways. The words are in
+          // the picture, so a card is picture + tap link. One with no picture,
+          // or outside its start/end day, is left out; five at most, as the
+          // editor allows. The day is China's (UTC+8), computed the same way
+          // as the editor and the web renderer.
+          out.promoCards = promoCardsToShow(b.cards).map((c, i) => ({
+            key: c.id || String(i),
+            img: absUrl(c.image_url),
+            target: c.target || '',
+          }));
+          break;
+        }
         case 'video_banner': {
           // Autoplaying muted loop. The clip + optional poster come straight
           // from the CMS; playback flags are fixed (no controls) so it just
@@ -2281,6 +2298,11 @@ Component({
     },
     onVideoTap() {
       const target = this.data.videoLink;
+      if (target) this.triggerEvent('cta', { target });
+    },
+    // §296 — each promo card carries its own link on its dataset.
+    onPromoTap(e) {
+      const target = e && e.currentTarget && e.currentTarget.dataset.target;
       if (target) this.triggerEvent('cta', { target });
     },
     onGreetingCtaTap() {

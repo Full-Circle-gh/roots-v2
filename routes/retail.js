@@ -35126,6 +35126,10 @@ const ALLOWED_BLOCK_TYPES = new Set([
   // Standalone unread-notifications bar — hides when the customer has no
   // unread updates. Count comes from /api/retail/notifications/unread-count.
   'notification_bar',
+  // §296 — a row of tall picture cards the customer swipes sideways, each
+  // with its own tap link and optional start / end day. On the Shop landing
+  // page they also show at the top of the mini app's Shop tab.
+  'promo_cards',
   // ── Deprecated types kept on the whitelist so existing drafts/layouts
   // still validate. The CMS palette hides them; clients ignore them.
   'wechat_oa',                        // replaced 2026-05-19 by wecom_contact

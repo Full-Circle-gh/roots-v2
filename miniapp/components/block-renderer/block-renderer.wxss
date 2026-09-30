@@ -4286,6 +4286,24 @@ button.cp-cta::after { border: none; }
 
 /* ── Leaderboard block — Roots Club ranking strip on Home ───────────────── */
 /* Video banner — autoplaying muted loop clip */
+/* §296 · Promo cards — a sideways row of tall 3:4 picture cards. */
+.promo-blk { width: 100%; padding: 8rpx 0 24rpx; }
+.promo-rail { width: 100%; white-space: nowrap; }
+.promo-track {
+  display: inline-flex;
+  gap: 20rpx;
+  padding: 0 44rpx;
+}
+.promo-card {
+  flex: none;
+  width: 300rpx; height: 400rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 3rpx solid var(--ink);
+  background: var(--oat);
+}
+.promo-img { width: 100%; height: 100%; display: block; }
+
 .video-blk {
   width: 100%;
   overflow: hidden;

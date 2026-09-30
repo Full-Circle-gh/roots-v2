@@ -25,6 +25,17 @@
     </view>
   </block>
 
+  <!-- ════ PROMO CARDS (§296) ═════════════════════════════════════
+       The promo_cards blocks of the editor's Shop landing page, drawn by the
+       same renderer as Home. Hidden while a search is typed: someone who
+       typed "beet" wants beets, not an ad. In the rail layouts the page
+       itself never scrolls, so the row TUCKS AWAY (promoTucked) once the
+       product list is scrolled, and comes back at the top; in gallery the
+       page scrolls and the row simply scrolls off. -->
+  <view wx:if="{{promoBlocks.length && !query}}" class="promo-wrap {{promoTucked ? 'tucked' : ''}}">
+    <block-renderer wx:for="{{promoBlocks}}" wx:key="id" block="{{item}}" lang="{{lang}}" bind:cta="onPromoCta"></block-renderer>
+  </view>
+
   <!-- ════ STICKY TOP — search / switcher / filters / category chips -->
   <view class="sticky-top {{isListLayout ? '' : 'sticky-grid'}}">
     <!-- §295 — one tool row: the search button on the left, the layout
