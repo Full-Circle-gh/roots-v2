@@ -6,10 +6,10 @@
  *
  * POST /api/retail-admin/reports/read and /reports/ask are billed model calls
  * that read the period's figures back. They matched no rule in
- * lib/cap-routes.js, so they fell through fail-open. They are gated now on an
- * any-of of the two keys that open a screen calling them today —
- * `reports:view` (the desktop's Reports tab) and `dashboard:view` (the phone's
- * Trend) — so nobody who can reach either screen loses the read.
+ * lib/cap-routes.js, so they fell through fail-open. F5b gated them on either
+ * `reports:view` or `dashboard:view`; §324 (Ash: a Trend-only account does not
+ * get the AI read) narrowed it to `reports:view` alone — the desktop Reports
+ * tab's key and the key the phone already drew the read for.
  *
  * Both sides are asserted — who is let through and who is refused — through
  * the choke point exactly as routes/retail.js applies it (checked against that
@@ -52,11 +52,12 @@ section('0 · the stand-in is the real choke point, and the screens use the keys
     && /router\.post\('\/api\/retail-admin\/reports\/ask', requireRetailAdmin/.test(RETAIL), 'both routes sit behind requireRetailAdmin');
   ok(/reports: 'reports:view'/.test(CORE), 'the desktop Reports tab opens on reports:view');
   ok(/trend:'dashboard:view'/.test(M), 'the phone Trend screen opens on dashboard:view');
+  ok(/const trendAiOn=\(\)=>mCan\('reports:view'\)/.test(M), 'the phone draws the read only for reports:view');
 }
 
 section('1 · the rule');
-is(requiredCapFor('POST', READ), ['reports:view', 'dashboard:view'], 'the read: either key');
-is(requiredCapFor('POST', ASK), ['reports:view', 'dashboard:view'], 'Ask: either key');
+is(requiredCapFor('POST', READ), 'reports:view', 'the read: reports:view only (§324)');
+is(requiredCapFor('POST', ASK), 'reports:view', 'Ask: reports:view only (§324)');
 is(requiredCapFor('POST', '/api/retail-admin/reports/read/x'), null, 'exact paths: nothing longer rides on it');
 is(requiredCapFor('GET', '/api/retail-admin/dashboard'), null, 'the reads behind both screens stay open, as every read does');
 
@@ -64,7 +65,6 @@ section('2 · who gets through');
 for (const p of [READ, ASK]) {
   const w = p.endsWith('read') ? 'the read' : 'Ask';
   ok(allowed({ path: p, caps: ['reports:view'] }), `${w}: a desktop Reports reader`);
-  ok(allowed({ path: p, caps: ['dashboard:view'] }), `${w}: a phone Trend reader`);
   ok(allowed({ path: p, role: 'owner', caps: [] }), `${w}: the owner, holding nothing`);
   ok(allowed({ path: p, caps: [], enforce: false }), `${w}: a shop with enforcement off`);
   ok(allowed({ path: p, caps: null }), `${w}: unresolved caps fail open, as everywhere else`);
@@ -76,6 +76,7 @@ for (const p of [READ, ASK]) {
   ok(!allowed({ path: p, caps: ['orders:view', 'orders:edit'] }), `${w}: an orders-only account`);
   ok(!allowed({ path: p, caps: ['quickstock:add', 'restock:pick'] }), `${w}: a warehouse account`);
   ok(!allowed({ path: p, caps: [] }), `${w}: nothing held`);
+  ok(!allowed({ path: p, caps: ['dashboard:view'] }), `${w}: a Trend-only account (§324)`);
 }
 
 section('4 · the callers');
