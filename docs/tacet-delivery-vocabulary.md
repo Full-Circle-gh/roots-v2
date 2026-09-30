@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.222 · 2026-09-30 · §313 THE PHONE'S RECEIVE EXTRAS — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Tracking, 发票 and returns on the phone's receive screen (§313)*.
+
 **v1.221 · 2026-09-30 · §312 THE RECIPE RECORD'S ⋯ MENU ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *The recipe record's actions on the phone (§312)*.
 
 **v1.220 · 2026-09-30 · §311 FINANCE CATEGORIES ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Finance categories on the phone (§311)*.
@@ -9944,3 +9946,24 @@ or is the phone's own live pair:
   `Both languages, no money on it`, `N saved versions`): **rejected**. They
   would each be composed, and each row is already named in the desktop's own
   words.
+
+## Tracking, 发票 and returns on the phone's receive screen (§313)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the block under
+each line of the phone's receive screen (`public/m.html`). Every label is copied
+whole:
+
+- from the desktop's receive table (`16-purchasing.js`): `Tracking no. · 运单号`,
+  `Invoice · 发票`, the picker's `Awaiting · 待收`, `Received · 已收`, `None · 无发票`,
+  `None · whole order · 无发票 · 整单`; the return box's `Returned · 退货` (`returnedColumn`),
+  `Why? · 原因？` (`returnReasonPrompt`), and the five reasons (`错货` as shipped in
+  `RCV_REASONS`, the other four locked 2026-09-01); `Pick a reason for the return · 请选择退货原因`
+  and the other `PU_RECEIVE_ERRORS` sentences; the locked `returnBlockedTitle`
+  and `returnBlocked`, with `N short · N 短少`; and the receive note's four
+  clauses (`Confirmed counts go into … stock by themselves`,
+  `and sync out to every sales channel.`, `Damaged units are kept out of stock.`,
+  `returnsComeOffBoth`);
+- **the tick dropped** (the phone's toasts carry none): `Invoice status saved · 发票状态已保存`;
+- from the phone's own live pairs: `Return · 退货`, `Tracking saved · 运单号已保存`,
+  `Saved · 已保存`, `Saving… · 保存中…`, and the Receiving journal's
+  `N <unit> sent back · 退回 N <unit>` for what went back.

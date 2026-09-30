@@ -1097,6 +1097,9 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* §300 P4 — the line extras' own write (tracking / 发票 / return), as
+     'kind:lineId' while one is in flight, and its refusal, kept on its line. */
+  recvXBusy:null, recvXErr:null,
   /* THE KITCHEN'S QUEUE, and the two screens that close it (§48).
      kq  — what has been asked of this kitchen.
      hd  — "What you made": how much of it actually reached the shelf.
@@ -10472,6 +10475,7 @@ function loadDelivery(id){
 function loadReceive(poId){
   state.recvId=Number(poId); state.recvPo=null; state.recvErr=null; state.recvSaveErr=null;
   state.recvVals=null; state.recvDmg=null; state.recvStore=null; state.recvStoreOpen=false;
+  state.recvXBusy=null; state.recvXErr=null;
   /* A NEW VISIT IS A NEW DELIVERY. The receipt the last one amended belongs to
      the van that came then; carrying its id here would hang tomorrow's boxes
      off yesterday's delivery. The pending write is dropped with it — whatever
@@ -10674,6 +10678,150 @@ function rcvLocation(){
    Below that, unchanged: [−][n][+] as one control, the unit beside it, and the
    damage mark at the right end of the SAME row — one row, one hand, nothing
    hidden. */
+/* ── §300 P4 — THE RECEIVE SCREEN'S EXTRAS (desktop: 16-purchasing.js
+   receiveRow's Tracking no. / Invoice / Returned cells) ─────────────────────
+   Three things the desktop's receive table carries per line that the door
+   screen did not: the tracking number, the line's 发票 status, and a RETURN.
+   None of them is a count, so none rides the counting pause (recvFlush): each
+   is its own write, the moment it is made, and none sends qty_received — the
+   receive route writes only the columns a payload names, so a tracking number
+   or a return can never book or clear a delivery by accident.
+
+   RETURNS COME TO THE PHONE BY §300's NAME, overturning docs/purchase-returns.md
+   "What this does not do" #5. The model is that document's and nothing here
+   changes it: a return is drawn from what was ACCEPTED (arrived − damaged),
+   `returned_qty` is the line's running total — a payload states where the line
+   now stands, never what to add — a reason is required from the five fixed
+   codes, and a return the shelf cannot cover is refused whole (return_blocked)
+   with nothing written. Offered only on a line whose arrival the server holds:
+   nothing can go back that has not come in. */
+const recvAccepted=it=>{ const w=rcvVal(it.id).was; return w&&w.recv!=null?Math.max(0,(Number(w.recv)||0)-(Number(w.dmg)||0)):0; };
+function recvXRefresh(poId){
+  return api('/purchases/'+poId).then(d=>{
+    const po=state.recvPo; if(!po||po.id!==poId||!d) return;
+    const by=new Map((d.items||[]).map(i=>[String(i.id),i]));
+    (po.items||[]).forEach(it=>{ const f=by.get(String(it.id)); if(!f) return;
+      ['returned_qty','return_reason','returned_at','tracking_number','invoice_status','no_invoice_expected'].forEach(k=>{ it[k]=f[k]; }); });
+    po.no_invoice_expected=d.no_invoice_expected; render();
+  }).catch(()=>{});
+}
+/* The desktop's words for a receive refusal (PU_RECEIVE_ERRORS), and the shelf
+   refusal with the goods named (puShowReturnBlocked), both locked pairs. */
+function recvXErrFor(e){
+  const c=e&&e.code, b=(e&&e.body)||{};
+  if(c==='return_blocked') return {title:T('Cannot record this return','无法登记此次退货'),
+    msg:T('Some of these goods are no longer in stock, so they cannot be sent back — nothing was changed.','部分货品已不在库存中，无法退货 — 未作任何更改。'),
+    rows:(b.blocking||[]).map(x=>[rcvName(x)||('#'+x.product_id),T(`${x.short} short`,`${x.short} 短少`)])};
+  const M={
+    return_before_receipt:['Nothing has arrived on that line yet, so nothing can go back. Record the delivery first.','该行尚未收货，无法退货。请先登记收货。'],
+    return_exceeds_received:['That is more than the line accepted. A return can only send back what was taken in.','退货数量超过该行实收数量。退货不能超过已接收的数量。'],
+    return_reason_required:['Pick a reason for the return','请选择退货原因'],
+    return_reason_invalid:['That return reason is not one this app knows. Reopen the order and try again.','该退货原因无效，请重新打开采购单后重试。'],
+    return_reason_not_applicable:['A reason belongs only on a line with a return.','只有退货的项才需要填写原因。'],
+    return_invalid:['That returned quantity is not a number.','退货数量无效。'],
+  };
+  if(M[c]) return {msg:T(...M[c])};
+  return {msg:recvErrText(e)};
+}
+function recvXWrite(kind,it,req,okMsg){
+  const po=state.recvPo; if(!po||state.recvXBusy) return;
+  const poId=po.id;
+  state.recvXBusy=kind+':'+it.id; state.recvXErr=null; render();
+  apiWrite(req[0],req[1],req[2]).then(()=>{
+    state.recvXBusy=null;
+    showToast(okMsg);
+    if(kind==='ret'){ state.rcvTried=false; state.rcvToTried=false; }   // the journal gains a return row
+    return recvXRefresh(poId);
+  }).catch(e=>{
+    state.recvXBusy=null;
+    if(String(e.message)==='auth') return;
+    state.recvXErr=Object.assign({line:String(it.id)},recvXErrFor(e)); render();
+  });
+}
+reg('recvTrack', (id,v)=>{
+  const po=state.recvPo, it=po&&(po.items||[]).find(x=>String(x.id)===String(id)); if(!it) return;
+  const val=String(v==null?'':v).trim();
+  if(val===String(it.tracking_number||'').trim()) return;
+  recvXWrite('trk',it,['/purchases/'+po.id+'/receive',{receipts:[{line_id:it.id,tracking_number:val}]},'PUT'],T('Tracking saved','运单号已保存'));
+});
+/* The line's 发票 mark saves on its own route, as the desktop's picker does
+   (puSaveLineInvoice) — never folded into a count. Its key is the Invoices
+   screen's, purchasing:invoices. */
+reg('recvInv', (id,v)=>{
+  const po=state.recvPo, it=po&&(po.items||[]).find(x=>String(x.id)===String(id)); if(!it) return;
+  if(!mCan('purchasing:invoices')||po.no_invoice_expected||!['not_received','received','no_invoice'].includes(v)) return;
+  const cur=it.no_invoice_expected?'no_invoice':(it.invoice_status||'not_received');
+  if(v===cur) return;
+  recvXWrite('inv',it,['/purchasing/po/'+po.id+'/line/'+it.id+'/invoice-status',{invoice_status:v},'PUT'],T('Invoice status saved','发票状态已保存'));
+});
+reg('recvReturn', id=>{
+  const po=state.recvPo, it=po&&(po.items||[]).find(x=>String(x.id)===String(id));
+  if(!it||!rcvBooked(it)||state.recvXBusy) return;
+  const had=Number(it.returned_qty)||0, acc=recvAccepted(it), unit=escAttr(it.unit||'');
+  state.askErr=null;
+  state.ask={title:T('Return','退货')+' · '+escAttr(rcvName(it)),
+    fields:[
+      {id:'qty',label:T('Returned','退货')+(unit?' ('+unit+')':''),value:had?rcvFmt(had):'',numeric:true,placeholder:'0'},
+      {id:'reason',label:T('Why?','原因？'),value:it.return_reason||'',
+       choices:[['',T('Why?','原因？')]].concat(RCV_RETURN_REASONS.map(r=>[r.key,T(r.en,r.zh)]))}],
+    confirmLabel:T('Save','保存'),
+    /* Caught here as well as on the server — the courtesy, not the rule: the
+       server still refuses both. */
+    validate:v=>{ const q=rcvNum(v.qty);
+      if(String(v.qty).trim()!==''&&!/^\s*\d*\.?\d+\s*$/.test(String(v.qty))) return T('That returned quantity is not a number.','退货数量无效。');
+      if(q>acc+1e-9) return T('That is more than the line accepted. A return can only send back what was taken in.','退货数量超过该行实收数量。退货不能超过已接收的数量。');
+      if(q>0&&!v.reason) return T('Pick a reason for the return','请选择退货原因');
+      return null; },
+    run:v=>{ const q=rcvNum(v.qty);
+      recvXWrite('ret',it,['/purchases/'+po.id+'/receive',{receipts:[{line_id:it.id,returned_qty:q,return_reason:q>0?v.reason:null}]},'PUT'],
+        T('Saved','已保存')); }};
+  render();
+});
+/* The block under a line: tracking, 发票, and what went back. */
+function rcvExtras(it){
+  const po=state.recvPo; if(!po) return '';
+  const busy=state.recvXBusy, mine=busy&&busy.split(':')[1]===String(it.id);
+  const err=state.recvXErr&&state.recvXErr.line===String(it.id)?state.recvXErr:null;
+  const inv=it.no_invoice_expected?'no_invoice':(it.invoice_status||'not_received');
+  const INV=[['not_received','Awaiting','待收'],['received','Received','已收'],['no_invoice','None','无发票']];
+  const invRow=po.no_invoice_expected
+    ?`<span style="font-size:13px;color:var(--text-secondary)">${T('None · whole order','无发票 · 整单')}</span>`
+    :mCan('purchasing:invoices')
+      /* A native select, as the desktop's picker is: three fixed answers, and
+         the platform's own wheel on a phone. */
+      ?`<select style="flex:1;min-width:0;height:40px;padding-top:0;padding-bottom:0" aria-label="${T('Invoice','发票')}" ${mine?'disabled':''} onchange="APP.cmd('recvInv','${it.id}',this.value)">${
+          INV.map(([k,en,zh])=>`<option value="${k}"${inv===k?' selected':''}>${T(en,zh)}</option>`).join('')}</select>`
+      :`<span style="font-size:13px;color:var(--text-secondary)">${T(...(INV.find(x=>x[0]===inv)||INV[0]).slice(1))}</span>`;
+  const ret=Number(it.returned_qty)||0;
+  const retLine=ret>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink)">${LANG==='en'
+      ?(rcvFmt(ret)+' '+escAttr(it.unit||'')+' sent back'):('退回 '+rcvFmt(ret)+' '+escAttr(it.unit||''))}${
+      it.return_reason?' · '+rcvReturnReason(it.return_reason):''}${it.returned_at?' · '+escAttr(fmtDateOnly(it.returned_at)):''}</div>`:'';
+  const retBtn=rcvBooked(it)&&recvAccepted(it)>0
+    ?`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13px" ${busy?'disabled':''} onclick="APP.cmd('recvReturn','${it.id}')">${ic('rotate-ccw',15)}${T('Return','退货')}</button>`:'';
+  return `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-default);display:flex;flex-direction:column;gap:10px">
+    <label style="display:flex;align-items:center;gap:10px"><span style="flex:none;font-size:13px;color:var(--text-secondary);min-width:64px">${T('Tracking no.','运单号')}</span>
+      <input value="${escAttr(it.tracking_number||'')}" style="flex:1;min-width:0" ${mine?'disabled':''} onchange="APP.cmd('recvTrack','${it.id}',this.value)"></label>
+    <div style="display:flex;align-items:center;gap:10px"><span style="flex:none;font-size:13px;color:var(--text-secondary);min-width:64px">${T('Invoice','发票')}</span>${invRow}</div>
+    ${retLine||retBtn?`<div style="display:flex;align-items:center;gap:10px;justify-content:space-between">${retLine||'<span></span>'}${retBtn}</div>`:''}
+    ${mine?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`:''}
+    ${err?`<div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;background:var(--brick-tint);font-size:13px;line-height:1.5">
+      ${err.title?`<span style="font-weight:500;color:var(--brick-ink)">${err.title}</span>`:''}<span style="color:var(--brick-ink)">${err.msg}</span>
+      ${(err.rows||[]).map(([n,v])=>`<span style="display:flex;justify-content:space-between;gap:10px;color:var(--brick-ink)"><span>${escAttr(n)}</span><span class="num">${escAttr(v)}</span></span>`).join('')}</div>`:''}</div>`;
+}
+/* THE DESKTOP'S RECEIVE NOTE, drawn here only once the order has a return on
+   it, because that is when its last clause — the money and the shelf both
+   come back — is news. Every clause is the desktop's (receiveNote), rendered
+   only when the lines earn it; an all-material order promises no stock. */
+function rcvReturnNote(po){
+  const items=(po&&po.items)||[];
+  if(!items.some(i=>Number(i.returned_qty)>0)) return '';
+  if(!items.some(i=>!i.ingredient_id&&i.store_product_id)) return '';
+  const chan=items.some(i=>i.channel_listed)?' '+T('and sync out to every sales channel.',',并同步到各销售渠道。'):'';
+  return `<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface-raised);font-size:13px;line-height:1.55">
+    <span style="flex:none;display:flex;color:var(--text-secondary);margin-top:2px">${ic('info',15)}</span>
+    <span><b style="font-weight:500">${T('Confirmed counts go into','确认的数量会自动计入')} ${escAttr(rcvStoreName({store_name_en:po.receiving_store_name_en||po.store_name_en,store_name_cn:po.receiving_store_name_cn||po.store_name_cn}))} ${T('stock by themselves','门店库存')}</b>${chan} ${
+      T('Damaged units are kept out of stock.','破损数量不计入库存。')} ${T('Returned units come back off both.','退货数量会从库存和支出中同时扣除。')}</span></div>`;
+}
 function rcvLine(it){
   const v=rcvVal(it.id), ord=rcvOrdered(it), sh=rcvShort(it), ov=rcvOver(it);
   const on=rcvOn(it), came=rcvCame(it), no=rcvNo(it);
@@ -10819,7 +10967,7 @@ function rcvLine(it){
         ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}
         ${noteRow}</span>
       <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${rcvFmt(ord)} ${escAttr(it.unit||'')}</span></div>
-    ${answer}${qty}${dmg}${note}${reasons}${undo}</div>`;
+    ${answer}${qty}${dmg}${note}${reasons}${undo}${rcvExtras(it)}</div>`;
 }
 /* The two whole-supplier answers, because those are the two things that happen
    to a whole supplier: the van came with everything on the list, or it did not
@@ -10981,6 +11129,7 @@ function screenReceive(){
     ${poNoteCard}
     ${allBtn}
     ${lines}
+    ${rcvReturnNote(po)}
     ${rcvSummary()}
     <div style="display:flex;flex-direction:column">${err}${warn}${done}
       ${status?`<span style="margin-top:10px">${status}</span>`:''}</div></div>`;
