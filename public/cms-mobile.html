@@ -260,6 +260,13 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 .pc-two .fld{flex:1;min-width:0;}
 .pc-hint{font:400 12px var(--f-sans);color:var(--text-3);line-height:1.45;margin:-6px 0 4px;}
 .pc-err{font:400 12.5px var(--f-sans);color:var(--danger);margin:0 0 10px;}
+.fld select{width:100%;background:var(--bg-input);border:1px solid var(--line);border-radius:var(--r-md);
+  padding:10px 12px;font:400 14px var(--f-sans);color:var(--text-1);}
+/* §325 — a read-only line that follows the linked coupon; every block's chrome */
+.ro-line{padding:10px 12px;border-radius:var(--r-md);background:var(--bg-elev-2);font:400 14px var(--f-sans);color:var(--text-2);line-height:1.4;}
+.chrome{margin-top:6px;padding-top:16px;border-top:1px solid var(--line-soft);}
+.chk{display:flex;align-items:center;gap:10px;min-height:44px;font:500 13.5px var(--f-sans);color:var(--text-1);cursor:pointer;}
+.chk input{width:20px;height:20px;accent-color:var(--accent);flex:0 0 auto;}
 .edit-foot{display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line-soft);flex:0 0 auto;}
 .edit-foot button{flex:1;height:44px;border-radius:var(--r-lg);font:600 14px var(--f-sans);cursor:pointer;}
@@ -577,6 +584,9 @@ const M = {
   editId: null,
   sheet: null,            // which bottom sheet is open ('add'|'edit'|'design'|'theme')
   design: null,           // last 'design' payload from the bridge (per-block colours)
+  extra: null,            // §325 — the bridge's facts beside the selected block (show_on, coupons)
+  frameColors: [],        // §325 — the inspector's Frame choices [{value,label,hex}]
+  corners: [],            // §325 — the inspector's Corner radius choices [{value,label}]
 };
 
 /* ── i18n chrome ──────────────────────────────────────────────────── */
@@ -609,6 +619,8 @@ window.addEventListener('message', (e) => {
     M.ready = true;
     M.pages = d.pages || [];
     M.palette = d.palette || [];
+    M.frameColors = d.frameColors || [];
+    M.corners = d.corners || [];
     if (d.page) M.page = d.page;
     if (d.lang) { M.lang = d.lang; try { localStorage.setItem(LANG_KEY, M.lang); } catch (e2) {} applyLang(); }
     buildPageMenu();
@@ -625,6 +637,7 @@ window.addEventListener('message', (e) => {
     updateActbar();
   } else if (d.evt === 'selected') {
     M.selectedBlock = d.block || null;
+    M.extra = d.extra || null;
     M.selectedId = M.selectedBlock ? M.selectedBlock.id : null;
     updateActbar();
     if (M.editId != null) {
@@ -654,6 +667,7 @@ window.addEventListener('message', (e) => {
   } catch (e) { gateError(e); return; }
 
   // Auth OK — show the editor, mount the real preview.
+  backDoor();
   $('#gate').hidden = true;
   $('#app').hidden = false;
   const f = $('#pv');
@@ -663,6 +677,25 @@ window.addEventListener('message', (e) => {
   tbInit();
 })();
 
+/* §325 — THE WAY BACK TO THE PHONE APP. The phone app's Editor screen opens
+   this page as /cms?from=m. An app added to the home screen has no browser
+   Back, so without this the editor was a room with no door out: the logo's
+   place becomes Back, which returns to the app (to the very screen when the
+   browser still holds it, else to the app's start). */
+function fromPhoneApp() {
+  try { return new URLSearchParams(location.search).get('from') === 'm'; } catch (e) { return false; }
+}
+function backDoor() {
+  if (!fromPhoneApp()) return;
+  const brand = document.querySelector('.topbar .brand'); if (!brand) return;
+  brand.innerHTML = '<button class="icon-btn" id="back-btn" onclick="backToApp()" aria-label="' + esc(cuT('Back', '返回')) + '" title="' + esc(cuT('Back', '返回')) + '">' + SV('m15 18-6-6 6-6') + '</button>';
+}
+function backToApp() {
+  let cameFromApp = false;
+  try { cameFromApp = !!document.referrer && new URL(document.referrer).origin === location.origin && new URL(document.referrer).pathname === '/m'; } catch (e) {}
+  if (cameFromApp && history.length > 1) history.back();
+  else location.href = '/m';
+}
 function gateLogin() {
   $('#gate-spin').hidden = true;
   $('#gate-title').textContent = cuT('Please sign in', '请先登录');
@@ -807,7 +840,11 @@ const F = {
   greeting:         [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
   countdown_timer:  [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['ends_at', 'Ends at', '结束时间', 0, 'datetime-local']],
   flash_sale_strip: [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  coupon_block:     [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['code', 'Coupon code', '优惠码'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  // §325 — the headline, subtitle, discount and code FOLLOW the linked coupon
+  // (desktop shows them read-only), so they are not typed here: the picker
+  // above the fields sets them. The small heading and the button are the
+  // operator's own words, as on desktop.
+  coupon_block:     [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
   points_widget:    [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
   top_up:           [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
   voting_block:     [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
@@ -845,6 +882,7 @@ function renderEdit() {
   } else if (type === 'promo_cards') {
     renderPromoEdit(body, blk);   // §299 — pictures, links and dates, on the phone
   } else if (fields && fields.length) {
+    if (type === 'coupon_block') renderCouponPick(body, blk);   // §325 — a real coupon, never a typed one
     fields.forEach(f => {
       const k = f[0], label = M.lang === 'cn' ? f[2] : f[1], ml = f[3], inputType = f[4] || 'text';
       const wrap = document.createElement('div'); wrap.className = 'fld';
@@ -867,6 +905,8 @@ function renderEdit() {
   // sits over the fields. Shown here instead of inline in the preview canvas.
   const note = M.lang === 'cn' ? (m.note_cn || m.note) : m.note;
   if (note) body.insertAdjacentHTML('afterbegin', '<div class="edit-note">' + esc(note) + '</div>');
+  // §325 — where it shows, its frame, corners and width: every block has them.
+  if (blk) renderChrome(body, blk);
   // Promo cards ARE pictures, edited right here — the "images are tuned on
   // desktop" note would tell the operator the opposite of what the sheet does.
   if (type === 'promo_cards') return;
@@ -874,6 +914,103 @@ function renderEdit() {
     '<div class="desk-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' +
     '<div>' + cuT('<b>Images, colours &amp; advanced options</b> for this block are tuned on desktop. ', '此模块的<b>图片、配色与高级选项</b>请在电脑上调整。') +
     '<a href="/cms?desktop=1">' + cuT('Open on a computer ↗', '在电脑上打开 ↗') + '</a></div></div>');
+}
+
+/* ── §325 · THE COUPON BLOCK'S PICKER, AND EVERY BLOCK'S CHROME ─────────
+   Two things the desktop inspector has that this sheet did not.
+
+   THE COUPON BLOCK HANDS OUT A REAL COUPON. The sheet used to take a typed
+   title, subtitle and code, which let a block advertise an offer no coupon
+   backs; desktop replaced those with a picker and shows the headline, the
+   subtitle, the discount and the code read-only, from the coupon. Picking one
+   here sends 'pickCoupon' and the bridge runs the desktop select's own
+   handler, so what gets copied onto the block is decided in one place.
+
+   SHOW ON (§272), FRAME, CORNER RADIUS, FULL WIDTH are on every block's
+   inspector ("Show on" and "Frame, radius & width"). Each one is a 'patch' of
+   exactly the field desktop writes, with desktop's value for "none" (the key
+   left out, never an empty string). The effective show_on and its type's
+   default come from the bridge (showOnFor / SHOW_ON_DEFAULTS), so a block
+   just added — which the server has not yet filled — reads the same here as
+   there. Every word is the inspector's own. */
+function pickLang(en, cn) {
+  const a = String(en || '').trim(), b = String(cn || '').trim();
+  return M.lang === 'cn' ? (b || a) : (a || b);
+}
+function labelSide(label) {   // "Lime · 青柠" → the side in the operator's language
+  const parts = String(label || '').split(' · ');
+  return parts.length > 1 ? (M.lang === 'cn' ? parts.slice(1).join(' · ') : parts[0]) : String(label || '');
+}
+function renderCouponPick(body, blk) {
+  const x = M.extra || {};
+  const coupons = Array.isArray(x.coupons) ? x.coupons : [];
+  const live = x.couponLive || null;
+  const pick = document.createElement('div'); pick.className = 'fld';
+  if (!coupons.length) {
+    pick.innerHTML = '<label>' + esc(cuT('Coupon', '优惠券')) + '</label><div class="pc-hint" style="margin:0">' +
+      esc(cuT('No coupons exist yet. Create one in the Mini App Backend → Marketing → Coupons, then pick it here.', '尚未创建优惠券。请到「小程序后台 → 营销 → 优惠券」中创建,然后在此处选择。')) + '</div>';
+  } else {
+    const cur = blk.voucher_id ? String(blk.voucher_id) : '';
+    const opt = (v, l) => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>';
+    pick.innerHTML = '<label>' + esc(cuT('Coupon', '优惠券')) + '</label><select data-a="coupon">' +
+      opt('', cuT('— Select a coupon —', '— 选择优惠券 —')) +
+      coupons.map(c => opt(String(c.id), (c.code || ('#' + c.id)) + (c.title_en ? ' — ' + c.title_en : ''))).join('') + '</select>' +
+      '<div class="pc-hint" style="margin:6px 0 0">' + esc(cuT('The real coupon this block hands out. Manage coupons in the Mini App Backend → Marketing.', '本区块发放的真实优惠券。请在「小程序后台 → 营销」中管理优惠券。')) + '</div>';
+    pick.querySelector('[data-a=coupon]').onchange = (e) => send('pickCoupon', { id: blk.id, voucherId: e.target.value || null });
+  }
+  body.appendChild(pick);
+  // The lines that follow the coupon, read-only, from the live coupon.
+  const ro = (label, hint, text) => {
+    const d = document.createElement('div'); d.className = 'fld';
+    d.innerHTML = '<label>' + esc(label) + '</label><div class="ro-line">' + esc(text) + '</div>' +
+      (hint ? '<div class="pc-hint" style="margin:6px 0 0">' + esc(hint) + '</div>' : '');
+    body.appendChild(d);
+  };
+  ro(cuT('Headline', '标题'), cuT('Follows the coupon — change it by editing the coupon’s name in Marketing.', '自动跟随优惠券 — 如需修改请在「营销」中编辑优惠券名称。'),
+    live ? pickLang(live.title_en, live.title_cn) : cuT('Pick a coupon above.', '请在上方选择优惠券。'));
+  if (live && (live.subtitle_en || live.subtitle_cn)) {
+    ro(cuT('Subtitle', '副标题'), cuT('Follows the coupon (min spend / expiry).', '自动跟随优惠券(最低消费 / 到期)。'), pickLang(live.subtitle_en, live.subtitle_cn));
+  }
+  ro(cuT('Discount & code', '折扣与券码'), '',
+    (live && (live.discount_label_en || live.code))
+      ? cuT('Big number: ', '左侧大号数字:') + (live.discount_label_en || '—') + (live.code ? '   ·   CODE: ' + live.code : '')
+      : cuT('Pick a coupon above to set the discount and code.', '请在上方选择优惠券以设置折扣与券码。'));
+}
+function renderChrome(body, blk) {
+  const x = M.extra || {};
+  const showOn = x.showOn || 'both';
+  const wrap = document.createElement('div'); wrap.className = 'chrome';
+  const opt = (v, l, cur) => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>';
+  const frame = blk.frame_color || '';
+  const corner = blk.corner_radius || 'subtle';
+  wrap.innerHTML =
+    '<div class="dgroup"><div class="t">' + esc(cuT('Show on', '显示位置')) + '</div>' +
+      '<div class="fld" style="margin-bottom:6px"><select data-a="showon">' +
+        opt('both', cuT('Mini app + website', '小程序 + 网页版'), showOn) +
+        opt('miniapp', cuT('Mini app only', '仅小程序'), showOn) +
+        opt('web', cuT('Website only', '仅网页版'), showOn) + '</select></div>' +
+      '<div class="pc-hint" style="margin:0">' + esc(cuT('Where customers see this block. The website is your shop in a browser; the mini app is your shop in WeChat.', '顾客在哪里看到本模块。网页版是浏览器里的商店,小程序是微信里的商店。')) + '</div>' +
+      (x.showOnDefault === 'miniapp' && showOn === 'miniapp'
+        ? '<div class="edit-note" style="margin:10px 0 0">' + esc(cuT('The website has no wallet, notifications or order pages yet, so this block is off there unless you turn it on.', '网页版暂无钱包、通知和订单页面,因此本模块默认不在网页版显示,除非你打开它。')) + '</div>' : '') +
+    '</div>' +
+    '<div class="dgroup"><div class="t">' + esc(cuT('Frame, radius & width', '边框、圆角与宽度')) + '</div>' +
+      '<div class="cfield"><div class="cflabel">' + esc(cuT('Frame', '边框')) + '</div>' +
+        '<div class="pc-hint" style="margin:-4px 0 8px">' + esc(cuT('Add a coloured outline around this block.', '为本模块添加彩色边框。')) + '</div>' +
+        '<div class="swatches">' +
+          '<div class="sw none' + (frame === '' ? ' on' : '') + '" data-frame="" title="' + esc(cuT('— none —', '— 无 —')) + '"></div>' +
+          (M.frameColors || []).map(c => '<div class="sw' + (c.value === frame ? ' on' : '') + '" data-frame="' + esc(c.value) + '" title="' + esc(labelSide(c.label)) + '"' +
+            (c.hex ? ' style="background:' + esc(c.hex) + '"' : '') + '></div>').join('') +
+        '</div></div>' +
+      '<div class="cfield"><div class="cflabel">' + esc(cuT('Corner radius', '圆角')) + '</div>' +
+        '<div class="pc-hint" style="margin:-4px 0 8px">' + esc(cuT('Sharp = square edges · Subtle = default · Bold = pronounced rounding.', '直角 = 方角 · 微圆角 = 默认 · 大圆角 = 明显圆角。')) + '</div>' +
+        '<div class="vchips">' + (M.corners || []).map(c => '<button class="vchip' + (c.value === corner ? ' on' : '') + '" data-corner="' + esc(c.value) + '">' + esc(labelSide(c.label)) + '</button>').join('') + '</div></div>' +
+      '<label class="chk"><input type="checkbox" data-a="bleed"' + (blk.full_bleed === true ? ' checked' : '') + '><span>' + esc(cuT('Stretch full width (edge to edge)', '拉伸至全宽（贴合屏幕两侧）')) + '</span></label>' +
+    '</div>';
+  wrap.querySelector('[data-a=showon]').onchange = (e) => send('patch', { id: blk.id, patch: { show_on: e.target.value } });
+  wrap.querySelectorAll('[data-frame]').forEach(sw => { sw.onclick = () => send('patch', { id: blk.id, patch: { frame_color: sw.dataset.frame || undefined } }); });
+  wrap.querySelectorAll('[data-corner]').forEach(ch => { ch.onclick = () => send('patch', { id: blk.id, patch: { corner_radius: ch.dataset.corner } }); });
+  wrap.querySelector('[data-a=bleed]').onchange = (e) => send('patch', { id: blk.id, patch: { full_bleed: e.target.checked ? true : undefined } });
+  body.appendChild(wrap);
 }
 
 /* ── §299 · PROMO CARDS, ON THE PHONE ─────────────────────────────────

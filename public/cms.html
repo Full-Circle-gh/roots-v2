@@ -15913,7 +15913,21 @@ document.addEventListener('keydown', (e) => {
     evt: 'state', page: state.page, lang: state.lang, dirty: !!state.dirty,
     saving: !!state.saving, blocks: outline(), selectedId: state.selectedId,
   });
-  const postSelected = () => POST({ evt: 'selected', block: selectedBlock() });
+  // §325 — what the phone's edit sheet needs beside the block itself, worked
+  // out HERE so the phone never keeps a second copy of a desktop rule: the
+  // block's effective `show_on` and its type's default (§272), and for a
+  // coupon block the active coupons it may link and what the linked one shows
+  // today (liveCouponDisplay — the same read-only lines the inspector draws).
+  const selectedExtra = (b) => {
+    if (!b) return null;
+    const x = { showOn: showOnFor(b), showOnDefault: SHOW_ON_DEFAULTS[b.type] || 'both' };
+    if (b.type === 'coupon_block') {
+      x.coupons = (state.vouchers || []).map(v => ({ id: v.id, code: v.code || '', title_en: v.title_en || '' }));
+      x.couponLive = liveCouponDisplay(b);
+    }
+    return x;
+  };
+  const postSelected = () => { const b = selectedBlock(); POST({ evt: 'selected', block: b, extra: selectedExtra(b) }); };
   // Per-block colour controls for the mobile Design sheet. state.designFields is
   // rebuilt by renderInspector() on every render (preview embed only); we strip
   // the live onChange refs (not serialisable) and index each field so the shell
@@ -15939,6 +15953,10 @@ document.addEventListener('keydown', (e) => {
     POST({
       evt: 'ready',
       pages: PAGES.map(p => ({ id: p.id, name: p.name, cn: p.cn })),
+      // §325 — the universal Frame and Corner radius choices, from the
+      // inspector's own option lists, with each colour's swatch.
+      frameColors: BRAND_COLOR_OPTIONS.map(o => ({ value: o.value, label: o.label, hex: dcResolveHex(o.value) || null })),
+      corners: CORNER_RADIUS_OPTIONS.map(o => ({ value: o.value, label: o.label })),
       page: state.page, lang: state.lang, palette: palette(),
     });
     postState();
@@ -15968,6 +15986,14 @@ document.addEventListener('keydown', (e) => {
         case 'duplicate':  duplicateBlock(d.id); break;
         case 'delete':     deleteBlock(d.id); break;            // self-confirms
         case 'patch':      updateBlockSilent(d.id, d.patch || {}); break;
+        // §325 — the coupon block's picker, exactly as the inspector's select:
+        // none unlinks, a coupon fills the block from that coupon.
+        case 'pickCoupon': {
+          if (!d.voucherId) { updateBlock(d.id, { voucher_id: null }); break; }
+          const v = (state.vouchers || []).find(x => String(x.id) === String(d.voucherId));
+          if (v) updateBlock(d.id, couponDisplayFromVoucher(v));
+          break;
+        }
         case 'switchPage': await switchPage(d.page); postReady(); break;
         case 'setLang':    if (d.lang && d.lang !== state.lang) cmsToggleLang(); break;
         case 'save':       saveDraft(); break;

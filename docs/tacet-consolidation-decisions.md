@@ -22828,3 +22828,59 @@ put to him after the §325 survey). Each overturns or settles a named hold.
 9. **A receive-only account may NOT mark a draft purchase order Delivered**
    (§302 item 7): only an order already placed (Ordered) can be marked
    Delivered by `purchasing:receive` alone.
+
+## §327 — THE PHONE APP OPENS THE PAGE EDITOR, AND THE PHONE EDITOR GAINS WHAT EVERY DESKTOP BLOCK HAS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone app's Editor screen listed a page's live blocks and said that
+placing, editing and publishing were done on desktop. They were not: `/cms`
+answers a phone with the phone editor (`cms-mobile.html`), which already
+places, edits and publishes — but nothing in the phone app led there. The
+Editor screen now has the door, and the phone editor gains the four controls
+at the foot of every desktop inspector and the coupon block's picker. Pictures,
+video, button links and the block pickers are the next two steps, not this one.
+
+1. **The door is the Editor screen's header button, *Open page editor*.** It
+   leaves the app for `/cms?from=m` (the app's existing `leave` command, same
+   host only). It is drawn for `content:edit`, the key the editor's own gate
+   admits; the server lane's rule for `/cms/*` is the wider any-of
+   `content:edit` / `editor:edit`, but a button that opens onto "no permission"
+   is worse than none, so the door follows the page it opens. Widening that
+   gate to `editor:edit` is a separate question, not taken here.
+2. **The editor has a way back.** Opened with `?from=m`, the logo's place in
+   its top bar becomes Back: to the very screen when the browser still holds
+   it, else to `/m`. An app added to the home screen has no browser Back, so
+   without it the door led into a room with no way out. Opened any other way,
+   nothing changes.
+3. **The screen stops saying the work is desktop-only.** The dirty card keeps
+   its first sentence and drops "Publishing is on desktop"; the foot note
+   "Blocks are placed, edited and published on desktop" is gone.
+4. **The page names are the editor's own** (`cms.html` `PAGES`, in its order):
+   *Shop landing · 商品* (was *Categories · 分类*, the name §296 retired),
+   *Promotions · 优惠* (was 促销), *Onboarding · 欢迎* (was 引导). A list that
+   names a page differently from the editor it opens sends an operator looking
+   for a page that is not there.
+5. **Show on (§272), Frame, Corner radius and Full width are on every block's
+   edit sheet**, promo cards included, in the inspector's words and order. Each
+   sends exactly the field desktop writes, with desktop's "none" (the key left
+   undefined, never an empty string). The effective *Show on* and its type's
+   default come from the desktop editor underneath (`showOnFor` /
+   `SHOW_ON_DEFAULTS`), so a block just added reads the same on both, and the
+   phone keeps no second copy of that table. The Frame and Corner lists are
+   the inspector's own, sent once when the editor is ready.
+6. **The coupon block hands out a real coupon.** The sheet used to take a
+   typed title, subtitle and code, which let a block advertise an offer no
+   coupon backs. It now has the desktop's picker (active coupons, *— Select a
+   coupon —* to unlink) and shows the headline, subtitle, discount and code
+   read-only from the linked coupon. Picking sends `pickCoupon`, and the
+   desktop editor underneath runs its own select's handler
+   (`couponDisplayFromVoucher`), so what is copied onto the block is decided
+   in one place. The small heading and the button text stay typed, as on
+   desktop.
+7. **No new server route.** Everything rides the phone editor's existing
+   bridge into `cms.html` (three additive fields and one command, active only
+   in `?embed=preview`).
+8. **Not done here**: pictures, video and button links (M2); product,
+   category, coupon, poll, store and review pickers, sizes and behaviour,
+   onboarding settings (M3). The "Images, colours & advanced options are tuned
+   on desktop" note stays until those land.
