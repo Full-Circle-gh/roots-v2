@@ -14480,7 +14480,11 @@ function rcpMeta(x){
    string has no slot for one. The missing-cost count is the desktop's own
    sentence up to its dash — the clause after it, "costs shown are too low",
    is about a cost figure, and this row shows none. */
-const rcpMissingText = n => T(`${n} ingredient${n===1?'':'s'} missing cost`, `${n} 项原料缺少成本`);
+/* With the cost ON SCREEN (§300 R3) the sentence is the desktop's whole one —
+   the figure beside it is too low, and it says so. */
+const rcpMissingText = (n, full) => full
+  ? T(`${n} ingredient${n===1?'':'s'} missing cost — costs shown are too low`, `${n} 项原料缺少成本 — 显示成本偏低`)
+  : T(`${n} ingredient${n===1?'':'s'} missing cost`, `${n} 项原料缺少成本`);
 /* Why a recipe that backs a material has its cost frozen — the desktop's
    BLOCK_REASON, one for one, which mirrors the reasons lib/recipe-rollup.js
    returns, so this can never say something the rollup would disagree with. */
@@ -14498,7 +14502,7 @@ function rcpRowFlags(x){
   const pills=[], notes=[];
   if(x.backsMaterial) pills.push(pill(rcpBlocked(x)?'restock':'draft', T('Material','物料')));
   if(Number(x.unreconciledUnitLines)>0) pills.push(pill('restock', T('UNIT MISMATCH','单位不符')));
-  if(Number(x.zeroCostIngredientLines)>0) notes.push(rcpMissingText(Number(x.zeroCostIngredientLines)));
+  if(Number(x.zeroCostIngredientLines)>0) notes.push(rcpMissingText(Number(x.zeroCostIngredientLines), rcpRowMoney(x)));
   if(rcpBlocked(x)) notes.push(rcpBlockText(x.materialBlock.reason, x.materialBlock.unpriced));
   return (pills.length?`<span style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">${pills.join('')}</span>`:'')
     + notes.map(t=>`<span style="font-size:13px;line-height:1.45;color:var(--amber-ink)">${escAttr(t)}</span>`).join('');
@@ -14565,6 +14569,7 @@ function rcpBodyHtml(){
           ${rcpMeta(x)?`<span class="num" style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcpMeta(x))}</span>`:''}
           ${rcpRowFlags(x)}
         </span>
+        ${rcpRowCost(x)}
         <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>
       </button>`;}).join('')}</div>`:''}
     </div>`;
@@ -14683,7 +14688,7 @@ const rcpLineOther = l => { const o=String((LANG==='en'?l.name_cn:(l.name_en||l.
    counts are the SERVER's (rec.cost keeps them for everybody); no amount. */
 function rcpRecWarns(rec){
   const c=(rec&&rec.cost)||{}, out=[];
-  if(Number(c.zeroCostIngredientLines)>0) out.push(rcpMissingText(Number(c.zeroCostIngredientLines)));
+  if(Number(c.zeroCostIngredientLines)>0) out.push(rcpMissingText(Number(c.zeroCostIngredientLines), rcpRecMoney(rec)));
   if(Number(c.unreconciledUnitLines)>0) out.push(T('UNIT MISMATCH','单位不符'));
   return out.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink)">
     <span style="flex:none;display:flex">${ic('triangle-alert',17)}</span><span style="flex:1;min-width:0;font-size:13.5px;line-height:1.45">${escAttr(t)}</span></div>`).join('');
@@ -14700,6 +14705,9 @@ function rcpMakesHtml(rec){
   const ps=(rec&&Array.isArray(rec.products))?rec.products:[];
   if(!ps.length) return '';
   const many=ps.length>1;
+  /* The margin beside each of several products — the cost by subtraction, so
+     only where the cost itself may be shown (§300 R3). */
+  const withCost=many&&rcpRecMoney(rec);
   const canOpen=canRoute('products');
   const rows=ps.map((p,i)=>{
     const nm=T(p.name_en||p.name_cn||'', p.name_cn||p.name_en||'')||T('Untitled product','未命名产品');
@@ -14711,6 +14719,7 @@ function rcpMakesHtml(rec){
         <span style="font-size:15px">${escAttr(nm)}</span>
         ${p.size?`<span class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(p.size)}</span>`:''}</span>
       ${many?`<span class="num" style="flex:none;font-size:15px">${Number(p.sell_price)>0?escAttr(money(CUR,p.sell_price)):'—'}</span>`:''}
+      ${withCost?rcpMakesMargin(p):''}
       ${hit?`<span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>`:''}`;
     return `${i?'<div class="sep"></div>':''}${hit
       ? `<button class="row" onclick="APP.cmd('rcpProduct',${Number(p.id)})" style="min-height:52px;align-items:center">${inner}</button>`
@@ -14718,7 +14727,7 @@ function rcpMakesHtml(rec){
   }).join('');
   return `<div style="display:flex;flex-direction:column;gap:8px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 4px">
-      <span class="eyebrow">${T('Makes','产出')}</span>${many?`<span class="eyebrow">${T('Sells','售价')}</span>`:''}</div>
+      <span class="eyebrow">${T('Makes','产出')}</span>${many?`<span class="eyebrow">${T('Sells','售价')}${withCost?' · '+T('Margin','毛利'):''}</span>`:''}</div>
     <div class="list">${rows}</div></div>`;
 }
 /* The material this recipe stocks as — "internal plumbing", as the desktop's
@@ -14730,7 +14739,7 @@ function rcpMaterialHtml(rec){
   const blocked=rcpBlocked(rec);
   const nm=T(m.name_en||m.name_cn||'', m.name_cn||m.name_en||'');
   return `<div class="card" style="padding:13px 16px;font-size:14px;line-height:1.55;${blocked?'background:var(--amber-tint);color:var(--amber-ink)':''}">
-    ${T('Also stocked as a material: ','同时作为物料备货:')}<b style="font-weight:600">${escAttr(nm)}</b>${blocked
+    ${T('Also stocked as a material: ','同时作为物料备货:')}<b style="font-weight:600">${escAttr(nm)}</b>${rcpMaterialRate(rec)}${blocked
       ?` — ${T('frozen at its last computed value.','已冻结为最近一次计算的值。')} ${escAttr(rcpBlockText(rec.materialBlock.reason, rec.materialBlock.unpriced))}`:''}</div>`;
 }
 /* The Details tab — what the desktop's Details sheet holds, as facts. Each is
@@ -14775,16 +14784,12 @@ function screenRecipeOne(){
      desktop's Details sheet holds — the other name, SKU, category, type,
      batch, servings, serving size, shelf life, storage, notes — and what the
      recipe becomes. */
-  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
-    ${[['ingredients','Ingredients','原料',lines.length],['steps','Steps','步骤',steps.length],['details','Details','基本信息',0]].map(([k,en,zh,n])=>{
-      const on=r.tab===k;
-      return `<button onclick="APP.cmd('rcpTab','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
-        font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
-        box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}${n?` <span class="num" style="font-size:12px;opacity:.7">${n}</span>`:''}</button>`;
-    }).join('')}</div>`;
+  const withMoney=rcpRecMoney(rec);
+  const strip=rcpTabStrip(lines.length, steps.length, withMoney);
 
   const made=rcpMadeBy();
-  const body=r.tab==='details' ? rcpDetailsHtml(rec)
+  const body=(r.tab==='cost'&&withMoney) ? rcpCostReadHtml(rec)
+    : r.tab==='details' ? rcpDetailsHtml(rec)
     : r.tab==='steps'
     ? (!steps.length
         ? `<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('None','无')}</div>`
@@ -14813,17 +14818,18 @@ function screenRecipeOne(){
                   ${subId!=null?pill('draft',T('Recipe','食谱')):''}
                   ${bad?pill('restock',T('UNIT MISMATCH','单位不符')):''}</span>
                 ${meta?`<span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(meta)}</span>`:''}
+                ${rcpLineMoneyHtml(rcpLineMoney(l, l))}
                 ${l.ingredient_id==null?`<span style="font-size:12.5px;color:var(--amber-ink)">${T('material deleted','物料已删除')}</span>`:''}
                 ${bad?`<span style="font-size:12.5px;line-height:1.5;color:var(--amber-ink)">${escAttr(rcpMismatchText(l))}</span>`:''}
               </span>
-              <span class="num" style="flex:none;font-size:15px;font-weight:500">${escAttr(rcpNum(l.qty))} ${escAttr(l.unit||'g')}</span>
+              ${rcpLineQtyHtml(l, rcpLineMoney(l, l))}
               ${subId!=null?`<span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>`:''}`;
             return `${i?'<div class="sep"></div>':''}${subId!=null
               ? `<button class="row" onclick="APP.cmd('rcpOpenSub',${subId})" style="min-height:52px;align-items:center;gap:14px">${inner}</button>`
               : `<div style="display:flex;align-items:center;gap:14px;min-height:52px;padding:11px 16px">${inner}</div>`}`;
           }).join('')}</div>`);
 
-  const warns=rcpRecWarns(rec);
+  const warns=(withMoney?rcpSumWrap(rcpSummaryHtml(rec, rec.cost)):'')+rcpRecWarns(rec);
   return (warns?`<div style="padding:12px 16px 0;display:flex;flex-direction:column;gap:8px">${warns}</div>`:'')
     + strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
     ${body}
@@ -15030,6 +15036,262 @@ reg('rcpPrintNow', ()=>{
   window.print();
 });
 
+/* ── Cost & pricing (§300 step R3) ─────────────────────────────────────────
+   Every figure of money the desktop Recipes screen shows, shown here to
+   exactly the people the desktop shows it to: the list's cost and cost per
+   gram, the record's summary strip (batch cost, the per-unit cost, and for a
+   recipe that makes one product, its price and margin), each ingredient line's
+   cost and rate with "no cost" where it has none, the Cost & Pricing tab with
+   its four inputs and the breakdown, the margin beside each of several
+   products, and the linked material's rate.
+
+   FAILS CLOSED, TWICE. The capability first: mCan('recipes:costs') answers no
+   while the caps are loading (MCAN_MONEY_ONLY, §300's fix), and a warehouse,
+   dispatch or customer-service board never sees money on the phone
+   (recapNoMoney, the Recap's rule). Then the data: a figure is drawn only when
+   the server actually SENT it — lib/recipe-cost-visibility.js deletes every
+   cost key for a caller without the capability, and a key that is not there
+   draws nothing rather than a zero. A cap list that says yes over a payload
+   that says no is a stale cap list, and the payload wins.
+
+   ALL OF IT LIVES IN THIS BLOCK. The rest of the recipes code calls these
+   functions and reads no cost key itself — scripts/test_mobile_recipes.js
+   holds it to that — so there is one place to read to learn what money this
+   screen can show and to whom. */
+function rcpMoney(){ return mCan('recipes:costs') && !recapNoMoney(); }
+const rcpHas = (o,k) => !!o && typeof o==='object' && Object.prototype.hasOwnProperty.call(o,k);
+/* The record's figures are the server's, and only if it sent them. */
+function rcpRecMoney(rec){ return rcpMoney() && !!rec && rcpHas(rec.cost,'batchCost'); }
+const rcpRowMoney = x => rcpMoney() && rcpHas(x,'batchCost');
+/* Cost PER GRAM is often sub-cent (¥0.0114); at the currency's own places it
+   rounds to ¥0.01 for everything. Two places beyond, the desktop's moneyU. */
+const rcpMoneyU = n => (CUR||'¥')+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:4,maximumFractionDigits:4});
+/* The desktop's _paMargin (09-products.js): gross on price, null when either
+   side is unknown — every caller draws null as an em dash, never 0%. */
+function rcpMargin(price, cost){
+  if(cost==null||cost==='') return null;
+  const p=Number(price), c=Number(cost);
+  if(!Number.isFinite(p)||p<=0||!Number.isFinite(c)||c<0) return null;
+  return {money:p-c, pct:((p-c)/p)*100};
+}
+/* One typographic minus on both halves of a negative margin (pctTxt). */
+const rcpPct = m => (m.money<0?'−':'')+Math.abs(m.pct).toFixed(1)+'%';
+const rcpSignedMoney = v => (v<0?'−':'')+money(CUR,Math.abs(v));
+/* The list row's figure: cost per serving when servings is recorded, else the
+   whole batch, marked so; and cost per gram under it — the figure a made
+   material inherits, the desktop's two columns. */
+function rcpRowCost(x){
+  if(!rcpRowMoney(x)) return '';
+  const top=x.costPerServing!=null
+    ? `${escAttr(money(CUR,x.costPerServing))}<span style="font-size:12px;font-weight:400;color:var(--text-secondary)">/${T('serving','份')}</span>`
+    : `${escAttr(money(CUR,x.batchCost))} <span style="font-size:12px;font-weight:400;color:var(--text-secondary)">${T('(batch)','(整批)')}</span>`;
+  return `<span class="num" style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+    <span style="font-size:15px;font-weight:500">${top}</span>
+    ${x.costPerGram!=null?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(rcpMoneyU(x.costPerGram))}/g</span>`:''}</span>`;
+}
+/* A line's cost and its material's rate — lineCostText()/linePerText(). `rate`
+   is {master_cost, master_free}; a rate the server did not send draws nothing. */
+function rcpLineMoney(l, rate){
+  if(!rcpMoney()||!rate||!rcpHas(rate,'master_cost')) return null;
+  const free=!!rate.master_free, has=Number(rate.master_cost)>0||free;
+  return {
+    cost: free?T('free','免费'):(has?money(CUR,(Number(l.qty)||0)*Number(rate.master_cost)):'—'),
+    per: free?T('free','免费'):(has?rcpMoneyU(rate.master_cost)+'/'+(rate.master_unit||l.master_unit||l.unit||''):T('no cost','无成本')),
+    none: !has,
+  };
+}
+function rcpLineMoneyHtml(lm){
+  if(!lm) return '';
+  return `<span style="font-size:12.5px;${lm.none?'color:var(--amber-ink)':'color:var(--text-secondary)'}">${escAttr(lm.per)}</span>`;
+}
+/* THE SUMMARY STRIP — summaryFacts()/paintSummary(). Batch cost and the
+   per-unit cost always; with ONE product, its price and a margin that is a fact
+   about THIS recipe: the product's own when it still takes its cost from the
+   recipe, else the recipe's own sell price against its own cost per serving,
+   labelled so — a product with a build list has a cost this recipe had no part
+   in, and printing its margin here read as one arc when the two disagreed 37×. */
+function rcpSummaryHtml(rec, c){
+  const prods=(rec&&Array.isArray(rec.products))?rec.products:[];
+  const solo=prods.length===1?prods[0]:null;
+  const owned=solo?!(Number(solo.build_line_count)>0):false;
+  const soloM=(solo&&owned)?rcpMargin(solo.sell_price, solo.unit_cost):null;
+  const recM=(!owned&&c.marginPerServing!=null&&c.sellPrice>0&&c.costPerServing!=null)
+    ? {money:c.marginPerServing, pct:((c.sellPrice-c.costPerServing)/c.sellPrice)*100} : null;
+  const showM=soloM||recM;
+  const mLbl=recM&&!soloM?T('Margin (recipe)','毛利(食谱)'):T('Margin','毛利');
+  const primary=c.costPerServing!=null ? [T('Cost per serving','每份成本'), money(CUR,c.costPerServing)]
+    : (c.costPerGram!=null ? [T('Cost per gram','每克成本'), rcpMoneyU(c.costPerGram)] : null);
+  const cell=(k,v,tone)=>`<div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${k}</span>
+      <span class="num" style="font-size:17px;font-weight:500;${tone?'color:'+tone:''}">${v}</span></div>`;
+  const cells=[cell(T('Batch cost','整批成本'), escAttr(money(CUR,c.batchCost)))];
+  cells.push(primary?cell(primary[0], escAttr(primary[1]))
+    : `<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:12.5px;color:var(--text-secondary)">${T('Per-unit cost','单位成本')}</span>
+        <span style="font-size:13px;color:var(--text-secondary)">${T('No batch size or servings recorded','未记录批量大小或份数')}</span></div>`);
+  if(solo){
+    cells.push(cell(T('Sells for','售价'), Number(solo.sell_price)>0?escAttr(money(CUR,solo.sell_price)):'—'));
+    cells.push(cell(mLbl, showM?`${escAttr(rcpSignedMoney(showM.money))} <span style="font-size:13px">${rcpPct(showM)}</span>`:'—',
+      showM&&showM.money<0?'var(--brick-ink)':''));
+  }
+  /* Selling below cost is an error, not a warning, and it is said in words — a
+     minus sign on a figure is easy to skim past. */
+  const below=soloM&&soloM.money<0
+    ? `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink)">
+        <span style="flex:none;display:flex">${ic('triangle-alert',17)}</span><span style="font-size:13.5px">${T('Selling below cost','低于成本销售')}</span></div>` : '';
+  return `<div class="card" style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:14px 16px">${cells.join('')}</div>${below}`;
+}
+/* The breakdown — breakdownHtml(). The struck "packaging — no longer counted"
+   row is not drawn: the desktop paints this block from its live draft, which
+   never carries packaging, so that row does not appear there either. */
+function rcpBreakdownHtml(c){
+  const row=(k,v,strong)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--border-default)">
+    <span style="font-size:14.5px;${strong?'font-weight:500':'color:var(--text-secondary)'}">${k}</span><span class="num" style="font-size:14.5px;font-weight:${strong?'600':'500'}">${v}</span></div>`;
+  return `<div id="mRcpBk" class="card" style="padding:4px 16px 6px">
+    ${row(T('Ingredient cost','原料成本'), escAttr(money(CUR,c.ingredientCost)))}
+    ${row(T('Labour','人工'), escAttr(money(CUR,c.labour)))}
+    ${row(T('Overhead','管理费用'), escAttr(money(CUR,c.overheadAmount)))}
+    ${row(T('Batch cost','整批成本'), escAttr(money(CUR,c.batchCost)), true)}
+    ${row(T('Cost per serving','每份成本'), c.costPerServing!=null?escAttr(money(CUR,c.costPerServing)):'— '+T('(no servings)','(未记录份数)'))}
+    ${row(T('Cost per gram','每克成本'), c.costPerGram!=null?escAttr(rcpMoneyU(c.costPerGram)):'— '+T('(no batch size)','(未记录批量)'))}
+    ${c.sellPrice>0?row(T('Margin per serving','每份毛利'), c.marginPerServing!=null?escAttr(money(CUR,c.marginPerServing)):'—'):''}
+    ${c.sellPrice>0?row(T('Food cost %','食品成本率'), c.foodCostPct!=null?Number(c.foodCostPct).toFixed(1)+'%':'—'):''}
+    ${row(T('Suggested sell price','建议售价'), c.suggestedSellPrice!=null?escAttr(money(CUR,c.suggestedSellPrice)):'—')}
+  </div>`;
+}
+/* The Cost & Pricing tab, read: the four inputs as they are stored, then the
+   server's breakdown. */
+function rcpCostReadHtml(rec){
+  const cd=rec.costData||{}, c=rec.cost||{};
+  const kv=[[T('Labour','人工'), escAttr(money(CUR,cd.labour||0))],
+    [T('Overhead %','管理费用 %'), (Number(cd.overhead_pct)||0)+'%'],
+    [T('Sell price','售价'), escAttr(money(CUR,cd.sell_price||0))],
+    [T('Target food cost %','目标食品成本 %'), (cd.target_food_cost==null?30:Number(cd.target_food_cost))+'%']];
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <span class="eyebrow">${T('Inputs','成本输入')}</span>
+      ${kv.map(([k,v])=>`<div style="display:flex;justify-content:space-between;gap:12px"><span style="font-size:14.5px;color:var(--text-secondary)">${k}</span><span class="num" style="font-size:14.5px;font-weight:500">${v}</span></div>`).join('')}
+    </div>${rcpBreakdownHtml(c)}`;
+}
+/* The record's tab strip, read or editing. Cost & Pricing is a fourth tab only
+   where money may be shown; a record left on it when it may not falls back to
+   Ingredients rather than onto a tab it cannot draw (the desktop's subtabSafe). */
+function rcpTabStrip(nI, nS, money){
+  const r=state.rcp;
+  if(r.tab==='cost'&&!money) r.tab='ingredients';
+  const tabs=[['ingredients','Ingredients','原料',nI],['steps','Steps','步骤',nS],['details','Details','基本信息',0]]
+    .concat(money?[['cost','Cost & Pricing','成本与定价',0]]:[]);
+  return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
+    ${tabs.map(([k,en,zh,n])=>{
+      const on=r.tab===k;
+      return `<button onclick="APP.cmd('rcpTab','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
+        font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
+        box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}${n?` <span class="num" style="font-size:12px;opacity:.7">${n}</span>`:''}</button>`;
+    }).join('')}</div>`;
+}
+/* A read line's right-hand column: the amount, and under it what that amount
+   costs where cost may be shown. */
+function rcpLineQtyHtml(l, lm){
+  return `<span class="num" style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+    <span style="font-size:15px;font-weight:500">${escAttr(rcpNum(l.qty))} ${escAttr(l.unit||'g')}</span>
+    ${lm?`<span style="font-size:13px;${lm.none?'color:var(--amber-ink)':'color:var(--text-secondary)'}">${escAttr(lm.cost)}</span>`:''}</span>`;
+}
+function rcpMakesMargin(p){
+  const m=rcpMargin(p.sell_price, p.unit_cost);
+  return `<span class="num" style="flex:none;min-width:72px;text-align:right;font-size:13px;${m?(m.money<0?'color:var(--brick-ink)':''):'color:var(--text-secondary)'}">${m?escAttr(rcpSignedMoney(m.money))+' '+rcpPct(m):'—'}</span>`;
+}
+/* The linked material's rate, the desktop's materialHtml() money half. */
+function rcpMaterialRate(rec){
+  const m=rec&&rec.backsMaterial;
+  if(!rcpRecMoney(rec)||!rcpHas(m,'cost_per_unit')) return '';
+  const cpu=Number(m.cost_per_unit);
+  return ' — '+escAttr(cpu>0?rcpMoneyU(cpu)+'/'+(m.unit||'g'):T('not yet costed','尚未计算成本'));
+}
+/* ── The cost half of the editor ──────────────────────────────────────────
+   LOADED ONLY WHERE IT IS SHOWN, SENT ONLY WHERE IT WAS LOADED. The draft
+   carries `cost` (the four inputs, as the tab shows them) and `rates` (each
+   line's material rate, for the live figures) only when this reader may see
+   money AND the server sent it; otherwise both are null, there is no Cost tab,
+   and no cost request is ever made — §164's addendum, which is the whole
+   reason R2 made none. The inputs are sent as the desktop's draftCostData()
+   sends them: four keys, parsed the same way (an empty labour is 0, an empty
+   target is 30), and NO `packaging` key — lib/recipe-cost-data-write.js keeps a
+   stored packaging only when the key is absent. */
+function rcpCostDraft(rec){
+  const cd=(rec&&rec.costData)||{}, s=v=>v==null?'':String(v);
+  return {labour:s(cd.labour), overhead_pct:s(cd.overhead_pct), sell_price:s(cd.sell_price),
+    target_food_cost:cd.target_food_cost==null?'30':s(cd.target_food_cost)};
+}
+function rcpRatesFrom(lines){
+  const out={};
+  (lines||[]).forEach(l=>{ if(l&&l.ingredient_id!=null&&rcpHas(l,'master_cost'))
+    out[l.ingredient_id]={master_cost:l.master_cost, master_free:l.master_free, master_unit:l.master_unit}; });
+  return out;
+}
+function rcpCostPayload(d){
+  const c=d.cost;
+  return {labour:parseFloat(c.labour)||0, overhead_pct:parseFloat(c.overhead_pct)||0,
+    sell_price:parseFloat(c.sell_price)||0, target_food_cost:parseFloat(c.target_food_cost)||30};
+}
+/* The live figures, from the one shared derivation — computeRecipeCost with
+   the draft's details, its lines with their rates, and its cost inputs. */
+function rcpLiveCost(d){
+  const C=window.RootsRecipeCost;
+  if(!d||!d.cost||!C||typeof C.computeRecipeCost!=='function') return null;
+  const rates=d.rates||{};
+  return C.computeRecipeCost({
+    recipe:{batch_size:d.batch_size||null, servings:d.servings||null, serving_size:d.serving_size||null,
+      batch_size_auto:d.batch_size_auto, servings_auto:d.servings_auto},
+    ingredients:d.lines.map(l=>Object.assign({}, l, rates[l.ingredient_id]||{master_cost:0})),
+    costData:rcpCostPayload(d)});
+}
+/* The record the draft belongs to — its products decide the strip's price and
+   margin. A new recipe makes nothing yet. */
+function rcpEdRec(d){ const r=state.rcp; return (d.id!=null&&r.rec&&Number(r.rec.id)===Number(d.id))?r.rec:{}; }
+/* The strip, wrapped so it can be repainted in place. */
+const rcpSumWrap = inner => `<div id="mRcpSum" style="display:flex;flex-direction:column;gap:8px">${inner}</div>`;
+/* An edited line's rate and cost, from the draft's rates. */
+function rcpEdLineMoney(d, l){
+  const lm=d.rates?rcpLineMoney(l, d.rates[l.ingredient_id]):null;
+  return lm?`<span style="font-size:12.5px;${lm.none?'color:var(--amber-ink)':'color:var(--text-secondary)'}">${escAttr(lm.per)}${lm.none?'':' · '+escAttr(lm.cost)}</span>`:'';
+}
+/* A picked material's rate into the draft's rates, for the live cost. */
+function rcpRateFromPick(d, m){
+  if(d&&d.rates&&rcpHas(m,'cost_per_unit')) d.rates[m.id]={master_cost:m.cost_per_unit, master_free:m.free_by_design, master_unit:m.unit};
+}
+/* The picker's rate beside a candidate, where money may be shown and the
+   materials read sent one — the desktop's picker, same rule. */
+function rcpPickRate(m){
+  if(!rcpMoney()||!rcpHas(m,'cost_per_unit')) return '';
+  return Number(m.cost_per_unit)>0?rcpMoneyU(m.cost_per_unit)+'/'+(m.unit||''):T('no cost','无成本');
+}
+function rcpCostEditHtml(d){
+  const c=d.cost;
+  const f=(k,label)=>`<label>${rcpLbl(label)}<input id="mRcpC-${k}" inputmode="decimal" value="${escAttr(c[k])}" style="width:100%"
+      oninput="APP.cmd('rcpCostSet','${k}',this.value)"></label>`;
+  const live=rcpLiveCost(d);
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+      <span class="eyebrow">${T('Inputs','成本输入')}</span>
+      ${f('labour',T('Labour','人工'))}${f('overhead_pct',T('Overhead %','管理费用 %'))}
+      ${f('sell_price',T('Sell price','售价'))}${f('target_food_cost',T('Target food cost %','目标食品成本 %'))}
+    </div>${live?rcpBreakdownHtml(live):''}`;
+}
+/* The strip and the breakdown, repainted in place after a keystroke — the
+   inputs they sit beside are not rebuilt. */
+function rcpCostPatch(){
+  const d=rcpEditing(); if(!d||!d.cost) return;
+  const live=rcpLiveCost(d); if(!live) return;
+  const put=(id,html)=>{ const el=document.getElementById(id); if(el) el.outerHTML=html; };
+  put('mRcpBk', rcpBreakdownHtml(live));
+  const sum=document.getElementById('mRcpSum');
+  if(sum) sum.innerHTML=rcpSummaryHtml(rcpEdRec(d), live);
+  d.lines.forEach((l,i)=>{ const el=document.getElementById('mRcpLC-'+i); if(el) el.innerHTML=rcpEdLineMoney(d,l); });
+}
+reg('rcpCostSet', (k,v)=>{
+  const d=rcpEditing(); if(!d||!d.cost) return;
+  const key=String(k); if(['labour','overhead_pct','sell_price','target_food_cost'].indexOf(key)===-1) return;
+  d.cost[key]=String(v==null?'':v);
+  if(rcpAuto) rcpAuto.touch();
+  rcpCostPatch();
+});
 /* ── Editing a recipe (§300 step R2) ─────────────────────────────────────────
    The desktop record's Details, Ingredients and Steps, written from a phone:
    a new recipe, every field, the material picker, quantity and unit, counts
@@ -15091,7 +15353,12 @@ function rcpDraftFrom(rec, forId){
       name_en:l.name_en, name_cn:l.name_cn, sku:l.sku, qty:l.qty==null?'':String(l.qty), unit:l.unit||'g',
       in_yield:rcpInYield(l)?1:0, notes:s(l.notes), substitutes:l.substitutes==null?null:l.substitutes,
       master_unit:l.master_unit, master_free:l.master_free, master_name_en:l.master_name_en, master_sku:l.master_sku})),
-    steps:(rec.steps||[]).map(st=>({name:s(st.name), instructions:s(st.instructions)}))};
+    steps:(rec.steps||[]).map(st=>({name:s(st.name), instructions:s(st.instructions)})),
+    /* §300 R3: the cost inputs and the lines' rates — ONLY for a reader who may
+       see money, off a read that carried it. Null otherwise, and a null here
+       is what keeps the cost request from ever being made. */
+    cost:rcpRecMoney(rec)?rcpCostDraft(rec):null,
+    rates:rcpRecMoney(rec)?rcpRatesFrom(rec.ingredients):null};
 }
 /* What the two yield fields resolve to — lib/recipe-cost.js's resolveYield,
    the function the server stamps the row with, never a sum of this screen's. */
@@ -15143,7 +15410,8 @@ function rcpPayload(d){
    row they land back on reads the new way. */
 function rcpSend(d, p, note){
   const r=state.rcp;
-  const body=Object.assign({}, p, {save_source:note==='manual'?'manual':'auto'});
+  const src=note==='manual'?'manual':'auto';
+  const body=Object.assign({}, p.recipe, {save_source:src});
   const write=d.id!=null
     ? apiWrite('/api/retail-admin/recipes/'+Number(d.id), body, 'PUT')
     : apiWrite('/api/retail-admin/recipes', body, 'POST').then(j=>{
@@ -15154,7 +15422,12 @@ function rcpSend(d, p, note){
         if(f){ f.rid=id; f.isNew=false; }
         r.openId=id; r.recFor=id; r.recTried=true;
       });
-  return write.then(()=>{
+  /* THE COST REQUEST, the desktop's second: only when the draft loaded the
+     inputs (p.cost exists only then), after the recipe is written, and with
+     exactly the four keys draftCostData() sends. */
+  return write.then(()=>p.cost
+    ? apiWrite('/api/retail-admin/recipes/'+Number(d.id)+'/cost', Object.assign({}, p.cost, {save_source:src}), 'PUT')
+    : null).then(()=>{
     d.savedAt=Date.now(); r.tried=false;
     const id=d.id;
     return api('/api/retail-admin/recipes/'+Number(id)).then(fresh=>{
@@ -15168,10 +15441,12 @@ function rcpEdStart(d){
   if(prev) prev.flush();
   if(typeof TacetAutosave==='undefined') return;
   const auto=TacetAutosave.create({delay:RCP_AUTOSAVE_IDLE_MS, maxWait:RCP_AUTOSAVE_MAX_MS,
-    read:()=>rcpPayload(d),
+    /* What the engine compares and hands to rcpSend: the recipe body, and the
+       cost inputs only when the draft loaded them. */
+    read:()=>d.cost?{recipe:rcpPayload(d), cost:rcpCostPayload(d)}:{recipe:rcpPayload(d)},
     /* The server refuses a recipe with no English name, so one is not sent —
        held, not failed: the operator has not finished typing. */
-    hold:p=>p.name_en?'':T('this recipe still needs an English name','该食谱还需要填写英文名称'),
+    hold:p=>p.recipe.name_en?'':T('this recipe still needs an English name','该食谱还需要填写英文名称'),
     send:(p,note)=>rcpSend(d,p,note),
     onChange:()=>{ if(rcpAuto===auto) rcpEdPaintState(); }});
   auto.start();
@@ -15279,6 +15554,7 @@ function rcpEdPatch(){
   if(y&&d.servings_auto) put('mRcpF-servings', y.servings>0?String(y.servings):'');
   const h1=document.getElementById('mRcpYB'); if(h1) h1.innerHTML=rcpBatchHint(d);
   const h2=document.getElementById('mRcpYS'); if(h2) h2.innerHTML=rcpServHint(d);
+  rcpCostPatch();
 }
 /* ── The editor ────────────────────────────────────────────────────────────── */
 const rcpLbl=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
@@ -15335,6 +15611,7 @@ function rcpEdLinesHtml(d){
             ${bad?pill('restock',T('UNIT MISMATCH','单位不符')):''}</span>
           ${(sku||other)?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr([sku,other].filter(Boolean).join(' · '))}</span>`:''}
           ${l.ingredient_id==null?`<span style="font-size:12.5px;color:var(--amber-ink)">${T('material deleted','物料已删除')}</span>`:''}
+          <span id="mRcpLC-${i}">${rcpEdLineMoney(d,l)}</span>
         </span>
         <button class="iconbtn" style="width:38px;height:38px" aria-label="${T('Move up','上移')}" ${i?'':'disabled'} onclick="APP.cmd('rcpLineMove',${i},-1)">${ic('chevron-up',18)}</button>
         <button class="iconbtn" style="width:38px;height:38px" aria-label="${T('Move down','下移')}" ${i<n-1?'':'disabled'} onclick="APP.cmd('rcpLineMove',${i},1)">${ic('chevron-down',18)}</button>
@@ -15374,7 +15651,7 @@ function rcpPickHtml(){
       <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
         <span style="font-size:15px">${escAttr(rcpName(m))}</span>
         ${(m.sku||rcpOther(m))?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr([m.sku,rcpOther(m)].filter(Boolean).join(' · '))}</span>`:''}</span>
-      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${escAttr(m.unit||'')}</span>
+      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${escAttr(rcpPickRate(m)||m.unit||'')}</span>
       <span style="flex:none;color:var(--text-secondary);display:flex">${ic('plus',18)}</span></button>`).join('')}</div>`;
 }
 function rcpEdStepsHtml(d){
@@ -15396,19 +15673,16 @@ function rcpEdStepsHtml(d){
 }
 function rcpEditorHtml(d){
   const r=state.rcp;
-  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
-    ${[['ingredients','Ingredients','原料',d.lines.length],['steps','Steps','步骤',d.steps.length],['details','Details','基本信息',0]].map(([k,en,zh,n])=>{
-      const on=r.tab===k;
-      return `<button onclick="APP.cmd('rcpTab','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
-        font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
-        box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}${n?` <span class="num" style="font-size:12px;opacity:.7">${n}</span>`:''}</button>`;
-    }).join('')}</div>`;
-  const body=r.tab==='details'?rcpEdDetailsHtml(d):(r.tab==='steps'?rcpEdStepsHtml(d):rcpEdLinesHtml(d));
+  const strip=rcpTabStrip(d.lines.length, d.steps.length, !!d.cost);
+  const body=(r.tab==='cost'&&d.cost)?rcpCostEditHtml(d)
+    : r.tab==='details'?rcpEdDetailsHtml(d):(r.tab==='steps'?rcpEdStepsHtml(d):rcpEdLinesHtml(d));
+  const live=d.cost?rcpLiveCost(d):null;
   const err=!!(rcpAuto&&rcpAuto.state==='error');
   /* A refusal renders where the operator is looking and stays until the next
      save clears it — the SKU another recipe already has, a line that would make
      the recipe depend on itself. */
-  return `<div id="mRcpEdErr" style="${err?'':'display:none;'}margin:12px 16px 0;padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${err?escAttr(rcpEdStateText()):''}</div>`
+  return (live?`<div style="padding:12px 16px 0">${rcpSumWrap(rcpSummaryHtml(rcpEdRec(d), live))}</div>`:'')
+    + `<div id="mRcpEdErr" style="${err?'':'display:none;'}margin:12px 16px 0;padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${err?escAttr(rcpEdStateText()):''}</div>`
     + strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">${body}
       ${d.id!=null?`<button class="btn2" style="width:100%" onclick="APP.cmd('rcpHistory')">${T('Version history','历史版本')}</button>`:''}</div>`;
 }
@@ -15432,6 +15706,9 @@ reg('rcpNew', ()=>{
   if(!t||t.route!=='recipeone') return;
   t.isNew=true; t.rid=null;
   r.ed=rcpDraftFrom({batch_size_auto:1, servings_auto:1, recipe_type:'made'}, 'new');
+  /* A new recipe has no read to check against; the desktop draws its Cost &
+     Pricing tab from the capability alone, empty, target 30. */
+  if(rcpMoney()){ r.ed.cost=rcpCostDraft(null); r.ed.rates={}; }
   r.tab='details'; r.pickQ=''; r.pickRows=null; r.pickErr=null;
   rcpEdStart(r.ed); render();
 });
@@ -15519,6 +15796,9 @@ reg('rcpPickAdd', id=>{
   d.lines.push({ingredient_id:m.id, name_en:m.name_en, name_cn:m.name_cn, sku:m.sku,
     qty:'', unit:m.unit||'g', in_yield:1, notes:'', substitutes:null,
     master_unit:m.unit, master_free:m.free_by_design, master_name_en:m.name_en, master_sku:m.sku});
+  /* Its rate, for the live cost — only into a draft that carries rates, and
+     only if the materials read sent one (§300 R3). */
+  rcpRateFromPick(d, m);
   r.pickQ=''; r.pickRows=null; r.pickErr=null;
   if(rcpAuto) rcpAuto.touch(); render();
 });
