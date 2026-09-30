@@ -192,6 +192,10 @@ Page({
     priceMin: '',
     priceMax: '',
     query: '',
+    // §295 — search is a button until it is used. searchOpen is the box
+    // shown by a tap; the WXML also keeps it open whenever `query` is set.
+    searchOpen: false,
+    searchFocus: false,
     sortIndex: 0,
     lang: 'en',
     loading: true,
@@ -219,6 +223,7 @@ Page({
 
     // Labels
     seeAll: 'ALL',
+    searchLabel: 'Search',
     searchPlaceholder: 'Search the pantry…',
     listTitle: 'CATEGORIES',
     emptyTitle: 'No products yet.',
@@ -328,6 +333,9 @@ Page({
       layoutOptions: LAYOUT_OPTIONS.map(o => ({ ...o, label: L === 'cn' ? o.cn : o.en })),
       seeAll:            L === 'cn' ? '全部' : 'ALL',
       backLabel:         L === 'cn' ? '全部分类' : 'ALL CATEGORIES',
+      // §295 — the search button's screen-reader label; copied whole from
+      // the web shop's search button (public/shop.html).
+      searchLabel:       L === 'cn' ? '搜索' : 'Search',
       searchPlaceholder: L === 'cn' ? '搜索…'  : 'Search the pantry…',
       listTitle:         L === 'cn' ? '分类' : 'CATEGORIES',
       inStockLabel:      L === 'cn' ? '有货' : 'IN STOCK',
@@ -1202,9 +1210,23 @@ Page({
     if (this._searchT) clearTimeout(this._searchT);
     this._searchT = setTimeout(() => this.refresh(), 300);
   },
-  clearSearch() {
-    this.setData({ query: '' });
-    this.refresh();
+  // §295 — the search button opens the box with the keyboard up.
+  openSearch() {
+    this.setData({ searchOpen: true, searchFocus: true });
+  },
+  // Leaving the box with nothing typed folds it back to the button. With a
+  // search typed it stays open: the list is filtered and the box is what says so.
+  onSearchBlur() {
+    if (this.data.query) this.setData({ searchFocus: false });
+    else this.setData({ searchOpen: false, searchFocus: false });
+  },
+  // × clears the search and closes the box. Only re-fetches when there was a
+  // search to clear, so closing an empty box costs no request.
+  closeSearch() {
+    if (this._searchT) { clearTimeout(this._searchT); this._searchT = null; }
+    const had = !!this.data.query;
+    this.setData({ query: '', searchOpen: false, searchFocus: false });
+    if (had) this.refresh();
   },
 
   openProduct(e) {

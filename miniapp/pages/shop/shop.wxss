@@ -92,17 +92,34 @@
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
 }
 
-/* ─── Search ─────────────────────────────────────────────────────── */
-.search-bar {
-  display: flex; align-items: center; gap: 12rpx;
-  margin: 0 44rpx 24rpx;
-  padding: 16rpx 20rpx;
+/* ─── Tool row — search button / box + layout buttons (§295) ─────── */
+.tool-row {
+  display: flex; align-items: center; gap: 16rpx;
+  padding: 0 44rpx 16rpx;
+}
+.tool-row-list { padding: 8rpx 44rpx 8rpx; }
+.tool-spacer { flex: 1; }
+
+.search-btn {
+  width: 64rpx; height: 64rpx; flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
   background: #FFFCF7;
   border: 3rpx solid var(--ink);
 }
-.search-bar-list { margin: 8rpx 44rpx 16rpx; }
-.search-icon { font-size: calc(28rpx * var(--font-scale)); opacity: 0.55; flex-shrink: 0; }
-.search-input { flex: 1; font-size: calc(28rpx * var(--font-scale)); font-family: inherit; background: transparent; border: 0; }
+.search-btn-ico { width: 32rpx; height: 32rpx; }
+
+/* The open box takes the row's free width; the layout buttons keep theirs. */
+.search-bar {
+  flex: 1; min-width: 0;
+  height: 64rpx; box-sizing: border-box;
+  display: flex; align-items: center; gap: 12rpx;
+  padding: 0 8rpx 0 20rpx;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+}
+.search-ico { width: 28rpx; height: 28rpx; opacity: 0.55; flex-shrink: 0; }
+.search-input { flex: 1; min-width: 0; font-size: calc(28rpx * var(--font-scale)); font-family: inherit; background: transparent; border: 0; }
 .search-clear {
   width: 44rpx; height: 44rpx;
   display: flex; align-items: center; justify-content: center;
@@ -111,11 +128,9 @@
 
 /* ─── View switcher (customer layout picker) ─────────────────────── */
 .view-switcher {
-  display: flex; justify-content: flex-end;
+  display: flex; justify-content: flex-end; flex-shrink: 0;
   gap: 8rpx;
-  padding: 0 44rpx 16rpx;
 }
-.view-switcher-list { padding: 0 44rpx 8rpx; }
 .vs-btn {
   width: 56rpx; height: 56rpx;
   display: flex; align-items: center; justify-content: center;

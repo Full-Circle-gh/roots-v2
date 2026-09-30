@@ -21071,3 +21071,32 @@ switched the family off and on again, with nothing on screen saying so.
    click would publish the siblings and leave that size hidden: a button that
    seems to do nothing.
 7. **No new string** in either language.
+
+## §295 — THE SHOP TAB'S SEARCH IS AN ICON UNTIL SOMEONE USES IT
+
+**Decided 2026-09-30 by Ash** (*"also instead of search bar the icon on top
+seems more efficient"*, then *"go do all"* on the mockup that drew it). The mini
+app's Shop tab (`miniapp/pages/shop/`) gave search a full-width row of its own
+above the layout buttons, on every visit.
+
+1. **The search bar becomes a square search button** at the left end of the row
+   that already holds the four layout buttons, so the search row is gone and the
+   products move up. When the operator has locked the layout (no layout
+   buttons), the row still exists and holds the search button alone.
+2. **Tapping it opens the search box in that same row**, with the keyboard up.
+   The layout buttons stay on the right.
+3. **While a search is active the box stays open and shows what was typed.**
+   Folded back to an icon, a filtered list reads as a nearly empty shop: the
+   customer sees three products and has forgotten she searched. The box folds
+   away only when nothing is typed.
+4. **× clears the search and closes the box**; leaving the box with nothing
+   typed closes it too.
+5. **Not in the WeChat title bar**, where 混果汁 (the reference Ash sent) puts
+   it. The Shop tab uses WeChat's standard title bar; an icon there means
+   drawing the whole bar by hand around WeChat's own ••• ⦿ button on every
+   phone size (Home does this). That is the riskier build and saves no more
+   space than the layout row does. Claude recommended against it; Ash agreed.
+6. **Not changed:** how search works (the same server search, 300 ms after the
+   last key), the web shop's search, every other control on the tab.
+7. **No composed string.** The button's screen-reader label `Search · 搜索` is
+   copied whole from the web shop's search button (`public/shop.html`).

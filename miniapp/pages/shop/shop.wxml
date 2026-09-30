@@ -27,18 +27,33 @@
 
   <!-- ════ STICKY TOP — search / switcher / filters / category chips -->
   <view class="sticky-top {{isListLayout ? '' : 'sticky-grid'}}">
-    <view class="search-bar {{isListLayout ? 'search-bar-list' : ''}}">
-      <view class="search-icon">🔍</view>
-      <input class="search-input" placeholder="{{searchPlaceholder}}" value="{{query}}" bindinput="onSearchInput" confirm-type="search"/>
-      <view wx:if="{{query}}" class="search-clear" bindtap="clearSearch">×</view>
-    </view>
+    <!-- §295 — one tool row: the search button on the left, the layout
+         buttons on the right. The row stays even when the layout is locked,
+         so search never disappears with the switcher.
+         The box stays open while anything is typed: folded to an icon, a
+         filtered list reads as a nearly empty shop. -->
+    <view class="tool-row {{isListLayout ? 'tool-row-list' : ''}}">
+      <view wx:if="{{searchOpen || query}}" class="search-bar">
+        <image class="search-ico" src="/assets/icons/search.svg" mode="aspectFit"/>
+        <input class="search-input" placeholder="{{searchPlaceholder}}" value="{{query}}"
+               focus="{{searchFocus}}" bindinput="onSearchInput" bindblur="onSearchBlur"
+               confirm-type="search"/>
+        <view class="search-clear" bindtap="closeSearch">×</view>
+      </view>
+      <block wx:else>
+        <view class="search-btn" bindtap="openSearch" aria-role="button" aria-label="{{searchLabel}}">
+          <image class="search-btn-ico" src="/assets/icons/search.svg" mode="aspectFit"/>
+        </view>
+        <view class="tool-spacer"></view>
+      </block>
 
-    <view wx:if="{{!layoutLocked}}" class="view-switcher {{isListLayout ? 'view-switcher-list' : ''}}">
-      <view wx:for="{{layoutOptions}}" wx:key="key"
-            class="vs-btn {{layout === item.key ? 'on' : ''}}"
-            data-key="{{item.key}}" bindtap="setLayout"
-            aria-label="{{item.label}}">
-        <text class="vs-icon">{{item.icon}}</text>
+      <view wx:if="{{!layoutLocked}}" class="view-switcher">
+        <view wx:for="{{layoutOptions}}" wx:key="key"
+              class="vs-btn {{layout === item.key ? 'on' : ''}}"
+              data-key="{{item.key}}" bindtap="setLayout"
+              aria-label="{{item.label}}">
+          <text class="vs-icon">{{item.icon}}</text>
+        </view>
       </view>
     </view>
 
