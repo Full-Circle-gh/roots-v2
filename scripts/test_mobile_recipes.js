@@ -79,6 +79,8 @@ const LIST   = slice('function screenRecipes()', 'function rcpBodyHtml()');
 // three slices below), for the rules that hold everywhere in it.
 const REGION = codeOnly(slice('const rcpNum = v =>', '/* ── Making one (§167)'));
 const MAKES  = codeOnly(slice('function rcpMakesHtml(rec){', 'function rcpMaterialHtml(rec){'));
+// §300 R3: the one block that may read a cost key, every figure in it gated.
+const COSTBLK = codeOnly(slice('/* ── Cost & pricing (§300 step R3)', '/* ── Editing a recipe (§300 step R2)'));
 const BODY   = slice('function rcpBodyHtml()', 'const RCP_STORAGE=');
 const RECORD = slice('function screenRecipeOne()', 'SUBS.recipes=');
 const SCREENS = codeOnly(LIST + BODY + RECORD);
@@ -135,7 +137,7 @@ check('and NOT on `recipes:costs` — that would refuse the screen to the kitche
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-section('3. No cost on these screens, for anybody, until the cost step (§300)');
+section('3. Cost only in the cost block, and only with recipes:costs, failing closed (§300 R3)');
 // ═══════════════════════════════════════════════════════════════════════════
 
 // THE LOAD-BEARING CASE. Not a capability check — a fact about what the screen
@@ -146,35 +148,55 @@ const MONEY_READS = [
   'master_cost', 'unit_cost', 'sell_price', 'suggestedSellPrice',
   'foodCostPct', 'overheadPct', 'labour', 'costData',
 ];
-// §300 DELIBERATELY NARROWED THIS, and by one key. `sell_price` is what a
-// customer is charged — it is on the shopfront and the receipt, it is not what
-// `recipes:costs` withholds (lib/recipe-cost-visibility.js keeps it for
-// everybody), and the desktop prints it beside the products a recipe makes. So
-// it may be read in exactly one function, rcpMakesHtml(), and nowhere else;
-// every COST key stays out of the whole region.
+// §300 DELIBERATELY NARROWED THIS TWICE. R1: `sell_price` — what a customer is
+// charged, which lib/recipe-cost-visibility.js keeps for everybody and the
+// desktop prints beside the products a recipe makes — may be read in the
+// products function. R3: every COST key may be read in the cost block, and
+// nowhere else in the region; the rest of the recipes code only CALLS it.
 for (const key of MONEY_READS) {
-  check(`the recipes region never reads \`${key}\`${key === 'sell_price' ? ' — outside the products it makes' : ''}`, () => {
-    const where = key === 'sell_price' ? REGION.replace(MAKES, ' ') : REGION;
+  check(`outside the cost block, the recipes region never reads \`${key}\`${key === 'sell_price' ? ' (nor outside the products it makes)' : ''}`, () => {
+    let where = REGION.replace(COSTBLK, ' ');
+    if (key === 'sell_price') where = where.replace(MAKES, ' ');
     assert.ok(where.indexOf(key) === -1,
-      `${key} appears in the recipes screens — no cost is drawn here until the cost step, and then only with recipes:costs`);
+      `${key} appears outside the cost block — a cost figure is drawn only there, and only with recipes:costs`);
   });
 }
 
-check('the products block reads the sell price and nothing derived from cost', () => {
+check('the products block reads the sell price, and its margin only through the gated cost block', () => {
   assert.match(MAKES, /p\.sell_price/);
-  assert.doesNotMatch(MAKES, /unit_cost|margin|_paMargin|build_line_count/i);
+  assert.doesNotMatch(MAKES, /unit_cost|_paMargin|build_line_count/i);
+  assert.match(MAKES, /const withCost=many&&rcpRecMoney\(rec\);/);
+  assert.match(MAKES, /\$\{withCost\?rcpMakesMargin\(p\):''\}/);
 });
 
-check('and the money helper is called in that one place only', () => {
-  assert.doesNotMatch(REGION.replace(MAKES, ' '), /\bmoney0?\(/, 'money() has no business elsewhere on these screens');
+check('the money helper is called only in the cost block and the products block', () => {
+  assert.doesNotMatch(REGION.replace(COSTBLK, ' ').replace(MAKES, ' '), /\bmoney0?\(/, 'money() has no business elsewhere on these screens');
   assert.doesNotMatch(REGION, /acMoney|money0\(/);
+});
+
+// FAILS CLOSED: the capability (mCan fails closed for recipes:costs while the
+// caps load — MCAN_MONEY_ONLY), the board (warehouse, dispatch and customer
+// service never see money — recapNoMoney), and the data (a key the server did
+// not send draws nothing).
+check('the gate is recipes:costs AND not a no-money board, and the data must carry the figure', () => {
+  assert.match(COSTBLK, /function rcpMoney\(\)\{ return mCan\('recipes:costs'\) && !recapNoMoney\(\); \}/);
+  assert.match(COSTBLK, /function rcpRecMoney\(rec\)\{ return rcpMoney\(\) && !!rec && rcpHas\(rec\.cost,'batchCost'\); \}/);
+  assert.match(COSTBLK, /const rcpRowMoney = x => rcpMoney\(\) && rcpHas\(x,'batchCost'\);/);
+  assert.match(MHTML, /const MCAN_MONEY_ONLY=new Set\(\[[^\]]*'recipes:costs'/);
+});
+check('every figure function in the block opens on a gate', () => {
+  assert.match(COSTBLK, /function rcpRowCost\(x\)\{\s*if\(!rcpRowMoney\(x\)\) return '';/);
+  assert.match(COSTBLK, /function rcpLineMoney\(l, rate\)\{\s*if\(!rcpMoney\(\)\|\|!rate\|\|!rcpHas\(rate,'master_cost'\)\) return null;/);
+  assert.match(COSTBLK, /function rcpMaterialRate\(rec\)\{[\s\S]{0,80}if\(!rcpRecMoney\(rec\)\|\|!rcpHas\(m,'cost_per_unit'\)\) return '';/);
+  assert.match(COSTBLK, /function rcpPickRate\(m\)\{\s*if\(!rcpMoney\(\)\|\|!rcpHas\(m,'cost_per_unit'\)\) return '';/);
+  assert.match(COSTBLK, /function rcpLiveCost\(d\)\{[\s\S]{0,60}if\(!d\|\|!d\.cost\|\|/);
 });
 
 // The quantities ARE rendered, and by a helper of their own — a weight is not
 // money and must not borrow money's formatter.
 check('quantities go through rcpNum, which is a number helper and not a money one', () => {
   assert.match(MHTML, /const rcpNum = v => \{ const n=Number\(v\);/);
-  assert.match(RECORD, /rcpNum\(l\.qty\)/, 'the line quantity');
+  assert.match(slice('function rcpLineQtyHtml(l, lm){', 'function rcpMakesMargin(p){'), /rcpNum\(l\.qty\)/, 'the line quantity');
   assert.match(MHTML, /rcpNum\(rec\.batch_size\)/, 'the batch size in the status line');
 });
 
@@ -263,12 +285,14 @@ section('5. The record');
 
 // Three since §300: Details joined them, holding what the desktop's Details
 // sheet holds. The fourth, Cost & Pricing, is the cost step's.
-check('it carries three tabs — Ingredients, Steps, Details — and not Cost & Pricing', () => {
-  assert.match(RECORD, /\['ingredients','Ingredients','原料'/);
-  assert.match(RECORD, /\['steps','Steps','步骤'/);
-  assert.match(RECORD, /\['details','Details','基本信息'/);
-  assert.doesNotMatch(codeOnly(RECORD), /Cost & Pricing|成本与定价/,
-    'the money tab is not this screen\'s to draw');
+// Three tabs for everybody; the desktop's fourth, Cost & Pricing, only where
+// money may be shown (§300 R3), and a record left on it falls back.
+check('Ingredients, Steps, Details — and Cost & Pricing only with money', () => {
+  const strip = slice('function rcpTabStrip(nI, nS, money){', 'function rcpLineQtyHtml(l, lm){');
+  assert.match(strip, /\['ingredients','Ingredients','原料',nI\],\['steps','Steps','步骤',nS\],\['details','Details','基本信息',0\]/);
+  assert.match(strip, /\.concat\(money\?\[\['cost','Cost & Pricing','成本与定价',0\]\]:\[\]\)/);
+  assert.match(strip, /if\(r\.tab==='cost'&&!money\) r\.tab='ingredients';/);
+  assert.match(RECORD, /const withMoney=rcpRecMoney\(rec\);\s*const strip=rcpTabStrip\(lines\.length, steps\.length, withMoney\);/);
 });
 
 // A recipe is edited on desktop, so the copy in hand may be an hour old and the
