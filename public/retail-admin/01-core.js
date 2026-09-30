@@ -2320,6 +2320,9 @@ let catLoaded = false;
 let catCounts = {};       // nodeId -> { n, published }, from /category-counts
 let catSel = 0;           // index of the top category the pane is showing
 let catEdit = null;       // open rename card: { kind:'top'|'sub', ti, si, name, name_cn }
+// §297 — the open shelf's products, for the banner's link list. Held apart
+// from _catProdRows, which an empty shelf leaves holding the last shelf's.
+let _catBannerRows = [];
 let _catLangHooked = false;
 // §288 — the QR menu's own order. The tree (catModel) is still the one tree:
 // names, subcategories and products are shared. In 'qr' mode the rail, the
@@ -2629,6 +2632,7 @@ function catRenderPane() {
   }
   const c = catCount(t);
   const subs = t.subs || [];
+  _catBannerRows = [];      // this shelf's products are loaded below (catLoadProducts)
   const pill = !c ? `<span class="cat2-pill cat2-pill-new">${escapeHtml(cuT('new — not saved yet', '新建 — 尚未保存'))}</span>`
     : c.published ? `<span class="cat2-pill cat2-pill-live">${escapeHtml(cuT('visible in the shop', '显示在店面'))}</span>`
     : `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('hidden — nothing published', '已隐藏 — 无上架产品'))}</span>`;
@@ -2652,6 +2656,8 @@ function catRenderPane() {
     </div>
     <div id="cat2-tophead-rename"></div>
 
+    <div id="cat2-banner">${catBannerHtml(t)}</div>
+
     <div ondragover="catDragOver(event,'sub')" ondrop="catDrop(event,'sub')" ondragleave="catDragLeave(event)">
     <div class="cat2-sec">${escapeHtml(cuT('Subcategories — the section headings', '子分类 — 区块标题'))}</div>
     <div id="cat2-subs">${catSubList(catSel).map(({ s, si }, p) => catSubRowHtml(s, si, p)).join('')
@@ -2664,6 +2670,128 @@ function catRenderPane() {
   `;
   catRenderOpenRename();
   catLoadProducts();
+}
+
+// ── §297 · A category's banner ──────────────────────────────────────────────
+// One wide 5:2 picture per TOP category, drawn at the top of its section on
+// the mini app's Shop tab. It lives on the tree node (`banner`), so it moves
+// with the category when the category is dragged or renamed, and saves with
+// the tree like every other edit here (autosave). The server keeps only a
+// usable one (lib/category-tree.js sanitizeBanner).
+//
+// "Today" is China's day, and the status words are the pop-ups' own
+// (05-marketing.js puStatus), because the fields are the same start/end days.
+function catBannerToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
+function catBannerStatus(b) {
+  const today = catBannerToday();
+  if (b.start_at && today < b.start_at) return { cls: 'cat2-pill-hidden', label: cuT('Starts ', '待开始 ') + b.start_at };
+  if (b.end_at && today > b.end_at)     return { cls: 'cat2-pill-new',    label: cuT('Ended ', '已结束 ') + b.end_at };
+  return { cls: 'cat2-pill-live', label: cuT('Live', '进行中') };
+}
+// The link picker's pages a banner most often wants, in its own words
+// (cms.html TARGET_PAGES), plus the products standing on this shelf.
+const CAT_BANNER_PAGES = [
+  { v: 'promotions', en: 'Promotions page', cn: '促销页面' },
+  { v: 'coupons',    en: 'Coupons',         cn: '优惠券' },
+  { v: 'membership', en: 'Membership',      cn: '会员' },
+  { v: 'shop',       en: 'Shop',            cn: '商店' },
+];
+function catBannerHtml(t) {
+  const b = t && t.banner;
+  const head = `<div class="cat2-sec" style="margin-top:26px">${escapeHtml(cuT('Banner (optional)', '横幅(可选)'))}</div>`;
+  const hint = `<div class="cat2-empty">${escapeHtml(cuT('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab. Hidden while a customer is searching.', '宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。'))}</div>`;
+  const file = '<input type="file" id="cat2-banner-file" accept="image/*" hidden onchange="catBannerPicked(this)">';
+  if (!b || !b.image_url) {
+    return head + hint + file +
+      `<button class="cat2-btn cat2-btn-ghost" type="button" onclick="catBannerPick()">${CAT_ICON.plus}<span>${escapeHtml(cuT('Add banner', '添加横幅'))}</span></button>`;
+  }
+  const st = catBannerStatus(b);
+  return head + file + `
+    <div class="cat2-banner">
+      <div class="cat2-banner-pic"><img src="${escapeAttr(b.image_url)}" alt=""></div>
+      <div class="cat2-banner-side">
+        <div><span class="cat2-pill ${st.cls}">${escapeHtml(st.label)}</span></div>
+        <label class="cat2-banner-lbl" for="cat2-banner-target">${escapeHtml(cuT('Tap link', '点击跳转'))}</label>
+        <select id="cat2-banner-target" onchange="catBannerSet('target', this.value)">${catBannerTargetOptions(b.target)}</select>
+        <div class="cat2-banner-dates">
+          <label class="cat2-banner-lbl">${escapeHtml(cuT('Start', '开始'))}<input type="date" value="${escapeAttr(b.start_at || '')}" onchange="catBannerSet('start_at', this.value)"></label>
+          <label class="cat2-banner-lbl">${escapeHtml(cuT('End', '结束'))}<input type="date" value="${escapeAttr(b.end_at || '')}" onchange="catBannerSet('end_at', this.value)"></label>
+        </div>
+        <div class="cat2-banner-hint">${escapeHtml(cuT('Leave both empty to show it always. Outside its dates it hides by itself.', '两者留空则一直显示。不在日期内时会自动隐藏。'))}</div>
+        <div class="cat2-banner-acts">
+          <button class="cat2-btn" type="button" onclick="catBannerPick()">${escapeHtml(cuT('Replace picture', '更换图片'))}</button>
+          <button class="cat2-btn cat2-btn-danger" type="button" onclick="catBannerRemove()">${CAT_ICON.trash}<span>${escapeHtml(cuT('Remove banner', '删除横幅'))}</span></button>
+        </div>
+      </div>
+    </div>` + hint;
+}
+function catBannerTargetOptions(current) {
+  const cur = current || '';
+  const opt = (v, label) => `<option value="${escapeAttr(v)}"${v === cur ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  const rows = _catBannerRows;
+  const prods = rows.map(p => opt('product:' + p.id, cuT(p.name_en || p.name_cn, p.name_cn || p.name_en) || ('#' + p.id)));
+  // A saved link that is not in either list (a product since moved, a page
+  // set elsewhere) is kept as it is, never silently swapped for another.
+  const known = [''].concat(CAT_BANNER_PAGES.map(x => x.v), rows.map(p => 'product:' + p.id));
+  const keep = cur && !known.includes(cur) ? opt(cur, cur) : '';
+  return opt('', cuT('Picture only', '仅图片')) + keep +
+    `<optgroup label="${escapeAttr(cuT('Pages', '页面'))}">${CAT_BANNER_PAGES.map(x => opt(x.v, cuT(x.en, x.cn))).join('')}</optgroup>` +
+    (prods.length ? `<optgroup label="${escapeAttr(cuT('Products on this shelf', '货架上的产品'))}">${prods.join('')}</optgroup>` : '');
+}
+// The shelf's products arrive after the pane is drawn; refill the link list
+// then, keeping whatever is chosen (_catBannerRows, declared with the
+// shelf's other state above).
+function catBannerFillTargets() {
+  const sel = document.getElementById('cat2-banner-target');
+  const t = catModel[catSel];
+  if (sel && t && t.banner) sel.innerHTML = catBannerTargetOptions(t.banner.target);
+}
+function catBannerRepaint() {
+  const host = document.getElementById('cat2-banner');
+  if (host) host.innerHTML = catBannerHtml(catModel[catSel]);
+}
+function catBannerSet(key, value) {
+  const t = catModel[catSel];
+  if (!t || !t.banner) return;
+  t.banner = { ...t.banner, [key]: value || '' };
+  if (key !== 'target') catBannerRepaint();   // the status pill follows the dates
+  catUpdateDirty();
+}
+function catBannerPick() { const f = document.getElementById('cat2-banner-file'); if (f) { f.value = ''; f.click(); } }
+async function catBannerPicked(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  const ti = catSel;   // the category the picture was chosen for, even if the operator moves on
+  toast(cuT('Uploading…', '上传中…'));
+  try {
+    // Shrink in the browser first (1600px long side) when the product
+    // editor's resizer is on the page — it is, on this admin.
+    let blob = file;
+    if (typeof pdResizeImage === 'function') {
+      const r = await pdResizeImage(file, { maxLong: 1600, quality: 0.88 });
+      if (r && r.dataURL) blob = await (await fetch(r.dataURL)).blob();
+    }
+    const fd = new FormData();
+    fd.append('file', blob, file.name || 'banner.jpg');
+    const res = await fetch('/api/retail-admin/cms/media', { method: 'POST', credentials: 'same-origin', body: fd });
+    if (res.status === 401) { location.href = '/backend/login'; return; }
+    const j = await res.json();
+    if (!j.success || !j.data || !j.data.url) throw new Error(j.error || 'upload_failed');
+    const t = catModel[ti];
+    if (!t) return;
+    t.banner = { target: '', start_at: '', end_at: '', ...(t.banner || {}), image_url: j.data.url };
+    if (ti === catSel) catBannerRepaint();
+    catUpdateDirty();
+  } catch (e) {
+    toast(cuT('Upload failed', '上传失败') + ': ' + e.message, 'err');
+  }
+}
+function catBannerRemove() {
+  const t = catModel[catSel];
+  if (!t || !t.banner) return;
+  delete t.banner;
+  catBannerRepaint();
+  catUpdateDirty();
 }
 
 // `p` is the row's place as drawn (what a drag moves); `si` its index in the
@@ -3282,6 +3410,8 @@ async function catLoadProducts() {
     if (req !== _catProdReq) return;    // the operator moved on to another shelf
     _catProdListed = listed ? new Set(listed.data || []) : null;
     const rows = data || [];
+    _catBannerRows = rows;
+    catBannerFillTargets();   // §297 — the banner's link list names this shelf's products
     if (!rows.length) {
       host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Nothing stands on this shelf yet.', '该分类下暂无产品。'))}</div>`;
       return;

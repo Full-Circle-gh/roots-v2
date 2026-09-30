@@ -6431,7 +6431,10 @@ async function pwAddCategoryFlow() {
     return;
   }
   try {
-    const newTree = (PA_CAT_TREE || []).map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn, subs: (t.subs || []).map(s => ({ id: s.id, name: s.name, name_cn: s.name_cn })) }))
+    // Every node is sent back WHOLE. This PUT rewrites the entire tree, so a
+    // field left out here is a field deleted — a category's banner (§297)
+    // would vanish the moment anyone added a category from this wizard.
+    const newTree = (PA_CAT_TREE || []).map(t => ({ ...t, subs: (t.subs || []).map(s => ({ ...s })) }))
       .concat([{ name: result.en, name_cn: result.cn, subs: [] }]);
     const j = await api('/api/retail-admin/category-tree', { method: 'PUT', body: { tree: newTree } });
     PA_CAT_TREE = Array.isArray(j.data) ? j.data : newTree;

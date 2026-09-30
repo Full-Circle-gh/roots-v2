@@ -18,7 +18,7 @@ const cart     = require('../../utils/cart');
 const config   = require('../../utils/config');
 const delivery = require('../../utils/delivery');
 const freshEta = require('../../utils/fresh-eta');
-const { promoCardsToShow } = require('../../utils/promo-cards');
+const { promoCardsToShow, chinaToday, inDateWindow } = require('../../utils/promo-cards');
 
 // §296 — tuck the promo row away only when the product list would still
 // scroll with it gone. Tucking grows the list's box by the row's height; on a
@@ -660,6 +660,14 @@ Page({
     }
 
     const sections = [];
+    // §297 — a top category's banner shows only with a picture and inside its
+    // start/end days, on China's calendar (the promo cards' own rule).
+    const today = chinaToday();
+    const bannerOf = (top) => {
+      const b = top && top.banner;
+      if (!b || !b.image_url || !inDateWindow(b, today)) return null;
+      return { img: absUrl(b.image_url), target: b.target || '' };
+    };
     (tree || []).forEach((top, ti) => {
       const subMap = byTop.get(top.name);
       if (!subMap) return;
@@ -697,6 +705,7 @@ Page({
         // Only categories with ≥2 subcategories are worth drilling into — a
         // single-group top just scrolls (the chevron is its tell).
         drillable: groups.length >= 2,
+        banner: bannerOf(top),
         groups,
       });
     });
@@ -1004,6 +1013,10 @@ Page({
   // §296 — a promo card was tapped (bubbled up by block-renderer).
   onPromoCta(e) {
     this._routePromoTarget((e && e.detail && e.detail.target) || '');
+  },
+  // §297 — a category's banner was tapped. Same links, same routing.
+  onBannerTap(e) {
+    this._routePromoTarget((e && e.currentTarget && e.currentTarget.dataset.target) || '');
   },
   // The link picker's targets, from the Shop tab. A category link stays on
   // this tab and opens that category the way a Home tile does; `shop` goes
