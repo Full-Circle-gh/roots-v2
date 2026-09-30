@@ -4,6 +4,7 @@
   "backgroundColor": "#F2E7DF",
   "usingComponents": {
     "popup-manager": "/components/popup-manager/popup-manager",
+    "block-renderer": "/components/block-renderer/block-renderer",
     "cart-notice": "/components/cart-notice/cart-notice"
   }
 }

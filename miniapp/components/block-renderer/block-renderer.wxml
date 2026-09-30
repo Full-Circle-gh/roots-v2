@@ -1536,6 +1536,18 @@
   <view class="lb-cta" style="color:{{leaderboardAccent}}">{{leaderboardCard.ctaLabel}} ›</view>
 </view>
 
+<!-- §296 · Promo cards: tall 3:4 pictures swiped sideways. Nothing to show
+     today (no picture, or every card outside its dates) draws nothing. -->
+<view wx:elif="{{type === 'promo_cards' && promoCards.length}}" class="promo-blk">
+  <scroll-view scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}" class="promo-rail">
+    <view class="promo-track">
+      <view wx:for="{{promoCards}}" wx:key="key" class="promo-card"
+            data-target="{{item.target}}" bindtap="onPromoTap">
+        <image class="promo-img" src="{{item.img}}" mode="aspectFill" lazy-load="{{true}}"/>
+      </view>
+    </view>
+  </scroll-view>
+</view>
 <!-- Video banner: autoplaying muted loop, no controls -->
 <view wx:elif="{{type === 'video_banner' && videoUrl}}" class="video-blk {{videoFullscreen ? 'video-fs' : ''}}" style="{{videoFullscreen ? '' : 'height:' + (videoHeight * 2) + 'rpx'}}" bindtap="onVideoTap">
   <video class="video-el"

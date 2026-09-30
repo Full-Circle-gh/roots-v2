@@ -1468,6 +1468,27 @@
     return b.link_target ? ctaWrap(b.link_target, html) : html;
   };
 
+  // promo_cards (§296) --------------------------------------------------------
+  // A row of tall 3:4 picture cards, scrolled sideways. The words are in the
+  // picture. A card outside its start/end day (YYYY-MM-DD, China's calendar,
+  // the same day the mini app and the editor compute) is left out; so is one
+  // with no picture. Five at most, as the editor allows.
+  function promoToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
+  renderers.promo_cards = function (b) {
+    var today = promoToday();
+    var cards = (Array.isArray(b.cards) ? b.cards : []).filter(function (c) {
+      if (!c || !c.image_url) return false;
+      if (c.start_at && today < c.start_at) return false;
+      if (c.end_at && today > c.end_at) return false;
+      return true;
+    }).slice(0, 5);
+    if (!cards.length) return '';
+    return '<div class="sb-promo-blk">' + cards.map(function (c) {
+      var card = '<div class="sb-promo-card"><img class="sb-promo-img" src="' + attr(absUrl(c.image_url)) + '" alt="" loading="lazy"></div>';
+      return c.target ? ctaWrap(c.target, card) : card;
+    }).join('') + '</div>';
+  };
+
   // points_widget ------------------------------------------------------------
   renderers.points_widget = function (b) {
     var bg = color(b.bg_color || 'forest-kale'), fg = color(b.fg_color || 'lime-leaf');

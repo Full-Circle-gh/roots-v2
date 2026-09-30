@@ -18,6 +18,22 @@ const cart     = require('../../utils/cart');
 const config   = require('../../utils/config');
 const delivery = require('../../utils/delivery');
 const freshEta = require('../../utils/fresh-eta');
+const { promoCardsToShow } = require('../../utils/promo-cards');
+
+// §296 — tuck the promo row away only when the product list would still
+// scroll with it gone. Tucking grows the list's box by the row's height; on a
+// short list that clamps the scroll back to 0, which brings the row back,
+// which shrinks the box again — a flicker loop. The row is at most 520rpx
+// (≈300px on the widest phones), so this much spare scroll is enough.
+const PROMO_TUCK_ROOM_PX = 320;
+
+// §296 — where a promo card's link goes from the Shop tab. The same targets
+// the editor's link picker offers and Home routes (pages/home/home.js
+// routeTarget); pages that are plain navigateTo destinations are listed here.
+const PROMO_NAV_PAGES = [
+  'membership', 'about', 'coupons', 'wallet', 'voting', 'faq', 'affiliate',
+  'topup', 'favorites', 'orders', 'leaderboard', 'notifications',
+];
 
 function absUrl(u) {
   if (!u) return '';
@@ -196,6 +212,10 @@ Page({
     // shown by a tap; the WXML also keeps it open whenever `query` is set.
     searchOpen: false,
     searchFocus: false,
+    // §296 — the promo_cards blocks of the editor's Shop landing page that
+    // have something to show today, and whether the row is tucked away.
+    promoBlocks: [],
+    promoTucked: false,
     sortIndex: 0,
     lang: 'en',
     loading: true,
@@ -383,7 +403,14 @@ Page({
     const showPriceFilter  = !!s.showPriceFilter;
     const showAnyFilter    = showSort || showDietary || showStockFilter || showBadgeFilter || showPriceFilter;
 
+    // §296 — only the promo_cards blocks of the Shop landing page come to the
+    // tab; the page's other blocks still open only from a link to it. A block
+    // with nothing to show today is dropped here, so no empty row is drawn.
+    const promoBlocks = config.forMiniApp(cfg && cfg.categories && cfg.categories.layout)
+      .filter(b => b.type === 'promo_cards' && promoCardsToShow(b.cards).length > 0);
+
     this.setData({
+      promoBlocks,
       layout, isListLayout, layoutLocked,
       showSort, showDietary, showStockFilter, showBadgeFilter, showPriceFilter, showAnyFilter,
       hideOutOfStock: !!s.hideOutOfStock,
@@ -398,8 +425,9 @@ Page({
     if (key === this.data.layout) return;
     const isListLayout = LIST_LAYOUTS.includes(key);
     // Drill works in every layout (sidebar rail ⇄ chip row), so it carries
-    // across a layout switch — just re-measure for the new view.
-    this.setData({ layout: key, isListLayout });
+    // across a layout switch — just re-measure for the new view. The promo
+    // row comes back: gallery never tucks it, and a rail layout starts at top.
+    this.setData({ layout: key, isListLayout, promoTucked: false });
     try { wx.setStorageSync(LAYOUT_STORAGE_KEY, key); } catch {}
     setTimeout(() => {
       if (this.data.drillTop) this._measureGroups(); else this._measureSections();
@@ -923,6 +951,7 @@ Page({
   // since setData inside _updateActive only fires on category transitions.
   onListScroll(e) {
     const st = e.detail.scrollTop;
+    if (this.data.promoBlocks.length) this._tuckPromos(st, e.detail.scrollHeight);
     // Drilled in → track the active subcategory instead of the top category.
     if (this.data.drillTop) {
       const h = this._listViewportH || 0;
@@ -943,6 +972,56 @@ Page({
     const h = this._listViewportH || 0;
     const threshold = h > 0 ? Math.round(h * 0.3) : LIST_STICKY_OFFSET_PX;
     this._updateActiveByScrollTop(st, threshold);
+  },
+
+  // §296 — the promo row tucks away once the rail layout's list is scrolled
+  // past a few pixels, and comes back at the very top. The two thresholds
+  // differ on purpose (24 to tuck, 2 to return) so a finger resting near the
+  // top does not flap it. Only called from onListScroll, so gallery (page
+  // scroll, row scrolls off by itself) never tucks.
+  _tuckPromos(scrollTop, scrollHeight) {
+    const tucked = !!this.data.promoTucked;
+    let next = tucked;
+    if (!tucked && scrollTop > 24) {
+      const view = this._listViewportH || 0;
+      const room = (scrollHeight && view) ? scrollHeight - view : Infinity;
+      if (room > PROMO_TUCK_ROOM_PX) next = true;
+    } else if (tucked && scrollTop <= 2) {
+      next = false;
+    }
+    if (next === tucked) return;
+    this.setData({ promoTucked: next });
+    // The list's box changed height once the 0.25s transition ends; the
+    // offsets inside it did not, but the viewport height the reading line
+    // uses did.
+    if (this._promoMeasureT) clearTimeout(this._promoMeasureT);
+    this._promoMeasureT = setTimeout(() => {
+      this._promoMeasureT = null;
+      if (this.data.drillTop) this._measureGroups(); else this._measureSections();
+    }, 300);
+  },
+
+  // §296 — a promo card was tapped (bubbled up by block-renderer).
+  onPromoCta(e) {
+    this._routePromoTarget((e && e.detail && e.detail.target) || '');
+  },
+  // The link picker's targets, from the Shop tab. A category link stays on
+  // this tab and opens that category the way a Home tile does; `shop` goes
+  // back to the top of the list.
+  _routePromoTarget(t) {
+    if (!t) return;
+    if (t === 'shop') return this.setCategory({ currentTarget: { dataset: { name: '' } } });
+    if (t.startsWith('category:')) {
+      const id = t.slice('category:'.length);
+      const node = (this._tree || []).find(n => String(n.id) === id);
+      if (!node) return;
+      getApp().globalData.pendingCategory = node.name;
+      return this._applyPendingCategory();
+    }
+    if (t.startsWith('product:')) return wx.navigateTo({ url: '/pages/product/product?id=' + t.split(':')[1] });
+    if (t === 'home' || t === 'cart' || t === 'me') return wx.switchTab({ url: '/pages/' + t + '/' + t });
+    if (t === 'promotions' || t === 'categories') return wx.navigateTo({ url: '/pages/layout/layout?page=' + t });
+    if (PROMO_NAV_PAGES.includes(t)) return wx.navigateTo({ url: '/pages/' + t + '/' + t });
   },
 
   _setActive(name) {

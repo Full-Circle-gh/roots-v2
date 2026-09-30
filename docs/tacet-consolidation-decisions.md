@@ -21100,3 +21100,42 @@ above the layout buttons, on every visit.
    last key), the web shop's search, every other control on the tab.
 7. **No composed string.** The button's screen-reader label `Search · 搜索` is
    copied whole from the web shop's search button (`public/shop.html`).
+
+## §296 — PROMO CARDS, AND THE TOP OF THE SHOP TAB
+
+**Decided 2026-09-30 by Ash** (*"I like the idea to have in shop this kind of
+banner promotions"*, sending 混果汁's shop with a row of tall promo cards above
+the menu, then *"go do all"* on the mockup). Before this the Shop tab had no
+promotional space, and the page editor's *Shop landing* page said it showed
+"on the Shop tab above the category browser", which it never did: it opened
+only from a button linking to it.
+
+1. **A new page-editor block, `promo_cards`**: a row of tall 3:4 pictures that
+   customers swipe sideways. Up to 5 cards. A card is a picture, a tap link
+   (the usual link picker) and an optional start and end day. **The words are
+   drawn into the picture**, so a card has no typed text in either language.
+2. **Only the Shop landing page's `promo_cards` come to the Shop tab**, at the
+   top, above the tool row. The page's other blocks still open only from a link
+   to it, so a tenant who built that page as a stand-alone page does not find
+   it suddenly stacked on the Shop tab. The page's description now says this.
+3. **The row scrolls away.** In the rail layouts (the page itself never scrolls,
+   only the product list does) it tucks away once the list is scrolled and comes
+   back at the very top; in gallery it scrolls off with the page. It does not
+   tuck when the list is too short to still scroll without it, which would
+   otherwise loop. Claude argued against a row that stays put (it would take a
+   third of the screen on every visit) and Ash agreed on the mockup.
+4. **Hidden while a search is typed.** Someone who typed "beet" wants beets.
+5. **No auto-sliding.** Customers swipe; cards that move on their own while
+   someone is choosing are a nuisance.
+6. **"Today" is China's day (UTC+8)**, start and end inclusive, computed the
+   same way in the mini app (`miniapp/utils/promo-cards.js`), the web renderer
+   and the editor. A bare UTC date would keep a card ending on the 31st alive
+   until 08:00 on the 1st. The fields are the pop-ups' own `start_at` /
+   `end_at`, and the editor shows a card's state in the pop-ups' own words.
+7. **A card's category link opens that category on the Shop tab**, the way a
+   Home tile does; other links go where Home sends them.
+8. **The website** gets the renderer the block whitelist requires (same date
+   rule, same cap). The web shop renders only Home, so on the web the cards
+   appear only if placed on Home.
+9. **Strings:** the editor's labels, declared in the vocabulary document
+   (v1.208), most copied, some composed.

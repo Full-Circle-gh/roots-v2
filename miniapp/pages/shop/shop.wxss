@@ -92,6 +92,19 @@
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
 }
 
+/* ─── Promo cards (§296) ─────────────────────────────────────────── */
+/* In the rail layouts the row tucks away once the list is scrolled. The
+   max-height is a ceiling above the row's real height (400rpx cards + the
+   block's padding), so the transition has somewhere to go from; it is never
+   what sizes the row. */
+.promo-wrap {
+  flex-shrink: 0;
+  max-height: 520rpx;
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+.promo-wrap.tucked { max-height: 0; opacity: 0; }
+
 /* ─── Tool row — search button / box + layout buttons (§295) ─────── */
 .tool-row {
   display: flex; align-items: center; gap: 16rpx;

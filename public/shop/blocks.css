@@ -2278,6 +2278,29 @@
 .shop-blocks .sb-countdown.sb-urgent .sb-cd-cell:nth-child(6) { animation-delay: .36s; }
 
 
+/* ── PROMO CARDS (§296) — mirrors block-renderer.wxss .promo-* ── */
+.shop-blocks .sb-promo-blk {
+  display: flex;
+  gap: calc(20 * var(--u));
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 0 calc(44 * var(--u));
+}
+.shop-blocks .sb-promo-blk::-webkit-scrollbar { display: none; }
+.shop-blocks .sb-promo-card {
+  flex: none;
+  width: calc(300 * var(--u));
+  max-width: 240px;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: calc(3 * var(--u)) solid var(--ink);
+  background: var(--oat);
+  scroll-snap-align: start;
+  cursor: pointer;
+}
+.shop-blocks .sb-promo-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 /* ── VIDEO BANNER (ported from block-renderer.sb-wxss 4272-4293) ── */
 /* Video banner — autoplaying muted loop clip */
 .shop-blocks .sb-video-blk {
