@@ -89,6 +89,8 @@ function mk(opts = {}) {
     searchBox: (inner, id) => `<span>${inner}<button id="${id}"></button></span>`,
     searchClearShow: () => {},
     catLabel: (v) => String(v || '').split(' ')[0],
+    // Production off: the From-the-kitchen card (P3) is its own suite's.
+    featOn: () => false,
     canRoute: (k) => (opts.routes ? opts.routes.includes(k) : true),
     mCan: (k) => !Array.isArray(ctx.state.caps) || ctx.state.caps.includes(k),
     screenSupOwed: () => '<div>SUPOWED-SCREEN</div>',

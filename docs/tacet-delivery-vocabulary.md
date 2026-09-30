@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.219 · 2026-09-30 · §310 FROM THE KITCHEN ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *From the kitchen on the phone (§310)*.
+
+**v1.218 · 2026-09-30 · §309 RECIPE COSTS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (毛利(食谱)), THE REST COPIED WHOLE.** See *A recipe's cost on the phone (§309)*.
+
+**v1.217 · 2026-09-30 · §308 FINANCE TRANSACTIONS ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM THE DESKTOP.** See *Finance transactions on the phone (§308)*.
+
 **v1.216 · 2026-09-30 · §307 WRITING A PURCHASE ORDER ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Writing a purchase order on the phone (§307)*.
 
 **v1.215 · 2026-09-30 · §306 EDITING RECIPES ON THE PHONE — NOTHING COMPOSED; ONE LINE JOINED FROM TWO LIVE PAIRS, ONE CUT SHORT, THE REST COPIED WHOLE.** See *Editing a recipe on the phone (§306)*.
@@ -9742,4 +9748,121 @@ the two surfaces use one word for each thing:
 `Loading… · 加载中…`, `Could not load this. · 无法加载。`,
 `That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。` and
 `This order has already moved on. Close and open it again to see where it is now. · 这个订单已经进入下一步。请关闭后重新打开查看当前状态。`
+(the phone's own).
+
+## Finance transactions on the phone (§308)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Finance → Transactions tab (`public/m.html`, `screenFinTx`,
+`sheetFinTxRow`, `sheetFinTxForm`, `sheetFinTxRet`). Every label is copied
+whole from the desktop ledger (`public/retail-admin/22-finance.js` and its
+markup in `public/retail-admin.html`), so the two ledgers use one word for each
+thing:
+
+- **The tab, tiles and filters** — `Transactions · 交易记录`, `Money out · 支出`,
+  `Money in · 进账`, `Sales revenue is on Summary · 营收见汇总`, `All · 全部`,
+  `Filter these transactions · 筛选交易记录`, `Export CSV · 导出`,
+  `No matching records. · 没有符合条件的记录。`, `Clear · 清除`, the empty state
+  `Nothing recorded yet · 暂无记录` with its sentence, and the truncation
+  sentence from `tdShowTruncation` (01-core.js) with `ledger rows · 条流水`.
+- **The row's marks** — `Posted by Purchasing · 采购单自动记入`,
+  `Sum of N category subtotals · N 个类别小计合计`, `Staff claim · 费用申请`,
+  `Staff claim · own money · 费用申请 · 个人支付`, `Carrier claim · 承运商赔偿`,
+  `Return · 退货` and the five reasons (`Wrong item · 错货`, `Quality · 质量问题`,
+  `Expired · 过期`, `Over-delivered · 多送`, `Not needed · 无需要`),
+  `Owes the shop · 应退还店里`, `Returned · 退货`, `Net · 净额`,
+  `Approved by · 审批人`, `Entered by · 录入人`, `Note · 备注`.
+- **The sheets and forms** — `New transaction · 新建交易`, `Edit · 编辑`,
+  `Direction · 方向`, `Date · 日期`, `Amount · 金额`, `Category · 分类`,
+  `Note · 备注`, `Cancel · 取消`, `Save · 保存`, `Saving… · 保存中…`,
+  `Delete · 删除`, `Void · 作废`, `Open purchase order · 查看采购单`,
+  `— pick a category — · — 选择分类 —`, `Why? · 原因？`, the return hint
+  `Only what the seller actually refunded. If shipping was not refunded, leave
+  it out. · 只填卖家实际退回的金额。运费没退就不要算进去。`.
+- **The confirms and toasts** — `Delete this transaction? · 删除这条交易记录？`,
+  `Void this claim? · 作废这条费用申请？`, their shared body `This removes the row
+  from the ledger. This cannot be undone. · 此操作将从账本中移除该记录。此操作无法撤销。`,
+  `Saved · 已保存`, `Deleted · 已删除`, `Voided · 已作废`.
+- **The two checks before a return is sent** — `amount must be positive ·
+  金额必须大于零` (the server's own, as the desktop shows it) and
+  `Pick a reason for the return · 请选择退货原因` (Purchasing's).
+- **Reused from the phone** — `That did not go through. Nothing has changed —
+  try again. · 没有成功。数据没有变化 — 请重试。` for a failure the server did not
+  explain, and `Try again · 重试`.
+
+A delete or void in flight shows `Saving… · 保存中…` on its button, as the
+desktop's shared write path (`finTxWrite`) does; `Deleting…` / `Voiding…` were
+not minted. Server refusals arrive as `English · 中文` and are shown one half
+at a time (`tmOneLang`), unchanged.
+
+## A recipe's cost on the phone (§309)
+
+**Composed by Claude, 2026-09-30, under the 2026-09-06 amendment.** Operator
+register only (Rule 1): the phone Recipes list and record (`public/m.html`),
+shown only to `recipes:costs` holders.
+
+| shipped | built from |
+|---|---|
+| `Margin (recipe) · 毛利(食谱)` (the summary strip's label when the one product is costed by its build list) | **composed.** The desktop ships this label as `Margin (recipe) · Margin (recipe)`, marked *CN PENDING*: it has no Chinese. `毛利` is the live `Margin · 毛利`, `食谱` is the live `Recipe · 食谱`, and the full-width brackets are the ones the record's own live labels use (`名称(中文)`, `每份克数`, `(整批)`). |
+
+**Copied whole from the desktop record (`19-recipes.js`):** `Cost & Pricing · 成本与定价`,
+`Inputs · 成本输入`, `Labour · 人工`, `Overhead % · 管理费用 %`, `Sell price · 售价`,
+`Target food cost % · 目标食品成本 %`, `Ingredient cost · 原料成本`,
+`Overhead · 管理费用`, `Batch cost · 整批成本`, `Cost per serving · 每份成本`,
+`Cost per gram · 每克成本`, `(no servings) · (未记录份数)`,
+`(no batch size) · (未记录批量)`, `Margin per serving · 每份毛利`,
+`Food cost % · 食品成本率`, `Suggested sell price · 建议售价`,
+`Per-unit cost · 单位成本`, `No batch size or servings recorded · 未记录批量大小或份数`,
+`Sells for · 售价`, `Margin · 毛利`, `Selling below cost · 低于成本销售`,
+`serving · 份`, `(batch) · (整批)`, `free · 免费`, `no cost · 无成本`,
+`not yet costed · 尚未计算成本`, and the whole missing-cost sentence
+`N ingredients missing cost — costs shown are too low · N 项原料缺少成本 — 显示成本偏低`.
+It is now used wherever a cost figure is on screen; the short form declared in
+R1 stays where none is.
+
+**Live candidates rejected.**
+
+- Leaving the desktop's English `Margin (recipe)` in the Chinese half, as the
+  desktop does: **rejected**, because it would put English in front of a
+  Chinese reader on the one label that says the margin is not the product's.
+- `毛利(配方)`: **rejected**, because 配方 appears only in the server's refusal
+  sentences, while 食谱 is the screen's own word for a recipe, on every label
+  of it.
+- The Packaging breakdown row `Packaging (batch) — no longer counted`: **not
+  drawn**, so no Chinese was needed; see the decision.
+
+## From the kitchen on the phone (§310)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the card on
+the phone's Purchasing list and its *From the kitchen* sheet (`public/m.html`).
+Every label is copied whole from the desktop's *From the kitchen* modal
+(`public/retail-admin/16-purchasing.js`):
+
+- `From the kitchen · 厨房申请`;
+  `Materials the kitchen has asked for. Ticked lines become one draft order you can price and place. · 厨房申请的物料。勾选的行会生成一张采购单草稿，可在此定价并下单。`;
+- `Find a material or request · 搜索物料或申请单`, `Select all shown · 全选当前`,
+  `Nothing matches that search. · 没有匹配的申请。`,
+  `The kitchen has not asked for anything. · 厨房暂无物料申请。`;
+- `Urgent · 加急`, and `by <day> · <day> 订购` (§176, v1.131), with the day in the
+  phone's own date format;
+- `File under store · 归属门店`, `No stores · 暂无门店`, `Supplier · 供应商`,
+  `Optional — set it later · 可稍后填写`, `Pick a store first. · 请先选择门店。`;
+- `This makes a DRAFT. Nothing is ordered and nothing reaches the books until you mark it Ordered. · 这里只生成草稿。标记「已下单」后才会正式下单并记入账目。`,
+  `Tick the lines you are buying. · 勾选要采购的物料。`;
+- `Draft N line(s) · 生成草稿 (N 行)`, `Make draft · 生成草稿`, `Working… · 处理中…`;
+- `Already ordered: · 已下单:`;
+- the ✕'s confirm `Remove this line? · 移除该行？`,
+  `The kitchen asked for it and it will not be bought. It leaves this list for good — if it is still needed, the kitchen asks again. · 厨房申请的该物料将不会采购，并永久离开此列表。如仍需要，请厨房重新申请。`,
+  `Remove · 移除`;
+- the unit names (`PO_UNIT_CN`).
+
+**Copied whole, the tick dropped** (the phone's toasts carry none):
+`<po> drafted from N line(s) · 已生成草稿 <po>，共 N 行` and `Removed · 已移除`.
+
+**Copied whole from elsewhere:** `That line is already on a purchase order. · 该行已在采购单上。`,
+`That line was removed and is no longer being bought. · 该行已移除，不再采购。`,
+`Choose a location first. · 请先选择门店。` (the desktop's error catalogue,
+`01-core.js`); `Could not load this. · 无法加载。`, `Try again · 重试`,
+`Loading… · 加载中…`, `Close · 关闭`,
+`That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`
 (the phone's own).
