@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.230 · 2026-09-30 · §323 THE BUILD LIST'S MONEY IS SENT ONLY ON THE KEYS THAT DRAW IT — NOTHING COMPOSED, NO STRING CHANGED.** See *Build-list money on the wire (§323)*.
+
 **v1.229 · 2026-09-30 · §322 A PRODUCT'S COST & PRICING ON THE PHONE — SIX STRINGS COMPOSED BY CLAUDE, THE BUILD LIST STILL UNNAMED IN CHINESE.** See *A product's Cost & Pricing on the phone (§322)*.
 
 **v1.228 · 2026-09-30 · §321 SUPPLIERS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, ONE TRIMMED, ONE §286 STRING RETIRED; EVERY OTHER LABEL COPIED.** See *Suppliers on the phone (§321)*.
@@ -10280,3 +10282,9 @@ drawn, because the list is on the same screen. `物料清单` stays unminted, as
   配方 throughout, and those pairs are copied as they are. The recipe-search
   failure is the phone's own live `无法加载食谱。`, which is the one place the
   two words meet on this screen.
+
+## Build-list money on the wire (§323)
+
+**Nothing composed, 2026-09-30.** Step R7 changes what the server sends,
+not what any screen says. No string was added, removed or reworded on the
+phone or the desktop.
