@@ -21176,3 +21176,49 @@ banner and not an ad wall:
    the field), subcategories.
 9. **Strings:** the category pane's labels, declared in the vocabulary
    document (v1.209).
+
+## §298 — A CATEGORY'S BANNER CAN BE EDITED FROM THE PHONE
+
+**Decided 2026-09-30 by Ash** (*"can edit the banner from the mobile app ?"*;
+it could not, and on Claude's recommendation, *"go"*). The phone admin's
+Categories screen (`public/m.html`) was read-only. An open category on the phone
+now carries the same banner editor as the desktop pane (§297).
+
+1. **The same controls as desktop**, stacked for a phone: add or replace the
+   picture, tap link (picture only, pages, this shelf's products; a saved link
+   in neither list is kept), start and end day, remove. Status in the pop-ups'
+   words on China's day.
+2. **Every change saves at once.** A phone has no "unsaved" to come back to.
+   The save PUTs the whole tree, exactly as the desktop does, because the banner
+   lives on its node; sending part of the tree would delete the rest.
+3. **A failed save says so and reloads the tree**, so the screen never shows a
+   banner the server did not keep.
+4. **The picture is shrunk on the phone first** (1600px long side, JPEG): a
+   phone photo is often past the upload's 5 MB limit. It goes to the phone's own
+   media upload (`/media/upload`, the permission its photo library already uses).
+5. **Everything else on the screen stays read-only.** Rename, reorder, add and
+   remove are still desktop only, and the screen still says so.
+6. **No composed string.** Every label is §297's, copied whole.
+
+## §299 — PROMO CARDS CAN BE EDITED FROM THE PHONE
+
+**Decided 2026-09-30 by Ash** (the same *"go"* as §298). The phone page editor
+(`public/cms-mobile.html`) could place a promo cards block (§296) but not edit
+it: its quick-edit sheet takes text fields and sends pictures to desktop, and
+a promo card is nothing but a picture, a link and two days.
+
+1. **The block gets its own small editor in the sheet.** Per card: the picture
+   (add or replace), status, tap link, start and end day, move up / down,
+   remove; *+ Add card* up to five, as on desktop.
+2. **Every change sends the whole card list** through the sheet's existing
+   `patch`, so the desktop editor running underneath saves it and redraws the
+   preview exactly as if it had been done there. No new server route.
+3. **The link list** offers picture only, the pages a card most often wants,
+   and the shop's top categories. A link set on desktop that is not in the list
+   (a product) is kept, shown by its number, never swapped.
+4. **The picture is shrunk on the phone first** (1600px, JPEG) and goes to the
+   editor's own upload (`/cms/media`), as desktop does.
+5. **The "images are tuned on desktop" note is not shown for this block**,
+   because here they are not.
+6. **No composed string.** Every label is §296's or the link picker's, copied
+   whole.
