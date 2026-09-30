@@ -21222,3 +21222,45 @@ a promo card is nothing but a picture, a link and two days.
    because here they are not.
 6. **No composed string.** Every label is §296's or the link picker's, copied
    whole.
+
+## §300 — RECIPES, PURCHASING AND FINANCE COME TO THE PHONE IN FULL
+
+**Decided 2026-09-30 by Ash** (*"I want recipe full version on mobile . you
+need to check all feature on PC and bring them to mobile 100% … do the same for
+our purchasing and everything that got to do with acocunting"*; then, on the
+survey and its four questions, *"yes , and keep going until you finish all .I
+approve all"*). This is §97 applied to three whole areas. The survey, the gap
+list and the build order are `docs/tacet-phone-parity-recipes-purchasing-finance.md`;
+the mockups are `design-handoff/phone-parity/`.
+
+1. **Every desktop feature in Recipes (with Materials and the product ↔ recipe
+   link), Purchasing (orders, the new-order wizard, kitchen requests, receiving,
+   发票, reorder, price history, suppliers) and Finance (Summary, Transactions,
+   Categories, Approvals), plus 发票 issuing on an order and Reports' dates and
+   store, is built on the phone**, one PR per step, in the order the survey
+   gives: permission and money fixes first, then screens that read, then
+   screens that write.
+2. **Four narrower holds are overturned, by name**, so nobody inherits them:
+   - §164 / §167 and the phone Recipes header (*read-only; writes need their
+     own decision*): **the phone writes recipes.** This is that decision.
+   - The phone Recipes header's *"no money on this screen, for anybody"*:
+     **the phone shows recipe costs to exactly the people the desktop does**
+     (`recipes:costs`), and the gate **fails closed**, as the desktop's does.
+   - §286 item and the phone's Suppliers-we-owe header (*a supplier is switched
+     to credit on the desktop*): **the switch comes to the phone**, behind a
+     confirm.
+   - `docs/purchase-returns.md` "What this does not do" #5 (*no return UI on
+     the phone*): **returns are recorded on the phone**, on the receive screen.
+3. **Defects found by the survey are fixed before any new screen**: the
+   `/purchases/:id/status` gate that lets a receive-only account cancel or
+   un-send an order; the kitchen-request decline gated on the cook's
+   capability instead of the buyer's; the phone's Approvals settle, which
+   writes on the first tap because its confirm calls a function that does not
+   exist; a voided claim reading *Waiting*; purchase-order buttons shown to
+   accounts that cannot use them; and `mCan` failing open for money keys.
+4. **Not built, on Claude's recommendation, accepted with the rest**: importing
+   suppliers from a CSV file on the phone. It is one-off setup work and a phone
+   rarely holds the file.
+5. **§97's two standing rules hold for every step**: every new write is
+   asserted on the request, and every guard the desktop puts in front of a
+   write comes with it.
