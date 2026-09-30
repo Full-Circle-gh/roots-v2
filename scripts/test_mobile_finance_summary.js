@@ -474,11 +474,10 @@ const ROWS = [
 /* ─────────────────────────────────────────────────────────────────────── */
 section('5 · the sub-view strip');
 {
-  it('Summary, Transactions and Approvals — and nothing that does not exist yet', () => {
+  it('Summary, Transactions, Approvals and Categories, in the desktop\'s order', () => {
     const h = mk();
     const t = h.text(h.screen());
-    assert.ok(t.startsWith('Summary Transactions Approvals'));
-    assert.ok(!/Categories/.test(t));
+    assert.ok(t.startsWith('Summary Transactions Approvals Categories'));
     assert.ok(DESK.includes('Summary · 汇总') && DESK.includes('Transactions · 交易记录') && DESK.includes('Approvals · 审批'));
   });
   it('Approvals renders the Approvals screen this app has, from a fresh queue', () => {
@@ -495,7 +494,7 @@ section('5 · the sub-view strip');
   it('without expenses:approve: no Approvals tab, and it cannot be forced', () => {
     const h = mk({ caps: ['finance:view'] });
     assert.ok(!h.text(h.screen()).includes('Approvals'));
-    assert.ok(h.text(h.screen()).startsWith('Summary Transactions Today'));
+    assert.ok(h.text(h.screen()).startsWith('Summary Transactions Categories Today'));
     h.CMD.finView('approvals');
     assert.strictEqual(h.f.view, 'summary');
   });

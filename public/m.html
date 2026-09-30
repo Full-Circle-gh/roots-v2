@@ -1249,7 +1249,10 @@ const state = {
        /* §300 F2 — Transactions: the ledger payload and its read, the chip and
           search filters, the row whose sheet is open (a kind:id key), that
           sheet's busy/refusal, and the New/Edit and Return forms. */
-       tx:null,txTried:false,txErr:'',txSeq:0,txDir:'all',txQ:'',txRow:null,txBusy:'',txActErr:'',form:null,ret:null},
+       tx:null,txTried:false,txErr:'',txSeq:0,txDir:'all',txQ:'',txRow:null,txBusy:'',txActErr:'',form:null,ret:null,
+       /* §300 F3 — Categories: the list and its read, a write's refusal (kept on
+          screen until the next write), the write in flight, the Add box. */
+       cats:null,catsTried:false,catsErr:'',catsMsg:'',catsBusy:'',catsNew:''},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -1315,6 +1318,11 @@ const state = {
           under the ingredient lines: what is typed, what came back, and the
           ticket that lets the last-asked answer win. */
        ed:null,pickQ:'',pickRows:null,pickErr:null,pickSeq:0,
+       /* §300 R4 — the ⋯ menu's writes. `actBusy` names the one on the wire
+          (the menu is shut while it is), `actErr` is a refusal, kept on the
+          record until the next action; `mz` is the make-available screen's
+          form. */
+       actBusy:null,actErr:null,mz:null,
        /* MAKING ONE (stage two). `scale` multiplies every quantity on screen
           and is never written anywhere — the recipe on the server is the
           recipe, and doubling it for one afternoon is a fact about this
@@ -1459,7 +1467,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      copy in hand may be an hour old and the person holding the phone is about
      to make the thing. `rec` to null rather than kept, so the screen draws
      "Loading…" rather than the last recipe somebody opened. */
-  if(route==='recipeone'){ const r=state.rcp; r.rec=null; r.recTried=false; r.recErr=null; r.recFor=null; r.tab='ingredients'; }
+  if(route==='recipeone'){ const r=state.rcp; r.rec=null; r.recTried=false; r.recErr=null; r.recFor=null; r.tab='ingredients'; r.actErr=null; }
   /* Making one starts at one batch with nothing gathered, every time. */
   if(route==='recipemake'){ const r=state.rcp; r.scale=1; r.got={}; r.step=null; }
   /* A CLAIM IS WRITTEN FROM AN EMPTY FORM EVERY TIME, and a screen reopened
@@ -1476,7 +1484,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
-    f.txTried=false; f.txErr=''; f.txRow=null; f.txActErr=''; f.txBusy=''; f.form=null; f.ret=null; }
+    f.txTried=false; f.txErr=''; f.txRow=null; f.txActErr=''; f.txBusy=''; f.form=null; f.ret=null;
+    f.catsTried=false; f.catsErr=''; f.catsMsg=''; f.catsBusy=''; f.catsNew=''; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid=EXP_PAID_DEFAULT; x.note=''; x.photo=null; x.date=null;
     x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
@@ -1764,6 +1773,7 @@ reg('rqSearch', v=>{
  ['mProdQ','mProdClr','prodSearch'],
  ['mRcpQ','mRcpClr','rcpSearch'],
  ['mRcpPickQ','mRcpPickClr','rcpPickQ'],
+ ['mRcpMzQ','mRcpMzClr','rcpMzQ'],
  ['mExpQ','mExpClr','expQ'],
  ['mRcvQ','mRcvClr','rcvQuery'],
  ['mRcvToQ','mRcvToClr','rcvToQuery'],
@@ -16355,7 +16365,8 @@ function screenRecipeOne(){
               : `<div style="display:flex;align-items:center;gap:14px;min-height:52px;padding:11px 16px">${inner}</div>`}`;
           }).join('')}</div>`);
 
-  const warns=(withMoney?rcpSumWrap(rcpSummaryHtml(rec, rec.cost)):'')+rcpRecWarns(rec);
+  const warns=(r.actErr?`<div style="padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${escAttr(r.actErr)}</div>`:'')
+    +(withMoney?rcpSumWrap(rcpSummaryHtml(rec, rec.cost)):'')+rcpRecWarns(rec);
   return (warns?`<div style="padding:12px 16px 0;display:flex;flex-direction:column;gap:8px">${warns}</div>`:'')
     + strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
     ${body}
@@ -16381,7 +16392,8 @@ SUBS.recipeone={title:['Recipes','食谱'],
     if(!rec) return '';
     const has=rec&&((Array.isArray(rec.ingredients)&&rec.ingredients.length)||(Array.isArray(rec.steps)&&rec.steps.length));
     return (mCan('recipes:edit')?`<button class="iconbtn" aria-label="${T('Edit','编辑')}" onclick="APP.cmd('rcpEdit')">${ic('pencil',20)}</button>`:'')
-      + `<button class="iconbtn" aria-label="${T('Print','打印')}" onclick="APP.cmd('rcpPrint')">${ic('printer',20)}</button>`
+      /* The ⋯ menu (§300 R4) — Print moved into it with the actions. */
+      + `<button class="iconbtn" aria-label="${T('More actions','更多操作')}" ${state.rcp.actBusy?'disabled':''} onclick="APP.cmd('rcpActs')">${ic('ellipsis',20)}</button>`
       + (has?`<button class="cta inhead" onclick="APP.cmd('rcpMake')">${T('Make it','开始制作')}</button>`:''); },
   titleOf:()=>{ const d=rcpEditing();
     if(d&&d.id==null) return T('New recipe','新建食谱');
@@ -16400,6 +16412,7 @@ SUBS.recipeone={title:['Recipes','食谱'],
        the record is a document being worked on. Never empty — the line is
        patched in place as the save moves, so it has to exist to be patched. */
     if(rcpEditing()){ const t=rcpEdStateText(); return t?escAttr(t):'\u00a0'; }
+    if(state.rcp.actBusy) return T('Saving…','保存中…');
     const rec=rcpRec(); if(!rec) return '';
     const bits=[];
     if(rec.batch_size) bits.push(rcpNum(rec.batch_size)+' g');
@@ -16778,6 +16791,13 @@ const rcpSumWrap = inner => `<div id="mRcpSum" style="display:flex;flex-directio
 function rcpEdLineMoney(d, l){
   const lm=d.rates?rcpLineMoney(l, d.rates[l.ingredient_id]):null;
   return lm?`<span style="font-size:12.5px;${lm.none?'color:var(--amber-ink)':'color:var(--text-secondary)'}">${escAttr(lm.per)}${lm.none?'':' · '+escAttr(lm.cost)}</span>`:'';
+}
+/* The frozen figure the archive warning names (archiveMaterialWarning) — null
+   without money, which the sentence was written to survive. */
+function rcpArchiveCost(rec){
+  const m=rec&&rec.backsMaterial;
+  if(!rcpRecMoney(rec)||!rcpHas(m,'cost_per_unit')||!(Number(m.cost_per_unit)>0)) return null;
+  return rcpMoneyU(m.cost_per_unit)+'/'+(m.unit||'g');
 }
 /* A picked material's rate into the draft's rates, for the live cost. */
 function rcpRateFromPick(d, m){
@@ -17244,7 +17264,10 @@ reg('rcpNew', ()=>{
    stays open with the reason on it. */
 reg('rcpEdDone', ()=>{
   const d=rcpEditing(), A=rcpAuto; if(!d||!A) return;
-  Promise.resolve(A.flush(A.dirty()?'manual':null)).then(()=>{
+  /* A recipe never yet saved (New recipe, a duplicate) is written by Done even
+     untouched — the desktop's Save; without an English name it is held and
+     says so. */
+  Promise.resolve(A.flush((A.dirty()||d.id==null)?'manual':null)).then(()=>{
     if(A.state==='hold'||A.state==='error'||A.dirty()){ rcpEdPaintState(); return; }
     const r=state.rcp;
     rcpEdEnd(); r.recTried=false; r.tried=false; render();
@@ -17411,6 +17434,267 @@ function rcpMayLeave(){
 }
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden'&&rcpAuto&&state.rcp.ed) rcpAuto.flush();
+});
+/* ── The record's ⋯ menu (§300 step R4) ─────────────────────────────────────
+   What the desktop record's header and the list row's action carry, in one
+   sheet (mockup R07): Print, Duplicate, Version history, Make available as
+   material / unlink it, Archive or Restore. Each is drawn only for the
+   capability its write needs — Duplicate and Archive `recipes:edit` (the
+   desktop's data-cap), the material link `recipes:edit` AND `materials:edit`
+   (the route's second gate, requireMaterialsEditToo): a button whose write is
+   refused is, on this phone, a trip to the login page.
+
+   OFFERED FROM THE READ VIEW ONLY. The editor's head carries Done and nothing
+   else, and Done does not hand the record back until its last save has
+   landed — so every action here starts from a record that is on the server,
+   which is the state the desktop's flushSave() waits for before each one. */
+function rcpActs(rec){
+  const edit=mCan('recipes:edit'), acts=[];
+  acts.push({key:'print', label:T('Print','打印')});
+  if(edit) acts.push({key:'dup', label:T('Duplicate','复制')});
+  acts.push({key:'hist', label:T('Version history','历史版本')});
+  if(edit&&mCan('materials:edit')) acts.push(rec.backsMaterial
+    ? {key:'unlink', label:escAttr(T('Linked to material: ','已关联物料:')+rcpName(rec.backsMaterial))}
+    : {key:'mz', label:T('Make available as material','设为可用物料')});
+  if(edit) acts.push({key:'arch', label:rec.is_active===0?T('Restore','恢复'):T('Archive','归档')});
+  return acts;
+}
+reg('rcpActs', ()=>{
+  const rec=rcpRec(), r=state.rcp; if(!rec||r.actBusy) return;
+  state.ask={title:T('More actions','更多操作'), options:rcpActs(rec), run:k=>APP.cmd('rcpAct',k)};
+  render();
+});
+reg('rcpAct', k=>{
+  const r=state.rcp; r.actErr=null;
+  if(k==='print') return CMD.rcpPrint();
+  if(k==='hist') return CMD.rcpHistory();
+  if(k==='dup') return rcpDuplicate();
+  if(k==='mz') return rcpMzOpen();
+  if(k==='unlink') return rcpUnlink();
+  if(k==='arch') return rcpArchiveAsk();
+});
+/* A refusal from any of these renders on the record, where the operator is
+   looking, and stays until the next action — a toast only ever confirms. */
+function rcpActFail(e){
+  const r=state.rcp; r.actBusy=null;
+  if(e&&String(e.message)==='auth') return;
+  r.actErr=T('Failed','操作失败')+': '+tmOneLang((e&&e.message)||'');
+  render();
+}
+/* ── Duplicate — duplicateOf() ────────────────────────────────────────────
+   Read the source FRESH (the list row is a summary with no lines or steps),
+   then open the copy exactly as New recipe opens: a draft on a frame of its
+   own, created by its first save. What the copy carries is the desktop's
+   list — the lines, the steps, batch and servings with their derived flags,
+   shelf life, storage, notes, category, type, and the cost inputs FOR A COST
+   HOLDER (rcpDraftFrom loads them only off a read that carried them, so a
+   reader without `recipes:costs` copies none and sends none). What it does not
+   carry: the id, the SKU (unique — a copied one is a 400 on every save), the
+   material and the products the source is linked to. The suffixes are STORED
+   DATA, one per language, never the screen's language: ' (copy)' on the
+   English name, '(副本)' on the Chinese. */
+function rcpDuplicate(){
+  const rec=rcpRec(), r=state.rcp; if(!rec||!mCan('recipes:edit')) return;
+  r.actBusy='dup'; rcpActPaint();
+  api('/api/retail-admin/recipes/'+Number(rec.id)).then(src=>{
+    r.actBusy=null;
+    if(!src) throw new Error('not_found');
+    const copy=Object.assign({}, src, {id:null, sku:'',
+      name_en:(src.name_en||'')+' (copy)', name_cn:src.name_cn?src.name_cn+'(副本)':''});
+    push('recipeone');
+    const t=state.stack[state.stack.length-1];
+    if(!t||t.route!=='recipeone') return;
+    t.isNew=true; t.rid=null;
+    r.ed=rcpDraftFrom(copy, 'new');
+    r.tab='details'; r.pickQ=''; r.pickRows=null; r.pickErr=null;
+    rcpEdStart(r.ed);
+    render();
+    /* Nothing is on the server yet, and the toast says so in its second half —
+       the desktop's words, from the popup manager's duplicate. */
+    showToast(T('Duplicated · edit the copy','已复制 · 编辑副本'));
+  }).catch(e=>{
+    r.actBusy=null;
+    if(String(e.message)==='auth') return;
+    r.actErr=T('Could not open that recipe','无法打开该食谱')+': '+(e.message||''); render();
+  });
+}
+/* ── Archive / Restore — rcpArchive() and archiveMaterialWarning() ──────── */
+function rcpArchiveAsk(){
+  const rec=rcpRec(); if(!rec||!mCan('recipes:edit')) return;
+  const restoring=rec.is_active===0;
+  const run=()=>rcpArchiveRun(rec, restoring);
+  if(restoring){
+    state.ask={title:T('Bring this recipe back?','恢复该食谱?'), confirmLabel:T('Restore','恢复'), run};
+  } else if(rec.backsMaterial){
+    /* The consequence named, not a generic confirm: archiving a recipe that
+       supplies a material freezes the material's cost, and every recipe using
+       it goes on reading that frozen number with no sign anything changed. */
+    const m=rec.backsMaterial, cons=Array.isArray(m.consumers)?m.consumers:[], n=cons.length;
+    const namesEn=cons.slice(0,4).map(c=>c.name_en).join(', ')+(n>4?`, +${n-4}`:'');
+    const namesCn=cons.slice(0,4).map(c=>c.name_cn||c.name_en).join('、')+(n>4?`等 ${n} 个`:'');
+    const cost=rcpArchiveCost(rec);
+    const usedEn=n>0?`, used by ${n} recipe${n===1?'':'s'}${namesEn?' ('+namesEn+')':''}`:'';
+    const usedCn=n>0?`,被 ${n} 个食谱使用${namesCn?'('+namesCn+')':''}`:'';
+    const whoEn=n===0?'nothing uses it yet, but anything that does':(n===1?'that recipe':'those recipes');
+    const whoCn=n===0?'目前没有食谱使用它,但之后使用它的食谱':'这些食谱';
+    state.ask={title:T('Archive this recipe?','归档该食谱?'),
+      body:escAttr(T(`"${rec.name_en}" supplies the material "${m.name_en}"${usedEn}. Archiving freezes its cost${cost?` at ${cost}`:''} — ${whoEn} will keep using that number until you bring it back.`,
+        `"${rec.name_en}" 是物料 "${m.name_en}" 的产出来源${usedCn}。归档后其成本将冻结${cost?`为 ${cost}`:''} —— ${whoCn}会持续使用该数值,直到你恢复该配方。`)),
+      confirmLabel:T('Archive anyway','仍然归档'), danger:true, run};
+  } else {
+    state.ask={title:T('Archive this recipe?','归档该食谱?'), body:T('You can bring it back later.','之后可以恢复。'),
+      confirmLabel:T('Archive','归档'), danger:true, run};
+  }
+  render();
+}
+function rcpArchiveRun(rec, restoring){
+  const r=state.rcp, id=Number(rec.id);
+  r.actBusy='arch'; rcpActPaint();
+  apiWrite('/api/retail-admin/recipes/'+id+'/archive', {restore:restoring}, 'PUT').then(()=>{
+    r.actBusy=null;
+    /* Both lists are stale now — the recipe has moved from one to the other. */
+    r.tried=false; r.archTried=false; r.archRows=null;
+    showToast(restoring?T('Restored','已恢复'):T('Archived','已归档'));
+    /* Back to where it was opened from, as the desktop goes back to its list. */
+    const t=state.stack[state.stack.length-1];
+    if(t&&t.route==='recipeone'&&rcpCurId()===id){ forgetScroll(); state.stack.pop(); }
+    r.recTried=false;
+    render();
+  }).catch(rcpActFail);
+}
+/* ── Unlink — unlinkFlow() ─────────────────────────────────────────────── */
+function rcpUnlink(){
+  const rec=rcpRec(); if(!rec||!rec.backsMaterial||!(mCan('recipes:edit')&&mCan('materials:edit'))) return;
+  const name=rec.backsMaterial.name_en;
+  state.ask={title:T('Unlink this material?','取消关联该物料?'),
+    body:escAttr(T(`"${name}" stops being backed by this recipe. It is not deleted, and any other recipe already using it keeps using it — its cost just stops updating from here.`,
+      `"${name}" 将不再由本食谱产出。该物料不会被删除,其他正在使用它的食谱不受影响 —— 只是它的成本将不再随本食谱更新。`)),
+    confirmLabel:T('Unlink','取消关联'), danger:true,
+    run:()=>{
+      const r=state.rcp, id=Number(rec.id);
+      r.actBusy='unlink'; rcpActPaint();
+      apiWrite('/api/retail-admin/recipes/'+id+'/materialize', {}, 'DELETE').then(()=>{
+        r.actBusy=null; r.recTried=false; r.tried=false;
+        showToast(T('Unlinked','已取消关联')); render();
+      }).catch(rcpActFail);
+    }};
+  render();
+}
+/* While an action is on the wire the menu is shut (the ⋯ is disabled) and the
+   status line says so. */
+function rcpActPaint(){ render(); }
+/* ── Make available as material — openMaterializeModal() ───────────────────
+   A screen of its own rather than a sheet: it has fields, a search, and a
+   choice between two modes, and a sheet rebuilt on each keystroke takes the
+   keyboard with it. Two modes, as on the desktop: a NEW material (named from
+   the recipe, recipe unit g, SKU optional, a kind), or LINK an existing one —
+   searched with the picker's query and narrowed to what the server will
+   accept (stocked in g, not already made by another recipe). */
+const RCP_MZ_KINDS=[['food','Food','食品'],['packaging','Packaging','包装'],['equipment','Equipment','设备'],['retail','Retail','零售'],['other','Other','其他']];
+function rcpMzOpen(){
+  const rec=rcpRec(); if(!rec||!(mCan('recipes:edit')&&mCan('materials:edit'))) return;
+  state.rcp.mz={mode:'new', name_en:String(rec.name_en||''), name_cn:String(rec.name_cn||''), sku:'', kind:'food',
+    q:'', results:null, seq:0, selected:null, busy:false, err:null};
+  push('recipemz');
+}
+function rcpMzReason(){
+  const z=state.rcp.mz; if(!z) return '';
+  if(z.mode==='new') return String(z.name_en||'').trim()?'':T('An English name is required.','英文名称为必填项。');
+  return z.selected?'':T('Pick a material to link.','请选择一个要关联的物料。');
+}
+function rcpMzResultsHtml(){
+  const z=state.rcp.mz; if(!z||z.selected||!String(z.q||'').trim()) return '';
+  if(z.results===null) return `<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!z.results.length) return `<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('Nothing matches','没有匹配项')}</div>`;
+  return `<div class="list">${z.results.slice(0,20).map((m,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('rcpMzPick',${Number(m.id)})" style="min-height:52px;align-items:center">
+      <span style="flex:1;min-width:0;font-size:15px">${escAttr(rcpName(m))}${rcpOther(m)?` <span style="color:var(--text-secondary)">· ${escAttr(rcpOther(m))}</span>`:''}</span>
+      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${escAttr(rcpPickRate(m))}</span></button>`).join('')}</div>`;
+}
+function rcpMzSelectedHtml(){
+  const z=state.rcp.mz, m=z&&z.selected; if(!m) return '';
+  return `<div style="font-size:14.5px">${T('Selected: ','已选择:')}<b style="font-weight:600">${escAttr(m.name_en||'')}</b></div>
+    ${Number(m.buy_price)>0?`<div style="padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);font-size:13.5px;line-height:1.5">${
+      T('This material has a buy price — linking will switch its cost to come from this recipe instead.','该物料已有采购价 —— 关联后其成本将改为来自本食谱。')}</div>`:''}`;
+}
+function screenRecipeMz(){
+  const z=state.rcp.mz, rec=rcpRec();
+  if(!z||!rec) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const why=rcpMzReason();
+  const f=(k,label)=>`<label>${rcpLbl(label)}<input id="mRcpMz-${k}" value="${escAttr(z[k])}" style="width:100%" oninput="APP.cmd('rcpMzSet','${k}',this.value)"></label>`;
+  const pane=z.mode==='new'
+    ? `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+        ${f('name_en',T('Name (English)','名称(英文)'))}${f('name_cn',T('Name (中文)','名称(中文)'))}
+        <label>${rcpLbl(T('Recipe unit','配方单位'))}<input value="g" disabled style="width:100%;opacity:.7"></label>
+        ${f('sku',T('SKU (optional)','货号(可选)'))}
+        <label>${rcpLbl(T('Kind','类别'))}<select style="width:100%" onchange="APP.cmd('rcpMzSet','kind',this.value)">${RCP_MZ_KINDS.map(([v,en,zh])=>
+          `<option value="${v}"${z.kind===v?' selected':''}>${T(en,zh)}</option>`).join('')}</select></label></div>`
+    : `<div style="display:flex;flex-direction:column;gap:10px">
+        <label>${rcpLbl(T('Search materials','搜索物料'))}${searchBox(`<input id="mRcpMzQ" inputmode="search" value="${escAttr(z.q)}" style="width:100%"
+          placeholder="${T('Name or SKU…','名称或货号…')}" oninput="APP.cmd('rcpMzQ',this.value)">`,'mRcpMzClr',!!z.q)}</label>
+        <div id="mRcpMzRes">${rcpMzResultsHtml()}</div>
+        <div id="mRcpMzSel" style="display:flex;flex-direction:column;gap:8px">${rcpMzSelectedHtml()}</div></div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:14.5px;color:var(--text-secondary);line-height:1.55">${T('Lets another recipe use what this one makes as an ingredient.','让其他食谱可以将本食谱的产出作为原料使用。')}</div>
+    ${z.err?`<div style="padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${escAttr(z.err)}</div>`:''}
+    <div style="margin:0 -16px">${chipRow([{key:'new',en:'Create new',zh:'新建'},{key:'link',en:'Link existing',zh:'关联现有'}], z.mode, 'rcpMzMode')}</div>
+    ${pane}
+    <div id="mRcpMzWhy" style="font-size:13px;color:var(--amber-ink);${why?'':'display:none'}">${why}</div>
+    <button id="mRcpMzGo" class="cta" ${why||z.busy?'disabled':''} onclick="APP.cmd('rcpMzGo')">${z.busy?T('Saving…','保存中…'):T('Make available','设为可用')}</button>
+  </div>`;
+}
+/* The reason and the button follow the typing in place. */
+function rcpMzPaint(){
+  const z=state.rcp.mz; if(!z) return;
+  const why=rcpMzReason();
+  const w=document.getElementById('mRcpMzWhy'); if(w){ w.textContent=why; w.style.display=why?'':'none'; }
+  const b=document.getElementById('mRcpMzGo'); if(b) b.disabled=!!why||z.busy;
+}
+SUBS.recipemz={title:['Make available as material','设为可用物料'],
+  backLabel:()=>escAttr(rcpName(rcpRec())||T('Recipes','食谱')),
+  render:()=>screenRecipeMz()};
+reg('rcpMzMode', k=>{ const z=state.rcp.mz; if(!z||z.busy) return; z.mode=k==='link'?'link':'new'; z.err=null; render(); });
+reg('rcpMzSet', (k,v)=>{ const z=state.rcp.mz; if(!z||['name_en','name_cn','sku','kind'].indexOf(k)===-1) return;
+  z[k]=String(v==null?'':v); rcpMzPaint(); });
+reg('rcpMzQ', v=>{
+  const z=state.rcp.mz; if(!z) return;
+  z.q=String(v||''); z.selected=null; state.focus={id:'mRcpMzQ',pos:null};
+  searchClearShow('mRcpMzClr', !!z.q);
+  const q=z.q.trim();
+  const paint=()=>{ const a=document.getElementById('mRcpMzRes'); if(a) a.innerHTML=rcpMzResultsHtml();
+    const s=document.getElementById('mRcpMzSel'); if(s) s.innerHTML=rcpMzSelectedHtml(); rcpMzPaint(); };
+  z.results=null; paint();
+  clearTimeout(rcpPickTimer);
+  if(!q) return;
+  const seq=++z.seq;
+  rcpPickTimer=setTimeout(()=>{
+    api('/api/retail-admin/materials?for_recipe=1&search='+encodeURIComponent(q)).then(rows=>{
+      if(seq!==z.seq) return;
+      z.results=(Array.isArray(rows)?rows:[]).filter(m=>(m.unit||'g')==='g'&&m.source_recipe_id==null); paint();
+    }).catch(e=>{ if(seq!==z.seq||String(e.message)==='auth') return; z.results=[]; paint(); });
+  }, 220);
+});
+reg('rcpMzPick', id=>{ const z=state.rcp.mz; if(!z) return;
+  z.selected=(z.results||[]).find(m=>Number(m.id)===Number(id))||null;
+  if(z.selected) z.q=String(z.selected.name_en||''); render(); });
+reg('rcpMzGo', ()=>{
+  const z=state.rcp.mz, rec=rcpRec(); if(!z||!rec||z.busy||rcpMzReason()) return;
+  const body=z.mode==='link' ? {mode:'link', material_id:z.selected.id}
+    : {mode:'new', name_en:String(z.name_en).trim(), name_cn:String(z.name_cn).trim(), sku:String(z.sku).trim(), item_kind:z.kind};
+  z.busy=true; z.err=null; render();
+  apiWrite('/api/retail-admin/recipes/'+Number(rec.id)+'/materialize', body, 'POST').then(j=>{
+    z.busy=false;
+    const r=state.rcp; r.mz=null; r.recTried=false; r.tried=false;
+    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipemz'){ forgetScroll(); state.stack.pop(); }
+    /* The server's warning when it has one (a material with purchase
+       history), else the desktop's confirmation. */
+    showToast((j&&j.warning)||T('Now available as a material','已设为可用物料'));
+    render();
+  }).catch(e=>{
+    z.busy=false;
+    if(String(e.message)==='auth') return;
+    z.err=T('Failed','操作失败')+': '+tmOneLang(e.message||''); render();
+  });
 });
 /* ── Making one (§167) ────────────────────────────────────────────────────
    Scale the batch, tick things off as you gather them, then work the steps one
@@ -18583,13 +18867,12 @@ reg('expSend', ()=>{
    The days are the STORE's (shopToday), as the desktop's tdToday — a day out on
    this screen is money in the wrong month.
 
-   THE SUB-VIEW STRIP names only what exists: Summary and Transactions (F2),
-   and Approvals for an operator who may approve (it renders the Approvals
-   screen this app already has). Categories joins it in its own step; a tab
-   that opened onto nothing would be a control that lies.
+   THE SUB-VIEW STRIP is the desktop's, in its order: Summary, Transactions
+   (F2), Approvals for an operator who may approve (it renders the Approvals
+   screen this app already has), Categories (F3).
    ══════════════════════════════════════════════════════════════════════════ */
 SUBS.finance={title:['Finance','财务'],
-  status:()=>state.fin.view==='approvals'?'':escAttr(finRangeLabel(finWindow())),
+  status:()=>(state.fin.view==='approvals'||state.fin.view==='categories')?'':escAttr(finRangeLabel(finWindow())),
   /* §300 F2 — the desktop's New transaction, Transactions' alone (Summary types
      nothing), and only for the pen: `finance:record`, the key the write needs. */
   cta:()=>state.fin.view==='transactions'&&mCan('finance:record')
@@ -18750,7 +19033,8 @@ function finStair(d){
 function finStrip(){
   const v=state.fin.view;
   return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
-    ${[['summary','Summary','汇总'],['transactions','Transactions','交易记录']].concat(canRoute('approvals')?[['approvals','Approvals','审批']]:[]).map(([k,en,zh])=>{
+    ${[['summary','Summary','汇总'],['transactions','Transactions','交易记录']].concat(canRoute('approvals')?[['approvals','Approvals','审批']]:[])
+      .concat([['categories','Categories','分类']]).map(([k,en,zh])=>{
       const on=v===k;
       return `<button onclick="APP.cmd('finView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
         font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
@@ -18766,6 +19050,8 @@ function screenFinance(){
   // always a strip; Approvals joins it for who may approve.
   const strip=finStrip();
   if(f.view==='approvals'&&canRoute('approvals')) return strip+screenApprovals();
+  // §300 F3 — the list has no window, so no range chips over it.
+  if(f.view==='categories') return screenFinCats(strip);
   const head=`${strip}<div style="padding:12px 0 0">${chipRow(FIN_RANGES,f.range,'finRange')}</div>`;
   if(f.view==='transactions') return screenFinTx(head);
   finLoad();
@@ -18880,11 +19166,13 @@ function sheetFinCat(){
 reg('finView', v=>{
   const f=state.fin;
   if(v==='approvals'){ if(!canRoute('approvals')) return; aprFresh(); }
-  f.view=(v==='approvals'||v==='transactions')?v:'summary'; render();
+  f.view=(v==='approvals'||v==='transactions'||v==='categories')?v:'summary'; render();
 });
 reg('finToggle', k=>{ const o=state.fin.open; o[k]=!o[k]; render(); });
 reg('finRetry', ()=>{ const f=state.fin;
-  if(f.view==='transactions'){ f.txTried=false; f.txErr=''; } else { f.tried=false; f.err=''; } render(); });
+  if(f.view==='transactions'){ f.txTried=false; f.txErr=''; }
+  else if(f.view==='categories'){ f.catsTried=false; f.catsErr=''; }
+  else { f.tried=false; f.err=''; } render(); });
 /* A preset moves the window at once. Custom asks for two days first, in the
    ask-sheet, and applies them only when both are there and in order — the
    server refuses an inverted window, and the sheet says so before it is asked. */
@@ -19364,6 +19652,165 @@ reg('finTxOpenPO', ()=>{
   if(!r||!finTxActions(r).includes('openpo')) return;
   f.txRow=null; APP.cmd('openPO',Number(r.po_id));
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   §300 — FINANCE ON THE PHONE: CATEGORIES (step F3)
+   --------------------------------------------------------------------------
+   The tenant's own expense-category list (22-finance.js, §87 part two): the
+   list the money-out form offers and the Summary breakdown is drawn in. Read
+   for anybody on Finance; every write needs `finance:record`, the key
+   lib/cap-routes.js puts on every /finance/ write — the desktop draws its
+   controls for anyone and lets the server refuse, the phone does not draw a
+   control that would be refused.
+
+     Add        POST   /finance/categories {name}
+     Rename     PATCH  /finance/categories/:id {name}     (the rows follow it)
+     Operating  PATCH  /finance/categories/:id {is_operating}
+     Hide       PATCH  /finance/categories/:id {is_active:false}, after its confirm
+     Restore    PATCH  /finance/categories/:id {is_active:true}
+     Delete     DELETE /finance/categories/:id, after its confirm, and only for
+                a category nothing has used — said BEFORE the request, from the
+                count already here, exactly as finCatDelete does.
+
+   THE DESKTOP'S INLINE NAME FIELD IS A RENAME SHEET here, and its row of
+   controls is a ⋯ sheet: the same writes, the phone's shape (§97). No window:
+   the list has no date about it, so the range chips and the status line give
+   way, as the desktop hides its bar. Every write re-reads the list, because a
+   rename moves rows and the counts on OTHER rows move with it.
+   ══════════════════════════════════════════════════════════════════════════ */
+function finCatsLoad(){
+  const f=state.fin;
+  if(f.catsTried) return; f.catsTried=true;
+  api('/finance/categories').then(d=>{
+    f.cats=Array.isArray(d)?d:[]; f.catsErr=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    f.catsErr=T('Could not load the categories.','分类加载失败。'); render();
+  });
+}
+/* finCatsUsage: the count as a sentence, and "Not used" in words at zero. */
+function finCatsUsage(n){
+  const c=Number(n)||0;
+  return c===0?T('Not used','未使用'):T(`Used by ${c}`,`${c} 条使用`);
+}
+const finCatById=id=>(state.fin.cats||[]).find(c=>String(c.id)===String(id))||null;
+function finCatRowHtml(c){
+  const pen=mCan('finance:record');
+  const busy=!!state.fin.catsBusy;
+  const off=c.is_active===0;
+  const sub=[finCatsUsage(c.usage_count)].concat(off?[T('Hidden','已停用')]:[])
+    .concat(pen?[]:[c.is_operating?T('Operating expense','营业费用'):T('Not an operating expense','不计入营业费用')]);
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px 10px 14px;${off?'opacity:.62':''}">
+    <span style="display:flex;flex-direction:column;min-width:0;flex:1">
+      <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis">${escAttr(c.name)}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${escAttr(sub.join(' · '))}</span></span>
+    ${pen?`<span style="display:flex;align-items:center;gap:8px;flex:none">
+      <span style="font-size:12px;color:var(--text-secondary)">${T('Operating expense','营业费用')}</span>
+      ${busy?`<span style="opacity:.5;pointer-events:none">${toggle(!!c.is_operating,'')}</span>`:toggle(!!c.is_operating,`APP.cmd('finCatFlag',${Number(c.id)})`)}
+      <button class="iconbtn" style="width:36px;height:36px" ${busy?'disabled':''} aria-label="${T('More','更多')}" onclick="APP.cmd('finCatMore',${Number(c.id)})">${ic('ellipsis',20)}</button></span>`:''}
+  </div>`;
+}
+function screenFinCats(strip){
+  const f=state.fin;
+  finCatsLoad();
+  const pen=mCan('finance:record');
+  const intro=`<div style="font-size:13px;line-height:1.55;color:var(--text-secondary)">${T('Your own list. Expenses are filed against these, and only these are offered when someone records one.','本店自己的分类列表。记录支出时只会显示这些分类。')}</div>`;
+  const add=pen?`<div style="display:flex;gap:8px">
+      <input id="mFinCatNew" autocomplete="off" value="${escAttr(f.catsNew)}" placeholder="${T('Rent','租金')}" style="flex:1;min-width:0"
+        oninput="APP.cmd('finCatNewSet',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();APP.cmd('finCatAdd')}">
+      <button class="btn2" style="flex:none;width:auto;padding:0 18px" ${f.catsBusy?'disabled':''} onclick="APP.cmd('finCatAdd')">${f.catsBusy==='add'?T('Saving…','保存中…'):T('Add','添加')}</button></div>`:'';
+  const msg=f.catsMsg?finBanner(escAttr(f.catsMsg)):'';
+  let body;
+  if(f.catsErr&&!f.cats) body=`${finBanner(f.catsErr)}
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:0 auto;display:flex" onclick="APP.cmd('finRetry')">${T('Try again','重试')}</button>`;
+  else if(!f.cats) body=`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else if(!f.cats.length) body=`<div style="padding:18px 4px;font-size:14.5px;line-height:1.55;color:var(--text-secondary)">${T(
+      'No categories yet. Add the ones this business spends money on — rent, wages.','还没有分类。请新增本店的支出分类 — 租金、工资。')}</div>`;
+  else body=`<div class="list">${f.cats.map((c,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${finCatRowHtml(c)}`).join('')}</div>`;
+  return `${strip}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${intro}${add}${msg}${body}</div>`;
+}
+/* One write path: busy while it runs, the list re-read either way, a toast
+   only on success and the server's refusal on the screen where it stays. */
+function finCatsWrite(kind,run,after){
+  const f=state.fin;
+  if(f.catsBusy) return;
+  f.catsBusy=kind; f.catsMsg=''; render();
+  run().then(()=>{
+    f.catsBusy=''; f.catsTried=false;
+    // A category list change is a change to the ledger's words and the
+    // staircase's lines: both re-read when next shown.
+    f.txTried=false; f.tried=false;
+    if(after) after();
+    render(); showToast(T('Saved','已保存'));
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    f.catsBusy=''; f.catsTried=false; f.catsMsg=finTxWords(e); render();
+  });
+}
+reg('finCatNewSet', v=>{ state.fin.catsNew=String(v==null?'':v); });
+/* CLEARED ONLY ON SUCCESS — a duplicate leaves what was typed to be corrected. */
+reg('finCatAdd', ()=>{
+  const f=state.fin; if(!mCan('finance:record')) return;
+  const name=String(f.catsNew||'').trim();
+  if(!name) return;
+  finCatsWrite('add',()=>apiWrite('/finance/categories',{name}),()=>{ f.catsNew=''; });
+});
+reg('finCatFlag', id=>{
+  const c=finCatById(id); if(!c||!mCan('finance:record')) return;
+  finCatsWrite('flag:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_operating:!c.is_operating},'PATCH'));
+});
+reg('finCatMore', id=>{
+  const c=finCatById(id); if(!c||!mCan('finance:record')||state.fin.catsBusy) return;
+  const off=c.is_active===0;
+  state.ask={title:escAttr(c.name),
+    options:[{key:'rename',label:T('Rename','重命名')},
+      off?{key:'restore',label:T('Restore','启用')}:{key:'hide',label:T('Hide','停用')},
+      {key:'delete',label:T('Delete','删除')}],
+    run:k=>{
+      if(k==='rename') return finCatRename(c);
+      if(k==='restore') return finCatsWrite('active:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_active:true},'PATCH'));
+      if(k==='hide') return finCatHide(c);
+      if(k==='delete') return finCatDelete(c);
+    }};
+  render();
+});
+/* An empty or unchanged name puts the old one back and sends nothing — the
+   desktop field's blur does the same. */
+function finCatRename(c){
+  state.ask={title:T('Rename','重命名'),
+    fields:[{id:'name',label:T('Category','分类'),value:c.name}],
+    confirmLabel:T('Save','保存'),
+    run:v=>{
+      const name=String(v.name||'').trim();
+      if(!name||name===c.name){ render(); return; }
+      finCatsWrite('rename:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{name},'PATCH'));
+    }};
+  render();
+}
+/* Hiding is the ordinary way to retire one; the confirm says what it does. */
+function finCatHide(c){
+  state.ask={title:T('Hide this category?','停用该分类？'),
+    body:T('It stops being offered when recording an expense. Expenses already filed under it keep it, and keep its setting.',
+           '记录支出时不再显示该分类。已使用该分类的支出保持不变，其设置也保留。'),
+    confirmLabel:T('Hide','停用'),
+    run:()=>finCatsWrite('active:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_active:false},'PATCH'))};
+  render();
+}
+/* Delete is for a category nothing has used; the reason for refusing the rest
+   is said before any request, from the count on screen. */
+function finCatDelete(c){
+  const f=state.fin;
+  if(Number(c.usage_count)>0){
+    f.catsMsg=T(`"${c.name}" is used by ${c.usage_count} expenses. Hide it instead — hiding keeps those records exactly as they are.`,
+                `“${c.name}”已被 ${c.usage_count} 条支出使用。请改为停用 — 停用不会改动这些记录。`);
+    render(); return;
+  }
+  state.ask={title:T('Delete this category?','删除该分类？'),
+    body:T('Nothing has been filed under it. This cannot be undone.','尚无支出使用该分类。此操作无法撤销。'),
+    confirmLabel:T('Delete','删除'), danger:true,
+    run:()=>finCatsWrite('delete:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{},'DELETE'))};
+  render();
+}
 
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
@@ -26765,7 +27212,7 @@ const ROUTE_CAP={
      The record, Making one and the print card carry the same key: each is the
      list's other half, not a second permission — and the print card has no
      money in it for anybody, by construction. */
-  recipes:'recipes:view', recipeone:'recipes:view', recipemake:'recipes:view', recipeprint:'recipes:view',
+  recipes:'recipes:view', recipeone:'recipes:view', recipemake:'recipes:view', recipeprint:'recipes:view', recipemz:'recipes:edit',
   /* `till` is deliberately ABSENT from this table — it is the one route that
      needs ALL of a pair rather than any of it, and an array here means any-of.
      Its gate is the named branch in canRoute() below. */
@@ -26906,6 +27353,9 @@ function canRoute(k){
      table: one route needs this, and a table where an array sometimes means
      any-of and sometimes all-of is a table nobody can read. */
   if(k==='till') return mCan('till:use') && mCan('orders:edit');
+  /* Make available as material writes a materials row too, so its route
+     wants materials:edit as well (retail-recipes.js requireMaterialsEditToo). */
+  if(k==='recipemz') return mCan('recipes:edit') && mCan('materials:edit');
   /* §300 P2 — WRITING A PURCHASE ORDER NEEDS BOTH, the same named && as the
      till. The screen is purchasing:edit's (its saves), but it shows every
      price on the order, and on the desktop nobody reaches the wizard without
