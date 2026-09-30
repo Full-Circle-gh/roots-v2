@@ -262,6 +262,27 @@ it('products:costs without materials:costs: the product’s figures, but no mate
   assert.match(html, /id="mPcTot"/);
   assert.ok(!/mPcLc-|\/g<|no cost/.test(html), 'no rate, no line cost, no mark');
 });
+it('…and as the server now answers that reader (§300 R7: no rates), the figure is the server’s for the saved list', async () => {
+  // The payload lib/product-build-cost-visibility.js sends a products:costs
+  // holder without materials:costs: no rate on any line, the total kept.
+  const V = require('../lib/product-build-cost-visibility.js');
+  const req = { caps: new Set(ALL.filter((k) => k !== 'materials:costs')) };
+  const full = { product_id: 41, name_en: 'Zhoug 200 g', unit_cost: 8.5, lines: J(LINES),
+    cost: { hasBuildList: true, unitCost: 8.45, ingredientCost: 8.45, ingredientLines: 2, zeroCostLines: 0,
+      unreconciledUnitLines: 0, packagingOnly: false, lines: [] }, recipe: { state: 'none' } };
+  const sent = V.stripBuildPayload(req, full);
+  assert.ok(!('material_cost_per_unit' in sent.lines[0]), 'the fixture really is the stripped shape');
+  const t = mk({ handlers: h({ ['GET ' + BL]: { success: true, data: sent } }), caps: [...req.caps] });
+  seed(t);
+  const html = await open(t);
+  assert.match(html, /id="mPcTot"[^>]*>¥8\.45</, 'the server’s total, not a sum of rates it no longer has');
+  assert.match(html, /id="mPcMargin"[^>]*>57\.8%</);
+  assert.ok(!/mPcSubM|has no unit cost|no cost/.test(html), 'no subtotals it cannot make, no false “no unit cost”');
+  const tot = t.el('mPcTot'), mg = t.el('mPcMargin');
+  t.ctx.CMD.pcQty(0, '100');
+  assert.strictEqual(tot.textContent, '—', 'an edit in hand has no figure until it is saved');
+  assert.strictEqual(mg.textContent, '—');
+});
 it('without products:costs: no cost block, no link, no figures — and the recipe’s health is never asked', async () => {
   const t = mk({ handlers: h(), caps: ALL.filter((k) => k !== 'products:costs') });
   seed(t);

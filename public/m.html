@@ -1367,7 +1367,7 @@ const state = {
        skuRule:null,skuHint:'',skuNote:''},
   /* A product's Cost & Pricing (§300 R6): the build list in hand, its recipe
      bridge, the picker, the recipe's warnings and the link picker. */
-  pc:{pid:null,lines:null,recipe:null,tried:false,err:null,seq:0,dirty:false,busy:false,saveErr:null,
+  pc:{pid:null,lines:null,recipe:null,cost:null,tried:false,err:null,seq:0,dirty:false,busy:false,saveErr:null,
       q:'',pick:null,matched:0,pickErr:null,pickSeq:0,health:null,healthSeq:0,actBusy:null,actErr:null,link:null,stale:false},
   wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
        range:'week',reason:'',store:'',reasons:null,
@@ -19003,8 +19003,11 @@ function matArchiveRun(row, restoring){
        products:edit in lib/cap-routes.js), and Unlink needs products:delete,
        because DELETE /products/:id/recipe-link is mapped to it there: a
        button the server refuses is not offered.
-   The server sends material costs on /build-lines to anyone who may read the
-   product; this screen decides what is DRAWN, and draws nothing it may not.
+   The server sends the same money on the same keys (§300 R7,
+   lib/product-build-cost-visibility.js), so a reader without materials:costs
+   receives no rates at all and the figures come from the server's own total
+   for the saved list (pcTotals). This screen still decides what is DRAWN,
+   and draws nothing it may not, whatever arrives.
 
    IT NEVER WRITES A COST. The build list is saved and the server's recompute
    writes unit_cost (routes/retail-product-build.js); linking hands the cost to
@@ -19027,7 +19030,7 @@ const pcUnitMoney=n=>{ const v=Math.abs(Number(n)||0);
   const p=v>=0.01?4:5; return (CUR||'¥')+Number(n).toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p}); };
 function pcFresh(){
   const c=state.pc;
-  c.lines=null; c.recipe=null; c.tried=false; c.err=null; c.seq=(c.seq||0)+1; c.dirty=false; c.busy=false; c.saveErr=null;
+  c.lines=null; c.recipe=null; c.cost=null; c.tried=false; c.err=null; c.seq=(c.seq||0)+1; c.dirty=false; c.busy=false; c.saveErr=null;
   c.q=''; c.pick=null; c.matched=0; c.pickErr=null; c.pickSeq=(c.pickSeq||0)+1;
   c.health=null; c.healthSeq=(c.healthSeq||0)+1; c.actBusy=null; c.actErr=null; c.link=null; c.stale=false;
 }
@@ -19071,6 +19074,17 @@ function pcLineCost(l){
 function pcTotals(){
   const out={materials:0,packaging:0,total:0,blocked:false,blockedNames:[],packagingOnly:false};
   const lines=state.pc.lines||[];
+  /* WITHOUT materials:costs THE SERVER SENDS NO RATES (§300 R7), so the sum
+     cannot be made here. The figure is then the server's own for the SAVED
+     list (cost.unitCost, sent on products:costs), and a list with edits in
+     hand has none until it is saved — a dash, never a guess. */
+  if(!pcLineMoney()){
+    out.server=true;
+    if(lines.length&&!lines.some(l=>pcGroupOf(l)!=='packaging')){ out.blocked=true; out.packagingOnly=true; return out; }
+    const k=state.pc.cost, u=k&&k.unitCost;
+    if(state.pc.dirty||u==null||!Number.isFinite(Number(u))){ out.blocked=true; return out; }
+    out.total=Number(u); return out;
+  }
   for(const l of lines){
     const c=pcLineCost(l);
     if(c===null){ out.blocked=true; out.blockedNames.push(pcName(l)); continue; }
@@ -19092,7 +19106,7 @@ function pcLoad(){
     if(seq!==c.seq) return;
     const x=d||{};
     c.lines=Array.isArray(x.lines)?x.lines.map(l=>Object.assign({},l)):[];
-    c.recipe=x.recipe||null; c.dirty=false; c.saveErr=null;
+    c.recipe=x.recipe||null; c.cost=x.cost||null; c.dirty=false; c.saveErr=null;
     render(); pcHealthLoad();
   }).catch(e=>{
     if(seq!==c.seq||String(e.message)==='auth') return;
@@ -19289,7 +19303,7 @@ function pcRailHtml(p){
   const row=(k,v,id)=>`<div style="display:flex;justify-content:space-between;gap:12px;font-size:14.5px">
     <span style="color:var(--text-secondary)">${k}</span><span class="num"${id?` id="${id}"`:''}>${v}</span></div>`;
   let h='';
-  if(lines.length){
+  if(lines.length&&!t.server){
     h+=row(T('Materials','物料'), escAttr(money(CUR,t.materials)), 'mPcSubM');
     if(lines.some(l=>pcGroupOf(l)==='packaging')) h+=row(T('Packaging','包装'), escAttr(money(CUR,t.packaging)), 'mPcSubP');
   }
@@ -19304,7 +19318,7 @@ function pcRailHtml(p){
   if(lines.length&&t.packagingOnly){
     note=T('Every line here is packaging. Nothing is recorded as the contents, so this product has no cost yet. Add what goes inside and the margin appears.',
            '这里每一行都是包装,没有记录内容,因此本产品暂无成本。添加内容后即显示毛利。');
-  } else if(lines.length&&t.blocked){
+  } else if(lines.length&&t.blocked&&!t.server){
     const names=t.blockedNames.filter(Boolean), first=names[0]||'';
     note=names.length>1
       ? T(`“${first}” and ${names.length-1} more have no unit cost.`, `“${first}”等 ${names.length} 项没有单位成本。`)
