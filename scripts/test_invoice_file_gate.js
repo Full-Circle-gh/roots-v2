@@ -46,7 +46,7 @@ section('0 · the stand-in is the real choke point');
 }
 
 section('1 · the rule');
-is(requiredCapFor('POST', '/api/retail-admin/invoice-file'), 'invoices:manage', 'the upload is invoices:manage');
+is(JSON.stringify(requiredCapFor('POST', '/api/retail-admin/invoice-file')), JSON.stringify(['invoices:manage', 'orders:edit']), 'the upload is invoices:manage OR orders:edit (the Mark issued key)');
 is(requiredCapFor('GET', '/api/retail-admin/invoice-file'), null, 'reads stay open, as every read does');
 is(requiredCapFor('POST', '/api/retail-admin/invoice-file/x'), null, 'exact path: nothing longer rides on it');
 is(requiredCapFor('PUT', '/api/retail-admin/orders/5/invoice'), 'orders:edit', 'Mark issued is unchanged');
@@ -61,7 +61,8 @@ ok(allowed({ ...UP, caps: [], enforce: false }), 'a shop with enforcement off se
 ok(allowed({ ...UP, caps: null }), 'unresolved caps fail open, as everywhere else');
 
 section('3 · who is refused');
-ok(!allowed({ ...UP, caps: ['orders:edit', 'orders:view'] }), 'orders:edit alone (the staff and dispatch presets) is refused');
+ok(allowed({ ...UP, caps: ['orders:edit', 'orders:view'] }), 'orders:edit alone (the staff and dispatch presets) still uploads, as it can Mark issued');
+ok(!allowed({ ...UP, caps: ['orders:view'] }), 'reading orders is not uploading');
 ok(!allowed({ ...UP, caps: ['invoices:view', 'invoices:export'] }), 'reading invoices is not uploading one');
 ok(!allowed({ ...UP, caps: [] }), 'nothing held, nothing uploaded');
 
