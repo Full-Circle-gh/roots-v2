@@ -21264,3 +21264,212 @@ the mockups are `design-handoff/phone-parity/`.
 5. **§97's two standing rules hold for every step**: every new write is
    asserted on the request, and every guard the desktop puts in front of a
    write comes with it.
+
+## §301 — THE PHONE'S MONEY AND PERMISSION DEFECTS ARE FIXED BEFORE ANY FINANCE SCREEN LANDS
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 0a of the parity survey's build order (`docs/tacet-phone-parity-recipes-purchasing-finance.md`
+§3 defects 3–6). Four phone-only fixes in `public/m.html`, no new screen and no server change: a
+money write that went out without its confirm, a wrong status on money, three buttons drawn for
+accounts that cannot use them, and a permission check that let money keys through while it did not
+know who was signed in. The server gates (defects 1 and 2) are the next step, not this one; the
+stale Purchasing record (defect 7) is not touched here.
+
+1. **Approvals' Mark paid / Mark recovered now asks first.** Its confirm was the desktop's
+   `askConfirm`, which the phone does not have, behind a check that it existed — so the check
+   failed on every tap and the settle was sent on the first touch. It is the phone's own ask-sheet
+   (`state.ask`) now, with the desktop's words from `finAprSettle` (22-finance.js): *Paid ¥N back?*
+   with its "does not change the accounts" body and *Mark paid*; *Recovered ¥N?* naming the person
+   and *Mark recovered* for a refund being handed back. Nothing is sent until the sheet's button is
+   pressed; then the same `POST /staff-expenses/:id/settle {settled:true}`, one claim after another,
+   as before. A nameless claim reads *Someone · 未知*, the desktop's fallback. The person's name is
+   escaped into the sheet.
+2. **Every Approvals write that succeeds now says so.** Five handlers confirmed through
+   `window.toast`, the desktop's, which the phone never defines — so on the phone none of them ever
+   showed anything: the settle (*Marked paid* / *Recovered*), approve and reject (*Approved* /
+   *Not approved*), approve-together onto one order (*Approved · RPO-…*), and the two saves on a
+   claim already in the books, who paid and its category (*Saved*). All five are `showToast` now,
+   with their existing words. Approve-together adds the order number only when the server sends
+   one, so a toast that is now visible never ends in a bare " · ". A refusal still renders on the
+   screen and stays, and toasts nothing.
+3. **A voided claim reads *Voided · 已作废*,** in the neutral pill, exactly as `finAprPill` on the
+   desktop (§90): reversed is not refused, so not Brick, and never *Waiting*, which is what the
+   phone said before.
+4. **The purchase-order sheet draws each button only for who may press it,** on the desktop's
+   keys (16-purchasing.js): *Mark ordered* needs `purchasing:edit` (the desktop's *Place order*);
+   *Everything arrived* and *Receive line by line* need `purchasing:receive` (*All arrived as
+   ordered*, *Confirm delivery*). The two commands behind them refuse on the same keys, so a sheet
+   left open cannot write past the gate.
+5. **`mCan` fails CLOSED for money-only keys while the caps are unknown, and OPEN for everything
+   else, as before.** The closed set is the keys whose whole job is money: `finance:view`,
+   `finance:record`, `recipes:costs`, `materials:costs`, `products:costs`, `waste:costs`,
+   `purchasing:invoices`, `reports:view` — each money-marked in `lib/capabilities.js`. A figure
+   missing for one render comes back with the caps; a figure shown to the wrong person cannot be
+   taken back.
+6. **Deliberately not every money-marked key.** `customers:view`, `customers:adjust`,
+   `purchasing:view`, `purchasing:edit`, `purchasing:receive`, `invoices:*`, `till:use`,
+   `expenses:approve` also carry a marker, but each opens a whole working screen where the money is
+   incidental, the phone already gates on them, and failing them closed would lock a counter or a
+   warehouse out of its job on a hiccup — the reason `mCan` fails open at all. Their behaviour is
+   unchanged, and an existing suite (customers, "unknown permissions fail open") pins it.
+7. **`wstShowMoney` (waste) is left as it is.** It already failed closed on its own and now agrees
+   with `mCan('waste:costs')`; folding one into the other is tidying, not this step.
+8. **Nothing composed.** Every string is an existing live pair: the settle confirm's were already
+   on the phone; *Voided · 已作废* and *Someone · 未知* are live on both surfaces.
+9. **Tests.** `scripts/test_mobile_finance_guards.js` (fast shard, no browser) runs the sliced code:
+   no request before confirm, the exact request after it, cancel, refusal, both languages, a
+   confirmation after each of the five Approvals writes and none after a refusal, the
+   voided pill, the PO sheet for view-only / edit-only / receive-only accounts, and `mCan` with
+   unknown, empty and known caps. One assertion in `test_staff_expenses.js` pinned the broken
+   `askConfirm` shape; it now pins the ask-sheet and the absence of `askConfirm`.
+
+## §302 — TWO PURCHASING WRITES NOW NEED THE BUYER'S KEY ON THE SERVER
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 0b of the parity survey's build order (`docs/tacet-phone-parity-recipes-purchasing-finance.md`
+§3 defects 1 and 2). Two server permission gates in purchasing let the wrong person in. Both are
+closed in `lib/cap-routes.js` and one handler, with no screen change. The desktop and the phone
+already drew these buttons for the right people (the phone since F0); the server now agrees with
+them. As with every gate in that file, nothing changes for a shop that has not switched
+enforcement on, for the owner, or while an operator's permissions cannot be resolved.
+
+1. **A receive-only account may mark an order "everything arrived", and nothing else.**
+   `PUT /purchases/:id/status` accepted `purchasing:receive` for any status, so a store manager who
+   can only receive could cancel an order, or send it back to draft, through the API. Now only
+   `Delivered` takes either key; `Ordered`, `Requested` and `Cancelled` need `purchasing:edit`,
+   matching the desktop's Place order / Back to draft / Cancel order buttons.
+2. **The rule lives in the handler, because the path cannot carry it.** The target status is in the
+   body, and the choke point (`requiredCapFor`) sees only method and path, so the path still lets
+   either key through. The handler then asks `purchaseStatusCap(status)` (new, in
+   `lib/cap-routes.js`) and refuses through `capDenied`, before it reads or writes anything. This is
+   the pattern the order-status route already uses for a full refund. The refusal has the choke
+   point's own shape: `403 {error:'forbidden_capability', need:'purchasing:edit'}`.
+3. **`capDenied` now takes a list as well as one key** (hold any one), which are the two shapes
+   `requiredCapFor` returns, read the way the choke point reads them. Every existing caller passes a
+   single key, and those behave exactly as before.
+4. **The phone's "Everything arrived" still works for a receive-only account.** It sends
+   `PUT {status:'Delivered'}`, which is the one status left open to that key. It is tested end to
+   end.
+5. **Striking a kitchen-request line off needs `purchasing:edit`.**
+   `PUT /material-requests/lines/:id/decline` sat under the kitchen's `production:request`, so the
+   buyer the desktop draws the ✕ for was refused and any cook was allowed. It is the buyer's answer
+   to the ask ("we are not buying this one", §174), so it takes the buyer's key. The rule matches
+   that one path exactly and comes before the general material-requests rule.
+6. **The cook keeps their own way to take an ask back.** Withdrawing the whole request
+   (`PUT /material-requests/:id/archive`) and editing a draft (`PUT /material-requests/:id`) stay
+   `production:request`, and so do raising and sending one. No screen calls withdraw today (the
+   route exists; the phone's "Mine" list does not offer it), so nothing a cook uses was taken away.
+   Striking a single line off was never theirs to do: §86's rule is that the kitchen withdraws and
+   raises again.
+7. **Deliberately not done:** a receive-only account may still mark a DRAFT (`Requested`) order
+   Delivered, as the brief asked ("Delivered and nothing else"). No screen offers that — the phone
+   and the desktop only draw "Everything arrived" on an order already placed — but the server does
+   not refuse it either. Narrowing it to orders already placed would be a further, separate rule,
+   and it is Ash's to ask for.
+8. **Tests.** `scripts/test_purchasing_cap_gates.js` (fast shard) runs the real purchasing and
+   material-request routers behind a copy of the choke point, and checks that copy against
+   `routes/retail.js`'s source. It covers allow and refuse for the receiver, the buyer, a view-only
+   account and a cook; the owner, enforcement off and unresolved permissions; the order untouched
+   and the line still standing after each refusal; and the desktop's `data-cap` on the same controls.
+9. **Nothing composed.** No operator strings were added.
+
+## §303 — THE PHONE'S RECIPES SHOW EVERYTHING THE DESKTOP'S SHOW, BEFORE THEY WRITE ANYTHING
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step R1 of the recipes lane — the survey's PR 5, "recipes read gaps". The phone
+list and record (`public/m.html`, `screenRecipes` / `screenRecipeOne`) gain what
+the desktop Recipes screen shows and the phone did not: the category filter,
+Archived, the row-ceiling notice, the other language's name, the not-money
+warnings, what a recipe makes and the material it stocks, a Details tab, lines
+that are other recipes, and the printed recipe card. Nothing on the phone writes
+a recipe yet; that is R2, and the screen's "Best edited on desktop" stays until
+then. No cost figure is drawn for anybody yet either; that is R3.
+
+1. **The list.** A Category chip opens the desktop's own category list
+   (`GET /recipes/meta/categories`), one choice at a time, and the lit chip names
+   the category; it filters the rows in hand, and the Made/Repacked counts count
+   the category, as the desktop's do. A failed category read draws no chip and
+   leaves the list working ("categories are optional", the desktop's words). An
+   **Archived** chip reads `?archived=1` — the desktop's query — and shows that
+   list instead of the live one; the live catalogue is kept, because the record
+   reads it. Entering the list again drops the category and the archive with the
+   search word.
+2. **The row ceiling (audit J-01)** is said when the server cut the list, in the
+   desktop's own first sentence. Its second sentence ("search or filter to reach
+   the rest") is left off: the phone searches the rows in hand, so it would be a
+   promise this list cannot keep.
+3. **Each row names the recipe in the screen's language and the other name under
+   it**, as the desktop's second line does, and writes on the row what the desktop
+   keeps in a tooltip: the missing-cost COUNT, UNIT MISMATCH (the locked pair, no
+   count), a Material badge, and — only when the material's cost is frozen — the
+   desktop's reason, word for word. On live data that is a handful of rows; every
+   other row stays two lines.
+4. **The record** opens on Ingredients, not on Details as the desktop does: the
+   person holding a phone at a bench opened it to see what goes in, and §167's
+   Making one starts there. Three tabs — Ingredients, Steps, Details; Cost &
+   Pricing is R3's. The missing-cost count and UNIT MISMATCH sit above the tabs,
+   from the server's counts, so they read on every tab like the desktop's pinned
+   card.
+5. **UNIT MISMATCH is marked on the line it is about**, with the desktop's locked
+   explanation written under it (a phone has no tooltip). The rule is read out of
+   `lib/recipe-cost.js` itself — loaded into the phone with a deferred
+   `<script src="/lib/recipe-cost.js">`, the file the server and the desktop run,
+   no-store and deliberately not precached (sw.js already lets it through). A
+   second copy of the rule is how a line's mark and a recipe's count come to
+   disagree. Offline the module is absent and only the count shows.
+6. **Per-line "no cost" is NOT drawn.** On the desktop it lives in the line's rate
+   slot, which is money-gated, and the server strips `master_cost` for anybody
+   without `recipes:costs`; it comes with R3.
+7. **A line that is another recipe** is marked `Recipe · 食谱` and opens that
+   recipe, stacked over this one, with this one's name on its Back. Which line is
+   which is answered from the live list's `backsMaterial` — no new read and no
+   server change. A line whose recipe is archived, or past the list's ceiling, is
+   not marked and still reads as the material it is. Each record's id rides on
+   its own stack frame, so Back — the app's or the phone's edge swipe — lands on
+   the parent and re-reads it rather than showing the child under the parent's
+   name.
+8. **Details** holds what the desktop's Details sheet holds, as facts: the other
+   name, SKU, category, type, batch size, servings, serving size, shelf life (read
+   back in the screen's language rather than printed raw), storage, notes. Under
+   them, what the recipe becomes: **Makes** (each product by name and size,
+   opening the phone's product sheet when that sheet can find it and the reader
+   holds `products:view`; with several products, each one's sell price, as the
+   desktop's Sells column does for every `recipes:view` holder — never the margin,
+   which is the cost by subtraction), and **Also stocked as a material**, with the
+   frozen-cost reason when blocked and without the rate.
+9. **The recipe card.** A printer icon on the record opens the card on the phone,
+   then prints it with the phone's own print sheet (which is also where Save as
+   PDF and Share live on a phone). The desktop's builder could not be run as it
+   stands: its data half is private to `19-recipes.js`'s closure, and its document
+   half opens a pop-up and `document.write`s into it, which an installed phone app
+   cannot rely on and whose blocked-pop-up path calls the desktop's toast. So the
+   data half is **ported line for line** and the new suite runs the desktop's own
+   `recipePrintCard()` beside the phone's across four shapes of recipe and requires
+   the same answer; the document is drawn in `tdPrintRecipe`'s order with its
+   bilingual headings. Printing hides everything but the card. No money is read on
+   the card's path, for anybody. Names that will print in English only are said
+   above the card, before printing — the desktop says it in a toast after.
+10. **Two defects fixed on the way, both inside this screen.** A failed recipe read
+    threw instead of saying *Could not load recipes*: the message was an `E()`
+    pair and the screen spread it as an array, so the error state never painted.
+    And `chipRow` gained three optional per-chip fields (`cmd`, `on`, `ic`) so a
+    filter row can carry a chip that opens a choice; a chip without them is drawn
+    byte for byte as before.
+11. **One test-harness change, called out:** `scripts/lib/m-probe.js` inlines
+    `lib/recipe-cost.js` the way it inlines the date module, because over file://
+    the new script tag 404s and `test_mobile_screens.js` counts a failed script
+    load as an error on every screen.
+12. **Not done here, on purpose:** any write (R2–R4); cost figures, the summary
+    strip and per-line rates (R3); the "more" sheet the mockup draws (Duplicate,
+    Version history, Archive) — R4 adds those actions, and R1 had only Print to put
+    in it; the mockup's composed row wording ("2 lines have no cost", "Unit
+    mismatch on 1 line"), rejected for the desktop's live and locked pairs.
+
+**Coverage.** `scripts/test_mobile_recipes_read.js` (fast shard, 42 cases, runs
+the sliced code): every read path, the category and archive filters, empty /
+loading / failed for the list, the archive, the categories and the record, the
+row ceiling, both languages, the sub-recipe stack and Back, product links with
+and without `products:view`, no cost figure from a payload full of them, the
+card against the desktop's own function, and the print. `scripts/test_mobile_recipes.js`
+updated where §300 overturned it — the "no money for anybody" list keeps every
+COST key and now admits `sell_price` in the one products function only.

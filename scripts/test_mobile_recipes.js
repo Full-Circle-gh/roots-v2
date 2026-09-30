@@ -10,11 +10,15 @@
  *
  * WHAT CAN GO WRONG, and each has a case:
  *
- *   • MONEY APPEARING ON IT. This screen draws no cost figure for anybody,
- *     whatever they hold. §164 split `recipes:costs` out so the kitchen could
- *     have the ingredients WITHOUT the batch cost and the margin; a phone that
- *     printed them would hand back exactly what the split withheld, and it
- *     would do it to the operator the split was for.
+ *   • A COST APPEARING ON IT. §164 split `recipes:costs` out so the kitchen
+ *     could have the ingredients WITHOUT the batch cost and the margin; a phone
+ *     that printed them would hand back exactly what the split withheld, and it
+ *     would do it to the operator the split was for. §300 (2026-09-30) changed
+ *     the rule from "no money for anybody" to "no COST without recipes:costs,
+ *     failing closed" — and until the cost step lands, that still means no
+ *     cost figure here for anybody. The one currency figure is a product's
+ *     SELL PRICE beside several products, which the desktop prints to every
+ *     recipes:view holder; it is confined to rcpMakesHtml() below.
  *   • THE ROW GATED ON THE WRONG KEY. `recipes:costs` would refuse the screen
  *     to the person it was built for. `recipes:view` is the key that opens a
  *     recipe.
@@ -71,6 +75,10 @@ function codeOnly(src) {
 }
 
 const LIST   = slice('function screenRecipes()', 'function rcpBodyHtml()');
+// The whole recipes region, list to print card (§300 widened it well past the
+// three slices below), for the rules that hold everywhere in it.
+const REGION = codeOnly(slice('const rcpNum = v =>', '/* ── Making one (§167)'));
+const MAKES  = codeOnly(slice('function rcpMakesHtml(rec){', 'function rcpMaterialHtml(rec){'));
 const BODY   = slice('function rcpBodyHtml()', 'const RCP_STORAGE=');
 const RECORD = slice('function screenRecipeOne()', 'SUBS.recipes=');
 const SCREENS = codeOnly(LIST + BODY + RECORD);
@@ -127,7 +135,7 @@ check('and NOT on `recipes:costs` — that would refuse the screen to the kitche
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-section('3. No money on this screen, for anybody');
+section('3. No cost on these screens, for anybody, until the cost step (§300)');
 // ═══════════════════════════════════════════════════════════════════════════
 
 // THE LOAD-BEARING CASE. Not a capability check — a fact about what the screen
@@ -138,16 +146,28 @@ const MONEY_READS = [
   'master_cost', 'unit_cost', 'sell_price', 'suggestedSellPrice',
   'foodCostPct', 'overheadPct', 'labour', 'costData',
 ];
+// §300 DELIBERATELY NARROWED THIS, and by one key. `sell_price` is what a
+// customer is charged — it is on the shopfront and the receipt, it is not what
+// `recipes:costs` withholds (lib/recipe-cost-visibility.js keeps it for
+// everybody), and the desktop prints it beside the products a recipe makes. So
+// it may be read in exactly one function, rcpMakesHtml(), and nowhere else;
+// every COST key stays out of the whole region.
 for (const key of MONEY_READS) {
-  check(`the screens never read \`${key}\``, () => {
-    assert.ok(SCREENS.indexOf(key) === -1,
-      `${key} appears in the recipes screens — this screen draws no money for anyone`);
+  check(`the recipes region never reads \`${key}\`${key === 'sell_price' ? ' — outside the products it makes' : ''}`, () => {
+    const where = key === 'sell_price' ? REGION.replace(MAKES, ' ') : REGION;
+    assert.ok(where.indexOf(key) === -1,
+      `${key} appears in the recipes screens — no cost is drawn here until the cost step, and then only with recipes:costs`);
   });
 }
 
-check('and they call none of the phone\'s money helpers', () => {
-  assert.doesNotMatch(SCREENS, /\bmoney0?\(/, 'money() has no business on this screen');
-  assert.doesNotMatch(SCREENS, /acMoney|CUR\b/);
+check('the products block reads the sell price and nothing derived from cost', () => {
+  assert.match(MAKES, /p\.sell_price/);
+  assert.doesNotMatch(MAKES, /unit_cost|margin|_paMargin|build_line_count/i);
+});
+
+check('and the money helper is called in that one place only', () => {
+  assert.doesNotMatch(REGION.replace(MAKES, ' '), /\bmoney0?\(/, 'money() has no business elsewhere on these screens');
+  assert.doesNotMatch(REGION, /acMoney|money0\(/);
 });
 
 // The quantities ARE rendered, and by a helper of their own — a weight is not
@@ -208,18 +228,21 @@ check('each part is dropped when it is not recorded, rather than dashed', () => 
   assert.doesNotMatch(body, /'—'/);
 });
 
+// §300 put Category and Archived on the same row, so the row is always a
+// choice now; the two FILING chips are still each dropped when there is
+// nothing to file under them.
 check('the Made/Repacked chips are filing only, and are dropped when there is nothing to file', () => {
   assert.match(MHTML, /function rcpChips\(\)\{[\s\S]{0,500}if\(made\) out\.push/);
   assert.match(MHTML, /if\(rep\) out\.push/);
-  assert.match(BODY, /chips\.length>1\?/, 'one chip is not a choice, so the row is not drawn');
+  assert.match(MHTML, /out\.push\(\{key:'',cmd:'rcpArch'/, 'Archived is always offered');
 });
 
 // §1.12 — a section with bad data says so rather than falling through to the
 // empty state, which would read as "this shop has no recipes".
 check('a failed load says so, and does not read as an empty catalogue', () => {
-  assert.match(BODY, /if\(r\.err\)/);
+  assert.match(BODY, /if\(err\)/);
   assert.match(MHTML, /Could not load recipes\.','无法加载食谱。'/);
-  const errAt = BODY.indexOf('if(r.err)');
+  const errAt = BODY.indexOf('if(err)');
   const emptyAt = BODY.indexOf('No recipes yet');
   assert.ok(errAt !== -1 && errAt < emptyAt, 'the error branch must come before the empty state');
 });
@@ -233,9 +256,12 @@ check('an empty catalogue points at the desktop rather than offering a create', 
 section('5. The record');
 // ═══════════════════════════════════════════════════════════════════════════
 
-check('it carries two tabs — Ingredients and Steps — and not the desktop\'s four', () => {
+// Three since §300: Details joined them, holding what the desktop's Details
+// sheet holds. The fourth, Cost & Pricing, is the cost step's.
+check('it carries three tabs — Ingredients, Steps, Details — and not Cost & Pricing', () => {
   assert.match(RECORD, /\['ingredients','Ingredients','原料'/);
   assert.match(RECORD, /\['steps','Steps','步骤'/);
+  assert.match(RECORD, /\['details','Details','基本信息'/);
   assert.doesNotMatch(codeOnly(RECORD), /Cost & Pricing|成本与定价/,
     'the money tab is not this screen\'s to draw');
 });
@@ -249,7 +275,7 @@ check('it is re-read on every entry, not carried from the last one opened', () =
 
 check('the catalogue is kept across entries but the filters are dropped', () => {
   const push = slice('function push(route){', 'function pop(){');
-  assert.match(push, /if\(route==='recipes'\)\{ const r=state\.rcp; r\.q=''; r\.type=''; \}/);
+  assert.match(push, /if\(route==='recipes'\)\{ const r=state\.rcp; r\.q=''; r\.type=''; r\.cat=''; r\.arch=false; \}/);
   assert.doesNotMatch(push, /if\(route==='recipes'\)\{[^}]*r\.rows=null/,
     're-reading 205 recipes on every entry is a wait for nothing');
 });
@@ -262,9 +288,11 @@ check('the status line states the batch and the servings, or says nothing at all
   assert.doesNotMatch(sub, /'—'/, '§1.7 — a status line is a fact or it is nothing');
 });
 
-check('Back names the list it came from', () => {
+// The list — or, for a recipe opened from another recipe's line (§300), that
+// recipe, whose name its stack frame carries.
+check('Back names what it came from', () => {
   const sub = slice('SUBS.recipeone=', "reg('rcpSearch'");
-  assert.match(sub, /backLabel:\(\)=>T\('Recipes','食谱'\)/);
+  assert.match(sub, /return \(t&&t\.back\)\?escAttr\(t\.back\):T\('Recipes','食谱'\); \}/);
 });
 
 check('both screens say where a recipe is actually edited', () => {
@@ -401,7 +429,7 @@ check('offered only to somebody who could actually use it', () => {
 
 check('the way in is offered only when there is something to work through', () => {
   const sub = slice('SUBS.recipeone=', 'reg(\'rcpSearch\'');
-  assert.match(sub, /cta:\(\)=>\{ const rec=state\.rcp\.rec;/);
+  assert.match(sub, /cta:\(\)=>\{ const rec=rcpRec\(\);/);
   assert.match(sub, /ingredients\.length\)\|\|\(Array\.isArray\(rec\.steps\)&&rec\.steps\.length\)/);
 });
 
