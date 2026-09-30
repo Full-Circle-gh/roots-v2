@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.210 · 2026-09-30 · §298 A CATEGORY'S BANNER ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** The phone admin's Categories screen gains the banner editor, in the desktop pane's own words. See *A category's banner on the phone (§298)*.
+
 **v1.209 · 2026-09-30 · §297 A CATEGORY'S BANNER — SIX OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The banner section on Products → Categories. See *A category's banner (§297)*.
 
 **v1.208 · 2026-09-30 · §296 PROMO CARDS — OPERATOR STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** The page editor's new promo cards block: its name, description, note, form labels and hints, and the Shop landing page's corrected description. The cards themselves carry no text. See *Promo cards (§296)*.
@@ -9426,3 +9428,18 @@ the page names `Promotions page · 促销页面`, `Coupons · 优惠券`,
   the other pictures.
 - `主图` (hero) for the banner: **rejected**; it names the page editor's block,
   and this is not that block.
+
+## A category's banner on the phone (§298)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Categories screen (`public/m.html`). Every label is copied whole from
+the desktop pane (*A category's banner (§297)*, above), so the two surfaces
+use one word for each thing: `Banner (optional) · 横幅(可选)`, its hint,
+`Add banner · 添加横幅`, `Tap link · 点击跳转`, `Picture only · 仅图片`,
+`Pages · 页面` and the page names, `Products on this shelf · 货架上的产品`,
+`Start · 开始`, `End · 结束`, the hint under the dates, `Replace picture · 更换图片`,
+`Remove banner · 删除横幅`, and the state words `Live · 进行中`,
+`Starts · 待开始`, `Ended · 已结束`. The phone's own live pairs are reused for
+the rest: `Uploading… · 上传中…`, `That did not upload. · 上传失败。` with its
+reasons (the photo library's `MEDIA_ERR`), `Saved · 已保存`,
+`Save failed · 保存失败`.

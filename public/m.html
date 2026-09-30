@@ -963,6 +963,7 @@ const state = {
   supAcct:null, supAcctErr:null, supAcctBusy:false, supAcctMounted:false,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
+  catBannerBusy:false, catBannerErr:null, catShelf:null,   // §298 the open category's banner editor
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
   alipay:null, alipayTried:false, puBusy:null, puErr:null,
   gzFlagged:null, gzSummary:null, gzBusy:null, gzErr:null,
@@ -3239,7 +3240,7 @@ reg('togglePopup', id=>{
 });
 reg('affSeg', v=>{ state.affSeg=v; state.affRows=null; state.affiliateTried=false; render(); loadAffiliate(true); });
 reg('cmsPage', v=>{ state.cmsPage=v; state.cmsErr=null; render(); loadCms(v); });
-reg('catTop', v=>{ state.catTop=v||null; render(); });
+reg('catTop', v=>{ state.catTop=v||null; state.catBannerErr=null; render(); });
 reg('actRange', v=>{ state.actRange=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loadActivity(true); });
@@ -6887,6 +6888,135 @@ function catRow(n,onclick,subs){
       <span style="font-size:12px;margin-top:2px;color:${m.warn?'var(--amber-ink)':'var(--text-secondary)'}">${m.text}${subs!=null&&subs?' · '+subs+' '+T(subs===1?'subcategory':'subcategories','个子分类'):''}</span></span>
     ${onclick?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</${el}>`;
 }
+/* §298 — A CATEGORY'S BANNER, ON THE PHONE. The same banner the desktop pane
+   edits (§297, 01-core.js catBannerHtml): one wide 5:2 picture on a TOP
+   category, drawn first in its section on the mini app's Shop tab, with a tap
+   link and start / end days. It lives on the tree node, so saving it means
+   PUTting the whole tree — exactly what the desktop does. Every change saves
+   at once (a phone has no "unsaved" to come back to). Same words as the
+   desktop, same China-day status as the pop-ups. */
+const CAT_BANNER_PAGES=[['promotions','Promotions page','促销页面'],['coupons','Coupons','优惠券'],
+  ['membership','Membership','会员'],['shop','Shop','商店']];
+function catBannerToday(){ return new Date(Date.now()+8*3600e3).toISOString().slice(0,10); }
+function catBannerStatus(b){
+  const today=catBannerToday();
+  if(b.start_at&&today<b.start_at) return {text:T('Starts ','待开始 ')+b.start_at,bg:'var(--amber-tint)',fg:'var(--amber-ink)'};
+  if(b.end_at&&today>b.end_at) return {text:T('Ended ','已结束 ')+b.end_at,bg:'var(--surface-raised)',fg:'var(--text-secondary)'};
+  return {text:T('Live','进行中'),bg:'var(--sage-tint)',fg:'var(--sage-ink)'};
+}
+// This shelf's products, for the link list. Loaded once per open shelf.
+function loadCatBannerShelf(top){
+  if(state.catShelf&&state.catShelf.top===top.name) return;
+  state.catShelf={top:top.name,rows:[]};
+  apiRaw('/category-products?'+new URLSearchParams({top:top.name}))
+    .then(j=>{ if(state.catShelf&&state.catShelf.top===top.name){ state.catShelf.rows=(j&&j.data)||[]; render(); } })
+    .catch(()=>{});
+}
+function catBannerCard(top){
+  const b=top.banner;
+  const head=`<div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary);padding:0 2px">${T('Banner (optional)','横幅(可选)')}</div>`;
+  const hint=`<div style="font-size:12.5px;line-height:1.5;color:var(--text-secondary);padding:0 2px">${T('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab. Hidden while a customer is searching.','宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。')}</div>`;
+  const busy=state.catBannerBusy;
+  const err=state.catBannerErr?`<div style="font-size:13px;color:var(--brick-ink)">${state.catBannerErr}</div>`:'';
+  if(!b||!b.image_url){
+    return `<div style="display:flex;flex-direction:column;gap:8px">${head}${hint}${err}
+      <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')" style="align-self:flex-start;width:auto;gap:8px">${ic('plus',16)}${busy?T('Uploading…','上传中…'):T('Add banner','添加横幅')}</button></div>`;
+  }
+  loadCatBannerShelf(top);
+  const st=catBannerStatus(b), cur=b.target||'';
+  const opt=(v,l)=>`<option value="${escAttr(v)}"${v===cur?' selected':''}>${escAttr(l)}</option>`;
+  const rows=(state.catShelf&&state.catShelf.top===top.name&&state.catShelf.rows)||[];
+  const known=[''].concat(CAT_BANNER_PAGES.map(p=>p[0]),rows.map(p=>'product:'+p.id));
+  const options=opt('',T('Picture only','仅图片'))
+    +(cur&&!known.includes(cur)?opt(cur,cur):'')
+    +`<optgroup label="${escAttr(T('Pages','页面'))}">${CAT_BANNER_PAGES.map(p=>opt(p[0],T(p[1],p[2]))).join('')}</optgroup>`
+    +(rows.length?`<optgroup label="${escAttr(T('Products on this shelf','货架上的产品'))}">${rows.map(p=>opt('product:'+p.id,(LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||('#'+p.id))).join('')}</optgroup>`:'');
+  const lbl=t=>`<span style="font-size:12.5px;color:var(--text-secondary)">${t}</span>`;
+  return `<div style="display:flex;flex-direction:column;gap:10px">${head}
+    <div style="position:relative;width:100%;aspect-ratio:5/2;border-radius:12px;overflow:hidden;background:var(--surface-raised)">
+      <img src="${escAttr(b.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+    <div><span style="font-size:12px;padding:3px 10px;border-radius:999px;background:${st.bg};color:${st.fg}">${st.text}</span></div>
+    <label style="display:flex;flex-direction:column;gap:5px">${lbl(T('Tap link','点击跳转'))}
+      <select onchange="APP.cmd('catBannerSet','target',this.value)" style="width:100%">${options}</select></label>
+    <div style="display:flex;gap:10px">
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${lbl(T('Start','开始'))}
+        <input type="date" value="${escAttr(b.start_at||'')}" onchange="APP.cmd('catBannerSet','start_at',this.value)" style="width:100%"></label>
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${lbl(T('End','结束'))}
+        <input type="date" value="${escAttr(b.end_at||'')}" onchange="APP.cmd('catBannerSet','end_at',this.value)" style="width:100%"></label></div>
+    <div style="font-size:12.5px;color:var(--text-secondary)">${T('Leave both empty to show it always. Outside its dates it hides by itself.','两者留空则一直显示。不在日期内时会自动隐藏。')}</div>
+    ${err}
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')">${busy?T('Uploading…','上传中…'):T('Replace picture','更换图片')}</button>
+      <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerRemove')" style="color:var(--brick-ink)">${T('Remove banner','删除横幅')}</button></div>
+    </div>`;
+}
+// Save the whole tree (the banner lives on its node). On failure the screen
+// reloads the tree so it never shows a banner the server did not keep.
+async function catSaveTree(){
+  try{
+    const j=await apiWrite('/category-tree',{tree:state.cats},'PUT');
+    if(j&&Array.isArray(j.data)) state.cats=j.data;
+    state.catBannerErr=null; showToast(T('Saved','已保存'));
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    state.catBannerErr=T('Save failed','保存失败')+(e.message?': '+e.message:'');
+    state.catsTried=false; state.cats=null; loadCategories();
+    render();
+  }
+}
+function catBannerTop(){ return (state.cats||[]).find(t=>t.id===state.catTop)||null; }
+reg('catBannerSet',(key,value)=>{
+  const t=catBannerTop(); if(!t||!t.banner) return;
+  t.banner=Object.assign({},t.banner,{[key]:value||''});
+  render(); catSaveTree();
+});
+reg('catBannerRemove',()=>{
+  const t=catBannerTop(); if(!t||!t.banner) return;
+  delete t.banner; render(); catSaveTree();
+});
+reg('catBannerPick',()=>{
+  if(state.catBannerBusy) return;
+  const el=document.createElement('input');
+  el.type='file'; el.accept='image/*';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) catBannerUpload(f); };
+  el.click();
+});
+/* A phone photo is often past the upload's 5 MB limit, so it is shrunk first:
+   1600px on the long side, JPEG — plenty for a 5:2 band. A browser that cannot
+   decode it sends the original and lets the server say why. */
+async function catBannerShrink(file){
+  try{
+    const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});
+    const k=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+    const c=document.createElement('canvas');
+    c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k);
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.88));
+    return blob||file;
+  }catch(e){ return file; }
+}
+async function catBannerUpload(file){
+  const topId=state.catTop;   // the category the picture was picked for
+  state.catBannerBusy=true; state.catBannerErr=null; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'banner.jpg');
+    const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data||!j.data.url){
+      const reason=MEDIA_ERR[j&&j.error];
+      state.catBannerErr=T('That did not upload.','上传失败。')+(reason?' '+T(...reason):'');
+      return;
+    }
+    const t=(state.cats||[]).find(x=>x.id===topId); if(!t) return;
+    t.banner=Object.assign({target:'',start_at:'',end_at:''},t.banner||{},{image_url:j.data.url});
+    await catSaveTree();
+  }catch(e){
+    state.catBannerErr=T('That did not upload.','上传失败。');
+  }finally{
+    state.catBannerBusy=false; render();
+  }
+}
 function statusCategories(){
   const tree=state.cats; if(!tree||!tree.length) return '';
   // Drilled into one shelf, the page's subject is that shelf — so the band
@@ -6914,6 +7044,7 @@ function screenCategories(){
       <button class="row" onclick="APP.cmd('catTop','')" style="background:none;border:none;padding:0;display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-family:inherit;font-size:13.5px;cursor:pointer">
         <span style="display:flex;transform:rotate(180deg)">${ic('chevron-right',16)}</span>${T('All categories','全部分类')}</button>
       <div class="list">${catRow(top,null,subs.length)}</div>
+      ${catBannerCard(top)}
       ${subs.length?`<div class="list">${subs.map((sb,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}${catRow(sb,null)}`).join('')}</div>`
         :`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No subcategories on this shelf.','该分类下没有子分类。')}</div>`}
       ${noteBar(T('Rename, reorder, add and remove on desktop — every product on a shelf follows a rename.','重命名、排序、新增与删除请在电脑端进行 — 重命名后商品会自动迁移。'))}</div>`;
