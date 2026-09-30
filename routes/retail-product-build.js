@@ -24,6 +24,9 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const { computeProductBuildCost } = require('../lib/product-build-cost');
 const { fireRecompute } = require('../lib/recipe-rollup');
+// §300 R7 — the money on these answers is drawn on products:costs and
+// materials:costs, and now only SENT on them (see the module's header).
+const { stripBuildPayload, stripPickerRows, stripProductRow } = require('../lib/product-build-cost-visibility');
 
 const router = express.Router();
 
@@ -156,7 +159,7 @@ router.get('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, (re
 
   res.json({
     success: true,
-    data: { product_id: id, name_en: product.name_en, unit_cost: product.unit_cost, lines, cost, recipe },
+    data: stripBuildPayload(req, { product_id: id, name_en: product.name_en, unit_cost: product.unit_cost, lines, cost, recipe }),
   });
 });
 
@@ -210,7 +213,7 @@ router.get('/api/retail-admin/product-build/materials', requireRetailAdmin, (req
 
   // The screen shows 8. The count of what MATCHED is sent whole, so the hint
   // line can say "8 of 34" honestly rather than implying 34 is all there is.
-  res.json({ success: true, data: rows.slice(0, 8), matched: rows.length });
+  res.json({ success: true, data: stripPickerRows(req, rows.slice(0, 8)), matched: rows.length });
 });
 
 // Save — delete-all + reinsert, mirroring recipe_ingredients' own save
@@ -255,7 +258,7 @@ router.put('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, exp
   const rollup = fireRecompute(db, { source: 'product-build.update', product_id: id });
 
   const row = db.prepare('SELECT id, unit_cost FROM store_products WHERE id = ?').get(id);
-  res.json({ success: true, data: row, rollup });
+  res.json({ success: true, data: stripProductRow(req, row), rollup });
 });
 
 module.exports = router;
