@@ -22115,3 +22115,58 @@ now carries a dated note pointing here. Its old text is kept.
    (`returned_at`) and shown, not typed. The desktop takes no date either.
 8. **The Received journal is read again after a return**, because a return is its
    own event there.
+
+## §314 — A 发票 IS ISSUED FROM THE PHONE'S ORDER SHEET
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 4 of the parity survey's build order; it completes what §97 already allowed. The phone's
+order sheet used to show the customer's fapiao request with the line "Issuing it is a desktop
+job." That line is gone. The sheet now issues the fapiao the way the desktop's block does
+(`renderInvoiceBlock` and its four writes, `07-content-billing.js`): Copy for accounting, a
+link and a number, a PDF or a photo, Mark issued, and un-issue.
+
+1. **Who may issue: `invoices:manage` AND `orders:edit`.** `invoices:manage` ("Issue / upload
+   invoices") is the key the role editor offers for this job. `orders:edit` is the key
+   `lib/cap-routes.js` actually requires on `PUT /orders/:id/invoice`. The desktop draws the
+   block for everyone; the phone shows controls only to an account that holds both, so nothing
+   it shows would be refused and nobody sees a job they were not given. Anyone else sees the
+   request, as before, and no controls.
+2. **Copy for accounting** puts the desktop's bundle on the real clipboard (`copyText`, the same
+   helper the waybill copy uses). The bundle is built line for line as the desktop's
+   `invoiceAccountingText` builds it:
+   - it stays bilingual whatever language the screen is in;
+   - it carries the goods total only: the stored subtotal, else the sum of the lines, else the
+     total less delivery;
+   - it infers "company" from a tax id on an older row with no type.
+
+   The order mapping now carries the three values this needs.
+3. **The upload.** Only a PDF or an image, at most 10 MB; both limits are checked before
+   anything is sent, in the desktop's words. It goes to `POST /invoice-file {data}`, and the
+   URL that comes back fills the link box. Uploading does not mark anything issued; that is
+   still the operator's own tap, as on the desktop.
+   - **A photo is shrunk first**, to 2400 px on the long side as JPEG, as the phone's other
+     uploads are. The desktop sends the original, but the route takes a data URL under a 12 MB
+     body limit, which a camera original plus base64's extra third can exceed. A fapiao is
+     still legible at 2400 px. A browser that cannot decode the photo sends the original.
+   - A PDF is sent as it is.
+4. **Mark issued.** At least a link or a number is required, and this is said before any
+   request. It then sends `PUT /orders/:id/invoice {action:'issue', file_url, number}`, trimmed,
+   through the order sheet's own write path (busy state, refusal line, order re-read). The
+   server then tells the customer.
+5. **Un-issue asks first. This is a deliberate difference from the desktop**, whose "edit" link
+   reverts with no question asked. The approved mockup says un-issue asks first, and on a
+   phone it sits a thumb away from Open the fapiao while the customer's record changes with
+   it. The confirm's title is the one composed string (see the vocab entry). It then sends
+   `PUT /orders/:id/invoice {action:'unissue'}`.
+6. **Not built:**
+   - the mockup's Amount row: the desktop block shows no amount, and the goods figure is in
+     the copied bundle;
+   - its sentence about what Mark issued does.
+7. **Tests.** `scripts/test_mobile_orders_fapiao.js` (fast shard) runs the sliced phone code.
+   It checks:
+   - each write's method, path and body, and that nothing is sent before a check or a confirm;
+   - the permission-denied cases;
+   - the clipboard payload against the desktop's lines;
+   - the mapping's three derived values.
+
+   It caught one defect while being written: both writes had gone out as POST, not PUT.

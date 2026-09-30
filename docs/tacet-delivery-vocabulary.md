@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.223 · 2026-09-30 · §314 发票 ISSUING ON THE PHONE — ONE CONFIRM TITLE COMPOSED BY CLAUDE, EVERYTHING ELSE COPIED WHOLE.** See *Issuing a 发票 from the phone's order sheet (§314)*.
+
 **v1.222 · 2026-09-30 · §313 THE PHONE'S RECEIVE EXTRAS — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Tracking, 发票 and returns on the phone's receive screen (§313)*.
 
 **v1.221 · 2026-09-30 · §312 THE RECIPE RECORD'S ⋯ MENU ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *The recipe record's actions on the phone (§312)*.
@@ -9967,3 +9969,28 @@ whole:
 - from the phone's own live pairs: `Return · 退货`, `Tracking saved · 运单号已保存`,
   `Saved · 已保存`, `Saving… · 保存中…`, and the Receiving journal's
   `N <unit> sent back · 退回 N <unit>` for what went back.
+
+## Issuing a 发票 from the phone's order sheet (§314)
+
+Operator register only (Rule 1): the fapiao block on the phone admin's order
+sheet (`public/m.html`, `invoiceBlock`). Copied whole from the desktop block's
+`invT` pairs (`public/retail-admin/07-content-billing.js`): `Copy for
+accounting · 复制开票信息`, `Fapiao link (or attach PDF) · 发票链接(或上传 PDF)`,
+`Invoice no. (optional) · 发票号码(可选)`, `PDF / image · PDF / 图片`,
+`Mark issued · 标记已开`, `edit · 修改`, `PDF or image only · 仅限 PDF 或图片`,
+`File too large (max 10MB) · 文件过大`, `Attached — tap Mark issued ·
+已附加,点击标记已开`, `Upload failed: · 上传失败:`, `Add a fapiao link/PDF or
+invoice number · 请填写发票链接或号码`, `Invoice marked issued · 已标记开票`,
+`Back to requested · 已恢复待开`. The clipboard payload is the desktop's
+bilingual bundle, unchanged. The phone's own `Uploading… · 上传中…`,
+`Saving… · 保存中…` and `Confirm · 确认` are reused. The line `Issuing it is a
+desktop job. · 开具发票请在电脑端。` is RETIRED: it is no longer true.
+
+| Composed | Built from | Why |
+|---|---|---|
+| `Back to requested? · 恢复待开？` (the un-issue confirm's title) | the live toast `Back to requested · 已恢复待开`, as a question; `恢复待开` drops the toast's `已`, which marks it done | The desktop reverts with no confirm, so it has no confirm wording. The phone asks first (see the decision), and the title had to name the act. |
+
+Live candidates rejected: `edit · 修改` (the desktop's link text) names the
+control rather than what it does, and would have read "修改?" over a sheet that
+changes nothing but the status; `Undo · 撤销` is live on the phone but for
+dispatch, where it means something else.
