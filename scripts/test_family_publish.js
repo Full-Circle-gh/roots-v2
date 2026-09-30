@@ -41,7 +41,10 @@ const M1 = 72948, M2 = 72949;                    // family M: fully off, every s
 const L = 72950;                                 // a lone product
 const X = 72951;                                 // an ARCHIVED member of family G
 const ALL = [A, B, C, H1, H2, K1, K2, M1, M2, L, X];
-const OPERATOR = 1;
+const { testOperator } = require('./lib/test-operator');
+// The suite's own operator, made and removed by the suite — see scripts/lib/test-operator.js.
+const op = testOperator(99862, '__op_family_publish');
+const OPERATOR = op.id;      // tenant_users row the suite acts as
 
 let pass = 0, fail = 0;
 const ok  = (m) => { pass++; console.log('  ✓ ' + m); };
@@ -49,6 +52,7 @@ const bad = (m, e) => { fail++; console.log('  ✗ ' + m + (e ? '\n      ' + e :
 async function it(m, fn) { try { await fn(); ok(m); } catch (e) { bad(m, e.message); } }
 
 function cleanup() {
+  op.remove();
   const ph = ALL.map(() => '?').join(',');
   db.prepare(`DELETE FROM retail_product_versions WHERE product_id IN (${ph})`).run(...ALL);
   db.prepare(`DELETE FROM store_products WHERE id IN (${ph})`).run(...ALL);
@@ -78,6 +82,7 @@ const pubs = ids => ids.map(pub);
 (async () => {
   seed();
   const app = express();
+  op.add();
   app.use((req, _res, next) => { req.session = { backendUserId: OPERATOR }; next(); });
   app.use(router);
   const server = app.listen(0);

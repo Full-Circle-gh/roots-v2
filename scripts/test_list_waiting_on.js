@@ -40,11 +40,16 @@ async function it(name, fn) {
 }
 
 // High ids, clear of the other suites' fixture blocks.
-const STORE = 9801, CUSTOMER = 9831, OPERATOR = 1;
+const STORE = 9801, CUSTOMER = 9831;
+const { testOperator } = require('./lib/test-operator');
+// The suite's own operator, made and removed by the suite — see scripts/lib/test-operator.js.
+const op = testOperator(99863, '__op_list_waiting_on');
+const OPERATOR = op.id;
 const P_MILK = 9811, P_NUTS = 9812, P_RICE = 9813, P_GONE = 9814;
 const PIDS = [P_MILK, P_NUTS, P_RICE, P_GONE];
 
 function cleanup() {
+  op.remove();
   const oids = db.prepare('SELECT id FROM retail_orders WHERE customer_id = ?').all(CUSTOMER).map((r) => r.id);
   if (oids.length) {
     const ph = oids.map(() => '?').join(',');
@@ -107,6 +112,7 @@ vm.runInContext(M.slice(start, M.indexOf('\n}\n', start) + 3), phone);
   const orphan   = makeOrder('awaiting_restock', [P_NUTS, P_GONE], [NUTS]);
 
   const app = express();
+  op.add();
   app.use((req, _res, next) => { req.session = { backendUserId: OPERATOR }; next(); });
   app.use(router);
   const server = app.listen(0);

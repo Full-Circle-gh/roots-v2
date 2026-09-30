@@ -40,6 +40,9 @@ const ROOT = path.join(__dirname, '..');
 require(path.join(ROOT, 'database.js'));
 const { tdb } = require(path.join(ROOT, 'lib', 'tenant-db.js'));
 const router  = require(path.join(ROOT, 'routes', 'retail.js'));
+const { testOperator } = require('./lib/test-operator');
+// The suite's own operator, made and removed by the suite — see scripts/lib/test-operator.js.
+const op = testOperator(99865, '__op_new_order_options');
 const db = tdb();
 
 let pass = 0, fail = 0;
@@ -60,6 +63,7 @@ const SKU    = '__NOO-';
 const ALL = [P_WRAP, P_SOUP, P_GONE, A_OAT, A_SOY];
 
 function cleanup() {
+  op.remove();
   const ph = ALL.map(() => '?').join(',');
   db.prepare(`DELETE FROM retail_product_option_choices
                WHERE option_id IN (SELECT id FROM retail_product_options WHERE product_id IN (${ph}))`).run(...ALL);
@@ -105,7 +109,8 @@ function seed() {
 // ── 1 · the read ──────────────────────────────────────────────────────────
 async function theRead() {
   const app = express();
-  app.use((req, _res, next) => { req.session = { backendUserId: 1 }; next(); });
+  op.add();
+  app.use((req, _res, next) => { req.session = { backendUserId: op.id }; next(); });
   app.use(router);
   const server = app.listen(0);
   await new Promise(r => server.once('listening', r));

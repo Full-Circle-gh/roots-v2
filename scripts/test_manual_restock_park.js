@@ -58,13 +58,17 @@ const P_NOROW  = 9714;   // stocked NOWHERE — the can-never-release case
 const OPT      = 9751;
 const CH_EXTRA = 9761;
 const CUSTOMER = 9731;
-const OPERATOR = 1;      // tenant_users row the suite acts as
+const { testOperator } = require('./lib/test-operator');
+// The suite's own operator, made and removed by the suite — see scripts/lib/test-operator.js.
+const op = testOperator(99864, '__op_manual_restock_park');
+const OPERATOR = op.id;      // tenant_users row the suite acts as
 
 function orderIds() {
   return db.prepare('SELECT id FROM retail_orders WHERE customer_id = ?').all(CUSTOMER).map(r => r.id);
 }
 
 function cleanup() {
+  op.remove();
   const oids = orderIds();
   if (oids.length) {
     const ph = oids.map(() => '?').join(',');
@@ -179,6 +183,7 @@ const load = (id) =>
 (async () => {
   seed();
   const app = express();
+  op.add();
   app.use((req, _res, next) => { req.session = { backendUserId: OPERATOR }; next(); });
   app.use(router);
   const server = app.listen(0);
