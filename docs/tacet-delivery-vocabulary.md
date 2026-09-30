@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.207 · 2026-09-30 · §295 THE SHOP TAB'S SEARCH BUTTON — NOTHING COMPOSED, ONE PAIR COPIED.** The mini app Shop tab's search becomes an icon; its screen-reader label `Search · 搜索` is copied whole from the web shop's search button. See *The Shop tab's search button (§295)*.
+
 **v1.206 · 2026-09-29 · THE SHOP MENU SWITCH'S HOVER NAMES ITS STATE — NOTHING COMPOSED, TWO PAIRS REUSED.** Sales → Locations → Shop menu. The per-row switch's hover said `On the shop · tap to hide · 已上架 · 点按下架` / `Off the shop · tap to show · 未上架 · 点按上架`; off never hides a listing from the QR menu, so both were wrong. It now reads `Available · 有货` when on and `Sold out · 售罄` when off. See *The Shop menu's Available column*.
 
 **v1.205 · 2026-09-29 · THE SHOP MENU'S AVAILABILITY COLUMN SAYS AVAILABLE, NOT IN SHOP — NOTHING COMPOSED, ONE PAIR LIFTED.** Sales → Locations → Shop menu. The column header over each row's switch was `In shop · 上架`, which reads as "on or off the menu"; a made-here row switched off is sold out and still on the menu, greyed. It now reads `Available · 有货`. See *The Shop menu's Available column*.
@@ -9339,3 +9341,15 @@ Chinese was needed.
   phone's product card, a different switch.
 - `可售`: **not live** anywhere in the product; minting it was unnecessary with
   `有货` already carrying this meaning.
+
+## The Shop tab's search button (§295)
+
+**Nothing composed, 2026-09-30.** Customer register (Rule 1): the mini app's
+Shop tab (`miniapp/pages/shop/`). The button is an icon; the pair below is its
+screen-reader label only.
+
+| shipped | built from |
+|---|---|
+| `Search · 搜索` (search button, `aria-label`) | **copied whole** from the web shop's search button (`public/shop.html`, `mpSearchBtn`): customer register, same action |
+
+The open box keeps its placeholder, `Search the pantry… · 搜索…`, unchanged.
