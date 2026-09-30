@@ -21770,3 +21770,71 @@ as it does on the desktop. *Order again*, deferred from P1, is on a received ord
     or notes. That is the desktop's `puReorder`.
 11. **Leaving the screen with Back drops an unsaved order**, as the desktop's Cancel
     does. Save as draft is how to keep it.
+
+## §308 — FINANCE TRANSACTIONS ON THE PHONE: THE LEDGER, ITS WRITES, AND ITS EXPORT
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 2 of the parity survey's build order. Finance on the phone gains a Transactions tab: the
+desktop's ledger of typed rows, meaning money in and out that is not an order, over the same
+window as Summary. It carries every write the desktop has on it, each calling the same endpoint
+with the same body, behind the same permission check and confirm. The tab strip now reads
+Summary · Transactions · Approvals; Categories comes in F3.
+
+1. **The list.** It uses the desktop's tiles (Money out, Money in, and the "Sales revenue is on
+   Summary" note), the All / Money in / Money out chips with counts, and a search that narrows
+   the rows on screen. The search redraws the list only, so the keyboard stays up. Each row
+   shows its subject (a category in this operator's language, a typed note as written), its date,
+   and the desktop's line of labels: Posted by Purchasing with the category-subtotal hint; Staff
+   claim, marking own money; Carrier claim; Return with its reason and "Owes the shop"; Returned
+   ¥x · Net ¥y; Entered by / Approved by; Note. Amounts are whole yuan with the direction as the
+   sign, and a return reads +¥. States: loading; an empty ledger; filtered to nothing with Clear;
+   a failed read with Try again; the desktop's "Showing the first N of M ledger rows" when the
+   server cut the list short.
+2. **A desktop table row becomes a phone row that opens a sheet** of what may be done to it
+   (§97). A row with nothing that may be done to it is not a control: a carrier claim, a
+   purchase order the phone's Purchasing cannot open, or anything when the operator holds none
+   of the keys. A purchase order, claim, carrier claim or return is never offered Edit; that is
+   §36's rule, and the server refuses it anyway.
+3. **New, Edit and Delete, on `finance:record`.** The header button is "New transaction". The
+   form has Direction (on a new row only, because an edit cannot move a row between tables),
+   Date with no earliest day (§36), Amount, Category and Note.
+   - **Category** offers the tenant's list under the box, filtered as typed. For money in it
+     appears only once an income category exists, or when the row already has one.
+   - **Saving a category** saves the whole stored value: typing either half of a known category
+     saves its full stored name (`Rent` → `Rent 房租`), as `finTxCatStored` does.
+   - **Writes:** `POST /finance/transactions` or `PUT /finance/transactions/:kind/:id` with
+     `{kind, date, amount, category, note}`. Delete asks first, in the desktop's words, then
+     sends `DELETE`.
+4. **Return and Delete return, on `finance:record`.** Return is offered on a typed or claim row
+   that still has something left to return. The amount starts empty with the ceiling as its
+   placeholder, and the hint line is shown (§269 addendum). A reason is required. Both checks
+   run before the request, in the server's and Purchasing's own words. It sends
+   `POST /finance/transactions/out/:id/return {date, amount, reason, note}`. A return row
+   offers only Delete, which asks first.
+5. **Claims.**
+   - **Void** needs `expenses:cancel`, and is not offered on a settled claim or one with a return
+     against it. It asks first, then sends `POST /staff-expenses/:claim/void`.
+   - **Re-file** needs `expenses:approve` or `:cancel`. It uses the claim's own
+     `POST /staff-expenses/:claim/category {category}`, with no confirm, as on the desktop.
+     Picking the blank option does nothing.
+   - **After a write:** anything a claim owns, and every return, also refreshes the Approvals
+     queue.
+6. **Open purchase order** opens this app's own purchase-order sheet, and is offered only to
+   an operator who can open Purchasing.
+7. **Export CSV** downloads the desktop's URL for the window on screen
+   (`/finance/transactions/export.csv?from=&to=`), not for the search. It is a plain page
+   navigation, as the phone's customer export already is.
+8. **One window governs both tabs.** Changing the range re-reads the ledger and marks the
+   Summary figures out of date. Every write re-reads the ledger and the Summary figures.
+9. **How each write behaves.** The button that pressed it is disabled and says "Saving…". A
+   server refusal (the server sends "English · 中文") shows in this operator's language on the
+   form or sheet where it happened, and stays. A network failure shows the phone's "nothing has
+   changed" sentence. A toast only ever confirms a success.
+10. **Not built from the mockups:** the row sheet's explanatory subtitles ("Re-files the claim",
+    "Money back on this, up to ¥38"), the form's "Your own list, from Categories." hint, and the
+    longer caption under the list. None is on the desktop and each would have needed new
+    Chinese. The desktop's own pointer, "Sales revenue is on Summary", is used instead.
+11. **Tests.** `scripts/test_mobile_finance_transactions.js` (fast shard) runs the sliced phone
+    code against a fake server. It checks every write's method, path and body, and that nothing
+    is sent before its confirm. `test_mobile_finance_summary.js` now expects Transactions in the
+    tab strip.
