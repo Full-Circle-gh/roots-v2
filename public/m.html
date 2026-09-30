@@ -1235,7 +1235,10 @@ const state = {
        /* §300 F2 — Transactions: the ledger payload and its read, the chip and
           search filters, the row whose sheet is open (a kind:id key), that
           sheet's busy/refusal, and the New/Edit and Return forms. */
-       tx:null,txTried:false,txErr:'',txSeq:0,txDir:'all',txQ:'',txRow:null,txBusy:'',txActErr:'',form:null,ret:null},
+       tx:null,txTried:false,txErr:'',txSeq:0,txDir:'all',txQ:'',txRow:null,txBusy:'',txActErr:'',form:null,ret:null,
+       /* §300 F3 — Categories: the list and its read, a write's refusal (kept on
+          screen until the next write), the write in flight, the Add box. */
+       cats:null,catsTried:false,catsErr:'',catsMsg:'',catsBusy:'',catsNew:''},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -1462,7 +1465,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
-    f.txTried=false; f.txErr=''; f.txRow=null; f.txActErr=''; f.txBusy=''; f.form=null; f.ret=null; }
+    f.txTried=false; f.txErr=''; f.txRow=null; f.txActErr=''; f.txBusy=''; f.form=null; f.ret=null;
+    f.catsTried=false; f.catsErr=''; f.catsMsg=''; f.catsBusy=''; f.catsNew=''; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid=EXP_PAID_DEFAULT; x.note=''; x.photo=null; x.date=null;
     x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
@@ -16799,13 +16803,12 @@ reg('expSend', ()=>{
    The days are the STORE's (shopToday), as the desktop's tdToday — a day out on
    this screen is money in the wrong month.
 
-   THE SUB-VIEW STRIP names only what exists: Summary and Transactions (F2),
-   and Approvals for an operator who may approve (it renders the Approvals
-   screen this app already has). Categories joins it in its own step; a tab
-   that opened onto nothing would be a control that lies.
+   THE SUB-VIEW STRIP is the desktop's, in its order: Summary, Transactions
+   (F2), Approvals for an operator who may approve (it renders the Approvals
+   screen this app already has), Categories (F3).
    ══════════════════════════════════════════════════════════════════════════ */
 SUBS.finance={title:['Finance','财务'],
-  status:()=>state.fin.view==='approvals'?'':escAttr(finRangeLabel(finWindow())),
+  status:()=>(state.fin.view==='approvals'||state.fin.view==='categories')?'':escAttr(finRangeLabel(finWindow())),
   /* §300 F2 — the desktop's New transaction, Transactions' alone (Summary types
      nothing), and only for the pen: `finance:record`, the key the write needs. */
   cta:()=>state.fin.view==='transactions'&&mCan('finance:record')
@@ -16966,7 +16969,8 @@ function finStair(d){
 function finStrip(){
   const v=state.fin.view;
   return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
-    ${[['summary','Summary','汇总'],['transactions','Transactions','交易记录']].concat(canRoute('approvals')?[['approvals','Approvals','审批']]:[]).map(([k,en,zh])=>{
+    ${[['summary','Summary','汇总'],['transactions','Transactions','交易记录']].concat(canRoute('approvals')?[['approvals','Approvals','审批']]:[])
+      .concat([['categories','Categories','分类']]).map(([k,en,zh])=>{
       const on=v===k;
       return `<button onclick="APP.cmd('finView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
         font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
@@ -16982,6 +16986,8 @@ function screenFinance(){
   // always a strip; Approvals joins it for who may approve.
   const strip=finStrip();
   if(f.view==='approvals'&&canRoute('approvals')) return strip+screenApprovals();
+  // §300 F3 — the list has no window, so no range chips over it.
+  if(f.view==='categories') return screenFinCats(strip);
   const head=`${strip}<div style="padding:12px 0 0">${chipRow(FIN_RANGES,f.range,'finRange')}</div>`;
   if(f.view==='transactions') return screenFinTx(head);
   finLoad();
@@ -17096,11 +17102,13 @@ function sheetFinCat(){
 reg('finView', v=>{
   const f=state.fin;
   if(v==='approvals'){ if(!canRoute('approvals')) return; aprFresh(); }
-  f.view=(v==='approvals'||v==='transactions')?v:'summary'; render();
+  f.view=(v==='approvals'||v==='transactions'||v==='categories')?v:'summary'; render();
 });
 reg('finToggle', k=>{ const o=state.fin.open; o[k]=!o[k]; render(); });
 reg('finRetry', ()=>{ const f=state.fin;
-  if(f.view==='transactions'){ f.txTried=false; f.txErr=''; } else { f.tried=false; f.err=''; } render(); });
+  if(f.view==='transactions'){ f.txTried=false; f.txErr=''; }
+  else if(f.view==='categories'){ f.catsTried=false; f.catsErr=''; }
+  else { f.tried=false; f.err=''; } render(); });
 /* A preset moves the window at once. Custom asks for two days first, in the
    ask-sheet, and applies them only when both are there and in order — the
    server refuses an inverted window, and the sheet says so before it is asked. */
@@ -17580,6 +17588,165 @@ reg('finTxOpenPO', ()=>{
   if(!r||!finTxActions(r).includes('openpo')) return;
   f.txRow=null; APP.cmd('openPO',Number(r.po_id));
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   §300 — FINANCE ON THE PHONE: CATEGORIES (step F3)
+   --------------------------------------------------------------------------
+   The tenant's own expense-category list (22-finance.js, §87 part two): the
+   list the money-out form offers and the Summary breakdown is drawn in. Read
+   for anybody on Finance; every write needs `finance:record`, the key
+   lib/cap-routes.js puts on every /finance/ write — the desktop draws its
+   controls for anyone and lets the server refuse, the phone does not draw a
+   control that would be refused.
+
+     Add        POST   /finance/categories {name}
+     Rename     PATCH  /finance/categories/:id {name}     (the rows follow it)
+     Operating  PATCH  /finance/categories/:id {is_operating}
+     Hide       PATCH  /finance/categories/:id {is_active:false}, after its confirm
+     Restore    PATCH  /finance/categories/:id {is_active:true}
+     Delete     DELETE /finance/categories/:id, after its confirm, and only for
+                a category nothing has used — said BEFORE the request, from the
+                count already here, exactly as finCatDelete does.
+
+   THE DESKTOP'S INLINE NAME FIELD IS A RENAME SHEET here, and its row of
+   controls is a ⋯ sheet: the same writes, the phone's shape (§97). No window:
+   the list has no date about it, so the range chips and the status line give
+   way, as the desktop hides its bar. Every write re-reads the list, because a
+   rename moves rows and the counts on OTHER rows move with it.
+   ══════════════════════════════════════════════════════════════════════════ */
+function finCatsLoad(){
+  const f=state.fin;
+  if(f.catsTried) return; f.catsTried=true;
+  api('/finance/categories').then(d=>{
+    f.cats=Array.isArray(d)?d:[]; f.catsErr=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    f.catsErr=T('Could not load the categories.','分类加载失败。'); render();
+  });
+}
+/* finCatsUsage: the count as a sentence, and "Not used" in words at zero. */
+function finCatsUsage(n){
+  const c=Number(n)||0;
+  return c===0?T('Not used','未使用'):T(`Used by ${c}`,`${c} 条使用`);
+}
+const finCatById=id=>(state.fin.cats||[]).find(c=>String(c.id)===String(id))||null;
+function finCatRowHtml(c){
+  const pen=mCan('finance:record');
+  const busy=!!state.fin.catsBusy;
+  const off=c.is_active===0;
+  const sub=[finCatsUsage(c.usage_count)].concat(off?[T('Hidden','已停用')]:[])
+    .concat(pen?[]:[c.is_operating?T('Operating expense','营业费用'):T('Not an operating expense','不计入营业费用')]);
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px 10px 14px;${off?'opacity:.62':''}">
+    <span style="display:flex;flex-direction:column;min-width:0;flex:1">
+      <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis">${escAttr(c.name)}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${escAttr(sub.join(' · '))}</span></span>
+    ${pen?`<span style="display:flex;align-items:center;gap:8px;flex:none">
+      <span style="font-size:12px;color:var(--text-secondary)">${T('Operating expense','营业费用')}</span>
+      ${busy?`<span style="opacity:.5;pointer-events:none">${toggle(!!c.is_operating,'')}</span>`:toggle(!!c.is_operating,`APP.cmd('finCatFlag',${Number(c.id)})`)}
+      <button class="iconbtn" style="width:36px;height:36px" ${busy?'disabled':''} aria-label="${T('More','更多')}" onclick="APP.cmd('finCatMore',${Number(c.id)})">${ic('ellipsis',20)}</button></span>`:''}
+  </div>`;
+}
+function screenFinCats(strip){
+  const f=state.fin;
+  finCatsLoad();
+  const pen=mCan('finance:record');
+  const intro=`<div style="font-size:13px;line-height:1.55;color:var(--text-secondary)">${T('Your own list. Expenses are filed against these, and only these are offered when someone records one.','本店自己的分类列表。记录支出时只会显示这些分类。')}</div>`;
+  const add=pen?`<div style="display:flex;gap:8px">
+      <input id="mFinCatNew" autocomplete="off" value="${escAttr(f.catsNew)}" placeholder="${T('Rent','租金')}" style="flex:1;min-width:0"
+        oninput="APP.cmd('finCatNewSet',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();APP.cmd('finCatAdd')}">
+      <button class="btn2" style="flex:none;width:auto;padding:0 18px" ${f.catsBusy?'disabled':''} onclick="APP.cmd('finCatAdd')">${f.catsBusy==='add'?T('Saving…','保存中…'):T('Add','添加')}</button></div>`:'';
+  const msg=f.catsMsg?finBanner(escAttr(f.catsMsg)):'';
+  let body;
+  if(f.catsErr&&!f.cats) body=`${finBanner(f.catsErr)}
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:0 auto;display:flex" onclick="APP.cmd('finRetry')">${T('Try again','重试')}</button>`;
+  else if(!f.cats) body=`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else if(!f.cats.length) body=`<div style="padding:18px 4px;font-size:14.5px;line-height:1.55;color:var(--text-secondary)">${T(
+      'No categories yet. Add the ones this business spends money on — rent, wages.','还没有分类。请新增本店的支出分类 — 租金、工资。')}</div>`;
+  else body=`<div class="list">${f.cats.map((c,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${finCatRowHtml(c)}`).join('')}</div>`;
+  return `${strip}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${intro}${add}${msg}${body}</div>`;
+}
+/* One write path: busy while it runs, the list re-read either way, a toast
+   only on success and the server's refusal on the screen where it stays. */
+function finCatsWrite(kind,run,after){
+  const f=state.fin;
+  if(f.catsBusy) return;
+  f.catsBusy=kind; f.catsMsg=''; render();
+  run().then(()=>{
+    f.catsBusy=''; f.catsTried=false;
+    // A category list change is a change to the ledger's words and the
+    // staircase's lines: both re-read when next shown.
+    f.txTried=false; f.tried=false;
+    if(after) after();
+    render(); showToast(T('Saved','已保存'));
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    f.catsBusy=''; f.catsTried=false; f.catsMsg=finTxWords(e); render();
+  });
+}
+reg('finCatNewSet', v=>{ state.fin.catsNew=String(v==null?'':v); });
+/* CLEARED ONLY ON SUCCESS — a duplicate leaves what was typed to be corrected. */
+reg('finCatAdd', ()=>{
+  const f=state.fin; if(!mCan('finance:record')) return;
+  const name=String(f.catsNew||'').trim();
+  if(!name) return;
+  finCatsWrite('add',()=>apiWrite('/finance/categories',{name}),()=>{ f.catsNew=''; });
+});
+reg('finCatFlag', id=>{
+  const c=finCatById(id); if(!c||!mCan('finance:record')) return;
+  finCatsWrite('flag:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_operating:!c.is_operating},'PATCH'));
+});
+reg('finCatMore', id=>{
+  const c=finCatById(id); if(!c||!mCan('finance:record')||state.fin.catsBusy) return;
+  const off=c.is_active===0;
+  state.ask={title:escAttr(c.name),
+    options:[{key:'rename',label:T('Rename','重命名')},
+      off?{key:'restore',label:T('Restore','启用')}:{key:'hide',label:T('Hide','停用')},
+      {key:'delete',label:T('Delete','删除')}],
+    run:k=>{
+      if(k==='rename') return finCatRename(c);
+      if(k==='restore') return finCatsWrite('active:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_active:true},'PATCH'));
+      if(k==='hide') return finCatHide(c);
+      if(k==='delete') return finCatDelete(c);
+    }};
+  render();
+});
+/* An empty or unchanged name puts the old one back and sends nothing — the
+   desktop field's blur does the same. */
+function finCatRename(c){
+  state.ask={title:T('Rename','重命名'),
+    fields:[{id:'name',label:T('Category','分类'),value:c.name}],
+    confirmLabel:T('Save','保存'),
+    run:v=>{
+      const name=String(v.name||'').trim();
+      if(!name||name===c.name){ render(); return; }
+      finCatsWrite('rename:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{name},'PATCH'));
+    }};
+  render();
+}
+/* Hiding is the ordinary way to retire one; the confirm says what it does. */
+function finCatHide(c){
+  state.ask={title:T('Hide this category?','停用该分类？'),
+    body:T('It stops being offered when recording an expense. Expenses already filed under it keep it, and keep its setting.',
+           '记录支出时不再显示该分类。已使用该分类的支出保持不变，其设置也保留。'),
+    confirmLabel:T('Hide','停用'),
+    run:()=>finCatsWrite('active:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_active:false},'PATCH'))};
+  render();
+}
+/* Delete is for a category nothing has used; the reason for refusing the rest
+   is said before any request, from the count on screen. */
+function finCatDelete(c){
+  const f=state.fin;
+  if(Number(c.usage_count)>0){
+    f.catsMsg=T(`"${c.name}" is used by ${c.usage_count} expenses. Hide it instead — hiding keeps those records exactly as they are.`,
+                `“${c.name}”已被 ${c.usage_count} 条支出使用。请改为停用 — 停用不会改动这些记录。`);
+    render(); return;
+  }
+  state.ask={title:T('Delete this category?','删除该分类？'),
+    body:T('Nothing has been filed under it. This cannot be undone.','尚无支出使用该分类。此操作无法撤销。'),
+    confirmLabel:T('Delete','删除'), danger:true,
+    run:()=>finCatsWrite('delete:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{},'DELETE'))};
+  render();
+}
 
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
