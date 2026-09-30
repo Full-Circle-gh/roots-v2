@@ -521,7 +521,46 @@ section('5 · a draft opens here, and Order again');
   });
 }
 
-section('6 · both languages');
+section('6 · the screen needs purchasing:view AND purchasing:edit');
+{
+  // The REAL gate, run out of m.html: ROUTE_CAP, mCan and canRoute together.
+  const GATE = slice('const ROUTE_CAP={', 'function stockAppLabel(');
+  const gate = (caps) => {
+    const g = { state: { caps }, Set, Array };
+    vm.createContext(g); vm.runInContext(GATE, g);
+    return g;
+  };
+  it('both held: the screen opens', () => {
+    assert.strictEqual(gate(['purchasing:view', 'purchasing:edit']).canRoute('newpo'), true);
+  });
+  it('edit without view: refused — prices never reach an account that may not read them', () => {
+    assert.strictEqual(gate(['purchasing:edit']).canRoute('newpo'), false);
+  });
+  it('view without edit: refused', () => {
+    assert.strictEqual(gate(['purchasing:view']).canRoute('newpo'), false);
+  });
+  it('the neighbouring routes are unchanged', () => {
+    const g = gate(['purchasing:edit']);
+    assert.strictEqual(g.canRoute('purchasing'), false);
+    assert.strictEqual(g.canRoute('receiving'), false);
+    const v = gate(['purchasing:view']);
+    assert.strictEqual(v.canRoute('purchasing'), true);
+    assert.strictEqual(v.canRoute('supowed'), true);
+    assert.strictEqual(gate(['till:use', 'orders:edit']).canRoute('till'), true);
+  });
+  it('and with the real gate, New order / a draft / Order again do nothing for edit-without-view', async () => {
+    const e = mk({ caps: ['purchasing:edit'] });
+    const g = gate(['purchasing:edit']);
+    e.ctx.canRoute = g.canRoute; e.ctx.mCan = g.mCan;
+    vm.runInContext('canRoute=this.canRoute; mCan=this.mCan;', e.ctx);
+    e.CMD.pwNew();
+    assert.strictEqual(e.s.pw, null); assert.deepStrictEqual(e.calls.pushed, []);
+    e.s.poDetail = { id: 6, status: 'Delivered', items: [] };
+    assert.ok(!plain(vm.runInContext('poActions(state.poDetail)', e.ctx).map((a) => a.key)).includes('again'));
+  });
+}
+
+section('7 · both languages');
 {
   it('in Chinese, the steps and the buttons are the desktop\'s pairs', async () => {
     const e = await started({ lang: 'zh' });

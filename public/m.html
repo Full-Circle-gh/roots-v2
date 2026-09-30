@@ -9285,12 +9285,12 @@ function pwFromPO(po,again){
   return w;
 }
 function pwOpen(w){
-  state.pw=w; state.pwSheet=null;
   if(!canRoute('newpo')) return;
+  state.pw=w; state.pwSheet=null;
   state.stack=state.stack.filter(s=>s.route!=='newpo');
   push('newpo'); pwLoad();
 }
-reg('pwNew', ()=>{ if(!mCan('purchasing:edit')) return; pwOpen(pwBlank()); });
+reg('pwNew', ()=>{ pwOpen(pwBlank()); });
 reg('poAgain', ()=>{ const d=state.poDetail; if(!d||d.status!=='Delivered'||!mCan('purchasing:edit')) return;
   const w=pwFromPO(d,true); state.poId=null; state.poDetail=null; state.poPrint=false; pwOpen(w); });
 
@@ -23586,7 +23586,8 @@ const ROUTE_CAP={
      purchasing:receive server-side (lib/cap-routes.js). Showing it to a holder
      of purchasing:view alone would be a screen whose only action 403s. */
   receiving:'purchasing:receive', receive:'purchasing:receive',
-  /* §300 P2 — writing an order is the desktop's New order, purchasing:edit. */
+  /* §300 P2 — writing an order is the desktop's New order, purchasing:edit —
+     AND purchasing:view, which canRoute() adds by name (see there). */
   newpo:'purchasing:edit',
   /* WASTE IS GATED ON VIEW, NOT ON RECORD — the opposite call to Receiving's
      one line above, and for the opposite reason. Receiving is a screen whose
@@ -23740,6 +23741,12 @@ function canRoute(k){
      table: one route needs this, and a table where an array sometimes means
      any-of and sometimes all-of is a table nobody can read. */
   if(k==='till') return mCan('till:use') && mCan('orders:edit');
+  /* §300 P2 — WRITING A PURCHASE ORDER NEEDS BOTH, the same named && as the
+     till. The screen is purchasing:edit's (its saves), but it shows every
+     price on the order, and on the desktop nobody reaches the wizard without
+     purchasing:view — the Purchasing tab's own key. edit-without-view must
+     never see a price, so the phone asks for the pair. */
+  if(k==='newpo') return mCan('purchasing:view') && mCan('purchasing:edit');
   return mCan(ROUTE_CAP[k]);
 }
 /* NAMED FOR THE JOB THEY HOLD, not for where the screen lives. Someone who can
