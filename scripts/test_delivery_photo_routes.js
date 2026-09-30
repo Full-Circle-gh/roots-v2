@@ -33,7 +33,10 @@ function it(name, fn) {
 
 const OWNER    = 7401;   // the customer whose order it is
 const STRANGER = 7402;   // another logged-in customer
-const OPERATOR = 1;      // tenant_users row the suite acts as
+const { testOperator } = require('./lib/test-operator');
+// The suite's own operator, made and removed by the suite — see scripts/lib/test-operator.js.
+const op = testOperator(99861, '__op_delivery_photo_routes');
+const OPERATOR = op.id;      // tenant_users row the suite acts as
 const T_OWNER    = 'dphtestowner7401';
 const T_STRANGER = 'dphteststranger7402';
 const JPEG = 'data:image/jpeg;base64,' + Buffer.from('a photo of a door').toString('base64');
@@ -44,6 +47,7 @@ function orderIds() {
     .all(OWNER, STRANGER, 'DPH%').map(r => r.id);
 }
 function cleanup() {
+  op.remove();
   const oids = orderIds();
   if (oids.length) {
     const ph = oids.map(() => '?').join(',');
@@ -82,6 +86,7 @@ function seed() {
 (async () => {
   seed();
   const app = express();
+  op.add();
   app.use((req, _res, next) => { req.session = { backendUserId: OPERATOR }; next(); });
   app.use(router);
   const server = app.listen(0);
