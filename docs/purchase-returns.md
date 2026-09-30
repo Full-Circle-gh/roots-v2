@@ -240,6 +240,16 @@ change; each is a boundary.
    marks return events in the Received list, and explains the refusal it can now
    provoke (lowering an arrived count below what has already gone back). What it
    does not offer is a control to record one.
+
+   **OVERTURNED 2026-09-30 by §300** (*"recipes, purchasing and finance come to
+   the phone in full"*), which names this entry. The text above is kept as the
+   record of what was decided and why. Returns are now recorded on the phone's
+   receive screen (step P4 of §300's purchasing lane): the same model, the same
+   endpoint, the same reason codes and refusals, and one line at a time. The
+   quantity is the line's running total, it is drawn from what was accepted, and
+   a return the shelf cannot cover is refused whole with the goods named.
+   Nothing in this document's model changed. See §300 in
+   `docs/tacet-consolidation-decisions.md` and `scripts/test_mobile_receive_extras.js`.
 6. **The kitchen route accepts returns; no kitchen screen sends them.** The rule,
    the validation and the money are shared by both receive endpoints — parity at
    the seam, so the two can never disagree about what a return is — but the only
