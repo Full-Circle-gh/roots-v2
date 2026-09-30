@@ -2472,7 +2472,7 @@ reg('dispatchParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -2493,7 +2493,7 @@ reg('prepareParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -2519,7 +2519,7 @@ reg('undoParcelDispatch', sid=>{
       }).catch(e=>{
         state.parcelBusy=null;
         if(String(e.message)==='auth') return;
-        state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+        state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -3215,7 +3215,7 @@ reg('toggleShop', ids=>{
       rows.forEach(p=>{ p.pub=before.get(p._id); reKindProduct(p); });   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3242,7 +3242,7 @@ reg('togglePaused', id=>{
       p.paused=!next; reKindProduct(p);   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3286,7 +3286,7 @@ reg('pickOos', v=>{
       p.oos=was;   // the row must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3343,7 +3343,7 @@ reg('pollStatus', (id,st)=>{
   }).catch(e=>{
     state.pollBusy=null;
     if(String(e.message)==='auth') return;
-    state.pollsErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.pollsErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -3362,7 +3362,7 @@ reg('finalizeTopup', id=>{
       }).catch(e=>{
         state.tupBusy=null;
         if(String(e.message)==='auth') return;
-        state.tupErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+        state.tupErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -3390,7 +3390,7 @@ reg('gzPickup', (id,how)=>{
     }).catch(e=>{
       state.gzBusy=null;
       if(String(e.message)==='auth') return;
-      state.gzErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+      state.gzErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -3419,7 +3419,7 @@ reg('togglePopup', id=>{
   }).catch(e=>{
     state.puBusy=null;
     if(String(e.message)==='auth') return;
-    state.puErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.puErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -3729,6 +3729,7 @@ reg('recvGroupAll', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) r
    that has drifted from the rule, so each says what to do rather than echoing
    a code the operator cannot act on. */
 function recvErrText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(c==='reason_required')       return T('A short line needs a reason. Pick one and try again.','短少的项需要选择原因，请选择后重试。');
   if(c==='reason_not_applicable') return T('A reason belongs only on a line that came up short.','只有短少的项才需要填写原因。');
@@ -3915,7 +3916,7 @@ reg('poStatus', st=>{
     }).catch(e=>{
       state.poBusy=false;
       if(String(e.message)==='auth') return;
-      state.poErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+      state.poErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -3987,7 +3988,7 @@ reg('sendReplyText', t=>{
   }).catch(e=>{
     state.replyBusy=false;
     if(String(e.message)==='auth') return;
-    state.replyErr=e.code==='message_required'?T('Write something first.','请先输入内容。')
+    state.replyErr=e.refused?E(...e.words):e.code==='message_required'?T('Write something first.','请先输入内容。')
       :T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
@@ -4013,7 +4014,7 @@ function revWrite(r,visible){
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 }
@@ -4044,7 +4045,7 @@ reg('toggleFeedbackHandled', key=>{
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -4126,7 +4127,7 @@ reg('chanCell', (channel, storeCode, next)=>{
       }).catch(e=>{
         state.chanBusy=null;
         if(String(e.message)==='auth') return;
-        state.chanErr = E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.chanErr = e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -4166,7 +4167,7 @@ reg('shopOpen', (storeCode, next)=>{
       }).catch(e=>{
         state.shopBusy=null;
         if(String(e.message)==='auth') return;
-        state.shopErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.shopErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -4191,7 +4192,7 @@ reg('resumeDelivery', ()=>{
       }).catch(e=>{
         state.dlvBusy=false;
         if(String(e.message)==='auth') return;
-        state.dlvErr=E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
+        state.dlvErr=e.refused?E(...e.words):E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
       });
     }};
   render();
@@ -6045,7 +6046,7 @@ function toggleNotifCat(k){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 reg('toggleNotifCat', k=>toggleNotifCat(k));
@@ -7207,7 +7208,9 @@ async function catBannerUpload(file){
   try{
     const fd=new FormData(); fd.append('file',await catBannerShrink(file),'banner.jpg');
     const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
-    if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+    if(r.status===401){ location.href='/backend/login'; return; }
+    // §325 — a refusal is said on the card, not answered with the login page.
+    if(r.status===403){ state.catBannerErr=(await apiRefusal(r)).message; return; }
     const j=await r.json().catch(()=>({}));
     if(!r.ok||!j||!j.success||!j.data||!j.data.url){
       const reason=MEDIA_ERR[j&&j.error];
@@ -8692,7 +8695,15 @@ reg('onwCreate', ()=>{
        not: a code has a sentence written for it here, and e.message for a coded
        failure is the raw field name. */
     const pid=e.body&&e.body.product_id!=null?Number(e.body.product_id):null;
-    state.onw.err={where:ONW_WHERE[e.code]||(pid!=null?'what':'who'),msg:onwErrText(e.code,e.code?null:e.message,pid)};
+    /* §325 — onwErrText's forbidden_capability sentence is about the customer
+       ("cannot create customers"), which is the handler's refusal
+       (need: customers:edit) and was unreachable while apiWrite sent every 403
+       to the login page. Any other refusal — no orders:edit, a store outside
+       this account's scope — is the general sentence; blaming the customer box
+       for it would send the operator to untick a box that changes nothing. */
+    const custRefused=e.code==='forbidden_capability'&&e.body&&e.body.need==='customers:edit';
+    state.onw.err={where:ONW_WHERE[e.code]||(pid!=null?'what':'who'),
+      msg:(e.refused&&!custRefused)?E(...e.words):onwErrText(e.code,e.code?null:e.message,pid)};
     render();
   });
 });
@@ -9253,7 +9264,7 @@ reg('poLcSave', ()=>{
   }).catch(e=>{
     lc.busy=false;
     if(String(e.message)==='auth') return;
-    lc.err=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+    lc.err=e.refused?E(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
   });
 });
 /* WHAT THE ORDER PUT IN THE BOOKS, the desktop's Finance panel: the expense
@@ -10000,6 +10011,7 @@ function pwBody(){
 const PW_ERR={date_required:['Choose a date first.','请先选择日期。'],store_required:['Choose a location first.','请先选择门店。'],
   name_required:['Give it a name first.','请先填写名称。']};
 function pwErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(PW_ERR[c]) return T(...PW_ERR[c]);
   if(c==='not_draft'||c==='already_receiving'||c==='not_found') return T('This order has already moved on. Close and open it again to see where it is now.','这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
@@ -10193,6 +10205,7 @@ reg('pkField', (f,v)=>{ const k=state.pk; if(!k) return;
   if(f==='store'){ k.store=Number(v)||null; render(); }
   else if(f==='supplier') k.supplier=String(v==null?'':v); });
 function pkErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code, b=(e&&e.body)||{};
   if(c==='already_sourced'&&Array.isArray(b.lines)&&b.lines.length)
     return T('Already ordered: ','已下单:')+b.lines.map(d=>`${d.name_en||''} → ${d.po_number||''}`).join(', ');
@@ -10474,7 +10487,7 @@ function pinvAct(req,ok){
   v.busy=true; v.actErr=null; pinvPatch();
   apiWrite(req[0],req[1],req[2]).then(r=>{ v.busy=false; showToast(typeof ok==='function'?ok(r):ok); pinvLoad(true); })
     .catch(e=>{ v.busy=false; if(String(e.message)==='auth') return;
-      v.actErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
+      v.actErr=e.refused?E(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
 }
 reg('pinvMarkPo', (poId,flag)=>{ flag=!!Number(flag);
   pinvAct(['/purchasing/po/'+Number(poId)+'/no-invoice',{no_invoice_expected:flag},'PUT'], r=>{
@@ -10647,6 +10660,7 @@ reg('pinvMatch', ()=>{
   render();
 });
 function pinvErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(c==='amount_required') return T('Enter an amount first.','请先填写金额。');
   if(c==='date_required') return T('Choose a date first.','请先选择日期。');
@@ -10991,7 +11005,7 @@ function psupBody(d){
     payment_method:t('payment_method')||null,channel_type:d.channel_type||null,channel_link:t('channel_link')||null,
     rating:parseInt(d.rating,10)||0,notes:t('notes')||null};
 }
-const psupErrMsg=e=>e&&e.code==='name_taken'?T('Name already exists','名称已存在'):e&&e.code==='name_required'?T('Name is required','名称必填')
+const psupErrMsg=e=>e&&e.refused?T(...e.words):e&&e.code==='name_taken'?T('Name already exists','名称已存在'):e&&e.code==='name_required'?T('Name is required','名称必填')
   :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
 function psupAutoStart(id){
   if(psupAuto){ psupAuto.flush(); psupAuto.stop&&psupAuto.stop(); psupAuto=null; }
@@ -11365,7 +11379,7 @@ function supOwedWrite(path, body, done){
   }).catch(e=>{
     state.supAcctBusy=false;
     if(String(e.message)==='auth') return;
-    state.supAcctErr=e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
+    state.supAcctErr=e.refused?E(...e.words):e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
       :e.code==='invalid_amount'?E('Enter an amount first.','请先填写金额。')
       :E('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
     render();
@@ -13908,7 +13922,7 @@ function kqReprint(){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     k.printing=false;
-    k.err=(e.code==='no_kitchen_printer'||e.code==='not_configured')
+    k.err=e.refused?E(...e.words):(e.code==='no_kitchen_printer'||e.code==='not_configured')
       ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
       : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
     render();
@@ -14331,7 +14345,7 @@ function pikWriteLine(L,per){
     .catch(e=>{
       if(String(e.message)==='auth') return;
       k.busy=false;
-      k.err=e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
+      k.err=e.refused?E(...e.words):e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
                               :T('That line did not save. Nothing has changed — try again.','该项未保存,数据未变 — 请重试。');
       render();
     });
@@ -14612,7 +14626,7 @@ function xfrSaveCount(itemId,qty){
     // The number they typed is never thrown away by a failed write. Losing a
     // delivery's counts at the door is the one failure nobody forgives.
     x.held={item_id:itemId,qty:qty};
-    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+    x.err=e.refused?E(...e.words):e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
                              : T('That count did not save. It is still on screen — try again.','数量未保存,仍显示在屏幕上 — 请重试。');
     render();
   });
@@ -14680,7 +14694,7 @@ function xfrAllArrived(){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     x.busy=false;
-    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+    x.err=e.refused?E(...e.words):e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
                              : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
     render();
   });
@@ -19539,7 +19553,7 @@ reg('pcSave', ()=>{
   }).catch(e=>{
     c.busy=false;
     if(String(e.message)==='auth') return;
-    c.saveErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+    c.saveErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
   });
 });
 
@@ -21722,7 +21736,7 @@ function toggleCoupon(code){
   }).catch(e=>{
     state.couponBusy=null;
     if(String(e.message)==='auth') return;
-    state.couponErr=E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
+    state.couponErr=e.refused?E(...e.words):E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
   });
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
@@ -21739,7 +21753,7 @@ function recallBroadcast(id){
   }).catch(e=>{
     state.bcBusy=null;
     if(String(e.message)==='auth') return;
-    state.bcErr=E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
+    state.bcErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
   });
 }
 
@@ -21984,6 +21998,7 @@ function csNeedsDesktop(c){ return !!c && c.k==='att' && CS_DESKTOP_REASONS.inde
    sentence for these two codes, the second is orderErrorText's default on this
    file. Nothing here is composed. */
 function csErrText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   if(e.code==='not_mapped'||e.code==='not_syncing')
     return T('Somebody else changed this while you had it open — reload and try again.','该记录已被他人修改,请刷新后重试。');
   return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
@@ -22224,10 +22239,11 @@ function screenChannelSync(){
                class for exactly that and carries the 44px target and the disabled
                state; the label is the desktop button's own pair, and Sending… is
                this screen's own word for a push in flight (csCellWord).
-               GATED CLIENT-SIDE, which the desktop does not need to be: this
-               file's apiWrite sends a 403 to /backend/login exactly as it sends a
-               401, so an ungated button would answer a missing permission by
-               throwing the operator out of the app. mCan's null-caps case means
+               GATED CLIENT-SIDE, as every phone control is (§325): a button
+               drawn for somebody the server will refuse is a dead end. (This
+               file's apiWrite used to send a 403 to /backend/login exactly as it
+               sent a 401, which made the gate matter more; since §325 a refusal
+               is said on the row, csErrText.) mCan's null-caps case means
                allowed, so the server stays the gate. */
             const busy=state.csBusy===x.ch.key+':'+p.id;
             const btn=(csCanPush(c2)&&mCan(x.ch.key+':sync'))
@@ -23095,16 +23111,20 @@ function orderNext(o){
 }
 
 /* A write helper that keeps the server's own words. api() throws away the body,
-   and the body is where the reason lives. */
+   and the body is where the reason lives. §325: only a 401 leaves for the login
+   page; a 403 throws the refusal (apiRefusal) into the caller's own error path —
+   the same path a 500 takes, so its busy flag resets and its slot says why. */
 async function apiWrite(path, body, method){
   const r=await fetch(apiURL(path),{method:method||'POST',credentials:'same-origin',
     headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body||{})});
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);
   let j=null; try{ j=await r.json(); }catch(e){}
   if(!r.ok){ const e=new Error((j&&(j.message||j.error))||('HTTP '+r.status)); e.code=j&&j.error; e.body=j; throw e; }
   return j;
 }
 function orderErrorText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   if(e.code==='__plain') return e.message;
   // invalid_status is /refund/direct's word for the same thing invalid_transition
   // is the status route's: the order is no longer where the screen thinks it is.
@@ -23253,7 +23273,7 @@ async function saveProductEdits(){
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
-    state.prodErr=landed
+    state.prodErr=e.refused?E(...e.words):landed
       ? E('Some of that did not save. What did is already in — press Save again for the rest.',
            '部分内容没有保存成功。已保存的不会重复写入 — 请再按一次「保存」。')
       : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -23276,7 +23296,8 @@ function custWrite(kind, run, okMsg){
   }).catch(e=>{
     state.custBusy=null;
     if(String(e.message)==='auth') return;
-    state.custErr=e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
+    state.custErr=e.refused?T(...e.words)   // §325
+      :e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
       :e.code==='phone_taken'?T('Another customer already has that phone number.','该手机号已被其他顾客使用。')
       :e.code==='message_required'?T('Write something first.','请先输入内容。')
       :e.code==='reason_required'?T('A reason is required.','需要填写原因。')
@@ -23639,7 +23660,7 @@ reg('caddrSave', ()=>{
     const t=state.caddr; if(!t) return;
     if(String(e.message)==='auth') return;
     t.busy=false;
-    t.err=e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
+    t.err=e.refused?E(...e.words):e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
       :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
       :e.code==='not_found'?T('This address is no longer on the record.','该地址已不存在。')
       :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -23683,7 +23704,7 @@ function toggleFeature(key){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadOps(){
@@ -24040,12 +24061,15 @@ async function uploadMedia(files){
   files=(files||[]).filter(f=>/^image\//.test(f.type||''));
   if(!files.length) return;
   state.mediaBusy={done:0,total:files.length}; state.mediaErr=null; render();
-  let ok=0, fail=0, why=null;
+  let ok=0, fail=0, why=null, refused=null;
   for(const f of files){
     const fd=new FormData(); fd.append('file',f);
     try{
       const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
-      if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+      if(r.status===401){ location.href='/backend/login'; return; }
+      /* §325 — a 403 is a refusal, not a lost session, and the next photo would
+         be refused the same way: stop, and count the rest as not uploaded. */
+      if(r.status===403){ refused=await apiRefusal(r); fail+=files.length-ok-fail; break; }
       const j=await r.json().catch(()=>({}));
       if(r.ok&&j&&j.success) ok++; else { fail++; why=why||(j&&j.error); }
     }catch(e){ fail++; }
@@ -24055,7 +24079,7 @@ async function uploadMedia(files){
   // A refusal names the reason the server gave when it gave one, and says how
   // many DID land — "3 of 4" is the difference between a retry and a re-do.
   if(fail){
-    const reason=MEDIA_ERR[why];
+    const reason=refused?refused.words:MEDIA_ERR[why];
     const head=ok?T(ok+' of '+(ok+fail)+' uploaded.', '已上传 '+ok+'/'+(ok+fail)+' 张。')
                  :T('That did not upload.','上传失败。');
     state.mediaErr=head+' '+(reason?T(...reason):T('Try again.','请重试。'));
@@ -24176,7 +24200,7 @@ function invSnooze(id){
        list in hand is stale, so say what is true and refetch rather than
        leaving a chip that lies about a row that no longer waits. */
     if(e.code==='not_pending'){ state.invLoaded=false; loadLiveInvoices(); }
-    showToast(T('That did not save.','没有保存成功。'));
+    showToast(e.refused?T(...e.words):T('That did not save.','没有保存成功。'));
   });
 }
 reg('invSnooze', id=>invSnooze(id));
@@ -24195,7 +24219,7 @@ function togglePrint(){
   }).catch(e=>{
     state.printerBusy=false;
     if(String(e.message)==='auth') return;
-    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.printerErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadInbox(){
@@ -28518,8 +28542,8 @@ function screenCustomers(){
   /* THE HEADER'S ONE BUTTON, and it is the desktop's own — the roster's "+ Add"
      for a walk-in or a telephone order. Gated on `customers:edit`, which is what
      lib/cap-routes.js gates POST /customers on: absent, never disabled, for an
-     operator whose save would 403. §112's rule, and the reason it matters here
-     is that apiWrite sends a 403 to the login page. */
+     operator whose save would 403. §112's rule. (It mattered more while apiWrite
+     sent a 403 to the login page; since §325 a refusal is said, not a logout.) */
   /* 38px, not the class's 44. The band standardises its controls at 38 — every
      iconbtn in this row overrides the 44px class inline to say so — and the Add
      slab arrived at 44, which is the whole of what "tight" was. Six pixels:
@@ -28998,9 +29022,10 @@ function sheetCustomer(){
             customers:edit for the other two (lib/cap-routes.js). All four were
             offered to every role, and a customer-service or warehouse account
             holding customers:view alone got the whole row. That is worse here
-            than a dead button: apiWrite treats a 403 as a lost session and sends
+            than a dead button: apiWrite treated a 403 as a lost session and sent
             the operator to the login page, so tapping Points on a record you may
-            read but not adjust logged you out of the app. Absent, never
+            read but not adjust logged you out of the app (§325 stopped that; a
+            refusal is now said in words, but a dead button is still one). Absent, never
             disabled — §112's rule, and the four buttons re-flow to fill the row
             at whatever number survives. */''}
       ${d?(()=>{
@@ -31290,7 +31315,7 @@ reg('pushTest', ()=>{
 /* ==========================================================================
    Live data — binds the core monitoring screens to the store backend's
    /api/retail-admin/* endpoints (same API the desktop admin uses). The page
-   self-auths: a 401/403 bounces to the store root. Every map is defensive and
+   self-auths: a 401 bounces to the login page (a 403 is a refusal, §325). Every map is defensive and
    falls back to the mock content above, so a shape change can never white-screen
    the app — the long-tail marketing/loyalty screens stay on sample data for now.
    ========================================================================== */
@@ -31300,11 +31325,51 @@ const API='/api/retail-admin';
    backend's own login and session routes — so a path that already starts at
    /api/ is taken as given rather than prefixed into /api/retail-admin/api/... */
 const apiURL = p => String(p).indexOf('/api/')===0 ? p : API+p;
+/* §325 — A REFUSAL IS NOT A LOST SESSION. Every read and write here used to send
+   a 403 to the login page exactly as it sent a 401, so with permissions switched
+   on, one refused tap threw a shift worker out of the app. Only a 401 means the
+   session is gone (requireRetailAdmin answers every "who are you?" with 401, on
+   purpose, and so does lib/require-cap.js). A 403 is the server saying "you, no"
+   — `forbidden_capability` from the choke point or a handler, `forbidden_store`
+   from the store-scope check, or a sentence of its own — and the operator is
+   told so where they are looking, through the caller's own error slot.
+   THE WORDS ARE THE DESKTOP'S (01-core.js TD_ERR), the same refusal answered
+   with the same sentence on both surfaces. A 403 that brings a bilingual
+   sentence of its own ("… · …", the backend routes' shape) keeps it; one that
+   brings nothing the phone can read gets lib/require-cap.js's own pair. */
+const REFUSAL_WORDS={
+  forbidden_capability:['Your role does not include this action. An owner can grant it on the Team page.','你的角色不包含此操作。可由负责人在团队页授权。'],
+  forbidden_store:['You can only do that in a location you are assigned to.','只能在你被分配的门店执行该操作。'],
+  store_not_assigned:['You are not assigned to that location.','你未被分配到该门店。'],
+};
+const REFUSAL_ANY=['You don’t have permission for this','你没有此操作的权限'];
+function refusalWords(j){
+  const code=j&&j.error;
+  if(REFUSAL_WORDS[code]) return REFUSAL_WORDS[code];
+  const s=typeof code==='string'?code:'', i=s.indexOf(' · ');
+  if(i>0) return [s.slice(0,i),s.slice(i+3)];
+  return REFUSAL_ANY;
+}
+/* The thrown error: its message is the sentence (so a caller that shows
+   e.message shows it), `code`/`body` are the server's as apiWrite always kept
+   them, and `refused` + `words` let a caller whose fallback is "try again"
+   say the true thing instead — `e.refused?E(...e.words):<its own words>`,
+   E() so a stored error re-reads in the language on screen when it paints.
+   Trying again will not help a refusal; saying why is the whole point. */
+async function apiRefusal(r){
+  let j=null; try{ j=await r.json(); }catch(e){}
+  const words=refusalWords(j);
+  const e=new Error(T(words[0],words[1]));
+  e.code=j&&j.error; e.body=j; e.status=403; e.refused=true; e.words=words;
+  return e;
+}
 async function api(path){
   const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
   // Match the desktop backend's auth-fail target. Redirecting to '/' would loop
   // once the store root serves this app to phones (root → 401 → root → …).
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  // §325: a 401 only — a 403 is a refusal, not a lost session.
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);
   if(!r.ok) throw new Error('HTTP '+r.status);
   const j=await r.json();
   return (j && j.data!==undefined) ? j.data : j;
@@ -31402,7 +31467,8 @@ function fmtDateOnly(v){
 }
 async function apiRaw(path){
   const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);   // §325, as api()
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
