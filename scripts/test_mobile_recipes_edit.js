@@ -429,8 +429,10 @@ it('Back with work that CANNOT be saved asks, says why, and only then drops it',
 });
 it('the phone\'s edge swipe cannot wait — the work goes on the wire as the frame comes down', () => {
   const layers = between(M, 'function layers(){', '  // Order first, record second');
-  // (§300 R5 put the materials record's own leave on the next line.)
-  assert.match(layers, /if\(t&&t\.route==='recipeone'\) rcpLeaveNow\(false\);[^\n]*\n[^\n]*materialone[^\n]*\n\s*forgetScroll\(\); state\.stack\.pop\(\);/);
+  // (§300 R5 put the materials record's own leave on the next line, and R6
+  // the Cost & Pricing screen's ask after it — still before the frame comes
+  // down, and still with nothing between the leave and the pop but those.)
+  assert.match(layers, /if\(t&&t\.route==='recipeone'\) rcpLeaveNow\(false\);[^\n]*\n[^\n]*materialone[^\n]*\n[^\n]*productcost[^\n]*\n\s*forgetScroll\(\); const gone=state\.stack\.pop\(\);/);
   assert.match(M, /if\(rcpAuto&&rcpAuto\.busy\(\)\) return true;/, 'and a reload waits for it (mUnsavedWork)');
 });
 
