@@ -21473,3 +21473,135 @@ and without `products:view`, no cost figure from a payload full of them, the
 card against the desktop's own function, and the print. `scripts/test_mobile_recipes.js`
 updated where §300 overturned it — the "no money for anybody" list keeps every
 COST key and now admits `sell_price` in the one products function only.
+
+## §304 — A PURCHASE ORDER IS MANAGED FROM THE PHONE: FOUND, READ, SENT BACK, UNDONE, BACK-ORDERED, CANCELLED, COSTED AND PRINTED
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P1 of the purchasing lane (survey build-order row 11, with row 18's print).
+The phone's Purchasing screen could list orders and open one read-only, with Mark
+ordered, Everything arrived and Receive line by line. It now does what the desktop's
+order ledger and receive-and-manage screen do, except build an order (the wizard is
+P2). The desktop module (`public/retail-admin/16-purchasing.js`) is the spec for
+every control: same endpoint, same body, same condition, same capability, same
+confirm, same refusal.
+
+1. **The search goes to the server** (`GET /purchases?search=&month=&store_id=`),
+   not the desktop's in-page filter, because the server's search also looks inside
+   the lines, and the row names the products that matched. Typing waits for the
+   pause; the answer repaints the list and the segment counts only, never the
+   field. Month and store choices come from the orders already loaded, so they cost
+   no extra read, and each is drawn only when there is a choice to make.
+2. **The sub-view strip shows only tabs that work**: Orders, and Suppliers we owe
+   (§286's screen, drawn inside Purchasing). Invoices, Reorder and the supplier
+   directory join it when they are built. One tab alone is not drawn as a strip.
+3. **The row carries the desktop's facts**: the order date, "N suppliers" for an
+   order mixing suppliers per line (not "No supplier"), and "from PO-####" for a
+   copy pulled from a kitchen order. That last one is **words, not a link**: it is a
+   kitchen-scope order, which the retail order route does not open.
+4. **The order stays a sheet**, not the pushed screen mockup P06 draws. Same
+   capabilities, not same layout (§97). The three buttons the finance lane's F0
+   gates (Mark ordered, Everything arrived, Receive line by line) are untouched.
+5. **Money on the order fails closed.** Line totals, cost each, the order total,
+   landed cost, the Finance panel and the printed order show only when
+   `purchasing:view` is known to be held. The sheet is also reached from Receiving,
+   which `purchasing:receive` opens on its own; the desktop shows an order's money
+   only inside Purchasing. The list's own figures are unchanged: that screen is
+   already gated on `purchasing:view`, and making `mCan` fail closed is F0's job.
+6. **Back to draft, Undo receiving and Cancel sit under ⋯**, on the desktop's
+   conditions (Sent: back to draft, cancel; Received: undo) and its capability
+   (`purchasing:edit`). Cancel and Undo ask the desktop's own questions, and Undo
+   says what it clears before the confirm. **Back to draft gains a confirm the
+   desktop does not have**, because on the phone it sits one row from Cancel in the
+   same menu, and mockup P06 puts every ⋯ action behind one. Its body is the
+   desktop's own sentence (*Posts to Expenses when the order is placed.*); only its
+   title is new.
+7. **A refused write is said where the operator is looking, and stays.** The
+   desktop's two stock and cost refusals (`undo_blocked`, `cost_not_recoverable`)
+   are dialogs listing the goods; on the phone they are the same locked words in a
+   band at the top of the order, with the goods listed, until the next action or
+   until the order is closed. A toast only ever confirms.
+8. **Back-order N short** has no confirm, as on the desktop (it makes a draft,
+   which can be deleted), and opens the new draft, as the desktop does.
+9. **Landed cost** reads to `purchasing:view` and saves to `purchasing:edit`, with
+   the desktop's body (`freight`, `tax`, `handling`). Goods is the desktop's own sum,
+   ordered quantity × cost each. The per-unit figure the desktop removed stays
+   removed. Typing repaints the total alone.
+10. **The Finance panel** lists what the order posted by category, or says it posts
+    when placed, and names what a return took off, dated to the order.
+11. **The printed order is the desktop's sheet, ported.** The desktop builder lives
+    inside its own module and opens with `window.open`, which a phone's in-app
+    browser often refuses. So the same document (both languages whatever the phone
+    is set to, because it goes to the supplier) is shown in a frame over the order.
+    Print hands it to the phone's print sheet, which is also where Save as PDF and
+    sharing are. The shop name at its foot is the phone's own (the store wordmark),
+    because the phone does not load the desktop's tenant brand name.
+12. **Not built in this step, deliberately.** *Order again*: on the desktop it only
+    pre-fills the new-order wizard and writes nothing, so there is no request to
+    make until P2 builds the wizard. It arrives with it. *Managing a draft*: the
+    desktop opens a draft in the wizard (with Delete draft) and offers it none of
+    these actions, so the phone offers none either until P2.
+13. **Found on the way.** The printed document lives inside `m.html`'s script, and
+    the phone's render harnesses inject themselves at the first closing body tag in
+    the file. A literal one in the document swallowed the harness, and every probe
+    suite read the page title instead. Every closing tag in the document is now
+    written escaped, and the new suite pins the file to one closing body tag.
+
+## §305 — THE FINANCE SUMMARY IS ON THE PHONE, READ-ONLY
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 1 of the parity survey's build order. The phone gains a Finance screen (More → Money and
+numbers → Finance) that shows the desktop's money staircase for any window. A category's
+figure opens the ledger rows behind it in a sheet, and a purchase-order row opens its items. It
+calls the same three read endpoints as `22-finance.js`, with the same parameters, and draws the
+same rows, states and notes. It writes nothing. Transactions and Categories are later steps
+(F2, F3).
+
+1. **Gated on `finance:view`, and closed while that is unknown.** The route is in `ROUTE_CAP`,
+   and F0's `mCan` refuses money-only keys while caps are unknown. `canRoute` also refuses it on
+   the three boards that never see money (`recapNoMoney()`: warehouse, dispatch, customer
+   service), whatever their caps, which is the rule Trend and Home already follow. The server
+   leaves reads open by design (`lib/cap-routes.js`), so this is the gate.
+2. **The staircase is the desktop's, row for row.** The rows run in this order:
+   - Revenue, with its channels, open by default and with no chevron when there are none, then
+     the revenue note (§182).
+   - "of which tax", only when the shop charges tax.
+   - Cost of goods and Gross profit, in the server's three states: Not recorded plus one
+     sentence; the figures plus the floored coverage sentence; or the figures alone.
+   - Operating expenses, with its categories, open by default.
+   - Net.
+   - Below the card, the excluded money (§87): closed by default, absent at zero, with no minus.
+
+   Figures are whole yuan on the staircase and exact to the fen inside a drill-down, per §36 and
+   §88. Category labels use the phone's existing `catLabel`/`catLabels` split and collision
+   rule, which match the desktop's.
+3. **A category opens in a sheet, not in place** (§97: same capability, not same layout). It
+   reads `/finance/summary/category` over the window the figures came from (`data.window`), not
+   over the chips, which may have moved. The uncategorised line asks with an empty category. A
+   purchase-order row with items opens them inside the sheet (`/finance/summary/po-lines`); a
+   landed-cost row with no items does not. Each level has loading, empty and failed states, one
+   open at a time, and a slow answer is discarded when it arrives late.
+4. **The window.** The desktop's four presets (Today, 7, 30, 90 days) run on the store's own day,
+   plus a Custom chip that opens the ask-sheet with From and To. There is no minimum date (§36).
+   The sheet refuses an empty day or an inverted window before the server would. A custom pick
+   that equals a preset lights that preset, as `finSyncRangeButtons` does. The status line
+   reads like `finRangeLabel`. Moving the window closes an open category. A failed first read
+   shows the desktop's sentence with Try again. A failed refresh keeps the figures with the
+   banner above them.
+5. **The sub-view strip shows only what exists: Summary, plus Approvals** for an operator who
+   holds `expenses:approve`. The Approvals tab shows the Approvals screen this app already has,
+   starting from a fresh queue (the route's own reset, now `aprFresh()`). With one sub-view
+   there is no strip, as on the desktop. Transactions and Categories are not drawn until their
+   steps build them, so no tab leads nowhere. The separate Approvals row under Record and review
+   stays, for approvers who do not hold `finance:view`.
+6. **Deliberately not built:**
+   - the mockup's extra date chips (This month / Last month / This quarter / Since 1 Aug);
+   - its "Finance starts on 1 August" note, which contradicts §36;
+   - its "all stores" suffix. The desktop has no store dimension on this screen, and naming one
+     would be a claim.
+7. **Nothing composed.** Every string is copied from 22-finance.js, the desktop markup, or an
+   existing phone or desktop pair. One refusal is the server's own sentence with its first
+   letter capitalised. The details are in the vocab entry.
+8. **Tests.** `scripts/test_mobile_finance_summary.js` (fast shard) runs the sliced phone code
+   against a fake server. `test_mobile_ops_groups.js` and `test_mobile_ask_strip.js` pin the
+   Operations row count and set; they move from 26 to 27 for the one reason they allow, a row
+   added.

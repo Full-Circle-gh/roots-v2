@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.214 · 2026-09-30 · §305 FINANCE SUMMARY ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM A LIVE PAIR.** See *The Finance summary on the phone (§305)*.
+
+**v1.213 · 2026-09-30 · §304 PURCHASE ORDERS MANAGED ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Purchase orders managed on the phone (§304)*.
+
 **v1.212 · 2026-09-30 · §303 RECIPES ON THE PHONE, READ HALF — NOTHING COMPOSED; TWO SENTENCES CUT SHORT FROM LIVE PAIRS, THE REST COPIED WHOLE.** See *Recipes on the phone — what the desktop shows (§303)*.
 
 **v1.211 · 2026-09-30 · §299 PROMO CARDS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** The phone page editor gains a promo card editor, in the desktop form's own words. See *Promo cards on the phone (§299)*.
@@ -9511,3 +9515,119 @@ whatever the screen's, `Ingredients 原料`, `Steps 步骤`, `Notes 备注`,
 - `请用搜索或筛选查看其余。` (the truncation notice's second sentence):
   **rejected**; the phone's search runs over the rows in hand and cannot reach
   the rest.
+
+## Purchase orders managed on the phone (§304)
+
+**One pair composed by Claude, 2026-09-30, under the 2026-09-06 amendment.**
+Operator register only (Rule 1): the phone admin's Purchasing screen and order
+sheet (`public/m.html`). The printed order goes to a supplier and is the
+desktop's document, copied word for word.
+
+| shipped | built from |
+|---|---|
+| `Back to draft? · 退回草稿？` (the confirm's title) | **composed** from the desktop's live button `Back to draft · 退回草稿` (`16-purchasing.js`), made a question the way the live `Undo receiving? · 撤销收货？` is made from `Undo receiving · 撤销收货`. The desktop asks nothing here; the phone asks because the action sits one row from Cancel in the same menu |
+
+**Copied whole from the desktop** (`public/retail-admin/16-purchasing.js`):
+`Orders · 采购单` (sub-view tab); `Find an order, supplier or product · 搜索采购单、供应商或商品`;
+`All months · 全部月份` (the Invoices month select); `from · 来自` and
+`suppliers · 家供应商` (the list row); the stepper `Draft · 草稿`, `Sent · 已下单`,
+`Part received · 部分收货`, `Received · 已收货`, `Cancelled · 已取消`;
+`Back to draft · 退回草稿`, `Undo receiving · 撤销收货`, `Cancel order · 取消采购单`;
+`Undo receiving? · 撤销收货？` with both halves of its body (the locked
+`undoClearsCounts` pair included); `Cancel this order? · 确定取消该采购单？`;
+the locked refusals `Cannot undo this delivery · 无法撤销此次收货` with
+`undoBlocked`, and `This order cannot go back yet · 该采购单暂时无法退回` with its
+sentence and `Set their price yourself under Materials, then try again. · 请先在「物料」中手动设置这些物料的价格，然后再试。`;
+`${n} short · ${n} 短少`; `Back-order ${n} short · ${n} 项缺货补单`;
+`No short items to back-order · 没有缺货项目`; `each · 每件`; `Material · 物料`;
+`True landed cost · 到手成本`, `Goods · 货款`, `Freight · 运费`, `Tax · 税费`,
+`Handling · 杂费`, `Landed total · 到手合计`,
+`Save — posts freight & fees to Finance · 保存 —— 运杂费记入财务`;
+`Finance · 财务`, `Posted to Expenses · 已记入支出`,
+`Posts to Expenses when the order is placed. · 下单后自动记入支出。` (also the
+body of the new Back to draft confirm), `Returned to supplier · 已退回供应商`,
+`already taken off the total above, dated to the order · 已从上方合计中扣除，记在采购单原日期`;
+`Print / send · 打印 / 发送`; and the whole printed purchase order (its
+bilingual labels, `STATUS_BOTH`, and the unit names `PO_UNIT_CN`).
+
+**Copied whole, the tick dropped** (the phone's toasts carry none):
+`Saved · 已保存`, `Undone · 已撤销`, `Back-order created · 已生成缺货补单`,
+`Landed cost saved · 到手成本已保存`.
+
+**Copied whole from elsewhere:** `All stores · 全部门店` (the phone's Pick
+screen); `Suppliers we owe · 供应商欠款` (§286); `More actions · 更多操作`,
+`Saving… · 保存中…`, `Try again · 重试`, `Could not load purchase orders. · 无法加载采购单。`,
+`Nothing here — try another filter. · 这里没有内容 — 换个筛选试试。`,
+`That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`
+(the phone's own); `This order has already moved on. Close and open it again to see where it is now. · 这个订单已经进入下一步。请关闭后重新打开查看当前状态。`
+(the phone's customer-order refusal, for an order that moved while it was open);
+`Print · 打印` (`19-recipes.js`); `Print failed · 打印失败` (`04-orders.js`);
+`Close · 关闭`.
+
+**Live candidates rejected.**
+
+- `Back to prepared · 退回备货` shape (the phone's customer-order undo) for the
+  confirm title: **rejected**; a purchase order has no *prepared*, and the desktop's
+  own button already names the step.
+- A composed body for the Back to draft confirm (*"The cost comes off the books
+  until it is placed again"*): **rejected** in favour of the desktop's live
+  `Posts to Expenses when the order is placed.`, which says the same thing from
+  the draft's side and needed nothing new.
+- A composed sub-line under Back-order (mockup P06's *Opens a new order for what is
+  missing*): **rejected**; the desktop button says it in three words and the phone
+  row carries only that.
+
+## The Finance summary on the phone (§305)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Finance screen (`public/m.html`, `SUBS.finance`, `sheetFinCat`). The
+staircase, its notes and the drill-down marks are copied whole from the
+desktop module (`public/retail-admin/22-finance.js`), so the two Finance
+screens use one word for each thing:
+
+- **The staircase** — `Revenue · 营收`, `of which tax · 其中税费`,
+  `Cost of goods · 销货成本`, `Gross profit · 毛利润`, `Not recorded · 未记录`,
+  `Operating expenses · 营业费用`, `Net · 净额`,
+  `Not an operating expense · 不计入营业费用`.
+- **Its notes** — `This period has no recorded cost data. · 此期间未记录成本数据。`,
+  the coverage sentence `Cost recorded for N% of this period's revenue — the real
+  margin is lower. · 此期间 N% 的营收已记录成本 —— 实际毛利更低。` (§56, its
+  Chinese already lifted there from 09-products.js), the revenue note
+  `Orders only — wallet money counts when spent, not when topped up. ·
+  仅计订单 —— 储值在消费时计入，充值时不计入。` (composed for the desktop in v1.138,
+  copied here unchanged), and `Recorded, and not counted in the figures above. ·
+  已记录，未计入上方数字。`.
+- **The channels** — `finChannelLabel`'s pairs exactly (`WeChat · 微信`,
+  `Web shop · 网页商店`, `Meituan · 美团`, `Eleme · 饿了么`, `Shop · 门店`,
+  `Pick up · 到店自取`, `WeChat message · 微信消息`, `Wholesale · 批发`,
+  `Other · 其他`, `Manual · 手动`, bare `Gzgrocery`). The phone's own CHAN_META
+  pairs (`Mini app · 小程序` and so on) were REJECTED for this card: this card
+  says what the desktop card says, and the desktop comment records why its
+  pairs were chosen.
+- **The drill-down** — `Posted by Purchasing · 采购单自动记入`,
+  `Staff claim · 费用申请`, `Staff claim · own money · 费用申请 · 个人支付`,
+  `Carrier claim · 承运商赔偿`, `Return · 退货`, `Nothing recorded yet · 暂无记录`,
+  `Could not load Finance. · 财务数据加载失败。`, `Loading… · 加载中…`.
+- **The title and the strip** — `Finance · 财务` (the desktop tab),
+  `Summary · 汇总` and `Approvals · 审批` (the desktop sub-view strip).
+- **The window** — `Today · 今日`, `7 days · 7天`, `30 days · 30天`,
+  `90 days · 90天` and `Apply · 应用` from the desktop range bar
+  (retail-admin.html); `today · 今日` and `N days · N天` from `finRangeLabel`.
+  The phone's `Today · 今天` (fmtDateOnly) was REJECTED for the chip: the chip
+  names the same window the desktop button names, so it takes that button's pair.
+- **Live elsewhere, reused** — `Custom · 自定义` (the phone's Team screen; the
+  fifth chip and the title of its sheet), `From · 从` and `To · 至`
+  (20-waste.js's date range), `Pick a date · 选日期` (the phone's own, the
+  refusal for an empty day), `Try again · 重试` and `Close · 关闭` (the phone's).
+
+**One pair lifted from the server, with its first letter capitalised:**
+`From is after to · 起始日期晚于结束日期`. It is the refusal
+`routes/finance-summary.js` sends for an inverted window
+(`'from is after to · 起始日期晚于结束日期'`); the Custom sheet says it before the
+server would have to. The Chinese is unchanged; the English gains a capital F
+because it now begins a sentence on screen. Nothing else about it was altered.
+
+The mockup's `Pick dates`, `Show these dates`, `This month`, `Last month`,
+`This quarter`, `Since 1 Aug` and the "Finance starts on 1 August 2026" note were
+NOT built: none is on the desktop, each would have been composed, and the last
+contradicts §36's "Finance is not floored at the cutover date".
