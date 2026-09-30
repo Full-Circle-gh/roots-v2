@@ -1049,6 +1049,9 @@ const state = {
      screen reads once per visit (stores come from state.stores), and the
      price-list / supplier sheet open over it. */
   pw:null, pwc:{stock:{},stockErr:{},mats:null,sups:null,cats:null,hist:{},info:{},tried:{}}, pwSheet:null,
+  /* §300 P3 — what the kitchen is waiting on (the pending lines, their read's
+     failure, whether it was asked for) and the From-the-kitchen sheet. */
+  pkLines:null, pkErr:null, pkTried:false, pk:null,
   /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
      one. Two prefixes because they are two screens with two lifetimes — the
      list survives opening a delivery, the receive screen is thrown away the
@@ -1759,6 +1762,7 @@ reg('rqSearch', v=>{
  ['mRcvToQ','mRcvToClr','rcvToQuery'],
  ['mPoQ','mPoClr','poQuery'],
  ['mPwQ','mPwClr','pwQ'],
+ ['mPkQ','mPkClr','pkQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
@@ -8841,7 +8845,7 @@ function poPatch(){
   segs.innerHTML=poSegsHtml(); body.innerHTML=poBodyHtml();
 }
 function screenPurchasing(){
-  loadPOs();
+  loadPOs(); loadPkLines();
   const strip=poViewStrip();
   if(state.poView==='supowed'&&canRoute('supowed')) return strip+screenSupOwed();
   if(state.posErr) return strip+`<div style="padding:14px 16px 24px">
@@ -8852,7 +8856,7 @@ function screenPurchasing(){
   const all=state.poList;
   /* §300 P2 — orders are written here now, so the empty ledger says what one
      is in the desktop's words and offers the first one (to purchasing:edit). */
-  if(!all.length) return strip+nothingYet(T('No purchase orders yet','还没有采购单'),
+  if(!all.length) return strip+(pkCardHtml()?`<div style="padding:14px 16px 0">${pkCardHtml()}</div>`:'')+nothingYet(T('No purchase orders yet','还没有采购单'),
     T('An order is a list of what you’re buying from one supplier for one store. Tacet does the bookkeeping for you.',
       '一张采购单就是你向某个供应商、为某家门店采购的清单。记账的事交给 Tacet。'))
     +(canRoute('newpo')?`<div style="display:flex;justify-content:center;padding:0 24px 24px"><button class="cta" style="width:auto" onclick="APP.cmd('pwNew')">${T('Start your first order','创建第一张采购单')}</button></div>`:'');
@@ -8869,6 +8873,7 @@ function screenPurchasing(){
   return strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div id="mPoSegs">${poSegsHtml()}</div>
     ${search}
+    ${pkCardHtml()}
     ${filters.length?`<div style="display:flex;gap:8px">${filters.join('')}</div>`:''}
     <div id="mPoBody">${poBodyHtml()}</div></div>`;
 }
@@ -9946,6 +9951,202 @@ reg('pwDelete', ()=>{
       }).catch(e=>{ w.busy=null; if(String(e.message)==='auth') return; w.err=pwErrFor(e); render(); });
     }};
   render();
+});
+
+/* ==========================================================================
+   §300 P3 — From the kitchen (§86, the buyer's side; desktop: 16-purchasing.js
+   puMrOpen … puMrMake)
+   --------------------------------------------------------------------------
+   The cook asks for materials on this phone (askbuy); the lines wait here until
+   a buyer ticks them. WHAT LANDS IS A DRAFT, ALWAYS — the kitchen asks, it does
+   not spend — and the draft then opens where drafts are written (P2). Quantity
+   and unit are the kitchen's and are not edited here; the draft is where a
+   buyer changes a number.
+
+   THE BUYER'S ✕ STRIKES ONE LINE OFF for good (§174), behind the desktop's
+   confirm; the server gates it on purchasing:edit since §301 (defect 2).
+   Everything here is the desktop button's own capability, purchasing:edit, and
+   the Production switch that gates Materials and Recipes.
+   ========================================================================== */
+const pkOn=()=>featOn('production')&&mCan('purchasing:edit');
+function loadPkLines(force){
+  if(!pkOn()||(state.pkTried&&!force)) return;
+  state.pkTried=true;
+  api('/material-requests/pending-lines').then(rows=>{
+    state.pkLines=Array.isArray(rows)?rows:[]; state.pkErr=null;
+    if(state.pk){ const ids=new Set(state.pkLines.map(l=>l.id)); state.pk.pick=state.pk.pick.filter(id=>ids.has(id)); }
+    pkRepaint();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.pkErr=E('Could not load this.','无法加载。'); pkRepaint(); });
+}
+/* While the search box has the keyboard, only the list under it is patched. */
+function pkRepaint(){
+  const a=document.activeElement;
+  const b=a&&a.id==='mPkQ'&&document.getElementById('mPkBody');
+  if(b){ b.innerHTML=pkBodyHtml(); const f=document.getElementById('mPkFoot'); if(f) f.innerHTML=pkFootHtml(); return; }
+  render();
+}
+/* The card on the orders list. Drawn only when something is waiting — the
+   desktop's rule: a permanent button that is usually empty teaches the buyer
+   to ignore it, and the count is the reason to press it. */
+function pkCardHtml(){
+  const rows=state.pkLines;
+  if(!pkOn()||!rows||!rows.length) return '';
+  const hot=rows.filter(l=>Number(l.urgent)).length;
+  return `<button class="card row" style="min-height:60px;padding:12px 14px" onclick="APP.cmd('pkOpen')">
+    <span class="rowico">${ic('chef-hat',18)}</span>
+    <span style="flex:1;min-width:0;font-size:15px">${T('From the kitchen','厨房申请')}</span>
+    ${hot?pill('restock',T('Urgent','加急')):''}
+    <span class="num" style="font-size:15px;font-weight:500">${rows.length}</span>
+    <span style="color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span></button>`;
+}
+function pkRows(){
+  const q=String((state.pk&&state.pk.q)||'').toLowerCase().trim(), all=state.pkLines||[];
+  if(!q) return all;
+  return all.filter(l=>`${l.name_en||''} ${l.name_cn||''} ${l.sku||''} ${l.mr_number||''} ${l.created_by_name||''}`.toLowerCase().indexOf(q)>=0);
+}
+/* §176's two marks, both printed and neither resolved into the other: an
+   urgent line with a day says "Urgent" AND "by 30 Sep". */
+function pkWhen(l){
+  const bits=[];
+  if(Number(l.urgent)) bits.push(pill('restock',T('Urgent','加急')));
+  if(l.needed_by){ const d=fmtDateOnly(l.needed_by); bits.push(`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(T('by '+d, d+' 订购'))}</span>`); }
+  return bits.join('');
+}
+function pkBodyHtml(){
+  const k=state.pk; if(!k) return '';
+  if(state.pkErr&&!state.pkLines) return `<div style="padding:16px 20px"><div style="font-size:14px;color:var(--brick-ink)">${state.pkErr}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:12px" onclick="APP.cmd('pkRetry')">${T('Try again','重试')}</button></div>`;
+  if(!state.pkLines||k.loading) return `<div style="padding:28px 20px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=pkRows();
+  if(!rows.length) return `<div style="padding:28px 20px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    (state.pkLines||[]).length?T('Nothing matches that search.','没有匹配的申请。'):T('The kitchen has not asked for anything.','厨房暂无物料申请。')}</div>`;
+  const edit=mCan('purchasing:edit');
+  return rows.map((l,i)=>{
+    const on=k.pick.indexOf(l.id)>=0;
+    return `${i?'<div class="sep" style="margin-left:20px"></div>':''}<div style="display:flex;align-items:flex-start;gap:4px;padding:0 12px 0 0">
+      <button class="row" style="flex:1;min-width:0;align-items:flex-start;padding:12px 8px 12px 20px;gap:12px" onclick="APP.cmd('pkTick',${Number(l.id)})">
+        <span style="flex:none;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;margin-top:1px;
+          ${on?'background:var(--text-primary)':'border:1.5px solid var(--edge);background:var(--surface-card)'}">${on?`<span style="display:flex;color:var(--bg)">${ic('check',16,2.5)}</span>`:''}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+          <span style="font-size:15px">${escAttr(pwName(l))} <span class="num" style="color:var(--text-secondary)">· ${escAttr(l.qty)} ${escAttr(pwUnit(l.unit))}</span></span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr([l.mr_number,l.created_by_name,l.date?fmtDateOnly(l.date):''].filter(Boolean).join(' · '))}${l.sku?' · '+escAttr(l.sku):''}</span>
+          ${l.notes?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(l.notes)}</span>`:''}
+          ${pkWhen(l)?`<span style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">${pkWhen(l)}</span>`:''}</span></button>
+      ${edit?`<button class="iconbtn" style="width:36px;height:36px;margin-top:8px;flex:none" aria-label="${T('Remove','移除')}" ${k.busy?'disabled':''} onclick="APP.cmd('pkDecline',${Number(l.id)})">${ic('x',18,2)}</button>`:''}</div>`;
+  }).join('');
+}
+function pkFootHtml(){
+  const k=state.pk; if(!k) return '';
+  const n=k.pick.length, stores=state.stores||[];
+  return `${k.err?`<div style="font-size:14px;color:var(--brick-ink);line-height:1.5">${k.err}</div>`:''}
+    <div style="display:flex;gap:10px">
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${T('File under store','归属门店')}</span>
+        <select onchange="APP.cmd('pkField','store',this.value)" style="width:100%">${stores.length
+          ?stores.map(s=>`<option value="${escAttr(s.id)}"${Number(s.id)===Number(k.store)?' selected':''}>${escAttr(pwStoreName(s.id))}</option>`).join('')
+          :`<option value="">${T('No stores','暂无门店')}</option>`}</select></label>
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:500;color:var(--text-secondary)">${T('Supplier','供应商')}</span>
+        <input value="${escAttr(k.supplier)}" placeholder="${T('Optional — set it later','可稍后填写')}" oninput="APP.cmd('pkField','supplier',this.value)"></label></div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${n
+      ?T('This makes a DRAFT. Nothing is ordered and nothing reaches the books until you mark it Ordered.','这里只生成草稿。标记「已下单」后才会正式下单并记入账目。')
+      :T('Tick the lines you are buying.','勾选要采购的物料。')}</div>
+    <button class="cta" ${n&&k.store&&!k.busy?'':'disabled style="opacity:.55"'} onclick="APP.cmd('pkMake')">${k.busy==='make'
+      ?T('Working…','处理中…'):(n?T(`Draft ${n} line${n===1?'':'s'}`,`生成草稿 (${n} 行)`):T('Make draft','生成草稿'))}</button>`;
+}
+function sheetPK(){
+  const k=state.pk; if(!k) return '';
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('pkClose')"></div>
+   <div class="sheet" style="top:60px;z-index:46;overflow:hidden">
+     <div style="flex:none;padding:8px 20px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:flex-start;gap:8px">
+         <span style="flex:1;min-width:0"><span style="display:block;font-size:18px;font-weight:500">${T('From the kitchen','厨房申请')}</span>
+           <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${T('Materials the kitchen has asked for. Ticked lines become one draft order you can price and place.','厨房申请的物料。勾选的行会生成一张采购单草稿，可在此定价并下单。')}</span></span>
+         <button class="iconbtn" style="width:36px;height:36px;margin-right:-6px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('pkClose')">${ic('x',20,2)}</button></div>
+       <div style="display:flex;gap:8px;margin-top:12px">
+         ${searchBox(`<input id="mPkQ" inputmode="search" enterkeyhint="search" value="${escAttr(k.q)}" placeholder="${T('Find a material or request','搜索物料或申请单')}" oninput="APP.cmd('pkQ',this.value)">`,'mPkClr',!!k.q,'flex:1;min-width:0')}
+         <button class="btn2" style="width:auto;padding:0 14px;flex:none" onclick="APP.cmd('pkAll')">${T('Select all shown','全选当前')}</button></div></div>
+     <div id="mPkBody" style="flex:1;min-height:0;overflow-y:auto;background:var(--surface-card)">${pkBodyHtml()}</div>
+     <div id="mPkFoot" style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">${pkFootHtml()}</div></div>`;
+}
+reg('pkOpen', ()=>{
+  if(!pkOn()) return;
+  const st=(state.stores||[])[0];
+  state.pk={pick:[],q:'',store:st?st.id:null,supplier:'',busy:null,err:null,loading:true};
+  render();
+  if(!state.stores) api('/stores').then(r=>{ state.stores=(Array.isArray(r)?r:[]).filter(s=>s.is_active==null||s.is_active);
+    if(state.pk&&state.pk.store==null&&state.stores[0]) state.pk.store=state.stores[0].id; render(); }).catch(()=>{});
+  // The list is read again on opening, as the desktop does: another buyer may
+  // have drafted or struck off lines since the count on the card.
+  state.pkErr=null;
+  api('/material-requests/pending-lines').then(rows=>{
+    state.pkLines=Array.isArray(rows)?rows:[]; if(state.pk) state.pk.loading=false; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    if(state.pk) state.pk.loading=false; state.pkLines=null; state.pkErr=E('Could not load this.','无法加载。'); render(); });
+});
+reg('pkClose', ()=>{ state.pk=null; render(); });
+reg('pkRetry', ()=>{ APP.cmd('pkOpen'); });
+reg('pkQ', v=>{ const k=state.pk; if(!k) return; k.q=String(v||''); searchClearShow('mPkClr',!!k.q);
+  const b=document.getElementById('mPkBody'); if(b) b.innerHTML=pkBodyHtml(); else render(); });
+reg('pkTick', id=>{ const k=state.pk; if(!k) return; id=Number(id);
+  const i=k.pick.indexOf(id); if(i>=0) k.pick.splice(i,1); else if((state.pkLines||[]).some(l=>l.id===id)) k.pick.push(id);
+  render(); });
+/* Ticks what the CURRENT search shows and nothing behind it; pressed again with
+   all of those ticked, it unticks them. */
+reg('pkAll', ()=>{ const k=state.pk; if(!k) return;
+  const rows=pkRows(), allOn=rows.length>0&&rows.every(l=>k.pick.indexOf(l.id)>=0);
+  rows.forEach(l=>{ const i=k.pick.indexOf(l.id); if(allOn){ if(i>=0) k.pick.splice(i,1); } else if(i<0) k.pick.push(l.id); });
+  render(); });
+reg('pkField', (f,v)=>{ const k=state.pk; if(!k) return;
+  if(f==='store'){ k.store=Number(v)||null; render(); }
+  else if(f==='supplier') k.supplier=String(v==null?'':v); });
+function pkErrFor(e){
+  const c=e&&e.code, b=(e&&e.body)||{};
+  if(c==='already_sourced'&&Array.isArray(b.lines)&&b.lines.length)
+    return T('Already ordered: ','已下单:')+b.lines.map(d=>`${d.name_en||''} → ${d.po_number||''}`).join(', ');
+  if(c==='already_sourced') return T('That line is already on a purchase order.','该行已在采购单上。');
+  if(c==='line_declined') return T('That line was removed and is no longer being bought.','该行已移除，不再采购。');
+  if(c==='store_required') return T('Choose a location first.','请先选择门店。');
+  return T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+}
+/* THE LINE, NOT THE REQUEST, and it does not come back — the confirm says so. */
+reg('pkDecline', id=>{
+  const k=state.pk; if(!k||k.busy||!mCan('purchasing:edit')) return;
+  id=Number(id);
+  state.ask={title:T('Remove this line?','移除该行？'),
+    body:T('The kitchen asked for it and it will not be bought. It leaves this list for good — if it is still needed, the kitchen asks again.',
+           '厨房申请的该物料将不会采购，并永久离开此列表。如仍需要，请厨房重新申请。'),
+    confirmLabel:T('Remove','移除'), danger:true, run:()=>{
+      if(state.pk!==k) return;
+      k.busy='decline'; k.err=null; render();
+      apiWrite('/material-requests/lines/'+id+'/decline',{},'PUT').then(()=>{
+        k.busy=null;
+        // Untick it first: a tick on a line that has gone would be counted and sent.
+        const i=k.pick.indexOf(id); if(i>=0) k.pick.splice(i,1);
+        showToast(T('Removed','已移除'));
+        loadPkLines(true);
+      }).catch(e=>{ k.busy=null; if(String(e.message)==='auth') return; k.err=pkErrFor(e); render(); });
+    }};
+  render();
+});
+reg('pkMake', ()=>{
+  const k=state.pk; if(!k||k.busy||!k.pick.length||!mCan('purchasing:edit')) return;
+  if(!k.store){ k.err=T('Pick a store first.','请先选择门店。'); render(); return; }
+  k.busy='make'; k.err=null; render();
+  apiWrite('/purchases/from-material-requests',{line_ids:k.pick.slice(),store_id:k.store,supplier:k.supplier.trim()||null},'POST').then(r=>{
+    const d=(r&&r.data)||{};
+    state.pk=null;
+    showToast(T(`${d.po_number} drafted from ${d.line_count} line${d.line_count===1?'':'s'}`,`已生成草稿 ${d.po_number}，共 ${d.line_count} 行`));
+    loadPkLines(true); poReloadLists();
+    // Straight into the draft: the buyer's next act is a supplier and a price.
+    if(d.id!=null) APP.cmd('openPO',d.id); else render();
+  }).catch(e=>{
+    k.busy=null;
+    if(String(e.message)==='auth') return;
+    k.err=pkErrFor(e);
+    // The refused lines have gone from the list; read it again so they are not pressed twice.
+    if(e.code==='already_sourced'||e.code==='line_declined') loadPkLines(true);
+    render();
+  });
 });
 
 /* ==========================================================================
@@ -26827,6 +27028,7 @@ function render(){
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
   if(state.poId!=null&&state.poPrint&&state.poDetail) html += layer('poprint:'+state.poId, sheetPOPrint());
   if(state.pwSheet&&state.pw&&pwOnTop()) html += layer('pw:'+state.pwSheet.kind, sheetPW());
+  if(state.pk) html += layer('pk', sheetPK());
   if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());
   if(state.fin.txRow) html += layer('fintx:'+state.fin.txRow, sheetFinTxRow());
   if(state.fin.form) html += layer('fintxform', sheetFinTxForm());
@@ -27278,6 +27480,7 @@ function layers(){
   // Over the order it prints, so Back closes the print view first (§300).
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
   if(state.pwSheet&&state.pw&&pwOnTop()) L.push(()=>{ state.pwSheet=null; });
+  if(state.pk) L.push(()=>{ state.pk=null; });
   if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });
   if(state.fin.txRow) L.push(()=>{ state.fin.txRow=null; state.fin.txActErr=''; });
   if(state.fin.form) L.push(()=>{ state.fin.form=null; });
