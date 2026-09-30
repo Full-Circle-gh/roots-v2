@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.213 · 2026-09-30 · §304 PURCHASE ORDERS MANAGED ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Purchase orders managed on the phone (§304)*.
+
+**v1.212 · 2026-09-30 · §303 RECIPES ON THE PHONE, READ HALF — NOTHING COMPOSED; TWO SENTENCES CUT SHORT FROM LIVE PAIRS, THE REST COPIED WHOLE.** See *Recipes on the phone — what the desktop shows (§303)*.
+
 **v1.211 · 2026-09-30 · §299 PROMO CARDS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** The phone page editor gains a promo card editor, in the desktop form's own words. See *Promo cards on the phone (§299)*.
 
 **v1.210 · 2026-09-30 · §298 A CATEGORY'S BANNER ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** The phone admin's Categories screen gains the banner editor, in the desktop pane's own words. See *A category's banner on the phone (§298)*.
@@ -9459,3 +9463,114 @@ under the dates, `+ Add card (n of 5) · + 添加卡片(n / 5)`, and the state w
 `Picture only · 仅图片` (§297), `Pages · 页面` and the page names, and the
 editor's own link-picker words `Category · 分类` and `Product # · 商品 #`.
 `Uploading… · 上传中…` and `Upload failed · 上传失败` are the admin's own.
+
+## Recipes on the phone — what the desktop shows (§303)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Recipes list, record and recipe card (`public/m.html`). Every label is
+the desktop Recipes screen's own (`public/retail-admin/19-recipes.js`), its print
+card's (`26-print.js`) or the admin's truncation notice (`01-core.js`).
+
+**Cut short from a live pair, declared because the result is a string no screen
+carried before:**
+
+| shipped | cut from |
+|---|---|
+| `N ingredient(s) missing cost · N 项原料缺少成本` (list row, record) | the desktop's `N ingredient(s) missing cost — costs shown are too low · N 项原料缺少成本 — 显示成本偏低`, up to its dash. The clause after it is about a cost FIGURE, and the phone shows none yet. |
+| `Showing the first N of M recipes. · 仅显示前 N 条,共 M 个食谱。` (list) | `tdShowTruncation`'s pair called with `recipes` / `个食谱`, as the desktop Recipes list calls it, up to its first full stop. |
+
+**Copied whole:** `Category · 分类`, `All categories · 全部分类`,
+`Archived · 已归档`, `Material · 物料`, `UNIT MISMATCH · 单位不符` (locked, no
+count) and its locked explanation (`lineMismatchTitle`, both halves), the five
+frozen-material reasons (`BLOCK_REASON`), `Also stocked as a material: · 同时作为物料备货:`,
+`frozen at its last computed value. · 已冻结为最近一次计算的值。`,
+`Details · 基本信息`, `Name (English) · 名称(英文)`, `Name (中文) · 名称(中文)`,
+`SKU · 货号`, `Type · 类型`, `Batch size · 批量大小`, `Servings · 份数`,
+`Serving size (g) · 每份克数`, `Days / Months / Years · 天 / 个月 / 年` (with the
+print card's singular for 1), `Makes · 产出`, `Sells · 售价`,
+`Untitled product · 未命名产品`, `Recipe · 食谱` (the line's pill),
+`material deleted · 物料已删除`, `Print · 打印`,
+`Add a name in Chinese · 添加中文名`; and on the card, printed in both languages
+whatever the screen's, `Ingredients 原料`, `Steps 步骤`, `Notes 备注`,
+`Servings · 份数`, `SKU · 货号`, `Shelf life · 保质期`, `Storage · 储存方式`,
+`Nothing to show · 暂无内容`. The phone's own live pairs are reused for the rest:
+`Nothing matches · 没有匹配项`, `Could not load recipes. · 无法加载食谱。`,
+`Loading… · 加载中…`, `All · 全部`, `Made · 自制`, `Repacked · 分装`.
+
+**Live candidates rejected.**
+
+- The mockup's row lines `2 lines have no cost` and `Unit mismatch on 1 line`:
+  **rejected**. The first is composed where a live sentence exists; the second
+  gives the locked `UNIT MISMATCH · 单位不符` a count, which the desktop refuses
+  in so many words ("widening it here would be composing a variant of a locked
+  pair").
+- The mockup's `Print recipe card`, `Makes 2 products`, `Stocked as a material`:
+  **rejected** for the desktop's live `Print · 打印`, `Makes · 产出` and
+  `Also stocked as a material: · 同时作为物料备货:`.
+- `显示成本偏低` (the rest of the missing-cost pair): **rejected on the phone for
+  now**; it says the cost shown is too low, and no cost is shown. The cost step
+  (R3), which draws the figure, is where the whole pair belongs.
+- `请用搜索或筛选查看其余。` (the truncation notice's second sentence):
+  **rejected**; the phone's search runs over the rows in hand and cannot reach
+  the rest.
+
+## Purchase orders managed on the phone (§304)
+
+**One pair composed by Claude, 2026-09-30, under the 2026-09-06 amendment.**
+Operator register only (Rule 1): the phone admin's Purchasing screen and order
+sheet (`public/m.html`). The printed order goes to a supplier and is the
+desktop's document, copied word for word.
+
+| shipped | built from |
+|---|---|
+| `Back to draft? · 退回草稿？` (the confirm's title) | **composed** from the desktop's live button `Back to draft · 退回草稿` (`16-purchasing.js`), made a question the way the live `Undo receiving? · 撤销收货？` is made from `Undo receiving · 撤销收货`. The desktop asks nothing here; the phone asks because the action sits one row from Cancel in the same menu |
+
+**Copied whole from the desktop** (`public/retail-admin/16-purchasing.js`):
+`Orders · 采购单` (sub-view tab); `Find an order, supplier or product · 搜索采购单、供应商或商品`;
+`All months · 全部月份` (the Invoices month select); `from · 来自` and
+`suppliers · 家供应商` (the list row); the stepper `Draft · 草稿`, `Sent · 已下单`,
+`Part received · 部分收货`, `Received · 已收货`, `Cancelled · 已取消`;
+`Back to draft · 退回草稿`, `Undo receiving · 撤销收货`, `Cancel order · 取消采购单`;
+`Undo receiving? · 撤销收货？` with both halves of its body (the locked
+`undoClearsCounts` pair included); `Cancel this order? · 确定取消该采购单？`;
+the locked refusals `Cannot undo this delivery · 无法撤销此次收货` with
+`undoBlocked`, and `This order cannot go back yet · 该采购单暂时无法退回` with its
+sentence and `Set their price yourself under Materials, then try again. · 请先在「物料」中手动设置这些物料的价格，然后再试。`;
+`${n} short · ${n} 短少`; `Back-order ${n} short · ${n} 项缺货补单`;
+`No short items to back-order · 没有缺货项目`; `each · 每件`; `Material · 物料`;
+`True landed cost · 到手成本`, `Goods · 货款`, `Freight · 运费`, `Tax · 税费`,
+`Handling · 杂费`, `Landed total · 到手合计`,
+`Save — posts freight & fees to Finance · 保存 —— 运杂费记入财务`;
+`Finance · 财务`, `Posted to Expenses · 已记入支出`,
+`Posts to Expenses when the order is placed. · 下单后自动记入支出。` (also the
+body of the new Back to draft confirm), `Returned to supplier · 已退回供应商`,
+`already taken off the total above, dated to the order · 已从上方合计中扣除，记在采购单原日期`;
+`Print / send · 打印 / 发送`; and the whole printed purchase order (its
+bilingual labels, `STATUS_BOTH`, and the unit names `PO_UNIT_CN`).
+
+**Copied whole, the tick dropped** (the phone's toasts carry none):
+`Saved · 已保存`, `Undone · 已撤销`, `Back-order created · 已生成缺货补单`,
+`Landed cost saved · 到手成本已保存`.
+
+**Copied whole from elsewhere:** `All stores · 全部门店` (the phone's Pick
+screen); `Suppliers we owe · 供应商欠款` (§286); `More actions · 更多操作`,
+`Saving… · 保存中…`, `Try again · 重试`, `Could not load purchase orders. · 无法加载采购单。`,
+`Nothing here — try another filter. · 这里没有内容 — 换个筛选试试。`,
+`That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`
+(the phone's own); `This order has already moved on. Close and open it again to see where it is now. · 这个订单已经进入下一步。请关闭后重新打开查看当前状态。`
+(the phone's customer-order refusal, for an order that moved while it was open);
+`Print · 打印` (`19-recipes.js`); `Print failed · 打印失败` (`04-orders.js`);
+`Close · 关闭`.
+
+**Live candidates rejected.**
+
+- `Back to prepared · 退回备货` shape (the phone's customer-order undo) for the
+  confirm title: **rejected**; a purchase order has no *prepared*, and the desktop's
+  own button already names the step.
+- A composed body for the Back to draft confirm (*"The cost comes off the books
+  until it is placed again"*): **rejected** in favour of the desktop's live
+  `Posts to Expenses when the order is placed.`, which says the same thing from
+  the draft's side and needed nothing new.
+- A composed sub-line under Back-order (mockup P06's *Opens a new order for what is
+  missing*): **rejected**; the desktop button says it in three words and the phone
+  row carries only that.
