@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.217 · 2026-09-30 · §308 FINANCE TRANSACTIONS ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM THE DESKTOP.** See *Finance transactions on the phone (§308)*.
+
+**v1.216 · 2026-09-30 · §307 WRITING A PURCHASE ORDER ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Writing a purchase order on the phone (§307)*.
+
 **v1.215 · 2026-09-30 · §306 EDITING RECIPES ON THE PHONE — NOTHING COMPOSED; ONE LINE JOINED FROM TWO LIVE PAIRS, ONE CUT SHORT, THE REST COPIED WHOLE.** See *Editing a recipe on the phone (§306)*.
 
 **v1.214 · 2026-09-30 · §305 FINANCE SUMMARY ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM A LIVE PAIR.** See *The Finance summary on the phone (§305)*.
@@ -9687,3 +9691,102 @@ its body, `Leave · 离开`), and the history (`Now — the live recipe · 当�
 - The mockup's `Counts to weight` and `Add ingredient`: **rejected** for the
   desktop's live `Counts toward the batch weight · 计入批量重量` and its
   search-to-add field.
+
+## Writing a purchase order on the phone (§307)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's *New order* screen and its two sheets (`public/m.html`). Every label is
+copied whole from the desktop wizard (`public/retail-admin/16-purchasing.js`), so
+the two surfaces use one word for each thing:
+
+- the screen and its entrances: `New order · 新建采购单`, `Start your first order · 创建第一张采购单`,
+  and the empty ledger's `An order is a list of what you’re buying from one supplier for one store. Tacet does the bookkeeping for you. · 一张采购单就是你向某个供应商、为某家门店采购的清单。记账的事交给 Tacet。`
+  (replacing the phone's own sentence, which sent the reader to the desktop);
+- the steps `From & to · 来源与门店`, `What to buy · 采购内容`, `Review & place · 确认下单`;
+  the fields `Supplier · 供应商`, `Optional — leave empty for a mixed or one-off buy. · 可选 —— 混合或一次性采购可留空。`,
+  `Deliver to · 收货门店`, `Order date · 下单日期`, `Items can arrive on different days. · 每件商品的到货时间可能不同。`,
+  `Note · 备注`, `Anything the receiver should know · 收货人需要知道的信息`, `Next — what to buy · 下一步 —— 采购内容`;
+- the recap `Supplier · 供应商`, `none · 不指定`, `Deliver to · 收货`, `Placed · 下单`, `Change · 修改`;
+- the picker `Add products & materials · 添加商品或物料`, `Add products · 添加商品`,
+  `Search by name or SKU · 按名称或货号搜索`, `stock · 库存`, `No match · 无匹配`, `Add · 添加`,
+  `Material · 物料`, and the four empty-order sentences;
+- `Running low here · 此门店库存偏低`, `left · 剩余`, `buffer · 安全库存`;
+- the price list `Preferred · 常用`, `Unrecorded · 未记录`, `Last paid · 上次`, `cheapest · 最低`,
+  `Average · 均价`, `Bought · 采购`, `Use · 选用`, `In use · 使用中`,
+  `Someone else / type it myself · 其他 / 手动填写`, `Adds the line — set the supplier and price by hand. · 先添加,再手动填写供应商与价格。`;
+- a line's supplier `Choose supplier · 选择供应商` (also the step-1 field's empty state),
+  `Who are we buying this from? · 这一行向谁采购？`, `Someone else · 其他供应商`,
+  `Type to search your suppliers · 输入以搜索供应商`,
+  `Leave it empty and the line follows the order’s supplier. · 留空则该行沿用订单的供应商。`, `Save · 保存`;
+- a line `Name · 名称`, `Category · 分类`, `Buy unit · 采购单位`, `On shelf · 现库存`,
+  `Quantity · 数量`, `Cost each · 单价`, `last paid · 上次`, `was · 上次`, `Remove · 移除`,
+  and the unit names (`PO_UNIT_CN`);
+- `Sort · 排序` with `Supplier · 供应商`, `Name · 名称`, `On shelf · 现库存`, `Line total · 小计`;
+  `products · 商品`, `units · 件`;
+- review: the desktop's sentence built from `from · 来自`, `no supplier · 不指定供应商`,
+  `to · 送至`, `placed · 下单`; `When you place the order, · 下单后,`,
+  `posts to Finance → Expenses by itself. · 会自动记入财务 → 支出。`,
+  `Nothing touches stock until the goods arrive and you tick them in. · 在到货并勾选收货之前,库存不会有任何变动。`,
+  `Add at least one product before placing the order. · 下单前请至少添加一件商品。`,
+  `Add at least one product · 请先添加商品`;
+- the buttons `Back · 上一步`, `Review order · 确认订单`, `Save as draft · 存为草稿`,
+  `Place order · 确认下单`, `Delete draft · 删除草稿`, and the delete confirm
+  `Delete this draft order? · 删除此草稿采购单？` / `It was never placed, so nothing to unwind — this just removes it. · 该订单从未下单，删除不会影响任何账目。`;
+- `Order again · 再次采购` (the order's ⋯ menu).
+
+**Copied whole, the tick dropped** (the phone's toasts carry none):
+`Saved as draft · 已存为草稿`, `Order placed · 已下单`, `Draft deleted · 草稿已删除`.
+
+**Copied whole from elsewhere:** `Give it a name first. · 请先填写名称。`,
+`Choose a date first. · 请先选择日期。`, `Choose a location first. · 请先选择门店。`
+(the desktop's error catalogue, `01-core.js`); `No supplier · 未指定供应商`,
+`Purchasing · 采购`, `Less · 减少`, `More · 增加`, `Saving… · 保存中…`, `Close · 关闭`,
+`Loading… · 加载中…`, `Could not load this. · 无法加载。`,
+`That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。` and
+`This order has already moved on. Close and open it again to see where it is now. · 这个订单已经进入下一步。请关闭后重新打开查看当前状态。`
+(the phone's own).
+
+## Finance transactions on the phone (§308)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Finance → Transactions tab (`public/m.html`, `screenFinTx`,
+`sheetFinTxRow`, `sheetFinTxForm`, `sheetFinTxRet`). Every label is copied
+whole from the desktop ledger (`public/retail-admin/22-finance.js` and its
+markup in `public/retail-admin.html`), so the two ledgers use one word for each
+thing:
+
+- **The tab, tiles and filters** — `Transactions · 交易记录`, `Money out · 支出`,
+  `Money in · 进账`, `Sales revenue is on Summary · 营收见汇总`, `All · 全部`,
+  `Filter these transactions · 筛选交易记录`, `Export CSV · 导出`,
+  `No matching records. · 没有符合条件的记录。`, `Clear · 清除`, the empty state
+  `Nothing recorded yet · 暂无记录` with its sentence, and the truncation
+  sentence from `tdShowTruncation` (01-core.js) with `ledger rows · 条流水`.
+- **The row's marks** — `Posted by Purchasing · 采购单自动记入`,
+  `Sum of N category subtotals · N 个类别小计合计`, `Staff claim · 费用申请`,
+  `Staff claim · own money · 费用申请 · 个人支付`, `Carrier claim · 承运商赔偿`,
+  `Return · 退货` and the five reasons (`Wrong item · 错货`, `Quality · 质量问题`,
+  `Expired · 过期`, `Over-delivered · 多送`, `Not needed · 无需要`),
+  `Owes the shop · 应退还店里`, `Returned · 退货`, `Net · 净额`,
+  `Approved by · 审批人`, `Entered by · 录入人`, `Note · 备注`.
+- **The sheets and forms** — `New transaction · 新建交易`, `Edit · 编辑`,
+  `Direction · 方向`, `Date · 日期`, `Amount · 金额`, `Category · 分类`,
+  `Note · 备注`, `Cancel · 取消`, `Save · 保存`, `Saving… · 保存中…`,
+  `Delete · 删除`, `Void · 作废`, `Open purchase order · 查看采购单`,
+  `— pick a category — · — 选择分类 —`, `Why? · 原因？`, the return hint
+  `Only what the seller actually refunded. If shipping was not refunded, leave
+  it out. · 只填卖家实际退回的金额。运费没退就不要算进去。`.
+- **The confirms and toasts** — `Delete this transaction? · 删除这条交易记录？`,
+  `Void this claim? · 作废这条费用申请？`, their shared body `This removes the row
+  from the ledger. This cannot be undone. · 此操作将从账本中移除该记录。此操作无法撤销。`,
+  `Saved · 已保存`, `Deleted · 已删除`, `Voided · 已作废`.
+- **The two checks before a return is sent** — `amount must be positive ·
+  金额必须大于零` (the server's own, as the desktop shows it) and
+  `Pick a reason for the return · 请选择退货原因` (Purchasing's).
+- **Reused from the phone** — `That did not go through. Nothing has changed —
+  try again. · 没有成功。数据没有变化 — 请重试。` for a failure the server did not
+  explain, and `Try again · 重试`.
+
+A delete or void in flight shows `Saving… · 保存中…` on its button, as the
+desktop's shared write path (`finTxWrite`) does; `Deleting…` / `Voiding…` were
+not minted. Server refusals arrive as `English · 中文` and are shown one half
+at a time (`tmOneLang`), unchanged.

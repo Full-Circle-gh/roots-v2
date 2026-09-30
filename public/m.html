@@ -1045,6 +1045,10 @@ const state = {
      (poRefusal), the landed-cost editor (poLc) and the print view (poPrint). */
   poView:'orders', poQ:'', poMonth:'', poStoreF:'', poFound:null, poFoundErr:null,
   poRefusal:null, poLc:null, poPrint:false,
+  /* §300 P2 — the purchase order being written (null when none), what its
+     screen reads once per visit (stores come from state.stores), and the
+     price-list / supplier sheet open over it. */
+  pw:null, pwc:{stock:{},stockErr:{},mats:null,sups:null,cats:null,hist:{},info:{},tried:{}}, pwSheet:null,
   /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
      one. Two prefixes because they are two screens with two lifetimes — the
      list survives opening a delivery, the receive screen is thrown away the
@@ -1758,6 +1762,7 @@ reg('rqSearch', v=>{
  ['mRcvQ','mRcvClr','rcvQuery'],
  ['mRcvToQ','mRcvToClr','rcvToQuery'],
  ['mPoQ','mPoClr','poQuery'],
+ ['mPwQ','mPwClr','pwQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
@@ -3476,7 +3481,11 @@ reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null
   // The arrivals booked against this order, so the order and its deliveries
   // are one tap apart — the cost of putting Receiving on its own screen, paid.
   loadPoReceipts(Number(id));
-  api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return; state.poDetail=d; render(); })
+  api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return;
+    /* §300 P2 — A DRAFT OPENS IN THE WIZARD, as the desktop's puOpenPO sends
+       it, for whoever may write one; anybody else reads it here. */
+    if(d&&d.status==='Requested'&&canRoute('newpo')){ state.poId=null; state.poDetail=null; pwOpen(pwFromPO(d)); return; }
+    state.poDetail=d; render(); })
     .catch(e=>{ if(state.poId!==Number(id)||String(e.message)==='auth') return;
       state.poErr=E('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
 reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null;
@@ -8845,9 +8854,12 @@ function screenPurchasing(){
       <span style="font-size:14px;color:var(--brick-ink)">${state.posErr}</span></div></div>`;
   if(!state.poList) return strip+`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const all=state.poList;
+  /* §300 P2 — orders are written here now, so the empty ledger says what one
+     is in the desktop's words and offers the first one (to purchasing:edit). */
   if(!all.length) return strip+nothingYet(T('No purchase orders yet','还没有采购单'),
-    T('An order is what you are buying from one supplier for one store. They are written on desktop; once one exists you can read it and tick it in from here.',
-      '采购单记录你向某个供应商、为某家门店采购的内容。在电脑端创建后，可在此查看并收货。'));
+    T('An order is a list of what you’re buying from one supplier for one store. Tacet does the bookkeeping for you.',
+      '一张采购单就是你向某个供应商、为某家门店采购的清单。记账的事交给 Tacet。'))
+    +(canRoute('newpo')?`<div style="display:flex;justify-content:center;padding:0 24px 24px"><button class="cta" style="width:auto" onclick="APP.cmd('pwNew')">${T('Start your first order','创建第一张采购单')}</button></div>`:'');
   const search=`<div style="position:relative">
     <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
     ${searchBox(`<input id="mPoQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.poQ)}" style="padding-left:42px"
@@ -8986,12 +8998,13 @@ function poLifeStepper(p){
 /* The desktop's manage buttons, on the desktop's own conditions, each with the
    capability its button carries (data-cap="purchasing:edit"). A draft is not
    among them: on the desktop a draft opens in the wizard, which is P2's.
-   ORDER AGAIN IS NOT HERE YET, deliberately: on the desktop it only pre-fills
-   the new-order wizard and writes nothing, so it arrives with that wizard. */
+   Order again (a received order) opens the new-order screen, P2. */
 function poActions(p){
   if(!p||!mCan('purchasing:edit')) return [];
   const a=[];
   if(p.status==='Ordered') a.push({key:'draft',label:T('Back to draft','退回草稿')});
+  // §300 P2: Order again opens the new-order screen with these lines (puReorder).
+  if(p.status==='Delivered'&&canRoute('newpo')) a.push({key:'again',label:T('Order again','再次采购')});
   if(p.status==='Delivered') a.push({key:'undo',label:T('Undo receiving','撤销收货')});
   if(p.status==='Ordered') a.push({key:'cancel',label:T('Cancel order','取消采购单')});
   return a;
@@ -9077,6 +9090,8 @@ reg('poActs', ()=>{
    and its body is the desktop's own sentence for what a draft does. */
 reg('poAct', k=>{
   const d=state.poDetail; if(!d||!poActions(d).some(a=>a.key===k)) return;
+  // Order again writes nothing — it only opens a new order — so it asks nothing.
+  if(k==='again'){ APP.cmd('poAgain'); return; }
   if(k==='draft') state.ask={title:T('Back to draft?','退回草稿？'),
     body:T('Posts to Expenses when the order is placed.','下单后自动记入支出。'),
     confirmLabel:T('Back to draft','退回草稿'), run:()=>poWrite('draft')};
@@ -9324,6 +9339,617 @@ reg('poPrintGo', ()=>{
   const f=document.getElementById('mPoPrintFrame');
   try{ f.contentWindow.focus(); f.contentWindow.print(); if(state.poPrint==='failed'){ state.poPrint=true; render(); } }
   catch(e){ state.poPrint='failed'; render(); }
+});
+
+/* ==========================================================================
+   §300 P2 — Writing a purchase order (desktop: 16-purchasing.js, the wizard)
+   --------------------------------------------------------------------------
+   The desktop's three steps, one screen: who and where, what to buy, review
+   and place. Every request is the desktop's: POST /purchases (a new draft) or
+   PUT /purchases/:id (a draft already saved, its lines carrying their own ids
+   so an edit UPDATES them and a 发票 allocation on a line survives), then —
+   for Place order — PUT /purchases/:id/status {status:'Ordered'}. Delete draft
+   is DELETE /purchases/:id, behind the desktop's confirm.
+
+   A DRAFT OPENS HERE, not in the read-only sheet, exactly as the desktop's
+   puOpenPO sends a Requested order to its wizard; ORDER AGAIN opens here with
+   a received order's lines, which is all the desktop's puReorder does.
+
+   ONE THING THE DESKTOP DOES NOT: a Place that saved the draft and then could
+   not mark it ordered keeps the new draft's id, so pressing Place again PUTs
+   that draft rather than creating a second one.
+   ========================================================================== */
+const PW_UNITS=Object.keys(PO_UNIT_CN);
+const pwOnTop=()=>{ const top=state.stack.length?state.stack[state.stack.length-1]:null; return !!top&&top.route==='newpo'; };
+const pwUnit=u=>u?T(u,PO_UNIT_CN[u]||u):'';
+const pwName=it=>(LANG==='en'?(it.name_en||it.name_cn):(it.name_cn||it.name_en))||'—';
+const pwNum=v=>parseFloat(v)||0;
+const pwLineTotal=it=>pwNum(it.qty)*pwNum(it.cost_per_unit);
+const pwTotal=w=>w.items.reduce((s,it)=>s+pwLineTotal(it),0);
+const pwUnits=w=>w.items.reduce((s,it)=>s+pwNum(it.qty),0);
+const pwTyped=it=>!it.store_product_id&&!it.ingredient_id;
+function pwBlank(){
+  const st=(state.stores||[])[0];
+  return {id:null,po_number:null,date:shopToday(),delivery_date:'',supplier:'',store_id:st?st.id:null,notes:'',
+          items:[],step:1,busy:null,err:null,sort:null,q:''};
+}
+/* A saved draft, as the desktop's puOpenPO rebuilds it: every line keeps its
+   row id so the save updates it in place. */
+function pwFromPO(po,again){
+  const w=pwBlank();
+  w.step=2;
+  if(again){
+    // The desktop's puReorder: today, the same supplier and store, the lines
+    // without their ids, their suppliers or their notes — a new order.
+    w.supplier=po.supplier||''; w.store_id=po.store_id||w.store_id;
+    w.items=(po.items||[]).map(i=>({store_product_id:i.store_product_id||null,ingredient_id:i.ingredient_id||null,
+      name_en:i.name_en,name_cn:i.name_cn,sku:i.sku,qty:i.qty,unit:i.unit||'pcs',cost_per_unit:i.cost_per_unit,
+      expense_category:i.expense_category||'',purchase_channel:i.purchase_channel||'',current_stock:i.current_stock,
+      supplier_name:'',note:''}));
+    return w;
+  }
+  Object.assign(w,{id:po.id,po_number:po.po_number,date:po.date||w.date,delivery_date:po.delivery_date||'',
+    supplier:po.supplier||'',store_id:po.store_id||w.store_id,notes:po.notes||''});
+  w.items=(po.items||[]).map(i=>({id:i.id,store_product_id:i.store_product_id||null,ingredient_id:i.ingredient_id||null,
+    name_en:i.name_en,name_cn:i.name_cn,sku:i.sku,qty:i.qty,unit:i.unit,cost_per_unit:i.cost_per_unit,
+    expense_category:i.expense_category||'',purchase_channel:i.purchase_channel||'',
+    supplier_name:i.supplier_name||'',current_stock:i.current_stock,note:i.note||''}));
+  return w;
+}
+function pwOpen(w){
+  if(!canRoute('newpo')) return;
+  state.pw=w; state.pwSheet=null;
+  state.stack=state.stack.filter(s=>s.route!=='newpo');
+  push('newpo'); pwLoad();
+}
+reg('pwNew', ()=>{ pwOpen(pwBlank()); });
+reg('poAgain', ()=>{ const d=state.poDetail; if(!d||d.status!=='Delivered'||!mCan('purchasing:edit')) return;
+  const w=pwFromPO(d,true); state.poId=null; state.poDetail=null; state.poPrint=false; pwOpen(w); });
+
+/* ── What the screen reads, each once per visit to the app ──────────────── */
+function pwLoad(){
+  const c=state.pwc, w=state.pw; if(!w) return;
+  const done=()=>{ if(state.pw) pwRepaint(); };
+  if(!state.stores&&!c.tried.stores){ c.tried.stores=1;
+    api('/stores').then(r=>{ state.stores=(Array.isArray(r)?r:[]).filter(s=>s.is_active==null||s.is_active);
+      if(state.pw&&state.pw.store_id==null&&state.stores[0]) state.pw.store_id=state.stores[0].id; render(); }).catch(()=>{}); }
+  if(!c.tried.sups){ c.tried.sups=1;
+    api('/suppliers').then(r=>{ c.sups=(Array.isArray(r)?r:[]).filter(s=>s.is_active==null||s.is_active); done(); })
+      .catch(()=>{ c.sups=[]; done(); }); }
+  if(featOn('production')&&!c.tried.mats){ c.tried.mats=1;
+    api('/materials').then(r=>{ c.mats=(Array.isArray(r)?r:[]).filter(m=>m.is_active==null||m.is_active); done(); })
+      .catch(()=>{ c.mats=null; c.matsErr=true; done(); }); }
+  if(!c.tried.cats){ c.tried.cats=1;
+    api('/materials/meta/accounting-categories').then(r=>{ c.cats=Array.isArray(r)?r:[]; done(); })
+      .catch(()=>{ c.cats=[]; }); }
+  pwLoadStock(w.store_id);
+}
+function pwLoadStock(storeId){
+  const c=state.pwc; if(storeId==null||c.stock[storeId]||c.tried['stock'+storeId]) return;
+  c.tried['stock'+storeId]=1;
+  api('/stores/'+Number(storeId)+'/stock').then(r=>{ c.stock[storeId]=Array.isArray(r)?r:[]; if(state.pw) pwRepaint(); })
+    .catch(()=>{ c.stockErr[storeId]=true; if(state.pw) pwRepaint(); });
+}
+const pwStock=()=>{ const w=state.pw; return (w&&state.pwc.stock[w.store_id])||null; };
+
+/* ── Suppliers: the book, one language shown, the whole name stored ──────
+   A supplier is stored as ONE string, often with both languages in it, and
+   the master may hold its 中文 separately (name_cn). The row shows one half;
+   what lands on the order is always the stored name (desktop bookSuggestRows). */
+function pwSupRows(extra){
+  const seen=new Set(), out=[];
+  const add=(n,cn)=>{ const v=String(n==null?'':n).trim(); if(!v||seen.has(v.toLowerCase())) return;
+    seen.add(v.toLowerCase()); const h=catSplit(v);
+    out.push({v,en:h?h.en:v,cn:(cn&&String(cn).trim())||(h?h.cn:v)}); };
+  (state.pwc.sups||[]).forEach(s=>add(s.name,s.name_cn));
+  (extra||[]).forEach(n=>add(n));
+  return out;
+}
+function pwSupShow(n){
+  if(!n) return '';
+  const r=pwSupRows([n]).find(x=>x.v===n);
+  return r?(LANG==='en'?r.en:r.cn):n;
+}
+const pwSupMatch=(r,q)=>!q||[r.v,r.en,r.cn].some(x=>String(x||'').toLowerCase().indexOf(q)>=0);
+
+/* ── Adding lines ─────────────────────────────────────────────────────── */
+function pwPicks(){
+  const w=state.pw, q=String(w.q||'').trim().toLowerCase();
+  if(!q) return null;
+  const has=s=>String(s||'').toLowerCase().indexOf(q)>=0;
+  const prods=(pwStock()||[]).filter(p=>has(p.name_en)||has(p.name_cn)||has(p.sku)).slice(0,30);
+  const mats=featOn('production')?(state.pwc.mats||[]).filter(m=>has(m.name_en)||has(m.name_cn)||has(m.sku)).slice(0,30):[];
+  return {prods,mats};
+}
+function pwPicksHtml(){
+  const w=state.pw; if(!w||!String(w.q||'').trim()) return '';
+  const c=state.pwc;
+  if(c.stockErr[w.store_id]) return `<div style="font-size:13px;color:var(--brick-ink)">${T('Could not load this.','无法加载。')}</div>`;
+  if(!pwStock()) return `<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const r=pwPicks();
+  const row=(cmd,arg,name,sub,tag)=>`<button class="row" style="min-height:52px" onclick="APP.cmd('${cmd}',${arg})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tag}${escAttr(name)}</span>
+        ${sub?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr(sub)}</span>`:''}</span></button>`;
+  const matTag=`<span class="pill" style="background:${PILL.clear[0]};color:${PILL.clear[1]};margin-right:6px">${T('Material','物料')}</span>`;
+  const rows=r.prods.map(p=>row('pwPick',Number(p.product_id),pwName(p),[p.sku,T('stock','库存')+' '+(p.physical_qty==null?0:p.physical_qty)].filter(Boolean).join(' · '),''))
+    .concat(r.mats.map(m=>row('pwPickMat',Number(m.id),pwName(m),m.sku||'',matTag)));
+  /* NOT IN EITHER CATALOGUE IS NOT THE END OF THE SEARCH — the desktop's typed
+     line: gloves, a chair, a repair. The LAST row, never the first, so a thing
+     already stocked is found before a second one is invented. The name is read
+     off the box by the command, never passed through this attribute. */
+  const typed=`<button class="row" style="min-height:52px" onclick="APP.cmd('pwPickTyped')">
+      <span class="rowico">${ic('plus',18)}</span><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Add','添加')} “${escAttr(String(w.q).trim())}”</span></button>`;
+  return `<div class="list">${(rows.length?rows:[`<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('No match','无匹配')}</div>`])
+    .concat([typed]).join('<div class="sep"></div>')}</div>`;
+}
+/* The desktop's "Running low here": the four products furthest under their
+   buffer (5 where none is set) that are not on the order yet. Behind the
+   tenant's own switch (§178), and read from the stock list the picker uses. */
+function pwLowHtml(){
+  const w=state.pw, list=pwStock();
+  if(!featOn('lowStockHints')||!list) return '';
+  const have=new Set(w.items.map(it=>it.store_product_id).filter(Boolean));
+  const low=list.filter(p=>!have.has(p.product_id))
+    .map(p=>({p,gap:(p.safety_buffer>0?p.safety_buffer:5)-(Number(p.physical_qty)||0)}))
+    .filter(x=>x.gap>0).sort((a,b)=>b.gap-a.gap).slice(0,4);
+  if(!low.length) return '';
+  return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+    <div class="eyebrow">${T('Running low here','此门店库存偏低')}</div>
+    ${low.map(({p})=>`<div style="display:flex;align-items:center;gap:10px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pwName(p))}</span>
+        <span class="num" style="font-size:12px;color:var(--amber-ink)">${p.physical_qty} ${T('left','剩余')}${p.safety_buffer>0?' · '+T('buffer','安全库存')+' '+p.safety_buffer:''}</span></span>
+      <button class="btn2" style="width:auto;padding:0 14px;flex:none" onclick="APP.cmd('pwPick',${Number(p.product_id)})">${T('Add','添加')}</button></div>`).join('')}</div>`;
+}
+function pwAddProduct(p,supplier,cost){
+  const w=state.pw;
+  let it=w.items.find(x=>x.store_product_id===p.product_id);
+  if(!it){
+    it={store_product_id:p.product_id,name_en:p.name_en,name_cn:p.name_cn,sku:p.sku,qty:1,unit:'pcs',cost_per_unit:0,
+        expense_category:'门店进货 Retail stock',purchase_channel:'',current_stock:p.physical_qty,supplier_name:'',note:''};
+    w.items.push(it); w.sort=null;
+  }
+  it.supplier_name=supplier||'';
+  if(cost!=null&&cost!=='') it.cost_per_unit=cost;
+  state.pwSheet=null; render();
+}
+reg('pwPick', pid=>{
+  const w=state.pw; if(!w) return;
+  const p=(pwStock()||[]).find(x=>Number(x.product_id)===Number(pid)); if(!p) return;
+  w.q='';
+  const c=state.pwc;
+  const go=info=>{
+    if(!state.pw) return;
+    if(info.last) c.hist[p.product_id]=info.last.cost;
+    if(info.suppliers&&info.suppliers.length){ state.pwSheet={kind:'price',p,info}; render(); }
+    else pwAddProduct(p,w.supplier||'',null);     // nothing on file → a blank line, no invented vendor
+  };
+  if(c.info[p.product_id]){ go(c.info[p.product_id]); return; }
+  render();
+  api('/products/'+Number(p.product_id)+'/suppliers').then(r=>{ c.info[p.product_id]=r||{suppliers:[]}; go(c.info[p.product_id]); })
+    .catch(()=>{ go({suppliers:[]}); });
+});
+/* A material drops straight onto the order with ITS unit — ingredients.buy_unit,
+   never 'pcs': the price write-back refuses a line whose unit does not match. */
+reg('pwPickMat', id=>{
+  const w=state.pw; if(!w) return;
+  const m=(state.pwc.mats||[]).find(x=>Number(x.id)===Number(id)); if(!m) return;
+  w.q='';
+  if(!w.items.find(x=>x.ingredient_id===m.id)){
+    w.items.push({ingredient_id:m.id,name_en:m.name_en,name_cn:m.name_cn,sku:m.sku,qty:1,unit:m.buy_unit||'pcs',
+      cost_per_unit:m.buy_price||0,expense_category:m.accounting_category||'',purchase_channel:'',current_stock:null,
+      supplier_name:m.supplier||'',note:''});
+    w.sort=null;
+  }
+  render();
+});
+reg('pwPickTyped', ()=>{
+  const w=state.pw; if(!w) return;
+  const text=String(w.q||'').trim(); if(!text) return;
+  w.q='';
+  const pair=catSplit(text);
+  /* Not merged with a line of the same name: two typed "Repair" lines are two
+     repairs, and merging them would lose one of the two prices. */
+  w.items.push(Object.assign({store_product_id:null,ingredient_id:null,sku:null,qty:1,unit:'pcs',cost_per_unit:0,
+    expense_category:'',purchase_channel:'',current_stock:null,supplier_name:w.supplier||'',note:''},
+    pair?{name_en:pair.en,name_cn:pair.cn}:{name_en:text,name_cn:null}));
+  w.sort=null; render();
+});
+
+/* ── Editing lines ────────────────────────────────────────────────────── */
+/* Typing never renders — the keyboard would drop — so a keystroke writes the
+   line and repaints its own total and the order's, in place. */
+function pwPatchTotals(i){
+  const w=state.pw; if(!w) return;
+  const it=w.items[i], el=document.getElementById('mPwLt'+i);
+  if(el&&it) el.textContent=money(CUR,pwLineTotal(it));
+  const t=document.getElementById('mPwTot'); if(t) t.innerHTML=pwTotHtml();
+  const f=document.getElementById('mPwFoot'); if(f) f.innerHTML=pwFootHtml();
+}
+reg('pwLine', (i,field,v)=>{
+  const w=state.pw, it=w&&w.items[Number(i)];
+  if(!it||!['qty','cost_per_unit','note','expense_category','unit'].includes(field)) return;
+  it[field]=String(v==null?'':v);
+  if(field==='unit'||field==='expense_category'){ render(); return; }
+  if(field==='qty'||field==='cost_per_unit') pwPatchTotals(Number(i));
+});
+reg('pwLineName', (i,v)=>{
+  const w=state.pw, it=w&&w.items[Number(i)]; if(!it||!pwTyped(it)) return;
+  const text=String(v==null?'':v), pair=catSplit(text);
+  Object.assign(it,pair?{name_en:pair.en,name_cn:pair.cn}:{name_en:text.trim(),name_cn:null});
+});
+reg('pwQty', (i,d)=>{
+  const w=state.pw, it=w&&w.items[Number(i)]; if(!it) return;
+  it.qty=Math.max(0,pwNum(it.qty)+Number(d)); render();
+});
+reg('pwDrop', i=>{
+  const w=state.pw; if(!w||!w.items[Number(i)]) return;
+  w.items.splice(Number(i),1); state.pwSheet=null; render();
+});
+/* The desktop's four sort chips. The same chip again flips the direction; a
+   blank supplier or an unknown stock sinks to the bottom either way. */
+const PW_SORT=[
+  {key:'supplier',dir:1,en:'Supplier',zh:'供应商',val:it=>String(it.supplier_name||'').trim(),blank:v=>!v},
+  {key:'name',dir:1,en:'Name',zh:'名称',val:it=>[it.name_en,it.name_cn].filter(Boolean).join(' · '),blank:v=>!v},
+  {key:'stock',dir:-1,en:'On shelf',zh:'现库存',val:it=>it.current_stock==null?null:parseFloat(it.current_stock),blank:v=>v==null||Number.isNaN(v)},
+  {key:'total',dir:-1,en:'Line total',zh:'小计',val:pwLineTotal,blank:()=>false},
+];
+reg('pwSort', key=>{
+  const w=state.pw, spec=PW_SORT.find(k=>k.key===key); if(!w||!spec||w.items.length<2) return;
+  const dir=(w.sort&&w.sort.key===key)?-w.sort.dir:spec.dir;
+  w.sort={key,dir};
+  w.items.sort((a,b)=>{ const va=spec.val(a), vb=spec.val(b), ba=spec.blank(va), bb=spec.blank(vb);
+    if(ba||bb) return ba&&bb?0:(ba?1:-1);
+    const c=typeof va==='string'?va.localeCompare(vb,undefined,{numeric:true,sensitivity:'base'}):(va<vb?-1:va>vb?1:0);
+    return c*dir; });
+  state.pwSheet=null; render();
+});
+
+/* ── The two sheets: a product's price list, and "who from?" ──────────── */
+reg('pwSup', target=>{
+  const w=state.pw; if(!w) return;
+  const t=target==='order'?'order':Number(target);
+  if(t!=='order'&&!w.items[t]) return;
+  state.pwSheet={kind:'sup',target:t,q:t==='order'?'':(w.items[t].supplier_name||''),info:null};
+  render();
+  const it=t==='order'?null:w.items[t];
+  if(it&&it.store_product_id){
+    const c=state.pwc, have=c.info[it.store_product_id];
+    const set=info=>{ const s=state.pwSheet; if(s&&s.kind==='sup'&&s.target===t&&state.pw&&state.pw.items[t]===it){ s.info=info; render(); } };
+    if(have) set(have);
+    else api('/products/'+Number(it.store_product_id)+'/suppliers').then(r=>{ c.info[it.store_product_id]=r||{suppliers:[]}; set(c.info[it.store_product_id]); }).catch(()=>{});
+  }
+});
+reg('pwSheetClose', ()=>{ state.pwSheet=null; render(); });
+reg('pwSupQ', v=>{ const s=state.pwSheet; if(!s||s.kind!=='sup') return;
+  s.q=String(v||''); const b=document.getElementById('mPwSupList'); if(b) b.innerHTML=pwSupListHtml(); });
+/* Picking from the book sets the name only — never a price: there is no figure
+   to put against a supplier this product has never been bought from. */
+reg('pwSupPick', idx=>{
+  const s=state.pwSheet, w=state.pw; if(!s||s.kind!=='sup'||!w) return;
+  const r=pwSupSheetRows()[Number(idx)]; if(!r) return;
+  if(s.target==='order') w.supplier=r.v; else if(w.items[s.target]) w.items[s.target].supplier_name=r.v;
+  state.pwSheet=null; render();
+});
+reg('pwSupNone', ()=>{ const s=state.pwSheet, w=state.pw; if(!s||!w||s.target!=='order') return;
+  w.supplier=''; state.pwSheet=null; render(); });
+/* A line's box also takes a name that is nobody in the book — a one-off
+   supplier, as the desktop allows — resolved to the stored name when it is
+   somebody in either language. Empty: the line follows the order's supplier. */
+reg('pwSupSave', ()=>{
+  const s=state.pwSheet, w=state.pw; if(!s||s.kind!=='sup'||!w||s.target==='order'||!w.items[s.target]) return;
+  const typed=String(s.q||'').trim(), lq=typed.toLowerCase();
+  const hit=typed&&pwSupRows(pwLineSupExtras()).find(r=>[r.v,r.en,r.cn].some(x=>x&&String(x).toLowerCase()===lq));
+  w.items[s.target].supplier_name=hit?hit.v:typed;
+  state.pwSheet=null; render();
+});
+/* Taking a supplier off the price list takes their last price with it. */
+reg('pwUse', idx=>{
+  const s=state.pwSheet, w=state.pw; if(!s||!w) return;
+  const x=((s.info&&s.info.suppliers)||[])[Number(idx)];
+  if(s.kind==='price'){
+    if(Number(idx)<0){ pwAddProduct(s.p,w.supplier||'',null); return; }
+    if(!x) return;
+    state.pwc.hist[s.p.product_id]=x.last_cost;
+    pwAddProduct(s.p,x.supplier||'',x.last_cost); return;
+  }
+  const it=w.items[s.target]; if(!it||!x) return;
+  it.supplier_name=x.supplier||'';
+  if(x.last_cost!=null&&x.last_cost!=='') it.cost_per_unit=x.last_cost;
+  if(it.store_product_id) state.pwc.hist[it.store_product_id]=x.last_cost;
+  state.pwSheet=null; render();
+});
+function pwLineSupExtras(){
+  const s=state.pwSheet, w=state.pw;
+  const it=s&&s.target!=='order'&&w?w.items[s.target]:null;
+  return ((s&&s.info&&s.info.suppliers)||[]).map(x=>x.supplier).concat(it?[it.supplier_name]:[]).concat(s&&s.target==='order'&&w?[w.supplier]:[]);
+}
+function pwSupSheetRows(){
+  const s=state.pwSheet; const q=String((s&&s.q)||'').trim().toLowerCase();
+  return pwSupRows(pwLineSupExtras()).filter(r=>pwSupMatch(r,q)).slice(0,40);
+}
+function pwSupListHtml(){
+  const rows=pwSupSheetRows();
+  if(state.pwc.sups==null) return `<div style="padding:14px 20px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return `<div style="padding:14px 20px;font-size:14px;color:var(--text-secondary)">${T('No match','无匹配')}</div>`;
+  return rows.map((r,i)=>`<button class="row" style="min-height:52px;padding:10px 20px" onclick="APP.cmd('pwSupPick',${i})"><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(LANG==='en'?r.en:r.cn)}</span></button>`).join('');
+}
+function pwPriceRowsHtml(list,chosenName){
+  const costs=list.map(x=>Number(x.last_cost)).filter(n=>isFinite(n));
+  const min=costs.length?Math.min(...costs):null;
+  return list.map((x,idx)=>{
+    const pref=idx===0, cheap=min!=null&&Number(x.last_cost)===min&&list.length>1;
+    const chosen=chosenName!=null&&!!chosenName&&x.supplier===chosenName;
+    return `<div style="padding:12px 20px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border-default)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="flex:1;min-width:0;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(x.supplier?pwSupShow(x.supplier):T('Unrecorded','未记录'))}</span>
+        ${pref?`<span class="pill" style="background:${PILL.success[0]};color:${PILL.success[1]}">${T('Preferred','常用')}</span>`:''}</div>
+      <div class="num" style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--text-secondary)">
+        <span>${T('Last paid','上次')} <b style="font-weight:500;color:${cheap?'var(--sage-ink)':'var(--text-primary)'}">${money(CUR,x.last_cost)}</b>${cheap?' · '+T('cheapest','最低'):''}</span>
+        <span>${T('Average','均价')} ${x.avg_cost!=null?money(CUR,x.avg_cost):'—'}</span>
+        <span>${T('Bought','采购')} ${x.order_count}× · ${escAttr(x.last_date?fmtDateOnly(x.last_date):'—')}</span></div>
+      <button class="btn2" style="width:100%" ${chosen?'disabled':''} onclick="APP.cmd('pwUse',${idx})">${chosen?T('In use','使用中'):T('Use','选用')+' '+money(CUR,x.last_cost)}</button></div>`;
+  }).join('');
+}
+function sheetPW(){
+  const s=state.pwSheet, w=state.pw; if(!s||!w) return '';
+  const head=(title,sub)=>`<div class="grabber" style="margin-bottom:12px"></div>
+    <div style="padding:0 20px 10px;display:flex;align-items:flex-start;gap:8px">
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:18px;font-weight:500">${title}</span>
+        ${sub?`<span style="display:block;font-size:13.5px;color:var(--text-secondary);margin-top:4px">${sub}</span>`:''}</span>
+      <button class="iconbtn" style="width:36px;height:36px;margin-right:-6px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('pwSheetClose')">${ic('x',20,2)}</button></div>`;
+  let body='';
+  if(s.kind==='price'){
+    const p=s.p, list=(s.info&&s.info.suppliers)||[];
+    body=head(escAttr(pwName(p)),escAttr([p.sku,T('stock','库存')+' '+(p.physical_qty==null?0:p.physical_qty)].filter(Boolean).join(' · ')))
+      +`<div style="max-height:56vh;overflow:auto">${pwPriceRowsHtml(list,null)}
+        <div style="padding:12px 20px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border-default)">
+          <span style="font-size:15px;font-weight:500">${T('Someone else / type it myself','其他 / 手动填写')}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary)">${T('Adds the line — set the supplier and price by hand.','先添加,再手动填写供应商与价格。')}</span>
+          <button class="btn2" style="width:100%" onclick="APP.cmd('pwUse',-1)">${T('Add','添加')}</button></div></div>`;
+  }else{
+    const line=s.target==='order'?null:w.items[s.target];
+    const list=(s.info&&s.info.suppliers)||[];
+    body=head(line?T('Who are we buying this from?','这一行向谁采购？'):T('Supplier','供应商'),
+              line?escAttr(pwName(line)):T('Optional — leave empty for a mixed or one-off buy.','可选 —— 混合或一次性采购可留空。'))
+      +`<div style="max-height:60vh;overflow:auto">
+        ${line?pwPriceRowsHtml(list,line.supplier_name||''):''}
+        <div style="padding:10px 20px 6px;border-top:${line&&list.length?'1px solid var(--border-default)':'none'}">
+          ${line&&list.length?`<div class="eyebrow" style="margin-bottom:8px">${T('Someone else','其他供应商')}</div>`:''}
+          <input id="mPwSupQ" value="${escAttr(s.q)}" placeholder="${T('Type to search your suppliers','输入以搜索供应商')}" oninput="APP.cmd('pwSupQ',this.value)">
+          ${line?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('Leave it empty and the line follows the order’s supplier.','留空则该行沿用订单的供应商。')}</div>
+            <button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('pwSupSave')">${T('Save','保存')}</button>`:''}</div>
+        ${line?'':`<button class="row" style="min-height:52px;padding:10px 20px" onclick="APP.cmd('pwSupNone')"><span style="flex:1;font-size:15px;color:var(--text-secondary)">${T('No supplier','未指定供应商')}</span></button>`}
+        <div id="mPwSupList">${pwSupListHtml()}</div></div>`;
+  }
+  return `<div class="scrim" style="z-index:49" onclick="APP.scrimClose('pwSheetClose')"></div>
+   <div class="sheet" style="z-index:50;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 20px)">${body}</div>`;
+}
+
+/* ── The screen ───────────────────────────────────────────────────────── */
+function pwStoreName(id){
+  const s=(state.stores||[]).find(x=>Number(x.id)===Number(id));
+  return s?(LANG==='en'?(s.name_en||s.name_cn||s.code||''):(s.name_cn||s.name_en||s.code||'')):'';
+}
+function pwStepsHtml(step){
+  const names=[T('From & to','来源与门店'),T('What to buy','采购内容'),T('Review & place','确认下单')];
+  return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)">${names.map((n,i)=>{
+    const k=i+1, dot=k<step?'background:var(--text-primary)':k===step?'box-shadow:inset 0 0 0 2px var(--text-primary)':'background:var(--border-default)';
+    return `<span style="width:8px;height:8px;border-radius:50%;flex:none;${dot}"></span><span style="flex:none;${k===step?'color:var(--text-primary);font-weight:500':''}">${n}</span>${
+      i<2?'<span style="flex:1;min-width:6px;height:1px;background:var(--border-default)"></span>':''}`; }).join('')}</div>`;
+}
+function pwField(label,inner,hint){
+  return `<label style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${label}</span>${inner}${
+    hint?`<span style="font-size:12.5px;color:var(--text-secondary)">${hint}</span>`:''}</label>`;
+}
+function pwErrHtml(){
+  const w=state.pw; if(!w||!w.err) return '';
+  return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${w.err}</span></div>`;
+}
+function pwStep1(){
+  const w=state.pw, stores=state.stores||[];
+  const sup=w.supplier?escAttr(pwSupShow(w.supplier)):`<span style="color:var(--text-secondary)">${T('Choose supplier','选择供应商')}</span>`;
+  return pwField(T('Supplier','供应商'),`<button class="card" style="display:flex;align-items:center;gap:10px;padding:12px 14px;width:100%;text-align:left;font-size:15px;cursor:pointer" onclick="APP.cmd('pwSup','order')">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sup}</span><span style="display:flex;color:var(--text-secondary)">${ic('chevron-down',18)}</span></button>`,
+      T('Optional — leave empty for a mixed or one-off buy.','可选 —— 混合或一次性采购可留空。'))
+    +pwField(T('Deliver to','收货门店'),stores.length
+      ?`<select onchange="APP.cmd('pwHead','store_id',this.value)" style="width:100%">${stores.map(s=>`<option value="${escAttr(s.id)}"${Number(s.id)===Number(w.store_id)?' selected':''}>${escAttr(pwStoreName(s.id))}</option>`).join('')}</select>`
+      :`<span style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+    +pwField(T('Order date','下单日期'),`<input type="date" value="${escAttr(w.date)}" onchange="APP.cmd('pwHead','date',this.value)">`,
+      T('Items can arrive on different days.','每件商品的到货时间可能不同。'))
+    +pwField(T('Note','备注'),`<input id="mPwNote" value="${escAttr(w.notes)}" placeholder="${T('Anything the receiver should know','收货人需要知道的信息')}" oninput="APP.cmd('pwHead','notes',this.value)">`);
+}
+function pwLineHtml(it,i){
+  const typed=pwTyped(it);
+  const hist=it.store_product_id!=null?state.pwc.hist[it.store_product_id]:undefined;
+  const last=hist==null?'':(pwNum(it.cost_per_unit)>parseFloat(hist)+1e-9
+    ?`<span class="num" style="color:var(--amber-ink)">▲ ${T('was','上次')} ${money(CUR,hist)}</span>`
+    :`<span class="num">${T('last paid','上次')} ${money(CUR,hist)}</span>`);
+  const cats=state.pwc.cats||[];
+  const cat=!typed?'':(cats.length
+    ?`<select aria-label="${T('Category','分类')}" onchange="APP.cmd('pwLine',${i},'expense_category',this.value)" style="width:100%">
+        <option value="">${T('Category','分类')}</option>${cats.concat(it.expense_category&&cats.indexOf(it.expense_category)<0?[it.expense_category]:[])
+          .map(c=>`<option value="${escAttr(c)}"${c===it.expense_category?' selected':''}>${escAttr(catLabel(c))}</option>`).join('')}</select>`
+    :`<input value="${escAttr(it.expense_category)}" placeholder="${T('Category','分类')}" aria-label="${T('Category','分类')}" oninput="APP.cmd('pwLine',${i},'expense_category',this.value)">`);
+  const unit=typed
+    ?`<select aria-label="${T('Buy unit','采购单位')}" onchange="APP.cmd('pwLine',${i},'unit',this.value)" style="width:auto;flex:none;height:44px;padding-top:0;padding-bottom:0">${PW_UNITS.map(u=>`<option value="${u}"${(it.unit||'pcs')===u?' selected':''}>${escAttr(pwUnit(u))}</option>`).join('')}</select>`
+    :`<span style="font-size:13px;color:var(--text-secondary);flex:none">${escAttr(pwUnit(it.unit||'pcs'))}</span>`;
+  return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        ${typed?`<input value="${escAttr([it.name_en,it.name_cn].filter(Boolean).join(' '))}" placeholder="${T('Name','名称')}" aria-label="${T('Name','名称')}" onchange="APP.cmd('pwLineName',${i},this.value)">`
+          :`<span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pwName(it))}</span>`}
+        <span class="num" style="font-size:12px;color:var(--text-secondary);display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center">${
+          it.ingredient_id?`<span class="pill" style="background:${PILL.clear[0]};color:${PILL.clear[1]}">${T('Material','物料')}</span>`:''}${
+          it.sku?`<span>${escAttr(it.sku)}</span>`:''}${it.current_stock!=null?`<span>${T('On shelf','现库存')} ${escAttr(it.current_stock)}</span>`:''}</span></span>
+      <button class="iconbtn" style="width:32px;height:32px;margin:-4px -6px 0 0" onclick="APP.cmd('pwDrop',${i})" aria-label="${T('Remove','移除')}">${ic('x',18,2)}</button></div>
+    <button class="chip" style="align-self:flex-start;height:36px;max-width:100%" onclick="APP.cmd('pwSup',${i})"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+      it.supplier_name?escAttr(pwSupShow(it.supplier_name)):T('Choose supplier','选择供应商')}</span>${ic('chevron-down',14)}</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="stepbtn" onclick="APP.cmd('pwQty',${i},-1)" aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
+      <input class="num" inputmode="decimal" value="${escAttr(it.qty==null?1:it.qty)}" aria-label="${T('Quantity','数量')}" oninput="APP.cmd('pwLine',${i},'qty',this.value)" style="width:64px;text-align:center;flex:none">
+      <button class="stepbtn" onclick="APP.cmd('pwQty',${i},1)" aria-label="${T('More','增加')}">${ic('plus',18)}</button>
+      ${unit}</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Cost each','单价')}</span>
+      <input class="num" inputmode="decimal" value="${escAttr(it.cost_per_unit==null?0:it.cost_per_unit)}" aria-label="${T('Cost each','单价')}" oninput="APP.cmd('pwLine',${i},'cost_per_unit',this.value)" style="width:96px;text-align:right;flex:none">
+      <span style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary)">${last}</span>
+      <span class="num" id="mPwLt${i}" style="font-size:15px;font-weight:500;flex:none">${money(CUR,pwLineTotal(it))}</span></div>
+    ${cat}
+    <input value="${escAttr(it.note)}" placeholder="${T('Note','备注')}" aria-label="${T('Note','备注')}" oninput="APP.cmd('pwLine',${i},'note',this.value)">
+  </div>`;
+}
+function pwTotHtml(){
+  const w=state.pw;
+  return `<span class="num" style="font-size:13px;color:var(--text-secondary)">${w.items.length} ${T('products','商品')} · ${pwUnits(w)} ${T('units','件')}</span>
+    <span class="num" style="font-size:17px;font-weight:500">${money(CUR,pwTotal(w))}</span>`;
+}
+function pwStep2(){
+  const w=state.pw;
+  const recap=`<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:10px">
+    <span style="flex:1;min-width:0;font-size:13.5px;line-height:1.6">${T('Supplier','供应商')}: <b style="font-weight:500">${escAttr(w.supplier?pwSupShow(w.supplier):T('none','不指定'))}</b><br>
+      ${T('Deliver to','收货')}: <b style="font-weight:500">${escAttr(pwStoreName(w.store_id))}</b> · ${T('Placed','下单')}: <b class="num" style="font-weight:500">${escAttr(w.date?fmtDateOnly(w.date):'—')}</b></span>
+    <button class="btn2" style="width:auto;padding:0 14px;flex:none" onclick="APP.cmd('pwStep',1)">${T('Change','修改')}</button></div>`;
+  const prod=featOn('production');
+  const search=pwField(prod?T('Add products & materials','添加商品或物料'):T('Add products','添加商品'),
+    searchBox(`<input id="mPwQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}" placeholder="${T('Search by name or SKU','按名称或货号搜索')}" oninput="APP.cmd('pwQ',this.value)">`,'mPwClr',!!w.q)
+    +`<div id="mPwPicks">${pwPicksHtml()}</div>`);
+  const low=featOn('lowStockHints');
+  const empty=low?(prod?T('Nothing yet — search or pick a suggestion above.','还没有内容——在上方搜索或选择推荐。'):T('No products yet — search or pick a suggestion above.','还没有商品——在上方搜索或选择推荐。'))
+                 :(prod?T('Nothing yet — search above.','还没有内容——在上方搜索。'):T('No products yet — search above.','还没有商品——在上方搜索。'));
+  const sortBar=w.items.length>1?`<div class="hscroll" style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Sort','排序')}</span>${PW_SORT.map(k=>{
+        const on=w.sort&&w.sort.key===k.key;
+        return `<button class="chip ${on?'on':''}" style="height:36px" onclick="APP.cmd('pwSort','${k.key}')"><span>${T(k.en,k.zh)}${on?(w.sort.dir===1?' ↑':' ↓'):''}</span></button>`; }).join('')}</div>`:'';
+  const lines=w.items.length
+    ?`<div style="display:flex;flex-direction:column;gap:10px">${w.items.map(pwLineHtml).join('')}</div>
+      <div id="mPwTot" style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 2px">${pwTotHtml()}</div>`
+    :`<div style="font-size:13.5px;color:var(--text-secondary)">${empty}</div>`;
+  return recap+search+pwLowHtml()+sortBar+lines+pwDraftBtns();
+}
+function pwDraftBtns(){
+  const w=state.pw, busy=w.busy;
+  return `<div style="display:flex;flex-direction:column;gap:10px">
+    <button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('pwSave',0)">${busy==='save'?T('Saving…','保存中…'):T('Save as draft','存为草稿')}</button>
+    ${w.id&&mCan('purchasing:edit')?`<button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('pwDelete')">${T('Delete draft','删除草稿')}</button>`:''}</div>`;
+}
+function pwStep3(){
+  const w=state.pw, total=pwTotal(w), empty=!w.items.length;
+  const line=`${w.items.length} ${T('products','商品')} · ${pwUnits(w)} ${T('units','件')} · <b class="num" style="font-weight:500">${money(CUR,total)}</b>
+    — ${T('from','来自')} <b style="font-weight:500">${escAttr(w.supplier?pwSupShow(w.supplier):T('no supplier','不指定供应商'))}</b>,
+    ${T('to','送至')} <b style="font-weight:500">${escAttr(pwStoreName(w.store_id))}</b>,
+    ${T('placed','下单')} <b class="num" style="font-weight:500">${escAttr(w.date?fmtDateOnly(w.date):'—')}</b>.`;
+  return `<div style="font-size:16px;line-height:1.55">${line}</div>
+    ${empty?`<div style="font-size:14px;color:var(--amber-ink)">${T('Add at least one product before placing the order.','下单前请至少添加一件商品。')}</div>`
+    :`<div class="list">${w.items.map((it,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;justify-content:space-between;gap:12px;padding:12px 14px">
+        <span style="min-width:0;font-size:14.5px">${escAttr(pwName(it))} <span class="num" style="color:var(--text-secondary)">· ${escAttr(it.qty)} ${escAttr(pwUnit(it.unit||'pcs'))}</span>${
+          it.supplier_name?`<span style="display:block;font-size:12px;color:var(--text-secondary)">${escAttr(pwSupShow(it.supplier_name))}</span>`:''}</span>
+        <span class="num" style="flex:none;font-size:14.5px">${money(CUR,pwLineTotal(it))}</span></div>`).join('')}</div>
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface-raised);font-size:13.5px;line-height:1.55">
+        <span style="flex:none;display:flex;color:var(--text-secondary);margin-top:2px">${ic('wallet',16)}</span>
+        <span>${T('When you place the order,','下单后,')} <b style="font-weight:500">${money(CUR,total)} ${T('posts to Finance → Expenses by itself.','会自动记入财务 → 支出。')}</b> ${T('Nothing touches stock until the goods arrive and you tick them in.','在到货并勾选收货之前,库存不会有任何变动。')}</span></div>`}
+    ${pwDraftBtns()}`;
+}
+function pwFootHtml(){
+  const w=state.pw; if(!w) return '';
+  const busy=w.busy;
+  const back=w.step>1?`<button class="btn2" style="width:auto;padding:0 18px;flex:none" ${busy?'disabled':''} onclick="APP.cmd('pwStep',${w.step-1})">${T('Back','上一步')}</button>`:'';
+  if(w.step===1) return `<button class="cta" onclick="APP.cmd('pwStep',2)">${T('Next — what to buy','下一步 —— 采购内容')}</button>`;
+  if(w.step===2) return `${back}<span class="num" style="flex:1;min-width:0;font-size:13.5px;color:var(--text-secondary)">${money(CUR,pwTotal(w))}</span>
+    <button class="cta" style="width:auto;flex:none" onclick="APP.cmd('pwStep',3)">${T('Review order','确认订单')}</button>`;
+  const empty=!w.items.length;
+  return `${back}<span style="flex:1"></span>${mCan('purchasing:edit')?`<button class="cta" style="width:auto;flex:none;${empty||busy?'opacity:.55':''}" ${empty||busy?'disabled':''} onclick="APP.cmd('pwSave',1)">${
+    busy==='place'?T('Saving…','保存中…'):T('Place order','确认下单')}</button>`:''}`;
+}
+function screenNewPO(){
+  const w=state.pw;
+  if(!w) return nothingYet(T('New order','新建采购单'),'');
+  pwLoad();
+  const body=w.step===1?pwStep1():w.step===2?pwStep2():pwStep3();
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${pwStepsHtml(w.step)}${pwErrHtml()}${body}</div>${footBar(pwFootHtml(),'mPwFoot')}`;
+}
+/* A read landing while somebody types in one of the two search boxes patches
+   that box's list only; anything else repaints. */
+function pwRepaint(){
+  const a=document.activeElement, id=a&&a.id;
+  const box=id==='mPwQ'?'mPwPicks':id==='mPwSupQ'?'mPwSupList':null;
+  const b=box&&document.getElementById(box);
+  if(b){ b.innerHTML=box==='mPwPicks'?pwPicksHtml():pwSupListHtml(); return; }
+  render();
+}
+reg('pwHead', (k,v)=>{
+  const w=state.pw; if(!w||!['store_id','date','notes'].includes(k)) return;
+  if(k==='store_id'){ w.store_id=Number(v)||w.store_id; pwLoadStock(w.store_id); render(); return; }
+  if(k==='date'){ w.date=String(v||'')||w.date||shopToday(); return; }   // a cleared box keeps the order's date, as the desktop does
+  w.notes=String(v==null?'':v);
+});
+reg('pwStep', n=>{ const w=state.pw; if(!w||w.busy) return; n=Number(n); if(![1,2,3].includes(n)) return;
+  w.step=n; w.err=null; state.pwSheet=null; render(); });
+let pwQTimer=null;
+reg('pwQ', v=>{ const w=state.pw; if(!w) return;
+  const el=document.getElementById('mPwQ'); state.focus={id:'mPwQ',pos:el?el.selectionStart:null};
+  w.q=String(v||''); searchClearShow('mPwClr',!!w.q);
+  clearTimeout(pwQTimer); pwQTimer=setTimeout(()=>{ const b=document.getElementById('mPwPicks'); if(b) b.innerHTML=pwPicksHtml(); else render(); },150); });
+
+/* ── The three writes ─────────────────────────────────────────────────── */
+function pwBody(){
+  const w=state.pw;
+  return {date:w.date||shopToday(),delivery_date:w.delivery_date||null,supplier:w.supplier||null,store_id:w.store_id,notes:w.notes||null,
+    items:w.items.map(it=>({id:it.id||null,store_product_id:it.store_product_id,ingredient_id:it.ingredient_id,
+      name_en:it.name_en,name_cn:it.name_cn,sku:it.sku,qty:pwNum(it.qty),unit:it.unit||'pcs',cost_per_unit:pwNum(it.cost_per_unit),
+      expense_category:it.expense_category||null,purchase_channel:it.purchase_channel||null,supplier_name:it.supplier_name||null,note:it.note||null}))};
+}
+const PW_ERR={date_required:['Choose a date first.','请先选择日期。'],store_required:['Choose a location first.','请先选择门店。'],
+  name_required:['Give it a name first.','请先填写名称。']};
+function pwErrFor(e){
+  const c=e&&e.code;
+  if(PW_ERR[c]) return T(...PW_ERR[c]);
+  if(c==='not_draft'||c==='already_receiving'||c==='not_found') return T('This order has already moved on. Close and open it again to see where it is now.','这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
+  return T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+}
+function pwLeave(){
+  state.pw=null; state.pwSheet=null;
+  state.stack=state.stack.filter(s=>s.route!=='newpo');
+  poReloadLists(); render();
+}
+reg('pwSave', mark=>{
+  const w=state.pw; if(!w||w.busy) return;
+  mark=!!Number(mark);
+  if(mark&&!mCan('purchasing:edit')) return;
+  const body=pwBody();
+  if(!body.items.length){ w.err=T('Add at least one product','请先添加商品'); render(); return; }
+  if(w.items.some(it=>pwTyped(it)&&!String(it.name_en||'').trim()&&!String(it.name_cn||'').trim())){ w.err=T(...PW_ERR.name_required); render(); return; }
+  w.busy=mark?'place':'save'; w.err=null; render();
+  const save=w.id?apiWrite('/purchases/'+w.id,body,'PUT'):apiWrite('/purchases',body,'POST').then(r=>{ if(r&&r.id!=null){ w.id=r.id; w.po_number=r.po_number||w.po_number; } return r; });
+  save.then(()=>mark?apiWrite('/purchases/'+w.id+'/status',{status:'Ordered'},'PUT'):null).then(()=>{
+    const id=w.id; w.busy=null;
+    if(state.pw!==w) return;
+    showToast(mark?T('Order placed','已下单'):T('Saved as draft','已存为草稿'));
+    pwLeave();
+    if(mark&&id!=null) APP.cmd('openPO',id);
+  }).catch(e=>{
+    w.busy=null;
+    if(String(e.message)==='auth') return;
+    w.err=pwErrFor(e); render();
+  });
+});
+reg('pwDelete', ()=>{
+  const w=state.pw; if(!w||!w.id||w.busy||!mCan('purchasing:edit')) return;
+  state.ask={title:T('Delete this draft order?','删除此草稿采购单？'),
+    body:T('It was never placed, so nothing to unwind — this just removes it.','该订单从未下单，删除不会影响任何账目。'),
+    confirmLabel:T('Delete draft','删除草稿'), danger:true, run:()=>{
+      if(state.pw!==w) return;
+      w.busy='delete'; w.err=null; render();
+      apiWrite('/purchases/'+w.id,{},'DELETE').then(()=>{
+        w.busy=null; if(state.pw!==w) return;
+        showToast(T('Draft deleted','草稿已删除')); pwLeave();
+      }).catch(e=>{ w.busy=null; if(String(e.message)==='auth') return; w.err=pwErrFor(e); render(); });
+    }};
+  render();
 });
 
 /* ==========================================================================
@@ -10566,7 +11192,15 @@ const SUBS={
     render:()=>screenNewOrder()},
   products:{title:['Products','产品'],render:()=>screenProductCatalogue()},
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
-  purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),render:()=>screenPurchasing()},
+  purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),
+    /* §300 P2 — the desktop's New order, on its own key (data-cap="purchasing:edit"). */
+    cta:()=>state.poView!=='supowed'&&canRoute('newpo')
+      ? `<button class="cta inhead" onclick="APP.cmd('pwNew')">${T('New order','新建采购单')}</button>` : '',
+    render:()=>screenPurchasing()},
+  newpo:{title:['New order','新建采购单'],
+    titleOf:()=>state.pw&&state.pw.po_number?escAttr(state.pw.po_number):T('New order','新建采购单'),
+    backLabel:()=>T('Purchasing','采购'),
+    render:()=>screenNewPO()},
   supowed:{title:['Suppliers we owe','供应商欠款'],status:()=>statusSupOwed(),render:()=>screenSupOwed()},
   activity:{title:['Stock activity','库存流水'],render:()=>screenActivity()},
   /* No `status` — see the block comment on screenWaste. The CTA carries
@@ -25129,6 +25763,9 @@ const ROUTE_CAP={
      purchasing:receive server-side (lib/cap-routes.js). Showing it to a holder
      of purchasing:view alone would be a screen whose only action 403s. */
   receiving:'purchasing:receive', receive:'purchasing:receive',
+  /* §300 P2 — writing an order is the desktop's New order, purchasing:edit —
+     AND purchasing:view, which canRoute() adds by name (see there). */
+  newpo:'purchasing:edit',
   /* WASTE IS GATED ON VIEW, NOT ON RECORD — the opposite call to Receiving's
      one line above, and for the opposite reason. Receiving is a screen whose
      entire purpose is the save at the bottom of it, so a viewer gets a page
@@ -25286,6 +25923,12 @@ function canRoute(k){
      table: one route needs this, and a table where an array sometimes means
      any-of and sometimes all-of is a table nobody can read. */
   if(k==='till') return mCan('till:use') && mCan('orders:edit');
+  /* §300 P2 — WRITING A PURCHASE ORDER NEEDS BOTH, the same named && as the
+     till. The screen is purchasing:edit's (its saves), but it shows every
+     price on the order, and on the desktop nobody reaches the wizard without
+     purchasing:view — the Purchasing tab's own key. edit-without-view must
+     never see a price, so the phone asks for the pair. */
+  if(k==='newpo') return mCan('purchasing:view') && mCan('purchasing:edit');
   /* §300 F1 — FINANCE IS MONEY AND NOTHING ELSE, so the boards that never see
      money (recapNoMoney: warehouse, dispatch, customer service) do not get it
      whatever their caps say — the rule Trend's revenue and Home's recap follow. */
@@ -26070,6 +26713,7 @@ function render(){
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
   if(state.poId!=null&&state.poPrint&&state.poDetail) html += layer('poprint:'+state.poId, sheetPOPrint());
+  if(state.pwSheet&&state.pw&&pwOnTop()) html += layer('pw:'+state.pwSheet.kind, sheetPW());
   if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());
   if(state.fin.txRow) html += layer('fintx:'+state.fin.txRow, sheetFinTxRow());
   if(state.fin.form) html += layer('fintxform', sheetFinTxForm());
@@ -26520,6 +27164,7 @@ function layers(){
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   // Over the order it prints, so Back closes the print view first (§300).
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
+  if(state.pwSheet&&state.pw&&pwOnTop()) L.push(()=>{ state.pwSheet=null; });
   if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });
   if(state.fin.txRow) L.push(()=>{ state.fin.txRow=null; state.fin.txActErr=''; });
   if(state.fin.form) L.push(()=>{ state.fin.form=null; });
