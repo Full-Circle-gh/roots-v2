@@ -12,6 +12,11 @@
                          'undo' or 'restore' otherwise; the server files it on the
                          history row so those steps are never folded into an edit.
      onChange()        → repaint the footer. Called on every state change.
+     delay             → the pause after the last edit before it is sent (800ms).
+     maxWait           → optional: the longest an edit may wait, however long the
+                         typing goes on. Without it a steady typist postpones the
+                         save for as long as they type — a plain debounce. The
+                         Recipes record (§300) keeps the desktop's 1.2s / 8s.
 
    WHAT IT GIVES BACK
      start()           → the visit begins: what read() says now is both "saved"
@@ -38,6 +43,9 @@
 
   function create(opts) {
     var delay = opts.delay != null ? opts.delay : 800;
+    var maxWait = opts.maxWait != null ? opts.maxWait : null;
+    /* Set by the FIRST edit of a burst and not moved by the ones after it. */
+    var deadline = 0;
     var timer = null, inFlight = false, again = false, againNote = null, running = null;
     var saved = null, visitStart = null;
     var ctl = { state: 'saved', message: '' };
@@ -50,7 +58,7 @@
     function clear() { if (timer) { clearTimeout(timer); timer = null; } }
 
     ctl.start = function () {
-      clear(); inFlight = false; again = false; againNote = null;
+      clear(); deadline = 0; inFlight = false; again = false; againNote = null;
       saved = visitStart = now();
       ctl.state = 'saved'; ctl.message = '';
     };
@@ -60,15 +68,21 @@
 
     ctl.touch = function () {
       clear();
-      if (!ctl.dirty()) { if (!inFlight) set('saved'); return; }
+      if (!ctl.dirty()) { deadline = 0; if (!inFlight) set('saved'); return; }
       var why = opts.hold ? opts.hold(opts.read()) : '';
       if (why) { set('hold', why); return; }
       set('pending');
-      timer = setTimeout(function () { timer = null; ctl.flush(); }, delay);
+      var wait = delay;
+      if (maxWait != null) {
+        var t = Date.now();
+        if (!deadline) deadline = t + maxWait;
+        wait = Math.max(0, Math.min(delay, deadline - t));
+      }
+      timer = setTimeout(function () { timer = null; ctl.flush(); }, wait);
     };
 
     ctl.flush = function (note) {
-      clear();
+      clear(); deadline = 0;
       /* Queued behind the write on the wire; the promise handed back is that
          write's, which does not settle until the queued one has run too. */
       if (inFlight) { again = true; againNote = note || againNote; return running || Promise.resolve(); }
