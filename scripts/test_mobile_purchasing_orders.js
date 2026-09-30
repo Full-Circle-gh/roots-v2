@@ -192,7 +192,9 @@ section('2 · the sub-view strip draws only what works');
     const e = mk({ state: { poList: LIST } });
     const t = text(e.ctx.screenPurchasing());
     assert.ok(t.includes('Orders') && t.includes('Suppliers we owe'));
-    assert.ok(!/Invoices|Reorder/.test(t), 'no dead tabs');
+    // Reorder (P6) works for anyone who can open Purchasing; Invoices (P5) only
+    // with purchasing:invoices, which this account does not hold.
+    assert.ok(t.includes('Reorder') && !/Invoices/.test(t), 'no dead tabs');
   });
   it('the second tab shows the account screen, and the head band follows', () => {
     const e = mk({ state: { poList: LIST } });

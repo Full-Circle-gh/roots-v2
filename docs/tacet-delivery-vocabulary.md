@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.227 · 2026-09-30 · §320 REORDER AND PRICE HISTORY ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Reorder and Price history on the phone (§320)*.
+
 **v1.226 · 2026-09-30 · §319 MATERIALS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP MATERIALS SCREEN.** See *Materials on the phone (§319)*.
 
 **v1.225 · 2026-09-30 · §317 REPORTS ON THE PHONE — ONE NOTE COMPOSED BY CLAUDE, EVERYTHING ELSE COPIED WHOLE FROM THE DESKTOP.** See *Reports on the phone (§317)*.
@@ -10144,3 +10146,24 @@ already holds all of them, or is the phone's own live pair:
 search placeholder and its `4 without a price` status are not used: the first
 promises a search the server does not run (it searches name and SKU), and the
 second would be composed.
+
+## Reorder and Price history on the phone (§320)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the Reorder
+tab on the phone's Purchasing screen and the Price history sheet
+(`public/m.html`). Every label is copied whole from the desktop
+(`public/retail-admin/16-purchasing.js`):
+
+- Reorder: `Reorder · 补货`, `Nothing’s running low · 库存都很充足` and its body,
+  `No preferred supplier yet · 暂无常用供应商`, `low · 偏低`, `left · 剩`, `buffer · 安全`,
+  `more · 更多`, `units suggested · 件建议`, `Open draft order · 生成草稿单`;
+- Price history: `Price history · 价格历史`, `Last paid · 上次`, `Average · 均价`,
+  `orders · 次`, `Range · 区间`, `low · 低`, `high · 高`, `Bought · 采购`, `since · 自`,
+  `What it has cost you · 历史成本`, `now · 现在`,
+  `Need at least two purchases to chart a trend. · 至少两次采购才能绘制趋势。`,
+  `Who sells it · 供应来源`, `suppliers · 家`, `Times · 次数`, `Preferred · 常用`,
+  `Unrecorded · 未记录`, `No supplier history yet. · 暂无供应商记录。`,
+  `No purchase history yet · 暂无采购记录` and its body.
+
+The phone's own: `Could not load this. · 无法加载。`, `Try again · 重试`,
+`Loading… · 加载中…`, `Close · 关闭`.

@@ -22473,3 +22473,44 @@ modules. It covers:
 updated from 27 to 28 Operations rows, with the new row named.
 `test_mobile_recipes_edit.js` was updated for the materials line in the Back
 gesture.
+
+## §320 — REORDER AND PRICE HISTORY COME TO THE PHONE
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P6 of the purchasing lane (survey build-order row 16). The phone had
+neither of the desktop's Reorder tab or Price history screen
+(`16-purchasing.js`). Reorder is now a tab on Purchasing's strip. Price history
+opens from wherever a product's price is shown. No server changes were made.
+
+1. **Reorder is Purchasing's own tab, for anyone who can open Purchasing.** It
+   carries no money, so no other key is needed. It reads `GET /reorder`, again
+   each time the tab is opened, as the desktop does. There is one card per usual
+   supplier and store. Each card shows how many products are low, the first six
+   with *N left · buffer B* and a count for the rest, and the units suggested. A
+   product with no usual supplier goes under *No preferred supplier yet*. The
+   empty, loading and failed states are the desktop's words; the failed state
+   offers Try again.
+2. **Open draft order is the desktop's `puReorderDraft`, and it writes nothing.**
+   It opens the new-order screen (P2) at its lines: the suggested quantities,
+   cost 0, the retail-stock category, and the card's supplier on the order and on
+   each line. The draft exists only once it is saved there. The button is drawn
+   only for whoever may open that screen (`purchasing:view` and
+   `purchasing:edit`).
+3. **Price history is all money, so it opens only where money shows**
+   (`purchasing:view`, failing closed). It opens from the new-order price list, a
+   product line's supplier sheet, and each product line on an order. Material
+   lines have no retail purchase history and offer none. It reads
+   `GET /products/:spid/suppliers` and shows:
+   - last paid (who, when);
+   - the average (over how many orders);
+   - the range, naming who is cheapest and dearest;
+   - how much has been bought since the first purchase;
+   - a line of what it has cost;
+   - who sells it, the preferred supplier first.
+4. **It is a sheet over whatever it was opened from**, where the mockup draws a
+   pushed screen, so that closing it lands back on the order or the new-order
+   sheet. The desktop's Back does the same (`_phBack`).
+5. **The sparkline is Trend's own drawing** (a line, a tint under it, the last
+   point) **scaled min-to-max instead of zero-to-max.** A price moving from ¥119
+   to ¥131 is the whole story, and drawn from zero it is flat. This is the
+   desktop's `sparkPath` scaling. With one purchase it says it needs two.
