@@ -919,6 +919,14 @@ const state = {
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
   trend:null, trendFull:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
+  /* §300 F5 — Reports on the phone: the custom days, the store picked, whether
+     the stores were asked for, the AI read (per window key) and the Ask log. */
+  trendFrom:null, trendTo:null, trendStore:'', trendStoresTried:false,
+  trendRead:{key:null,data:null,loading:false,unavailable:false,error:false},
+  trendAsk:{log:[],busy:false,q:''},
+  /* The operator's own store when they are store-scoped (/me scopeStores): every
+     store-scoped read is pinned to it, as the desktop's RA_STORE_LOCK is. */
+  storeLock:null,
   trendOpen:{},          // which Trend fact section is expanded, by key
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   /* The role's Dashboard cards, from the Roles editor — null until /me
@@ -4031,7 +4039,10 @@ reg('toggleFeature', k=>toggleFeature(k));
    teamLockReason(), which live there, and a handler sitting four hundred
    lines from the only screen that draws it is a handler nobody reviews
    beside the rules it enforces. */
-reg('trendRange', v=>{ state.trendRange=v; render(); loadTrend(); });
+reg('trendRange', v=>{
+  // §300 F5 — Custom asks for its two days before anything is read.
+  if(v==='custom'){ trendCustomAsk(); return; }
+  state.trendRange=v; state.trendFrom=null; state.trendTo=null; render(); loadTrend(); });
 reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('trendSection', k=>{ state.trendOpen[k]=!state.trendOpen[k]; render(); });
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
@@ -24245,30 +24256,20 @@ function trendMetric(){
   return (m==='revenue'&&recapNoMoney()) ? 'orders' : m;
 }
 function loadTrend(force){
-  const key=state.trendRange;
+  /* §300 F5 — the key is the preset (as it always was) or the custom days,
+     plus the store when one is scoped; see trendReadKey. */
+  const key=trendReadKey();
   if(state.trendKey===key&&!force) return;
   state.trendKey=key; state.trend=null; state.trendFull=null; state.trendErr=null;
-  const to=shopToday().slice(0,10);
   /* THE WINDOW WAS ONE DAY TOO LONG IN GUANGZHOU, which is to say everywhere it
      actually runs. `new Date(to+'T00:00:00')` is LOCAL midnight and setDate
      steps back in LOCAL days — but the result was serialised with
      toISOString(), which is UTC. At UTC+8 local midnight is 16:00 the PREVIOUS
-     day in UTC, so the from-date came back a day early: "last 7 days" asked for
-     eight and "30 days" asked for thirty-one. Every figure on the screen was
-     computed over that window — the total, the busiest day, and the mean, which
-     divides by a day-count that did not match what was fetched.
-
-     It read correctly at UTC offset 0, where local midnight and UTC midnight
-     are the same instant, so it survived every run on a UTC box. The suite that
-     catches it only does so because the runner pins TZ=Asia/Shanghai to match
-     production.
-
-     Formatted from the local fields now, so the string that goes out is the
+     day in UTC, so the from-date came back a day early. Formatted from the
+     local fields now (trendPresetWindow), so the string that goes out is the
      same day the arithmetic was done in. */
-  const from=(()=>{ const d=new Date(to+'T00:00:00'); d.setDate(d.getDate()-(Number(key)-1));
-    const p=n=>String(n).padStart(2,'0');
-    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); })();
-  api('/dashboard?from='+from+'&to='+to).then(d=>{
+  const {from,to}=trendWindow();
+  api('/dashboard?from='+from+'&to='+to+trendStoreQS()).then(d=>{
     if(state.trendKey!==key) return;   // a later range won the race
     state.trend=Array.isArray(d&&d.trend)?d.trend:[];
     /* The WHOLE reply is kept now, not just its `trend` array. Everything the
@@ -24603,7 +24604,10 @@ function statusTrend(){
   const lbl=TREND_METRICS.find(x=>x[0]===m);
   return (m==='revenue'?money0(CUR,total):Math.round(total).toLocaleString())
     + ' ' + T(lbl[1],lbl[2]).toLowerCase()
-    + ' · ' + T('last '+state.trendRange+' days','近 '+state.trendRange+' 天');
+    + ' · ' + (state.trendRange==='custom'
+        ? (()=>{ const w=trendWindow(), f=x=>tdWhen(x,'date',_tdL())||x; return w.from===w.to?f(w.from):f(w.from)+' – '+f(w.to); })()
+        : T('last '+state.trendRange+' days','近 '+state.trendRange+' 天'))
+    + (trendStoreName()?' · '+escAttr(trendStoreName()):'');
 }
 function screenTrend(){
   loadTrend();
@@ -24612,8 +24616,15 @@ function screenTrend(){
   const chips=(list,cur,cmd)=>`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
     ${list.map(([k,en,zh])=>`<button onclick="APP.cmd('${cmd}','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
       background:${cur===k?'var(--surface-card)':'transparent'};color:${cur===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${cur===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${T(en,zh)}</button>`).join('')}</div>`;
+  /* §300 F5 — the stores for the picker, read once if the board has not. */
+  if(state.stores==null&&!state.trendStoresTried){ state.trendStoresTried=true;
+    api('/stores').then(r=>{ if(Array.isArray(r)){ state.stores=r.filter(s=>s.is_active==null||s.is_active); render(); } }).catch(()=>{}); }
+  const storeSel=trendStorePicker()?`<select aria-label="${T('Store','门店')}" style="width:100%" onchange="APP.cmd('trendStore',this.value)">
+      <option value=""${state.trendStore?'':' selected'}>${T('All stores','全部门店')}</option>
+      ${state.stores.map(st=>`<option value="${escAttr(String(st.id))}"${String(st.id)===String(state.trendStore)?' selected':''}>${escAttr(mStoreName(st))}</option>`).join('')}</select>`:'';
   const head=`<div style="padding:14px 16px 0;display:flex;flex-direction:column;gap:8px">
-    ${chips(TREND_RANGES,state.trendRange,'trendRange')}
+    ${chips(TREND_RANGES.concat([['custom','Custom','自定义']]),state.trendRange,'trendRange')}
+    ${storeSel}
     ${metrics.length>1?chips(metrics,m,'trendMetric'):''}</div>`;
   if(state.trendErr) return `${head}<div style="padding:16px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
@@ -24621,6 +24632,7 @@ function screenTrend(){
       <span style="font-size:14px;color:var(--brick-ink)">${state.trendErr}</span></div></div>`;
   if(!state.trend) return `${head}<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const t=state.trend;
+  trendReadLoad();   // §300 F5 — once per window, while this screen is on
   if(!t.length) return head+nothingYet(T('Nothing in this window','该时段没有数据'),
     T('No day in this range has anything on it yet. A shorter window may.','所选时段内还没有任何数据，可以试试更短的区间。'));
   const vals=t.map(p=>Number(p[m])||0);
@@ -24653,7 +24665,7 @@ function screenTrend(){
       <span style="display:flex;transform:rotate(${up?0:180}deg)">${ic('arrow-up',13,2.5)}</span>
       ${(up?'+':'−')+Math.abs(Number(dl))+'%'}</span>
     <span style="font-size:13px;color:var(--text-secondary)">${
-      T('vs prior '+state.trendRange+' days','对比前 '+state.trendRange+' 天')}</span></div>`;
+      T('vs prior '+trendSpan()+' days','对比前 '+trendSpan()+' 天')}</span></div>`;
 
   /* VISITS ARE ONE CHANNEL'S, SITTING IN A CHIP ROW BESIDE TWO THAT ARE EVERY
      CHANNEL'S. retail_visits has exactly one writer — the mini app's tracker via
@@ -24715,9 +24727,312 @@ function screenTrend(){
       ${bestDow?fact(T('Best day of the week','一周中最旺的一天'),bestDow,T('on average','平均')):''}
       ${fact(T('Days counted','统计天数'),String(days))}
     </div>
+    ${trendReadCard()}
     ${sections.map(section).join('')}
+    ${trendHeatCard()}
+    ${trendRetCard()}
+    ${trendAskCard()}
     ${recapNoMoney()?noteBar(T('Revenue is not shown on this account.','此账号不显示营收。')):''}
-    ${noteBar(T('Hover charts, the cohort grid and the written read are on desktop.','悬停图表、留存矩阵与文字解读在电脑端。'))}</div>`;
+    ${/* §300 F5 — the old note named three things on desktop; the read and the
+          retention figures are here now, so it names the one that is not. */''}
+    ${noteBar(T('Hover charts are on desktop.','悬停图表在电脑端。'))}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   §300 — WHAT THE DESKTOP'S REPORTS HAS THAT TREND LACKED (step F5)
+   --------------------------------------------------------------------------
+   Trend reads the same /dashboard payload the desktop's Reports reads. What
+   it was missing, per the parity survey, is built here from 03-dashboard.js:
+
+     • a CUSTOM window (dashSetRange's inputs) — a fourth chip opening From/To;
+     • a STORE select (dashStoreId / dashEnsureStoreFilter) — shown only with
+       more than one store, and never to a store-scoped operator, who is pinned
+       to their own store on every read (RA_STORE_LOCK). Trend sent no store at
+       all before, so a store-scoped operator was reading every store's figures;
+     • the DEMAND HEATMAP (dashRenderHeatmap) — orders by weekday and hour;
+     • RETENTION (dashRenderCohorts) — month 1/3/6/12 and the weighted curve;
+     • THE READ and ASK (dashReadMaybeLoad / dashAskSubmit) — the AI's plain-
+       words reading of the period, and questions about it.
+
+   GATES, AS TREND'S AND THE DESKTOP'S. The heatmap and retention carry no
+   money (counts and percentages) and show wherever Trend does. The read and
+   Ask speak about revenue and are the Reports tab's own, so they need
+   `reports:view` (which mCan fails CLOSED while caps are unknown) and are
+   never offered on the three no-money boards (recapNoMoney). The read is a
+   billed call, cached by the server per window, and is fetched only when this
+   screen is on — the desktop's "only once Reports is opened" rule.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* The window Trend reads: a preset counted back from the store's today (the
+   arithmetic loadTrend has always done), or the two custom days. */
+function trendPresetWindow(k){
+  const to=shopToday().slice(0,10);
+  const d=new Date(to+'T00:00:00'); d.setDate(d.getDate()-(Number(k)-1));
+  const p=n=>String(n).padStart(2,'0');
+  return {from:d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()),to};
+}
+function trendWindow(){
+  if(state.trendRange==='custom'&&state.trendFrom&&state.trendTo) return {from:state.trendFrom,to:state.trendTo};
+  return trendPresetWindow(state.trendRange==='custom'?'7':state.trendRange);
+}
+/* The store every read is scoped to: the operator's own when they are
+   store-scoped, else the one picked, else '' for all. */
+const trendStoreId=()=>String(state.storeLock||state.trendStore||'');
+const trendStoreQS=()=>{ const s=trendStoreId(); return s?'&store_id='+encodeURIComponent(s):''; };
+/* The key a read is made for. A preset with no store is just the preset — the
+   key Trend has always used — so nothing that seeds it had to change. */
+function trendReadKey(){
+  const w=trendWindow();
+  const base=state.trendRange==='custom'?('custom:'+w.from+':'+w.to):String(state.trendRange);
+  return base+(trendStoreId()?'@'+trendStoreId():'');
+}
+/* The picker: more than one store, and not a store-scoped operator. */
+const trendStorePicker=()=>!state.storeLock&&Array.isArray(state.stores)&&state.stores.length>1;
+function trendStoreName(){
+  const sid=trendStoreId(); if(!sid) return '';
+  const s=(state.stores||[]).find(x=>String(x.id)===sid);
+  return s?mStoreName(s):'';
+}
+/* The span a preset or custom window covers, for the "vs prior N days" line. */
+function trendSpan(){
+  const w=trendWindow();
+  return Math.round((new Date(w.to)-new Date(w.from))/86400000)+1;
+}
+
+/* ── The demand heatmap (dashRenderHeatmap) ─────────────────────────────── */
+const TREND_DOW_1=[['S','日'],['M','一'],['T','二'],['W','三'],['T','四'],['F','五'],['S','六']];
+const TREND_DOW_EN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const TREND_DOW_CN=['周日','周一','周二','周三','周四','周五','周六'];
+function trendHeatCard(){
+  const d=state.trendFull; if(!d) return '';
+  const heat=d.heat||[];
+  const head=`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px">
+    <span style="font-size:15.5px;font-weight:500">${T('Demand heatmap','需求热力图')}</span>
+    <span style="font-size:12px;color:var(--text-secondary)">${T('orders by hour','按小时订单')}</span></div>`;
+  if(!heat.length) return `<div class="card" style="padding:14px 16px">${head}
+    <div style="font-size:13.5px;color:var(--text-secondary)">${T('No orders in range','区间内无订单')}</div></div>`;
+  const grid={}; let max=1, busiest=null;
+  heat.forEach(h=>{ grid[h.dow+'-'+h.hour]=h; if(h.orders>max) max=h.orders; if(!busiest||h.orders>busiest.orders) busiest=h; });
+  let rows='';
+  for(let dw=0;dw<7;dw++){
+    let cells='';
+    for(let hr=0;hr<24;hr++){
+      const c=grid[dw+'-'+hr]; const k=c?c.orders/max:0;
+      cells+=`<i style="flex:1;height:12px;border-radius:2px;background:${k===0?'var(--surface-raised)':'var(--text-primary)'};${k===0?'':'opacity:'+(0.1+k*0.75).toFixed(2)}"></i>`;
+    }
+    rows+=`<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;flex:none;font-size:11px;color:var(--text-secondary);text-align:center">${T(...TREND_DOW_1[dw])}</span>
+      <span style="display:flex;gap:1px;flex:1;min-width:0">${cells}</span></div>`;
+  }
+  const hh=busiest?String(busiest.hour).padStart(2,'0'):'';
+  const busy=busiest?T(`Busiest: ${TREND_DOW_EN[busiest.dow]} ${hh}:00`,`最忙：${TREND_DOW_CN[busiest.dow]} ${hh}:00`):'';
+  return `<div class="card" style="padding:14px 16px">${head}
+    <div style="display:flex;flex-direction:column;gap:2px">${rows}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:12px;color:var(--text-secondary)">
+      <span class="num">${busy}</span>
+      <span style="display:flex;align-items:center;gap:4px;flex:none">${T('fewer','少')}
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--surface-raised)"></i>
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--text-primary);opacity:.18"></i>
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--text-primary);opacity:.45"></i>
+        <i style="width:10px;height:10px;border-radius:2px;background:var(--text-primary);opacity:.8"></i>${T('more','多')}</span></div></div>`;
+}
+
+/* ── Retention (dashRenderCohorts) ──────────────────────────────────────── */
+/* The weighted curve: for each month since a first order, the share of every
+   cohort old enough to have that month who ordered in it. */
+function trendRetCurve(d){
+  const sizes=(d&&d.cohortSizes)||[], rows=(d&&d.cohorts)||[];
+  if(!sizes.length) return [];
+  const byMonth={};
+  rows.forEach(c=>{ (byMonth[c.cohort_month]=byMonth[c.cohort_month]||{})[c.active_month]=c.active_customers; });
+  const sizeMap={}; sizes.forEach(c=>{ sizeMap[c.cohort_month]=c.size; });
+  const months=sizes.map(c=>c.cohort_month);
+  const monthAdd=(mo,n)=>{ const p=mo.split('-').map(Number); const t=(p[1]-1)+n;
+    return (p[0]+Math.floor(t/12))+'-'+String(((t%12)+12)%12+1).padStart(2,'0'); };
+  const between=(a,b)=>{ const x=a.split('-').map(Number), y=b.split('-').map(Number); return (y[0]-x[0])*12+(y[1]-x[1]); };
+  const todayYM=shopToday().slice(0,7);
+  const age={}; months.forEach(m=>{ age[m]=between(m,todayYM); });
+  const maxOff=Math.max(0,...Object.values(age));
+  const curve=[];
+  for(let m=0;m<=maxOff;m++){
+    let active=0,size=0;
+    for(const cm of months){
+      if(age[cm]<m) continue;
+      const s=sizeMap[cm]||0; if(!s) continue;
+      active+=(byMonth[cm]&&byMonth[cm][monthAdd(cm,m)])||0; size+=s;
+    }
+    if(size>0) curve.push({offset:m,pct:Math.round(active/size*1000)/10});
+  }
+  return curve;
+}
+function trendRetCard(){
+  const d=state.trendFull; if(!d) return '';
+  const head=`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px">
+    <span style="font-size:15.5px;font-weight:500">${T('Retention','留存')}</span>
+    <span style="font-size:12px;color:var(--text-secondary)">${T('weighted, all cohorts','加权，全部批次')}</span></div>`;
+  if(!(d.cohortSizes||[]).length) return `<div class="card" style="padding:14px 16px">${head}
+    <div style="font-size:13.5px;color:var(--text-secondary)">${T('Not enough history yet','暂无足够留存数据')}</div></div>`;
+  const curve=trendRetCurve(d);
+  const kpi=m=>{ const c=curve.find(x=>x.offset===m); return c?c.pct:null; };
+  const tile=(m,en,zh)=>{ const v=kpi(m); return `<div style="min-width:0;text-align:center">
+    <div class="num" style="font-size:18px;font-weight:500">${v==null?'—':Math.round(v)+'%'}</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${T(en,zh)}</div></div>`; };
+  let svg='';
+  if(curve.length>1){
+    const W=320,H=70,pt=6,pb=8,ih=H-pt-pb;
+    const pts=curve.map((c,i)=>`${(i/(curve.length-1)*W).toFixed(1)},${(pt+ih-(c.pct/100)*ih).toFixed(1)}`).join(' ');
+    svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" aria-hidden="true" style="display:block;margin-top:12px">
+      <line x1="0" y1="${H-pb}" x2="${W}" y2="${H-pb}" stroke="var(--border-default)"/>
+      <polyline points="${pts}" fill="none" stroke="var(--text-primary)" stroke-width="1.75" stroke-linejoin="round"/></svg>`;
+  }
+  return `<div class="card" style="padding:14px 16px">${head}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${tile(1,'month 1','第1个月')}${tile(3,'month 3','第3个月')}${tile(6,'month 6','第6个月')}${tile(12,'month 12','第12个月')}</div>${svg}</div>`;
+}
+
+/* ── The read and Ask (dashReadMaybeLoad / dashAskSubmit) ───────────────── */
+const trendAiOn=()=>mCan('reports:view')&&!recapNoMoney();
+/* The digest the model reads — dashAiDigest, field for field, over the same
+   payload: rounded, top-N, and nothing the screen does not already hold. The
+   server writes the read from this and caches it per window. */
+const TREND_SCENE_EN={1001:'Mini-program list',1005:'Search',1006:'Search result',1007:'Single chat card',1008:'Group chat card',
+  1011:'Scan QR',1012:'Long-press QR',1013:'Album QR',1014:'Template msg',1017:'Trial version',1019:'Wallet',1020:'Card package',
+  1023:'Home screen',1027:'Search recents',1035:'Official-account menu',1036:'App share',1037:'From mini-program',
+  1038:'Back from mini-program',1047:'Scan code (Discover)',1048:'Long-press code',1058:'Official article',1065:'URL link',
+  1074:'Official-account card',1089:'Chat tools',1101:'Dev preview',1106:'Chat pull-down search',1107:'Subscription msg',
+  1131:'Floating window',1271:'Chat pull-down favourites'};
+function trendDigest(){
+  const D=state.trendFull; if(!D) return null;
+  const r2=n=>Math.round(Number(n||0)*100)/100;
+  const k=D.kpis||{};
+  const status={};
+  Object.entries(D.funnel||{}).forEach(([st,v])=>{ status[st]={orders:v.n,revenue:r2(v.revenue)}; });
+  const mk=D.marketing||{};
+  const vouchers=mk.vouchers||[];
+  return {
+    currency:CUR||'¥',
+    window:D.window,
+    kpis:{revenue:r2(k.revenue),orders:k.orders,average_order:r2(k.aov),buyers:k.buyers,
+      new_customers:k.new_customers,visits:k.visits,sessions:k.sessions,unique_visitors:k.visitors,
+      mini_app_orders:k.mini_app_orders,
+      conversion_rate_pct:r2(k.conversion_rate),refund_rate_pct:r2(k.refund_rate),
+      cancelled_orders:k.cancelled_orders,refunded_orders:k.refunded_orders},
+    change_vs_prior_window_pct:D.deltas,
+    order_status:status,
+    payments:(D.payments||[]).slice(0,6).map(p=>({method:p.method,orders:p.orders,revenue:r2(p.revenue)})),
+    delivery_modes:(D.delivery||[]).slice(0,5).map(x=>({mode:x.mode,orders:x.orders})),
+    revenue_composition:D.composition?{products:r2(D.composition.product_total),delivery_fees:r2(D.composition.delivery_fee),
+      voucher_discounts:r2(D.composition.voucher_total),point_discounts:r2(D.composition.points_total),
+      store_credit_used:r2(D.composition.balance_total),net:r2(D.composition.net_total)}:null,
+    wallet:D.topups?{topups_received:r2(D.topups.received),store_credit_redeemed:r2(D.topups.redeemed)}:null,
+    busiest_hours:(D.heat||[]).slice().sort((a,b)=>b.orders-a.orders).slice(0,3)
+      .map(h=>({weekday:TREND_DOW_EN[h.dow],hour:h.hour,orders:h.orders})),
+    top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue)})),
+    top_customers:(D.topCustomers||[]).slice(0,5).map(c=>({name:c.nickname||('#'+c.customer_id),orders:c.orders,revenue:r2(c.revenue)})),
+    buyers_new_vs_returning:D.new_vs_returning,
+    top_cities:(D.geoCities||[]).slice(0,6).map(g=>({city:g.city_en||g.city,city_cn:g.city,orders:g.orders,revenue:r2(g.revenue)})),
+    vouchers:{orders_with_voucher:vouchers.reduce((s,v)=>s+Number(v.uses||0),0),
+      discount_given:r2(vouchers.reduce((s,v)=>s+Number(v.discount||0),0))},
+    points:mk.points?{orders:mk.points.orders,value:r2(mk.points.points_value)}:null,
+    checkout:D.checkout?{started:D.checkout.started,converted:D.checkout.converted,
+      abandoned:D.checkout.abandoned,checkout_to_paid_pct:D.checkout.conversion_rate}:null,
+    retention_pct_by_months_since_first_order:trendRetCurve(D).slice(0,7).map(c=>({month:c.offset,pct:c.pct})),
+    traffic_scenes:((D.traffic&&D.traffic.scenes)||[]).slice(0,6).map(sc=>({source:TREND_SCENE_EN[sc.scene]||('scene '+sc.scene),visits:sc.visits})),
+    article_views:(D.articleViews||[]).slice(0,3).map(a=>({title:a.title_en||a.title_cn||'(removed)',seen:a.impressions,reads:a.reads})),
+  };
+}
+/* Once per window, only while this screen is on, and never again once the
+   server says the AI is not configured — "quietly a reports page without AI". */
+function trendReadLoad(){
+  const r=state.trendRead;
+  if(!trendAiOn()||!state.trendFull||r.unavailable) return;
+  const key=trendReadKey();
+  if(r.key===key) return;
+  r.key=key; r.loading=true; r.data=null; r.error=false;
+  const w=trendWindow();
+  apiWrite('/reports/read',{from:w.from,to:w.to,store_id:trendStoreId(),digest:trendDigest()}).then(j=>{
+    if(r.key!==key) return;
+    r.loading=false;
+    const d=j&&j.data;
+    if(!d||d.available===false) r.unavailable=true; else r.data=d;
+    render();
+  }).catch(e=>{
+    if(r.key!==key||String(e.message)==='auth') return;
+    r.loading=false; r.error=true; render();   // hidden rather than apologised for, as on the desktop
+  });
+}
+const TREND_ASK_CHIPS=[['Why did the average order change?','平均客单为什么变化？'],
+  ['What should I restock first?','我该先补什么货？'],
+  ['How does this period compare with the one before?','这个区间和上一个相比怎么样？']];
+const trendDot=`<span style="width:7px;height:7px;border-radius:50%;background:var(--dusk-ink);flex:none;display:inline-block"></span>`;
+function trendReadCard(){
+  const r=state.trendRead;
+  if(!trendAiOn()||r.unavailable||r.error) return '';
+  if(r.loading&&!r.data) return `<div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-secondary)">${trendDot}${T('Reading the numbers…','正在读取数据…')}</div>`;
+  const d=r.data; if(!d||!d.read) return '';
+  const text=String(LANG==='en'?(d.read.read_en||d.read.read_cn):(d.read.read_cn||d.read.read_en)||'');
+  const paras=text.split(/\n+/).map(x=>x.trim()).filter(Boolean).map(x=>`<p style="margin:0;font-size:14.5px;line-height:1.6">${escAttr(x)}</p>`).join('');
+  const when=d.generated_at?tdWhen(d.generated_at,'time',_tdL()):'';
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">${trendDot}<span style="font-size:15.5px;font-weight:500">${T('The read','解读')}</span>
+      <span style="font-size:12px;color:var(--text-secondary);margin-left:auto">${escAttr(when?T('written at '+when,'写于 '+when):T("written from this period's numbers",'由本期数据生成'))}</span></div>
+    ${paras}
+    <div style="font-size:12px;line-height:1.5;color:var(--text-secondary)">${T('Drawn from the numbers in this report — nothing else. Refreshes with the range, at most twice a day.','内容仅依据本报表数据。随区间刷新，每天最多两次。')}</div></div>`;
+}
+function trendAskCard(){
+  const r=state.trendRead, a=state.trendAsk;
+  // As dashAskEnsure: offered once the read has had its answer, unless the
+  // server said there is no AI here at all.
+  if(!trendAiOn()||r.unavailable||r.loading||(!r.data&&!r.error)) return '';
+  const log=a.log.map(x=>{
+    const body=x.pending?`<div style="display:flex;gap:8px;align-items:flex-start;color:var(--text-secondary)">${trendDot}<span>${T('Reading the numbers…','正在读取数据…')}</span></div>`
+      : x.error?`<div style="color:var(--text-secondary)">${x.error==='ask_limit'?T("That's the day's questions used up — ask again tomorrow.",'今天的提问次数已用完，明天再来。')
+          :T('That one didn’t go through. Try again.','这次没有成功，请再试一次。')}</div>`
+      : `<div style="display:flex;gap:8px;align-items:flex-start">${trendDot}<span>${escAttr(LANG==='en'?x.a_en:x.a_cn)}</span></div>`;
+    return `<div style="border-top:1px solid var(--border-default);padding-top:10px;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.55">
+      <div style="font-weight:500">${escAttr(x.q)}</div>${body}</div>`;
+  }).join('');
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">${trendDot}<span style="font-size:15.5px;font-weight:500">${T('Ask about your numbers','问问你的数据')}</span></div>
+    <div style="display:flex;gap:8px">
+      <input id="mTrendAsk" maxlength="300" enterkeyhint="send" value="${escAttr(a.q)}" placeholder="${T('e.g. Why did the average order drop?','例如：平均客单为什么下降？')}" style="flex:1;min-width:0"
+        oninput="APP.cmd('trendAskSet',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();APP.cmd('trendAsk','')}">
+      <button class="btn2" style="flex:none;width:auto;padding:0 16px" ${a.busy?'disabled':''} onclick="APP.cmd('trendAsk','')">${T('Ask','提问')}</button></div>
+    <div class="hscroll" style="display:flex;gap:8px">${TREND_ASK_CHIPS.map((c,i)=>`<button class="chip" ${a.busy?'disabled':''} onclick="APP.cmd('trendAskChip',${i})"><span>${T(c[0],c[1])}</span></button>`).join('')}</div>
+    ${log}</div>`;
+}
+reg('trendAskSet', v=>{ state.trendAsk.q=String(v==null?'':v); });
+reg('trendAskChip', i=>{ const c=TREND_ASK_CHIPS[Number(i)]; if(c) CMD.trendAsk(T(c[0],c[1])); });
+/* One question at a time; the box empties when it was the box that asked. */
+reg('trendAsk', qArg=>{
+  const a=state.trendAsk;
+  const q=String(qArg||a.q||'').trim();
+  if(!q||a.busy||!state.trendFull||!trendAiOn()) return;
+  a.busy=true; if(!qArg) a.q='';
+  const row={q,pending:true}; a.log.push(row); render();
+  const w=trendWindow();
+  apiWrite('/reports/ask',{q,from:w.from,to:w.to,store_id:trendStoreId(),digest:trendDigest()}).then(j=>{
+    row.pending=false;
+    const ans=(j&&j.data&&j.data.answer)||{};
+    row.a_en=ans.answer_en; row.a_cn=ans.answer_cn;
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    row.pending=false; row.error=(e&&e.code==='ask_limit')?'ask_limit':'failed';
+  }).then(()=>{ a.busy=false; render(); });
+});
+reg('trendStore', v=>{ if(state.storeLock) return; state.trendStore=String(v||''); render(); loadTrend(); });
+/* Custom asks for two days in the ask-sheet, as Finance's does (F1); a pick
+   that is a preset lights the preset. */
+function trendCustomAsk(){
+  const w=trendWindow();
+  state.ask={title:T('Custom','自定义'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:w.from},{id:'to',label:T('To','至'),type:'date',value:w.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(!v.from||!v.to)?T('Pick a date','选日期'):v.from>v.to?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{
+      const hit=TREND_RANGES.map(r=>r[0]).find(k=>{ const x=trendPresetWindow(k); return x.from===v.from&&x.to===v.to; });
+      if(hit){ state.trendRange=hit; state.trendFrom=null; state.trendTo=null; }
+      else { state.trendRange='custom'; state.trendFrom=v.from; state.trendTo=v.to; }
+      render(); loadTrend();
+    }};
+  render();
 }
 
 /* ==========================================================================
@@ -30743,6 +31058,8 @@ async function loadMe(){
        FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */
     state.caps=Array.isArray(u.caps)?u.caps:null;
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null};
+    // §300 F5 — RA_STORE_LOCK's rule: the first of the operator's scoped stores.
+    state.storeLock=(Array.isArray(u.scopeStores)&&u.scopeStores.length)?String(u.scopeStores[0]):null;
     /* The operator's own language, from their account (audit M-01 / M-02). It
        wins over whatever this handset had — that is the point. null means they
        have never chosen, and then the handset's value stands: nobody who has
