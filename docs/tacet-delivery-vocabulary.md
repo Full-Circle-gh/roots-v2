@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.220 · 2026-09-30 · §311 FINANCE CATEGORIES ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Finance categories on the phone (§311)*.
+
 **v1.219 · 2026-09-30 · §310 FROM THE KITCHEN ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *From the kitchen on the phone (§310)*.
 
 **v1.218 · 2026-09-30 · §309 RECIPE COSTS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (毛利(食谱)), THE REST COPIED WHOLE.** See *A recipe's cost on the phone (§309)*.
@@ -9866,3 +9868,36 @@ Every label is copied whole from the desktop's *From the kitchen* modal
 `Loading… · 加载中…`, `Close · 关闭`,
 `That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`
 (the phone's own).
+
+## Finance categories on the phone (§311)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Finance → Categories tab (`public/m.html`, `screenFinCats`). Every
+label is copied whole from the desktop sub-view (`public/retail-admin/22-finance.js`,
+"CATEGORIES", and its markup in `public/retail-admin.html`):
+
+- **The tab and its head** — `Categories · 分类`, the intro `Your own list.
+  Expenses are filed against these, and only these are offered when someone
+  records one. · 本店自己的分类列表。记录支出时只会显示这些分类。`, the Add box's
+  placeholder `Rent · 租金` and `Add · 添加`.
+- **A row** — `Used by N · N 条使用`, `Not used · 未使用`, `Hidden · 已停用`,
+  `Operating expense · 营业费用`, and for an operator without the pen
+  `Not an operating expense · 不计入营业费用` (the Summary's own pair).
+- **The ⋯ sheet** — `Rename · 重命名` (live on the desktop as `cuT('Rename',
+  '重命名')`; the desktop renames in place and needs no button, the phone does),
+  `Hide · 停用`, `Restore · 启用`, `Delete · 删除`; the rename sheet's field is
+  `Category · 分类` and its button `Save · 保存`.
+- **The confirms and the refusal** — `Hide this category? · 停用该分类？` with its
+  body, `Delete this category? · 删除该分类？` with `Nothing has been filed under
+  it. This cannot be undone. · 尚无支出使用该分类。此操作无法撤销。`, and the
+  used-category sentence `"X" is used by N expenses. Hide it instead — hiding
+  keeps those records exactly as they are. · “X”已被 N 条支出使用。请改为停用 —
+  停用不会改动这些记录。`.
+- **States** — `No categories yet. Add the ones this business spends money on —
+  rent, wages. · 还没有分类。请新增本店的支出分类 — 租金、工资。`,
+  `Could not load the categories. · 分类加载失败。`, `Loading… · 加载中…`,
+  `Saving… · 保存中…`, `Saved · 已保存`, `Try again · 重试`.
+- **Reused from the phone** — `More · 更多` (the ⋯ button's label).
+
+Server refusals (`that category already exists · 该分类已存在`, `name required ·
+分类名称必填`) are shown one half at a time, unchanged.
