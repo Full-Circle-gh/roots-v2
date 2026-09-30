@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.232 · 2026-09-30 · §328 ORDER FACTS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *The order sheet's facts on the phone (§328)*.
+
 **v1.231 · 2026-09-30 · §327 THE PAGE EDITOR'S DOOR AND ITS BLOCK CHROME ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *The page editor from the phone (§327)*.
 
 **v1.230 · 2026-09-30 · §323 THE BUILD LIST'S MONEY IS SENT ONLY ON THE KEYS THAT DRAW IT — NOTHING COMPOSED, NO STRING CHANGED.** See *Build-list money on the wire (§323)*.
@@ -10324,3 +10326,46 @@ app's Editor screen (`public/m.html`) and the phone page editor's edit sheet
   请在上方选择优惠券。` and `Pick a coupon above to set the discount and code. ·
   请在上方选择优惠券以设置折扣与券码。`. The kept fields reuse the phone sheet's
   own `Kicker · 小标题` and `Button label · 按钮文字`.
+
+## The order sheet's facts on the phone (§328)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's order sheet and order
+list (`public/m.html`). Everything is copied from the desktop drawer
+(`public/retail-admin/04-orders.js`) except the row below.
+
+| String | Status |
+|---|---|
+| `The point is placed on the desktop map. · 配送点请在电脑端地图上标记。` | **composed by Claude (O1).** Under *Confirm delivery point* on an order parked for want of a delivery point. §97 keeps the Qingyun point picker on the desktop, so the phone says where the job is done instead of showing a surface it cannot finish. Built from the desktop's own 配送点 and 标记 (`尚未标记配送点`, `请标记配送点`) and the phone's live 在电脑端 (`请在电脑端设置中添加。`). Rejected: the desktop hint *Tap the map where the door is. · 在地图上点选收货位置。*, because there is no map to tap on the phone; *Best edited on desktop · 建议在电脑端编辑*, because this is not a preference — it cannot be done here. |
+| `Promised tomorrow, D. · 明天(D)送达。` followed by `Confirm the point today — … · 请今天确认配送点 — …` (and its *Pick the place today* twin) | **split, not composed.** The desktop prints these as one string with the first sentence in `<b>`; the phone prints the same two halves, the first bold, with nothing added or dropped. |
+| `Subtotal · 小计`, `Packing · 打包费` | **copied**, capitalised: the desktop's settlement rows are the lower-case `subtotal · 小计` and `packing · 打包费`. |
+| The refund-history step names | **the phone's own live pairs** (`REFUND_STATE`: *Refund requested · 申请退款* …), not the desktop's raw event keys, so the panel's heading and its history cannot name one state two ways. An unknown step reads as words. |
+
+Copied whole from the desktop:
+
+- pay link: `Payment link · 付款链接`, `Open pay page · 打开付款页`,
+  `Send this to the customer, or show the page for them to scan. · 发给顾客,或打开页面让其扫码支付。`;
+- moved address: `Address changed by the customer · 顾客修改了收货地址`,
+  `Check the shipping label against the address above before this goes out · 发货前请核对面单与上方地址`;
+- `Pre-order · 预订`, `Rerouted, shop was closed · 改派 · 门店已关闭`;
+- was the customer told: `Was the customer told · 顾客是否已收到通知`, the seven
+  message kinds, the three channels (`WeChat · 微信`, `Text · 短信`, `Email · 邮件`)
+  and the seven reasons (`they have not agreed to be messaged in the mini app · 顾客未在小程序中同意接收通知` …);
+- refund history: `History · 历史`, `Refund history · 退款历史`, `No events yet · 暂无记录`,
+  `by · 操作人`, `customer · 顾客`, `Lines · 退款明细`, `Reason · 原因`, `Payout · 打款`;
+- settlement: `Settlement · 结算明细`, `Customer delivery fee · 顾客配送费`,
+  `Merchant discount · 商家对顾客的活动补贴`, `Commission · 佣金`, `Estimated income · 预计收入`,
+  the unreconciled sentence and `Commission and income not published by the channel yet. · 平台尚未公布佣金与预计收入。`;
+- holds: `Stock reservations — needs attention · 库存预留 — 需留意`, `Expires · 到期`,
+  `Committed · 提交`, `Released · 释放`;
+- list row: `Partial refund · 部分退款` (the desktop badge's title);
+- same-city courier: `Same-city courier · 同城配送`, `Ships from · 取货门店`,
+  `Push refused — nobody is collecting this · 发单被拒 — 无人接单`,
+  `Held — map service unavailable, retrying · 已挂起 — 地图服务不可用,正在重试`, `since · 自`,
+  `No courier called yet · 尚未呼叫运力`, `Queued for push… · 排队发单中…`, the geocoder
+  sentence, the moved-store and old-job sentences, `Confirm delivery point · 确认配送点`
+  and its sentence, `Delivery date passed · 配送日期已过` and its sentence,
+  `Pick the delivery point · 选择配送点` and its sentence,
+  `Distances are from the store the rider collects from. · 距离为骑手取货门店到该地点的距离。`.
+
+The phone's own, already live: `Copy · 复制`, `Could not load this. · 无法加载。`,
+`Try again · 重试`, `Loading… · 加载中…`.
