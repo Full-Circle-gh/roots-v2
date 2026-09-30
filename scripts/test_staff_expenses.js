@@ -769,7 +769,12 @@ it('the phone says marking paid changes nothing in the accounts', () => {
   assert.ok(PHONE.includes('Marking paid does not change the accounts'));
   // And it asks first, naming the person and the figure: this asserts money has
   // already changed hands somewhere this app cannot see.
-  assert.match(PHONE_CODE, /askConfirm\(\{[\s\S]*?Mark paid/);
+  // §300: through the phone's own ask-sheet. It used to be the desktop's
+  // askConfirm, which the phone does not have, so the question was never asked
+  // and the write went out on the first tap; this line pinned that shape.
+  // scripts/test_mobile_finance_guards.js runs it and checks the request.
+  assert.match(PHONE_CODE, /state\.ask = owes[\s\S]*?title:T\('Paid ¥'\+total\+' back\?'[\s\S]*?confirmLabel:T\('Mark paid','标记已付'\), run\}/);
+  assert.ok(!/askConfirm\s*\(/.test(PHONE_CODE), 'no call to a dialog the phone does not define');
 });
 
 it('the owed block is absent when nothing is owed', () => {

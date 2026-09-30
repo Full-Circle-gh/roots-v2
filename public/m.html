@@ -3372,7 +3372,7 @@ reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null; ren
 /* From the order straight into receiving it. The sheet closes first — leaving
    it open behind a full screen is how a Back button ends up with two things
    to mean. */
-reg('poReceive', ()=>{ const id=state.poId; if(!id) return;
+reg('poReceive', ()=>{ const id=state.poId; if(!id||!mCan('purchasing:receive')) return;
   state.poId=null; state.poDetail=null; APP.cmd('recvOpen',id); });
 /* Marking a delivery in writes stock and posts the cost to the books, so it
    asks first and says both of those things before it does. */
@@ -3712,6 +3712,8 @@ function recvFlush(){
 
 reg('poStatus', st=>{
   const d=state.poDetail; if(!d||state.poBusy) return;
+  // §300: the same keys sheetPO draws the buttons on, so a stale sheet cannot write past them.
+  if(!mCan(st==='Delivered'?'purchasing:receive':'purchasing:edit')) return;
   const run=()=>{
     state.poBusy=true; state.poErr=null; render();
     apiWrite('/purchases/'+d.id+'/status',{status:st},'PUT').then(()=>{
@@ -8655,9 +8657,15 @@ function sheetPO(){
   // are ALL there. Anything else — one product of twelve, a short count,
   // damage — is per-product work and belongs on Receive, which is a screen on
   // this phone (the button below this one).
-  const cta = d.status==='Requested'
+  /* §300 — EACH BUTTON ONLY FOR WHO MAY PRESS IT, on the desktop's own keys
+     (16-purchasing.js): placing an order is `purchasing:edit` (Place order),
+     counting one in is `purchasing:receive` (Confirm delivery / All arrived as
+     ordered). They used to be drawn for anybody who could open the list, and a
+     view-only tap was refused by the server after the sheet had asked. */
+  const canRcv=mCan('purchasing:receive');
+  const cta = d.status==='Requested'&&mCan('purchasing:edit')
     ? {label:T('Mark ordered','标记已下单'),status:'Ordered'}
-    : d.status==='Ordered'
+    : d.status==='Ordered'&&canRcv
       ? {label:T('Everything arrived','全部到货'),status:'Delivered'}
       : null;
   return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closePO')"></div>
@@ -8683,7 +8691,7 @@ function sheetPO(){
              footnote pointing somewhere else would be the app lying about its
              own reach. "Everything arrived" below stays as the fast path for
              the common case; this is the way in when something is wrong. */''}
-       ${done?'':`<button class="btn2" style="width:100%" onclick="APP.cmd('poReceive')">${ic('package',18)}${T('Receive line by line','逐项收货')}</button>`}
+       ${done||!canRcv?'':`<button class="btn2" style="width:100%" onclick="APP.cmd('poReceive')">${ic('package',18)}${T('Receive line by line','逐项收货')}</button>`}
        ${poDeliveries(d.id)}
      </div>
      ${cta?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
@@ -14129,7 +14137,8 @@ reg('aprDecide', (id,decision)=>{
     delete a.cat[Number(id)];
     delete a.paid[Number(id)];
     aprLoad();
-    if(window.toast) toast(decision==='approve'?T('Approved','已通过'):T('Not approved','已拒绝'));
+    // §300: showToast, the phone's own — `window.toast` is the desktop's and was never here.
+    showToast(decision==='approve'?T('Approved','已通过'):T('Not approved','已拒绝'));
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -14168,7 +14177,10 @@ reg('aprTogether', ()=>{
     for(const id of ids){ delete a.cat[id]; delete a.paid[id]; }
     a.join={};
     aprLoad();
-    if(window.toast) toast(T('Approved','已通过')+' · '+((j&&j.data&&j.data.po_number)||''));
+    // §300: showToast (as aprDecide); the order number only when the server sent one,
+    // so a visible toast never ends in a dangling " · ".
+    const po=(j&&j.data&&j.data.po_number)||'';
+    showToast(T('Approved','已通过')+(po?' · '+po:''));
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -14209,7 +14221,7 @@ reg('aprPaidSet', (id,value)=>{
   apiWrite('/staff-expenses/'+Number(id)+'/paid-by',{paid_by:paid}).then(()=>{
     a.busy=0; a.tried=false;
     aprLoad();
-    if(window.toast) toast(T('Saved','已保存'));
+    showToast(T('Saved','已保存'));   // §300: the phone's own toast
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -14241,7 +14253,7 @@ reg('aprFile', (id,value)=>{
   apiWrite('/staff-expenses/'+Number(id)+'/category',{category:cat}).then(()=>{
     a.busy=0; a.tried=false;
     aprLoad();
-    if(window.toast) toast(T('Saved','已保存'));
+    showToast(T('Saved','已保存'));   // §300: the phone's own toast
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -14258,8 +14270,17 @@ reg('aprFile', (id,value)=>{
    ONE PERSON AT A TIME, EVERY CLAIM AT ONCE, because that is how it is actually
    paid: one transfer to Wei, not four taps. The confirm names the person and the
    figure, since this is an assertion that money has already changed hands
-   somewhere this app cannot see. */
-reg('aprSettle', async (who,total,ids)=>{
+   somewhere this app cannot see.
+
+   THE CONFIRM IS THE SHEET'S (§300). It used to be `askConfirm`, the DESKTOP's
+   dialog, behind a check that the function existed — and this file has no
+   askConfirm, so the check failed on every tap and the write went straight
+   through: money marked paid on the first touch, with no question asked. It is
+   `state.ask` now, the ask-sheet every other confirm here uses, carrying the
+   desktop's own words (finAprSettle, 22-finance.js), and nothing is sent until
+   its button is pressed. The person's name goes into the sheet's markup, so it
+   is escaped there. */
+reg('aprSettle', (who,total,ids)=>{
   const a=state.apr;
   if(a.busy) return;
   const list=String(ids||'').split(',').map(Number).filter(Boolean);
@@ -14267,33 +14288,37 @@ reg('aprSettle', async (who,total,ids)=>{
   // §269: a negative total is a refund the employee is handing back.
   const owes=Number(total)<0;
   const abs=String(Math.abs(Number(total)));
-  if(owes&&typeof askConfirm==='function'){
-    if(!(await askConfirm({
-      title:T('Recovered ¥'+abs+'?','已收回 ¥'+abs+'？'),
-      body:escAttr(who||''),
-      confirmLabel:T('Mark recovered','标记已收回'),
-    }))) return;
-  } else if(typeof askConfirm==='function'){
-    if(!(await askConfirm({
-      title:T('Paid ¥'+total+' back?','已付款 ¥'+total+'？'),
-      body:T('This records that '+(who||'they')+' has been paid back. It does not change the accounts — the expense was recorded when it was approved.',
-             '记录已向'+(who||'该员工')+'付款。不会改动账目 — 该费用在审批通过时已记入。'),
-      confirmLabel:T('Mark paid','标记已付'),
-    }))) return;
-  }
-  a.busy=-1; render();
+  // The desktop's fallback when a claim carries no name, and its pair.
+  const person=escAttr(who||T('Someone','未知'));
+  const run=()=>aprSettleRun(list,owes);
+  state.ask = owes
+    ? {title:T('Recovered ¥'+abs+'?','已收回 ¥'+abs+'？'),
+       body:person,
+       confirmLabel:T('Mark recovered','标记已收回'), run}
+    : {title:T('Paid ¥'+total+' back?','已付款 ¥'+total+'？'),
+       body:T('This records that '+person+' has been paid back. It does not change the accounts — the expense was recorded when it was approved.',
+              '记录已向'+person+'付款。不会改动账目 — 该费用在审批通过时已记入。'),
+       confirmLabel:T('Mark paid','标记已付'), run};
+  render();
+});
+async function aprSettleRun(list,owes){
+  const a=state.apr;
+  if(a.busy) return;
+  a.busy=-1; a.err=''; render();
   try{
     // Sequential rather than parallel: four writes racing on one connection is
     // how a phone on a shop's wifi ends with two of them applied.
     for(const id of list) await apiWrite('/staff-expenses/'+id+'/settle',{settled:true});
     a.busy=0; a.tried=false; aprLoad();
-    if(window.toast) toast(owes?T('Recovered','已收回'):T('Marked paid','已标记付款'));
+    // showToast, the phone's own: `window.toast` is the desktop's and is never
+    // defined here, so the old line confirmed nothing.
+    showToast(owes?T('Recovered','已收回'):T('Marked paid','已标记付款'));
   }catch(e){
     a.busy=0;
     if(String(e.message)==='auth') return;
     a.err=e.message||E('Could not do that.','操作失败。'); render();
   }
-});
+}
 
 /* §146 — WHERE THE CLAIM IS FILED, ON THE ROW BEING DECIDED.
 
@@ -14663,6 +14688,11 @@ function expStatusPill(r){
   }
   if(r.status==='rejected')
     return `<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Not approved','已拒绝')}</span>`;
+  /* §300, as finAprPill (22-finance.js) has it since §90: a voided claim was
+     approved and later reversed, which is not the same fact as refused, so it
+     wears the NEUTRAL pill rather than Brick — and never "Waiting", which is
+     what it read here before: a finished claim shown as one still to decide. */
+  if(r.status==='voided') return pill('voided',T('Voided','已作废'));
   return `<span class="pill" style="background:var(--amber-tint);color:var(--amber-ink)">${T('Waiting','待审批')}</span>`;
 }
 
@@ -22527,11 +22557,30 @@ const ROUTE_CAP={
 };
 /* Fail-OPEN on null, exactly as the desktop's can()/canAny(): caps are null only
    on a resolution hiccup or a stale session, and an operator locked out of their
-   own app by a hiccup is worse than one shown a row they cannot use. */
+   own app by a hiccup is worse than one shown a row they cannot use.
+
+   EXCEPT FOR THE KEYS BELOW, which fail CLOSED (§300). Each is a key whose
+   WHOLE JOB is money — it reveals a figure (`money:'shows'` in
+   lib/capabilities.js) or moves one (`'moves'`) and does nothing else: the
+   finance ledger and its writes, the four `:costs` keys, the supplier-invoice
+   screen, the revenue reports. For those the argument above inverts, the one
+   wstShowMoney() makes for waste: a figure missing for one render comes back
+   when the caps do; a figure shown to somebody who may not read it cannot be
+   taken back.
+
+   DELIBERATELY NOT every money-marked key. `customers:view`, `purchasing:view`,
+   `purchasing:edit`, `invoices:view`, `till:use`, `expenses:approve`,
+   `customers:adjust`… carry a marker too, but each opens a whole working
+   screen or tool where the money is incidental, the phone already gates on
+   them, and failing those closed would lock a warehouse or a counter out of
+   its job on a hiccup — the regression the paragraph above exists to prevent.
+   Keys not listed behave exactly as before. */
+const MCAN_MONEY_ONLY=new Set(['finance:view','finance:record','recipes:costs','materials:costs',
+  'products:costs','waste:costs','purchasing:invoices','reports:view']);
 function mCan(v){
-  if(!state.caps) return true;
   if(v===undefined) return true;
-  return Array.isArray(v) ? v.some(k=>state.caps.indexOf(k)!==-1) : state.caps.indexOf(v)!==-1;
+  const has=k=>state.caps ? state.caps.indexOf(k)!==-1 : !MCAN_MONEY_ONLY.has(k);
+  return Array.isArray(v) ? v.some(has) : has(v);
 }
 function canRoute(k){
   /* THE TILL NEEDS BOTH CAPS, and it is the only route that does. Receiving's
