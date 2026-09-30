@@ -70,7 +70,11 @@ it('eight groups, each with a heading in both languages', () => {
   }
 });
 
-/* TWENTY-SEVEN SINCE 2026-09-30, for the same one reason: `finance` (§300 F1,
+/* TWENTY-EIGHT SINCE 2026-09-30 (later the same day), for the same one
+   reason: `materials` (§300 R5, the desktop's Materials screen on the phone)
+   joins Making things beside Recipes, behind the same production switch. A row
+   ADDED, gated on `materials:view`.
+   Twenty-seven from 2026-09-30, for the same one reason: `finance` (§300 F1,
    the desktop's Finance summary, read-only on the phone) joins Money and
    numbers beside Sales and Trend. A row ADDED, gated on `finance:view`.
    Twenty-six from 2026-09-28, for the same one reason: `supowed` (§286, the
@@ -90,15 +94,15 @@ it('eight groups, each with a heading in both languages', () => {
    or not at all. */
 it('the same rows came out as went in — a regroup is a move, not an edit', () => {
   const keys = groups().flatMap((g) => g.keys);
-  assert.strictEqual(keys.length, 27, `expected 27 Operations rows, found ${keys.length}`);
-  assert.strictEqual(new Set(keys).size, 27, 'a row key appears in two groups');
+  assert.strictEqual(keys.length, 28, `expected 28 Operations rows, found ${keys.length}`);
+  assert.strictEqual(new Set(keys).size, 28, 'a row key appears in two groups');
   /* Named in full rather than counted, so a row SWAPPED for another still
      fails. A count alone would pass a rename of the set. */
   const expected = ['neworder', 'till', 'sales', 'trend', 'finance', 'invoices', 'pick', 'delivery',
     'purchasing', 'supowed', 'receiving', 'receivexfer', 'stockapp', 'kitchenqueue', 'logbatch',
     'askkitchen', 'askstock', 'askstocksent', 'askbuy', 'kitchenready', 'askbuysent',
     'waste', 'expense',
-    'approvals', 'inbox', 'channelsync', 'recipes'];
+    'approvals', 'inbox', 'channelsync', 'recipes', 'materials'];
   assert.deepStrictEqual([...keys].sort(), [...expected].sort(),
     'the set of Operations rows changed, not just their grouping');
 });
