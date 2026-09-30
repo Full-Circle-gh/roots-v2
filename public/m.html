@@ -1349,6 +1349,10 @@ const state = {
        kinds:null,cats:null,catsByKind:{},finCats:null,sups:null,pickTried:false,
        openId:null,isNew:false,rec:null,recTried:false,recErr:null,ed:null,busy:null,actErr:null,supErr:null,
        skuRule:null,skuHint:'',skuNote:''},
+  /* A product's Cost & Pricing (§300 R6): the build list in hand, its recipe
+     bridge, the picker, the recipe's warnings and the link picker. */
+  pc:{pid:null,lines:null,recipe:null,tried:false,err:null,seq:0,dirty:false,busy:false,saveErr:null,
+      q:'',pick:null,matched:0,pickErr:null,pickSeq:0,health:null,healthSeq:0,actBusy:null,actErr:null,link:null,stale:false},
   wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
        range:'week',reason:'',store:'',reasons:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
@@ -1485,6 +1489,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      record is read fresh every time. */
   if(route==='materials'){ const m=state.mat; m.q=''; m.kind=''; m.cat=''; m.sup=''; m.arch=false; m.source='bought'; m.tried=false; }
   if(route==='materialone'){ const m=state.mat; m.rec=null; m.recTried=false; m.recErr=null; m.actErr=null; m.supErr=null; m.ed=null; m.isNew=false; m.busy=null; }
+  /* A product's Cost & Pricing is read fresh every time it is opened (§300 R6). */
+  if(route==='productcost') pcFresh();
   if(route==='recipes'){ const r=state.rcp; r.q=''; r.type=''; r.cat=''; r.arch=false; }
   /* A RECORD IS RE-READ EVERY TIME. Recipes are written on desktop, so the
      copy in hand may be an hour old and the person holding the phone is about
@@ -1530,9 +1536,10 @@ function pop(){
      be saved (§300 R2, rcpMayLeave). */
   if(top==='recipeone'&&!rcpMayLeave()) return;
   if(top==='materialone'&&!matMayLeave()) return;
+  if(top==='productcost'&&!pcMayLeave()) return;
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
-  forgetScroll(); state.stack.pop(); render(); }
+  forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
 /* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
@@ -1799,6 +1806,8 @@ reg('rqSearch', v=>{
  ['mRcpPickQ','mRcpPickClr','rcpPickQ'],
  ['mRcpMzQ','mRcpMzClr','rcpMzQ'],
  ['mMatQ','mMatClr','matSearch'],
+ ['mPcQ','mPcClr','pcPickQ'],
+ ['mPcLinkQ','mPcLinkClr','pcLinkQ'],
  ['mExpQ','mExpClr','expQ'],
  ['mRcvQ','mRcvClr','rcvQuery'],
  ['mRcvToQ','mRcvToClr','rcvToQuery'],
@@ -17940,6 +17949,701 @@ function matArchiveRun(row, restoring){
   }).catch(e=>{ m.busy=null; if(String(e.message)==='auth') return;
     m.actErr=T('Failed','操作失败')+': '+(e.message||''); render(); });
 }
+/* ==========================================================================
+   A product's Cost & Pricing (§300 step R6)
+   --------------------------------------------------------------------------
+   The desktop product editor's tab of that name, on a phone: where the
+   product's cost comes from (09-products.js pdApplyCostSource), the recipe it
+   is linked to — Link, Change, Unlink (pdRecipeLinkOpen, pdRecipeUnlink) —
+   and what that recipe is warning about (pdRecipeHealthPaint), then the build
+   list, the product's own list of what one unit is made of
+   (21-product-build.js): the lines, the recipe bridge, the material picker,
+   quantity and unit, remove, and Save.
+
+   A SCREEN, NOT MORE SHEET. The product sheet is a quick edit; this has a
+   search, inputs per line and a save of its own. It opens from the sheet's
+   "Cost & Pricing" row and, on Back, hands the operator back to that sheet.
+
+   THE GATES ARE THE DESKTOP'S, AND MONEY FAILS CLOSED:
+     • the whole cost block — the figure, where it comes from, the recipe link
+       and its warnings — needs products:costs (paShowMoney: the desktop hides
+       that one .field, all five parts together), and no board that never
+       sees money (recapNoMoney);
+     • a line's rate and cost are a MATERIAL's price, so they also need
+       materials:costs, the key the phone's Materials screen shows prices on;
+     • a recipe's cost in the link picker needs recipes:costs;
+     • writing needs products:edit (PUT build-lines, PUT recipe-link — both
+       products:edit in lib/cap-routes.js), and Unlink needs products:delete,
+       because DELETE /products/:id/recipe-link is mapped to it there: a
+       button the server refuses is not offered.
+   The server sends material costs on /build-lines to anyone who may read the
+   product; this screen decides what is DRAWN, and draws nothing it may not.
+
+   IT NEVER WRITES A COST. The build list is saved and the server's recompute
+   writes unit_cost (routes/retail-product-build.js); linking hands the cost to
+   the recipe cascade. Exactly the desktop's discipline — a third writer on
+   the column is what §31's addendum forbids.
+   ========================================================================== */
+const PC_UNITS=['g','ml','pcs','bag','bottle','box'];
+function pcMoney(){ return mCan('products:costs')&&!recapNoMoney(); }
+function pcLineMoney(){ return pcMoney()&&mCan('materials:costs'); }
+function pcRecipeMoney(){ return mCan('recipes:costs')&&!recapNoMoney(); }
+function pcCanEdit(){ return mCan('products:edit'); }
+/* Link and Change: the write is products:edit, and the desktop only ever
+   offers them inside the cost block, with Production on. */
+function pcCanLink(){ return pcCanEdit()&&pcMoney()&&featOn('production'); }
+function pcCanUnlink(){ return mCan('products:delete')&&pcMoney(); }
+const pcName=x=>x?String(LANG==='en'?(x.name_en||x.name_cn||''):(x.name_cn||x.name_en||'')):'';
+const pcOther=x=>{ if(!x) return ''; const o=LANG==='en'?x.name_cn:x.name_en; return o&&o!==pcName(x)?String(o):''; };
+const pcUnitMoney=n=>{ const v=Math.abs(Number(n)||0);
+  if(v===0||v>=0.1) return money(CUR,n);
+  const p=v>=0.01?4:5; return (CUR||'¥')+Number(n).toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p}); };
+function pcFresh(){
+  const c=state.pc;
+  c.lines=null; c.recipe=null; c.tried=false; c.err=null; c.seq=(c.seq||0)+1; c.dirty=false; c.busy=false; c.saveErr=null;
+  c.q=''; c.pick=null; c.matched=0; c.pickErr=null; c.pickSeq=(c.pickSeq||0)+1;
+  c.health=null; c.healthSeq=(c.healthSeq||0)+1; c.actBusy=null; c.actErr=null; c.link=null; c.stale=false;
+}
+function pcProduct(){ const id=state.pc.pid; return id==null?null:((DB.products||[]).find(x=>String(x._id)===String(id))||null); }
+/* The desktop's _pdRecipeOwnsCost: a recipe is named AND Production is on. */
+function pcRecipeOwns(p){ return !!(p&&p.recipeId!=null&&featOn('production')); }
+function pcGroupOf(l){ return l&&l.material_item_kind==='packaging'?'packaging':'materials'; }
+function pcHasContents(){ return (state.pc.lines||[]).some(l=>pcGroupOf(l)!=='packaging'); }
+
+/* ── The product's net weight as a first line's quantity (blNetWeight) ───── */
+function pcNetWeight(p){
+  const raw=String((p&&p.size)||'').trim();
+  if(!raw||raw.indexOf('/')>=0||/[[\]]|填写/.test(raw)) return null;
+  const m=/^([0-9]+(?:\.[0-9]+)?)\s*(kg|g|克|公斤|ml|毫升|l|升)$/i.exec(raw);
+  if(!m) return null;
+  const n=parseFloat(m[1]); if(!(n>0)) return null;
+  const u=m[2].toLowerCase();
+  if(u==='kg'||u==='公斤') return {qty:n*1000,unit:'g',raw};
+  if(u==='l'||u==='升') return {qty:n*1000,unit:'ml',raw};
+  if(u==='ml'||u==='毫升') return {qty:n,unit:'ml',raw};
+  return {qty:n,unit:'g',raw};
+}
+/* Only the FIRST contents line, only in the unit the weight is stated in —
+   blSuggestQty's three refusals, for its reasons. */
+function pcSuggestQty(p, mat){
+  if((mat.item_kind||'food')==='packaging') return null;
+  if(pcHasContents()) return null;
+  const w=pcNetWeight(p); if(!w) return null;
+  if((mat.unit||'g')!==w.unit) return null;
+  return w;
+}
+/* ── The arithmetic (blLineCost / blTotals, lib/product-build-cost.js's rule)
+   free_by_design is a real zero; an absent cost is null, never 0, and one null
+   line blocks the whole list — a partial sum is never shown. */
+function pcLineCost(l){
+  if(l.material_free_by_design) return 0;
+  const cpu=Number(l.material_cost_per_unit)||0;
+  if(!(cpu>0)) return null;
+  return (Number(l.qty)||0)*cpu;
+}
+function pcTotals(){
+  const out={materials:0,packaging:0,total:0,blocked:false,blockedNames:[],packagingOnly:false};
+  const lines=state.pc.lines||[];
+  for(const l of lines){
+    const c=pcLineCost(l);
+    if(c===null){ out.blocked=true; out.blockedNames.push(pcName(l)); continue; }
+    out[pcGroupOf(l)]+=c; out.total+=c;
+  }
+  if(lines.length&&!lines.some(l=>pcGroupOf(l)!=='packaging')){ out.blocked=true; out.packagingOnly=true; }
+  return out;
+}
+
+/* ── Reading ───────────────────────────────────────────────────────────────
+   A FAILED READ IS NOT AN EMPTY LIST. The desktop falls back to [] on a failed
+   load, which paints "nothing yet" over a product that has lines — and a Save
+   from there would write the empty list over them. Here it says it could not
+   load, offers the read again, and no editing is drawn until one lands. */
+function pcLoad(){
+  const c=state.pc, pid=c.pid; if(pid==null) return;
+  const seq=++c.seq; c.tried=true; c.err=null;
+  api('/api/retail-admin/products/'+Number(pid)+'/build-lines').then(d=>{
+    if(seq!==c.seq) return;
+    const x=d||{};
+    c.lines=Array.isArray(x.lines)?x.lines.map(l=>Object.assign({},l)):[];
+    c.recipe=x.recipe||null; c.dirty=false; c.saveErr=null;
+    render(); pcHealthLoad();
+  }).catch(e=>{
+    if(seq!==c.seq||String(e.message)==='auth') return;
+    c.lines=null; c.err=E('Could not load this.','无法加载。'); render();
+  });
+}
+/* The recipe's warnings, fetched and never carried on the row — the fix
+   happens on the other screen. Only where the desktop asks: a recipe owns the
+   cost, it is not a bundle, and the cost block is drawn at all. */
+function pcHealthLoad(){
+  const c=state.pc, p=pcProduct();
+  const seq=++c.healthSeq; c.health=null;
+  if(!p||!pcMoney()||!pcRecipeOwns(p)||p.parts) return;
+  api('/api/retail-admin/products/'+Number(p._id)+'/recipe-health').then(d=>{
+    if(seq!==c.healthSeq) return; c.health=d||null; render();
+  }).catch(e=>{ if(seq!==c.healthSeq||String(e.message)==='auth') return; c.health='err'; render(); });
+}
+
+/* ── Drawing ───────────────────────────────────────────────────────────── */
+const pcWarn=t=>`<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);font-size:13.5px;line-height:1.5">
+  <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',16)}</span><span style="flex:1;min-width:0">${t}</span></div>`;
+const pcErr=t=>`<div style="padding:12px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px;line-height:1.5">${t}</div>`;
+/* The four pills, worded exactly as pdRecipeHealthPaint words them — which is
+   the recipe screen's own wording, so the sentence met here is the one met
+   there. UNIT MISMATCH · 单位不符 and its sentence are locked
+   (docs/tacet-delivery-vocabulary.md) and copied. */
+function pcHealthHtml(){
+  const h=state.pc.health;
+  if(h==='err') return `<div style="font-size:13.5px;color:var(--text-secondary)">${T('Couldn’t load the recipe','无法加载配方')}</div>`;
+  if(!h) return '';
+  const pills=[];
+  if(!h.recipe_active) pills.push(pcWarn(escAttr(T('This recipe is archived — frozen at its last computed value.','该配方已归档。已冻结为最近一次计算的值。'))));
+  const n=Number(h.missing)||0;
+  if(n>0) pills.push(pcWarn(escAttr(T(n+' ingredient'+(n===1?'':'s')+' missing cost — costs shown are too low', n+' 项原料缺少成本 — 显示成本偏低'))));
+  const um=Number(h.unreconciled)||0;
+  if(um>0){
+    const tail=` — ${um} ingredient${um===1?'':'s'} in this recipe ${um===1?'is':'are'} counted in a unit the material is not stocked in, `
+      +`so ${um===1?'its':'their'} cost is left out. The cost shown is incomplete.`;
+    const tailCn=` —— 本配方中有 ${um} 项原料所用单位与物料的库存单位计量的不是同一类量,其成本不计入。显示成本不完整。`;
+    pills.push(pcWarn(`<b style="font-weight:600">${T('UNIT MISMATCH','单位不符')}</b>${escAttr(T(tail,tailCn))}`));
+  }
+  const cps=Number(h.cost_per_serving);
+  if(h.cost_per_serving==null||!Number.isFinite(cps)||cps<=0)
+    pills.push(pcWarn(escAttr(T('This recipe has no cost yet — it needs servings, a batch size, and a price on every ingredient.','该配方暂无成本 —— 需要填写份数、批量大小，并为每项原料填写价格。'))));
+  return pills.join('');
+}
+/* The recipe's name, and the way into it where the recipe screen may open. */
+function pcRecipeName(p){
+  const nm=p.recipeName?T(p.recipeName[0],p.recipeName[1]):'';
+  return nm||(T('Recipe','配方')+' #'+p.recipeId);
+}
+function pcRecipeLinkHtml(p){
+  const nm=escAttr(pcRecipeName(p));
+  return (canRoute('recipeone')&&featOn('production'))
+    ? `<button onclick="APP.cmd('pcOpenRecipe',${Number(p.recipeId)})" style="background:none;border:none;padding:0;font:inherit;font-size:15px;font-weight:500;color:var(--accent);cursor:pointer;text-align:left">${nm}</button>`
+    : `<span style="font-size:15px;font-weight:500">${nm}</span>`;
+}
+function pcLinkActs(){
+  const c=state.pc, busy=!!c.actBusy, acts=[];
+  if(pcCanLink()) acts.push(`<button class="btn2" style="min-height:38px;padding:0 14px" ${busy?'disabled':''} onclick="APP.cmd('pcLinkOpen')">${T('Change','更换')}</button>`);
+  if(pcCanUnlink()) acts.push(`<button class="btn2" style="min-height:38px;padding:0 14px;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('pcUnlinkAsk')">${c.actBusy==='unlink'?T('Saving…','保存中…'):T('Unlink','取消关联')}</button>`);
+  return acts.length?`<div style="display:flex;gap:8px;flex-wrap:wrap">${acts.join('')}</div>`:'';
+}
+/* WHERE THE FIGURE COMES FROM, in pdApplyCostSource's order: a bundle
+   outranks the build list, which outranks the recipe. The recipe link
+   survives a build list and stays reachable — it still carries allergens. */
+function pcSourceHtml(p){
+  if(!pcMoney()) return '';
+  const c=state.pc;
+  const cost=(p.unitCost!=null&&Number.isFinite(Number(p.unitCost)))?money(CUR,Number(p.unitCost)):'';
+  const hasBuild=!!(c.lines&&c.lines.length);
+  const owns=pcRecipeOwns(p);
+  const linkBtn=(pcCanLink()&&p._id!=null)
+    ? `<div><button class="btn2" style="min-height:38px;padding:0 14px" ${c.actBusy?'disabled':''} onclick="APP.cmd('pcLinkOpen')">${T('Link a recipe','关联配方')}</button></div>` : '';
+  let src='';
+  if(p.parts){
+    src=`<div style="font-size:13.5px;color:var(--text-secondary)">${cost
+      ? T('Added up from what’s inside','由套装内商品成本合计得出')
+      : T('Added up from what’s inside — blank until every product inside has a cost','由套装内商品成本合计得出 — 内含商品成本齐全后显示')}</div>`;
+  } else if(hasBuild){
+    src=(owns&&p.recipeId!=null)
+      ? `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;color:var(--text-secondary)">${T('Recipe','配方')}</span>${pcRecipeLinkHtml(p)}</div>${pcLinkActs()}`
+      : linkBtn;
+  } else if(owns){
+    src=`<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;color:var(--text-secondary)">${T('From recipe','来自配方')}</span>${pcRecipeLinkHtml(p)}</div>${pcLinkActs()}`;
+  } else {
+    src=linkBtn;
+  }
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+      <span class="eyebrow">${T('Cost','成本')}</span><span class="num" style="font-size:17px;font-weight:500">${cost||'—'}</span></div>
+    ${src}
+    ${(owns&&!p.parts)?pcHealthHtml():''}
+    ${c.actErr?pcErr(escAttr(c.actErr)):''}
+  </div>`;
+}
+/* One line. The quantity and the unit are the operator's; the rate and the
+   line's cost are drawn only with money for materials. */
+function pcLineHtml(l, i, edit){
+  const lm=pcLineMoney();
+  const cost=pcLineCost(l);
+  const deleted=l.ingredient_id==null||!l.material_is_active;
+  let per='';
+  if(lm){
+    if(l.material_free_by_design) per=escAttr(T('free','免费'));
+    else if(Number(l.material_cost_per_unit)>0) per=escAttr(pcUnitMoney(l.material_cost_per_unit)+'/'+(l.material_unit||l.unit||''));
+    else per=`<span style="color:var(--amber-ink)">${T('no cost','无成本')}</span>`;
+  }
+  const sub=[pcOther(l)?escAttr(pcOther(l)):'', per].filter(Boolean).join(' · ');
+  const unitOpts=u=>PC_UNITS.concat(u&&PC_UNITS.indexOf(u)===-1?[u]:[]).map(x=>
+    `<option value="${escAttr(x)}"${x===u?' selected':''}>${escAttr(x)}</option>`).join('');
+  const kept=pcGroupOf(l)==='materials'
+    ? (edit
+      ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span style="font-size:13.5px;color:var(--text-secondary)">${T('Not counted as waste if it expires or spoils','过期或变质报废时不计损耗')}</span>
+          ${toggle(!!l.packed_separately,`APP.cmd('pcKept',${i})`)}</div>`
+      : (l.packed_separately?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('Not counted as waste if it expires or spoils','过期或变质报废时不计损耗')}</span>`:''))
+    : '';
+  return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:flex-start;gap:8px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding-top:4px">
+        <span style="font-size:15px;font-weight:500">${escAttr(pcName(l))}</span>
+        ${sub?`<span style="font-size:12.5px;color:var(--text-secondary)">${sub}</span>`:''}
+        ${deleted?`<span style="font-size:12.5px;color:var(--amber-ink)">${T('material deleted','物料已删除')}</span>`:''}
+        ${l.qty_from_weight?`<span id="mPcW-${i}" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(T('from the product’s net weight ('+l.qty_from_weight+')','取自产品净重('+l.qty_from_weight+')'))}</span>`:''}
+      </span>
+      ${lm?`<span id="mPcLc-${i}" class="num" style="flex:none;font-size:15px;padding-top:4px">${cost===null?'—':escAttr(money(CUR,cost))}</span>`:''}
+      ${edit?`<button class="iconbtn" style="width:38px;height:38px;color:var(--brick-ink)" aria-label="${T('Remove','移除')}" onclick="APP.cmd('pcRm',${i})">${ic('x',18)}</button>`:''}
+    </div>
+    ${edit
+      ? `<div style="display:flex;gap:8px">
+          <input id="mPcQty-${i}" inputmode="decimal" value="${escAttr(l.qty)}" placeholder="${T('qty','数量')}" aria-label="${T('qty','数量')}" style="flex:1;min-width:0" oninput="APP.cmd('pcQty',${i},this.value)">
+          <select aria-label="${T('Unit','单位')}" style="width:112px;flex:none" onchange="APP.cmd('pcUnit',${i},this.value)">${unitOpts(l.unit||'g')}</select></div>`
+      : `<span class="num" style="font-size:14px;color:var(--text-secondary)">${escAttr(String(l.qty))} ${escAttr(l.unit||'')}</span>`}
+    ${kept}
+  </div>`;
+}
+/* The recipe bridge (blRenderBridge): a cooked product's contents arrive as
+   the material its recipe makes. Three states, three different actions; said
+   only while the list has no contents yet, and never for a material already
+   on it. */
+function pcBridgeHtml(edit){
+  const c=state.pc, r=c.recipe;
+  if(!r||r.state==='none'||!c.lines) return '';
+  const matId=r.material&&r.material.id;
+  if(matId!=null&&c.lines.some(l=>l.ingredient_id===matId)) return '';
+  if(pcHasContents()) return '';
+  if(r.state==='ready'||r.state==='repack'){
+    if(!edit||!r.material) return '';
+    const m=r.material;
+    const qty=(r.state==='repack'&&r.qty!=null)?`<span class="num">${escAttr(r.qty+' '+(r.qty_unit||'g'))}</span> · `:'';
+    return `<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:15px;font-weight:500">${escAttr(pcName(m)||(T('Recipe','配方')+' #'+r.recipe_id))}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary)">${qty}${T('from recipe','配方自制')}</span></span>
+      <button class="btn2" style="flex:none;min-height:38px;padding:0 14px" onclick="APP.cmd('pcAddRecipeMat')">${T('Add','添加')}</button></div>`;
+  }
+  const open=(canRoute('recipeone')&&featOn('production'))
+    ? `<button class="btn2" style="flex:none;min-height:38px;padding:0 14px" onclick="APP.cmd('pcOpenRecipe',${Number(r.recipe_id)})">${T('Open recipe','打开配方')}</button>` : '';
+  return `<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:15px;font-weight:500">${escAttr(pcName(r)||(T('Recipe','配方')+' #'+r.recipe_id))}</span>
+      <span style="font-size:12.5px;color:var(--amber-ink)">${T('Not available as a material yet','尚未设为可用物料')}</span></span>
+    ${open}</div>`;
+}
+/* The picker's answer. The build list's OWN endpoint — ranked by use, and
+   packaging included (never for_recipe=1: the jar belongs on this list). */
+function pcPickHtml(){
+  const c=state.pc;
+  if(!String(c.q||'').trim()) return '';
+  if(c.pickErr) return `<div style="padding:12px 4px;font-size:14px;color:var(--brick-ink)">${c.pickErr}</div>`;
+  if(c.pick===null) return `<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('Searching…','搜索中…')}</div>`;
+  if(!c.pick.length) return `<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('No materials match','没有匹配的物料')}</div>`;
+  const shown=c.pick.slice(0,8), lm=pcLineMoney();
+  const rate=m=>!lm?'':(m.free_by_design?T('free','免费')
+    :(Number(m.cost_per_unit)>0?escAttr(pcUnitMoney(m.cost_per_unit)+'/'+(m.unit||'')):T('no cost','无成本')));
+  return `${c.matched>shown.length?`<div class="num" style="padding:0 4px 6px;font-size:12.5px;color:var(--text-secondary)">${shown.length} / ${Number(c.matched)}</div>`:''}
+    <div class="list">${shown.map((m,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('pcPickAdd',${Number(m.id)})" style="min-height:52px;align-items:center">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px">${escAttr(pcName(m))}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary)">${[
+          m.item_kind==='packaging'?T('Packaging','包装'):'',
+          m.source_recipe_id!=null?T('from recipe','配方自制'):'',
+          pcOther(m)?escAttr(pcOther(m)):''].filter(Boolean).join(' · ')}</span></span>
+      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${rate(m)}</span></button>`).join('')}</div>`;
+}
+/* The figures: materials, packaging, cost, price, margin — blRenderRail. A
+   blocked list shows a dash and names the line, never a partial sum. */
+function pcRailHtml(p){
+  if(!pcMoney()) return '';
+  const c=state.pc, lines=c.lines||[], t=pcTotals();
+  const price=Number(p.priceNum);
+  const row=(k,v,id)=>`<div style="display:flex;justify-content:space-between;gap:12px;font-size:14.5px">
+    <span style="color:var(--text-secondary)">${k}</span><span class="num"${id?` id="${id}"`:''}>${v}</span></div>`;
+  let h='';
+  if(lines.length){
+    h+=row(T('Materials','物料'), escAttr(money(CUR,t.materials)), 'mPcSubM');
+    if(lines.some(l=>pcGroupOf(l)==='packaging')) h+=row(T('Packaging','包装'), escAttr(money(CUR,t.packaging)), 'mPcSubP');
+  }
+  h+=row(T('Cost','成本'), (!lines.length||t.blocked)?'—':escAttr(money(CUR,t.total)), 'mPcTot');
+  h+=row(T('Price','价格'), price>0?escAttr(money(CUR,price)):'—');
+  const can=lines.length&&!t.blocked&&price>0;
+  const pct=can?((price-t.total)/price)*100:null;
+  h+=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding-top:4px;border-top:1px solid var(--border-default)">
+    <span style="font-size:15px;font-weight:500">${T('Margin','毛利')}</span>
+    <span id="mPcMargin" class="num" style="font-size:20px;font-weight:500;${pct!=null&&pct<0?'color:var(--brick-ink)':''}">${pct==null?'—':pct.toFixed(1)+'%'}</span></div>`;
+  let note='';
+  if(lines.length&&t.packagingOnly){
+    note=T('Every line here is packaging. Nothing is recorded as the contents, so this product has no cost yet. Add what goes inside and the margin appears.',
+           '这里每一行都是包装,没有记录内容,因此本产品暂无成本。添加内容后即显示毛利。');
+  } else if(lines.length&&t.blocked){
+    const names=t.blockedNames.filter(Boolean), first=names[0]||'';
+    note=names.length>1
+      ? T(`“${first}” and ${names.length-1} more have no unit cost.`, `“${first}”等 ${names.length} 项没有单位成本。`)
+      : T(`“${first}” has no unit cost.`, `“${first}”没有单位成本。`);
+  }
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">${h}
+    <div id="mPcNote" style="font-size:13px;line-height:1.5;color:var(--amber-ink);${note?'':'display:none'}">${escAttr(note)}</div></div>`;
+}
+function screenProductCost(){
+  const c=state.pc;
+  const f=state.stack[state.stack.length-1];
+  /* A second product opened over the first (a recipe's product, reached from
+     its own recipe) replaces what is in hand; coming back down to the first
+     reads it again. */
+  if(f&&f.route==='productcost'&&f.pid!=null&&String(f.pid)!==String(c.pid)){ c.pid=f.pid; pcFresh(); }
+  const p=pcProduct();
+  if(!p) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!c.tried||(c.stale&&!c.dirty&&!c.busy)){ c.stale=false; pcLoad(); }
+  const edit=pcCanEdit()&&Array.isArray(c.lines);
+  let list;
+  if(c.err&&!c.lines) list=`<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">${pcErr(`${c.err}`)}
+      <button class="btn2" onclick="APP.cmd('pcRetry')">${T('Try again','重试')}</button></div>`;
+  else if(!c.lines) list=`<div style="padding:18px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else {
+    const groups=[['materials',T('Materials','物料')],['packaging',T('Packaging','包装')]];
+    list=c.lines.length
+      ? groups.map(([g,label])=>{
+          const rows=c.lines.map((l,i)=>[l,i]).filter(([l])=>pcGroupOf(l)===g);
+          return rows.length?`<div class="eyebrow" style="padding:4px 4px 0">${label}</div>${rows.map(([l,i])=>pcLineHtml(l,i,edit)).join('')}`:'';
+        }).join('')
+      : `<div style="padding:18px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No materials yet','暂无物料')}</div>`;
+    list+=pcBridgeHtml(edit);
+    if(edit) list+=`<div style="position:relative">
+      <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+      ${searchBox(`<input id="mPcQ" inputmode="search" value="${escAttr(c.q)}" style="padding-left:42px;width:100%"
+        placeholder="${T('Search materials to add…','搜索要添加的物料…')}" oninput="APP.cmd('pcPickQ',this.value)">`,'mPcClr',!!c.q)}</div>
+      <div id="mPcPick">${pcPickHtml()}</div>`;
+  }
+  const save=edit
+    ? `${c.saveErr?pcErr(`${c.saveErr}`):''}
+       <button id="mPcSave" class="cta" ${(!c.dirty||c.busy)?'disabled':''} onclick="APP.cmd('pcSave')">${c.busy?T('Saving…','保存中…'):T('Save build list','保存')}</button>` : '';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${pcSourceHtml(p)}
+    ${list}
+    ${Array.isArray(c.lines)?pcRailHtml(p):''}
+    ${save}
+  </div>`;
+}
+/* A keystroke moves the money and the Save button, and nothing else: a
+   repaint would take the caret and the keyboard with it. */
+function pcPaint(i){
+  const c=state.pc, p=pcProduct(); if(!p) return;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+  if(i!=null&&pcLineMoney()){ const l=c.lines[i], lc=l?pcLineCost(l):null; set('mPcLc-'+i, lc===null?'—':money(CUR,lc)); }
+  if(i!=null){ const w=document.getElementById('mPcW-'+i); if(w&&c.lines[i]&&!c.lines[i].qty_from_weight) w.style.display='none'; }
+  if(pcMoney()){
+    const t=pcTotals(), price=Number(p.priceNum), n=(c.lines||[]).length;
+    set('mPcSubM', money(CUR,t.materials)); set('mPcSubP', money(CUR,t.packaging));
+    set('mPcTot', (!n||t.blocked)?'—':money(CUR,t.total));
+    const can=n&&!t.blocked&&price>0;
+    set('mPcMargin', can?(((price-t.total)/price)*100).toFixed(1)+'%':'—');
+  }
+  const b=document.getElementById('mPcSave'); if(b) b.disabled=!c.dirty||c.busy;
+}
+SUBS.productcost={title:['Cost & Pricing','成本与定价'],
+  titleOf:()=>{ const p=pcProduct(); return p?escAttr(T(p.name[0],p.name[1])):T('Cost & Pricing','成本与定价'); },
+  status:()=>{ const c=state.pc; if(c.busy||c.actBusy) return T('Saving…','保存中…');
+    return T('Cost & Pricing','成本与定价'); },
+  render:()=>screenProductCost()};
+
+/* ── In and out ────────────────────────────────────────────────────────────
+   The sheet's row opens this screen; Back hands the operator back to the
+   sheet they came from, with anything they had typed there still in it. */
+function pcEntryRow(p){
+  if(!p||p._id==null||!canRoute('productcost')) return '';
+  return `<div class="card" style="padding:0">
+    <button class="row" ${state.prodBusy?'disabled':''} onclick="APP.cmd('pcOpen','${escAttr(p.sku)}')">
+      <span style="flex:1;min-width:0;font-size:15px">${T('Cost & Pricing','成本与定价')}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',20)}</span></button></div>`;
+}
+function pcOpenNow(p){
+  state.productSku=null; state.oosSku=null;
+  state.pc.pid=p._id;
+  push('productcost');
+  const t=state.stack[state.stack.length-1];
+  if(t&&t.route==='productcost'){ t.pid=p._id; t.sku=p.sku; }
+  render();
+}
+reg('pcOpen', sku=>{
+  const p=(DB.products||[]).find(x=>x.sku===sku);
+  if(!p||p._id==null||state.prodBusy||!canRoute('productcost')) return;
+  const c=state.pc;
+  /* A list edited on a screen further down the stack is not dropped silently. */
+  if(c.dirty&&String(c.pid)!==String(p._id)&&state.stack.some(f=>f&&f.route==='productcost')){
+    state.ask={title:T('Leave without saving?','未保存就离开?'), confirmLabel:T('Leave','离开'), danger:true,
+      run:()=>{ c.dirty=false; pcOpenNow(p); }};
+    render(); return;
+  }
+  pcOpenNow(p);
+});
+/* Leaving with an unsaved list asks first (the desktop's "Leave without
+   saving?"). The list is saved by its own button, so there is nothing to put
+   on the wire on the way out — it is kept or it is dropped, and the operator
+   says which. */
+function pcMayLeave(){
+  const c=state.pc; if(!c.dirty) return true;
+  state.ask={title:T('Leave without saving?','未保存就离开?'), confirmLabel:T('Leave','离开'), danger:true,
+    run:()=>{ c.dirty=false; const t=state.stack[state.stack.length-1];
+      if(t&&t.route==='productcost'){ forgetScroll(); pcPopped(state.stack.pop()); } render(); }};
+  render(); return false;
+}
+/* Called with every frame taken off the stack: a Cost & Pricing frame drops
+   what it held and puts its product's sheet back up. */
+function pcPopped(f){
+  if(!f||f.route!=='productcost') return;
+  const c=state.pc; c.dirty=false; c.link=null;
+  if(f.sku&&(DB.products||[]).some(x=>x.sku===f.sku)) state.productSku=f.sku;
+}
+reg('pcRetry', ()=>{ const c=state.pc; c.err=null; c.lines=null; render(); pcLoad(); });
+/* Into the recipe, stacked over this screen, so Back returns here. What the
+   recipe screen changes (made available as a material, a price) is read
+   again on the way back, unless there is typing here to keep. */
+reg('pcOpenRecipe', id=>{
+  if(!(canRoute('recipeone')&&featOn('production'))||!(Number(id)>0)) return;
+  state.pc.stale=true;
+  CMD.rcpOpen(Number(id));
+});
+
+/* ── Editing the list ───────────────────────────────────────────────────── */
+reg('pcQty', (i,v)=>{
+  const c=state.pc, l=c.lines&&c.lines[i]; if(!l||!pcCanEdit()) return;
+  const n=Number(String(v==null?'':v).replace(',','.').trim());
+  l.qty=String(v).trim()===''||!Number.isFinite(n)?0:n;
+  /* The net-weight note is true only until the number is typed over. */
+  l.qty_from_weight=null;
+  c.dirty=true; c.saveErr=null; pcPaint(i);
+});
+reg('pcUnit', (i,u)=>{ const c=state.pc, l=c.lines&&c.lines[i]; if(!l||!pcCanEdit()) return;
+  l.unit=String(u||'g'); c.dirty=true; c.saveErr=null; render(); });
+reg('pcRm', i=>{ const c=state.pc; if(!c.lines||!c.lines[i]||!pcCanEdit()) return;
+  c.lines.splice(i,1); c.dirty=true; c.saveErr=null; render(); });
+reg('pcKept', i=>{ const c=state.pc, l=c.lines&&c.lines[i]; if(!l||!pcCanEdit()) return;
+  l.packed_separately=!l.packed_separately; c.dirty=true; c.saveErr=null; render(); });
+let pcPickTimer=null;
+reg('pcPickQ', v=>{
+  const c=state.pc; if(!c.lines) return;
+  c.q=String(v||''); state.focus={id:'mPcQ',pos:null};
+  searchClearShow('mPcClr', !!c.q);
+  const paint=()=>{ const a=document.getElementById('mPcPick'); if(a) a.innerHTML=pcPickHtml(); };
+  c.pick=null; c.pickErr=null; c.matched=0; paint();
+  clearTimeout(pcPickTimer);
+  const q=c.q.trim(); if(!q) return;
+  const seq=++c.pickSeq;
+  pcPickTimer=setTimeout(()=>{
+    apiRaw('/api/retail-admin/product-build/materials?search='+encodeURIComponent(q)).then(j=>{
+      if(seq!==c.pickSeq) return;
+      const all=Array.isArray(j&&j.data)?j.data:[];
+      /* Already on the list drops out — the same jar twice doubles its cost. */
+      const chosen=new Set((c.lines||[]).map(l=>l.ingredient_id).filter(x=>x!=null));
+      c.pick=all.filter(m=>!chosen.has(m.id)); c.matched=Number(j&&j.matched)||all.length; paint();
+    }).catch(e=>{ if(seq!==c.pickSeq||String(e.message)==='auth') return;
+      c.pick=[]; c.pickErr=E('Could not load materials','无法加载物料'); paint(); });
+  }, 220);
+});
+/* blPickAdd: zero unless the net weight says what this first contents line
+   holds; one for packaging, which is bought and used one at a time. */
+reg('pcPickAdd', id=>{
+  const c=state.pc, p=pcProduct(); if(!c.lines||!p||!pcCanEdit()) return;
+  const m=(c.pick||[]).find(x=>Number(x.id)===Number(id)); if(!m) return;
+  if(c.lines.some(l=>l.ingredient_id===m.id)) return;
+  const sug=pcSuggestQty(p,m), pack=(m.item_kind||'food')==='packaging';
+  c.lines.push({id:null, ingredient_id:m.id, name_en:m.name_en, name_cn:m.name_cn, sku:m.sku,
+    qty:sug?sug.qty:(pack?1:0), qty_from_weight:sug?sug.raw:null, unit:m.unit||'g', notes:null,
+    material_item_kind:m.item_kind||'food', material_cost_per_unit:m.cost_per_unit, material_buy_price:m.buy_price,
+    material_unit:m.unit, material_free_by_design:m.free_by_design, material_is_active:1});
+  c.q=''; c.pick=null; c.pickSeq++; c.dirty=true; c.saveErr=null;
+  state.focus=null; render();
+});
+/* blAddRecipeMaterial: the ordinary add, with the picking already done. A
+   repack's quantity is the recipe's own; a made material falls back to the
+   product's net weight. */
+reg('pcAddRecipeMat', ()=>{
+  const c=state.pc, r=c.recipe, p=pcProduct();
+  if(!r||(r.state!=='ready'&&r.state!=='repack')||!r.material||!c.lines||!p||!pcCanEdit()) return;
+  const m=r.material;
+  if(c.lines.some(l=>l.ingredient_id===m.id)) return;
+  const repackQty=(r.state==='repack'&&Number(r.qty)>0)?Number(r.qty):null;
+  const sug=repackQty!=null?null:pcSuggestQty(p,m);
+  c.lines.push({id:null, ingredient_id:m.id, name_en:m.name_en, name_cn:m.name_cn, sku:m.sku,
+    qty:repackQty!=null?repackQty:(sug?sug.qty:0), qty_from_weight:sug?sug.raw:null,
+    unit:repackQty!=null?(r.qty_unit||m.unit||'g'):(m.unit||'g'), notes:null,
+    material_item_kind:m.item_kind||'food', material_cost_per_unit:m.cost_per_unit, material_buy_price:null,
+    material_unit:m.unit, material_free_by_design:m.free_by_design, material_is_active:1});
+  c.dirty=true; c.saveErr=null; render();
+});
+/* Save — its own control, as on the desktop: the build list has its own
+   route and its own refusal. A quantity of zero is refused here, before the
+   wire, in the words the server would use. The body is blSave()'s, key for
+   key. */
+reg('pcSave', ()=>{
+  const c=state.pc, p=pcProduct();
+  if(!p||!c.lines||c.busy||!pcCanEdit()) return;
+  const bad=c.lines.find(l=>!(Number(l.qty)>0));
+  if(bad){ const en=bad.name_en||bad.name_cn||'', cn=bad.name_cn||bad.name_en||'';
+    c.saveErr=E(`“${en}” needs a quantity greater than zero.`, `“${cn}”的数量必须大于 0。`); render(); return; }
+  const body={lines:c.lines.map(l=>({ingredient_id:l.ingredient_id, name_en:l.name_en, name_cn:l.name_cn, sku:l.sku,
+    qty:Number(l.qty), unit:l.unit, notes:l.notes||null, packed_separately:!!l.packed_separately}))};
+  const pid=Number(p._id);
+  c.busy=true; c.saveErr=null; render();
+  apiWrite('/api/retail-admin/products/'+pid+'/build-lines', body, 'PUT').then(j=>{
+    c.busy=false; c.dirty=false;
+    const d=j&&j.data;
+    /* The stored figure, where this reader may hold one. */
+    if(d&&pcMoney()&&Object.prototype.hasOwnProperty.call(d,'unit_cost')) p.unitCost=d.unit_cost==null?null:Number(d.unit_cost);
+    showToast(T('Build list saved','已保存'));
+    /* Re-read, so what is on screen is the server's, not this screen's sum. */
+    if(String(state.pc.pid)===String(pid)) pcLoad(); else render();
+  }).catch(e=>{
+    c.busy=false;
+    if(String(e.message)==='auth') return;
+    c.saveErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+  });
+});
+
+/* ── Link / Change — pdRecipeLinkOpen ──────────────────────────────────────
+   Prefilled with the product's own SKU and searched at once: SKU is what
+   identifies the right recipe in nearly every unlinked case, so the match is
+   usually on screen before anything is typed. The recipe already linked is
+   not a candidate. */
+reg('pcLinkOpen', ()=>{
+  const p=pcProduct(), c=state.pc; if(!p||!pcCanLink()||c.actBusy) return;
+  c.link={q:String(p.rawSku||''), results:null, seq:0, sel:null, err:null, sending:false, sendErr:null};
+  push('productrecipe');
+  pcLinkSearch();
+});
+function pcLinkSearch(){
+  const c=state.pc, z=c.link, p=pcProduct(); if(!z||!p) return;
+  const q=String(z.q||'').trim();
+  const seq=++z.seq;
+  if(!q){ z.results=[]; render(); return; }
+  z.results=null; z.err=null;
+  api('/api/retail-admin/recipes?search='+encodeURIComponent(q)).then(rows=>{
+    if(!c.link||seq!==c.link.seq) return;
+    c.link.results=(Array.isArray(rows)?rows:[]).filter(r=>Number(r.id)!==Number(p.recipeId));
+    pcLinkPaint();
+  }).catch(e=>{ if(!c.link||seq!==c.link.seq||String(e.message)==='auth') return;
+    c.link.results=[]; c.link.err=E('Could not load recipes.','无法加载食谱。'); pcLinkPaint(); });
+}
+const pcRecipeUsable=r=>r&&r.costPerServing!=null&&Number.isFinite(Number(r.costPerServing))&&Number(r.costPerServing)>0;
+function pcLinkResultsHtml(){
+  const z=state.pc.link; if(!z||z.sel) return '';
+  if(z.err) return `<div style="padding:12px 4px;font-size:14px;color:var(--brick-ink)">${z.err}</div>`;
+  if(z.results===null) return `<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('Searching…','搜索中…')}</div>`;
+  if(!z.results.length) return String(z.q||'').trim()?`<div style="padding:12px 4px;font-size:14px;color:var(--text-secondary)">${T('No recipe matches that.','没有匹配的配方。')}</div>`:'';
+  const rm=pcRecipeMoney();
+  return `<div class="list">${z.results.slice(0,8).map((r,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('pcLinkPick',${Number(r.id)})" style="min-height:52px;align-items:center">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px">${escAttr(pcName(r))}</span>
+        ${r.sku?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(r.sku)}</span>`:''}</span>
+      ${rm?`<span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${pcRecipeUsable(r)?escAttr(money(CUR,Number(r.costPerServing))):T('no cost yet','暂无成本')}</span>`:''}
+    </button>`).join('')}</div>`;
+}
+function pcLinkSelHtml(){
+  const z=state.pc.link, r=z&&z.sel; if(!r) return '';
+  const rm=pcRecipeMoney(), ok=pcRecipeUsable(r);
+  return `<div style="font-size:14.5px">${T('Selected: ','已选择：')}<b style="font-weight:600">${escAttr(pcName(r))}</b>${
+      rm&&ok?' — '+escAttr(T('cost','成本')+' '+money(CUR,Number(r.costPerServing))):''}</div>
+    ${rm&&!ok?pcWarn(escAttr(T('This recipe has no cost yet — it needs servings, a batch size, and a price on every ingredient. The link is saved either way, and the cost appears as soon as the recipe can be costed.',
+      '该配方暂无成本 —— 需要填写份数、批量大小，并为每项原料填写价格。关联仍会保存，配方可计算成本后即会显示。'))):''}`;
+}
+function screenProductRecipe(){
+  const z=state.pc.link;
+  if(!z) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const why=z.sel?'':T('Pick a recipe to link.','请选择要关联的配方。');
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:14.5px;color:var(--text-secondary);line-height:1.55">${T('The cost of this product is then worked out from the recipe, and updates whenever the recipe does.','关联后，本产品的成本将由该配方计算得出，并随配方更新。')}</div>
+    ${z.sendErr?pcErr(escAttr(z.sendErr)):''}
+    <label><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Search recipes','搜索配方')}</span>
+      ${searchBox(`<input id="mPcLinkQ" inputmode="search" value="${escAttr(z.q)}" style="width:100%"
+        placeholder="${T('Name or SKU…','名称或货号…')}" oninput="APP.cmd('pcLinkQ',this.value)">`,'mPcLinkClr',!!z.q)}</label>
+    <div id="mPcLinkRes">${pcLinkResultsHtml()}</div>
+    <div id="mPcLinkSel" style="display:flex;flex-direction:column;gap:8px">${pcLinkSelHtml()}</div>
+    <div id="mPcLinkWhy" style="font-size:13px;color:var(--amber-ink);${why?'':'display:none'}">${why}</div>
+    <button id="mPcLinkGo" class="cta" ${(!z.sel||z.sending)?'disabled':''} onclick="APP.cmd('pcLinkGo')">${z.sending?T('Saving…','保存中…'):T('Link','关联')}</button>
+  </div>`;
+}
+function pcLinkPaint(){
+  const z=state.pc.link; if(!z) return;
+  const a=document.getElementById('mPcLinkRes'); if(a) a.innerHTML=pcLinkResultsHtml();
+  const s=document.getElementById('mPcLinkSel'); if(s) s.innerHTML=pcLinkSelHtml();
+  const why=z.sel?'':T('Pick a recipe to link.','请选择要关联的配方。');
+  const w=document.getElementById('mPcLinkWhy'); if(w){ w.textContent=why; w.style.display=why?'':'none'; }
+  const b=document.getElementById('mPcLinkGo'); if(b) b.disabled=!z.sel||z.sending;
+}
+SUBS.productrecipe={title:['Link a recipe','关联配方'],
+  backLabel:()=>{ const p=pcProduct(); return p?escAttr(T(p.name[0],p.name[1])):T('Cost & Pricing','成本与定价'); },
+  render:()=>screenProductRecipe()};
+let pcLinkTimer=null;
+reg('pcLinkQ', v=>{
+  const z=state.pc.link; if(!z) return;
+  z.q=String(v||''); z.sel=null; z.sendErr=null; state.focus={id:'mPcLinkQ',pos:null};
+  searchClearShow('mPcLinkClr', !!z.q);
+  z.results=String(z.q).trim()?null:[]; z.err=null; z.seq++; pcLinkPaint();
+  clearTimeout(pcLinkTimer);
+  pcLinkTimer=setTimeout(pcLinkSearch, 220);
+});
+reg('pcLinkPick', id=>{ const z=state.pc.link; if(!z||z.sending) return;
+  z.sel=(z.results||[]).find(r=>Number(r.id)===Number(id))||null;
+  if(z.sel) z.q=pcName(z.sel); state.focus=null; render(); });
+/* Fold a link or unlink answer back into the product in hand
+   (pdRecipeLinkApplied): the returned columns onto the row, then repaint from
+   the row. A cost comes in only where this reader may hold one. */
+function pcLinkApplied(pid, d){
+  if(!d) return;
+  const p=(DB.products||[]).find(x=>String(x._id)===String(pid)); if(!p) return;
+  p.recipeId=d.recipe_id!=null?Number(d.recipe_id):null;
+  const en=d.recipe_name_en||'', cn=d.recipe_name_cn||'';
+  p.recipeName=(en||cn)?[en||cn,cn||en]:null;
+  if(pcMoney()&&Object.prototype.hasOwnProperty.call(d,'unit_cost')) p.unitCost=d.unit_cost==null?null:Number(d.unit_cost);
+  /* The recipe bridge answers from the link, so the list is read again —
+     unless there is typing on it to keep. */
+  if(String(state.pc.pid)===String(pid)){ if(!state.pc.dirty) pcLoad(); else pcHealthLoad(); }
+}
+reg('pcLinkGo', ()=>{
+  const c=state.pc, z=c.link, p=pcProduct();
+  if(!z||!z.sel||z.sending||!p||!pcCanLink()) return;
+  const pid=Number(p._id);
+  z.sending=true; z.sendErr=null; render();
+  apiWrite('/api/retail-admin/products/'+pid+'/recipe-link', {recipe_id:Number(z.sel.id)}, 'PUT').then(j=>{
+    z.sending=false; c.link=null;
+    const t=state.stack[state.stack.length-1]; if(t&&t.route==='productrecipe'){ forgetScroll(); state.stack.pop(); }
+    pcLinkApplied(pid, j&&j.data);
+    /* The server's warning names the one thing stopping the number arriving
+       (Production off, a recipe that cannot be costed yet), carried through
+       verbatim as the desktop carries it. */
+    showToast((j&&j.warning)||T('Cost now comes from the recipe','成本已改为来自配方'));
+    render();
+  }).catch(e=>{
+    z.sending=false;
+    if(String(e.message)==='auth') return;
+    z.sendErr=T('Could not link','关联失败')+': '+tmOneLang(e.message||''); render();
+  });
+});
+/* ── Unlink — pdRecipeUnlink, its confirmation word for word ────────────── */
+reg('pcUnlinkAsk', ()=>{
+  const c=state.pc, p=pcProduct(); if(!p||p.recipeId==null||!pcCanUnlink()||c.actBusy) return;
+  state.ask={title:T('Stop taking the cost from this recipe?','不再从该配方获取成本？'),
+    body:escAttr(T('The last figure stays on the product and the Cost field becomes editable again. The recipe is not changed.',
+      '最近一次计算出的成本会保留在产品上，成本字段将恢复为可编辑。配方本身不会改变。')),
+    confirmLabel:T('Unlink','取消关联'), danger:true,
+    run:()=>{
+      const pid=Number(p._id);
+      c.actBusy='unlink'; c.actErr=null; render();
+      apiWrite('/api/retail-admin/products/'+pid+'/recipe-link', {}, 'DELETE').then(j=>{
+        c.actBusy=null;
+        pcLinkApplied(pid, j&&j.data);
+        showToast(T('Unlinked','已取消关联')); render();
+      }).catch(e=>{
+        c.actBusy=null;
+        if(String(e.message)==='auth') return;
+        c.actErr=T('Could not unlink','取消关联失败')+': '+tmOneLang(e.message||''); render();
+      });
+    }};
+  render();
+});
+
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive from another shop','调拨收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
@@ -24287,6 +24991,7 @@ function sheetProduct(){
        </div>
        ${stockCard(p)}
        ${oosCard(p)}
+       ${pcEntryRow(p)}
      </div>
      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
@@ -27464,6 +28169,9 @@ const ROUTE_CAP={
      tab gate; every write inside carries `materials:edit`, and every price
      `materials:costs` (failing closed). */
   materials:'materials:view', materialone:'materials:view',
+  /* A product's Cost & Pricing (§300 R6) opens with the catalogue; its link
+     picker is a write, and a named branch in canRoute() below. */
+  productcost:'products:view', productrecipe:'products:edit',
   /* `till` is deliberately ABSENT from this table — it is the one route that
      needs ALL of a pair rather than any of it, and an array here means any-of.
      Its gate is the named branch in canRoute() below. */
@@ -27607,6 +28315,10 @@ function canRoute(k){
   /* Make available as material writes a materials row too, so its route
      wants materials:edit as well (retail-recipes.js requireMaterialsEditToo). */
   if(k==='recipemz') return mCan('recipes:edit') && mCan('materials:edit');
+  /* Linking a recipe (§300 R6) writes products:edit, and the desktop offers
+     it only inside the cost block — products:costs, no no-money board —
+     with Production on. */
+  if(k==='productrecipe') return mCan('products:edit') && mCan('products:costs') && !recapNoMoney() && featOn('production');
   /* §300 P2 — WRITING A PURCHASE ORDER NEEDS BOTH, the same named && as the
      till. The screen is purchasing:edit's (its saves), but it shows every
      price on the order, and on the desktop nobody reaches the wizard without
@@ -28827,7 +29539,8 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false);
     if(t&&t.route==='materialone') matLeaveNow(false);
-    forgetScroll(); state.stack.pop(); });
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays
+    forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
   // record is what opened the ORDER — a Recent orders row — the pair is stacked
@@ -29015,6 +29728,8 @@ function mUnsavedWork(){
     if(rcpAuto&&rcpAuto.busy()) return true;
     /* A material edit likewise (§300 R5). */
     if(matAuto&&matAuto.busy()) return true;
+    /* A build list edited and not yet saved (§300 R6) — held in memory only. */
+    if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
     const f=state.qs&&state.qs.inflight; for(const k in f) if(f[k]) return true;
   }catch(e){}
@@ -30475,6 +31190,16 @@ function mapProduct(r){
     designed:!!r.has_blocks,
     price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind,
     pub, supplier, paused, oos:String(r.oos_policy||'strict'),
+    /* Cost & Pricing (§300 R6): the SKU as stored (the one above is a label),
+       the size text a first build line may take its quantity from, the
+       recipe link, whether it is a bundle, and the cost — ONLY when the
+       server sent one (stripProductCosts deletes it for a reader without
+       products:costs, and absent must stay absent, never 0). */
+    rawSku:String(r.sku||''), size:String(r.size||'').trim(),
+    recipeId:r.recipe_id!=null?Number(r.recipe_id):null,
+    recipeName:(r.recipe_name_en||r.recipe_name_cn)?[r.recipe_name_en||r.recipe_name_cn,r.recipe_name_cn||r.recipe_name_en]:null,
+    parts:!!r.is_bundle,
+    unitCost:Object.prototype.hasOwnProperty.call(r,'unit_cost')?(r.unit_cost==null?null:Number(r.unit_cost)):undefined,
     cat:String(r.top_category||r.category||'').trim(),
     // One lowercased haystack per product, built once: name in both languages
     // and the SKU, which is what the desktop's search box matches on.
