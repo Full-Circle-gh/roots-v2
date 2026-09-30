@@ -50,7 +50,7 @@ function mk(opts = {}) {
     T: (en) => en, LANG: 'en', API: '/api/retail-admin',
     escAttr: (s) => String(s == null ? '' : s).replace(/"/g, '&quot;'),
     ic: () => '<i></i>',
-    state: { cats: opts.cats, catTop: opts.catTop || null, catShelf: opts.catShelf || null },
+    state: { cats: opts.cats, catTop: opts.catTop || null, catShelf: opts.catShelf || null, catsVersion: opts.version || null },
     render: () => { calls.renders++; },
     reg: (n, f) => { CMD[n] = f; },
     showToast: (m) => calls.toasts.push(m),
@@ -59,8 +59,11 @@ function mk(opts = {}) {
     apiWrite: async (p, body, method) => {
       calls.writes.push({ p, body: JSON.parse(JSON.stringify(body)), method });
       if (opts.saveFails) { const e = new Error('dup_top'); throw e; }
-      return { success: true, data: body.tree };
+      if (opts.stale) { const e = new Error('stale_tree'); e.code = 'stale_tree'; throw e; }
+      return { success: true, data: body.tree, version: opts.newVersion };
     },
+    E: (en) => ({ toString: () => en }),
+    staleSaveText: () => ({ toString: () => 'Somebody else changed this while you had it open. It has been reloaded — try again.' }),
     MEDIA_ERR: { too_large: ['That photo is too large. Try a smaller one.', '图片太大'] },
     FormData: class { append() {} },
     fetch: async (u) => { calls.fetches.push(u); return opts.upload; },
@@ -137,6 +140,34 @@ section('2 · every change saves the WHOLE tree');
     assert.ok(/^Save failed/.test(ctx.state.catBannerErr));
     assert.strictEqual(calls.reloads, 1);
     assert.strictEqual(ctx.state.cats, null, 'the edited copy is thrown away');
+  });
+}
+
+section('2b · the save carries the version it was loaded at (§325)');
+{
+  it('the version goes up with the tree, and the new one is kept', async () => {
+    const { ctx, CMD, calls } = mk({ cats: tree(), catTop: 'fresh', version: 'aaaaaaaaaaaaaaaa', newVersion: 'bbbbbbbbbbbbbbbb' });
+    CMD.catBannerSet('target', 'coupons');
+    await new Promise((r) => setImmediate(r));
+    assert.deepStrictEqual(Object.keys(calls.writes[0].body).sort(), ['tree', 'version']);
+    assert.strictEqual(calls.writes[0].body.version, 'aaaaaaaaaaaaaaaa');
+    assert.strictEqual(ctx.state.catsVersion, 'bbbbbbbbbbbbbbbb');
+  });
+  it('with no version loaded, it saves unchecked, as before', async () => {
+    const { CMD, calls } = mk({ cats: tree(), catTop: 'fresh' });
+    CMD.catBannerSet('target', 'coupons');
+    await new Promise((r) => setImmediate(r));
+    assert.deepStrictEqual(Object.keys(calls.writes[0].body), ['tree']);
+  });
+  it('refused as stale: it says so in words and reloads the tree', async () => {
+    const { ctx, CMD, calls } = mk({ cats: tree(), catTop: 'fresh', version: 'aaaaaaaaaaaaaaaa', stale: true });
+    CMD.catBannerSet('end_at', '2026-10-31');
+    await new Promise((r) => setImmediate(r));
+    assert.strictEqual(String(ctx.state.catBannerErr), 'Somebody else changed this while you had it open. It has been reloaded — try again.');
+    assert.strictEqual(calls.reloads, 1);
+    assert.strictEqual(ctx.state.cats, null, 'the stale copy is thrown away');
+    assert.strictEqual(ctx.state.catsVersion, null, 'and so is its version');
+    assert.deepStrictEqual(calls.toasts, [], 'no toast claims it saved');
   });
 }
 

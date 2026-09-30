@@ -603,7 +603,10 @@ router.get('/api/retail/category-tree', (req, res) => {
 // Operator-facing read of the live tree (no cache header — the editor wants
 // the freshest copy).
 router.get('/api/retail-admin/category-tree', requireRetailAdmin, (req, res) => {
-  res.json({ success: true, data: getCategoryTree(tdb()) });
+  const tree = getCategoryTree(tdb());
+  // §325 — `version` beside the tree, for a save that wants to be refused
+  // rather than overwrite an edit made since it loaded (PUT below).
+  res.json({ success: true, data: tree, version: contentVersion(JSON.stringify(tree)) });
 });
 
 // How many products sit under each node of the tree, keyed by the node's stable
@@ -727,6 +730,24 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
   const db = tdb();
   const oldTree = getCategoryTree(db);
 
+  /* §325 — A SAVE FROM A STALE COPY IS REFUSED, NOT APPLIED. This PUT replaces
+     the whole tree, and a rename in it re-tags products, so a screen that
+     loaded the tree before somebody else's edit would put the old tree back and
+     undo that edit — reverting a rename re-tags the products a second time.
+     A caller that sends the `version` it loaded (GET above) is refused with
+     409 and the current tree when the tree has moved since. BACKWARD
+     COMPATIBLE: a caller that sends no version is not checked, so the desktop
+     editor and the mini-app editor work exactly as before. Checked here, and
+     again inside the transaction, where no other save can land between the
+     check and the write. */
+  const expectedVersion = typeof (req.body && req.body.version) === 'string' && req.body.version ? req.body.version : null;
+  if (expectedVersion) {
+    const have = contentVersion(JSON.stringify(oldTree));
+    if (have !== expectedVersion) {
+      return res.status(409).json({ success: false, error: 'stale_tree', version: have, data: oldTree });
+    }
+  }
+
   // Old lookups keyed by stable id.
   const oldTopById = new Map();                 // topId -> oldTopName
   const oldSubById = new Map();                 // subId -> { parentId, name }
@@ -757,6 +778,11 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
     // reports it, and it is only true once the renames committed. Every
     // statement runs on `tx`, the handle withTransaction hands in — §24.
     const migrated = await withTransaction(db, (tx) => {
+      if (expectedVersion) {
+        const now = getCategoryTree(tx);
+        const have = contentVersion(JSON.stringify(now));
+        if (have !== expectedVersion) throw Object.assign(new Error('stale_tree'), { stale: { version: have, data: now } });
+      }
       const upsert = tx.prepare(
         `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
            VALUES ('category.tree', ?, CURRENT_TIMESTAMP, ?)
@@ -783,8 +809,9 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
       upsert.run(JSON.stringify(incoming), (req.user && req.user.id) || null);
       return migrated;
     });
-    res.json({ success: true, data: incoming, migrated });
+    res.json({ success: true, data: incoming, migrated, version: contentVersion(JSON.stringify(getCategoryTree(db))) });
   } catch (e) {
+    if (e && e.stale) return res.status(409).json({ success: false, error: 'stale_tree', ...e.stale });
     res.status(500).json({ success: false, error: 'save_failed', message: e.message });
   }
 });
@@ -23286,6 +23313,8 @@ router.get('/api/retail-admin/config', requireRetailAdmin, (req, res) => {
     ...(cfgOut.qrMenu && typeof cfgOut.qrMenu === 'object' ? cfgOut.qrMenu : {}),
     shownBlockTypes: qrBlockDefaults.readShownTypes(tdb()),
   };
+  // §325 — the versions of the keys saved whole (configVersions, below).
+  cfgOut._versions = configVersions(tdb());
   res.json({ success: true, data: cfgOut });
 });
 
@@ -23355,6 +23384,23 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
     }
   }
 
+  /* §325 — A WHOLE LIST SAVED FROM A STALE COPY IS REFUSED. `popups.list` is
+     written whole: switching one pop-up on sends every pop-up, so a phone that
+     loaded the list before somebody added or edited one on the desktop would
+     put the old list back. A caller may say which version it loaded —
+     `?expect=popups.list:<version>`, the version GET /config hands out in
+     `_versions` — and a key that has moved since is refused with 409, its
+     current version and its current value, so the caller can show what is
+     there now. Nothing in the body is written. BACKWARD COMPATIBLE: without
+     `expect` nothing is checked, which is every existing caller. Checked here
+     and again inside the transaction below. */
+  const expects = parseConfigExpect(req.query && req.query.expect);
+  if (!expects) return res.status(400).json({ success: false, error: 'bad_expect' });
+  for (const [k, want] of expects) {
+    const cur = configKeyVersion(tdb(), k);
+    if (cur.version !== want) return res.status(409).json({ success: false, error: 'stale_config', key: k, ...cur });
+  }
+
   /* ── A settings card's version history (decisions §279) ──────────────────
      A card that saves itself names itself in `?history=<card>`, and this write
      is then recorded around, the way the role and customer writes are: the
@@ -23371,6 +23417,10 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
   // Await inside the try — the update_failed 500 below is only reachable there.
   try {
     await withTransaction(tdb(), (tx) => {
+      for (const [k, want] of expects) {
+        const cur = configKeyVersion(tx, k);
+        if (cur.version !== want) throw Object.assign(new Error('stale_config'), { stale: { key: k, ...cur } });
+      }
       const upsert = tx.prepare(
         `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
          VALUES (?, ?, CURRENT_TIMESTAMP, ?)
@@ -23382,7 +23432,10 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
       for (const [k, v] of entries) upsert.run(k, JSON.stringify(v), req.user.id);
     });
   }
-  catch (e) { console.error('[retail-admin/config PUT]', e); return res.status(500).json({ success: false, error: 'update_failed' }); }
+  catch (e) {
+    if (e && e.stale) return res.status(409).json({ success: false, error: 'stale_config', ...e.stale });
+    console.error('[retail-admin/config PUT]', e); return res.status(500).json({ success: false, error: 'update_failed' });
+  }
   if (histCard) {
     try {
       editHistory.after(tdb(), historyTenantId(), 'config', histCard, configSnapshot(entries.map(e => e[0])),
@@ -23390,8 +23443,48 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
     } catch (e) { console.error('[config history after]', e.message); }
   }
   logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: entries.map(e => e[0]) }, req.ip);
-  res.json({ success: true, data: loadConfig() });
+  res.json({ success: true, data: { ...loadConfig(), _versions: configVersions(tdb()) } });
 });
+
+/* §325 — VERSIONS FOR THE SAVES THAT REPLACE A WHOLE STRUCTURE.
+   A content hash of what is stored, so it moves exactly when the stored value
+   does (two saves in one second still differ, which an updated_at would not),
+   and needs no column. Used by the category tree (its served tree) and by the
+   config keys written whole. */
+function contentVersion(text) {
+  return crypto.createHash('sha1').update(String(text == null ? '' : text)).digest('hex').slice(0, 16);
+}
+// The config keys a screen saves whole from a copy it loaded. GET /config
+// hands their versions out as `_versions`; any key can be `expect`ed.
+const VERSIONED_CONFIG_KEYS = ['popups.list'];
+function configKeyVersion(conn, key) {
+  const row = conn.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+  let value = null;
+  if (row) { try { value = JSON.parse(row.value_json); } catch (_) { value = null; } }
+  return { version: contentVersion(row ? row.value_json : ''), value };
+}
+function configVersions(conn) {
+  const out = {};
+  for (const k of VERSIONED_CONFIG_KEYS) {
+    try { out[k] = configKeyVersion(conn, k).version; } catch (_) { /* table not ready */ }
+  }
+  return out;
+}
+// `?expect=key:version[,key:version]` (repeatable) → [[key, version]]; [] when
+// absent; null when malformed, which is refused rather than ignored — a
+// caller that asked for the check must not be answered without it.
+function parseConfigExpect(raw) {
+  if (raw == null || raw === '') return [];
+  const parts = (Array.isArray(raw) ? raw : [raw]).join(',').split(',').map(x => x.trim()).filter(Boolean);
+  const out = [];
+  for (const p of parts) {
+    const i = p.lastIndexOf(':');
+    const k = i > 0 ? p.slice(0, i) : '', v = i > 0 ? p.slice(i + 1) : '';
+    if (!/^[A-Za-z0-9_.-]{1,120}$/.test(k) || !/^[0-9a-f]{16}$/.test(v)) return null;
+    out.push([k, v]);
+  }
+  return out;
+}
 
 // The stored values of `keys`, in the order given — null for a key never
 // written. Read straight from the table, so what is recorded is what is held.
