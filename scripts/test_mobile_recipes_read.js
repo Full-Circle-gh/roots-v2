@@ -135,6 +135,7 @@ function mk(opts = {}) {
   // R2's editor is in the same region; this suite reads, so every edit key is
   // simply absent unless a case grants it.
   ctx.mCan = (k) => (opts.caps || []).indexOf(k) !== -1;
+  ctx.recapNoMoney = () => false;
   ctx.push = null;
   vm.createContext(ctx);
   vm.runInContext(HELPERS, ctx);
@@ -635,10 +636,12 @@ section('8 · what R1 does not do');
 // screens make none: every write lives in the two functions that save.
 it('the only writes in the recipes region are the editor\'s save and restore', () => {
   const writes = codeOnly(REGION).match(/apiWrite\([^)]*/g) || [];
-  assert.strictEqual(writes.length, 3, writes.join(' | '));
+  // Four since R3: PUT, POST, the cost PUT (only for a draft that loaded the
+  // cost inputs) and the restore.
+  assert.strictEqual(writes.length, 4, writes.join(' | '));
   const saver = codeOnly(between(M, 'function rcpSend(d, p, note){', 'function rcpEdStart(d){'));
   const restore = codeOnly(between(M, 'function rcpRestore(id, v){', 'function rcpLeaveNow(discard){'));
-  assert.strictEqual((saver.match(/apiWrite\(/g) || []).length + (restore.match(/apiWrite\(/g) || []).length, 3);
+  assert.strictEqual((saver.match(/apiWrite\(/g) || []).length + (restore.match(/apiWrite\(/g) || []).length, 4);
   assert.doesNotMatch(codeOnly(REGION), /apiPost|method:\s*'(POST|PUT|PATCH|DELETE)'/);
 });
 it('the shared cost module is loaded, deferred, and the service worker still lets it through to the network', () => {
