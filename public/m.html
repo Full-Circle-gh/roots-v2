@@ -1055,6 +1055,8 @@ const state = {
   /* §300 P5 — Purchasing's Invoices (发票) view: which half, the month and
      search, the two reads and their failure, which supplier groups are open,
      a mark/delete in flight and its refusal, and the one sheet over it. */
+  /* §300 P6 — the Reorder tab's read, and the Price history sheet (a product). */
+  preo:{rows:null,err:null,tried:false}, pph:null,
   pinv:{view:'suppliers',month:'',q:'',out:null,list:null,err:null,tried:false,seq:0,open:{},busy:false,actErr:null,sheet:null},
   /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
      one. Two prefixes because they are two screens with two lifetimes — the
@@ -8770,6 +8772,7 @@ function poRow(p){
    The desktop got the identical test in 16-purchasing.js (puPartial). */
 function statusPurchasing(){
   if(state.poView==='supowed'&&canRoute('supowed')) return statusSupOwed();
+  if(state.poView==='reorder') return '';
   if(state.poView==='invoices'&&pinvOn()){ const t=state.pinv.out&&state.pinv.out.totals;
     return t?T('Total purchases','采购总额')+' '+money(CUR,t.total||0):''; }
   const all=state.poList; if(!all||!all.length) return '';
@@ -8792,11 +8795,13 @@ function poViewTabs(){
   if(canRoute('supowed')) t.push(['supowed','Suppliers we owe','供应商欠款']);
   // §300 P5 — the desktop's Invoices tab, for whoever may read its money and write its marks.
   if(pinvOn()) t.push(['invoices','Invoices','发票']);
+  // §300 P6 — the desktop's Reorder tab; no money on it, so Purchasing's own key.
+  t.push(['reorder','Reorder','补货']);
   return t;
 }
 function poViewStrip(){
   const tabs=poViewTabs(); if(tabs.length<2) return '';
-  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':state.poView==='invoices'&&pinvOn()?'invoices':'orders';
+  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':state.poView==='invoices'&&pinvOn()?'invoices':state.poView==='reorder'?'reorder':'orders';
   return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">${tabs.map(([k,en,zh])=>{
     const on=cur===k;
     return `<button onclick="APP.cmd('poView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
@@ -8871,6 +8876,7 @@ function screenPurchasing(){
   const strip=poViewStrip();
   if(state.poView==='supowed'&&canRoute('supowed')) return strip+screenSupOwed();
   if(state.poView==='invoices'&&pinvOn()) return strip+screenPoInvoices();
+  if(state.poView==='reorder') return strip+screenPoReorder();
   if(state.posErr) return strip+`<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -8900,7 +8906,9 @@ function screenPurchasing(){
     ${filters.length?`<div style="display:flex;gap:8px">${filters.join('')}</div>`:''}
     <div id="mPoBody">${poBodyHtml()}</div></div>`;
 }
-reg('poView', v=>{ state.poView=v==='supowed'||v==='invoices'?v:'orders'; render(); });
+reg('poView', v=>{ state.poView=['supowed','invoices','reorder'].includes(v)?v:'orders';
+  if(state.poView==='reorder') state.preo.tried=false;   // read again each time the tab is opened, as the desktop does
+  render(); });
 reg('poQuery', v=>{
   state.poQ=String(v||'');
   searchClearShow('mPoClr', !!state.poQ);
@@ -8926,6 +8934,8 @@ function poLineRow(it){
       ${sup||each||it.ingredient_id?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center">${
         it.ingredient_id?`<span class="pill" style="background:${PILL.clear[0]};color:${PILL.clear[1]}">${T('Material','物料')}</span>`:''}${
         sup?`<span>${escAttr(sup)}</span>`:''}${each?`<span>${each}</span>`:''}</span>`:''}
+      ${/* §300 P6 — the product's price history, where the money is shown. */''}
+      ${it.store_product_id&&pphLink(it.store_product_id)?`<span style="margin-top:6px">${pphLink(it.store_product_id)}</span>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
       ${poMoney()?`<span class="num" style="font-size:14.5px;font-weight:500">${money0(CUR,it.total_cost)}</span>`:''}
@@ -9727,6 +9737,7 @@ function sheetPW(){
   if(s.kind==='price'){
     const p=s.p, list=(s.info&&s.info.suppliers)||[];
     body=head(escAttr(pwName(p)),escAttr([p.sku,T('stock','库存')+' '+(p.physical_qty==null?0:p.physical_qty)].filter(Boolean).join(' · ')))
+      +(pphLink(p.product_id)?`<div style="padding:0 20px 10px">${pphLink(p.product_id)}</div>`:'')
       +`<div style="max-height:56vh;overflow:auto">${pwPriceRowsHtml(list,null)}
         <div style="padding:12px 20px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border-default)">
           <span style="font-size:15px;font-weight:500">${T('Someone else / type it myself','其他 / 手动填写')}</span>
@@ -9737,6 +9748,7 @@ function sheetPW(){
     const list=(s.info&&s.info.suppliers)||[];
     body=head(line?T('Who are we buying this from?','这一行向谁采购？'):T('Supplier','供应商'),
               line?escAttr(pwName(line)):T('Optional — leave empty for a mixed or one-off buy.','可选 —— 混合或一次性采购可留空。'))
+      +(line&&pphLink(line.store_product_id)?`<div style="padding:0 20px 10px">${pphLink(line.store_product_id)}</div>`:'')
       +`<div style="max-height:60vh;overflow:auto">
         ${line?pwPriceRowsHtml(list,line.supplier_name||''):''}
         <div style="padding:10px 20px 6px;border-top:${line&&list.length?'1px solid var(--border-default)':'none'}">
@@ -10679,6 +10691,138 @@ reg('pinvQr', id=>{
   api('/suppliers/'+Number(id)+'/channel-qr').then(r=>{ d.name=(r&&r.name)||''; d.qr=r&&r.qr; if(!d.qr) d.err=true; })
     .catch(()=>{ d.err=true; }).then(()=>{ if(state.pinv.sheet===d) render(); });
 });
+
+/* ==========================================================================
+   §300 P6 — Reorder, and a product's Price history (desktop: 16-purchasing.js
+   REORDER / PRICE HISTORY)
+   --------------------------------------------------------------------------
+   REORDER is the desktop's tab: what is under its buffer (5 where none is set)
+   in each store, grouped by who it is usually bought from (GET /reorder) — no
+   money on it, so it opens with Purchasing itself (purchasing:view). "Open
+   draft order" is the desktop's puReorderDraft: the new-order screen (P2) at
+   its lines, holding the suggested quantities, which needs the pair P2 needs.
+
+   PRICE HISTORY is one product, every supplier, cost over time (GET
+   /products/:spid/suppliers). It is all money, so it opens only where money
+   shows (poMoney, failing closed) — from the new-order price list, a line's
+   supplier sheet, and an order's lines. A sheet over whatever it was opened
+   from, so closing it lands back there, as the desktop's Back does.
+   ========================================================================== */
+function loadReorder(force){
+  const r=state.preo; if(r.tried&&!force) return;
+  r.tried=true;
+  api('/reorder').then(rows=>{ r.rows=Array.isArray(rows)?rows:[]; r.err=null; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; r.err=E('Could not load this.','无法加载。'); render(); });
+}
+function screenPoReorder(){
+  loadReorder();
+  const r=state.preo;
+  const pad=inner=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${inner}</div>`;
+  if(r.err&&!r.rows) return pad(`<div style="font-size:14px;color:var(--brick-ink)">${r.err}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;align-self:flex-start" onclick="APP.cmd('preoRetry')">${T('Try again','重试')}</button>`);
+  if(!r.rows) return pad(`<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
+  if(!r.rows.length) return nothingYet(T('Nothing’s running low','库存都很充足'),
+    T('Every product is above its buffer across your stores. Nothing to reorder right now.','各门店商品均高于安全库存,暂时无需补货。'));
+  const canDraft=canRoute('newpo');
+  return pad(r.rows.map((g,i)=>{
+    const units=g.items.reduce((s,x)=>s+(Number(x.suggest)||0),0);
+    return `<div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:15px;font-weight:500">${escAttr(g.supplier?pwSupShow(g.supplier):T('No preferred supplier yet','暂无常用供应商'))}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(g.store_name||'')}</span></span>
+        ${pill('restock',g.items.length+' '+T('low','偏低'))}</div>
+      ${g.items.slice(0,6).map(it=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 14px;border-top:1px solid var(--border-default)">
+        <span style="min-width:0;font-size:14px">${escAttr(pwName(it))}</span>
+        <span class="num" style="flex:none;font-size:12.5px;color:var(--amber-ink)">${escAttr(it.physical_qty)} ${T('left','剩')} · ${T('buffer','安全')} ${escAttr(it.buffer)}</span></div>`).join('')}
+      ${g.items.length>6?`<div style="padding:9px 14px;border-top:1px solid var(--border-default);font-size:12.5px;color:var(--text-secondary)">+${g.items.length-6} ${T('more','更多')}</div>`:''}
+      <div style="padding:12px 14px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:10px">
+        <span class="num" style="flex:1;font-size:13px;color:var(--text-secondary)">${units} ${T('units suggested','件建议')}</span>
+        ${canDraft?`<button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('preoDraft',${i})">${T('Open draft order','生成草稿单')}</button>`:''}</div></div>`; }).join(''));
+}
+reg('preoRetry', ()=>{ state.preo.err=null; state.preo.rows=null; render(); loadReorder(true); });
+/* The desktop's puReorderDraft, field for field: nothing is written — the
+   draft exists once it is saved on the new-order screen. */
+reg('preoDraft', i=>{
+  const g=(state.preo.rows||[])[Number(i)]; if(!g||!canRoute('newpo')) return;
+  const w=pwBlank();
+  w.step=2; w.supplier=g.supplier||''; w.store_id=g.store_id;
+  w.items=g.items.map(it=>({store_product_id:it.product_id,name_en:it.name_en,name_cn:it.name_cn,sku:it.sku,
+    qty:it.suggest,unit:'pcs',cost_per_unit:0,expense_category:'门店进货 Retail stock',purchase_channel:'',
+    supplier_name:g.supplier||'',current_stock:it.physical_qty,note:''}));
+  pwOpen(w);
+});
+
+/* ── Price history ─────────────────────────────────────────────────────── */
+/* Min-to-max, not zero-to-max like Trend's revenue line: a price moving from
+   ¥119 to ¥131 is the whole story, and scaled from zero it is a flat line.
+   Otherwise Trend's own drawing — a line, a tint under it, the last point. */
+function pphSpark(vals){
+  const pts=vals.map(Number).filter(v=>Number.isFinite(v));
+  if(pts.length<2) return '';
+  const W=1000,H=200,pad=8, min=Math.min(...pts), max=Math.max(...pts), range=(max-min)||1, n=pts.length;
+  const x=i=>pad+(i/(n-1))*(W-2*pad), y=v=>pad+(H-2*pad)-((v-min)/range)*(H-2*pad);
+  const p=pts.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1));
+  const area='M'+x(0).toFixed(1)+','+(H-pad)+' L'+p.join(' L')+' L'+x(n-1).toFixed(1)+','+(H-pad)+' Z';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:96px" aria-hidden="true">
+    <path d="${area}" fill="var(--sage-tint)"></path>
+    <path d="M${p.join(' L')}" fill="none" stroke="var(--sage-ink)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+    <circle cx="${x(n-1).toFixed(1)}" cy="${y(pts[n-1]).toFixed(1)}" r="7" fill="var(--sage-ink)"></circle></svg>`;
+}
+reg('pphOpen', spid=>{
+  spid=Number(spid); if(!spid||!poMoney()) return;
+  const h={spid,data:null,err:null}; state.pph=h; render();
+  api('/products/'+spid+'/suppliers').then(d=>{ h.data=d||{}; })
+    .catch(e=>{ if(String(e.message)==='auth') return; h.err=E('Could not load this.','无法加载。'); })
+    .then(()=>{ if(state.pph===h) render(); });
+});
+reg('pphClose', ()=>{ state.pph=null; render(); });
+function sheetPPH(){
+  const h=state.pph; if(!h) return '';
+  const d=h.data, pr=(d&&d.product)||{}, st=(d&&d.stats)||{}, last=(d&&d.last)||{}, sups=(d&&d.suppliers)||[];
+  let body;
+  if(!poMoney()) body='';
+  else if(h.err) body=`<div style="padding:16px 20px;font-size:14px;color:var(--brick-ink)">${h.err}</div>`;
+  else if(!d) body=`<div style="padding:34px 20px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else {
+    const series=d.series||[];
+    const cheap=sups.length?sups.reduce((a,b)=>Number(b.min_cost)<Number(a.min_cost)?b:a):null;
+    const dear=sups.length?sups.reduce((a,b)=>Number(b.max_cost)>Number(a.max_cost)?b:a):null;
+    const tile=(lab,val,foot)=>`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${lab}</span><span class="num" style="font-size:17px;font-weight:500">${val}</span>
+      ${foot?`<span style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis">${foot}</span>`:''}</div>`;
+    const top=!series.length
+      ?nothingYet(T('No purchase history yet','暂无采购记录'),T('Once you buy this product on an order, its price history shows here.','在采购单中购买该商品后,这里会显示价格历史。'))
+      :`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          ${tile(T('Last paid','上次'),money(CUR,last.cost||st.avg_cost||0),last.supplier?escAttr(pwSupShow(last.supplier))+(last.date?' · '+escAttr(fmtDateOnly(last.date)):''):'')}
+          ${tile(T('Average','均价'),money(CUR,st.avg_cost||0),st.order_count?st.order_count+' '+T('orders','次'):'')}
+          ${tile(T('Range','区间'),money(CUR,st.min_cost||0)+'–'+money(CUR,st.max_cost||0),[cheap&&cheap.supplier?T('low','低')+' '+escAttr(pwSupShow(cheap.supplier)):'',dear&&dear.supplier?T('high','高')+' '+escAttr(pwSupShow(dear.supplier)):''].filter(Boolean).join(' · '))}
+          ${tile(T('Bought','采购'),escAttr(st.total_qty||0),st.first_date?T('since','自')+' '+escAttr(fmtDateOnly(st.first_date)):'')}</div>
+        <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+          <span class="eyebrow">${T('What it has cost you','历史成本')}</span>
+          ${series.length>=2?pphSpark(series.map(s=>s.cost))+`<div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary)"><span>${escAttr(st.first_date?fmtDateOnly(st.first_date):'')}</span><span>${T('now','现在')} ${money(CUR,last.cost||0)}</span></div>`
+            :`<span style="font-size:13px;color:var(--text-secondary)">${T('Need at least two purchases to chart a trend.','至少两次采购才能绘制趋势。')}</span>`}</div>`;
+    body=`<div style="padding:0 16px 20px;display:flex;flex-direction:column;gap:12px">${top}
+      <div class="eyebrow">${T('Who sells it','供应来源')} — ${sups.length} ${T('suppliers','家')}</div>
+      ${sups.length?`<div class="list">${sups.map((s,i)=>`${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:center;gap:10px;padding:12px 14px">
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:14.5px;font-weight:500">${escAttr(s.supplier?pwSupShow(s.supplier):T('Unrecorded','未记录'))}${i===0?' '+pill('delivered',T('Preferred','常用')):''}</span>
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Average','均价')} ${s.avg_cost!=null?money(CUR,s.avg_cost):'—'} · ${T('Times','次数')} ${escAttr(s.order_count)}</span></span>
+          <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none"><span class="num" style="font-size:15px;font-weight:500">${money(CUR,s.last_cost||0)}</span>
+            <span style="font-size:12px;color:var(--text-secondary)">${T('Last paid','上次')}</span></span></div>`).join('')}</div>`
+        :`<div style="font-size:13.5px;color:var(--text-secondary)">${T('No supplier history yet.','暂无供应商记录。')}</div>`}</div>`;
+  }
+  return `<div class="scrim" style="z-index:53" onclick="APP.scrimClose('pphClose')"></div>
+   <div class="sheet" style="top:48px;z-index:54;overflow:hidden">
+     <div style="flex:none;padding:8px 20px 12px"><div class="grabber"></div>
+       <div style="display:flex;align-items:flex-start;gap:8px"><span style="flex:1;min-width:0">
+         <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('Price history','价格历史')}</span>
+         <span style="display:block;font-size:18px;font-weight:500">${escAttr(pr.name_en||pr.name_cn?pwName(pr):'')}${pr.sku?` <span class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(pr.sku)}</span>`:''}</span></span>
+         <button class="iconbtn" style="width:36px;height:36px;margin-right:-6px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('pphClose')">${ic('x',20,2)}</button></div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto">${body}</div></div>`;
+}
+/* The way in, drawn only where money is: the new-order sheets and an order's lines. */
+const pphLink=spid=>spid&&poMoney()?`<button class="btn2" style="width:auto;min-height:32px;padding:0 12px;font-size:12.5px" onclick="event.stopPropagation();APP.cmd('pphOpen',${Number(spid)})">${T('Price history','价格历史')}</button>`:'';
 
 /* ==========================================================================
    §286 — Suppliers we owe
@@ -12070,7 +12214,7 @@ const SUBS={
     /* §300 P2 — the desktop's New order, on its own key (data-cap="purchasing:edit"). */
     cta:()=>state.poView==='invoices'&&pinvOn()
       ? `<button class="cta inhead" onclick="APP.cmd('pinvNew',-1)">${T('Add invoice','添加发票')}</button>`
-      : state.poView!=='supowed'&&state.poView!=='invoices'&&canRoute('newpo')
+      : state.poView==='orders'&&canRoute('newpo')
       ? `<button class="cta inhead" onclick="APP.cmd('pwNew')">${T('New order','新建采购单')}</button>` : '',
     render:()=>screenPurchasing()},
   newpo:{title:['New order','新建采购单'],
@@ -28149,6 +28293,7 @@ function render(){
   if(state.pwSheet&&state.pw&&pwOnTop()) html += layer('pw:'+state.pwSheet.kind, sheetPW());
   if(state.pk) html += layer('pk', sheetPK());
   if(state.pinv.sheet) html += layer('pinv:'+state.pinv.sheet.kind, sheetPinv());
+  if(state.pph) html += layer('pph:'+state.pph.spid, sheetPPH());
   if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());
   if(state.fin.txRow) html += layer('fintx:'+state.fin.txRow, sheetFinTxRow());
   if(state.fin.form) html += layer('fintxform', sheetFinTxForm());
@@ -28602,6 +28747,8 @@ function layers(){
   if(state.pwSheet&&state.pw&&pwOnTop()) L.push(()=>{ state.pwSheet=null; });
   if(state.pk) L.push(()=>{ state.pk=null; });
   if(state.pinv.sheet) L.push(()=>{ state.pinv.sheet=null; });
+  // Last of the purchasing layers: it opens over any of them, so Back closes it first.
+  if(state.pph) L.push(()=>{ state.pph=null; });
   if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });
   if(state.fin.txRow) L.push(()=>{ state.fin.txRow=null; state.fin.txActErr=''; });
   if(state.fin.form) L.push(()=>{ state.fin.form=null; });
