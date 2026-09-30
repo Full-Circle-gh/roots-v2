@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.216 · 2026-09-30 · §307 WRITING A PURCHASE ORDER ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Writing a purchase order on the phone (§307)*.
+
+**v1.215 · 2026-09-30 · §306 EDITING RECIPES ON THE PHONE — NOTHING COMPOSED; ONE LINE JOINED FROM TWO LIVE PAIRS, ONE CUT SHORT, THE REST COPIED WHOLE.** See *Editing a recipe on the phone (§306)*.
+
+**v1.214 · 2026-09-30 · §305 FINANCE SUMMARY ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM A LIVE PAIR.** See *The Finance summary on the phone (§305)*.
+
 **v1.213 · 2026-09-30 · §304 PURCHASE ORDERS MANAGED ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Purchase orders managed on the phone (§304)*.
 
 **v1.212 · 2026-09-30 · §303 RECIPES ON THE PHONE, READ HALF — NOTHING COMPOSED; TWO SENTENCES CUT SHORT FROM LIVE PAIRS, THE REST COPIED WHOLE.** See *Recipes on the phone — what the desktop shows (§303)*.
@@ -9574,3 +9580,166 @@ screen); `Suppliers we owe · 供应商欠款` (§286); `More actions · 更多�
 - A composed sub-line under Back-order (mockup P06's *Opens a new order for what is
   missing*): **rejected**; the desktop button says it in three words and the phone
   row carries only that.
+
+## The Finance summary on the phone (§305)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Finance screen (`public/m.html`, `SUBS.finance`, `sheetFinCat`). The
+staircase, its notes and the drill-down marks are copied whole from the
+desktop module (`public/retail-admin/22-finance.js`), so the two Finance
+screens use one word for each thing:
+
+- **The staircase** — `Revenue · 营收`, `of which tax · 其中税费`,
+  `Cost of goods · 销货成本`, `Gross profit · 毛利润`, `Not recorded · 未记录`,
+  `Operating expenses · 营业费用`, `Net · 净额`,
+  `Not an operating expense · 不计入营业费用`.
+- **Its notes** — `This period has no recorded cost data. · 此期间未记录成本数据。`,
+  the coverage sentence `Cost recorded for N% of this period's revenue — the real
+  margin is lower. · 此期间 N% 的营收已记录成本 —— 实际毛利更低。` (§56, its
+  Chinese already lifted there from 09-products.js), the revenue note
+  `Orders only — wallet money counts when spent, not when topped up. ·
+  仅计订单 —— 储值在消费时计入，充值时不计入。` (composed for the desktop in v1.138,
+  copied here unchanged), and `Recorded, and not counted in the figures above. ·
+  已记录，未计入上方数字。`.
+- **The channels** — `finChannelLabel`'s pairs exactly (`WeChat · 微信`,
+  `Web shop · 网页商店`, `Meituan · 美团`, `Eleme · 饿了么`, `Shop · 门店`,
+  `Pick up · 到店自取`, `WeChat message · 微信消息`, `Wholesale · 批发`,
+  `Other · 其他`, `Manual · 手动`, bare `Gzgrocery`). The phone's own CHAN_META
+  pairs (`Mini app · 小程序` and so on) were REJECTED for this card: this card
+  says what the desktop card says, and the desktop comment records why its
+  pairs were chosen.
+- **The drill-down** — `Posted by Purchasing · 采购单自动记入`,
+  `Staff claim · 费用申请`, `Staff claim · own money · 费用申请 · 个人支付`,
+  `Carrier claim · 承运商赔偿`, `Return · 退货`, `Nothing recorded yet · 暂无记录`,
+  `Could not load Finance. · 财务数据加载失败。`, `Loading… · 加载中…`.
+- **The title and the strip** — `Finance · 财务` (the desktop tab),
+  `Summary · 汇总` and `Approvals · 审批` (the desktop sub-view strip).
+- **The window** — `Today · 今日`, `7 days · 7天`, `30 days · 30天`,
+  `90 days · 90天` and `Apply · 应用` from the desktop range bar
+  (retail-admin.html); `today · 今日` and `N days · N天` from `finRangeLabel`.
+  The phone's `Today · 今天` (fmtDateOnly) was REJECTED for the chip: the chip
+  names the same window the desktop button names, so it takes that button's pair.
+- **Live elsewhere, reused** — `Custom · 自定义` (the phone's Team screen; the
+  fifth chip and the title of its sheet), `From · 从` and `To · 至`
+  (20-waste.js's date range), `Pick a date · 选日期` (the phone's own, the
+  refusal for an empty day), `Try again · 重试` and `Close · 关闭` (the phone's).
+
+**One pair lifted from the server, with its first letter capitalised:**
+`From is after to · 起始日期晚于结束日期`. It is the refusal
+`routes/finance-summary.js` sends for an inverted window
+(`'from is after to · 起始日期晚于结束日期'`); the Custom sheet says it before the
+server would have to. The Chinese is unchanged; the English gains a capital F
+because it now begins a sentence on screen. Nothing else about it was altered.
+
+The mockup's `Pick dates`, `Show these dates`, `This month`, `Last month`,
+`This quarter`, `Since 1 Aug` and the "Finance starts on 1 August 2026" note were
+NOT built: none is on the desktop, each would have been composed, and the last
+contradicts §36's "Finance is not floored at the cutover date".
+
+## Editing a recipe on the phone (§306)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+Recipes record's editor and version history (`public/m.html`). Every label is
+the desktop record's own (`public/retail-admin/19-recipes.js`) or one the phone
+already ships.
+
+**Joined or cut from live pairs, declared because the result is new text on a
+screen:**
+
+| shipped | built from |
+|---|---|
+| `Unsaved changes — this recipe still needs an English name · 有未保存的更改 — 该食谱还需要填写英文名称` (status line while a new recipe has no English name) | the desktop bar's `Unsaved changes · 有未保存的更改` and its leave guard's `this recipe still needs an English name · 该食谱还需要填写英文名称`, joined with the bar's own ` — ` (the shape of its `Not saved — reason`) |
+| `A recipe is what you make and what goes into it. · 食谱记录你制作的东西及其用料。` (empty list, reader without `recipes:edit`) | the phone's own live empty sentence, up to its first full stop. The second sentence (*They are written on desktop*) is no longer true. |
+
+**Copied whole from the desktop record:** `New recipe · 新建食谱`,
+`Name (English) · 名称(英文)`, `Name (中文) · 名称(中文)`, `SKU · 货号` and
+`Kept forever, even after archiving. · 归档后仍永久保留。`, `Category · 分类`,
+`None · 无`, `Type · 类型` and its hint, `Made · 自制`, `Repacked · 分装`,
+`Batch size (g) · 批量大小(克)`, `Servings · 份数`, `Serving size (g) · 每份克数`
+and its hint, every batch and serving hint with `Auto · 自动`,
+`Type it myself · 手动填写`, `Use the ingredient total (N g) · 按原料合计填写(N 克)`,
+`Work it out (N) · 自动算出(N)`, the oversize, adrift and cannot-add-up warnings,
+`Shelf life · 保质期` with `Days / Months / Years · 天 / 个月 / 年`,
+`Storage · 储存方式` and its three options, `Notes · 备注`,
+`Search materials to add… · 搜索要添加的物料…`, `No ingredients yet. · 暂无原料。`,
+`qty · 数量`, `Note · 备注`, `Counts toward the batch weight · 计入批量重量`,
+`Move up · 上移`, `Move down · 下移`, `Remove · 移除`,
+`Step name (optional) · 步骤名称(可选)`, `Instructions · 操作说明`,
+`Add step · 添加步骤`, `No steps yet. · 暂无步骤。`, the save line
+(`Unsaved changes · 有未保存的更改`, `Saving… · 保存中…`, `Saved · 已保存`,
+`just now · 刚刚`, `N min ago · N 分钟前`, `N h ago · N 小时前`,
+`Not saved · 未保存`), the leave guard (`Leave without saving? · 未保存就离开?`,
+its body, `Leave · 离开`), and the history (`Now — the live recipe · 当前 —— 正在使用的版本`,
+`until · 直到`, `unknown · 未知`, `N ingredients · M steps · N 项原料 · M 个步骤`,
+`saved · 保存`, `autosaved · 自动保存`, `restored an older version · 恢复了旧版本`,
+`No earlier versions yet — … · 暂无更早的版本 —— …`, `Could not load history · 无法加载修改记录`,
+`Restore this version? · 恢复该版本?`, its body, `Restore · 恢复`,
+`Restored · 已恢复`, `Restored — except … · 已恢复 —— 但 … 未一并恢复。`,
+`Restore failed · 恢复失败`). **From the desktop Materials screen:**
+`Could not load materials · 无法加载物料`. **From the phone:** `Edit · 编辑`,
+`Done · 完成`, `Version history · 历史版本`, `Nothing matches · 没有匹配项`,
+`Loading… · 加载中…`.
+
+**Live candidates rejected.**
+
+- The phone history sheet's own `Restore this version? · 还原此版本?` /
+  `Restore · 还原` for a recipe: **rejected** in favour of the desktop
+  record's `恢复该版本?` / `恢复`. The confirm's body is the desktop's and says
+  `恢复`, and one dialog must not use two words for one act.
+- The mockup's `Counts to weight` and `Add ingredient`: **rejected** for the
+  desktop's live `Counts toward the batch weight · 计入批量重量` and its
+  search-to-add field.
+
+## Writing a purchase order on the phone (§307)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's *New order* screen and its two sheets (`public/m.html`). Every label is
+copied whole from the desktop wizard (`public/retail-admin/16-purchasing.js`), so
+the two surfaces use one word for each thing:
+
+- the screen and its entrances: `New order · 新建采购单`, `Start your first order · 创建第一张采购单`,
+  and the empty ledger's `An order is a list of what you’re buying from one supplier for one store. Tacet does the bookkeeping for you. · 一张采购单就是你向某个供应商、为某家门店采购的清单。记账的事交给 Tacet。`
+  (replacing the phone's own sentence, which sent the reader to the desktop);
+- the steps `From & to · 来源与门店`, `What to buy · 采购内容`, `Review & place · 确认下单`;
+  the fields `Supplier · 供应商`, `Optional — leave empty for a mixed or one-off buy. · 可选 —— 混合或一次性采购可留空。`,
+  `Deliver to · 收货门店`, `Order date · 下单日期`, `Items can arrive on different days. · 每件商品的到货时间可能不同。`,
+  `Note · 备注`, `Anything the receiver should know · 收货人需要知道的信息`, `Next — what to buy · 下一步 —— 采购内容`;
+- the recap `Supplier · 供应商`, `none · 不指定`, `Deliver to · 收货`, `Placed · 下单`, `Change · 修改`;
+- the picker `Add products & materials · 添加商品或物料`, `Add products · 添加商品`,
+  `Search by name or SKU · 按名称或货号搜索`, `stock · 库存`, `No match · 无匹配`, `Add · 添加`,
+  `Material · 物料`, and the four empty-order sentences;
+- `Running low here · 此门店库存偏低`, `left · 剩余`, `buffer · 安全库存`;
+- the price list `Preferred · 常用`, `Unrecorded · 未记录`, `Last paid · 上次`, `cheapest · 最低`,
+  `Average · 均价`, `Bought · 采购`, `Use · 选用`, `In use · 使用中`,
+  `Someone else / type it myself · 其他 / 手动填写`, `Adds the line — set the supplier and price by hand. · 先添加,再手动填写供应商与价格。`;
+- a line's supplier `Choose supplier · 选择供应商` (also the step-1 field's empty state),
+  `Who are we buying this from? · 这一行向谁采购？`, `Someone else · 其他供应商`,
+  `Type to search your suppliers · 输入以搜索供应商`,
+  `Leave it empty and the line follows the order’s supplier. · 留空则该行沿用订单的供应商。`, `Save · 保存`;
+- a line `Name · 名称`, `Category · 分类`, `Buy unit · 采购单位`, `On shelf · 现库存`,
+  `Quantity · 数量`, `Cost each · 单价`, `last paid · 上次`, `was · 上次`, `Remove · 移除`,
+  and the unit names (`PO_UNIT_CN`);
+- `Sort · 排序` with `Supplier · 供应商`, `Name · 名称`, `On shelf · 现库存`, `Line total · 小计`;
+  `products · 商品`, `units · 件`;
+- review: the desktop's sentence built from `from · 来自`, `no supplier · 不指定供应商`,
+  `to · 送至`, `placed · 下单`; `When you place the order, · 下单后,`,
+  `posts to Finance → Expenses by itself. · 会自动记入财务 → 支出。`,
+  `Nothing touches stock until the goods arrive and you tick them in. · 在到货并勾选收货之前,库存不会有任何变动。`,
+  `Add at least one product before placing the order. · 下单前请至少添加一件商品。`,
+  `Add at least one product · 请先添加商品`;
+- the buttons `Back · 上一步`, `Review order · 确认订单`, `Save as draft · 存为草稿`,
+  `Place order · 确认下单`, `Delete draft · 删除草稿`, and the delete confirm
+  `Delete this draft order? · 删除此草稿采购单？` / `It was never placed, so nothing to unwind — this just removes it. · 该订单从未下单，删除不会影响任何账目。`;
+- `Order again · 再次采购` (the order's ⋯ menu).
+
+**Copied whole, the tick dropped** (the phone's toasts carry none):
+`Saved as draft · 已存为草稿`, `Order placed · 已下单`, `Draft deleted · 草稿已删除`.
+
+**Copied whole from elsewhere:** `Give it a name first. · 请先填写名称。`,
+`Choose a date first. · 请先选择日期。`, `Choose a location first. · 请先选择门店。`
+(the desktop's error catalogue, `01-core.js`); `No supplier · 未指定供应商`,
+`Purchasing · 采购`, `Less · 减少`, `More · 增加`, `Saving… · 保存中…`, `Close · 关闭`,
+`Loading… · 加载中…`, `Could not load this. · 无法加载。`,
+`That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。` and
+`This order has already moved on. Close and open it again to see where it is now. · 这个订单已经进入下一步。请关闭后重新打开查看当前状态。`
+(the phone's own).

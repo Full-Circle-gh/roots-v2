@@ -334,7 +334,9 @@ section('5 · Back to draft, Undo receiving, Cancel — the desktop\'s condition
 {
   const keys = (e, po) => { open(e, po); return JSON.parse(JSON.stringify(e.ctx.poActions(e.s.poDetail).map((a) => a.key))); };
   it('Sent: back to draft and cancel', () => assert.deepStrictEqual(keys(mk(), ORDERED), ['draft', 'cancel']));
-  it('Received: undo receiving', () => assert.deepStrictEqual(keys(mk(), DELIVERED), ['undo']));
+  it('Received: order again (P2) and undo receiving', () => assert.deepStrictEqual(keys(mk(), DELIVERED), ['again', 'undo']));
+  it('Received, without the new-order screen: undo receiving alone', () =>
+    assert.deepStrictEqual(keys(mk({ routes: ['purchasing', 'supowed'] }), DELIVERED), ['undo']));
   it('Cancelled and draft: none (a draft opens in the wizard on the desktop)', () => {
     assert.deepStrictEqual(keys(mk(), Object.assign({}, ORDERED, { status: 'Cancelled' })), []);
     assert.deepStrictEqual(keys(mk(), Object.assign({}, ORDERED, { status: 'Requested' })), []);
