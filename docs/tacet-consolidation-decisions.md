@@ -22746,3 +22746,22 @@ who could open the product, and so did the recipe-link answer.
      the key. That is intended: the figures stop reaching someone who may not
      read them. Its wording for that state is a note for Ash, not part of this
      step.
+
+## §324 — TWO OF THE OVERNIGHT BUILD'S OPEN QUESTIONS, ANSWERED
+
+**Decided 2026-10-01 by Ash**, answering the questions left open by §316 and §318
+(*"1 . same as now"*, *"3.no"*).
+
+1. **Who may issue a 发票 stays as it is now (§316).** Uploading the file takes
+   `invoices:manage` **or** `orders:edit`, and Mark issued stays under
+   `orders:edit`. So the `staff` and `dispatch` presets keep issuing. Nothing is
+   narrowed; §316's rule is final, not interim.
+2. **A Trend-only account does not get the AI read (§318).** `POST
+   /reports/read` and `/reports/ask` now need `reports:view` alone
+   (`lib/cap-routes.js`); `dashboard:view` no longer lets them through. The
+   desktop Reports tab opens on `reports:view`, and the phone already drew the
+   read and Ask only for it (`trendAiOn`), so nobody who could see the read on
+   either screen loses it. `scripts/test_reports_ai_gate.js` refuses a
+   Trend-only account and pins the phone's own gate.
+3. **Still open:** §302 item 7 — whether a receive-only account may mark a
+   *draft* order Delivered. Not answered; nothing changed.
