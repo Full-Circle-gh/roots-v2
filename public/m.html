@@ -14137,7 +14137,8 @@ reg('aprDecide', (id,decision)=>{
     delete a.cat[Number(id)];
     delete a.paid[Number(id)];
     aprLoad();
-    if(window.toast) toast(decision==='approve'?T('Approved','已通过'):T('Not approved','已拒绝'));
+    // §300: showToast, the phone's own — `window.toast` is the desktop's and was never here.
+    showToast(decision==='approve'?T('Approved','已通过'):T('Not approved','已拒绝'));
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -14176,7 +14177,10 @@ reg('aprTogether', ()=>{
     for(const id of ids){ delete a.cat[id]; delete a.paid[id]; }
     a.join={};
     aprLoad();
-    if(window.toast) toast(T('Approved','已通过')+' · '+((j&&j.data&&j.data.po_number)||''));
+    // §300: showToast (as aprDecide); the order number only when the server sent one,
+    // so a visible toast never ends in a dangling " · ".
+    const po=(j&&j.data&&j.data.po_number)||'';
+    showToast(T('Approved','已通过')+(po?' · '+po:''));
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -14217,7 +14221,7 @@ reg('aprPaidSet', (id,value)=>{
   apiWrite('/staff-expenses/'+Number(id)+'/paid-by',{paid_by:paid}).then(()=>{
     a.busy=0; a.tried=false;
     aprLoad();
-    if(window.toast) toast(T('Saved','已保存'));
+    showToast(T('Saved','已保存'));   // §300: the phone's own toast
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -14249,7 +14253,7 @@ reg('aprFile', (id,value)=>{
   apiWrite('/staff-expenses/'+Number(id)+'/category',{category:cat}).then(()=>{
     a.busy=0; a.tried=false;
     aprLoad();
-    if(window.toast) toast(T('Saved','已保存'));
+    showToast(T('Saved','已保存'));   // §300: the phone's own toast
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;

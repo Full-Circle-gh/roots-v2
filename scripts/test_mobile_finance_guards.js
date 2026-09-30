@@ -53,6 +53,10 @@ const SRC = [
   slice("reg('askRun', key=>{", "reg('copyWaybill'"),
   slice("reg('closeAsk',", '/* The live sheet'),
   slice('function sheetAsk(){', '/* A photo, full-screen.'),
+  slice("reg('aprDecide', (id,decision)=>{", '/* §146 — A CATEGORY CHOSEN ON A CLAIM STILL WAITING.'),
+  slice("reg('aprTogether', ()=>{", "reg('aprCatPick'"),
+  slice("reg('aprPaidSet', (id,value)=>{", '/* §146 — RE-FILING A CLAIM'),
+  slice("reg('aprFile', (id,value)=>{", '/* MARKING A DEBT PAID'),
   slice("reg('aprSettle', (who,total,ids)=>{", '/* §146 — WHERE THE CLAIM IS FILED'),
   slice('function expStatusPill(r){', 'function expMineRow('),
   slice("reg('poReceive', ()=>{", '/* Marking a delivery in writes stock'),
@@ -72,7 +76,7 @@ function mk(opts = {}) {
     ic: () => '<i></i>',
     state: {
       caps: opts.caps === undefined ? null : opts.caps,
-      apr: { busy: 0, err: '', tried: true },
+      apr: { busy: 0, err: '', tried: true, cat: {}, paid: {}, join: {}, rows: [] },
       ask: null, askErr: null,
       poDetail: opts.po || null, poId: opts.po ? opts.po.id : null, poBusy: false, poErr: null,
     },
@@ -84,7 +88,7 @@ function mk(opts = {}) {
     apiWrite: async (p, body, method) => {
       calls.writes.push({ p, body: JSON.parse(JSON.stringify(body)), method: method || 'POST' });
       if (opts.writeFails && calls.writes.length >= opts.writeFails) throw new Error('Claim is not approved');
-      return { success: true };
+      return opts.writeAnswer || { success: true };
     },
     api: async () => opts.po,
     loadPOs: () => {},
@@ -196,6 +200,55 @@ section('1 · Mark paid / Mark recovered asks before it writes');
     b.ctx.state.apr.busy = -1;
     b.CMD.aprSettle('Wei', '38', '4');
     assert.strictEqual(b.ctx.state.ask, null);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+section('1b · every Approvals write that succeeds says so (showToast, not the desktop\'s window.toast)');
+{
+  it('no handler on the phone reaches for window.toast any more', () => {
+    const code = M.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    assert.ok(!/window\.toast|[^\w.]toast\(/.test(code), 'window.toast is never defined in m.html');
+  });
+  const ok = async (label, go, request, toast, answer) => {
+    const { ctx, CMD, calls } = mk({ writeAnswer: answer });
+    ctx.state.apr.rows = [{ id: 7, paid_by: 'employee' }, { id: 8, paid_by: 'employee' }];
+    go(CMD, ctx);
+    await tick(); await tick();
+    assert.deepStrictEqual(calls.writes, [request], label + ': the request');
+    assert.deepStrictEqual(calls.toasts, [toast], label + ': the confirmation');
+    assert.strictEqual(calls.loads, 1, label + ': the queue reloads');
+  };
+  it('approve: "Approved"', () => ok('approve', (C) => C.aprDecide(7, 'approve'),
+    { p: '/staff-expenses/7/decide', body: { decision: 'approve' }, method: 'POST' }, 'Approved'));
+  it('approve with a picked category and a changed payer: both ride along', () => ok('approve+',
+    (C, x) => { x.state.apr.cat[7] = 'Transport'; x.state.apr.paid[7] = 'company'; C.aprDecide(7, 'approve'); },
+    { p: '/staff-expenses/7/decide', body: { decision: 'approve', category: 'Transport', paid_by: 'company' }, method: 'POST' }, 'Approved'));
+  it('reject: "Not approved"', () => ok('reject', (C) => C.aprDecide(7, 'reject'),
+    { p: '/staff-expenses/7/decide', body: { decision: 'reject' }, method: 'POST' }, 'Not approved'));
+  it('approve together onto one order: "Approved · RPO-0042"', () => ok('together',
+    (C, x) => { x.state.apr.join = { 7: true, 8: true }; C.aprTogether(); },
+    { p: '/staff-expenses/approve-together', body: { ids: [7, 8], categories: {}, paid_by: {} }, method: 'POST' },
+    'Approved · RPO-0042', { success: true, data: { po_number: 'RPO-0042' } }));
+  it('approve together with no order number: "Approved", no dangling separator', () => ok('together-',
+    (C, x) => { x.state.apr.join = { 7: true, 8: true }; C.aprTogether(); },
+    { p: '/staff-expenses/approve-together', body: { ids: [7, 8], categories: {}, paid_by: {} }, method: 'POST' }, 'Approved'));
+  it('who paid, corrected: "Saved"', () => ok('paid-by', (C) => C.aprPaidSet(7, 'company'),
+    { p: '/staff-expenses/7/paid-by', body: { paid_by: 'company' }, method: 'POST' }, 'Saved'));
+  it('re-filed under a category: "Saved"', () => ok('file', (C) => C.aprFile(7, 'Transport'),
+    { p: '/staff-expenses/7/category', body: { category: 'Transport' }, method: 'POST' }, 'Saved'));
+  it('in Chinese, the same live pairs', async () => {
+    const { CMD, calls } = mk({ lang: 'zh' });
+    CMD.aprDecide(7, 'approve'); await tick(); await tick();
+    CMD.aprFile(7, 'Transport'); await tick(); await tick();
+    assert.deepStrictEqual(calls.toasts, ['已通过', '已保存']);
+  });
+  it('a refused write shows its reason on the screen and toasts nothing', async () => {
+    const { ctx, CMD, calls } = mk({ writeFails: 1 });
+    CMD.aprDecide(7, 'approve'); await tick(); await tick();
+    assert.deepStrictEqual(calls.toasts, []);
+    assert.strictEqual(String(ctx.state.apr.err), 'Claim is not approved');
+    assert.strictEqual(ctx.state.apr.busy, 0);
   });
 }
 
