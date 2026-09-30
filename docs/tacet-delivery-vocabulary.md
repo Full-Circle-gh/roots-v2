@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.218 · 2026-09-30 · §309 RECIPE COSTS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (毛利(食谱)), THE REST COPIED WHOLE.** See *A recipe's cost on the phone (§309)*.
+
 **v1.217 · 2026-09-30 · §308 FINANCE TRANSACTIONS ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM THE DESKTOP.** See *Finance transactions on the phone (§308)*.
 
 **v1.216 · 2026-09-30 · §307 WRITING A PURCHASE ORDER ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Writing a purchase order on the phone (§307)*.
@@ -9790,3 +9792,39 @@ A delete or void in flight shows `Saving… · 保存中…` on its button, as t
 desktop's shared write path (`finTxWrite`) does; `Deleting…` / `Voiding…` were
 not minted. Server refusals arrive as `English · 中文` and are shown one half
 at a time (`tmOneLang`), unchanged.
+
+## A recipe's cost on the phone (§309)
+
+**Composed by Claude, 2026-09-30, under the 2026-09-06 amendment.** Operator
+register only (Rule 1): the phone Recipes list and record (`public/m.html`),
+shown only to `recipes:costs` holders.
+
+| shipped | built from |
+|---|---|
+| `Margin (recipe) · 毛利(食谱)` (the summary strip's label when the one product is costed by its build list) | **composed.** The desktop ships this label as `Margin (recipe) · Margin (recipe)`, marked *CN PENDING*: it has no Chinese. `毛利` is the live `Margin · 毛利`, `食谱` is the live `Recipe · 食谱`, and the full-width brackets are the ones the record's own live labels use (`名称(中文)`, `每份克数`, `(整批)`). |
+
+**Copied whole from the desktop record (`19-recipes.js`):** `Cost & Pricing · 成本与定价`,
+`Inputs · 成本输入`, `Labour · 人工`, `Overhead % · 管理费用 %`, `Sell price · 售价`,
+`Target food cost % · 目标食品成本 %`, `Ingredient cost · 原料成本`,
+`Overhead · 管理费用`, `Batch cost · 整批成本`, `Cost per serving · 每份成本`,
+`Cost per gram · 每克成本`, `(no servings) · (未记录份数)`,
+`(no batch size) · (未记录批量)`, `Margin per serving · 每份毛利`,
+`Food cost % · 食品成本率`, `Suggested sell price · 建议售价`,
+`Per-unit cost · 单位成本`, `No batch size or servings recorded · 未记录批量大小或份数`,
+`Sells for · 售价`, `Margin · 毛利`, `Selling below cost · 低于成本销售`,
+`serving · 份`, `(batch) · (整批)`, `free · 免费`, `no cost · 无成本`,
+`not yet costed · 尚未计算成本`, and the whole missing-cost sentence
+`N ingredients missing cost — costs shown are too low · N 项原料缺少成本 — 显示成本偏低`.
+It is now used wherever a cost figure is on screen; the short form declared in
+R1 stays where none is.
+
+**Live candidates rejected.**
+
+- Leaving the desktop's English `Margin (recipe)` in the Chinese half, as the
+  desktop does: **rejected**, because it would put English in front of a
+  Chinese reader on the one label that says the margin is not the product's.
+- `毛利(配方)`: **rejected**, because 配方 appears only in the server's refusal
+  sentences, while 食谱 is the screen's own word for a recipe, on every label
+  of it.
+- The Packaging breakdown row `Packaging (batch) — no longer counted`: **not
+  drawn**, so no Chinese was needed; see the decision.
