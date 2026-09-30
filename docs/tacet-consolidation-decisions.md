@@ -22115,3 +22115,121 @@ now carries a dated note pointing here. Its old text is kept.
    (`returned_at`) and shown, not typed. The desktop takes no date either.
 8. **The Received journal is read again after a return**, because a return is its
    own event there.
+
+## §314 — A 发票 IS ISSUED FROM THE PHONE'S ORDER SHEET
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 4 of the parity survey's build order; it completes what §97 already allowed. The phone's
+order sheet used to show the customer's fapiao request with the line "Issuing it is a desktop
+job." That line is gone. The sheet now issues the fapiao the way the desktop's block does
+(`renderInvoiceBlock` and its four writes, `07-content-billing.js`): Copy for accounting, a
+link and a number, a PDF or a photo, Mark issued, and un-issue.
+
+1. **Who may issue: `invoices:manage` AND `orders:edit`.** `invoices:manage` ("Issue / upload
+   invoices") is the key the role editor offers for this job. `orders:edit` is the key
+   `lib/cap-routes.js` actually requires on `PUT /orders/:id/invoice`. The desktop draws the
+   block for everyone; the phone shows controls only to an account that holds both, so nothing
+   it shows would be refused and nobody sees a job they were not given. Anyone else sees the
+   request, as before, and no controls.
+2. **Copy for accounting** puts the desktop's bundle on the real clipboard (`copyText`, the same
+   helper the waybill copy uses). The bundle is built line for line as the desktop's
+   `invoiceAccountingText` builds it:
+   - it stays bilingual whatever language the screen is in;
+   - it carries the goods total only: the stored subtotal, else the sum of the lines, else the
+     total less delivery;
+   - it infers "company" from a tax id on an older row with no type.
+
+   The order mapping now carries the three values this needs.
+3. **The upload.** Only a PDF or an image, at most 10 MB; both limits are checked before
+   anything is sent, in the desktop's words. It goes to `POST /invoice-file {data}`, and the
+   URL that comes back fills the link box. Uploading does not mark anything issued; that is
+   still the operator's own tap, as on the desktop.
+   - **A photo is shrunk first**, to 2400 px on the long side as JPEG, as the phone's other
+     uploads are. The desktop sends the original, but the route takes a data URL under a 12 MB
+     body limit, which a camera original plus base64's extra third can exceed. A fapiao is
+     still legible at 2400 px. A browser that cannot decode the photo sends the original.
+   - A PDF is sent as it is.
+4. **Mark issued.** At least a link or a number is required, and this is said before any
+   request. It then sends `PUT /orders/:id/invoice {action:'issue', file_url, number}`, trimmed,
+   through the order sheet's own write path (busy state, refusal line, order re-read). The
+   server then tells the customer.
+5. **Un-issue asks first. This is a deliberate difference from the desktop**, whose "edit" link
+   reverts with no question asked. The approved mockup says un-issue asks first, and on a
+   phone it sits a thumb away from Open the fapiao while the customer's record changes with
+   it. The confirm's title is the one composed string (see the vocab entry). It then sends
+   `PUT /orders/:id/invoice {action:'unissue'}`.
+6. **Not built:**
+   - the mockup's Amount row: the desktop block shows no amount, and the goods figure is in
+     the copied bundle;
+   - its sentence about what Mark issued does.
+7. **Tests.** `scripts/test_mobile_orders_fapiao.js` (fast shard) runs the sliced phone code.
+   It checks:
+   - each write's method, path and body, and that nothing is sent before a check or a confirm;
+   - the permission-denied cases;
+   - the clipboard payload against the desktop's lines;
+   - the mapping's three derived values.
+
+   It caught one defect while being written: both writes had gone out as POST, not PUT.
+
+## §315 — PURCHASING'S INVOICES (发票) COME TO THE PHONE
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P5 of the purchasing lane (survey build-order row 15). The phone had nothing
+of the desktop's Invoices tab. It now has all of it (`16-purchasing.js`,
+INVOICES) as a third tab on Purchasing's strip: the chase by supplier down to
+the order and the line, the 发票 already recorded, the no-invoice marks, Set
+supplier, the add and edit sheet with its allocation, Re-match, and the reach
+chip. There are no new server routes; every write is the desktop's request and
+body.
+
+1. **The tab is behind `purchasing:invoices` AND `purchasing:view`, and both fail
+   closed.** The first is the key every `/purchasing/*` write carries on the
+   server; the second because every figure on the screen is money. Before
+   capabilities are known there is no tab and no screen. The header button reads
+   *Add invoice* while the tab is open.
+2. **Organised around the chase, as on the desktop.** It shows *By supplier* and
+   *Recorded*, a month picker (months drawn from what came back, so it never
+   offers an empty one), and a server search. There are five figures: total
+   purchases, fully invoiced, partial, awaiting ("chase these") and no invoice.
+   Two strips follow. One names 发票 money that is recorded against an order that
+   has since stood down, with the orders and a *Re-match…*. The other shows the
+   credit due on returns made after invoicing, with the instruction to ask for a
+   credit note. Every figure is the server's (`lineStatus`); the screen adds
+   nothing up for itself.
+3. **A supplier opens to its orders and their lines.** Each order shows its date,
+   which kitchen order it replaced and what was already invoiced there, and how
+   many other suppliers share it (the order-level buttons cover them too). Each
+   line shows its status, what is invoiced, and any credit due. A search opens
+   every group. The reach chip dials, opens the link, or shows the WeChat QR in a
+   sheet; a stored link with a script scheme is shown as a word, never as a link.
+4. **The no-invoice mark at both levels.** Whole order is
+   `PUT /purchasing/po/:id/no-invoice`; one line is
+   `PUT /purchasing/po/:id/line/:lineId/no-invoice`. The pill states the fact and
+   the button, which starts with a verb, acts. Restoring an order says how many
+   lines keep their own mark. A line under the order's mark reads *by whole-order
+   mark* and offers no toggle. One mark is sent at a time; a failure is said on
+   the screen and stays there.
+5. **Add / edit a 发票** uses the desktop's form and body, including handing back
+   the due date it loaded. The lines on offer are that supplier's open lines plus
+   the ones this 发票 already covers; none marked no-invoice are offered.
+   Ticking a line takes what is still open on it. The badge follows every
+   keystroke without a repaint. *Match to amount* pours the amount down the open
+   lines in order. Changing the supplier clears the allocation. No supplier means
+   a one-off buy, covering the Unspecified lines. A line allocated past its
+   headroom is refused in words (see the vocabulary entry), and the form stays
+   open.
+6. **The two supplier fields are native selects**, not the desktop's search
+   boxes. A phone draws its own wheel. The list is the same book: the names on the
+   chase plus the active suppliers. It shows one language and stores the whole
+   name.
+7. **Set supplier** (the way out of the Unspecified bucket) opens on the line,
+   the order or the whole bucket it was pressed from, with every line ticked. It
+   sends `PUT /purchasing/lines/supplier` and then opens the group the lines moved
+   into.
+8. **Re-match shows the pairing before anything moves.** The plans are read-only
+   GETs, and an order is ticked by default only when its whole order pairs. The
+   orders are then sent one at a time, so a failure part-way leaves the moved ones
+   alone, and each order that failed is named in the sheet.
+9. **Recorded 发票** show supplier, number, day, orders, amount, and any shortfall
+   between the lines ticked and the total. *Edit* opens the sheet with the 发票's
+   own lines ticked. *Delete* goes behind the desktop's confirm.
