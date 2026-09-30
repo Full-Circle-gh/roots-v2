@@ -520,13 +520,13 @@ section('6 · every string is the desktop\'s (or a named live pair)');
       assert.ok(FIN.includes(s), s);
     }
   });
-  it('the rest are live elsewhere, named in docs/pending/F1.vocab.md', () => {
+  it('the rest are live elsewhere, named in the vocabulary document', () => {
     const W = fs.readFileSync(path.join(ROOT, 'public/retail-admin/20-waste.js'), 'utf8');
     assert.ok(W.includes("T('From', '从')") && W.includes("T('To', '至')"));
     assert.ok(M.includes("T('Custom','自定义')") && M.includes("T('Pick a date','选日期')") && M.includes("T('Try again','重试')"));
     const S = fs.readFileSync(path.join(ROOT, 'routes/finance-summary.js'), 'utf8');
     assert.ok(S.includes("'from is after to · 起始日期晚于结束日期'"));
-    assert.ok(fs.existsSync(path.join(ROOT, 'docs/pending/F1.vocab.md')));
+    assert.ok(fs.readFileSync(path.join(ROOT, 'docs/tacet-delivery-vocabulary.md'), 'utf8').includes('## The Finance summary on the phone ('));
   });
 }
 
