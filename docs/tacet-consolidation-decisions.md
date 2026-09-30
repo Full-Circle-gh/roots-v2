@@ -22765,3 +22765,37 @@ who could open the product, and so did the recipe-link answer.
    Trend-only account and pins the phone's own gate.
 3. **Still open:** §302 item 7 — whether a receive-only account may mark a
    *draft* order Delivered. Not answered; nothing changed.
+
+## §325 — THE REST OF THE PHONE COMES TO PARITY, SAFETY FIRST
+
+**Decided 2026-10-01 by Ash** (*"overview which section if the phone is not
+199% function like PC , and let's strtvdo them all"*). §97 applied to every
+section §300 did not cover. The survey, the gap list and the build order are
+`docs/tacet-phone-parity-rest-of-app.md`.
+
+1. **Every section is brought to parity**: Orders, Customers, Delivery,
+   Products, Categories, Stock and waste, Shop menus, Channels, Marketing,
+   Loyalty, Content, the page editor, Settings, Dashboard and Billing. One PR
+   per step; reads before writes; every new write asserted on its request and
+   every desktop guard carried with it (§97's two standing rules).
+2. **Live defects are fixed first**, before any new screen: a permission
+   refusal logging the operator out; controls drawn for accounts that cannot
+   use them; server writes that no permission gates (settings, polls,
+   leaderboard, top-up packages and wallet finalize, affiliate, the page
+   editor, flash-sale keys that gate nothing); the dashboard endpoint ignoring
+   the store (which makes §317's "closes a leak" wrong — recorded here, not
+   edited there); Home ignoring the store lock; the channel reopen check; the
+   refund rider warning; silent rounding of points; the out-of-stock policy
+   on one size; the unanswered recount refusals; whole-tree saves that can
+   undo desktop edits; Resume delivery skipping history.
+3. **The server permission rule for writes that had none**: each is gated on
+   the key(s) that open the desktop screen making that write, as an any-of
+   where more than one screen makes it — the §316/§318 principle: close the
+   account that holds none of them, take nothing from anyone who can use the
+   screen today.
+4. **Held until Ash answers, not built**: §63 (coupons, flash sales); holiday
+   ON, closing a channel everywhere, Meituan/Eleme off, online-store
+   open/close; §124 (per-item sync, matching); §116 (statement print, reset
+   test account); §112 (team devices); product spreadsheet import; the product
+   page designer; §97's three exceptions and the box-label printer; billing;
+   §302.7.
