@@ -977,6 +977,9 @@ const state = {
      exists because Safari has no prompt to fire. refreshing is the pull-to-
      refresh spinner — see wirePull(). */
   canInstall:false, installBar:false, installSheet:false, refreshing:false, refreshedAt:0,
+  /* §300 F4 — the fapiao being issued from the open order: the link and number
+     typed so far, an upload in flight, and a refusal said before any request. */
+  inv:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   /* prodStock is keyed by PRODUCT ID, not a single list, because the sheet now
@@ -1103,6 +1106,9 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* §300 P4 — the line extras' own write (tracking / 发票 / return), as
+     'kind:lineId' while one is in flight, and its refusal, kept on its line. */
+  recvXBusy:null, recvXErr:null,
   /* THE KITCHEN'S QUEUE, and the two screens that close it (§48).
      kq  — what has been asked of this kitchen.
      hd  — "What you made": how much of it actually reached the shelf.
@@ -1248,7 +1254,10 @@ const state = {
        /* §300 F2 — Transactions: the ledger payload and its read, the chip and
           search filters, the row whose sheet is open (a kind:id key), that
           sheet's busy/refusal, and the New/Edit and Return forms. */
-       tx:null,txTried:false,txErr:'',txSeq:0,txDir:'all',txQ:'',txRow:null,txBusy:'',txActErr:'',form:null,ret:null},
+       tx:null,txTried:false,txErr:'',txSeq:0,txDir:'all',txQ:'',txRow:null,txBusy:'',txActErr:'',form:null,ret:null,
+       /* §300 F3 — Categories: the list and its read, a write's refusal (kept on
+          screen until the next write), the write in flight, the Add box. */
+       cats:null,catsTried:false,catsErr:'',catsMsg:'',catsBusy:'',catsNew:''},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -1498,7 +1507,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
-    f.txTried=false; f.txErr=''; f.txRow=null; f.txActErr=''; f.txBusy=''; f.form=null; f.ret=null; }
+    f.txTried=false; f.txErr=''; f.txRow=null; f.txActErr=''; f.txBusy=''; f.form=null; f.ret=null;
+    f.catsTried=false; f.catsErr=''; f.catsMsg=''; f.catsBusy=''; f.catsNew=''; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid=EXP_PAID_DEFAULT; x.note=''; x.photo=null; x.date=null;
     x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
@@ -10495,6 +10505,7 @@ function loadDelivery(id){
 function loadReceive(poId){
   state.recvId=Number(poId); state.recvPo=null; state.recvErr=null; state.recvSaveErr=null;
   state.recvVals=null; state.recvDmg=null; state.recvStore=null; state.recvStoreOpen=false;
+  state.recvXBusy=null; state.recvXErr=null;
   /* A NEW VISIT IS A NEW DELIVERY. The receipt the last one amended belongs to
      the van that came then; carrying its id here would hang tomorrow's boxes
      off yesterday's delivery. The pending write is dropped with it — whatever
@@ -10697,6 +10708,150 @@ function rcvLocation(){
    Below that, unchanged: [−][n][+] as one control, the unit beside it, and the
    damage mark at the right end of the SAME row — one row, one hand, nothing
    hidden. */
+/* ── §300 P4 — THE RECEIVE SCREEN'S EXTRAS (desktop: 16-purchasing.js
+   receiveRow's Tracking no. / Invoice / Returned cells) ─────────────────────
+   Three things the desktop's receive table carries per line that the door
+   screen did not: the tracking number, the line's 发票 status, and a RETURN.
+   None of them is a count, so none rides the counting pause (recvFlush): each
+   is its own write, the moment it is made, and none sends qty_received — the
+   receive route writes only the columns a payload names, so a tracking number
+   or a return can never book or clear a delivery by accident.
+
+   RETURNS COME TO THE PHONE BY §300's NAME, overturning docs/purchase-returns.md
+   "What this does not do" #5. The model is that document's and nothing here
+   changes it: a return is drawn from what was ACCEPTED (arrived − damaged),
+   `returned_qty` is the line's running total — a payload states where the line
+   now stands, never what to add — a reason is required from the five fixed
+   codes, and a return the shelf cannot cover is refused whole (return_blocked)
+   with nothing written. Offered only on a line whose arrival the server holds:
+   nothing can go back that has not come in. */
+const recvAccepted=it=>{ const w=rcvVal(it.id).was; return w&&w.recv!=null?Math.max(0,(Number(w.recv)||0)-(Number(w.dmg)||0)):0; };
+function recvXRefresh(poId){
+  return api('/purchases/'+poId).then(d=>{
+    const po=state.recvPo; if(!po||po.id!==poId||!d) return;
+    const by=new Map((d.items||[]).map(i=>[String(i.id),i]));
+    (po.items||[]).forEach(it=>{ const f=by.get(String(it.id)); if(!f) return;
+      ['returned_qty','return_reason','returned_at','tracking_number','invoice_status','no_invoice_expected'].forEach(k=>{ it[k]=f[k]; }); });
+    po.no_invoice_expected=d.no_invoice_expected; render();
+  }).catch(()=>{});
+}
+/* The desktop's words for a receive refusal (PU_RECEIVE_ERRORS), and the shelf
+   refusal with the goods named (puShowReturnBlocked), both locked pairs. */
+function recvXErrFor(e){
+  const c=e&&e.code, b=(e&&e.body)||{};
+  if(c==='return_blocked') return {title:T('Cannot record this return','无法登记此次退货'),
+    msg:T('Some of these goods are no longer in stock, so they cannot be sent back — nothing was changed.','部分货品已不在库存中，无法退货 — 未作任何更改。'),
+    rows:(b.blocking||[]).map(x=>[rcvName(x)||('#'+x.product_id),T(`${x.short} short`,`${x.short} 短少`)])};
+  const M={
+    return_before_receipt:['Nothing has arrived on that line yet, so nothing can go back. Record the delivery first.','该行尚未收货，无法退货。请先登记收货。'],
+    return_exceeds_received:['That is more than the line accepted. A return can only send back what was taken in.','退货数量超过该行实收数量。退货不能超过已接收的数量。'],
+    return_reason_required:['Pick a reason for the return','请选择退货原因'],
+    return_reason_invalid:['That return reason is not one this app knows. Reopen the order and try again.','该退货原因无效，请重新打开采购单后重试。'],
+    return_reason_not_applicable:['A reason belongs only on a line with a return.','只有退货的项才需要填写原因。'],
+    return_invalid:['That returned quantity is not a number.','退货数量无效。'],
+  };
+  if(M[c]) return {msg:T(...M[c])};
+  return {msg:recvErrText(e)};
+}
+function recvXWrite(kind,it,req,okMsg){
+  const po=state.recvPo; if(!po||state.recvXBusy) return;
+  const poId=po.id;
+  state.recvXBusy=kind+':'+it.id; state.recvXErr=null; render();
+  apiWrite(req[0],req[1],req[2]).then(()=>{
+    state.recvXBusy=null;
+    showToast(okMsg);
+    if(kind==='ret'){ state.rcvTried=false; state.rcvToTried=false; }   // the journal gains a return row
+    return recvXRefresh(poId);
+  }).catch(e=>{
+    state.recvXBusy=null;
+    if(String(e.message)==='auth') return;
+    state.recvXErr=Object.assign({line:String(it.id)},recvXErrFor(e)); render();
+  });
+}
+reg('recvTrack', (id,v)=>{
+  const po=state.recvPo, it=po&&(po.items||[]).find(x=>String(x.id)===String(id)); if(!it) return;
+  const val=String(v==null?'':v).trim();
+  if(val===String(it.tracking_number||'').trim()) return;
+  recvXWrite('trk',it,['/purchases/'+po.id+'/receive',{receipts:[{line_id:it.id,tracking_number:val}]},'PUT'],T('Tracking saved','运单号已保存'));
+});
+/* The line's 发票 mark saves on its own route, as the desktop's picker does
+   (puSaveLineInvoice) — never folded into a count. Its key is the Invoices
+   screen's, purchasing:invoices. */
+reg('recvInv', (id,v)=>{
+  const po=state.recvPo, it=po&&(po.items||[]).find(x=>String(x.id)===String(id)); if(!it) return;
+  if(!mCan('purchasing:invoices')||po.no_invoice_expected||!['not_received','received','no_invoice'].includes(v)) return;
+  const cur=it.no_invoice_expected?'no_invoice':(it.invoice_status||'not_received');
+  if(v===cur) return;
+  recvXWrite('inv',it,['/purchasing/po/'+po.id+'/line/'+it.id+'/invoice-status',{invoice_status:v},'PUT'],T('Invoice status saved','发票状态已保存'));
+});
+reg('recvReturn', id=>{
+  const po=state.recvPo, it=po&&(po.items||[]).find(x=>String(x.id)===String(id));
+  if(!it||!rcvBooked(it)||state.recvXBusy) return;
+  const had=Number(it.returned_qty)||0, acc=recvAccepted(it), unit=escAttr(it.unit||'');
+  state.askErr=null;
+  state.ask={title:T('Return','退货')+' · '+escAttr(rcvName(it)),
+    fields:[
+      {id:'qty',label:T('Returned','退货')+(unit?' ('+unit+')':''),value:had?rcvFmt(had):'',numeric:true,placeholder:'0'},
+      {id:'reason',label:T('Why?','原因？'),value:it.return_reason||'',
+       choices:[['',T('Why?','原因？')]].concat(RCV_RETURN_REASONS.map(r=>[r.key,T(r.en,r.zh)]))}],
+    confirmLabel:T('Save','保存'),
+    /* Caught here as well as on the server — the courtesy, not the rule: the
+       server still refuses both. */
+    validate:v=>{ const q=rcvNum(v.qty);
+      if(String(v.qty).trim()!==''&&!/^\s*\d*\.?\d+\s*$/.test(String(v.qty))) return T('That returned quantity is not a number.','退货数量无效。');
+      if(q>acc+1e-9) return T('That is more than the line accepted. A return can only send back what was taken in.','退货数量超过该行实收数量。退货不能超过已接收的数量。');
+      if(q>0&&!v.reason) return T('Pick a reason for the return','请选择退货原因');
+      return null; },
+    run:v=>{ const q=rcvNum(v.qty);
+      recvXWrite('ret',it,['/purchases/'+po.id+'/receive',{receipts:[{line_id:it.id,returned_qty:q,return_reason:q>0?v.reason:null}]},'PUT'],
+        T('Saved','已保存')); }};
+  render();
+});
+/* The block under a line: tracking, 发票, and what went back. */
+function rcvExtras(it){
+  const po=state.recvPo; if(!po) return '';
+  const busy=state.recvXBusy, mine=busy&&busy.split(':')[1]===String(it.id);
+  const err=state.recvXErr&&state.recvXErr.line===String(it.id)?state.recvXErr:null;
+  const inv=it.no_invoice_expected?'no_invoice':(it.invoice_status||'not_received');
+  const INV=[['not_received','Awaiting','待收'],['received','Received','已收'],['no_invoice','None','无发票']];
+  const invRow=po.no_invoice_expected
+    ?`<span style="font-size:13px;color:var(--text-secondary)">${T('None · whole order','无发票 · 整单')}</span>`
+    :mCan('purchasing:invoices')
+      /* A native select, as the desktop's picker is: three fixed answers, and
+         the platform's own wheel on a phone. */
+      ?`<select style="flex:1;min-width:0;height:40px;padding-top:0;padding-bottom:0" aria-label="${T('Invoice','发票')}" ${mine?'disabled':''} onchange="APP.cmd('recvInv','${it.id}',this.value)">${
+          INV.map(([k,en,zh])=>`<option value="${k}"${inv===k?' selected':''}>${T(en,zh)}</option>`).join('')}</select>`
+      :`<span style="font-size:13px;color:var(--text-secondary)">${T(...(INV.find(x=>x[0]===inv)||INV[0]).slice(1))}</span>`;
+  const ret=Number(it.returned_qty)||0;
+  const retLine=ret>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink)">${LANG==='en'
+      ?(rcvFmt(ret)+' '+escAttr(it.unit||'')+' sent back'):('退回 '+rcvFmt(ret)+' '+escAttr(it.unit||''))}${
+      it.return_reason?' · '+rcvReturnReason(it.return_reason):''}${it.returned_at?' · '+escAttr(fmtDateOnly(it.returned_at)):''}</div>`:'';
+  const retBtn=rcvBooked(it)&&recvAccepted(it)>0
+    ?`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13px" ${busy?'disabled':''} onclick="APP.cmd('recvReturn','${it.id}')">${ic('rotate-ccw',15)}${T('Return','退货')}</button>`:'';
+  return `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-default);display:flex;flex-direction:column;gap:10px">
+    <label style="display:flex;align-items:center;gap:10px"><span style="flex:none;font-size:13px;color:var(--text-secondary);min-width:64px">${T('Tracking no.','运单号')}</span>
+      <input value="${escAttr(it.tracking_number||'')}" style="flex:1;min-width:0" ${mine?'disabled':''} onchange="APP.cmd('recvTrack','${it.id}',this.value)"></label>
+    <div style="display:flex;align-items:center;gap:10px"><span style="flex:none;font-size:13px;color:var(--text-secondary);min-width:64px">${T('Invoice','发票')}</span>${invRow}</div>
+    ${retLine||retBtn?`<div style="display:flex;align-items:center;gap:10px;justify-content:space-between">${retLine||'<span></span>'}${retBtn}</div>`:''}
+    ${mine?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`:''}
+    ${err?`<div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;background:var(--brick-tint);font-size:13px;line-height:1.5">
+      ${err.title?`<span style="font-weight:500;color:var(--brick-ink)">${err.title}</span>`:''}<span style="color:var(--brick-ink)">${err.msg}</span>
+      ${(err.rows||[]).map(([n,v])=>`<span style="display:flex;justify-content:space-between;gap:10px;color:var(--brick-ink)"><span>${escAttr(n)}</span><span class="num">${escAttr(v)}</span></span>`).join('')}</div>`:''}</div>`;
+}
+/* THE DESKTOP'S RECEIVE NOTE, drawn here only once the order has a return on
+   it, because that is when its last clause — the money and the shelf both
+   come back — is news. Every clause is the desktop's (receiveNote), rendered
+   only when the lines earn it; an all-material order promises no stock. */
+function rcvReturnNote(po){
+  const items=(po&&po.items)||[];
+  if(!items.some(i=>Number(i.returned_qty)>0)) return '';
+  if(!items.some(i=>!i.ingredient_id&&i.store_product_id)) return '';
+  const chan=items.some(i=>i.channel_listed)?' '+T('and sync out to every sales channel.',',并同步到各销售渠道。'):'';
+  return `<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface-raised);font-size:13px;line-height:1.55">
+    <span style="flex:none;display:flex;color:var(--text-secondary);margin-top:2px">${ic('info',15)}</span>
+    <span><b style="font-weight:500">${T('Confirmed counts go into','确认的数量会自动计入')} ${escAttr(rcvStoreName({store_name_en:po.receiving_store_name_en||po.store_name_en,store_name_cn:po.receiving_store_name_cn||po.store_name_cn}))} ${T('stock by themselves','门店库存')}</b>${chan} ${
+      T('Damaged units are kept out of stock.','破损数量不计入库存。')} ${T('Returned units come back off both.','退货数量会从库存和支出中同时扣除。')}</span></div>`;
+}
 function rcvLine(it){
   const v=rcvVal(it.id), ord=rcvOrdered(it), sh=rcvShort(it), ov=rcvOver(it);
   const on=rcvOn(it), came=rcvCame(it), no=rcvNo(it);
@@ -10842,7 +10997,7 @@ function rcvLine(it){
         ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}
         ${noteRow}</span>
       <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${rcvFmt(ord)} ${escAttr(it.unit||'')}</span></div>
-    ${answer}${qty}${dmg}${note}${reasons}${undo}</div>`;
+    ${answer}${qty}${dmg}${note}${reasons}${undo}${rcvExtras(it)}</div>`;
 }
 /* The two whole-supplier answers, because those are the two things that happen
    to a whole supplier: the van came with everything on the list, or it did not
@@ -11004,6 +11159,7 @@ function screenReceive(){
     ${poNoteCard}
     ${allBtn}
     ${lines}
+    ${rcvReturnNote(po)}
     ${rcvSummary()}
     <div style="display:flex;flex-direction:column">${err}${warn}${done}
       ${status?`<span style="margin-top:10px">${status}</span>`:''}</div></div>`;
@@ -18842,13 +18998,12 @@ reg('expSend', ()=>{
    The days are the STORE's (shopToday), as the desktop's tdToday — a day out on
    this screen is money in the wrong month.
 
-   THE SUB-VIEW STRIP names only what exists: Summary and Transactions (F2),
-   and Approvals for an operator who may approve (it renders the Approvals
-   screen this app already has). Categories joins it in its own step; a tab
-   that opened onto nothing would be a control that lies.
+   THE SUB-VIEW STRIP is the desktop's, in its order: Summary, Transactions
+   (F2), Approvals for an operator who may approve (it renders the Approvals
+   screen this app already has), Categories (F3).
    ══════════════════════════════════════════════════════════════════════════ */
 SUBS.finance={title:['Finance','财务'],
-  status:()=>state.fin.view==='approvals'?'':escAttr(finRangeLabel(finWindow())),
+  status:()=>(state.fin.view==='approvals'||state.fin.view==='categories')?'':escAttr(finRangeLabel(finWindow())),
   /* §300 F2 — the desktop's New transaction, Transactions' alone (Summary types
      nothing), and only for the pen: `finance:record`, the key the write needs. */
   cta:()=>state.fin.view==='transactions'&&mCan('finance:record')
@@ -19009,7 +19164,8 @@ function finStair(d){
 function finStrip(){
   const v=state.fin.view;
   return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
-    ${[['summary','Summary','汇总'],['transactions','Transactions','交易记录']].concat(canRoute('approvals')?[['approvals','Approvals','审批']]:[]).map(([k,en,zh])=>{
+    ${[['summary','Summary','汇总'],['transactions','Transactions','交易记录']].concat(canRoute('approvals')?[['approvals','Approvals','审批']]:[])
+      .concat([['categories','Categories','分类']]).map(([k,en,zh])=>{
       const on=v===k;
       return `<button onclick="APP.cmd('finView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
         font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
@@ -19025,6 +19181,8 @@ function screenFinance(){
   // always a strip; Approvals joins it for who may approve.
   const strip=finStrip();
   if(f.view==='approvals'&&canRoute('approvals')) return strip+screenApprovals();
+  // §300 F3 — the list has no window, so no range chips over it.
+  if(f.view==='categories') return screenFinCats(strip);
   const head=`${strip}<div style="padding:12px 0 0">${chipRow(FIN_RANGES,f.range,'finRange')}</div>`;
   if(f.view==='transactions') return screenFinTx(head);
   finLoad();
@@ -19139,11 +19297,13 @@ function sheetFinCat(){
 reg('finView', v=>{
   const f=state.fin;
   if(v==='approvals'){ if(!canRoute('approvals')) return; aprFresh(); }
-  f.view=(v==='approvals'||v==='transactions')?v:'summary'; render();
+  f.view=(v==='approvals'||v==='transactions'||v==='categories')?v:'summary'; render();
 });
 reg('finToggle', k=>{ const o=state.fin.open; o[k]=!o[k]; render(); });
 reg('finRetry', ()=>{ const f=state.fin;
-  if(f.view==='transactions'){ f.txTried=false; f.txErr=''; } else { f.tried=false; f.err=''; } render(); });
+  if(f.view==='transactions'){ f.txTried=false; f.txErr=''; }
+  else if(f.view==='categories'){ f.catsTried=false; f.catsErr=''; }
+  else { f.tried=false; f.err=''; } render(); });
 /* A preset moves the window at once. Custom asks for two days first, in the
    ask-sheet, and applies them only when both are there and in order — the
    server refuses an inverted window, and the sheet says so before it is asked. */
@@ -19623,6 +19783,165 @@ reg('finTxOpenPO', ()=>{
   if(!r||!finTxActions(r).includes('openpo')) return;
   f.txRow=null; APP.cmd('openPO',Number(r.po_id));
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   §300 — FINANCE ON THE PHONE: CATEGORIES (step F3)
+   --------------------------------------------------------------------------
+   The tenant's own expense-category list (22-finance.js, §87 part two): the
+   list the money-out form offers and the Summary breakdown is drawn in. Read
+   for anybody on Finance; every write needs `finance:record`, the key
+   lib/cap-routes.js puts on every /finance/ write — the desktop draws its
+   controls for anyone and lets the server refuse, the phone does not draw a
+   control that would be refused.
+
+     Add        POST   /finance/categories {name}
+     Rename     PATCH  /finance/categories/:id {name}     (the rows follow it)
+     Operating  PATCH  /finance/categories/:id {is_operating}
+     Hide       PATCH  /finance/categories/:id {is_active:false}, after its confirm
+     Restore    PATCH  /finance/categories/:id {is_active:true}
+     Delete     DELETE /finance/categories/:id, after its confirm, and only for
+                a category nothing has used — said BEFORE the request, from the
+                count already here, exactly as finCatDelete does.
+
+   THE DESKTOP'S INLINE NAME FIELD IS A RENAME SHEET here, and its row of
+   controls is a ⋯ sheet: the same writes, the phone's shape (§97). No window:
+   the list has no date about it, so the range chips and the status line give
+   way, as the desktop hides its bar. Every write re-reads the list, because a
+   rename moves rows and the counts on OTHER rows move with it.
+   ══════════════════════════════════════════════════════════════════════════ */
+function finCatsLoad(){
+  const f=state.fin;
+  if(f.catsTried) return; f.catsTried=true;
+  api('/finance/categories').then(d=>{
+    f.cats=Array.isArray(d)?d:[]; f.catsErr=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    f.catsErr=T('Could not load the categories.','分类加载失败。'); render();
+  });
+}
+/* finCatsUsage: the count as a sentence, and "Not used" in words at zero. */
+function finCatsUsage(n){
+  const c=Number(n)||0;
+  return c===0?T('Not used','未使用'):T(`Used by ${c}`,`${c} 条使用`);
+}
+const finCatById=id=>(state.fin.cats||[]).find(c=>String(c.id)===String(id))||null;
+function finCatRowHtml(c){
+  const pen=mCan('finance:record');
+  const busy=!!state.fin.catsBusy;
+  const off=c.is_active===0;
+  const sub=[finCatsUsage(c.usage_count)].concat(off?[T('Hidden','已停用')]:[])
+    .concat(pen?[]:[c.is_operating?T('Operating expense','营业费用'):T('Not an operating expense','不计入营业费用')]);
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px 10px 14px;${off?'opacity:.62':''}">
+    <span style="display:flex;flex-direction:column;min-width:0;flex:1">
+      <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis">${escAttr(c.name)}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${escAttr(sub.join(' · '))}</span></span>
+    ${pen?`<span style="display:flex;align-items:center;gap:8px;flex:none">
+      <span style="font-size:12px;color:var(--text-secondary)">${T('Operating expense','营业费用')}</span>
+      ${busy?`<span style="opacity:.5;pointer-events:none">${toggle(!!c.is_operating,'')}</span>`:toggle(!!c.is_operating,`APP.cmd('finCatFlag',${Number(c.id)})`)}
+      <button class="iconbtn" style="width:36px;height:36px" ${busy?'disabled':''} aria-label="${T('More','更多')}" onclick="APP.cmd('finCatMore',${Number(c.id)})">${ic('ellipsis',20)}</button></span>`:''}
+  </div>`;
+}
+function screenFinCats(strip){
+  const f=state.fin;
+  finCatsLoad();
+  const pen=mCan('finance:record');
+  const intro=`<div style="font-size:13px;line-height:1.55;color:var(--text-secondary)">${T('Your own list. Expenses are filed against these, and only these are offered when someone records one.','本店自己的分类列表。记录支出时只会显示这些分类。')}</div>`;
+  const add=pen?`<div style="display:flex;gap:8px">
+      <input id="mFinCatNew" autocomplete="off" value="${escAttr(f.catsNew)}" placeholder="${T('Rent','租金')}" style="flex:1;min-width:0"
+        oninput="APP.cmd('finCatNewSet',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();APP.cmd('finCatAdd')}">
+      <button class="btn2" style="flex:none;width:auto;padding:0 18px" ${f.catsBusy?'disabled':''} onclick="APP.cmd('finCatAdd')">${f.catsBusy==='add'?T('Saving…','保存中…'):T('Add','添加')}</button></div>`:'';
+  const msg=f.catsMsg?finBanner(escAttr(f.catsMsg)):'';
+  let body;
+  if(f.catsErr&&!f.cats) body=`${finBanner(f.catsErr)}
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:0 auto;display:flex" onclick="APP.cmd('finRetry')">${T('Try again','重试')}</button>`;
+  else if(!f.cats) body=`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else if(!f.cats.length) body=`<div style="padding:18px 4px;font-size:14.5px;line-height:1.55;color:var(--text-secondary)">${T(
+      'No categories yet. Add the ones this business spends money on — rent, wages.','还没有分类。请新增本店的支出分类 — 租金、工资。')}</div>`;
+  else body=`<div class="list">${f.cats.map((c,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${finCatRowHtml(c)}`).join('')}</div>`;
+  return `${strip}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${intro}${add}${msg}${body}</div>`;
+}
+/* One write path: busy while it runs, the list re-read either way, a toast
+   only on success and the server's refusal on the screen where it stays. */
+function finCatsWrite(kind,run,after){
+  const f=state.fin;
+  if(f.catsBusy) return;
+  f.catsBusy=kind; f.catsMsg=''; render();
+  run().then(()=>{
+    f.catsBusy=''; f.catsTried=false;
+    // A category list change is a change to the ledger's words and the
+    // staircase's lines: both re-read when next shown.
+    f.txTried=false; f.tried=false;
+    if(after) after();
+    render(); showToast(T('Saved','已保存'));
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    f.catsBusy=''; f.catsTried=false; f.catsMsg=finTxWords(e); render();
+  });
+}
+reg('finCatNewSet', v=>{ state.fin.catsNew=String(v==null?'':v); });
+/* CLEARED ONLY ON SUCCESS — a duplicate leaves what was typed to be corrected. */
+reg('finCatAdd', ()=>{
+  const f=state.fin; if(!mCan('finance:record')) return;
+  const name=String(f.catsNew||'').trim();
+  if(!name) return;
+  finCatsWrite('add',()=>apiWrite('/finance/categories',{name}),()=>{ f.catsNew=''; });
+});
+reg('finCatFlag', id=>{
+  const c=finCatById(id); if(!c||!mCan('finance:record')) return;
+  finCatsWrite('flag:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_operating:!c.is_operating},'PATCH'));
+});
+reg('finCatMore', id=>{
+  const c=finCatById(id); if(!c||!mCan('finance:record')||state.fin.catsBusy) return;
+  const off=c.is_active===0;
+  state.ask={title:escAttr(c.name),
+    options:[{key:'rename',label:T('Rename','重命名')},
+      off?{key:'restore',label:T('Restore','启用')}:{key:'hide',label:T('Hide','停用')},
+      {key:'delete',label:T('Delete','删除')}],
+    run:k=>{
+      if(k==='rename') return finCatRename(c);
+      if(k==='restore') return finCatsWrite('active:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_active:true},'PATCH'));
+      if(k==='hide') return finCatHide(c);
+      if(k==='delete') return finCatDelete(c);
+    }};
+  render();
+});
+/* An empty or unchanged name puts the old one back and sends nothing — the
+   desktop field's blur does the same. */
+function finCatRename(c){
+  state.ask={title:T('Rename','重命名'),
+    fields:[{id:'name',label:T('Category','分类'),value:c.name}],
+    confirmLabel:T('Save','保存'),
+    run:v=>{
+      const name=String(v.name||'').trim();
+      if(!name||name===c.name){ render(); return; }
+      finCatsWrite('rename:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{name},'PATCH'));
+    }};
+  render();
+}
+/* Hiding is the ordinary way to retire one; the confirm says what it does. */
+function finCatHide(c){
+  state.ask={title:T('Hide this category?','停用该分类？'),
+    body:T('It stops being offered when recording an expense. Expenses already filed under it keep it, and keep its setting.',
+           '记录支出时不再显示该分类。已使用该分类的支出保持不变，其设置也保留。'),
+    confirmLabel:T('Hide','停用'),
+    run:()=>finCatsWrite('active:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_active:false},'PATCH'))};
+  render();
+}
+/* Delete is for a category nothing has used; the reason for refusing the rest
+   is said before any request, from the count on screen. */
+function finCatDelete(c){
+  const f=state.fin;
+  if(Number(c.usage_count)>0){
+    f.catsMsg=T(`"${c.name}" is used by ${c.usage_count} expenses. Hide it instead — hiding keeps those records exactly as they are.`,
+                `“${c.name}”已被 ${c.usage_count} 条支出使用。请改为停用 — 停用不会改动这些记录。`);
+    render(); return;
+  }
+  state.ask={title:T('Delete this category?','删除该分类？'),
+    body:T('Nothing has been filed under it. This cannot be undone.','尚无支出使用该分类。此操作无法撤销。'),
+    confirmLabel:T('Delete','删除'), danger:true,
+    run:()=>finCatsWrite('delete:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{},'DELETE'))};
+  render();
+}
 
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
@@ -22376,14 +22695,54 @@ function addonTimeline(o){
         <span class="num" style="flex:none;font-size:14px">+${money(CUR,a.amount)}</span></div>`).join('')}
     </div></div>`;
 }
-/* The fapiao the customer asked for. Issuing it is a desktop job, but WHAT was
-   requested — the title, the tax id, where it goes — is exactly what someone
-   away from their desk gets asked to read out. */
+/* The fapiao the customer asked for — WHAT was requested (the title, the tax
+   id, where it goes), and, since §300 F4, issuing it, which used to be "a
+   desktop job". The desktop's block (renderInvoiceBlock, 07-content-billing.js)
+   is the spec: Copy for accounting, a link and a number, a PDF or a photo, Mark
+   issued, and the way back from a mistake.
+
+   WHO MAY ISSUE: `invoices:manage` — "Issue / upload invoices", the key the
+   role editor offers for exactly this — AND `orders:edit`, the key
+   lib/cap-routes.js actually puts on PUT /orders/:id/invoice. The desktop draws
+   the block for everyone; the phone draws nothing the server would refuse, and
+   nothing an account was not given the job of. Without both, the block reads
+   and offers nothing. */
+const invCanIssue=()=>mCan('invoices:manage')&&mCan('orders:edit');
+/* invoiceAccountingText, line for line: a clipboard payload for a
+   Chinese-speaking accountant, so it stays bilingual whatever this screen
+   reads in, and it carries the goods total only — no items, no delivery. */
+function invAccountingText(o){
+  const v=o.invoice;
+  const L=['开票申请 Invoice request','订单号 Order: '+(v.orderNo||o.id),
+    '类型 Type: '+(v.company?'企业 Company':'个人 Personal'),'抬头 Title: '+(v.title||'')];
+  if(v.company) L.push('税号 Tax ID: '+(v.taxId||''));
+  if(v.email) L.push('邮箱 Email: '+v.email);
+  L.push('————————————');
+  L.push('商品总额 Products total: '+finExact(v.goods));
+  return L.join('\n');
+}
+/* The link and number typed for THIS order; another order starts empty. */
+function invDraft(o){
+  const d=state.inv;
+  if(!d||d.orderId!==o.id) state.inv={orderId:o.id,url:'',number:'',busy:'',err:''};
+  return state.inv;
+}
 function invoiceBlock(o){
   const v=o.invoice; if(!v) return '';
   const issued=v.status==='issued';
+  const can=invCanIssue();
   const row=(l,val)=>val?`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:13.5px;margin-top:6px">
     <span style="color:var(--text-secondary);flex:none">${l}</span><span class="num" style="min-width:0;text-align:right;word-break:break-all">${escAttr(val)}</span></div>`:'';
+  const d=can?invDraft(o):null;
+  const busy=!!(d&&d.busy)||!!state.orderBusy;
+  const issue=can&&!issued?`<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-default)">
+      <input id="mInvUrl" autocomplete="off" value="${escAttr(d.url)}" placeholder="${T('Fapiao link (or attach PDF)','发票链接(或上传 PDF)')}" style="width:100%" oninput="APP.cmd('invSet','url',this.value)">
+      <input id="mInvNo" autocomplete="off" value="${escAttr(d.number)}" placeholder="${T('Invoice no. (optional)','发票号码(可选)')}" style="width:100%" oninput="APP.cmd('invSet','number',this.value)">
+      ${d.err?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(d.err)}</div>`:''}
+      <div style="display:flex;gap:8px">
+        <label class="btn2" style="flex:1;gap:6px;${busy?'opacity:.5;pointer-events:none':''}">${ic('paperclip',16)}${d.busy==='upload'?T('Uploading…','上传中…'):T('PDF / image','PDF / 图片')}
+          <input type="file" accept="application/pdf,image/*" style="display:none" onchange="APP.cmd('invFile',this)"></label>
+        <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('invIssue')">${state.orderBusy==='invoice'?T('Saving…','保存中…'):T('Mark issued','标记已开')}</button></div></div>`:'';
   return `<div class="card" style="padding:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${T('Fapiao','发票')}</span>
@@ -22394,9 +22753,85 @@ function invoiceBlock(o){
     ${row(T('Send to','发送至'),v.email)}
     ${row(T('Number','发票号'),v.number)}
     ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;text-decoration:none">${ic('download',15)} ${T('Open the fapiao','打开发票')}</a>`:''}
-    ${!issued?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:10px">${T('Issuing it is a desktop job.','开具发票请在电脑端。')}</div>`:''}
+    ${can?`<button class="btn2" style="width:100%;margin-top:12px;gap:6px" onclick="APP.cmd('invCopy')">${ic('clipboard',16)}${T('Copy for accounting','复制开票信息')}</button>`:''}
+    ${issue}
+    ${can&&issued?`<div style="display:flex;justify-content:flex-end;margin-top:8px"><button style="border:none;background:none;padding:4px 0;font-family:inherit;font-size:13px;color:var(--text-secondary);cursor:pointer" ${busy?'disabled':''} onclick="APP.cmd('invUnissue')">${T('edit','修改')}</button></div>`:''}
   </div>`;
 }
+reg('invSet', (k,v)=>{ const d=state.inv; if(!d||(k!=='url'&&k!=='number')) return; d[k]=String(v==null?'':v); });
+/* The real clipboard, through copyText — the same helper the waybill uses. */
+reg('invCopy', ()=>{ const o=currentOrder(); if(!o||!o.invoice||!invCanIssue()) return; copyText(invAccountingText(o)); });
+/* A PDF goes as it is. A photo is shrunk first — 2400px on the long side,
+   JPEG — as the phone's other uploads are: the desktop sends the original, but
+   the route takes a data URL under a 12 MB body limit, which a camera original
+   plus base64's third can pass, and a fapiao read at 2400px is still legible.
+   A browser that cannot decode it sends the original. */
+async function invShrink(file){
+  if(!/^image\//.test(file.type||'')) return file;
+  try{
+    const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});
+    const k=Math.min(1,2400/Math.max(bmp.width,bmp.height));
+    const c=document.createElement('canvas');
+    c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k);
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.88));
+    return blob||file;
+  }catch(e){ return file; }
+}
+const invDataUrl=file=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result||'')); r.onerror=()=>rej(new Error('read')); r.readAsDataURL(file); });
+/* uploadInvoicePdf: PDF or image only, 10 MB at most, both said before the
+   upload; the stored file's URL fills the link box, and Mark issued is still
+   the operator's tap. */
+reg('invFile', async input=>{
+  const o=currentOrder(); const d=state.inv;
+  const file=input&&input.files&&input.files[0];
+  if(input) input.value='';
+  if(!file||!o||!d||d.orderId!==o.id||d.busy||!invCanIssue()) return;
+  const isPdf=file.type==='application/pdf', isImg=/^image\//.test(file.type||'');
+  if(!isPdf&&!isImg){ d.err=T('PDF or image only','仅限 PDF 或图片'); render(); return; }
+  d.busy='upload'; d.err=''; render();
+  try{
+    const send=await invShrink(file);
+    if(send.size>10*1024*1024){ d.busy=''; d.err=T('File too large (max 10MB)','文件过大'); render(); return; }
+    const j=await apiWrite('/invoice-file',{data:await invDataUrl(send)});
+    const url=j&&j.data&&j.data.url;
+    d.busy='';
+    if(url) d.url=url;
+    render(); showToast(T('Attached — tap Mark issued','已附加,点击标记已开'));
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    d.busy=''; d.err=T('Upload failed: ','上传失败:')+(e.message||''); render();
+  }
+});
+/* markInvoiceIssued: a link or a number, at least one, said before the
+   request; then the desktop's body. Marking it issued tells the customer. */
+reg('invIssue', ()=>{
+  const o=currentOrder(); const d=state.inv;
+  if(!o||!o.invoice||!d||d.orderId!==o.id||d.busy||!invCanIssue()) return;
+  const url=String(d.url||'').trim(), number=String(d.number||'').trim();
+  if(!url&&!number){ d.err=T('Add a fapiao link/PDF or invoice number','请填写发票链接或号码'); render(); return; }
+  d.err='';
+  orderWrite('invoice', async()=>{
+    await apiWrite('/orders/'+o._id+'/invoice',{action:'issue',file_url:url,number},'PUT');
+    state.inv=null;
+    return T('Invoice marked issued','已标记开票');
+  });
+});
+/* unissueInvoice. The desktop's "edit" link reverts with no question asked;
+   the phone asks first (§300 F4, the approved mockup: "Un-issue … asks
+   first"), because on a phone it sits one thumb away from Open the fapiao, and
+   the customer's record changes with it. */
+reg('invUnissue', ()=>{
+  const o=currentOrder();
+  if(!o||!o.invoice||o.invoice.status!=='issued'||!invCanIssue()||state.orderBusy) return;
+  state.ask={title:T('Back to requested?','恢复待开？'),
+    confirmLabel:T('Confirm','确认'),
+    run:()=>orderWrite('invoice', async()=>{
+      await apiWrite('/orders/'+o._id+'/invoice',{action:'unissue'},'PUT');
+      return T('Back to requested','已恢复待开');
+    })};
+  render();
+});
 /* The sheet's chrome around a read that has not landed yet.
    Every other way into an order goes through a row the app already holds, so
    there has always been something to paint on the first frame. An order opened
@@ -29925,6 +30360,15 @@ function mapDetail(o){
     status:o.invoice_status||'requested', type:o.invoice_type||'',
     title:o.invoice_title||'', taxId:o.invoice_tax_id||'', email:o.invoice_email||'',
     number:o.invoice_number||'', file:o.invoice_file_url||'', issuedAt:o.invoice_issued_at||'',
+    /* §300 F4 — what Copy for accounting needs, computed the desktop's way
+       (invoiceAccountingText / invoiceIsCompany): the order number, company
+       inferred from a tax id on a legacy row with no type, and the GOODS total —
+       the stored subtotal, else the lines, else total less delivery. */
+    orderNo:o.order_no||o.id,
+    company:o.invoice_type?o.invoice_type==='company':!!o.invoice_tax_id,
+    goods:(o.subtotal!=null)?Number(o.subtotal)
+      :(Array.isArray(o.items)&&o.items.length?o.items.reduce((a,it)=>a+Number(it.line_total||0),0)
+        :Number(o.total||0)-Number(o.shipping_fee||0)),
   }:null;
   // [en, zh] pair like the rest — "自提门店 Tianhe Store" read half-translated.
   base.pickupStore=(o.fulfillment_type==='pickup')

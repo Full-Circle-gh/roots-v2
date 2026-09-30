@@ -1,5 +1,13 @@
 # Tacet delivery vocabulary — locked
 
+**v1.223 · 2026-09-30 · §314 发票 ISSUING ON THE PHONE — ONE CONFIRM TITLE COMPOSED BY CLAUDE, EVERYTHING ELSE COPIED WHOLE.** See *Issuing a 发票 from the phone's order sheet (§314)*.
+
+**v1.222 · 2026-09-30 · §313 THE PHONE'S RECEIVE EXTRAS — NOTHING COMPOSED, EVERY LABEL COPIED.** See *Tracking, 发票 and returns on the phone's receive screen (§313)*.
+
+**v1.221 · 2026-09-30 · §312 THE RECIPE RECORD'S ⋯ MENU ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *The recipe record's actions on the phone (§312)*.
+
+**v1.220 · 2026-09-30 · §311 FINANCE CATEGORIES ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Finance categories on the phone (§311)*.
+
 **v1.219 · 2026-09-30 · §310 FROM THE KITCHEN ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED.** See *From the kitchen on the phone (§310)*.
 
 **v1.218 · 2026-09-30 · §309 RECIPE COSTS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (毛利(食谱)), THE REST COPIED WHOLE.** See *A recipe's cost on the phone (§309)*.
@@ -9866,3 +9874,123 @@ Every label is copied whole from the desktop's *From the kitchen* modal
 `Loading… · 加载中…`, `Close · 关闭`,
 `That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`
 (the phone's own).
+
+## Finance categories on the phone (§311)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+admin's Finance → Categories tab (`public/m.html`, `screenFinCats`). Every
+label is copied whole from the desktop sub-view (`public/retail-admin/22-finance.js`,
+"CATEGORIES", and its markup in `public/retail-admin.html`):
+
+- **The tab and its head** — `Categories · 分类`, the intro `Your own list.
+  Expenses are filed against these, and only these are offered when someone
+  records one. · 本店自己的分类列表。记录支出时只会显示这些分类。`, the Add box's
+  placeholder `Rent · 租金` and `Add · 添加`.
+- **A row** — `Used by N · N 条使用`, `Not used · 未使用`, `Hidden · 已停用`,
+  `Operating expense · 营业费用`, and for an operator without the pen
+  `Not an operating expense · 不计入营业费用` (the Summary's own pair).
+- **The ⋯ sheet** — `Rename · 重命名` (live on the desktop as `cuT('Rename',
+  '重命名')`; the desktop renames in place and needs no button, the phone does),
+  `Hide · 停用`, `Restore · 启用`, `Delete · 删除`; the rename sheet's field is
+  `Category · 分类` and its button `Save · 保存`.
+- **The confirms and the refusal** — `Hide this category? · 停用该分类？` with its
+  body, `Delete this category? · 删除该分类？` with `Nothing has been filed under
+  it. This cannot be undone. · 尚无支出使用该分类。此操作无法撤销。`, and the
+  used-category sentence `"X" is used by N expenses. Hide it instead — hiding
+  keeps those records exactly as they are. · “X”已被 N 条支出使用。请改为停用 —
+  停用不会改动这些记录。`.
+- **States** — `No categories yet. Add the ones this business spends money on —
+  rent, wages. · 还没有分类。请新增本店的支出分类 — 租金、工资。`,
+  `Could not load the categories. · 分类加载失败。`, `Loading… · 加载中…`,
+  `Saving… · 保存中…`, `Saved · 已保存`, `Try again · 重试`.
+- **Reused from the phone** — `More · 更多` (the ⋯ button's label).
+
+Server refusals (`that category already exists · 该分类已存在`, `name required ·
+分类名称必填`) are shown one half at a time, unchanged.
+
+## The recipe record's actions on the phone (§312)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+recipe record's ⋯ sheet and its make-available screen (`public/m.html`). Every
+label is copied whole from the desktop record (`public/retail-admin/19-recipes.js`),
+or is the phone's own live pair:
+
+- **The menu:** `Duplicate · 复制`, `Print · 打印`, `Version history · 历史版本`
+  (the phone's), `Make available as material · 设为可用物料`,
+  `Linked to material: · 已关联物料:`, `Archive · 归档`, `Restore · 恢复`,
+  `More actions · 更多操作` (the phone's own ⋯ label, from the purchase order
+  sheet).
+- **Duplicate:** `Duplicated · edit the copy · 已复制 · 编辑副本`,
+  `Could not open that recipe · 无法打开该食谱`, and the stored suffixes
+  ` (copy)` / `(副本)`.
+- **Archive:** `Archive this recipe? · 归档该食谱?`,
+  `You can bring it back later. · 之后可以恢复。`, `Archive anyway · 仍然归档`,
+  the used-by warning (both halves, `archiveMaterialWarning`),
+  `Bring this recipe back? · 恢复该食谱?`, `Archived · 已归档`,
+  `Restored · 已恢复`, `Failed · 操作失败`.
+- **Make available:** `Lets another recipe use what this one makes as an ingredient. · 让其他食谱可以将本食谱的产出作为原料使用。`,
+  `Create new · 新建`, `Link existing · 关联现有`, `Name (English) · 名称(英文)`,
+  `Name (中文) · 名称(中文)`, `Recipe unit · 配方单位`, `SKU (optional) · 货号(可选)`,
+  `Kind · 类别` with `Food · 食品`, `Packaging · 包装`, `Equipment · 设备`,
+  `Retail · 零售`, `Other · 其他`, `Search materials · 搜索物料`,
+  `Name or SKU… · 名称或货号…`, `An English name is required. · 英文名称为必填项。`,
+  `Pick a material to link. · 请选择一个要关联的物料。`, `Selected: · 已选择:`,
+  the buy-price warning, `Make available · 设为可用`,
+  `Now available as a material · 已设为可用物料`.
+- **Unlink:** `Unlink this material? · 取消关联该物料?`, its body,
+  `Unlink · 取消关联`, `Unlinked · 已取消关联`.
+- The phone's own `Saving… · 保存中…`, `Loading… · 加载中…`,
+  `Nothing matches · 没有匹配项`.
+
+**Live candidates rejected.**
+
+- The mockup's sub-lines under each menu row (`A copy opens as a new recipe`,
+  `Both languages, no money on it`, `N saved versions`): **rejected**. They
+  would each be composed, and each row is already named in the desktop's own
+  words.
+
+## Tracking, 发票 and returns on the phone's receive screen (§313)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the block under
+each line of the phone's receive screen (`public/m.html`). Every label is copied
+whole:
+
+- from the desktop's receive table (`16-purchasing.js`): `Tracking no. · 运单号`,
+  `Invoice · 发票`, the picker's `Awaiting · 待收`, `Received · 已收`, `None · 无发票`,
+  `None · whole order · 无发票 · 整单`; the return box's `Returned · 退货` (`returnedColumn`),
+  `Why? · 原因？` (`returnReasonPrompt`), and the five reasons (`错货` as shipped in
+  `RCV_REASONS`, the other four locked 2026-09-01); `Pick a reason for the return · 请选择退货原因`
+  and the other `PU_RECEIVE_ERRORS` sentences; the locked `returnBlockedTitle`
+  and `returnBlocked`, with `N short · N 短少`; and the receive note's four
+  clauses (`Confirmed counts go into … stock by themselves`,
+  `and sync out to every sales channel.`, `Damaged units are kept out of stock.`,
+  `returnsComeOffBoth`);
+- **the tick dropped** (the phone's toasts carry none): `Invoice status saved · 发票状态已保存`;
+- from the phone's own live pairs: `Return · 退货`, `Tracking saved · 运单号已保存`,
+  `Saved · 已保存`, `Saving… · 保存中…`, and the Receiving journal's
+  `N <unit> sent back · 退回 N <unit>` for what went back.
+
+## Issuing a 发票 from the phone's order sheet (§314)
+
+Operator register only (Rule 1): the fapiao block on the phone admin's order
+sheet (`public/m.html`, `invoiceBlock`). Copied whole from the desktop block's
+`invT` pairs (`public/retail-admin/07-content-billing.js`): `Copy for
+accounting · 复制开票信息`, `Fapiao link (or attach PDF) · 发票链接(或上传 PDF)`,
+`Invoice no. (optional) · 发票号码(可选)`, `PDF / image · PDF / 图片`,
+`Mark issued · 标记已开`, `edit · 修改`, `PDF or image only · 仅限 PDF 或图片`,
+`File too large (max 10MB) · 文件过大`, `Attached — tap Mark issued ·
+已附加,点击标记已开`, `Upload failed: · 上传失败:`, `Add a fapiao link/PDF or
+invoice number · 请填写发票链接或号码`, `Invoice marked issued · 已标记开票`,
+`Back to requested · 已恢复待开`. The clipboard payload is the desktop's
+bilingual bundle, unchanged. The phone's own `Uploading… · 上传中…`,
+`Saving… · 保存中…` and `Confirm · 确认` are reused. The line `Issuing it is a
+desktop job. · 开具发票请在电脑端。` is RETIRED: it is no longer true.
+
+| Composed | Built from | Why |
+|---|---|---|
+| `Back to requested? · 恢复待开？` (the un-issue confirm's title) | the live toast `Back to requested · 已恢复待开`, as a question; `恢复待开` drops the toast's `已`, which marks it done | The desktop reverts with no confirm, so it has no confirm wording. The phone asks first (see the decision), and the title had to name the act. |
+
+Live candidates rejected: `edit · 修改` (the desktop's link text) names the
+control rather than what it does, and would have read "修改?" over a sheet that
+changes nothing but the status; `Undo · 撤销` is live on the phone but for
+dispatch, where it means something else.

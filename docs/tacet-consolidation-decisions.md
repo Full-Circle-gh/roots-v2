@@ -21948,3 +21948,225 @@ buyer's key.
 6. **Not built:** the desktop's older *Copy from kitchen* picker. §78 retired the
    app that produced its source orders, and the survey lists it as dead on the
    desktop.
+
+## §311 — FINANCE CATEGORIES ON THE PHONE
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 3 of the parity survey's build order. Finance on the phone gains its fourth tab,
+Categories: the shop's own list of expense categories (§87 part two), which the money-out form
+offers and the Summary breakdown is drawn in. It has every write the desktop tab has, each
+calling the same endpoint with the same body. The tab strip is now the desktop's, in the
+desktop's order: Summary · Transactions · Approvals (for approvers) · Categories.
+
+1. **Reading the list is open to anyone on Finance; every write needs `finance:record`.** That
+   is the key `lib/cap-routes.js` puts on every `/finance/` write. The desktop draws its
+   controls for everyone and lets the server refuse; the phone does not draw a control the
+   server would refuse. Without the key the list is read-only, and each category's operating
+   flag is shown in words ("Operating expense" / "Not an operating expense", both existing
+   pairs) instead of as a switch.
+2. **Each row** shows the name, its usage in the desktop's words ("Used by N" / "Not used"),
+   Hidden where it applies, the operating switch, and a ⋯ button for Rename, Hide or Restore,
+   and Delete. The desktop edits a name in place; the phone renames in a sheet. The writes are
+   the same (§97).
+3. **The writes:**
+   - Add: `POST /finance/categories {name}`, trimmed. The box is cleared only on success, so a
+     duplicate leaves what was typed there to fix.
+   - Operating switch: `PATCH {is_operating}`, sending the opposite of what is shown.
+   - Rename: `PATCH {name}`. An empty or unchanged name sends nothing.
+   - Hide: asks first, with the desktop's explanation, then `PATCH {is_active:false}`.
+   - Restore: `PATCH {is_active:true}`, no confirm.
+   - Delete: a category that has been used is refused **before any request**, using the count
+     already on screen and the desktop's sentence pointing to Hide. An unused one asks first,
+     styled as dangerous, then sends `DELETE`.
+4. **After each write.** The list is re-read whether it worked or not, because a rename moves
+   rows and changes the counts on other categories. The Transactions and Summary tabs are also
+   marked out of date, since both show these names. While one write runs the other controls
+   are held. A refusal shows on the screen and stays until the next write; a toast only
+   confirms success.
+5. **No date range over this tab**, as on the desktop: the range chips and the status line
+   step aside, because the list has no date about it.
+6. **Not built from the mockup:**
+   - its status line ("14 categories · 2 hidden");
+   - its caption about what ⋯ does.
+
+   Neither is on the desktop, and each would have needed new Chinese. The desktop's own intro
+   sentence is shown instead. Drag to reorder (`/finance/categories/reorder`) is not on the
+   desktop screen either, so it is not here.
+7. **Tests.** `scripts/test_mobile_finance_categories.js` (fast shard) runs the sliced phone
+   code against a fake server. It checks each write's method, path and body, and that nothing
+   is sent before a confirm or for a used category. `test_mobile_finance_summary.js` now
+   expects the four-tab strip.
+
+## §312 — THE RECIPE RECORD'S ⋯ MENU: DUPLICATE, ARCHIVE, MAKE AVAILABLE AS MATERIAL
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step R4 of the recipes lane (the survey's PR 8). The phone record
+(`public/m.html`) gains the desktop record's remaining actions in one ⋯ sheet
+(mockup R07): Print, Duplicate, Version history, Make available as material
+(or unlink it), and Archive or Restore. The printer icon moves into the menu;
+the head keeps the pencil and Make it.
+
+1. **Each action is drawn only for the capability its write needs.** Duplicate
+   and Archive need `recipes:edit` (the desktop's `data-cap`). The material
+   link needs `recipes:edit` **and** `materials:edit`: the route's second gate,
+   `requireMaterialsEditToo`, lives in `canRoute('recipemz')` as the till's
+   pair does. A reader gets Print and Version history. Each command also
+   refuses on its own, because on the phone a refused write logs you out.
+2. **The menu is offered from the read view only.** While editing, the head
+   carries only Done, and Done does not return the record until its last save
+   has landed. So every action starts from a record that is on the server,
+   which is the state the desktop's `flushSave()` waits for.
+3. **Duplicate follows the desktop's `duplicateOf()`.** It reads the source
+   fresh and opens the copy exactly as New recipe opens: a draft on its own
+   frame, created by its first save. The copy carries the lines, the steps,
+   batch and servings with their derived flags, shelf life, storage, notes,
+   category and type, and the cost inputs **for a cost holder only**. It
+   carries no id, no SKU (SKUs are unique, so a copied one fails every save)
+   and no material or products. ` (copy)` and `(副本)` are stored data, one per
+   language, whatever the screen's language. The desktop's toast says nothing
+   is saved yet.
+4. **Done on a recipe never yet saved** (New recipe, a duplicate) now writes
+   it even untouched, as the desktop's Save does. Without an English name it
+   is held and says why. This also fixes an R2 gap: Done on an untouched New
+   recipe used to leave an empty "Loading…" record.
+5. **Archive and Restore use the desktop's three confirms.** A recipe that
+   supplies a material gets the used-by warning: the material, the recipes
+   using it (four names, then a count), and that its cost freezes. The frozen
+   figure is included only where money may be shown; the sentence reads
+   correctly without it, as the desktop wrote it to. The write is
+   `PUT /:id/archive {restore}`. On success the phone says *Archived* or
+   *Restored*, goes back to where the record was opened from, and marks both
+   lists (live and archived) to be re-read.
+6. **Make available as material gets a screen of its own**, not a sheet: it
+   has fields, a search and two modes, and a sheet rebuilt on each keystroke
+   takes the keyboard with it. The two modes are the desktop's. *Create new*
+   is named from the recipe, with recipe unit g, SKU optional and a kind.
+   *Link existing* searches with the picker's query, narrowed to what the
+   server will accept (stocked in g, not already made by another recipe), and
+   warns when the material has a buy price. The reason the button is off is
+   shown under it. On success the toast is the server's warning, or the
+   desktop's confirmation, and the phone goes back to the record and re-reads
+   it. **Unlink** asks in the desktop's words, then sends
+   `DELETE /:id/materialize`.
+7. **Three states for each write.** While a write is on the wire, the ⋯ is
+   disabled and the status line says *Saving…*; on the make-available screen,
+   the button says so. A refusal renders on the record or the screen and stays
+   until the next action. A toast only ever confirms.
+8. **The material search has a clear (×) button**, registered in the shared
+   table as every phone search is. `test_search_clear.js` requires this.
+
+**Coverage.** New `scripts/test_mobile_recipes_actions.js` (fast shard, 20
+cases). It checks:
+- the menu for each combination of capabilities, and the commands' own refusals;
+- Duplicate for a cost holder (POST, then the source's cost inputs) and for
+  anyone else (POST only, no cost key), a source that cannot be read, and Done
+  held without a name;
+- Archive and Restore bodies, the used-by warning with and without money, and
+  a refusal;
+- Make available in both modes, the missing-name reason, a refusal, the
+  server's warning, and Unlink.
+
+`test_mobile_recipes_read.js` was updated deliberately: Print is in the menu,
+and there are now seven writes, each pinned.
+
+## §313 — THE PHONE'S RECEIVE SCREEN RECORDS TRACKING, THE 发票 MARK AND RETURNS
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P4 of the purchasing lane (survey build-order row 14). Each line on the
+desktop's receive table has three cells the phone's door screen did not:
+*Tracking no.*, *Invoice* and *Returned* (`16-purchasing.js` `receiveRow`). They
+now sit under each open line on the phone. §300 overturned
+`docs/purchase-returns.md` "What this does not do" #5 by name, and that entry
+now carries a dated note pointing here. Its old text is kept.
+
+1. **None of the three rides the counting pause.** The receive screen saves counts
+   by itself (§70). A tracking number, a 发票 mark or a return is each its own
+   write, sent the moment it is made. None of them ever sends `qty_received`: the
+   receive route writes only the columns a payload names, so none of these can
+   book or clear a delivery by accident. There is one extra write at a time, and
+   after each one the screen reads the order back so it shows what the server now
+   holds.
+2. **Tracking number**: saved when the field is left, by
+   `PUT /purchases/:id/receive {receipts:[{line_id, tracking_number}]}`, on any
+   line. The tracking number is often known before the van arrives.
+3. **The 发票 mark** saves on its own route, as the desktop's picker does:
+   `PUT /purchasing/po/:id/line/:lineId/invoice-status`. It is a native select with
+   the desktop's three answers. It needs `purchasing:invoices`, the Invoices
+   screen's key, and fails closed until the account's permissions are known.
+   Without that key, the mark reads and cannot be changed. When the whole order is
+   marked, the line reads *None · whole order* and offers no picker, as on the
+   desktop.
+4. **A return is purchase-returns.md's model, unchanged.** It is offered only on a
+   line the server holds as arrived, and only while something on it was accepted
+   (arrived − damaged). The box holds the line's **running total**, prefilled
+   with what already went back, and a payload states where the line now stands.
+   A reason from the five codes is required. Too many, no reason, or not a number
+   are caught before the round trip and refused again by the server.
+5. **Its refusals are said on the line, and stay.** A return the shelf cannot
+   cover gets the locked `returnBlockedTitle` / `returnBlocked`, with the goods
+   and how short each one is. The server's other return codes get the desktop's
+   sentences. A toast only ever confirms.
+6. **Where a return went is said.** The line reads *2 kg sent back · Quality ·
+   29 Sep*, using the phone's Receiving-journal words. Once the order has a return,
+   the desktop's receive note appears above the tally, ending
+   `returnsComeOffBoth`. The Finance panel on the order (P1) already carried
+   `returnedToSupplier` / `returnedNetted`.
+7. **The return date is the server's**, stamped when a return grows
+   (`returned_at`) and shown, not typed. The desktop takes no date either.
+8. **The Received journal is read again after a return**, because a return is its
+   own event there.
+
+## §314 — A 发票 IS ISSUED FROM THE PHONE'S ORDER SHEET
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step 4 of the parity survey's build order; it completes what §97 already allowed. The phone's
+order sheet used to show the customer's fapiao request with the line "Issuing it is a desktop
+job." That line is gone. The sheet now issues the fapiao the way the desktop's block does
+(`renderInvoiceBlock` and its four writes, `07-content-billing.js`): Copy for accounting, a
+link and a number, a PDF or a photo, Mark issued, and un-issue.
+
+1. **Who may issue: `invoices:manage` AND `orders:edit`.** `invoices:manage` ("Issue / upload
+   invoices") is the key the role editor offers for this job. `orders:edit` is the key
+   `lib/cap-routes.js` actually requires on `PUT /orders/:id/invoice`. The desktop draws the
+   block for everyone; the phone shows controls only to an account that holds both, so nothing
+   it shows would be refused and nobody sees a job they were not given. Anyone else sees the
+   request, as before, and no controls.
+2. **Copy for accounting** puts the desktop's bundle on the real clipboard (`copyText`, the same
+   helper the waybill copy uses). The bundle is built line for line as the desktop's
+   `invoiceAccountingText` builds it:
+   - it stays bilingual whatever language the screen is in;
+   - it carries the goods total only: the stored subtotal, else the sum of the lines, else the
+     total less delivery;
+   - it infers "company" from a tax id on an older row with no type.
+
+   The order mapping now carries the three values this needs.
+3. **The upload.** Only a PDF or an image, at most 10 MB; both limits are checked before
+   anything is sent, in the desktop's words. It goes to `POST /invoice-file {data}`, and the
+   URL that comes back fills the link box. Uploading does not mark anything issued; that is
+   still the operator's own tap, as on the desktop.
+   - **A photo is shrunk first**, to 2400 px on the long side as JPEG, as the phone's other
+     uploads are. The desktop sends the original, but the route takes a data URL under a 12 MB
+     body limit, which a camera original plus base64's extra third can exceed. A fapiao is
+     still legible at 2400 px. A browser that cannot decode the photo sends the original.
+   - A PDF is sent as it is.
+4. **Mark issued.** At least a link or a number is required, and this is said before any
+   request. It then sends `PUT /orders/:id/invoice {action:'issue', file_url, number}`, trimmed,
+   through the order sheet's own write path (busy state, refusal line, order re-read). The
+   server then tells the customer.
+5. **Un-issue asks first. This is a deliberate difference from the desktop**, whose "edit" link
+   reverts with no question asked. The approved mockup says un-issue asks first, and on a
+   phone it sits a thumb away from Open the fapiao while the customer's record changes with
+   it. The confirm's title is the one composed string (see the vocab entry). It then sends
+   `PUT /orders/:id/invoice {action:'unissue'}`.
+6. **Not built:**
+   - the mockup's Amount row: the desktop block shows no amount, and the goods figure is in
+     the copied bundle;
+   - its sentence about what Mark issued does.
+7. **Tests.** `scripts/test_mobile_orders_fapiao.js` (fast shard) runs the sliced phone code.
+   It checks:
+   - each write's method, path and body, and that nothing is sent before a check or a confirm;
+   - the permission-denied cases;
+   - the clipboard payload against the desktop's lines;
+   - the mapping's three derived values.
+
+   It caught one defect while being written: both writes had gone out as POST, not PUT.
