@@ -70,7 +70,10 @@ it('eight groups, each with a heading in both languages', () => {
   }
 });
 
-/* TWENTY-SIX SINCE 2026-09-28, for the same one reason: `supowed` (§286, the
+/* TWENTY-SEVEN SINCE 2026-09-30, for the same one reason: `finance` (§300 F1,
+   the desktop's Finance summary, read-only on the phone) joins Money and
+   numbers beside Sales and Trend. A row ADDED, gated on `finance:view`.
+   Twenty-six from 2026-09-28, for the same one reason: `supowed` (§286, the
    suppliers who give us credit and what we owe each) joins Stock coming in,
    beside the Purchasing whose orders it counts.
    It was twenty-five from 2026-09-20, and the count moved for the one reason it may:
@@ -87,11 +90,11 @@ it('eight groups, each with a heading in both languages', () => {
    or not at all. */
 it('the same rows came out as went in — a regroup is a move, not an edit', () => {
   const keys = groups().flatMap((g) => g.keys);
-  assert.strictEqual(keys.length, 26, `expected 26 Operations rows, found ${keys.length}`);
-  assert.strictEqual(new Set(keys).size, 26, 'a row key appears in two groups');
+  assert.strictEqual(keys.length, 27, `expected 27 Operations rows, found ${keys.length}`);
+  assert.strictEqual(new Set(keys).size, 27, 'a row key appears in two groups');
   /* Named in full rather than counted, so a row SWAPPED for another still
      fails. A count alone would pass a rename of the set. */
-  const expected = ['neworder', 'till', 'sales', 'trend', 'invoices', 'pick', 'delivery',
+  const expected = ['neworder', 'till', 'sales', 'trend', 'finance', 'invoices', 'pick', 'delivery',
     'purchasing', 'supowed', 'receiving', 'receivexfer', 'stockapp', 'kitchenqueue', 'logbatch',
     'askkitchen', 'askstock', 'askstocksent', 'askbuy', 'kitchenready', 'askbuysent',
     'waste', 'expense',
@@ -175,7 +178,7 @@ it('three pill values, and no pill is the default', () => {
     .concat([...PILLS.matchAll(/[,{]\s*([a-z]+):\[/g)].map((m) => m[1]));
   const pilled = new Set(keys);
   assert.ok(pilled.size <= 6,
-    `${pilled.size} of 26 rows carry a pill — past a handful it is a column, not a mark`);
+    `${pilled.size} of 27 rows carry a pill — past a handful it is a column, not a mark`);
 });
 
 it('the pill is on the rows that earn it, and on no others', () => {

@@ -1168,6 +1168,13 @@ const state = {
      — opening a receipt, another row's decision landing. Held in the DOM alone,
      checking the photo before approving would silently throw the pick away. */
   apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[],cats:[],cat:{},paid:{},join:{}},
+  /* §300 F1 — Finance on the phone. `range` is a preset key or 'custom' (then
+     `from`/`to` hold the days); `data` is the last /finance/summary payload,
+     kept on screen through a reload; `seq` drops a stale answer; `open` is the
+     three disclosures; `cat` / `pol` are the category sheet and the purchase
+     order opened inside it. */
+  fin:{view:'summary',range:'30',from:null,to:null,data:null,err:'',tried:false,seq:0,
+       open:{rev:true,exp:true,excl:false},cat:null,pol:null},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -1365,8 +1372,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      is: what is waiting for a decision is a fact about this minute, and a list
      carried over from the last time the app was opened may already have been
      worked by somebody else. */
-  if(route==='approvals'){ const a=state.apr;
-    a.rows=null; a.tried=false; a.err=''; a.busy=0; a.shot=null; a.shotFor=null; }
+  if(route==='approvals') aprFresh();
+  /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
+     now. The window chosen last time is kept, as the desktop keeps it. */
+  if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid=EXP_PAID_DEFAULT; x.note=''; x.photo=null; x.date=null;
     x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
@@ -1941,6 +1950,10 @@ reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.or
   state.orderOverCust=false; state.detailFetch=false; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
 reg('closeActions', ()=>{ state.detailActions=false; render(); });
+/* The Approvals queue from nothing — its own route's entry, and Finance's
+   Approvals tab (§300 F1), which renders the same screen. */
+function aprFresh(){ const a=state.apr;
+  a.rows=null; a.tried=false; a.err=''; a.busy=0; a.shot=null; a.shotFor=null; }
 reg('closeAsk', ()=>{ const L=state.ask&&state.ask.live; state.ask=null; state.askErr=null; render(); if(L) L.close(); });
 /* The live sheet's commands (§279). A field writes into the draft and nudges
    the engine; nothing re-renders, because the operator is typing. */
@@ -5421,6 +5434,9 @@ const MORE_GROUPS=[
   {h:['Money and numbers','营收与数据'],rows:[
     ['sales','store','Sales','销售'],
     ['trend','trending-up','Trend','趋势'],
+    /* §300 F1 — the desktop's Finance tab, read-only for now. Beside Sales and
+       Trend because it is the same kind of question at a longer reach. */
+    ['finance','landmark','Finance','财务'],
     /* Kept as `Invoices · 发票` on purpose. Option A proposed *Issue tax
        invoices* as an interim and §119 declined it: the design canvas's batch
        three folds this row into Orders as a filter, and renaming a row that is
@@ -15070,6 +15086,346 @@ reg('expSend', ()=>{
     render();
   });
 });
+/* ══════════════════════════════════════════════════════════════════════════
+   §300 — FINANCE ON THE PHONE: THE SUMMARY (step F1)
+   --------------------------------------------------------------------------
+   The desktop's money staircase (public/retail-admin/22-finance.js, §36, §56,
+   §87, §182), read-only, with the two drill-downs under it. THE DESKTOP MODULE
+   IS THE SPEC: the same three reads, the same rows in the same order, the same
+   three cost states decided by the server, the same notes, and every string
+   copied from it. What differs is only what a phone needs to differ —
+
+     • a category opens in a SHEET rather than in place, and a purchase-order
+       row opens inside that sheet (§97: a sheet where the desktop has a
+       disclosure is the same capability);
+     • the window is a chip row plus a Custom sheet with two dates, where the
+       desktop has four buttons and two inline date fields.
+
+   READ-ONLY, AND GATED TWICE. The route is `finance:view` (ROUTE_CAP), which
+   mCan fails CLOSED while the caps are unknown (F0), and canRoute also refuses
+   it on the three boards that never see money (recapNoMoney()), the rule Trend
+   and Home already follow. The server does not gate reads (lib/cap-routes.js
+   leaves them open by design), so this is the gate.
+
+   NO FLOOR ON THE DATES. §36, "Finance is not floored at the cutover date":
+   the presets reach back past 1 August 2026 and the Custom sheet takes any day.
+   The days are the STORE's (shopToday), as the desktop's tdToday — a day out on
+   this screen is money in the wrong month.
+
+   THE SUB-VIEW STRIP names only what exists: Summary, and Approvals for an
+   operator who may approve (it renders the Approvals screen this app already
+   has). Transactions and Categories join it in their own steps; a tab that
+   opened onto nothing would be a control that lies. With one sub-view there
+   is no strip at all, as on the desktop.
+   ══════════════════════════════════════════════════════════════════════════ */
+SUBS.finance={title:['Finance','财务'],
+  status:()=>state.fin.view==='approvals'?'':escAttr(finRangeLabel(finWindow())),
+  render:()=>screenFinance()};
+
+/* The desktop's four presets, with its own pairs, and a fifth chip for the
+   dates the desktop types inline. `Custom · 自定义` is live on this phone. */
+const FIN_RANGES=[{key:'today',en:'Today',zh:'今日'},{key:'7',en:'7 days',zh:'7天'},
+  {key:'30',en:'30 days',zh:'30天'},{key:'90',en:'90 days',zh:'90天'},{key:'custom',en:'Custom',zh:'自定义'}];
+const FIN_BACK={today:0,'7':6,'30':29,'90':89};
+function finPreset(key){
+  const to=shopToday(); const back=FIN_BACK[key];
+  return back==null?null:{from:shopDayAdd(to,-back),to};
+}
+function finWindow(){
+  const f=state.fin;
+  if(f.range==='custom'&&f.from&&f.to) return {from:f.from,to:f.to};
+  return finPreset(f.range)||finPreset('30');
+}
+/* A custom pick that IS a preset lights the preset — finSyncRangeButtons'
+   rule, so the chips never assert a window the dates deny. */
+function finMatchPreset(from,to){
+  for(const k of Object.keys(FIN_BACK)){ const p=finPreset(k); if(p.from===from&&p.to===to) return k; }
+  return null;
+}
+/* finRangeLabel's shape: the dates, then the span. No store half — there is
+   no store dimension on this screen, so naming one would be a claim. */
+function finRangeLabel(w){
+  const fmt=s=>tdWhen(s,'date',_tdL())||s;
+  const days=Math.round((new Date(w.to)-new Date(w.from))/86400000)+1;
+  const win=days<=1?T('today','今日'):T(days+' days',days+'天');
+  return `${w.from===w.to?fmt(w.from):fmt(w.from)+' – '+fmt(w.to)} · ${win}`;
+}
+/* Whole units on the staircase (§36), to the fen inside a drill-down (§88):
+   finMoney and finExact, one each. */
+const finMoney=n=>money0(CUR,n);
+const finExact=n=>(CUR||'¥')+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+/* The revenue channels, finChannelLabel's pairs exactly. The phone's own
+   CHAN_META names these differently (Mini app · 小程序); this card says what
+   the desktop card says, so the two Finance screens read alike. An unknown key
+   renders as itself: it is inside a total that counted it. */
+function finChannelLabel(key){
+  const L={wechat:['WeChat','微信'],web:['Web shop','网页商店'],meituan:['Meituan','美团'],eleme:['Eleme','饿了么'],
+    shop:['Shop','门店'],pickup:['Pick up','到店自取'],wechat_chat:['WeChat message','微信消息'],
+    wholesale:['Wholesale','批发'],other:['Other','其他'],manual:['Manual','手动']}[key];
+  if(key==='gzgrocery') return 'Gzgrocery';
+  return L?T(L[0],L[1]):String(key==null?'':key);
+}
+/* finOperating / finNonOperating: a row with no flag is operating, the
+   server's own default, so a stale payload cannot move money out of the total. */
+const finOp=rows=>(rows||[]).filter(r=>r.is_operating!==0);
+const finNonOp=rows=>(rows||[]).filter(r=>r.is_operating===0);
+/* A breakdown row's label: the half for this language, both whole where two
+   would read alike, and the seventh-state word for a category never typed. */
+function finCatName(row,half){
+  if(!row.category) return T('Not recorded','未记录');
+  return catLabels(half.map(r=>r.category)).get(row.category)||catLabel(row.category);
+}
+
+function finLoad(){
+  const f=state.fin;
+  if(f.tried) return; f.tried=true;
+  const w=finWindow(); const seq=++f.seq;
+  // The open category belongs to the window being left (finLoad on desktop).
+  f.cat=null; f.pol=null;
+  api('/finance/summary?from='+encodeURIComponent(w.from)+'&to='+encodeURIComponent(w.to)).then(d=>{
+    if(seq!==f.seq) return;
+    f.data=d||null; f.err=''; render();
+  }).catch(e=>{
+    if(seq!==f.seq||String(e.message)==='auth') return;
+    // §1.12: said where the operator is looking, never a toast; on a refresh
+    // failure the figures already up stay, with this above them.
+    f.err=T('Could not load Finance.','财务数据加载失败。'); render();
+  });
+}
+
+const FIN_NOTE='padding:0 16px 12px;font-size:12.5px;line-height:1.5;color:var(--text-secondary)';
+/* One step of the staircase. The minus is a deduction cue and appears only
+   beside a figure it applies to — never beside Not recorded (finRow). */
+function finStep(label,fig,o){
+  o=o||{};
+  const sign=(o.less&&!o.notrec)?'− ':'';
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 16px">
+    <span style="font-size:15px;${o.strong?'font-weight:600;':''}color:${o.notrec?'var(--text-secondary)':'var(--text-primary)'}">${label}</span>
+    <span class="num" style="flex:none;font-size:15px;${o.strong?'font-weight:600;':''}color:${o.notrec?'var(--text-secondary)':'var(--text-primary)'}">${sign}${fig}</span></div>`;
+}
+/* A total with lines behind it: a control, open by default for Revenue and
+   Operating expenses as on the desktop, closed for the excluded block. */
+function finDisclose(key,label,fig,o){
+  o=o||{};
+  const open=!!state.fin.open[key];
+  return `<button onclick="APP.cmd('finToggle','${key}')" aria-expanded="${open?'true':'false'}" style="display:flex;width:100%;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 16px;border:none;background:none;font-family:inherit;text-align:left;cursor:pointer;color:var(--text-primary)">
+    <span style="display:flex;align-items:center;gap:6px;font-size:15px;${o.strong?'font-weight:600':''}"><span style="display:flex;color:var(--text-secondary);transform:rotate(${open?90:0}deg)">${ic('chevron-right',16)}</span>${label}</span>
+    <span class="num" style="flex:none;font-size:15px;${o.strong?'font-weight:600':''}">${o.less?'− ':''}${fig}</span></button>`;
+}
+/* A channel line: a plain row, no chevron — there is no read behind a channel,
+   and a chevron that opens onto nothing is a control that lies. */
+const finSubRow=(label,fig)=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 16px 8px 38px">
+  <span style="font-size:14px;color:var(--text-secondary);min-width:0">${label}</span>
+  <span class="num" style="flex:none;font-size:14px;color:var(--text-secondary)">${fig}</span></div>`;
+/* A category line: a control, because a read lists the rows behind it. */
+function finCatRow(r,all,half){
+  const i=all.indexOf(r);
+  return `<button onclick="APP.cmd('finCat',${i})" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px 8px 38px;border:none;background:none;font-family:inherit;text-align:left;cursor:pointer">
+    <span style="font-size:14px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis">${escAttr(finCatName(r,half))}</span>
+    <span style="display:flex;align-items:center;gap:4px;flex:none"><span class="num" style="font-size:14px;color:var(--text-secondary)">${finMoney(r.amount)}</span>
+      <span style="display:flex;color:var(--text-secondary)">${ic('chevron-right',16)}</span></span></button>`;
+}
+/* Lines 2 and 3 in the server's three states (finCostRows): no cost at all is
+   Not recorded with one sentence under the pair; some cost is the figures with
+   the shortfall stated (floored, so it never claims more than there is); all
+   of it is the figures alone. */
+function finCostRows(d){
+  const cogs=d.cost_of_goods;
+  const cov=typeof d.cost_coverage==='number'?d.cost_coverage:null;
+  if(cogs==null){
+    const nr=T('Not recorded','未记录');
+    return finStep(T('Cost of goods','销货成本'),nr,{less:true,notrec:true})
+      + finStep(T('Gross profit','毛利润'),nr,{strong:true,notrec:true})
+      + `<div style="${FIN_NOTE}">${T('This period has no recorded cost data.','此期间未记录成本数据。')}</div>`;
+  }
+  const p=cov!=null&&cov<1?Math.floor(cov*100):null;
+  return finStep(T('Cost of goods','销货成本'),finMoney(cogs),{less:true})
+    + finStep(T('Gross profit','毛利润'),finMoney(d.gross_profit),{strong:true})
+    + (p!=null?`<div style="${FIN_NOTE}">${T(`Cost recorded for ${p}% of this period's revenue — the real margin is lower.`,
+        `此期间 ${p}% 的营收已记录成本 —— 实际毛利更低。`)}</div>`:'');
+}
+function finStair(d){
+  const f=state.fin;
+  const all=d.expense_breakdown||[];
+  const op=finOp(all), nonop=finNonOp(all);
+  const rev=d.revenue_breakdown||[];
+  const revLabel=T('Revenue','营收'), expLabel=T('Operating expenses','营业费用');
+  const card=`<div class="card" style="padding:4px 0;overflow:hidden">
+    ${rev.length
+      ? finDisclose('rev',revLabel,finMoney(d.revenue),{strong:true})+(f.open.rev?rev.map(r=>finSubRow(escAttr(finChannelLabel(r.channel)),finMoney(r.amount))).join(''):'')
+      : finStep(revLabel,finMoney(d.revenue),{strong:true})}
+    <div style="${FIN_NOTE}">${T('Orders only — wallet money counts when spent, not when topped up.','仅计订单 —— 储值在消费时计入，充值时不计入。')}</div>
+    ${d.tax?finStep(T('of which tax','其中税费'),finMoney(d.tax.net)):''}
+    ${finCostRows(d)}
+    <div style="border-top:1px solid var(--border-default);margin:4px 0"></div>
+    ${op.length
+      ? finDisclose('exp',expLabel,finMoney(d.operating_expenses),{less:true})+(f.open.exp?op.map(r=>finCatRow(r,all,op)).join(''):'')
+      : finStep(expLabel,finMoney(d.operating_expenses),{less:true})}
+    <div style="border-top:1px solid var(--border-default);margin-top:4px">${finStep(T('Net','净额'),finMoney(d.net),{strong:true})}</div>
+  </div>`;
+  /* §87 — money that left and is not a cost of running the shop: below the
+     card, no minus (it subtracts from nothing), and absent at zero. */
+  const nlabel=T('Not an operating expense','不计入营业费用');
+  const excl=Number(d.non_operating_expenses)>0?`<div class="card" style="padding:4px 0;overflow:hidden">
+    ${nonop.length
+      ? finDisclose('excl',nlabel,finMoney(d.non_operating_expenses))+(f.open.excl?nonop.map(r=>finCatRow(r,all,nonop)).join(''):'')
+      : finStep(nlabel,finMoney(d.non_operating_expenses))}
+    <div style="${FIN_NOTE}">${T('Recorded, and not counted in the figures above.','已记录，未计入上方数字。')}</div></div>`:'';
+  return card+excl;
+}
+function finStrip(){
+  const v=state.fin.view;
+  return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
+    ${[['summary','Summary','汇总'],['approvals','Approvals','审批']].map(([k,en,zh])=>{
+      const on=v===k;
+      return `<button onclick="APP.cmd('finView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
+        font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
+        box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}</button>`;
+    }).join('')}</div>`;
+}
+const finBanner=msg=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+  <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+  <span style="font-size:14px;color:var(--brick-ink)">${msg}</span></div>`;
+function screenFinance(){
+  const f=state.fin;
+  const strip=canRoute('approvals')?finStrip():'';
+  if(f.view==='approvals'&&canRoute('approvals')) return strip+screenApprovals();
+  finLoad();
+  const head=`${strip}<div style="padding:12px 0 0">${chipRow(FIN_RANGES,f.range,'finRange')}</div>`;
+  const err=f.err?`${finBanner(f.err)}
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:0 auto;display:flex" onclick="APP.cmd('finRetry')">${T('Try again','重试')}</button>`:'';
+  if(!f.data) return `${head}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${
+    err||`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`}</div>`;
+  return `${head}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${err}${finStair(f.data)}</div>`;
+}
+
+/* ── The rows behind one category, in a sheet ─────────────────────────────
+   A SECOND READ, keyed by the index into the whole breakdown (a category is
+   free text and may be null, so it is not an identity), over the window the
+   figures on screen came from — `data.window`, never the chips, which may
+   already point somewhere else. A stale answer is dropped on arrival. */
+reg('finCat', i=>{
+  const f=state.fin; const all=(f.data&&f.data.expense_breakdown)||[];
+  const row=all[Number(i)]; if(!row) return;
+  const w=(f.data&&f.data.window)||finWindow();
+  f.pol=null; f.cat={i:Number(i),rows:null,err:''}; render();
+  const q='from='+encodeURIComponent(w.from||'')+'&to='+encodeURIComponent(w.to||'')
+    +'&category='+encodeURIComponent(row.category||'');
+  api('/finance/summary/category?'+q).then(d=>{
+    if(!f.cat||f.cat.i!==Number(i)) return;
+    f.cat.rows=(d&&d.rows)||[]; render();
+  }).catch(e=>{
+    if(!f.cat||f.cat.i!==Number(i)||String(e.message)==='auth') return;
+    f.cat.err=T('Could not load Finance.','财务数据加载失败。'); render();
+  });
+});
+reg('closeFinCat', ()=>{ state.fin.cat=null; state.fin.pol=null; render(); });
+/* The third level: the items on one purchase order, by the LEDGER ROW's id —
+   the server resolves the order and the category from it. One open at a time;
+   a tap on the open one shuts it. */
+reg('finPol', id=>{
+  const f=state.fin; const entry=Number(id); if(!entry) return;
+  if(f.pol&&f.pol.id===entry){ f.pol=null; render(); return; }
+  f.pol={id:entry,rows:null,err:''}; render();
+  api('/finance/summary/po-lines?entry_id='+encodeURIComponent(entry)).then(d=>{
+    if(!f.pol||f.pol.id!==entry) return;
+    f.pol.rows=(d&&d.rows)||[]; render();
+  }).catch(e=>{
+    if(!f.pol||f.pol.id!==entry||String(e.message)==='auth') return;
+    f.pol.err=T('Could not load Finance.','财务数据加载失败。'); render();
+  });
+});
+const finNoteLine=t=>`<div style="padding:12px 14px;font-size:14px;color:var(--text-secondary)">${t}</div>`;
+/* One item on the order: the name by language with a fallback across, what the
+   shop is billed for × the unit cost to the fen, and the line's amount. */
+function finPolRow(r){
+  const name=(LANG==='en'?(r.name_en||r.name_cn):(r.name_cn||r.name_en))||'';
+  const qty=Number(r.qty||0).toLocaleString('en-US',{maximumFractionDigits:3});
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 14px">
+    <span style="display:flex;flex-direction:column;min-width:0">
+      <span style="font-size:14px">${escAttr(name)}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(qty+(r.unit?' '+r.unit:'')+' × '+finExact(r.unit_cost))}</span></span>
+    <span class="num" style="flex:none;font-size:14px">${finExact(r.amount)}</span></div>`;
+}
+function finPolBody(p){
+  if(p.err) return finNoteLine(p.err);
+  if(p.rows===null) return finNoteLine(T('Loading…','加载中…'));
+  if(!p.rows.length) return finNoteLine(T('Nothing recorded yet','暂无记录'));
+  return p.rows.map(finPolRow).join('');
+}
+/* One ledger row: date, the name the poster wrote (the PO number only as a
+   fallback — the description already leads with it), the mark saying which
+   kind of row it is, and its amount to the fen. Openable only where there are
+   items behind it (a landed-cost row has none). */
+function finCatEntry(r){
+  const f=state.fin;
+  const po=r.source==='po';
+  const mark=po?T('Posted by Purchasing','采购单自动记入')
+    : r.source==='claim'?(r.paid_by==='employee'?T('Staff claim · own money','费用申请 · 个人支付'):T('Staff claim','费用申请'))
+    : r.source==='delay_case'?T('Carrier claim','承运商赔偿')
+    : r.source==='return'?T('Return','退货') : '';
+  const name=r.note||(po?(r.po_number||''):'')||'';
+  const day=tdWhen(r.date,'date',_tdL())||String(r.date||'');
+  const openable=po&&Number(r.lines)>0;
+  const open=openable&&f.pol&&f.pol.id===r.id;
+  const inner=`<span style="display:flex;flex-direction:column;min-width:0;flex:1">
+      ${name?`<span style="font-size:14.5px">${escAttr(name)}</span>`:''}
+      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(day)}${mark?' · '+mark:''}</span></span>
+    <span style="display:flex;align-items:center;gap:4px;flex:none"><span class="num" style="font-size:14.5px;font-weight:500">${finExact(r.amount)}</span>${
+      openable?`<span style="display:flex;color:var(--text-secondary);transform:rotate(${open?90:0}deg)">${ic('chevron-right',16)}</span>`:''}</span>`;
+  const rowStyle='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;width:100%';
+  if(!openable) return `<div style="${rowStyle}">${inner}</div>`;
+  return `<button onclick="APP.cmd('finPol',${Number(r.id)})" aria-expanded="${open?'true':'false'}" style="${rowStyle};border:none;background:none;font-family:inherit;text-align:left;cursor:pointer;color:var(--text-primary)">${inner}</button>`
+    + (open?`<div style="background:var(--surface-raised)">${finPolBody(f.pol)}</div>`:'');
+}
+function sheetFinCat(){
+  const f=state.fin, c=f.cat; if(!c) return '';
+  const all=(f.data&&f.data.expense_breakdown)||[];
+  const row=all[c.i]||{};
+  const half=row.is_operating===0?finNonOp(all):finOp(all);
+  const w=(f.data&&f.data.window)||finWindow();
+  const body = c.err ? finBanner(c.err)
+    : c.rows===null ? finNoteLine(T('Loading…','加载中…'))
+    : !c.rows.length ? finNoteLine(T('Nothing recorded yet','暂无记录'))
+    : `<div class="list">${c.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${finCatEntry(r)}`).join('')}</div>`;
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('closeFinCat')"></div>
+   <div class="sheet" style="top:76px;z-index:46;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeFinCat')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(row.category!==undefined?finCatName(row,half):'')}</span></div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--bg)">
+       <div class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(finRangeLabel(w))} · ${finMoney(row.amount)}</div>
+       ${body}</div></div>`;
+}
+
+/* ── Controls ──────────────────────────────────────────────────────────── */
+reg('finView', v=>{
+  const f=state.fin;
+  if(v==='approvals'){ if(!canRoute('approvals')) return; aprFresh(); }
+  f.view=v==='approvals'?'approvals':'summary'; render();
+});
+reg('finToggle', k=>{ const o=state.fin.open; o[k]=!o[k]; render(); });
+reg('finRetry', ()=>{ const f=state.fin; f.tried=false; f.err=''; render(); });
+/* A preset moves the window at once. Custom asks for two days first, in the
+   ask-sheet, and applies them only when both are there and in order — the
+   server refuses an inverted window, and the sheet says so before it is asked. */
+reg('finRange', k=>{
+  const f=state.fin;
+  if(k!=='custom'){ if(FIN_BACK[k]==null) return; f.range=k; f.from=null; f.to=null; f.tried=false; render(); return; }
+  const w=finWindow();
+  state.ask={title:T('Custom','自定义'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:w.from},{id:'to',label:T('To','至'),type:'date',value:w.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(!v.from||!v.to)?T('Pick a date','选日期'):v.from>v.to?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{
+      const k2=finMatchPreset(v.from,v.to);
+      if(k2){ f.range=k2; f.from=null; f.to=null; } else { f.range='custom'; f.from=v.from; f.to=v.to; }
+      f.tried=false; render();
+    }};
+  render();
+});
+
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
 SUBS.receiving={title:['Receive from a supplier','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
@@ -22497,6 +22853,9 @@ const ROUTE_CAP={
      its own Approve is gated on server-side — and that key is in no floor
      preset. An owner ticks it on for the person who approves spending. */
   approvals:'expenses:approve',
+  /* §300 F1. Fails CLOSED while caps are unknown (MCAN_MONEY_ONLY), and
+     canRoute also refuses it on the no-money boards. */
+  finance:'finance:view',
   /* The same pair the count is gated on, and the same pair routes/restock.js
      addresses the 'prepared' push to — the people who RAISE these requests. A
      fulfil-only kitchen operator is the one who made it, and telling them
@@ -22593,6 +22952,10 @@ function canRoute(k){
      table: one route needs this, and a table where an array sometimes means
      any-of and sometimes all-of is a table nobody can read. */
   if(k==='till') return mCan('till:use') && mCan('orders:edit');
+  /* §300 F1 — FINANCE IS MONEY AND NOTHING ELSE, so the boards that never see
+     money (recapNoMoney: warehouse, dispatch, customer service) do not get it
+     whatever their caps say — the rule Trend's revenue and Home's recap follow. */
+  if(k==='finance') return mCan('finance:view') && !recapNoMoney();
   return mCan(ROUTE_CAP[k]);
 }
 /* NAMED FOR THE JOB THEY HOLD, not for where the screen lives. Someone who can
@@ -23372,6 +23735,7 @@ function render(){
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
+  if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());
   if(state.supOwedId!=null) html += layer('supowed:'+state.supOwedId, sheetSupOwed());
   if(state.chanSheet) html += layer('chan', sheetChannel());
   if(state.quickSheet) html += layer('quick', sheetQuick());
@@ -23812,6 +24176,7 @@ function layers(){
   if(state.oosSku) L.push(()=>{ state.oosSku=null; });
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
+  if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });
   /* AN OPEN KITCHEN JOB (§115). It is a STATE of the queue screen rather than a
      screen of its own, so the stack loop above cannot see it — and without this
      line an edge swipe threw the whole screen away and landed on More, straight
