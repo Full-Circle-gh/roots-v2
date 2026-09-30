@@ -622,9 +622,13 @@ it('Print puts the card, and only the card, on paper — and writes nothing', as
   assert.strictEqual(calls.writes.length, 0);
   assert.match(M, /html\.m-print body>\*:not\(#mPrintHost\)\{display:none!important\}/, 'and the print sheet hides everything else');
 });
-it('the print icon is on the record, gated with it', async () => {
+// §300 R4 moved Print into the record's ⋯ menu with the other actions; it is
+// offered there to every reader, as the route is.
+it('Print is in the record\'s ⋯ menu, for every reader', async () => {
   const { ctx } = openRec(); ctx.screenRecipeOne(); await tick();
-  assert.match(ctx.SUBS.recipeone.cta(), /aria-label="Print" onclick="APP\.cmd\('rcpPrint'\)"/);
+  assert.match(ctx.SUBS.recipeone.cta(), /aria-label="More actions"[^>]*onclick="APP\.cmd\('rcpActs'\)"/);
+  ctx.CMD.rcpActs();
+  assert.strictEqual(ctx.state.ask.options[0].key, 'print');
   assert.match(CAPS, /recipeprint:'recipes:view'/);
 });
 
@@ -637,11 +641,17 @@ section('8 · what R1 does not do');
 it('the only writes in the recipes region are the editor\'s save and restore', () => {
   const writes = codeOnly(REGION).match(/apiWrite\([^)]*/g) || [];
   // Four since R3: PUT, POST, the cost PUT (only for a draft that loaded the
-  // cost inputs) and the restore.
-  assert.strictEqual(writes.length, 4, writes.join(' | '));
+  // cost inputs) and the restore. Three more since R4, each an action in the
+  // ⋯ menu: archive/restore, unlink, make available.
+  assert.strictEqual(writes.length, 7, writes.join(' | '));
   const saver = codeOnly(between(M, 'function rcpSend(d, p, note){', 'function rcpEdStart(d){'));
   const restore = codeOnly(between(M, 'function rcpRestore(id, v){', 'function rcpLeaveNow(discard){'));
+  const acts = codeOnly(between(M, '/* ── The record\'s ⋯ menu (§300 step R4)', '/* ── Making one (§167)'));
   assert.strictEqual((saver.match(/apiWrite\(/g) || []).length + (restore.match(/apiWrite\(/g) || []).length, 4);
+  assert.strictEqual((acts.match(/apiWrite\(/g) || []).length, 3);
+  assert.match(acts, /apiWrite\('\/api\/retail-admin\/recipes\/'\+id\+'\/archive', \{restore:restoring\}, 'PUT'\)/);
+  assert.match(acts, /apiWrite\('\/api\/retail-admin\/recipes\/'\+id\+'\/materialize', \{\}, 'DELETE'\)/);
+  assert.match(acts, /apiWrite\('\/api\/retail-admin\/recipes\/'\+Number\(rec\.id\)\+'\/materialize', body, 'POST'\)/);
   assert.doesNotMatch(codeOnly(REGION), /apiPost|method:\s*'(POST|PUT|PATCH|DELETE)'/);
 });
 it('the shared cost module is loaded, deferred, and the service worker still lets it through to the network', () => {
