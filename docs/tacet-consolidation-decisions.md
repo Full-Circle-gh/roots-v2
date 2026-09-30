@@ -21473,3 +21473,75 @@ and without `products:view`, no cost figure from a payload full of them, the
 card against the desktop's own function, and the print. `scripts/test_mobile_recipes.js`
 updated where §300 overturned it — the "no money for anybody" list keeps every
 COST key and now admits `sell_price` in the one products function only.
+
+## §304 — A PURCHASE ORDER IS MANAGED FROM THE PHONE: FOUND, READ, SENT BACK, UNDONE, BACK-ORDERED, CANCELLED, COSTED AND PRINTED
+
+**Built 2026-09-30 under §300** (Ash: *"yes , and keep going until you finish all .I approve all"*).
+Step P1 of the purchasing lane (survey build-order row 11, with row 18's print).
+The phone's Purchasing screen could list orders and open one read-only, with Mark
+ordered, Everything arrived and Receive line by line. It now does what the desktop's
+order ledger and receive-and-manage screen do, except build an order (the wizard is
+P2). The desktop module (`public/retail-admin/16-purchasing.js`) is the spec for
+every control: same endpoint, same body, same condition, same capability, same
+confirm, same refusal.
+
+1. **The search goes to the server** (`GET /purchases?search=&month=&store_id=`),
+   not the desktop's in-page filter, because the server's search also looks inside
+   the lines, and the row names the products that matched. Typing waits for the
+   pause; the answer repaints the list and the segment counts only, never the
+   field. Month and store choices come from the orders already loaded, so they cost
+   no extra read, and each is drawn only when there is a choice to make.
+2. **The sub-view strip shows only tabs that work**: Orders, and Suppliers we owe
+   (§286's screen, drawn inside Purchasing). Invoices, Reorder and the supplier
+   directory join it when they are built. One tab alone is not drawn as a strip.
+3. **The row carries the desktop's facts**: the order date, "N suppliers" for an
+   order mixing suppliers per line (not "No supplier"), and "from PO-####" for a
+   copy pulled from a kitchen order. That last one is **words, not a link**: it is a
+   kitchen-scope order, which the retail order route does not open.
+4. **The order stays a sheet**, not the pushed screen mockup P06 draws. Same
+   capabilities, not same layout (§97). The three buttons the finance lane's F0
+   gates (Mark ordered, Everything arrived, Receive line by line) are untouched.
+5. **Money on the order fails closed.** Line totals, cost each, the order total,
+   landed cost, the Finance panel and the printed order show only when
+   `purchasing:view` is known to be held. The sheet is also reached from Receiving,
+   which `purchasing:receive` opens on its own; the desktop shows an order's money
+   only inside Purchasing. The list's own figures are unchanged: that screen is
+   already gated on `purchasing:view`, and making `mCan` fail closed is F0's job.
+6. **Back to draft, Undo receiving and Cancel sit under ⋯**, on the desktop's
+   conditions (Sent: back to draft, cancel; Received: undo) and its capability
+   (`purchasing:edit`). Cancel and Undo ask the desktop's own questions, and Undo
+   says what it clears before the confirm. **Back to draft gains a confirm the
+   desktop does not have**, because on the phone it sits one row from Cancel in the
+   same menu, and mockup P06 puts every ⋯ action behind one. Its body is the
+   desktop's own sentence (*Posts to Expenses when the order is placed.*); only its
+   title is new.
+7. **A refused write is said where the operator is looking, and stays.** The
+   desktop's two stock and cost refusals (`undo_blocked`, `cost_not_recoverable`)
+   are dialogs listing the goods; on the phone they are the same locked words in a
+   band at the top of the order, with the goods listed, until the next action or
+   until the order is closed. A toast only ever confirms.
+8. **Back-order N short** has no confirm, as on the desktop (it makes a draft,
+   which can be deleted), and opens the new draft, as the desktop does.
+9. **Landed cost** reads to `purchasing:view` and saves to `purchasing:edit`, with
+   the desktop's body (`freight`, `tax`, `handling`). Goods is the desktop's own sum,
+   ordered quantity × cost each. The per-unit figure the desktop removed stays
+   removed. Typing repaints the total alone.
+10. **The Finance panel** lists what the order posted by category, or says it posts
+    when placed, and names what a return took off, dated to the order.
+11. **The printed order is the desktop's sheet, ported.** The desktop builder lives
+    inside its own module and opens with `window.open`, which a phone's in-app
+    browser often refuses. So the same document (both languages whatever the phone
+    is set to, because it goes to the supplier) is shown in a frame over the order.
+    Print hands it to the phone's print sheet, which is also where Save as PDF and
+    sharing are. The shop name at its foot is the phone's own (the store wordmark),
+    because the phone does not load the desktop's tenant brand name.
+12. **Not built in this step, deliberately.** *Order again*: on the desktop it only
+    pre-fills the new-order wizard and writes nothing, so there is no request to
+    make until P2 builds the wizard. It arrives with it. *Managing a draft*: the
+    desktop opens a draft in the wizard (with Delete draft) and offers it none of
+    these actions, so the phone offers none either until P2.
+13. **Found on the way.** The printed document lives inside `m.html`'s script, and
+    the phone's render harnesses inject themselves at the first closing body tag in
+    the file. A literal one in the document swallowed the harness, and every probe
+    suite read the page title instead. Every closing tag in the document is now
+    written escaped, and the new suite pins the file to one closing body tag.
