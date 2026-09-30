@@ -75,6 +75,7 @@ function mk(opts = {}) {
       poDetail: null, poErr: null, poBusy: false, poMounted: false,
       poView: 'orders', poQ: '', poMonth: '', poStoreF: '', poFound: null, poFoundErr: null,
       poRefusal: null, poLc: null, poPrint: false, ask: null, storeName: 'Roots',
+      psupDir: { rows: [], err: null, tried: true, all: false, seg: 'active', q: '' }, psup: null,
     }, opts.state || {}),
     E: (en, zh) => ({ toString() { return ctx.LANG === 'en' ? en : zh; } }),
     escAttr: (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
@@ -94,6 +95,7 @@ function mk(opts = {}) {
     canRoute: (k) => (opts.routes ? opts.routes.includes(k) : true),
     mCan: (k) => !Array.isArray(ctx.state.caps) || ctx.state.caps.includes(k),
     screenSupOwed: () => '<div>SUPOWED-SCREEN</div>',
+    loadSupOwed: () => {},
     statusSupOwed: () => 'SUPOWED-STATUS',
     poDeliveries: () => '',
     loadPoReceipts: () => {},
@@ -188,27 +190,28 @@ section('1 · the list: the row\'s facts');
 
 section('2 · the sub-view strip draws only what works');
 {
-  it('Orders and Suppliers we owe, when both are reachable', () => {
+  it('Orders, Suppliers and Reorder, when reachable', () => {
     const e = mk({ state: { poList: LIST } });
     const t = text(e.ctx.screenPurchasing());
-    assert.ok(t.includes('Orders') && t.includes('Suppliers we owe'));
-    // Reorder (P6) works for anyone who can open Purchasing; Invoices (P5) only
-    // with purchasing:invoices, which this account does not hold.
-    assert.ok(t.includes('Reorder') && !/Invoices/.test(t), 'no dead tabs');
+    assert.ok(t.includes('Orders') && t.includes('Suppliers') && t.includes('Reorder'));
+    // Invoices (P5) needs purchasing:invoices, which this account does not hold.
+    assert.ok(!/Invoices/.test(t), 'no dead tabs');
   });
-  it('the second tab shows the account screen, and the head band follows', () => {
+  it('the Suppliers tab shows the directory (P7), and the head band carries what we owe', () => {
     const e = mk({ state: { poList: LIST } });
-    e.CMD.poView('supowed');
-    assert.strictEqual(e.s.poView, 'supowed');
-    assert.ok(e.ctx.screenPurchasing().includes('SUPOWED-SCREEN'));
+    e.CMD.poView('suppliers');
+    assert.strictEqual(e.s.poView, 'suppliers');
+    assert.ok(e.ctx.screenPurchasing().includes('mPsupBody'));
     assert.strictEqual(e.ctx.statusPurchasing(), 'SUPOWED-STATUS');
+    e.CMD.poView('supowed');
+    assert.strictEqual(e.s.poView, 'suppliers', 'the old name lands on the same tab');
   });
-  it('one tab alone is not a strip', () => {
+  it('a tab that cannot be reached is not drawn, nor its screen', () => {
     const e = mk({ routes: ['purchasing'], state: { poList: LIST } });
     const t = text(e.ctx.screenPurchasing());
-    assert.ok(!t.includes('Suppliers we owe'));
-    e.CMD.poView('supowed');
-    assert.ok(!e.ctx.screenPurchasing().includes('SUPOWED-SCREEN'), 'an unreachable view is not drawn');
+    assert.ok(!t.includes('Suppliers'));
+    e.CMD.poView('suppliers');
+    assert.ok(!e.ctx.screenPurchasing().includes('mPsupBody'), 'an unreachable view is not drawn');
   });
 }
 

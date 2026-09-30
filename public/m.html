@@ -1074,6 +1074,8 @@ const state = {
      a mark/delete in flight and its refusal, and the one sheet over it. */
   /* §300 P6 — the Reorder tab's read, and the Price history sheet (a product). */
   preo:{rows:null,err:null,tried:false}, pph:null,
+  /* §300 P7 — the Suppliers tab's directory, and the one supplier open. */
+  psupDir:{rows:null,err:null,tried:false,all:false,seg:'active',q:''}, psup:null,
   pinv:{view:'suppliers',month:'',q:'',out:null,list:null,err:null,tried:false,seq:0,open:{},busy:false,actErr:null,sheet:null},
   /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
      one. Two prefixes because they are two screens with two lifetimes — the
@@ -1546,6 +1548,7 @@ function pop(){
   if(top==='materialone'&&!matMayLeave()) return;
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
+  if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
   forgetScroll(); state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
@@ -1820,6 +1823,7 @@ reg('rqSearch', v=>{
  ['mPwQ','mPwClr','pwQ'],
  ['mPkQ','mPkClr','pkQ'],
  ['mPinvQ','mPinvClr','pinvQ'],
+ ['mPsupQ','mPsupClr','psupQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
@@ -8812,7 +8816,7 @@ function poRow(p){
    "1 open" about the same three orders Receiving was calling "To receive 3".
    The desktop got the identical test in 16-purchasing.js (puPartial). */
 function statusPurchasing(){
-  if(state.poView==='supowed'&&canRoute('supowed')) return statusSupOwed();
+  if((state.poView==='suppliers'||state.poView==='supowed')&&canRoute('supowed')) return poMoney()?statusSupOwed():'';
   if(state.poView==='reorder') return '';
   if(state.poView==='invoices'&&pinvOn()){ const t=state.pinv.out&&state.pinv.out.totals;
     return t?T('Total purchases','采购总额')+' '+money(CUR,t.total||0):''; }
@@ -8833,7 +8837,9 @@ function statusPurchasing(){
    theirs here. */
 function poViewTabs(){
   const t=[['orders','Orders','采购单']];
-  if(canRoute('supowed')) t.push(['supowed','Suppliers we owe','供应商欠款']);
+  /* §300 P7 — the desktop's Suppliers tab: the directory, with §286's
+     Suppliers-we-owe card at its head (the More row still opens that screen). */
+  if(canRoute('supowed')) t.push(['suppliers','Suppliers','供应商']);
   // §300 P5 — the desktop's Invoices tab, for whoever may read its money and write its marks.
   if(pinvOn()) t.push(['invoices','Invoices','发票']);
   // §300 P6 — the desktop's Reorder tab; no money on it, so Purchasing's own key.
@@ -8842,7 +8848,7 @@ function poViewTabs(){
 }
 function poViewStrip(){
   const tabs=poViewTabs(); if(tabs.length<2) return '';
-  const cur=state.poView==='supowed'&&canRoute('supowed')?'supowed':state.poView==='invoices'&&pinvOn()?'invoices':state.poView==='reorder'?'reorder':'orders';
+  const cur=(state.poView==='suppliers'||state.poView==='supowed')&&canRoute('supowed')?'suppliers':state.poView==='invoices'&&pinvOn()?'invoices':state.poView==='reorder'?'reorder':'orders';
   return `<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">${tabs.map(([k,en,zh])=>{
     const on=cur===k;
     return `<button onclick="APP.cmd('poView','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
@@ -8915,7 +8921,7 @@ function poPatch(){
 function screenPurchasing(){
   loadPOs(); loadPkLines();
   const strip=poViewStrip();
-  if(state.poView==='supowed'&&canRoute('supowed')) return strip+screenSupOwed();
+  if((state.poView==='suppliers'||state.poView==='supowed')&&canRoute('supowed')) return strip+screenPoSuppliers();
   if(state.poView==='invoices'&&pinvOn()) return strip+screenPoInvoices();
   if(state.poView==='reorder') return strip+screenPoReorder();
   if(state.posErr) return strip+`<div style="padding:14px 16px 24px">
@@ -8947,7 +8953,9 @@ function screenPurchasing(){
     ${filters.length?`<div style="display:flex;gap:8px">${filters.join('')}</div>`:''}
     <div id="mPoBody">${poBodyHtml()}</div></div>`;
 }
-reg('poView', v=>{ state.poView=['supowed','invoices','reorder'].includes(v)?v:'orders';
+reg('poView', v=>{ if(v==='supowed') v='suppliers';
+  state.poView=['suppliers','invoices','reorder'].includes(v)?v:'orders';
+  if(state.poView==='suppliers') state.psupDir.tried=false;
   if(state.poView==='reorder') state.preo.tried=false;   // read again each time the tab is opened, as the desktop does
   render(); });
 reg('poQuery', v=>{
@@ -10866,6 +10874,339 @@ function sheetPPH(){
 const pphLink=spid=>spid&&poMoney()?`<button class="btn2" style="width:auto;min-height:32px;padding:0 12px;font-size:12.5px" onclick="event.stopPropagation();APP.cmd('pphOpen',${Number(spid)})">${T('Price history','价格历史')}</button>`:'';
 
 /* ==========================================================================
+   §300 P7 — Suppliers: the directory and one supplier's record (desktop:
+   16-purchasing.js SUPPLIERS / ONE SUPPLIER)
+   --------------------------------------------------------------------------
+   The directory is Purchasing's Suppliers tab: Active / Disabled, a search,
+   and — first, because it is money owed — §286's Suppliers-we-owe card, whose
+   rows open the account sheet that screen already has. The record is its own
+   screen: the scorecard, the fields (an existing supplier SAVES ITSELF, §279,
+   with Undo and Version history; a new one keeps Save, which creates it), the
+   credit switch, the price list (→ Price history), paperwork, the orders, and
+   New order from this supplier.
+
+   THE CREDIT SWITCH COMES TO THE PHONE by §300's name, overturning §286's
+   "switched on the desktop": one switch, purchasing:edit, behind a confirm.
+
+   NOT BUILT: importing suppliers from a CSV (§300 item 4).
+
+   Money — the scorecard's spend and awaiting, the price list, the orders'
+   totals, the owed card — shows only with purchasing:view (poMoney, failing
+   closed); the fields carry none.
+   ========================================================================== */
+const PSUP_TERMS=[['Prepay 预付','Prepay','预付'],['COD 货到付款','COD','货到付款'],['Net 15','Net 15','月结15'],['Net 30','Net 30','月结30']];
+const PSUP_METHODS=[['WeChat 微信','WeChat','微信'],['Alipay 支付宝','Alipay','支付宝'],['Bank 银行转账','Bank transfer','银行转账'],['Cash 现金','Cash','现金']];
+const PSUP_CH=[['',null],['taobao',['Taobao','淘宝']],['alibaba',['Alibaba','阿里巴巴']],['wechat',['WeChat','微信']],['phone',['Phone','电话']],['website',['Website','网站']],['other',['Channel','渠道']]];
+const PSUP_DOC=[['license','License','营业执照'],['permit','Permit','许可证'],['payment_qr','Payment QR','收款码'],['other','Other','其他']];
+/* The fields' own labels, for the version history's "what changed". */
+const PSUP_LABELS={name:['Name','名称'],name_cn:['中文名','中文名'],products_supplied:['What they supply','供应商品'],contact_name:['Contact person','联系人'],
+  contact_phone:['Phone','电话'],contact_wechat:['WeChat','微信'],payment_terms:['When','付款时点'],payment_method:['How','付款渠道'],
+  channel_type:['Ordering channel','渠道'],channel_link:['Link','链接'],rating:['Rating','评分'],notes:['Notes','备注'],price_info:['Notes','备注']};
+const PSUP_FIELDS=['name','name_cn','products_supplied','contact_name','contact_phone','contact_wechat','payment_terms','payment_method','channel_type','channel_link','rating','notes'];
+function loadSupDir(force){
+  const v=state.psupDir; if(v.tried&&!force) return;
+  v.tried=true;
+  api('/suppliers'+(v.all?'?all=1':'')).then(rows=>{ v.rows=Array.isArray(rows)?rows:[]; v.err=null; psupDirPatch(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; v.err=E('Could not load this.','无法加载。'); psupDirPatch(); });
+}
+function psupDirPatch(){ const b=document.getElementById('mPsupBody'); if(b) b.innerHTML=psupDirBody(); else render(); }
+const psupRate=n=>{ n=Math.min(5,Math.max(0,parseInt(n,10)||0)); return n?'★'.repeat(n)+'<span style="opacity:.3">'+'★'.repeat(5-n)+'</span>':''; };
+function psupOwedCard(){
+  const d=state.supOwed; if(!poMoney()||!d||!(d.suppliers||[]).length) return '';
+  return `<div class="card" style="padding:0;overflow:hidden">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:12px 14px">
+      <span style="font-size:15px;font-weight:500">${T('Suppliers we owe','供应商欠款')}</span>
+      <span class="num" style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')} <b style="font-weight:500;color:var(--text-primary)">${supMoney(d.total_owed)}</b></span></div>
+    ${d.suppliers.map(r=>{ const w=supOwedWords(r.owed);
+      return `<button class="row" style="min-height:52px;padding:10px 14px;border-top:1px solid var(--border-default)" onclick="APP.cmd('openSupOwed',${Number(r.supplier_id)})">
+        <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pinvSup(r.name,r.name_cn))}</span>
+        <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none"><span style="font-size:12px;color:var(--text-secondary)">${w.lab}</span>
+          <span class="num" style="font-size:14.5px;font-weight:500;${w.muted?'color:var(--text-secondary)':''}">${supMoney(r.owed)}</span></span></button>`; }).join('')}</div>`;
+}
+function psupDirBody(){
+  const v=state.psupDir;
+  if(v.err&&!v.rows) return `<div><div style="font-size:14px;color:var(--brick-ink)">${v.err}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:12px" onclick="APP.cmd('psupRetry')">${T('Try again','重试')}</button></div>`;
+  if(!v.rows) return `<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const q=String(v.q||'').toLowerCase().trim();
+  let rows=v.rows.filter(s=>v.seg==='disabled'?!s.is_active:s.is_active);
+  if(q) rows=rows.filter(s=>`${s.name} ${s.name_cn||''} ${s.contact_name||''}`.toLowerCase().indexOf(q)>=0);
+  if(!rows.length){
+    if(v.seg==='active'&&!q&&!v.rows.some(s=>s.is_active)) return nothingYet(T('No suppliers yet','还没有供应商'),
+      T('Add the businesses you buy from. Once they’re here, every order and invoice can lean on them — and each product remembers who sells it and for how much.','添加你的供货商。加入后,采购单和发票都能用上它们 —— 每件商品也会记住由谁供货、价格多少。'))
+      +(mCan('purchasing:edit')?`<div style="display:flex;justify-content:center"><button class="cta" style="width:auto" onclick="APP.cmd('psupNew')">${T('Add your first supplier','添加第一个供应商')}</button></div>`:'');
+    return `<div style="padding:28px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No suppliers here.','暂无供应商。')}</div>`;
+  }
+  return `<div class="list">${rows.map((s,i)=>{
+    const sub=[s.products_supplied||'',s.doc_count?s.doc_count+' '+T('files on record','份资质文件'):''].filter(Boolean).join(' · ');
+    const pay=[s.payment_terms,s.payment_method].filter(Boolean)[0];
+    return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:64px;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('psupOpen',${Number(s.id)})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+        <span style="font-size:15px;font-weight:500">${escAttr(pinvSup(s.name,s.name_cn))}</span>
+        ${sub?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(sub)}</span>`:''}
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr([s.contact_name,s.contact_phone,pay].filter(Boolean).join(' · ')||'—')}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none">
+        <span class="num" style="font-size:13px">${Number(s.po_count)||0} ${T('Orders','采购单')}</span>
+        ${s.last_po_date?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr(fmtDateOnly(s.last_po_date))}</span>`:''}
+        <span style="font-size:12px;color:var(--amber-ink)">${psupRate(s.rating)}</span></span></button>`; }).join('')}</div>`;
+}
+function screenPoSuppliers(){
+  loadSupDir(); if(poMoney()) loadSupOwed();
+  const v=state.psupDir;
+  const act=(v.rows||[]).filter(s=>s.is_active).length, dis=(v.rows||[]).filter(s=>!s.is_active).length;
+  const segBtn=(k,label,n)=>`<button onclick="APP.cmd('psupSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${v.seg===k?'var(--surface-card)':'transparent'};color:${v.seg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${v.seg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${psupOwedCard()}
+    <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+      ${segBtn('active',T('Active','启用'),act)}${segBtn('disabled',T('Disabled','停用'),v.all?dis:'·')}</div>
+    ${searchBox(`<input id="mPsupQ" inputmode="search" enterkeyhint="search" value="${escAttr(v.q)}" placeholder="${T('Find a supplier or contact','搜索供应商或联系人')}" oninput="APP.cmd('psupQ',this.value)">`,'mPsupClr',!!v.q)}
+    <div id="mPsupBody">${psupDirBody()}</div></div>`;
+}
+reg('psupSeg', k=>{ const v=state.psupDir; v.seg=k==='disabled'?'disabled':'active';
+  // The disabled ones are read only when asked for, as the desktop does.
+  if(v.seg==='disabled'&&!v.all){ v.all=true; v.rows=null; v.tried=false; }
+  render(); loadSupDir(); });
+reg('psupQ', q=>{ state.psupDir.q=String(q||''); searchClearShow('mPsupClr',!!state.psupDir.q);
+  const b=document.getElementById('mPsupBody'); if(b) b.innerHTML=psupDirBody(); else render(); });
+reg('psupRetry', ()=>{ const v=state.psupDir; v.err=null; v.rows=null; v.tried=false; render(); loadSupDir(); });
+
+/* ── One supplier ─────────────────────────────────────────────────────── */
+let psupAuto=null, psupFileSel=null;
+function psupDraftFrom(s){ const d={}; PSUP_FIELDS.forEach(k=>{ d[k]=k==='rating'?(Number(s[k])||0):(s[k]==null?'':String(s[k])); }); return d; }
+/* The desktop's supBody, key for key, so the engine and the server read one shape. */
+function psupBody(d){
+  const t=k=>String(d[k]||'').trim();
+  return {name:t('name'),name_cn:t('name_cn')||null,products_supplied:t('products_supplied')||null,contact_name:t('contact_name')||null,
+    contact_phone:t('contact_phone')||null,contact_wechat:t('contact_wechat')||null,payment_terms:t('payment_terms')||null,
+    payment_method:t('payment_method')||null,channel_type:d.channel_type||null,channel_link:t('channel_link')||null,
+    rating:parseInt(d.rating,10)||0,notes:t('notes')||null};
+}
+const psupErrMsg=e=>e&&e.code==='name_taken'?T('Name already exists','名称已存在'):e&&e.code==='name_required'?T('Name is required','名称必填')
+  :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+function psupAutoStart(id){
+  if(psupAuto){ psupAuto.flush(); psupAuto.stop&&psupAuto.stop(); psupAuto=null; }
+  const p=state.psup; if(!p||!p.draft||!mCan('purchasing:edit')||typeof TacetAutosave==='undefined') return;
+  /* Reads the LIVE draft: Undo and a restore replace p.draft wholesale. */
+  psupAuto=TacetAutosave.create({
+    read:()=>psupBody(p.draft),
+    hold:b=>b.name?'':T('Name is required','名称必填'),
+    /* The desktop's autosave card: the same PUT, filed on the record's history. */
+    send:(b,note)=>apiWrite('/suppliers/'+id+'?history='+encodeURIComponent('supplier.'+id)+(note?'&note='+note:''),b,'PUT')
+      .then(()=>{ const r=state.psup&&state.psup.rec; if(r&&r.id===id) Object.assign(r,b); })
+      .catch(e=>{ throw new Error(psupErrMsg(e)); }),
+    onChange:()=>{ const f=document.getElementById('mPsupFoot'); if(f) f.innerHTML=psupFootHtml(); },
+  });
+  psupAuto.start();
+}
+function loadPsup(id){
+  const p={id,rec:null,err:null,draft:null,acct:null,busy:null,msg:null,doc:{kind:'license',label:''}};
+  state.psup=p; psupFileSel=null;
+  api('/suppliers/'+id).then(s=>{ if(state.psup!==p) return; p.rec=s; p.draft=psupDraftFrom(s); psupAutoStart(id); render(); })
+    .catch(e=>{ if(String(e.message)==='auth'||state.psup!==p) return; p.err=E('Could not load this.','无法加载。'); render(); });
+  api('/suppliers/'+id+'/account').then(a=>{ if(state.psup===p){ p.acct=a; render(); } }).catch(()=>{});
+}
+reg('psupOpen', id=>{ if(!canRoute('posupplier')) return; loadPsup(Number(id)); state.stack=state.stack.filter(s=>s.route!=='posupplier'); push('posupplier'); });
+reg('psupNew', ()=>{
+  if(!mCan('purchasing:edit')||!canRoute('posupplier')) return;
+  if(psupAuto){ psupAuto.flush(); psupAuto=null; }
+  state.psup={id:null,rec:{id:null,is_active:1},err:null,draft:psupDraftFrom({}),acct:null,busy:null,msg:null,doc:{kind:'license',label:''}};
+  state.stack=state.stack.filter(s=>s.route!=='posupplier'); push('posupplier');
+});
+reg('psupField', (k,v)=>{
+  const p=state.psup; if(!p||!p.draft||PSUP_FIELDS.indexOf(k)<0) return;
+  p.draft[k]=String(v==null?'':v);
+  if(psupAuto) psupAuto.touch();
+});
+/* The When / How suggestions: the desktop's fixed vocabularies, one tap to
+   fill; the field stays free text. */
+reg('psupPick', (k,i)=>{
+  const p=state.psup; if(!p||!p.draft) return;
+  const list=k==='payment_terms'?PSUP_TERMS:k==='payment_method'?PSUP_METHODS:null; const o=list&&list[Number(i)]; if(!o) return;
+  p.draft[k]=o[0]; if(psupAuto) psupAuto.touch(); render();
+});
+reg('psupUndo', ()=>{ if(!psupAuto) return; psupAuto.undo(b=>{ const p=state.psup; if(p) p.draft=psupDraftFrom(b); render(); }); });
+reg('psupHistory', ()=>{
+  const p=state.psup; if(!p||!p.id||!psupAuto) return;
+  const id=p.id;
+  Promise.resolve(psupAuto.flush()).then(()=>apiRaw('/suppliers/'+id+'/history')).then(j=>{
+    const list=Array.isArray(j&&j.versions)?j.versions:[];
+    if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+    liveHistorySheet(list, v=>(v.changed||[]).map(k=>PSUP_LABELS[k]?T(...PSUP_LABELS[k]):k).join(' · '),
+      mCan('purchasing:edit')?(v=>{ const cur=state.psup; if(!cur||cur.id!==id||!psupAuto) return;
+        cur.draft=psupDraftFrom(v.snapshot||{}); render();
+        return Promise.resolve(psupAuto.flush('restore')); }):null);
+  }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+});
+/* CREATES a supplier; an existing one saves itself. */
+reg('psupSave', ()=>{
+  const p=state.psup; if(!p||p.id||p.busy||!mCan('purchasing:edit')) return;
+  const b=psupBody(p.draft);
+  if(!b.name){ p.msg=T('Name is required','名称必填'); render(); return; }
+  p.busy='save'; p.msg=null; render();
+  apiWrite('/suppliers',b,'POST').then(r=>{
+    p.busy=null; showToast(T('Saved','已保存'));
+    state.psupDir.tried=false;
+    if(r&&r.id!=null){ loadPsup(Number(r.id)); render(); }
+  }).catch(e=>{ p.busy=null; if(String(e.message)==='auth') return; p.msg=psupErrMsg(e); render(); });
+});
+function psupReload(){ const p=state.psup; if(p&&p.id){ state.psupDir.tried=false; const keep=p.id; loadPsup(keep); } }
+reg('psupToggle', ()=>{
+  const p=state.psup; if(!p||!p.id||p.busy||!mCan('purchasing:edit')) return;
+  p.busy='toggle'; p.msg=null; render();
+  apiWrite('/suppliers/'+p.id,{is_active:!Number(p.rec.is_active)},'PUT').then(()=>{ p.busy=null; showToast(T('Saved','已保存')); psupReload(); })
+    .catch(e=>{ p.busy=null; if(String(e.message)==='auth') return; p.msg=psupErrMsg(e); render(); });
+});
+/* §300 overturns §286's desktop-only hold: the switch, behind a confirm. */
+reg('psupCredit', on=>{
+  const p=state.psup; if(!p||!p.id||!p.acct||p.busy||!mCan('purchasing:edit')) return;
+  on=!!Number(on);
+  state.ask={title:T('We pay them later (credit)','先货后款'),
+    body:on?T('Turn on for a supplier who delivers now and is paid later. What you owe is worked out from delivered orders.','适用于先送货、后付款的供应商。欠款按已收货的采购单自动计算。')
+           :T('The account is hidden and every entry is kept — turning it back on finds it as it was.','账户将隐藏，所有记录都会保留 —— 重新开启后原样恢复。'),
+    confirmLabel:on?T('Turn on','开启'):T('Turn off','停用'), danger:!on,
+    run:()=>{ if(state.psup!==p) return;
+      p.busy='credit'; p.msg=null; render();
+      apiWrite('/suppliers/'+p.id+'/account',{on_credit:on},'PUT').then(r=>{
+        p.busy=null; if(r&&r.data) p.acct=r.data; state.supOwedTried=false; showToast(T('Saved','已保存')); render();
+      }).catch(e=>{ p.busy=null; if(String(e.message)==='auth') return; p.msg=psupErrMsg(e); render(); }); }};
+  render();
+});
+reg('psupNewOrder', ()=>{
+  const p=state.psup; if(!p||!p.rec||!p.rec.name||!canRoute('newpo')) return;
+  const w=pwBlank(); w.supplier=p.rec.name; pwOpen(w);
+});
+/* ── paperwork ── */
+reg('psupDocKind', v=>{ const p=state.psup; if(p&&PSUP_DOC.some(d=>d[0]===v)) p.doc.kind=v; });
+reg('psupDocLabel', v=>{ const p=state.psup; if(p) p.doc.label=String(v||''); });
+reg('psupDocFile', el=>{ psupFileSel=el&&el.files&&el.files[0]||null; });
+reg('psupUpload', ()=>{
+  const p=state.psup; if(!p||!p.id||p.busy||!mCan('purchasing:edit')) return;
+  const f=psupFileSel;
+  if(!f){ p.msg=T('Choose a file first','请先选择文件'); render(); return; }
+  if(f.size>10*1024*1024){ p.msg=T('Max 10MB','最大10MB'); render(); return; }
+  p.busy='upload'; p.msg=null; render();
+  const id=p.id;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    apiWrite('/suppliers/'+id+'/documents',{kind:p.doc.kind,label:p.doc.label.trim()||null,filename:f.name,mime_type:f.type,size_bytes:f.size,data:rd.result},'POST')
+      .then(()=>{ p.busy=null; psupFileSel=null; showToast(T('Uploaded','已上传')); psupReload(); })
+      .catch(e=>{ p.busy=null; if(String(e.message)==='auth') return;
+        p.msg=e.code==='too_large'?T('Max 10MB','最大10MB'):psupErrMsg(e); render(); });
+  };
+  rd.onerror=()=>{ p.busy=null; p.msg=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); };
+  rd.readAsDataURL(f);
+});
+reg('psupDocView', docId=>{
+  const p=state.psup; if(!p||!p.id) return;
+  api('/suppliers/'+p.id+'/documents/'+Number(docId)).then(d=>{
+    const data=String((d&&d.data)||'');
+    if(/^image\//.test(d.mime_type||'')||/^data:image\//.test(data)){ APP.cmd('zoomImg',data); return; }
+    const m=/^data:([^;,]+)?(;base64)?,(.*)$/.exec(data); if(!m) return;
+    const bytes=atob(m[3]), arr=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+    window.open(URL.createObjectURL(new Blob([arr],{type:d.mime_type||m[1]||'application/octet-stream'})),'_blank');
+  }).catch(e=>{ if(String(e.message)==='auth') return; p.msg=T('Could not load this.','无法加载。'); render(); });
+});
+reg('psupDocDelete', docId=>{
+  const p=state.psup; if(!p||!p.id||!mCan('purchasing:edit')) return;
+  state.ask={title:T('Delete this document?','确定删除该文件？'),confirmLabel:T('Delete document','删除文件'),danger:true,
+    run:()=>{ p.busy='doc'; p.msg=null; render();
+      apiWrite('/suppliers/'+p.id+'/documents/'+Number(docId),{},'DELETE').then(()=>{ p.busy=null; showToast(T('Deleted','已删除')); psupReload(); })
+        .catch(e=>{ p.busy=null; if(String(e.message)==='auth') return; p.msg=psupErrMsg(e); render(); }); }};
+  render();
+});
+function psupFootHtml(){
+  const a=psupAuto; if(!a) return '';
+  const st=a.state;
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message):st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||'')):T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<span style="flex:1;min-width:0;font-size:12.5px;color:${tone}">${line}</span>
+    ${a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('psupUndo')">${T('Undo','撤销')}</button>`:''}
+    <button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('psupHistory')">${T('Version history','历史版本')}</button>`;
+}
+function screenPoSupplier(){
+  const p=state.psup;
+  if(!p) return nothingYet(T('Suppliers','供应商'),'');
+  if(p.err) return `<div style="padding:24px 16px;font-size:14px;color:var(--brick-ink)">${p.err}</div>`;
+  if(!p.rec||!p.draft) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const s=p.rec, d=p.draft, edit=mCan('purchasing:edit'), showMoney=poMoney();
+  const ro=edit?'':'disabled';
+  const inp=(k,label,ph,hint,multi)=>`<label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${label}</span>${
+    multi?`<textarea rows="3" style="resize:none" ${ro} placeholder="${ph||''}" oninput="APP.cmd('psupField','${k}',this.value)">${escAttr(d[k])}</textarea>`
+         :`<input value="${escAttr(d[k])}" ${ro} placeholder="${ph||''}" oninput="APP.cmd('psupField','${k}',this.value)">`}${hint?`<span style="font-size:12.5px;color:var(--text-secondary)">${hint}</span>`:''}</label>`;
+  const sugg=(k,list)=>edit?`<div class="hscroll" style="display:flex;gap:6px">${list.map((o,i)=>`<button class="chip${d[k]===o[0]?' on':''}" style="height:34px;padding:0 12px;flex:none" onclick="APP.cmd('psupPick','${k}',${i})"><span>${T(o[1],o[2])}</span></button>`).join('')}</div>`:'';
+  const group=(title,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">${title}</div>${inner}</div>`;
+  const sc=s.scorecard||{};
+  const tile=(lab,val,foot)=>`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:12.5px;color:var(--text-secondary)">${lab}</span>
+    <span class="num" style="font-size:17px;font-weight:500">${val}</span>${foot?`<span style="font-size:12px;color:var(--text-secondary)">${foot}</span>`:''}</div>`;
+  const score=s.id?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${tile(T('Orders','采购单'),Number(sc.order_count)||0,sc.last_date?T('last','最近')+' '+escAttr(fmtDateOnly(sc.last_date)):T('none yet','暂无'))}
+      ${tile(T('Products','商品'),Number(sc.product_count)||0,T('bought before','曾采购'))}
+      ${showMoney?tile(T('Spend, all time','累计采购'),money(CUR,sc.spend||0),'')+tile(T('Awaiting 发票','待开票'),money(CUR,sc.awaiting||0),(Number(sc.awaiting_lines)||0)+' '+T('lines','条明细')):''}</div>`:'';
+  const a=p.acct;
+  const credit=s.id&&a?(a.on_credit
+    ?`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div class="eyebrow">${T('We pay them later (credit)','先货后款')}</div>
+        ${showMoney?`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:var(--text-secondary)">${supOwedWords(a.owed).lab}</span>
+          <span class="num" style="font-size:22px;font-weight:600">${supMoney(a.owed)}</span></div>
+          <button class="btn2" style="width:100%" onclick="APP.cmd('openSupOwed',${Number(s.id)})">${T('Suppliers we owe','供应商欠款')}</button>`:''}
+        ${edit?`<label style="display:flex;align-items:center;gap:10px;font-size:14px"><input type="checkbox" checked ${p.busy?'disabled':''} onchange="this.checked=true;APP.cmd('psupCredit',0)">${T('We pay them later (credit)','先货后款')}</label>`:''}</div>`
+    :(edit?`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500"><input type="checkbox" ${p.busy?'disabled':''} onchange="this.checked=false;APP.cmd('psupCredit',1)">${T('We pay them later (credit)','先货后款')}</label>
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Turn on for a supplier who delivers now and is paid later. What you owe is worked out from delivered orders.','适用于先送货、后付款的供应商。欠款按已收货的采购单自动计算。')}</span></div>`:'')):'';
+  const fields=group(T('Who they are','基本信息'),
+      inp('name',T('Name','名称'),'',T('The only thing we need to save.','唯一必填项。'))+inp('name_cn','中文名')
+      +inp('products_supplied',T('What they supply','供应商品'),T('e.g. tofu, soy milk, miso','如:豆腐、豆浆、味噌'))
+      +inp('contact_name',T('Contact person','联系人'))+inp('contact_phone',T('Phone','电话'))+inp('contact_wechat',T('WeChat','微信')))
+    +group(T('How you pay them','付款方式'),inp('payment_terms',T('When','付款时点'))+sugg('payment_terms',PSUP_TERMS)+inp('payment_method',T('How','付款渠道'))+sugg('payment_method',PSUP_METHODS))
+    +group(T('Where you order','采购渠道'),
+      `<label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Ordering channel','渠道')}</span>
+        <select ${ro} onchange="APP.cmd('psupField','channel_type',this.value)" style="width:100%">${PSUP_CH.map(([v,l])=>`<option value="${v}"${(d.channel_type||'')===v?' selected':''}>${l?T(...l):'—'}</option>`).join('')}</select></label>`
+      +inp('channel_link',T('Link','链接'),T('Shop or catalogue URL','店铺或目录链接'))
+      +(s.id?`<label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Rating','评分')}</span>
+        <select ${ro} onchange="APP.cmd('psupField','rating',this.value)" style="width:100%">${[0,1,2,3,4,5].map(n=>`<option value="${n}"${Number(d.rating)===n?' selected':''}>${n?'★'.repeat(n):T('Not rated yet','暂未评分')}</option>`).join('')}</select>
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('Rate them after you’ve worked together.','合作之后再评分。')}</span></label>`:'')
+      +inp('notes',T('Notes','备注'),T('Minimum order, delivery days, price quirks…','起订量、送货日、价格说明……'),'',true));
+  const pl=s.price_list||[];
+  const priceList=showMoney&&pl.length?group(T('Price list — what you’ve bought from them','价格清单 —— 曾向其采购'),
+    `<div class="list" style="margin:0 -14px -14px">${pl.map((x,i)=>`${i?'<div class="sep"></div>':''}<button class="row" style="min-height:56px;padding:10px 14px" onclick="APP.cmd('pphOpen',${Number(x.store_product_id)})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left"><span style="font-size:14.5px">${escAttr(pwName(x))}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${T('Average','均价')} ${x.avg_cost!=null?money(CUR,x.avg_cost):'—'} · ${T('Times','次数')} ${escAttr(x.times)}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none"><span class="num" style="font-size:14.5px;font-weight:500">${money(CUR,x.last_cost||0)}</span>
+        <span style="font-size:12px;color:var(--text-secondary)">${T('Last paid','上次')}</span></span></button>`).join('')}</div>`):'';
+  const docs=s.documents||[];
+  const paper=s.id?group(T('Paperwork','资质文件'),
+    (docs.length?`<div class="list" style="margin:0 -14px">${docs.map((x,i)=>{ const k=PSUP_DOC.find(z=>z[0]===x.kind);
+      return `${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:center;gap:8px;padding:10px 14px">
+        <span style="flex:none;font-size:12.5px;color:var(--text-secondary);min-width:64px">${k?T(k[1],k[2]):escAttr(x.kind)}</span>
+        <span style="flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(x.label||x.filename||'file')}</span>
+        <button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:12.5px" onclick="APP.cmd('psupDocView',${Number(x.id)})">${T('View','查看')}</button>
+        ${edit?`<button class="iconbtn" style="width:34px;height:34px" aria-label="${T('Delete','删除')}" onclick="APP.cmd('psupDocDelete',${Number(x.id)})">${ic('x',16,2)}</button>`:''}</div>`; }).join('')}</div>`
+      /* The desktop's sentence with its last clause ("Drag a file in") cut at
+         its own full stop: there is nothing to drag on a phone. */
+      :`<span style="font-size:13px;color:var(--text-secondary)">${T('None yet — licence, permits, payment QR.','暂无 —— 营业执照、许可证、收款码。')}</span>`)
+    +(edit?`<div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border-default);padding-top:12px">
+        <div style="display:flex;gap:8px"><select style="flex:none;width:42%" onchange="APP.cmd('psupDocKind',this.value)">${PSUP_DOC.map(([v,en,zh])=>`<option value="${v}"${p.doc.kind===v?' selected':''}>${T(en,zh)}</option>`).join('')}</select>
+          <input style="flex:1;min-width:0" value="${escAttr(p.doc.label)}" placeholder="${T('Label','说明')}" oninput="APP.cmd('psupDocLabel',this.value)"></div>
+        <input type="file" accept="image/*,application/pdf" onchange="APP.cmd('psupDocFile',this)">
+        <button class="btn2" style="width:100%" ${p.busy?'disabled':''} onclick="APP.cmd('psupUpload')">${p.busy==='upload'?T('Uploading…','上传中…'):T('Upload','上传')}</button></div>`:'')):'';
+  const pos=s.recent_pos||[];
+  const orders=s.id?group(T('Orders with them','与其采购单'),pos.length?`<div class="list" style="margin:0 -14px -14px">${pos.map((o,i)=>`${i?'<div class="sep"></div>':''}<button class="row" style="min-height:52px;padding:10px 14px" onclick="APP.cmd('openPO',${Number(o.id)})">
+      <span class="num" style="font-size:14px;font-weight:500">${escAttr(o.po_number)}</span><span class="num" style="flex:1;font-size:12.5px;color:var(--text-secondary)">${escAttr(o.date?fmtDateOnly(o.date):'')}</span>
+      ${showMoney?`<span class="num" style="font-size:14px">${money0(CUR,o.total||0)}</span>`:''}${poPill(o)}</button>`).join('')}</div>`
+    :`<span style="font-size:13px;color:var(--text-secondary)">${T('None yet.','暂无。')}</span>`):'';
+  const msg=p.msg?`<div style="padding:12px 14px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${p.msg}</div>`:'';
+  const foot=s.id
+    ?footBar((edit?`<button class="btn2" style="width:auto;padding:0 14px;flex:none;${Number(s.is_active)?'color:var(--brick-ink);border-color:var(--brick-ink)':''}" ${p.busy?'disabled':''} onclick="APP.cmd('psupToggle')">${Number(s.is_active)?T('Disable','停用'):T('Enable','启用')}</button>`:'')
+        +`<div id="mPsupFoot" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;justify-content:flex-end">${psupFootHtml()}</div>`,'mPsupBar')
+    :footBar(`<button class="cta" ${p.busy?'disabled':''} onclick="APP.cmd('psupSave')">${p.busy==='save'?T('Saving…','保存中…'):T('Save supplier','保存')}</button>`,'mPsupBar');
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${s.id&&!Number(s.is_active)?`<div>${pill('off',T('Disabled','已停用'))}</div>`:''}
+    ${msg}${score}${credit}${fields}${priceList}${paper}${orders}</div>${foot}`;
+}
+
+/* ==========================================================================
    §286 — Suppliers we owe
    --------------------------------------------------------------------------
    The few suppliers who deliver now and are paid later. WHAT WE OWE IS THE
@@ -10875,8 +11216,9 @@ const pphLink=spid=>spid&&poMoney()?`<button class="btn2" style="width:auto;min-
 
    A PAYMENT IS NOT AN EXPENSE. The order already put the purchase in the books;
    a payment only lowers what we owe, and the sheet says so under its button.
-   A supplier is switched to credit on the desktop's supplier page — the phone
-   reads and records, it does not configure.
+   A supplier is switched to credit on its record — on the desktop's supplier
+   page, and since §300 (P7, overturning §286's desktop-only hold) on the
+   phone's too, behind a confirm (psupCredit).
    ========================================================================== */
 /* Two decimals, always: a debt settled to the fen must read to the fen, which
    money0's whole-yuan rounding would not. */
@@ -10911,7 +11253,9 @@ function screenSupOwed(){
   if(!d) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const rows=d.suppliers||[];
   if(!rows.length) return nothingYet(T('No suppliers on credit yet','暂无先货后款供应商'),
-    T('Turn it on in the supplier’s page on the computer.','请在电脑端的供应商页面开启。'));
+    /* §300 P7 — the switch is on the supplier's record on this phone now, so
+       the empty state no longer sends anyone to the computer. */
+    T('Turn on for a supplier who delivers now and is paid later. What you owe is worked out from delivered orders.','适用于先送货、后付款的供应商。欠款按已收货的采购单自动计算。'));
   const row=r=>{ const w=supOwedWords(r.owed);
     const name=LANG==='en'?r.name:(r.name_cn||r.name);
     return `<button class="row" style="min-height:64px;padding:12px 16px" onclick="APP.cmd('openSupOwed',${r.supplier_id})">
@@ -12253,11 +12597,19 @@ const SUBS={
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),
     /* §300 P2 — the desktop's New order, on its own key (data-cap="purchasing:edit"). */
-    cta:()=>state.poView==='invoices'&&pinvOn()
+    cta:()=>(state.poView==='suppliers'||state.poView==='supowed')&&mCan('purchasing:edit')
+      ? `<button class="cta inhead" onclick="APP.cmd('psupNew')">${T('New supplier','新建供应商')}</button>`
+      : state.poView==='invoices'&&pinvOn()
       ? `<button class="cta inhead" onclick="APP.cmd('pinvNew',-1)">${T('Add invoice','添加发票')}</button>`
       : state.poView==='orders'&&canRoute('newpo')
       ? `<button class="cta inhead" onclick="APP.cmd('pwNew')">${T('New order','新建采购单')}</button>` : '',
     render:()=>screenPurchasing()},
+  posupplier:{title:['Suppliers','供应商'],
+    titleOf:()=>state.psup&&state.psup.rec&&state.psup.rec.name?escAttr(pinvSup(state.psup.rec.name,state.psup.rec.name_cn)):T('New supplier','新建供应商'),
+    backLabel:()=>T('Suppliers','供应商'),
+    cta:()=>state.psup&&state.psup.id&&canRoute('newpo')
+      ? `<button class="cta inhead" onclick="APP.cmd('psupNewOrder')">${T('New order','新建采购单')}</button>` : '',
+    render:()=>screenPoSupplier()},
   newpo:{title:['New order','新建采购单'],
     titleOf:()=>state.pw&&state.pw.po_number?escAttr(state.pw.po_number):T('New order','新建采购单'),
     backLabel:()=>T('Purchasing','采购'),
@@ -28422,6 +28774,9 @@ const ROUTE_CAP={
   /* §300 P2 — writing an order is the desktop's New order, purchasing:edit —
      AND purchasing:view, which canRoute() adds by name (see there). */
   newpo:'purchasing:edit',
+  /* §300 P7 — a supplier's record reads with Purchasing's key; its writes and its
+     money each carry their own (purchasing:edit, poMoney). */
+  posupplier:'purchasing:view',
   /* WASTE IS GATED ON VIEW, NOT ON RECORD — the opposite call to Receiving's
      one line above, and for the opposite reason. Receiving is a screen whose
      entire purpose is the save at the bottom of it, so a viewer gets a page
