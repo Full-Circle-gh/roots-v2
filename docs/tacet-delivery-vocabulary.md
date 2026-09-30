@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.215 · 2026-09-30 · §306 EDITING RECIPES ON THE PHONE — NOTHING COMPOSED; ONE LINE JOINED FROM TWO LIVE PAIRS, ONE CUT SHORT, THE REST COPIED WHOLE.** See *Editing a recipe on the phone (§306)*.
+
 **v1.214 · 2026-09-30 · §305 FINANCE SUMMARY ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM A LIVE PAIR.** See *The Finance summary on the phone (§305)*.
 
 **v1.213 · 2026-09-30 · §304 PURCHASE ORDERS MANAGED ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Purchase orders managed on the phone (§304)*.
@@ -9631,3 +9633,57 @@ The mockup's `Pick dates`, `Show these dates`, `This month`, `Last month`,
 `This quarter`, `Since 1 Aug` and the "Finance starts on 1 August 2026" note were
 NOT built: none is on the desktop, each would have been composed, and the last
 contradicts §36's "Finance is not floored at the cutover date".
+
+## Editing a recipe on the phone (§306)
+
+**Nothing composed, 2026-09-30.** Operator register only (Rule 1): the phone
+Recipes record's editor and version history (`public/m.html`). Every label is
+the desktop record's own (`public/retail-admin/19-recipes.js`) or one the phone
+already ships.
+
+**Joined or cut from live pairs, declared because the result is new text on a
+screen:**
+
+| shipped | built from |
+|---|---|
+| `Unsaved changes — this recipe still needs an English name · 有未保存的更改 — 该食谱还需要填写英文名称` (status line while a new recipe has no English name) | the desktop bar's `Unsaved changes · 有未保存的更改` and its leave guard's `this recipe still needs an English name · 该食谱还需要填写英文名称`, joined with the bar's own ` — ` (the shape of its `Not saved — reason`) |
+| `A recipe is what you make and what goes into it. · 食谱记录你制作的东西及其用料。` (empty list, reader without `recipes:edit`) | the phone's own live empty sentence, up to its first full stop. The second sentence (*They are written on desktop*) is no longer true. |
+
+**Copied whole from the desktop record:** `New recipe · 新建食谱`,
+`Name (English) · 名称(英文)`, `Name (中文) · 名称(中文)`, `SKU · 货号` and
+`Kept forever, even after archiving. · 归档后仍永久保留。`, `Category · 分类`,
+`None · 无`, `Type · 类型` and its hint, `Made · 自制`, `Repacked · 分装`,
+`Batch size (g) · 批量大小(克)`, `Servings · 份数`, `Serving size (g) · 每份克数`
+and its hint, every batch and serving hint with `Auto · 自动`,
+`Type it myself · 手动填写`, `Use the ingredient total (N g) · 按原料合计填写(N 克)`,
+`Work it out (N) · 自动算出(N)`, the oversize, adrift and cannot-add-up warnings,
+`Shelf life · 保质期` with `Days / Months / Years · 天 / 个月 / 年`,
+`Storage · 储存方式` and its three options, `Notes · 备注`,
+`Search materials to add… · 搜索要添加的物料…`, `No ingredients yet. · 暂无原料。`,
+`qty · 数量`, `Note · 备注`, `Counts toward the batch weight · 计入批量重量`,
+`Move up · 上移`, `Move down · 下移`, `Remove · 移除`,
+`Step name (optional) · 步骤名称(可选)`, `Instructions · 操作说明`,
+`Add step · 添加步骤`, `No steps yet. · 暂无步骤。`, the save line
+(`Unsaved changes · 有未保存的更改`, `Saving… · 保存中…`, `Saved · 已保存`,
+`just now · 刚刚`, `N min ago · N 分钟前`, `N h ago · N 小时前`,
+`Not saved · 未保存`), the leave guard (`Leave without saving? · 未保存就离开?`,
+its body, `Leave · 离开`), and the history (`Now — the live recipe · 当前 —— 正在使用的版本`,
+`until · 直到`, `unknown · 未知`, `N ingredients · M steps · N 项原料 · M 个步骤`,
+`saved · 保存`, `autosaved · 自动保存`, `restored an older version · 恢复了旧版本`,
+`No earlier versions yet — … · 暂无更早的版本 —— …`, `Could not load history · 无法加载修改记录`,
+`Restore this version? · 恢复该版本?`, its body, `Restore · 恢复`,
+`Restored · 已恢复`, `Restored — except … · 已恢复 —— 但 … 未一并恢复。`,
+`Restore failed · 恢复失败`). **From the desktop Materials screen:**
+`Could not load materials · 无法加载物料`. **From the phone:** `Edit · 编辑`,
+`Done · 完成`, `Version history · 历史版本`, `Nothing matches · 没有匹配项`,
+`Loading… · 加载中…`.
+
+**Live candidates rejected.**
+
+- The phone history sheet's own `Restore this version? · 还原此版本?` /
+  `Restore · 还原` for a recipe: **rejected** in favour of the desktop
+  record's `恢复该版本?` / `恢复`. The confirm's body is the desktop's and says
+  `恢复`, and one dialog must not use two words for one act.
+- The mockup's `Counts to weight` and `Add ingredient`: **rejected** for the
+  desktop's live `Counts toward the batch weight · 计入批量重量` and its
+  search-to-add field.
