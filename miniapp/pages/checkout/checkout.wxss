@@ -939,7 +939,7 @@
   line-height: 1;
 }
 .fb-modal-delta__val {
-  font-family: 'Toni Grotesk', -apple-system, sans-serif;
+  font-family: 'Toni Grotesk', 'League Gothic', -apple-system, sans-serif;
   font-size: 30rpx;
   font-weight: 700;
   color: #1a2314;
