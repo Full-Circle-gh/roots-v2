@@ -1506,6 +1506,12 @@ const state = {
      each card's refusal (err) or note (ok). */
   x7:{integ:null, integTried:false, integErr:null, prn:null, prnTried:false, prnErr:null, prnD:null, prnStore:null, prev:{},
       qy:null, qyTried:false, qyErr:null, qyAsked:{}, cfgTried:false, cfgErr:null, d:{}, busy:null, err:{}, ok:{}},
+  /* §325 X8a — the channel screens' upkeep: each channel's stores and their
+     hours (for Sync from), Meituan's catalogue and gzgrocery's product list
+     with whether either is being read again, which button is in flight, and
+     each card's refusal (err) or note (ok). */
+  x8:{busy:null, err:{}, ok:{}, mtStores:null, mtTried:false, mtErr:null, elStores:null, elTried:false, elErr:null,
+      mtCat:null, mtCatTried:false, catReading:false, gyLs:null, gyTried:false, gyReading:false},
   /* §325 X4 — the Brand screen (the logo and name, a draft of the name being
      typed, which save is in flight and each half's refusal) and the brand
      studio (its form, the job being polled, the result and its Apply). */
@@ -1641,6 +1647,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      now, and `rows`/`st` back to null draws Loading rather than the last visit. */
   if(route==='changes'||route==='sent'){ const c=route==='sent'?state.nlg:state.chl; c.tried=false; c.rows=null; c.err=null; c.open=null; }
   if(route==='mirror_eleme'){ const e=state.elm; e.tried=false; e.st=null; e.cfg=null; e.err=null; }
+  /* §325 X8a — the upkeep cards are read again with their channel screen. */
+  if(route==='mirror_meituan'||route==='mirror_eleme'||route==='mirror_gzgrocery'){ const x=state.x8;
+    x.mtTried=false; x.mtStores=null; x.mtErr=null; x.elTried=false; x.elStores=null; x.elErr=null;
+    x.mtCatTried=false; x.gyTried=false; x.err={}; x.ok={}; }
   /* §325 X2 — Operations re-reads what was deleted on every entry (something
      may have been deleted on another screen a minute ago), and a refusal from
      the last visit does not greet the next one. */
@@ -27011,11 +27021,11 @@ function gzFlaggedBlock(){
 function mirrorScreen(which,note){
   const rows=(state.mirror&&state.mirror[which])||null;
   if(!rows&&state.mirrorLoading!==which&&!state.mirrorTried){ /* first paint kicks the load */ }
-  const mt = which==='meituan' ? mtHealthCard() : '';
+  const mt = which==='meituan' ? mtHealthCard()+x8MtCard() : '';   // §325 X8a — and its upkeep
   const gz = which==='gzgrocery'
     ? `${state.gzErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick-ink)">${state.gzErr}</span></div>`:''}${gzModeCard()}${gzFlaggedBlock()}`
+        <span style="font-size:14px;color:var(--brick-ink)">${state.gzErr}</span></div>`:''}${gzModeCard()}${x8GyCard()/* §325 X8a */}${gzFlaggedBlock()}`
     : '';
   if(!rows||!rows.length){
     if((gz||mt)&&state.mirrorLoading!==which) return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">${mt}${gz}
@@ -27680,6 +27690,7 @@ function screenEleme(){
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${String(e.err)}</span></div>`:''}
     ${head}
+    ${x8ElCard()/* §325 X8a — Push all stock, and each store's Sync from */}
     ${stores.length?`<div><div class="eyebrow" style="padding:2px 4px 10px">${T('Stores','门店')}</div><div class="list">${storeRows}</div></div>`:''}
     ${elmLog(T('Stock pushes','库存推送'),e.st.recentStock||[],elmStockRow,stores)}
     ${elmLog(T('Sync events','系统事件'),e.st.recentSystem||[],elmSysRow,stores)}</div>`;
@@ -29706,6 +29717,213 @@ function screenPushCfg(){
 }
 SUBS.pushcfg={title:['Push notifications','推送通知'],render:()=>screenPushCfg()};
 /* §325 X7 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X8a — CHANNEL UPKEEP: SYNC NOW, THE CATALOGUE, AUTO-MATCH, SYNC FROM
+   --------------------------------------------------------------------------
+   The channel tabs' maintenance buttons, on the phone's three channel screens,
+   each the desktop's own request:
+
+   • Meituan (11-meituan.js): Sync now — POST /meituan/push-all {force:false};
+     the catalogue line and Refresh catalogue — POST /meituan/listings/refresh,
+     then GET /meituan/listings until no job is running (it applies nothing,
+     which is the whole difference from Match names); each store's Sync from.
+   • Eleme (14-eleme.js): Push all stock — POST /eleme/push-all; each store's
+     Sync from.
+   • gzgrocery (12-guanyi.js): the product-list line and Refresh list —
+     POST /guanyi/listings/refresh, then GET /guanyi/listings until done;
+     Auto-match by SKU — POST /guanyi/auto-match; Push all stock —
+     POST /guanyi/push-all.
+   • Sync from writes the store row, PATCH /stores/:id {sync_start_time}, so
+     every channel picks it up — the desktop's mtSetSyncStart / elSetSyncStart.
+
+   Each button is drawn for the key the server asks of its request
+   (lib/cap-routes.js): meituan:sync, eleme:sync, guanyi:sync, guanyi:map, and
+   stores:edit for Sync from. Without it the fact still shows; the button
+   does not.
+   ══════════════════════════════════════════════════════════════════════════ */
+const x8=()=>state.x8;
+const X8_LEAD_MIN=120;   // mirrors DEFAULT_PREOPEN_LEAD_MIN in lib/store-hours.js
+const x8Hm=mins=>{ const m=((mins%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+function x8ParseHm(v){ const m=/^(\d{1,2}):(\d{2})$/.exec(String(v==null?'':v).trim()); if(!m) return null;
+  const mins=(+m[1])*60+(+m[2]); return mins>=0&&mins<1440?mins:null; }
+/* What the daemon will actually use (syncWindow() in lib/store-hours.js, its
+   clamp included): a start later than opening reads as opening. null = no
+   hours on file, which the daemons treat as always on. */
+function x8EffStart(st){
+  const ex=x8ParseHm(st&&st.syncStartTime), open=x8ParseHm(st&&st.openTime);
+  if(ex!=null) return x8Hm(open!=null?Math.min(ex,open):ex);
+  if(open==null) return null;
+  return x8Hm(Math.max(0,open-X8_LEAD_MIN));
+}
+const x8Err=k=>{ const e=x8().err[k]; return e?`<div style="font-size:13.5px;color:var(--brick-ink);line-height:1.5;overflow-wrap:anywhere">${escAttr(String(e))}</div>`:''; };
+const x8Note=k=>{ const e=x8().ok[k]; return e?`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5;overflow-wrap:anywhere">${escAttr(String(e))}</div>`:''; };
+const x8Btn=(cmd,label,busyKey,busyLabel,arg)=>{ const s=x8(), b=s.busy===busyKey;
+  return `<button class="btn2" style="width:auto;min-height:36px;padding:0 14px;font-size:13.5px" ${s.busy||(busyKey==='mtcat'&&s.catReading)||(busyKey==='gyls'&&s.gyReading)?'disabled':''} onclick="APP.cmd('${cmd}'${arg!=null?`,'${escAttr(arg)}'`:''})">${b?busyLabel:label}</button>`; };
+const x8Wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ── The stores each channel syncs, with their hours ─────────────────────── */
+function x8LoadStores(ch){
+  const s=x8(), k=ch==='meituan'?'mt':'el'; if(s[k+'Tried']) return; s[k+'Tried']=true; s[k+'Err']=null;
+  api(ch==='meituan'?'/meituan/stores':'/eleme/stores').then(r=>{ s[k+'Stores']=Array.isArray(r)?r:[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s[k+'Err']=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+const x8StoreName=st=>LANG==='en'?((st&&(st.nameEn||st.name))||(st&&st.code)||''):((st&&(st.name||st.nameEn))||(st&&st.code)||'');
+function x8SyncFromCard(ch){
+  const s=x8(), k=ch==='meituan'?'mt':'el'; x8LoadStores(ch);
+  const list=s[k+'Stores'];
+  if(!list) return s[k+'Err']?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s[k+'Err']))}</div>`:'';
+  if(!list.length) return '';
+  const can=mCan('stores:edit');
+  const rows=list.map(st=>{
+    const eff=x8EffStart(st);
+    const hint=st.syncStartTime?'':eff?T('defaults to '+eff,'默认 '+eff):T('no opening hours set — syncs all day','未设营业时间 — 全天同步');
+    const ctl=can
+      ? `<input type="time" value="${escAttr(st.syncStartTime||'')}" aria-label="${escAttr(T('Sync from','同步开始'))}" style="width:116px;flex:none" ${s.busy==='sf:'+st.id?'disabled':''}
+          onchange="APP.cmd('x8SyncFrom','${ch}',${Number(st.id)},this.value)">`
+      : `<span class="num" style="font-size:14px;flex:none">${escAttr(eff||'—')}</span>`;
+    return tmRow({label:escAttr(x8StoreName(st)),note:hint?escAttr(hint):'',right:ctl});
+  });
+  return `<div>${cfgHead(T('Sync from','同步开始'),T('When this store starts syncing each day. Customers pre-order before you open, so set it earlier than opening. Blank = 2 h before opening.',
+      '每天从几点开始同步该门店。顾客会在开门前下预订单,建议设置在开门之前。留空 = 开门前 2 小时。'))}
+    ${tmList(rows)}${x8Err('sf')}</div>`;
+}
+reg('x8SyncFrom', (ch,id,v)=>{
+  const s=x8(), k=ch==='meituan'?'mt':ch==='eleme'?'el':null; id=Number(id);
+  if(!k||s.busy||!mCan('stores:edit')) return;
+  const st=(s[k+'Stores']||[]).find(x=>x.id===id); if(!st) return;
+  const value=String(v==null?'':v).trim();
+  if(value&&x8ParseHm(value)==null) return;
+  s.busy='sf:'+id; s.err.sf=null; render();
+  apiWrite('/stores/'+id,{sync_start_time:value||null},'PATCH').then(()=>{
+    s.busy=null; st.syncStartTime=value||null;
+    const eff=x8EffStart(st);
+    showToast(T('Syncing this store from '+(eff||'—'),'该门店 '+(eff||'—')+' 起同步'));
+    if(ch==='meituan') x8MtStatus(); else { state.elm.tried=false; }
+    render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+    s.err.sf=e&&e.refused?E(...e.words):E('Could not save the sync start: '+tmOneLang((e&&e.message)||''),'同步开始时间保存失败:'+tmOneLang((e&&e.message)||'')); render(); });
+});
+
+/* ── Meituan ─────────────────────────────────────────────────────────────── */
+function x8MtStatus(){ return apiRaw('/meituan/status').then(j=>{ state.mtStatus=j; state.mtOffline=false; render(); }).catch(()=>{}); }
+function x8LoadMtCat(){
+  const s=x8(); if(s.mtCatTried) return; s.mtCatTried=true;
+  apiRaw('/meituan/listings').then(j=>{ s.mtCat=(j&&j.catalogue)||{}; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.mtCat=null; render(); });
+}
+reg('x8MtPush', ()=>{
+  const s=x8(); if(s.busy||!mCan('meituan:sync')) return;
+  s.busy='mtpush'; s.err.mt=null; render();
+  apiWrite('/meituan/push-all',{force:false},'POST').then(r=>{
+    s.busy=null; const n=Number((r&&r.queued)||0);
+    showToast(T('Queued '+n+' stock push(es) to Meituan','已排队 '+n+' 个库存推送')); x8MtStatus(); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.mt=x6Words(e,'Push failed','推送失败'); render(); });
+});
+/* Enqueue the read, then ask until no job is running (three minutes at most,
+   the desktop's own bound). It applies nothing. */
+reg('x8MtCat', ()=>{
+  const s=x8(); if(s.busy||s.catReading||!mCan('meituan:sync')) return;
+  s.catReading=true; s.err.mtcat=null; render();
+  const fail=e=>{ s.catReading=false; if(e&&String(e.message)==='auth') return;
+    const tail=e&&e.message&&!e.x8empty?' '+tmOneLang(e.message):'';
+    s.err.mtcat=e&&e.refused?E(...e.words):E('Could not read the listings — is the sync service signed in?'+tail,'无法读取商品名称 — 同步服务是否已登录?'+tail); render(); };
+  apiWrite('/meituan/listings/refresh',{},'POST').then(async ()=>{
+    const t0=Date.now(); let data=null;
+    while(Date.now()-t0<180000){ await x8Wait(3000); data=await apiRaw('/meituan/listings'); if(!data||!data.running) break; }
+    s.catReading=false;
+    if(data) s.mtCat=data.catalogue||{};
+    const total=Object.values((data&&data.listings)||{}).reduce((a,b)=>a+(Array.isArray(b)?b.length:0),0);
+    if(!total) throw Object.assign(new Error(''),{x8empty:true});
+    showToast(T('Catalogue updated. Nothing was matched or changed.','商品名称已更新,未匹配或改动任何内容。')); render();
+  }).catch(fail);
+});
+function x8MtCard(){
+  const s=x8(); x8LoadStores('meituan'); x8LoadMtCat();
+  const stores=s.mtStores||[], cat=s.mtCat;
+  const per=stores.map(st=>{ const c=cat&&cat[st.code]; const n=(c&&c.count)||0;
+    return x8StoreName(st)+' '+n+' · '+(c&&c.scrapedAt?elmAgo(c.scrapedAt):T('never read','从未读取')); }).join('  ·  ');
+  const sync=mCan('meituan:sync');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:14.5px;font-weight:500">${T('Listing names read from Meituan','从美团读取的商品名称')}</span>
+      <span class="num" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;overflow-wrap:anywhere">${escAttr(cat==null?T('Loading…','加载中…'):(per||T('never read','从未读取')))}</span>
+      ${sync?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('Reads the current listing names. Changes nothing and matches nothing.','读取当前商品名称,不改动也不匹配任何内容。')}</span>`:''}</div>
+    ${x8Err('mtcat')}
+    ${sync?`<span style="display:flex;gap:8px;flex-wrap:wrap">
+      ${x8Btn('x8MtCat',s.catReading?T('Reading…','读取中…'):T('Refresh catalogue','刷新商品名称'),'mtcat',T('Reading…','读取中…'))}
+      ${x8Btn('x8MtPush',T('Sync now','立即同步'),'mtpush',T('Queuing…','排队中…'))}</span>
+      <span style="font-size:12px;color:var(--text-secondary)">${T('Queue a fresh stock push for every mapped product','为所有已匹配商品排队推送库存')}</span>`:''}
+    ${x8Err('mt')}</div>
+  ${x8SyncFromCard('meituan')}`;
+}
+
+/* ── Eleme ───────────────────────────────────────────────────────────────── */
+reg('x8ElPush', ()=>{
+  const s=x8(); if(s.busy||!mCan('eleme:sync')) return;
+  s.busy='elpush'; s.err.el=null; render();
+  apiWrite('/eleme/push-all',{},'POST').then(r=>{
+    s.busy=null; const n=Number((r&&r.queued)||0);
+    showToast(T('Queued '+n+' product(s)','已排队 '+n+' 个商品')); state.elm.tried=false; render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.el=x6Words(e,'Push failed','推送失败'); render(); });
+});
+function x8ElCard(){
+  const sync=mCan('eleme:sync');
+  return `${sync?`<div style="display:flex;flex-direction:column;gap:6px">
+      <span>${x8Btn('x8ElPush',T('Push all stock','推送全部库存'),'elpush',T('Queuing…','排队中…'))}</span>
+      <span style="font-size:12px;color:var(--text-secondary)">${T('Queue a fresh stock push for every mapped product','为所有已匹配商品排队推送库存')}</span>${x8Err('el')}</div>`:''}
+    ${x8SyncFromCard('eleme')}`;
+}
+
+/* ── gzgrocery ───────────────────────────────────────────────────────────── */
+function x8LoadGy(){
+  const s=x8(); if(s.gyTried) return; s.gyTried=true;
+  apiRaw('/guanyi/listings').then(j=>{ s.gyLs=j||{}; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.gyLs=null; render(); });
+}
+reg('x8GyRefresh', ()=>{
+  const s=x8(); if(s.busy||s.gyReading||!mCan('guanyi:sync')) return;
+  s.gyReading=true; s.err.gy=null; s.ok.gy=null; render();
+  apiWrite('/guanyi/listings/refresh',{},'POST').then(async ()=>{
+    for(let i=0;i<30;i++){ await x8Wait(2000); const r=await apiRaw('/guanyi/listings'); s.gyLs=r||s.gyLs; if(r&&!r.running) break; }
+    s.gyReading=false; showToast(T('Guanyi product list refreshed','已刷新')); render();
+  }).catch(e=>{ s.gyReading=false; if(String(e&&e.message)==='auth') return; s.err.gy=x6Words(e,'Refresh failed','刷新失败'); render(); });
+});
+reg('x8GyMatch', ()=>{
+  const s=x8(); if(s.busy||!mCan('guanyi:map')) return;
+  s.busy='gymatch'; s.err.gy=null; s.ok.gy=null; render();
+  apiWrite('/guanyi/auto-match',{},'POST').then(r=>{
+    s.busy=null; r=r||{};
+    if(r.note){ s.ok.gy=/Refresh first/i.test(r.note)?E('No cached Guanyi listings — click Refresh first.','尚无已缓存的管易商品 — 请先点击刷新。'):E(r.note,r.note); render(); return; }
+    const n=Number(r.matched||0), a=Array.isArray(r.ambiguous)?r.ambiguous.length:0, u=Number(r.unmatched||0);
+    showToast(T('Matched '+n+' product(s)'+(a?' · '+a+' ambiguous':'')+(u?' · '+u+' unmatched':''),
+                '已匹配 '+n+' 个商品'+(a?' · '+a+' 个有歧义':'')+(u?' · '+u+' 个未匹配':'')));
+    render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.gy=x6Words(e,'Auto-match failed','自动匹配失败'); render(); });
+});
+reg('x8GyPush', ()=>{
+  const s=x8(); if(s.busy||!mCan('guanyi:sync')) return;
+  s.busy='gypush'; s.err.gy=null; s.ok.gy=null; render();
+  apiWrite('/guanyi/push-all',{},'POST').then(r=>{
+    s.busy=null; const n=Number((r&&r.queued)||0);
+    showToast(T('Queued '+n+' product(s)','已排队 '+n+' 个商品')); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.gy=x6Words(e,'Push failed','推送失败'); render(); });
+});
+function x8GyCard(){
+  const s=x8(); x8LoadGy();
+  const ls=s.gyLs, n=ls?(ls.listings||[]).length:null, busy=s.gyReading||!!(ls&&ls.running);
+  const fresh=busy?T('refreshing…','刷新中'):!ls?'…':ls.job?(ls.job.completed_at?tdWhen(ls.job.completed_at,'dateTime',_tdL()):T('cached','已缓存')):T('never refreshed','未刷新');
+  const read=n==null?'':T(n+' listings read','已读取 '+n+' 个商品');
+  const sync=mCan('guanyi:sync'), map=mCan('guanyi:map');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <span class="num" style="font-size:13px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr([read,fresh].filter(Boolean).join(' · '))}</span>
+    ${(sync||map)?`<span style="display:flex;gap:8px;flex-wrap:wrap">
+      ${sync?x8Btn('x8GyRefresh',busy?T('refreshing…','刷新中'):T('Refresh list','刷新'),'gyls',T('refreshing…','刷新中')):''}
+      ${map?x8Btn('x8GyMatch',T('Auto-match by SKU','按货号自动匹配'),'gymatch',T('Matching…','匹配中…')):''}
+      ${sync?x8Btn('x8GyPush',T('Push all stock','推送全部库存'),'gypush',T('Queuing…','排队中…')):''}</span>`:''}
+    ${map?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('Products are matched by the SKU embedded in the Guanyi name (e.g. "GVF 1-180").','通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。')}</span>`:''}
+    ${x8Note('gy')}${x8Err('gy')}</div>`;
+}
+/* §325 X8a ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
