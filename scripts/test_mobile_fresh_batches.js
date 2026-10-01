@@ -52,6 +52,8 @@ function sliceBetween(from, to) {
 const CODE = [
   sliceBetween('const DLV_WRITE=', 'const DLV_LIVE={'),
   sliceFn('dlvCfgPut'),
+  // T1 kept one cfgMerge (the later one); dlvCfgPut folds what it wrote through it.
+  sliceFn('cfgMerge'),
   sliceBetween('/* ── §325 O9 — FRESH BATCHES ON THE PHONE', '/* ── §325 O5 — DELIVERY ZONES ON THE PHONE'),
   sliceBetween("reg('askRun', key=>{", "reg('copyWaybill'"),
   'const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split(\'.\')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };',
@@ -323,6 +325,7 @@ async function main() {
         T: (en, zh) => (ctx.LANG === 'en' ? en : (zh || en)), ic: (n) => `<i data-ic="${n}"></i>`, escAttr: String,
         loadPrinter: () => {}, loadGeo: () => {}, dlvZoneFacts: () => null, settingsGroupCard: () => '', dlvSetupCard: () => '',
         dlvSettingsCard: () => '', noteBar: (t) => t, desktopNote: () => '',
+        x7DeliveryDoors: () => '',   // X7's own row on this screen (another lane), not under test here
         canRoute: (k) => (k === 'storeone' ? !!opts.edit : true),
       };
       vm.createContext(ctx); vm.runInContext(SD, ctx); return ctx.screenDelivery();
