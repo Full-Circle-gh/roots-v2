@@ -109,7 +109,16 @@ const row = (pid) => db.prepare('SELECT eleme_name AS name, sync_enabled AS sync
     } };
     walk('public');
     const callers = files.filter((f) => /eleme\/products\/'\s*\+[^;\n]*'\/map'|eleme\/products\/\$\{[^}]+\}\/map/.test(read(f)));
-    is(callers, ['public/retail-admin/14-eleme.js'], 'the only screen calling /map is the desktop Eleme panel (the phone has none at this merge)');
+    /* §325 X8c (lane/set) gave the phone a second caller, its channel
+       matching screen; it is held to the desktop's three guards below. */
+    is(callers, ['public/m.html', 'public/retail-admin/14-eleme.js'], 'the screens calling /map are the desktop Eleme panel and the phone\'s matching screen');
+    const PH = read('public/m.html');
+    ok(/if\(!name\|\|!chmKnown\(code,name\)\) return;/.test(PH),
+      'phone picker (chmPick): only a name from the channel\'s own list is sent');
+    ok(/apiWrite\('\/eleme\/products\/'\+s\.pid\+'\/map',\{storeId:Number\(storeId\),storeCode:code,elemeName:name\|\|null,syncEnabled:cur\?Number\(cur\.sync_enabled\):0\},'POST'\)/.test(PH),
+      'phone name write (chmNameWrite): the switch is echoed, 0 for a new row');
+    ok(/apiWrite\('\/eleme\/products\/'\+s\.pid\+'\/map',\{storeId:Number\(storeId\),storeCode:code,remove:true\},'POST'\)/.test(PH),
+      'phone Remove deletes the mapping rather than blanking it');
     ok(!/INSERT INTO eleme_product_map|UPDATE eleme_product_map SET [^`]*sync_enabled/.test(read('lib/channel-sync-items.js') + read('lib/eleme-sync.js')),
       'no library writes a mapping\'s name or switch behind the route');
   }
