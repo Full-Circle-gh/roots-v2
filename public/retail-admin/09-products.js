@@ -5845,7 +5845,7 @@ async function pdSaveCore() {
     if (id) {
       const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
       if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
-      // §374 — the server copied Shipping to the other sizes. Mirror it here, or
+      // §377 — the server copied Shipping to the other sizes. Mirror it here, or
       // opening one of them would load its old value and the next autosave
       // would copy that stale value back over the whole family.
       if (Array.isArray(j.ship_modes_family) && j.data) {

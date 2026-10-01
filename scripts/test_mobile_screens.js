@@ -25,6 +25,11 @@ const { inlineTdDatetime } = require('./lib/m-probe');
    is a module now so the FAST shard can run it too — see its header, and the
    note over the call site. */
 const { stateKeyProblems } = require('./lib/m-state-keys');
+/* The other static passes, the same way and for the same reason (§325 T2):
+   their logic is scripts/lib/m-static-guards.js, which the fast shard runs
+   through scripts/test_mobile_static_guards.js. This suite still asks every
+   one of them below, through that module, before it renders. */
+const guards = require('./lib/m-static-guards');
 
 const APP = path.join(__dirname, '..', 'public', 'm.html');
 
@@ -354,20 +359,11 @@ function main() {
   // deleted (an edit sliced a region and took it with it, twice in one day).
   // These names follow the file's own conventions, so the check is a grep, not
   // a parser: every mapX / loadX / screenX / sheetX that is CALLED must exist.
+  // Comments are stripped first (a comment naming a helper is not a call), and
+  // the BARE identifier is matched, not `name(` — the two call sites that
+  // shipped this bug were `rows.map(mapFeedback)`. Logic: m-static-guards.js.
   {
-    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
-    // Strip comments first: a comment naming a helper is not a call, and this
-    // file's comments name plenty of them.
-    const js = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-    const defined = new Set();
-    for (const m of js.matchAll(/(?:function|const|let|var)\s+([a-zA-Z_$][\w$]*)/g)) defined.add(m[1]);
-    // Match the BARE identifier, not `name(`. The two call sites that shipped
-    // this bug were `rows.map(mapFeedback)` — a reference passed to .map(),
-    // with no parentheses of its own, which a call-shaped regex walks straight
-    // past. That is precisely the shape this check exists to catch.
-    const called = new Set();
-    for (const m of js.matchAll(/\b((?:map|load|screen|sheet)[A-Z][\w$]*)\b/g)) called.add(m[1]);
-    const missing = [...called].filter((n) => !defined.has(n)).sort();
+    const missing = guards.missingHelpers(src);
     if (missing.length) {
       for (const n of missing) console.error(`FAIL static — ${n}() is called but never defined`);
       console.error(`\n${missing.length} helper${missing.length === 1 ? '' : 's'} called but not defined.`);
@@ -380,18 +376,10 @@ function main() {
   // a string reaches them, and a pair whose second half is English reaches
   // them as English — silently, on one row, in one state, which is exactly
   // where it will not be noticed. Cheap to check, so checked.
+  // A pair with no Chinese is fine when it has no words either — '×3', a SKU,
+  // a currency symbol, a proper noun the shop uses in both.
   {
-    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
-    const js4 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-    const cjk = (t) => /[一-鿿]/.test(t);
-    const bad = [];
-    for (const m of js4.matchAll(/(^|[^\w$.])T\(\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)'\s*\)/g)) {
-      const [, , en, zh] = m;
-      // A pair with no Chinese is fine when it has no words either — '×3',
-      // a SKU, a currency symbol, a proper noun the shop uses in both.
-      if (!cjk(zh) && /[A-Za-z]{3}/.test(zh) && zh === en) bad.push(en);
-      else if (!cjk(zh) && /[A-Za-z]{4,}\s+[A-Za-z]{3,}/.test(zh)) bad.push(en);
-    }
+    const bad = guards.englishOnlyPairs(src);
     if (bad.length) {
       for (const t of [...new Set(bad)].slice(0, 20)) console.error(`FAIL i18n — "${t}" has no Chinese`);
       console.error(`\n${new Set(bad).size} bilingual pair${new Set(bad).size === 1 ? '' : 's'} whose Chinese half is English.`);
@@ -408,15 +396,11 @@ function main() {
   // success and does nothing is the worst shape a bug can take, and no render
   // test can see it. This one is a grep on the dispatcher itself.
   {
-    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
-    const js3 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-    const disp = (js3.match(/window\.APP\s*=\s*\{\s*cmd\s*:\s*\(([^)]*)\)/) || [])[1] || '';
-    const variadic = /\.\.\./.test(disp);
-    // Call sites that pass more than one argument, e.g. APP.cmd('x', 1, 'y').
-    const multi = new Set();
-    for (const m of js3.matchAll(/APP\.cmd\(\s*'([a-zA-Z_$][\w$]*)'\s*,[^)]*,[^)]*\)/g)) multi.add(m[1]);
-    if (multi.size && !variadic) {
-      for (const n of [...multi].sort()) {
+    // Call sites that pass more than one argument, e.g. APP.cmd('x', 1, 'y'),
+    // while the dispatcher is not variadic.
+    const multi = guards.droppedArguments(src);
+    if (multi.length) {
+      for (const n of multi) {
         console.error(`FAIL static — APP.cmd('${n}', …) passes extra arguments the dispatcher drops`);
       }
       console.error(`\nMake APP.cmd variadic, or stop passing arguments it cannot forward.`);
@@ -431,9 +415,7 @@ function main() {
   // one of them is gone; this keeps them gone.
   {
     // Comments stripped first — the comment explaining why noop is gone names it.
-    const noopSrc = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-    const hits = [...noopSrc.matchAll(/APP\.cmd\(\s*'noop'/g)].length
-               + [...noopSrc.matchAll(/\breg\(\s*'noop'/g)].length;
+    const hits = guards.noopReferences(src);
     if (hits) {
       console.error(`FAIL static — ${hits} reference${hits === 1 ? '' : 's'} to the 'noop' command.`);
       console.error("A control wired to noop is a control that lies. Give it a destination or stop drawing it as a control.");
@@ -461,57 +443,22 @@ function main() {
   // list of quoted names, which is how the customer sheet's four actions and
   // every chipRow filter are wired.
   {
-    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
     // STRIPPING COMMENTS IS NOT `/\*` — IT IS `/\*` THAT ISN'T INSIDE SOMETHING.
-    // This read `/\/\*[\s\S]*?\*\//` and reported expPhoto unreachable for
-    // months, because the expense screen's file input carries
-    // accept="image/*" — the two characters of a MIME wildcard are also the
-    // two that open a block comment. The stripper started there and ate
-    // everything to the next `*/`, taking the onchange="APP.cmd('expPhoto',this)"
-    // eight lines below with it. The handler was wired the whole time; this
-    // check could not see the wire.
-    //
-    // A real block comment in this file opens at the start of a line, or after
-    // `${`, `(`, `,`, `;` or a space — never immediately after a word
-    // character. `image/*`, and any `https://…/*` that shows up later, always
-    // do. So the guard is one character wide, and it is the same shape as the
-    // `[^:]` already guarding the line-comment strip below (which exists so
-    // `https://` is not read as a comment).
-    const js5 = raw.replace(/(^|[^\w])\/\*[\s\S]*?\*\//g, '$1 ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-
-    /* THE STRIPPER IS CHECKED AGAINST ITS OWN TRAP BEFORE IT IS TRUSTED.
-       A stripper that eats too much does not fail loudly — it reports a wired
-       handler as unreachable, which reads as a real finding and cost this
-       suite months of being red on main with its 400-odd renders never
-       running. Two fixtures, and the second is the one that regressed:
-       a comment must go, and a MIME wildcard in an attribute must stay. */
+    // A stripper that read `image/*` as a comment opening reported expPhoto
+    // unreachable for months: it ate everything to the next `*/`, taking the
+    // onchange="APP.cmd('expPhoto',this)" with it. A real block comment never
+    // opens immediately after a word character, so that is the guard
+    // (m-static-guards.js stripGuarded), and it is checked against its own trap
+    // before it is trusted.
     {
-      const strip = (t) => t.replace(/(^|[^\w])\/\*[\s\S]*?\*\//g, '$1 ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-      const cases = [
-        ['a block comment is removed', `a=1; /* reg('ghost') */ b=2;`, (o) => !o.includes('ghost')],
-        // THE SHAPE THAT REGRESSED, and the trailing comment is load-bearing:
-        // the old stripper needed a `*/` somewhere later to run TO. In the real
-        // file that `*/` is whatever comment comes next, which is why the
-        // damage was eight lines wide and invisible.
-        ['a MIME wildcard is not a comment',
-         `<input accept="image/*" onchange="APP.cmd('kept',this)">\n/* a later comment */`,
-         (o) => o.includes("'kept'")],
-        ['a line comment is removed', `a=1; // reg('ghost2')\nb=2;`, (o) => !o.includes('ghost2')],
-        ['a url is not a line comment', `u="https://x.example/p"; APP.cmd('kept2')`, (o) => o.includes("'kept2'")],
-      ];
-      const bad = cases.filter(([, src, ok]) => !ok(strip(src))).map(([name]) => name);
+      const bad = guards.stripperProblems();
       if (bad.length) {
         for (const n of bad) console.error(`FAIL static — the comment stripper is wrong: ${n}`);
         console.error('\nThis check cannot be trusted while its own stripper is broken.');
         process.exit(1);
       }
     }
-    const names = [...new Set([...js5.matchAll(/\breg\(\s*'([a-zA-Z_$][\w$]*)'/g)].map((m) => m[1]))];
-    const orphans = names.filter((n) => {
-      const asString = (js5.match(new RegExp("'" + n + "'", 'g')) || []).length;
-      const asMember = (js5.match(new RegExp('\\bCMD\\.' + n + '\\b', 'g')) || []).length;
-      return asString + asMember <= 1;
-    }).sort();
+    const orphans = guards.unreachableCommands(src);
     if (orphans.length) {
       for (const n of orphans) console.error(`FAIL static — reg('${n}') is registered but nothing can reach it`);
       console.error(`\n${orphans.length} unreachable command${orphans.length === 1 ? '' : 's'}. Wire it or delete it — an unreachable handler is a lie waiting for a button.`);
@@ -553,27 +500,14 @@ function main() {
   // and the fires' count badges were drawn exactly that way. Text on a tint
   // uses the matching --*-ink, which exists for this.
   {
-    const css = (src.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    const block = (re) => (css.match(re) || [])[1] || '';
-    const light = block(/:root\s*\{([\s\S]*?)\}/);
-    const dark = block(/:root\[data-theme="dark"\]\s*\{([\s\S]*?)\}/);
-    if (!light || !dark) { console.error('FAIL static — cannot find the theme blocks'); process.exit(1); }
-    // name -> value, so an ALIAS can be skipped: --accent-tint is
-    // `var(--dusk-tint)`, which follows whatever the theme sets. And the
-    // hyphen before the suffix keeps --ink itself out of it: that is a raw
-    // palette hue, fixed on purpose.
-    const decls = (b) => new Map([...b.matchAll(/(--[a-z-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
-    const inDark = decls(dark);
-    const missing = [...decls(light)]
-      .filter(([n, v]) => /-[a-z]+-(tint|ink)$/.test(n) && !/^var\(/.test(v) && !inDark.has(n))
-      .map(([n]) => n).sort();
+    const t = guards.themeProblems(src);
+    if (t.error) { console.error('FAIL static — ' + t.error); process.exit(1); }
+    const missing = t.lightOnly, paired = t.textOnTint;
     for (const n of missing) console.error(`FAIL theme — ${n} is defined for light only; dark inherits the light value`);
-
-    const paired = [...src.matchAll(/background:var\(--([a-z]+)-tint[^)]*\);\s*color:var\(--\1[,)]/g)].map((m) => m[1]);
-    for (const h of [...new Set(paired)]) console.error(`FAIL theme — --${h} is used as text on --${h}-tint; use --${h}-ink`);
+    for (const h of paired) console.error(`FAIL theme — --${h} is used as text on --${h}-tint; use --${h}-ink`);
 
     if (missing.length || paired.length) {
-      console.error(`\n${missing.length + new Set(paired).size} theme token problem${missing.length + new Set(paired).size === 1 ? '' : 's'}.`);
+      console.error(`\n${missing.length + paired.length} theme token problem${missing.length + paired.length === 1 ? '' : 's'}.`);
       process.exit(1);
     }
   }
@@ -587,13 +521,9 @@ function main() {
   // call .filter on one of them. Every key the app reads as DB.x must be in the
   // literal that defines DB.
   {
-    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
-    const js2 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-    const lit = (js2.match(/\bconst DB\s*=\s*\{([\s\S]*?)\n\};/) || [])[1] || '';
-    if (!lit) { console.error('FAIL static — cannot find the DB literal'); process.exit(1); }
-    const have = new Set([...lit.matchAll(/\n {2}([a-zA-Z_$][\w$]*)\s*:/g)].map((m) => m[1]));
-    const read = new Set([...js2.matchAll(/\bDB\.([a-zA-Z_$][\w$]*)/g)].map((m) => m[1]));
-    const gone = [...read].filter((k) => !have.has(k)).sort();
+    const d = guards.dbKeyGaps(src);
+    if (d.error) { console.error('FAIL static — ' + d.error); process.exit(1); }
+    const gone = d.gone;
     if (gone.length) {
       for (const k of gone) console.error(`FAIL static — DB.${k} is read but the DB literal has no such key`);
       console.error(`\n${gone.length} DB key${gone.length === 1 ? '' : 's'} read but not defined.`);

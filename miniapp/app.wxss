@@ -76,7 +76,13 @@ page {
      this names something that exists. Mirrored in lib/brand-theme.js, which
      builds the same token for the web as --f-num. */
   --f-num:    'Lilita One', 'Bear Serif', 'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, serif;
-  --f-toni:   'Toni Grotesk', 'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, sans-serif;
+  /* League Gothic stands in for Toni while Toni is still downloading or failed
+     to load. Toni is the heaviest face (280KB) and arrives last, so on a slow
+     connection the label used to drop to the phone's wide system sans: the
+     add-to-basket label spread out and the price beside it sat off-line.
+     League Gothic is the same tall, narrow shape, 44KB, and loads before Toni
+     (utils/fonts.js). It has no Chinese glyphs, so CJK still goes to DF Yuan. */
+  --f-toni:   'Toni Grotesk', 'League Gothic', 'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, sans-serif;
   --f-gothic: 'League Gothic','DF Yuan', 'PingFang SC', 'Hiragino Sans GB', 'Bebas Neue', sans-serif;
   --f-aleo:   'Aleo',         'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, serif;
   --f-yuan:   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', sans-serif;

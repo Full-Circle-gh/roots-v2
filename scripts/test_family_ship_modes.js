@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Shipping is one setting for the whole product, not per size — §374.
+ * Shipping is one setting for the whole product, not per size — §377.
  *
  *   node scripts/test_family_ship_modes.js
  *
@@ -90,7 +90,7 @@ const versions = id => db.prepare('SELECT COUNT(*) AS n FROM retail_product_vers
       const r = await patch(A, { ship_modes: 'land' });
       assert.strictEqual(r.status, 200, JSON.stringify(r.body));
       assert.deepStrictEqual(modesOf([A, B, C]), ['land', 'land', 'land'],
-        'a size kept its own setting — the trap §374 closes');
+        'a size kept its own setting — the trap §377 closes');
     });
     await it('the answer names the other sizes it wrote, so the editor can refresh them', async () => {
       const r = await patch(B, { ship_modes: 'air' });
