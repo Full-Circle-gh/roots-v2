@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
+
 **v1.272 · 2026-09-30 · §380 JD WAYBILL ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *JD waybill create and cancel on the phone (§380)*.
 
 **v1.271 · 2026-09-30 · §379 CUSTOMERS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Customers on the phone (§379)*.
@@ -11906,3 +11908,31 @@ the parcel cards and the JD sheet in `public/m.html`.
 | String | Note |
 |---|---|
 | Cancel's confirm button | The desktop's is English-only ("Cancel pickup"). The phone uses the desktop's own `Cancel JD pickup · 取消揽收` pair from the same card, so nothing is composed. |
+
+## Ground on an air parcel's label, and the question it asks (§381)
+
+**Operator register (Rule 1), 2026-10-01.** The JD label dialog
+(`createJdLabel`, `public/retail-admin/04-orders.js`). An air parcel now lists
+the two ground services after air, and picking one asks first. This mirrors
+*Air on a land parcel's label, marked rather than hidden (2026-09-16)* above.
+The rows themselves are the `JD_SERVICES` labels, unchanged. Nothing new is on
+them.
+
+### Reused verbatim
+
+| Chinese | English | Lifted from |
+|---|---|---|
+| `空运包裹` | Air parcel | this dialog's own subtitle (`空运包裹 — 生鲜特快`), and the parcel card's mode label. Now the question's title |
+| `暂不` | Not yet | the land→air question's decline, itself from `transition()` |
+| `此包裹` | This parcel | the land→air question's fallback body, `此包裹仅陆运。…` |
+
+### Composed — declared, by Claude, under Rule 4's 2026-09-06 delegation
+
+| Chinese | English | Why it is here |
+|---|---|---|
+| `<names> 计划空运,陆运较慢。仍要生成陆运运单吗?` | `<names> — planned for air. Ground is slower. Create the ground waybill anyway?` | The question's body when the parcel's items are known. **Lifted parts:** the item names in bold are the land→air question's own. `计划` + a plan is live in this file: `此订单计划于 <b>…</b> 当天新鲜制作,…` (the early-dispatch question). `空运` and `陆运` are the locked mode words. `仍要生成…运单吗?` is the locked `仍要生成空运运单吗?` with `空运` swapped for `陆运`. **Composed:** `较慢` (slower) — no live Chinese says one service is slower than another, and the question needs to give the reason for asking. **Rejected:** `改走陆运` / `走陆运` — not found anywhere in `public/`, and `生成陆运运单` keeps the parallel with the live air question exactly. **Rejected:** naming 生鲜 spoilage — the parcel may hold nothing fresh (the screenshot's was dates and chips), and a reason that is sometimes false teaches people to skip it |
+| `此包裹计划空运,陆运较慢。仍要生成陆运运单吗?` | `This parcel is planned for air. Ground is slower. Create the ground waybill anyway?` | The same body when the order's items are not loaded. `此包裹` opens it, as the land→air fallback does |
+| `仍要生成陆运运单` | Create ground waybill anyway | The confirm button. It is the body question without `吗?`, the same pairing as `仍要生成空运运单` / `仍要生成空运运单吗?` |
+
+**English "ground", Chinese 陆运.** The rows say `Fresh · Ground · 生鲜 · 陆运`.
+The question uses the same pair as the row being picked, so the two read alike.
