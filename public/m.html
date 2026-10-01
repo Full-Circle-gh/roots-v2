@@ -1144,6 +1144,10 @@ const state = {
      each secret is set, never a secret), which page is open, the wizard's
      step, what is being typed, the open Replace boxes, and the in-place line. */
   wxm:{cfg:null, tried:false, err:null, mode:null, step:1, d:{}, open:{}, showPub:false, busy:null, msg:null, finishAnyway:false, done:null},
+  /* §325 X9c — the web store's page: what was read, the sign-in switches and
+     the site's words being edited (kept across a re-read after a domain
+     change), the domain being typed, and the two in-place lines. */
+  wcf:{cfg:null, tried:false, err:null, keep:false, signin:{}, site:null, newHost:'', busy:null, msg:null, dmsg:null, customOpen:false},
   gzb:{period:'', from:'', to:'', data:null, tried:false, err:null, err2:null, seq:0},
   mtb:{list:null, tried:false, err:null, stores:null, names:null, prod:null, draft:null, q:'', pq:'', busy:null, note:null, saveErr:null, suggest:null, hint:null},
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
@@ -32118,9 +32122,8 @@ reg('gzbOpen', ()=>{ if(!canRoute('gzbilling')) return; const s=gzb(); Object.as
      need their one-time login and Enable channel — POST /eleme/enable
      {enabled:true}; Map products opens the phone's Eleme screen.
    • JD opens the phone's JD Logistics keys (§325 X7).
-   • The WeChat mini program opens its own pages (§325 X9b, below). The web
-     store's wizard is X9c; until then its card shows its state and says
-     where it is set up.
+   • The WeChat mini program and the web store open their own pages
+     (§325 X9b and X9c, below).
 
    Each control is the server's key (lib/cap-routes.js): integrations:manage
    for help, the box and the to-dos; eleme:sync for the shop ids and Enable.
@@ -32149,6 +32152,7 @@ function hubOpenFor(kind){
   if(kind==='eleme') return canRoute('hubeleme')?"APP.cmd('hubElemeOpen')":'';
   if(kind==='jd') return canRoute('jdcfg')?"APP.cmd('push','jdcfg')":'';
   if(kind==='wechat_miniapp') return canRoute('wxmini')?"APP.cmd('wxmOpen')":'';   /* §325 X9b */
+  if(kind==='web') return canRoute('webcfg')?"APP.cmd('wcfOpen')":'';   /* §325 X9c */
   return '';
 }
 function screenHub(){
@@ -32172,7 +32176,7 @@ function screenHub(){
       ${s.note[c.kind]?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(String(s.note[c.kind]))}</div>`:''}
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${open?`<button class="${c.status==='connected'?'btn2':'cta'}" style="width:auto;padding:0 14px;min-height:36px" onclick="${open}">${verb}</button>`
-          :c.kind==='web'?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('Set up on desktop for now','暂请在电脑端设置')}</span>`:''}
+:''}
         <span style="flex:1"></span>
         ${can?`<button class="btn2" style="width:auto;min-height:32px;padding:0 10px;font-size:13px" onclick="APP.cmd('hubHelp','${escAttr(c.kind)}')">? ${T('Get help','获取帮助')}</button>`:''}</div>
     </div>`;
@@ -32611,6 +32615,259 @@ SUBS.wxmini={title:['WeChat configuration','小程序配置'],
   titleOf:()=>wxm().mode==='wizard'&&wxmCan()?T('Set up your WeChat','设置你的小程序'):T('WeChat configuration','小程序配置'),
   render:()=>screenWxMini()};
 /* §325 X9b ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X9c — THE WEB STORE: ITS ADDRESS, ITS DOMAINS, SIGN-IN, ITS OWN
+   WORDS, AND HOW IT TAKES PAYMENT
+   --------------------------------------------------------------------------
+   The desktop's Web store configuration (15-integrations.js igWebConfig,
+   igWebSaveSignin, the wcSite* editor, igWebAddDomain, igWebCheckDns,
+   igWebRemoveDomain), on the phone, opened from the web store's card in the
+   channel hub (§325 X9a). One read, GET /channel-hub/web/config:
+
+   • The three ready marks: store online, sign-in ready, payments ready.
+   • The shop address: the live one, with Copy and Open; or the free address
+     reserved; or none yet.
+   • Your own domain: each one added, live or waiting for DNS with the CNAME
+     record to add; Check DNS — POST /channel-hub/web/domain/:id/check; Remove,
+     asked first — DELETE /channel-hub/web/domain/:id; Add domain — POST
+     /channel-hub/web/domain {host}, with the desktop's word for each refusal.
+   • Customer sign-in: the five ways, each Ready or Not available yet; one
+     that is not available cannot be switched on.
+   • The title, menu and footer (§273): both languages, up to six menu links
+     (Home, Shop or a web address) and six footer links. Before saving, a bare
+     domain gets its https:// and anything the server would drop is named,
+     as the desktop's wcSiteProblems does.
+   • Save changes sends the desktop's two writes, each reported on its own:
+     POST /channel-hub/web/signin {phone, email, google, apple, wechat} and
+     POST /channel-hub/web/site with the eight fields.
+   • Payments: WeChat Pay with Open WeChat config (§325 X9b); Alipay's state.
+     (Alipay's QR is set up in §325 X10.)
+
+   One difference, on purpose: the desktop reloads the whole page after a
+   domain is added or removed, which throws away sign-in switches and site
+   words not yet saved. The phone reads the page again but keeps those.
+
+   Every write is integrations:manage, the server's key for /channel-hub
+   (lib/cap-routes.js); without it the page is read-only and nothing is sent.
+   ══════════════════════════════════════════════════════════════════════════ */
+const wcf=()=>state.wcf;
+const wcfCan=()=>mCan('integrations:manage');
+const WCF_ORDER=['phone','email','google','apple','wechat'];
+const WCF_META={phone:['Phone number','手机号','Six-digit code by SMS','短信验证码'], email:['Email','邮箱','Six-digit code by email','邮件验证码'],
+  google:['Google','谷歌','One-tap sign-in with a Google account','谷歌账号一键登录'], apple:['Apple','苹果','Sign in with an Apple ID','使用 Apple ID 登录'],
+  wechat:['WeChat','微信','Sign in by scanning with WeChat','微信扫码登录']};
+const wcfEmpty=()=>({title_en:'', title_cn:'', description_en:'', description_cn:'', nav:[], footer_en:'', footer_cn:'', links:[]});
+function wcfSiteOf(raw){
+  const r=(raw&&typeof raw==='object')?raw:{}, out=wcfEmpty(), str=v=>String(v==null?'':v);
+  for(const k of ['title_en','title_cn','description_en','description_cn','footer_en','footer_cn']) out[k]=str(r[k]);
+  out.nav=(Array.isArray(r.nav)?r.nav:[]).map(n=>({label_en:str(n&&n.label_en), label_cn:str(n&&n.label_cn), target:str(n&&n.target)}));
+  out.links=(Array.isArray(r.links)?r.links:[]).map(l=>({label_en:str(l&&l.label_en), label_cn:str(l&&l.label_cn), url:str(l&&l.url)}));
+  return out;
+}
+const wcfIsUrl=r=>!(r.target==='home'||r.target==='shop');
+/* keep: a re-read after a domain change keeps the switches and words being edited. */
+function wcfLoad(){
+  const s=wcf(); if(s.tried) return; s.tried=true; s.err=null;
+  api('/channel-hub/web/config').then(c=>{
+    c=c||{}; s.cfg=c;
+    if(!s.keep){ s.signin=Object.assign({},(c.signin&&c.signin.enabled)||{}); s.site=wcfSiteOf(c.site); }
+    s.keep=false; render();
+  }).catch(e=>{ s.keep=false; if(String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+function wcfReread(){ const s=wcf(); s.keep=!!s.cfg; s.tried=false; render(); }
+reg('wcfRetry', ()=>{ wcf().tried=false; render(); });
+reg('wcfOpen', ()=>{
+  if(!canRoute('webcfg')) return;
+  Object.assign(state.wcf,{cfg:null, tried:false, err:null, keep:false, signin:{}, site:null, newHost:'', busy:null, msg:null, dmsg:null, customOpen:false});
+  push('webcfg');
+});
+
+/* ── The title, menu and footer: typing writes the draft and repaints nothing ── */
+reg('wcfIn', (p,v)=>{
+  const st=wcf().site; if(!st) return; v=String(v==null?'':v);
+  const m=/^(nav|links)\.(\d+)\.(label_en|label_cn|target|url)$/.exec(String(p));
+  if(m){ const r=st[m[1]][Number(m[2])]; if(!r||!(m[3] in r)) return; r[m[3]]=v; return; }
+  if(['title_en','title_cn','description_en','description_cn','footer_en','footer_cn'].includes(p)) st[p]=v;
+});
+reg('wcfPick', (i,choice)=>{
+  const r=(wcf().site||{nav:[]}).nav[Number(i)]; if(!r) return;
+  r.target=choice==='home'||choice==='shop'?choice:(wcfIsUrl(r)?r.target:''); render();
+});
+reg('wcfAdd', kind=>{
+  const st=wcf().site; if(!st||!wcfCan()||!['nav','links'].includes(kind)||st[kind].length>=6) return;
+  st[kind].push(kind==='nav'?{label_en:'', label_cn:'', target:'home'}:{label_en:'', label_cn:'', url:''}); render();
+});
+reg('wcfDrop', (kind,i)=>{ const st=wcf().site; if(!st||!wcfCan()||!['nav','links'].includes(kind)) return; st[kind].splice(Number(i),1); render(); });
+reg('wcfTog', m=>{
+  const s=wcf(); if(!s.cfg||!wcfCan()||!WCF_ORDER.includes(m)) return;
+  const av=(s.cfg.signin&&s.cfg.signin.available)||{}; if(!av[m]) return;
+  s.signin[m]=!s.signin[m]; render();
+});
+/* The desktop's wcSiteProblems: a bare domain gets its https://, and a row
+   the server would drop is named instead of vanishing after "Saved". */
+function wcfProblems(){
+  const st=wcf().site; if(!st) return [];
+  const fixUrl=u=>{ u=String(u||'').trim(); if(u&&!/^https?:\/\//i.test(u)&&/^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(u)) u='https://'+u; return u; };
+  const out=[];
+  st.nav.forEach((r,i)=>{ if(r.target!=='home'&&r.target!=='shop') r.target=fixUrl(r.target); const n=i+1;
+    if(!(r.label_en||r.label_cn)) out.push(E(`Menu link ${n} has no text`,`菜单链接 ${n} 没有文字`));
+    if(r.target!=='home'&&r.target!=='shop'&&!/^https?:\/\/[^\s"'<>]+$/i.test(r.target)) out.push(E(`Menu link ${n} needs a web address starting with https://`,`菜单链接 ${n} 需要以 https:// 开头的网址`)); });
+  st.links.forEach((r,i)=>{ r.url=fixUrl(r.url); const n=i+1;
+    if(!(r.label_en||r.label_cn)) out.push(E(`Footer link ${n} has no text`,`页脚链接 ${n} 没有文字`));
+    if(!/^https?:\/\/[^\s"'<>]+$/i.test(r.url)) out.push(E(`Footer link ${n} needs a web address starting with https://`,`页脚链接 ${n} 需要以 https:// 开头的网址`)); });
+  return out;
+}
+/* Save changes: the desktop's two writes, each reported on its own. */
+reg('wcfSave', ()=>{
+  const s=wcf(); if(s.busy||!wcfCan()||!s.cfg||!s.site) return;
+  const problems=wcfProblems();
+  if(problems.length){ s.msg={lazy:problems[0], more:problems.length-1}; render(); return; }
+  const body={}; for(const m of WCF_ORDER) body[m]=!!s.signin[m];
+  s.busy='save'; s.msg=null; render();
+  const failed=[]; let refused=null;
+  const note=(e,en,zh)=>{ if(String(e&&e.message)==='auth') throw e; if(e&&e.refused&&!refused) refused=e; failed.push([en,zh]); };
+  apiWrite('/channel-hub/web/signin',body,'POST').catch(e=>note(e,'sign-in','登录'))
+    .then(()=>apiWrite('/channel-hub/web/site',s.site,'POST').then(r=>{ if(r&&r.site) s.site=wcfSiteOf(r.site); }).catch(e=>note(e,'title, menu and footer','标题、菜单与页脚')))
+    .then(()=>{
+      s.busy=null;
+      if(refused) s.msg={lazy:E(...refused.words)};
+      else if(failed.length) s.msg={lazy:E('Save failed: '+failed.map(f=>f[0]).join(', '),'保存失败:'+failed.map(f=>f[1]).join(', '))};
+      else { showToast(T('Saved','已保存')); s.keep=false; s.tried=false; }
+      render();
+    }).catch(()=>{ s.busy=null; });
+});
+
+/* ── Domains ─────────────────────────────────────────────────────────────── */
+reg('wcfHost', v=>{ wcf().newHost=String(v==null?'':v); });
+reg('wcfCustom', ()=>{ const s=wcf(); s.customOpen=!s.customOpen; render(); });
+reg('wcfCopy', url=>{ copyText(String(url||'')); });
+reg('wcfAddDomain', ()=>{
+  const s=wcf(); if(s.busy||!wcfCan()) return;
+  const host=String(s.newHost||'').trim().toLowerCase(); if(!host) return;
+  s.busy='add'; s.dmsg=null; render();
+  apiWrite('/channel-hub/web/domain',{host},'POST').then(()=>{
+    s.busy=null; s.newHost=''; s.customOpen=true; wcfReread();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+    const map={bad_domain:E('Enter a valid domain (e.g. shop.example.com).','请输入有效域名。'), reserved:E('That is a platform address — it is managed for you.','这是平台地址,由系统托管。'),
+      taken:E('That domain is already registered.','该域名已被登记。'), already_yours:E('You have already added that domain.','您已添加该域名。')};
+    s.dmsg={t:e&&e.refused?E(...e.words):(map[e&&e.code]||E('Could not add that domain.','无法添加该域名。')), tone:'bad'}; render(); });
+});
+const wcfDomain=id=>((wcf().cfg&&wcf().cfg.domains)||[]).find(d=>String(d.id)===String(id))||null;
+reg('wcfCheck', id=>{
+  const s=wcf(), d=wcfDomain(id); if(s.busy||!wcfCan()||!d) return;
+  s.busy='check:'+d.id; s.dmsg=null; render();
+  apiWrite('/channel-hub/web/domain/'+encodeURIComponent(d.id)+'/check',undefined,'POST').then(r=>{
+    s.busy=null;
+    s.dmsg=r&&r.pointing?{t:E('DNS is pointing here. We’ll issue HTTPS and turn it on — usually within a few minutes.','DNS 已指向本平台。我们会签发 HTTPS 并开启,通常几分钟内完成。'), tone:'ok'}
+      :{t:E('Not pointing here yet. DNS can take a while to update — try again shortly.','尚未指向本平台。DNS 生效可能需要一些时间,请稍后重试。'), tone:'warn'};
+    render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.dmsg={t:e&&e.refused?E(...e.words):E('Check failed','检测失败'), tone:'bad'}; render(); });
+});
+reg('wcfRemove', id=>{
+  const s=wcf(), d=wcfDomain(id); if(s.busy||!wcfCan()||!d||d.kind==='subdomain') return;
+  state.askErr=null;
+  state.ask={title:T('Remove '+d.host+'?','移除 '+d.host+'?'), body:T('Customers using it will no longer reach your store.','使用该域名的顾客将无法访问您的商店。'),
+    confirmLabel:T('Remove domain','移除域名'), danger:true,
+    run:()=>{ s.busy='remove:'+d.id; s.dmsg=null; render();
+      apiWrite('/channel-hub/web/domain/'+encodeURIComponent(d.id),undefined,'DELETE').then(()=>{ s.busy=null; wcfReread(); })
+        .catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.dmsg={t:e&&e.refused?E(...e.words):E('Could not remove','无法移除'), tone:'bad'}; render(); }); }};
+  render();
+});
+
+/* ── Drawing ─────────────────────────────────────────────────────────────── */
+const wcfLine=m=>m?`<div style="font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;color:${m.tone==='ok'?'var(--sage-ink)':m.tone==='warn'?'var(--amber-ink)':'var(--brick-ink)'}">${m.tone==='ok'?'✓ ':''}${escAttr(String(m.lazy?String(m.lazy)+(m.more?` (+${m.more})`:''):m.t))}</div>`:'';
+const wcfNote=(en,zh)=>`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T(en,zh)}</div>`;
+const wcfSec=(head,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div style="font-size:15px;font-weight:500">${head}</div>${inner}</div>`;
+function wcfIn(p,v,ph,o){ o=o||{};
+  return `<input type="text" value="${escAttr(v||'')}" placeholder="${escAttr(ph||'')}" autocapitalize="off" spellcheck="false" autocomplete="off" ${wcfCan()?'':'readonly'} ${o.url?'inputmode="url"':''}
+    style="width:100%;min-width:0" oninput="APP.cmd('wcfIn','${p}',this.value)">`; }
+const wcfPair=(k,v1,v2)=>`<div style="display:flex;gap:8px">${wcfIn(k+'_en',v1,'English')}${wcfIn(k+'_cn',v2,'中文')}</div>`;
+const wcfLbl=t=>`<div style="font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</div>`;
+function wcfRows(kind){
+  const st=wcf().site, can=wcfCan();
+  return st[kind].map((r,i)=>{
+    const url=kind==='links'||wcfIsUrl(r);
+    const tgt=kind==='nav'?`<select style="width:100%" ${can?'':'disabled'} onchange="APP.cmd('wcfPick',${i},this.value)">
+        <option value="home"${r.target==='home'?' selected':''}>${T('Home','首页')}</option><option value="shop"${r.target==='shop'?' selected':''}>${T('Shop','商品')}</option>
+        <option value="url"${url?' selected':''}>${T('Web address','网址')}</option></select>${url?wcfIn(`nav.${i}.target`,r.target,'https://…',{url:true}):''}`
+      :wcfIn(`links.${i}.url`,r.url,'https://…',{url:true});
+    return `<div style="display:flex;flex-direction:column;gap:6px;border:1px solid var(--border-default);border-radius:10px;padding:10px">
+      <div style="display:flex;gap:8px">${wcfIn(`${kind}.${i}.label_en`,r.label_en,'English')}${wcfIn(`${kind}.${i}.label_cn`,r.label_cn,'中文')}</div>${tgt}
+      ${can?`<button class="btn2" style="width:auto;align-self:flex-end;min-height:30px;padding:0 10px;font-size:12.5px" aria-label="${escAttr(T('Remove','移除'))}" onclick="APP.cmd('wcfDrop','${kind}',${i})">✕ ${T('Remove','移除')}</button>`:''}</div>`;
+  }).join('');
+}
+const wcfAddBtn=kind=>wcfCan()?`<button class="btn2" style="width:auto;align-self:flex-start;min-height:32px;padding:0 12px;font-size:13px" ${wcf().site[kind].length>=6?'disabled':''} onclick="APP.cmd('wcfAdd','${kind}')">+ ${T('Add link','添加链接')}</button>`:'';
+function wcfSiteHtml(){
+  const st=wcf().site;
+  return wcfNote('Website only — the mini app has its own tabs and footer.','仅网页版 — 小程序有自己的标签栏和页脚。')
+    +wcfLbl(T('Site title','网站标题'))+wcfPair('title',st.title_en,st.title_cn)+wcfNote('Browser tab and search results. Blank = your brand name.','浏览器标签页与搜索结果。留空 = 品牌名。')
+    +wcfLbl(T('Description','描述'))+wcfPair('description',st.description_en,st.description_cn)+wcfNote('One or two sentences for search results.','一两句话,用于搜索结果。')
+    +wcfLbl(T('Menu','菜单'))+wcfRows('nav')+wcfAddBtn('nav')+wcfNote('The links across the top of the website. Blank = Home and Shop.','网站顶部的链接。留空 = 首页和商品。')
+    +wcfLbl(T('Footer line','页脚文字'))+wcfPair('footer',st.footer_en,st.footer_cn)+wcfNote('e.g. address, opening hours or ICP filing number.','例如地址、营业时间或 ICP 备案号。')
+    +wcfLbl(T('Footer links','页脚链接'))+wcfRows('links')+wcfAddBtn('links');
+}
+function wcfChip(ok,en,zh){ const [bg,fg]=PILL[ok?'success':'muted']; return `<span class="pill" style="background:${bg};color:${fg}">${ok?'✓':'○'} ${T(en,zh)}</span>`; }
+function screenWebCfg(){
+  const s=wcf(); wcfLoad();
+  if(s.err&&!s.cfg) return x1Err(escAttr(String(s.err)),'wcfRetry');
+  if(!s.cfg||!s.site) return x1Loading();
+  const c=s.cfg, can=wcfCan(), domains=Array.isArray(c.domains)?c.domains:[];
+  const active=domains.filter(d=>d.status==='active'), primary=active.find(d=>d.isPrimary)||active[0]||null;
+  const custom=domains.filter(d=>d.kind!=='subdomain'), target=c.cnameTarget||c.baseDomain||'';
+  const av=(c.signin&&c.signin.available)||{}, saved=(c.signin&&c.signin.enabled)||{};
+  const pay=c.pay||{}, payReady=!!(pay.wechatReady||pay.alipayConfigured);
+  let addr;
+  if(primary){ const url='https://'+primary.host;
+    addr=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="width:8px;height:8px;border-radius:50%;background:var(--sage-ink);flex:none"></span>
+      <span class="num" style="flex:1;min-width:0;font-size:14px;overflow-wrap:anywhere">${escAttr(url)}</span></div>
+      <div style="display:flex;gap:8px"><button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('wcfCopy','${escAttr(url)}')">${T('Copy','复制')}</button>
+      <a href="${escAttr(url)}" target="_blank" rel="noopener" class="btn2" style="width:auto;padding:0 14px;display:inline-flex;align-items:center;text-decoration:none">${T('Open','打开')} ↗</a></div>
+      ${wcfNote('This address works immediately and never needs setup.','该网址即刻可用,无需任何设置。')}`;
+  } else if(c.suggestedSub){
+    addr=`<div class="num" style="font-size:14px;color:var(--text-secondary);overflow-wrap:anywhere">https://${escAttr(c.suggestedSub)}</div>${wcfNote('Your free address is reserved and will go live shortly.','免费网址已预留,即将上线。')}`;
+  } else addr=wcfNote('No web address yet — add your own domain below.','尚无网页地址 — 请在下方接入自有域名。');
+  const domRows=custom.map(d=>{ const live=d.status==='active', busy=s.busy===('check:'+d.id);
+    return `<div style="display:flex;flex-direction:column;gap:8px;border:1px solid var(--border-default);border-radius:10px;padding:10px 12px">
+      <div style="display:flex;align-items:center;gap:8px"><span class="num" style="flex:1;min-width:0;font-weight:500;overflow-wrap:anywhere">${escAttr(d.host)}</span>
+        ${wcfChip(live,live?'Live':'Waiting for DNS',live?'已上线':'等待解析')}</div>
+      ${live?wcfNote('Live and secured.','已上线并启用 HTTPS。')
+        :`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;overflow-wrap:anywhere">${escAttr(T('Add a CNAME record for this name pointing to ','为该域名添加 CNAME 记录,指向 ')+target+T(', then check DNS.',',然后检测解析。'))}</div>
+        <div style="display:grid;grid-template-columns:auto auto 1fr;gap:4px 12px;font-size:12.5px;background:var(--surface-raised);border-radius:8px;padding:8px 10px">
+          <b>${T('Type','类型')}</b><b>${T('Name','主机记录')}</b><b>${T('Value','记录值')}</b>
+          <span class="num">CNAME</span><span class="num">${escAttr(String(d.host).split('.')[0])}</span><span class="num" style="overflow-wrap:anywhere">${escAttr(target)}</span></div>
+        ${can?`<div style="display:flex;gap:8px"><button class="cta" style="width:auto;padding:0 14px;min-height:36px" ${s.busy?'disabled':''} onclick="APP.cmd('wcfCheck',${Number(d.id)})">${busy?T('Checking DNS…','检测解析中…'):T('Check DNS','检测解析')}</button>
+          <button class="btn2" style="width:auto;padding:0 14px" ${s.busy?'disabled':''} onclick="APP.cmd('wcfRemove',${Number(d.id)})">${T('Remove','移除')}</button></div>`:''}`}</div>`; }).join('');
+  const customHtml=`<button class="btn2" style="width:100%;justify-content:space-between;display:flex;align-items:center;text-align:left;padding:10px 12px;min-height:44px" onclick="APP.cmd('wcfCustom')">
+      <span><b>${T('Use your own domain','使用自有域名')}</b><span style="display:block;font-size:12px;color:var(--text-secondary);font-weight:400">${T('e.g. shop.yourbrand.com — optional','例如 shop.yourbrand.com — 选填')}</span></span><span>${s.customOpen?'▾':'▸'}</span></button>
+    ${s.customOpen?`${domRows}
+      ${can?`<div style="display:flex;gap:8px"><input type="text" value="${escAttr(s.newHost||'')}" placeholder="shop.yourbrand.com" spellcheck="false" autocapitalize="off" autocomplete="off" inputmode="url" style="flex:1;min-width:0" oninput="APP.cmd('wcfHost',this.value)">
+        <button class="cta" style="width:auto;padding:0 14px;min-height:40px" ${s.busy?'disabled':''} onclick="APP.cmd('wcfAddDomain')">${s.busy==='add'?T('Adding…','添加中…'):T('Add domain','添加域名')}</button></div>`:''}
+      ${wcfLine(s.dmsg)}`:''}`;
+  const methods=WCF_ORDER.map(m=>{ const [en,zh,den,dzh]=WCF_META[m], ok=!!av[m], on=!!s.signin[m];
+    return `<div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0"><div style="font-size:14.5px">${T(en,zh)}</div><div style="font-size:12.5px;color:var(--text-secondary)">${T(den,dzh)}</div>
+        <div style="font-size:12px;color:${ok?'var(--sage-ink)':'var(--text-secondary)'}">${ok?'✓ '+T('Ready','就绪'):T('Not available yet','暂不可用')}</div></div>
+      ${ok&&can?toggle(on,`APP.cmd('wcfTog','${m}')`):`<span style="font-size:12.5px;color:var(--text-secondary)">${on?T('On','已开启'):''}</span>`}</div>`; }).join('');
+  const payHtml=`<div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0"><div style="font-size:14.5px">${T('WeChat Pay','微信支付')}</div><div style="font-size:12.5px;color:var(--text-secondary)">${T('Uses your WeChat merchant setup — nothing to enter again.','沿用小程序的商户配置,无需重复填写。')}</div></div>
+      ${wcfChip(!!pay.wechatReady,pay.wechatReady?'Ready':'Not set up',pay.wechatReady?'就绪':'未配置')}</div>
+    ${canRoute('wxmini')?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('wxmOpen')">${T('Open WeChat config','打开小程序配置')}</button>`:''}
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0"><div style="font-size:14.5px">${T('Alipay','支付宝')}</div><div style="font-size:12.5px;color:var(--text-secondary)">${T('Show your Alipay collection QR at checkout; staff confirm the transfer.','结账时展示收款码,由店员核实到账。')}</div></div>
+      ${wcfChip(!!pay.alipayConfigured,pay.alipayConfigured?'On':'Optional',pay.alipayConfigured?'已开启':'选填')}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${wcfChip(!!primary,'Store online','商店在线')}${wcfChip(WCF_ORDER.some(m=>saved[m]),'Sign-in ready','登录可用')}${wcfChip(payReady,'Payments ready','收款可用')}</div>
+    ${wcfSec(T('Shop address','商店网址'),addr+customHtml)}
+    ${wcfSec(T('Customer sign-in','顾客登录'),methods)}
+    ${wcfSec(T('Title, menu and footer','标题、菜单与页脚'),wcfSiteHtml())}
+    ${wcfSec(T('Payments','收款'),payHtml)}
+    ${wcfLine(s.msg)}
+    ${can?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('wcfSave')">${s.busy==='save'?T('Saving…','保存中…'):T('Save changes','保存更改')}</button>`:''}
+    ${hubManage()?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('hubHelp','web')">? ${T('Get help','获取帮助')}</button>`:''}
+  </div>`;
+}
+SUBS.webcfg={title:['Web store configuration','网页商店配置'],render:()=>screenWebCfg()};
+/* §325 X9c ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -43502,6 +43759,9 @@ const ROUTE_CAP={
   /* §325 X9b. The mini program's page reads as the hub does; every save on
      it is integrations:manage, drawn for that key, read-only without it. */
   wxmini:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
+  /* §325 X9c. The web store's page reads as the hub does; every save on it
+     is integrations:manage, drawn for that key, read-only without it. */
+  webcfg:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
