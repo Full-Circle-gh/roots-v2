@@ -18865,12 +18865,18 @@ function screenProductCatalogue(){
     const sel=prodBulkAny()?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('prodSelect')">${Array.isArray(state.prodSel)?T('Done','完成'):T('Select','选择')}</button>`:'';
     const exp=mCan('products:export')
       ? `<button class="btn2" style="width:auto;flex:none;padding:0 14px;gap:6px" onclick="APP.cmd('prodExport')">${ic('download',16)}${T('Export CSV','导出')}</button>` : '';
+    /* The search has its own line and the tools sit under it. Three buttons
+       beside the search do not fit a phone: the search box was squeezed to a
+       sliver and slid over the first button (Ash's screenshot, 2026-10-01).
+       The tool line scrolls sideways rather than wrapping, so it is always one
+       line whatever the language and however many buttons a role is given. */
+    const tools=sel+exp+countButton();
     return `<div>
-      <div style="padding:12px 16px 4px;display:flex;gap:8px;align-items:center">
-        <div style="flex:1;min-width:0">${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
+      <div style="padding:12px 16px 4px;display:flex;flex-direction:column;gap:8px">
+        <div>${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
           oninput="APP.cmd('prodSearch',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${sel}${exp}${countButton()}</div>
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${tools?`<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px">${sel}${exp}${countButton()}</div>`:''}</div>
       <div id="mProdBody">${prodBodyHtml()}</div>
     </div>`;
 }
