@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.301 · 2026-09-30 · §413 "OPEN EVERYTHING" SAYS WHAT STAYED CLOSED — ONE STRING COMPOSED BY CLAUDE, ON THE DESKTOP AND THE PHONE ALIKE.** See *What "Open everything" left closed (§413)*.
+
 **v1.300 · 2026-09-30 · §411 FLASH SALES ON THE PHONE — NOTHING COMPOSED; TWO DESKTOP LINES WITH A HALF IN ONE LANGUAGE ARE SPLIT, AND EVERYTHING ELSE IS COPIED WHOLE.** See *Flash sales run from the phone (§411)*.
 
 **v1.299 · 2026-09-30 · §410 COUPON WIZARD ON THE PHONE — NO NEW WORDS; THE DESKTOP'S BILINGUAL LINES SPLIT INTO THEIR HALVES, AND FOUR CHINESE LINES ASSEMBLED FROM THE DESKTOP'S OWN PIECES.** See *A coupon made on the phone (§410)*.
@@ -13033,3 +13035,26 @@ and its composer.
   - `Flash sales · 秒杀`, `Saving… · 保存中…`, `Failed · 失败`;
   - the existing card's own lines;
   - the leave confirm.
+
+## What "Open everything" left closed (§413)
+
+**Operator register (Rule 1), 2026-10-01.** The desktop Operations panel's line
+under the master button (`02-settings-ops.js` `ocStayedLine`) and the phone's
+Open for business card (`public/m.html` `ocStayedLine`).
+
+| String | Status |
+|---|---|
+| `Still closed — closed at the shop with its own switch: · 仍关闭 — 在门店单独关闭: ` | **Composed by Claude (§412.4).** The Chinese is built on `在门店单独关闭`, from the phone's live *Open everything?* confirm (`在门店单独关闭（或随门店开关关闭）的其他渠道保持关闭`). Rejected: the whole of that confirm sentence (it describes the rule before the write, not a list after it); `保持关闭` alone (it does not say why they are closed, which is the point of the line). |
+
+The rest is not new:
+- The shop names are the store's own English and Chinese names.
+- The channel names are each surface's existing ones:
+  - desktop `csName`: `WeChat · 微信`, `Web shop · 网页商店`, `Eleme · 饿了么`,
+    `Gzgrocery`, `Counter sale · 前台销售`;
+  - phone `CHAN_META`: `Mini app · 小程序`, `Web store · 网店`, `Eleme · 饿了么`,
+    `gzgrocery ERP · gzgrocery`, `In store · 门店`.
+
+  The two surfaces already name these channels differently. That is not
+  changed here; §412.7 settles named words only.
+- Separators follow each language: `, ` and `; ` in English, `、` and `;` in
+  Chinese.
