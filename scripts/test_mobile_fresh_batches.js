@@ -52,6 +52,8 @@ function sliceBetween(from, to) {
 const CODE = [
   sliceBetween('const DLV_WRITE=', 'const DLV_LIVE={'),
   sliceFn('dlvCfgPut'),
+  // T1 kept one cfgMerge (the later one); dlvCfgPut folds what it wrote through it.
+  sliceFn('cfgMerge'),
   sliceBetween('/* ── §325 O9 — FRESH BATCHES ON THE PHONE', '/* ── §325 O5 — DELIVERY ZONES ON THE PHONE'),
   sliceBetween("reg('askRun', key=>{", "reg('copyWaybill'"),
   'const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split(\'.\')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };',

@@ -69,7 +69,7 @@ const CODE = [
   sliceFn('orderNotes'),
   sliceFn('ordNoteLabel'),
   sliceFn('mapOrderRow'),
-  sliceBetween("reg('statusF',", "reg('openOrder',"),
+  sliceBetween("reg('statusF',", "reg('closeOrder',"),
   // §325 O10 — the header's Drafts door asks the drafts' own gate.
   sliceBetween('const draftsOn=', '\nfunction onwToDraft('),
 ].join('\n');

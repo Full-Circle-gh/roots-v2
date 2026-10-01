@@ -2567,7 +2567,9 @@ reg('ordViewDel', id=>{
     }};
   render();
 });
-reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
+/* reg('openOrder') is registered ONCE, with the live orders (§325 T1). A
+   one-line copy here from the mock-data days was overwritten by that later
+   registration before anybody could tap, so it never ran and is gone. */
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
@@ -5784,15 +5786,10 @@ reg('resumeDelivery', ()=>{
    same any-of, and each command refuses without it. */
 const DLV_WRITE=['delivery:view','delivery:edit','settings:shop','stores:view'];
 const dlvCanWrite=()=>mCan(DLV_WRITE);
-/* Put what was written into the config the screen reads, key by dotted key. */
-function cfgMerge(body){
-  state.cfg=state.cfg||{};
-  Object.keys(body||{}).forEach(k=>{
-    const parts=k.split('.'); let o=state.cfg;
-    parts.slice(0,-1).forEach(pp=>{ if(!o[pp]||typeof o[pp]!=='object') o[pp]={}; o=o[pp]; });
-    o[parts[parts.length-1]]=body[k];
-  });
-}
+/* What was written goes into the config the screen reads through cfgMerge(),
+   key by dotted key — ONE definition, beside the Settings cards' autosave
+   (§325 T1). Two lanes each wrote one, identical in effect; the later one
+   always won, so this copy was never called and is gone. */
 const dlvTxt=v=>String(v==null?'':v).trim();
 /* Whole days 0–365, blank is null (no window) — the desktop's preorderBody. */
 function dlvDay(raw){
