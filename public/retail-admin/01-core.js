@@ -333,6 +333,10 @@ const TD_ERR = {
      new ones saying it again in different words. */
   not_mapped:             ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
   not_syncing:            ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
+  /* §325 S2j — the server refusing to switch on an Eleme mapping that names no
+     listing (lib/channel-sync-write.js). The Eleme panel's own sentence for the
+     same refusal (14-eleme.js, the switch's title), copied whole. */
+  no_listing_name:        ['Sync cannot be switched on until this mapping names an Eleme listing.', '未选择饿了么商品名前无法开启同步。'],
   cycle:                  ['That would make something contain itself.', '该操作会造成循环引用。'],
   /* §174 — the two line-level refusals the kitchen's ask can give a buyer. BOTH
      ARE STALE-SCREEN FACTS: the row was acted on by somebody else, or in
