@@ -216,6 +216,9 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['reviews.reward', list(route('reviews')), 'phone Reviews — Reward reviewers'],
       ['reviews.topup', list(route('reviews')), 'phone Reviews — Auto top-up'],
       ['reviews.tags', list(route('reviews')), 'phone Reviews — review tags (card reviews.tags)'],
+      // §325 M11 — the phone's loyalty money, each with its own Save.
+      ['points.earnRate', list(route('pointsrules')), 'phone How points work — Save points rules'],
+      ['roots_club.tiers', list(route('tiersedit')), 'phone Membership — Save tiers'],
       // §325 O4 — the phone's Delivery screen writes the Delivery panel's cards.
       ['delivery.holidayMessage', list(route('delivery')), 'phone Delivery — Holiday mode on, and its message'],
       ['delivery.sameDayCutoffMinutes', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
@@ -421,7 +424,18 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const dlvSite = M.indexOf("function dlvCfgPut(");
       const dlvSites = sites.filter((i) => i > dlvSite && i < M.indexOf('\n}\n', dlvSite));
       is(dlvSites.length, 1, 'the Delivery settings helper is one write site');
-      const famSites = sites.filter((i) => !dlvSites.includes(i));
+      /* §325 M11 — the points rules save through prBody, whose seven keys are
+         named where the body is built (the desktop's savePointsSettings), so
+         that site is set apart like the Delivery helper and its keys pinned. */
+      const prSite = M.indexOf("apiWrite('/config',prBody(PR.d),'PUT')");
+      ok(prSite !== -1 && sites.includes(prSite), 'the points rules write through one site');
+      const prBlock = M.slice(M.indexOf('function prBody(d){'), M.indexOf('\n}\n', M.indexOf('function prBody(d){')));
+      is((prBlock.match(/'(points\.[a-zA-Z]+)'/g) || []).map((k) => k.slice(1, -1)).sort(),
+        ['points.coverShipping', 'points.earnBase', 'points.earnPoints', 'points.earnRate', 'points.earnSpend', 'points.expiryMonths', 'points.redeemRate'],
+        'the phone\'s points rules write the desktop\'s seven keys (§325 M11)');
+      ok(list(route('pointsrules')).every((k) => has(configKeyCap('points.earnRate'), k)), 'phone How points work may write points.*');
+      ok(list(route('tiersedit')).every((k) => has(configKeyCap('roots_club.tiers'), k)), 'phone tiers editor may write roots_club.tiers');
+      const famSites = sites.filter((i) => !dlvSites.includes(i) && i !== prSite);
       // §325 X2/X3: the phone's Operations screen adds four families —
       // inventory.lowStockThreshold, inventory.lowStockDigest, support.hidden
       // (the open one) and product_page.sections — each its own write site.
@@ -431,7 +445,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // (notifications.* and system_alerts.*), as the desktop's saveConfig.
       const FAMS = ['customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
         'notifications.categories.', 'notifications.order_status_template_id', 'popups.list', 'product_page.sections', 'reviews.reward', 'reviews.topup',
-        'shop.', 'support.hidden', 'system_alerts.'];
+        'roots_club.tiers', 'shop.', 'support.hidden', 'system_alerts.'];
       // §325 M10 adds the Reviews screen's two Set up saves — the reward and
       // auto top-up — each its own site, as the desktop's saveReviewReward /
       // saveReviewTopup; the review tags are a cfgCard below.
@@ -463,7 +477,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
       }
       is(famSites.filter((i) => i !== CARD_SITE).map((i) => famAt(i).join('|')).sort(),
-        SITE_FAMS, 'the phone writes fourteen families at thirteen write sites, each asserted in section 2 (support.hidden as the open one)');
+        SITE_FAMS, 'the phone writes fifteen families at fourteen write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'
@@ -522,6 +536,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(route('sharecards'), 'sharing:edit', 'phone Share cards');
     is(route('sharecard'), 'sharing:edit', 'phone Share cards → one page');
     is(route('social'), 'social:edit', 'phone Social proof');
+    is(route('topuppkgs'), 'topup:edit', 'phone Top-up packages — the key every /topup-packages write needs');
     is(list(route('reviews')).sort().join('|'), 'reviews:moderate|reviews:view', 'phone Reviews — the reviews family\'s own any-of');
     is(tab('flash'), 'flash:view', 'desktop Flash sales');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms.html')), 'cms.html opens on content:edit');

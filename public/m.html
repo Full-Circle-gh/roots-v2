@@ -1704,6 +1704,8 @@ function pop(){
   if(top==='productcost'&&!pcMayLeave()) return;
   if(top==='polledit'&&!pollMayLeave()) return;   // §325 M7 — an unsaved poll asks first
   if(top==='affsettings'&&!affMayLeave()) return;   // §325 M9 — so does an unsaved offer
+  if(top==='pointsrules'&&!prMayLeave()) return;    // §325 M11 — and unsaved points rules,
+  if(top==='tiersedit'&&!teMayLeave()) return;      // and an unsaved ladder
   if(top==='affeligible') loadAffElig();   // the count on the offer is re-read, as the desktop's dialog does on close
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
@@ -11136,9 +11138,16 @@ function screenMembership(){
       <span style="font-size:14px;color:var(--brick-ink)">${state.tiersErr}</span></div></div>`;
   if(!state.tiers) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const tiers=state.tiers.slice().sort((a,b)=>(Number(a.threshold)||0)-(Number(b.threshold)||0));
-  if(!tiers.length) return nothingYet(T('No tiers yet','暂无会员等级'),
-    T('The membership ladder is built on desktop. Once there are rungs, they show here with how many members stand on each.',
-      '会员等级在电脑端设置。设置后会连同各等级人数显示在这里。'));
+  /* §325 M11 — the points rules and the ladder are edited here now, each a
+     draft with its own Save (§279.2); the cards below stay the read. */
+  const can=loyCan();
+  const rules=state.cfg?`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div class="eyebrow">${T('How points work','积分规则')}</div>
+      <div style="font-size:13.5px;line-height:1.55">${prOutcome(prFrom(cfgGet('points',null)),true)}</div>
+      ${can?`<button class="btn2" style="width:100%" onclick="APP.cmd('prOpen')">${T('Edit','编辑')}</button>`:''}</div>`:'';
+  const editTiers=can?`<button class="btn2" style="width:100%" onclick="APP.cmd('teOpen')">${tiers.length?T('Edit tier','编辑等级'):T('+ Add tier','添加等级')}</button>`:'';
+  if(!tiers.length) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${rules}
+    <div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No tiers yet — add one to start the ladder.','暂无等级 — 添加一个以开始等级体系。')}</div>${editTiers}</div>`;
   const card=t=>{
     const th=Number(t.threshold)||0;
     /* The merchant's own zero, not a yuan one (audit D-03) — this is the only
@@ -11160,8 +11169,291 @@ function screenMembership(){
         :`<div style="font-size:13px;color:var(--text-secondary);opacity:.8">${T('No perks yet','暂无权益')}</div>`}</div>`;
   };
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${rules}
     ${tiers.map(card).join('')}
-    ${noteBar(T('Thresholds, multipliers and perks are edited on desktop.','门槛、倍数与权益在电脑端编辑。'))}</div>`;
+    ${editTiers}</div>`;
+}
+
+/* ==========================================================================
+   §325 M11 — LOYALTY MONEY, SET ON THE PHONE (desktop: 07-content-billing.js
+   savePointsSettings / saveRctiers / the top-up packages table)
+   --------------------------------------------------------------------------
+   Thresholds, multipliers, perks, the points rules and the top-up packages
+   were "edited on desktop". Each decides what a customer is given, so under
+   §279.2 none of them saves itself: each is a draft with an explicit Save,
+   sending the desktop's body, and leaving with unsaved changes asks.
+     · How points work: the desktop's four rules and the shipping switch, as
+       the seven keys savePointsSettings sends (PUT /config), with its worked
+       example and its short-expiry nudge.
+     · The tiers: the whole ladder staged, then Save tiers — every tier keyed
+       from its English name once and kept, no two the same, at least one, the
+       lowest starting at 0, sorted by spend — PUT /config 'roots_club.tiers'.
+     · Top-up packages: add (POST), change (PATCH, only what changed), switch
+       on or off, delete (asks) — /topup-packages.
+   Keys: the points and tiers are the loyalty family (loyalty:view or
+   loyalty:edit); packages are topup:edit. All fail CLOSED while the account's
+   keys are unknown — each one is money.
+   ========================================================================== */
+const LOY_KEYS=['loyalty:view','loyalty:edit'];
+const loyKnown=()=>!!state.caps;
+const loyCan=()=>loyKnown()&&mCan(LOY_KEYS);
+const tupCan=()=>loyKnown()&&mCan('topup:edit');
+const mpFmt=n=>{ if(!Number.isFinite(n)) return '0'; const r=Math.round(n*100)/100; return Number.isInteger(r)?String(r):String(r).replace(/0+$/,'').replace(/\.$/,''); };
+/* ── How points work ────────────────────────────────────────────────────── */
+const PR={d:null, saved:null, busy:false, err:'', said:false};
+function prFrom(pts){
+  const p=pts||{};
+  const redeem=Number(p.redeemRate)||100;
+  return {earnPoints:String(p.earnPoints!=null?p.earnPoints:1), earnSpend:String(p.earnSpend!=null?p.earnSpend:(p.earnRate!=null?p.earnRate:100)),
+    earnBase:p.earnBase==='subtotal'?'subtotal':'paid', pointValue:(1/redeem).toFixed(2),
+    expiryMonths:String(p.expiryMonths!=null?p.expiryMonths:12), coverShipping:!!p.coverShipping};
+}
+// The desktop's savePointsSettings body, field for field.
+function prBody(d){
+  const earnPoints=Math.max(1,parseInt(d.earnPoints,10)||1), earnSpend=Math.max(1,parseInt(d.earnSpend,10)||100);
+  const pointValue=Math.min(1,Math.max(0.01,parseFloat(d.pointValue)||1));
+  return {'points.earnPoints':earnPoints, 'points.earnSpend':earnSpend,
+    'points.earnRate':Math.max(1,Math.ceil(earnSpend/earnPoints)),
+    'points.earnBase':d.earnBase==='subtotal'?'subtotal':'paid',
+    'points.redeemRate':Math.max(1,Math.round(1/pointValue)),
+    'points.expiryMonths':Math.max(0,parseInt(d.expiryMonths,10)||0),
+    'points.coverShipping':!!d.coverShipping};
+}
+const prDirty=()=>!!(PR.d&&PR.saved)&&JSON.stringify(PR.d)!==JSON.stringify(PR.saved);
+function topTier(){ const t=state.tiers||[]; return t.length?t.reduce((a,b)=>(Number(b.points_mult)||1)>(Number(a.points_mult)||1)?b:a,t[0]):null; }
+// The grey "what it adds up to" line (mpOutcome).
+function prOutcome(d, noTier){
+  const earnPoints=Math.max(0,parseFloat(d.earnPoints)||0), earnSpend=Math.max(1,parseFloat(d.earnSpend)||100), pv=Math.max(0,parseFloat(d.pointValue)||0);
+  if(!earnPoints||!pv) return T('Set an earn rate and point value above to see what an order gives back.','在上方填写积分速率与积分价值,即可预览一笔订单的回馈。');
+  const S=200, base=(S/earnSpend)*earnPoints, val=base*pv, pct=val/S*100;
+  let s=T(`So a ${money(CUR,S)} order earns ${mpFmt(base)} points = ${money(CUR,mpFmt(val))} off a future order (${mpFmt(pct)}% back).`,
+          `一笔 ${money(CUR,S)} 订单可得 ${mpFmt(base)} 积分 = ${money(CUR,mpFmt(val))},可抵扣后续订单(回馈 ${mpFmt(pct)}%)。`);
+  const top=topTier(), m=top?(Number(top.points_mult)||1):1;
+  if(!noTier&&top&&m>1) s+=' '+T(`A ${tierName(top)} member at ${mpFmt(m)}× earns ${mpFmt(base*m)} points on the same order.`,`${tierName(top)} 会员按 ${mpFmt(m)} 倍,同一订单可得 ${mpFmt(base*m)} 积分。`);
+  return s;
+}
+function prExpiryHint(d){ const m=parseInt(d.expiryMonths,10);
+  return Number.isFinite(m)&&m>0&&m<6?T('Short — most stores give 12–24, or 0 so points never expire.','偏短 — 多数商家设 12–24 个月,或设 0 让积分永不过期。'):''; }
+reg('prOpen', ()=>{ if(!loyCan()||!state.cfg) return; PR.d=prFrom(cfgGet('points',null)); PR.saved=Object.assign({},PR.d); PR.err=''; PR.said=false; CMD.push('pointsrules'); });
+reg('prSet', (k,v)=>{
+  if(!PR.d||!loyCan()||['earnPoints','earnSpend','earnBase','pointValue','expiryMonths'].indexOf(k)<0) return;
+  PR.d[k]=String(v==null?'':v); PR.said=false;
+  const o=document.getElementById('mPrOut'); if(o) o.textContent=prOutcome(PR.d);
+  const h=document.getElementById('mPrHint'); if(h) h.textContent=prExpiryHint(PR.d);
+  const b=document.getElementById('mPrSave'); if(b) b.disabled=!prDirty()||PR.busy;
+});
+reg('prShip', ()=>{ if(!PR.d||!loyCan()) return; PR.d.coverShipping=!PR.d.coverShipping; PR.said=false; render(); });
+reg('prSave', ()=>{
+  if(!PR.d||PR.busy||!prDirty()||!loyCan()) return;
+  PR.busy=true; PR.err=''; render();
+  apiWrite('/config',prBody(PR.d),'PUT').then(j=>{
+    if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
+    PR.busy=false; PR.saved=Object.assign({},PR.d); PR.said=true; showToast(T('Saved','已保存')); render();
+  }).catch(e=>{ PR.busy=false; if(String(e.message)==='auth') return;
+    PR.err=e.refused?T(...e.words):T('Save failed','保存失败')+(e.message&&!e.refused?': '+e.message:''); render(); });
+});
+function prMayLeave(){
+  if(!prDirty()) return true;
+  state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+    confirmLabel:T('Leave','离开'), danger:true, run:()=>{ PR.d=Object.assign({},PR.saved); forgetScroll(); state.stack.pop(); render(); }};
+  render(); return false;
+}
+function screenPointsRules(){
+  const d=PR.d; if(!d) return screenMembership();
+  const inp=(k,label,w)=>`<input type="number" inputmode="decimal" value="${escAttr(d[k])}" aria-label="${escAttr(label)}" style="width:${w||'72px'}" oninput="APP.cmd('prSet','${k}',this.value)">`;
+  const row=html=>`<div style="font-size:15px;line-height:2.2">${html}</div>`;
+  const hint=prExpiryHint(d);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      ${row(`${T('Customers earn','顾客获得')} ${inp('earnPoints',T('Customers earn','顾客获得'))} ${T('point for every ¥','积分,每消费 ¥').replace('¥',CUR||'¥')} ${inp('earnSpend',T('point for every ¥','积分,每消费 ¥'))} ${T('of','的')}
+        <select onchange="APP.cmd('prSet','earnBase',this.value)">
+          <option value="paid"${d.earnBase==='paid'?' selected':''}>${T('what they pay','实付金额')}</option>
+          <option value="subtotal"${d.earnBase==='subtotal'?' selected':''}>${T('order value before discounts','折前金额')}</option></select>`)}
+      ${row(`${T('Each point is worth ¥','每积分价值 ¥').replace('¥',CUR||'¥')} ${inp('pointValue',T('Each point is worth ¥','每积分价值 ¥'))} ${T('at checkout.','(结账时抵扣)。')}`)}
+      ${row(`${T('Points expire','积分有效期')} ${inp('expiryMonths',T('Points expire','积分有效期'))} ${T('months after they\'re earned.','个月。')}`)}
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('0 = never expire','0 为永不过期')}</div>
+      <div id="mPrHint" style="font-size:12.5px;color:var(--amber-ink)">${hint}</div>
+      <div class="sep"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Points can pay for shipping','积分可抵运费')}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${T('Off — shipping is always paid in cash','关闭时运费以现金支付')}</span></span>
+        ${toggle(!!d.coverShipping,"APP.cmd('prShip')")}</div>
+      <div id="mPrOut" style="font-size:13px;color:var(--text-secondary);line-height:1.55">${prOutcome(d)}</div></div>
+    ${PR.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(PR.err)}</div>`:''}
+    <div style="font-size:12.5px;color:var(--text-secondary);text-align:center">${PR.said&&!prDirty()?T('Saved','已保存'):T('Applies to new orders only.','仅对新订单生效。')}</div>
+    <button id="mPrSave" class="cta" ${!prDirty()||PR.busy?'disabled':''} onclick="APP.cmd('prSave')">${PR.busy?T('Saving…','保存中…'):T('Save points rules','保存积分规则')}</button></div>`;
+}
+/* ── The tiers (renderRctierCards / saveRctiers) ───────────────────────── */
+const TE={d:null, saved:'', busy:false, err:''};
+function teCopy(list){ return (list||[]).map(t=>({key:String(t.key||'').trim(), name_en:String(t.name_en||'').trim(), name_cn:String(t.name_cn||'').trim(),
+  threshold:Math.max(0,Number(t.threshold)||0),
+  points_mult:(()=>{ const m=Number(t.points_mult); return Number.isFinite(m)&&m>0?Math.max(0.1,Math.min(10,m)):1; })(),
+  perks_en:Array.isArray(t.perks_en)?t.perks_en.slice():[], perks_cn:Array.isArray(t.perks_cn)?t.perks_cn.slice():[]})); }
+const teDirty=()=>!!TE.d&&JSON.stringify(TE.d)!==TE.saved;
+reg('teOpen', ()=>{ if(!loyCan()||!state.tiers) return; TE.d=teCopy(state.tiers); TE.saved=JSON.stringify(TE.d); TE.err=''; CMD.push('tiersedit'); });
+// One tier in a sheet; its edits go into the staged ladder, not to the server.
+function teSheet(i){
+  const t=TE.d&&TE.d[i]; if(!t) return;
+  state.ask={title:T('Edit tier','编辑等级'),
+    body:`${T('Key','标识')} <span class="num">${escAttr(tierKey(t)||'—')}</span> — ${T('set automatically from the English name.','由英文名称自动生成。')}`,
+    fields:[{id:'name_en',label:T('Name (English)','名称(英文)'),value:t.name_en},
+      {id:'name_cn',label:T('Name (中文)','名称(中文)'),value:t.name_cn},
+      {id:'threshold',label:T('Reached at lifetime spend','达到门槛(累计消费)')+' · '+(CUR||'¥'),type:'number',value:String(t.threshold)},
+      {id:'points_mult',label:T('Points multiplier','积分倍率')+' — '+T('1.0 = base rate','1.0 = 基础速率'),type:'number',value:String(t.points_mult)},
+      {id:'perks_en',label:T('Perks — one per line (English)','权益 — 每行一条(英文)'),multiline:true,value:t.perks_en.join('\n')},
+      {id:'perks_cn',label:T('Perks — one per line (中文)','权益 — 每行一条(中文)'),multiline:true,value:t.perks_cn.join('\n')}],
+    confirmLabel:T('Done','完成'),
+    run:v=>{ const cur=TE.d[i]; if(!cur) return;
+      cur.name_en=String(v.name_en||''); cur.name_cn=String(v.name_cn||'');
+      cur.threshold=Math.max(0,parseInt(v.threshold,10)||0);
+      const m=parseFloat(v.points_mult); cur.points_mult=Number.isFinite(m)&&m>0?Math.max(0.1,Math.min(10,m)):1;
+      const lines=s=>String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);
+      cur.perks_en=lines(v.perks_en); cur.perks_cn=lines(v.perks_cn); TE.err=''; render(); }};
+  state.askErr=null; render();
+}
+reg('teEdit', i=>{ if(loyCan()) teSheet(Number(i)); });
+reg('teAdd', ()=>{
+  if(!TE.d||!loyCan()) return;
+  // The next ¥1000 above the top tier, so the ladder stays in order.
+  const top=TE.d.reduce((m,t)=>Math.max(m,Number(t.threshold)||0),0);
+  TE.d.push({key:'',name_en:'',name_cn:'',threshold:top+1000,points_mult:1,perks_en:[],perks_cn:[]});
+  teSheet(TE.d.length-1);
+});
+reg('teRemove', i=>{
+  i=Number(i); const t=TE.d&&TE.d[i]; if(!t||!loyCan()) return;
+  state.ask={title:T(`Remove tier "${t.name_en||t.name_cn||'(unnamed)'}"?`,`删除等级"${t.name_cn||t.name_en||'(未命名)'}"?`),
+    confirmLabel:T('Remove tier','删除等级'), danger:true, run:()=>{ TE.d.splice(i,1); render(); }};
+  render();
+});
+// The desktop's holds, in its words; then sorted by spend and sent whole.
+function teCheck(list){
+  for(const t of list){ if(!t.key) t.key=tierKey(t); }
+  const keys=new Set();
+  for(const t of list){
+    if(!t.key) return T('Every tier needs an English name','每个等级需要英文名称');
+    if(keys.has(t.key)) return T(`Two tiers resolve to the same key "${t.key}" — rename one.`,`两个等级标识重复"${t.key}" — 请重命名其一。`);
+    keys.add(t.key);
+  }
+  if(!list.length) return T('At least one tier is required','至少需要一个等级');
+  const lowest=list.reduce((m,t)=>Math.min(m,Number(t.threshold)||0),Infinity);
+  if(lowest!==0) return T('The lowest tier must start at '+money0(CUR,0),'最低等级门槛必须为 0');
+  return '';
+}
+reg('teSave', ()=>{
+  if(!TE.d||TE.busy||!loyCan()) return;
+  const list=TE.d.map(t=>Object.assign({},t,{perks_en:t.perks_en.slice(),perks_cn:t.perks_cn.slice()}));
+  const why=teCheck(list); if(why){ TE.err=why; render(); return; }
+  const sorted=list.slice().sort((a,b)=>(Number(a.threshold)||0)-(Number(b.threshold)||0));
+  TE.busy=true; TE.err=''; render();
+  apiWrite('/config',{'roots_club.tiers':sorted},'PUT').then(j=>{
+    if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
+    TE.busy=false; state.tiers=sorted.map(t=>Object.assign({},t)); TE.d=teCopy(sorted); TE.saved=JSON.stringify(TE.d);
+    showToast(T('Tiers saved','已保存')); render();
+  }).catch(e=>{ TE.busy=false; if(String(e.message)==='auth') return;
+    TE.err=e.refused?T(...e.words):T('Save failed','保存失败')+(e.message?': '+e.message:''); render(); });
+});
+function teMayLeave(){
+  if(!teDirty()) return true;
+  state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+    confirmLabel:T('Leave','离开'), danger:true, run:()=>{ TE.d=null; forgetScroll(); state.stack.pop(); render(); }};
+  render(); return false;
+}
+function screenTiersEdit(){
+  if(!TE.d) return screenMembership();
+  const card=(t,i)=>{
+    const th=Number(t.threshold)||0;
+    const from=th===0?T('from '+money0(CUR,0)+' — everyone starts here','从 '+money0(CUR,0)+' 起 — 人人有份')
+      :T('from '+money0(CUR,th)+' lifetime spend','累计消费 '+money0(CUR,th)+' 起');
+    const perks=LANG==='en'?(t.perks_en.length?t.perks_en:t.perks_cn):(t.perks_cn.length?t.perks_cn:t.perks_en);
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:16px;font-weight:500;min-width:0">${escAttr(tierName(t))}</span>
+        <span class="num" style="font-size:13px;color:var(--text-secondary);flex:none">${multText(t.points_mult)}× ${T('points','积分')}</span></div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${from}</div>
+      ${perks.length?`<ul style="margin:2px 0 0;padding-left:18px">${perks.map(p=>`<li style="font-size:13.5px;color:var(--text-secondary)">${escAttr(p)}</li>`).join('')}</ul>`
+        :`<div style="font-size:13px;color:var(--text-secondary)">${T('No perks yet','暂无权益')}</div>`}
+      <div style="display:flex;gap:8px">
+        <button class="btn2" style="flex:1" onclick="APP.cmd('teEdit',${i})">${T('Edit tier','编辑等级')}</button>
+        <button class="btn2" style="flex:1;color:var(--brick-ink)" onclick="APP.cmd('teRemove',${i})">${T('Remove tier','删除等级')}</button></div></div>`;
+  };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('Shoppers reach a tier by lifetime spend and keep it — the lowest tier starts at '+money0(CUR,0)+' so everyone belongs somewhere. Each tier multiplies the points earned above.','顾客按累计消费达到并保留等级;最低等级从 '+money0(CUR,0)+' 起,人人有份。各等级在上述基础上叠加积分倍率。')}</div>
+    ${TE.d.length?TE.d.map(card).join(''):`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No tiers yet — add one to start the ladder.','暂无等级 — 添加一个以开始等级体系。')}</div>`}
+    <button class="btn2" style="width:100%" onclick="APP.cmd('teAdd')">${T('+ Add tier','添加等级')}</button>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Tiers sort by spend when you save. Everyone\'s tier updates automatically from their lifetime spend.','保存后按门槛排序;顾客等级依累计消费自动更新。')}</div>
+    ${TE.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(TE.err)}</div>`:''}
+    <button class="cta" ${!teDirty()||TE.busy?'disabled':''} onclick="APP.cmd('teSave')">${TE.busy?T('Saving…','保存中…'):T('Save tiers','保存等级')}</button></div>`;
+}
+
+/* ── Top-up packages (the desktop's table: add, change, switch, delete) ──── */
+const TP={rows:null, err:null, busy:null, rowErr:''};
+function loadTupPkgs(){
+  return api('/topup-packages').then(r=>{ TP.rows=Array.isArray(r)?r:[]; TP.err=null; state.tupPkgs=TP.rows; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; TP.err=E('Could not load this.','无法加载。'); render(); });
+}
+reg('tpOpen', ()=>{ if(!tupCan()) return; TP.rows=null; TP.rowErr=''; CMD.push('topuppkgs'); loadTupPkgs(); });
+function tpWrite(id, call, okText){
+  TP.busy=id; TP.rowErr=''; render();
+  call.then(()=>{ TP.busy=null; if(okText) showToast(okText); loadTupPkgs(); })
+    .catch(e=>{ TP.busy=null; if(String(e.message)==='auth') return;
+      TP.rowErr=e.refused?T(...e.words):T('Save failed','保存失败')+(e.message?': '+e.message:''); loadTupPkgs(); });
+}
+const tpFields=pk=>[
+  {id:'amount',label:T('Amount ¥','金额').replace('¥',CUR||'¥'),type:'number',value:pk?String(pk.amount):'',placeholder:'200'},
+  {id:'bonus',label:T('Bonus points','赠送积分'),type:'number',value:pk?String(pk.bonus_points||0):'',placeholder:'50'},
+  {id:'title_en',label:T('Title · EN','标题 · 英文'),value:pk?String(pk.title_en||''):'',placeholder:money(CUR,200)+' + 50 bonus pts'},
+  {id:'title_cn',label:T('Title · 中','标题(中文)'),value:pk?String(pk.title_cn||''):'',placeholder:'充200送50积分'}];
+reg('tpAdd', ()=>{
+  if(!tupCan()||TP.busy) return;
+  state.ask={title:T('New top-up package','新建充值套餐'), fields:tpFields(null),
+    validate:v=>Number(v.amount)>0?'':T('Amount required','请填写金额'),
+    confirmLabel:T('Add','添加'),
+    run:v=>tpWrite('new', apiWrite('/topup-packages',{amount:Number(v.amount), bonus_points:Math.max(0,parseInt(v.bonus,10)||0),
+      title_en:v.title_en||null, title_cn:v.title_cn||null},'POST'), T('Package added','套餐已添加'))};
+  state.askErr=null; render();
+});
+/* A change sends only the fields that changed — the desktop's table sends one
+   field per edit; nothing here is sent until Save. */
+reg('tpEdit', id=>{
+  const pk=(TP.rows||[]).find(x=>x.id===Number(id)); if(!pk||!tupCan()||TP.busy) return;
+  state.ask={title:money(CUR,pk.amount), fields:tpFields(pk),
+    validate:v=>Number(v.amount)>0?'':T('Amount required','请填写金额'),
+    confirmLabel:T('Save','保存'),
+    run:v=>{ const body={};
+      if(Number(v.amount)!==Number(pk.amount)) body.amount=Number(v.amount);
+      if((parseInt(v.bonus,10)||0)!==(Number(pk.bonus_points)||0)) body.bonus_points=Math.max(0,parseInt(v.bonus,10)||0);
+      if(v.title_en!==String(pk.title_en||'')) body.title_en=v.title_en;
+      if(v.title_cn!==String(pk.title_cn||'')) body.title_cn=v.title_cn;
+      if(!Object.keys(body).length) return;
+      tpWrite(pk.id, apiWrite('/topup-packages/'+pk.id,body,'PATCH'), T('Saved','已保存')); }};
+  state.askErr=null; render();
+});
+reg('tpActive', id=>{
+  const pk=(TP.rows||[]).find(x=>x.id===Number(id)); if(!pk||!tupCan()||TP.busy) return;
+  tpWrite(pk.id, apiWrite('/topup-packages/'+pk.id,{is_active:pk.is_active?0:1},'PATCH'));
+});
+reg('tpDelete', id=>{
+  const pk=(TP.rows||[]).find(x=>x.id===Number(id)); if(!pk||!tupCan()||TP.busy) return;
+  state.ask={title:T(`Delete ${money(CUR,pk.amount)} top-up package?`,`删除 ${money(CUR,pk.amount)} 充值套餐？`),
+    confirmLabel:T('Delete','删除'), danger:true,
+    run:()=>tpWrite(pk.id, apiWrite('/topup-packages/'+pk.id,{},'DELETE'), T('Package deleted','套餐已删除'))};
+  render();
+});
+function screenTupPkgs(){
+  if(TP.err) return `<div style="padding:14px 16px 24px"><div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${TP.err}</div></div>`;
+  if(!TP.rows) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const busy=TP.busy!=null;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${TP.rowErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(TP.rowErr)}</div>`:''}
+    ${TP.rows.length?`<div class="list">${TP.rows.map((pk,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+        <button onclick="APP.cmd('tpEdit',${Number(pk.id)})" ${busy?'disabled':''} style="flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;background:none;border:0;padding:0;font-family:inherit;color:var(--text-primary);cursor:pointer">
+          <span class="num" style="font-size:14.5px">${money(CUR,pk.amount)} · ${Number(pk.bonus_points||0)?'+'+pk.bonus_points+' '+T('points','积分'):T('no bonus','无赠送')}</span>
+          ${pk.title_en||pk.title_cn?`<span style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(LANG==='en'?(pk.title_en||pk.title_cn):(pk.title_cn||pk.title_en))}</span>`:''}</button>
+        ${toggle(!!pk.is_active,`APP.cmd('tpActive',${Number(pk.id)})`)}
+        <button class="iconbtn" aria-label="${escAttr(T('Delete','删除'))}" ${busy?'disabled':''} onclick="APP.cmd('tpDelete',${Number(pk.id)})">${ic('trash-2',18)}</button></div>`).join('')}</div>`
+      :`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No top-up packages yet','暂无充值套餐')}</div>`}
+    <button class="cta" ${busy?'disabled':''} onclick="APP.cmd('tpAdd')">${TP.busy==='new'?T('Saving…','保存中…'):T('New top-up package','新建充值套餐')}</button></div>`;
 }
 
 /* ── Top-up ──────────────────────────────────────────────────────────────── */
@@ -11225,7 +11517,7 @@ function screenTopups(){
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recent top-ups','最近充值')}</div>
       ${rows.length?`<div class="list">${rows.map((t,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${tupRow(t)}`).join('')}</div>`
         :`<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No top-ups yet.','暂无充值记录。')}</div>`}</div>
-    ${noteBar(T('Packages are created and priced on desktop.','充值套餐在电脑端创建与定价。'))}</div>`;
+    ${tupCan()?`<button class="btn2" style="width:100%" onclick="APP.cmd('tpOpen')">${T('Top-up packages','充值套餐')}</button>`:''}</div>`;
 }
 
 /* ── Leaderboard ─────────────────────────────────────────────────────────── */
@@ -17792,6 +18084,10 @@ const SUBS={
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
   wallet:{title:['Top-up','充值'],status:()=>statusTopups(),render:()=>screenTopups()},
+  /* §325 M11 — the money of the loyalty programme, each with its own Save. */
+  pointsrules:{title:['How points work','积分规则'],backLabel:()=>T('Membership','会员积分'),render:()=>screenPointsRules()},
+  tiersedit:{title:['Membership','会员积分'],backLabel:()=>T('Membership','会员积分'),render:()=>screenTiersEdit()},
+  topuppkgs:{title:['Top-up packages','充值套餐'],backLabel:()=>T('Top-up','充值'),render:()=>screenTupPkgs()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
   voting:{title:['Voting','投票'],
     cta:()=>mCan('voting:edit')?`<button class="cta inhead" onclick="APP.cmd('pollEdit')">${T('New poll','新建投票')}</button>`:'',
@@ -40187,7 +40483,7 @@ const ROUTE_CAP={
      screen it lives inside rather than left open on a screen that is not. */
   bcnew:'broadcasts:send', bcauto:'broadcasts:send',
   // More → Loyalty & Wallet.
-  membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit', polledit:'voting:edit',
+  membership:'loyalty:view', pointsrules:['loyalty:view','loyalty:edit'], tiersedit:['loyalty:view','loyalty:edit'], wallet:'topup:edit', topuppkgs:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit', polledit:'voting:edit',
   // More → Content.
   editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view', snippets:'content:view',
   // Settings, and the screens reached from inside it or from the Products strip.
@@ -41520,7 +41816,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -41733,6 +42029,9 @@ function mUnsavedWork(){
     if(PE&&PE.dirty&&(state.stack||[]).some(f=>f&&f.route==='polledit')) return true;
     /* The affiliate offer, changed and not yet saved (§325 M9). */
     if(affDirty()&&(state.stack||[]).some(f=>f&&f.route==='affsettings')) return true;
+    /* The points rules and the ladder, changed and not yet saved (§325 M11). */
+    if(prDirty()&&(state.stack||[]).some(f=>f&&f.route==='pointsrules')) return true;
+    if(teDirty()&&(state.stack||[]).some(f=>f&&f.route==='tiersedit')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
