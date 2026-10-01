@@ -1616,6 +1616,7 @@ function pop(){
   if(top==='recipeone'&&!rcpMayLeave()) return;
   if(top==='materialone'&&!matMayLeave()) return;
   if(top==='productcost'&&!pcMayLeave()) return;
+  if(top==='polledit'&&!pollMayLeave()) return;   // §325 M7 — an unsaved poll asks first
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
@@ -3895,23 +3896,7 @@ reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('inboxGo', s=>{ state.inboxSeg=s; CMD.push('inbox'); });
 reg('poSeg', v=>{ state.poSeg=v; render(); });
 reg('pollOpen', id=>{ state.pollOpen = state.pollOpen===Number(id) ? null : Number(id); render(); });
-/* Opening a poll makes it visible to every customer; closing one stops the
-   voting. Both are one tap and both are reversible, so neither asks — but the
-   card says what a draft means before you open it. */
-reg('pollStatus', (id,st)=>{
-  const p=(state.polls||[]).find(x=>x.id===Number(id)); if(!p||state.pollBusy) return;
-  state.pollBusy=p.id; state.pollsErr=null; render();
-  apiWrite('/polls/'+p.id,{status:st},'PUT').then(()=>{
-    state.pollBusy=null;
-    showToast(st==='open'?T('Poll is live','投票已开启'):T('Poll closed','投票已关闭'));
-    state.pollsTried=false; loadPolls(true);
-  }).catch(e=>{
-    state.pollBusy=null;
-    if(String(e.message)==='auth') return;
-    state.pollsErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
-    render();
-  });
-});
+/* The poll status write and its confirm live with the Voting screen (§325 M7). */
 reg('finalizeTopup', id=>{
   const t=(state.tup||[]).find(x=>x.id===Number(id)); if(!t||state.tupBusy) return;
   // It credits a real wallet. The desktop asks; so does this.
@@ -7002,11 +6987,13 @@ function cfgCardStart(c){
   c.auto=TacetAutosave.create({
     read:()=>c.read(),
     hold:p=>c.hold?c.hold(p):'',
-    send:(body,note)=>apiWrite('/config?history='+encodeURIComponent(c.card)+(note?'&note='+note:''),body,'PUT').then(j=>{
+    /* §325 M7 — a card whose settings live behind a route of their own (the
+       voting and leaderboard settings, withConfigHistory on the server) sends
+       through its own `put`; every other card is PUT /config. */
+    send:(body,note)=>(c.put?c.put(body,note):apiWrite('/config?history='+encodeURIComponent(c.card)+(note?'&note='+note:''),body,'PUT').then(j=>{
       // The rest of the app reads state.cfg; the screen reads its draft.
       if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
-      if(c.after) c.after(body);
-    }),
+    })).then(()=>{ if(c.after) c.after(body); }),
     onChange:()=>{ askLiveRepaint(); cfgFootRepaint(c); },
   });
   c.auto.start();
@@ -7025,6 +7012,8 @@ function cfgFootHtml(c){
 }
 function cfgFoot(c){ return `<div id="mCfgFoot-${c.card.replace(/[^a-z0-9]/gi,'_')}">${cfgFootHtml(c)}</div>`; }
 function cfgFootRepaint(c){ const el=document.getElementById('mCfgFoot-'+c.card.replace(/[^a-z0-9]/gi,'_')); if(el) el.innerHTML=cfgFootHtml(c); }
+/* The history query a route-owned card adds to its own path (§279). */
+const cfgHistQ=(card,note)=>'?history='+encodeURIComponent(card)+(note?'&note='+note:'');
 function cfgBusy(){ return Object.keys(CFG_CARD).some(k=>{ const a=CFG_CARD[k].auto; return !!(a&&a.busy()); }); }
 reg('cfgUndo', card=>{ const c=CFG_CARD[card]; if(!c||!c.auto) return; c.auto.undo(p=>{ c.apply(p); render(); }); });
 reg('cfgHistory', card=>{ const c=CFG_CARD[card]; if(c) cfgHistory(c); });
@@ -7036,7 +7025,7 @@ function cfgHistory(c){
     const list=Array.isArray(j&&j.versions)?j.versions:[];
     if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
     liveHistorySheet(list, v=>(v.changed||[]).map(k=>c.words&&c.words[k]?T(...c.words[k]):k).join(' · '),
-      v=>{ c.apply(v.snapshot||{}); render(); return c.auto.flush('restore').then(()=>{
+      v=>{ const snap=v.snapshot||{}; c.apply(c.fromSnapshot?c.fromSnapshot(snap):snap); render(); return c.auto.flush('restore').then(()=>{
         if(c.auto.state==='error') throw new Error(c.auto.message||''); }); });
   }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
 }
@@ -8377,6 +8366,14 @@ function screenMore(){
    dropped the reward points, the closing time, whether a poll is featured, and
    the fact that a draft is invisible to customers. And it carried two invented
    polls in its source for whenever /polls came back empty.
+
+   §325 M7 — and it could not write one. The question, the options, the
+   rewards and the page's own two settings were "written on desktop". They are
+   written here now, on the desktop's endpoints with the desktop's bodies: the
+   editor (votRenderEditor / votCollect / votSavePoll / votDeletePoll) as a
+   screen of its own, every confirm the desktop asks before a write, and the
+   page settings (VOT_CARD) as a §279 card on /voting/config. All of it on
+   voting:edit, the key the server gates polls and the voting settings on.
    ========================================================================== */
 function loadPolls(force){
   if(state.pollsTried&&!force) return;
@@ -8421,11 +8418,10 @@ function pollCard(p){
     total+' '+T(total===1?'vote':'votes','票'),
     Number(p.reward_points||0)?'+'+p.reward_points+' '+T('pts','积分'):null,
     p.closes_at?T('closes ','截止 ')+fmtDay(p.closes_at):null].filter(Boolean).join(' · ');
-  // The one action a phone is the right place for: a poll you have decided
-  // about, closed on the spot. Writing the question is desktop work.
+  // The status write asks first, in the desktop's words (votSetStatus).
   const next = p.status==='open'?'closed':'open';
   const verb = p.status==='draft'?T('Open','开启') : p.status==='open'?T('Close','关闭') : T('Reopen','重新开启');
-  const busy=state.pollBusy===p.id;
+  const busy=state.pollBusy===p.id, can=mCan('voting:edit');
   const btn=(label,cmd,dis)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
   return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -8435,23 +8431,369 @@ function pollCard(p){
     ${p.status==='draft'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Customers cannot see a draft.','草稿对顾客不可见。')}</div>`:''}
     ${floor?`<div style="font-size:12.5px;color:var(--amber-ink)">${T('Customers are shown at least '+floor+' votes, whatever the real count is.','顾客看到的票数下限为 '+floor+' 票，与真实票数无关。')}</div>`:''}
     ${open?pollBars(p):''}
-    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap">
       ${btn(open?T('Hide results','收起结果'):T('See results','查看结果'),`APP.cmd('pollOpen',${p.id})`,false)}
-      ${btn(busy?T('Saving…','保存中…'):verb,`APP.cmd('pollStatus',${p.id},'${next}')`,busy)}</div></div>`;
+      ${can?btn(busy?T('Saving…','保存中…'):verb,`APP.cmd('pollAsk',${p.id},'${next}')`,busy):''}
+      ${can?btn(T('Edit','编辑'),`APP.cmd('pollEdit',${p.id})`,busy):''}</div></div>`;
+}
+/* ── The status write (desktop: votSetStatus) ─────────────────────────────
+   Publishing puts a poll in front of every customer and starts paying points;
+   closing locks the voting. The desktop asks before either, in these words,
+   and so does this: the card's button and the editor's go through pollAsk,
+   and pollStatus is the write the confirm runs. */
+reg('pollAsk', (id,st)=>{
+  const p=(state.polls||[]).find(x=>x.id===Number(id));
+  if(!p||state.pollBusy||!mCan('voting:edit')) return;
+  if(st!=='open'&&st!=='closed') return;
+  if(st==='open'&&p.status==='open') return;
+  const ask = st==='closed'
+    ? {title:T('Close this poll? Voting locks and the result moves to past results.','关闭此投票?投票将被锁定,结果会移到“往期结果”。'), confirmLabel:T('Close poll','关闭投票')}
+    : p.status==='closed'
+    ? {title:T('Reopen this poll? Customers can vote again.','重新开启此投票?顾客可以再次投票。'), confirmLabel:T('Reopen poll','重新开启')}
+    : {title:T('Publish this poll? Customers see it immediately and start earning points for voting.','发布此投票?顾客会立即看到,并可通过投票获得积分。'), confirmLabel:T('Publish poll','发布投票')};
+  state.ask=Object.assign(ask,{run:()=>CMD.pollStatus(p.id,st)});
+  render();
+});
+reg('pollStatus', (id,st)=>{
+  const p=(state.polls||[]).find(x=>x.id===Number(id)); if(!p||state.pollBusy||!mCan('voting:edit')) return;
+  state.pollBusy=p.id; state.pollsErr=null; if(PE&&PE.d.id===p.id) PE.err=''; render();
+  apiWrite('/polls/'+p.id,{status:st},'PUT').then(()=>{
+    state.pollBusy=null;
+    showToast(st==='open'?T('Poll published','投票已发布'):T('Poll closed','投票已关闭'));
+    // Pressed from inside the editor: the page in front takes the poll's new
+    // state, and keeps whatever else is being typed (the desktop's editor does).
+    if(PE&&PE.d.id===p.id) PE.d.status=st;
+    state.pollsTried=false; loadPolls(true); render();
+  }).catch(e=>{
+    state.pollBusy=null;
+    if(String(e.message)==='auth') return;
+    const why=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    if(PE&&PE.d.id===p.id) PE.err=why; else state.pollsErr=why;
+    render();
+  });
+});
+
+/* ── The page's own settings (desktop: VOT_CARD) ──────────────────────────
+   The line under "Your say" in both languages, and whether customers see the
+   numbers: one §279 card ('voting') on PUT /voting/config?history=voting, the
+   desktop's three fields trimmed as it trims them. It starts only once the
+   stored settings have arrived — a card started on blanks would write blanks
+   over the real wording, which is why the desktop waits too. */
+let VOT_D=null, VOT_ERR=null, votCfgTried=false;
+const votCard=()=>cfgCard('voting',{
+  read:()=>({intro_en:String(VOT_D.intro_en||'').trim(), intro_cn:String(VOT_D.intro_cn||'').trim(), show_counts:!!VOT_D.show_counts}),
+  apply:b=>{ VOT_D=Object.assign({},VOT_D,b||{}); },
+  fromSnapshot:s=>s['voting.config']||{},
+  put:(b,note)=>apiWrite('/voting/config'+cfgHistQ('voting',note),b,'PUT'),
+  words:{'voting.config':['Page settings','页面设置']},
+});
+function loadVotCfg(){
+  if(votCfgTried) return;
+  votCfgTried=true;
+  api('/voting/config').then(d=>{
+    const c=d||{};
+    VOT_D={intro_en:String(c.intro_en||''), intro_cn:String(c.intro_cn||''), show_counts:c.show_counts!==false};
+    VOT_ERR=null;
+    if(mCan('voting:edit')) cfgCardStart(votCard());
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return; VOT_ERR=E('Could not load this.','无法加载。'); render(); });
+}
+reg('votIntroEdit', ()=>{
+  const c=CFG_CARD.voting; if(!VOT_D||!c||!c.auto||!mCan('voting:edit')) return;
+  cfgSheet(c, T('The line under “Your say”','“你说了算”下方的一行字'),
+    escAttr(T('The first thing customers read on the Your say page, under its headline. Write {pts} anywhere in it and the points the featured poll pays are filled in for you, so the line stays true when you change the reward. Saving here is live at once — you do not republish the mini app.',
+      '顾客打开“你说了算”页面后,在标题下方最先读到的一行。在文中任意位置写 {pts},系统会自动填入精选投票的奖励积分,改了奖励这行字也不会说错。此处保存后立即生效 —— 无需重新发布小程序。')),
+    [{id:'intro_en',label:'English',max:240,placeholder:'Every poll closes Sundays. Voting earns {pts} pts.'},
+     {id:'intro_cn',label:'中文',max:240,placeholder:'每周日截止,投票得 {pts} 积分。'}],
+    f=>VOT_D[f], (f,v)=>{ VOT_D[f]=v; });
+});
+reg('votCounts', ()=>{
+  const c=CFG_CARD.voting; if(!VOT_D||!c||!c.auto||!mCan('voting:edit')) return;
+  VOT_D.show_counts=!VOT_D.show_counts;
+  c.auto.touch(); render();
+});
+function votSettingsCard(){
+  const head=`<div class="eyebrow" style="padding:2px 4px 8px">${T('Page settings','页面设置')}</div>`;
+  if(VOT_ERR) return `<div>${head}<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${VOT_ERR}</div></div>`;
+  if(!VOT_D) return `<div>${head}<div style="padding:16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
+  const c=CFG_CARD.voting, can=mCan('voting:edit')&&!!(c&&c.auto);
+  const line=LANG==='en'?(VOT_D.intro_en||VOT_D.intro_cn):(VOT_D.intro_cn||VOT_D.intro_en);
+  const on=!!VOT_D.show_counts;
+  return `<div>${head}<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('The line under “Your say”','“你说了算”下方的一行字')}</span>
+      <span style="font-size:14.5px;line-height:1.5">${line?escAttr(line):'—'}</span>
+      ${can?`<button class="btn2" style="width:100%;margin-top:4px" onclick="APP.cmd('votIntroEdit')">${T('Edit','编辑')}</button>`:''}</div>
+    <div class="sep"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span style="font-size:15px">${T('Show vote counts to customers','向顾客显示票数')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on?T('On. Customers see the tallies and percentages.','开启。顾客能看到票数和百分比。'):T('Off. Customers see which option leads, never the numbers.','关闭。顾客只看到哪个选项领先,看不到数字。')}</span></span>
+      ${can?toggle(on,"APP.cmd('votCounts')"):''}</div>
+    ${can?cfgFoot(c):''}</div></div>`;
 }
 function screenVoting(){
-  loadPolls();
+  loadPolls(); loadVotCfg();
   if(state.pollsErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.pollsErr}</span></div></div>`;
   if(!state.polls) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!state.polls.length) return nothingYet(T('No polls yet','还没有投票'),
-    T('Polls are written on desktop. Once one exists you can read the split and open or close it from here.',
-      '投票在电脑端创建。创建后可在此查看结果并开启或关闭。'));
+  const list=state.polls.length?state.polls.map(pollCard).join('')
+    : nothingYet(T('No polls yet','还没有投票'),
+      T('Your first poll takes about a minute. It lands on Me → Your say.','第一个投票大约一分钟就能建好,会出现在“我的 → 你说了算”。'));
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${state.polls.map(pollCard).join('')}
-    ${noteBar(T('Questions, options and rewards are written on desktop.','问题、选项与奖励在电脑端编写。'))}</div>`;
+    ${list}
+    ${votSettingsCard()}</div>`;
+}
+
+/* ── The editor (desktop: votOpenEditor … votDeletePoll) ──────────────────
+   A screen of its own, as the desktop's is a page of its own (§1.7a): the
+   question, the small label and the line under it in the language picked at
+   the top; the options with their colours (eight at most, one with votes
+   never removed on its own); the rules; the display floor and what it does to
+   the numbers. Nothing is sent until Save draft / Publish / Save changes —
+   a poll is an authored object, not a setting — so leaving with changes asks,
+   in the desktop's words, and the reload guard holds while they are unsaved. */
+const POLL_PALETTE=['#F2CA6C','#F4B8CB','#F4F087','#E96174','#B2CFED','#7BBD3B','#A8D185','#FFAF60'];
+const pollLetter=i=>String.fromCharCode(65+i);
+let PE=null;   // {d, lang, dirty, reset, qErr, err, busy}
+function pollBlank(){
+  return {id:null, question_en:'', question_cn:'', explainer_en:'', explainer_cn:'', category_en:'', category_cn:'',
+    status:'draft', closes_at:'', reward_points:5, is_featured:0, sort_order:0, display_min_total:0, winner_option_id:null,
+    options:[{label_en:'',label_cn:'',color_hex:POLL_PALETTE[0],votes:0},{label_en:'',label_cn:'',color_hex:POLL_PALETTE[1],votes:0}]};
+}
+const pollTotal=d=>(d.options||[]).reduce((s,o)=>s+(Number(o.votes)||0),0);
+reg('pollEdit', id=>{
+  if(!mCan('voting:edit')) return;
+  let d;
+  if(id!=null&&id!==''){
+    const p=(state.polls||[]).find(x=>x.id===Number(id)); if(!p) return;
+    d=JSON.parse(JSON.stringify(p));
+    d.closes_at=d.closes_at?String(d.closes_at).slice(0,16).replace(' ','T'):'';
+    if(!Array.isArray(d.options)) d.options=[];
+  } else d=pollBlank();
+  PE={d, lang:LANG==='en'?'en':'cn', dirty:false, reset:false, qErr:'', err:'', busy:null};
+  CMD.push('polledit');
+});
+/* Typing writes into the draft and repaints nothing — a repaint would take the
+   keyboard away. The display floor's line is the one thing that follows a
+   keystroke, and it is written in place. */
+reg('pollEdSet', (f,v)=>{
+  if(!PE) return;
+  PE.d[f]=v; PE.dirty=true;
+  if(f==='display_min_total'){ const el=document.getElementById('mPollBoost'); if(el) el.textContent=pollBoostLine(PE.d); }
+  if(f==='question_en'||f==='question_cn'){ if(PE.qErr){ PE.qErr=''; const el=document.getElementById('mPollQErr'); if(el) el.textContent=''; } }
+});
+reg('pollEdOpt', (i,f,v)=>{ if(!PE) return; const o=PE.d.options[Number(i)]; if(!o) return; o[f]=v; PE.dirty=true; });
+reg('pollEdLang', l=>{ if(!PE) return; PE.lang=l==='cn'?'cn':'en'; render(); });
+reg('pollEdAdd', ()=>{
+  if(!PE||PE.d.options.length>=8) return;
+  PE.d.options.push({label_en:'',label_cn:'',color_hex:POLL_PALETTE[PE.d.options.length%POLL_PALETTE.length],votes:0});
+  PE.dirty=true; render();
+});
+reg('pollEdRemove', i=>{
+  if(!PE) return; const o=PE.d.options[Number(i)]; if(!o) return;
+  if((Number(o.votes)||0)>0) return;   // votes are never dropped quietly
+  PE.d.options.splice(Number(i),1); PE.dirty=true; render();
+});
+reg('pollEdReset', on=>{ if(PE) PE.reset=!!on; });
+// The desktop's real → shown line (votBoostLine): the server's display boost.
+function pollBoostLine(d){
+  const total=pollTotal(d);
+  const floor=Math.max(0,parseInt(d.display_min_total,10)||0);
+  if(!floor||total<=0||floor<=total) return total>0
+    ? T(`Off. Customers see the real ${total} votes.`,`关闭。顾客看到真实的 ${total} 票。`)
+    : T('Off. Nothing is scaled until the first real vote.','关闭。在第一票之前不会放大任何数字。');
+  const factor=floor/total;
+  let shown=0; (d.options||[]).forEach(o=>{ shown+=Math.round((Number(o.votes)||0)*factor); });
+  return T(`Customers will see about ${shown} votes — every option ×${factor.toFixed(1)}.`,`顾客将看到约 ${shown} 票 —— 所有选项均放大 ${factor.toFixed(1)} 倍。`);
+}
+// The desktop's votCollect, field for field.
+function pollCollect(){
+  const d=PE.d;
+  const out={
+    question_en:String(d.question_en||'').trim(), question_cn:String(d.question_cn||'').trim(),
+    category_en:String(d.category_en||'').trim(), category_cn:String(d.category_cn||'').trim(),
+    explainer_en:String(d.explainer_en||'').trim(), explainer_cn:String(d.explainer_cn||'').trim(),
+    status:d.status,
+    reward_points:Math.max(0,parseInt(d.reward_points,10)||0),
+    is_featured:d.is_featured?1:0,
+    closes_at:d.closes_at||null,
+    sort_order:parseInt(d.sort_order,10)||0,
+    display_min_total:Math.max(0,parseInt(d.display_min_total,10)||0),
+    options:(d.options||[]).map((o,i)=>({id:o.id||null, label_en:String(o.label_en||'').trim(), label_cn:String(o.label_cn||'').trim(),
+      color_hex:String(o.color_hex||'').trim(), image_url:String(o.image_url||'').trim(), sort_order:i})),
+  };
+  if(d.id){
+    if('winner_option_id' in d) out.winner_option_id=d.winner_option_id?parseInt(d.winner_option_id,10):null;
+    // The clear-votes box is drawn only when there are votes to clear.
+    if((d.options||[]).some(o=>(Number(o.votes)||0)>0)) out.replace_options=!!PE.reset;
+  }
+  return out;
+}
+/* One confirm after another, each in the desktop's words; the write runs
+   only once every one of them has been answered yes. */
+function pollConfirmChain(steps, done){
+  if(!steps.length){ done(); return; }
+  const s=steps[0];
+  state.ask={title:s.title, confirmLabel:s.confirmLabel, danger:!!s.danger,
+    run:()=>{ if(s.then) s.then(); pollConfirmChain(steps.slice(1), done); }};
+  render();
+}
+function pollDone(){
+  PE=null;
+  const top=state.stack.length?state.stack[state.stack.length-1].route:null;
+  if(top==='polledit'){ forgetScroll(); state.stack.pop(); }
+  state.pollsTried=false; loadPolls(true); render();
+}
+reg('pollSave', publishAs=>{
+  if(!PE||PE.busy||state.pollBusy||!mCan('voting:edit')) return;
+  const body=pollCollect();
+  // The failure stays beside the field that caused it (§1.12).
+  if(!body.question_en&&!body.question_cn){
+    PE.qErr=E('Give the poll a question — customers see this line first.','请填写问题 —— 顾客最先看到的就是这一行。');
+    render(); return;
+  }
+  PE.qErr='';
+  // The server keys polls off the English question; a Chinese-only poll sends its own text there.
+  if(!body.question_en) body.question_en=body.question_cn;
+  const named=body.options.filter(o=>o.label_en||o.label_cn);
+  if(named.length<2){ PE.err=E('A poll needs at least two options to choose between.','投票至少需要两个可供选择的选项。'); render(); return; }
+  named.forEach(o=>{ if(!o.label_en) o.label_en=o.label_cn; });
+  body.options=named;
+  PE.err='';
+  const steps=[];
+  if(publishAs==='open'&&body.status!=='open') steps.push({
+    title:T('Publish this poll? Customers see it immediately and start earning points for voting.','发布此投票?顾客会立即看到,并可通过投票获得积分。'),
+    confirmLabel:T('Publish poll','发布投票'), then:()=>{ body.status='open'; }});
+  if(body.replace_options) steps.push({
+    title:T('Clear every vote on this poll? The tally cannot be recovered.','清空此投票的全部票数?票数无法恢复。'),
+    confirmLabel:T('Clear votes','清空票数'), danger:true});
+  pollConfirmChain(steps, ()=>{
+    if(!PE) return;
+    const id=PE.d.id;
+    PE.busy='save'; render();
+    apiWrite(id?'/polls/'+id:'/polls', body, id?'PUT':'POST').then(()=>{
+      showToast(id
+        ? (body.status==='open'&&publishAs==='open'?T('Poll published','投票已发布'):T('Poll saved','投票已保存'))
+        : (body.status==='open'?T('Poll published','投票已发布'):T('Poll created','投票已创建')));
+      pollDone();
+    }).catch(e=>{
+      if(!PE) return;
+      PE.busy=null;
+      if(String(e.message)==='auth') return;
+      PE.err=e.refused?E(...e.words):id?E('Save failed','保存失败'):E('Could not create the poll','创建投票失败');
+      render();
+    });
+  });
+});
+reg('pollDelete', ()=>{
+  if(!PE||!PE.d.id||PE.busy||state.pollBusy||!mCan('voting:edit')) return;
+  const total=pollTotal(PE.d), id=PE.d.id;
+  pollConfirmChain([{title:total?T(`Delete this poll? Its ${total} votes go with it.`,`删除此投票?已有的 ${total} 票也会一并删除。`):T('Delete this poll?','删除此投票?'),
+    confirmLabel:T('Delete poll','删除投票'), danger:true}], ()=>{
+    if(!PE||PE.d.id!==id) return;
+    PE.busy='delete'; render();
+    apiWrite('/polls/'+id,{},'DELETE').then(()=>{ showToast(T('Poll deleted','投票已删除')); pollDone(); })
+      .catch(e=>{
+        if(!PE) return;
+        PE.busy=null;
+        if(String(e.message)==='auth') return;
+        PE.err=e.refused?E(...e.words):E('Delete failed','删除失败');
+        render();
+      });
+  });
+});
+/* Back asks only when something was changed and not saved. */
+function pollMayLeave(){
+  if(!PE||!PE.dirty){ PE=null; return true; }
+  state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+    confirmLabel:T('Leave','离开'), danger:true,
+    run:()=>{ PE=null; forgetScroll(); state.stack.pop(); render(); }};
+  render();
+  return false;
+}
+function screenPollEdit(){
+  if(!PE) return screenVoting();
+  const d=PE.d, cn=PE.lang==='cn', isEdit=!!d.id;
+  const qF=cn?'question_cn':'question_en', eF=cn?'explainer_cn':'explainer_en', kF=cn?'category_cn':'category_en', lF=cn?'label_cn':'label_en';
+  const total=pollTotal(d), hasVotes=(d.options||[]).some(o=>(Number(o.votes)||0)>0);
+  const busy=!!PE.busy||state.pollBusy===d.id;
+  const stateLine=d.status==='open'?T('Open. Customers can vote on it now.','进行中。顾客现在可以投票。')
+    : d.status==='closed'?T('Closed. It shows under past results.','已结束。展示在“往期结果”中。')
+    : isEdit?T('Draft. Nobody can see it yet.','草稿。顾客还看不到。')
+    : T('New. Nothing is saved until you save it.','新建。保存前不会存下任何内容。');
+  const lab=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
+  const hint=t=>`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.5">${t}</div>`;
+  const group=(title,body,right)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span class="eyebrow">${title}</span>${right||''}</div>${body}</div>`;
+  const num=(f,v,mn,mx,label)=>`<input type="number" inputmode="numeric" ${mn!=null?`min="${mn}"`:''} ${mx!=null?`max="${mx}"`:''} value="${escAttr(String(v))}" aria-label="${escAttr(label)}" style="width:100%" oninput="APP.cmd('pollEdSet','${f}',this.value)">`;
+  const opts=(d.options||[]).map((o,i)=>{ const v=Number(o.votes)||0; return `<div style="display:flex;align-items:center;gap:10px">
+      <input type="color" value="${escAttr(o.color_hex||POLL_PALETTE[i%POLL_PALETTE.length])}" aria-label="${escAttr(T('Colour for option ','选项颜色 ')+pollLetter(i))}"
+        style="width:36px;height:36px;padding:0;border:none;background:none;flex:none" oninput="APP.cmd('pollEdOpt',${i},'color_hex',this.value)">
+      <input value="${escAttr(o[lF]||'')}" placeholder="${pollLetter(i)}" aria-label="${escAttr(T('Option ','选项 ')+pollLetter(i))}" style="flex:1;min-width:0"
+        oninput="APP.cmd('pollEdOpt',${i},'${lF}',this.value)">
+      <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${v} ${T('votes','票')}</span>
+      <button ${v>0?'disabled':''} onclick="APP.cmd('pollEdRemove',${i})" aria-label="${escAttr(T('Remove option ','删除选项 ')+pollLetter(i))}"
+        style="flex:none;width:32px;height:32px;border-radius:8px;border:1px solid var(--border-default);background:var(--surface-raised);color:var(--text-primary);font-size:18px;line-height:1;cursor:pointer;${v>0?'opacity:.4':''}">&times;</button></div>`; }).join('');
+  const winner=(d.options||[]).map((o,i)=>`<option value="${o.id||''}" ${String(d.winner_option_id||'')===String(o.id||'')?'selected':''}>${pollLetter(i)} · ${escAttr(pollOptLabel(o)==='—'?T('(unnamed)','(未命名)'):pollOptLabel(o))}</option>`).join('');
+  const primary=d.status==='draft'
+    ? `<button class="cta" ${busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pollSave','open')">${PE.busy==='save'?T('Saving…','保存中…'):T('Publish','发布')}</button>`
+    : `<button class="cta" ${busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pollSave','')">${PE.busy==='save'?T('Saving…','保存中…'):T('Save changes','保存更改')}</button>`;
+  const secondary=d.status==='draft'
+    ? `<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('pollSave','')">${T('Save draft','保存草稿')}</button>`
+    : d.status==='open'
+    ? `<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('pollAsk',${d.id},'closed')">${state.pollBusy===d.id?T('Saving…','保存中…'):T('Close poll','关闭投票')}</button>`
+    : `<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('pollAsk',${d.id},'open')">${state.pollBusy===d.id?T('Saving…','保存中…'):T('Reopen','重新开启')}</button>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13.5px;color:var(--text-secondary)">${stateLine}</div>
+    ${group(T('The question','问题'),`
+      <div style="display:flex;gap:8px">${[['en','English'],['cn','中文']].map(([k,l])=>`<button class="chip ${PE.lang===k?'on':''}" onclick="APP.cmd('pollEdLang','${k}')"><span>${l}</span></button>`).join('')}</div>
+      <label style="display:block">${lab(T('Question','问题'))}
+        <input value="${escAttr(d[qF]||'')}" style="width:100%" oninput="APP.cmd('pollEdSet','${qF}',this.value)">
+        ${hint(T('What you are asking. Customers read this first, in bold at the top of the card.','你要问的问题。顾客最先读到的就是它,以粗体显示在卡片顶部。'))}
+        <div id="mPollQErr" style="font-size:13px;color:var(--brick-ink);margin-top:6px">${PE.qErr||''}</div></label>
+      <label style="display:block">${lab(T('Small label above it','上方的小标签'))}
+        <input value="${escAttr(d[kF]||'')}" style="width:100%" oninput="APP.cmd('pollEdSet','${kF}',this.value)">
+        ${hint(T('Optional. One or two words saying what kind of question this is — New flavour, Opening hours. Leave it empty and nothing shows.','可不填。用一两个词说明这是什么类型的问题 —— 新口味、营业时间。留空则不显示。'))}</label>
+      <label style="display:block">${lab(T('Line under the question','问题下方的一行字'))}
+        <textarea style="width:100%;min-height:72px;resize:none" oninput="APP.cmd('pollEdSet','${eF}',this.value)">${escAttr(d[eF]||'')}</textarea>
+        ${hint(T('Optional. One line telling customers why you are asking, or what happens to the winner.','可不填。用一行字告诉顾客你为什么问,或者胜出的选项会怎样。'))}</label>`)}
+    ${group(T('Options','选项'),`
+      ${opts}
+      <div><button class="btn2" style="width:100%" ${d.options.length>=8?'disabled':''} onclick="APP.cmd('pollEdAdd')">${T('Add option','添加选项')}</button>
+        ${hint(T('Customers pick exactly one of these. The colour is the dot shown beside it in the mini app. An option that already has votes cannot be removed on its own — clearing the whole poll below is the only way.','顾客只能从中选一项。颜色就是小程序里显示在该选项旁边的圆点。已有票数的选项无法单独删除 —— 只能用下方的清空整个投票。'))}</div>
+      ${isEdit&&hasVotes?`<label style="display:flex;align-items:flex-start;gap:10px">
+          <input type="checkbox" ${PE.reset?'checked':''} onchange="APP.cmd('pollEdReset',this.checked)" style="margin-top:3px">
+          <span style="font-size:14px;color:var(--brick-ink)">${T(`Clear all ${total} votes and rebuild the options`,`清空全部 ${total} 票并重建选项`)}</span></label>
+        ${hint(T('Only when you are rewriting the question entirely. Editing the labels in place keeps every vote.','仅在彻底改写问题时使用。就地修改文字不会影响任何票数。'))}`:''}`,
+      `<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${d.options.length} / 8</span>`)}
+    ${group(T('Rules','规则'),`
+      <label style="display:block">${lab(T('Points for voting','投票奖励积分'))}${num('reward_points',d.reward_points!=null?d.reward_points:5,0,100,T('Points for voting','投票奖励积分'))}
+        ${hint(T('Each customer may vote once on this poll, and that one vote pays these points. Voting on your other polls pays their own points again.','每位顾客在本投票中只能投一次,这一票即可获得这些积分。参与你的其他投票可再次获得该投票的积分。'))}</label>
+      <label style="display:block">${lab(T('Closes','截止时间'))}
+        <input type="datetime-local" value="${escAttr(d.closes_at||'')}" aria-label="${escAttr(T('Closes','截止时间'))}" style="width:100%" oninput="APP.cmd('pollEdSet','closes_at',this.value)">
+        ${hint(T('A date customers see as days left. It closes nothing by itself — the poll keeps taking votes until you press Close poll.','顾客会看到由此算出的剩余天数。它本身不会关闭投票 —— 在你点击“关闭投票”之前,投票一直接受投票。'))}</label>
+      <div>${lab(T('Feature it','设为精选'))}
+        <label style="display:flex;align-items:center;gap:10px"><input type="checkbox" ${d.is_featured?'checked':''} onchange="APP.cmd('pollEdSet','is_featured',this.checked?1:0)"><span style="font-size:15px">${T('Featured','精选')}</span></label>
+        ${hint(T('The featured poll is the big card at the top of Your say. Everything else sits under it in a plain list.','精选投票会以大卡片显示在“你说了算”页面顶部,其余投票以普通列表排在下方。'))}</div>
+      <label style="display:block">${lab(T('Order','排序'))}${num('sort_order',d.sort_order||0,null,null,T('Order','排序'))}
+        ${hint(T('Where this poll sits when several are open at once. Lower numbers come first.','多个投票同时进行时,决定本投票的位置。数值越小越靠前。'))}</label>
+      ${isEdit&&d.status==='closed'?`<label style="display:block">${lab(T('Winner','获胜选项'))}
+        <select style="width:100%" aria-label="${escAttr(T('Winner','获胜选项'))}" onchange="APP.cmd('pollEdSet','winner_option_id',this.value)">
+          <option value="">${T('The most-voted option','票数最高的选项')}</option>${winner}</select>
+        ${hint(T('The option customers see marked as the winner under past results. Leave it alone and whichever option took the most votes is marked.','顾客在“往期结果”中看到的获胜选项。留空则票数最高的选项自动标为获胜。'))}</label>`:''}`)}
+    ${group(T('What customers see as the count','顾客看到的票数'),`
+      <label style="display:block">${lab(T('Show at least','至少显示'))}${num('display_min_total',d.display_min_total||0,0,100000,T('Show at least','至少显示'))}
+        ${hint(T('Customers see at least this many votes. If real turnout is lower, every option is multiplied by the same number — the leader and every percentage stay exactly as they are, only the size of the numbers changes. 0 shows the real count. This page always shows you the real count.','顾客至少会看到这么多票。若真实票数低于此值,所有选项按同一倍数放大 —— 领先项与每个百分比完全不变,变的只是数字的大小。填 0 即显示真实票数。本页始终向你显示真实票数。'))}</label>
+      <div id="mPollBoost" style="font-size:13px;color:var(--text-secondary)">${pollBoostLine(d)}</div>`)}
+    ${PE.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${PE.err}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${primary}
+      ${secondary}
+      ${isEdit?`<button class="btn2" style="width:100%;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('pollDelete')">${PE.busy==='delete'?T('Working…','处理中…'):T('Delete','删除')}</button>`:''}</div>
+  </div>`;
 }
 
 /* ==========================================================================
@@ -8610,14 +8952,207 @@ function lbValue(v,metric){
   if(metric==='orders_count') return n.toLocaleString()+' '+T(n===1?'order':'orders','单');
   return n.toLocaleString()+' '+T('pts','分');
 }
+/* ==========================================================================
+   §325 M7 — THE LEADERBOARD'S SETTINGS, ON THE PHONE (desktop: LB_CARD)
+   --------------------------------------------------------------------------
+   Metric, period, how many, how names show, the headline, the rewards, the
+   placeholder board and who is hidden were "set on desktop". They are one
+   §279 card ('leaderboard') here, as there: PUT /leaderboard/config
+   ?history=leaderboard, a full replace with every field the desktop's
+   lbReadForm sends, in its shapes (top_n a number, hide_names a list split on
+   commas). The visibility switch saves like any other field — the desktop's
+   does. The placeholder members are the desktop's generator, names and curve.
+   The card starts once the stored board has arrived; leaderboard:edit, the key
+   the server gates the write on and the screen opens on.
+   ========================================================================== */
+const LB_FIELDS=['enabled','title_en','title_cn','kicker_en','kicker_cn','subhead_en','subhead_cn',
+  'metric','period','top_n','reveal_mode',
+  'reward_top1_en','reward_top1_cn','reward_top3_en','reward_top3_cn','reward_top10_en','reward_top10_cn'];
+let LB_D=null, LB_ERR=null, lbCfgTried=false;
+// The stored board, as the desktop's form holds it (lbApplyConfigToForm).
+function lbFrom(cfg){
+  const c=cfg||{}, d={};
+  LB_FIELDS.forEach(f=>{ d[f]=f==='enabled'?!!c[f]:(c[f]!=null?String(c[f]):''); });
+  d.seed_enabled=!!c.seed_enabled;
+  d.seed_entries=Array.isArray(c.seed_entries)?c.seed_entries.map(s=>Object.assign({},s)):[];
+  d.hide_names=Array.isArray(c.hide_names)?c.hide_names.join(', '):String(c.hide_names||'');
+  return d;
+}
+// What the desktop sends (lbReadForm), field for field.
+function lbPayload(){
+  const out={};
+  LB_FIELDS.forEach(f=>{ out[f]=f==='enabled'?!!LB_D.enabled : f==='top_n'?(parseInt(LB_D.top_n,10)||20) : LB_D[f]; });
+  out.seed_enabled=!!LB_D.seed_enabled;
+  out.seed_entries=LB_D.seed_entries;
+  out.hide_names=String(LB_D.hide_names||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean);
+  return out;
+}
+/* After a save the board underneath is read again (the desktop's `after`),
+   and redrawn only when no sheet is open — a repaint mid-sentence would take
+   the keyboard away. Closing the sheet draws it. */
+function lbPreviewRefresh(){
+  return api('/leaderboard/preview').then(d=>{ state.lb=d||{}; state.lbErr=null; if(!state.ask) render(); }).catch(()=>{});
+}
+const lbCard=()=>cfgCard('leaderboard',{
+  read:lbPayload,
+  apply:b=>{ LB_D=lbFrom(b); },
+  fromSnapshot:s=>s['leaderboard.config']||{},
+  put:(b,note)=>apiWrite('/leaderboard/config'+cfgHistQ('leaderboard',note),b,'PUT'),
+  after:()=>lbPreviewRefresh(),
+  words:{'leaderboard.config':['Leaderboard','排行榜']},
+});
+function loadLbCfg(){
+  if(lbCfgTried) return;
+  lbCfgTried=true;
+  api('/leaderboard/config').then(d=>{
+    LB_D=lbFrom(d); LB_ERR=null;
+    if(mCan('leaderboard:edit')) cfgCardStart(lbCard());
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    LB_ERR=E('Failed to load leaderboard config','加载排行榜配置失败'); render(); });
+}
+const lbLive=()=>{ const c=CFG_CARD.leaderboard; return LB_D&&c&&c.auto&&mCan('leaderboard:edit')?c:null; };
+reg('lbToggle', k=>{
+  const c=lbLive(); if(!c||(k!=='enabled'&&k!=='seed_enabled')) return;
+  LB_D[k]=!LB_D[k]; c.auto.touch(); render();
+});
+/* The desktop's cards, one live sheet each. A label is the desktop's word
+   plus the language it is typed in, rather than a new pair per field. */
+const lbLang=(w,l)=>T(...w)+' · '+l;
+const LB_SHEETS={
+  copy:{title:['Headline copy','标题文案'],
+    body:['Shown on the leaderboard hero. Keep the kicker short — it\'s the small all-caps line above the title.','显示在排行榜顶部;引题简短为佳 — 标题上方的大写小字行。'],
+    fields:()=>[
+      {id:'kicker_en',label:lbLang(['Kicker','引题'],'EN'),placeholder:'ROOTS CLUB · LEADERBOARD'},
+      {id:'kicker_cn',label:lbLang(['Kicker','引题'],'中文'),placeholder:'ROOTS 会员 · 排行榜'},
+      {id:'title_en',label:lbLang(['Title','标题'],'EN'),placeholder:'Top growers'},
+      {id:'title_cn',label:lbLang(['Title','标题'],'中文'),placeholder:'排行榜'},
+      {id:'subhead_en',label:lbLang(['Subhead','副标题'],'EN'),multiline:true,placeholder:'The members who keep our garden growing.'},
+      {id:'subhead_cn',label:lbLang(['Subhead','副标题'],'中文'),multiline:true,placeholder:'让花园持续生长的会员们。'}]},
+  rank:{title:['Ranking rules','排序规则'],
+    body:['What members are ranked by, and over what window.','排名所用的指标及统计区间。'],
+    fields:()=>[
+      {id:'metric',label:T('Metric','指标'),choices:[['lifetime_spend',T('Lifetime spend (¥)','累计消费')],['points_balance',T('Points balance','积分余额')],['orders_count',T('Paid orders count','付款订单数')]]},
+      {id:'period',label:T('Period','周期'),choices:[['all',T('All time','全部时间')],['year',T('Last 12 months','近 12 个月')],['month',T('Last 30 days','近 30 天')],['week',T('Last 7 days','近 7 天')]]},
+      {id:'top_n',label:T('Show top N','显示前 N 名'),type:'number',commit:true},
+      {id:'reveal_mode',label:T('Reveal nicknames','显示昵称'),choices:[['first_char',T('First character + asterisks (recommended)','首字 + 星号(推荐)')],['full',T('Full nickname + avatar','完整昵称 + 头像')],['masked',T('Fully masked (**)','完全隐藏(**)')]]}]},
+  rewards:{title:['Rewards (optional)','奖励(可选)'],
+    body:['Plain-text reward callouts shown under the list. Leave blank to hide.','列表下方的奖励说明纯文本;留空则隐藏。'],
+    fields:()=>[
+      {id:'reward_top1_en',label:lbLang(['Top 1 reward','第 1 名奖励'],'EN'),placeholder:money0(CUR,500)+' store credit + harvest box'},
+      {id:'reward_top1_cn',label:lbLang(['Top 1 reward','第 1 名奖励'],'中文'),placeholder:money0(CUR,500)+' 储值 + 丰收礼盒'},
+      {id:'reward_top3_en',label:lbLang(['Top 3 reward','前 3 名奖励'],'EN'),placeholder:money0(CUR,200)+' store credit'},
+      {id:'reward_top3_cn',label:lbLang(['Top 3 reward','前 3 名奖励'],'中文'),placeholder:money0(CUR,200)+' 储值'},
+      {id:'reward_top10_en',label:lbLang(['Top 10 reward','前 10 名奖励'],'EN'),placeholder:'500 bonus points'},
+      {id:'reward_top10_cn',label:lbLang(['Top 10 reward','前 10 名奖励'],'中文'),placeholder:'500 积分奖励'}]},
+  hide:{title:['Hide these real members','隐藏指定真实会员'],
+    body:['Comma-separated nicknames (e.g. staff or test accounts). They stay active everywhere else — just hidden from the board.','逗号分隔的昵称(如员工或测试账号);仅从榜单隐藏,其他功能不受影响。'],
+    fields:()=>[{id:'hide_names',label:T('Hide these real members','隐藏指定真实会员'),placeholder:'mimi, asher, steve'}]},
+};
+reg('lbEdit', k=>{
+  const c=lbLive(), s=LB_SHEETS[k]; if(!c||!s) return;
+  cfgSheet(c, T(...s.title), escAttr(T(...s.body)), s.fields(), f=>LB_D[f], (f,v)=>{ LB_D[f]=v; });
+});
+/* The placeholder board — the desktop's generator (lbGenerateSeed): a
+   believable descending spend from the top value down, 70% Western names and
+   30% Chinese, shuffled, strictly decreasing. Generating switches it on. */
+const LB_SEED_NAMES_WEST=['Emma','Oliver','Sophie','Liam','Chloe','Lucas','Grace','Ethan',
+  'Ava','Noah','Isla','Max','Ruby','Leo','Hazel','Theo','Nina',
+  'Ivy','Felix','Daisy','Owen','Lily','Jasper','Elena','Marcus',
+  'Clara','Hugo','Stella','Adrian','Naomi','Victor','Freya'];
+const LB_SEED_NAMES_CN=['小确幸','清晨慢跑','一颗西兰花','半糖主义','林深时见鹿','番茄炒蛋',
+  '海盐柠檬','江南细雨','木棉花','一勺蜂蜜','南山以南','慢慢来呀',
+  '小满','晚风温柔','橙子味的猫','麦田守望者'];
+const LB_SEED_WEST_RATIO=0.7;
+function lbSeedTier(frac){ return frac<0.10?'tree':frac<0.35?'root':frac<0.70?'sprout':'seed'; }
+function lbShuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function lbSeedEntries(maxRaw,countRaw){
+  const max=Math.max(50,parseInt(maxRaw,10)||3000);
+  const count=Math.max(3,Math.min(50,parseInt(countRaw,10)||18));
+  const westN=Math.round(count*LB_SEED_WEST_RATIO);
+  const names=lbShuffle(lbShuffle(LB_SEED_NAMES_WEST).slice(0,westN).concat(lbShuffle(LB_SEED_NAMES_CN).slice(0,count-westN)));
+  const entries=[];
+  for(let i=0;i<count;i++){
+    const frac=count>1?i/(count-1):0;
+    let v=max*Math.pow(1-frac,1.35);
+    v=v*(1+(Math.random()-0.5)*0.08);
+    v=Math.max(max*0.04,v);
+    entries.push({name:names[i]||('Member '+(i+1)), value:Math.round(v/5)*5, tier_key:lbSeedTier(frac)});
+  }
+  entries[0].value=max;
+  for(let i=1;i<entries.length;i++){ if(entries[i].value>=entries[i-1].value) entries[i].value=Math.max(20,entries[i-1].value-5); }
+  return entries;
+}
+reg('lbSeedAsk', ()=>{
+  const c=lbLive(); if(!c) return;
+  state.ask={title:T('Generate placeholder members','生成占位会员'),
+    body:escAttr(T('Fill the board with realistic-looking members so it doesn\'t sit empty before real activity picks up. Real customers blend in and outrank placeholders as they spend — switch this off once the board fills on its own.',
+      '在真实消费产生前,用拟真会员填充榜单,避免空榜。真实顾客会自动混入并在消费后超越占位会员;榜单自然填满后请关闭。')),
+    fields:[{id:'max',label:T('Top spender (¥)','榜首消费'),type:'number',value:'3000'},
+            {id:'count',label:T('How many members','会员数量'),type:'number',value:'18'}],
+    confirmLabel:T('Generate placeholder members','生成占位会员'),
+    run:vals=>{ const c2=lbLive(); if(!c2) return;
+      LB_D.seed_entries=lbSeedEntries(vals.max,vals.count);
+      LB_D.seed_enabled=true;              // generating implies "use it"
+      c2.auto.touch();
+      showToast(T('Placeholder members generated','已生成占位会员'));
+      render(); }};
+  state.askErr=null;
+  render();
+});
+function lbSeedSummary(){
+  const s=LB_D.seed_entries;
+  if(!s.length) return T('No placeholder members yet.','尚未生成占位会员。');
+  const top=money0(CUR,s[0].value), bottom=money0(CUR,s[s.length-1].value);
+  return T(s.length+' members · '+top+' → '+bottom, s.length+' 位会员 · '+top+' → '+bottom);
+}
+function lbSettings(){
+  if(LB_ERR) return `<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${LB_ERR}</div>`;
+  if(!LB_D) return `<div style="padding:16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const c=lbLive();
+  if(!c) return '';
+  const pick=(en,cn)=>LANG==='en'?(LB_D[en]||LB_D[cn]):(LB_D[cn]||LB_D[en]);
+  const sec=(k,summary,extra)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+    <div class="eyebrow">${T(...LB_SHEETS[k].title)}</div>
+    ${summary?`<div style="font-size:14.5px;line-height:1.5">${summary}</div>`:`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(...LB_SHEETS[k].body)}</div>`}
+    ${extra||''}
+    <button class="btn2" style="width:100%;margin-top:4px" onclick="APP.cmd('lbEdit','${k}')">${T('Edit','编辑')}</button></div>`;
+  const choice=(k,v)=>{ const f=LB_SHEETS.rank.fields().find(x=>x.id===k); const ch=f&&f.choices.find(x=>x[0]===v); return ch?ch[1]:escAttr(v); };
+  const rewards=[['reward_top1_en','reward_top1_cn',['Top 1 reward','第 1 名奖励']],['reward_top3_en','reward_top3_cn',['Top 3 reward','前 3 名奖励']],['reward_top10_en','reward_top10_cn',['Top 10 reward','前 10 名奖励']]]
+    .filter(([e,z])=>pick(e,z)).map(([e,z,w])=>T(...w)+': '+escAttr(pick(e,z))).join('<br>');
+  const hidden=String(LB_D.hide_names||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean);
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Visibility','可见度')}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${T('When off, the mini-app menu entry stays hidden and the API returns 404.','关闭后,小程序入口隐藏,接口返回 404。')}</span></span>
+        ${toggle(!!LB_D.enabled,"APP.cmd('lbToggle','enabled')")}</div></div>
+    ${sec('copy',[pick('kicker_en','kicker_cn'),pick('title_en','title_cn')].filter(Boolean).map(escAttr).join(' · '))}
+    ${sec('rank',[choice('metric',LB_D.metric),choice('period',LB_D.period),T('Show top N','显示前 N 名').replace('N',String(parseInt(LB_D.top_n,10)||20)),choice('reveal_mode',LB_D.reveal_mode)].join(' · '),
+      LB_D.metric==='points_balance'?`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Note: points-balance metric is point-in-time. Period selector is ignored for this metric.','说明:积分余额为实时快照指标,该指标会忽略周期选择。')}</div>`:'')}
+    ${sec('rewards',rewards)}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${T('Placeholder board (temporary)','占位榜单(临时)')}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Show placeholder members','显示占位会员')}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${T('Blends the generated members below into the live board.','将下方生成的会员混入实时榜单。')}</span></span>
+        ${toggle(!!LB_D.seed_enabled,"APP.cmd('lbToggle','seed_enabled')")}</div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${lbSeedSummary()}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('lbSeedAsk')">${T('Generate placeholder members','生成占位会员')}</button>
+      <div class="sep"></div>
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Hide these real members','隐藏指定真实会员')}</span>
+      <div style="font-size:14.5px">${hidden.length?escAttr(hidden.join(', ')):'—'}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('lbEdit','hide')">${T('Edit','编辑')}</button></div>
+    ${cfgFoot(c)}`;
+}
 function screenLeaderboard(){
-  loadLeaderboard();
+  loadLeaderboard(); loadLbCfg();
   if(state.lbErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.lbErr}</span></div></div>`;
   if(!state.lb) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  const cfg=state.lb.config||{};
+  // The head reads the card's draft once it is there, so a change shows at once.
+  const cfg=LB_D?lbPayload():(state.lb.config||{});
   // The preview is what STAFF see. reveal_mode is what CUSTOMERS see, so the
   // masked list is the one on screen and the note says which it is.
   const rows=state.lb.revealed_entries||state.lb.raw_entries||[];
@@ -8640,7 +9175,7 @@ function screenLeaderboard(){
         <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(e.name||e.nickname||'—')}</span>
         <span class="num" style="font-size:13.5px;color:var(--text-secondary);flex:none">${lbValue(e.value,metric)}</span></div>`).join('')}</div>`
       :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nobody is on the board yet.','排行榜还没有人。')}</div>`}
-    ${noteBar(T('Metric, period, rewards and who is hidden are set on desktop.','排名依据、周期、奖励与隐藏名单在电脑端设置。'))}</div>`;
+    ${lbSettings()}</div>`;
 }
 
 /* ==========================================================================
@@ -14566,7 +15101,14 @@ const SUBS={
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
   wallet:{title:['Top-up','充值'],status:()=>statusTopups(),render:()=>screenTopups()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
-  voting:{title:['Voting','投票'],render:()=>screenVoting()},
+  voting:{title:['Voting','投票'],
+    cta:()=>mCan('voting:edit')?`<button class="cta inhead" onclick="APP.cmd('pollEdit')">${T('New poll','新建投票')}</button>`:'',
+    render:()=>screenVoting()},
+  /* §325 M7 — the desktop's poll editor, a screen of its own. */
+  polledit:{title:['New poll','新建投票'],
+    titleOf:()=>PE?(PE.d.id?escAttr(pollQ(PE.d)):T('New poll','新建投票')):T('Voting','投票'),
+    backLabel:()=>T('Voting','投票'),
+    render:()=>screenPollEdit()},
   /* §325 — the door to the phone editor. It LEAVES this app (the 'leave'
      command, as Quick Stock's row once did); ?from=m gives the editor a Back. */
   editor:{title:['Editor','编辑器'],status:()=>statusEditor(),render:()=>screenEditor(),
@@ -29036,7 +29578,7 @@ function sheetAsk(){
                `<option value="${escAttr(v2)}"${String(val(f)==null?'':val(f))===String(v2)?' selected':''}>${lab}</option>`).join('')}</select>`
            : f.multiline
            ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none" ${wire(f)}>${val(f)!=null?escAttr(val(f)):''}</textarea>`
-           : `<div style="display:flex;gap:8px;align-items:center"><input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${val(f)!=null?escAttr(val(f)):''}" style="flex:1;min-width:0" ${wire(f)}
+           : `<div style="display:flex;gap:8px;align-items:center"><input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.max?`maxlength="${f.max}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${val(f)!=null?escAttr(val(f)):''}" style="flex:1;min-width:0" ${wire(f)}
                     onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();${L?'':"APP.cmd('askRun','')"}}">${
                L&&f.ownSave?`<button class="btn2" id="ask-own-${f.id}" style="flex:none;${L.ownDirty(f.id)?'':'display:none'}" onclick="APP.cmd('askLiveOwnSave','${f.id}')">${T('Save','保存')}</button>`:''}</div>`}
        </label>`).join('')}
@@ -33114,7 +33656,7 @@ const ROUTE_CAP={
      screen it lives inside rather than left open on a screen that is not. */
   bcnew:'broadcasts:send', bcauto:'broadcasts:send',
   // More → Loyalty & Wallet.
-  membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit',
+  membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit', polledit:'voting:edit',
   // More → Content.
   editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view', snippets:'content:view',
   // Settings, and the screens reached from inside it or from the Products strip.
@@ -34414,7 +34956,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false);
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
@@ -34612,6 +35154,8 @@ function mUnsavedWork(){
     if(cfgBusy()) return true;
     /* A picture's details likewise (§325 M5). */
     if(ML.auto&&ML.auto.busy()) return true;
+    /* A poll typed and not yet saved (§325 M7) — held in memory only. */
+    if(PE&&PE.dirty&&(state.stack||[]).some(f=>f&&f.route==='polledit')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;

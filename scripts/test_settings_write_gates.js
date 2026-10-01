@@ -355,7 +355,10 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const SITE = /apiWrite\(('\/config[^']*'[^,]*|cfgPath),/g;
       const sites = [];
       for (let mm; (mm = SITE.exec(M));) sites.push(mm.index);
-      ok(!/apiWrite\((?!'\/config|cfgPath)[^,]*config/.test(M), 'the phone writes /config through no other path');
+      /* §325 M7 — the voting and leaderboard settings are not /config keys:
+         each has a route of its own (gated voting:edit / leaderboard:edit in
+         section 1), and the phone writes them there, as the desktop does. */
+      ok(!/apiWrite\((?!'\/config|cfgPath|'\/(voting|leaderboard)\/config')[^,]*config/.test(M), 'the phone writes /config through no other path');
       is(who(/retail-admin\/config['"`?]/), [
         'public/cms-mobile.html', 'public/cms.html', 'public/product-editor.html', 'public/retail-admin.html',
         'public/retail-admin/01-core.js', 'public/retail-admin/05-marketing.js', 'public/retail-admin/06-delivery.js',
@@ -377,7 +380,12 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const CARD_SITE = M.indexOf("apiWrite('/config?history='+encodeURIComponent(c.card)");
       ok(CARD_SITE !== -1 && sites.includes(CARD_SITE), 'the content cards write through the one cfgCard site');
       const cards = (M.match(/cfgCard\('([a-z.]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z.]+)'/)[1]).sort();
-      is(cards, ['about', 'copy.snippets', 'faq', 'legal'], 'the phone\'s content cards: about, copy, faq, legal');
+      is(cards, ['about', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'voting'], 'the phone\'s cards: about, copy, faq, legal on /config; leaderboard and voting on their own routes');
+      for (const [card, url] of [['voting', '/voting/config'], ['leaderboard', '/leaderboard/config']]) {
+        const at = M.indexOf("cfgCard('" + card + "',{");
+        const own = M.slice(at, M.indexOf('\n});', at));
+        ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
+      }
       is(famSites.filter((i) => i !== CARD_SITE).map((i) => FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f)).join('|')).sort(),
         FAMS, 'the phone writes four families, one per write site, each asserted in section 2');
       /* §325 O4 — the phone's Delivery settings write through one helper
@@ -395,7 +403,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         'fees.pickupPackingFee', 'notice.preorder', 'pickup.leadMinutes', 'pickup.window'], 'the phone\'s Delivery settings write these fourteen keys (§325 O4)');
       for (const k of dlvKeys) ok(list(route('delivery')).every((c) => has(configKeyCap(k), c)), 'phone Delivery may write ' + k);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
-      is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
+      is(who(/retail-admin\/(voting|leaderboard)\/config|apiWrite\('\/(voting|leaderboard)\/config/), ['public/m.html', 'public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs and the phone\'s two screens (§325 M7)');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
       is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs write, the others read');
       ok(!/apiWrite\('\/affiliate\/(settings|referrals)/.test(M), '…the phone only reads them');
@@ -409,6 +417,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(tab('voting'), 'voting:edit', 'desktop Voting');
     is(route('voting'), 'voting:edit', 'phone Voting');
     is(tab('leaderboard'), 'leaderboard:edit', 'desktop Leaderboard');
+    is(route('leaderboard'), 'leaderboard:edit', 'phone Leaderboard');
+    is(route('polledit'), 'voting:edit', 'phone poll editor');
     is(tab('topup'), 'topup:edit', 'desktop Top-up');
     is(route('wallet'), 'topup:edit', 'phone Wallet');
     is(tab('affiliate'), 'affiliate:view', 'desktop Affiliate');
