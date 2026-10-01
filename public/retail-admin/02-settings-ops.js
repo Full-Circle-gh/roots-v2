@@ -460,7 +460,18 @@ async function _saveAlipayManual() {
    ══════════════════════════════════════════════════════════════════════════ */
 let _ocState = null;
 let _ocBusy = false;
-
+/* §412.4 — what the last "Open everything" left closed, said under the master
+   button until the next write: the server's `stayedClosed`, each shop with the
+   channels closed there with that shop's own switch. Those stay closed by
+   rule; the line names them so nobody has to hunt for them on the grid. */
+let _ocStayed = [];
+function ocStayedLine(list) {
+  const rows = (Array.isArray(list) ? list : []).filter((r) => r && Array.isArray(r.channels) && r.channels.length);
+  if (!rows.length) return '';
+  const shops = rows.map((r) => cuT(r.nameEn || r.name || r.storeCode, r.nameCn || r.name || r.storeCode) + ': '
+    + r.channels.map(csName).join(cuT(', ', '、')));
+  return cuT('Still closed — closed at the shop with its own switch: ', '仍关闭 — 在门店单独关闭: ') + shops.join(cuT('; ', ';'));
+}
 async function loadOpenClose() {
   const box = document.getElementById('oc-body');
   if (!box) return;
@@ -529,6 +540,7 @@ function paintOpenClose() {
       ${btn(master !== 'closed', master === 'closed' ? cuT('Open everything', '全部营业') : cuT('Close everything', '全部关闭'),
             `ocMaster(${master === 'closed' ? 'true' : 'false'})`, 'settings:edit')}
     </div>
+    ${ocStayedLine(_ocStayed) ? `<div id="oc-stayed" style="margin:0 0 10px;font-size:12.5px;line-height:1.5;color:var(--amber-ink,#7a5a12)">${escapeHtml(ocStayedLine(_ocStayed))}</div>` : ''}
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)">
       <div style="min-width:0">
         <div style="color:var(--text-1)">${escapeHtml(cuT('Online store', '线上商城'))}</div>
@@ -544,11 +556,12 @@ function paintOpenClose() {
 // The three writes. Each disables the panel while it runs, because two taps on
 // "close everything" while the first is in flight is how a merchant ends up
 // reopening a shop they meant to shut.
-async function _ocWrite(path, body, okEn, okCn) {
+async function _ocWrite(path, body, okEn, okCn, after) {
   if (_ocBusy) return;
-  _ocBusy = true; paintOpenClose();
+  _ocBusy = true; _ocStayed = []; paintOpenClose();
   try {
-    await api(path, { method: 'POST', body });
+    const r = await api(path, { method: 'POST', body });
+    if (after) after(r);
     toast(cuT(okEn, okCn), 'ok');
   } catch (e) {
     toast(cuT('Could not change the shop status', '修改营业状态失败') + ': ' + (e.message || ''), 'err');
@@ -558,7 +571,8 @@ async function _ocWrite(path, body, okEn, okCn) {
 }
 window.ocMaster = (open) => _ocWrite('/api/retail-admin/store-status/master', { open },
   open ? 'Opening every channel' : 'Closing every channel — marketplaces follow within about a minute',
-  open ? '正在开启全部渠道' : '正在关闭全部渠道 — 外卖平台约一分钟内跟随');
+  open ? '正在开启全部渠道' : '正在关闭全部渠道 — 外卖平台约一分钟内跟随',
+  (r) => { _ocStayed = open && r && Array.isArray(r.stayedClosed) ? r.stayedClosed : []; });   // §412.4
 window.ocSetOnline = (open) => _ocWrite('/api/retail-admin/store-status/online', { open },
   open ? 'Online store is open' : 'Online store is closed',
   open ? '线上商城已开启' : '线上商城已关闭');
