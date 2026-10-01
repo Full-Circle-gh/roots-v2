@@ -884,6 +884,8 @@ const state = {
      same shape, and their vocabulary is the server's (`tag_vocabulary`) so the
      row offers groups somebody actually used rather than a list to remember. */
   custSeg:'all', custTier:[], custChan:[], custTags:[], custTagVocab:null,
+  /* §325 O11 — the roster's found-but-filtered count, and the statement sheet. */
+  custHidden:null, stmt:null,
   custQ:'', customers:null, custMeta:null, custLoaded:false,
   custTotal:null, custMore:false, custSort:'last_seen', custDir:null,
   custId:null, custDetail:null, prodView:'catalogue',
@@ -945,7 +947,7 @@ const state = {
   /* §325 O5 — the zones screen: search, the list's read, the region catalogue,
      a row switch or refusal, and the zone sheet's draft (edit / add / copy, and
      its copy-to-others panel). */
-  zn:{q:'', loading:false, loadErr:null, regions:null, regionsBusy:false, busy:null, err:null, edit:null},
+  zn:{q:'', loading:false, readErr:null, regions:null, regionsBusy:false, busy:null, err:null, edit:null},
   /* §325 O9 — the Fresh batches sheet's draft, and the delivery set-up wizard. */
   fb:null, dwiz:null,
   /* THREE KEYS THAT WORKED WITHOUT BEING DECLARED, WHICH IS THE PROBLEM. §181
@@ -1474,6 +1476,9 @@ const state = {
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
   ordViews:{open:false, rows:undefined, loading:false, busy:null, err:null},
+  /* §325 O10 — the list's selection and its bulk move, the bulk-tracking sheet,
+     and the drafts sheet with the last count read. */
+  ordSel:null, ordBulkBusy:false, btrk:null, drafts:null, draftCount:null,
   liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
@@ -2309,6 +2314,179 @@ reg('ordExport', ()=>{
   const s=ordersFilterParams().toString();
   location.href=API+'/orders/export.csv'+(s?'?'+s:'');
 });
+/* ── §325 O10 — DESK WORK ON THE PHONE ─────────────────────────────────────
+   Four of the desktop Orders screen's desk tools (04-orders.js):
+     · SELECT AND MOVE (ordRenderBulkBar / ordBulkStatus): tick orders, move the
+       ones that can move one step forward — one PATCH …/status per order, the
+       call the sheet makes, so the server's transition guard applies to each.
+       With one addition the desktop lacks (parity doc §14): "Mark dispatched"
+       names every ticked order the early-dispatch rule would stop
+       (earlyShipFacts), in the single-order sheet's own words, and asks the
+       single-order question before anything is sent.
+     · BULK ATTACH TRACKING (openBulkTracking / submitBulkTracking): paste
+       "order# waybill# [carrier]" lines, POST /orders/bulk-tracking. Offered
+       where the desktop offers it — only while Settings → Delivery's "Bulk
+       attach tracking" switch is on.
+     · DRAFTS (ordShowDrafts … ordNewSaveDraft): an unfinished New order saved
+       and reopened, in the desktop's own payload so a draft started on either
+       opens on the other.
+     · THE BY-PHONE WARNING (ordNewPhoneBlur): a typed phone that already
+       belongs to a customer, to a blocked one, or to several, said before
+       Create — the server files the order under that record either way.
+   Every write is under /orders or /order-drafts, so orders:edit
+   (lib/cap-routes.js); every control is drawn for it. */
+const ORD_BULK_FROM={preparing:['paid','awaiting_restock'], dispatched:['preparing','paid'], delivered:['dispatched']};
+const ORD_BULK_STEP={preparing:['Start preparing','开始备货'], dispatched:['Mark dispatched','标记发货'], delivered:['Mark delivered','标记送达']};
+const ordSelCan=()=>mCan('orders:edit');
+const ordSelectable=o=>!!o&&!o.viewOnly&&o._id!=null;
+reg('ordSelOn', ()=>{ if(!ordSelCan()) return; state.ordSel={ids:[]}; render(); });
+reg('ordSelOff', ()=>{ state.ordSel=null; render(); });
+reg('ordSelT', id=>{
+  const s=state.ordSel; if(!s) return;
+  const o=ordersFiltered().find(x=>String(x.id)===String(id)); if(!ordSelectable(o)) return;
+  s.ids=s.ids.includes(o.id)?s.ids.filter(x=>x!==o.id):s.ids.concat([o.id]); render();
+});
+reg('ordSelAll', on=>{
+  const s=state.ordSel; if(!s) return;
+  const vis=ordersFiltered().filter(ordSelectable).map(o=>o.id);
+  s.ids=on?[...new Set(s.ids.concat(vis))]:s.ids.filter(x=>!vis.includes(x)); render();
+});
+reg('ordSelClear', ()=>{ if(state.ordSel){ state.ordSel.ids=[]; render(); } });
+function ordPicked(){ const s=state.ordSel; if(!s) return []; return ordersFiltered().filter(o=>s.ids.includes(o.id)&&ordSelectable(o)); }
+/* The bar: how many are ticked, the page's all/none, and the three steps —
+   each greyed when it can move none of them, and counting when it can move
+   only some. */
+function ordBulkBar(){
+  const s=state.ordSel; if(!s) return '';
+  const picked=ordPicked(), n=picked.length;
+  const vis=ordersFiltered().filter(ordSelectable), allVis=vis.length>0&&vis.every(o=>s.ids.includes(o.id));
+  const busy=!!state.ordBulkBusy;
+  const step=to=>{ const k=picked.filter(o=>(ORD_BULK_FROM[to]||[]).includes(o.raw)).length;
+    return `<button class="btn2" style="width:auto;padding:0 12px;min-height:38px;font-size:13.5px"${k&&!busy?'':' disabled'} onclick="APP.cmd('ordBulk','${to}')">${T(...ORD_BULK_STEP[to])}${k&&k!==n?` <span class="num" style="color:var(--text-secondary)">${k}</span>`:''}</button>`; };
+  const tool='background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)';
+  return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <span style="font-size:14.5px;font-weight:500">${T(n+' selected','已选 '+n+' 单')}</span>
+      <button style="${tool}" onclick="APP.cmd('ordSelAll',${allVis?'false':'true'})">${allVis?T('Clear page','清空本页'):T('Select all '+vis.length,'全选 '+vis.length)}</button>
+      ${n?`<button style="${tool}" onclick="APP.cmd('ordSelClear')">${T('Clear','清除')}</button>`:''}
+      <button style="${tool};margin-left:auto;color:var(--text-primary);font-weight:500" onclick="APP.cmd('ordSelOff')">${T('Done','完成')}</button></div>
+    ${n?`<div style="display:flex;gap:8px;flex-wrap:wrap">${step('preparing')}${step('dispatched')}${step('delivered')}</div>`:''}
+    ${busy?`<div style="font-size:13px;color:var(--text-secondary)">${T('Working…','处理中…')}</div>`:''}
+  </div>`;
+}
+reg('ordBulk', to=>{
+  if(!mCan('orders:edit')||state.ordBulkBusy) return;   // §325: every /orders write is orders:edit on the server
+  const label=ORD_BULK_STEP[to]; if(!label) return;
+  const picked=ordPicked(), can=picked.filter(o=>(ORD_BULK_FROM[to]||[]).includes(o.raw));
+  if(!can.length) return;
+  const lab=T(...label), skipped=picked.length-can.length;
+  /* Both numbers when they differ — "Move 20 orders" when 14 can move is the
+     quiet arithmetic that stops an operator trusting the screen. */
+  let body=skipped?T(skipped+' of the '+picked.length+' you selected '+(skipped===1?'is':'are')+' not at a step this can move from, and will be left alone.',
+                     '所选 '+picked.length+' 单中有 '+skipped+' 单当前状态无法进入此步骤,将保持不变。'):'';
+  const early=to==='dispatched'?can.filter(o=>o.earlyShip):[];
+  if(early.length){
+    body+=(body?'<br><br>':'')+early.map(o=>{ const e=o.earlyShip;
+      return escAttr(o.id)+' · '+(e.kind==='fresh'?T('Made fresh later','稍后制作')+' · '+escAttr(e.day)
+        :T('Delivery requested later','要求稍后送达')+' · '+escAttr(e.label||e.day)); }).join('<br>');
+  }
+  state.ask={title:T(lab+' — '+can.length+' order'+(can.length===1?'':'s')+'?',lab+' — '+can.length+' 单?'), body,
+    confirmLabel:early.length?T('Mark dispatched anyway','仍要标记已发货'):lab,
+    run:()=>ordBulkRun(to,can)};
+  render();
+});
+async function ordBulkRun(to,can){
+  if(!mCan('orders:edit')) return;
+  state.ordBulkBusy=true; render();
+  let done=0; const failed=[];
+  for(const o of can){
+    try{ await apiWrite('/orders/'+o._id+'/status',{status:to},'PATCH'); done++; }
+    catch(e){
+      if(String(e.message)==='auth'){ state.ordBulkBusy=false; return; }
+      failed.push(escAttr(o.id)+' — '+escAttr(String(orderErrorText(e))));
+    }
+  }
+  state.ordBulkBusy=false; state.ordSel=null;
+  /* A failure names the orders, not just a count. */
+  if(failed.length){
+    state.ask={title:T(done+' moved, '+failed.length+' could not',done+' 单已处理,'+failed.length+' 单失败'),
+      body:failed.slice(0,10).join('<br>')+(failed.length>10?'<br>'+T('…and '+(failed.length-10)+' more','…还有 '+(failed.length-10)+' 单'):''),
+      options:[{key:'ok',label:T('OK','好')}]};
+  } else showToast(T('Moved '+done+' ✓','已处理 '+done+' 单 ✓'));
+  render();
+  loadOrdersPage();
+}
+/* ── bulk attach tracking ── */
+const btrkOn=()=>mCan('orders:edit')&&!!cfgGet('delivery.bulkTracking',false);
+/* The desktop's parseBulkTrackingText, verbatim in behaviour: one entry per
+   line, order# then waybill#, an optional third value overriding the carrier,
+   comma / tab / space / semicolon between. */
+function btrkParse(text,dflt){
+  const out=[];
+  for(const raw of String(text||'').split(/\r?\n/)){
+    const line=raw.trim(); if(!line) continue;
+    const parts=line.split(/[\s,;]+/).filter(Boolean); if(parts.length<2) continue;
+    out.push({order_no:parts[0], tracking_number:parts[1], carrier:(parts[2]||dflt||'jd').toLowerCase()});
+  }
+  return out;
+}
+reg('btrkOpen', ()=>{
+  if(!btrkOn()||state.btrk) return;
+  const b=state.btrk={carrier:'jd', text:'', busy:false, err:null, res:null, carriers:Array.isArray(state.carriers)?state.carriers:null};
+  render();
+  if(!b.carriers) ensureCarriers().then(c=>{ if(state.btrk===b){ b.carriers=c; render(); } }).catch(()=>{ if(state.btrk===b){ b.carriers=[]; render(); } });
+});
+reg('btrkClose', ()=>{ if(state.btrk&&state.btrk.busy) return; state.btrk=null; render(); });
+reg('btrkCarrier', v=>{ const b=state.btrk; if(b&&!b.busy) b.carrier=String(v||'jd'); });
+reg('btrkText', v=>{ const b=state.btrk; if(!b) return; b.text=String(v==null?'':v);
+  const el=document.getElementById('mBtrkCount'); if(el) el.textContent=btrkCount(); });
+function btrkCount(){ const b=state.btrk; const n=String(b&&b.text||'').split(/\r?\n/).filter(l=>l.trim().length).length;
+  return T(n+(n===1?' entry':' entries'),n+' 条'); }
+reg('btrkGo', ()=>{
+  if(!btrkOn()) return;   // §325: POST /orders/bulk-tracking is orders:edit on the server
+  const b=state.btrk; if(!b||b.busy) return;
+  const entries=btrkParse(b.text,b.carrier);
+  if(!entries.length){ b.err=T('Nothing to process — check the format','无可处理的内容,请检查格式'); render(); return; }
+  b.busy=true; b.err=null; b.res=null; render();
+  apiWrite('/orders/bulk-tracking',{entries}).then(r=>{
+    b.busy=false; b.res=Array.isArray(r&&r.results)?r.results:[];
+    const ok=b.res.filter(x=>x.ok).length;
+    showToast(T('Bulk: '+ok+'/'+b.res.length+' saved','批量: '+ok+'/'+b.res.length+' 已保存'));
+    render(); loadOrdersPage();
+  }).catch(e=>{ b.busy=false; if(String(e.message)==='auth') return;
+    b.err=e.refused?T(...e.words):T('Request failed','请求失败')+': '+escAttr(e.code||e.message||'network'); render(); });
+});
+function sheetBulkTracking(){
+  const b=state.btrk; if(!b) return '';
+  const dis=b.busy?' disabled':'';
+  const opts=(b.carriers||[]).map(c=>`<option value="${escAttr(c.code)}"${c.code===b.carrier?' selected':''}>${escAttr(c.name_en)} · ${escAttr(c.name_cn)}</option>`).join('');
+  const res=b.res?(()=>{ const ok=b.res.filter(x=>x.ok).length, bad=b.res.length-ok, auto=b.res.filter(x=>x.auto_dispatched).length;
+    return `<div style="padding:10px 14px;border-radius:12px;background:var(--surface-raised);font-size:13.5px"><b>${ok}</b> ${T('saved','已保存')}${bad?` · <span style="color:var(--brick-ink)"><b>${bad}</b> ${T('failed','失败')}</span>`:''} · <b>${auto}</b> ${T('auto-marked dispatched','自动已发货')}</div>
+      <div style="display:flex;flex-direction:column">${b.res.map(x=>`<div style="display:flex;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--hairline);font-size:13px">
+        <span class="num" style="flex:1;min-width:0;overflow-wrap:anywhere">${escAttr(x.order_no)}</span>
+        <span style="flex:none;color:var(--${x.ok?'sage-ink':'brick-ink'})">${x.ok?'✓ '+T('saved','已保存')+(x.auto_dispatched?' · '+T('auto-dispatched','自动发货'):''):'✗ '+escAttr(x.error||T('failed','失败'))}</span></div>`).join('')}</div>`; })():'';
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('btrkClose')"></div>
+   <div class="sheet" style="z-index:46;top:46px;overflow:hidden;padding:0">
+     <div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <span style="flex:1;font-size:18px;font-weight:500">${T('Bulk attach tracking','批量绑定运单号')}</span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('btrkClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+       <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;line-height:1.5;padding-right:8px">${T('Paste one waybill per line. Auto-flips paid/preparing orders to dispatched.','每行粘贴一个运单号,会自动将已付款/备货中订单切换为已发货。')}</div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+       <label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Default carrier','默认快递')}</span>
+         ${b.carriers===null?`<span style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`
+           :`<select id="mBtrkCarrier" style="width:100%"${dis} onchange="APP.cmd('btrkCarrier',this.value)">${opts}</select>`}</label>
+       <label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Entries — order#  waybill# on each line (comma, tab, or space-separated)','条目 — 每行一个 订单号  运单号(逗号、制表或空格分隔)')}</span>
+         <textarea id="mBtrkText" class="num" style="min-height:150px;resize:none;font-size:13px" placeholder="R260517000123, JD0012345678&#10;R260517000124  SF1234567890&#10;R260517000125;EMS9999"${dis} oninput="APP.cmd('btrkText',this.value)">${escAttr(b.text)}</textarea></label>
+       <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5"><span id="mBtrkCount">${btrkCount()}</span> · ${T('Per-line override: append a third value to set a different carrier (e.g. R26… JD123 sf).','单行覆盖:追加第三个值可指定不同快递。')}</div>
+       ${res}</div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${b.err?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${b.err}</div>`:''}
+       <div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1"${dis} onclick="APP.cmd('btrkClose')">${T('Cancel','取消')}</button>
+         <button class="cta" style="flex:1"${dis||b.carriers===null?' disabled':''} onclick="APP.cmd('btrkGo')">${b.busy?T('Processing','处理中')+'…':T('Process entries','处理条目')}</button></div></div>
+   </div>`;
+}
 /* ── §325 O2 — SAVED VIEWS (the desktop's 25-views.js, screen 'orders') ─────
    A view is a name and the list's filter keys, the server's keys, so one saved
    on the desktop applies here and the other way round. Private when saved,
@@ -4016,8 +4194,8 @@ function sheetShipTo(){
   let body;
   if(!s.f){
     // The proposal is still being read, or could not be: no form yet.
-    body=s.loadErr
-      ?`<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start"><span style="font-size:15px;color:var(--brick-ink)">${s.loadErr}</span>
+    body=s.readErr
+      ?`<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start"><span style="font-size:15px;color:var(--brick-ink)">${s.readErr}</span>
           <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('shipToRetry')">${T('Try again','重试')}</button></div>`
       :`<div style="font-size:15px;color:var(--text-secondary)">${T('Translating address…','正在翻译地址…')}</div>`;
     return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shipToClose')"></div>
@@ -4058,7 +4236,7 @@ function sheetShipTo(){
    AI's street, the region table's names, and what the map matched. */
 function shipToPropose(o){
   const s=state.shipTo; if(!s) return;
-  s.f=null; s.loadErr=null; render();
+  s.f=null; s.readErr=null; render();
   apiWrite('/orders/'+o._id+'/address/to-chinese',{}).then(r=>{
     const t=state.shipTo; if(!t||t.oid!==o.id||t.mode!=='cn') return;
     const d=(r&&r.data)||{}, c=d.chinese||{};
@@ -4070,7 +4248,7 @@ function shipToPropose(o){
   }).catch(e=>{
     const t=state.shipTo; if(!t||t.oid!==o.id) return;
     if(String(e.message)==='auth') return;
-    t.loadErr=e.refused?T(...e.words)
+    t.readErr=e.refused?T(...e.words)
       :e.code==='ai_not_configured'?T('Translation service is off','翻译服务未启用')
       :e.code==='pickup_order'?T('Pickup order — no shipping address','自提订单 — 无收货地址')
       :T('Couldn’t translate the address','地址翻译失败');
@@ -4081,7 +4259,7 @@ reg('shipToOpen', mode=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null||o.viewOnly||!o.shipTo||state.shipTo) return;
   if(mode==='cn'){
-    state.shipTo={mode:'cn', oid:o.id, f:null, loadErr:null, geo:null, original:'', saveOrder:true, saveCust:true, busy:false, err:null};
+    state.shipTo={mode:'cn', oid:o.id, f:null, readErr:null, geo:null, original:'', saveOrder:true, saveCust:true, busy:false, err:null};
     shipToPropose(o); return;
   }
   const a=o.shipTo;
@@ -6182,6 +6360,8 @@ reg('dwizNext', ()=>{
     // then go where the answer leads: per-area coverage or pricing means the
     // zone table is the next screen.
     api('/delivery-zones').then(z=>{ if(Array.isArray(z)) state.zones=z; render(); }).catch(()=>render());
+    // …and the setup guide, whose handover step this can tick (§325 O10).
+    if(state.setup) api('/setup').then(d=>{ if(d&&d.percent!=null){ state.setup=d; render(); } }).catch(()=>{});
     if((r.where==='areas'||r.price==='zones')&&canRoute('zones')) APP.cmd('push','zones'); else render();
   }).catch(e=>{ w.busy=false; if(String(e.message)==='auth') return;
     w.err=e.refused?T(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
@@ -6269,9 +6449,9 @@ function znGroups(rows){
   return order.map(k=>map.get(k)).sort((a,b)=>(rank(a)-rank(b))||String(a.en||'').localeCompare(String(b.en||'')));
 }
 function loadZones(){
-  const z=state.zn; z.loading=true; z.loadErr=null;
+  const z=state.zn; z.loading=true; z.readErr=null;
   return api('/delivery-zones').then(r=>{ state.zones=Array.isArray(r)?r:[]; z.loading=false; render(); })
-    .catch(e=>{ z.loading=false; if(String(e.message)==='auth') return; z.loadErr=E('Could not load this.','无法加载。'); render(); });
+    .catch(e=>{ z.loading=false; if(String(e.message)==='auth') return; z.readErr=E('Could not load this.','无法加载。'); render(); });
 }
 function loadRegions(){
   const z=state.zn; if(z.regions||z.regionsBusy) return;
@@ -6282,7 +6462,7 @@ function loadRegions(){
 }
 function znListHtml(){
   const z=state.zn, all=Array.isArray(state.zones)?state.zones:null;
-  if(z.loadErr&&!all) return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:20px 4px;font-size:15px;color:var(--brick-ink)">${z.loadErr}
+  if(z.readErr&&!all) return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:20px 4px;font-size:15px;color:var(--brick-ink)">${z.readErr}
     <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('znReload')">${T('Try again','重试')}</button></div>`;
   if(!all) return `<div style="padding:24px 4px;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const q=z.q.trim().toLowerCase();
@@ -6306,7 +6486,7 @@ function znListHtml(){
 }
 function screenZones(){
   const z=state.zn;
-  if(state.zones===null&&!z.loading&&!z.loadErr) loadZones();
+  if(state.zones===null&&!z.loading&&!z.readErr) loadZones();
   return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
     ${searchBox(`<input id="mZnQ" inputmode="search" enterkeyhint="search" value="${escAttr(z.q)}" placeholder="${T('Search zone','搜索配送区…')}" style="width:100%" oninput="APP.cmd('znQ',this.value)">`,'mZnClr',!!z.q)}
     ${z.err?`<div style="padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${z.err}</div>`:''}
@@ -6333,7 +6513,7 @@ reg('znQ', v=>{ const z=state.zn, el=document.getElementById('mZnQ');
   searchClearShow('mZnClr',!!z.q);
   const box=document.getElementById('mZnList'); if(box) box.innerHTML=znListHtml(); });
 reg('mZnClr', ()=>searchClearRun('mZnQ','mZnClr','znQ'));
-reg('znReload', ()=>{ state.zones=null; state.zn.loadErr=null; render(); loadZones(); });
+reg('znReload', ()=>{ state.zones=null; state.zn.readErr=null; render(); loadZones(); });
 reg('znOpen', id=>{
   const z=(state.zones||[]).find(x=>x.id===id); if(!z) return;
   state.zn.edit={mode:'edit', id, type:z.zone_type, f:znFromZone(z,true), picksD:[], picksC:[], cityQ:'', busy:false, err:null, apply:null};
@@ -7632,6 +7812,10 @@ function ordersHeader(){
   const tool='display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)';
   return `<div style="padding:14px 0 16px">
     <div style="padding:0 16px 10px;display:flex;align-items:center;justify-content:flex-end;gap:18px">
+      ${/* §325 O10 — Select, Drafts and Bulk attach tracking, each for the key its writes need. */''}
+      ${mCan('orders:edit')&&!state.ordSel?`<button onclick="APP.cmd('ordSelOn')" style="${tool}">${ic('check',14,2)} ${T('Pick','选择')}</button>`:''}
+      ${draftsOn()?`<button onclick="APP.cmd('draftsOpen')" style="${tool}">${ic('file-plus',14,2)} ${T('Drafts','草稿')}${state.draftCount?' · '+state.draftCount:''}</button>`:''}
+      ${btrkOn()?`<button onclick="APP.cmd('btrkOpen')" style="${tool}">${ic('truck',14,2)} ${T('Bulk attach tracking','批量绑定运单号')}</button>`:''}
       <button onclick="APP.cmd('ordViewsOpen')" style="${tool}">${ic('bookmark',14,2)} ${T('Views','视图')}${vn?' · '+vn:''}</button>
       ${mCan('orders:export')?`<button onclick="APP.cmd('ordExport')" style="${tool}">${ic('download',14,2)} ${T('Export','导出')}</button>`:''}</div>
     ${state.ordCust?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('ordClearCust')" class="chip on" style="max-width:100%" aria-label="${escAttr(T('Clear customer filter','清除顾客筛选'))}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Showing orders for','仅显示以下顾客的订单')} ${escAttr(state.ordCust.name)}</span>${ic('x',14,2)}</button></div>`:''}
@@ -7753,8 +7937,11 @@ function screenOrders(){
         <div style="font-size:18px;font-weight:500">${state.orderQ?T('No orders match “'+state.orderQ+'”','没有匹配“'+state.orderQ+'”的订单'):T('No orders match these filters','没有符合筛选的订单')}</div>
         <div style="font-size:15px;color:var(--text-secondary);max-width:260px">${T('Clear them and the whole list comes back.','清除筛选即可看到全部。')}</div>
         <button class="btn2" onclick="APP.cmd('ordersClear')">${T('Clear filters','清除筛选')}</button></div>`:''}
-    ${os.length?os.map(o=>`
-      <button class="card${ordUnread(o)?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
+    ${ordBulkBar()}
+    ${os.length?os.map(o=>{ const sel=state.ordSel, picked=!!sel&&sel.ids.includes(o.id), selectable=ordSelectable(o);
+      return `
+      <button class="card${ordUnread(o)?' unseen':''}" ${sel?(selectable?`role="checkbox" aria-checked="${picked?'true':'false'}" onclick="APP.cmd('ordSelT','${o.id}')"`:'disabled'):`onclick="APP.cmd('openOrder','${o.id}')"`} style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)${picked?';border-color:var(--text-primary)':''}${sel&&!selectable?';opacity:.5':''}">
+        ${sel&&selectable?`<span style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)"><span style="flex:none;width:20px;height:20px;border-radius:6px;border:1.75px solid ${picked?'var(--text-primary)':'var(--border-strong)'};background:${picked?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${picked?ic('check',13,2.5):''}</span></span>`:''}
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:7px;min-width:0;color:var(--text-secondary)">${chIcon(o.ch)}
             <span class="num" style="font-size:13px">${o.ch==='shop'?T('Shop','门店')+' · ':''}${o.id} · ${fmtDay(o.placedAt)}</span></span>
@@ -7790,7 +7977,7 @@ function screenOrders(){
                 one. Same rule as the settings rows. */''}
           ${delivCell(o)}</div>
         ${orderMetaLine(o)}
-      </button>`).join(''):''}
+      </button>`; }).join(''):''}
     ${os.length&&state.ordersTotal!=null?`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0 0">
       <span class="num" style="font-size:13px;color:var(--text-secondary)">${T(os.length+' of '+state.ordersTotal, state.ordersTotal+' 单中的 '+os.length)}</span>
       ${state.ordersMore?`<button class="btn2" style="width:100%" ${state.ordersLoading?'disabled':''} onclick="APP.cmd('ordersMore')">${state.ordersLoading?T('Loading…','加载中…'):T('Load more','加载更多')}</button>`:''}
@@ -9785,7 +9972,11 @@ function setupRow(x,i,n){
       <span style="flex:1;min-width:0;display:flex;flex-direction:column">
         <span style="font-size:15px">${T(...(SETUP_LABEL[x.key]||[x.key,x.key]))}</span>
         ${det?`<span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${det}</span>`:''}</span>
-      ${x.done?'':`<span style="font-size:12.5px;color:var(--text-secondary);flex:none">${n?T('next','下一步'):T('to do','待办')}</span>`}</div>`;
+      ${x.done?''
+        /* §325 O10 — the delivery half of this step runs on the phone now (O9's
+           wizard), offered exactly where the Delivery screen offers it. */
+        :(x.key==='fulfillment'&&dlvCanWrite()&&dlvUnconfigured())?`<button class="btn2" style="width:auto;flex:none;padding:0 12px;min-height:36px;font-size:13.5px" onclick="APP.cmd('dwizOpen')">${T('Set up delivery','设置配送')}</button>`
+        :`<span style="font-size:12.5px;color:var(--text-secondary);flex:none">${n?T('next','下一步'):T('to do','待办')}</span>`}</div>`;
 }
 function screenSetup(){
   const d=state.setup;
@@ -12150,7 +12341,10 @@ function onwBlank(stores){
     ful:'delivery',storeId:st.length===1?st[0].id:null,channel:'',channelNote:'',
     cityQ:'',city:'',province:'',cities:null,citiesTried:false,districts:null,district:'',street:'',
     ship:0,pack:0,feeTouched:{ship:false,pack:false},feeNote:null,feeSeq:0,tax:null,
-    paid:false,pay:'cash',note:'',staffNote:'',busy:false,err:null};
+    paid:false,pay:'cash',note:'',staffNote:'',busy:false,err:null,
+    /* §325 O10 — the draft this form came from or was saved as, its save, a
+       desktop draft's grand-total override, and the by-phone warning. */
+    draftId:null,draftBusy:false,draftSaved:false,override:null,phoneNote:null,phoneSeq:0};
 }
 /* The city catalogue is 300-odd rows and does not go stale, so it survives a
    Clear — everything the operator typed does not. */
@@ -12251,6 +12445,7 @@ function onwOptHtml(){
   return h;
 }
 function onwTotal(){ const o=state.onw;
+  if(o.override!=null) return Number(o.override)||0;   // §325 O10 — a desktop draft's grand-total override
   return onwSubtotal()+(o.ful==='delivery'?(Number(o.ship)||0):0)+(Number(o.pack)||0)
     + (o.tax?(Number(o.tax.added)||0):0); }
 /* Anything typed. Read by the Clear control — there is nothing to clear on an
@@ -12306,6 +12501,9 @@ function onwBody(){
     staff_note:o.staffNote.trim()||null,
   };
   if(o.storeId) body.store_id=Number(o.storeId);
+  /* §325 O10 — a grand-total override arrives only with a desktop draft; it is
+     shown in the foot, can be removed there, and is sent as the desktop sends it. */
+  if(o.override!=null) body.total_override=Number(o.override);
   /* The customer is created by the ORDER endpoint, inside the order's own
      transaction — never as a POST of its own first. A failure between the two
      used to leave a customer nobody asked for, already carrying signup
@@ -12572,8 +12770,13 @@ function onwFootHtml(){
    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
      <span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span>
      <span class="num" style="font-size:22px;font-weight:500">${money(CUR,onwTotal())}</span></div>
-   <button class="cta" ${blocked||o.busy?'disabled':''} style="${blocked||o.busy?'opacity:.55':''}" onclick="APP.cmd('onwCreate')">${
-     o.busy?T('Creating…','创建中…'):T('Create order','创建订单')}</button>`;
+   ${o.override!=null?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px">
+     <span style="color:var(--text-secondary)">${T('Grand-total override','自定义总额')} <span class="num" style="color:var(--text-primary)">${money(CUR,o.override)}</span></span>
+     <button class="iconbtn" style="width:32px;height:32px" onclick="APP.cmd('onwOverrideOff')" aria-label="${T('Remove','移除')}">${ic('x',16,2)}</button></div>`:''}
+   <div style="display:flex;gap:8px">
+   ${draftsOn()?`<button class="btn2" style="flex:1" ${o.busy||o.draftBusy?'disabled':''} onclick="APP.cmd('onwSaveDraft')">${o.draftBusy?T('Saving…','保存中…'):o.draftSaved?T('Saved','已保存'):T('Save draft','存为草稿')}</button>`:''}
+   <button class="cta" ${blocked||o.busy?'disabled':''} style="flex:1;${blocked||o.busy?'opacity:.55':''}" onclick="APP.cmd('onwCreate')">${
+     o.busy?T('Creating…','创建中…'):T('Create order','创建订单')}</button></div>`;
 }
 
 function screenNewOrder(){
@@ -12593,7 +12796,8 @@ function screenNewOrder(){
          placeholder="${T('Search name or phone, or leave as guest','搜索姓名或电话,或留空作为访客')}" oninput="APP.cmd('onwCustQ',this.value)">`,'mOnwCustClr',!!o.custQ)+`
        <div id="mOnwCustBox">${onwCustPicksHtml()}</div>`))
     + onwField(T('Name','姓名'),`<input id="mOnwName" value="${escAttr(o.name)}" maxlength="80" oninput="APP.cmd('onwName',this.value)">`)
-    + onwField(T('Phone','电话'),`<input id="mOnwPhone" inputmode="tel" value="${escAttr(o.phone)}" maxlength="20" oninput="APP.cmd('onwPhone',this.value)">`)
+    + onwField(T('Phone','电话'),`<input id="mOnwPhone" inputmode="tel" value="${escAttr(o.phone)}" maxlength="20" oninput="APP.cmd('onwPhone',this.value)" onblur="APP.cmd('onwPhoneCheck')">`)
+    + onwPhoneNoteHtml()
     + (o.cust?'':`<button class="chip ${o.saveCust?'on':''}" style="align-self:flex-start" onclick="APP.cmd('onwSaveCust')"><span>${T('Also save as a customer','同时存为顾客')}</span></button>`);
   const what=onwField('',
       searchBox(`<input id="mOnwProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.q)}"
@@ -12663,7 +12867,7 @@ function screenNewOrder(){
    not rebuilt by their own typing, so there is no caret to put back — and an
    armed focus would be spent by the NEXT render whatever caused it, which is
    how a tap on a chip ends up reopening the keyboard on a field nobody is in. */
-function onwTyped(key,v){ state.onw[key]=String(v==null?'':v); }
+function onwTyped(key,v){ state.onw[key]=String(v==null?'':v); state.onw.draftSaved=false; }
 reg('onwName', v=>{ onwTyped('name',v); onwRepaintFoot(); });
 reg('onwPhone', v=>{ onwTyped('phone',v); });
 reg('onwStreet', v=>{ onwTyped('street',v); onwRepaintFoot(); onwFeesSoon(); });
@@ -12802,6 +13006,165 @@ reg('onwPay', k=>{ state.onw.pay=String(k); render(); });
 /* Clearing throws away work and nothing else does, so it asks — the rule the
    desktop's draft delete follows. Leaving the screen is not destructive and
    never asks: what was typed is still here when you come back. */
+/* §325 O10 — DRAFTS AND THE BY-PHONE WARNING, beside the form they serve (the
+   desk-work note above ordBulkBar says what each is). */
+/* ── drafts ──
+   The desktop's payload, both ways: {form, lines, cust, customer, saveCust},
+   where `form` is the order body (ordNewCollect) and `lines` carry the names
+   so the list can say "Oolong +2 more" without reading the products again. */
+const draftsOn=()=>mCan('orders:edit')&&canRoute('neworder');
+function onwToDraft(){
+  const o=state.onw, form=onwBody();
+  if(o.override!=null) form.total_override=o.override;
+  return {form,
+    lines:o.lines.map(l=>{ const x={product_id:l.id, name_en:l.en||'', name_cn:l.cn||'', sku:l.sku||'', qty:Number(l.qty)||0, unit_price:Number(l.price)||0};
+      if(Array.isArray(l.choices)&&l.choices.length){ x.choices=l.choices.slice(); x.opts=l.opts||[]; x.delta=Number(l.delta)||0; }
+      return x; }),
+    cust:o.cust?'linked':(o.name.trim()||o.phone.trim()?'guest':'rest'), customer:o.cust||null, saveCust:!!o.saveCust};
+}
+/* A desktop payload onto the phone's form. The desktop's Cash is 'offline';
+   the phone's is 'cash' — the same tender, two spellings. A counter draft
+   comes back as a pickup, as on the desktop (§94). */
+function onwFromDraft(d){
+  const p=(d&&d.payload&&typeof d.payload==='object')?d.payload:{};
+  const f=(p.form&&typeof p.form==='object')?p.form:{}, a=(f.address&&typeof f.address==='object')?f.address:{};
+  onwReset();
+  const o=state.onw;
+  o.draftId=d.id!=null?d.id:null;
+  o.lines=(Array.isArray(p.lines)?p.lines:[]).filter(l=>l&&l.product_id!=null).map(l=>{
+    const x={id:l.product_id, en:l.name_en||l.name_cn||'', cn:l.name_cn||l.name_en||'', sku:l.sku||'', price:Number(l.unit_price)||0, qty:Number(l.qty)||1};
+    if(Array.isArray(l.choices)&&l.choices.length){ x.choices=l.choices.slice(); x.opts=l.opts||[]; x.delta=Number(l.delta)||0; }
+    return x; });
+  o.cust=(p.customer&&typeof p.customer==='object'&&p.customer.id!=null)?p.customer:null;
+  o.name=String(f.recipient_name||''); o.phone=String(f.recipient_phone||'');
+  o.saveCust=!o.cust&&p.saveCust!==false&&p.cust==='guest';
+  o.ful=f.fulfillment_type==='counter'?'pickup':(f.fulfillment_type||'delivery');
+  o.storeId=f.store_id!=null?Number(f.store_id):o.storeId;
+  o.channel=String(f.channel||''); o.channelNote=String(f.channel_note||'');
+  o.city=String(a.city||''); o.province=String(a.province||''); o.district=String(a.district||''); o.street=String(a.address||'');
+  o.ship=Number(f.shipping_fee)||0; o.pack=Number(f.packing_fee)||0; o.feeTouched={ship:true,pack:true};
+  o.paid=f.status==='paid'; o.pay=f.payment_method==='offline'?'cash':(f.payment_method||'cash');
+  o.note=String(f.customer_note||''); o.staffNote=String(f.staff_note||'');
+  o.override=(f.total_override!=null&&f.total_override!==''&&Number.isFinite(Number(f.total_override)))?Number(f.total_override):null;
+  if(o.city) loadOnwDistricts();
+}
+reg('draftsOpen', ()=>{
+  if(!draftsOn()) return;
+  state.drafts={loading:true, err:null, rows:null, busy:null}; render(); draftsLoad();
+});
+function draftsLoad(){
+  const s=state.drafts; if(!s) return;
+  s.loading=true; s.err=null;
+  apiRaw('/order-drafts').then(j=>{
+    if(state.drafts!==s) return;
+    s.loading=false; s.rows=Array.isArray(j&&j.data)?j.data:[]; state.draftCount=(j&&j.total!=null)?Number(j.total):s.rows.length; render();
+  }).catch(e=>{ if(state.drafts!==s||String(e.message)==='auth') return;
+    s.loading=false; s.err=e.refused?E(...e.words):E('The list could not be read just now. Try again in a moment.','暂时无法读取列表,请稍后再试。'); render(); });
+}
+reg('draftsClose', ()=>{ state.drafts=null; render(); });
+reg('draftsRetry', ()=>{ if(state.drafts){ draftsLoad(); render(); } });
+function draftLabel(p){
+  if(!p) return {text:T('Empty draft','空草稿'), none:true};
+  if(p.kind==='customer'||p.kind==='guest') return {text:p.label||'', none:false};
+  if(p.kind==='products') return {text:T(p.label||p.label_cn||'',p.label_cn||p.label||'')+(p.extra>0?T(' +'+p.extra+' more',' +'+p.extra+' 项'):''), none:false};
+  return {text:T('Empty draft','空草稿'), none:true};
+}
+reg('draftOpen', id=>{
+  if(!draftsOn()) return;
+  const s=state.drafts; if(!s||s.busy) return;
+  s.busy='open:'+id; render();
+  api('/order-drafts/'+encodeURIComponent(id)).then(d=>{
+    if(state.drafts!==s) return;
+    onwFromDraft(d||{}); state.drafts=null;
+    push('neworder'); render(); onwFeesSoon();
+  }).catch(e=>{ if(state.drafts!==s||String(e.message)==='auth') return;
+    s.busy=null; s.err=e.refused?E(...e.words):E('The list could not be read just now. Try again in a moment.','暂时无法读取列表,请稍后再试。'); draftsLoad(); render(); });
+});
+reg('draftDel', id=>{
+  if(!draftsOn()) return;
+  const s=state.drafts; if(!s||s.busy) return;
+  state.ask={title:T('Delete this draft?','删除这份草稿？'), body:T('It has not been placed as an order, and this cannot be undone.','该草稿尚未生成订单，删除后无法恢复。'),
+    confirmLabel:T('Delete draft','删除草稿'), danger:true,
+    run:()=>{ if(!draftsOn()) return;
+      s.busy='del:'+id; render();
+      apiWrite('/order-drafts/'+encodeURIComponent(id),{},'DELETE').then(()=>{ if(state.drafts!==s) return; s.busy=null; draftsLoad(); })
+        .catch(e=>{ if(String(e.message)==='auth'||state.drafts!==s) return;
+          s.busy=null; s.err=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); }); }};
+  render();
+});
+function sheetDrafts(){
+  const s=state.drafts; if(!s) return '';
+  let body;
+  if(s.loading&&!s.rows) body=`<div style="padding:20px 4px;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else if(s.err&&!s.rows) body=`<div style="padding:20px 4px;display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="font-size:15px;font-weight:500">${T('Drafts did not load','草稿未能加载')}</span>
+      <span style="font-size:13.5px;color:var(--text-secondary)">${s.err}</span><button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('draftsRetry')">${T('Try again','重试')}</button></div>`;
+  else if(!s.rows.length) body=`<div style="padding:20px 4px;display:flex;flex-direction:column;gap:6px"><span style="font-size:15px;font-weight:500">${T('No drafts','没有草稿')}</span>
+      <span style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T('Drafts are yours alone. A half-typed order waits here until you come back for it.','草稿仅你可见。未填完的订单会留在这里,等你回来继续。')}</span></div>`;
+  else body=`${s.err?`<div style="padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:13.5px">${s.err}</div>`:''}
+    <div class="list">${s.rows.map((d,i)=>{ const lab=draftLabel(d.preview), busy=!!s.busy;
+      return `${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:center;gap:8px;padding:4px 6px 4px 0">
+        <button class="row" style="flex:1;min-width:0;gap:10px;min-height:56px;padding:10px 14px"${busy?' disabled':''} onclick="APP.cmd('draftOpen',${Number(d.id)})">
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;text-align:left">
+            <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap${lab.none?';color:var(--text-secondary)':''}">${escAttr(lab.text)}</span>
+            <span style="font-size:12.5px;color:var(--text-secondary)">${s.busy==='open:'+d.id?T('Loading…','加载中…'):T('Saved','保存于')+' '+courierAgo(d.updated_at||d.created_at)}</span></span>
+          <span class="num" style="flex:none;font-size:14px">${money(CUR,(d.preview&&d.preview.total)||0)}</span></button>
+        <button class="iconbtn" style="flex:none"${busy?' disabled':''} onclick="APP.cmd('draftDel',${Number(d.id)})" aria-label="${T('Delete draft','删除草稿')}">${ic('trash',18)}</button></div>`; }).join('')}</div>`;
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('draftsClose')"></div>
+   <div class="sheet" style="z-index:46;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 20px)">
+     <div class="grabber" style="margin-bottom:8px"></div>
+     <div style="display:flex;align-items:center;gap:8px;padding:0 12px 8px 20px">
+       <span style="flex:1;font-size:18px;font-weight:500">${T('Drafts','草稿')}</span>
+       <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('draftsClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+     <div style="max-height:64vh;overflow-y:auto;padding:0 16px;display:flex;flex-direction:column;gap:10px">${body}</div></div>`;
+}
+/* Save draft — the form as it stands, valid or not. A draft is unfinished by
+   definition, so nothing is checked; the second save updates the same one. */
+reg('onwSaveDraft', ()=>{
+  if(!draftsOn()) return;   // §325: /order-drafts writes are orders:edit on the server
+  const o=state.onw; if(o.busy||o.draftBusy) return;
+  o.draftBusy=true; o.draftSaved=false; o.err=null; render();
+  const payload=onwToDraft();
+  const req=o.draftId!=null?apiWrite('/order-drafts/'+o.draftId,{payload},'PATCH'):apiWrite('/order-drafts',{payload});
+  req.then(j=>{
+    const t=state.onw; if(t!==o) return;
+    o.draftBusy=false; o.draftSaved=true;
+    if(j&&j.data&&j.data.id!=null) o.draftId=j.data.id;
+    render();
+  }).catch(e=>{ if(state.onw!==o) return; o.draftBusy=false; if(String(e.message)==='auth') return;
+    o.err={where:'who', msg:e.refused?E(...e.words):E('The draft did not save.','草稿未能保存。')}; render(); });
+});
+/* ── the by-phone warning ──
+   The lookup the create path's reuse-by-phone uses (exact equality), never the
+   roster search. Blocked is never hidden: the order is filed under that record
+   regardless, and "no match" would be a lie. Best-effort: silence on failure,
+   because Create checks again. */
+reg('onwPhoneCheck', ()=>{
+  const o=state.onw; if(o.cust){ o.phoneNote=null; return; }
+  const raw=String(o.phone||'').replace(/\s+/g,'');
+  if(!raw||!/^\+?[0-9]{7,15}$/.test(raw)){ if(o.phoneNote){ o.phoneNote=null; render(); } return; }
+  const seq=(o.phoneSeq=(o.phoneSeq||0)+1);
+  apiRaw('/customers/by-phone?phone='+encodeURIComponent(raw)).then(j=>{
+    if(state.onw!==o||o.phoneSeq!==seq) return;
+    if(!j||!j.match){ o.phoneNote=null; }
+    else o.phoneNote={kind:Number(j.share_count)>1?'shared':(j.match.is_blocked?'blocked':'match'),
+      name:j.match.nickname||('#'+j.match.id), phone:raw, count:Number(j.share_count)||1};
+    render();
+  }).catch(()=>{});
+});
+function onwPhoneNoteHtml(){
+  const o=state.onw, n=o&&!o.cust&&o.phoneNote; if(!n) return '';
+  const nm=escAttr(n.name), ph=escAttr(n.phone);
+  const html=n.kind==='blocked'
+    ?T('<b>'+ph+' belongs to '+nm+', whose account is blocked.</b> The order will still be filed under that record.','<b>'+ph+' 属于 '+nm+',该账户已被拉黑。</b>订单仍会记入该档案。')
+    :n.kind==='shared'
+    ?T('<b>'+ph+' is shared by '+n.count+' customers.</b> The order will be filed under '+nm+', the oldest record.','<b>'+ph+' 有 '+n.count+' 位顾客共用。</b>订单将记入最早的档案:'+nm+'。')
+    :T('<b>'+ph+' belongs to '+nm+'.</b> The order will be filed under that customer record, not a new one.','<b>'+ph+' 属于 '+nm+'。</b>订单将记入这位顾客的档案,不会新建。');
+  const tone=n.kind==='blocked'?'brick':'amber';
+  return `<div style="display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:var(--${tone}-tint);color:var(--${tone}-ink);font-size:13px;line-height:1.5">
+    <span style="flex:none;display:flex;margin-top:1px">${ic(n.kind==='blocked'?'ban':n.kind==='shared'?'users':'triangle-alert',15)}</span><span>${html}</span></div>`;
+}
+/* §325 O10 — a desktop draft's override comes off with one tap; the total goes back to the lines. */
+reg('onwOverrideOff', ()=>{ const o=state.onw; if(o.override==null) return; o.override=null; render(); });
 reg('onwClear', ()=>{
   if(!onwHasWork()) return;
   state.ask={title:T('Clear this order?','清空这张订单？'),
@@ -12818,6 +13181,11 @@ reg('onwCreate', ()=>{
   apiWrite('/orders',onwBody()).then(j=>{
     const d=(j&&j.data)||{};
     state.onw.busy=false;
+    /* §325 O10 — the draft became an order, so it stops being a draft.
+       Best-effort: a draft that outlives its order is a duplicate to delete,
+       never a reason to report the create as failed. */
+    const draftId=state.onw.draftId;
+    if(draftId!=null){ apiWrite('/order-drafts/'+draftId,{},'DELETE').catch(()=>{}); state.draftCount=null; }
     onwReset();
     /* Land on the list with the new order open — that is where the pay link,
        the receipt and every next action live. The same landing the desktop
@@ -31199,6 +31567,8 @@ function custWrite(kind, run, okMsg){
       :e.code==='name_or_phone_required'?T('A name or a phone number — one of the two.','姓名或手机号，至少填一项。')
       :e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
       :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
+      /* §325 O11 — the desktop's sentence (01-core.js TD_ERR). */
+      :e.code==='already_reset'?T('That customer has already been reset — they are waiting to arrive as a new customer.','该顾客已重置，正等待以新顾客身份进入。')
       /* THE ONE REFUSAL THAT NAMES AN AMOUNT. Both adjust endpoints answer
          `would_go_negative` when the change would take a balance below zero,
          and the blanket sentence below turns that into "try again" — which is
@@ -35242,8 +35612,8 @@ function vaPutBody(members,nounEn,nounCn){
 }
 function loadPeSizes(e){
   if(!e) return;
-  const va=e.va||(e.va={members:null,noun_en:'',noun_cn:'',hadGroup:false,loadErr:null,err:null,busy:null,busyText:'',seq:0});
-  const seq=++va.seq; va.loadErr=null;
+  const va=e.va||(e.va={members:null,noun_en:'',noun_cn:'',hadGroup:false,readErr:null,err:null,busy:null,busyText:'',seq:0});
+  const seq=++va.seq; va.readErr=null;
   api('/products/'+e.pid+'/variants').then(d=>{
     if(state.pe!==e||va.seq!==seq) return;
     const rows=(d&&Array.isArray(d.members))?d.members:[];
@@ -35256,7 +35626,7 @@ function loadPeSizes(e){
     if(state.pe!==e||va.seq!==seq||String(err&&err.message)==='auth') return;
     const msg=err&&err.refused?T(...err.words):T('Load failed','加载失败');
     // A family already on screen stays there; only a first read that failed is an empty card.
-    if(va.members) va.err=msg; else va.loadErr=msg;
+    if(va.members) va.err=msg; else va.readErr=msg;
     render();
   });
 }
@@ -35286,7 +35656,7 @@ function vaFind(id){
 function peSizesCard(){
   const e=state.pe, va=e&&e.va; if(!va) return '';
   const wrap=inner=>`<div class="card" id="mPeSizes" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div class="eyebrow">${T('Variants','规格')}</div>${inner}</div>`;
-  if(va.loadErr) return wrap(`<span style="font-size:14px;color:var(--brick-ink)">${escAttr(va.loadErr)}</span>
+  if(va.readErr) return wrap(`<span style="font-size:14px;color:var(--brick-ink)">${escAttr(va.readErr)}</span>
     <button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" onclick="APP.cmd('vaRetry')">${T('Try again','重试')}</button>`);
   if(!va.members) return wrap(`<span style="font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`);
   const edit=prodCanEdit(), busy=!!va.busy, ms=va.members, d=e.draft;
@@ -35337,7 +35707,7 @@ function peSizesCard(){
   }).join('');
   return wrap(`${nounRow}<div>${rows}</div>${errLine}${status}${add}`);
 }
-reg('vaRetry', ()=>{ const e=state.pe; if(e&&e.va){ e.va.loadErr=null; e.va.err=null; render(); loadPeSizes(e); } });
+reg('vaRetry', ()=>{ const e=state.pe; if(e&&e.va){ e.va.readErr=null; e.va.err=null; render(); loadPeSizes(e); } });
 /* Order: the whole family, in its new order, in one PUT (variant_sort = index). */
 reg('vaMove', (i,dir)=>{
   const e=state.pe, va=e&&e.va; if(!va||!va.members||va.busy) return;
@@ -38167,6 +38537,8 @@ function screenCustomers(){
       <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('custRetry')">${T('Try again','重试')}</button></div>`;
   } else if(!state.custLoaded){
     body=`${custSkeleton()}${custSkeleton()}${custSkeleton()}${custSkeleton()}`;
+  } else if(!rows.length && state.custHidden){
+    body=custHiddenState();   // §325 O11
   } else if(!rows.length && custFiltered0()){
     body=emptyState(T('No customers yet','还没有顾客'),
       T('They settle in here as soon as someone orders — every channel, remembered without you asking.',
@@ -38581,16 +38953,202 @@ function custActivity(d){
    routine controls, not proximity. So it keeps the foot to itself, as the
    outline §5 asks for — which also stops it reading at the same weight as
    Reissue, which is undone in one tap. */
+/* ── §325 O11 — CUSTOMERS: WHAT THE DESKTOP DRAWER AND ROSTER STILL HAD ─────
+   Four things from 08-customers.js / 26-print.js:
+     · FOUND, BUT FILTERED (cuHiddenMatchState): a search that matched nobody
+       on screen but somebody on file — a blocked account, or one outside the
+       tier / channel / tag / segment chosen — says so, how many, and goes and
+       gets them, keeping the search.
+     · DIAGNOSTICS (renderDiagnosticsBlock, cuCopyDiagnostics): the device and
+       app build, errors in 7 days, the last 25 log rows with their stacks,
+       and Copy summary. Read-only, open to whoever opens the record.
+     · PRINT STATEMENT (cuPrintStatement): every order this customer placed,
+       what each came to, and a total of the ones that count — a record, not an
+       invoice. §326.4 brought it to the phone.
+     · RESET TO A NEW CUSTOMER (cuResetTestCustomer): §326.4 brought it to the
+       phone with the desktop's typed RESET and customers:block — the key
+       lib/cap-routes.js asks of POST /customers/:id/reset-test. */
+function custFilterSummaryText(){
+  const q=String(state.custQ||'').trim();
+  return q?'“'+escAttr(q)+'”':T('these filters','当前筛选');
+}
+function custHiddenState(){
+  const h=state.custHidden; if(!h) return '';
+  const n=Number(h.total||0), blocked=Number(h.blocked||0), allBlocked=blocked>=n;
+  const who=n===1?T('1 customer','1 位顾客'):T(n+' customers',n+' 位顾客');
+  const f=custFilterSummaryText();
+  const body=allBlocked
+    ?T(who+' matching '+f+' is blocked, and blocked accounts show up nowhere but the Blocked list.','有'+who+'匹配'+f+',但已被封禁 — 封禁的账号只出现在“已封禁”名单中。')
+    :T(who+' matching '+f+' '+(n===1?'is':'are')+" outside the filters you've set.",'有'+who+'匹配'+f+',但不在当前筛选范围内。');
+  const label=allBlocked?(n===1?T('Show the blocked match','查看该封禁顾客'):T('Show the blocked matches','查看这些封禁顾客')):T('Show them','查看');
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
+    <div style="font-size:18px;font-weight:500">${T('Found — but your filters are hiding '+(n===1?'it':'them'),'找到了 — 但被当前筛选隐藏')}</div>
+    <div style="font-size:15px;color:var(--text-secondary);max-width:280px;line-height:1.5">${body}</div>
+    <button class="btn2" style="width:auto;padding:11px 22px" onclick="APP.cmd('custReveal')">${label}</button></div>`;
+}
+/* Every filter but the search comes off — the server counted the hidden ones
+   under the search term ALONE, so that is what makes "your filters are hiding
+   N" true — and an all-blocked match lands on the Blocked list. (The desktop
+   leaves a tag filter standing here, which can hide the very match it is
+   revealing; the phone does not.) */
+reg('custReveal', ()=>{
+  const h=state.custHidden; if(!h) return;
+  const allBlocked=Number(h.blocked||0)>=Number(h.total||0);
+  state.custTier=[]; state.custChan=[]; state.custTags=[];
+  state.custSeg=allBlocked?'blocked':'all';
+  loadCustomers();
+});
+/* ── diagnostics ── */
+function custDiagnostics(d){
+  const g=d&&d.diagnostics;
+  if(g&&g.unavailable) return custSection(T('Diagnostics','诊断'),
+    `<div style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T("Diagnostics couldn't be read for this customer. This is not an all-clear — the check itself failed.",'无法读取该顾客的诊断数据。这不代表一切正常 — 是检查本身失败了。')}</div>`);
+  const dev=g&&g.device_last_seen, logs=(g&&g.recent_logs)||[], errs=Number(g&&g.error_count_7d)||0;
+  const badge=errs?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${errs} ${T('errors in 7 days','近7天报错')}</span>`
+    :`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No errors in 7 days','近7天无报错')}</span>`;
+  const devRows=dev?[[T('App version','小程序版本'),dev.app_version],[T('Phone','手机'),dev.device_model],[T('System','系统'),dev.system],
+      [T('WeChat','微信版本'),dev.wx_version],[T('Base library','基础库'),dev.lib_version],
+      [T('Last seen','最近一次'),dev.created_at?tdWhen(dev.created_at,'dateTime',_tdL()):'']].filter(r=>r[1]).map(r=>custRow(r[0],escAttr(String(r[1]))))
+    :[];
+  /* The log is forensic: times stay absolute, and a dash is the row carrying
+     no value for that field — a fact about the record, not a stand-in. */
+  const logHtml=logs.length?logs.map((l,i)=>{ const err=l.kind==='error', detail=[l.stack,l.extra].filter(Boolean).join('\n');
+      return `${i?'<div class="sep"></div>':''}<div style="padding:10px 16px;display:flex;flex-direction:column;gap:4px${err?';background:var(--brick-tint)':''}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--text-secondary)">
+          <span class="num">${escAttr(tdWhen(l.created_at,'dateTime',_tdL())||'')}</span>
+          <span class="pill" style="background:${err?'var(--brick-tint)':PILL.muted[0]};color:${err?'var(--brick-ink)':PILL.muted[1]}">${err?T('error','报错'):T('open','启动')}</span>
+          <span style="overflow-wrap:anywhere">${escAttr(l.page||'—')}</span></div>
+        <div style="font-size:13.5px;overflow-wrap:anywhere">${escAttr(l.message||(err?'—':(l.app_version||'—')))}</div>
+        ${detail?`<details><summary style="font-size:12.5px;color:var(--text-secondary);cursor:pointer">${T('stack / details','堆栈 / 详情')}</summary><pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;margin:6px 0 0;max-height:220px;overflow:auto">${escAttr(detail)}</pre></details>`:''}
+      </div>`; }).join('')
+    :`<div style="padding:12px 16px;font-size:13.5px;color:var(--text-secondary)">${T('No diagnostics logged yet.','暂无诊断记录。')}</div>`;
+  return custSection(T('Diagnostics','诊断'),
+    `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">${badge}
+      <button onclick="APP.cmd('custDiagCopy')" style="background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Copy summary','复制摘要')}</button></div>
+    <div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);margin:4px 0 6px">${T('Device & app','设备与版本')}</div>
+    ${devRows.length?custList(devRows):`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('No device data yet. It appears once this customer opens the app build that reports diagnostics (needs a WeChat publish).','暂无设备数据。顾客打开包含诊断上报的版本后才会出现（需先发布微信版本）。')}</div>`}
+    <div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);margin:12px 0 6px">${T('Recent activity & errors (last 25)','近期活动与报错（最近25条）')}</div>
+    <div class="list">${logHtml}</div>`);
+}
+/* The desktop's plain-text snapshot, line for line (cuCopyDiagnostics): for a
+   support chat or engineering. Field names stay English — it is a log. */
+function custDiagText(d){
+  const c=(d&&d.customer)||{}, g=(d&&d.diagnostics)||{}, dev=g.device_last_seen||{};
+  const lines=['Customer #'+c.id+(c.phone?' · '+c.phone:'')+(c.nickname?' · '+c.nickname:''),
+    'App: '+(dev.app_version||'—')+' · Phone: '+(dev.device_model||'—')+' · System: '+(dev.system||'—')+' · WeChat: '+(dev.wx_version||'—'),
+    'Errors (7d): '+(g.error_count_7d||0)+' · Active sessions: '+((d&&d.stats&&d.stats.active_sessions)||0),
+    '', 'Recent log:'];
+  (g.recent_logs||[]).slice(0,10).forEach(l=>{
+    lines.push('  ['+(tdWhen(l.created_at,'dateTime',_tdL())||'')+'] '+l.kind+' '+(l.page||'')+' — '+(l.message||l.app_version||''));
+    const detail=[l.stack,l.extra].filter(Boolean).join('\n');
+    if(detail) detail.split('\n').forEach(s=>lines.push('      '+s));
+  });
+  return lines.join('\n');
+}
+reg('custDiagCopy', ()=>{ const d=state.custDetail; if(!d) return; copyText(custDiagText(d)); });
+/* ── print statement ──
+   GET /orders?customer_id=&limit=500, as the desktop reads it. Cancelled,
+   refunded and unpaid orders are LISTED and say which they are, and only the
+   rest count towards the total — a statement that quietly drops a cancelled
+   order is one the customer cannot reconcile. Drawn for orders:view, the key
+   that opens the orders it lists. */
+const STMT_WORD={paid:['Paid','已付款'],preparing:['Preparing','备货中'],dispatched:['Sent','已发出'],delivered:['Delivered','已送达'],
+  completed:['Completed','已完成'],cancelled:['Cancelled','已取消'],refunded:['Refunded','已退款'],pending_payment:['Unpaid','未付款']};
+const stmtWord=s=>{ const m=STMT_WORD[s]; return m?T(m[0],m[1]):String(s||''); };
+reg('custStatement', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(c.id==null||!mCan('orders:view')) return;
+  const s=state.stmt={id:c.id, who:c.nickname||c.phone||('#'+c.id), loading:true, err:null, orders:null, failed:false}; render();
+  api('/orders?customer_id='+encodeURIComponent(c.id)+'&limit=500').then(rows=>{
+    if(state.stmt!==s) return; s.loading=false; s.orders=Array.isArray(rows)?rows:[]; render();
+  }).catch(e=>{ if(state.stmt!==s||String(e.message)==='auth') return;
+    s.loading=false; s.err=e.refused?E(...e.words):E('Could not read the orders','无法读取订单'); render(); });
+});
+reg('stmtClose', ()=>{ state.stmt=null; render(); });
+reg('stmtPrint', ()=>{
+  const f=document.getElementById('mStmtFrame'), s=state.stmt; if(!s) return;
+  try{ f.contentWindow.focus(); f.contentWindow.print(); if(s.failed){ s.failed=false; render(); } }
+  catch(e){ s.failed=true; render(); }
+});
+function stmtTotal(orders){
+  return orders.filter(o=>['cancelled','refunded','pending_payment'].indexOf(o.status)<0).reduce((t,o)=>t+(Number(o.total)||0),0);
+}
+/* The desktop's tdPrintTable document, its columns and its note. */
+function stmtDoc(s){
+  const e2=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const orders=s.orders||[], shop=state.storeName||'';
+  const rows=orders.map((o,i)=>`<tr><td class="idx">${i+1}</td><td>${e2((o.placed_at||'').slice(0,10))}</td><td>${e2(o.order_no||('#'+o.id))}</td>
+    <td>${e2(stmtWord(o.status))}</td><td class="r">${e2(money(CUR,Number(o.total)||0))}</td></tr>`).join('');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Statement</title><style>
+  body{font:13px/1.5 -apple-system,"PingFang SC",sans-serif;color:#111;margin:0;padding:18px}
+  h1{font-size:20px;margin:0}.cn{color:#555}.sub{margin-top:4px;color:#555}
+  .head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
+  dl{display:grid;grid-template-columns:auto auto;gap:2px 12px;margin:0;font-size:12px}dt{color:#555}dd{margin:0;text-align:right}
+  table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 4px;border-bottom:1px solid #ddd;font-size:12px}
+  .r{text-align:right}.idx{color:#888;width:22px}.note{margin-top:18px;padding:8px 10px;border-left:2px solid #ccc;font-size:11.5px;color:#555}
+  .foot{margin-top:24px;display:flex;justify-content:space-between;font-size:10px;color:#888}
+  </style></head><body>
+  <div class="head"><div>${shop?`<div>${e2(shop)}</div>`:''}<h1>Statement</h1><div class="cn">对账单</div><div class="sub">${e2(s.who)}</div></div>
+  <dl><dt>${e2(T('Date','日期'))}</dt><dd>${e2(tdWhen(new Date(),'date',_tdL()))}</dd><dt>${e2(T('Orders','订单数'))}</dt><dd>${orders.length}</dd>
+  <dt>${e2(T('Total','合计'))}</dt><dd>${e2(money(CUR,stmtTotal(orders)))}</dd></dl></div>
+  <table><thead><tr><th>#</th><th>${e2(T('Date 日期','日期 Date'))}</th><th>${e2(T('Order 订单','订单 Order'))}</th><th>${e2(T('Status 状态','状态 Status'))}</th><th class="r">${e2(T('Total 金额','金额 Total'))}</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan="5" style="padding:20px;text-align:center;color:#888">Nothing to show · 暂无内容</td></tr>'}</tbody></table>
+  <div class="note">${e2(T('The total counts orders that were not cancelled, refunded or left unpaid. This is a record of orders, not an invoice.','合计仅包含未取消、未退款且已付款的订单。本表为订单记录，非发票。'))}</div>
+  <div class="foot"><span>${e2(shop)}</span><span>${e2(tdWhen(new Date(),'dateTime',_tdL()))}</span></div>
+<\/body><\/html>`;
+}
+function sheetStatement(){
+  const s=state.stmt; if(!s) return '';
+  const head=`<div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('stmtClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Print statement','打印对账单')}</span>
+         ${s.orders?`<button class="btn2" style="width:auto;padding:0 18px;flex:none" onclick="APP.cmd('stmtPrint')">${ic('printer',18)}${T('Print','打印')}</button>`:''}</div>
+       ${s.failed?`<div style="font-size:13.5px;color:var(--brick-ink);margin-top:8px">${T('Print failed','打印失败')}</div>`:''}</div>`;
+  const body=s.orders?`<iframe id="mStmtFrame" title="${escAttr(s.who)}" srcdoc="${escAttr(stmtDoc(s))}" style="flex:1;min-height:0;width:100%;border:0;background:#fff"></iframe>`
+    :`<div style="padding:20px;font-size:15px;color:${s.err?'var(--brick-ink)':'var(--text-secondary)'}">${s.err||T('Loading…','加载中…')}</div>`;
+  return `<div class="scrim" style="z-index:51" onclick="APP.scrimClose('stmtClose')"></div>
+   <div class="sheet" style="top:40px;z-index:52;overflow:hidden">${head}${body}</div>`;
+}
+/* ── reset to a new customer ── */
+const custIsReset=c=>String((c&&c.openid)||'').startsWith('_reset_');
+reg('custResetTest', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{};
+  if(!state.custId||!mCan('customers:block')||c.id==null||custIsReset(c)) return;
+  const who=escAttr(c.nickname||c.phone||('#'+c.id));
+  state.ask={title:T('Reset '+who+' to a new customer?','将 '+who+' 重置为新顾客？'),
+    body:T('Their WeChat sign-in is detached from this record. Next time they open the mini app they arrive as a new customer with no orders, points, balance or addresses. This record is kept here and is not deleted, but their phone can never reach it again. For testing signup on your own phone. Not for a real customer.',
+           '将其微信登录与此记录解除关联。下次打开小程序时，将以新顾客身份进入，没有订单、积分、余额和地址。此记录会保留，不会删除，但其手机将无法再次访问。仅用于在自己手机上测试注册流程，请勿用于真实顾客。'),
+    fields:[{id:'word', label:T('Type RESET to continue','输入 RESET 以继续'), placeholder:'RESET'}],
+    validate:v=>v.word==='RESET'?null:T('Type RESET to continue','输入 RESET 以继续'),
+    confirmLabel:T('Reset to a new customer','重置为新顾客'), danger:true,
+    run:()=>{ if(!mCan('customers:block')) return;
+      custWrite('reset', ()=>apiWrite('/customers/'+c.id+'/reset-test',{}).then(j=>{
+        const n=Number(j&&j.revoked)||0;
+        showToast(n?T('Reset — '+n+' session'+(n===1?'':'s')+' revoked, they arrive as a new customer next time','已重置，已撤销 '+n+' 个会话，下次进入将是新顾客')
+                   :T('Reset — they arrive as a new customer next time','已重置，下次进入将是新顾客'));
+      }), null); }};
+  render();
+});
 function custFooterActions(d,c){
-  if(!mCan('customers:block')) return '';
-  const blocked=!!c.is_blocked;
+  /* §325 O11 — Print statement for whoever may read the orders it lists; Block,
+     and below it Reset (§326.4), for customers:block. */
+  const stmt=mCan('orders:view')?`<div style="margin-top:24px"><button class="btn2" style="width:100%;gap:8px" onclick="APP.cmd('custStatement')">${ic('printer',18)}${T('Print statement','打印对账单')}</button></div>`:'';
+  if(!mCan('customers:block')) return stmt;
+  const blocked=!!c.is_blocked, spent=custIsReset(c);
   /* Unblock is NOT destructive — it gives something back — so it renders as the
      ordinary secondary button and only Block wears the Brick outline. */
-  return `<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default)">
-    <button class="${blocked?'btn2':'dangerbtn'}" style="width:100%" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">
+  return `${stmt}<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default)">
+    <div><button class="${blocked?'btn2':'dangerbtn'}" style="width:100%" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">
       ${blocked?ic('circle-check',18):ic('ban',18)}${state.custBusy==='block'?T('Saving…','保存中…')
         :(blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'))}
-    </button></div>`;
+    </button></div>
+    ${/* §325 O11 — the one control here that makes the operator TYPE a word. A
+          spent reset stays in view, disabled, saying so — an operator who cannot
+          see why it vanished asks whether the reset worked. */''}
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-default)">
+      <button class="dangerbtn" style="width:100%" ${state.custBusy||spent?'disabled':''} onclick="APP.cmd('custResetTest')">
+        ${ic('rotate-ccw',18)}${state.custBusy==='reset'?T('Saving…','保存中…'):T('Reset to a new customer','重置为新顾客')}
+        <span style="font-size:12px;font-weight:400;opacity:.8">· ${spent?T('already reset','已重置'):T('testing','测试')}</span></button></div></div>`;
 }
 function sheetCustomer(){
   const d=state.custDetail;
@@ -38621,10 +39179,7 @@ function sheetCustomer(){
     ${custAffiliate(d)}
     ${custFacts(d,c,st)}
     ${custActivity(d)}
-    <div style="margin-top:16px;font-size:13px;color:var(--text-secondary)">${
-      d.diagnostics && d.diagnostics.unavailable ? T('Diagnostics could not be read.','诊断数据读取失败。')
-      : d.diagnostics && d.diagnostics.error_count_7d ? T(d.diagnostics.error_count_7d+' app errors in 7 days', '近 7 天 '+d.diagnostics.error_count_7d+' 次报错')
-      : T('No app errors in 7 days','近 7 天无报错')}</div>`;
+    ${custDiagnostics(d)}`;
   /* Every sheet is rebuilt from scratch on each render, so its rise replays
      every time — and this one renders again the moment its read lands. A replay
      is not a flicker: the sheet drops back to translateY(100%), parked below the
@@ -40305,6 +40860,9 @@ function render(){
   if(state.ordViews.open) html += layer('ordviews', sheetOrdViews());
   if(state.zn.edit) html += layer('zn:'+(state.zn.edit.id||state.zn.edit.mode), sheetZone());
   if(state.fb) html += layer('fb', sheetBatch());
+  if(state.btrk) html += layer('btrk', sheetBulkTracking());
+  if(state.stmt) html += layer('stmt:'+state.stmt.id, sheetStatement());
+  if(state.drafts) html += layer('drafts', sheetDrafts());
   if(state.dwiz) html += layer('dwiz:'+state.dwiz.step, sheetDlvWiz());
   if(state.custId) html += layer('cust:'+state.custId, sheetCustomer());
   if(state.caddr) html += layer('caddr', sheetCustAddr());
@@ -41406,12 +41964,14 @@ async function loadCustomers(more){
        guard costs nothing and stops a future narrowing of that query from
        quietly deleting the chip an operator is standing on. */
     if(j&&Array.isArray(j.tag_vocabulary)) state.custTagVocab=j.tag_vocabulary;
+    // §325 O11 — a search that matched only what the filters hide.
+    state.custHidden=(!more&&j&&j.hidden_by_filters&&Number(j.hidden_by_filters.total)>0)?j.hidden_by_filters:null;
     state.custLoaded=true;
   }catch(e){
     if(String(e.message)==='auth') return;
     // Same rule as the orders list: a failed load says so rather than handing
     // back five sample customers with real-looking names and spend.
-    if(!more){ state.customers=[]; state.custTotal=null; state.custMore=false; state.custLoaded=true; }
+    if(!more){ state.customers=[]; state.custTotal=null; state.custMore=false; state.custLoaded=true; state.custHidden=null; }
     state.custLoadErr=E('Could not load customers.','无法加载客户。');
   }
   state.custLoading=false;
