@@ -1136,6 +1136,14 @@ const state = {
      two searches, which write is in flight, and each refusal. */
   /* §325 X8e — gzgrocery billing: the period and range asked for, the
      answer, and the read's and the file's refusals. */
+  /* §325 X9a — the channel hub: its cards and stores, which write is in flight,
+     each card's refusal, the channel whose box screen is open, and Eleme's
+     stores with the shop ids being typed. */
+  hub:{cards:null, stores:null, tried:false, err:null, busy:null, note:{}, boxKind:null, elStores:null, elTried:false, elErr:null, shopIds:{}},
+  /* §325 X9b — the WeChat mini program's pages: what was read (only whether
+     each secret is set, never a secret), which page is open, the wizard's
+     step, what is being typed, the open Replace boxes, and the in-place line. */
+  wxm:{cfg:null, tried:false, err:null, mode:null, step:1, d:{}, open:{}, showPub:false, busy:null, msg:null, finishAnyway:false, done:null},
   gzb:{period:'', from:'', to:'', data:null, tried:false, err:null, err2:null, seq:0},
   mtb:{list:null, tried:false, err:null, stores:null, names:null, prod:null, draft:null, q:'', pq:'', busy:null, note:null, saveErr:null, suggest:null, hint:null},
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
@@ -8624,6 +8632,7 @@ function screenSales(){
          now: the rows open and close per shop, and since §325 X12 the sheet's
          own button flips the whole channel. A footer that denies the control
          directly above it teaches an operator to stop trying, so it is gone. */''}
+    ${x9HubDoor()/* §325 X9a — the channel hub: set up, fix, get help */}
   </div>`;
 }
 
@@ -32088,6 +32097,520 @@ function screenGzBilling(){
 SUBS.gzbilling={title:['Billing','对账'],render:()=>screenGzBilling()};
 reg('gzbOpen', ()=>{ if(!canRoute('gzbilling')) return; const s=gzb(); Object.assign(s,{period:'',from:'',to:'',data:null,tried:false,err:null,err2:null}); push('gzbilling'); });
 /* §325 X8e ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X9a — THE CHANNEL HUB: EVERY CHANNEL'S STATE, ITS TO-DOS, GET HELP,
+   AND THE MEITUAN / QINGYUN AND ELEME SETUP WIZARDS
+   --------------------------------------------------------------------------
+   The desktop's channel hub (15-integrations.js, painted on the Sales page
+   and its Configure overlay), on the phone:
+
+   • Every channel and logistics card from GET /channel-hub: its state in the
+     desktop's seven words, its health line or blurb, and its open to-dos
+     ("New location … — link it here"), each dismissable —
+     POST /channel-hub/:kind/todos/dismiss {todoId}.
+   • Get help on every card — POST /channel-hub/help {kind, note}, the note
+     optional, as the desktop's askReason makes it.
+   • Meituan and Qingyun set up through a box we ship (§257): the box's state
+     from the card, Request the box — POST /channel-hub/:kind/box-request {} —
+     and, once it is there, Get help, which is how a box is connected.
+   • Eleme's two steps: link each store's shop id — POST /eleme/shop {storeId,
+     storeCode, shopId} — then, with every store linked, the stores that still
+     need their one-time login and Enable channel — POST /eleme/enable
+     {enabled:true}; Map products opens the phone's Eleme screen.
+   • JD opens the phone's JD Logistics keys (§325 X7).
+   • The WeChat mini program opens its own pages (§325 X9b, below). The web
+     store's wizard is X9c; until then its card shows its state and says
+     where it is set up.
+
+   Each control is the server's key (lib/cap-routes.js): integrations:manage
+   for help, the box and the to-dos; eleme:sync for the shop ids and Enable.
+   The hub itself reads for the Sales page's keys.
+   ══════════════════════════════════════════════════════════════════════════ */
+const hub=()=>state.hub;
+const HUB_STATUS={
+  connected:['Connected','已连接','success'], configured:['Ready to set up','待设置','warning'], in_setup:['In setup','设置中','warning'],
+  connecting:['Connecting…','连接中…','warning'], error:['Needs attention','需处理','danger'], paused:['Paused','已暂停','muted'],
+  not_configured:['Not set up','未配置','muted'],
+};
+function hubLoad(force){
+  const s=hub(); if(s.tried&&!force) return; s.tried=true; s.err=null;
+  apiRaw('/channel-hub').then(j=>{ s.cards=(j&&j.data)||[]; s.stores=(j&&j.stores)||[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+reg('hubRetry', ()=>{ hub().tried=false; render(); });
+const hubCard=k=>(hub().cards||[]).find(c=>c.kind===k)||null;
+const hubLabel=c=>c?T(c.labelEn||c.kind,c.labelCn||c.labelEn||c.kind):'';
+const hubManage=()=>mCan('integrations:manage');
+function hubPill(status){ const [en,zh,tone]=HUB_STATUS[status]||HUB_STATUS.not_configured; const [bg,fg]=PILL[tone];
+  return `<span class="pill" style="background:${bg};color:${fg};flex:none">${T(en,zh)}</span>`; }
+/* Which phone screen a card's Set up / Manage / Fix opens, if any yet. */
+function hubOpenFor(kind){
+  if(kind==='meituan'||kind==='qingyun') return canRoute('hubbox')?`APP.cmd('hubBoxOpen','${kind}')`:'';
+  if(kind==='eleme') return canRoute('hubeleme')?"APP.cmd('hubElemeOpen')":'';
+  if(kind==='jd') return canRoute('jdcfg')?"APP.cmd('push','jdcfg')":'';
+  if(kind==='wechat_miniapp') return canRoute('wxmini')?"APP.cmd('wxmOpen')":'';   /* §325 X9b */
+  return '';
+}
+function screenHub(){
+  const s=hub(); hubLoad();
+  if(s.err&&!s.cards) return x1Err(escAttr(String(s.err)),'hubRetry');
+  if(!s.cards) return x1Loading();
+  if(!s.cards.length) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No channels available.','暂无可用渠道。')}</div>`;
+  const can=hubManage();
+  const cards=s.cards.map(c=>{
+    const health=c.health&&(c.health.last_error||c.health.detail);
+    const todos=(c.config&&Array.isArray(c.config.todos))?c.config.todos:[];
+    const open=hubOpenFor(c.kind);
+    const verb=c.status==='error'?T('Fix','修复'):(c.status==='connected'||c.category==='first_party')?T('Manage','管理'):T('Set up','开始设置');
+    return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:15.5px;font-weight:500;min-width:0">${escAttr(hubLabel(c))}</span>${hubPill(c.status)}</div>
+      <div style="font-size:13px;line-height:1.5;color:${health?'var(--brick-ink)':'var(--text-secondary)'};overflow-wrap:anywhere">${escAttr(health||T(c.blurbEn||'',c.blurbCn||c.blurbEn||''))}</div>
+      ${todos.map(t=>`<div style="display:flex;align-items:center;gap:10px;background:var(--amber-tint);border-radius:10px;padding:8px 10px">
+        <span style="flex:1;min-width:0;font-size:13px;color:var(--amber-ink)">⚑ ${escAttr(T('New location '+(t.store_name||t.store_code)+' — link it here','新门店 '+(t.store_name||t.store_code)+' — 请在此关联'))}</span>
+        ${can?`<button class="btn2" style="width:auto;min-height:30px;padding:0 10px;font-size:12.5px" aria-label="${escAttr(T('Dismiss','忽略'))}" ${s.busy?'disabled':''} onclick="APP.cmd('hubDismiss','${escAttr(c.kind)}','${escAttr(t.id)}')">${T('Dismiss','忽略')}</button>`:''}</div>`).join('')}
+      ${s.note[c.kind]?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(String(s.note[c.kind]))}</div>`:''}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${open?`<button class="${c.status==='connected'?'btn2':'cta'}" style="width:auto;padding:0 14px;min-height:36px" onclick="${open}">${verb}</button>`
+          :c.kind==='web'?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('Set up on desktop for now','暂请在电脑端设置')}</span>`:''}
+        <span style="flex:1"></span>
+        ${can?`<button class="btn2" style="width:auto;min-height:32px;padding:0 10px;font-size:13px" onclick="APP.cmd('hubHelp','${escAttr(c.kind)}')">? ${T('Get help','获取帮助')}</button>`:''}</div>
+    </div>`;
+  });
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${cards.join('')}</div>`;
+}
+SUBS.chhub={title:['Channels','渠道'],render:()=>screenHub()};
+reg('hubOpen', ()=>{ if(!canRoute('chhub')) return; const s=hub(); s.tried=false; s.note={}; push('chhub'); });
+function x9HubDoor(){ return canRoute('chhub')?`<button class="btn2" style="width:100%" onclick="APP.cmd('hubOpen')">${T('Configure','配置')}</button>`:''; }
+reg('hubDismiss', (kind,id)=>{
+  const s=hub(); if(s.busy||!hubManage()) return;
+  const c=hubCard(kind); if(!c||!((c.config&&c.config.todos)||[]).some(t=>String(t.id)===String(id))) return;
+  s.busy='todo'; s.note[kind]=null; render();
+  apiWrite('/channel-hub/'+encodeURIComponent(kind)+'/todos/dismiss',{todoId:id},'POST').then(()=>{ s.busy=null; hubLoad(true); })
+    .catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note[kind]=x6Words(e,'Failed','操作失败'); render(); });
+});
+/* Get help: the note is optional, as on the desktop, and sent as typed. */
+reg('hubHelp', kind=>{
+  if(!hubManage()) return;
+  const c=hubCard(kind), label=c?hubLabel(c):T('setup','设置');
+  state.askErr=null;
+  state.ask={title:T('Tell us what you\'re stuck on with '+label+' (optional):','请告诉我们您在'+label+'遇到的问题(可选):'),
+    fields:[{id:'note',label:T('Note','备注'),multiline:true}],
+    confirmLabel:T('Send request','发送求助'),
+    run:v=>{ const s=hub(); s.note[kind]=null;
+      apiWrite('/channel-hub/help',{kind:kind||'general',note:(v&&v.note)||''},'POST').then(()=>{ showToast(T('Help request sent — we’ll be in touch.','求助已发送 — 我们会尽快联系您。')); })
+        .catch(e=>{ if(String(e&&e.message)==='auth') return; s.note[kind]=x6Words(e,'Failed','操作失败'); render(); }); }};
+  render();
+});
+
+/* ── Meituan / Qingyun: the box (§257) ───────────────────────────────────── */
+reg('hubBoxOpen', kind=>{ if(!canRoute('hubbox')||!['meituan','qingyun'].includes(kind)) return; hub().boxKind=kind; push('hubbox'); });
+reg('hubBoxRequest', ()=>{
+  const s=hub(), kind=s.boxKind; if(s.busy||!hubManage()||!kind) return;
+  s.busy='box'; s.note.box=null; render();
+  apiWrite('/channel-hub/'+encodeURIComponent(kind)+'/box-request',{},'POST').then(()=>{
+    s.busy=null; showToast(T('Box requested — we’ll contact you','已申请 — 我们会联系您')); hubLoad(true);
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note.box=e&&e.refused?E(...e.words):E('Request failed — try again','申请失败,请重试'); render(); });
+});
+function screenHubBox(){
+  const s=hub(); hubLoad();
+  if(s.err&&!s.cards) return x1Err(escAttr(String(s.err)),'hubRetry');
+  if(!s.cards) return x1Loading();
+  const c=hubCard(s.boxKind)||{kind:s.boxKind}, label=hubLabel(c)||s.boxKind;
+  const b=(c.config&&c.config.box)||null, st=b&&b.status, can=hubManage();
+  const help=can?`<button class="btn2" style="width:100%" onclick="APP.cmd('hubHelp','${escAttr(s.boxKind)}')">${st==='requested'||st==='shipped'||st==='delivered'?T('Box is plugged in — continue','盒子已接入 — 继续'):T('I already have it — continue','已有盒子 — 继续')}</button>`:'';
+  let body;
+  if(st==='requested'||st==='shipped'||st==='delivered'){
+    const when=String((st==='delivered'?b.delivered_at:st==='shipped'?b.shipped_at:b.requested_at)||'').slice(0,10);
+    const head=st==='delivered'?T('Box delivered','盒子已送达'):st==='shipped'?T('Box shipped — on its way','盒子已寄出 — 在路上'):T('Box requested','已申请盒子');
+    const copy=st==='delivered'?T('Your box has arrived. Plug it into your shop’s internet, then continue below.','盒子已送达。请接入门店网络,然后点击继续。')
+      :st==='shipped'?T('Your box is on the way. When it arrives, plug it into your shop’s internet and continue below.','盒子已在路上。到货后请接入门店网络,然后点击继续。')
+      :T('We got your request. Our team will contact you to arrange delivery and any cost. Once the box arrives, plug it into your shop’s internet and continue below.','我们已收到申请。团队会联系您安排寄送及费用。盒子到货后,请接入门店网络,然后点击继续。');
+    body=`<div style="font-size:15px;font-weight:500;color:var(--sage-ink)">✓ ${head}${when?` <span class="num" style="color:var(--text-secondary);font-weight:400">${escAttr(when)}</span>`:''}</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${copy}</div>
+      ${b.tracking?`<div style="font-size:13px">${T('Tracking','快递')}: <span class="num" style="font-family:monospace">${escAttr(b.tracking)}</span></div>`:''}
+      ${help}`;
+  } else {
+    body=`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${escAttr(T(label+' setup starts with a small box we ship to you. Plug it into your shop’s internet — it makes your '+label+' logins come from your own shop, which keeps your account safe. We set this up together and help at every step.',
+        label+'设置的第一步是我们寄给您的小盒子。将它接入门店网络后,'+label+'的登录都来自您自己的门店,账号更安全。我们会全程协助您完成设置。'))}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('After you request it, our team contacts you to arrange delivery and any cost.','提交申请后,团队会联系您安排寄送及费用。')}</div>
+      ${can?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('hubBoxRequest')">${s.busy==='box'?T('Sending…','提交中…'):T('Request the box','申请盒子')}</button>`:''}
+      ${help}`;
+  }
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${body}
+    ${s.note.box?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.note.box))}</div>`:''}
+    ${s.note[s.boxKind]?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.note[s.boxKind]))}</div>`:''}</div>`;
+}
+SUBS.hubbox={title:['Set up','设置'],titleOf:()=>T('Set up','设置')+' '+escAttr(hubLabel(hubCard(hub().boxKind))||hub().boxKind||''),render:()=>screenHubBox()};
+
+/* ── Eleme: link the shops, then verify and enable ───────────────────────── */
+function hubElemeLoad(){
+  const s=hub(); if(s.elTried) return; s.elTried=true; s.elErr=null;
+  api('/eleme/stores').then(r=>{ s.elStores=Array.isArray(r)?r:((r&&(r.stores||r.data))||[]); render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.elErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+reg('hubElemeOpen', ()=>{ if(!canRoute('hubeleme')) return; const s=hub(); s.elTried=false; s.elStores=null; s.shopIds={}; s.note.el=null; push('hubeleme'); });
+reg('hubShopId', (id,v)=>{ hub().shopIds[Number(id)]=String(v==null?'':v); });
+reg('hubElemeShop', id=>{
+  const s=hub(); id=Number(id); if(s.busy||!mCan('eleme:sync')) return;
+  const st=(s.elStores||[]).find(x=>x.id===id); const shopId=String(s.shopIds[id]||'').trim();
+  if(!st||!shopId) return;
+  s.busy='shop:'+id; s.note.el=null; render();
+  apiWrite('/eleme/shop',{storeId:id,storeCode:st.code,shopId},'POST').then(()=>{
+    s.busy=null; s.shopIds[id]=''; s.elTried=false; hubLoad(true); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note.el=x6Words(e,'Failed','操作失败'); render(); });
+});
+reg('hubElemeEnable', ()=>{
+  const s=hub(); if(s.busy||!mCan('eleme:sync')) return;
+  s.busy='enable'; s.note.el=null; render();
+  apiWrite('/eleme/enable',{enabled:true},'POST').then(()=>{
+    s.busy=null; showToast(T('Eleme enabled','已开启')); hubLoad(true);
+    if(state.stack.length&&state.stack[state.stack.length-1].route==='hubeleme') pop();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note.el=x6Words(e,'Failed','操作失败'); render(); });
+});
+function screenHubEleme(){
+  const s=hub(); hubElemeLoad();
+  if(s.elErr&&!s.elStores) return x1Err(escAttr(String(s.elErr)),'hubElemeRetry');
+  if(!s.elStores) return x1Loading();
+  const stores=s.elStores, linked=stores.filter(x=>!!x.shop_id).length, can=mCan('eleme:sync');
+  const step=(stores.length&&linked===stores.length)?'verify':'shop';
+  const rail=`<div style="font-size:12.5px;color:var(--text-secondary)">${step==='shop'?`<b style="color:var(--text-primary)">1. ${T('Link shops','关联门店')}</b> › 2. ${T('Verify & enable','验证并开启')}`
+    :`✓ ${T('Link shops','关联门店')} › <b style="color:var(--text-primary)">2. ${T('Verify & enable','验证并开启')}</b>`}</div>`;
+  const nm=x=>escAttr(LANG==='en'?(x.nameEn||x.name||x.code):(x.name||x.nameEn||x.code));
+  let body;
+  if(step==='shop'){
+    body=`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${T('Enter each store’s Eleme shop id, found in the Eleme merchant backend’s URL (…/app/shop/<id>/…).','在饿了么商家后台地址栏中找到店铺ID(…/app/shop/<id>/…),并在此为每个门店填写。').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      ${stores.length?tmList(stores.map(x=>tmRow({label:nm(x),
+        right:x.shop_id?`<span style="font-size:13px;color:var(--sage-ink)">✓ ${escAttr(x.shop_name||x.shop_id)}</span>`
+          :can?`<span style="display:flex;gap:6px;align-items:center"><input inputmode="numeric" placeholder="${escAttr(T('Eleme shop id','店铺ID'))}" style="width:120px" value="${escAttr(s.shopIds[x.id]||'')}" oninput="APP.cmd('hubShopId',${Number(x.id)},this.value)">
+            <button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px" ${s.busy?'disabled':''} onclick="APP.cmd('hubElemeShop',${Number(x.id)})">${s.busy==='shop:'+x.id?T('Saving…','保存中…'):T('Save','保存')}</button></span>`:''})))
+        :`<div style="font-size:13.5px;color:var(--text-secondary)">${T('No stores yet.','暂无门店。')}</div>`}`;
+  } else {
+    const need=stores.filter(x=>!x.sessionActive);
+    body=`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${T('All stores linked to an Eleme shop. Map products by SKU on the Eleme page, then switch the channel on.','所有门店已关联饿了么店铺。请在饿了么页面按货号映射商品,然后开启渠道。')}</div>
+      ${need.length?`<div style="background:var(--amber-tint);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--amber-ink);line-height:1.5">${T('These stores still need a one-time login (an ops task, not a click here):','以下门店还需要一次性登录(需运维操作,非此处点击):')} <b>${need.map(nm).join(', ')}</b></div>`
+        :`<div style="font-size:13px;color:var(--sage-ink)">✓ ${T('Every linked store has an active login session.','所有已关联门店均已登录。')}</div>`}
+      ${can?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('hubElemeEnable')">${s.busy==='enable'?T('Saving…','保存中…'):T('Enable channel','开启渠道')}</button>`:''}
+      ${canRoute('mirror_eleme')?`<button class="btn2" style="width:100%" onclick="APP.cmd('push','mirror_eleme')">${T('Map products','商品映射')}</button>`:''}`;
+  }
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${rail}${body}
+    ${s.note.el?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.note.el))}</div>`:''}
+    ${hubManage()?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('hubHelp','eleme')">? ${T('Get help','获取帮助')}</button>`:''}</div>`;
+}
+reg('hubElemeRetry', ()=>{ hub().elTried=false; render(); });
+SUBS.hubeleme={title:['Set up Eleme','设置饿了么'],render:()=>screenHubEleme()};
+/* §325 X9a ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X9b — THE WECHAT MINI PROGRAM: ITS SETUP WIZARD AND ITS CONFIGURATION
+   --------------------------------------------------------------------------
+   The desktop's Mini App pages (15-integrations.js igMiniappConfig, the
+   igMiniappSetup wizard, igMwFinish, igMiniappConfigFull), on the phone, opened
+   from the WeChat mini program's card in the channel hub (§325 X9a):
+
+   • Which page opens is the desktop's rule: the account the server's own
+     config fills (source 'env'), or one whose login works and whose payments
+     are ready or put off, gets the one-page configuration; anyone else the
+     wizard, at the first step not done. Somebody who may not save
+     (integrations:manage) gets the page, read-only: the wizard is nothing but
+     saves.
+   • The wizard's three steps, each with the desktop's "where do I find this",
+     its link to the WeChat console, its checks before anything is sent, and
+     its live check with WeChat:
+       1. AppID and AppSecret — POST /channel-hub/miniapp/wechat-creds
+          {appId, appSecret}; WeChat must accept the pair to go on.
+       2. The merchant ID — the same endpoint, {mchId}.
+       3. The payment keys — POST /channel-hub/miniapp/wechat-pay-verify
+          {serialNo, apiV3Key, privateKey, platformPubKey}, a real signed call
+          to WeChat Pay; when it fails, "Finish anyway" appears, as there.
+     "Do it later" on step 1 closes; on steps 2 and 3 it puts payments off
+     (remembered on this device, the desktop's own key) and finishes.
+   • The finish page: what is ready, what was put off, a shortcut back to
+     each step still waiting.
+   • The configuration page: the three ready marks, the AppID, the merchant
+     ID and certificate serial, and Save & verify — wechat-creds with the
+     desktop's seven fields.
+
+   SECRETS. The server never sends a saved secret, only whether it is set
+   (appSecretSet, apiV3KeySet, privateKeySet, platformPubKeySet), and the
+   phone keeps only those flags of what it reads (wxmSafe). A saved secret
+   shows as dots and "Saved"; Replace opens an empty box; "Keep saved value"
+   closes it and throws away what was typed. A secret goes in the body only
+   as typed: a box left empty sends '', which the server reads as "keep the
+   one stored", the desktop's body exactly. What was typed is dropped once it
+   is saved and whenever the wizard moves to another step.
+
+   Every write is integrations:manage, the server's key for /channel-hub
+   (lib/cap-routes.js); without it the page is read-only and nothing is sent.
+   ══════════════════════════════════════════════════════════════════════════ */
+const wxm=()=>state.wxm;
+const WXM_SKIP='fc_miniapp_pay_skip';   /* the desktop's own key (MW_SKIP_KEY) */
+function wxmSkipped(){ try{ return localStorage.getItem(WXM_SKIP)==='1'; }catch(_){ return false; } }
+function wxmSkipSet(on){ try{ if(on) localStorage.setItem(WXM_SKIP,'1'); else localStorage.removeItem(WXM_SKIP); }catch(_){} }
+const wxmCan=()=>mCan('integrations:manage');
+const wxmEditable=()=>wxmCan()&&!!wxm().cfg&&wxm().cfg.source!=='env';
+/* Only what the page needs, and of each secret only whether it is set. */
+function wxmSafe(c){
+  c=c||{}; const p=c.pay||{}, st=c.status||{};
+  return {source:c.source==='env'?'env':String(c.source||''), appId:String(c.appId||''), appSecretSet:!!c.appSecretSet,
+    pay:{mchId:String(p.mchId||''), serialNo:String(p.serialNo||''), apiV3KeySet:!!p.apiV3KeySet, privateKeySet:!!p.privateKeySet, platformPubKeySet:!!p.platformPubKeySet},
+    status:{wxAppIdSet:!!st.wxAppIdSet, wechatLoginReady:!!st.wechatLoginReady, payReady:!!st.payReady}};
+}
+/* The boxes as the desktop draws them: the plain values filled in, every secret empty. */
+function wxmFresh(c){ const p=(c&&c.pay)||{};
+  return {appId:(c&&c.appId)||'', appSecret:'', mchId:p.mchId||'', serialNo:p.serialNo||'', apiV3Key:'', privateKey:'', platformPubKey:''}; }
+function wxmResume(){ const c=wxm().cfg||{}, st=c.status||{};
+  if(!st.wechatLoginReady) return 1; if(!(c.pay&&c.pay.mchId)) return 2; return 3; }
+function wxmLoad(){
+  const s=wxm(); if(s.tried) return; s.tried=true; s.err=null;
+  api('/channel-hub/miniapp/wechat-config').then(c=>{
+    s.cfg=wxmSafe(c); s.d=wxmFresh(s.cfg); s.open={};
+    if(!s.mode){ const st=s.cfg.status;
+      s.mode=(!wxmCan()||s.cfg.source==='env'||(st.wechatLoginReady&&(st.payReady||wxmSkipped())))?'full':'wizard';
+      if(s.mode==='wizard') s.step=wxmResume(); }
+    render();
+  }).catch(e=>{ if(String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+function wxmReread(){ const s=wxm(); s.tried=false; s.open={}; render(); }
+reg('wxmRetry', ()=>{ wxm().tried=false; render(); });
+reg('wxmOpen', ()=>{
+  if(!canRoute('wxmini')) return;
+  Object.assign(state.wxm,{cfg:null, tried:false, err:null, mode:null, step:1, d:wxmFresh(null), open:{}, showPub:false, busy:null, msg:null, finishAnyway:false, done:null});
+  push('wxmini');
+});
+/* Typing writes the draft and repaints nothing. */
+reg('wxmIn', (k,v)=>{ const d=wxm().d; if(!(k in d)) return; d[k]=String(v==null?'':v); });
+reg('wxmReplace', k=>{ if(!wxmEditable()) return; wxm().open[k]=true; render(); });
+reg('wxmKeep', k=>{ const s=wxm(); if(!(k in s.d)) return; s.open[k]=false; s.d[k]=''; render(); });
+reg('wxmPub', ()=>{ const s=wxm(); s.showPub=!s.showPub; render(); });
+function wxmSay(t,x){ const s=wxm(); s.msg={t, x:x?String(x):'', tone:'bad'}; render(); }
+const wxmV=k=>String(wxm().d[k]||'').trim();
+function wxmGo(step){ const s=wxm(); s.mode='wizard'; s.step=step; s.msg=null; s.finishAnyway=false; s.showPub=false; s.d=wxmFresh(s.cfg); render(); }
+function wxmFinish(paySkipped,unverified){
+  const s=wxm(); s.mode='done'; s.done={paySkipped:!!paySkipped, unverified:!!unverified}; s.msg=null; s.d=wxmFresh(s.cfg);
+  hubLoad(true); render();
+}
+const wxmFail=e=>e&&e.refused?E(...e.words):E('Could not save — try again.','保存失败 — 请重试。');
+
+/* ── The wizard's three checks and saves ─────────────────────────────────── */
+reg('wxmLogin', ()=>{
+  const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='wizard'||s.step!==1) return;
+  const appId=wxmV('appId'), secret=wxmV('appSecret');
+  if(!/^wx[0-9a-zA-Z]{16}$/.test(appId)) return wxmSay(E('AppID should be “wx” followed by 16 letters or numbers.','AppID 应为 wx 加 16 位字母数字。'));
+  if(!secret&&!s.cfg.appSecretSet) return wxmSay(E('Paste the AppSecret too.','请同时粘贴 AppSecret。'));
+  s.busy='login'; s.msg=null; render();
+  apiWrite('/channel-hub/miniapp/wechat-creds',{appId, appSecret:secret},'POST').then(r=>{
+    s.busy=null; r=r||{};
+    /* The server stores what it was sent before it asks WeChat, so the
+       secret is saved either way: the page drops its copy. */
+    s.cfg.appId=appId; if(secret) s.cfg.appSecretSet=true; s.d.appSecret='';
+    if(r.creds) s.cfg.status=wxmSafe({status:r.creds}).status;
+    if(r.verified){ wxmGo(2); return; }
+    wxmSay(E('WeChat did not accept this pair — check both values and try again. WeChat said: ','微信未通过校验 — 请核对两项后重试。微信返回：'), r.error);
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+    wxmSay(e&&e.code==='appid_taken'&&!e.refused?E('That AppID is already used by another account here.','该 AppID 已被其他账户使用。'):wxmFail(e)); });
+});
+reg('wxmMch', ()=>{
+  const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='wizard'||s.step!==2) return;
+  const mchId=wxmV('mchId');
+  if(!/^\d{8,12}$/.test(mchId)) return wxmSay(E('The merchant ID is a number, usually 10 digits.','商户号是数字，通常 10 位。'));
+  s.busy='mch'; s.msg=null; render();
+  apiWrite('/channel-hub/miniapp/wechat-creds',{mchId},'POST').then(()=>{
+    s.busy=null; s.cfg.pay.mchId=mchId; wxmGo(3);
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; wxmSay(wxmFail(e)); });
+});
+reg('wxmPay', ()=>{
+  const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='wizard'||s.step!==3) return;
+  const p=s.cfg.pay;
+  const body={serialNo:wxmV('serialNo'), apiV3Key:wxmV('apiV3Key'), privateKey:wxmV('privateKey'), platformPubKey:wxmV('platformPubKey')};
+  if(!body.serialNo&&!p.serialNo) return wxmSay(E('Fill in the certificate serial.','请填写证书序列号。'));
+  if(!body.apiV3Key&&!p.apiV3KeySet) return wxmSay(E('Fill in the API v3 key.','请填写 APIv3 密钥。'));
+  if(body.apiV3Key&&body.apiV3Key.length!==32) return wxmSay(E('The API v3 key is exactly 32 characters — this one isn’t.','APIv3 密钥应为 32 位 — 当前长度不对。'));
+  if(!body.privateKey&&!p.privateKeySet) return wxmSay(E('Paste the private key file’s contents.','请粘贴私钥文件内容。'));
+  if(body.privateKey&&body.privateKey.indexOf('PRIVATE KEY')===-1) return wxmSay(E('That doesn’t look like the key file — paste all of apiclient_key.pem, including the BEGIN and END lines.','内容不像私钥文件 — 请粘贴完整的 apiclient_key.pem，包含 BEGIN 与 END 行。'));
+  s.busy='pay'; s.msg=null; render();
+  apiWrite('/channel-hub/miniapp/wechat-pay-verify',body,'POST').then(r=>{
+    s.busy=null; r=r||{};
+    /* Whatever WeChat Pay said, what was typed is saved now: the page holds none of it. */
+    if(body.serialNo) s.cfg.pay.serialNo=body.serialNo;
+    if(body.apiV3Key) s.cfg.pay.apiV3KeySet=true; if(body.privateKey) s.cfg.pay.privateKeySet=true; if(body.platformPubKey) s.cfg.pay.platformPubKeySet=true;
+    s.d.apiV3Key=''; s.d.privateKey=''; s.d.platformPubKey='';
+    if(r.verified&&r.v3KeyOk!==false){ wxmSkipSet(false); wxmFinish(false,false); return; }
+    s.finishAnyway=true;
+    if(r.verified&&r.v3KeyOk===false) wxmSay(E('Almost: WeChat accepted the merchant ID, serial and private key, but the API v3 key is wrong — check the 32-character key and try again.','差一点：商户号、序列号和私钥都通过了，但 APIv3 密钥不对 — 请核对那串 32 位密钥后重试。'));
+    else if(r.error==='bad_private_key') wxmSay(E('The private key doesn’t look right — paste the whole apiclient_key.pem, including the BEGIN and END lines.','私钥内容不对 — 请粘贴完整的 apiclient_key.pem，包含 BEGIN 与 END 行。'));
+    else if(r.error==='missing_fields') wxmSay(E('Fill in the serial, the v3 key and the private key first.','请先填写序列号、APIv3 密钥和私钥。'));
+    else wxmSay(E('WeChat Pay did not accept the keys. WeChat said: ','微信支付未通过校验。微信返回：'), r.error);
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; wxmSay(wxmFail(e)); });
+});
+/* "Do it later": on step 1 nothing works without the pair, so it only closes. */
+reg('wxmSkip', ()=>{
+  const s=wxm(); if(s.busy||s.mode!=='wizard') return;
+  if(s.step===1){ if(state.stack.length&&state.stack[state.stack.length-1].route==='wxmini') pop(); return; }
+  wxmSkipSet(true); wxmFinish(true,false);
+});
+reg('wxmBack', ()=>{ const s=wxm(); if(s.busy||s.mode!=='wizard'||s.step<2) return; wxmGo(s.step-1); });
+reg('wxmAnyway', ()=>{ const s=wxm(); if(s.busy||!s.finishAnyway) return; wxmFinish(false,true); });
+reg('wxmStep', n=>{ const s=wxm(); n=Number(n); if(s.busy||!wxmCan()||![1,2,3].includes(n)) return; wxmGo(n); });
+reg('wxmGuide', ()=>{ const s=wxm(); if(s.busy||!wxmEditable()) return; wxmSkipSet(false); wxmGo(wxmResume()); });
+reg('wxmFull', ()=>{ const s=wxm(); if(s.busy) return; s.mode='full'; s.msg=null; s.finishAnyway=false; wxmReread(); });
+reg('wxmClose', ()=>{ if(state.stack.length&&state.stack[state.stack.length-1].route==='wxmini') pop(); });
+
+/* ── The configuration page's Save & verify: the desktop's seven fields ──── */
+reg('wxmSave', ()=>{
+  const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='full') return;
+  const body={appId:wxmV('appId'), appSecret:wxmV('appSecret'), mchId:wxmV('mchId'), apiV3Key:wxmV('apiV3Key'),
+    serialNo:wxmV('serialNo'), privateKey:wxmV('privateKey'), platformPubKey:wxmV('platformPubKey')};
+  s.busy='save'; s.msg=null; render();
+  apiWrite('/channel-hub/miniapp/wechat-creds',body,'POST').then(r=>{
+    s.busy=null; r=r||{};
+    if(r.verified) showToast(T('Saved — WeChat accepted the credentials.','已保存 — 微信验证通过。'));
+    else s.msg={t:E('Saved, but WeChat rejected the login pair: ','已保存，但微信校验未通过：'), x:String(r.error||''), tone:'warn'};
+    hubLoad(true); wxmReread();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+    const code=e&&!e.refused&&e.code;
+    s.msg={t:e&&e.refused?E(...e.words):code==='appid_taken'?E('That AppID is already in use.','该 AppID 已被占用。')
+      :code==='bad_appid'?E('That does not look like a Mini Program AppID. Copy it from mp.weixin.qq.com → 开发管理 → 开发设置; it starts with “wx” and is 18 characters long.','这不像是小程序 AppID。请在 mp.weixin.qq.com →「开发管理」→「开发设置」中复制;它以 wx 开头,共 18 位。')
+      :E('Save failed','保存失败'), x:'', tone:'bad'};
+    render(); });
+});
+
+/* ── Drawing ─────────────────────────────────────────────────────────────── */
+function wxmMsg(){ const m=wxm().msg; if(!m) return '';
+  return `<div style="font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;color:${m.tone==='warn'?'var(--amber-ink)':'var(--brick-ink)'}">${escAttr(String(m.t)+(m.x||''))}</div>`; }
+function wxmChip(ok,en,zh,later){ const [bg,fg]=PILL[ok?'success':later?'warning':'muted'];
+  return `<span class="pill" style="background:${bg};color:${fg}">${ok?'✓':later?'◷':'○'} ${T(en,zh)}</span>`; }
+const wxmLbl=(t,extra)=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}${extra||''}</span>`;
+const wxmOpt=()=>` <span style="font-weight:400;font-size:12px">${T('Optional','选填')}</span>`;
+/* A box. A secret is a password box, or for a key file a text box; neither
+   is ever filled from the server, only with what was typed here. */
+function wxmIn(k,label,o){
+  o=o||{}; const v=escAttr(wxm().d[k]||'');
+  const a=`placeholder="${escAttr(o.ph||'')}" autocapitalize="off" spellcheck="false" autocomplete="${o.secret?'new-password':'off'}" ${o.ro?'readonly':''} oninput="APP.cmd('wxmIn','${k}',this.value)"`;
+  const field=o.pem?`<textarea rows="4" ${a} style="width:100%;font-family:monospace;font-size:12px">${v}</textarea>`
+    :`<input type="${o.secret?'password':'text'}" value="${v}" ${o.num?'inputmode="numeric"':''} ${a} style="width:100%;font-family:monospace">`;
+  return `<label style="display:block">${wxmLbl(label,(o.opt?wxmOpt():'')+(o.file?` <span class="num" style="font-weight:400;font-size:12px">${o.file}</span>`:''))}${field}</label>`;
+}
+/* A saved secret: its mask and Replace; opened, an empty box and Keep saved value. */
+function wxmSecret(k,label,isSet,o){
+  o=o||{}; const s=wxm(), ed=wxmEditable();
+  if(!isSet) return wxmIn(k,label,Object.assign({secret:!o.pem, ro:!ed},o));
+  if(s.open[k]&&ed) return `<div style="display:flex;flex-direction:column;gap:6px">${wxmIn(k,label,Object.assign({secret:!o.pem},o))}
+    <button class="btn2" style="width:auto;align-self:flex-start;min-height:30px;padding:0 10px;font-size:12.5px" onclick="APP.cmd('wxmKeep','${k}')">${T('Keep saved value','保留已保存的值')}</button></div>`;
+  return `<div>${wxmLbl(label,o.opt?wxmOpt():'')}<div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:10px;padding:9px 12px">
+    <span class="num" style="letter-spacing:2px">••••••••</span><span style="font-size:13px;color:var(--text-secondary)">${T('Saved','已保存')}</span><span style="flex:1"></span>
+    ${ed?`<button class="btn2" style="width:auto;min-height:30px;padding:0 10px;font-size:12.5px" onclick="APP.cmd('wxmReplace','${k}')">${T('Replace','更换')}</button>`:''}</div></div>`;
+}
+const wxmSec=(head,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div style="font-size:15px;font-weight:500">${head}</div>${inner}</div>`;
+const wxmLink=(url,en,zh)=>`<a href="${url}" target="_blank" rel="noopener" class="btn2" style="width:auto;align-self:flex-start;min-height:32px;padding:0 12px;font-size:13px;display:inline-flex;align-items:center;text-decoration:none">${T(en,zh)} ↗</a>`;
+const wxmHelp=(head,link,items)=>`<div style="background:var(--surface-raised);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+  <div style="font-size:13.5px;font-weight:500">${head}</div>${link}
+  <ol style="margin:0;padding-left:20px;font-size:13px;line-height:1.55;color:var(--text-secondary)">${items.map(([en,zh])=>`<li>${T(en,zh)}</li>`).join('')}</ol></div>`;
+const wxmPurpose=(en,zh)=>`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${T(en,zh)}</div>`;
+const wxmHelpBtn=()=>hubManage()?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('hubHelp','wechat_miniapp')">? ${T('Get help','获取帮助')}</button>`:'';
+
+function wxmFullHtml(){
+  const s=wxm(), c=s.cfg, st=c.status, p=c.pay, env=c.source==='env', ed=wxmEditable(), ro=!ed;
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px">${wxmChip(st.wxAppIdSet,'Mini program linked','小程序已绑定')}${wxmChip(st.wechatLoginReady,'Customer login ready','顾客登录可用')}${wxmChip(st.payReady,'WeChat Pay ready','微信支付可用')}</div>
+    ${wxmSec(T('WeChat Mini Program','微信小程序'), wxmIn('appId','AppID',{ro})
+      +wxmSecret('appSecret','AppSecret',c.appSecretSet,{ph:T('Paste the AppSecret','粘贴 AppSecret')}))}
+    ${wxmSec(T('WeChat Pay','微信支付'), wxmIn('mchId',T('Merchant ID','商户号'),{ro, num:true})
+      +wxmIn('serialNo',T('Certificate serial','证书序列号'),{ro})
+      +wxmSecret('apiV3Key',T('API v3 key','APIv3 密钥'),p.apiV3KeySet,{ph:T('Paste the API v3 key','粘贴 APIv3 密钥')})
+      +wxmSecret('privateKey',T('Merchant private key','商户私钥'),p.privateKeySet,{pem:true, ph:T('Paste the full PEM, including the BEGIN and END lines','粘贴完整 PEM，包含 BEGIN 与 END 行')})
+      +wxmSecret('platformPubKey',T('WeChat platform public key','微信平台公钥'),p.platformPubKeySet,{pem:true, opt:true, ph:T('Paste PEM contents','粘贴 PEM 内容')}))}
+    ${env?`<div style="font-size:13px;color:var(--text-secondary)">${T('Filled from the server config for this account.','本账号由服务器配置填充。')}</div>`:''}
+    ${wxmMsg()}
+    ${wxmCan()?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('wxmSave')">${s.busy==='save'?T('Verifying…','验证中…'):T('Save & verify','保存并验证')}</button>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${ed?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('wxmGuide')">${T('Setup guide','设置向导')}</button>`:''}${wxmHelpBtn()}</div>`;
+}
+function wxmWizardHtml(){
+  const s=wxm(), c=s.cfg, p=c.pay, step=s.step;
+  const rail=[[1,'Link mini program','绑定小程序'],[2,'Merchant account','商户号'],[3,'Payment keys','支付密钥']].map(([n,en,zh])=>
+    n<step?`✓ ${T(en,zh)}`:n===step?`<b style="color:var(--text-primary)">${n}. ${T(en,zh)}</b>`:`${n}. ${T(en,zh)}`).join(' › ');
+  const saved=T('Saved — leave blank to keep it','已保存 — 留空即保留');
+  let body, next;
+  if(step===1){
+    next=['wxmLogin','Verify & continue','验证并继续'];
+    body=wxmSec(T('Link your mini program','绑定你的小程序'),
+      wxmPurpose('The mini program is your storefront inside WeChat. Two values connect it: AppID and AppSecret.','小程序是你在微信里的店面。绑定需要两项：AppID 和 AppSecret。')
+      +wxmHelp(T('Where do I find these?','在哪里找到它们？'), wxmLink('https://mp.weixin.qq.com','Open the mini program console','打开小程序后台'), [
+        ['Sign in with the WeChat account that owns your mini program.','用拥有该小程序的微信账号登录。'],
+        ['In the left menu open “开发管理”, then the “开发设置” tab (Development management → Development settings).','在左侧菜单打开「开发管理」，再选「开发设置」。'],
+        ['AppID is the first item on that page — copy it here.','AppID 是页面上的第一项 — 复制到这里。'],
+        ['For AppSecret press “生成” (Generate). WeChat shows it only once — copy it right away. Lost an old one? Press “重置” (Reset) to get a new one.','AppSecret 点「生成」。微信只显示一次 — 立即复制。旧的丢了就点「重置」换新的。']])
+      +wxmIn('appId','AppID',{ph:'wx0000000000000000'})
+      +wxmIn('appSecret','AppSecret',{secret:true, ph:c.appSecretSet?saved:T('Paste the AppSecret','粘贴 AppSecret')})
+      +wxmPurpose('Don’t have these on hand? Set this up later — the rest of your backend keeps working, and the Mini app card will remind you what’s left.','手头没有这些资料？可以稍后再设置 — 后台其他功能照常使用，小程序卡片会提醒你还差什么。'));
+  } else if(step===2){
+    next=['wxmMch','Continue','继续'];
+    body=wxmSec(T('Your WeChat Pay merchant account','你的微信支付商户号'),
+      wxmPurpose('This is what lets the mini app take payment. You only need one number here.','有了它，小程序才能收款。这一步只需要一个号码。')
+      +wxmHelp(T('Where do I find it?','在哪里找？'), wxmLink('https://pay.weixin.qq.com','Open the merchant console','打开商户平台'), [
+        ['Sign in to the WeChat Pay merchant console.','登录微信支付商户平台。'],
+        ['Open “账户中心” (Account center).','打开「账户中心」。'],
+        ['Your merchant ID (商户号) is the number shown at the top — usually 10 digits.','商户号显示在页面顶部 — 通常是 10 位数字。']])
+      +wxmIn('mchId',T('Merchant ID','商户号'),{ph:'1230000109', num:true})
+      +wxmPurpose('No WeChat Pay merchant account yet? Skip this — your storefront still works, and you can add payments here any time.','还没有微信支付商户号？可以先跳过 — 店面照常运行，之后随时回来补上。'));
+  } else {
+    next=['wxmPay','Verify & finish','验证并完成'];
+    body=wxmSec(T('Payment keys','支付密钥'),
+      wxmPurpose('Three items, all from one page of the merchant console. When you press Verify we make a real test call to WeChat Pay.','三项内容都在商户平台的同一个页面。点「验证」后我们会向微信支付发起一次真实测试请求。')
+      +wxmHelp(T('Where do I find these?','在哪里找到它们？'), wxmLink('https://pay.weixin.qq.com','Open the merchant console','打开商户平台'), [
+        ['In the merchant console open “账户中心” → “API安全” (Account center → API security).','在商户平台打开「账户中心」→「API安全」。'],
+        ['Certificate serial: shown next to your API certificate (API证书). Never made one? Press “申请证书” and follow the little tool it gives you.','证书序列号：显示在 API 证书旁边。还没申请过就点「申请证书」，按工具提示操作。'],
+        ['API v3 key: a 32-character key you set yourself under “设置APIv3密钥”. If you never set one, set it there now and paste the same value here.','APIv3 密钥：在「设置APIv3密钥」里由你自己设定的 32 位密钥。没设过就现在设一个，并把相同的值粘贴到这里。'],
+        ['Merchant private key: the certificate tool saved a folder with a file called apiclient_key.pem. Open it with any text editor and paste everything.','商户私钥：申请证书时工具保存的文件夹里有 apiclient_key.pem。用任意文本编辑器打开，全部复制粘贴到这里。']])
+      +wxmIn('serialNo',T('Certificate serial','证书序列号'))
+      +wxmIn('apiV3Key',T('API v3 key','APIv3 密钥'),{secret:true, ph:p.apiV3KeySet?saved:T('The 32-character key','32 位密钥')})
+      +wxmIn('privateKey',T('Merchant private key','商户私钥'),{pem:true, file:'apiclient_key.pem', ph:p.privateKeySet?saved:T('Paste the full PEM, including the BEGIN and END lines','粘贴完整 PEM，包含 BEGIN 与 END 行')})
+      +`<button class="btn2" style="width:auto;align-self:flex-start;min-height:32px;padding:0 12px;font-size:13px" onclick="APP.cmd('wxmPub')">${T('My account uses platform public keys (rare)','我的商户号使用平台公钥（少见）')}</button>`
+      +(s.showPub?wxmIn('platformPubKey',T('WeChat platform public key','微信平台公钥'),{pem:true, opt:true, ph:T('Paste PEM contents','粘贴 PEM 内容')}):'')
+      +wxmPurpose('Keys not ready? Skip this — everything you entered stays saved, and the finish page shows a shortcut back here.','密钥还没准备好？可以先跳过 — 已填内容都会保存，完成页有快捷入口回到这里。'));
+  }
+  return `<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T('Three short steps. Skip any of them and come back later.','三个小步骤。任何一步都可以先跳过，之后再回来。')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary)">${rail}</div>
+    ${body}
+    ${wxmMsg()}
+    <button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('${next[0]}')">${s.busy?T('Checking with WeChat…','正在向微信验证…'):T(next[1],next[2])}</button>
+    ${s.finishAnyway?`<button class="btn2" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('wxmAnyway')">${T('Finish anyway','仍然完成')}</button>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${step>1?`<button class="btn2" style="width:auto;padding:0 14px" ${s.busy?'disabled':''} onclick="APP.cmd('wxmBack')">${T('Back','上一步')}</button>`:''}
+      <button class="btn2" style="width:auto;padding:0 14px" ${s.busy?'disabled':''} onclick="APP.cmd('wxmSkip')">${T('Do it later','稍后再做')}</button>
+      <span style="flex:1"></span>${wxmHelpBtn()}</div>
+    <button class="btn2" style="width:100%;font-size:13px" ${s.busy?'disabled':''} onclick="APP.cmd('wxmFull')">${T('Prefer a plain form? Open the full configuration page','想直接填表？打开完整配置页')}</button>`;
+}
+function wxmDoneHtml(){
+  const s=wxm(), d=s.done||{}, mchSet=!!(s.cfg&&s.cfg.pay.mchId), pending=d.paySkipped||d.unverified;
+  const note=d.paySkipped?T('Nothing is lost — everything you entered is saved, and the steps you skipped are waiting below.','不会丢失任何内容 — 已填的都保存了，跳过的步骤列在下面。')
+    :d.unverified?T('Your keys are saved. Fix the failing one below and verify again whenever you’re ready.','密钥已保存。可在下面修正后随时重新验证。')
+    :T('Everything checked out with WeChat. Your storefront can sign customers in and take payment.','所有项目均通过微信验证。店面已可登录顾客并收款。');
+  const todo=(en,zh,step)=>`<div style="display:flex;align-items:center;gap:10px;background:var(--amber-tint);border-radius:10px;padding:9px 12px">
+    <span style="flex:1;min-width:0;font-size:13px;color:var(--amber-ink)">◷ ${T(en,zh)}</span>
+    ${wxmCan()?`<button class="btn2" style="width:auto;min-height:30px;padding:0 10px;font-size:12.5px" onclick="APP.cmd('wxmStep',${step})">${T('Finish now','现在完成')}</button>`:''}</div>`;
+  let todos='';
+  if(d.paySkipped){ if(!mchSet) todos+=todo('Add your WeChat Pay merchant ID','补上微信支付商户号',2);
+    todos+=todo('Add the payment keys so the store can take money','补上支付密钥，店面才能收款',mchSet?3:2); }
+  else if(d.unverified) todos+=todo('Fix the payment keys and verify again','修正支付密钥并重新验证',3);
+  const pay=d.paySkipped?wxmChip(false,'WeChat Pay — later','微信支付 — 稍后',true)
+    :d.unverified?wxmChip(false,'WeChat Pay saved — not verified yet','微信支付已保存 — 尚未验证',true):wxmChip(true,'WeChat Pay ready','微信支付可用');
+  return `<div style="text-align:center;font-size:17px;font-weight:500;color:${pending?'var(--amber-ink)':'var(--sage-ink)'}">${pending?'◷ '+T('Saved — a couple of things left for later','已保存 — 还有几项留到之后'):'✓ '+T('Your mini app is connected','你的小程序已接入')}</div>
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;text-align:center">${note}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">${wxmChip(true,'Mini program linked','小程序已绑定')}${wxmChip(true,'Customer login ready','顾客登录可用')}${d.paySkipped&&!mchSet?wxmChip(false,'Merchant account — later','商户号 — 稍后',true):''}${pay}</div>
+    ${todos?`${todos}<div style="font-size:13px;color:var(--text-secondary);text-align:center">${T('Until payments are set up, customers can browse and sign in but not pay.','在设置好收款前，顾客可以浏览和登录，但不能付款。')}</div>`:''}
+    <button class="cta" style="width:100%" onclick="APP.cmd('wxmFull')">${T('View configuration','查看配置')}</button>
+    <button class="btn2" style="width:100%" onclick="APP.cmd('wxmClose')">${T('Close','关闭')}</button>`;
+}
+function screenWxMini(){
+  const s=wxm(); wxmLoad();
+  if(s.err&&!s.cfg) return x1Err(escAttr(String(s.err)),'wxmRetry');
+  if(!s.cfg||!s.mode) return x1Loading();
+  const inner=s.mode==='wizard'&&wxmCan()?wxmWizardHtml():s.mode==='done'?wxmDoneHtml():wxmFullHtml();
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${inner}</div>`;
+}
+SUBS.wxmini={title:['WeChat configuration','小程序配置'],
+  titleOf:()=>wxm().mode==='wizard'&&wxmCan()?T('Set up your WeChat','设置你的小程序'):T('WeChat configuration','小程序配置'),
+  render:()=>screenWxMini()};
+/* §325 X9b ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -42970,6 +43493,15 @@ const ROUTE_CAP={
   mtbundles:['meituan:view','meituan:sync'], mtbundle:'meituan:sync',
   /* §325 X8e. Answered in canRoute (guanyi:view, and money). */
   gzbilling:'guanyi:view',
+  /* §325 X9a. The hub reads for the Sales page's keys and the hub's own; its
+     writes are integrations:manage (help, the box, to-dos) and eleme:sync
+     (shop ids, Enable), each drawn for its key. */
+  chhub:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
+  hubbox:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
+  hubeleme:['eleme:view','eleme:sync'],
+  /* §325 X9b. The mini program's page reads as the hub does; every save on
+     it is integrations:manage, drawn for that key, read-only without it. */
+  wxmini:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the

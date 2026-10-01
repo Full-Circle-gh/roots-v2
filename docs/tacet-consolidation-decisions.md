@@ -27056,3 +27056,102 @@ on the gzgrocery screen's card. It is read-only.
    - Not on the boards that never see money (`recapNoMoney`: warehouse,
      dispatch, customer service), the rule Finance and Home's recap follow.
    - The check sits in `canRoute`, next to Finance's.
+
+## §400 — THE CHANNEL HUB AND ITS SETUP WIZARDS ON THE PHONE (PART ONE)
+
+**Built 2026-10-01 under §325.** This is step X9a on the Settings / Channels /
+Dashboard / Billing lane. X9 was split in three because the three groups of
+wizards share nothing but the hub:
+
+- **X9a (this):** the hub itself, the to-dos, Get help, the Meituan / Qingyun
+  box, Eleme's two steps, and JD's door.
+- **X9b (to do):** the WeChat mini program wizard (the AppID and secret, WeChat
+  Pay, the pay check).
+- **X9c (to do):** the web store wizard (sign-in, the site, domains, DNS).
+
+The desktop's channel hub (`15-integrations.js`: `igLoad`, `igCard`, `STATUS`,
+`igDismissTodo`, `igHelp`, `igRelayWizard` / `igRelayBoxRequest`,
+`igElemeWizard` / `igElemeShop` / `igElemeEnable`, `igLaunchSetup`) is on the
+phone. It is reached from **Configure** on the Sales screen.
+
+1. **The read is the desktop's:** `GET /channel-hub`, the cards and the stores.
+   Every card shows its state in the desktop's seven words, its health line
+   or its blurb, and its open to-dos ("New location … — link it here").
+2. **The writes are the desktop's, with the same bodies:**
+   - Dismiss a to-do: `POST /channel-hub/:kind/todos/dismiss {todoId}`.
+   - Get help: `POST /channel-hub/help {kind, note}`. The note is optional,
+     as the desktop's prompt makes it.
+   - Request the box: `POST /channel-hub/:kind/box-request {}`.
+   - Link an Eleme shop: `POST /eleme/shop {storeId, storeCode, shopId}`.
+     Nothing is sent with the box empty, as on the desktop.
+   - Enable Eleme: `POST /eleme/enable {enabled:true}`.
+   After each, the hub is read again, as the desktop's `igLoad()` does.
+3. **Where Set up / Manage / Fix go follows `igLaunchSetup`:** Meituan and
+   Qingyun to the box screen; Eleme to its two steps; JD to the phone's JD
+   Logistics keys (X7). The WeChat mini program and the web store say "Set up
+   on desktop for now" until X9b and X9c.
+4. **The box screen follows the box's state** from the card's config:
+   none yet (what it is, Request the box, "I already have it — continue"),
+   requested, shipped (with its date and tracking), delivered. Continuing
+   opens Get help, which is how a box gets connected (§257).
+5. **Who sees what.** Each control is the server's key (`lib/cap-routes.js`):
+   - `integrations:manage` for Get help, the box and Dismiss;
+   - `eleme:sync` for the shop ids and Enable.
+   Without the key the control is not drawn and the command sends nothing.
+   The hub opens for the Sales page's keys.
+6. **The three states.** Each button disables and says what it is doing; a
+   refusal or failure is said in place and stays; a toast only confirms.
+
+## §401 — THE WECHAT MINI PROGRAM'S SETUP AND CONFIGURATION ON THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X9b on the Settings / Channels /
+Dashboard / Billing lane, the second of X9's three parts (X9a the hub, X9c the
+web store). The desktop's Mini App pages (`15-integrations.js`:
+`igMiniappConfig`, the `igMiniappSetup` wizard, `igMwVerifyLogin`,
+`igMwSaveMch`, `igMwVerifyPay`, `igMwFinish`, `igMiniappConfigFull`,
+`igSaveMiniappCreds`) are on the phone. They open from the WeChat mini
+program's card in the channel hub, which no longer says "Set up on desktop for
+now".
+
+1. **The read is the desktop's:** `GET /channel-hub/miniapp/wechat-config`.
+2. **Which page opens is the desktop's rule:**
+   - the account the server's own config fills (`source: 'env'`), or one
+     whose login works and whose payments are ready or put off, gets the
+     one-page configuration;
+   - anyone else gets the wizard, at the first step not done.
+   - **One phone rule on top:** somebody without `integrations:manage` gets
+     the configuration page read-only, because the wizard is nothing but
+     saves.
+3. **The wizard's writes are the desktop's, with the same bodies:**
+   - Step 1: `POST /channel-hub/miniapp/wechat-creds {appId, appSecret}`.
+     WeChat must accept the pair to go on.
+   - Step 2: the same endpoint, `{mchId}`.
+   - Step 3: `POST /channel-hub/miniapp/wechat-pay-verify {serialNo,
+     apiV3Key, privateKey, platformPubKey}`, a real signed call to WeChat Pay.
+     When it fails, "Finish anyway" appears, as on the desktop.
+   - Each step makes the desktop's checks before anything is sent: the AppID's
+     shape, the secret present, the merchant ID a number, the v3 key 32
+     characters, the key file a private key.
+   - "Do it later" on step 1 closes. On steps 2 and 3 it puts payments off
+     and finishes. "Put off" is remembered on this device under the desktop's
+     own key (`fc_miniapp_pay_skip`).
+4. **The configuration page's Save & verify** sends the desktop's seven
+   fields to `wechat-creds`. The server's own config account sees its values
+   read-only, as on the desktop.
+5. **Secrets.**
+   - The server never sends a saved secret, only whether it is set. The phone
+     keeps only those flags of what it reads, so even a server that sent one
+     could not have it drawn.
+   - A saved secret shows as dots and "Saved". Replace opens an empty box;
+     "Keep saved value" closes it and throws away what was typed.
+   - A secret goes in the body only as typed. A box left empty sends `''`,
+     which the server reads as "keep the stored one", exactly the desktop's
+     body.
+   - What was typed is dropped once the server has stored it, and whenever
+     the wizard moves to another step.
+6. **Who can save.** Every write is `integrations:manage`, the server's key for
+   `/channel-hub` (`lib/cap-routes.js`). Without it nothing is drawn to press
+   and the commands send nothing.
+7. **The three states.** Each button disables and says what it is doing
+   ("Checking with WeChat…", "Verifying…"). A refusal or WeChat's no is said
+   in place and stays. A toast only confirms a verified save.
