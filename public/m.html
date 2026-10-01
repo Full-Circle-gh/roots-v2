@@ -942,6 +942,10 @@ const state = {
   dlvOpening:null,
   /* …and a refusal from one of those settings writes, kept under the rows. */
   dlvSetErr:null,
+  /* §325 O5 — the zones screen: search, the list's read, the region catalogue,
+     a row switch or refusal, and the zone sheet's draft (edit / add / copy, and
+     its copy-to-others panel). */
+  zn:{q:'', loading:false, loadErr:null, regions:null, regionsBusy:false, busy:null, err:null, edit:null},
   /* THREE KEYS THAT WORKED WITHOUT BEING DECLARED, WHICH IS THE PROBLEM. §181
      added the Sales board's retry and the shop switch and wrote straight to
      `state`, where an assignment creates a key silently; the app has behaved
@@ -1461,6 +1465,9 @@ const state = {
   /* §325 O3 — the refund form open over the order sheet (approve, a direct
      refund by items, or the payout): its draft, busy flag and refusal. */
   rf:null,
+  /* §325 O6 — "Ship part later": the parcel being split and the lines ticked;
+     and the orders whose split suggestion was dismissed this session. */
+  splitPick:null, splitDismissed:[],
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
@@ -2739,6 +2746,61 @@ reg('dcSettle', (sid,outcome)=>{
 });
 /* One parcel of a multi-parcel order goes on its own. This is how an order can
    read "Dispatched" and still sit in the Paid tab: the other box has not left. */
+/* ── §325 O6 — the parcel writes, one helper. Disables the parcel's controls
+   while it runs, toasts the desktop's word, re-reads the order (state, status
+   and rollup move together), and puts a refusal on the order where the
+   operator is looking. */
+function parcelWrite(key, path, body, ok){
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder();
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.parcelBusy=key; state.orderErr=null; render();
+  return apiWrite('/orders/'+o._id+path,body).then(()=>{
+    state.parcelBusy=null; state.splitPick=null;
+    showToast(ok);
+    api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+    loadOrdersPage();
+  }).catch(e=>{
+    state.parcelBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=orderErrorText(e); render();
+  });
+}
+/* §189 — what became of a box that was out when its order was cancelled.
+   Asked first, in the desktop's words: "it came back" moves stock. */
+reg('parcelRecovery', (sid,outcome)=>{
+  if(!mCan('orders:edit')) return;
+  const back=outcome==='recovered';
+  state.ask={title:back?T('Put this parcel back on the shelf?','把此包裹退回货架?'):T('Record this parcel as not recovered?','登记此包裹未收回?'),
+    body:back?T('Its units go back on the count, and a ledger row records who said so.','其数量将计回库存,并在台账中记录操作人。')
+             :T('No stock moves. The units stay gone and the loss is recorded.','库存不变。该批数量计为损失并留存记录。'),
+    confirmLabel:back?T('It came back','已收回'):T('It did not come back','未收回'), danger:!back,
+    run:()=>parcelWrite('rec'+sid,'/shipments/'+sid+'/recovery',{outcome:back?'recovered':'not_recovered'},back?T('Parcel recovered','包裹已收回'):T('Recorded','已登记'))};
+  render();
+});
+reg('parcelDelivered', sid=>{
+  if(!mCan('orders:edit')) return;
+  state.ask={title:T('Mark parcel delivered?','标记包裹已送达?'),
+    body:T('Confirm the supplier parcel reached the customer. If it was the last parcel, the order is marked delivered.','确认此供应商包裹已送达顾客。若为最后一个包裹,订单将标记为已送达。'),
+    confirmLabel:T('Mark delivered','标记已送达'),
+    run:()=>parcelWrite('del'+sid,'/shipments/'+sid+'/deliver',{},T('Parcel delivered','包裹已送达'))};
+  render();
+});
+reg('parcelMethod', (sid,m)=>{
+  const method=m==='land'?'land':'local';
+  parcelWrite('meth'+sid,'/shipments/'+sid+'/method',{method},method==='local'?T('Switched to rider','已改为骑手配送'):T('Switched to JD logistics','已改为京东物流'));
+});
+reg('reopenAirDelay', ()=>parcelWrite('airopen','/air-delay/ack',{cleared:false},T('Air delay re-opened','空运延误已恢复')));
+reg('splitPickOpen', sid=>{ if(!mCan('orders:edit')) return; state.splitPick={sid:Number(sid), ids:[], err:null}; render(); });
+reg('splitPickClose', ()=>{ state.splitPick=null; render(); });
+reg('splitPickT', id=>{ const p=state.splitPick; if(!p) return; id=Number(id);
+  const i=p.ids.indexOf(id); if(i>=0) p.ids.splice(i,1); else p.ids.push(id); p.err=null; render(); });
+reg('splitPickGo', ()=>{ const p=state.splitPick; if(!p) return;
+  if(!p.ids.length){ p.err=T('Tick at least one item to ship later','请至少勾选一项'); render(); return; }
+  parcelWrite('split'+p.sid,'/shipments/split',{item_ids:p.ids.slice()},T('Moved to follow-up parcel','已移入后补包裹')); });
+reg('splitSugDismiss', ()=>{ const o=currentOrder(); if(!o) return;
+  state.splitDismissed=(state.splitDismissed||[]).concat([o._id]); render(); });
+reg('splitSugApply', ()=>parcelWrite('sug','/shipment-suggestion/apply',{},T('Split applied','拆分完成')));
 reg('dispatchParcel', sid=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
@@ -5231,6 +5293,393 @@ reg('dlvHoliday', ()=>{
     }};
   render();
 });
+/* ── §325 O5 — DELIVERY ZONES ON THE PHONE ─────────────────────────────────
+   The desktop's zones table and its drawer (06-delivery.js renderZoneTable,
+   openZoneDrawer, saveZoneDrawer, duplicateZone, the apply panel, updateZone,
+   deleteZone): the list grouped by province with each zone's price, on/off
+   per zone, add one or many areas from the region catalogue (/china-regions —
+   Guangzhou districts as chips, cities by search; no map), edit, duplicate,
+   copy settings to other zones, and delete. Every body is the desktop's.
+
+   WHO MAY (lib/cap-routes.js: /delivery… writes are delivery:edit, a DELETE
+   delivery:delete). The list opens on delivery:view like the Delivery screen;
+   the switch, Add, Save, Duplicate and Copy are drawn for delivery:edit;
+   Delete for delivery:delete, as the desktop's data-cap on its × does. */
+function znCanEdit(){ return mCan('delivery:edit'); }
+function znCanDel(){ return mCan('delivery:delete'); }
+function znLabel(z){ return (z&&(z.name_cn||z.match_district||z.match_city))||''; }
+function znChip(z){
+  const t=z.zone_type==='gz_district'?'GZ'
+    :z.is_province_wide?(/(省|自治区)$/.test(z.match_city||'')?T('Province','全省'):T('City-wide','全市'))
+    :T('City','城市');
+  return `<span style="flex:none;font-size:11px;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:6px;background:var(--surface-raised);color:var(--text-secondary)">${t}</span>`;
+}
+function znWeighted(z){ return z&&z.weight_first_kg_fee!=null&&z.weight_first_kg_fee!==''; }
+/* The row's figures: base (or the weight rate), free-over (or the default),
+   and the same-day mark on a Guangzhou district — the desktop's two views,
+   folded into one line a phone can carry. */
+function znFacts(z){
+  const bits=[];
+  bits.push(znWeighted(z)?money(CUR,z.weight_first_kg_fee)+(Number(z.weight_extra_kg_fee)?' +'+money(CUR,z.weight_extra_kg_fee)+'/kg':''):money(CUR,z.base_fee||0));
+  bits.push(T('Free over','满额免运')+' '+(z.free_threshold==null?T('default','默认'):money(CUR,z.free_threshold)));
+  if(z.zone_type==='gz_district'){
+    const fee=Number(z.same_day_surcharge)||0;
+    if(z.same_day_allowed||fee) bits.push(T('Same-day','同日')+(fee?' +'+money(CUR,fee):' ✓'));
+  }
+  bits.push(z.day_only?T('Day-only','仅按日'):T('Time-slot','按时段'));
+  return bits.join(' · ');
+}
+function znGroups(rows){
+  const map=new Map(), order=[];
+  rows.forEach(z=>{ const k=z.province_cn||'Other';
+    if(!map.has(k)){ map.set(k,{cn:z.province_cn||'其他',en:z.province_en||'Other',rows:[]}); order.push(k); }
+    map.get(k).rows.push(z); });
+  const rank=g=>(g.cn==='广州市'?0:g.cn==='广东省'?1:g.cn==='其他'?3:2);
+  return order.map(k=>map.get(k)).sort((a,b)=>(rank(a)-rank(b))||String(a.en||'').localeCompare(String(b.en||'')));
+}
+function loadZones(){
+  const z=state.zn; z.loading=true; z.loadErr=null;
+  return api('/delivery-zones').then(r=>{ state.zones=Array.isArray(r)?r:[]; z.loading=false; render(); })
+    .catch(e=>{ z.loading=false; if(String(e.message)==='auth') return; z.loadErr=E('Could not load this.','无法加载。'); render(); });
+}
+function loadRegions(){
+  const z=state.zn; if(z.regions||z.regionsBusy) return;
+  z.regionsBusy=true;
+  api('/china-regions').then(d=>{ z.regionsBusy=false;
+    z.regions={gz:(d&&d.guangzhou_districts)||[], cities:(d&&d.cities)||[]}; render(); })
+    .catch(e=>{ z.regionsBusy=false; if(String(e.message)==='auth') return; z.regions={gz:[],cities:[],err:true}; render(); });
+}
+function znListHtml(){
+  const z=state.zn, all=Array.isArray(state.zones)?state.zones:null;
+  if(z.loadErr&&!all) return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:20px 4px;font-size:15px;color:var(--brick-ink)">${z.loadErr}
+    <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('znReload')">${T('Try again','重试')}</button></div>`;
+  if(!all) return `<div style="padding:24px 4px;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const q=z.q.trim().toLowerCase();
+  const rows=all.filter(r=>!q||[r.name_cn,r.name_en,r.match_district,r.match_city].filter(Boolean).join(' ').toLowerCase().includes(q));
+  if(!rows.length) return `<div style="padding:24px 4px;font-size:15px;color:var(--text-secondary);line-height:1.55">${q
+    ?T('No matches.','无匹配结果')
+    :T('No zones yet — click + Add zone above.','暂无配送区,请点上方「+ 添加配送区」')}</div>`;
+  const can=znCanEdit();
+  return znGroups(rows).map(g=>`<div>
+    <div class="eyebrow" style="padding:2px 4px 8px">${escAttr(T(g.en,g.cn))} <span class="num">· ${g.rows.length}</span></div>
+    <div class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;min-height:60px${r.is_active?'':';opacity:.6'}">
+        <button class="row" style="flex:1;min-width:0;padding:0;border:none;background:none;gap:10px" onclick="APP.cmd('znOpen',${Number(r.id)})">
+          ${znChip(r)}
+          <span style="flex:1;min-width:0;text-align:left">
+            <span style="display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(znLabel(r)||'—')}${r.name_en?` <span style="color:var(--text-secondary);font-size:13px">${escAttr(r.name_en)}</span>`:''}</span>
+            <span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${znFacts(r)}</span></span></button>
+        ${can?(z.busy==='tog'+r.id?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`:toggle(!!r.is_active,`APP.cmd('znToggle',${Number(r.id)})`))
+             :`<span style="flex:none;font-size:13px;color:var(--text-secondary)">${r.is_active?T('On','开'):T('Off','关')}</span>`}
+      </div>`).join('')}</div></div>`).join('');
+}
+function screenZones(){
+  const z=state.zn;
+  if(state.zones===null&&!z.loading&&!z.loadErr) loadZones();
+  return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    ${searchBox(`<input id="mZnQ" inputmode="search" enterkeyhint="search" value="${escAttr(z.q)}" placeholder="${T('Search zone','搜索配送区…')}" style="width:100%" oninput="APP.cmd('znQ',this.value)">`,'mZnClr',!!z.q)}
+    ${z.err?`<div style="padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${z.err}</div>`:''}
+    <div id="mZnList" style="display:flex;flex-direction:column;gap:14px">${znListHtml()}</div></div>`;
+}
+/* ── the zone sheet: one zone, a new one, or a copy ── */
+function znBlank(type){
+  return {name_cn:'',name_en:'',base:'',free:'',max:'',pack:'',cap:'',w1:'',wx:'',lead:'',maxlead:'',hs:'',he:'',slot:'',
+    sd:false,sdfee:'',dayonly:false,active:true};
+}
+function znFromZone(z,withNames){
+  const v=x=>x==null?'':String(x);
+  const f={name_cn:withNames?v(z.name_cn):'', name_en:withNames?v(z.name_en):'', base:v(z.base_fee), free:v(z.free_threshold),
+    max:v(z.max_fee), pack:v(z.packing_fee_per_item), cap:v(z.packing_fee_cap), w1:withNames?v(z.weight_first_kg_fee):'', wx:withNames?v(z.weight_extra_kg_fee):'',
+    lead:v(z.min_lead_days), maxlead:v(z.max_lead_days), hs:v(z.slot_start_hour), he:v(z.slot_end_hour), slot:v(z.slot_duration_minutes),
+    // A surcharge with same-day off is the desktop's legacy drift, healed the
+    // way its drawer heals it: a fee means same-day was meant.
+    sd:!!z.same_day_allowed||(withNames&&Number(z.same_day_surcharge)>0), sdfee:v(z.same_day_surcharge),
+    dayonly:!!z.day_only, active:!!z.is_active};
+  return f;
+}
+reg('znQ', v=>{ const z=state.zn, el=document.getElementById('mZnQ');
+  z.q=String(v||''); state.focus={id:'mZnQ',pos:el?el.selectionStart:null};
+  searchClearShow('mZnClr',!!z.q);
+  const box=document.getElementById('mZnList'); if(box) box.innerHTML=znListHtml(); });
+reg('mZnClr', ()=>searchClearRun('mZnQ','mZnClr','znQ'));
+reg('znReload', ()=>{ state.zones=null; state.zn.loadErr=null; render(); loadZones(); });
+reg('znOpen', id=>{
+  const z=(state.zones||[]).find(x=>x.id===id); if(!z) return;
+  state.zn.edit={mode:'edit', id, type:z.zone_type, f:znFromZone(z,true), picksD:[], picksC:[], cityQ:'', busy:false, err:null, apply:null};
+  render();
+});
+reg('znAdd', ()=>{ if(!znCanEdit()) return;
+  state.zn.edit={mode:'add', id:null, type:'gz_district', f:znBlank(), picksD:[], picksC:[], cityQ:'', busy:false, err:null, apply:null};
+  loadRegions(); render(); });
+/* A copy opens as a new zone carrying the source's pricing and scheduling;
+   the area and the display names are the operator's to pick (duplicateZone). */
+reg('znDup', id=>{ if(!znCanEdit()) return;
+  const z=(state.zones||[]).find(x=>x.id===id); if(!z) return;
+  state.zn.edit={mode:'dup', id:null, srcId:id, type:z.zone_type, f:znFromZone(z,false), picksD:[], picksC:[], cityQ:'', busy:false, err:null, apply:null};
+  loadRegions(); render(); });
+reg('znClose', ()=>{ state.zn.edit=null; render(); });
+reg('znType', t=>{ const e=state.zn.edit; if(!e||e.mode==='edit'||e.busy) return; e.type=t==='city'?'city':'gz_district'; e.err=null; render(); });
+/* Typing never repaints; the two switches and the pickers do. */
+reg('znF', (k,v)=>{ const e=state.zn.edit; if(!e) return; e.f[k]=String(v==null?'':v);
+  // Typing a same-day fee means same-day is wanted (onSdFeeInput).
+  if(k==='sdfee'&&Number(v)>0&&!e.f.sd){ e.f.sd=true; render(); } });
+reg('znFlag', k=>{ const e=state.zn.edit; if(!e||e.busy) return; e.f[k]=!e.f[k];
+  if(k==='sd'&&!e.f.sd) e.f.sdfee='';
+  render(); });
+reg('znPickD', i=>{ const e=state.zn.edit, R=state.zn.regions; if(!e||!R) return;
+  const g=R.gz[Number(i)]; if(!g) return;
+  const at=e.picksD.indexOf(g.name_cn); if(at>=0) e.picksD.splice(at,1); else e.picksD.push(g.name_cn);
+  e.err=null; render(); });
+function znCityMatches(){
+  const e=state.zn.edit, R=state.zn.regions; if(!e||!R) return [];
+  const q=e.cityQ.trim().toLowerCase(); if(!q) return [];
+  return R.cities.filter(c=>(c.name_cn||'').toLowerCase().includes(q)||(c.name_en||'').toLowerCase().includes(q)).slice(0,12);
+}
+function znCityPicksHtml(){
+  const e=state.zn.edit; if(!e) return '';
+  const hits=znCityMatches(), q=e.cityQ.trim();
+  return (hits.length||q?`<div class="list" style="margin-top:8px">${hits.map((c,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+      <button class="row" style="min-height:48px;padding:10px 16px" onclick="APP.cmd('znPickC',${i})"><span style="flex:1;text-align:left;font-size:14.5px">${escAttr(c.name_cn)} · ${escAttr(c.name_en||'')}</span>
+        <span style="font-size:12px;color:var(--text-secondary)">${escAttr(c.province_cn||'')}</span></button>`).join('')}
+      ${q&&!hits.some(c=>c.name_cn===q)?`${hits.length?'<div class="sep" style="margin-left:16px"></div>':''}<button class="row" style="min-height:48px;padding:10px 16px" onclick="APP.cmd('znPickC',-1)"><span style="flex:1;text-align:left;font-size:14.5px">${ic('plus',15)} ${escAttr(q)}</span></button>`:''}
+    </div>`:'');
+}
+reg('znCityQ', v=>{ const e=state.zn.edit, el=document.getElementById('mZnCityQ'); if(!e) return;
+  e.cityQ=String(v||''); state.focus={id:'mZnCityQ',pos:el?el.selectionStart:null};
+  searchClearShow('mZnCityClr',!!e.cityQ);
+  const box=document.getElementById('mZnCityBox'); if(box) box.innerHTML=znCityPicksHtml(); });
+reg('mZnCityClr', ()=>searchClearRun('mZnCityQ','mZnCityClr','znCityQ'));
+/* A city from the catalogue, or what was typed (the desktop's parseCityEntry
+   keeps a hand-typed entry for an unusual name). A city that already has a
+   zone, or is already picked, is not added twice. */
+reg('znPickC', i=>{ const e=state.zn.edit; if(!e) return;
+  const c=Number(i)>=0?znCityMatches()[Number(i)]:null;
+  const entry=c?{name_cn:c.name_cn,name_en:c.name_en||''}:{name_cn:e.cityQ.trim(),name_en:''};
+  if(!entry.name_cn) return;
+  const taken=new Set((state.zones||[]).filter(z=>z.zone_type==='city').map(z=>z.match_city));
+  if(taken.has(entry.name_cn)){ e.err=T(entry.name_cn+' already has a zone',entry.name_cn+' 已存在'); render(); return; }
+  if(!e.picksC.some(x=>x.name_cn===entry.name_cn)) e.picksC.push(entry);
+  e.cityQ=''; e.err=null; render(); });
+reg('znUnpickC', i=>{ const e=state.zn.edit; if(!e) return; e.picksC.splice(Number(i),1); render(); });
+/* What the form says, the desktop's way (saveZoneDrawer's `shared`), after
+   the phone's one extra check: a box that is not a number is refused rather
+   than saved as 0. Returns {body} or {err}. */
+function znShared(e){
+  const f=e.f, isGz=e.type==='gz_district';
+  const t=v=>String(v==null?'':v).trim();
+  const money=['base','free','max','pack','cap','w1','wx','sdfee'], whole=['lead','maxlead','hs','he','slot'];
+  for(const k of money){ const v=t(f[k]); if(v!==''&&!(Number.isFinite(Number(v))&&Number(v)>=0)) return {err:T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。')}; }
+  for(const k of whole){ const v=t(f[k]); if(v!==''&&!(/^\d+$/.test(v))) return {err:T('Enter a whole number, 0 or more','请输入 0 或以上的整数')}; }
+  const n=v=>t(v)===''?null:Number(t(v));
+  return {body:{
+    zone_type:e.type,
+    base_fee:Number(t(f.base))||0, free_threshold:n(f.free), max_fee:isGz?n(f.max):null,
+    weight_first_kg_fee:n(f.w1), weight_extra_kg_fee:n(f.wx),
+    packing_fee_per_item:Number(t(f.pack))||0, packing_fee_cap:n(f.cap),
+    min_lead_days:n(f.lead)!=null?n(f.lead):(isGz?0:3), max_lead_days:n(f.maxlead)!=null?n(f.maxlead):14,
+    slot_start_hour:n(f.hs)!=null?n(f.hs):10, slot_end_hour:n(f.he)!=null?n(f.he):20,
+    slot_duration_minutes:n(f.slot)!=null?n(f.slot):120,
+    same_day_allowed:isGz?((f.sd||Number(t(f.sdfee))>0)?1:0):0,
+    same_day_surcharge:isGz?(Number(t(f.sdfee))||0):0,
+    day_only:f.dayonly?1:0, is_active:f.active?1:0}};
+}
+reg('znSave', ()=>{
+  const e=state.zn.edit; if(!e||e.busy||!znCanEdit()) return;
+  const sh=znShared(e); if(sh.err){ e.err=sh.err; render(); return; }
+  const shared=sh.body;
+  if(e.mode==='edit'){
+    const z=(state.zones||[]).find(x=>x.id===e.id); if(!z) return;
+    const body=Object.assign({},shared,{match_district:z.match_district||null, match_city:z.match_city||null,
+      name_cn:e.f.name_cn.trim()||z.name_cn||z.match_district||z.match_city, name_en:e.f.name_en.trim()||null});
+    e.busy=true; e.err=null; render();
+    apiWrite('/delivery-zones/'+e.id,body,'PATCH').then(()=>{
+      state.zn.edit=null; showToast(T('Zone saved','配送区已保存')); loadZones();
+    }).catch(err=>{ e.busy=false; if(String(err.message)==='auth') return;
+      e.err=err.refused?E(...err.words):T('Save failed: ','保存失败:')+(err.message||''); render(); });
+    return;
+  }
+  const isGz=e.type==='gz_district', R=state.zn.regions||{gz:[]};
+  const strip=s=>(String(s||'').replace(/(市|区|县)$/u,'')||s);
+  const picks=isGz
+    ? e.picksD.map(d=>{ const m=(R.gz||[]).find(g=>g.name_cn===d); return {match_district:d, match_city:null, name_cn:strip(d), name_en:(m&&m.name_en)||null}; })
+    : e.picksC.map(c=>({match_district:null, match_city:c.name_cn, name_cn:strip(c.name_cn), name_en:c.name_en||null}));
+  if(!picks.length){ e.err=isGz?T('Pick at least one district','请至少选一个区'):T('Add at least one city','请至少添加一个城市'); render(); return; }
+  e.busy=true; e.err=null; render();
+  /* One POST per area, one after another, as the desktop's loop sends them;
+     a partial failure says how many landed. */
+  (async()=>{
+    let ok=0, fail=0, first=null;
+    for(const pk of picks){
+      try{ await apiWrite('/delivery-zones',Object.assign({},shared,pk)); ok++; }
+      catch(err){ if(String(err.message)==='auth') return; fail++; if(!first) first=err; }
+    }
+    if(ok&&!fail){ state.zn.edit=null; showToast(T(ok===1?'Zone added':ok+' zones added','已添加 '+ok+' 个配送区')); loadZones(); return; }
+    e.busy=false;
+    const why=first?(first.refused?String(E(...first.words)):(first.message||'')):'';
+    e.err=ok?T('Added '+ok+', '+fail+' failed','已添加 '+ok+',失败 '+fail)+': '+why:T('Save failed: ','保存失败:')+why;
+    if(ok){ e.picksD=[]; e.picksC=[]; loadZones(); }
+    render();
+  })();
+});
+reg('znToggle', id=>{
+  const zn=state.zn; if(!znCanEdit()||zn.busy) return;
+  const z=(state.zones||[]).find(x=>x.id===id); if(!z) return;
+  const next=z.is_active?0:1;
+  zn.busy='tog'+id; zn.err=null; render();
+  apiWrite('/delivery-zones/'+id,{is_active:next},'PATCH').then(()=>{ z.is_active=next; zn.busy=null; render(); })
+    .catch(e=>{ zn.busy=null; if(String(e.message)==='auth') return;
+      zn.err=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
+});
+reg('znDel', ()=>{
+  const e=state.zn.edit; if(!e||e.mode!=='edit'||!znCanDel()||e.busy) return;
+  const z=(state.zones||[]).find(x=>x.id===e.id); if(!z) return;
+  const lbl=escAttr(znLabel(z));
+  state.ask={title:T('Delete delivery zone "'+lbl+'"?','删除配送区 "'+lbl+'"？'),
+    confirmLabel:T('Delete zone','删除'), danger:true,
+    run:()=>{ e.busy=true; e.err=null; render();
+      apiWrite('/delivery-zones/'+e.id,{},'DELETE').then(()=>{ state.zn.edit=null; showToast(T('Zone deleted','配送区已删除')); loadZones(); })
+        .catch(err=>{ e.busy=false; if(String(err.message)==='auth') return;
+          e.err=err.refused?E(...err.words):T('Delete failed','删除失败')+': '+(err.message||''); render(); }); }};
+  render();
+});
+/* ── Copy settings to other zones (the apply panel) ── */
+reg('znApplyOpen', ()=>{ const e=state.zn.edit; if(!e||e.mode!=='edit'||!znCanEdit()) return;
+  e.apply={bundles:{pricing:true,scheduling:true,active:false}, targets:[], busy:false}; e.err=null; render(); });
+reg('znApplyClose', ()=>{ const e=state.zn.edit; if(e) e.apply=null; render(); });
+reg('znApplyBundle', k=>{ const a=state.zn.edit&&state.zn.edit.apply; if(!a||a.busy) return; a.bundles[k]=!a.bundles[k]; render(); });
+reg('znApplyT', id=>{ const a=state.zn.edit&&state.zn.edit.apply; if(!a||a.busy) return;
+  const i=a.targets.indexOf(id); if(i>=0) a.targets.splice(i,1); else a.targets.push(id); render(); });
+reg('znApplyPreset', mode=>{ const e=state.zn.edit, a=e&&e.apply; if(!a||a.busy) return;
+  const others=(state.zones||[]).filter(z=>z.id!==e.id);
+  a.targets=mode==='none'?[]:others.filter(z=>mode==='all'||(mode==='gz'?z.zone_type==='gz_district':z.zone_type==='city')).map(z=>z.id);
+  render(); });
+/* buildApplyBody: only the chosen bundles, and nothing a target's type cannot
+   carry — MAX and the same-day pair go to Guangzhou districts only. */
+function znApplyBody(e,target,shared){
+  const isGz=target.zone_type==='gz_district', a=e.apply, b={};
+  if(a.bundles.pricing){
+    b.base_fee=shared.base_fee; b.free_threshold=shared.free_threshold;
+    if(isGz) b.max_fee=(e.type==='gz_district')?shared.max_fee:(String(e.f.max).trim()===''?null:Number(e.f.max));
+    b.packing_fee_per_item=shared.packing_fee_per_item; b.packing_fee_cap=shared.packing_fee_cap;
+  }
+  if(a.bundles.scheduling){
+    const t=v=>String(v==null?'':v).trim(), n=v=>t(v)===''?null:Number(t(v));
+    b.min_lead_days=n(e.f.lead)!=null?n(e.f.lead):(isGz?0:3);
+    b.max_lead_days=shared.max_lead_days; b.slot_start_hour=shared.slot_start_hour; b.slot_end_hour=shared.slot_end_hour;
+    b.slot_duration_minutes=shared.slot_duration_minutes; b.day_only=shared.day_only;
+    if(isGz){ b.same_day_allowed=e.f.sd?1:0; b.same_day_surcharge=Number(t(e.f.sdfee))||0; }
+  }
+  if(a.bundles.active) b.is_active=shared.is_active;
+  return b;
+}
+reg('znApplyGo', ()=>{
+  const e=state.zn.edit, a=e&&e.apply; if(!a||a.busy||!znCanEdit()) return;
+  if(!a.targets.length){ e.err=T('Pick at least one zone','请选择配送区'); render(); return; }
+  if(!Object.keys(a.bundles).some(k=>a.bundles[k])){ e.err=T('Pick at least one field bundle','请选择字段'); render(); return; }
+  const sh=znShared(e); if(sh.err){ e.err=sh.err; render(); return; }
+  const targets=(state.zones||[]).filter(z=>a.targets.includes(z.id));
+  state.ask={title:T('Copy settings to other zones','复制设置到其他配送区'),
+    body:targets.map(z=>'• '+escAttr(znLabel(z))).join('<br>'),
+    confirmLabel:T('Apply settings','应用'),
+    run:()=>{
+      a.busy=true; e.err=null; render();
+      Promise.allSettled(targets.map(t=>apiWrite('/delivery-zones/'+t.id,znApplyBody(e,t,sh.body),'PATCH'))).then(rs=>{
+        a.busy=false;
+        const bad=rs.filter(r=>r.status==='rejected').length, good=rs.length-bad;
+        if(bad){ e.err=T(good+' ok, '+bad+' failed',good+' 成功, '+bad+' 失败'); render(); loadZones(); return; }
+        e.apply=null; render(); showToast(T('Applied to '+good+' zone(s)','已应用到 '+good+' 个配送区')); loadZones();
+      });
+    }};
+  render();
+});
+function sheetZone(){
+  const zn=state.zn, e=zn.edit; if(!e) return '';
+  const can=znCanEdit(), isGz=e.type==='gz_district', dis=(e.busy||!can)?' disabled':'';
+  const src=e.srcId!=null?(state.zones||[]).find(z=>z.id===e.srcId):null;
+  const z=e.mode==='edit'?(state.zones||[]).find(x=>x.id===e.id):null;
+  const lbl=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>`;
+  const inp=(k,label,ph,mode)=>`<label style="display:block;min-width:0">${lbl(label)}<input id="mZn_${k}"${dis} inputmode="${mode||'decimal'}" value="${escAttr(e.f[k])}" placeholder="${escAttr(ph||'')}" oninput="APP.cmd('znF','${k}',this.value)"></label>`;
+  const flag=(k,label)=>`<button class="row" style="padding:6px 0;gap:10px;border:none;background:none"${dis} role="checkbox" aria-checked="${e.f[k]?'true':'false'}" onclick="APP.cmd('znFlag','${k}')">
+      <span style="width:24px;height:24px;flex:none;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1.5px solid ${e.f[k]?'var(--text-primary)':'var(--border-strong)'};background:${e.f[k]?'var(--text-primary)':'transparent'};color:var(--surface-card)">${e.f[k]?ic('check',14,2.5):''}</span>
+      <span style="flex:1;font-size:14.5px;text-align:left">${label}</span></button>`;
+  const grid=(...cells)=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${cells.join('')}</div>`;
+  const section=(t,inner)=>`<div style="display:flex;flex-direction:column;gap:12px"><span class="eyebrow">${t}</span>${inner}</div>`;
+  let title, sub, body;
+  if(e.apply){
+    const a=e.apply, others=(state.zones||[]).filter(x=>x.id!==e.id);
+    const bundle=(k,t,d)=>`<button class="row" style="padding:6px 0;gap:10px;border:none;background:none;align-items:flex-start"${a.busy?' disabled':''} role="checkbox" aria-checked="${a.bundles[k]?'true':'false'}" onclick="APP.cmd('znApplyBundle','${k}')">
+        <span style="width:24px;height:24px;flex:none;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1.5px solid ${a.bundles[k]?'var(--text-primary)':'var(--border-strong)'};background:${a.bundles[k]?'var(--text-primary)':'transparent'};color:var(--surface-card)">${a.bundles[k]?ic('check',14,2.5):''}</span>
+        <span style="flex:1;text-align:left"><span style="display:block;font-size:14.5px">${t}</span><span style="display:block;font-size:12.5px;color:var(--text-secondary);line-height:1.45">${d}</span></span></button>`;
+    title=T('Copy settings to other zones','复制设置到其他配送区');
+    sub=T('Pick which fields and which zones — applies the form values currently in the drawer.','选择要复制的字段和目标配送区——将抽屉中当前的表单值应用过去。');
+    body=section(T('Which fields','复制哪些字段'),
+        bundle('pricing',T('Pricing','定价'),T('Base fee · Free-over · MAX (GZ) · Packing fee & cap (city)','基础运费 · 满额免运 · 封顶(广州) · 包装费与上限(外地)'))
+       +bundle('scheduling',T('Scheduling','时间'),T('Hours · Slot length · Lead → Max · Same-day · Day-only mode','营业时段 · 时段长度 · 提前量 → 最长 · 当日达 · 仅按天模式'))
+       +bundle('active',T('Active toggle','启用状态'),T('Use sparingly — pushing this turns selected zones on/off.','谨慎使用 — 会切换所选配送区的启用状态。')))
+     +section(T('Which zones','复制到哪些配送区'),
+        `<div style="display:flex;gap:8px;flex-wrap:wrap">${[['gz',T('All GZ','所有广州区')],['city',T('All cities','所有外地')],['all',T('All','全选')],['none',T('Clear','清空')]]
+          .map(([k,t])=>`<button class="chip"${a.busy?' disabled':''} onclick="APP.cmd('znApplyPreset','${k}')"><span>${t}</span></button>`).join('')}</div>
+        ${others.length?`<div class="list">${others.map((x,i)=>{ const on=a.targets.includes(x.id);
+          return `${i?'<div class="sep" style="margin-left:16px"></div>':''}<button class="row" style="min-height:48px;padding:10px 16px;gap:10px"${a.busy?' disabled':''} role="checkbox" aria-checked="${on?'true':'false'}" onclick="APP.cmd('znApplyT',${Number(x.id)})">
+            <span style="width:22px;height:22px;flex:none;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1.5px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-card)">${on?ic('check',13,2.5):''}</span>
+            ${znChip(x)}<span style="flex:1;min-width:0;text-align:left;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(znLabel(x)||'—')}</span></button>`; }).join('')}</div>`
+          :`<div style="font-size:14px;color:var(--text-secondary)">${T('No other zones to copy to. Add some first.','没有其他配送区可复制。请先添加。')}</div>`}
+        <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(a.targets.length+' zone(s) selected','已选 '+a.targets.length+' 个配送区')}</div>`);
+  }else{
+    title=e.mode==='edit'?T('Edit zone','编辑配送区'):e.mode==='dup'&&src?T('Duplicate of '+escAttr(znLabel(src)),'复制 '+escAttr(znLabel(src))):T('Add zone','添加配送区');
+    sub=e.mode==='edit'?escAttr(znLabel(z))+(z&&z.name_en?' · '+escAttr(z.name_en):'')
+      :e.mode==='dup'?T('Pick a new district/city — the rest is pre-filled. You can edit anything before saving.','请选择新区/城市,其余已预填,可调整后保存。')
+      :T('Pick one or more areas — the same pricing & scheduling applies to all.','选择一个或多个区域,以下定价与时间应用于全部。');
+    const R=zn.regions;
+    const where=e.mode==='edit'?grid(inp('name_cn',T('Display','中'),'天河','text'),inp('name_en',T('Display · EN','英文'),'Tianhe','text'))
+      :`<div style="display:flex;gap:8px">${[['gz_district',T('Guangzhou district','广州区/县')],['city',T('Other city','其他城市')]]
+          .map(([k,t])=>`<button class="chip ${e.type===k?'on':''}"${e.busy?' disabled':''} onclick="APP.cmd('znType','${k}')"><span>${t}</span></button>`).join('')}</div>
+        <div>${lbl(isGz?T('Districts','区/县')+' '+T('(pick one or more)','(可多选)'):T('Cities','城市'))}
+        ${!R?`<div style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+          :R.err?`<div style="font-size:14px;color:var(--brick-ink)">${T('Could not load this.','无法加载。')}</div>`
+          :isGz?`<div style="display:flex;flex-wrap:wrap;gap:8px">${R.gz.map((g,i)=>{
+              const taken=(state.zones||[]).some(x=>x.zone_type==='gz_district'&&x.match_district===g.name_cn);
+              const on=e.picksD.includes(g.name_cn);
+              return `<button class="chip ${on?'on':''}"${taken||e.busy?' disabled':''} style="${taken?'opacity:.4':''}" onclick="APP.cmd('znPickD',${i})"><span>${escAttr(g.name_cn)} · ${escAttr(g.name_en||'')}</span></button>`; }).join('')}</div>`
+          :`${e.picksC.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">${e.picksC.map((c,i)=>`<button class="chip on"${e.busy?' disabled':''} onclick="APP.cmd('znUnpickC',${i})"><span>${escAttr(c.name_cn)}${c.name_en?' · '+escAttr(c.name_en):''}</span>${ic('x',14,2)}</button>`).join('')}</div>`:''}
+            ${searchBox(`<input id="mZnCityQ" inputmode="search" enterkeyhint="done" value="${escAttr(e.cityQ)}" placeholder="深圳 · Shenzhen" style="width:100%" oninput="APP.cmd('znCityQ',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();APP.cmd('znPickC',-1)}">`,'mZnCityClr',!!e.cityQ)}
+            <div id="mZnCityBox">${znCityPicksHtml()}</div>`}
+        ${isGz&&e.picksD.length||!isGz&&e.picksC.length?`<div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:8px">${T((isGz?e.picksD.length:e.picksC.length)+' selected','已选 '+(isGz?e.picksD.length:e.picksC.length))}</div>`:''}</div>`;
+    body=where
+      +section(T('Pricing','定价'),
+          grid(inp('base',T('Base fee','基础运费')+' ('+CUR+')','15'),inp('free',T('Free over','满额免运')+' ('+CUR+')',T('default','默认')))
+          +(isGz?grid(inp('max',T('MAX flat','任意距离封顶')+' ('+CUR+')','—'),''):'')
+          +grid(inp('pack',T('Packing / item','每件包装费')+' ('+CUR+')','1.5'),inp('cap',T('Packing cap','包装费上限')+' ('+CUR+')','20'))
+          +`<div>${lbl(T('By weight (optional)','按重量计费(可选)'))}${grid(inp('w1','','10'),inp('wx','','+3/kg'))}</div>`)
+      +section(T('Scheduling','时间'),
+          grid(inp('lead',T('Earliest lead (days)','提前天数'),'0','numeric'),inp('maxlead',T('Furthest day','最远天数'),'14','numeric'))
+          +grid(inp('hs',T('Kitchen hours','开放时间'),'10','numeric'),inp('he','—','20','numeric'))
+          +grid(inp('slot',T('Slot length (min)','时段长度'),'120','numeric'),'')
+          +(isGz?flag('sd',T('Allow same-day','允许同日送达'))+(e.f.sd?grid(inp('sdfee','+SD ('+CUR+')','0'),''):''):'')
+          +flag('dayonly',T('Day-only (no time slots)','仅按日'))
+          +flag('active',T('Active','启用')));
+  }
+  const foot=e.apply
+    ? `<button class="btn2" style="flex:1"${e.apply.busy?' disabled':''} onclick="APP.cmd('znApplyClose')">${T('Cancel','取消')}</button>
+       <button class="btn2" style="flex:1;font-weight:500"${e.apply.busy||!e.apply.targets.length?' disabled':''} onclick="APP.cmd('znApplyGo')">${e.apply.busy?T('Working…','处理中…'):T('Apply','应用')}</button>`
+    : `${e.mode==='edit'&&znCanDel()?`<button class="btn2" style="flex:none;width:auto;padding:0 14px;color:var(--brick-ink);border-color:var(--brick-ink)"${e.busy?' disabled':''} onclick="APP.cmd('znDel')">${T('Delete','删除')}</button>`:''}
+       <button class="btn2" style="flex:1"${e.busy?' disabled':''} onclick="APP.cmd('znClose')">${can?T('Cancel','取消'):T('Close','关闭')}</button>
+       ${can?`<button class="btn2" style="flex:1;font-weight:500"${e.busy?' disabled':''} onclick="APP.cmd('znSave')">${e.busy?T('Saving…','保存中…'):T('Save','保存')}</button>`:''}`;
+  const tools=(!e.apply&&e.mode==='edit'&&can)?`<div style="display:flex;gap:16px;flex-wrap:wrap">
+      <button class="rowact"${e.busy?' disabled':''} onclick="APP.cmd('znDup',${Number(e.id)})">${ic('copy',15)}&nbsp;${T('Duplicate','复制配送区')}</button>
+      <button class="rowact"${e.busy?' disabled':''} onclick="APP.cmd('znApplyOpen')">${ic('layers',15)}&nbsp;${T('Copy settings to other zones','复制设置到其他配送区')}</button></div>`:'';
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('znClose')"></div>
+   <div class="sheet" style="z-index:46;top:46px;overflow:hidden;padding:0">
+     <div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:18px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('${e.apply?'znApplyClose':'znClose'}')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+       <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;line-height:1.5">${sub}</div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:18px">${tools}${body}</div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${e.err?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${e.err}</div>`:''}
+       <div style="display:flex;gap:8px">${foot}</div></div>
+   </div>`;
+}
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
 /* §325 — Legal's own open row. It used faqToggle and state.faqOpen, so opening
    the second FAQ answer and then visiting Legal found the Privacy policy
@@ -8287,7 +8736,13 @@ function dlvSettingsCard(holiday,cutoff){
   };
   const win=(po.min_days!=null)?(po.min_days===po.max_days?String(po.min_days):po.min_days+'–'+po.max_days)+' '+T('days','天'):'—';
   const sep='<div class="sep" style="margin-left:16px"></div>';
+  const zf=dlvZoneFacts();
+  const zonesRow=canRoute('zones')?`<button class="row" style="gap:12px;min-height:56px;padding:12px 16px" onclick="APP.cmd('push','zones')">
+      <span style="flex:1;min-width:0;font-size:15px">${T('Delivery zones','配送区')}</span>
+      <span class="num" style="flex:none;font-size:14px;color:var(--text-secondary)">${zf?T(zf.live+' live','启用 '+zf.live):''}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>${sep}`:'';
   return `<div class="list">
+    ${zonesRow}
     ${row(T('Holiday mode','假日模式'), holiday?T('On','开'):T('Off','关'),'dlvHoliday')}${sep}
     ${row(T('Same-day cutoff','当日截单'), T((cutoff!=null?cutoff:10)+' min before close',(cutoff!=null?cutoff:10)+' 分钟(打烊前)'),'dlvLive','cutoff')}${sep}
     ${row(T('Fees & minimum','费用与起送'), T('Free over','满额免运')+' '+m(f.freeShippingThreshold)+' · '+m(f.minOrder),'dlvFees')}${sep}
@@ -15414,6 +15869,10 @@ const SUBS={
       ? `<button class="cta inhead" onclick="APP.cmd('wasteNew')">${T('Record','记录')}</button>` : '',
     render:()=>screenWaste()},
   delivery:{title:['Delivery settings','配送设置'],render:()=>screenDelivery()},
+  /* §325 O5 — the desktop's zones table, as a list with its drawer as a sheet. */
+  zones:{title:['Delivery zones','配送区'],
+    cta:()=>znCanEdit()?`<button class="cta inhead" onclick="APP.cmd('znAdd')">${T('Add zone','添加配送区')}</button>`:'',
+    render:()=>screenZones()},
   invoices:{title:['Invoices','发票'],render:()=>{
     const c=state.liveInvoiceCounts;
     /* All sums THREE now. `requested` is the pending queue alone — the server
@@ -29264,7 +29723,9 @@ const ORDER_NEXT_PICKUP={dispatched:{en:'Mark ready for pickup',zh:'标记可取
    nothing here can be offered that the server would refuse. */
 const ORDER_ALSO={
   pending_payment:['cancelled'],
-  paid:['dispatched','refunded','cancelled'],
+  /* §325 O6 — §136's step BACK: Hold for restock, the desktop's second row on
+     a paid order. The server decides which products it waits on. */
+  paid:['awaiting_restock','dispatched','refunded','cancelled'],
   preparing:['refunded','cancelled'],
   dispatched:['refunded'],
   delivered:['refunded'],
@@ -29311,6 +29772,9 @@ function orderActs(o){
       // The desktop's own two labels, and the difference is the whole warning:
       // cancelling an unpaid order moves no money, cancelling a paid one does.
       acts.push(['ban', st==='pending_payment'?T('Cancel','取消'):T('Cancel + refund','取消并退款'),"APP.cmd('cancelOrder')"]);
+    }else if(to==='awaiting_restock'){
+      if(!canEdit) continue;
+      acts.push(['clock',T('Hold for restock','等待补货'),"APP.cmd('advance','awaiting_restock')"]);
     }else if(to==='dispatched'){
       if(!canEdit) continue;
       // paid → dispatched, skipping preparing. Relabelled for a pickup exactly
@@ -29380,7 +29844,11 @@ function orderErrorText(e){
      said. The desktop passes these through for the same reason, and they are
      English-only on both surfaces: that is the server's, not this screen's. */
   if(['refund_already_processing','use_refund_payout','refund_in_progress','invalid_amount',
-      'wechat_refund_abnormal','wechat_refund_failed'].includes(e.code)) return e.message;
+      'wechat_refund_abnormal','wechat_refund_failed',
+      /* §325 O6 — Hold for restock's three refusals (routes/retail.js, §136):
+         no store, a line not stocked there, or nothing actually short. The
+         desktop shows "whatever it says"; so does this. */
+      'no_fulfilling_store','line_not_stocked_here','nothing_short'].includes(e.code)) return e.message;
   if(e.code==='already_shipped') return T('A parcel already has a waybill, so this cannot be undone here. Cancel the waybill first.',
                                           '已有包裹生成运单，无法在此撤销。请先取消运单。');
   /* §98 — a late-parcel case that is not finished. Not a failure: the carrier
@@ -31519,6 +31987,7 @@ function sheetOrderDetail(){
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:var(--sage-ink)">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
        ${shipByTile(o)}
        ${invoiceBlock(o)}
+       ${splitSuggestionCard(o)}
        ${orderItemsBlock(o)}
        ${addonTimeline(o)}
        ${resvCard(o)}
@@ -31916,7 +32385,9 @@ function trackingCard(o,sp,label){
       <div style="font-size:13.5px;font-weight:600">${T('Running late · '+rl+' day'+(rl===1?'':'s'),'配送逾期 '+rl+' 天')}</div>
       <div style="font-size:12.5px;color:var(--text-secondary)">${T('Not delivered yet · call the customer','尚未送达 · 请联系顾客')}</div></div>`:''}
     ${sp.airCleared==null&&(sp.lateDays>0)?delayCaseCard(o,sp):''}
-    ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
+    ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}<span style="flex:1;min-width:0">${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</span>
+      ${/* §325 O6 — the desktop's Undo beside it: re-flags the order. */''}
+      ${(sp.lateDays>0&&!o.viewOnly&&o._id!=null&&mCan('orders:edit'))?`<button class="rowact" style="min-height:34px" ${state.parcelBusy?'disabled':''} onclick="APP.cmd('reopenAirDelay')">${state.parcelBusy==='airopen'?T('Working…','处理中…'):T('Undo','撤销')}</button>`:''}</div>`:''}
     ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${
       reuse.delivered?T('This waybill is already on a delivered order ('+escAttr(reuse.order_no)+'). A reused number will not sync — check it.','此运单号已用于一笔已签收订单('+escAttr(reuse.order_no)+')，重复号码不会同步，请核对。')
                      :T('This waybill is also on order '+escAttr(reuse.order_no)+'. Reused numbers may not sync.','此运单号也绑定在订单 '+escAttr(reuse.order_no)+' 上，可能无法同步。')}</div>`:''}
@@ -32421,6 +32892,93 @@ function parcelCard(o,sp,i,n,ships){
     ${canPrepare?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('prepareParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel prepared','标记此包裹已备货')}</button>`:''}
     ${canDispatch?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('dispatchParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel dispatched','标记此包裹已发货')}</button>`:''}
     ${canUndoParcel?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('undoParcelDispatch',${sp.id})">${busy?T('Marking…','处理中…'):T('Undo dispatch','撤销发货')}</button>`:''}
+    ${parcelExtras(o,sp)}
+  </div>`;
+}
+/* ── §325 O6 — WHAT A PARCEL CAN STILL HAVE DONE TO IT ────────────────────
+   The desktop's shipment card (04-orders.js), on the phone's parcel card:
+     · §189 RECOVERY — a box that was out when its order was cancelled: say
+       what became of it (renderParcelRecovery / closeParcelRecovery);
+     · a SUPPLIER parcel the carrier cannot live-track: mark it delivered
+       (renderSupplierTrackingBlock / markParcelDelivered);
+     · RIDER OR JD on a Guangzhou outer-district parcel (renderGzMethodToggle);
+     · SHIP PART LATER — move ticked lines into a follow-up parcel
+       (renderSplitPanel / submitShipmentSplit).
+   Every one is a write under /orders, so orders:edit (lib/cap-routes.js); a
+   reader sees the state and no control. */
+function parcelExtras(o,sp){
+  const can=!o.viewOnly&&o._id!=null&&mCan('orders:edit');
+  const busy=state.parcelBusy, out=[];
+  if(sp.recoveryNeeded){
+    if(sp.recoveryOutcome){
+      const back=sp.recoveryOutcome==='recovered';
+      out.push(`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border-default)">
+        ${pill(back?'delivered':'cancelled',back?T('Recovered','已收回'):T('Not recovered','未收回'))}
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${sp.recoveryClosedAt?escAttr(tdWhen(sp.recoveryClosedAt,'dateTime',_tdL())):''}${sp.recoveryClosedBy?' · '+escAttr(sp.recoveryClosedBy):''}</span></div>`);
+    }else{
+      out.push(`<div style="padding:12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:13.5px;font-weight:600">${T('This parcel was already out when the order was cancelled','订单取消时此包裹已发货')}</div>
+        <div style="font-size:12.5px;line-height:1.5">${T('Say what became of it. Only "it came back" puts the stock on the shelf.','请确认其去向。仅“已收回”会把库存退回货架。')}</div>
+        ${can?`<div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('parcelRecovery',${sp.id},'recovered')">${busy==='rec'+sp.id?T('Working…','处理中…'):T('It came back','已收回')}</button>
+          <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('parcelRecovery',${sp.id},'not_recovered')">${T('It did not come back','未收回')}</button></div>`:''}</div>`);
+    }
+  }
+  if(sp.mode==='supplier'&&!sp.recoveryNeeded){
+    out.push(`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Ships directly from the supplier — no warehouse label is printed for it. Paste the tracking number the supplier sends you so the customer can follow it.','由供应商直接发货 — 此包裹不打印仓库面单。请将供应商提供的快递单号填入下方,顾客即可查询物流。')}</div>`);
+    if(can&&sp.state==='dispatched')
+      out.push(`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('parcelDelivered',${sp.id})">${busy==='del'+sp.id?T('Working…','处理中…'):T('Mark this parcel delivered','标记此包裹已送达')}</button>`);
+  }
+  if(o.gzMethodToggle&&(sp.mode==='local'||sp.mode==='land')&&sp.state!=='delivered'&&!o.viewOnly){
+    const seg=(m,en,zh,icn)=>{ const on=sp.mode===m;
+      return `<button class="chip ${on?'on':''}" ${on||!can||busy?'disabled':''} aria-pressed="${on?'true':'false'}" onclick="APP.cmd('parcelMethod',${sp.id},'${m}')">${ic(icn,15)}<span>${T(en,zh)}</span></button>`; };
+    out.push(`<div><span class="eyebrow" style="display:block;margin-bottom:8px">${T('Dispatch method','配送方式')}</span>
+      <div style="display:flex;gap:8px">${seg('local','Rider','骑手配送','bike')}${seg('land','JD logistics','京东物流','truck')}</div>
+      ${busy==='meth'+sp.id?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('Working…','处理中…')}</div>`:''}</div>`);
+  }
+  const lines=(sp.items||[]).filter(t=>t&&t[6]!=null);
+  if(can&&sp.state==='pending'&&lines.length>=2&&!sp.recoveryNeeded){
+    const pk=state.splitPick&&state.splitPick.sid===sp.id?state.splitPick:null;
+    if(!pk) out.push(`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('splitPickOpen',${sp.id})">${T('Ship part later','分批发货')}</button>`);
+    else out.push(`<div style="padding:12px;border:1px dashed var(--border-strong);border-radius:12px;display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Tick the items that ship <b>later</b> — they move to a new follow-up parcel and the rest stays here to ship now.','勾选稍后发货的商品,移入新的后补包裹。')}</div>
+      ${lines.map(t=>{ const on=pk.ids.includes(t[6]);
+        return `<button class="row" style="padding:6px 0;gap:10px;border:none;background:none" role="checkbox" aria-checked="${on?'true':'false'}" ${busy?'disabled':''} onclick="APP.cmd('splitPickT',${Number(t[6])})">
+          <span style="width:22px;height:22px;flex:none;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1.5px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-card)">${on?ic('check',13,2.5):''}</span>
+          <span style="flex:1;min-width:0;text-align:left;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(Array.isArray(t[1])?T(t[1][0],t[1][1]):t[1])}${t[5]?' · '+escAttr(T(...t[5])):''}</span>
+          <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">×${escAttr(t[0])}</span></button>`; }).join('')}
+      ${pk.err?`<div style="font-size:13px;color:var(--brick-ink)">${pk.err}</div>`:''}
+      <div style="display:flex;gap:8px">
+        <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('splitPickClose')">${T('Cancel','取消')}</button>
+        <button class="btn2" style="flex:1;font-weight:500" ${busy?'disabled':''} onclick="APP.cmd('splitPickGo')">${busy==='split'+sp.id?T('Working…','处理中…'):T('Move to follow-up parcel','移入后补包裹')}</button></div></div>`);
+  }
+  return out.join('');
+}
+/* ── §325 O6 — THE SPLIT SUGGESTION (splitSuggestionBanner) ──────────────────
+   The server's buildShipmentSuggestion, when eligible: split into an Air and
+   a Land package and save on freight. Apply re-buckets the lines
+   (POST /shipment-suggestion/apply); Dismiss hides it for this session, as the
+   desktop's in-memory dismissal does. Drawn for orders:edit — it is a control
+   with figures, and without the control it is nothing to act on. */
+function splitSuggestionCard(o){
+  const g=o.suggestion;
+  if(!g||o.viewOnly||o._id==null||!mCan('orders:edit')) return '';
+  if((state.splitDismissed||[]).includes(o._id)) return '';
+  const grams=v=>v>=1000?(v/1000).toFixed(1)+' kg':v+' g';
+  const busy=state.parcelBusy==='sug';
+  const plan=(g.suggested&&g.suggested.plan)||[];
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px;border-color:var(--sage-ink)">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <span style="font-size:14.5px;font-weight:500">${T('Suggested: split into 2 packages','拆分为 2 个包裹')}</span>
+      <span class="num" style="font-size:13px;color:var(--sage-ink);font-weight:500">${T('save '+money(CUR,g.savings),'节省 '+money(CUR,g.savings))}</span></div>
+    <div class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Current freight '+money(CUR,g.current&&g.current.cost)+' → split freight '+money(CUR,g.suggested&&g.suggested.cost),'当前 '+money(CUR,g.current&&g.current.cost)+' → 拆后 '+money(CUR,g.suggested&&g.suggested.cost))}</div>
+    ${plan.map(b=>`<div style="display:flex;align-items:center;gap:10px;font-size:13px">
+      ${ic(b.mode==='air'?'plane':'truck',15)}<span style="flex:1;min-width:0">${b.mode==='air'?T('Air package','空运包裹'):T('Land package','陆运包裹')}
+        <span class="num" style="display:block;font-size:12px;color:var(--text-secondary)">${T((b.item_ids||[]).length+' products',(b.item_ids||[]).length+' 款')} · ${money(CUR,b.value)} · ${grams(Number(b.grams)||0)}</span></span>
+      <span class="num" style="flex:none">${money(CUR,b.cost)}</span></div>`).join('')}
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('splitSugDismiss')">${T('Dismiss','忽略')}</button>
+      <button class="btn2" style="flex:1;font-weight:500" ${busy?'disabled':''} onclick="APP.cmd('splitSugApply')">${busy?T('Working…','处理中…'):T('Apply','拆分')}</button></div>
   </div>`;
 }
 /* PRODUCTS is how many lines to pick; UNITS is how many things go in the box.
@@ -37290,7 +37848,10 @@ const ROUTE_CAP={
   // to the shop menu there.
   shopmenus:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],
   shopmenu:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],
-  delivery:'delivery:view', invoices:'invoices:view', purchasing:'purchasing:view',
+  delivery:'delivery:view', invoices:'invoices:view',
+  /* §325 O5 — the zones list reads on the Delivery screen's key; its writes
+     are drawn for delivery:edit / delivery:delete where they appear. */
+  zones:'delivery:view', purchasing:'purchasing:view',
   /* §286 — a read of the same orders Purchasing shows, so the same key. Its
      writes (a payment, a correction) are purchasing:edit on the server and the
      buttons that make them are drawn only for a holder of it. */
@@ -38292,6 +38853,7 @@ function render(){
   if(state.overflow) html += layer('overflow', sheetOverflow());
   if(state.ask) html += layer('ask:'+state.ask.title, sheetAsk());
   if(state.ordViews.open) html += layer('ordviews', sheetOrdViews());
+  if(state.zn.edit) html += layer('zn:'+(state.zn.edit.id||state.zn.edit.mode), sheetZone());
   if(state.custId) html += layer('cust:'+state.custId, sheetCustomer());
   if(state.caddr) html += layer('caddr', sheetCustAddr());
   if(state.detailId) html += layer('detail:'+state.detailId, sheetOrderDetail());
@@ -40313,7 +40875,16 @@ function mapDetail(o){
     // order that is not awaiting restock, and the one thing that decides whether
     // a parked order's parcel may still be packed and sent.
     held_lines:sp.held_lines||0,
+    /* §325 O6 — §189's recovery case: stamped only by the cancel branch, only
+       on a box that was packed or gone. Absent on every parcel that ends
+       normally. */
+    recoveryNeeded:sp.recovery_needed_at||null, recoveryOutcome:sp.recovery_outcome||null,
+    recoveryClosedAt:sp.recovery_closed_at||null, recoveryClosedBy:sp.recovery_closed_by||null,
   }));
+  /* §325 O6 — the rider / JD switch on a Guangzhou outer-district order, and
+     the server's split suggestion (buildShipmentSuggestion). */
+  base.gzMethodToggle=!!o.gz_method_toggle;
+  base.suggestion=(o.shipment_suggestion&&o.shipment_suggestion.eligible)?o.shipment_suggestion:null;
   base.airDelayed=!!o.air_delivery_delayed;
   /* WHETHER THE SYSTEM SPLIT THIS ORDER BECAUSE OF WHERE IT IS GOING. Set by
      the server off the shipping city; the desktop gates its combine/split
