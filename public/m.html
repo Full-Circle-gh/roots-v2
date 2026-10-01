@@ -35608,8 +35608,8 @@ function vaPutBody(members,nounEn,nounCn){
 }
 function loadPeSizes(e){
   if(!e) return;
-  const va=e.va||(e.va={members:null,noun_en:'',noun_cn:'',hadGroup:false,loadErr:null,err:null,busy:null,busyText:'',seq:0});
-  const seq=++va.seq; va.loadErr=null;
+  const va=e.va||(e.va={members:null,noun_en:'',noun_cn:'',hadGroup:false,readErr:null,err:null,busy:null,busyText:'',seq:0});
+  const seq=++va.seq; va.readErr=null;
   api('/products/'+e.pid+'/variants').then(d=>{
     if(state.pe!==e||va.seq!==seq) return;
     const rows=(d&&Array.isArray(d.members))?d.members:[];
@@ -35622,7 +35622,7 @@ function loadPeSizes(e){
     if(state.pe!==e||va.seq!==seq||String(err&&err.message)==='auth') return;
     const msg=err&&err.refused?T(...err.words):T('Load failed','加载失败');
     // A family already on screen stays there; only a first read that failed is an empty card.
-    if(va.members) va.err=msg; else va.loadErr=msg;
+    if(va.members) va.err=msg; else va.readErr=msg;
     render();
   });
 }
@@ -35652,7 +35652,7 @@ function vaFind(id){
 function peSizesCard(){
   const e=state.pe, va=e&&e.va; if(!va) return '';
   const wrap=inner=>`<div class="card" id="mPeSizes" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div class="eyebrow">${T('Variants','规格')}</div>${inner}</div>`;
-  if(va.loadErr) return wrap(`<span style="font-size:14px;color:var(--brick-ink)">${escAttr(va.loadErr)}</span>
+  if(va.readErr) return wrap(`<span style="font-size:14px;color:var(--brick-ink)">${escAttr(va.readErr)}</span>
     <button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" onclick="APP.cmd('vaRetry')">${T('Try again','重试')}</button>`);
   if(!va.members) return wrap(`<span style="font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`);
   const edit=prodCanEdit(), busy=!!va.busy, ms=va.members, d=e.draft;
@@ -35703,7 +35703,7 @@ function peSizesCard(){
   }).join('');
   return wrap(`${nounRow}<div>${rows}</div>${errLine}${status}${add}`);
 }
-reg('vaRetry', ()=>{ const e=state.pe; if(e&&e.va){ e.va.loadErr=null; e.va.err=null; render(); loadPeSizes(e); } });
+reg('vaRetry', ()=>{ const e=state.pe; if(e&&e.va){ e.va.readErr=null; e.va.err=null; render(); loadPeSizes(e); } });
 /* Order: the whole family, in its new order, in one PUT (variant_sort = index). */
 reg('vaMove', (i,dir)=>{
   const e=state.pe, va=e&&e.va; if(!va||!va.members||va.busy) return;
