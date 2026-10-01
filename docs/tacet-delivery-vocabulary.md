@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.278 · 2026-09-30 · §386 BULK EDITS AND DELETE ON THE PHONE — NOTHING COMPOSED; TWO GLUED DESKTOP PAIRS LIFTED AS HALVES, THE REST COPIED WHOLE.** See *Bulk edits, bulk delete and single delete on the phone (§386)*.
+
+**v1.277 · 2026-09-30 · §385 SHOP MENU STRUCTURE ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SHOP MENU.** See *A shop menu's structure, changed on the phone (§385)*.
+
+**v1.276 · 2026-09-30 · §384 NEW PRODUCT ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP.** See *A new product, made on the phone (§384)*.
+
 **v1.275 · 2026-09-30 · §383 CUSTOMER CHOICES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *What the customer chooses, edited on the phone (§383)*.
 
 **v1.274 · 2026-09-30 · §382 BUNDLES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's two bundles, edited on the phone (§382)*.
@@ -12038,3 +12044,109 @@ writes as it stands, and is copied as it stands.
 
 **Phone live pairs reused:** `Move up · 上移`, `Move down · 下移`, `Remove · 移除`,
 `No matches · 无匹配`, `Close · 关闭`.
+
+## A new product, made on the phone (§384)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the Products tab header and on the Details screen before a
+new product's first save (`public/m.html`).
+
+**Copied whole from the desktop:**
+
+- From `public/retail-admin.html`:
+  - `Add product · 新增产品`, the Products toolbar button.
+- From `public/retail-admin/09-products.js`:
+  - `New product · 新增产品`, the editor's title for an unsaved product.
+  - `Add a name & SKU to start autosaving · 填写名称和货号后自动保存`, the
+    editor's opening hint.
+  - The four "Add a name & SKU above — it saves automatically, then …" lines,
+    one each for variants, suggested add-ons, the bundle and options, with
+    their pairs.
+
+**Phone live pairs reused:** `Add a name to start autosaving ·
+填写名称后自动保存`, `All changes saved · 已自动保存`, `Saving… · 保存中…`,
+`Save failed: · 保存失败:`, and the card titles from PD9–PD11.
+
+**Live candidate rejected:** the desktop's longer bundle header,
+`套装产品(作为一个产品出售)`, which its unsaved state uses. The phone keeps the
+`套装产品` header the card wears after the first save, so the card's name does
+not change under the operator.
+
+## A shop menu's structure, changed on the phone (§385)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the phone admin's Shop menu list, on a shop's card, and in
+the two Move asks (`public/m.html`).
+
+**Copied whole from the desktop shop menu** (`public/retail-admin/28-shops.js`):
+
+- **Setting up and saving:** `Set up · 设置`, `Saved · 已保存`.
+- **The shop's card:**
+  - `English name (optional) · 英文名(可选)`
+  - `Chinese name · 中文名`
+  - `On · 已开启`
+  - `Off · 已停用`
+- **Moving:**
+  - `Move products · 移动商品`
+  - `Move products to another location? · 移动商品到其他门店？`
+  - `Move N product(s) to X? · 移动 N 个商品到X？`
+  - the warning sentence, whole, in both languages
+  - `Move · 移动`
+  - `Moved · 已移动`
+
+**From the desktop's error words** (`public/retail-admin/01-core.js` TD_ERR):
+- `That location already has a menu of its own. · 该门店已有商品,请选择其他门店。`
+- `There is nothing on this menu to move. · 没有可移动的商品。`
+- `The menu is already at that location. · 商品已在该门店。`
+
+**Phone live pairs reused:** `Saving… · 保存中…`, `Not set up · 未开通`,
+`Inactive · 已停用`, and the shop-menu refusal sentence from PD4.
+
+## Bulk edits, bulk delete and single delete on the phone (§386)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear in the phone catalogue's bulk bar, its menus and confirms, and
+on the Details screen's Delete (`public/m.html`).
+
+**Copied whole from the desktop** (`public/retail-admin/09-products.js`,
+`paRenderBulkBar` / `paBulkApply` / `paBulkDelete`):
+
+- **The bar:** `N selected · 已选 N 件`, `Select all N · 全选 N`,
+  `Clear page · 清空本页`, `Clear · 清除`.
+- **The five menus:** `Shop · 上架`, `Badge · 标签`, `Shipping · 配送`,
+  `More · 更多`, `Delete · 删除`.
+- **Every menu item:** `Turn on · 上架`, `Turn off · 下架`, `None · 无`,
+  `Auto · 自动`, `NEW`, `POP`, `SALE`, `HOT`, `Air + Land · 空运+陆运`,
+  `Air only · 仅空运`, `Land only · 仅陆运`, `Show in markets · 在市集显示`,
+  `Hide from markets · 从市集隐藏`, `Mark fresh batch · 标记现做`,
+  `Not fresh batch · 取消现做`.
+- **The confirm's "what":** all fifteen labels, e.g. `Set badge to NEW ·
+  设置标签为 NEW · 新品` and `Hide from the shop · 从店面下架`.
+- **The confirms and results:**
+  - `… — N product(s)? · … — N 件商品?`
+  - `Apply · 应用`
+  - `Working… · 处理中…`
+  - `Updated N ✓ · 已更新 N 件 ✓`
+  - `N done, M failed · N 成功,M 失败`
+  - `Delete N product(s)? · 删除 N 件商品?`
+  - the cannot-be-undone sentence, whole
+  - `Deleted N ✓ · 已删除 N 件 ✓`
+  - `N deleted, M failed · N 已删除,M 失败`
+
+**Lifted, 2026-10-01, by Claude.** On the desktop, `pdDelete` writes its
+strings with both languages glued into one. Each half is used here on its
+own, in its own language; no words were changed.
+
+| shipped | lifted from |
+|---|---|
+| `Delete this product? · 删除此产品?` | `'Delete this product? · 删除此产品?'` |
+| `It will be hidden from the shop. · 将从店面隐藏。` | `'It will be hidden from the shop. · 将从店面隐藏。'` |
+
+**Phone and desktop live pairs reused:**
+- `Select · 选择` and `Done · 完成`, from the phone's Media screen.
+- `Deleted · 已删除`, a phone pair already in use.
+- `Deleting… · 删除中…`, declared in PD9.
+- `Delete failed: · 删除失败:`, the desktop's `vaRemove`.
+
+The " — " that joins a count to the server's refusal is punctuation, not a
+string.
