@@ -26646,3 +26646,57 @@ loaded. Holiday mode ON, also in §326.2, is not part of this step.
 8. **Not done:** holiday mode ON (§326.2), and messages for when the online store
    is closed (`message_en` / `message_cn`). The desktop panel does not write
    those messages either, and the server keeps the stored ones.
+
+## §391 — BILLING COMES TO THE PHONE: THE PLAN, THE PLANS, CHOOSING ONE AND PAYING IT, AND THE INVOICES
+
+**Built 2026-10-01 under §325** (Ash, §326.8: *"Billing and plans come to the phone, last."*).
+The phone gets the desktop Billing page (`public/backend-billing.html`). It is a
+row in Settings next to Brand, which is where the desktop links to it. It shows
+the subscription and its alert, the plans, choosing a plan and paying for it,
+and the invoices. Every request is the desktop page's own.
+
+1. **What it reads:**
+   - `GET /api/backend/billing` and `GET /api/backend/plans`, asked together. If
+     either read fails, the screen shows the desktop's *Failed to load billing*
+     with a retry.
+   - The four alerts are the desktop's own sentences.
+   - Statuses are shown as words, not the desktop's raw codes. The words come
+     from the platform back office (`store-admin.html`); one is composed (see
+     the vocabulary entry).
+   - Plan names and features are shown in one language.
+2. **Choosing a plan follows the desktop's `onChoosePlan` step for step:**
+   - First, a confirm.
+   - Then `POST /api/backend/billing/select-plan {plan_code}`.
+   - Then the payment provider, picked the desktop's way: WeChat Pay when it is
+     configured, otherwise manual.
+   - Then `POST /api/backend/billing/checkout {invoice_id, provider}`.
+   - Then the checkout appears in a sheet. For WeChat Pay it shows the QR, and
+     the phone asks `GET …/invoices/:id/payment-status` every 3 s. For a manual
+     transfer it shows the instructions and the reference.
+
+   The screen reads again afterwards, so the new invoice shows. The QR wait
+   stops when the sheet closes or the screen is left, as the desktop's modal
+   does.
+3. **The confirm says one thing the desktop's does not:** "Until it is paid,
+   billing shows the account as past due." The server sets the subscription to
+   `past_due` the moment the invoice is raised (`select-plan`), even partway
+   through a paid period. That is true and nobody would guess it.
+4. **Who:**
+   - The screen asks for `billing:view`, the key on the desktop's link.
+   - Choose asks for `billing:pay`, the key named "Pay / change plan". No preset
+     includes it; only the owner has it.
+   - Both wait for the operator's keys to load (`mCanKnown`, from X12).
+
+   **The server asks for neither key.** Every `/api/backend/billing*` route
+   accepts any signed-in operator (`requireBackend`). The phone's check can
+   only hide a control the server would allow; it never shows one the server
+   would refuse. The server gap is reported for a server step, not fixed here.
+5. **Not done, matching the desktop:**
+   - Paying an invoice that is already open. The desktop has no Pay button on
+     its invoice rows.
+   - Marking an invoice paid. That is SaaS-admin only.
+   - The *Company* line. It is the brand name, which Settings → Brand already
+     shows.
+
+   A WeChat QR shown on the phone has to be scanned with another device, just
+   as it would be from the desktop.
