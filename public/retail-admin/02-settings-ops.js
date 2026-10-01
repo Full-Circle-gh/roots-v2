@@ -380,6 +380,9 @@ async function saveAlipayManualInline() {
   // §325 D1 — never send a card that was not read: it would replace the stored
   // record with a blank one. The card already says so where it sits.
   if (!_alipayManualLoaded) return;
+  // §412.2 — the card is settings:payments alone (data-cap hides it); the
+  // shared Save bar it rides on is not, so it must not send the hidden card.
+  if (typeof can === 'function' && !can('settings:payments')) return;
   const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
   const chk = (id) => !!(document.getElementById(id) || {}).checked;
   const status = document.getElementById('alipay-manual-status');

@@ -34881,8 +34881,17 @@ const wxm=()=>state.wxm;
 const WXM_SKIP='fc_miniapp_pay_skip';   /* the desktop's own key (MW_SKIP_KEY) */
 function wxmSkipped(){ try{ return localStorage.getItem(WXM_SKIP)==='1'; }catch(_){ return false; } }
 function wxmSkipSet(on){ try{ if(on) localStorage.setItem(WXM_SKIP,'1'); else localStorage.removeItem(WXM_SKIP); }catch(_){} }
-const wxmCan=()=>mCan('integrations:manage');
-const wxmEditable=()=>wxmCan()&&!!wxm().cfg&&wxm().cfg.source!=='env';
+/* §412.2 — TWO HALVES, TWO KEYS (lib/cap-routes.js wechatCredsFieldCap). The
+   mini program's login pair is integrations:manage; the WeChat Pay merchant
+   details are settings:payments, which waits for the keys to be known. Each
+   half is editable, and its fields sent, only for its own key; the wizard's
+   pay steps exist only for the payments key. wxmCan is "either half". */
+const wxmCanLogin=()=>mCan('integrations:manage');
+const wxmCanPay=()=>mCanKnown('settings:payments');
+const wxmCan=()=>wxmCanLogin()||wxmCanPay();
+const wxmStepOk=n=>Number(n)===1?wxmCanLogin():wxmCanPay();
+const wxmNotEnv=()=>!!wxm().cfg&&wxm().cfg.source!=='env';
+const wxmEditable=(half)=>wxmNotEnv()&&(half==='pay'?wxmCanPay():half==='login'?wxmCanLogin():wxmCan());
 /* Only what the page needs, and of each secret only whether it is set. */
 function wxmSafe(c){
   c=c||{}; const p=c.pay||{}, st=c.status||{};
@@ -34901,7 +34910,7 @@ function wxmLoad(){
     s.cfg=wxmSafe(c); s.d=wxmFresh(s.cfg); s.open={};
     if(!s.mode){ const st=s.cfg.status;
       s.mode=(!wxmCan()||s.cfg.source==='env'||(st.wechatLoginReady&&(st.payReady||wxmSkipped())))?'full':'wizard';
-      if(s.mode==='wizard') s.step=wxmResume(); }
+      if(s.mode==='wizard'){ s.step=wxmResume(); if(!wxmStepOk(s.step)) s.mode='full'; } }
     render();
   }).catch(e=>{ if(String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
 }
@@ -34914,7 +34923,7 @@ reg('wxmOpen', ()=>{
 });
 /* Typing writes the draft and repaints nothing. */
 reg('wxmIn', (k,v)=>{ const d=wxm().d; if(!(k in d)) return; d[k]=String(v==null?'':v); });
-reg('wxmReplace', k=>{ if(!wxmEditable()) return; wxm().open[k]=true; render(); });
+reg('wxmReplace', k=>{ if(!wxmEditable(k==='appSecret'?'login':'pay')) return; wxm().open[k]=true; render(); });
 reg('wxmKeep', k=>{ const s=wxm(); if(!(k in s.d)) return; s.open[k]=false; s.d[k]=''; render(); });
 reg('wxmPub', ()=>{ const s=wxm(); s.showPub=!s.showPub; render(); });
 function wxmSay(t,x){ const s=wxm(); s.msg={t, x:x?String(x):'', tone:'bad'}; render(); }
@@ -34928,7 +34937,7 @@ const wxmFail=e=>e&&e.refused?E(...e.words):E('Could not save — try again.','�
 
 /* ── The wizard's three checks and saves ─────────────────────────────────── */
 reg('wxmLogin', ()=>{
-  const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='wizard'||s.step!==1) return;
+  const s=wxm(); if(s.busy||!wxmCanLogin()||!s.cfg||s.mode!=='wizard'||s.step!==1) return;
   const appId=wxmV('appId'), secret=wxmV('appSecret');
   if(!/^wx[0-9a-zA-Z]{16}$/.test(appId)) return wxmSay(E('AppID should be “wx” followed by 16 letters or numbers.','AppID 应为 wx 加 16 位字母数字。'));
   if(!secret&&!s.cfg.appSecretSet) return wxmSay(E('Paste the AppSecret too.','请同时粘贴 AppSecret。'));
@@ -34939,13 +34948,13 @@ reg('wxmLogin', ()=>{
        secret is saved either way: the page drops its copy. */
     s.cfg.appId=appId; if(secret) s.cfg.appSecretSet=true; s.d.appSecret='';
     if(r.creds) s.cfg.status=wxmSafe({status:r.creds}).status;
-    if(r.verified){ wxmGo(2); return; }
+    if(r.verified){ if(!wxmCanPay()){ s.mode='full'; wxmReread(); return; } wxmGo(2); return; }   // §412.2 — the pay steps are the payments key's
     wxmSay(E('WeChat did not accept this pair — check both values and try again. WeChat said: ','微信未通过校验 — 请核对两项后重试。微信返回：'), r.error);
   }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
     wxmSay(e&&e.code==='appid_taken'&&!e.refused?E('That AppID is already used by another account here.','该 AppID 已被其他账户使用。'):wxmFail(e)); });
 });
 reg('wxmMch', ()=>{
-  const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='wizard'||s.step!==2) return;
+  const s=wxm(); if(s.busy||!wxmCanPay()||!s.cfg||s.mode!=='wizard'||s.step!==2) return;
   const mchId=wxmV('mchId');
   if(!/^\d{8,12}$/.test(mchId)) return wxmSay(E('The merchant ID is a number, usually 10 digits.','商户号是数字，通常 10 位。'));
   s.busy='mch'; s.msg=null; render();
@@ -34954,7 +34963,7 @@ reg('wxmMch', ()=>{
   }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; wxmSay(wxmFail(e)); });
 });
 reg('wxmPay', ()=>{
-  const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='wizard'||s.step!==3) return;
+  const s=wxm(); if(s.busy||!wxmCanPay()||!s.cfg||s.mode!=='wizard'||s.step!==3) return;
   const p=s.cfg.pay;
   const body={serialNo:wxmV('serialNo'), apiV3Key:wxmV('apiV3Key'), privateKey:wxmV('privateKey'), platformPubKey:wxmV('platformPubKey')};
   if(!body.serialNo&&!p.serialNo) return wxmSay(E('Fill in the certificate serial.','请填写证书序列号。'));
@@ -34985,16 +34994,19 @@ reg('wxmSkip', ()=>{
 });
 reg('wxmBack', ()=>{ const s=wxm(); if(s.busy||s.mode!=='wizard'||s.step<2) return; wxmGo(s.step-1); });
 reg('wxmAnyway', ()=>{ const s=wxm(); if(s.busy||!s.finishAnyway) return; wxmFinish(false,true); });
-reg('wxmStep', n=>{ const s=wxm(); n=Number(n); if(s.busy||!wxmCan()||![1,2,3].includes(n)) return; wxmGo(n); });
-reg('wxmGuide', ()=>{ const s=wxm(); if(s.busy||!wxmEditable()) return; wxmSkipSet(false); wxmGo(wxmResume()); });
+reg('wxmStep', n=>{ const s=wxm(); n=Number(n); if(s.busy||![1,2,3].includes(n)||!wxmStepOk(n)) return; wxmGo(n); });
+reg('wxmGuide', ()=>{ const s=wxm(); if(s.busy||!wxmEditable('login')) return; const at=wxmResume(); if(!wxmStepOk(at)) return; wxmSkipSet(false); wxmGo(at); });
 reg('wxmFull', ()=>{ const s=wxm(); if(s.busy) return; s.mode='full'; s.msg=null; s.finishAnyway=false; wxmReread(); });
 reg('wxmClose', ()=>{ if(state.stack.length&&state.stack[state.stack.length-1].route==='wxmini') pop(); });
 
 /* ── The configuration page's Save & verify: the desktop's seven fields ──── */
 reg('wxmSave', ()=>{
   const s=wxm(); if(s.busy||!wxmCan()||!s.cfg||s.mode!=='full') return;
-  const body={appId:wxmV('appId'), appSecret:wxmV('appSecret'), mchId:wxmV('mchId'), apiV3Key:wxmV('apiV3Key'),
-    serialNo:wxmV('serialNo'), privateKey:wxmV('privateKey'), platformPubKey:wxmV('platformPubKey')};
+  /* §412.2 — each half is sent only for its own key. */
+  const body={};
+  if(wxmCanLogin()) Object.assign(body,{appId:wxmV('appId'), appSecret:wxmV('appSecret')});
+  if(wxmCanPay()) Object.assign(body,{mchId:wxmV('mchId'), apiV3Key:wxmV('apiV3Key'), serialNo:wxmV('serialNo'),
+    privateKey:wxmV('privateKey'), platformPubKey:wxmV('platformPubKey')});
   s.busy='save'; s.msg=null; render();
   apiWrite('/channel-hub/miniapp/wechat-creds',body,'POST').then(r=>{
     s.busy=null; r=r||{};
@@ -35027,7 +35039,7 @@ function wxmIn(k,label,o){
 }
 /* A saved secret: its mask and Replace; opened, an empty box and Keep saved value. */
 function wxmSecret(k,label,isSet,o){
-  o=o||{}; const s=wxm(), ed=wxmEditable();
+  o=o||{}; const s=wxm(), ed=wxmEditable(o.half);
   if(!isSet) return wxmIn(k,label,Object.assign({secret:!o.pem, ro:!ed},o));
   if(s.open[k]&&ed) return `<div style="display:flex;flex-direction:column;gap:6px">${wxmIn(k,label,Object.assign({secret:!o.pem},o))}
     <button class="btn2" style="width:auto;align-self:flex-start;min-height:30px;padding:0 10px;font-size:12.5px" onclick="APP.cmd('wxmKeep','${k}')">${T('Keep saved value','保留已保存的值')}</button></div>`;
@@ -35044,19 +35056,19 @@ const wxmPurpose=(en,zh)=>`<div style="font-size:13.5px;color:var(--text-seconda
 const wxmHelpBtn=()=>hubManage()?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('hubHelp','wechat_miniapp')">? ${T('Get help','获取帮助')}</button>`:'';
 
 function wxmFullHtml(){
-  const s=wxm(), c=s.cfg, st=c.status, p=c.pay, env=c.source==='env', ed=wxmEditable(), ro=!ed;
+  const s=wxm(), c=s.cfg, st=c.status, p=c.pay, env=c.source==='env', edL=wxmEditable('login'), edP=wxmEditable('pay');
   return `<div style="display:flex;flex-wrap:wrap;gap:6px">${wxmChip(st.wxAppIdSet,'Mini program linked','小程序已绑定')}${wxmChip(st.wechatLoginReady,'Customer login ready','顾客登录可用')}${wxmChip(st.payReady,'WeChat Pay ready','微信支付可用')}</div>
-    ${wxmSec(T('WeChat Mini Program','微信小程序'), wxmIn('appId','AppID',{ro})
-      +wxmSecret('appSecret','AppSecret',c.appSecretSet,{ph:T('Paste the AppSecret','粘贴 AppSecret')}))}
-    ${wxmSec(T('WeChat Pay','微信支付'), wxmIn('mchId',T('Merchant ID','商户号'),{ro, num:true})
-      +wxmIn('serialNo',T('Certificate serial','证书序列号'),{ro})
-      +wxmSecret('apiV3Key',T('API v3 key','APIv3 密钥'),p.apiV3KeySet,{ph:T('Paste the API v3 key','粘贴 APIv3 密钥')})
-      +wxmSecret('privateKey',T('Merchant private key','商户私钥'),p.privateKeySet,{pem:true, ph:T('Paste the full PEM, including the BEGIN and END lines','粘贴完整 PEM，包含 BEGIN 与 END 行')})
-      +wxmSecret('platformPubKey',T('WeChat platform public key','微信平台公钥'),p.platformPubKeySet,{pem:true, opt:true, ph:T('Paste PEM contents','粘贴 PEM 内容')}))}
+    ${wxmSec(T('WeChat Mini Program','微信小程序'), wxmIn('appId','AppID',{ro:!edL})
+      +wxmSecret('appSecret','AppSecret',c.appSecretSet,{half:'login', ph:T('Paste the AppSecret','粘贴 AppSecret')}))}
+    ${wxmSec(T('WeChat Pay','微信支付'), wxmIn('mchId',T('Merchant ID','商户号'),{ro:!edP, num:true})
+      +wxmIn('serialNo',T('Certificate serial','证书序列号'),{ro:!edP})
+      +wxmSecret('apiV3Key',T('API v3 key','APIv3 密钥'),p.apiV3KeySet,{half:'pay', ph:T('Paste the API v3 key','粘贴 APIv3 密钥')})
+      +wxmSecret('privateKey',T('Merchant private key','商户私钥'),p.privateKeySet,{half:'pay', pem:true, ph:T('Paste the full PEM, including the BEGIN and END lines','粘贴完整 PEM，包含 BEGIN 与 END 行')})
+      +wxmSecret('platformPubKey',T('WeChat platform public key','微信平台公钥'),p.platformPubKeySet,{half:'pay', pem:true, opt:true, ph:T('Paste PEM contents','粘贴 PEM 内容')}))}
     ${env?`<div style="font-size:13px;color:var(--text-secondary)">${T('Filled from the server config for this account.','本账号由服务器配置填充。')}</div>`:''}
     ${wxmMsg()}
     ${wxmCan()?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('wxmSave')">${s.busy==='save'?T('Verifying…','验证中…'):T('Save & verify','保存并验证')}</button>`:''}
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${ed?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('wxmGuide')">${T('Setup guide','设置向导')}</button>`:''}${wxmHelpBtn()}</div>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${edL&&wxmStepOk(wxmResume())?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('wxmGuide')">${T('Setup guide','设置向导')}</button>`:''}${wxmHelpBtn()}</div>`;
 }
 function wxmWizardHtml(){
   const s=wxm(), c=s.cfg, p=c.pay, step=s.step;
@@ -35121,7 +35133,7 @@ function wxmDoneHtml(){
     :T('Everything checked out with WeChat. Your storefront can sign customers in and take payment.','所有项目均通过微信验证。店面已可登录顾客并收款。');
   const todo=(en,zh,step)=>`<div style="display:flex;align-items:center;gap:10px;background:var(--amber-tint);border-radius:10px;padding:9px 12px">
     <span style="flex:1;min-width:0;font-size:13px;color:var(--amber-ink)">◷ ${T(en,zh)}</span>
-    ${wxmCan()?`<button class="btn2" style="width:auto;min-height:30px;padding:0 10px;font-size:12.5px" onclick="APP.cmd('wxmStep',${step})">${T('Finish now','现在完成')}</button>`:''}</div>`;
+    ${wxmStepOk(step)?`<button class="btn2" style="width:auto;min-height:30px;padding:0 10px;font-size:12.5px" onclick="APP.cmd('wxmStep',${step})">${T('Finish now','现在完成')}</button>`:''}</div>`;
   let todos='';
   if(d.paySkipped){ if(!mchSet) todos+=todo('Add your WeChat Pay merchant ID','补上微信支付商户号',2);
     todos+=todo('Add the payment keys so the store can take money','补上支付密钥，店面才能收款',mchSet?3:2); }
@@ -35437,7 +35449,10 @@ SUBS.webcfg={title:['Web store configuration','网页商店配置'],render:()=>s
    that never loaded would switch Alipay off.
    ══════════════════════════════════════════════════════════════════════════ */
 const payS=()=>state.pay;
-const PAY_KEYS=['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'];
+/* §412.2 — where money goes is changed only with the payments permission:
+   currency, tax.* and /alipay-manual are settings:payments alone on the
+   server now, so this screen and its doors are that key alone. */
+const PAY_KEYS=['settings:payments'];
 const payCan=()=>mCanKnown(PAY_KEYS)&&!recapNoMoney();
 /* The desktop's CURRENCY_PRESETS. Its labels are English for both languages,
    except the yuan's, whose two halves are shown one at a time here. */
@@ -46602,7 +46617,7 @@ const ROUTE_CAP={
   /* §325 X10. Payments: the keys the server asks of currency, tax.* and
      /alipay-manual (the desktop Settings set). canRoute adds that the keys
      must be known and the board must see money. */
-  paycfg:['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'],
+  paycfg:['settings:payments'],   /* §412.2 — the payments permission alone */
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
