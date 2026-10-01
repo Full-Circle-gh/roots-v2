@@ -327,12 +327,26 @@ section('3 · Kuaidi100 and JD keys');
     assert.ok(h.text(h.ctx.SUBS.kd100cfg.render()).includes('Test failed: kd100_auth'));
     assert.deepStrictEqual(h.calls.toasts, []);
   });
-  it('Kuaidi100 with nothing stored opens on the desktop\'s callback address, so both send the same body', async () => {
+  it('§412.6 — Kuaidi100\'s callback is the server\'s, never a Roots default, on either surface', async () => {
+    // Nothing in effect: the field is empty — no rootskitchenchina.com address.
     const h = mk(); h.ctx.SUBS.kd100cfg.render();
     await answer(h, '/integrations', Object.assign(plain(INTEG), { kd100: { enabled: false } }));
-    const desk = OPS.length && fs.readFileSync(path.join(ROOT, 'public/retail-admin.html'), 'utf8').match(/id="kd100-callback"[^>]*value="([^"]+)"/)[1];
-    assert.strictEqual(h.s.d['kd100.callback'], desk);
+    assert.strictEqual(h.s.d['kd100.callback'], '');
     assert.ok(h.text(h.ctx.SUBS.kd100cfg.render()).includes('NOT CONFIGURED'));
+    const HTML = fs.readFileSync(path.join(ROOT, 'public/retail-admin.html'), 'utf8');
+    assert.ok(/id="kd100-callback"[^>]*value=""/.test(HTML), 'the desktop field has no default either');
+    assert.ok(!/rootskitchenchina\.com\/api\/retail\/tracking\/kd100/.test(HTML + M + OPS), 'the Roots address is on neither surface');
+    // A tenant: the address built for it, shown read-only (the server never reads a typed one).
+    const t = mk(); t.ctx.SUBS.kd100cfg.render();
+    await answer(t, '/integrations', Object.assign(plain(INTEG), { kd100: { enabled: false, callback: 'https://srv.example/api/retail/tracking/kd100/callback/7', callback_built: true } }));
+    assert.strictEqual(t.s.d['kd100.callback'], 'https://srv.example/api/retail/tracking/kd100/callback/7');
+    assert.ok(/value="https:\/\/srv\.example\/api\/retail\/tracking\/kd100\/callback\/7"[^>]*readonly/.test(t.ctx.SUBS.kd100cfg.render()), 'read-only');
+    assert.ok(OPS.includes("if (kCb) { kCb.value = k.callback || ''; kCb.readOnly = !!k.callback_built; }"), 'the desktop does the same');
+  });
+  it('§412.6 — the out-of-city printer has no Tianhe default: unset shows "each order\'s own store"', () => {
+    const R = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+    assert.ok(!/天河\|tianhe/i.test(R.slice(R.indexOf("router.get('/api/retail-admin/printer'"), R.indexOf("router.get('/api/retail-admin/printer'") + 4000)), 'the server suggests no store');
+    assert.ok(R.includes('const oocStore = prefs.out_of_city_store_id == null ? null : prefs.out_of_city_store_id;'));
   });
   it('JD: the desktop body, env kept, a typed secret sent, Save & ping', async () => {
     const h = await open('jdcfg');

@@ -955,7 +955,10 @@ async function loadShippingIntegrations() {
     const kSec  = document.getElementById('kd100-secret');
     if (kCust) kCust.value = k.customer || '';
     if (kKey)  kKey.placeholder      = k.key_masked    ? `${k.key_masked} · leave blank to keep · 留空则保持不变` : 'paste 授权 key · 粘贴授权 key';
-    if (kCb && k.callback) kCb.value = k.callback;
+    // §412.6 — the address in effect, from the server: built per tenant (shown
+    // read-only — the server builds it, a typed one is never used), or Roots'
+    // own. Never a default of this page's.
+    if (kCb) { kCb.value = k.callback || ''; kCb.readOnly = !!k.callback_built; }
     if (kSec) kSec.placeholder       = k.secret_masked ? `${k.secret_masked} · leave blank to keep · 留空则保持不变` : 'random string — do not rotate · 随机字符串,请勿更换';
     const kChip = document.getElementById('kd100-chip');
     if (kChip) kChip.innerHTML = k.enabled
