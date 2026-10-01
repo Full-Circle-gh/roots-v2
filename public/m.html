@@ -2773,10 +2773,24 @@ reg('approveRefund', ()=>{
      this sheet left out: a FULL refund flips the order to Refunded and pulls a
      same-city rider who is already on it, and that is the one consequence
      nobody can undo. Said only when it is true, as there — see refundRiderWarn. */
-  const rider=refundRiderWarn(o);
+  /* §325 S1d — AND THE REST OF §222's BLOCK, as the desktop draws it above its
+     Approve button: what a full or a partial approve does, the rider when one
+     is on the road, and the line the whole block was written for — a refund
+     never moves the delivery day (TC000823). Brick edge on a full one, as
+     there. Figures not read yet: no full/partial line (the phone cannot say
+     which), but the rider and the day line still stand. */
+  const full=refundApproveFull(o), rider=refundRiderWarn(o);
+  const lines=[];
+  if(full===true) lines.push(T('Full refund: the order is marked refunded, its same-city delivery is cancelled, and stock, points and referral credit are reversed. The customer is told.',
+                               '全额退款:订单将标记为已退款,同城配送将被取消,库存、积分与推荐奖励一并退回。系统会通知顾客。'));
+  if(full===false) lines.push(T('Partial refund: the order keeps its status and its delivery. Stock reverses for the selected items only. The customer is told.',
+                                '部分退款:订单状态与配送均不变,仅退回所选商品的库存。系统会通知顾客。'));
+  if(rider) lines.push(`<b style="color:var(--brick-ink)">${rider}</b>`);
+  lines.push(`<span style="color:var(--text-secondary)">${T('Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead.',
+                                                             '退款不会更改配送日期。如顾客只是想改天收货,请拒绝此申请并改期。')}</span>`);
   state.ask={title:T('Approve this refund?','通过这笔退款？'),
     body:T('Approving accepts what the customer asked for. The money does not move until you pay it out.','通过即接受顾客申请的金额。款项在你发起打款前不会退出。')
-      +(rider?`<div style="margin-top:10px;color:var(--brick-ink)"><b>${rider}</b></div>`:''),
+      +`<div style="margin-top:10px;padding:8px 10px;border-left:3px solid ${full!==false?'var(--brick-ink)':'var(--border-default)'};font-size:13.5px;line-height:1.55">${lines.map(l=>`<div style="margin-top:4px">${l}</div>`).join('')}</div>`,
     confirmLabel:T('Approve','通过'),
     run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/approve',{}); return T('Refund approved','退款已通过'); })};
   render();
@@ -2793,19 +2807,20 @@ reg('approveRefund', ()=>{
    that turns out not to apply costs a second's reading; a rider pulled without
    warning costs the delivery. */
 const REFUND_RIDER_ON_IT=['awaiting_dispatch','heading_to_pickup','in_transit'];
+/* true = full, false = partial, null = the figures have not been read. */
+function refundApproveFull(o){
+  const r=o&&o.refund;
+  if(!(r&&r.gross>0)) return null;
+  const remaining=Math.max(0,Math.round((r.gross-Math.max(0,Number(r.approved)||0))*100)/100);
+  let amt=(r.lines&&r.lines.length)?r.lines.reduce((t,l)=>t+(Number(l.amount)||0),0)
+    :r.requested!=null?r.requested:(Number(o.totalNum)||0);
+  amt=Math.min(Math.round(amt*100)/100,remaining);
+  return (amt+0.005)>=remaining;
+}
 function refundRiderWarn(o){
   const stage=o&&o.courier&&o.courier.stage;
   if(!REFUND_RIDER_ON_IT.includes(stage)) return '';
-  const r=o.refund;
-  let full=true;
-  if(r&&r.gross>0){
-    const remaining=Math.max(0,Math.round((r.gross-Math.max(0,Number(r.approved)||0))*100)/100);
-    let amt=(r.lines&&r.lines.length)?r.lines.reduce((t,l)=>t+(Number(l.amount)||0),0)
-      :r.requested!=null?r.requested:(Number(o.totalNum)||0);
-    amt=Math.min(Math.round(amt*100)/100,remaining);
-    full=(amt+0.005)>=remaining;
-  }
-  return full?T('A rider is on this order right now — approving cancels that delivery.','当前已有骑手接单 — 批准后该配送会被取消。'):'';
+  return refundApproveFull(o)!==false?T('A rider is on this order right now — approving cancels that delivery.','当前已有骑手接单 — 批准后该配送会被取消。'):'';
 }
 reg('rejectRefund', ()=>{
   if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
@@ -4507,7 +4522,7 @@ function noteBar(text){ return `<div style="display:flex;align-items:flex-start;
 function nothingYet(title,msg){
   return `<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
     <div style="font-size:18px;font-weight:500">${title}</div>
-    <div style="font-size:15px;color:var(--text-secondary);max-width:270px;line-height:1.55">${msg}</div></div>`;
+    ${msg?`<div style="font-size:15px;color:var(--text-secondary);max-width:270px;line-height:1.55">${msg}</div>`:''}</div>`;
 }
 /* storefront_config comes back as one nested object; these screens read their
    own corner of it rather than shipping sample content. */
@@ -7395,13 +7410,24 @@ function loadCatBannerShelf(top){
     .then(j=>{ if(state.catShelf&&state.catShelf.top===top.name){ state.catShelf.rows=(j&&j.data)||[]; render(); } })
     .catch(()=>{});
 }
+/* §325 S1d — WHO MAY CHANGE A BANNER, on the server's map (lib/cap-routes.js):
+   every change saves the whole tree, PUT /category-tree, which is
+   categories:edit; a new picture is also POST /media/upload, media:upload. So
+   the card offers Add / Replace picture to an account holding both, the link,
+   dates and Remove to categories:edit, and to everyone else shows what is set
+   and nothing to press. With no banner and nothing to press there is nothing to
+   show, and the card is not drawn. */
+function catBannerCanEdit(){ return mCan('categories:edit'); }
+function catBannerCanUpload(){ return mCan('categories:edit')&&mCan('media:upload'); }
 function catBannerCard(top){
   const b=top.banner;
+  const canEdit=catBannerCanEdit(), canUp=catBannerCanUpload();
   const head=`<div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary);padding:0 2px">${T('Banner (optional)','横幅(可选)')}</div>`;
   const hint=`<div style="font-size:12.5px;line-height:1.5;color:var(--text-secondary);padding:0 2px">${T('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab. Hidden while a customer is searching.','宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。')}</div>`;
   const busy=state.catBannerBusy;
   const err=state.catBannerErr?`<div style="font-size:13px;color:var(--brick-ink)">${state.catBannerErr}</div>`:'';
   if(!b||!b.image_url){
+    if(!canUp) return '';
     return `<div style="display:flex;flex-direction:column;gap:8px">${head}${hint}${err}
       <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')" style="align-self:flex-start;width:auto;gap:8px">${ic('plus',16)}${busy?T('Uploading…','上传中…'):T('Add banner','添加横幅')}</button></div>`;
   }
@@ -7415,6 +7441,22 @@ function catBannerCard(top){
     +`<optgroup label="${escAttr(T('Pages','页面'))}">${CAT_BANNER_PAGES.map(p=>opt(p[0],T(p[1],p[2]))).join('')}</optgroup>`
     +(rows.length?`<optgroup label="${escAttr(T('Products on this shelf','货架上的产品'))}">${rows.map(p=>opt('product:'+p.id,(LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||('#'+p.id))).join('')}</optgroup>`:'');
   const lbl=t=>`<span style="font-size:12.5px;color:var(--text-secondary)">${t}</span>`;
+  if(!canEdit){
+    /* Read only: the same facts, as text — the link's own label from the list
+       above, the dates as stored. */
+    const page=CAT_BANNER_PAGES.find(p=>p[0]===cur), prod=rows.find(p=>'product:'+p.id===cur);
+    const link=!cur?T('Picture only','仅图片'):page?T(page[1],page[2])
+      :prod?((LANG==='en'?(prod.name_en||prod.name_cn):(prod.name_cn||prod.name_en))||('#'+prod.id)):cur;
+    return `<div style="display:flex;flex-direction:column;gap:10px">${head}
+    <div style="position:relative;width:100%;aspect-ratio:5/2;border-radius:12px;overflow:hidden;background:var(--surface-raised)">
+      <img src="${escAttr(b.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+    <div><span style="font-size:12px;padding:3px 10px;border-radius:999px;background:${st.bg};color:${st.fg}">${st.text}</span></div>
+    <div style="display:flex;flex-direction:column;gap:5px">${lbl(T('Tap link','点击跳转'))}<span style="font-size:15px">${escAttr(link)}</span></div>
+    ${(b.start_at||b.end_at)?`<div style="display:flex;gap:10px">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${lbl(T('Start','开始'))}<span class="num" style="font-size:15px">${escAttr(b.start_at||'—')}</span></div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${lbl(T('End','结束'))}<span class="num" style="font-size:15px">${escAttr(b.end_at||'—')}</span></div></div>`:''}
+    </div>`;
+  }
   return `<div style="display:flex;flex-direction:column;gap:10px">${head}
     <div style="position:relative;width:100%;aspect-ratio:5/2;border-radius:12px;overflow:hidden;background:var(--surface-raised)">
       <img src="${escAttr(b.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
@@ -7429,7 +7471,7 @@ function catBannerCard(top){
     <div style="font-size:12.5px;color:var(--text-secondary)">${T('Leave both empty to show it always. Outside its dates it hides by itself.','两者留空则一直显示。不在日期内时会自动隐藏。')}</div>
     ${err}
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')">${busy?T('Uploading…','上传中…'):T('Replace picture','更换图片')}</button>
+      ${canUp?`<button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')">${busy?T('Uploading…','上传中…'):T('Replace picture','更换图片')}</button>`:''}
       <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerRemove')" style="color:var(--brick-ink)">${T('Remove banner','删除横幅')}</button></div>
     </div>`;
 }
@@ -7449,16 +7491,18 @@ async function catSaveTree(){
 }
 function catBannerTop(){ return (state.cats||[]).find(t=>t.id===state.catTop)||null; }
 reg('catBannerSet',(key,value)=>{
+  if(!catBannerCanEdit()) return;   // §325 S1d: PUT /category-tree is categories:edit
   const t=catBannerTop(); if(!t||!t.banner) return;
   t.banner=Object.assign({},t.banner,{[key]:value||''});
   render(); catSaveTree();
 });
 reg('catBannerRemove',()=>{
+  if(!catBannerCanEdit()) return;   // §325 S1d
   const t=catBannerTop(); if(!t||!t.banner) return;
   delete t.banner; render(); catSaveTree();
 });
 reg('catBannerPick',()=>{
-  if(state.catBannerBusy) return;
+  if(state.catBannerBusy||!catBannerCanUpload()) return;   // §325 S1d: media:upload, then the tree save
   const el=document.createElement('input');
   el.type='file'; el.accept='image/*';
   el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) catBannerUpload(f); };
@@ -7479,6 +7523,7 @@ async function catBannerShrink(file){
   }catch(e){ return file; }
 }
 async function catBannerUpload(file){
+  if(!catBannerCanUpload()) return;   // §325 S1d
   const topId=state.catTop;   // the category the picture was picked for
   state.catBannerBusy=true; state.catBannerErr=null; render();
   try{
@@ -13231,8 +13276,12 @@ const SUBS={
       <span style="font-size:14px;color:var(--brick-ink)">${state.mediaErr}</span></div>`:'';
     if(!state.media){ if(!state.mediaTried) loadMedia();
       return `<div style="padding:0 16px">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
+    /* §325 S1d — the invitation names the Add photos button in the header, so
+       it is made only to somebody that button is drawn for (media:upload). To
+       anyone else the empty library says it is empty and stops: no sentence
+       pointing at a control they do not have. */
     if(!state.media.rows.length) return `<div style="padding:0 16px">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
-      T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'));
+      mCan('media:upload')?T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'):'');
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
       ${err}
       <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+(state.media.total===1?' image':' images'),'共 '+state.media.total+' 张')}</div>
