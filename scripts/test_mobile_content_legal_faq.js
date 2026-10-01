@@ -178,7 +178,7 @@ section('1 · Legal: a card that saves itself');
   });
   it('the reload guard and the background flush know these cards', () => {
     assert.ok(/if\(cfgBusy\(\)\) return true;/.test(MH));
-    assert.ok(/document\.visibilityState==='hidden'\) Object\.keys\(CFG_CARD\)\.forEach\(k=>\{ const a=CFG_CARD\[k\]\.auto; if\(a\) a\.flush\(\); \}\);/.test(MH));
+    assert.ok(/document\.visibilityState==='hidden'\)\{ Object\.keys\(CFG_CARD\)\.forEach\(k=>\{ const a=CFG_CARD\[k\]\.auto; if\(a\) a\.flush\(\); \}\);/.test(MH));
   });
 }
 

@@ -6317,7 +6317,8 @@ function cfgSheet(c, title, body, fields, get, set, acts){
 }
 reg('askLiveAct', k=>{ const L=state.ask&&state.ask.live; if(!L||!L.acts) return; const a=L.acts.find(x=>x.key===k); if(a) a.run(); });
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState==='hidden') Object.keys(CFG_CARD).forEach(k=>{ const a=CFG_CARD[k].auto; if(a) a.flush(); });
+  if(document.visibilityState==='hidden'){ Object.keys(CFG_CARD).forEach(k=>{ const a=CFG_CARD[k].auto; if(a) a.flush(); });
+    if(ML.auto) ML.auto.flush(); }
 });
 
 /* ── Legal pages (desktop: LEGAL_CARD, 05-marketing.js) ────────────────────
@@ -13815,27 +13816,8 @@ const SUBS={
     cta:()=>{ if(!mCan('media:upload')) return ''; const b=state.mediaBusy;
       return `<button class="cta inhead" ${b?'disabled':''} onclick="APP.cmd('pickMedia')">${
         b?T('Uploading '+b.done+'/'+b.total+'…','上传中 '+b.done+'/'+b.total+'…'):T('Add photos','添加图片')}</button>`; },
-    render:()=>{
-    const err=state.mediaErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick-ink)">${state.mediaErr}</span></div>`:'';
-    if(!state.media){ if(!state.mediaTried) loadMedia();
-      return `<div style="padding:0 16px">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
-    /* §325 S1d — the invitation names the Add photos button in the header, so
-       it is made only to somebody that button is drawn for (media:upload). To
-       anyone else the empty library says it is empty and stops: no sentence
-       pointing at a control they do not have. */
-    if(!state.media.rows.length) return `<div style="padding:0 16px">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
-      mCan('media:upload')?T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'):'');
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
-      ${err}
-      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+(state.media.total===1?' image':' images'),'共 '+state.media.total+' 张')}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${state.media.rows.map(m=>`
-        <div style="aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
-          <img loading="lazy" src="/api/retail/media/${m.id}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
-        </div>`).join('')}</div>
-      <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Folders, tags and alt text are on desktop','分组、标签与替代文本在电脑端设置')}</div></div>`;
-  }},
+    /* §325 M5 — the desktop's library: screenMedia. */
+    render:()=>screenMedia()},
   legal:{title:['Legal pages','法律条款'],render:()=>{
     // Both documents live in storefront_config; the dates are theirs, not a
     // pair of numbers typed into a mockup.
@@ -25847,13 +25829,234 @@ async function loadChannels(force){
     state.sales=(d&&d.channels)||null; state.salesSummary=(d&&d.summary)||null; }catch(e){}
   render();
 }
+/* ==========================================================================
+   §325 M5 — THE MEDIA LIBRARY, AS THE DESKTOP KEEPS IT (07-content-billing.js)
+   --------------------------------------------------------------------------
+   The phone listed the newest thirty pictures and said folders, tags and alt
+   text were on desktop. It now has the desktop's library: search (file name or
+   alt text), the folder and tag filters with their counts, pages of sixty,
+   each picture's "used in" count from the same scan, the details (file name,
+   alt text, folder, tags) that save themselves with Undo and Version history
+   on the desktop's own card ('media.<id>'), folders made, renamed and
+   deleted, and a selection moved, tagged or deleted — deleting says how many
+   places the pictures are used in, in the desktop's words, before it goes.
+
+   Keys, the server's: every /media write is media:upload except a delete
+   (DELETE, bulk-delete), which is media:delete. Each control is drawn only
+   for its key; the library itself reads for anybody who can open it.
+   ========================================================================== */
+const ML_PAGE=60;
+const ML={q:'', tag:'', folder:'', folders:null, unsorted:0, total:0, tags:null, usage:{}, sel:null, more:false, err:'', auto:null};
+const mlUsed=id=>Number(ML.usage[id]||0);
+function mlParams(offset){
+  const p=new URLSearchParams();
+  if(ML.q.trim()) p.set('q',ML.q.trim());
+  if(ML.tag) p.set('tag',ML.tag);
+  if(ML.folder) p.set('folder',ML.folder);
+  p.set('limit',ML_PAGE); p.set('offset',offset);
+  return p.toString();
+}
 async function loadMedia(){
   if(state.mediaLoading||state.mediaTried) return; state.mediaLoading=true; state.mediaTried=true;
-  try{ const d=await api('/media/list?limit=30');
+  // ML.err is not cleared here: a write's refusal must outlive the re-read it starts.
+  try{
+    const [d,f,t,u]=await Promise.all([api('/media/list?'+mlParams(0)), api('/media/folders').catch(()=>null),
+      api('/media/tags').catch(()=>null), api('/media/usage').catch(()=>null)]);
     state.media={rows:(d&&d.rows)||[], total:(d&&d.total)||0};
-  }catch(e){ state.media={rows:[],total:0}; }
+    if(f){ ML.folders=f.folders||[]; ML.unsorted=f.unsorted_count||0; ML.total=f.total_count||0; }
+    ML.tags=Array.isArray(t)?t:(ML.tags||[]);
+    ML.usage=(u&&typeof u==='object')?u:{};
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    state.media={rows:[],total:0};
+    ML.err=e&&e.refused?e.message:T('Load failed','加载失败');
+  }
   state.mediaLoading=false; render();
 }
+function mlReload(){ state.mediaTried=false; state.media=null; ML.sel=ML.sel?new Set():null; loadMedia(); }
+reg('mlMore', ()=>{
+  if(!state.media||ML.more||state.media.rows.length>=state.media.total) return;
+  ML.more=true; render();
+  api('/media/list?'+mlParams(state.media.rows.length)).then(d=>{
+    state.media={rows:state.media.rows.concat((d&&d.rows)||[]), total:(d&&d.total)||state.media.total};
+  }).catch(e=>{ if(String(e.message)!=='auth') showToast(T('Load failed','加载失败')); })
+    .then(()=>{ ML.more=false; render(); });
+});
+reg('mlQ', v=>{ ML.q=String(v||''); searchClearShow('mMlClr', !!ML.q); });
+reg('mlSearchGo', ()=>{ ML.err=''; mlReload(); });
+reg('mMlClr', ()=>{ searchClearRun('mMlQ','mMlClr','mlQ'); ML.err=''; mlReload(); });
+reg('mlFolder', k=>{ ML.folder=k==='all'?'':String(k); ML.err=''; mlReload(); });
+reg('mlTag', k=>{ ML.tag=k==='__all'?'':String(k); ML.err=''; mlReload(); });
+/* Selecting: the desktop's ctrl-click, as a mode — a phone has no modifier key. */
+reg('mlSelect', ()=>{ ML.sel=ML.sel?null:new Set(); render(); });
+reg('mlTap', id=>{
+  id=Number(id);
+  if(ML.sel){ ML.sel.has(id)?ML.sel.delete(id):ML.sel.add(id); render(); return; }
+  mlDetail(id);
+});
+function mlFolderName(fid){ const f=(ML.folders||[]).find(x=>x.id===fid); return f?f.name:''; }
+/* ── One picture's details: a live sheet on the desktop's card ──────────── */
+const mlTagList=s=>{ const out=[]; String(s||'').split(',').forEach(x=>{ const t=x.trim().toLowerCase().replace(/\s+/g,'-').slice(0,40); if(t&&!out.includes(t)) out.push(t); }); return out; };
+function mlFmtBytes(n){ if(!n) return '0 B'; if(n<1024) return n+' B'; if(n<1024*1024) return (n/1024).toFixed(0)+' KB'; return (n/1024/1024).toFixed(1)+' MB'; }
+function mlDetail(id){
+  const m=state.media&&state.media.rows.find(r=>r.id===id); if(!m) return;
+  const used=mlUsed(id);
+  const url='/api/retail/media/'+id;
+  const body=`<img src="${url}" alt="" style="width:100%;max-height:220px;object-fit:contain;border-radius:10px;background:var(--surface-raised)">
+    <div class="num" style="font-size:12.5px;margin-top:8px">${escAttr(m.mime_type||'')} · ${mlFmtBytes(m.size_bytes)}${m.width&&m.height?' · '+m.width+'×'+m.height:''}</div>
+    <div style="font-size:13px;margin-top:4px">${T('Used in','引用')}: ${used?T('Used in '+used+' place'+(used===1?'':'s'),'被引用 '+used+' 处'):T('Not used yet','未使用')}</div>
+    <div class="num" style="font-size:12px;margin-top:4px;word-break:break-all">${url}</div>`;
+  const acts=[{key:'copy',label:T('Copy','复制'),run:()=>copyText(url)}];
+  if(mCan('media:delete')) acts.push({key:'del',label:T('Delete','删除'),danger:true,run:()=>mlDeleteAsk([id])});
+  if(!mCan('media:upload')||typeof TacetAutosave==='undefined'){
+    // Read only: what the picture is, where it is used, its address.
+    state.ask={title:escAttr(m.filename||('#'+id)), body:body+`<div style="font-size:13px;margin-top:8px">${escAttr(m.alt_text||'')}</div>`,
+      options:acts.map(a=>({key:a.key,label:a.label})), run:k=>{ const a=acts.find(x=>x.key===k); if(a) a.run(); }};
+    render(); return;
+  }
+  const d={filename:m.filename||'', alt_text:m.alt_text||'', folder:m.folder_id==null?'':String(m.folder_id), tags:(m.tags||[]).join(', ')};
+  const payload=()=>({filename:d.filename.trim()||null, alt_text:d.alt_text.trim()||null, tags:mlTagList(d.tags),
+    folder_id:d.folder===''?null:parseInt(d.folder,10)});
+  const auto=TacetAutosave.create({
+    read:payload,
+    send:(p,note)=>apiWrite('/media/'+id+'?history='+encodeURIComponent('media.'+id)+(note?'&note='+note:''),p,'PATCH').then(()=>{
+      const cur=state.media&&state.media.rows.find(r=>r.id===id);
+      if(cur) Object.assign(cur,{filename:p.filename, alt_text:p.alt_text, tags:p.tags, folder_id:p.folder_id}); }),
+    onChange:()=>askLiveRepaint(),
+  });
+  auto.start();
+  ML.auto=auto;   // the reload guard and the background flush read it
+  const apply=p=>{ d.filename=p.filename||''; d.alt_text=p.alt_text||''; d.folder=p.folder_id==null?'':String(p.folder_id); d.tags=(p.tags||[]).join(', '); };
+  state.ask={title:escAttr(m.filename||('#'+id)), body,
+    fields:[{id:'filename',label:T('Filename','文件名'),placeholder:'(optional)'},
+      {id:'alt_text',label:T('Alt text','替代文字')+' '+T('(for screen readers and SEO)','(用于读屏与 SEO)'),placeholder:'Coconut milk in a glass jar, top-down'},
+      {id:'folder',label:T('Folder','文件夹'),choices:[['',T('(unsorted)','未分组')]].concat((ML.folders||[]).map(f=>[String(f.id),escAttr(f.name)]))},
+      {id:'tags',label:T('Tags','标签'),placeholder:'banner, hero, product…',commit:true}],
+    live:{auto, get:k=>d[k], set:(k,v)=>{ d[k]=v; }, apply, acts,
+      history:()=>{ Promise.resolve(auto.flush()).then(()=>api('/media/'+id+'/history')).then(j=>{
+        const list=Array.isArray(j&&j.versions)?j.versions:[];
+        if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+        liveHistorySheet(list, v=>(v.changed||[]).join(' · '), v=>{ apply(v.snapshot||{}); return auto.flush('restore'); });
+      }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); }); },
+      close:()=>{ Promise.resolve(auto.flush()).then(()=>mlReload()); }}};
+  state.askErr=null;
+  render();
+}
+/* ── Delete: the where-used warning first, in the desktop's words ──────── */
+function mlDeleteAsk(ids){
+  if(!mCan('media:delete')||!ids.length) return;
+  const used=ids.reduce((s,i)=>s+mlUsed(i),0);
+  let title;
+  if(ids.length===1){
+    const m=state.media&&state.media.rows.find(r=>r.id===ids[0]); const nm=(m&&m.filename)||('#'+ids[0]);
+    title=used?T('This media is referenced in '+used+' place'+(used===1?'':'s')+'. Delete anyway?','此媒体被 '+used+' 处引用。仍要删除吗？')
+      :T('Delete "'+nm+'"?','删除 "'+nm+'"？');
+  }else{
+    title=used?T('Delete '+ids.length+' items — '+used+' reference'+(used===1?'':'s')+' will be broken. Continue?','删除 '+ids.length+' 项，将破坏 '+used+' 处引用，是否继续？')
+      :T('Delete '+ids.length+' items?','删除 '+ids.length+' 项？');
+  }
+  state.ask={title:escAttr(title), confirmLabel:T('Delete','删除'), danger:true, run:()=>mlWrite(()=>apiWrite('/media/bulk-delete',{ids}), T('Deleted','已删除'))};
+  render();
+}
+/* Every list write: the refusal or failure stays on the screen; the toast
+   only confirms; the library is read again either way. */
+function mlWrite(go, okText){
+  ML.err=''; render();
+  return Promise.resolve().then(go).then(()=>{ showToast(okText); mlReload(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; ML.err=e&&e.refused?e.message:T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。')+(e&&e.message&&!e.refused?' ('+e.message+')':''); mlReload(); });
+}
+reg('mlBulkDelete', ()=>{ if(ML.sel) mlDeleteAsk([...ML.sel]); });
+reg('mlBulkMove', ()=>{
+  if(!ML.sel||!ML.sel.size||!mCan('media:upload')) return;
+  const ids=[...ML.sel];
+  state.ask={title:T('Move to folder','移到文件夹'),
+    options:[{key:'unsorted',label:T('(unsorted)','未分组')+` <span class="num" style="color:var(--text-secondary)">${ML.unsorted}</span>`}]
+      .concat((ML.folders||[]).map(f=>({key:String(f.id),label:escAttr(f.name)+` <span class="num" style="color:var(--text-secondary)">${f.count}</span>`}))),
+    run:k=>{ const folder_id=k==='unsorted'?null:parseInt(k,10);
+      mlWrite(()=>apiWrite('/media/bulk-move',{ids, folder_id}), T('Moved '+ids.length,'已移动 '+ids.length)); }};
+  render();
+});
+reg('mlBulkTag', ()=>{
+  if(!ML.sel||!ML.sel.size||!mCan('media:upload')) return;
+  const ids=[...ML.sel];
+  state.ask={title:T('Tag selected','批量加标签'),
+    fields:[{id:'add',label:T('Add tags','添加标签')+' '+T('(comma or Enter)','(逗号或回车)'),placeholder:'banner, hero…'},
+            {id:'remove',label:T('Remove tags','移除标签'),placeholder:'(optional)'}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(mlTagList(v.add).length||mlTagList(v.remove).length)?'':T('Nothing to apply','无变更'),
+    run:v=>mlWrite(()=>apiWrite('/media/bulk-tag',{ids, add:mlTagList(v.add), remove:mlTagList(v.remove)}), T('Tags updated','标签已更新'))};
+  render();
+});
+/* ── Folders: made, renamed, deleted ─────────────────────────────────────── */
+reg('mlFolders', ()=>{
+  const opts=[];
+  if(mCan('media:upload')) opts.push({key:'__new',label:T('+ New folder','+ 新建文件夹')});
+  (ML.folders||[]).forEach(f=>opts.push({key:String(f.id),label:escAttr(f.name)+` <span class="num" style="color:var(--text-secondary)">${f.count}</span>`}));
+  state.ask={title:T('Folder','文件夹'), options:opts, run:k=>{
+    if(k==='__new'){ state.ask={title:T('+ New folder','+ 新建文件夹'), fields:[{id:'name',label:T('Folder','文件夹')}], confirmLabel:T('Save','保存'),
+      // An empty name does nothing, as on the desktop.
+      run:v=>{ if(!v.name) return; mlWrite(()=>apiWrite('/media/folders',{name:v.name}), T('Folder created','文件夹已创建')); }}; render(); return; }
+    const f=(ML.folders||[]).find(x=>String(x.id)===k); if(!f) return;
+    const acts=[];
+    if(mCan('media:upload')) acts.push({key:'rename',label:T('Rename','重命名')});
+    if(mCan('media:delete')) acts.push({key:'delete',label:T('Delete','删除')});
+    if(!acts.length) return;
+    state.ask={title:escAttr(f.name), options:acts, run:a=>{
+      if(a==='rename'){ state.ask={title:T('Rename folder','重命名文件夹'), fields:[{id:'name',label:T('Folder','文件夹'),value:f.name}], confirmLabel:T('Rename','重命名'),
+        run:v=>{ if(!v.name||v.name===f.name) return; mlWrite(()=>apiWrite('/media/folders/'+f.id,{name:v.name},'PATCH'), T('Renamed','已重命名')); }}; render(); return; }
+      const msg=f.count?T('Delete folder "'+f.name+'"? Its '+f.count+' item'+(f.count===1?'':'s')+' will move to Unsorted (images are kept).','删除文件夹 "'+f.name+'"？其中 '+f.count+' 个项目将移至未分类（图片保留）。')
+        :T('Delete empty folder "'+f.name+'"?','删除空文件夹 "'+f.name+'"？');
+      state.ask={title:escAttr(msg), confirmLabel:T('Delete','删除'), danger:true,
+        run:()=>{ if(ML.folder===String(f.id)) ML.folder='';
+          mlWrite(()=>apiWrite('/media/folders/'+f.id,{},'DELETE'), T('Folder deleted','文件夹已删除')); }};
+      render(); }};
+    render(); }};
+  render();
+});
+function screenMedia(){
+  const err=(state.mediaErr||ML.err)?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${[state.mediaErr,ML.err?escAttr(ML.err):''].filter(Boolean).join(' ')}</span></div>`:'';
+  const search=`${searchBox(`<input id="mMlQ" inputmode="search" enterkeyhint="search" value="${escAttr(ML.q)}"
+      placeholder="${T('Search filename or alt text','搜索文件名/alt')}" style="width:100%"
+      oninput="APP.cmd('mlQ',this.value)" onchange="APP.cmd('mlSearchGo')"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mMlClr',!!ML.q)}`;
+  const folderChips=chipRow([{key:'all',en:'All media',zh:'全部',count:ML.total},{key:'unsorted',en:'Unsorted',zh:'未分组',count:ML.unsorted}]
+    .concat((ML.folders||[]).map(f=>({key:String(f.id),en:f.name,zh:f.name,count:f.count}))), ML.folder||'all', 'mlFolder');
+  const tagChips=(ML.tags&&ML.tags.length)?chipRow([{key:'__all',en:'All',zh:'全部'}].concat(ML.tags.map(t=>({key:t.tag,en:t.tag,zh:t.tag,count:t.n}))), ML.tag||'__all', 'mlTag'):'';
+  const head=`<div style="padding:12px 16px 0;display:flex;gap:8px;align-items:center"><div style="flex:1;min-width:0">${search}</div>
+      <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('mlFolders')">${T('Folder','文件夹')}</button></div>
+    <div style="padding-top:10px">${folderChips}</div>${tagChips?`<div style="padding-top:8px">${tagChips}</div>`:''}`;
+  if(!state.media){ if(!state.mediaTried) loadMedia();
+    return `${head}<div style="padding:8px 16px 0">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
+  const filtered=!!(ML.q.trim()||ML.tag||ML.folder);
+  /* §325 S1d — the invitation is made only to somebody the Add photos button
+     is drawn for; §325 M5 — and not when a filter is what emptied the list. */
+  if(!state.media.rows.length) return `${head}<div style="padding:8px 16px 0">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
+      filtered?'':mCan('media:upload')?T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'):'');
+  const sel=ML.sel;
+  const canBulk=mCan('media:upload')||mCan('media:delete');
+  const rows=state.media.rows, total=state.media.total;
+  return `${head}<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${err}
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="num" style="flex:1;font-size:13px;color:var(--text-secondary)">${T(rows.length+' of '+total,'共 '+total+' 项')}</span>
+      ${canBulk?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('mlSelect')">${sel?T('Done','完成'):T('Select','选择')}</button>`:''}</div>
+    ${sel?`<div class="card" style="padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <span class="num" style="font-size:13px;flex:1;min-width:80px">${sel.size} ${T('selected','已选')}</span>
+      ${mCan('media:upload')?`<button class="btn2" style="width:auto;padding:0 12px" ${sel.size?'':'disabled'} onclick="APP.cmd('mlBulkMove')">${T('Move to','移到')}</button>
+        <button class="btn2" style="width:auto;padding:0 12px" ${sel.size?'':'disabled'} onclick="APP.cmd('mlBulkTag')">${T('Tag','加标签')}</button>`:''}
+      ${mCan('media:delete')?`<button class="btn2" style="width:auto;padding:0 12px;color:var(--brick-ink)" ${sel.size?'':'disabled'} onclick="APP.cmd('mlBulkDelete')">${T('Delete','删除')}</button>`:''}</div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${rows.map(m=>{ const used=mlUsed(m.id), on=sel&&sel.has(m.id);
+      return `<button onclick="APP.cmd('mlTap',${m.id})" style="position:relative;padding:0;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:${on?'2px solid var(--accent)':'1px solid var(--border-default)'}">
+        <img loading="lazy" src="/api/retail/media/${m.id}" alt="${escAttr(m.alt_text||m.filename||'')}" style="width:100%;height:100%;object-fit:cover;display:block">
+        <span class="num" style="position:absolute;left:4px;bottom:4px;font-size:10.5px;padding:1px 6px;border-radius:999px;background:rgba(17,26,43,.62);color:#fff">${used?'× '+used:T('unused','未被引用')}</span>
+        ${on?`<span style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center">${ic('check',14,2.5)}</span>`:''}
+      </button>`; }).join('')}</div>
+    ${rows.length<total?`<button class="btn2" style="width:100%" ${ML.more?'disabled':''} onclick="APP.cmd('mlMore')">${ML.more?T('Loading…','加载中…'):T('Load more','加载更多')}</button>`:''}
+  </div>`;
+}
+
 /* The fapiao list read, named so it has two callers: loadLive's boot pass and
    the snooze's stale-row recovery. apiRaw, not api: the chip counts ride the
    envelope beside `data`, and api() returns `data` alone — so liveInvoiceCounts
@@ -33259,6 +33462,8 @@ function mUnsavedWork(){
     if(matAuto&&matAuto.busy()) return true;
     /* A content card (Legal, FAQ, About, copy) likewise (§325 M4). */
     if(cfgBusy()) return true;
+    /* A picture's details likewise (§325 M5). */
+    if(ML.auto&&ML.auto.busy()) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
