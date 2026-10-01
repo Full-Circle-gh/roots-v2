@@ -1714,6 +1714,7 @@ function pop(){
   if(top==='popupedit'&&!puMayLeave()) return;      // §325 M12 — and an unsaved new pop-up
   if(top==='coupon'&&!vdMayLeave()) return;         // §325 M13 — and a coupon label typed, not saved
   if(top==='coupongrant') VG=null;
+  if(top==='couponnew'&&!cwMayLeave()) return;      // §325 M14 — a coupon half made asks first
   if(top==='affeligible') loadAffElig();   // the count on the offer is re-read, as the desktop's dialog does on close
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
@@ -18598,11 +18599,14 @@ const SUBS={
                    ${state.invSnoozeBusy===v.dbId?'disabled':''}><span>${T('Remind me tomorrow','明天提醒我')}</span></button>`
               : ''}</div></div>`).join('')}</div></div>`;
   }},
-  coupons:{title:['Coupons','优惠券'],render:()=>{
+  coupons:{title:['Coupons','优惠券'],
+    /* §325 M14 — a coupon is made here now, through the desktop's wizard. */
+    cta:()=>cwCan()?`<button class="cta inhead" onclick="APP.cmd('cwOpen')">${T('New coupon','新建优惠券')}</button>`:'',
+    render:()=>{
     const all=DB.coupons||[];
     if(!state.vchLoaded&&!all.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(!all.length) return nothingYet(T('No coupons','没有优惠券'),
-      T('Coupons are written on desktop. Running ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
+      T('Money off for your customers — typed as a code, picked up in the app, or applied for them.','给顾客的优惠 — 输码使用、在小程序领取、或结账自动抵扣。'));
     const on=all.filter(c=>c.on), off=all.filter(c=>!c.on);
     const seg=state.vchSeg||'on';
     const list=seg==='on'?on:seg==='off'?off:on.concat(off);
@@ -18624,8 +18628,10 @@ const SUBS={
             ${!c.on?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};flex:none">${c.ended?T('Ended','已到期'):T('Off','已停用')}</span>`:''}</span>
           ${c.title?`<span style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span>`:''}</span>
         ${/* §325 — PATCH /vouchers/:id is coupons:edit (lib/cap-routes.js); without it
-              the card says where the coupon stands, as a sample row does. */''}
-        ${(c.id==null||!mCan('coupons:edit'))?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
+              the card says where the coupon stands, as a sample row does. §325 M14:
+              coupons:edit is money:'moves', so the switch also waits for the keys
+              (vdCan) rather than showing while they load. */''}
+        ${(c.id==null||!vdCan('coupons:edit'))?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
           :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
           :`<span style="flex:none" onclick="event.stopPropagation()">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
       </div>
@@ -18641,11 +18647,13 @@ const SUBS={
     </div>`).join('')}
     ${seg==='on'&&off.length?`<div style="text-align:center;font-size:13px;color:var(--text-secondary);padding-top:4px">${
       T(off.length+(off.length===1?' coupon is off':' coupons are off'),off.length+' 张已停用')} · <button onclick="APP.cmd('vchSeg','off')" style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary);text-decoration:underline">${T('view','查看')}</button></div>`:''}
-    ${desktopNote()}</div></div>`;
+    </div></div>`;
   }},
   /* §325 M13 — one coupon (the desktop's drawer) and its grant dialog. */
   coupon:{title:['Coupons','优惠券'],titleOf:()=>{ const r=vdRaw(); return r?escAttr(r.code):T('Coupons','优惠券'); },
     backLabel:()=>T('Coupons','优惠券'),render:()=>screenCoupon()},
+  couponnew:{title:['New coupon','新建优惠券'],titleOf:()=>CW&&CW_TITLES[CW.step]?T(...CW_TITLES[CW.step]):T('New coupon','新建优惠券'),
+    backLabel:()=>T('Coupons','优惠券'),render:()=>screenCouponNew()},
   coupongrant:{title:['Grant coupon','发放优惠券'],titleOf:()=>{ const c=VG&&(DB.coupons||[]).find(x=>x.id===VG.id);
       return T('Grant coupon','发放优惠券')+(c?' '+escAttr(c.code):''); },
     backLabel:()=>{ const r=vdRaw(); return r?escAttr(r.code):T('Coupons','优惠券'); },render:()=>screenCouponGrant()},
@@ -28106,7 +28114,7 @@ SUBS.receive={title:['Receive','收货'],
    single field on a single record, and it is what an operator reaches for when
    a code is being abused. Creating one is authoring, and stays on the desktop. */
 function toggleCoupon(code){
-  if(!mCan('coupons:edit')) return;   // §325
+  if(!vdCan('coupons:edit')) return;   // §325; M14: money, so closed until the keys are known
   const c=(DB.coupons||[]).find(x=>x.code===code);
   if(!c||c.id==null||state.couponBusy) return;
   // The switch controls is_active. LIVE is is_active AND unexpired, so turning
@@ -28489,6 +28497,402 @@ function screenCouponGrant(){
       <div class="card" style="padding:4px 0" id="mVgPicks">${vgPicksHtml()}</div>`:''}
     <div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Already granted','已发放')}</div>
     <div class="card" style="padding:4px 0">${list}</div>
+  </div>`;
+}
+/* ── §325 M14 — MAKING A COUPON ON THE PHONE ─────────────────────────────
+   The desktop's guided coupon wizard (05-marketing.js vwOpen … vwSave), step
+   for step: the deal (with the five starting points beside it), who gets it
+   (Start fresh, or "Change"), the small print, then turn it on. The same
+   live ticket and the same heads-up, read off the live coupons, on every step.
+   One POST /vouchers with the desktop's body; is_active:false is a draft.
+   coupons:create is money:'moves' (lib/capabilities.js), so the door and the
+   save fail closed until the keys are known (vdCan, M13). A coupon for chosen
+   customers goes straight on to the grant screen, as the desktop hands off to
+   its grant dialog. */
+let CW=null;   // the coupon being built — the desktop's _vw, plus busy/err/dirty and the snapshot
+const CW_TITLES={deal:['The deal','优惠内容'], who:['Who gets it','谁可以用'], rules:['The small print','使用规则'], review:['Turn it on','开启优惠券']};
+const cwSteps=()=>CW&&CW.showWho?['deal','who','rules','review']:['deal','rules','review'];
+const cwCan=()=>vdCan('coupons:create');
+function cwBlank(){
+  return {goal:'public', step:'deal', showWho:false,
+    type:'fixed_amount', value:10,
+    path:'public', showOnHome:false,
+    min:0, setMin:false, expires:'', endChip:'none',
+    perCust:1, maxUses:'', setMax:false,
+    code:'', title_en:'', title_cn:'',
+    codeEdited:false, labelEdited:false,
+    busy:null, err:'', dirty:false, vouchers:null};
+}
+reg('cwOpen', ()=>{
+  if(!cwCan()) return;
+  CW=cwBlank();
+  // The heads-up reads what is live now: the list as last read at once, and
+  // again from the server, as the desktop reads it on opening.
+  CW.vouchers=(DB.coupons||[]).map(c=>c.raw).filter(Boolean);
+  CMD.push('couponnew');
+  const w=CW;
+  api('/vouchers').then(r=>{ if(CW===w&&Array.isArray(r)){ w.vouchers=r; render(); } }).catch(()=>{ /* the snapshot above stands */ });
+});
+const cwTouch=()=>{ if(CW){ CW.dirty=true; CW.err=''; } };
+/* The five starting points set the same fields the first question edits, so
+   picking one REPLACES the answers (the desktop's vwApplyGoal). */
+reg('cwGoal', goal=>{
+  const w=CW; if(!w||w.busy) return;
+  w.goal=goal;
+  if(goal==='welcome')       Object.assign(w,{type:'fixed_amount', value:20, path:'welcome', showOnHome:true});
+  else if(goal==='sale')     Object.assign(w,{type:'percent', value:10, path:'auto', showOnHome:false});
+  else if(goal==='public')   Object.assign(w,{type:'fixed_amount', value:10, path:'public', showOnHome:false});
+  else if(goal==='shipping') Object.assign(w,{type:'free_shipping', value:0, path:'auto', showOnHome:false});
+  else { w.goal='fresh'; Object.assign(w,{type:'fixed_amount', value:0, path:'public', showOnHome:false}); }
+  w.showWho=(w.goal==='fresh');
+  w.codeEdited=false; w.labelEdited=false;
+  w.min=0; w.setMin=false; w.expires=''; w.endChip='none'; w.perCust=1; w.maxUses=''; w.setMax=false;
+  w.step='deal'; cwTouch(); render();
+});
+reg('cwType', t=>{ const w=CW; if(!w||['fixed_amount','percent','free_shipping'].indexOf(t)<0) return;
+  w.type=t;
+  if(t==='free_shipping') w.value=0;
+  else if(!(Number(w.value)>0)) w.value=(t==='percent'?10:20);
+  cwTouch(); render(); });
+reg('cwAmt', v=>{ if(!CW) return; CW.value=Number(v); cwTouch(); render(); });
+/* Typed fields repaint the ticket only, so the field keeps its caret. */
+reg('cwVal', v=>{ if(!CW) return; CW.value=String(v==null?'':v); cwTouch(); cwTicketRepaint(); });
+reg('cwChangeWho', ()=>{ if(!CW) return; CW.showWho=true; CW.step='who'; render(); });
+reg('cwPath', p=>{ if(!CW||['auto','public','welcome','pick'].indexOf(p)<0) return; CW.path=p; cwTouch(); render(); });
+reg('cwHome', b=>{ if(!CW) return; CW.showOnHome=!!Number(b); cwTouch(); render(); });
+reg('cwMinOn', ()=>{ if(!CW) return; CW.setMin=true; if(!(Number(CW.min)>0)) CW.min=''; cwTouch(); render(); });
+reg('cwMinOff', ()=>{ if(!CW) return; CW.setMin=false; CW.min=0; cwTouch(); render(); });
+reg('cwMin', v=>{ if(!CW) return; CW.min=Number(v)||0; cwTouch(); cwTicketRepaint(); });
+const cwDateFrom=days=>{ const d=new Date(); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); };
+reg('cwEnd', k=>{ const w=CW; if(!w) return;
+  w.endChip=k;
+  if(k==='none') w.expires='';
+  else if(k==='1w') w.expires=cwDateFrom(7);
+  else if(k==='1m') w.expires=cwDateFrom(30);
+  else w.expires=w.expires||cwDateFrom(30);
+  cwTouch(); render(); });
+reg('cwDate', v=>{ if(!CW) return; CW.expires=String(v||''); cwTouch(); cwTicketRepaint(); });
+reg('cwStep', d=>{ if(!CW) return; CW.perCust=Math.max(1,(Number(CW.perCust)||1)+Number(d)); cwTouch(); render(); });
+reg('cwMaxOn', ()=>{ if(!CW) return; CW.setMax=true; cwTouch(); render(); });
+reg('cwMaxOff', ()=>{ if(!CW) return; CW.setMax=false; CW.maxUses=''; cwTouch(); render(); });
+reg('cwMax', v=>{ if(!CW) return; CW.maxUses=String(v==null?'':v); cwTouch(); cwTicketRepaint(); });
+reg('cwCode', v=>{ if(!CW) return; CW.code=String(v||'').toUpperCase(); CW.codeEdited=true; cwTouch(); cwTicketRepaint(); });
+reg('cwLbl', (lang,v)=>{ if(!CW) return; CW[lang==='en'?'title_en':'title_cn']=String(v==null?'':v); CW.labelEdited=true; cwTouch(); cwTicketRepaint(); });
+
+/* ── what the wizard derives (the desktop's vwGenCode, vwGenLabel*, vwFlags) ── */
+function cwGenCode(w){
+  const v=Number(w.value)||0;
+  if(w.type==='free_shipping') return 'FREESHIP';
+  if(w.path==='welcome') return 'WELCOME'+(v||'');
+  if(w.path==='auto') return (w.type==='percent'?'SAVE':'SALE')+(v||'');
+  return (w.type==='percent'?'PERCENT':'OFF')+(v||'');
+}
+function cwGenLabelEn(w){
+  if(w.type==='free_shipping') return 'Free shipping';
+  const amt=w.type==='percent'?(Number(w.value)||0)+'% off':money(CUR,Number(w.value)||0)+' off';
+  return w.path==='welcome'?amt+' your first order':amt;
+}
+function cwGenLabelCn(w){
+  if(w.type==='free_shipping') return '免运费';
+  const amt=w.type==='percent'?(Number(w.value)||0)+'% 折扣':'立减 '+money(CUR,Number(w.value)||0);
+  return w.path==='welcome'?'首单'+amt:amt;
+}
+function cwFlags(w){
+  const p=w.path;
+  return {is_public:p==='public'||(p==='welcome'&&!!w.showOnHome), auto_grant_signup:p==='welcome', auto_apply:p==='auto'};
+}
+/* ── the step checks (vwCommitDeal / vwCommitRules), kept on the screen ── */
+function cwCheck(step){
+  const w=CW;
+  if(step==='deal'&&w.type!=='free_shipping'){
+    const v=Number(w.value);
+    if(!(v>0)) return T('Enter how much they save','请填写优惠金额');
+    if(w.type==='percent'&&v>100) return T('Percent can be at most 100','折扣最多 100%');
+  }
+  if(step==='rules'){
+    if(!w.setMin) w.min=0;
+    if(!w.setMax) w.maxUses='';
+    if(w.expires){ const d=new Date(w.expires+'T23:59:59');
+      if(d<new Date()) return T('That end date has passed — pick a later one','到期日已过,请选更晚的日期'); }
+  }
+  return '';
+}
+reg('cwNext', ()=>{
+  const w=CW; if(!w||w.busy) return;
+  const steps=cwSteps(), next=steps[steps.indexOf(w.step)+1];
+  if(!next) return;
+  const bad=cwCheck(w.step); if(bad){ w.err=bad; render(); return; }
+  w.err='';
+  if(next==='review'){
+    if(!w.codeEdited||!w.code) w.code=cwGenCode(w);
+    if(!w.labelEdited){ w.title_en=cwGenLabelEn(w); w.title_cn=cwGenLabelCn(w); }
+  }
+  w.step=next; render();
+});
+reg('cwBack', ()=>{
+  const w=CW; if(!w||w.busy) return;
+  const steps=cwSteps(), i=steps.indexOf(w.step);
+  if(i<=0) return;
+  w.err=''; w.step=steps[i-1]; render();
+});
+const cwExpired=v=>!!(v&&v.expires_at&&_date(v.expires_at)&&_date(v.expires_at)<new Date());
+/* ── the save (vwSave): the desktop's checks, then its body ── */
+reg('cwSave', activate=>{
+  const w=CW; if(!w||w.busy||!cwCan()) return;
+  const on=!!Number(activate);
+  const flags=cwFlags(w);
+  const code=String(w.code||'').trim().toUpperCase();
+  if(!code){ w.err=T('Code required','请填写编码'); render(); return; }
+  if(w.path!=='auto'&&!(String(w.title_en||'').trim()||String(w.title_cn||'').trim())){
+    w.err=T('Add a label customers see (EN or 中)','请填写顾客看到的标签'); render(); return; }
+  const clash=(w.vouchers||[]).find(v=>String(v.code).toUpperCase()===code);
+  if(clash&&clash.is_active&&!cwExpired(clash)){
+    w.err=T('A live coupon already uses '+code+' — change the code','已有生效中的优惠券使用此编码'); render(); return; }
+  const wasPick=w.path==='pick';
+  const body={code, type:w.type,
+    value:w.type==='free_shipping'?0:(Number(w.value)||0),
+    min_subtotal:Number(w.min)||0,
+    max_uses:(w.maxUses!==''&&w.maxUses!=null)?Number(w.maxUses):null,
+    per_customer_limit:w.perCust!=null?Number(w.perCust):1,
+    expires_at:w.expires||null,
+    is_public:flags.is_public, auto_grant_signup:flags.auto_grant_signup, auto_apply:flags.auto_apply,
+    title_en:String(w.title_en||'').trim()||null, title_cn:String(w.title_cn||'').trim()||null,
+    is_active:on};   // draft-first: off unless they chose "Turn it on"
+  w.busy=on?'live':'draft'; w.err=''; render();
+  apiWrite('/vouchers', body).then(r=>{
+    const vid=r&&r.data&&r.data.id;
+    showToast(r&&r.reused?T('Reused code '+code,'已复用 '+code)
+      :on?T('Created & live '+code,'已创建并开启 '+code):T('Saved as draft '+code,'已存为草稿 '+code));
+    if(CW===w){ CW=null; const top=state.stack[state.stack.length-1]; if(top&&top.route==='couponnew'){ forgetScroll(); state.stack.pop(); } }
+    render();
+    vchReload().then(()=>{ if(wasPick&&vid&&!CW){ CMD.vchOpen(vid); if(VD&&VD.id===vid) CMD.vgOpen(); } });
+  }).catch(e=>{ w.busy=null; if(String(e.message)==='auth') return;
+    w.err=e.refused?String(E(...e.words))
+      :T('Failed','失败')+': '+(e.code==='code_active'?T('A live coupon already uses this code','已有生效中的优惠券使用此编码')
+        :e.code==='code_exists'?T('Code already exists','编码已存在'):(e.message||''));
+    render(); });
+});
+function cwMayLeave(){
+  if(!CW) return true;
+  if(CW.dirty&&!CW.busy){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ CW=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  if(CW.busy) return false;   // a save on the wire finishes first
+  CW=null; return true;
+}
+
+/* ── the living ticket and the heads-up (vwTicketHtml, vwHeadsUp) ── */
+function cwTicketHtml(){
+  const w=CW; if(!w) return '';
+  const g=vchGives({type:w.type, value:w.value});
+  const min=Number(w.min)||0;
+  const cond=w.path==='welcome'
+    ? (min>0?T('first order over '+money(CUR,min),'首单满 '+money(CUR,min)):T('their first order','首单'))
+    : (min>0?T('orders '+money(CUR,min)+'+','满 '+money(CUR,min)):T('any order','任意订单'));
+  const who=w.path==='welcome'?T('New customers','新顾客'):w.path==='auto'?T('Automatic','自动应用')
+    :w.path==='pick'?T('Customers you pick','指定顾客'):T('Anyone','人人可用');
+  const pc=Number(w.perCust)||1;
+  const per=pc>1?T(pc+'× each','每人 '+pc+' 次'):T('once each','每人一次');
+  const end=w.expires?T('ends '+w.expires,'至 '+w.expires):T('no end date','永久');
+  const label=(w.labelEdited&&(w.title_en||w.title_cn))?`<div style="font-size:14px;font-weight:500">${escAttr(w.title_en||w.title_cn)}</div>`:'';
+  return `<div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);padding:0 4px 8px">${T('What the customer sees','顾客看到的')}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--amber)">
+      <div class="num" style="font-size:24px;font-weight:500;letter-spacing:-.01em">${escAttr(T(...g))}</div>
+      <div style="font-size:13px;color:var(--text-secondary)">${escAttr(cond)}</div>
+      ${label}
+      <div style="border-top:1px dashed var(--border-default);margin:6px 0 2px"></div>
+      <div style="font-size:13px;color:var(--text-secondary)"><b style="color:var(--text-primary);font-weight:500">${escAttr(who)}</b> · ${escAttr(per)} · ${escAttr(end)}</div>
+      ${w.step==='review'&&w.code?`<span class="num pill" style="align-self:flex-start;background:${PILL.muted[0]};color:${PILL.muted[1]}">${escAttr(w.code)}</span>`:''}
+    </div>
+    ${cwHeadsUpHtml()}`;
+}
+function cwTicketRepaint(){ const el=typeof document!=='undefined'&&document.getElementById&&document.getElementById('mCwTicket'); if(el) el.innerHTML=cwTicketHtml(); }
+/* The desktop's own resolution rules: best one wins, no stacking, signup
+   grants, a code on a dead coupon is reused. */
+function cwDiscAt(v, sub){
+  if(v.type==='fixed_amount') return Math.min(Number(v.value)||0, sub);
+  if(v.type==='percent') return sub*(Math.max(0,Math.min(100,Number(v.value)||0)))/100;
+  return 0;   // free shipping depends on the live fee — not comparable here
+}
+function cwHeadsUp(){
+  const w=CW, notes=[];
+  const code=String((w.code||cwGenCode(w))||'').toUpperCase();
+  const flags=cwFlags(w);
+  const all=w.vouchers||[];
+  const active=all.filter(v=>v.is_active);
+  const b=s=>'<b>'+escAttr(s)+'</b>';
+  const clash=all.find(v=>String(v.code).toUpperCase()===code);
+  if(clash){
+    if(clash.is_active&&!cwExpired(clash)) notes.push({tone:'red', html:T('A live coupon already uses '+b(code)+'. Pick another code, or turn the old one off first.',
+      '已有生效中的优惠券使用 '+b(code)+',请换一个编码或先停用旧的。')});
+    else notes.push({tone:'brass', html:T('You used '+b(code)+' before and it is off now. Saving reuses it and starts its count from zero.',
+      '你以前用过 '+b(code)+'(现已停用),保存会复用它并把使用次数清零。')});
+  }
+  if(flags.auto_apply){
+    const others=active.filter(v=>v.auto_apply&&String(v.code).toUpperCase()!==code);
+    if(others.length){
+      const list=others.map(v=>b(v.code)).join(', ');
+      notes.push({tone:'', html:T('You already have automatic deal(s): '+list+'. Customers get the single best one — these do not add together.',
+        '你已有自动优惠:'+list+'。顾客只享最优的一张,不叠加。')});
+      if(w.type!=='free_shipping'){
+        const ref=200, mine=cwDiscAt(w,ref);
+        const bigger=others.filter(v=>v.type!=='free_shipping'&&cwDiscAt(v,ref)>=mine);
+        const at=money0(CUR,ref);
+        notes.push(bigger.length
+          ? {tone:'brass', html:T('On a typical '+at+' order, '+b(bigger[0].code)+' gives more — your new deal may rarely be used.',
+              '以 '+at+' 订单为例,'+b(bigger[0].code)+' 更划算,你的新优惠可能很少被用到。')}
+          : {tone:'brass', html:T('On a typical '+at+' order, your new deal gives the most — it will usually win.',
+              '以 '+at+' 订单为例,你的新优惠最划算,通常会胜出。')});
+      }
+    }
+  }
+  if(flags.auto_grant_signup){
+    const others=active.filter(v=>v.auto_grant_signup&&String(v.code).toUpperCase()!==code);
+    if(others.length){ const list=others.map(v=>b(v.code)).join(', ');
+      notes.push({tone:'', html:T('New customers will also get '+list+'. They can use one per order.','新顾客还会获得 '+list+',每单只能用一张。')}); }
+  }
+  if(w.path==='pick') notes.push({tone:'', html:T('After saving, pick the customers to give it to — it lands in their coupons, no code needed.',
+    '保存后挑选顾客,优惠券直接进入他们的账户,无需编码。')});
+  else if(flags.is_public) notes.push({tone:'', html:T('Anyone can find this in the app, and a shared code also works.','任何人都能在小程序看到,分享的编码也能用。')});
+  return notes;
+}
+function cwHeadsUpHtml(){
+  const notes=cwHeadsUp(); if(!notes.length) return '';
+  return `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">${notes.map(n=>{
+    const bg=n.tone==='red'?'var(--brick-tint)':n.tone==='brass'?'var(--amber-tint)':'var(--surface-raised)';
+    const fg=n.tone==='red'?'var(--brick-ink)':n.tone==='brass'?'var(--amber-ink)':'var(--text-secondary)';
+    return `<div style="padding:12px 14px;border-radius:12px;background:${bg};font-size:13px;line-height:1.5;color:${fg}">${n.html}</div>`; }).join('')}</div>`;
+}
+
+/* ── the steps (vwDealHtml, vwWhoHtml, vwRulesHtml, vwReviewHtml) ── */
+const cwLab=t=>`<div style="font-size:13px;font-weight:500;color:var(--text-secondary);padding:4px 4px 0">${t}</div>`;
+const cwPick=(on,cmd,title,sub)=>`<button onclick="${cmd}" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:14px 16px;border-radius:14px;cursor:pointer;font-family:inherit;text-align:left;background:var(--surface-card);color:var(--text-primary);border:${on?'2px solid var(--text-primary)':'1px solid var(--border-default)'}">
+    <span style="font-size:15px;font-weight:500">${title}</span>${sub?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${sub}</span>`:''}</button>`;
+const cwLink=(cmd,label)=>`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" onclick="${cmd}">${label}</button>`;
+function cwWhoPlain(w){
+  if(w.path==='welcome') return T('<b>New customers</b> get it automatically when they join.','<b>新顾客</b>加入时自动获得。');
+  if(w.path==='auto')    return T('<b>Applied for everyone</b> at checkout — no code needed.','<b>自动应用</b>结账自动,无需编码。');
+  if(w.path==='pick')    return T('<b>Customers you pick</b> — chosen after saving.','<b>你指定的顾客</b>保存后由你挑选。');
+  return T('<b>Anyone</b> can find it in the app and tap to save.','<b>人人可用</b>在小程序内自行领取。');
+}
+function cwDealHtml(w){
+  const goals=[{key:'welcome',en:'Welcome gift',zh:'新人礼'},{key:'sale',en:'Store sale',zh:'店铺促销'},{key:'public',en:'Anyone can use',zh:'人人可领'},
+    {key:'shipping',en:'Free shipping',zh:'免运费'},{key:'fresh',en:'Start fresh',zh:'从头开始'}];
+  const types=[['fixed_amount',T('Money off','立减'),T('a set '+CUR+' amount','固定金额')],
+    ['percent',T('Percent off','折扣'),T('a % of the order','按比例')],
+    ['free_shipping',T('Free shipping','免运费'),T('no delivery fee','不收运费')]];
+  let amt='';
+  if(w.type!=='free_shipping'){
+    const presets=w.type==='percent'?[5,10,20]:[10,20,50];
+    amt=`${cwLab(T('How much do they save?','优惠多少?'))}
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:6px;flex:none"><span class="num" style="font-size:17px;color:var(--text-secondary)">${w.type==='percent'?'%':escAttr(CUR)}</span>
+          <input id="mCwValue" inputmode="decimal" value="${escAttr(String(w.value||''))}" style="width:96px" oninput="APP.cmd('cwVal',this.value)"></span>
+        ${presets.map(p=>`<button class="chip ${Number(w.value)===p?'on':''}" onclick="APP.cmd('cwAmt',${p})"><span>${p}</span></button>`).join('')}</div>`;
+  }
+  return `${cwLab(T('Start from','从以下开始'))}
+    <div style="margin:0 -16px">${chipRow(goals,w.goal,'cwGoal')}</div>
+    ${cwLab(T('What kind of discount?','哪种优惠?'))}
+    <div style="display:flex;flex-direction:column;gap:8px">${types.map(t=>cwPick(w.type===t[0],`APP.cmd('cwType','${t[0]}')`,t[1],t[2])).join('')}</div>
+    ${amt}
+    ${!w.showWho?`<div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13.5px;line-height:1.5">${cwWhoPlain(w)}</span>${cwLink("APP.cmd('cwChangeWho')",T('Change','更改'))}</div>`:''}`;
+}
+function cwWhoHtml(w){
+  const paths=[['auto',T('Applied for everyone','自动应用'),T('At checkout the best deal is applied. No code.','结账自动取最优,无需编码。')],
+    ['public',T('Anyone can use it','人人可用'),T('Shows in the app; a shared code also works.','显示在小程序,分享码也能用。')],
+    ['welcome',T('A welcome gift','新人礼'),T('Lands in every new customer\'s coupons.','自动进入新顾客账户。')],
+    ['pick',T('I choose who gets it','我来指定'),T('Pick the customers after saving.','保存后挑选顾客。')]];
+  return `${cwLab(T('How do customers get it?','顾客怎么获得?'))}
+    <div style="display:flex;flex-direction:column;gap:8px">${paths.map(p=>cwPick(w.path===p[0],`APP.cmd('cwPath','${p[0]}')`,p[1],p[2])).join('')}</div>
+    ${w.path==='welcome'?`<div class="card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="font-size:14px;min-width:0">${T('Also show it on the home page?','也在首页展示?')}</span>
+      <span style="display:flex;gap:6px;flex:none">
+        <button class="chip ${!w.showOnHome?'on':''}" onclick="APP.cmd('cwHome',0)"><span>${T('No','否')}</span></button>
+        <button class="chip ${w.showOnHome?'on':''}" onclick="APP.cmd('cwHome',1)"><span>${T('Yes','是')}</span></button></span></div>`:''}`;
+}
+function cwEndPlain(w){
+  if(w.endChip==='none') return T('Runs <b>until you turn it off</b>.','一直有效,直到你停用。');
+  if(w.endChip==='1w')   return T('Ends in <b>one week</b>.','一周后结束。');
+  if(w.endChip==='1m')   return T('Ends in <b>one month</b>.','一月后结束。');
+  return w.expires?T('Ends <b>'+escAttr(w.expires)+'</b>.','到期结束。'):T('Pick the last day it works.','选择截止日期。');
+}
+function cwRulesHtml(w){
+  const row=(txt,ctl)=>`<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-size:14px;line-height:1.5;min-width:0">${txt}</span>${ctl||''}</div></div>`;
+  const minRow=w.setMin
+    ? `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span style="font-size:14px">${T('On orders over','最低订单金额')}</span>${cwLink("APP.cmd('cwMinOff')",T('Any order','任意'))}</div>
+        <span style="display:flex;align-items:center;gap:6px"><span class="num" style="font-size:17px;color:var(--text-secondary)">${escAttr(CUR)}</span>
+          <input id="mCwMin" inputmode="decimal" value="${escAttr(String(w.min||''))}" style="flex:1;min-width:0" oninput="APP.cmd('cwMin',this.value)"></span></div>`
+    : row(T('Works on <b>any order size</b>.','任意订单金额可用。'),cwLink("APP.cmd('cwMinOn')",T('Set a minimum','设最低金额')));
+  const ends=[{key:'none',en:'No end date',zh:'永久'},{key:'1w',en:'One week',zh:'一周'},{key:'1m',en:'One month',zh:'一月'},{key:'pick',en:'Pick a day',zh:'选日期'}];
+  const endRow=`<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:14px;line-height:1.5">${cwEndPlain(w)}</span>
+    <div style="margin:0 -16px">${chipRow(ends,w.endChip,'cwEnd')}</div>
+    ${w.endChip==='pick'?`<input id="mCwDate" type="date" value="${escAttr(w.expires||'')}" oninput="APP.cmd('cwDate',this.value)">`:''}</div>`;
+  const pc=Number(w.perCust)||1;
+  const pcRow=row(`${T('Per customer','每人限用')} · <b>${vdPerLabel(pc)}</b>`,
+    `<span style="display:flex;align-items:center;gap:8px;flex:none">
+      <button class="stepbtn" aria-label="−" ${pc<=1?'disabled':''} onclick="APP.cmd('cwStep',-1)">${ic('minus',18,2.25)}</button>
+      <span class="num" style="min-width:20px;text-align:center">${pc}</span>
+      <button class="stepbtn" aria-label="+" onclick="APP.cmd('cwStep',1)">${ic('plus',18,2.25)}</button></span>`);
+  const maxRow=w.setMax
+    ? `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span style="font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0">${LANG==='en'?'Only ':'总数上限 '}<input id="mCwMax" inputmode="numeric" value="${escAttr(String(w.maxUses||''))}" style="width:80px" oninput="APP.cmd('cwMax',this.value)">${LANG==='en'?' can be used in total.':''}</span>${cwLink("APP.cmd('cwMaxOff')",T('No limit','不限'))}</div></div>`
+    : row(T('<b>No limit</b> on total uses.','总数不限。'),cwLink("APP.cmd('cwMaxOn')",T('Set a limit','设上限')));
+  return `<div style="font-size:13px;color:var(--text-secondary);padding:0 4px">${T('Good defaults are set. Change only what you want.','已有合适的默认值,只改你想改的。')}</div>
+    ${minRow}${endRow}${pcRow}${maxRow}`;
+}
+function cwRecap(w){
+  const g=vchGives({type:w.type, value:w.value});
+  const min=Number(w.min)>0;
+  const pc=Number(w.perCust)||1;
+  if(LANG==='en'){
+    const who=w.path==='welcome'?'New customers':w.path==='auto'?'Everyone':w.path==='pick'?'Customers you pick':'Anyone in the app';
+    const how=w.path==='auto'?' — applied automatically':w.path==='welcome'?' — placed in their coupons':w.path==='pick'?' — after you pick them':' — they tap to save';
+    return '<b>'+escAttr(who)+'</b> get <b>'+escAttr(g[0])+'</b>'+(min?' on orders '+escAttr(money(CUR,w.min))+'+':'')+escAttr(how)
+      +escAttr(pc>1?', up to '+pc+' times each':', once each')+escAttr(w.expires?', until '+w.expires:', until you turn it off')+'.';
+  }
+  const who=w.path==='welcome'?'新顾客':w.path==='auto'?'所有人':w.path==='pick'?'你指定的顾客':'小程序内任何人';
+  const how=w.path==='auto'?' — 自动应用':w.path==='welcome'?' — 自动进入账户':w.path==='pick'?' — 保存后挑选':' — 顾客自行领取';
+  return '<b>'+escAttr(who)+'</b>:<b>'+escAttr(g[1])+'</b>'+(min?',满 '+escAttr(money(CUR,w.min)):'')+escAttr(how)
+    +escAttr(pc>1?',每人限 '+pc+' 次':',每人一次')+escAttr(w.expires?',至 '+w.expires:',直到你停用')+'。';
+}
+function cwReviewHtml(w){
+  return `<div class="card" style="padding:16px;font-size:14.5px;line-height:1.6">${cwRecap(w)}</div>
+    <label style="display:block">
+      <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Coupon code','优惠码')} <span style="font-weight:400">${T('— made for you, change it if you like','已自动生成')}</span></span>
+      <input id="mCwCode" class="num" autocapitalize="characters" value="${escAttr(w.code)}" style="width:100%;text-transform:uppercase" oninput="APP.cmd('cwCode',this.value)"></label>
+    ${w.path!=='auto'?`<label style="display:block">
+      <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('What customers see','顾客看到')} <span style="font-weight:400">${T('— shown on the ticket','显示在券面')}</span></span>
+      <input id="mCwLblEn" value="${escAttr(w.title_en||'')}" placeholder="English" style="width:100%" oninput="APP.cmd('cwLbl','en',this.value)"></label>
+      <input id="mCwLblCn" value="${escAttr(w.title_cn||'')}" placeholder="中文" style="width:100%" oninput="APP.cmd('cwLbl','cn',this.value)">`:''}`;
+}
+function screenCouponNew(){
+  const w=CW;
+  if(!w) return nothingYet(T('Nothing here.','这里没有优惠券。'),'');
+  const steps=cwSteps(), i=steps.indexOf(w.step);
+  const body=w.step==='who'?cwWhoHtml(w):w.step==='rules'?cwRulesHtml(w):w.step==='review'?cwReviewHtml(w):cwDealHtml(w);
+  const can=cwCan(), dis=w.busy?'disabled':'';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${body}
+    <div id="mCwTicket" style="padding-top:8px">${cwTicketHtml()}</div>
+    ${w.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(w.err)}</div>`:''}
+    <div style="display:flex;justify-content:center;gap:6px;padding-top:4px">${steps.map(s=>
+      `<span style="width:6px;height:6px;border-radius:50%;background:${s===w.step?'var(--text-primary)':'var(--border-default)'}"></span>`).join('')}</div>
+    ${w.step==='review'
+      ? `<div style="display:flex;gap:8px">
+          <button class="btn2" style="flex:1" ${dis} onclick="APP.cmd('cwBack')">${T('Back','返回')}</button>
+          ${can?`<button class="btn2" style="flex:1" ${dis} onclick="APP.cmd('cwSave',0)">${w.busy==='draft'?T('Saving…','保存中…'):T('Save as draft','存为草稿')}</button>`:''}</div>
+        ${can?`<button class="cta" style="width:100%" ${dis} onclick="APP.cmd('cwSave',1)">${w.busy==='live'?T('Saving…','保存中…'):T('Turn it on','开启')}</button>`:''}`
+      : `<div style="display:flex;gap:8px">
+          ${i>0?`<button class="btn2" style="flex:1" onclick="APP.cmd('cwBack')">${T('Back','返回')}</button>`:''}
+          <button class="btn2" style="flex:1" onclick="APP.cmd('cwNext')">${T('Next','下一步')}</button></div>`}
   </div>`;
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
@@ -42273,7 +42677,7 @@ const ROUTE_CAP={
      advances than that it advances into a dead end. */
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
-  coupons:'coupons:view', coupon:'coupons:view', coupongrant:'coupons:view', flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
+  coupons:'coupons:view', coupon:'coupons:view', coupongrant:'coupons:view', couponnew:'coupons:create', flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
   sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
@@ -43621,7 +44025,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return; if(t&&t.route==='coupon'&&!vdMayLeave()) return; if(t&&t.route==='coupongrant') VG=null;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return; if(t&&t.route==='coupon'&&!vdMayLeave()) return; if(t&&t.route==='coupongrant') VG=null; if(t&&t.route==='couponnew'&&!cwMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -43842,6 +44246,8 @@ function mUnsavedWork(){
     if(PUE&&PUE.isNew&&PUE.dirty&&(state.stack||[]).some(f=>f&&f.route==='popupedit')) return true;
     /* A coupon label typed and not yet saved (§325 M13). */
     if(VD&&VD.lblDirty&&(state.stack||[]).some(f=>f&&f.route==='coupon')) return true;
+    /* A coupon half made in the wizard (§325 M14). */
+    if(CW&&CW.dirty&&(state.stack||[]).some(f=>f&&f.route==='couponnew')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;

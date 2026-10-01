@@ -65,6 +65,7 @@ const SRC = [
   fn('stockCard'), fn('oosCard'), fn('sheetProduct'),
   slice("reg('openReply', who=>{", "reg('closeReply',"),
   fn('sheetReply'),
+  "const vdCan=k=>!!state.caps&&mCan(k);",   // §325 M14 — the coupon switch's fail-closed gate (m.html, M13 block)
   fn('toggleCoupon'), fn('recallBroadcast'),
   slice("reg('pickMedia', ()=>{", '\n});\n') + '\n});\n',
 ].join('\n');
@@ -372,8 +373,13 @@ section('3 · the inbox');
 
 section('4 · coupons, broadcasts, media');
 {
-  it('the coupon switch is coupons:edit\'s; without it the card says On / Off', async () => {
-    assert.ok(/\$\{\(c\.id==null\|\|!mCan\('coupons:edit'\)\)\?`<span[^`]*\$\{c\.on\?T\('On','已启用'\):T\('Off','已关闭'\)\}/.test(M));
+  it('the coupon switch is coupons:edit\'s, closed until the keys are known; without it the card says On / Off', async () => {
+    // §325 M14: coupons:edit is money:'moves', so the switch fails closed (vdCan) while the keys load.
+    assert.ok(/\$\{\(c\.id==null\|\|!vdCan\('coupons:edit'\)\)\?`<span[^`]*\$\{c\.on\?T\('On','已启用'\):T\('Off','已关闭'\)\}/.test(M));
+    assert.ok(/const vdCan=k=>!!state\.caps&&mCan\(k\);/.test(M), 'vdCan fails closed');
+    const n = mk(null, { coupons: [{ id: 5, code: 'HI', active: true }] });
+    n.ctx.toggleCoupon('HI'); await tick();
+    assert.deepStrictEqual(plain(n.calls.writes), [], 'keys not yet known: nothing is sent');
     const h = mk(['coupons:view'], { coupons: [{ id: 5, code: 'HI', active: true }] });
     h.ctx.toggleCoupon('HI'); await tick();
     assert.deepStrictEqual(plain(h.calls.writes), []);
