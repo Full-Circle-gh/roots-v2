@@ -226,6 +226,11 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     rows.push(['shop.showSort', phoneSettings, 'phone Settings → Shop tab (§325 X5)']);
     rows.push(['customer_service.mode', phoneSettings, 'phone Settings → Customer service (§325 X5)']);
     rows.push(['customer_service.fab_bottom', phoneSettings, 'phone Settings → Customer service (§325 X5)']);
+    // §325 X7 — the phone's Push notifications screen saves the desktop
+    // Notifications panel's four keys under one Save, as saveConfig does.
+    for (const k of ['notifications.order_status_template_id', 'notifications.wecom_order_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook']) {
+      rows.push([k, list(route('pushcfg')), 'phone Settings → Push notifications (§325 X7)']);
+    }
     for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq', 'production', 'waste', 'lowStockHints']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
     }
@@ -391,8 +396,13 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // (the open one) and product_page.sections — each its own write site.
       // §325 X5 adds the two autosave cards, each filed on its own history
       // card: 'shop.display' (the shop.* family) and 'customer_service'.
+      // §325 X7 adds the Push notifications Save: ONE site, two families
+      // (notifications.* and system_alerts.*), as the desktop's saveConfig.
       const FAMS = ['customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
-        'notifications.categories.', 'popups.list', 'product_page.sections', 'shop.', 'support.hidden'];
+        'notifications.categories.', 'notifications.order_status_template_id', 'popups.list', 'product_page.sections', 'shop.', 'support.hidden',
+        'system_alerts.'];
+      const SITE_FAMS = FAMS.filter((f) => f !== 'notifications.order_status_template_id' && f !== 'system_alerts.')
+        .concat(['notifications.order_status_template_id|system_alerts.']).sort();
       // A site whose body is written inline names its family in the call itself;
       // only one that builds its body first (Resume delivery, the pop-up switch)
       // is read in the 900 characters before it. Several sites now sit within
@@ -402,7 +412,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         return own.length ? own : FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f));
       };
       is(famSites.map((i) => famAt(i).join('|')).sort(),
-        FAMS, 'the phone writes ten families, one per write site, each asserted in section 2 (support.hidden as the open one)');
+        SITE_FAMS, 'the phone writes twelve families at eleven write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'

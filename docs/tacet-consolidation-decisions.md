@@ -24767,3 +24767,253 @@ devices card.
      either.
    - **No phone for the setup wizard's map-pin confirmation.** That belongs
      to X11 / setup.
+
+## §358 — A STORE'S STOCK-STAFF SIGN-INS NEED A PERMISSION
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Found by the settings lane. The endpoints under `/api/backend/stores/:storeId/staff`
+(`routes/backend-team.js`) required only a signed-in session. So anyone signed in
+to the back office could create a stock-clerk sign-in, remove one, or reset its
+password, for any store in their shop. These routes are not under
+`/api/retail-admin`, so the permission check that gates `/api/retail-admin` writes
+(the "choke point", `requireRetailAdmin`) never saw them.
+
+1. **The three writes are gated** (§325.3): add (`POST`), remove (`DELETE /:userId`)
+   and reset password (`POST /:userId/password`). Each now needs any one of the
+   permissions that open a screen making them today (`storeStaffCap()` in
+   `lib/cap-routes.js`):
+   - **The desktop's Settings → Operations → Stores list.** Its "Stock staff"
+     button has no gate of its own, so these are the Settings tab's permissions:
+     `settings:shop`, `settings:push`, `settings:payments`, `stores:view`,
+     `shipping:config` and `delivery:view`.
+   - **The phone's store screen**, which draws the control for `stores:edit` or
+     `team:manage`. Both are admitted. At this merge the phone's call was not yet
+     in main. The suite accepts the phone as a caller, and checks its gate once it
+     arrives.
+2. **The check holds whether or not the shop has turned enforcement on.**
+   - It goes through `requireCap`, like every other write in this file (adding a
+     team member, resetting a password, editing roles). These sign-ins are the
+     same kind of power as those, and the Team page's writes have always been
+     checked this way.
+   - Nobody who can open a screen making these writes loses them. The screens are
+     drawn from the same permissions with enforcement on or off.
+   - The owner's permissions include all of these, so the owner is never refused.
+   - A refusal comes back as 403 with this file's own wording, as the Team writes'
+     refusals do.
+3. **The list (`GET`) stays open to anyone signed in**, as the whole roster
+   (`GET /api/backend/team`) is. Reads stay open across this product's permission
+   checks: what a screen shows is decided by the client, and refusing a read can
+   break a screen the operator is allowed to use. The list carries names, sign-in
+   names and the last sign-in time. It carries no password and no money.
+4. **Deliberately not done: holding a store-scoped operator to their own store.**
+   - The desktop's store list is not filtered by store scope, so a store-scoped
+     operator who can open Settings sees every store. That operator can manage
+     another store's clerks today.
+   - Refusing that would take something away from them. Whether those writes
+     should follow the scope rule that `/stores/:id` writes follow under
+     enforcement is Ash's decision.
+5. **Who is refused now:** only an account that can open neither screen. For
+   example, an orders-only, stock-count-only or no-permission account can no
+   longer create, remove or reset a stock clerk's sign-in.
+6. **Tests.** `scripts/test_store_staff_gates.js` (fast shard, 62 checks) runs the
+   real `routes/backend-team.js` over a scratch database with real sessions. It
+   checks:
+   - **The rule:** which permissions are let through, and that the list stays a
+     plain signed-in read.
+   - **Refused:** an orders account and an account holding nothing, for all three
+     writes. Each refusal leaves nothing made, the password unchanged and the
+     clerk still active.
+   - **Let through:** `settings:shop`, `stores:view`, `stores:edit`, `team:manage`
+     and the owner, for all three writes, with the effect checked.
+   - **The list:** still open to the orders account; still 401 when nobody is
+     signed in.
+   - **The callers:** the desktop Operations → Stores panel and its ungated
+     button, plus the phone when it calls these.
+7. **Nothing composed.** No operator strings were added.
+
+## §359 — PRINTERS, COURIER KEYS, QINGYUN AND THE SHOP'S PUSH NOTIFICATIONS ARE SET FROM THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X7 of the Settings / Channels /
+Dashboard / Billing lane. Five desktop panels are on the phone now, each on
+the desktop's own endpoints and bodies.
+
+1. **Receipt printing.** Opened from Operations, under the auto-print switch.
+   The desktop source is `02-settings-ops.js`.
+   - **What it holds:**
+     - each printer brand's account (Feie, Shangpeng);
+     - the three auto-print switches and the receipt header;
+     - each store's printer: SN, brand, template, copies, its print preview,
+       and **Save & test this store**;
+     - the kitchen printer, the stock-request slip, and which store prints
+       out-of-Guangzhou orders.
+   - **How Save all works:** as on the desktop. Every brand the server lists
+     has its account sent first (`PUT /integrations {feie}` / `{spyun}`),
+     then the printer settings (`PUT /printer`, the desktop's eleven keys in
+     order). A refused account is shown on the screen, and the printer
+     settings still go, as the desktop does.
+   - **How Save & test works:** saves everything first, then sends
+     `POST /printer/test {store_id}`. A failure names the brand and SN that
+     were tried. When the cloud does not know the SN, it asks whether the
+     brand is right, in the desktop's words.
+2. **Package tracking (Kuaidi100) and JD Logistics.** Each has Save and
+   Save & test, with the desktop's bodies.
+   - **A secret left blank is kept.** It is never sent, and only its mask is
+     shown back.
+   - **A test is only sent after a save that worked.**
+3. **Qingyun riders.** Shows each store's status, with **Request setup** for
+   a store that is not connected (`POST {store_code}`, once per visit).
+   - **Auto-send** is offered once a store is connected
+     (`POST {enabled}`). The switch moves only when the server says it did.
+   - The rider-point picker stays held (§97). It is not built here.
+4. **Push notifications** (the desktop Settings → Push panel). It holds:
+   - the WeCom app, with Save and Send a test. The test sends the group-bot
+     address typed below, as the desktop does, so it can be tried before
+     saving;
+   - SMS when delivered, with Save and Send a test SMS. The phone number is
+     checked first, then the keys are saved, then a real SMS is sent;
+   - the order-status template, the group-bot webhook, and System Alerts with
+     its test.
+   - **Save settings** sends the desktop `saveConfig`'s four keys, and only
+     those. The desktop's Save bar also saves the manual-Alipay card; that is
+     a money setting and gets its own screen in X10.
+5. **Who can open each screen.** Each is gated on exactly the keys the
+   server asks of its writes:
+   - Receipt printing and Push notifications: the desktop Settings set
+     (`SETTINGS_SCREEN`).
+   - Kuaidi100 and JD: `delivery:view` / `delivery:edit` / `shipping:config`.
+   - Qingyun: `delivery:view` / `delivery:edit`.
+6. **Where the doors are.**
+   - Receipt printing: Operations.
+   - Push notifications: Settings → Store.
+   - The three delivery cards: a new **Delivery** group in Settings, and the
+     phone's Delivery settings screen. That screen is the Orders lane's; it
+     gains one line (`x7DeliveryDoors()`) so `delivery:view` holders reach the
+     cards there, as they reach them in the desktop Delivery hub.
+7. **The Operations line now reads "Payment keys are set on desktop."**
+   Printers left the line.
+8. **Not built.** These stay held by §97: the JD label printer (a per-machine
+   switch), the box-label printer, and the Qingyun point picker.
+
+**Open for Ash.**
+- **The Kuaidi100 callback address.** When nothing is stored, the field opens
+  on `https://rootskitchenchina.com/...`. That is the desktop input's built-in
+  value, copied so both send the same body. On another tenant that address is
+  wrong. The server comment says the address is built per tenant, so the
+  field may not be needed at all. Desktop and phone should change together.
+- **The six test endpoints have no permission gate on the server**
+  (`/printer/test`, `/integrations/kd100/test`, `/integrations/jd/test`,
+  `/integrations/aliyun_sms/test`, `/wecom/test`, `/system-alerts/test`).
+  They send real prints, real SMS and real WeCom messages. The phone draws
+  each test only for its screen's keys. Closing this on the server is a
+  SERVER-lane change.
+
+## §360 — DELIVERY ZONES ARE MANAGED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O5 of the Orders lane. The phone counted zones ("3 live") and stopped.
+It now has the desktop's zones table and drawer (`06-delivery.js`): a
+Delivery zones list, reached from the Delivery screen, and a zone sheet that
+edits, adds, duplicates, copies settings to other zones and deletes — every
+body the desktop's, every route the desktop's.
+
+1. **The list** is grouped by province in the desktop's order (Guangzhou,
+   Guangdong, then A→Z, Other last), searchable by either name or the matched
+   district/city, each row carrying its type (GZ / City / Province /
+   City-wide), its price — the base fee or, for a zone priced by weight, the
+   weight rate — its free-over (or *default*), the same-day mark on a
+   Guangzhou district, and day-only / time-slot: the desktop's two table views
+   folded into one line. Loading, empty, no-match and failed-read states.
+2. **On / off per zone** is a switch on the row: `PATCH /delivery-zones/:id
+   {is_active}`, as `updateZone` sends it; a refusal stays on the screen and
+   the switch stays where it was.
+3. **The zone sheet** has the drawer's fields: display names (edit only),
+   base fee, free-over, MAX (Guangzhou), packing per item and cap, the weight
+   pair, earliest lead, furthest day, kitchen hours, slot length, same-day and
+   its fee (Guangzhou; typing a fee turns same-day on, switching it off clears
+   the fee), day-only, active. Save PATCHes the desktop's whole body
+   (`saveZoneDrawer`'s `shared` plus the zone's match and names).
+4. **Add** picks one or many areas: Guangzhou districts as chips from
+   `/china-regions` (a district that already has a zone cannot be picked), or
+   cities by search over the same catalogue, with a hand-typed name kept as
+   the desktop keeps it and a city that already has a zone refused. One POST
+   per area, each named from the catalogue the desktop's way; a partial
+   failure says how many landed and clears the picks so a retry does not add
+   the first ones twice. **No map** — the region list is the picker.
+5. **Duplicate** opens a new zone with the source's pricing and scheduling and
+   no area or names (`duplicateZone`).
+6. **Copy settings to other zones** is the desktop's apply panel: the three
+   bundles (pricing, scheduling, the active switch with its warning), targets
+   with All GZ / All cities / All / Clear, a confirm naming the zones, then one
+   PATCH per target with only the chosen bundles and nothing the target's type
+   cannot carry (`buildApplyBody`); failures are counted on the sheet.
+7. **Delete** asks in the desktop's words and sends `DELETE
+   /delivery-zones/:id` (the server copies the zone to the recycle bin first).
+8. **Who may.** The list opens on `delivery:view`, the Delivery screen's key.
+   Every write is `delivery:edit` on the server and a delete `delivery:delete`
+   (lib/cap-routes.js). The switch, Add, Save, Duplicate and Copy are drawn
+   for `delivery:edit`, Delete for `delivery:delete` (the desktop's data-cap on
+   its ×); every command refuses on the same key; a viewer opens a zone
+   read-only.
+9. **One deliberate difference, as in O4:** a box that is not a number is
+   refused on the sheet (money: a number 0 or more; days, hours and slot
+   length: whole numbers), where the desktop's `Number()||0` would save a
+   typo as 0.
+10. **Tests.** `scripts/test_mobile_zones.js` (fast shard, 128 assertions):
+    the server gates, viewer / edit-without-delete / full accounts, the list
+    and its states, every request on method, path and body, the catalogue
+    read, add by district and by city, duplicate, apply to a city and to a
+    district target, delete, both languages. The O4 suite's read-only-row
+    assertion now allows the one read it gains (the zones list).
+
+## §361 — PARCELS AND STATUS FROM THE PHONE: HOLD FOR RESTOCK, RECOVERY, SUPPLIER DELIVERED, RIDER OR JD, AIR DELAY REOPENED, SHIP PART LATER, THE SPLIT SUGGESTION
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O6 of the Orders lane. Seven parcel and status writes the desktop's order
+drawer (`04-orders.js`) has and the phone did not, each sending the
+desktop's request:
+
+1. **Hold for restock (§136)** is a More-sheet row on a paid order, first, as
+   on the desktop: `PATCH /orders/:id/status {status:'awaiting_restock'}`,
+   no confirm (the desktop has none). The server decides which products the
+   order waits on and refuses when it never could come back (no store, a line
+   not stocked there, nothing short); those three refusals are shown in the
+   server's own sentence, as the desktop shows them.
+2. **Parcel recovery (§189).** A box that was out when its order was cancelled
+   carries the desktop's card on its parcel: what happened, what each answer
+   does, *It came back* / *It did not come back*, each asked first
+   (not-recovered as the danger answer), then
+   `POST /shipments/:sid/recovery {outcome}`. A closed case shows how it ended,
+   when and by whom. The list chip (*To recover*, O2) and Home's *Parcels to
+   recover* row (X1) were already on the phone and lead here.
+3. **A supplier parcel delivered.** A supplier parcel carries the desktop's
+   instruction, and once dispatched a *Mark this parcel delivered* button,
+   asked first (if it is the last parcel the order is marked delivered), then
+   `POST /shipments/:sid/deliver`.
+4. **Rider or JD.** Where the server offers the switch (`gz_method_toggle`),
+   a same-city or land parcel not yet delivered shows *Dispatch method* with
+   *Rider* / *JD logistics*; the method in force cannot be re-picked;
+   `POST /shipments/:sid/method {method}`, no confirm (as the desktop).
+5. **A handled air delay reopened.** The *Air delay handled* line gains the
+   desktop's *Undo*: `POST /air-delay/ack {cleared:false}`, which re-flags
+   the order for "needs a call".
+6. **Ship part later.** A pending parcel with two or more lines offers it;
+   tick the lines that ship later, then *Move to follow-up parcel*:
+   `POST /shipments/split {item_ids}`. Nothing ticked is refused.
+7. **The split suggestion.** When the server's suggestion is eligible, a card
+   above the items gives the saving, the freight before and after, and each
+   package's lines, value and weight; *Apply* sends
+   `POST /shipment-suggestion/apply`, *Dismiss* hides it for the session (the
+   desktop's in-memory dismissal). Drawn for orders:edit only: without the
+   control it is nothing to act on.
+8. **Who may.** Every path is under `/orders`, so `orders:edit`
+   (lib/cap-routes.js). Each control is drawn for it and each command refuses
+   without it; a reader sees parcel states and recovery outcomes with nothing
+   to press. One helper (`parcelWrite`) locks the parcel controls while a
+   write runs, toasts the desktop's word, re-reads the order, and puts a
+   refusal on the order.
+9. **Tests.** `scripts/test_mobile_parcels.js` (fast shard, 94 assertions):
+   the server gates, every request, the confirms, the conditions each control
+   appears under, the refusals, the detail read, both languages.
+   `scripts/test_mobile_controls_gated.js`: a paid order's More sheet now has
+   the hold row first; the case pins it and pins that an account without
+   orders:edit does not get it.
