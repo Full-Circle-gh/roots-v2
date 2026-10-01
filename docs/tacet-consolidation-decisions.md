@@ -27913,3 +27913,44 @@ shop, including stores whose data that operator cannot even see.
      desktop's gate.
    - `scripts/test_mobile_settings_stores.js`: the phone's doors and writes
      per store, unscoped and owner unchanged, nothing while loading.
+
+## §418 — NO TENANT INHERITS ROOTS' VALUES: THE KUAIDI100 CALLBACK AND THE OUT-OF-CITY PRINTER
+
+**Built 2026-10-01 under §412.6.** Two Roots values were being handed to
+every other shop.
+
+1. **The Kuaidi100 callback address.**
+   - **Before:** both screens opened the field on
+     `https://rootskitchenchina.com/api/retail/tracking/kd100/callback`. The
+     desktop had it as the input's `value`; the phone carried it as
+     `X7_KD100_CB` so that both would send the same body. That address has no
+     tenant in its path, and for any shop but Roots it was never the address
+     in use. `kd100Creds()` builds each tenant's address itself, as
+     `…/callback/<tenant id>`.
+   - **Now:** `GET /integrations` gives the screens the address that is in
+     effect. For any shop but Roots that is the address built for it, marked
+     `callback_built` and shown read-only, because the server never reads a
+     typed one for them. For Roots it is its own configured value, as before.
+     Neither screen has a default any more.
+   - **The builder** (`lib/tracking.js` `kd100CallbackOrigin`) takes this
+     server's origin from `KD100_CALLBACK` or `PUBLIC_ORIGIN`. It no longer
+     falls back to a literal Roots domain. With neither set, the address is
+     unknown (`''`), and `kd100Enabled()` reports tracking as not set up
+     rather than subscribing with someone else's address.
+2. **The out-of-city printer.**
+   - **Before:** `GET /printer` pre-selected any store named 天河 or Tianhe
+     when nothing was saved. That is Roots' warehouse. It was offered to every
+     tenant with a store of that name, and saved as theirs the first time they
+     pressed Save.
+   - **Now:** unset stays unset until the shop picks one. Both screens then
+     show their existing first option, *— Use each order's own store · 按订单所属门店 —*.
+     That is what `printerForOrder()` does while it is unset, so the screen
+     says what happens. No string was composed.
+   - **Printing is unchanged.** It never read the suggestion, only the saved
+     value.
+3. **Tests:**
+   - New `scripts/test_kd100_callback_per_tenant.js`: the builder with each
+     origin source, and with none.
+   - `scripts/test_mobile_settings_keys.js`: both surfaces carry no default; a
+     tenant's built address is shown read-only on both; the printer route
+     suggests no store.
