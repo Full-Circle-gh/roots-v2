@@ -25874,3 +25874,201 @@ went in an Air parcel while the product page read Land.
    7 of them fail.
 
 No new words; nothing composed in Chinese. No schema change.
+
+## §378 — DESK WORK ON THE PHONE: MOVE SEVERAL ORDERS AT ONCE, BULK TRACKING, ORDER DRAFTS, THE BY-PHONE WARNING
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O10 of the Orders lane. Four desk tools from the desktop Orders screen
+(`04-orders.js`), and the setup guide's door to the delivery wizard. Every
+write is under `/orders` or `/order-drafts`, so every write is `orders:edit`
+(lib/cap-routes.js). Every control is drawn for that key, and every command
+refuses without it.
+
+1. **Pick and move.** *Pick* on the Orders list switches on selection. In
+   that mode a tap ticks an order instead of opening it, and mirrored-channel
+   orders cannot be ticked.
+   - A bar over the list shows how many are ticked, *Select all N* / *Clear
+     page*, *Clear*, *Done*, and the three steps (*Start preparing*, *Mark
+     dispatched*, *Mark delivered*), using the desktop's `ORD_BULK_FROM`
+     rules.
+   - A step that can move none of the ticked orders is greyed out. One that
+     can move only some shows how many.
+   - The confirm names both numbers when they differ. Then one
+     `PATCH /orders/:id/status` per order (the call the order sheet makes), so
+     the server checks each move.
+   - If any fail, the phone lists them by order number with the reason.
+2. **The early-dispatch warning, which the desktop's bulk path does not have**
+   (parity doc §14). *Mark dispatched* lists every ticked order that the
+   single-order warning would have stopped. Each is named with the sheet's
+   own words (*Made fresh later* / *Delivery requested later*) and its day,
+   and the button becomes *Mark dispatched anyway*. Nothing is sent before
+   that answer.
+3. **Bulk attach tracking** appears on the Orders list only while Settings →
+   Delivery's *Bulk attach tracking* switch is on, as on the desktop.
+   - Choose a default carrier (JD first) and paste `order# waybill#
+     [carrier]` lines, parsed the desktop's way. Then
+     `POST /orders/bulk-tracking {entries}`.
+   - The result shows saved, failed and auto-dispatched counts, and each line
+     with the server's reason.
+4. **Drafts** use the desktop's own payload in both directions
+   (`{form, lines, cust, customer, saveCust}`), so a draft started on either
+   screen opens on the other.
+   - *Drafts* on the Orders list opens a sheet listing your drafts
+     (`GET /order-drafts`), labelled the desktop's way. Opening one fills New
+     order with it. Delete asks first.
+   - New order gains *Save draft*: `POST /order-drafts`, and `PATCH` for the
+     same draft after that.
+   - Creating the order deletes its draft, best-effort as on the desktop.
+   - Two translations happen on the way in. The desktop's Cash (`offline`)
+     becomes the phone's `cash`, the same tender spelled differently. A
+     desktop draft's grand-total override is shown in the foot with a ×, and
+     sent the way the desktop sends it. It is never carried silently.
+5. **The by-phone warning.** Leaving the phone box on New order (no customer
+   picked) runs `GET /customers/by-phone`. That is the exact match the order
+   endpoint uses when it reuses a customer by phone. The phone then says, in
+   the desktop's three sentences, that the number belongs to a customer, to
+   a blocked one, or to several. A blocked customer is never hidden. A failed
+   lookup says nothing, because Create checks again.
+6. **The setup guide's handover step** offers *Set up delivery*, which opens
+   O9's wizard on the same conditions as the Delivery screen (not set up yet,
+   and the Delivery panel's key). Finishing the wizard reloads the guide.
+7. **Tests.**
+   - `scripts/test_mobile_desk_work.js` (fast shard, 132 assertions): the
+     gates; every request's method, path and body; the early-dispatch list;
+     per-order failures and refusals; the parsing; the draft payload both
+     ways; the by-phone outcomes; the setup door; both languages; the
+     desktop's words.
+   - `test_phone_order.js`: the New order screen's write list now names the
+     drafts, and nothing else.
+   - `test_mobile_orders_list.js` and `test_mobile_fresh_batches.js`: test
+     setup only, to stand up the new code and X7's new Delivery row.
+
+## §379 — CUSTOMERS ON THE PHONE: FOUND BUT FILTERED, DIAGNOSTICS, PRINT STATEMENT, RESET TO A NEW CUSTOMER
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*), with
+§326.4 (*"as you advice"*). Step O11 of the Orders lane. §326.4 overturned
+§116's two holds by name: customer statement print and reset test account come
+to the phone, and reset keeps the desktop's typed RESET confirm and
+`customers:block`. Both are built here, as decided. They join two things the
+desktop roster and drawer have (`08-customers.js`, `26-print.js`).
+
+1. **Found, but filtered.** Sometimes a search on the roster finds nobody on
+   screen, but the server counts people hidden by the filters
+   (`hidden_by_filters`, counted under the search alone). The roster now says
+   so in the desktop's words: how many, and whether they are blocked. Its
+   button clears every filter but the search, and lands on the Blocked list
+   when every match is blocked.
+   - This differs from the desktop, which leaves a tag filter on during this
+     step. A tag can be exactly what hides the match it is meant to reveal.
+2. **Diagnostics.** The record's one summary line becomes the desktop's
+   block:
+   - errors in the last 7 days;
+   - *Device & app* (app version, phone, system, WeChat, base library, last
+     seen);
+   - the last 25 log rows, each with its stack folded underneath;
+   - *Copy summary*, the desktop's plain-text snapshot.
+
+   Times stay absolute (a log is forensic), and a dash stays a dash. A failed
+   read says *This is not an all-clear*. It is read-only, for whoever can
+   open the record.
+3. **Print statement.** It reads `GET /orders?customer_id=&limit=500`, as the
+   desktop does. The document matches the desktop's `tdPrintTable` statement:
+   - columns of date, order, status word and total;
+   - cancelled, refunded and unpaid orders listed and labelled, but left out
+     of the total;
+   - the note *a record of orders, not an invoice*.
+
+   It is printed from a sheet, the way the phone already prints a purchase
+   order (an iframe and Print). Drawn for `orders:view`, the key that opens
+   the orders it lists. Loading, a failed read and an empty list are each
+   handled.
+4. **Reset to a new customer**, for `customers:block` (lib/cap-routes.js),
+   below Block and apart from it.
+   - Labelled *testing*. On a record already reset it stays visible but
+     disabled, reading *already reset*.
+   - The confirm is the desktop's: title, what it does, *for testing … not
+     for a real customer*. The operator must type RESET (the desktop's own
+     gate words); anything else is refused. Then
+     `POST /customers/:id/reset-test`.
+   - The toast says how many sessions were revoked. A second reset gets the
+     desktop's `already_reset` sentence.
+5. **A rename across O5 and O7.** `test_mobile_screens.js` treats every
+   load+Capital word as a function that must exist. The zones screen's
+   read-failure flag (`state.zn.loadErr`) and the ship-to sheet's flag were
+   both called `loadErr`, so the suite read them as calls to a missing
+   `loadErr()`. Both are now `readErr`, as X4's is. The zones suite now checks
+   that no `loadErr` remains.
+6. **Tests.**
+   - `scripts/test_mobile_customers_more.js` (fast shard, 107 assertions):
+     the gates; the hidden count and its reveal; diagnostics, its copy and
+     its failed read; the statement read, document and total; reset's typed
+     gate, request, toasts, refusals and spent state; both languages; the
+     desktop's words.
+   - `test_mobile_zones.js`: the readErr check.
+   - Block keeps a row of its own in the record's foot, so the slow
+     `test_mobile_customers.js` check that Block's row holds one control
+     still holds. That check was confirmed by reading it, not by running it.
+
+## §380 — A JD WAYBILL, CREATED AND CANCELLED FROM THE PHONE (NO PRINTING)
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O12, the last step of the Orders lane. The desktop order drawer's
+`createJdLabel` / `submitJdLabel` / `cancelJdPickup` (`04-orders.js`), on the
+phone's parcel cards. Both writes are `orders:edit` (lib/cap-routes.js). Both
+controls are drawn for that key, and neither appears on a mirrored channel's
+order.
+
+1. **Where.** *Create JD label* appears where the desktop draws it:
+   - on a parcel that is out with no waybill (the hoisted tracking card),
+     ahead of the manual *Save tracking*, which now sits under the desktop's
+     line *— or attach an existing waybill manually —*;
+   - on a pending Guangzhou outer-district parcel switched to JD, on an order
+     still being made.
+
+   Never on a supplier parcel.
+2. **The question.** The service is the one thing the order cannot answer,
+   and it is asked the desktop's way:
+   - An air parcel ships fresh express (生鲜特快) and asks nothing, except
+     into Fujian or Guangxi. There ground is pre-selected from the two fresh
+     services; `lib/jd.js` is the authority and re-applies the rule on the
+     server.
+   - A ground parcel chooses between fresh ground, ambient ground and air.
+     Fresh is pre-selected when an item in the box needs an ice pack, ambient
+     otherwise.
+   - On a ground parcel, air is marked *Land only* where the airline refuses
+     an item, with that item named.
+
+   There is also a pieces count (1–30), for one waybill split across boxes.
+3. **The desktop's two "anyway?" questions, each where the desktop puts it.**
+   - Picking air on a land parcel asks on the pick and names what is in the
+     box. Declining leaves the choice where it was.
+   - An order into a city whose air lane belongs to SF asks at submit,
+     because an air parcel has no list to pick from.
+4. **Create** sends `POST /orders/:id/jd-waybill {shipment_id, product,
+   package_count}`. The server attaches the waybill and marks the parcel
+   dispatched. The toast names the waybill and the box count, and the order
+   is read again.
+   - The desktop's sentences are used for a missing sender phone, JD not set
+     up, an order not ready to ship, a parcel waiting on restock, an unknown
+     parcel and a waybill already attached.
+   - Any other code is shown after *JD label failed*, as the desktop shows
+     it.
+5. **Cancel JD pickup** appears on a JD waybill beside *Clear*, with the
+   desktop's line on the difference: Cancel calls the courier off with JD;
+   Clear only removes the number locally. It asks first, then
+   `POST …/jd-waybill/cancel {shipment_id}`. The toast says whether JD
+   cancelled the pickup or intercepted a parcel already collected.
+6. **No printing.** The desktop sends the label to JD's print component
+   running on the PC wired to the label printer (`jdSendToComponent`, its
+   per-machine auto-print switch, the box-label sticker). A phone has none of
+   these, so the label is printed there. Nothing on the phone fetches print
+   data.
+7. **Tests.**
+   - `scripts/test_mobile_jd_waybill.js` (fast shard, 84 assertions): the
+     gates; where each control appears; every plan (air, Fujian/Guangxi,
+     ground, iced); both questions; the request bodies and the pieces clamp;
+     every refusal; the busy lock; cancel and intercept; the order-read
+     fields; both languages; the desktop's words.
+   - `test_mobile_controls_gated.js`: now also checks Create JD label + Save
+     tracking on a bare parcel, and Cancel JD pickup on a JD waybill. Both
+     commands are on its guard list.

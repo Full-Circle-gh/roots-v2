@@ -70,6 +70,8 @@ const CODE = [
   sliceFn('ordNoteLabel'),
   sliceFn('mapOrderRow'),
   sliceBetween("reg('statusF',", "reg('closeOrder',"),
+  // §325 O10 — the header's Drafts door asks the drafts' own gate.
+  sliceBetween('const draftsOn=', '\nfunction onwToDraft('),
 ].join('\n');
 
 const tick = () => new Promise((r) => setImmediate(r));
@@ -85,6 +87,8 @@ function mk(opts = {}) {
     fmtDay: (v) => 'D(' + v + ')',
     mCan: (k) => (opts.caps ? opts.caps.includes(k) : true),
     canRoute: (k) => (opts.routes ? opts.routes.includes(k) : true),
+    // §325 O10 — Bulk attach tracking shows only while Settings → Delivery's switch is on.
+    cfgGet: (k, d) => (k === 'delivery.bulkTracking' ? !!opts.bulkTracking : d),
     custSection: (t, b) => `<section><h>${t}</h>${b}</section>`,
     ORDER_STATUS: { paid: ['paid', 'Paid', '已付款'], refunded: ['refund', 'Refunded', '已退款'] },
     CH_BACK: { wechat: 'miniapp' },

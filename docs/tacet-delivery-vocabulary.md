@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.272 · 2026-09-30 · §380 JD WAYBILL ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *JD waybill create and cancel on the phone (§380)*.
+
+**v1.271 · 2026-09-30 · §379 CUSTOMERS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Customers on the phone (§379)*.
+
+**v1.270 · 2026-09-30 · §378 DESK WORK ON THE PHONE — ONE STRING COMPOSED (Drafts · 草稿); THE REST COPIED WHOLE.** See *Desk work on the phone (§378)*.
+
 **v1.269 · 2026-09-30 · §373 FRESH BATCHES AND THE DELIVERY WIZARD ON THE PHONE — NOTHING COMPOSED; ONE LIVE SENTENCE SHORTENED.** See *Fresh batches and the delivery set-up wizard on the phone (§373)*.
 
 **v1.268 · 2026-09-30 · §372 CHANNEL UPKEEP ON THE PHONE — 13 STRINGS COMPOSED BY CLAUDE (MOSTLY THE DESKTOP'S ENGLISH-ONLY MEITUAN CATALOGUE AND GZGROCERY LINES), THE REST COPIED.** See *Channel upkeep on the phone (§372)*.
@@ -11794,3 +11800,109 @@ the Delivery screen, the Fresh batches sheet and the set-up wizard in
 | String | Status |
 |---|---|
 | `One store has no coordinates, so it can never be the nearest one.` / `N stores have no coordinates, so they can never be the nearest one.` · `N 家门店没有坐标，无法参与就近派单。` | **The phone's live sentence, shortened.** Its last clause (*Fix it on desktop.* / *请在电脑端处理。*) is dropped, because since X6 a store's address and pin are fixed on the phone. The pointer that replaces it is a button carrying the live `Operations · 运营` pair, drawn for stores:edit. Nothing new was written. |
+
+## Desk work on the phone (§378)
+
+**Composed by the Orders-lane session, 2026-10-01: one string.** These are
+operator strings only (Rule 1): the Orders list, its sheets and New order in
+`public/m.html`.
+
+| String | Status | Notes |
+|---|---|---|
+| `Drafts · 草稿` | **composed** (Orders-lane session, §325 O10) | The desktop's own Drafts chip on the Orders list is English-only: its Chinese mode shows "Drafts". The Chinese is lifted from the live `Draft · 草稿` pairs (`05-marketing.js` and `16-purchasing.js`); Chinese marks no plural, so the plural English takes the same word. Rejected: `Draft · 草稿` on a list of several. **For Ash:** the desktop chip needs the same Chinese. |
+
+**Restructured onto a live pair:** the phone's selection toggle reads
+`Pick · 选择` (the live pair in `09-products.js`) rather than a new `Select`.
+
+**Copied whole from the desktop (`04-orders.js` and `retail-admin.html`):**
+
+- **The bar and the bulk move:**
+  - `N selected · 已选 N 单`, `Select all N · 全选 N`, `Clear page · 清空本页`, `Clear · 清除`
+  - the three steps: `Start preparing · 开始备货`, `Mark dispatched · 标记发货`, `Mark delivered · 标记送达`
+  - the confirm title, the "N of the M you selected …" sentence
+  - `N moved, M could not · N 单已处理,M 单失败`, `…and N more · …还有 N 单`, `OK · 好`, `Moved N ✓ · 已处理 N 单 ✓`
+  - the single-order warning's `Made fresh later · 稍后制作`, `Delivery requested later · 要求稍后送达`,
+    `Mark dispatched anyway · 仍要标记已发货`
+- **Bulk tracking:**
+  - `Bulk attach tracking · 批量绑定运单号` and its sub-line
+  - `Default carrier · 默认快递`, the entries label, the per-line override note
+  - `N entries · N 条`, `Process entries · 处理条目`, `Processing · 处理中`
+  - `saved · 已保存`, `failed · 失败`, `auto-marked dispatched · 自动已发货`, `auto-dispatched · 自动发货`
+  - `Nothing to process — check the format · 无可处理的内容,请检查格式`, `Request failed · 请求失败`,
+    `Bulk: N/M saved · 批量: N/M 已保存`
+- **Drafts:**
+  - `Drafts did not load · 草稿未能加载` and its sentence, `No drafts · 没有草稿` and its sentence
+  - `Empty draft · 空草稿`, ` +N more ·  +N 项`, `Saved · 保存于`
+  - `Delete this draft? · 删除这份草稿？` with its body, `Delete draft · 删除草稿`
+  - `Save draft · 存为草稿`, `Saved · 已保存`, `The draft did not save. · 草稿未能保存。`
+  - `Grand-total override · 自定义总额`, `Remove · 移除`
+- **By-phone:** the three warnings (belongs to / blocked / shared by N), as the
+  desktop words them.
+- **Setup guide:** `Set up delivery · 设置配送`.
+
+**Phone pairs already live:** `Done · 完成`, `Working… · 处理中…`, `Loading… · 加载中…`,
+`Try again · 重试`, `Cancel · 取消`, `Close · 关闭`, `Saving… · 保存中…`, and the refusal and
+failure sentences.
+
+## Customers on the phone (§379)
+
+**Nothing composed, 2026-10-01.** These are operator strings only (Rule 1):
+the roster, the customer record and the statement sheet in `public/m.html`.
+
+**Copied whole from the desktop:**
+
+- **From `08-customers.js`:**
+  - the found-but-filtered state: `Found — but your filters are hiding it/them · 找到了 — 但被当前筛选隐藏`,
+    the blocked and the outside-the-filters sentences, `Show the blocked match(es) · 查看该/这些封禁顾客`,
+    `Show them · 查看`, `these filters · 当前筛选`, `1 customer · 1 位顾客`
+  - the diagnostics block: `Diagnostics · 诊断`, `Device & app · 设备与版本`, the six field names,
+    `errors in 7 days · 近7天报错`, `No errors in 7 days · 近7天无报错`, `stack / details · 堆栈 / 详情`,
+    `error · 报错`, `open · 启动`, `No diagnostics logged yet. · 暂无诊断记录。`, the no-device sentence,
+    `Copy summary · 复制摘要`, `Recent activity & errors (last 25) · 近期活动与报错（最近25条）`,
+    the could-not-be-read sentence
+  - reset: `Reset to a new customer · 重置为新顾客`, `testing · 测试`, `already reset · 已重置`,
+    the title (Reset X to a new customer?), its body, and both toasts
+  - `Print statement · 打印对账单`
+- **From `26-print.js`:** the statement's columns, `Could not read the orders · 无法读取订单`, the status words
+  (`Sent · 已发出`, `Unpaid · 未付款` …), the note *a record of orders, not an invoice*, and
+  `Nothing to show · 暂无内容`.
+- **From `tacet-dialogs.js`:** the typed gate, `Type RESET to continue · 输入 RESET 以继续`.
+- **From `01-core.js`:** the `already_reset` sentence.
+
+**Phone pairs already live:** `Print · 打印`, `Print failed · 打印失败`, `Loading… · 加载中…`,
+`Close · 关闭`, `Saving… · 保存中…`, `Copied · 已复制`, and the refusal sentences.
+
+## JD waybill create and cancel on the phone (§380)
+
+**Nothing composed, 2026-10-01.** These are operator strings only (Rule 1):
+the parcel cards and the JD sheet in `public/m.html`.
+
+**Copied whole from the desktop (`04-orders.js`):**
+
+- **Create:**
+  - `Create JD label · 生成京东运单`, `Free live tracking — JD bills the parcel. · 免费物流追踪，京东承担费用。`,
+    `— or attach an existing waybill manually — · — 或手动填写已有运单 —`
+  - the sheet's sub-lines (air parcel / ground parcel)
+  - the three services from `JD_SERVICES` (`Fresh · Air · 生鲜 · 空运`, `Fresh · Ground · 生鲜 · 陆运`,
+    `Ambient · Ground · 普通 · 陆运`, each with its code line)
+  - `Pieces (boxes) · 箱数` and its note, `Create & ship · 生成并发货`
+  - `Land only · 仅陆运`, `Land shipping only — airline rejected · 仅陆运 — 航空拒运`
+  - the land-only question, `Create air waybill anyway · 仍要生成空运运单`, `Not yet · 暂不`
+  - `SF Express only · 仅顺丰速运` and its question
+  - `JD waybill created · 京东运单已生成`, ` boxes ·  箱`,
+    `Set the store’s sender phone first (Settings → Stores) · 请先在门店设置寄件电话`,
+    `JD label failed · 生成运单失败`
+- **Cancel:**
+  - `Cancel JD pickup · 取消揽收`, the Cancel-vs-Clear note
+  - the confirm title (Cancel the JD pickup / recall this parcel with JD? · 向京东取消揽收 / 拦截此包裹?)
+  - `JD pickup cancelled · 已取消揽收`, `JD parcel intercepted (was already collected) · 已拦截在途包裹`,
+    `JD cancel failed · 取消揽收失败`
+- **From `01-core.js`:** the sentences for `jd_not_configured`, `not_shippable`, `parcel_awaiting_restock`,
+  `invalid_shipment_id`, and `has_tracking` (used for `already_has_waybill`).
+
+**Phone pairs already live:** `Cancel · 取消`, `Close · 关闭`, `Working… · 处理中…`, `Clear · 清除`,
+`Save tracking · 保存运单号`, and the refusal sentences.
+
+| String | Note |
+|---|---|
+| Cancel's confirm button | The desktop's is English-only ("Cancel pickup"). The phone uses the desktop's own `Cancel JD pickup · 取消揽收` pair from the same card, so nothing is composed. |
