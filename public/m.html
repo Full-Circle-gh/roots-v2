@@ -1116,7 +1116,7 @@ const state = {
        next one. Two writes must not race each other for the same receipt. */
   recvReceiptId:null, recvSavedAt:0, recvAgain:false,
   poReceipts:null, poReceiptsFor:null,
-  toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
+  toast:null, drag:0, dragging:false, faqOpen:null, legalOpen:null, reviewsSeen:new Set(),
   /* Declared here rather than sprung into existence by whichever loader gets
      there first. There is one state object and well over a hundred keys on it,
      and two screens picking the same short name is not a hypothetical: `pos`
@@ -2784,12 +2784,44 @@ reg('markPaid', ()=>{
 reg('approveRefund', ()=>{
   if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  /* §325 — §222's RIDER WARNING, which the desktop's approve dialog carries and
+     this sheet left out: a FULL refund flips the order to Refunded and pulls a
+     same-city rider who is already on it, and that is the one consequence
+     nobody can undo. Said only when it is true, as there — see refundRiderWarn. */
+  const rider=refundRiderWarn(o);
   state.ask={title:T('Approve this refund?','通过这笔退款？'),
-    body:T('Approving accepts what the customer asked for. The money does not move until you pay it out.','通过即接受顾客申请的金额。款项在你发起打款前不会退出。'),
+    body:T('Approving accepts what the customer asked for. The money does not move until you pay it out.','通过即接受顾客申请的金额。款项在你发起打款前不会退出。')
+      +(rider?`<div style="margin-top:10px;color:var(--brick-ink)"><b>${rider}</b></div>`:''),
     confirmLabel:T('Approve','通过'),
     run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/approve',{}); return T('Refund approved','退款已通过'); })};
   render();
 });
+/* THE DESKTOP'S TEST, CARRIED ACROSS (04-orders.js openRefundApproveDialog,
+   §222). A rider is "on it" at the three in-flight courier stages — §219's
+   `cancelled` is not one, nothing is there to cancel. The approve is FULL when
+   the amount the server will take reaches the remaining GROSS tenders: the
+   server takes the customer's picked lines, else the amount they asked for,
+   else the order total (routes/retail.js /refund/approve), caps it at what is
+   left, and compares with the same ¥0.005 tolerance. The phone sends no amount
+   of its own, so that is exactly the amount it approves. Where the detail read
+   has not landed and the figures are unknown, the warning is SHOWN: a sentence
+   that turns out not to apply costs a second's reading; a rider pulled without
+   warning costs the delivery. */
+const REFUND_RIDER_ON_IT=['awaiting_dispatch','heading_to_pickup','in_transit'];
+function refundRiderWarn(o){
+  const stage=o&&o.courier&&o.courier.stage;
+  if(!REFUND_RIDER_ON_IT.includes(stage)) return '';
+  const r=o.refund;
+  let full=true;
+  if(r&&r.gross>0){
+    const remaining=Math.max(0,Math.round((r.gross-Math.max(0,Number(r.approved)||0))*100)/100);
+    let amt=(r.lines&&r.lines.length)?r.lines.reduce((t,l)=>t+(Number(l.amount)||0),0)
+      :r.requested!=null?r.requested:(Number(o.totalNum)||0);
+    amt=Math.min(Math.round(amt*100)/100,remaining);
+    full=(amt+0.005)>=remaining;
+  }
+  return full?T('A rider is on this order right now — approving cancels that delivery.','当前已有骑手接单 — 批准后该配送会被取消。'):'';
+}
 reg('rejectRefund', ()=>{
   if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
@@ -3394,18 +3426,31 @@ reg('pickOos', v=>{
   if(!p){ state.oosSku=null; render(); return; }
   if(state.prodBusy) return;
   const next=String(v);
-  if(next===String(p.oos||'strict')){ state.oosSku=null; render(); return; }
-  const was=p.oos;
+  /* §325 — THE WHOLE FAMILY, as the desktop does it. Its Save sends the policy
+     to every other size as well (09-products.js vaPersistSiblings(oosPolicy)),
+     because what shoppers see at zero is a decision about the product, not one
+     size of it; this picker changed the size on screen and left its siblings
+     saying something else. The size on screen goes first, then the rest in
+     size order. A size that already says `next` is not written, so picking
+     again after a partial failure finishes the job rather than redoing it. */
+  const fam=prodFamily(p);
+  const todo=[p].concat(fam.filter(m=>m!==p)).filter(m=>String(m.oos||'strict')!==next);
+  if(!todo.length){ state.oosSku=null; render(); return; }
+  const was=new Map(todo.map(m=>[m,m.oos]));
   state.prodBusy='oos'+p._id; state.prodErr=null;
-  p.oos=next; state.oosSku=null;   // optimistic
+  todo.forEach(m=>{ m.oos=next; });   // optimistic
+  state.oosSku=null;
   render();
-  apiWrite('/products/'+p._id,{oos_policy:next},'PATCH')
+  let landed=0;
+  todo.reduce((chain,m)=>chain.then(()=>apiWrite('/products/'+m._id,{oos_policy:next},'PATCH').then(()=>{ landed++; })),Promise.resolve())
     .then(()=>{ state.prodBusy=null; render(); showToast(T('Saved','已保存')); })
     .catch(e=>{
-      p.oos=was;   // the row must never lie
+      todo.slice(landed).forEach(m=>{ m.oos=was.get(m); });   // the rows must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words)
+        :landed?E('Some sizes did not save. Pick it again to finish.','部分规格未保存。请重新选择以完成。')
+        :E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -4284,7 +4329,9 @@ reg('chanCell', (channel, storeCode, next)=>{
                : T('No new orders arrive at this store on this channel. Orders already placed are not affected.',
                    '该门店在此渠道将不再接到新订单。已下单的订单不受影响。'),
     confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
-    run:()=>{
+    run:()=>{ if(open) chanReopenCheck(channel,storeCode,write); else write(); }};
+  render();
+  function write(){
       state.chanBusy=channel+'|'+storeCode; state.chanErr=null; render();
       // RE-READ, never patch. Writing `cell.open=open` locally made the row
       // agree with the tap whatever the server had actually stored — and for a
@@ -4306,9 +4353,48 @@ reg('chanCell', (channel, storeCode, next)=>{
         state.chanErr = e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
-    }};
-  render();
+  }
 });
+/* §325 — THE DESKTOP'S STOCK-PUBLISH CHECK, BEFORE A CHANNEL REOPENS AT A SHOP
+   (01-core.js csCell). A channel that pushes a full stock snapshot the moment it
+   comes back on (Meituan today) is about to publish numbers nobody has
+   necessarily just counted, so the desktop reads GET
+   /channel-status/reopen-preview first and, when anything would go out, asks
+   with the oldest figures listed. The phone went straight to the write.
+   Same read, same question, same words. A courtesy, not a gate, as there: a
+   3-second leash, and a preview that fails or is slow falls through to the
+   plain reopen rather than reading as a broken switch. Nothing to publish →
+   no question. */
+function chanAgeText(iso){
+  if(!iso) return T('never touched','从未更新');
+  const t=new Date(String(iso).replace(' ','T')+'Z').getTime();
+  if(!t||isNaN(t)) return T('never touched','从未更新');
+  const days=Math.floor((Date.now()-t)/86400000);
+  if(days<=0) return T('today','今天');
+  if(days===1) return T('1 day ago','1 天前');
+  if(days<30) return T(days+' days ago',days+' 天前');
+  const months=Math.round(days/30);
+  return T(months+(months===1?' month ago':' months ago'),months+' 个月前');
+}
+function chanReopenCheck(channel,storeCode,go){
+  state.chanBusy=channel+'|'+storeCode; render();
+  const leash=new Promise(res=>setTimeout(()=>res(null),3000));
+  Promise.race([apiRaw('/channel-status/reopen-preview?channel='+encodeURIComponent(channel)+'&storeCode='+encodeURIComponent(storeCode)),leash])
+    .catch(()=>null)
+    .then(prev=>{
+      state.chanBusy=null;
+      if(!(prev&&prev.count>0)){ go(); return; }
+      const items=Array.isArray(prev.items)?prev.items:[];
+      const rows=items.map(it=>`<div>${escAttr(it.name)} — ${escAttr(chanAgeText(it.updatedAt))}</div>`).join('');
+      const more=prev.count>items.length?`<div>${escAttr(T(`and ${prev.count-items.length} more`,`另有 ${prev.count-items.length} 项`))}</div>`:'';
+      state.ask={title:T('Publish current stock to this channel?','将当前库存发布到该渠道？'),
+        body:escAttr(T(`Reopening will publish current quantities for ${prev.count} product(s). Oldest first:`,
+                       `重新开启将发布 ${prev.count} 项商品的当前库存。最久未更新优先：`))
+             +`<div style="margin-top:8px;font-size:13px">${rows}${more}</div>`,
+        confirmLabel:T('Publish','发布'), cancelLabel:T('Not yet','暂不'), run:go};
+      render();
+    });
+}
 /* THE SHOP SWITCH — the desktop Sales page's location master, on the phone.
    Both directions, as asked, and it is the bluntest control in the app: it
    writes every channel at that shop AND the shop-wide fulfilment flag, which
@@ -4361,7 +4447,17 @@ reg('resumeDelivery', ()=>{
     confirmLabel:T('Resume','恢复'),
     run:()=>{
       state.dlvBusy=true; state.dlvErr=null; render();
-      apiWrite('/config',{'delivery.holidayMode':false},'PUT').then(()=>{
+      /* §325 — VERSION HISTORY, as the desktop's Holiday card writes it
+         (06-delivery.js, card 'delivery.holiday', §279): `?history=` names the
+         card so this change is a version Undo and Version history can see, and
+         the body carries the card's same two keys — the server records exactly
+         the keys it is sent, and a version with only one of them would not
+         compare with the rest. The message goes back as stored, unchanged; it
+         is left out only if the phone never read it, rather than sent blank. */
+      const hm=cfgGet('delivery.holidayMessage',null);
+      const body={'delivery.holidayMode':false};
+      if(hm&&typeof hm==='object') body['delivery.holidayMessage']={en:String(hm.en||''),cn:String(hm.cn||'')};
+      apiWrite('/config?history='+encodeURIComponent('delivery.holiday'),body,'PUT').then(()=>{
         state.cfg=state.cfg||{};
         state.cfg.delivery=Object.assign({},state.cfg.delivery||{},{holidayMode:false});
         state.dlvBusy=false; render(); showToast(T('Delivery resumed','配送已恢复'));
@@ -4374,6 +4470,10 @@ reg('resumeDelivery', ()=>{
   render();
 });
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
+/* §325 — Legal's own open row. It used faqToggle and state.faqOpen, so opening
+   the second FAQ answer and then visiting Legal found the Privacy policy
+   already open (both lists number from 0), and closing one closed the other. */
+reg('legalToggle', i=>{ state.legalOpen=state.legalOpen===i?null:i; render(); });
 reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
 reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
 reg('stepDec', k=>{ sheetStep[k]=Math.max(0,(sheetStep[k]||0)-1); render(); });
@@ -6526,7 +6626,10 @@ function screenOperations(){
       ])}</div>
     ${stores&&stores.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>
       <div class="list">${stores.map(opsStoreRow).join('')}</div></div>`:''}
-    ${noteBar(T('Store details, staff, printers and payment keys are set on desktop.','门店资料、员工、打印机与支付密钥在电脑端设置。'))}</div>`;
+    ${/* §325 — "staff" came out: the phone's Team screen invites, edits and
+          sets permissions (§300), so that clause was no longer true. The rest
+          still is. The live pair with one item dropped, in both halves. */''}
+    ${noteBar(T('Store details, printers and payment keys are set on desktop.','门店资料、打印机与支付密钥在电脑端设置。'))}</div>`;
 }
 
 /* ==========================================================================
@@ -12929,19 +13032,23 @@ const SUBS={
        of how to turn it on. What is left is the half that is still true and is
        the only half an operator can act on — and it is the live pair's own tail
        with its first clause dropped, so nothing was composed. */
-    const note = noteBar(T('Issue fapiao on desktop','请在电脑端开具'));
+    /* §325 — THAT LINE WAS NO LONGER TRUE. It read "Issue fapiao on desktop",
+       and since §314 the phone's order sheet issues one (upload, number, Mark
+       issued, un-issue) — but nothing here led to it. Each row now opens its
+       order's sheet, which is where the fapiao is issued, and the line is gone
+       rather than reworded: a chevron on a row says "tap for more" in every
+       language this app speaks. */
     if(state.invLoaded&&!(DB.invoices||[]).length) return nothingYet(T('No fapiao requested','没有发票申请'),
       T('When a customer asks for a fapiao with their order, the request shows here.','顾客下单时申请发票，申请会显示在这里。'));
     return `<div><div style="padding:12px 0 4px">${chipRow(chips,seg,'invSeg')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
-      ${note}
       ${!rows.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${seg==='issued'?T('None issued yet','尚无已开发票'):T('Nothing waiting','没有待开发票')}</div>`:''}
       ${rows.map(v=>`<div class="card" style="display:flex;flex-direction:column;gap:9px;padding:14px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <${v._id!=null?`button type="button" onclick="APP.cmd('openInvoiceOrder',${(DB.invoices||[]).indexOf(v)})"`:'div'} style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;width:100%;padding:0;margin:0;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:${v._id!=null?'pointer':'default'}">
           <span style="display:flex;flex-direction:column;min-width:0">
             <span style="font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(v.title||T('No title given','未填抬头'))}</span>
             <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(v.id)}${v.no?' · '+escAttr(v.no):''}</span></span>
-          <span class="num" style="font-size:16px;font-weight:500;flex:none">${v.amount}</span></div>
+          <span style="display:flex;align-items:center;gap:4px;flex:none"><span class="num" style="font-size:16px;font-weight:500">${v.amount}</span>${v._id!=null?`<span style="display:flex;color:var(--text-secondary)">${ic('chevron-right',18)}</span>`:''}</span></${v._id!=null?'button':'div'}>
         ${(v.taxId||v.email)?`<div class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([v.taxId,v.email].filter(Boolean).join(' · '))}</div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;row-gap:8px">
           <span style="display:flex;align-items:center;gap:9px;min-width:0;flex-wrap:wrap;row-gap:6px">${pill(v.kind,T(...v.status))}
@@ -13170,14 +13277,14 @@ const SUBS={
       T('Your terms and privacy policy are written on desktop. Once published they show here and in the mini app.','服务条款与隐私政策在电脑端撰写，发布后会显示在这里和小程序中。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     <div class="list">${docs.map((d,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
+      <button onclick="APP.cmd('legalToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
         <span style="display:flex;align-items:center;gap:10px;width:100%">
           <span style="flex:1;min-width:0">
             <span style="display:block;font-size:15px;color:var(--text-primary)">${T(...d.name)}</span>
             <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d.updated?T('Updated '+fmtDay(d.updated),'更新于 '+fmtDay(d.updated)):T('Not published','未发布')}</span>
           </span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.faqOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>
+        ${state.legalOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>
         ${String(d.body).length>1200?`<span style="font-size:12.5px;color:var(--text-secondary);opacity:.85">${T('Clipped here — the rest is on desktop.','此处已截断 — 完整内容见电脑端。')}</span>`:''}`:''}</button>`).join('')}</div>
     ${desktopNote()}</div>`;
   }},
@@ -15340,7 +15447,51 @@ function qsBumpCount(id,d){
    different ledger entry from a batch, and the whole of §46's second ruling.
    `reason: 'adjust'` is what the old app sent and what the server records for a
    clerk; in add mode the server writes the reason itself. */
-function qsSetCommit(id){
+/* §325 — THE TWO RECOUNT REFUSALS ARE QUESTIONS, AND THE PHONE NOW ASKS THEM.
+   PATCH /stores/:id/stock/:pid answers two 400s that are not errors: each is
+   answered by sending the same count again with one word in `recount_reason`
+   (routes/retail-inventory.js):
+     recount_clears_debt      §84 — the shelf is below zero, the only record of
+                              units sold that were never made; a count typed over
+                              it wipes that claim. The word is `clears_debt`.
+     recount_reason_required  §46 — a kitchen-mode count went DOWN, which may only
+                              mean it was counted wrong. The word is `miscount`.
+   The phone's product sheet and Add stock showed the server's English sentence
+   in the row and stopped, so a shelf at −18 could not be corrected from the
+   phone by any number. The questions are the desktop's own
+   (09-products.js _paAskRecountReason), word for word; the §46 one was the
+   phone's before it was the desktop's. `resend(word)` writes the same count
+   again with the answer; `keep()` is backing out. Returns false for any other
+   code, so the caller reports it as before. */
+const RECOUNT_QUESTIONS=['recount_clears_debt','recount_reason_required'];
+function recountAsk(code,body,shelf,typed,resend,keep){
+  if(code==='recount_clears_debt'){
+    const owed=Math.abs(Number(body&&body.owed))||Math.abs(Number(shelf)||0);
+    state.ask={title:T(`Customer orders waiting — ${owed}`,`有客户订单等待 — ${owed}`),
+      body:T(`This shelf is at ${shelf} because ${owed} were sold that were never made. `
+             +'That number is what the kitchen cooks against, and saving a count here sets it '
+             +'to zero. To add stock, record a batch instead.',
+             `在架 ${shelf},因为有 ${owed} 件已售出但从未制作。`
+             +'这个数字是厨房的待制作依据,在此保存数量会将其清零。若要增加库存,请改用“加库存”。'),
+      options:[{key:'clears_debt',label:T('Clear it and save','清零并保存')},{key:'keep',label:T('Keep it','保留')}],
+      run:k=>{ if(k==='clears_debt') resend('clears_debt'); else if(keep) keep(); }};
+    render(); return true;
+  }
+  if(code==='recount_reason_required'){
+    state.ask={title:T('The count has gone down','数量变少了'),
+      body:T('Shelf says '+shelf+', you counted '+typed+'.', '在架 '+shelf+'，你数的是 '+typed+'。'),
+      options:[{key:'miscount', label:T('I counted wrong — save '+typed, '数错了——保存 '+typed)},
+               {key:'gone',     label:T('Something is missing or spoiled','少了或坏了')}],
+      run:k=>{
+        if(k==='miscount') return resend('miscount');
+        if(keep) keep();
+        showToast(T('The count stays as it is. Tell whoever records waste.', '数量保持不变。请告诉负责记录损耗的人。'));
+      }};
+    render(); return true;
+  }
+  return false;
+}
+function qsSetCommit(id,reason){
   clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
   const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
   if(!p) return;
@@ -15349,10 +15500,19 @@ function qsSetCommit(id){
   if(was!=null&&n===was){ delete state.qs.setBase[id]; return; }   // back where it started
   state.qs.fixing[id]=n;
   render();
-  apiWrite('/stores/'+state.qs.storeId+'/stock/'+id,
-           {physical_qty:n, reason:'adjust', note:'quick-stock'}, 'PATCH')
+  const body={physical_qty:n, reason:'adjust', note:'quick-stock'};
+  if(reason) body.recount_reason=reason;   // §325: only on the resend that answers a refusal
+  apiWrite('/stores/'+state.qs.storeId+'/stock/'+id, body, 'PATCH')
     .then(()=>qsSetLanded(id))
-    .catch(e=>{ if(String(e.message)==='auth') return; qsSetFailed(id,was,e.message); });
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      /* §325 — a question, asked once: the shelf goes back to what it said, and
+         the answer resends this count with its word. */
+      if(!reason&&RECOUNT_QUESTIONS.includes(e.code)){
+        qsSetFailed(id,was,null); delete state.qs.rowErr[id];
+        recountAsk(e.code,e.body,was,n,w=>{ p.physical_qty=n; state.qs.setBase[id]=was; qsSetCommit(id,w); });
+        return;
+      }
+      qsSetFailed(id,was,e.message); });
 }
 /* The two ways a recount ends, named — the same call the add path makes one
    screen up, and for the same reason: they are what the operator is left
@@ -15564,6 +15724,9 @@ function qsCorrect(id,n,reason){
       // operator has to know before they try again.
       if(p&&was!=null) p.physical_qty=was;
       delete state.qs.fixing[id];
+      /* §325 — a raise across a negative shelf (§84), or a drop the shelf moved
+         under (§46), is asked rather than reported, and answered by resending. */
+      if(!reason&&recountAsk(e.code,e.body,was,n,w=>qsCorrect(id,n,w))){ render(); return; }
       state.qs.rowErr[id]=e.message||E('Didn\u2019t save','未保存');
       render(); });
 }
@@ -24114,7 +24277,10 @@ async function loadProductStock(pid){
    products:edit, because Quick Stock and the desktop's stock modal share it. */
 function prodCanEdit(){ return mCan('products:edit'); }
 function prodCanStock(){ return mCan(['quickstock:recount','quickstock:add','products:edit']); }
-async function saveProductEdits(){
+async function saveProductEdits(answers){
+  /* `answers` — §325: the recount words the operator has given this Save,
+     keyed store:product, so a resend after a question carries its word and
+     nothing else does. Absent on a plain tap of Save. */
   const p=DB.products.find(x=>x.sku===state.productSku);
   if(!p||p._id==null||state.prodBusy) return;
   const canPrice=prodCanEdit(), canStock=prodCanStock();
@@ -24171,13 +24337,16 @@ async function saveProductEdits(){
      the operator who is told that will type it all again over figures that are
      already in. Re-pressing Save re-sends only what is still pending, and a
      figure written twice writes the same figure. */
-  let landed=0;
+  let landed=0, cur=null;
   try{
     for(const job of jobs){
       if(job.price!=null){ await apiWrite('/products/'+job.m._id,{sell_price:job.price},'PATCH'); landed++; }
       for(const [st,now] of job.stock){
-        await apiWrite('/stores/'+st.id+'/stock/'+job.m._id,{physical_qty:now},'PATCH');
-        st.qty=now; landed++;
+        const k=st.id+':'+job.m._id; cur={st,m:job.m,now,k};
+        const body={physical_qty:now};
+        if(answers&&answers[k]) body.recount_reason=answers[k];
+        await apiWrite('/stores/'+st.id+'/stock/'+job.m._id,body,'PATCH');
+        st.qty=now; landed++; cur=null;
       }
     }
     state.prodBusy=false; state.productSku=null; render();
@@ -24192,6 +24361,18 @@ async function saveProductEdits(){
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
+    /* §325 — a recount question, asked once per count. What already landed is
+       in (st.qty moved with it), so the resend re-sends only what is pending.
+       Backing out puts that store's stepper back on the shelf's own number,
+       as the desktop grid puts its box back. */
+    if(cur&&!(answers&&answers[cur.k])&&RECOUNT_QUESTIONS.includes(e.code)){
+      const c=cur;
+      render();
+      recountAsk(e.code,e.body,c.st.qty,c.now,
+        w=>saveProductEdits(Object.assign({},answers||{},{[c.k]:w})),
+        ()=>{ sheetStep[stockKey(c.m._id,c.st.id)]=c.st.qty; render(); });
+      return;
+    }
     state.prodErr=e.refused?E(...e.words):landed
       ? E('Some of that did not save. What did is already in — press Save again for the rest.',
            '部分内容没有保存成功。已保存的不会重复写入 — 请再按一次「保存」。')
@@ -24404,12 +24585,18 @@ reg('adjustPoints', ()=>{
     fields:[{id:'delta',label:T('Change by','变动'),placeholder:'100',numeric:true},
             {id:'reason',label:T('Reason','原因'),placeholder:T('Goodwill after a late delivery','配送延误补偿')}],
     confirmLabel:T('Save','保存'),
-    validate:v=>{ const n=parseInt(v.delta,10);
+    /* §325 — READ WHOLE, NEVER ROUNDED. This was parseInt, so "1.5" saved 1
+       and "12abc" saved 12, and the ledger row disagreed with what the operator
+       typed. The desktop (08-customers.js cuSaveAdjust) reads Number() and
+       refuses a fraction in its own words; so does this, and sends the number
+       it read. */
+    validate:v=>{ const n=Number(String(v.delta==null?'':v.delta).trim()||NaN);
       if(!Number.isFinite(n)||n===0) return T('Enter a number other than zero.','请输入非零数字。');
+      if(!Number.isInteger(n)) return T('Points must be a whole number.','积分必须是整数。');
       if(!v.reason) return T('Say why — it goes on the customer\u2019s ledger.','请填写原因，会记入顾客账目。');
       return ''; },
     run:v=>custWrite('points', ()=>apiWrite('/customers/'+state.custId+'/points-adjust',
-      {delta:parseInt(v.delta,10), reason:v.reason}), T('Points updated','积分已更新'))};
+      {delta:Number(String(v.delta).trim()), reason:v.reason}), T('Points updated','积分已更新'))};
   render();
 });
 reg('adjustWallet', ()=>{
@@ -24626,9 +24813,16 @@ function toggleFeature(key){
     state.featErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
+/* §325 — THE STORE LOCK RIDES ALONG, as the desktop's does (03-dashboard.js
+   tdOpsLoad → dashStoreQS, which is RA_STORE_LOCK first). A store-scoped
+   operator's Needs you counted every store's refunds, deliveries and low
+   shelves while their Trend was pinned to their own (§300 F5). The phone has
+   no store picker on Home, so the lock is the only store it can send; with no
+   lock nothing is added and the read is all stores, exactly as before. */
+function opsStoreQS(){ return state.storeLock?'?store_id='+encodeURIComponent(state.storeLock):''; }
 async function loadOps(){
   if(state.opsLoading) return; state.opsLoading=true;
-  try{ state.ops=await api('/dashboard/ops'); }catch(e){}
+  try{ state.ops=await api('/dashboard/ops'+opsStoreQS()); }catch(e){}
   state.opsLoading=false; render();
 }
 function ageShort(v){
@@ -27086,7 +27280,7 @@ function sheetAsk(){
      : a.options
        ? `<div style="max-height:62vh;overflow:auto">${a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')}</div>`
        : `<div style="display:flex;gap:8px;padding:16px 20px 0">
-            <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>
+            <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${a.cancelLabel||T('Cancel','取消')}</button>
             <button class="btn2" style="flex:1;${a.danger?'color:var(--brick-ink);border-color:var(--brick-ink)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
           </div>`}
    </div>`;
@@ -33059,8 +33253,11 @@ function payNoteOf(r){
   if(!r.has_alipay_proof) return null;
   if(v==='match') return {sev:'amber',icon:'circle-check',
     label:['Payment verified · confirm','付款已核对 · 待确认'],
-    why:['The screenshot was read and matches. Marking it paid is a desktop action — it records which tender it was.',
-         '付款截图已核对一致。标记已付款需在电脑端完成 — 需要记录收款方式。']};
+    /* §325 — the second sentence said Mark paid was a desktop action because it
+       records the tender. The phone's Mark paid asks for the tender (markPaid),
+       so it was no longer true; the first sentence stands alone. */
+    why:['The screenshot was read and matches.',
+         '付款截图已核对一致。']};
   return {sev:'amber',icon:'triangle-alert',
     label:['Payment not checked yet','付款待核对'],
     why: v==='error'
@@ -33927,6 +34124,10 @@ function mapDetail(o){
     staffNote:(o.refund_review_note||'').trim()||null,
     requested:o.refund_amount_requested!=null?Number(o.refund_amount_requested):null,
     approved:o.refund_amount_approved!=null?Number(o.refund_amount_approved):null,
+    /* §325 — GROSS tenders (points + wallet + cash), the figure the server's
+       /refund/approve compares against to decide a FULL refund — not o.total,
+       which is the cash slice alone (§222; the desktop computes the same). */
+    gross:Math.round(((Number(o.points_amount)||0)+(Number(o.balance_used)||0)+(Number(o.total)||0))*100)/100,
     paid:o.refund_amount_paid!=null?Number(o.refund_amount_paid):null,
     cash:o.refund_cash_amount!=null?Number(o.refund_cash_amount):null,
     method:o.refund_payout_method||null, ref:o.refund_payout_ref||null,
@@ -34115,7 +34316,7 @@ function mapInvoice(r){
   // block shows and the phone showed nowhere: you could not tell whose invoice
   // was waiting without opening a laptop.
   const company = r.invoice_type ? r.invoice_type==='company' : !!r.invoice_tax_id;
-  return {id:r.order_no||('#'+r.id), no:r.invoice_number||null,
+  return {id:r.order_no||('#'+r.id), _id:r.id!=null?Number(r.id):null, no:r.invoice_number||null,
     title:r.invoice_title||null, company, taxId:r.invoice_tax_id||null, email:r.invoice_email||null,
     // 'off' is the muted pill — the same grey the app gives anything switched
     // out of play. A dead request must not wear Pending's clear pill: that is
@@ -34419,6 +34620,36 @@ reg('openDeliveryAlert', ()=>{
   render();
   state.detailMounted=true;
   api('/orders/'+it.id).then(o=>{
+    if(state.detailId!==no) return;
+    const d=mapDetail(o);
+    state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=T('This order could not be opened. Close and try again.',
+                     '无法打开该订单，请关闭后重试。');
+    render();
+  });
+});
+
+/* §325 — A FAPIAO REQUEST OPENS ITS ORDER, where §314 issues it. The same
+   shape as openDeliveryAlert above: the order is often not in whatever page of
+   the Orders list is loaded, so the sheet is built from its own read, with
+   detailFetch holding the screen meanwhile. The argument is the row's index in
+   DB.invoices, not its order number, for openCustOrder's reason (a number would
+   have to survive a JS string inside an HTML attribute). */
+reg('openInvoiceOrder', i=>{
+  const v=(DB.invoices||[])[Number(i)];
+  if(!v||v._id==null) return;
+  const no=v.id;
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const row=list.find(o=>o._id===v._id); if(row) row.isNew=false; }
+  });
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  api('/orders/'+v._id).then(o=>{
     if(state.detailId!==no) return;
     const d=mapDetail(o);
     state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
