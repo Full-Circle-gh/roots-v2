@@ -1433,6 +1433,8 @@ const state = {
   presence:null,
   /* §325 X2 — the Operations screen's writes: which save is in flight and its
      refusal, the locate-everything run, and the recently-deleted list. */
+  /* §325 X3 — the count sheet's print view: false, true, or 'failed'. */
+  countPrint:false,
   opsx:{busy:null, err:null, geoBusy:false, geoErr:null, bin:null, binDays:60, binTried:false, binErr:null, binBusy:null, binRowErr:{}},
   /* The Account screen's own reads and writes (screenAccount): the recovery
      contacts and two-step switches, the signed-in devices, the per-person
@@ -6476,6 +6478,7 @@ function screenOperations(){
       ])}${opsxGeoAction()}</div>
     ${opsxLowCard()}
     ${opsxSupportCard()}
+    ${ppgmCard()}
     ${stores&&stores.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>
       <div class="list">${stores.map(opsStoreRow).join('')}</div></div>`:''}
     ${opsxBinCard()}
@@ -12713,7 +12716,7 @@ function screenProductCatalogue(){
         <div style="flex:1;min-width:0">${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
           oninput="APP.cmd('prodSearch',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${exp}</div>
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${exp}${countButton()}</div>
       <div id="mProdBody">${prodBodyHtml()}</div>
     </div>`;
 }
@@ -23589,6 +23592,226 @@ function opsxBinCard(){
     <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. A restored purchase order keeps its own date, so it still lands in the month it was placed.','最近 60 天内删除的优惠券、配送区域、账目行与采购单草稿可以恢复。恢复的采购单保留原有日期，仍计入原来的月份。')}</div></div>`;
 }
 /* §325 X2 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X3 — THE PRODUCT PAGE'S SECTIONS, AND A STOCK COUNT SHEET
+   --------------------------------------------------------------------------
+   Two desktop things the phone did not have.
+
+   THE PRODUCT PAGE'S SECTIONS (31-product-page.js, Settings › Operations ›
+   Product page): the order the full product page shows its sections in, and
+   which it shows at all. One setting for the business, stored at
+   product_page.sections = {order:[keys], hidden:[keys]}, written by
+   PUT /config exactly as ppgSettingsSave writes it. The phone does not carry
+   the page itself — that is the product page designer, which §326.7 keeps for
+   a phone design of its own — but the setting is a list of switches and an
+   order, and that is a phone shape. It saves on every change (§279), one
+   change at a time; the list is drawn from what the server holds, so a
+   refusal leaves it as it was and says so beside it.
+
+   THE COUNT SHEET (26-print.js paPrintCountSheet): every active product, its
+   SKU, the system's figure — for the store the catalogue is showing, or every
+   store — and two empty columns to write in at the shelf. Shown in a frame
+   over Products and handed to the phone's own print sheet, the way the
+   purchase order's print view works (a phone's in-app browser often refuses
+   the desktop's pop-up). Offered only while the phone holds the whole
+   catalogue: a sheet that stops at the first few hundred products is a
+   stocktake that silently skips the rest.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* The desktop's PPG_SECTIONS, key for key, with the words its Settings card
+   shows. `locked` cannot be hidden: a product needs a name. */
+const PPGM_SECTIONS=[
+  {key:'basics', en:'Basics', cn:'基础', locked:true,
+   what_en:'Name, second-language name, SKU, photos', what_cn:'名称、名称(第二语言)、货号、图片'},
+  {key:'where', en:'Where it shows', cn:'分类与陈列',
+   what_en:'Shop section, subcategory, badge, size or weight', what_cn:'商店分区、子分类、标签、规格'},
+  {key:'cost', en:'Cost & Pricing', cn:'成本与定价',
+   what_en:'What one unit is made of, cost, price, margin', what_cn:'成本、价格、毛利'},
+  {key:'stock', en:'Stock', cn:'库存',
+   what_en:'On hand per store, low-stock alert, out-of-stock rule, sourcing', what_cn:'各门店库存、低库存提醒、缺货时的处理方式、货源'},
+  {key:'sold', en:'How it’s sold', cn:'售卖方式',
+   what_en:'Sizes, bundles, add-ons, options', what_cn:'规格、套装、推荐搭配、选项'},
+  {key:'page', en:'Shopper page', cn:'顾客页面',
+   what_en:'Description, product details, designed page', what_cn:'描述、产品详情、已设计页面'},
+];
+/* ppgResolveLayout, rule for rule: an unknown key is dropped, a missing one is
+   appended in default order, a locked one is never hidden, a duplicate is kept
+   once — so a layout stored by a version with other sections still resolves to
+   a page with every section on it. */
+function ppgmResolve(raw){
+  const known=PPGM_SECTIONS.map(s=>s.key);
+  const cfg=raw&&typeof raw==='object'?raw:{};
+  const order=[];
+  for(const k of (Array.isArray(cfg.order)?cfg.order:[])) if(known.includes(k)&&!order.includes(k)) order.push(k);
+  for(const k of known) if(!order.includes(k)) order.push(k);
+  const hidden=[];
+  for(const k of (Array.isArray(cfg.hidden)?cfg.hidden:[])){
+    const s=PPGM_SECTIONS.find(x=>x.key===k);
+    if(s&&!s.locked&&!hidden.includes(k)) hidden.push(k);
+  }
+  return {order,hidden};
+}
+const ppgmLayout=()=>ppgmResolve(cfgGet('product_page.sections',null));
+function ppgmSave(val){
+  const x=state.opsx; if(x.busy||!opsxCan()) return Promise.resolve();
+  x.busy='ppg'; x.err=null; render();
+  return apiWrite('/config',{'product_page.sections':val},'PUT').then(()=>{
+    state.cfg=state.cfg||{};
+    state.cfg.product_page=Object.assign({},state.cfg.product_page||{},{sections:val});
+    x.busy=null; render(); showToast(T('Saved','已保存'));
+  }).catch(e=>{
+    x.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    x.err={key:'ppg', msg:e.refused?E(...e.words):E('Save failed','保存失败')};
+    render();
+  });
+}
+reg('ppgToggle', key=>{
+  const s=PPGM_SECTIONS.find(x=>x.key===key); if(!s||s.locked) return;
+  const l=ppgmLayout();
+  const hidden=l.hidden.includes(key)?l.hidden.filter(k=>k!==key):l.hidden.concat([key]);
+  ppgmSave({order:l.order, hidden:l.order.filter(k=>hidden.includes(k))});
+});
+reg('ppgMove', (key,dir)=>{
+  const l=ppgmLayout(), i=l.order.indexOf(key), j=i+(Number(dir)<0?-1:1);
+  if(i<0||j<0||j>=l.order.length) return;
+  const order=l.order.slice(); order[i]=order[j]; order[j]=key;
+  ppgmSave({order, hidden:order.filter(k=>l.hidden.includes(k))});
+});
+/* The desktop's Reset: the default order, nothing hidden, saved at once. */
+reg('ppgReset', ()=>{ ppgmSave({order:PPGM_SECTIONS.map(s=>s.key), hidden:[]}); });
+function ppgmCard(){
+  if(!opsxCan()) return '';
+  const l=ppgmLayout(), busy=!!state.opsx.busy, saving=state.opsx.busy==='ppg';
+  const mv=(k,dir,dis,label)=>`<button class="iconbtn" style="width:34px;height:34px;flex:none" aria-label="${label}" ${dis||busy?'disabled':''} onclick="APP.cmd('ppgMove','${k}',${dir})">${ic(dir<0?'chevron-up':'chevron-down',18)}</button>`;
+  const rows=l.order.map((k,i)=>{
+    const s=PPGM_SECTIONS.find(x=>x.key===k), off=l.hidden.includes(k);
+    const sw=s.locked?`<span style="font-size:12.5px;color:var(--text-secondary);flex:none">${T('Always shown','始终显示')}</span>`
+      :busy?`<span style="width:44px;flex:none"></span>`
+      :`<span aria-label="${T('Show this section','显示此分区')}" style="display:flex;flex:none">${toggle(!off,`APP.cmd('ppgToggle','${k}')`)}</span>`;
+    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;${off?'opacity:.6':''}">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px">${T(s.en,s.cn)}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${T(s.what_en,s.what_cn)}</span></span>
+      ${mv(k,-1,i===0,T('Move up','上移'))}${mv(k,1,i===l.order.length-1,T('Move down','下移'))}${sw}</div>`;
+  }).join('');
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Product page','产品页')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px 8px">${T('The order your product page shows its sections in, and which ones it shows at all.','产品页各分区的显示顺序，以及显示哪些分区。')}</div>
+    <div class="list">${rows}${opsxErrLine('ppg')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('A hidden section keeps its data. Switch it back on and everything is still there. Basics cannot be hidden: a product needs a name.','隐藏的分区会保留其数据，重新开启后一切仍在。基础分区不能隐藏：产品需要一个名称。')}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding-top:10px">
+      <button class="btn2" style="width:auto;padding:0 14px" ${busy?'disabled':''} onclick="APP.cmd('ppgReset')">${T('Reset to default order','重置为默认顺序')}</button>
+      ${saving?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`:''}</div></div>`;
+}
+
+/* ── The count sheet ───────────────────────────────────────────────────────── */
+/* The store the sheet is for: the one the catalogue is showing, when the store
+   switch is on; otherwise every store, and the system figure is the total. */
+function countStore(){
+  if(!state.prodStore||!prodStoreOn()) return null;
+  return (state.prodGrid.stores||[]).find(x=>String(x.id)===String(state.prodStore))||null;
+}
+/* paPrintCountSheet's rows: name, SKU, the system's figure, two write-in boxes.
+   The figure at one store is that shelf's own number; with no store it is the
+   product's stock across the shop. A blank, never a zero, where it is unknown. */
+function countRows(){
+  const st=countStore();
+  return (DB.products||[]).map(p=>{
+    const sys=st ? (state.prodGrid.qty[p._id]&&state.prodGrid.qty[p._id][st.id]!=null ? state.prodGrid.qty[p._id][st.id] : '')
+                 : (p.stock!=null ? p.stock : '');
+    return {name:T(...p.name), sku:p.rawSku||'', sys:String(sys)};
+  });
+}
+/* products:view is ROUTE_CAP.products — the key that opens the screen the
+   button sits on, which is all the desktop's button asks (it carries no data-cap). */
+function countOffered(){ return mCan('products:view')&&!!state.catalogueComplete&&(DB.products||[]).length>0; }
+/* EVERY CLOSING TAG OF THE PAGE IS WRITTEN <\/…> BELOW, for the reason
+   poPrintDoc gives: the render harnesses find the app's own closing body tag
+   by its first occurrence. */
+function countSheetDoc(){
+  const e2=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const st=countStore(), rows=countRows(), shop=state.storeName||'';
+  const sub=st?T(st.name_en||st.name_cn||'',st.name_cn||st.name_en||''):T('All locations','全部门店');
+  const meta=[[T('Date','日期'),tdWhen(new Date(),'date',_tdL())],[T('Lines','行数'),String(rows.length)],[T('Counted by','盘点人'),'________']]
+    .map(([k,v])=>`<dt>${e2(k)}<\/dt><dd>${e2(v)}<\/dd>`).join('');
+  const cols=[['#',false,'26px'],[T('Product 商品','商品 Product'),false,''],['SKU',false,'110px'],
+    [T('System 系统','系统 System'),true,'76px'],[T('Counted 实盘','实盘 Counted'),true,'90px'],[T('Difference 差异','差异 Difference'),true,'90px']];
+  const head=cols.map(([h,r,w])=>`<th${r?' class="r"':''}${w?` style="width:${w}"`:''}>${e2(h)}<\/th>`).join('');
+  const body=rows.map((r,i)=>`<tr><td class="idx">${i+1}<\/td><td>${e2(r.name)}<\/td><td>${e2(r.sku)}<\/td><td class="r">${e2(r.sys)}<\/td><td class="write r"><\/td><td class="write r"><\/td><\/tr>`).join('');
+  return `<!DOCTYPE html>
+<html lang="${LANG==='en'?'en':'zh'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stock count${shop?' — '+e2(shop):''}<\/title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  :root { --ink:#000; --grey:#555; --hair:#C9C4B6;
+          --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#F2F1EC; font-family:var(--sans); color:var(--ink); }
+  .sheet { background:#fff; max-width:210mm; margin:24px auto; padding:18mm 16mm; }
+  .masthead { display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-bottom:14px; }
+  .shop { font-size:12px; color:var(--grey); letter-spacing:.14em; text-transform:uppercase; }
+  h1 { margin:6px 0 0; font-size:26px; font-weight:400; line-height:1.1; }
+  .cn { font-size:13px; color:var(--grey); margin-top:6px; letter-spacing:.18em; }
+  .sub { font-size:13px; margin-top:8px; }
+  .meta { font-size:12px; flex:none; }
+  .meta dl { margin:0; display:grid; grid-template-columns:auto auto; gap:6px 22px; }
+  .meta dt { color:var(--grey); }
+  .meta dd { margin:0; text-align:right; }
+  table { width:100%; border-collapse:collapse; margin-top:14px; }
+  thead th { border-bottom:1.5px solid var(--ink); font-weight:500; font-size:11px; letter-spacing:.02em; padding:9px 10px; text-align:left; white-space:nowrap; }
+  thead th.r { text-align:right; }
+  tbody td { border-bottom:1px solid var(--hair); padding:11px 10px; font-size:12.5px; vertical-align:top; }
+  tbody td.r { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  td.idx { color:var(--grey); font-size:11px; width:26px; }
+  td.write::after { content:''; display:block; height:16px; border-bottom:1px solid var(--hair); width:64px; margin-left:auto; }
+  .note { margin-top:22px; padding:10px 12px; border-left:2px solid var(--hair); font-size:12px; line-height:1.6; color:var(--grey); }
+  .foot { margin-top:36px; padding-top:10px; border-top:1px solid var(--hair); display:flex; justify-content:space-between; font-size:10px; color:var(--grey); }
+  .empty { padding:24px; text-align:center; color:var(--grey); font-size:12.5px; }
+  @media screen and (max-width:600px) { .sheet { margin:0; padding:18px 14px; } .masthead { flex-direction:column; align-items:flex-start; gap:16px; }
+    thead th, tbody td { padding-left:6px; padding-right:6px; } }
+  @media print { body { background:#fff; } .sheet { margin:0; padding:10mm; max-width:none; } }
+<\/style><\/head><body>
+<div class="sheet">
+  <div class="masthead">
+    <div>
+      ${shop?`<div class="shop">${e2(shop)}<\/div>`:''}
+      <h1>Stock count<\/h1>
+      <div class="cn">盘点表<\/div>
+      <div class="sub">${e2(sub)}<\/div>
+    <\/div>
+    <div class="meta"><dl>${meta}<\/dl><\/div>
+  <\/div>
+  <table>
+    <thead><tr>${head}<\/tr><\/thead>
+    <tbody>${body||'<tr><td colspan="6" class="empty">Nothing to show · 暂无内容<\/td><\/tr>'}<\/tbody>
+  <\/table>
+  <div class="note">${e2(T('Write the counted figure at the shelf. Nothing here changes the system — enter the counts in Products afterwards.','请在货架前填写实盘数量。此表不会更改系统库存 — 盘点后请在商品页录入。'))}<\/div>
+  <div class="foot"><span>${e2(shop)}<\/span><span>${e2(tdWhen(new Date(),'dateTime',_tdL()))}<\/span><\/div>
+<\/div>
+<\/body><\/html>`;
+}
+function sheetCountPrint(){
+  if(!state.countPrint) return '';
+  return `<div class="scrim" style="z-index:51" onclick="APP.scrimClose('countPrintClose')"></div>
+   <div class="sheet" style="top:40px;z-index:52;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('countPrintClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Count sheet','盘点表')}</span>
+         <button class="btn2" style="width:auto;padding:0 18px;flex:none" onclick="APP.cmd('countPrintGo')">${ic('printer',18)}${T('Print','打印')}</button></div>
+       ${state.countPrint==='failed'?`<div style="font-size:13.5px;color:var(--brick-ink);margin-top:8px">${T('Print failed','打印失败')}</div>`:''}</div>
+     <iframe id="mCountPrintFrame" title="${T('Count sheet','盘点表')}" srcdoc="${escAttr(countSheetDoc())}" style="flex:1;min-height:0;width:100%;border:0;background:#fff"></iframe></div>`;
+}
+function countButton(){
+  if(!countOffered()) return '';
+  return `<button class="btn2" style="width:auto;flex:none;padding:0 12px;gap:6px" aria-label="${T('A sheet to take to the shelves','打印盘点表')}" onclick="APP.cmd('countPrint')">${ic('printer',16)}${T('Count sheet','盘点表')}</button>`;
+}
+reg('countPrint', ()=>{ if(!countOffered()) return; state.countPrint=true; render(); });
+reg('countPrintClose', ()=>{ state.countPrint=false; render(); });
+reg('countPrintGo', ()=>{
+  const f=(typeof document!=='undefined')?document.getElementById('mCountPrintFrame'):null;
+  try{ f.contentWindow.focus(); f.contentWindow.print(); if(state.countPrint==='failed'){ state.countPrint=true; render(); } }
+  catch(e){ state.countPrint='failed'; render(); }
+});
+/* §325 X3 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -31998,6 +32221,7 @@ function render(){
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
   if(state.poId!=null&&state.poPrint&&state.poDetail) html += layer('poprint:'+state.poId, sheetPOPrint());
+  if(state.countPrint) html += layer('countprint', sheetCountPrint());
   if(state.pwSheet&&state.pw&&pwOnTop()) html += layer('pw:'+state.pwSheet.kind, sheetPW());
   if(state.pk) html += layer('pk', sheetPK());
   if(state.pinv.sheet) html += layer('pinv:'+state.pinv.sheet.kind, sheetPinv());
@@ -32459,6 +32683,8 @@ function layers(){
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   // Over the order it prints, so Back closes the print view first (§300).
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
+  // §325 X3 — the count sheet opens over Products; Back closes it first.
+  if(state.countPrint) L.push(()=>{ state.countPrint=false; });
   if(state.pwSheet&&state.pw&&pwOnTop()) L.push(()=>{ state.pwSheet=null; });
   if(state.pk) L.push(()=>{ state.pk=null; });
   if(state.pinv.sheet) L.push(()=>{ state.pinv.sheet=null; });
