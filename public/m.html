@@ -1424,10 +1424,21 @@ const state = {
      ask, so there is nothing to wait for and the sample app paints at once,
      exactly as it always did. Only a real deployment holds. */
   capsLoaded:(typeof location!=='undefined' && location.protocol==='file:'),
-  liveOrders:null, liveDetail:null, liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
+  liveOrders:null, liveDetail:null,
+  /* §325 O1 — the refund panel's History, unfolded on demand for ONE order
+     (id), read from GET /orders/:id/refund/events. */
+  rfHist:{open:false, id:null, busy:false, err:false, rows:null},
+  liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
+  /* §325 X1 — Change history (chl), What was sent (nlg), Eleme (elm), and
+     Home's "browsing now" count. One key per screen, so none can collide with
+     a name another screen takes later. */
+  chl:{rows:null, total:0, people:[], kinds:[], who:'', what:'', from:'', to:'', q:'', err:null, tried:false, more:false, seq:0, open:null},
+  nlg:{rows:null, total:0, failed:0, channels:[], kinds:[], channel:'', kind:'', from:'', to:'', q:'', onlyFailed:false, err:null, tried:false, more:false, seq:0, open:null},
+  elm:{cfg:null, st:null, err:null, tried:false, seq:0, cat:{}, catStore:null, catQ:''},
+  presence:null,
   /* The Account screen's own reads and writes (screenAccount): the recovery
      contacts and two-step switches, the signed-in devices, the per-person
      alert switches, and which write is in flight. One key, so the screen's
@@ -1551,6 +1562,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      carried over from the last time the app was opened may already have been
      worked by somebody else. */
   if(route==='approvals') aprFresh();
+  /* §325 X1 — the two records screens and Eleme are re-read on every entry:
+     what was changed, what was sent and what a channel is doing are facts about
+     now, and `rows`/`st` back to null draws Loading rather than the last visit. */
+  if(route==='changes'||route==='sent'){ const c=route==='sent'?state.nlg:state.chl; c.tried=false; c.rows=null; c.err=null; c.open=null; }
+  if(route==='mirror_eleme'){ const e=state.elm; e.tried=false; e.st=null; e.cfg=null; e.err=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
@@ -1861,6 +1877,9 @@ reg('rqSearch', v=>{
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mShmQ','mShmClr','shmQ'],
+ ['mChlQ','mChlClr','chlQ'],
+ ['mNlgQ','mNlgClr','nlgQ'],
+ ['mElmCatQ','mElmCatClr','elmCatQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
  ['mOnwProdQ','mOnwProdClr','onwProdQ'],
  ['mOnwCityQ','mOnwCityClr','onwCityQ'],
@@ -2498,7 +2517,7 @@ reg('dispatchParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -2519,7 +2538,7 @@ reg('prepareParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -2545,7 +2564,7 @@ reg('undoParcelDispatch', sid=>{
       }).catch(e=>{
         state.parcelBusy=null;
         if(String(e.message)==='auth') return;
-        state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+        state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -3007,6 +3026,32 @@ reg('copyAddr', ()=>{
   copyText(o?[o.cust&&T(...o.cust), o.phone, o.addr&&T(...o.addr)]
     .filter(v=>v&&v!=='—').join('\n'):'');
 });
+/* §325 O1 — the guest pay link, copied whole (payLinkURL) so it can be pasted
+   into a chat with the customer. Nothing to copy is nothing to copy. */
+reg('copyPayLink', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  const url=payLinkURL(o);
+  if(url) copyText(url);
+});
+/* §325 O1 — the refund panel's History. A tap on an open, loaded history folds
+   it; any other tap (closed, another order's, or after a failed read) reads it
+   again. The answer is kept only if the same order still owns the slot, so a
+   slow read cannot paint one order's history into another's panel. */
+reg('rfHist', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null) return;
+  const h=state.rfHist, id=o._id;
+  if(h.open&&h.id===id&&!h.busy&&!h.err){ h.open=false; render(); return; }
+  if(h.open&&h.id===id&&h.busy) return;
+  h.open=true; h.id=id; h.busy=true; h.err=false; h.rows=null; render();
+  api('/orders/'+id+'/refund/events').then(rows=>{
+    if(h.id!==id) return;
+    h.rows=Array.isArray(rows)?rows:[]; h.busy=false; render();
+  }).catch(()=>{
+    if(h.id!==id) return;
+    h.busy=false; h.err=true; render();
+  });
+});
 reg('copyTxn', ()=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||!o.txn) return;   // nothing to copy is nothing to copy
@@ -3256,7 +3301,7 @@ reg('toggleShop', ids=>{
       rows.forEach(p=>{ p.pub=before.get(p._id); reKindProduct(p); });   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3283,7 +3328,7 @@ reg('togglePaused', id=>{
       p.paused=!next; reKindProduct(p);   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3327,7 +3372,7 @@ reg('pickOos', v=>{
       p.oos=was;   // the row must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3384,7 +3429,7 @@ reg('pollStatus', (id,st)=>{
   }).catch(e=>{
     state.pollBusy=null;
     if(String(e.message)==='auth') return;
-    state.pollsErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.pollsErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -3403,7 +3448,7 @@ reg('finalizeTopup', id=>{
       }).catch(e=>{
         state.tupBusy=null;
         if(String(e.message)==='auth') return;
-        state.tupErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+        state.tupErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -3431,7 +3476,7 @@ reg('gzPickup', (id,how)=>{
     }).catch(e=>{
       state.gzBusy=null;
       if(String(e.message)==='auth') return;
-      state.gzErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+      state.gzErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -3460,7 +3505,7 @@ reg('togglePopup', id=>{
   }).catch(e=>{
     state.puBusy=null;
     if(String(e.message)==='auth') return;
-    state.puErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.puErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -3819,6 +3864,7 @@ reg('recvGroupAll', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) r
    that has drifted from the rule, so each says what to do rather than echoing
    a code the operator cannot act on. */
 function recvErrText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(c==='reason_required')       return T('A short line needs a reason. Pick one and try again.','短少的项需要选择原因，请选择后重试。');
   if(c==='reason_not_applicable') return T('A reason belongs only on a line that came up short.','只有短少的项才需要填写原因。');
@@ -4005,7 +4051,7 @@ reg('poStatus', st=>{
     }).catch(e=>{
       state.poBusy=false;
       if(String(e.message)==='auth') return;
-      state.poErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+      state.poErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -4077,7 +4123,7 @@ reg('sendReplyText', t=>{
   }).catch(e=>{
     state.replyBusy=false;
     if(String(e.message)==='auth') return;
-    state.replyErr=e.code==='message_required'?T('Write something first.','请先输入内容。')
+    state.replyErr=e.refused?E(...e.words):e.code==='message_required'?T('Write something first.','请先输入内容。')
       :T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
@@ -4103,7 +4149,7 @@ function revWrite(r,visible){
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 }
@@ -4134,7 +4180,7 @@ reg('toggleFeedbackHandled', key=>{
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -4216,7 +4262,7 @@ reg('chanCell', (channel, storeCode, next)=>{
       }).catch(e=>{
         state.chanBusy=null;
         if(String(e.message)==='auth') return;
-        state.chanErr = E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.chanErr = e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -4256,7 +4302,7 @@ reg('shopOpen', (storeCode, next)=>{
       }).catch(e=>{
         state.shopBusy=null;
         if(String(e.message)==='auth') return;
-        state.shopErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.shopErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -4281,7 +4327,7 @@ reg('resumeDelivery', ()=>{
       }).catch(e=>{
         state.dlvBusy=false;
         if(String(e.message)==='auth') return;
-        state.dlvErr=E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
+        state.dlvErr=e.refused?E(...e.words):E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
       });
     }};
   render();
@@ -4796,7 +4842,7 @@ function vitalsBlock(){
       ${cell(T('Refunded','已退款'), String(v.refunded),
         v.refunded?T((v.refundRate||0).toFixed(1)+'% of orders','占订单 '+(v.refundRate||0).toFixed(1)+'%')
                   :T('nothing sent back','无退款'))}
-    </div></div>`;
+    </div>${presenceLine()}</div>`;
 }
 /* ONE HEADING OVER BOTH CARDS, and it belongs to the section rather than to
    either card. The second card used to carry its own — "Also today ·
@@ -5140,7 +5186,7 @@ function screenHome(){
    server resolves, and nothing but that card ever sets it. */
 const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
   delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',pending:'pending_payment',
-  delayed:'delayed'};
+  delayed:'delayed', recover:'recover_parcel'};
 const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual',shop:'shop'};
 const ORDERS_PAGE=25;
 function ordersQuery(offset){
@@ -5263,6 +5309,9 @@ function ordersHeader(){
           that sets it carries — this names one thing and must not name it twice.
           Clears to All, which is the only status this can have come from. */''}
     ${state.statusF==='delayed'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Delivery needs a call','配送需要跟进')}</span>${ic('x',14,2)}</button></div>`:''}
+    ${/* §325 X1 — the same chip for Home's "Parcels to recover" row, whose
+          pseudo-status (recover_parcel) is the one the desktop's row opens. */''}
+    ${state.statusF==='recover'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Parcels to recover','待收回包裹')}</span>${ic('x',14,2)}</button></div>`:''}
     ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}
     ${stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,'storeF')}`:''}</div>`;
 }
@@ -5338,7 +5387,7 @@ function screenOrders(){
         ${o.waitingList?`<div style="display:flex;align-items:flex-start;gap:7px;color:var(--amber-ink);font-size:13px;line-height:1.45">
           <span style="flex:none;display:flex;margin-top:1px">${ic('clock',15)}</span>
           <span style="min-width:0;overflow-wrap:anywhere"><span style="font-weight:500">${T('Waiting on stock','等待补货')}</span> · ${escAttr(o.waitingList.map(p=>T(p[0],p[1])).join(T(', ','、')))}</span></div>`:''}
-        ${o.notes?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.notes.map(nt=>
+        ${(o.notes||o.partRefund!=null)?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.partRefund!=null?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${PILL.muted[0]};color:${PILL.muted[1]}">${ic('undo',12)}${T('Partial refund','部分退款')}${o.partRefund>0?` <span class="num">${money(CUR,o.partRefund)}</span>`:''}</span>`:''}${(o.notes||[]).map(nt=>
           `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${nt.sev==='muted'?PILL.muted[0]:'var(--'+nt.sev+'-tint)'};color:${nt.sev==='muted'?PILL.muted[1]:'var(--'+nt.sev+')'}">${ic(nt.icon,12)}${nt.label}</span>`).join('')}</div>`:''}
         ${o.parcels?`<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap">
           ${ic('package',14)}<span>${T(o.parcels.total+(o.parcels.total===1?' parcel':' parcels'),o.parcels.total+' 个包裹')}</span>
@@ -5464,7 +5513,7 @@ const CHAN_META={
   mini_app:{icon:'smartphone',en:'Mini app',zh:'小程序',key:'wechat'},
   web:{icon:'globe',en:'Web store',zh:'网店',key:'web'},
   meituan:{icon:'bike',en:'Meituan',zh:'美团',key:'meituan',mirror:'meituan'},
-  eleme:{icon:'utensils-crossed',en:'Eleme',zh:'饿了么',key:'eleme'},
+  eleme:{icon:'utensils-crossed',en:'Eleme',zh:'饿了么',key:'eleme',mirror:'eleme'},
   gzgrocery:{icon:'warehouse',en:'gzgrocery ERP',zh:'gzgrocery',key:'gzgrocery',mirror:'gzgrocery'},
   pos:{icon:'store',en:'In store',zh:'门店',key:'pos'},
 };
@@ -5527,8 +5576,9 @@ function sheetChannel(){
                busy?T('Saving…','保存中…'):shopShut?T('Shop closed','门店已关闭'):(cell.open?T('Open','营业中'):T('Closed','已关闭'))}</span>
              <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
        }).join('')}</div>
-       ${m.mirror?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
-         m.mirror==='meituan'?T('View orders from Meituan','查看美团订单'):T('View pickups','查看提货记录')}</button>`:''}
+       ${m.mirror&&canRoute('mirror_'+m.mirror)?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
+         m.mirror==='meituan'?T('View orders from Meituan','查看美团订单')
+         :m.mirror==='eleme'?T('View Eleme sync','查看饿了么同步'):T('View pickups','查看提货记录')}</button>`:''}
        ${noteBar(T('Closing a channel everywhere at once is on desktop.','一次性关闭整个渠道请在电脑端操作。'))}
      </div></div>`;
 }
@@ -5639,7 +5689,7 @@ function screenSales(){
       // inside that sheet. A channel with no integration has nothing to show
       // and stays flat.
       const go=(!notIntegrated&&cells.length)?`APP.cmd('openChannel','${c.channel}')`
-              : m.mirror?`APP.cmd('mirror','${m.mirror}')`:'';
+              : (m.mirror&&canRoute('mirror_'+m.mirror))?`APP.cmd('mirror','${m.mirror}')`:'';
       const Tag=go?'button':'div';
       return `<${Tag} class="card" ${go?`onclick="${go}"`:''} style="display:flex;flex-direction:column;gap:12px;text-align:left;${go?'cursor:pointer;':''}padding:16px;color:var(--text-primary);width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -6139,7 +6189,7 @@ function toggleNotifCat(k){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 reg('toggleNotifCat', k=>toggleNotifCat(k));
@@ -7309,7 +7359,9 @@ async function catBannerUpload(file){
   try{
     const fd=new FormData(); fd.append('file',await catBannerShrink(file),'banner.jpg');
     const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
-    if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+    if(r.status===401){ location.href='/backend/login'; return; }
+    // §325 — a refusal is said on the card, not answered with the login page.
+    if(r.status===403){ state.catBannerErr=(await apiRefusal(r)).message; return; }
     const j=await r.json().catch(()=>({}));
     if(!r.ok||!j||!j.success||!j.data||!j.data.url){
       const reason=MEDIA_ERR[j&&j.error];
@@ -8838,7 +8890,15 @@ reg('onwCreate', ()=>{
        not: a code has a sentence written for it here, and e.message for a coded
        failure is the raw field name. */
     const pid=e.body&&e.body.product_id!=null?Number(e.body.product_id):null;
-    state.onw.err={where:ONW_WHERE[e.code]||(pid!=null?'what':'who'),msg:onwErrText(e.code,e.code?null:e.message,pid)};
+    /* §325 — onwErrText's forbidden_capability sentence is about the customer
+       ("cannot create customers"), which is the handler's refusal
+       (need: customers:edit) and was unreachable while apiWrite sent every 403
+       to the login page. Any other refusal — no orders:edit, a store outside
+       this account's scope — is the general sentence; blaming the customer box
+       for it would send the operator to untick a box that changes nothing. */
+    const custRefused=e.code==='forbidden_capability'&&e.body&&e.body.need==='customers:edit';
+    state.onw.err={where:ONW_WHERE[e.code]||(pid!=null?'what':'who'),
+      msg:(e.refused&&!custRefused)?E(...e.words):onwErrText(e.code,e.code?null:e.message,pid)};
     render();
   });
 });
@@ -9399,7 +9459,7 @@ reg('poLcSave', ()=>{
   }).catch(e=>{
     lc.busy=false;
     if(String(e.message)==='auth') return;
-    lc.err=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+    lc.err=e.refused?E(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
   });
 });
 /* WHAT THE ORDER PUT IN THE BOOKS, the desktop's Finance panel: the expense
@@ -10146,6 +10206,7 @@ function pwBody(){
 const PW_ERR={date_required:['Choose a date first.','请先选择日期。'],store_required:['Choose a location first.','请先选择门店。'],
   name_required:['Give it a name first.','请先填写名称。']};
 function pwErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(PW_ERR[c]) return T(...PW_ERR[c]);
   if(c==='not_draft'||c==='already_receiving'||c==='not_found') return T('This order has already moved on. Close and open it again to see where it is now.','这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
@@ -10339,6 +10400,7 @@ reg('pkField', (f,v)=>{ const k=state.pk; if(!k) return;
   if(f==='store'){ k.store=Number(v)||null; render(); }
   else if(f==='supplier') k.supplier=String(v==null?'':v); });
 function pkErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code, b=(e&&e.body)||{};
   if(c==='already_sourced'&&Array.isArray(b.lines)&&b.lines.length)
     return T('Already ordered: ','已下单:')+b.lines.map(d=>`${d.name_en||''} → ${d.po_number||''}`).join(', ');
@@ -10620,7 +10682,7 @@ function pinvAct(req,ok){
   v.busy=true; v.actErr=null; pinvPatch();
   apiWrite(req[0],req[1],req[2]).then(r=>{ v.busy=false; showToast(typeof ok==='function'?ok(r):ok); pinvLoad(true); })
     .catch(e=>{ v.busy=false; if(String(e.message)==='auth') return;
-      v.actErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
+      v.actErr=e.refused?E(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
 }
 reg('pinvMarkPo', (poId,flag)=>{ flag=!!Number(flag);
   pinvAct(['/purchasing/po/'+Number(poId)+'/no-invoice',{no_invoice_expected:flag},'PUT'], r=>{
@@ -10793,6 +10855,7 @@ reg('pinvMatch', ()=>{
   render();
 });
 function pinvErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(c==='amount_required') return T('Enter an amount first.','请先填写金额。');
   if(c==='date_required') return T('Choose a date first.','请先选择日期。');
@@ -11137,7 +11200,7 @@ function psupBody(d){
     payment_method:t('payment_method')||null,channel_type:d.channel_type||null,channel_link:t('channel_link')||null,
     rating:parseInt(d.rating,10)||0,notes:t('notes')||null};
 }
-const psupErrMsg=e=>e&&e.code==='name_taken'?T('Name already exists','名称已存在'):e&&e.code==='name_required'?T('Name is required','名称必填')
+const psupErrMsg=e=>e&&e.refused?T(...e.words):e&&e.code==='name_taken'?T('Name already exists','名称已存在'):e&&e.code==='name_required'?T('Name is required','名称必填')
   :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
 function psupAutoStart(id){
   if(psupAuto){ psupAuto.flush(); psupAuto.stop&&psupAuto.stop(); psupAuto=null; }
@@ -11511,7 +11574,7 @@ function supOwedWrite(path, body, done){
   }).catch(e=>{
     state.supAcctBusy=false;
     if(String(e.message)==='auth') return;
-    state.supAcctErr=e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
+    state.supAcctErr=e.refused?E(...e.words):e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
       :e.code==='invalid_amount'?E('Enter an amount first.','请先填写金额。')
       :E('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
     render();
@@ -14243,7 +14306,7 @@ function kqReprint(){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     k.printing=false;
-    k.err=(e.code==='no_kitchen_printer'||e.code==='not_configured')
+    k.err=e.refused?E(...e.words):(e.code==='no_kitchen_printer'||e.code==='not_configured')
       ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
       : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
     render();
@@ -14666,7 +14729,7 @@ function pikWriteLine(L,per){
     .catch(e=>{
       if(String(e.message)==='auth') return;
       k.busy=false;
-      k.err=e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
+      k.err=e.refused?E(...e.words):e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
                               :T('That line did not save. Nothing has changed — try again.','该项未保存,数据未变 — 请重试。');
       render();
     });
@@ -14947,7 +15010,7 @@ function xfrSaveCount(itemId,qty){
     // The number they typed is never thrown away by a failed write. Losing a
     // delivery's counts at the door is the one failure nobody forgives.
     x.held={item_id:itemId,qty:qty};
-    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+    x.err=e.refused?E(...e.words):e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
                              : T('That count did not save. It is still on screen — try again.','数量未保存,仍显示在屏幕上 — 请重试。');
     render();
   });
@@ -15015,7 +15078,7 @@ function xfrAllArrived(){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     x.busy=false;
-    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+    x.err=e.refused?E(...e.words):e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
                              : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
     render();
   });
@@ -19874,7 +19937,7 @@ reg('pcSave', ()=>{
   }).catch(e=>{
     c.busy=false;
     if(String(e.message)==='auth') return;
-    c.saveErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+    c.saveErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
   });
 });
 
@@ -22057,7 +22120,7 @@ function toggleCoupon(code){
   }).catch(e=>{
     state.couponBusy=null;
     if(String(e.message)==='auth') return;
-    state.couponErr=E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
+    state.couponErr=e.refused?E(...e.words):E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
   });
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
@@ -22074,7 +22137,7 @@ function recallBroadcast(id){
   }).catch(e=>{
     state.bcBusy=null;
     if(String(e.message)==='auth') return;
-    state.bcErr=E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
+    state.bcErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
   });
 }
 
@@ -22233,6 +22296,9 @@ reg('bcfLink', v=>{ state.bcf.deeplink=String(v||'').trim(); bcfRepaintFoot(); }
 reg('bcfSend', ()=>bcfSend());
 
 async function loadMirror(which){
+  // Eleme reads for itself (elmLoad, §325 X1): its screen is not a list of
+  // records and shares nothing below.
+  if(which==='eleme') return;
   if(state.mirrorLoading===which) return;
   state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
   try{
@@ -22319,6 +22385,7 @@ function csNeedsDesktop(c){ return !!c && c.k==='att' && CS_DESKTOP_REASONS.inde
    sentence for these two codes, the second is orderErrorText's default on this
    file. Nothing here is composed. */
 function csErrText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   if(e.code==='not_mapped'||e.code==='not_syncing')
     return T('Somebody else changed this while you had it open — reload and try again.','该记录已被他人修改,请刷新后重试。');
   return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
@@ -22559,10 +22626,11 @@ function screenChannelSync(){
                class for exactly that and carries the 44px target and the disabled
                state; the label is the desktop button's own pair, and Sending… is
                this screen's own word for a push in flight (csCellWord).
-               GATED CLIENT-SIDE, which the desktop does not need to be: this
-               file's apiWrite sends a 403 to /backend/login exactly as it sends a
-               401, so an ungated button would answer a missing permission by
-               throwing the operator out of the app. mCan's null-caps case means
+               GATED CLIENT-SIDE, as every phone control is (§325): a button
+               drawn for somebody the server will refuse is a dead end. (This
+               file's apiWrite used to send a 403 to /backend/login exactly as it
+               sent a 401, which made the gate matter more; since §325 a refusal
+               is said on the row, csErrText.) mCan's null-caps case means
                allowed, so the server stays the gate. */
             const busy=state.csBusy===x.ch.key+':'+p.id;
             const btn=(csCanPush(c2)&&mCan(x.ch.key+':sync'))
@@ -22814,6 +22882,634 @@ function PUSH_NOTE(){
        : state.push==='unsupported' ? T('This browser cannot deliver them.','此浏览器无法接收推送。')
        : null;
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X1 — WHAT THE SHOP DID, WHAT IT SENT, WHO IS LOOKING, AND ELEME
+   --------------------------------------------------------------------------
+   Five reads the desktop has had and the phone had not (the Settings,
+   Dashboard and Channels rows of docs/tacet-phone-parity-rest-of-app.md).
+   Nothing here writes. Every request is the desktop's own, path and query:
+
+     Change history   GET /activity-log, /activity-log/export.csv
+                      (02-settings-ops.js, ch*)
+     What was sent    GET /notification-log            (02-settings-ops.js, nl*)
+     Browsing now     GET /dashboard/presence          (03-dashboard.js)
+     Two Home rows    /dashboard/ops needs_point and parcel_recovery, which Home
+                      already fetches                  (03-dashboard.js)
+     Eleme            GET /eleme/config, /eleme/status, /eleme/catalogue
+                      (14-eleme.js)
+
+   WHO OPENS WHAT. Change history and What was sent are not gated on the
+   desktop beyond reaching Settings ("an operator who can reach Settings can see
+   what was done to the shop they work in" — retail-admin.html's own note), so
+   here they carry exactly the Settings screen's key set and live inside it.
+   Eleme is the desktop tab's `eleme:view`. The two Home rows open orders, so
+   they need the Orders tab — the desktop gates its order worklists the same
+   way (DASH_CARD_CAP.orders).
+
+   Every string is the desktop's live pair unless docs/tacet-delivery-
+   vocabulary.md says otherwise under this step.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* One opener for an order a Home row points at, by its numeric id. The shape
+   of openDeliveryAlert's, deliberately: the sheet holds the screen until the
+   order arrives, and a failed read says so where the operator is looking. */
+function x1OpenOrder(id,no){
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const row=list.find(o=>o._id===id); if(row) row.isNew=false; }
+  });
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  return api('/orders/'+id).then(o=>{
+    if(state.detailId!==no) return;
+    const d=mapDetail(o);
+    state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=T('This order could not be opened. Close and try again.',
+                     '无法打开该订单，请关闭后重试。');
+    render();
+  });
+}
+/* The row's item, found again in the snapshot rather than carried through an
+   attribute — an order number is data and does not belong inside an onclick. */
+reg('openOpsOrder', (key,id)=>{
+  const k=String(key||''), n=Number(id);
+  const it=((((state.ops||{})[k])||{}).items||[])
+    .find(x=>x&&Number(k==='parcel_recovery'?x.order_id:x.id)===n);
+  if(!it) return;
+  x1OpenOrder(n, it.order_no||('#'+n));
+});
+
+/* ── Two rows for Home's Needs you ───────────────────────────────────────────
+   ORDERS WAITING FOR A DELIVERY POINT. A same-city push that could only place
+   the address to an area parks and waits for somebody to point at the door;
+   nothing retries it (docs/tacet-delivery-point-confirmation-spec.md §7). The
+   desktop gives it a block of its own that is absent at zero; here it is a
+   Needs-you row, which is absent at zero by construction. Brick, like the
+   other delivery row: it is a delivery nobody is coming for.
+
+   PARCELS TO RECOVER (§189). Boxes already out when their order was cancelled.
+   Amber, as on the desktop — the money is back with the customer and the count
+   is honest; what waits is a decision.
+
+   ONE OPENS THE ORDER ITSELF (Ash's rule for "Delivery needs a call"); more
+   open the list — the parked list for the first, the Orders filter the desktop
+   uses for the second (status=recover_parcel). Order numbers are the line, as
+   on the desktop's parcel row: they are what identifies an order. */
+function x1OrderNos(items,total){
+  const nos=(items||[]).map(x=>x&&x.order_no).filter(Boolean).slice(0,2);
+  const rest=Math.max(0,Number(total||0)-nos.length);
+  return nos.length?nos.join(T(', ','，'))+(rest>0?' +'+rest+' '+T('more','更多'):''):'';
+}
+function recoverFires(o){
+  const out=[];
+  if(!o||!canRoute('orders')) return out;
+  const np=o.needs_point||{}, pr=o.parcel_recovery||{};
+  const npN=Number(np.count)||0, prN=Number(pr.count)||0;
+  if(npN){
+    const it=np.items||[];
+    const ages=it.map(x=>({waiting_since:x&&x.parked_since}));
+    const nos=x1OrderNos(it,npN);
+    out.push({sev:'brick',icon:'map-pin',label:T('Orders waiting for a delivery point','待确认配送点'),n:npN,
+      meta:nos||oldestOf(ages),age:!nos,mins:oldestMins(ages),
+      go:(npN===1&&it.length===1&&it[0]&&it[0].id!=null)
+        ?`APP.cmd('openOpsOrder','needs_point',${Number(it[0].id)})`:"APP.cmd('push','needspoint')"});
+  }
+  if(prN){
+    const it=pr.items||[];
+    const nos=x1OrderNos(it,prN);
+    out.push({sev:'amber',icon:'box',label:T('Parcels to recover','待收回包裹'),n:prN,
+      meta:nos||oldestOf(it),age:!nos,mins:oldestMins(it),
+      go:(prN===1&&it.length===1&&it[0]&&it[0].order_id!=null)
+        ?`APP.cmd('openOpsOrder','parcel_recovery',${Number(it[0].order_id)})`:"APP.cmd('ordersGo','recover')"});
+  }
+  return out;
+}
+/* The parked orders, one row each, opening the order. The desktop lists five
+   and counts the rest; this lists what the snapshot carries (eight) and counts
+   the rest the same way. The point itself is picked on a map, which is one of
+   §97's three desktop-shaped exceptions — so the screen says where. */
+function x1ParkedFor(since){
+  const d=_date(since); if(!d) return T('Parked','已挂起');
+  const mins=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  if(mins<60) return T('parked '+mins+'m','已挂起 '+mins+' 分钟');
+  const hrs=Math.floor(mins/60);
+  if(hrs<24) return T('parked '+hrs+'h','已挂起 '+hrs+' 小时');
+  return T('parked '+Math.floor(hrs/24)+'d','已挂起 '+Math.floor(hrs/24)+' 天');
+}
+function screenNeedsPoint(){
+  const np=state.ops&&state.ops.needs_point;
+  if(!np) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const it=np.items||[], n=Number(np.count)||0;
+  const rest=Math.max(0,n-it.length);
+  const row=(x,i)=>{
+    const who=x.buyer||T('No name on the order','订单未留姓名');
+    const where=T(x.store_en||x.store_cn||'',x.store_cn||x.store_en||'')||x.store_code||T('Store not recorded','未记录门店');
+    const tomorrow=x.date_posture==='tomorrow';
+    const day=x.promised_day?tdWhen(x.promised_day,'date',_tdL()):'';
+    const when=x.promised_day?(tomorrow?T('Tomorrow · '+day,'明天 · '+day):day):x1ParkedFor(x.parked_since);
+    return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:60px;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('openOpsOrder','needs_point',${Number(x.id)})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+        <span class="num" style="font-size:15px;font-weight:500">${escAttr(x.order_no||'')}</span>
+        <span style="font-size:13px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(who)} · ${escAttr(where)}</span></span>
+      <span class="num" style="flex:none;font-size:13px;color:${tomorrow?'var(--amber-ink)':'var(--text-secondary)'}">${escAttr(when)}</span></button>`;
+  };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${it.length?`<div class="list">${it.map(row).join('')}</div>`
+      :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing yet','暂无记录')}</div>`}
+    ${rest>0?`<div style="font-size:13px;color:var(--text-secondary);padding:0 4px">${T('and '+rest+' more waiting for a delivery point','另有 '+rest+' 单待确认配送点')}</div>`:''}
+    ${noteBar(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。'))}</div>`;
+}
+SUBS.needspoint={title:['Orders waiting for a delivery point','待确认配送点'],render:()=>screenNeedsPoint()};
+
+/* ── Browsing now ─────────────────────────────────────────────────────────────
+   The desktop's quiet line in the foot of its Customers card: a Sage dot, the
+   count, and a label; at zero the label carries the whole sentence. It rides the
+   phone's twin of that card (vitalsBlock) and its gates. The desktop polls every
+   15s; this rides Home's own 60s tick, the one clock the phone keeps for Home,
+   rather than starting a second timer for one number. */
+function loadPresence(){
+  if(!canRoute('home')) return Promise.resolve();
+  return api('/dashboard/presence').then(d=>{ state.presence=d||null; }).catch(e=>{
+    /* A missed poll keeps the last count on screen and the next tick asks again —
+       the desktop's own rule for this number (dashHeroLoadPresence: "silent —
+       next tick retries"). Nothing else reads it. */
+    if(String(e&&e.message)==='auth') return;
+  });
+}
+function presenceLine(){
+  const p=state.presence; if(!p) return '';
+  const v=Number(p.viewing||0);
+  return `<div style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--text-secondary)">
+    <span style="width:8px;height:8px;border-radius:50%;background:var(--sage);opacity:${v?1:.45};flex:none"></span>
+    ${v?`<span class="num" style="font-weight:500;color:var(--text-primary)">${v}</span><span>${T('browsing now','人正在浏览')}</span>`
+       :`<span>${T('no one browsing right now','暂无人浏览')}</span>`}</div>`;
+}
+
+/* ── Shared by the two records screens ─────────────────────────────────────── */
+/* Patch the body only, so a search box keeps its keyboard (the Suppliers
+   screen's rule); anywhere else, an ordinary render. */
+function x1Paint(bodyId,build){
+  const b=(typeof document!=='undefined')?document.getElementById(bodyId):null;
+  if(b) b.innerHTML=build(); else render();
+}
+function x1Select(cmd,cur,first,vals,label){
+  const opts=(vals||[]).slice();
+  // A filtered read returns only the values that survive the filter, so the
+  // active choice can vanish from its own list. Put it back — the desktop does.
+  if(cur&&opts.indexOf(cur)<0) opts.push(cur);
+  return `<select onchange="APP.cmd('${cmd}',this.value)" style="flex:1;min-width:0;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0">
+    <option value="">${first}</option>${opts.map(v=>`<option value="${escAttr(v)}"${v===cur?' selected':''}>${escAttr(label(v))}</option>`).join('')}</select>`;
+}
+function x1WhenLabel(from,to){ return (from||to)?escAttr((from||'…')+' – '+(to||'…')):T('When','时间'); }
+function x1Err(msg,retry){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:34px 16px;text-align:center">
+    <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',24)}</span>
+    <span style="font-size:14.5px;color:var(--text-primary)">${msg}</span>
+    <button class="btn2" onclick="APP.cmd('${retry}')">${T('Try again','重试')}</button></div>`;
+}
+const x1Loading=()=>`<div style="padding:40px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+/* Two empty states, never one (§1.12): "your filters matched nothing" and
+   "nothing has happened yet" are different facts with different next moves. */
+function x1Empty(filtered,clearCmd,titleEn,titleZh,msgEn,msgZh){
+  return filtered
+    ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px 16px;text-align:center">
+        <span style="font-size:14px;color:var(--text-secondary)">${T('Nothing matches those filters.','没有符合条件的记录。')}</span>
+        <button class="btn2" style="width:auto;padding:0 18px" onclick="APP.cmd('${clearCmd}')">${T('Clear them','清除筛选')}</button></div>`
+    : nothingYet(T(titleEn,titleZh),T(msgEn,msgZh));
+}
+function x1Foot(n,total,moreCmd,busy){
+  if(!n) return '';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 4px">
+    <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Showing '+n+' of '+total,'显示 '+n+' / '+total)}</span>
+    ${n<total?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" ${busy?'disabled':''} onclick="APP.cmd('${moreCmd}')">${busy?T('Loading…','加载中…'):T('Show more','显示更多')}</button>`:''}</div>`;
+}
+/* ── Change history ───────────────────────────────────────────────────────────
+   Who changed what: `activity_log`, which every significant write has filled
+   for as long as the admin has existed. READ-ONLY on both surfaces — a history
+   somebody can tidy is not a history. Not the Stock activity screen: that one
+   answers "how did this number get here". */
+const CHL_ACTIONS={
+  create:['Created','新建'], update:['Edited','修改'], delete:['Deleted','删除'],
+  login:['Signed in','登录'], logout:['Signed out','退出'],
+  publish:['Published','上架'], unpublish:['Unpublished','下架'],
+  refund:['Refunded','退款'], cancel:['Cancelled','取消'],
+  approve:['Approved','批准'], reject:['Rejected','拒绝'],
+  receive:['Received','收货'], adjust:['Adjusted','调整'],
+  block:['Blocked','封禁'], unblock:['Unblocked','解封'],
+  import:['Imported','导入'], export:['Exported','导出'],
+};
+/* The desktop's chActionText, rule for rule: a known key reads as a word, a
+   key that starts or ends with one reads as the word and the rest, and anything
+   else reads as its own words rather than as a code. */
+function chlAction(action){
+  const key=String(action||'').toLowerCase();
+  if(CHL_ACTIONS[key]) return T(...CHL_ACTIONS[key]);
+  for(const k of Object.keys(CHL_ACTIONS)){
+    if(key.startsWith(k+'_')||key.endsWith('_'+k)){
+      const noun=key.replace(new RegExp('_?'+k+'_?'),'').replace(/_/g,' ');
+      return (T(...CHL_ACTIONS[k])+(noun?' '+noun:'')).trim();
+    }
+  }
+  return key.replace(/_/g,' ');
+}
+/* The details column is a JSON blob with no schema; "field: value" pairs, or
+   the raw text when it is not an object — chDetailsText's rule. */
+function chlDetails(details){
+  if(!details) return '';
+  let o=null;
+  try{ o=JSON.parse(details); }catch(e){ return String(details); }
+  if(o==null||typeof o!=='object') return String(details);
+  return Object.entries(o).map(([k,v])=>k.replace(/_/g,' ')+': '+(v==null?'—':(typeof v==='object'?JSON.stringify(v):v))).join(' · ');
+}
+function chlQs(){
+  const c=state.chl, qs=new URLSearchParams();
+  if(c.who) qs.set('who',c.who);
+  if(c.what) qs.set('entity_type',c.what);
+  if(c.from) qs.set('from',c.from);
+  if(c.to) qs.set('to',c.to);
+  if(String(c.q||'').trim()) qs.set('q',String(c.q).trim());
+  return qs;
+}
+const chlFiltered=()=>[...chlQs().keys()].length>0;
+function chlLoad(append){
+  const c=state.chl, seq=++c.seq;
+  c.tried=true; if(append) c.more=true;
+  const qs=chlQs(); qs.set('limit','100'); qs.set('offset',String(append?(c.rows||[]).length:0));
+  return apiRaw('/activity-log?'+qs.toString()).then(j=>{
+    if(seq!==c.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=append?(c.rows||[]).concat(j.data||[]):(j.data||[]);
+    c.total=Number(j.total)||0; c.people=j.people||[]; c.kinds=j.kinds||[];
+    c.err=null; c.more=false; chlPaint();
+  }).catch(e=>{
+    if(seq!==c.seq||String(e&&e.message)==='auth') return;
+    c.more=false;
+    if(!append) c.rows=null;
+    c.err=(e&&e.name==='TypeError')
+      ? E('Could not load the change history. Check your connection and try again.','无法加载修改记录,请检查网络后重试。')
+      : E('Could not load the change history.','无法加载修改记录。');
+    chlPaint();
+  });
+}
+function chlPaint(){ x1Paint('mChlBody',chlBody); }
+function chlRow(r,i){
+  const c=state.chl, open=c.open===Number(r.id);
+  const det=chlDetails(r.details);
+  const rec=[r.entity_type?String(r.entity_type).replace(/_/g,' '):'', r.entity_id?'#'+r.entity_id:''].filter(Boolean).join(' ');
+  const when=tdWhen(r.created_at,'dateTime',_tdL())||r.at_local||'';
+  return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('chlOpen',${Number(r.id)})">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+      <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(r.username||T('(unknown)','(未知)'))} · ${escAttr(chlAction(r.action))}</span>
+      ${rec?`<span class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(rec)}</span>`:''}
+      ${det?`<span style="font-size:12.5px;color:var(--text-secondary);${open?'white-space:pre-wrap;overflow-wrap:anywhere':'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}">${escAttr(det)}</span>`:''}</span>
+    <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(when)}</span></button>`;
+}
+function chlBody(){
+  const c=state.chl, filtered=chlFiltered();
+  const bar=`<div style="display:flex;gap:8px">
+      ${x1Select('chlWho',c.who,T('Everyone','全部人员'),c.people,v=>v)}
+      ${x1Select('chlWhat',c.what,T('Everything','全部类型'),c.kinds,v=>String(v).replace(/_/g,' '))}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1;min-width:0;gap:6px" onclick="APP.cmd('chlWhen')">${ic('calendar',16)}<span>${x1WhenLabel(c.from,c.to)}</span></button>
+      <button class="btn2" style="width:auto;flex:none;padding:0 14px;gap:6px" onclick="APP.cmd('chlExport')">${ic('download',16)}${T('Export CSV','导出')}</button></div>
+    ${filtered?`<div><button class="chip on" onclick="APP.cmd('chlClear')"><span>${T('Clear filters','清除筛选')}</span>${ic('x',14,2)}</button></div>`:''}`;
+  if(c.err) return bar+x1Err(String(c.err),'chlRetry');
+  if(!c.rows) return bar+x1Loading();
+  if(!c.rows.length) return bar+x1Empty(filtered,'chlClear','Nothing has been changed yet.','暂无修改记录。',
+    'Every edit your team makes will appear here.','团队的每次修改都会显示在这里。');
+  return bar+`<div class="list">${c.rows.map(chlRow).join('')}</div>`+x1Foot(c.rows.length,c.total,'chlMore',c.more);
+}
+function screenChanges(){
+  const c=state.chl; if(!c.tried) chlLoad(false);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mChlQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chlQ',this.value)">`,'mChlClr',!!c.q)}
+    <div id="mChlBody" style="display:flex;flex-direction:column;gap:12px">${chlBody()}</div></div>`;
+}
+SUBS.changes={title:['Change history','修改记录'],render:()=>screenChanges()};
+let chlT=null;
+/* A new filter blanks the list to Loading, as the desktop's table does, so a
+   list never sits under a filter it was not read with. */
+function chlRefilter(){ const c=state.chl; c.rows=null; c.err=null; c.open=null; chlPaint(); chlLoad(false); }
+reg('chlQ', v=>{ state.chl.q=String(v||''); searchClearShow('mChlClr',!!state.chl.q);
+  clearTimeout(chlT); chlT=setTimeout(chlRefilter,250); });
+reg('chlWho', v=>{ state.chl.who=String(v||''); chlRefilter(); });
+reg('chlWhat', v=>{ state.chl.what=String(v||''); chlRefilter(); });
+reg('chlWhen', ()=>{
+  const c=state.chl;
+  state.ask={title:T('When','时间'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:c.from},{id:'to',label:T('To','至'),type:'date',value:c.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(v.from&&v.to&&v.from>v.to)?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{ c.from=v.from||''; c.to=v.to||''; chlRefilter(); }};
+  render();
+});
+reg('chlClear', ()=>{ const c=state.chl; c.who=''; c.what=''; c.from=''; c.to=''; c.q='';
+  const el=(typeof document!=='undefined')?document.getElementById('mChlQ'):null; if(el) el.value='';
+  searchClearShow('mChlClr',false); chlRefilter(); });
+/* The same file the desktop downloads, with the same filters on it. */
+reg('chlExport', ()=>{ const qs=chlQs().toString(); location.href=API+'/activity-log/export.csv'+(qs?'?'+qs:''); });
+reg('chlMore', ()=>{ if(state.chl.more) return; chlLoad(true); chlPaint(); });
+reg('chlOpen', id=>{ const c=state.chl; c.open=c.open===Number(id)?null:Number(id); chlPaint(); });
+reg('chlRetry', ()=>chlRefilter());
+
+/* ── What was sent ────────────────────────────────────────────────────────────
+   Every message the system tried to deliver — a push to the team, a sign-in
+   code, a text to a customer — and whether it landed. Read-only, for the
+   change history's reason: a delivery record somebody can edit is not one. */
+const NLG_CHANNELS={
+  push:['Phone alert','手机推送'], email:['Email','邮件'], sms:['Text message','短信'],
+  wechat:['WeChat message','微信消息'], wecom:['Work chat','企业微信'], webhook:['Chat app','聊天应用'],
+};
+const NLG_KINDS={
+  order_paid:['A customer paid','顾客已付款'], ship_reminder:['Time to ship an order','订单该发货了'],
+  pickup_reminder:['A collection is due','自提订单临近'], low_stock_digest:['Daily low-stock list','每日低库存清单'],
+  signin_code:['Sign-in code','登录验证码'], restock_request:['A stock request','补货申请'],
+  new_order:['A new order','新订单'],
+};
+function nlgChannel(c){ const e=NLG_CHANNELS[c]; return e?T(...e):String(c||'').replace(/_/g,' '); }
+function nlgWords(k){ const w=String(k||'').replace(/_/g,' ').trim(); return w?w.charAt(0).toUpperCase()+w.slice(1):''; }
+function nlgKind(k){ const e=NLG_KINDS[k]; return e?T(...e):nlgWords(k); }
+/* A broadcast says how many phones it reached; a send to one says whether it
+   arrived; a failure says why. The desktop runs the stored reason through its
+   error dictionary (tdErrorText), which this app does not carry, so the reason
+   reads as that function's last resort does: the code, in words. */
+function nlgResult(r){
+  if(r.ok){
+    const d=r.detail||{};
+    if(typeof d.sent==='number'&&typeof d.total==='number'&&d.total>1){
+      const extra=[];
+      if(d.muted) extra.push(T(d.muted+' muted',d.muted+' 已静音'));
+      if(d.pruned) extra.push(T(d.pruned+' device gone',d.pruned+' 设备失效'));
+      return {ok:true,label:T('Sent','已发送'),line:[T(d.sent+' of '+d.total+' reached',d.total+' 台中 '+d.sent+' 台已送达')].concat(extra).join(' · ')};
+    }
+    return {ok:true,label:T('Sent','已发送'),line:''};
+  }
+  return {ok:false,label:T('Did not arrive','未送达'),line:nlgWords(r.error)};
+}
+function nlgQs(){
+  const c=state.nlg, qs=new URLSearchParams();
+  if(c.channel) qs.set('channel',c.channel);
+  if(c.kind) qs.set('kind',c.kind);
+  if(c.from) qs.set('from',c.from);
+  if(c.to) qs.set('to',c.to);
+  if(String(c.q||'').trim()) qs.set('q',String(c.q).trim());
+  if(c.onlyFailed) qs.set('failed','1');
+  return qs;
+}
+const nlgFiltered=()=>[...nlgQs().keys()].length>0;
+function nlgLoad(append){
+  const c=state.nlg, seq=++c.seq;
+  c.tried=true; if(append) c.more=true;
+  const qs=nlgQs(); qs.set('limit','100'); qs.set('offset',String(append?(c.rows||[]).length:0));
+  return apiRaw('/notification-log?'+qs.toString()).then(j=>{
+    if(seq!==c.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=append?(c.rows||[]).concat(j.data||[]):(j.data||[]);
+    c.total=Number(j.total)||0; c.failed=Number(j.failed)||0;
+    c.channels=j.channels||[]; c.kinds=j.kinds||[];
+    c.err=null; c.more=false; nlgPaint();
+  }).catch(e=>{
+    if(seq!==c.seq||String(e&&e.message)==='auth') return;
+    c.more=false;
+    if(!append) c.rows=null;
+    c.err=(e&&e.name==='TypeError')
+      ? E('Could not load the send record. Check your connection and try again.','无法加载发送记录,请检查网络后重试。')
+      : E('Could not load the send record.','无法加载发送记录。');
+    nlgPaint();
+  });
+}
+function nlgPaint(){ x1Paint('mNlgBody',nlgBody); }
+function nlgRow(r,i){
+  const c=state.nlg, open=c.open===Number(r.id), res=nlgResult(r);
+  const [bg,fg]=res.ok?PILL.success:PILL.danger;
+  const to=r.recipient?escAttr(r.recipient):T('your team','团队');
+  return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('nlgOpen',${Number(r.id)})">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+      <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(nlgKind(r.kind))}</span>
+      ${r.subject?`<span style="font-size:13px;color:var(--text-secondary);${open?'overflow-wrap:anywhere':'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}">${escAttr(r.subject)}</span>`:''}
+      <span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(nlgChannel(r.channel))} · ${to} · <span class="num">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></span>
+      ${res.line?`<span style="font-size:12.5px;color:${res.ok?'var(--text-secondary)':'var(--brick-ink)'};overflow-wrap:anywhere">${escAttr(res.line)}</span>`:''}</span>
+    <span class="pill" style="flex:none;background:${bg};color:${fg}">${res.label}</span></button>`;
+}
+function nlgBody(){
+  const c=state.nlg, filtered=nlgFiltered();
+  const failN=c.failed;
+  const bar=`<div style="display:flex;gap:8px">
+      ${x1Select('nlgChannel',c.channel,T('Every way','全部方式'),c.channels,nlgChannel)}
+      ${x1Select('nlgKind',c.kind,T('Everything','全部内容'),c.kinds,nlgKind)}</div>
+    <button class="btn2" style="gap:6px" onclick="APP.cmd('nlgWhen')">${ic('calendar',16)}<span>${x1WhenLabel(c.from,c.to)}</span></button>
+    ${(failN||c.onlyFailed||filtered)?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${(failN||c.onlyFailed)?`<button class="chip ${c.onlyFailed?'on':''}" onclick="APP.cmd('nlgFailed')"><span>${failN?T('Did not arrive ('+failN+')','未送达('+failN+')'):T('Did not arrive','未送达')}</span></button>`:''}
+      ${filtered?`<button class="chip on" onclick="APP.cmd('nlgClear')"><span>${T('Clear filters','清除筛选')}</span>${ic('x',14,2)}</button>`:''}</div>`:''}`;
+  if(c.err) return bar+x1Err(String(c.err),'nlgRetry');
+  if(!c.rows) return bar+x1Loading();
+  if(!c.rows.length) return bar+x1Empty(filtered,'nlgClear','Nothing has been sent yet.','暂无发送记录。',
+    'Every push, email and text will appear here.','每条推送、邮件与短信都会显示在这里。');
+  return bar+`<div class="list">${c.rows.map(nlgRow).join('')}</div>`+x1Foot(c.rows.length,c.total,'nlgMore',c.more);
+}
+function screenSent(){
+  const c=state.nlg; if(!c.tried) nlgLoad(false);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mNlgQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('nlgQ',this.value)">`,'mNlgClr',!!c.q)}
+    <div id="mNlgBody" style="display:flex;flex-direction:column;gap:12px">${nlgBody()}</div></div>`;
+}
+SUBS.sent={title:['What was sent','发送记录'],render:()=>screenSent()};
+let nlgT=null;
+function nlgRefilter(){ const c=state.nlg; c.rows=null; c.err=null; c.open=null; nlgPaint(); nlgLoad(false); }
+reg('nlgQ', v=>{ state.nlg.q=String(v||''); searchClearShow('mNlgClr',!!state.nlg.q);
+  clearTimeout(nlgT); nlgT=setTimeout(nlgRefilter,250); });
+reg('nlgChannel', v=>{ state.nlg.channel=String(v||''); nlgRefilter(); });
+reg('nlgKind', v=>{ state.nlg.kind=String(v||''); nlgRefilter(); });
+reg('nlgFailed', ()=>{ state.nlg.onlyFailed=!state.nlg.onlyFailed; nlgRefilter(); });
+reg('nlgWhen', ()=>{
+  const c=state.nlg;
+  state.ask={title:T('When','时间'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:c.from},{id:'to',label:T('To','至'),type:'date',value:c.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(v.from&&v.to&&v.from>v.to)?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{ c.from=v.from||''; c.to=v.to||''; nlgRefilter(); }};
+  render();
+});
+reg('nlgClear', ()=>{ const c=state.nlg; c.channel=''; c.kind=''; c.from=''; c.to=''; c.q=''; c.onlyFailed=false;
+  const el=(typeof document!=='undefined')?document.getElementById('mNlgQ'):null; if(el) el.value='';
+  searchClearShow('mNlgClr',false); nlgRefilter(); });
+reg('nlgMore', ()=>{ if(state.nlg.more) return; nlgLoad(true); nlgPaint(); });
+reg('nlgOpen', id=>{ const c=state.nlg; c.open=c.open===Number(id)?null:Number(id); nlgPaint(); });
+reg('nlgRetry', ()=>nlgRefilter());
+
+/* ── Eleme ────────────────────────────────────────────────────────────────────
+   The phone's third channel screen, beside the Meituan and gzgrocery ones:
+   what the desktop's Eleme tab says about the channel, read-only. The switch's
+   state, the stock waiting to go, one line per store (why it cannot push, or how
+   much is waiting, and how fresh its catalogue is), each store's catalogue as
+   last read, and the two logs of the tab's Activity view.
+
+   NOT HERE, deliberately, because they are later steps of §325 and each is a
+   write: the channel switch, linking a shop, Sign in, Sync from, Push all
+   stock, and matching. The desktop's Synced and Need-attention tiles are not
+   here either — they are counted by the matching classifier (elGroup), which
+   arrives with matching; a count shown without the list it counts is a number
+   nobody can act on. */
+function elmStoreName(st){ return LANG==='en'?((st&&(st.nameEn||st.name))||(st&&st.code)||'')
+                                             :((st&&(st.name||st.nameEn))||(st&&st.code)||''); }
+function elmAgo(iso){
+  const d=_date(iso); if(!d) return '';
+  const m=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  if(m<1) return T('just now','刚刚');
+  if(m<60) return T(m+' min ago',m+' 分钟前');
+  const h=Math.floor(m/60);
+  if(h<24) return T(h+' h ago',h+' 小时前');
+  return T(Math.floor(h/24)+' d ago',Math.floor(h/24)+' 天前');
+}
+/* The desktop's store line, word for word: why it cannot push, or what is
+   waiting, then how fresh the catalogue its pickers read is. */
+const ELM_BLOCK={no_shop:['has no Eleme shop linked yet','尚未关联饿了么店铺'], needs_login:['is signed out','已退出登录']};
+function elmStoreLine(st){
+  const cat=Number(st.catalogueCount)
+    ? T(st.catalogueCount+' listings read','已读取 '+st.catalogueCount+' 个商品')+(st.catalogueAt?' · '+elmAgo(st.catalogueAt):'')
+    : T('no catalogue read yet, so nothing can be matched here','尚未读取商品目录，无法匹配');
+  if(st.blocked){ const w=ELM_BLOCK[st.blockedBy]||['is not syncing','同步已停']; return {bad:true,text:T(...w)+' · '+cat}; }
+  const n=Number(st.pending||0)+Number(st.processing||0);
+  return {bad:false,text:(n?T(n+' stock updates waiting',n+' 条库存待推送'):T('Up to date','已是最新'))+' · '+cat};
+}
+function elmLoad(){
+  const e=state.elm, seq=++e.seq;
+  e.tried=true;
+  /* Two reads. The switch's state failing must not blank the health below it,
+     so it is asked on its own and simply not drawn when it does not answer. */
+  apiRaw('/eleme/config').then(j=>{ if(seq===e.seq){ e.cfg=j||null; render(); } }).catch(err=>{
+    /* The pill is left off and the rest of the screen still answers — the
+       desktop's own handling (elLoadConfig: "surfaced by api()"). */
+    if(String(err&&err.message)==='auth') return;
+  });
+  return apiRaw('/eleme/status').then(j=>{
+    if(seq!==e.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    e.st=j; e.err=null; render();
+  }).catch(err=>{
+    if(seq!==e.seq||String(err&&err.message)==='auth') return;
+    e.err=E('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。');
+    render();
+  });
+}
+function elmStockRow(r,stores){
+  let d={}; try{ d=JSON.parse(r.detail||'{}')||{}; }catch(e){ d={}; /* an unreadable detail prints the row without a name, as the desktop does */ }
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(d.product_id));
+  const name=p?T(...p.name):(d.sku||('#'+(d.product_id!=null?d.product_id:'?')));
+  const st=stores.find(s=>s.code===r.store_code);
+  const bad=r.status==='error';
+  return `<div style="display:flex;flex-direction:column;gap:3px;padding:11px 14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+      <span style="font-size:14.5px;min-width:0;overflow-wrap:anywhere">${escAttr(name)}${d.qty!=null?`<span class="num" style="color:var(--text-secondary)"> → ${escAttr(d.qty)}</span>`:''}</span>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></div>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(st?elmStoreName(st):(r.store_code||'-'))}</span>
+    ${bad?`<span style="font-size:12.5px;color:var(--brick-ink);overflow-wrap:anywhere">${escAttr(r.error_msg||'')}</span>`:''}</div>`;
+}
+function elmSysRow(r,stores){
+  const st=stores.find(s=>s.code===r.store_code);
+  return `<div style="display:flex;flex-direction:column;gap:3px;padding:11px 14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+      <span style="font-size:14.5px;min-width:0;overflow-wrap:anywhere;color:${r.status==='error'?'var(--brick-ink)':'var(--text-primary)'}">${escAttr(r.event_type)}: ${escAttr(r.error_msg||r.event_type)}</span>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></div>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(st?elmStoreName(st):(r.store_code||'-'))}</span></div>`;
+}
+function elmLog(title,rows,one,stores){
+  return `<div><div class="eyebrow" style="padding:2px 4px 10px">${title}</div>
+    <div class="list">${rows.length?rows.map((r,i)=>(i?'<div class="sep"></div>':'')+one(r,stores)).join('')
+      :`<div style="padding:16px 14px;font-size:14px;color:var(--text-secondary)">${T('Nothing yet','暂无记录')}</div>`}</div></div>`;
+}
+function screenEleme(){
+  const e=state.elm; if(!e.tried) elmLoad();
+  if(!e.st&&e.err) return x1Err(String(e.err),'elmRetry');
+  if(!e.st) return x1Loading();
+  const stores=e.st.stores||[];
+  const wait=r=>Number(r.pending||0)+Number(r.processing||0);
+  const waiting=stores.reduce((a,r)=>a+wait(r),0);
+  const on=e.cfg&&e.cfg.success!==false?!!e.cfg.enabled:null;
+  const [pbg,pfg]=on?PILL.success:PILL.muted;
+  const head=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('Stock updates waiting','待推送库存')}</span>
+      ${on==null?'':`<span class="pill" style="background:${pbg};color:${pfg}">${on?T('Channel on','渠道开启'):T('Channel off','渠道已关闭')}</span>`}</div>
+    <span class="num" style="font-size:26px;font-weight:500;line-height:1.3">${waiting}</span>
+    ${stores.length?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(stores.map(r=>wait(r)+' '+elmStoreName(r)).join(' · '))}</span>`:''}</div>`;
+  const storeRows=stores.map((st,i)=>{
+    const l=elmStoreLine(st), go=Number(st.catalogueCount)>0;
+    const Tag=go?'button':'div';
+    return `${i?'<div class="sep"></div>':''}<${Tag} class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" ${go?`onclick="APP.cmd('elmCat',${Number(st.id)})"`:''}>
+      <span style="width:8px;height:8px;border-radius:50%;flex:none;margin-top:7px;background:${l.bad?'var(--brick-ink)':'var(--sage)'}"></span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+        <span style="font-size:15px">${escAttr(elmStoreName(st))}</span>
+        <span style="font-size:13px;color:${l.bad?'var(--brick-ink)':'var(--text-secondary)'};overflow-wrap:anywhere">${escAttr(l.text)}</span></span>
+      ${go?`<span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span>`:''}</${Tag}>`;
+  }).join('');
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${e.err?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${String(e.err)}</span></div>`:''}
+    ${head}
+    ${stores.length?`<div><div class="eyebrow" style="padding:2px 4px 10px">${T('Stores','门店')}</div><div class="list">${storeRows}</div></div>`:''}
+    ${elmLog(T('Stock pushes','库存推送'),e.st.recentStock||[],elmStockRow,stores)}
+    ${elmLog(T('Sync events','系统事件'),e.st.recentSystem||[],elmSysRow,stores)}</div>`;
+}
+SUBS.mirror_eleme={title:['Eleme','饿了么'],render:()=>screenEleme()};
+reg('elmRetry', ()=>{ state.elm.err=null; state.elm.st=null; render(); elmLoad(); });
+
+/* ONE STORE'S CATALOGUE, as the daemon last read it — the listings Eleme holds
+   for that shop and the stock each shows. It is the cache the desktop's name
+   and size pickers read (routes/eleme-admin.js /eleme/catalogue), so what is
+   here is exactly what matching will be able to pick from. The search filters
+   what was read; it asks the server nothing. */
+function elmCatStore(){ const e=state.elm; return ((e.st&&e.st.stores)||[]).find(s=>s.code===e.catStore)||null; }
+function elmCatLoad(code){
+  const e=state.elm, c={rows:null,at:null,err:null};
+  e.cat[code]=c;
+  return apiRaw('/eleme/catalogue?storeCode='+encodeURIComponent(code)).then(j=>{
+    if(e.cat[code]!==c) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=j.data||[]; c.at=j.refreshedAt||null; render();
+  }).catch(err=>{
+    if(e.cat[code]!==c||String(err&&err.message)==='auth') return;
+    c.err=E('Could not load this.','无法加载。'); render();
+  });
+}
+function elmCatBody(){
+  const e=state.elm, c=e.cat[e.catStore];
+  if(!c) return x1Loading();
+  if(c.err) return x1Err(String(c.err),'elmCatRetry');
+  if(!c.rows) return x1Loading();
+  if(!c.rows.length) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('no catalogue read yet, so nothing can be matched here','尚未读取商品目录，无法匹配')}</div>`;
+  const q=String(e.catQ||'').toLowerCase().trim();
+  const rows=q?c.rows.filter(r=>String(r.name||'').toLowerCase().indexOf(q)>=0):c.rows;
+  const headLine=T(c.rows.length+' listings read','已读取 '+c.rows.length+' 个商品')+(c.at?' · '+elmAgo(c.at):'');
+  return `<div class="num" style="font-size:12.5px;color:var(--text-secondary);padding:0 4px">${escAttr(headLine)}</div>
+    ${rows.length?`<div class="list">${rows.map((r,i)=>`${i?'<div class="sep"></div>':''}<div class="row" style="min-height:48px;padding:10px 14px">
+      <span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${escAttr(r.name||'')}</span>
+      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${T('Stock','库存')} ${escAttr(r.stock==null?'—':r.stock)}</span></div>`).join('')}</div>`
+      :`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No matches','无匹配')}</div>`}`;
+}
+function screenElemeCat(){
+  const e=state.elm;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mElmCatQ" inputmode="search" enterkeyhint="search" value="${escAttr(e.catQ)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('elmCatQ',this.value)">`,'mElmCatClr',!!e.catQ)}
+    <div id="mElmCatBody" style="display:flex;flex-direction:column;gap:12px">${elmCatBody()}</div></div>`;
+}
+SUBS.elemecat={title:['Eleme','饿了么'],
+  titleOf:()=>{ const s=elmCatStore(); return s?escAttr(elmStoreName(s)):T('Eleme','饿了么'); },
+  render:()=>screenElemeCat()};
+reg('elmCat', id=>{
+  const e=state.elm, st=((e.st&&e.st.stores)||[]).find(s=>Number(s.id)===Number(id));
+  if(!st) return;
+  e.catStore=st.code; e.catQ='';
+  push('elemecat'); elmCatLoad(st.code);
+});
+reg('elmCatQ', v=>{ state.elm.catQ=String(v||''); searchClearShow('mElmCatClr',!!state.elm.catQ); x1Paint('mElmCatBody',elmCatBody); });
+reg('elmCatRetry', ()=>{ const code=state.elm.catStore; if(!code) return; elmCatLoad(code); render(); });
+/* §325 X1 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -22829,7 +23525,10 @@ function NOTIFICATION_ROWS(){
 }
 function screenSettings(){
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true}]},
+    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
+      /* §325 X1 — the desktop's two read-only records, beside the team whose work they record. */
+      ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
+      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[])]},
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -23430,16 +24129,20 @@ function orderNext(o){
 }
 
 /* A write helper that keeps the server's own words. api() throws away the body,
-   and the body is where the reason lives. */
+   and the body is where the reason lives. §325: only a 401 leaves for the login
+   page; a 403 throws the refusal (apiRefusal) into the caller's own error path —
+   the same path a 500 takes, so its busy flag resets and its slot says why. */
 async function apiWrite(path, body, method){
   const r=await fetch(apiURL(path),{method:method||'POST',credentials:'same-origin',
     headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body||{})});
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);
   let j=null; try{ j=await r.json(); }catch(e){}
   if(!r.ok){ const e=new Error((j&&(j.message||j.error))||('HTTP '+r.status)); e.code=j&&j.error; e.body=j; throw e; }
   return j;
 }
 function orderErrorText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   if(e.code==='__plain') return e.message;
   // invalid_status is /refund/direct's word for the same thing invalid_transition
   // is the status route's: the order is no longer where the screen thinks it is.
@@ -23590,7 +24293,7 @@ async function saveProductEdits(){
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
-    state.prodErr=landed
+    state.prodErr=e.refused?E(...e.words):landed
       ? E('Some of that did not save. What did is already in — press Save again for the rest.',
            '部分内容没有保存成功。已保存的不会重复写入 — 请再按一次「保存」。')
       : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -23613,7 +24316,8 @@ function custWrite(kind, run, okMsg){
   }).catch(e=>{
     state.custBusy=null;
     if(String(e.message)==='auth') return;
-    state.custErr=e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
+    state.custErr=e.refused?T(...e.words)   // §325
+      :e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
       :e.code==='phone_taken'?T('Another customer already has that phone number.','该手机号已被其他顾客使用。')
       :e.code==='message_required'?T('Write something first.','请先输入内容。')
       :e.code==='reason_required'?T('A reason is required.','需要填写原因。')
@@ -23976,7 +24680,7 @@ reg('caddrSave', ()=>{
     const t=state.caddr; if(!t) return;
     if(String(e.message)==='auth') return;
     t.busy=false;
-    t.err=e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
+    t.err=e.refused?E(...e.words):e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
       :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
       :e.code==='not_found'?T('This address is no longer on the record.','该地址已不存在。')
       :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -24020,7 +24724,7 @@ function toggleFeature(key){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadOps(){
@@ -24261,6 +24965,8 @@ function opsFires(){
       mins:pk.oldest_at?oldestMins([{waiting_since:pk.oldest_at}]):null,
       go:"APP.cmd('push','pick')"});
   }
+  /* §325 X1 — orders parked for a delivery point, and parcels to recover. */
+  recoverFires(o).forEach(x=>f.push(x));
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){
     // The pill counts what is actually OUT; the line names the rest. One number
@@ -24377,12 +25083,15 @@ async function uploadMedia(files){
   files=(files||[]).filter(f=>/^image\//.test(f.type||''));
   if(!files.length) return;
   state.mediaBusy={done:0,total:files.length}; state.mediaErr=null; render();
-  let ok=0, fail=0, why=null;
+  let ok=0, fail=0, why=null, refused=null;
   for(const f of files){
     const fd=new FormData(); fd.append('file',f);
     try{
       const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
-      if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+      if(r.status===401){ location.href='/backend/login'; return; }
+      /* §325 — a 403 is a refusal, not a lost session, and the next photo would
+         be refused the same way: stop, and count the rest as not uploaded. */
+      if(r.status===403){ refused=await apiRefusal(r); fail+=files.length-ok-fail; break; }
       const j=await r.json().catch(()=>({}));
       if(r.ok&&j&&j.success) ok++; else { fail++; why=why||(j&&j.error); }
     }catch(e){ fail++; }
@@ -24392,7 +25101,7 @@ async function uploadMedia(files){
   // A refusal names the reason the server gave when it gave one, and says how
   // many DID land — "3 of 4" is the difference between a retry and a re-do.
   if(fail){
-    const reason=MEDIA_ERR[why];
+    const reason=refused?refused.words:MEDIA_ERR[why];
     const head=ok?T(ok+' of '+(ok+fail)+' uploaded.', '已上传 '+ok+'/'+(ok+fail)+' 张。')
                  :T('That did not upload.','上传失败。');
     state.mediaErr=head+' '+(reason?T(...reason):T('Try again.','请重试。'));
@@ -24513,7 +25222,7 @@ function invSnooze(id){
        list in hand is stale, so say what is true and refetch rather than
        leaving a chip that lies about a row that no longer waits. */
     if(e.code==='not_pending'){ state.invLoaded=false; loadLiveInvoices(); }
-    showToast(T('That did not save.','没有保存成功。'));
+    showToast(e.refused?T(...e.words):T('That did not save.','没有保存成功。'));
   });
 }
 reg('invSnooze', id=>invSnooze(id));
@@ -24532,7 +25241,7 @@ function togglePrint(){
   }).catch(e=>{
     state.printerBusy=false;
     if(String(e.message)==='auth') return;
-    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.printerErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadInbox(){
@@ -24612,10 +25321,13 @@ function refundPanel(o){
     (credit!=null&&credit>0.005)?fig(T('As cash','现金'),r.cash):'',
     (credit!=null&&credit>0.005)?fig(T('To wallet','退回余额'),credit):'',
   ].filter(Boolean).join('');
+  const histOpen=state.rfHist.open&&state.rfHist.id===o._id;
   return `<div style="border-radius:14px;background:${bg};padding:14px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <span style="font-size:15px;font-weight:500;color:${fg}">${T(st.en,st.zh)}</span>
-      ${r.at?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('asked '+fmtDay(r.at),'申请于 '+fmtDay(r.at))}</span>`:''}</div>
+      ${r.at?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('asked '+fmtDay(r.at),'申请于 '+fmtDay(r.at))}</span>`:''}
+      ${o._id!=null?`<button class="rowact" style="min-height:34px;margin-left:auto" aria-expanded="${histOpen?'true':'false'}" onclick="APP.cmd('rfHist')">${ic('history',15)}&nbsp;${T('History','历史')}</button>`:''}</div>
+    ${histOpen?rfHistBody(o):''}
     ${(open&&r.requested!=null)?`<div style="font-size:14px">${T('The customer asked for '+money(CUR,r.requested)+' of '+o.total,'顾客申请退 '+money(CUR,r.requested)+' / 共 '+o.total)}</div>`:''}
     ${r.reason?`<div style="font-size:14px;line-height:1.55;background:var(--surface-card);border-radius:10px;padding:10px 12px">
       <span class="eyebrow" style="display:block;margin-bottom:4px">${T('In their words','顾客说明')}</span>${escAttr(r.reason)}</div>`:''}
@@ -24631,6 +25343,268 @@ function refundPanel(o){
       <span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;margin-top:5px"></span>
       <span>${T('The money is moving through the payment gateway. This finishes on its own — nothing to do.','正在通过支付网关打款，会自动完成，无需操作。')}</span></div>`:''}
   </div>`;
+}
+/* ── §325 O1 — REFUND HISTORY ──────────────────────────────────────────────
+   The desktop's openRefundEvents (04-orders.js): every step the refund took —
+   asked, reviewed, approved, paid, rejected, withdrawn — with who took it,
+   when, how much, the note, and the lines. Read on demand from
+   GET /orders/:id/refund/events (a read; no capability gates it, and the
+   desktop offers it to everyone who can open the order), unfolded inside the
+   refund panel rather than on a sheet of its own, because the panel is what it
+   explains. The step names are the phone's own REFUND_STATE words, so the
+   panel's heading and its history cannot name one state two ways; a step the
+   server adds tomorrow reads as words, never as a blank. */
+function rfEventWord(ev){
+  const st=REFUND_STATE[ev];
+  if(st) return T(st.en,st.zh);
+  const w=String(ev||'').replace(/_/g,' ').trim();
+  return w?w.charAt(0).toUpperCase()+w.slice(1):'';
+}
+function rfHistBody(o){
+  const h=state.rfHist;
+  const box=inner=>`<div style="background:var(--surface-card);border-radius:10px;padding:10px 12px">
+    <span class="eyebrow" style="display:block;margin-bottom:6px">${T('Refund history','退款历史')}</span>${inner}</div>`;
+  if(h.busy) return box(`<div style="font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
+  if(h.err) return box(`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px;color:var(--brick-ink)">
+      <span>${T('Could not load this.','无法加载。')}</span>
+      <button class="rowact" style="min-height:34px" onclick="APP.cmd('rfHist')">${T('Try again','重试')}</button></div>`);
+  const rows=h.rows||[];
+  if(!rows.length) return box(`<div style="font-size:13.5px;color:var(--text-secondary)">${T('No events yet','暂无记录')}</div>`);
+  /* A line is named off this order's own items (ITEM_TUPLE keeps the line id in
+     slot 6); a line that is gone reads as its id, as the desktop's does. */
+  const byId=new Map((o.items||[]).filter(t=>t&&t[6]!=null).map(t=>[t[6],t]));
+  const lineName=l=>{ const t=byId.get(l.item_id);
+    return t?T(t[1][0],t[1][1]):('#'+(l.item_id!=null?l.item_id:(l.product_id!=null?l.product_id:'?'))); };
+  return box(rows.map((ev,i)=>{
+    const m=(ev.meta&&typeof ev.meta==='object')?ev.meta:{};
+    const who=ev.user_username||ev.customer_nickname||(ev.user_id?'staff#'+ev.user_id:T('customer','顾客'));
+    const method=m.payout_method||m.method||'', ref=m.payout_ref||m.reference||'';
+    const lines=Array.isArray(m.lines)?m.lines:[];
+    return `<div style="padding:8px 0;${i?'border-top:1px solid var(--hairline)':''}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:14px;font-weight:500;min-width:0">${escAttr(rfEventWord(ev.event))}</span>
+        ${ev.amount!=null?`<span class="num" style="flex:none;font-size:14px">${money(CUR,ev.amount)}</span>`:''}</div>
+      <div class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${ev.created_at?escAttr(tdWhen(ev.created_at,'dateTime',_tdL()))+' · ':''}${T('by','操作人')} ${escAttr(who)}</div>
+      ${ev.note?`<div style="font-size:13px;line-height:1.5;margin-top:4px;overflow-wrap:anywhere">${escAttr(ev.note)}</div>`:''}
+      ${lines.length?`<div style="margin-top:4px">
+        <span style="display:block;font-size:11px;color:var(--text-secondary)">${T('Lines','退款明细')}</span>
+        ${lines.map(l=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px">
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(lineName(l))}${l.qty!=null?' ×'+escAttr(l.qty):''}</span>
+          ${l.amount!=null?`<span class="num" style="flex:none">${money(CUR,l.amount)}</span>`:''}</div>`).join('')}</div>`:''}
+      ${m.reason?`<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${T('Reason','原因')}: ${escAttr(m.reason)}</div>`:''}
+      ${method?`<div class="num" style="font-size:12px;color:var(--text-secondary);margin-top:4px">${T('Payout','打款')}: ${escAttr(method)}${ref?' · '+escAttr(ref):''}</div>`:''}
+    </div>`;
+  }).join(''));
+}
+/* ── §325 O1 — WAS THE CUSTOMER TOLD ───────────────────────────────────────
+   The desktop's wasCustomerToldBlock (audit P-02): the latest attempt per kind
+   of message, with its outcome and, when one did not arrive, why — in words
+   that say what to do next. DRAWN ONLY WHEN THERE IS SOMETHING TO SAY: an
+   order nobody tried to message gets no card, which is a different fact from
+   "tried and failed" and must not look like it. Read-only here; trying again
+   (POST /renotify) is a later step. The three tables are the desktop's,
+   copied whole. */
+const M_NOTIFY_KINDS={
+  order_paid:['Payment received','已收到付款'], order_preparing:['Preparing','备货中'],
+  order_dispatched:['Dispatched','已发货'], order_delivered:['Delivered','已送达'],
+  order_cancelled:['Cancelled','已取消'], order_refunded:['Refunded','已退款'],
+  delivery_update:['Delivery update','配送更新'],
+};
+const M_NOTIFY_CHANNELS={ wechat:['WeChat','微信'], sms:['Text','短信'], email:['Email','邮件'] };
+const M_NOTIFY_WHY={
+  no_consent:['they have not agreed to be messaged in the mini app','顾客未在小程序中同意接收通知'],
+  no_openid:['this customer has no linked mini-app account','该顾客未绑定小程序账号'],
+  no_template_id:['no message template is set up yet — Settings → Push notifications','尚未配置消息模板 — 设置 → 推送通知'],
+  no_access_token:['the WeChat connection is not working','微信连接异常'],
+  dev_mode_nothing_sent:['this shop is in test mode, so nothing was actually sent','本店处于测试模式,消息未真正发送'],
+  aliyun_sms_not_configured:['text messaging is not set up yet','短信服务尚未配置'],
+  bad_phone:['their phone number is not one we can text','该号码无法发送短信'],
+};
+// An unknown code reads as words, so one added tomorrow is legible on the day it ships.
+function mCodeWords(k){ const w=String(k||'').replace(/_/g,' ').trim(); return w?w.charAt(0).toUpperCase()+w.slice(1):''; }
+function toldCard(o){
+  const rows=o.told; if(!rows||!rows.length) return '';
+  const pair=(tbl,k,fb)=>{ const e=tbl[k]; return e?T(e[0],e[1]):fb(k); };
+  return `<div class="card" style="padding:14px">
+    <span class="eyebrow">${T('Was the customer told','顾客是否已收到通知')}</span>
+    ${rows.map(r=>`<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--hairline);margin-top:${r===rows[0]?'8px':'0'}">
+      <span style="flex:none;width:14px;display:flex;justify-content:center;margin-top:2px;color:var(--${r.ok?'sage-ink':'brick-ink'})">${r.ok?ic('check',14,2.25):'!'}</span>
+      <span style="flex:1;min-width:0">
+        <span style="display:flex;gap:10px;align-items:baseline;justify-content:space-between">
+          <span style="font-size:14px;min-width:0;overflow-wrap:anywhere">${escAttr(pair(M_NOTIFY_KINDS,r.kind,mCodeWords))}<span style="color:var(--text-secondary)"> · ${escAttr(pair(M_NOTIFY_CHANNELS,r.channel,String))}</span></span>
+          ${r.at?`<span class="num" style="flex:none;font-size:12px;color:var(--text-secondary)">${escAttr(tdWhen(r.at,'dateTime',_tdL()))}</span>`:''}</span>
+        ${r.ok?'':`<span style="display:block;font-size:12.5px;line-height:1.45;margin-top:3px;color:var(--brick-ink);overflow-wrap:anywhere">${escAttr(pair(M_NOTIFY_WHY,r.error,mCodeWords))}</span>`}
+      </span></div>`).join('')}
+  </div>`;
+}
+/* ── §325 O1 — A MARKETPLACE ORDER'S SETTLEMENT ────────────────────────────
+   The desktop's renderChannelMoneyPanel: what the customer paid, row by row,
+   and — only once those rows reconcile to the total AND the platform has
+   published both — the commission and the estimated income. When the rows
+   do not add up, the sum, the total and the gap are printed, with the
+   desktop's instruction to check the channel before refunding.
+
+   WHO SEES IT. The desktop draws it for everyone who can open the order, and
+   so does this — except that the COMMISSION and the ESTIMATED INCOME are the
+   shop's takings, not what the customer paid, and the three boards that never
+   see the shop's money (recapNoMoney: warehouse, dispatch, customer service)
+   do not get those two rows or the "not published yet" note about them. The
+   customer-side rows and the reconcile warning stay: the warning is what stops
+   a wrong refund, and customer service is who refunds. */
+function settlePanel(o){
+  const g=o.settle; if(!g) return '';
+  const rows=[];
+  if(g.items>0) rows.push([T('Subtotal','小计'),g.items]);
+  if(g.packaging>0) rows.push([T('Packing','打包费'),g.packaging]);
+  if(g.delivery>0) rows.push([T('Customer delivery fee','顾客配送费'),g.delivery]);
+  if(g.discount>0) rows.push([T('Merchant discount','商家对顾客的活动补贴'),-g.discount]);
+  if(!rows.length&&g.commission==null&&g.settle==null) return '';
+  const takings=!recapNoMoney();
+  const row=(l,v,strong)=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px${strong?';font-weight:500;padding-top:7px;border-top:1px solid var(--border-default)':''}">
+    <span style="color:var(--text-${strong?'primary':'secondary'})">${l}</span><span class="num">${v<0?'−':''}${money(CUR,Math.abs(v))}</span></div>`;
+  let note='';
+  if(!g.reconciled) note=T(
+    'These rows add up to '+money(CUR,g.expected)+', but the order records '+money(CUR,g.total)+' — '+money(CUR,Math.abs(g.gap))+' unaccounted for. Check the channel before refunding.',
+    '以上各项合计 '+money(CUR,g.expected)+'，但订单金额为 '+money(CUR,g.total)+' — 相差 '+money(CUR,Math.abs(g.gap))+'。退款前请先核对平台。');
+  else if(g.awaiting&&takings) note=T('Commission and income not published by the channel yet.','平台尚未公布佣金与预计收入。');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:7px">
+    <span class="eyebrow" style="margin-bottom:2px">${T('Settlement','结算明细')}</span>
+    ${rows.map(([l,v])=>row(l,v)).join('')}
+    ${(takings&&g.complete&&g.commission)?row(T('Commission','佣金'),-Math.abs(g.commission)):''}
+    ${(takings&&g.complete&&g.settle)?row(T('Estimated income','预计收入'),g.settle,true):''}
+    ${note?`<div style="font-size:12.5px;line-height:1.5;color:${g.reconciled?'var(--text-secondary)':'var(--amber-ink)'}">${note}</div>`:''}
+  </div>`;
+}
+/* ── §325 O1 — STOCK HOLDS THAT WENT WRONG ─────────────────────────────────
+   The desktop's reservations table. A hold's normal life (pending, then
+   committed) is plumbing nobody acts on, so — as there — nothing is drawn
+   unless one hold is abnormal: expired, released back, or pending past its
+   own expiry (stuck). Then every hold on the order is listed, so the odd one
+   can be read against the rest. The status is printed as the server's word,
+   exactly as the desktop prints it. The expiry is read through _date, the
+   phone's zone-correct parser, where the desktop's `new Date()` reads the
+   zoneless UTC stamp as local time. */
+function resvCard(o){
+  const list=o.resv; if(!list||!list.length) return '';
+  const now=Date.now();
+  const stuck=r=>{ if(r.status!=='pending'||!r.expires_at) return false; const d=_date(r.expires_at); return !!d&&d.getTime()<now; };
+  if(!list.some(r=>r.status==='expired'||r.status==='released'||stuck(r))) return '';
+  const when=v=>v?escAttr(tdWhen(v,'dateTime',_tdL())):'—';
+  const tone=s=>s==='committed'?PILL.muted:(s==='expired'||s==='released')?['var(--brick-tint)','var(--brick-ink)']:['var(--amber-tint)','var(--amber-ink)'];
+  return `<div class="card" style="padding:14px;border-color:var(--amber-ink)">
+    <div style="display:flex;align-items:center;gap:8px;color:var(--amber-ink)">${ic('triangle-alert',16)}
+      <span class="eyebrow" style="color:var(--amber-ink);flex:1;min-width:0">${T('Stock reservations — needs attention','库存预留 — 需留意')}</span>
+      <span class="num" style="font-size:13px">${list.length}</span></div>
+    ${list.map(r=>{ const [bg,fg]=tone(r.status);
+      const nm=(r.product_name_en||r.product_name_cn)?T(r.product_name_en||r.product_name_cn, r.product_name_cn||r.product_name_en):('product_id '+r.product_id);
+      return `<div style="padding:10px 0;border-top:1px solid var(--hairline);margin-top:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1;min-width:0;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>
+          <span class="num" style="flex:none;font-size:13px">×${escAttr(r.qty)}</span>
+          <span class="pill" style="flex:none;background:${bg};color:${fg}">${escAttr(r.status)}</span></div>
+        <div class="num" style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.55">
+          ${r.channel?escAttr(r.channel)+' · ':''}${T('Expires','到期')} ${when(r.expires_at)} · ${T('Committed','提交')} ${when(r.committed_at)} · ${T('Released','释放')} ${when(r.released_at)}</div></div>`; }).join('')}
+  </div>`;
+}
+/* ── §325 O1 — WHERE THE SAME-CITY RIDER COLLECTS, AND WHAT IS HOLDING IT ──
+   The desktop's renderQyShipFrom and its two parked surfaces, IN WORDS. Present
+   only for orders we created in Qingyun (the server sends qingyun_ship_from for
+   nothing else). No map: §97's exceptions keep the point picker on the desktop,
+   and this card says so rather than showing a surface it cannot finish.
+   What is NOT here yet, on purpose: every button the desktop puts beside these
+   words — Retry push, Change, Remove it, Reschedule, pick a place, compare
+   couriers — and the desktop sentences that point at them. They are writes and
+   arrive with the rider-operations step; a sentence telling the operator to
+   press a button the phone does not draw would be worse than no sentence. */
+function shipFromCard(o){
+  const sf=o.shipFrom; if(!sf) return '';
+  const card=(inner,warn)=>`<div class="card" style="padding:14px${warn?';border-color:var(--amber-ink)':''}">
+    <span class="eyebrow">${T('Same-city courier','同城配送')}</span>${inner}</div>`;
+  const head=(txt,tone)=>`<div style="font-size:14.5px;font-weight:500;margin-top:7px${tone?';color:var(--'+tone+')':''}">${txt}</div>`;
+  const sub=txt=>`<div style="font-size:13px;line-height:1.5;color:var(--text-secondary);margin-top:4px">${txt}</div>`;
+  const pd=escAttr(sf.promised_date||'');
+  if(!sf.qingyun_order_id){
+    const choice=!sf.awaiting_point&&sf.awaiting_choice&&Array.isArray(sf.candidates)&&sf.candidates.length;
+    if(sf.awaiting_point||choice){
+      if(sf.date_posture==='passed') return card(head(T('Delivery date passed','配送日期已过'),'brick-ink')+sub(T(
+        'Nobody was sent for this order and '+(pd||'the day it was promised for')+' has gone. A same-day rider can no longer take it — pick a new day to put it back in the queue.',
+        '此订单无人接单，'+(pd||'承诺配送日')+' 已过。同城骑手已无法配送，请选择新的配送日期重新排队。')),true);
+      const urgent=sf.date_posture==='tomorrow'?`<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);font-size:12.5px;line-height:1.5">
+        <span style="flex:none;display:flex;margin-top:1px">${ic('clock',15)}</span>
+        <span><b style="font-weight:600">${T('Promised tomorrow, '+pd+'.','明天('+pd+')送达。')}</b> ${choice
+          ?T('Pick the place today — after tonight this order can no longer go to a same-day rider.','请今天选择配送点 — 过了今晚将无法安排同城骑手。')
+          :T('Confirm the point today — after tonight this order can no longer go to a same-day rider.','请今天确认配送点 — 过了今晚将无法安排同城骑手。')}</span></div>`:'';
+      if(!choice){
+        const g=sf.guess_grade||{};
+        return card(head(T('Confirm delivery point','确认配送点'),'amber-ink')
+          +sub(T('We could not place this address precisely. Check the point and confirm.','无法精确定位该地址，请核对后确认配送点。'))
+          +((g.en||g.cn)?sub(escAttr(T(g.en||g.cn,g.cn||g.en))):'')
+          +urgent
+          +sub(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。')),true);
+      }
+      return card(head(T('Pick the delivery point','选择配送点'),'amber-ink')
+        +sub(T('This address matches more than one place. Pick the right one.','该地址匹配到多个地点，请选择正确的一个。'))
+        +`<div style="margin-top:8px">${sf.candidates.map(c=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--hairline)">
+            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500;overflow-wrap:anywhere">${escAttr(c.name||'')}</span>
+              <span style="display:block;font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(c.address||'')}</span></span>
+            ${c.drop_km!=null?`<span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(String(c.drop_km))}km</span>`:''}</div>`).join('')}</div>`
+        +sub(T('Distances are from the store the rider collects from.','距离为骑手取货门店到该地点的距离。'))
+        +urgent,true);
+    }
+    const refused=!!sf.needs_attention, held=!refused&&!!sf.push_held,
+          booked=!refused&&!held&&!!sf.awaiting_dispatch;
+    const line=refused?head(T('Push refused — nobody is collecting this','发单被拒 — 无人接单'),'amber-ink')
+      :held?head(T('Held — map service unavailable, retrying','已挂起 — 地图服务不可用,正在重试')+(sf.push_held_since&&fmtTime(sf.push_held_since)?' · '+T('since','自')+' '+escAttr(fmtTime(sf.push_held_since)):''),'amber-ink')
+      :booked?head(T('No courier called yet','尚未呼叫运力'))
+      :head(T('Queued for push…','排队发单中…')+(sf.push_since&&courierAgo(sf.push_since)?' · '+courierAgo(sf.push_since):''));
+    return card(line
+      +(sf.push_error?`<div class="num" style="font-size:12px;line-height:1.5;color:var(--text-secondary);margin-top:4px;overflow-wrap:anywhere">${escAttr(sf.push_error)}</div>`:'')
+      +(held?sub(T('Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.','地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')):''),
+      refused||held);
+  }
+  const moved=!!(o.storeCode&&sf.store_code!==o.storeCode);
+  const fe=(o.fulfil&&o.fulfil[0])||o.storeCode||'', fz=(o.fulfil&&o.fulfil[1])||o.storeCode||'';
+  return card(`<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:7px">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('Ships from','取货门店')}</span>
+      <span style="font-size:14.5px;font-weight:500">${escAttr(T(sf.name_en||sf.store_code,sf.name_cn||sf.store_code))}</span></div>`
+    +(moved?sub(T('Collected here, but the order still counts against '+escAttr(fe)+' for stock and reports.',
+                  '在此取货,但库存与报表仍算在 '+escAttr(fz)+'。')):'')
+    +(sf.stale?`<div style="display:flex;gap:7px;align-items:flex-start;margin-top:8px;font-size:12.5px;line-height:1.5;font-weight:500;color:var(--amber-ink)">
+        <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',14)}</span>
+        <span>${T('The old job at '+escAttr(sf.stale.name_en||sf.stale.store_code)+' is still in Qingyun — someone there could send a rider for it.',
+                  escAttr(sf.stale.name_cn||sf.stale.store_code)+' 的原配送单仍在青云中 — 那边有人可能会再叫一位骑手。')}</span></div>`:''),
+    !!sf.stale);
+}
+/* ── §325 O1 — THE GUEST PAY LINK ──────────────────────────────────────────
+   The desktop's orderPayLinkTile: the page a customer without an app account
+   pays this one order on. Only while unpaid and only with something to pay
+   (mapDetail's payPath carries the server's two conditions). Copy is the
+   phone's own copyText; Open goes to the page, for the customer to scan. */
+function payLinkURL(o){
+  if(!o||!o.payPath) return '';
+  return ((typeof location!=='undefined'&&location.origin)||'')+o.payPath;
+}
+function payLinkBlock(o){
+  const url=payLinkURL(o); if(!url) return '';
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="eyebrow">${T('Payment link','付款链接')}</span>
+      <button onclick="APP.cmd('copyPayLink')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
+    <a href="${escAttr(url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:14.5px;font-weight:500;color:var(--text-primary)">${ic('link',15)} ${T('Open pay page','打开付款页')}</a>
+    <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${T('Send this to the customer, or show the page for them to scan.','发给顾客,或打开页面让其扫码支付。')}</div></div>`;
+}
+/* ── §325 O1 — THE CUSTOMER MOVED THE SHIP-TO ──────────────────────────────
+   The desktop's addressChangedNote. Before the order goes out: an amber band
+   with the instruction, because a label already printed is now wrong. After:
+   a quiet trace — the fact stays on the record, the nagging does not. */
+function addrMovedNote(o){
+  const a=o.addrMoved; if(!a) return '';
+  const when=a.at?escAttr(tdWhen(a.at,'dateTime',_tdL())):'';
+  if(a.gone) return `<div style="font-size:12.5px;color:var(--text-secondary);margin-top:8px">${T('Address changed by the customer','顾客修改了收货地址')}${when?' · '+when:''}</div>`;
+  return `<div style="display:flex;align-items:flex-start;gap:9px;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink)">
+    <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',15)}</span>
+    <span style="font-size:12.5px;line-height:1.5"><span style="display:block;font-weight:500">${T('Address changed by the customer','顾客修改了收货地址')}</span>
+      <span style="display:block;margin-top:2px">${T('Check the shipping label against the address above before this goes out','发货前请核对面单与上方地址')}${when?' · '+when:''}</span></span></div>`;
 }
 /* The band under the total when it disagrees with the lines beneath it. The
    desktop has carried one since the drawer could be wrong out loud; the phone
@@ -24988,7 +25962,9 @@ function sheetOrderDetail(){
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
        ${shopNoteCard(o)}
+       ${toldCard(o)}
        ${riderCard(o)}
+       ${shipFromCard(o)}
        ${deliveryPhotoCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!o.viewOnly&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
@@ -25004,6 +25980,7 @@ function sheetOrderDetail(){
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
          </div>`:''}</div>
        ${moneyGapBand(o)}
+       ${settlePanel(o)}
        ${isPO?'':`
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
          <span class="eyebrow">${o.counter?T('Counter sale','前台销售'):o.pickup?T('Pickup','到店自提'):T('Ship to','收货地址')}</span>
@@ -25013,6 +25990,7 @@ function sheetOrderDetail(){
            o.counter?T('Handed over at the till','已在前台交付')
            :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore[0],'自提门店 '+o.pickupStore[1]):T('Collects in store','到店自提'))
            :o.addr?T(...o.addr):T('No address on file','没有收货地址')}</div>
+         ${(!o.counter&&!o.pickup)?addrMovedNote(o):''}
          ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('View customer','查看顾客')}</button>`:''}</div>
        <!-- Payment reads as the tender and nothing else: the WeChat mark plus the
             word. The status word is dropped when it agrees with the pill in the
@@ -25027,6 +26005,7 @@ function sheetOrderDetail(){
          ${o.payNote?`<div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);color:var(--${o.payNote.sev});font-size:13px">
            <span style="flex:none;display:flex;margin-top:1px">${ic(o.payNote.icon,15)}</span>
            <span>${T(...o.payNote.why)}</span></div>`:''}
+         ${payLinkBlock(o)}
          ${o.proof?`<div style="margin-top:10px">
            <div style="display:block;border-radius:10px;overflow:hidden;border:1px solid var(--border-default);cursor:zoom-in" onclick="APP.cmd('zoomImg','${o.proof}')">
              <img src="${escAttr(o.proof)}" alt="${T('Payment screenshot','付款截图')}" style="display:block;width:100%;max-height:220px;object-fit:cover"></div>
@@ -25036,6 +26015,12 @@ function sheetOrderDetail(){
          ${o.route?`<div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div>`:''}
          ${o.routedByArea?`<div style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;color:var(--amber-ink);font-size:12.5px;line-height:1.5">
            ${ic('triangle-alert',14)}<span>${T('Routed by area — the address could not be located, so check the store is right.','按区域派单 — 地址无法定位，请核对门店是否正确。')}</span></div>`:''}
+         ${o.movedFrom?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('Rerouted, shop was closed','改派 · 门店已关闭')} · <span class="num" style="font-weight:500;color:var(--text-primary)">${escAttr(o.movedFrom)}</span></div>`:''}
+         ${o.preorderSold?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
+           <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--text-secondary)">
+             <span style="width:6px;height:6px;border-radius:50%;background:var(--text-secondary);flex:none"></span>${T('Pre-order','预订')}</span>
+           <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${o.preorderSold.map(nm=>
+             `<span style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(nm[0],nm[1]))}</span>`).join('')}</div></div>`:''}
          ${o.shortItems?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
            <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--amber-ink)">
              <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex:none"></span>${T('The nearer store was short on','就近门店缺货')}</span>
@@ -25048,6 +26033,7 @@ function sheetOrderDetail(){
        ${invoiceBlock(o)}
        ${orderItemsBlock(o)}
        ${addonTimeline(o)}
+       ${resvCard(o)}
      </div>
    </div>`;
 }
@@ -29000,8 +29986,8 @@ function screenCustomers(){
   /* THE HEADER'S ONE BUTTON, and it is the desktop's own — the roster's "+ Add"
      for a walk-in or a telephone order. Gated on `customers:edit`, which is what
      lib/cap-routes.js gates POST /customers on: absent, never disabled, for an
-     operator whose save would 403. §112's rule, and the reason it matters here
-     is that apiWrite sends a 403 to the login page. */
+     operator whose save would 403. §112's rule. (It mattered more while apiWrite
+     sent a 403 to the login page; since §325 a refusal is said, not a logout.) */
   /* 38px, not the class's 44. The band standardises its controls at 38 — every
      iconbtn in this row overrides the 44px class inline to say so — and the Add
      slab arrived at 44, which is the whole of what "tight" was. Six pixels:
@@ -29480,9 +30466,10 @@ function sheetCustomer(){
             customers:edit for the other two (lib/cap-routes.js). All four were
             offered to every role, and a customer-service or warehouse account
             holding customers:view alone got the whole row. That is worse here
-            than a dead button: apiWrite treats a 403 as a lost session and sends
+            than a dead button: apiWrite treated a 403 as a lost session and sent
             the operator to the login page, so tapping Points on a record you may
-            read but not adjust logged you out of the app. Absent, never
+            read but not adjust logged you out of the app (§325 stopped that; a
+            refusal is now said in words, but a dead button is still one). Absent, never
             disabled — §112's rule, and the four buttons re-flow to fill the row
             at whatever number survives. */''}
       ${d?(()=>{
@@ -30229,6 +31216,13 @@ const ROUTE_CAP={
   settings:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   setup:['settings:shop','stores:view'],
   team:'team:view', categories:'categories:view', activity:'activity:view',
+  /* §325 X1. Change history and What was sent are read-only and live inside
+     Settings; the desktop gates neither beyond reaching Settings, so each takes
+     exactly the Settings screen's own set. Eleme and its catalogue are the
+     desktop tab's key. The parked-orders list opens orders. */
+  changes:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  sent:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  mirror_eleme:'eleme:view', elemecat:'eleme:view', needspoint:'orders:view',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -31409,6 +32403,7 @@ function mLiveTick(){
   const jobs=[
     mSettled(loadToday()),
     mSettled(loadOps()),
+    mSettled(loadPresence()),
     mSettled(api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
       state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{})),
   ];
@@ -31915,7 +32910,7 @@ reg('pushTest', ()=>{
 /* ==========================================================================
    Live data — binds the core monitoring screens to the store backend's
    /api/retail-admin/* endpoints (same API the desktop admin uses). The page
-   self-auths: a 401/403 bounces to the store root. Every map is defensive and
+   self-auths: a 401 bounces to the login page (a 403 is a refusal, §325). Every map is defensive and
    falls back to the mock content above, so a shape change can never white-screen
    the app — the long-tail marketing/loyalty screens stay on sample data for now.
    ========================================================================== */
@@ -31925,11 +32920,51 @@ const API='/api/retail-admin';
    backend's own login and session routes — so a path that already starts at
    /api/ is taken as given rather than prefixed into /api/retail-admin/api/... */
 const apiURL = p => String(p).indexOf('/api/')===0 ? p : API+p;
+/* §325 — A REFUSAL IS NOT A LOST SESSION. Every read and write here used to send
+   a 403 to the login page exactly as it sent a 401, so with permissions switched
+   on, one refused tap threw a shift worker out of the app. Only a 401 means the
+   session is gone (requireRetailAdmin answers every "who are you?" with 401, on
+   purpose, and so does lib/require-cap.js). A 403 is the server saying "you, no"
+   — `forbidden_capability` from the choke point or a handler, `forbidden_store`
+   from the store-scope check, or a sentence of its own — and the operator is
+   told so where they are looking, through the caller's own error slot.
+   THE WORDS ARE THE DESKTOP'S (01-core.js TD_ERR), the same refusal answered
+   with the same sentence on both surfaces. A 403 that brings a bilingual
+   sentence of its own ("… · …", the backend routes' shape) keeps it; one that
+   brings nothing the phone can read gets lib/require-cap.js's own pair. */
+const REFUSAL_WORDS={
+  forbidden_capability:['Your role does not include this action. An owner can grant it on the Team page.','你的角色不包含此操作。可由负责人在团队页授权。'],
+  forbidden_store:['You can only do that in a location you are assigned to.','只能在你被分配的门店执行该操作。'],
+  store_not_assigned:['You are not assigned to that location.','你未被分配到该门店。'],
+};
+const REFUSAL_ANY=['You don’t have permission for this','你没有此操作的权限'];
+function refusalWords(j){
+  const code=j&&j.error;
+  if(REFUSAL_WORDS[code]) return REFUSAL_WORDS[code];
+  const s=typeof code==='string'?code:'', i=s.indexOf(' · ');
+  if(i>0) return [s.slice(0,i),s.slice(i+3)];
+  return REFUSAL_ANY;
+}
+/* The thrown error: its message is the sentence (so a caller that shows
+   e.message shows it), `code`/`body` are the server's as apiWrite always kept
+   them, and `refused` + `words` let a caller whose fallback is "try again"
+   say the true thing instead — `e.refused?E(...e.words):<its own words>`,
+   E() so a stored error re-reads in the language on screen when it paints.
+   Trying again will not help a refusal; saying why is the whole point. */
+async function apiRefusal(r){
+  let j=null; try{ j=await r.json(); }catch(e){}
+  const words=refusalWords(j);
+  const e=new Error(T(words[0],words[1]));
+  e.code=j&&j.error; e.body=j; e.status=403; e.refused=true; e.words=words;
+  return e;
+}
 async function api(path){
   const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
   // Match the desktop backend's auth-fail target. Redirecting to '/' would loop
   // once the store root serves this app to phones (root → 401 → root → …).
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  // §325: a 401 only — a 403 is a refusal, not a lost session.
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);
   if(!r.ok) throw new Error('HTTP '+r.status);
   const j=await r.json();
   return (j && j.data!==undefined) ? j.data : j;
@@ -32027,7 +33062,8 @@ function fmtDateOnly(v){
 }
 async function apiRaw(path){
   const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);   // §325, as api()
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
@@ -32821,6 +33857,14 @@ function mapOrderRow(r){
        else called it, so it is gone rather than left as a second way to get
        this wrong; mapDetail's `route` already carried the pair. */
     routeNote: routingNotePair(r.routing_reason),
+    /* §325 O1 — A PARTIAL REFUND, on the row. A full refund flips the order to
+       Refunded and the status pill says so; a partial one leaves it Paid or
+       Delivered, and the row said nothing. The desktop's refundBadge: the
+       cumulative amount paid back, falling back to approved, then requested,
+       for rows older than the accumulation fix. A number, worded by the row. */
+    partRefund:(r.refund_status==='paid'&&r.status!=='refunded')
+      ?([r.refund_amount_paid,r.refund_amount_approved,r.refund_amount_requested].map(Number).find(n=>Number.isFinite(n)&&n>0)||0)
+      :null,
     // The Status cell's stack of note lines. Each is a fact about the order that
     // changes what an operator does with it, and none of them were here.
     notes: orderNotes(r),
@@ -32922,6 +33966,29 @@ function orderWaitingOn(o){
     else lines.push([null,['#'+pid,'#'+pid],'','','',null,null]);
   });
   return {lines, store, chose:o.fallback_choice==='wait_for_restock'};
+}
+/* §325 O1 — A MARKETPLACE ORDER'S SETTLEMENT, the desktop's
+   channelMoneyBreakdown (04-orders.js) line for line: items + packing +
+   delivery − merchant discount should equal what the customer paid, and only
+   when it does — and the platform has published both — are commission and
+   estimated income printed. The arithmetic is the test, not the columns'
+   presence (packing_fee and shipping_fee default to 0 whether or not they were
+   captured). Meituan and Eleme only; every other channel has no commission. */
+function chanMoneyOf(o){
+  const c=String((o&&o.channel)||'').toLowerCase();
+  if(c!=='meituan'&&c!=='eleme') return null;
+  const items=Number(o.subtotal)||0, packaging=Number(o.packing_fee)||0,
+        delivery=Number(o.shipping_fee)||0, discount=Number(o.channel_discount)||0,
+        total=Number(o.total)||0;
+  const hasCommission=o.channel_commission!=null, hasSettle=o.channel_settle_amount!=null;
+  const expected=Math.round((items+packaging+delivery-discount)*100)/100;
+  const reconciled=Math.abs(expected-total)<0.01;
+  return {items, packaging, delivery, discount,
+    commission:hasCommission?Number(o.channel_commission):null,
+    settle:hasSettle?Number(o.channel_settle_amount):null,
+    expected, gap:Math.round((expected-total)*100)/100, total, reconciled,
+    awaiting:reconciled&&!(hasCommission&&hasSettle),
+    complete:reconciled&&hasCommission&&hasSettle};
 }
 function mapDetail(o){
   const base=mapOrderRow(o);
@@ -33107,6 +34174,38 @@ function mapDetail(o){
       return it?[it.name_en||it.name_cn||('#'+pid), it.name_cn||it.name_en||('#'+pid)]:[('#'+pid),('#'+pid)]; }); })();
   base.waitingOn=orderWaitingOn(o);
   base.routedByArea=o.routed_by_distance===0;
+  /* §325 O1 — THE ORDER FACTS THE DESKTOP DRAWER CARRIES AND THE PHONE DID NOT.
+     Every one is already in the GET /orders/:id payload; each is carried raw
+     (a pair, a stamp, a code) and worded at render time, for the language
+     reason ITEM_TUPLE gives. */
+  // The guest pay link (04-orders.js orderPayLinkTile): only while unpaid and
+  // only when there is something to pay — the server's own two conditions.
+  base.payPath=(o.status==='pending_payment'&&o.pay_token&&Number(o.total)>0)?('/pay/'+o.pay_token):null;
+  // The customer moved the ship-to after placing it (addressChangedNote). Loud
+  // until it has gone out, a quiet trace after.
+  base.addrMoved=o.address_changed_at?{at:o.address_changed_at, gone:!!o.dispatched_at}:null;
+  // Sold as a pre-order (preorderSoldNote): the lines the checkout notice named.
+  base.preorderSold=(()=>{
+    let pids=[]; try{ pids=JSON.parse(o.preorder_pids||'[]')||[]; }catch(e){ pids=[]; }
+    if(!Array.isArray(pids)||!pids.length) return null;
+    const by=new Map((o.items||[]).map(it=>[it.product_id,it]));
+    return pids.map(pid=>{ const it=by.get(pid);
+      return it?[it.name_en||it.name_cn||('#'+pid), it.name_cn||it.name_en||('#'+pid)]:[('#'+pid),('#'+pid)]; }); })();
+  // The shop this address would have gone to had nothing been closed
+  // (movedFromNote). Its presence IS the fact.
+  base.movedFrom=String(o.moved_from_store||'').trim()||null;
+  // Was the customer told (wasCustomerToldBlock): the latest attempt per kind.
+  base.told=(Array.isArray(o.notifications)&&o.notifications.length)
+    ?o.notifications.map(r=>({kind:r.kind||'', channel:r.channel||'', at:r.created_at||null, ok:!!r.ok, error:r.error||null}))
+    :null;
+  // A Meituan / Eleme order's settlement (renderChannelMoneyPanel).
+  base.settle=chanMoneyOf(o);
+  // The stock holds, drawn only when one is abnormal — decided at render time,
+  // because "stuck" is a pending hold past its expiry and the clock moves.
+  base.resv=Array.isArray(o.reservations)&&o.reservations.length?o.reservations:null;
+  // Where a same-city rider collects, and any parked state (renderQyShipFrom).
+  base.shipFrom=o.qingyun_ship_from||null;
+  base.storeCode=o.store_code||null;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
   }
@@ -33836,6 +34935,7 @@ async function loadLive(){
      opened rather than after a tap. */
   refreshPushState();
   loadOps();
+  loadPresence().then(()=>render());
   /* From here the board keeps itself current — the live stream plus the 60s
      backstop. Wired here rather than at the bottom of the file because this is
      the first point at which the caps are known AND the flatNav gate above has

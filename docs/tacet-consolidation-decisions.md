@@ -22884,3 +22884,254 @@ video, button links and the block pickers are the next two steps, not this one.
    category, coupon, poll, store and review pickers, sizes and behaviour,
    onboarding settings (M3). The "Images, colours & advanced options are tuned
    on desktop" note stays until those land.
+
+## §328 — THE PHONE'S ORDER SHEET SHOWS WHAT THE DESKTOP DRAWER KNOWS: PAY LINK, MOVED ADDRESS, WHO WAS TOLD, REFUND HISTORY, SETTLEMENT, STUCK HOLDS, WHERE THE RIDER COLLECTS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O1 of the Orders lane. The desktop order drawer (`04-orders.js`) carries
+nine facts the phone's order sheet never drew, every one of them already in
+the `GET /orders/:id` (or list) payload the phone fetches. They are on the
+phone now, read-only. The writes that sit beside several of them on the
+desktop — try telling the customer again, Retry push, Change where it ships
+from, Remove the old job, pick a place, reschedule — are later steps of this
+lane (O7, O8), not this one, and no sentence on the phone points at a button
+it does not draw.
+
+1. **The guest pay link.** An unpaid order with something to pay shows
+   *Payment link* inside its Payment card: Copy (the whole
+   `origin/pay/<token>` URL), *Open pay page*, and the desktop's instruction.
+   Same two conditions as the desktop and the server: `pending_payment`, and a
+   total above zero.
+2. **The customer moved the ship-to.** Before dispatch, an amber band under
+   the address with the desktop's instruction to check the label; after, a
+   quiet line with the date. Delivery orders only, as on the desktop.
+3. **Pre-order and rerouted.** The Fulfilled-by card lists the lines the
+   order was sold as a pre-order on (*Pre-order*), and names the shop it would
+   have gone to had it not been closed (*Rerouted, shop was closed · BY*).
+4. **Was the customer told.** A card with the latest attempt per kind of
+   message: what it was about, by which channel, when, and — when it did not
+   arrive — why, in the desktop's words. No card when nothing was attempted,
+   because that is a different fact from "tried and failed". Try again is O7.
+5. **Refund history.** The refund panel has *History*, which unfolds the
+   refund's steps inside the panel from `GET /orders/:id/refund/events`: the
+   step (in the panel's own words, so the heading and the history never name a
+   state two ways), amount, when, by whom, the note, the lines, the reason and
+   the payout method and reference. Loading, empty and failed states; a
+   second tap folds it; a slow answer is never painted into another order.
+   Other meta keys (`is_full`, `split`, `direct`…) are not printed: the desktop
+   dumps them as raw `key: value` text, which on a phone is noise, and the
+   figures they carry are already in the panel.
+6. **A Meituan or Eleme order's settlement** (`renderChannelMoneyPanel`, its
+   arithmetic ported line for line). The rows the customer paid are drawn for
+   everyone who can open the order, as on the desktop. **The commission and the
+   estimated income — the shop's takings — are withheld on the three boards
+   that never see the shop's money** (`recapNoMoney`: warehouse, dispatch,
+   customer service), with the "not published yet" note that is about them.
+   The reconcile warning ("… unaccounted for. Check the channel before
+   refunding") stays on every board: customer service is who refunds.
+7. **Stock holds that went wrong.** The reservation table appears only when a
+   hold is expired, released, or pending past its expiry, then lists every
+   hold on the order with the server's status word and its three times. The
+   expiry is read through the phone's zone-correct parser; the desktop's
+   `new Date()` reads that zoneless UTC stamp as local time (noted, not fixed —
+   outside this lane).
+8. **A partial refund on the list row.** *Partial refund ¥X* on any row whose
+   refund is paid while the order is not Refunded — the cumulative amount paid
+   back, falling back to approved, then requested, as the desktop's
+   `refundBadge` does. Worded at render time.
+9. **Where a same-city rider collects, in words.** For orders we created in
+   Qingyun: *Ships from* the store, the note when that is not the order's own
+   store, and the warning when an old copy was left at another store. Before a
+   copy exists: refused (with the server's reason), held on a map outage (since
+   when), booked and waiting on staff, or queued (for how long). Parked for a
+   point: *Confirm delivery point*, why, the grade in words, and the deadline
+   when it is tomorrow — and, since §97 keeps the point picker on the desktop,
+   the one composed line *The point is placed on the desktop map.* Parked on a
+   choice: the candidate places listed with address and distance, not yet
+   pickable (O8). A passed date is its own state.
+10. **Capabilities.** Everything here is a read. No new control writes; the
+    one new request is the refund-events GET, which no capability gates and
+    which the desktop offers to everyone who can open the order.
+11. **Tests.** `scripts/test_mobile_orders_facts.js` (fast shard, no browser)
+    runs the sliced code: each fact present and absent, the pay-link copy,
+    the history request path, loading / empty / failed / fold / slow-answer,
+    the settlement on a no-money board, both languages, and every copied
+    string checked live in `04-orders.js`.
+
+## §329 — THE PRODUCTS, STOCK ACTIVITY AND WASTE LISTS NARROW AND EXPORT AS THE DESKTOP'S DO
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's three stock lists gained the desktop's remaining ways to narrow
+and to take a list away. The Products catalogue now has a subcategory row, a
+store switch that makes Low, Out and each card's stock answer for one store,
+the *Going nowhere* and *On promotion* chips, and *Export CSV*. Stock activity
+has a Custom window, a search, and *Export CSV* of the view on screen. Waste
+has a Custom window. Nothing on the server changed: every read is an endpoint
+the desktop already calls, with the desktop's parameters. The desktop's
+*Count sheet* print is not in this step (it was not in PD1's scope) and is
+still a gap.
+
+1. **Subcategories follow the desktop's picker (`paFillSubFilter`).** The row
+   appears only once a category is picked and only when its products carry a
+   subcategory. Order and Chinese names come from the category tree (read the
+   first time a category is picked, as the desktop reads it); a subcategory a
+   product carries that the tree no longer names comes after, A–Z. Picking
+   another category, or *Clear the filters*, resets it.
+2. **The store switch is a view, not a filter.** With a store picked, each
+   product's stock is that store's shelf, judged against the product's own
+   low line, then the store's, then the shop's (`paLowThreshold`'s order); an
+   assembled bundle counts the whole sets its parts make at that store
+   (`_paBundleStock`). Every product stays listed, and the phone's product
+   lookup (`DB.products`) is never rewritten — a store pick is computed over
+   it. Stock figures come from `GET /inventory/grid`, the desktop's read.
+3. **The switch is offered only where it can answer**: two stores or more, a
+   shop that keeps its own stock (not an upstream-catalogue tenant, which the
+   desktop also exempts), and a grid read that came back whole. The phone
+   asks for up to the endpoint's 5,000-row ceiling rather than the desktop's
+   1,000, because the phone holds the whole catalogue and the desktop only its
+   first 500; if even that comes back `truncated`, there is no switch rather
+   than a store view calling every product past the cut sold out. A failed
+   read is the desktop's answer too: the shop-wide figures.
+4. **Going nowhere and On promotion are two more status chips**, each the
+   server's count and the server's own id set from `/products/highlights`, so
+   the number and the list agree. Each shows only while its count is above
+   zero, as the desktop tiles hide at zero. If one disappears while lit, its
+   filter goes with it — a list must not stay narrowed by a chip nobody can
+   see.
+5. **Both Export CSV buttons are gated on the export keys the registry
+   declares — `products:export` and `activity:export`** — which the desktop
+   does not enforce anywhere (its two buttons carry no `data-cap`). The
+   presets say what those keys are for: the Stockroom preset takes activity
+   "view + export", the Shop floor preset takes view alone. Nobody loses a
+   phone control by this; there was no phone export before. The desktop's
+   missing gate is reported, not fixed here. The catalogue file is always the
+   whole catalogue (`paExportCsv`'s rule); the ledger file is exactly the view
+   on screen — window, channel and search — as the desktop's caption promises.
+6. **The ledger's search runs on Enter, not per keystroke** — it is the
+   server's search (`q`: SKU, either name, or the note, which holds the order
+   number), and Customers' rule for a server search keeps the keyboard up.
+   The box stays on screen while its answer loads and if it fails.
+7. **Custom windows use the ask-sheet Finance and Trend already use**: two
+   dates filled with the window on screen, a missing day or an inverted pair
+   refused in the sheet, and a pick that equals a preset lights the preset.
+   The chosen days are shown under the switch. A one-day Custom window shows
+   times alone, as a one-day preset does (`actFmtClock` follows the window,
+   not the chip).
+8. **Two phone rules written in earlier comments are retired**: "CSV export
+   stays on the desktop" (Stock activity) and "No free date range" (Waste).
+   §97 had already overruled both.
+9. **Not done, deliberately:** the store switch does not follow the operator's
+   store lock, because the desktop's does not; a store-locked operator can
+   still read another store's shelf, as on the desktop. Waste void is PD3.
+
+## §330 — THE PHONE READS WHAT THE SHOP CHANGED, WHAT IT SENT, WHO IS BROWSING, WHAT IS PARKED, AND ELEME
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step X1 of the Settings / Channels / Dashboard / Billing lane: the read-only
+half of the lane, before any of its writes. Five things the desktop shows and
+the phone did not are on the phone now, each asking the desktop's own endpoint
+with the desktop's own query. Nothing in this step writes. Every write that sits
+beside these reads on the desktop — the Eleme switch, linking a shop, Sign in,
+Sync from, Push all stock, matching, confirming a delivery point, closing a
+parcel's recovery case — belongs to a later step (X8, X9, X12, and the Orders
+lane), and no sentence on the phone points at a button it does not draw.
+
+1. **Change history (Settings).** Who changed what, from `GET /activity-log`:
+   who, what they did (the desktop's action words, key for key), the record,
+   the details (tap a row to read them in full), and when. The desktop's four
+   filters — person, record type, from/to dates — and its search, all on the
+   request; *Clear filters*; *Show more* in pages of a hundred; and *Export CSV*,
+   which downloads the desktop's own file with the same filters. Two empty
+   states (nothing yet / nothing matches, with *Clear them*), and a failed read
+   that says so and stays, with *Try again*.
+2. **What was sent (Settings).** Every message the system tried to deliver,
+   from `GET /notification-log`: what it was about, the subject, how it went
+   (the desktop's words), to whom (*your team* when nobody in particular), when,
+   and whether it landed — with the reach of a broadcast (*3 of 5 reached · 1
+   muted · 1 device gone*) or the reason it did not. The desktop's filters, its
+   search, and its *Did not arrive (N)* toggle, drawn only when something failed.
+   The reason reads as the desktop's error dictionary's last resort does — the
+   code in words — because the phone does not carry that dictionary.
+3. **Who opens them.** Neither is gated on the desktop beyond reaching
+   Settings, so on the phone both carry exactly the Settings screen's own key
+   set and live inside Settings, under Team. Nobody who opens Settings today
+   loses anything; nobody who cannot gains anything. Both re-read on every
+   entry.
+4. **Browsing now.** The desktop's quiet line in the foot of its Customers
+   card — a Sage dot, the count, *browsing now*, or *no one browsing right now*
+   — is in the foot of the phone's twin of that card, from `GET
+   /dashboard/presence`, behind that card's gates. It rides Home's existing 60s
+   refresh rather than the desktop's 15s poll: one clock for Home, not a second
+   timer for one number. A missed poll keeps the last count.
+5. **Two Home rows.** *Orders waiting for a delivery point* (brick — a delivery
+   nobody is coming for) and *Parcels to recover* (amber, as on the desktop),
+   both from the `/dashboard/ops` snapshot Home already reads, both naming their
+   order numbers, both sorted by how long the oldest has waited. One opens that
+   order (Ash's rule for *Delivery needs a call*); more open a list — the parked
+   orders in a list of their own, each row opening its order, with the desktop's
+   when-it-runs-out-of-road column; the parcels in the Orders filter the desktop
+   uses (`recover_parcel`), with a chip that names it and clears it. Both need
+   the Orders tab. The point itself is picked on a map, one of §97's three
+   exceptions, so the parked list says where (the sentence Orders step O1 wrote
+   for the same fact, reused rather than written twice).
+6. **Eleme.** A screen of its own beside the Meituan and gzgrocery ones, behind
+   the desktop tab's `eleme:view`, reached from its card and sheet on Sales: the
+   switch's state, the stock waiting to go (in total and per store), one line
+   per store in the desktop's words (why it cannot push, or what is waiting, and
+   how fresh its catalogue is), each store's catalogue as last read (tap the
+   store; search filters what was read), and the Activity view's two logs.
+   Deliberately NOT here: the Synced and Need-attention tiles, which are counted
+   by the matching classifier and arrive with matching (X8) — a count without
+   the list it counts is a number nobody can act on.
+7. **Nothing that already worked was re-gated.** The Meituan and gzgrocery
+   screens still carry no key (they had none); only the new Eleme screen does.
+
+## §331 — A PERMISSION REFUSAL ON THE PHONE IS SAID IN WORDS, NOT ANSWERED WITH THE LOGIN PAGE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Live defect 1 of the whole-app survey (`docs/tacet-phone-parity-rest-of-app.md`). The phone's three
+request helpers in `public/m.html` — `api()`, `apiRaw()` and `apiWrite()` — and its two photo uploads
+sent every 403 to `/backend/login` exactly as they sent a 401. With permissions switched on, one refused
+tap threw a shift worker out of the app, and whatever they had typed went with it. Now only a 401 (the
+session is gone) leaves for the login page; a 403 is an error the screen shows. Phone only: no server
+change, no new screen.
+
+1. **A 401 still goes to the login page, from every helper and both uploads.** The server answers every
+   "who are you?" with 401 on purpose (`requireRetailAdmin`, `lib/require-cap.js`), so that is the one
+   status that means the session is lost.
+2. **A 403 throws the refusal into the caller's own error path** — the same path a 500 already took, so
+   every busy flag comes back and the refusal renders where that caller renders its failures (the order
+   sheet, the product sheet, the review row, the ask sheet, the card). The error keeps the server's
+   `code` and `body` as `apiWrite` always did, and carries the sentence as its message.
+3. **The words are the desktop's.** `forbidden_capability`, `forbidden_store` and `store_not_assigned`
+   are `01-core.js` TD_ERR's own pairs, copied whole. A 403 that brings its own bilingual sentence
+   ("… · …", the backend team and role routes' shape) keeps it, one language shown. A 403 with nothing
+   readable gets `lib/require-cap.js`'s own pair, *You don’t have permission for this · 你没有此操作的权限*.
+   Nothing composed.
+4. **Deliberately not the new-order form's sentence for every refusal.** The brief pointed at the
+   phone's existing `onwErrText` sentence for `forbidden_capability`; that sentence is *"Your account
+   cannot create customers. Turn off 'Also save as a customer'…"*, which is true only for the handler's
+   refusal with `need: 'customers:edit'`. It now reaches the operator for exactly that case (it was
+   unreachable while a 403 logged them out). Every other refusal on that form, and everywhere else, is
+   the desktop's general sentence — telling somebody without `orders:edit` to untick the customer box
+   would send them to change something that fixes nothing.
+5. **"Try again" is not the answer to a refusal.** Thirty-three write catches ended in a fixed "That did
+   not save / send / go through — try again", and seven error-text helpers (`orderErrorText`,
+   `csErrText`, `recvErrText`, `pwErrFor`, `pkErrFor`, `pinvErrFor`, `psupErrMsg`) plus `custWrite`'s
+   chain fell back to it too. Each now says the refusal first and keeps its own words for every other
+   failure. Stored errors use `E()`, so they follow a language switch. Catches that already showed the
+   server's message (`finTxWords`, `acctWords`, autosave, `rcpActFail`, the stock rows) show the
+   refusal as they are. Reads that fail on a refusal (a store outside the operator's scope) show their
+   existing "Could not load" line — surfaced, and not reworded here.
+6. **The media upload stops at the first refusal** — the next photo would be refused the same way — and
+   says how many landed before it, then why. The category banner upload says the refusal on its card.
+7. **Comments that justified a gate by "a 403 logs you out"** are corrected in place (channel sync,
+   the customer header and action row). The gates stay: a button drawn for somebody the server refuses
+   is still a dead end, which is step S1b.
+8. **Tests.** `scripts/test_mobile_refusal_not_logout.js` (fast shard, 24 checks) runs the helpers and
+   three callers with a fake fetch: 401 still redirects from all three helpers and the upload; 403 does
+   not, and throws the code, body and sentence; the words in both languages against the desktop's file
+   and `lib/require-cap.js`; the order sheet, a review switch and the media upload showing the refusal
+   with their busy flags reset and the request as sent; and a guard that no write catch answers a
+   refusal with a "did not save" sentence. `scripts/test_mobile_channel_sync_repair.js` pinned the old
+   rule ("apiWrite sends 403 to the login page"); that check now pins the new one.
