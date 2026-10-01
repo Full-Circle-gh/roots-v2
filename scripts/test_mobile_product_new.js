@@ -357,14 +357,24 @@ it('the desktop: Add manually opens a blank editor; the hint and the hold are th
   assert.ok(PRODUCTS_JS.includes("'New product · 新增产品'"));
   assert.ok(PRODUCTS_JS.includes("if (skuEl && !skuEl.value.trim() && j.data.sku) skuEl.value = j.data.sku;"));
 });
-it('the server’s create stores every key the phone trusts it with, and none of the ones the phone sends after', () => {
+it('the server’s create stores every key the phone trusts it with, and (since §325 S2i) the ones the phone sends after too', () => {
   const at = RETAIL.indexOf("router.post('/api/retail-admin/products', ");
   const end = RETAIL.indexOf('router.get(', at);
   const create = RETAIL.slice(at, end);
   const keys = vm.runInNewContext(liftConst('PE_CREATE_KEYS').replace(/^const PE_CREATE_KEYS\s*=/, '(') .replace(/;$/, ')'));
   keys.forEach((k) => assert.ok(new RegExp('\\bb\\.' + k + '\\b').test(create), 'POST reads b.' + k));
   const def = vm.runInNewContext(liftConst('PE_NEW_DEFAULT').replace(/^const PE_NEW_DEFAULT\s*=/, '(').replace(/;$/, ')'));
-  Object.keys(def).forEach((k) => assert.ok(!new RegExp('\\bb\\.' + k + '\\b').test(create), 'POST ignores b.' + k));
+  /* S2i (§376) taught the create to store cost, its incomplete tag, the
+     low-stock line and the batch flag. The phone's follow-up PATCH of those
+     keys is now redundant but harmless; this pins that the create reads them,
+     so the follow-up can be dropped safely later. */
+  const S2I = ['unit_cost', 'cost_incomplete', 'low_stock_threshold', 'is_batch_made'];
+  Object.keys(def).forEach((k) => {
+    const reads = new RegExp('\\bb\\.' + k + '\\b').test(create);
+    if (S2I.includes(k)) assert.ok(reads, 'POST now reads b.' + k);
+    else assert.ok(!reads, 'POST still ignores b.' + k + ', so only the follow-up PATCH carries it');
+  });
+  S2I.forEach((k) => assert.ok(k in def, 'the follow-up still covers ' + k));
   assert.ok(/is_published, is_active, created_at/.test(create) && create.includes('b.is_published ? 1 : 0'), 'hidden unless told otherwise');
 });
 
