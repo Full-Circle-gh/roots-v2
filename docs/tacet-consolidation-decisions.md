@@ -26232,3 +26232,48 @@ desktop's `optBody` shape, and Undo puts them back.
    catalogue the phone already holds, covers every product except this one,
    and shows each product's size and SKU so that two jars of the same paste
    can be told apart. Up and down buttons replace the desktop's drag-to-reorder.
+
+## §384 — A NEW PRODUCT IS MADE FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The Products tab gained **Add product** on its catalogue view. It is the
+desktop's *Add product ▾ → Add manually*: the Details screen opens empty, with
+the same fields and the same autosave. The first save that has a name creates
+the product with `POST /products`. If no SKU was typed, the server makes up a
+DRAFT-… code, and the box shows it. From then on the screen belongs to that
+product exactly as if it had been opened from the list. Every later edit is a
+`PATCH`, and the sizes, bundles and customer-choices cards open.
+
+1. **Before the first save, the screen says what starts it.** The foot reads
+   *Add a name & SKU to start autosaving*. A SKU on its own is held until there
+   is a name. The cards that need a product (sizes, the two bundles and
+   customer choices) show the desktop's own line saying so. Photos work at
+   once and are sent with the create.
+2. **No field is lost in the create.** `POST /products` stores only part of
+   the screen: names, SKU, size, sections, badge, price and was-price,
+   shipping, descriptions, photos, Free of, notes, facts, and two flags. The
+   desktop gets the rest (cost, the low-stock line, made in batches) onto the
+   product with its next whole-form save. The phone sends only what changed,
+   so it sends those straight after the create, in one `PATCH` of the new
+   product. It does this only for fields that differ from the new row's empty
+   defaults. A test reads the server's create handler, so the phone's list of
+   what the create stores cannot drift from what it really stores.
+3. **A new product is hidden until someone turns it on**, as on the desktop.
+   It needs `products:create` to be made, and `products:edit` for every save
+   after the first. It is not offered where the catalogue is kept upstream.
+4. **After the create, the product is read again before the choices card
+   offers any control.** If that read fails, the card says it could not
+   load. It never says "none" (the PD11 rule). Undo is not offered for a
+   product made in this visit, because its starting point is a blank form.
+   Back leads to the new product's sheet. If a name was typed but not yet
+   saved, the create goes out as the screen closes, and the list still picks
+   up the new product.
+5. **Two fixes to the Details screen's saving came with this step**, because
+   the new-product path exposed them:
+   - The autosave now reads from the screen visit it belongs to. Before, a
+     save that finished after Back read from a screen that had already been
+     let go, and threw an error.
+   - After a save, what the phone believes the server holds is merged with
+     the payload, not replaced by it. Before, the customer choices read while
+     a save was in flight could be dropped from that record, and the next
+     edit would send them again for no reason.
