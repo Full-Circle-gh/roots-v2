@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.250 · 2026-09-30 · §351 DUPLICATE AND RESTORE ON THE PHONE — TWO PROGRESS WORDS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Duplicating a product, and restoring a version, on the phone (§351)*.
+
 **v1.249 · 2026-09-30 · §350 A PRODUCT'S PHOTOS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's photos on the phone (§350)*.
 
 **v1.248 · 2026-09-30 · §349 A PRODUCT'S DETAILS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (THE COST TAG'S CHINESE), THE REST COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's details on the phone (§349)*.
@@ -10930,3 +10932,26 @@ Content → Media · 图库为空 — 请在「内容 → 媒体」中上传图�
 The reorder buttons reuse the live `Move up · 上移` / `Move down · 下移` (the
 promo-card editor's). `Close · 关闭`, `Try again · 重试` and `Loading… · 加载中…`
 are the phone's own.
+
+## Duplicating a product, and restoring a version, on the phone (§351)
+
+Operator register only (Rule 1): the phone's product sheet and its Version
+history list (`public/m.html`). Copied whole from the desktop product editor
+(`public/retail-admin/09-products.js`): `Restore · 还原`, `Restore this
+version? · 还原此版本?` and its sentence, `Restored to the chosen version. ·
+已还原到所选版本。`, `Restore failed: · 还原失败:`, `Roll this product back to
+any saved version. Stock counts are never changed. ·
+将此产品还原到任意已保存的版本。库存数量不会被更改。`, `Duplicate · 复制`,
+`Duplicated — set the new SKU / price / size, then publish. · 已复制 —
+请设置新货号 / 价格 / 规格后再上架。`, `Duplicate failed: · 复制失败:`.
+
+**Composed by Claude, 2026-10-01.** The desktop shows no progress word on
+either button:
+
+| shipped | built from |
+|---|---|
+| `Restoring… · 还原中…` | `Restore · 还原` + `中…`, the shape of the live `保存中…` / `添加中…` |
+| `Duplicating… · 复制中…` | `Duplicate · 复制` + `中…`, the same shape |
+
+**Live candidates rejected:** `Restoring… · 恢复中…` (live on the desktop
+elsewhere, but it says 恢复 under a button that says 还原).
