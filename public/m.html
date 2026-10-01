@@ -1476,6 +1476,20 @@ const state = {
   nlg:{rows:null, total:0, failed:0, channels:[], kinds:[], channel:'', kind:'', from:'', to:'', q:'', onlyFailed:false, err:null, tried:false, more:false, seq:0, open:null},
   elm:{cfg:null, st:null, err:null, tried:false, seq:0, cat:{}, catStore:null, catQ:''},
   presence:null,
+  /* §325 X2 — the Operations screen's writes: which save is in flight and its
+     refusal, the locate-everything run, and the recently-deleted list. */
+  /* §325 X3 — the count sheet's print view: false, true, or 'failed'. */
+  countPrint:false,
+  /* §325 X5 — the Shop tab and Customer service cards: whether each has been
+     read this visit, its load error, its draft, and the QR upload. */
+  cfgc:{tried:{shop:false, cs:false}, err:{shop:null, cs:null}, shop:null, cs:null, qrBusy:false, qrErr:null},
+  /* §325 X4 — the Brand screen (the logo and name, a draft of the name being
+     typed, which save is in flight and each half's refusal) and the brand
+     studio (its form, the job being polled, the result and its Apply). */
+  brand:{data:null, tried:false, readErr:null, busy:null, name:'', nameTouched:false, nameErr:null, logoErr:null},
+  bst:{about:'', audience:'mixed', language:'bilingual', words:[], cust:[], colour:'', type:'', busy:false, err:null, seq:0,
+       result:null, applyBusy:false, applyErr:null, applyMsg:null},
+  opsx:{busy:null, err:null, geoBusy:false, geoErr:null, bin:null, binDays:60, binTried:false, binErr:null, binBusy:null, binRowErr:{}},
   /* The Account screen's own reads and writes (screenAccount): the recovery
      contacts and two-step switches, the signed-in devices, the per-person
      alert switches, and which write is in flight. One key, so the screen's
@@ -1604,6 +1618,16 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      now, and `rows`/`st` back to null draws Loading rather than the last visit. */
   if(route==='changes'||route==='sent'){ const c=route==='sent'?state.nlg:state.chl; c.tried=false; c.rows=null; c.err=null; c.open=null; }
   if(route==='mirror_eleme'){ const e=state.elm; e.tried=false; e.st=null; e.cfg=null; e.err=null; }
+  /* §325 X2 — Operations re-reads what was deleted on every entry (something
+     may have been deleted on another screen a minute ago), and a refusal from
+     the last visit does not greet the next one. */
+  /* §325 X4 — Brand re-reads what is stored on every entry; a half-typed name
+     from the last visit is not carried into this one. */
+  /* §325 X5 — each card is read fresh on entry: the desktop may have saved it. */
+  if(route==='shopdisplay'||route==='custservice'){ const c=state.cfgc, k=route==='shopdisplay'?'shop':'cs';
+    c.tried[k]=false; c[k]=null; c.err[k]=null; if(k==='cs'){ c.qrErr=null; c.qrBusy=false; } }
+  if(route==='brand'){ const b=state.brand; b.tried=false; b.nameTouched=false; b.nameErr=null; b.logoErr=null; b.readErr=null; }
+  if(route==='operations'){ const x=state.opsx; x.binTried=false; x.binErr=null; x.binRowErr={}; x.err=null; x.geoErr=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
@@ -1635,6 +1659,7 @@ function pop(){
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
+  if(top==='shopdisplay'||top==='custservice') cfgFlushAll();   // §325 X5 — a pending edit goes on the way out
   forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone);
   if(top==='productedit') pePopped(gone);   // §325 PD5 — its edits go, and the sheet comes back
   render(); }
@@ -7928,9 +7953,13 @@ function screenOperations(){
         {label:T('Maps provider','地图服务'),value: !g?T('Loading…','加载中…'):(noKey?T('no key','未配置密钥'):provider)},
         {label:T('Stores located','门店已定位'),value: st?(st.geocoded+'/'+st.total):T('Loading…','加载中…')},
         {label:T('Customer addresses located','顾客地址已定位'),value: addr?(addr.geocoded+'/'+addr.total):T('Loading…','加载中…')},
-      ])}</div>
+      ])}${opsxGeoAction()}</div>
+    ${opsxLowCard()}
+    ${opsxSupportCard()}
+    ${ppgmCard()}
     ${stores&&stores.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>
       <div class="list">${stores.map(opsStoreRow).join('')}</div></div>`:''}
+    ${opsxBinCard()}
     ${/* §325 — "staff" came out: the phone's Team screen invites, edits and
           sets permissions (§300), so that clause was no longer true. The rest
           still is. The live pair with one item dropped, in both halves. */''}
@@ -15201,7 +15230,7 @@ function screenProductCatalogue(){
         <div style="flex:1;min-width:0">${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
           oninput="APP.cmd('prodSearch',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${exp}</div>
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${exp}${countButton()}</div>
       <div id="mProdBody">${prodBodyHtml()}</div>
     </div>`;
 }
@@ -25699,6 +25728,18 @@ const FEATURE_CATALOG=[
    offEn:'Off: no bought-counts, recent buyers or SOLD badge.', offZh:'关闭后：不显示购买人数、最近购买与“已售”标签。'},
   {key:'faq',         en:'Help / FAQ',          zh:'帮助 / 常见问题',
    offEn:'Off: the help screen is hidden in the mini app.', offZh:'关闭后：小程序内隐藏帮助页面。'},
+  /* §325 X2 — the three the desktop hosts on Settings → Operations
+     (05-marketing.js FEATURE_HOMES), with its own off-state sentences. The
+     server gates all three on the Settings screen's keys (configKeyCap). */
+  {key:'production',  en:'Production',          zh:'生产',
+   offEn:'Off. The Materials and Recipes tabs are hidden. Nothing is deleted — everything is still there when you turn it back on.',
+   offZh:'已关闭:“物料”与“食谱”标签均已隐藏。数据不会删除,重新开启后仍在。'},
+  {key:'waste',       en:'Waste',               zh:'损耗',
+   offEn:'Off. The Waste tab is hidden. Nothing already recorded is deleted, and stock already moved stays moved.',
+   offZh:'已关闭:“损耗”标签已隐藏。已登记的记录不会删除,已变动的库存也不会恢复。'},
+  {key:'lowStockHints', en:'Running low here',  zh:'此门店库存偏低',
+   offEn:'Off. Purchase orders suggest nothing — search for what you want to buy. Nothing else on the order changes.',
+   offZh:'已关闭:采购单不再推荐商品,自行搜索添加即可。采购单的其余部分不受影响。'},
 ];
 /* Entitled, or not on the list. A missing key means entitled — that is the
    server's own rule (lib/features.js entitlements()). */
@@ -26348,6 +26389,1016 @@ reg('elmCat', id=>{
 reg('elmCatQ', v=>{ state.elm.catQ=String(v||''); searchClearShow('mElmCatClr',!!state.elm.catQ); x1Paint('mElmCatBody',elmCatBody); });
 reg('elmCatRetry', ()=>{ const code=state.elm.catStore; if(!code) return; elmCatLoad(code); render(); });
 /* §325 X1 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X2 — WHAT THE DESKTOP'S SETTINGS → OPERATIONS TURNS ON AND OFF
+   --------------------------------------------------------------------------
+   The writes on the desktop's Operations panel that the phone did not have,
+   drawn on the phone's Operations screen (the three feature switches join the
+   Features group in Settings, beside the six already there). Every write is the
+   desktop's request, byte for byte:
+
+     Low-stock default    PUT /config {'inventory.lowStockThreshold': n}
+                          (09-products.js paSaveLowStockDefault)
+     Daily low-stock list PUT /config {'inventory.lowStockDigest': {enabled,hour}}
+                          (09-products.js saveLowStockDigest)
+     Support button       PUT /config {'support.hidden': bool} (05-marketing.js)
+     Locate everything    POST /inventory/geocode-backfill, behind the desktop's
+                          own confirm (02-settings-ops.js _geocodeBackfill)
+     Put it back          POST /deleted/:id/restore, unconfirmed as on the
+                          desktop — it is the reversible direction (recycleRestore)
+
+   WHO. Everything here lives inside Settings, so the controls are drawn for
+   exactly the Settings screen's own keys (ROUTE_CAP.settings) — the set the
+   server's per-key PUT /config gate (§325, configKeyCap) already admits for
+   `inventory` and leaves open for `support.hidden`.
+
+   PUT IT BACK IS THE EXCEPTION, and it is a decision rather than a copy. The
+   desktop draws that button for `settings:edit`, a key lib/capabilities.js does
+   not define, so for every account whose permissions resolve it is drawn for
+   nobody. The phone draws it for whoever may make the deletion it undoes: a
+   delivery zone for delivery:edit, a ledger row for finance:record (money,
+   fails closed), a coupon for coupons:edit or coupons:delete, a draft purchase
+   order for purchasing:edit. Nobody loses a button they had — nobody had one.
+
+   Three states for every write: the control says what it is doing, a refusal
+   stays where it was caused, a toast only confirms.
+   ══════════════════════════════════════════════════════════════════════════ */
+const opsxCan=()=>canRoute('settings');
+/* `send` is the write itself, written out at each caller as a literal PUT
+   /config with its key in the body, so every family the phone writes can be
+   read off this file (§325 S2a pins them in scripts/test_settings_write_gates.js). */
+function opsxCfgSet(key,send,apply,okMsg){
+  const x=state.opsx; if(x.busy||!opsxCan()) return Promise.resolve();
+  x.busy=key; x.err=null; render();
+  return send().then(()=>{
+    state.cfg=state.cfg||{}; apply(state.cfg);
+    x.busy=null; render(); showToast(okMsg);
+  }).catch(e=>{
+    x.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    x.err={key, msg:e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。')}; render();
+  });
+}
+const opsxInv=(c,patch)=>{ c.inventory=Object.assign({},c.inventory||{},patch); };
+/* The tenant default, read the way the desktop hydrates it (05-marketing.js):
+   a whole number of 0 or more, else 5. */
+function opsxLowThreshold(){
+  const n=parseInt(cfgGet('inventory.lowStockThreshold',''),10);
+  return Number.isFinite(n)&&n>=0?n:5;
+}
+/* The digest is ON unless the account turned it off, at 09:00 unless it chose
+   an hour — paSyncLowStockDigestUi's reading, so the switch shows what the
+   sweeper will actually do. */
+function opsxDigest(){
+  const d=cfgGet('inventory.lowStockDigest',null);
+  return {enabled:(d&&d.enabled!==undefined)?!!d.enabled:true,
+          hour:(d&&Number.isInteger(d.hour)&&d.hour>=0&&d.hour<=23)?d.hour:9};
+}
+reg('lowStockSet', v=>{
+  const n=Math.max(0,parseInt(v,10)||0);
+  opsxCfgSet('low',()=>apiWrite('/config',{'inventory.lowStockThreshold':n},'PUT'),c=>opsxInv(c,{lowStockThreshold:n}),T('Saved','已保存'));
+});
+/* One write for the pair, whichever of its two controls moved. */
+function opsxDigestSave(v,okMsg){
+  return opsxCfgSet('digest',()=>apiWrite('/config',{'inventory.lowStockDigest':v},'PUT'),c=>opsxInv(c,{lowStockDigest:v}),okMsg);
+}
+reg('lowDigestToggle', ()=>{
+  const d=opsxDigest(), v={enabled:!d.enabled,hour:d.hour};
+  opsxDigestSave(v,v.enabled?T('Turned on','已开启'):T('Turned off','已关闭'));
+});
+/* Only the hour is kept — a once-a-day message, so a minute would be a promise
+   the sweeper does not keep. Midnight is an hour like any other: 0 is a real
+   answer here, not a missing one. */
+reg('lowDigestHour', h=>{
+  const n=parseInt(h,10); if(!Number.isInteger(n)||n<0||n>23) return;
+  const v={enabled:opsxDigest().enabled,hour:n};
+  opsxDigestSave(v,T('Saved','已保存'));
+});
+const opsxSupportShown=()=>!cfgGet('support.hidden',false);
+reg('supportToggle', ()=>{
+  const hidden=opsxSupportShown();
+  opsxCfgSet('support',()=>apiWrite('/config',{'support.hidden':hidden},'PUT'),c=>{ c.support=Object.assign({},c.support||{},{hidden}); },
+    hidden?T('Turned off','已关闭'):T('Turned on','已开启'));
+});
+
+/* Locate every store and customer address that has no coordinates yet. It
+   spends the maps quota, so the desktop asks first and so does this. Two of its
+   outcomes come back as a success and are not one — the quota ran out part way,
+   or not one address could be placed — so they are said where the button is,
+   and stay, rather than toasted. */
+reg('geoBackfill', ()=>{
+  if(!opsxCan()||state.opsx.geoBusy) return;
+  state.ask={title:T('Geocode all stores + customer addresses now? Uses your maps quota.','现在为所有门店与客户地址重新定位?将消耗地图配额。'),
+    confirmLabel:T('Geocode now','立即定位'), run:()=>opsxGeoRun()};
+  render();
+});
+function opsxGeoRun(){
+  const x=state.opsx; x.geoBusy=true; x.geoErr=null; render();
+  return apiWrite('/inventory/geocode-backfill',{},'POST').then(j=>{
+    x.geoBusy=false;
+    const d=(j&&j.data)||{};
+    if(d.aborted_on_quota||(d.last_error&&d.last_error.quota)){
+      x.geoErr=E('Daily map quota exhausted — geocoding stopped. Fix the key (see panel), quota resets next day.','地图配额已用尽,已停止。请修复 key,次日重置。');
+    } else if(d.addresses_total>0&&d.addresses_geocoded===0&&d.last_error){
+      const why=String(d.last_error.message||d.last_error.code||'');
+      x.geoErr=E('Could not geocode addresses: '+why,'地址定位失败: '+why);
+    } else {
+      showToast(T('Geocoded '+d.stores_geocoded+'/'+d.stores_total+' stores · '+d.addresses_geocoded+'/'+d.addresses_total+' addresses','已定位 门店与地址'));
+    }
+    state.geoTried=false; loadGeo(); render();
+  }).catch(e=>{
+    x.geoBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    const c=e&&e.code;
+    x.geoErr=e.refused?E(...e.words):(c==='tencent_maps_key_missing'||c==='maps_key_missing')
+      ? E('Set AMAP_MAPS_KEY or TENCENT_MAPS_KEY in /root/roots-v2/.env first','请先在 /root/roots-v2/.env 配置地图 key')
+      : E('Failed: '+String((e&&e.message)||''),'操作失败: '+String((e&&e.message)||''));
+    render();
+  });
+}
+
+/* ── Recently deleted ──────────────────────────────────────────────────────── */
+const BIN_CAP={delivery_zone:'delivery:edit', finance_in:'finance:record', finance_out:'finance:record',
+  voucher:['coupons:edit','coupons:delete'], purchase_order:'purchasing:edit'};
+const opsxCanRestore=r=>!!r&&opsxCan()&&BIN_CAP[r.kind]!==undefined&&mCan(BIN_CAP[r.kind]);
+function opsxBinLoad(){
+  const x=state.opsx; if(x.binTried) return Promise.resolve();
+  x.binTried=true; x.binErr=null;
+  return apiRaw('/deleted').then(j=>{
+    if(!j||!j.success) throw new Error('refused');
+    x.bin=j.data||[]; x.binDays=Number(j.days)||60; render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    x.bin=null; x.binErr=E('Could not read what was deleted','无法读取删除记录'); render();
+  });
+}
+reg('binRetry', ()=>{ const x=state.opsx; x.binTried=false; x.binErr=null; render(); opsxBinLoad(); });
+reg('binRestore', id=>{
+  const x=state.opsx, r=(x.bin||[]).find(b=>Number(b.id)===Number(id));
+  if(!opsxCanRestore(r)||x.binBusy!=null) return;
+  x.binBusy=r.id; x.binRowErr={}; render();
+  apiWrite('/deleted/'+r.id+'/restore',{},'POST').then(()=>{
+    x.binBusy=null; showToast(T('Put back','已恢复'));
+    /* The record belongs to another screen still holding the list it read
+       before this. Refresh the one it went back to — a screen silently stale
+       after a success is how a restore gets tried twice. */
+    if(r.kind==='delivery_zone') api('/delivery-zones').then(z=>{ if(Array.isArray(z)){ state.zones=z; render(); } }).catch(e=>{ /* the zone list re-reads on its own next load; the restore itself has landed */ });
+    if(r.kind==='voucher') api('/vouchers').then(v=>{ if(Array.isArray(v)){ DB.coupons=v.map(mapVoucher);
+      DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); render(); } }).catch(e=>{ /* the coupon list re-reads on its own next load; the restore itself has landed */ });
+    x.binTried=false; opsxBinLoad(); render();
+  }).catch(e=>{
+    x.binBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    const c=e&&e.code, m=String((e&&e.message)||'');
+    x.binRowErr={[r.id]: e.refused?E(...e.words):c==='taken'
+      ? E('Something else now uses that record’s place. It cannot be put back.','该记录的位置已被其他内容占用，无法恢复。')
+      : c==='gone'
+        ? E('The record itself is no longer here, so there is nothing to switch back on.','该记录已不存在，无法恢复。')
+        : E('Could not put it back: '+m,'恢复失败: '+m)};
+    render();
+  });
+});
+
+/* ── The four cards on the Operations screen ───────────────────────────────── */
+function opsxErrLine(key){
+  const e=state.opsx.err; if(!e||e.key!==key) return '';
+  return `<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${String(e.msg)}</div>`;
+}
+const opsxRow=(label,ctl,note)=>`<div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px">
+  <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;overflow-wrap:anywhere">${label}</span>${note?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;line-height:1.5">${note}</span>`:''}</span>${ctl}</div>`;
+const opsxSaving=()=>`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`;
+function opsxLowCard(){
+  if(!opsxCan()) return '';
+  const x=state.opsx, d=opsxDigest();
+  const num=x.busy==='low'?opsxSaving()
+    :`<span style="display:flex;align-items:center;gap:6px;flex:none"><span style="color:var(--text-secondary)">≤</span>
+      <input type="number" inputmode="numeric" min="0" step="1" value="${opsxLowThreshold()}" aria-label="${T('Flag a product low at this many units','低库存提醒数量')}"
+        style="width:78px;text-align:right" ${x.busy?'disabled':''} onchange="APP.cmd('lowStockSet',this.value)">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('units','件')}</span></span>`;
+  const hours=Array.from({length:24},(_,h)=>h);
+  const hourSel=x.busy==='digest'?opsxSaving()
+    :`<select style="width:auto;flex:none;height:40px;padding-top:0;padding-bottom:0" ${x.busy?'disabled':''} onchange="APP.cmd('lowDigestHour',this.value)">${
+      hours.map(h=>`<option value="${h}"${h===d.hour?' selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select>`;
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Low-stock alert at','低库存提醒')}</div>
+    <div class="list">
+      ${opsxRow(T('Flag any product low when it drops to this many units.','商品降到此数量时提醒。'),num)}
+      ${opsxErrLine('low')}
+      <div class="sep" style="margin-left:14px"></div>
+      ${opsxRow(T('Send me a daily list of what is running low','每天发送库存偏低清单'),
+        x.busy==='digest'?opsxSaving():toggle(d.enabled,"APP.cmd('lowDigestToggle')"))}
+      <div class="sep" style="margin-left:14px"></div>
+      ${opsxRow(T('at','时间'),hourSel)}
+      ${opsxErrLine('digest')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. It goes to everyone on your team who can edit products or raise a restock request.','每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。发送给团队中可编辑商品或发起补货的成员。')}</div></div>`;
+}
+function opsxSupportCard(){
+  if(!opsxCan()) return '';
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Support button','客服按钮')}</div>
+    <div class="list">${opsxRow(T('Show the Support button','显示客服按钮'),
+      state.opsx.busy==='support'?opsxSaving():toggle(opsxSupportShown(),"APP.cmd('supportToggle')"),
+      T('The floating Support button in the bottom-right corner opens a chat with platform support. Turn it off to hide it.','右下角悬浮的客服按钮用于联系平台客服。关闭即可隐藏。'))}
+    ${opsxErrLine('support')}</div></div>`;
+}
+function opsxGeoAction(){
+  if(!opsxCan()) return '';
+  const x=state.opsx;
+  return `<button class="btn2" style="width:100%;margin-top:10px" ${x.geoBusy?'disabled':''} onclick="APP.cmd('geoBackfill')">${
+      x.geoBusy?T('Geocoding…','定位中…'):T('Geocode all stores & addresses now','立即定位所有门店与地址')}</button>
+    ${x.geoErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);margin-top:10px">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink);overflow-wrap:anywhere">${String(x.geoErr)}</span></div>`:''}`;
+}
+function opsxBinCard(){
+  if(!opsxCan()) return '';
+  opsxBinLoad();
+  const x=state.opsx;
+  let body;
+  if(x.binErr) body=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px">
+      <span style="font-size:14px;color:var(--brick-ink)">${String(x.binErr)}</span>
+      <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('binRetry')">${T('Try again','重试')}</button></div>`;
+  else if(!x.bin) body=`<div style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else if(!x.bin.length) body=`<div style="padding:16px;font-size:14px;color:var(--text-secondary)">${
+      T('Nothing has been deleted in the last '+x.binDays+' days.','最近 '+x.binDays+' 天内没有删除记录。')}</div>`;
+  else body=x.bin.map((r,i)=>{
+    const busy=x.binBusy===r.id, err=x.binRowErr[r.id];
+    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(r.label||('#'+r.record_id))}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(T(r.kindEn||r.kind||'',r.kindCn||r.kindEn||r.kind||''))} · <span class="num">${escAttr(r.deleted_at||'')}</span>${r.deleted_by?' · '+escAttr(r.deleted_by):''}</span>
+        ${err?`<span style="font-size:13px;color:var(--brick-ink)">${String(err)}</span>`:''}</span>
+      ${opsxCanRestore(r)?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" ${x.binBusy!=null?'disabled':''} onclick="APP.cmd('binRestore',${Number(r.id)})">${busy?T('Saving…','保存中…'):T('Put it back','恢复')}</button>`:''}</div>`;
+  }).join('');
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recently deleted','最近删除')}</div>
+    <div class="list">${body}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. A restored purchase order keeps its own date, so it still lands in the month it was placed.','最近 60 天内删除的优惠券、配送区域、账目行与采购单草稿可以恢复。恢复的采购单保留原有日期，仍计入原来的月份。')}</div></div>`;
+}
+/* §325 X2 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X3 — THE PRODUCT PAGE'S SECTIONS, AND A STOCK COUNT SHEET
+   --------------------------------------------------------------------------
+   Two desktop things the phone did not have.
+
+   THE PRODUCT PAGE'S SECTIONS (31-product-page.js, Settings › Operations ›
+   Product page): the order the full product page shows its sections in, and
+   which it shows at all. One setting for the business, stored at
+   product_page.sections = {order:[keys], hidden:[keys]}, written by
+   PUT /config exactly as ppgSettingsSave writes it. The phone does not carry
+   the page itself — that is the product page designer, which §326.7 keeps for
+   a phone design of its own — but the setting is a list of switches and an
+   order, and that is a phone shape. It saves on every change (§279), one
+   change at a time; the list is drawn from what the server holds, so a
+   refusal leaves it as it was and says so beside it.
+
+   THE COUNT SHEET (26-print.js paPrintCountSheet): every active product, its
+   SKU, the system's figure — for the store the catalogue is showing, or every
+   store — and two empty columns to write in at the shelf. Shown in a frame
+   over Products and handed to the phone's own print sheet, the way the
+   purchase order's print view works (a phone's in-app browser often refuses
+   the desktop's pop-up). Offered only while the phone holds the whole
+   catalogue: a sheet that stops at the first few hundred products is a
+   stocktake that silently skips the rest.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* The desktop's PPG_SECTIONS, key for key, with the words its Settings card
+   shows. `locked` cannot be hidden: a product needs a name. */
+const PPGM_SECTIONS=[
+  {key:'basics', en:'Basics', cn:'基础', locked:true,
+   what_en:'Name, second-language name, SKU, photos', what_cn:'名称、名称(第二语言)、货号、图片'},
+  {key:'where', en:'Where it shows', cn:'分类与陈列',
+   what_en:'Shop section, subcategory, badge, size or weight', what_cn:'商店分区、子分类、标签、规格'},
+  {key:'cost', en:'Cost & Pricing', cn:'成本与定价',
+   what_en:'What one unit is made of, cost, price, margin', what_cn:'成本、价格、毛利'},
+  {key:'stock', en:'Stock', cn:'库存',
+   what_en:'On hand per store, low-stock alert, out-of-stock rule, sourcing', what_cn:'各门店库存、低库存提醒、缺货时的处理方式、货源'},
+  {key:'sold', en:'How it’s sold', cn:'售卖方式',
+   what_en:'Sizes, bundles, add-ons, options', what_cn:'规格、套装、推荐搭配、选项'},
+  {key:'page', en:'Shopper page', cn:'顾客页面',
+   what_en:'Description, product details, designed page', what_cn:'描述、产品详情、已设计页面'},
+];
+/* ppgResolveLayout, rule for rule: an unknown key is dropped, a missing one is
+   appended in default order, a locked one is never hidden, a duplicate is kept
+   once — so a layout stored by a version with other sections still resolves to
+   a page with every section on it. */
+function ppgmResolve(raw){
+  const known=PPGM_SECTIONS.map(s=>s.key);
+  const cfg=raw&&typeof raw==='object'?raw:{};
+  const order=[];
+  for(const k of (Array.isArray(cfg.order)?cfg.order:[])) if(known.includes(k)&&!order.includes(k)) order.push(k);
+  for(const k of known) if(!order.includes(k)) order.push(k);
+  const hidden=[];
+  for(const k of (Array.isArray(cfg.hidden)?cfg.hidden:[])){
+    const s=PPGM_SECTIONS.find(x=>x.key===k);
+    if(s&&!s.locked&&!hidden.includes(k)) hidden.push(k);
+  }
+  return {order,hidden};
+}
+const ppgmLayout=()=>ppgmResolve(cfgGet('product_page.sections',null));
+function ppgmSave(val){
+  const x=state.opsx; if(x.busy||!opsxCan()) return Promise.resolve();
+  x.busy='ppg'; x.err=null; render();
+  return apiWrite('/config',{'product_page.sections':val},'PUT').then(()=>{
+    state.cfg=state.cfg||{};
+    state.cfg.product_page=Object.assign({},state.cfg.product_page||{},{sections:val});
+    x.busy=null; render(); showToast(T('Saved','已保存'));
+  }).catch(e=>{
+    x.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    x.err={key:'ppg', msg:e.refused?E(...e.words):E('Save failed','保存失败')};
+    render();
+  });
+}
+reg('ppgToggle', key=>{
+  const s=PPGM_SECTIONS.find(x=>x.key===key); if(!s||s.locked) return;
+  const l=ppgmLayout();
+  const hidden=l.hidden.includes(key)?l.hidden.filter(k=>k!==key):l.hidden.concat([key]);
+  ppgmSave({order:l.order, hidden:l.order.filter(k=>hidden.includes(k))});
+});
+reg('ppgMove', (key,dir)=>{
+  const l=ppgmLayout(), i=l.order.indexOf(key), j=i+(Number(dir)<0?-1:1);
+  if(i<0||j<0||j>=l.order.length) return;
+  const order=l.order.slice(); order[i]=order[j]; order[j]=key;
+  ppgmSave({order, hidden:order.filter(k=>l.hidden.includes(k))});
+});
+/* The desktop's Reset: the default order, nothing hidden, saved at once. */
+reg('ppgReset', ()=>{ ppgmSave({order:PPGM_SECTIONS.map(s=>s.key), hidden:[]}); });
+function ppgmCard(){
+  if(!opsxCan()) return '';
+  const l=ppgmLayout(), busy=!!state.opsx.busy, saving=state.opsx.busy==='ppg';
+  const mv=(k,dir,dis,label)=>`<button class="iconbtn" style="width:34px;height:34px;flex:none" aria-label="${label}" ${dis||busy?'disabled':''} onclick="APP.cmd('ppgMove','${k}',${dir})">${ic(dir<0?'chevron-up':'chevron-down',18)}</button>`;
+  const rows=l.order.map((k,i)=>{
+    const s=PPGM_SECTIONS.find(x=>x.key===k), off=l.hidden.includes(k);
+    const sw=s.locked?`<span style="font-size:12.5px;color:var(--text-secondary);flex:none">${T('Always shown','始终显示')}</span>`
+      :busy?`<span style="width:44px;flex:none"></span>`
+      :`<span aria-label="${T('Show this section','显示此分区')}" style="display:flex;flex:none">${toggle(!off,`APP.cmd('ppgToggle','${k}')`)}</span>`;
+    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;${off?'opacity:.6':''}">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px">${T(s.en,s.cn)}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${T(s.what_en,s.what_cn)}</span></span>
+      ${mv(k,-1,i===0,T('Move up','上移'))}${mv(k,1,i===l.order.length-1,T('Move down','下移'))}${sw}</div>`;
+  }).join('');
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Product page','产品页')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px 8px">${T('The order your product page shows its sections in, and which ones it shows at all.','产品页各分区的显示顺序，以及显示哪些分区。')}</div>
+    <div class="list">${rows}${opsxErrLine('ppg')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('A hidden section keeps its data. Switch it back on and everything is still there. Basics cannot be hidden: a product needs a name.','隐藏的分区会保留其数据，重新开启后一切仍在。基础分区不能隐藏：产品需要一个名称。')}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding-top:10px">
+      <button class="btn2" style="width:auto;padding:0 14px" ${busy?'disabled':''} onclick="APP.cmd('ppgReset')">${T('Reset to default order','重置为默认顺序')}</button>
+      ${saving?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`:''}</div></div>`;
+}
+
+/* ── The count sheet ───────────────────────────────────────────────────────── */
+/* The store the sheet is for: the one the catalogue is showing, when the store
+   switch is on; otherwise every store, and the system figure is the total. */
+function countStore(){
+  if(!state.prodStore||!prodStoreOn()) return null;
+  return (state.prodGrid.stores||[]).find(x=>String(x.id)===String(state.prodStore))||null;
+}
+/* paPrintCountSheet's rows: name, SKU, the system's figure, two write-in boxes.
+   The figure at one store is that shelf's own number; with no store it is the
+   product's stock across the shop. A blank, never a zero, where it is unknown. */
+function countRows(){
+  const st=countStore();
+  return (DB.products||[]).map(p=>{
+    const sys=st ? (state.prodGrid.qty[p._id]&&state.prodGrid.qty[p._id][st.id]!=null ? state.prodGrid.qty[p._id][st.id] : '')
+                 : (p.stock!=null ? p.stock : '');
+    return {name:T(...p.name), sku:p.rawSku||'', sys:String(sys)};
+  });
+}
+/* products:view is ROUTE_CAP.products — the key that opens the screen the
+   button sits on, which is all the desktop's button asks (it carries no data-cap). */
+function countOffered(){ return mCan('products:view')&&!!state.catalogueComplete&&(DB.products||[]).length>0; }
+/* EVERY CLOSING TAG OF THE PAGE IS WRITTEN <\/…> BELOW, for the reason
+   poPrintDoc gives: the render harnesses find the app's own closing body tag
+   by its first occurrence. */
+function countSheetDoc(){
+  const e2=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const st=countStore(), rows=countRows(), shop=state.storeName||'';
+  const sub=st?T(st.name_en||st.name_cn||'',st.name_cn||st.name_en||''):T('All locations','全部门店');
+  const meta=[[T('Date','日期'),tdWhen(new Date(),'date',_tdL())],[T('Lines','行数'),String(rows.length)],[T('Counted by','盘点人'),'________']]
+    .map(([k,v])=>`<dt>${e2(k)}<\/dt><dd>${e2(v)}<\/dd>`).join('');
+  const cols=[['#',false,'26px'],[T('Product 商品','商品 Product'),false,''],['SKU',false,'110px'],
+    [T('System 系统','系统 System'),true,'76px'],[T('Counted 实盘','实盘 Counted'),true,'90px'],[T('Difference 差异','差异 Difference'),true,'90px']];
+  const head=cols.map(([h,r,w])=>`<th${r?' class="r"':''}${w?` style="width:${w}"`:''}>${e2(h)}<\/th>`).join('');
+  const body=rows.map((r,i)=>`<tr><td class="idx">${i+1}<\/td><td>${e2(r.name)}<\/td><td>${e2(r.sku)}<\/td><td class="r">${e2(r.sys)}<\/td><td class="write r"><\/td><td class="write r"><\/td><\/tr>`).join('');
+  return `<!DOCTYPE html>
+<html lang="${LANG==='en'?'en':'zh'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stock count${shop?' — '+e2(shop):''}<\/title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  :root { --ink:#000; --grey:#555; --hair:#C9C4B6;
+          --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#F2F1EC; font-family:var(--sans); color:var(--ink); }
+  .sheet { background:#fff; max-width:210mm; margin:24px auto; padding:18mm 16mm; }
+  .masthead { display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-bottom:14px; }
+  .shop { font-size:12px; color:var(--grey); letter-spacing:.14em; text-transform:uppercase; }
+  h1 { margin:6px 0 0; font-size:26px; font-weight:400; line-height:1.1; }
+  .cn { font-size:13px; color:var(--grey); margin-top:6px; letter-spacing:.18em; }
+  .sub { font-size:13px; margin-top:8px; }
+  .meta { font-size:12px; flex:none; }
+  .meta dl { margin:0; display:grid; grid-template-columns:auto auto; gap:6px 22px; }
+  .meta dt { color:var(--grey); }
+  .meta dd { margin:0; text-align:right; }
+  table { width:100%; border-collapse:collapse; margin-top:14px; }
+  thead th { border-bottom:1.5px solid var(--ink); font-weight:500; font-size:11px; letter-spacing:.02em; padding:9px 10px; text-align:left; white-space:nowrap; }
+  thead th.r { text-align:right; }
+  tbody td { border-bottom:1px solid var(--hair); padding:11px 10px; font-size:12.5px; vertical-align:top; }
+  tbody td.r { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  td.idx { color:var(--grey); font-size:11px; width:26px; }
+  td.write::after { content:''; display:block; height:16px; border-bottom:1px solid var(--hair); width:64px; margin-left:auto; }
+  .note { margin-top:22px; padding:10px 12px; border-left:2px solid var(--hair); font-size:12px; line-height:1.6; color:var(--grey); }
+  .foot { margin-top:36px; padding-top:10px; border-top:1px solid var(--hair); display:flex; justify-content:space-between; font-size:10px; color:var(--grey); }
+  .empty { padding:24px; text-align:center; color:var(--grey); font-size:12.5px; }
+  @media screen and (max-width:600px) { .sheet { margin:0; padding:18px 14px; } .masthead { flex-direction:column; align-items:flex-start; gap:16px; }
+    thead th, tbody td { padding-left:6px; padding-right:6px; } }
+  @media print { body { background:#fff; } .sheet { margin:0; padding:10mm; max-width:none; } }
+<\/style><\/head><body>
+<div class="sheet">
+  <div class="masthead">
+    <div>
+      ${shop?`<div class="shop">${e2(shop)}<\/div>`:''}
+      <h1>Stock count<\/h1>
+      <div class="cn">盘点表<\/div>
+      <div class="sub">${e2(sub)}<\/div>
+    <\/div>
+    <div class="meta"><dl>${meta}<\/dl><\/div>
+  <\/div>
+  <table>
+    <thead><tr>${head}<\/tr><\/thead>
+    <tbody>${body||'<tr><td colspan="6" class="empty">Nothing to show · 暂无内容<\/td><\/tr>'}<\/tbody>
+  <\/table>
+  <div class="note">${e2(T('Write the counted figure at the shelf. Nothing here changes the system — enter the counts in Products afterwards.','请在货架前填写实盘数量。此表不会更改系统库存 — 盘点后请在商品页录入。'))}<\/div>
+  <div class="foot"><span>${e2(shop)}<\/span><span>${e2(tdWhen(new Date(),'dateTime',_tdL()))}<\/span><\/div>
+<\/div>
+<\/body><\/html>`;
+}
+function sheetCountPrint(){
+  if(!state.countPrint) return '';
+  return `<div class="scrim" style="z-index:51" onclick="APP.scrimClose('countPrintClose')"></div>
+   <div class="sheet" style="top:40px;z-index:52;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('countPrintClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Count sheet','盘点表')}</span>
+         <button class="btn2" style="width:auto;padding:0 18px;flex:none" onclick="APP.cmd('countPrintGo')">${ic('printer',18)}${T('Print','打印')}</button></div>
+       ${state.countPrint==='failed'?`<div style="font-size:13.5px;color:var(--brick-ink);margin-top:8px">${T('Print failed','打印失败')}</div>`:''}</div>
+     <iframe id="mCountPrintFrame" title="${T('Count sheet','盘点表')}" srcdoc="${escAttr(countSheetDoc())}" style="flex:1;min-height:0;width:100%;border:0;background:#fff"></iframe></div>`;
+}
+function countButton(){
+  if(!countOffered()) return '';
+  return `<button class="btn2" style="width:auto;flex:none;padding:0 12px;gap:6px" aria-label="${T('A sheet to take to the shelves','打印盘点表')}" onclick="APP.cmd('countPrint')">${ic('printer',16)}${T('Count sheet','盘点表')}</button>`;
+}
+reg('countPrint', ()=>{ if(!countOffered()) return; state.countPrint=true; render(); });
+reg('countPrintClose', ()=>{ state.countPrint=false; render(); });
+reg('countPrintGo', ()=>{
+  const f=(typeof document!=='undefined')?document.getElementById('mCountPrintFrame'):null;
+  try{ f.contentWindow.focus(); f.contentWindow.print(); if(state.countPrint==='failed'){ state.countPrint=true; render(); } }
+  catch(e){ state.countPrint='failed'; render(); }
+});
+/* §325 X3 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X4 — THE BRAND, AND THE BRAND STUDIO
+   --------------------------------------------------------------------------
+   Two desktop pages the phone did not have (public/backend-brand.html and
+   public/brand-studio.html), reached from Settings → Store as the desktop
+   reaches them from Settings' nav.
+
+   BRAND. The logo and the brand name that lead the admin, the sign-in page
+   and customer emails. Every write is the page's own PUT /api/backend/brand:
+   {logo:<data URL>} — a raster image is first drawn onto a canvas no larger
+   than 512px and sent as PNG, an SVG is sent as it is — {logo:null} to remove
+   it, and {name} (60 characters at most) behind its own Save, as on the
+   desktop. The server answers for settings:shop (callerHas), which is the key
+   the desktop's link carries, so it is this screen's key too.
+
+   BRAND STUDIO. Describe the shop; the studio drafts a palette, fonts and a
+   Home layout; Apply puts it in the Mini App Editor as a DRAFT, never live.
+   POST /brand/generate, then GET /brand/job/:id every two seconds for up to
+   two minutes, then POST /brand/apply {theme, layout} — the page's own three
+   calls with its own bodies. The server gates all three on ai:generate
+   (lib/cap-routes.js), so the screen is gated on it.
+
+   THE DESKTOP STUDIO IS ENGLISH-ONLY. Every Chinese string on that screen was
+   composed for this step and is declared in the vocabulary. The words sent to
+   the designer stay the desktop's English values; only what is shown is
+   translated. What the SERVER writes back — its progress line, its errors, its
+   contrast warnings — is English and is shown as it comes.
+   ══════════════════════════════════════════════════════════════════════════ */
+function brandLoad(){
+  const b=state.brand; if(b.tried) return Promise.resolve();
+  b.tried=true; b.readErr=null;
+  return api('/api/backend/brand').then(j=>{
+    b.data=(j&&j.brand)||{};
+    if(!b.nameTouched) b.name=b.data.name||'';
+    render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    b.readErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render();
+  });
+}
+/* The server's refusal comes as "English · 中文"; this screen shows its half.
+   A network failure or a bare status gets the page's own sentences. */
+function brandErr(e){
+  if(e&&e.refused) return E(...e.words);
+  if(!e||e.name==='TypeError') return E('Network error — please try again','网络错误，请重试');
+  const s=String(e.message||'');
+  if(!s||/^HTTP \d+$/.test(s)) return E('Couldn’t save — please try again','保存失败，请重试');
+  return {toString(){ return tmOneLang(s); }};
+}
+function brandSave(which,payload,okEn,okZh){
+  const b=state.brand; if(b.busy||!canRoute('brand')) return Promise.resolve();
+  b.busy=which; b[which==='name'?'nameErr':'logoErr']=null; render();
+  return apiWrite('/api/backend/brand',payload,'PUT').then(j=>{
+    b.busy=null;
+    if(j&&j.brand) b.data=j.brand;
+    if(which==='name'){ b.nameTouched=false; b.name=(b.data&&b.data.name)||''; }
+    render(); showToast(T(okEn,okZh));
+  }).catch(e=>{
+    b.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    b[which==='name'?'nameErr':'logoErr']=brandErr(e); render();
+  });
+}
+reg('brandName', v=>{ const b=state.brand; b.name=String(v||'').slice(0,60); b.nameTouched=true; });
+reg('brandNameSave', ()=>{ brandSave('name',{name:String(state.brand.name||'').trim()},'Saved','已保存'); });
+reg('brandLogoClear', ()=>{ brandSave('logo',{logo:null},'Logo removed','徽标已移除'); });
+reg('brandLogo', input=>{
+  const f=input&&input.files&&input.files[0];
+  if(!f) return;
+  input.value='';
+  const b=state.brand; if(b.busy||!canRoute('brand')) return;
+  const say=(en,zh)=>{ b.logoErr=E(en,zh); render(); };
+  if(!/^image\//.test(f.type||'')) return say('Please choose an image file','请选择图片文件');
+  const rd=new FileReader();
+  rd.onerror=()=>say('Couldn’t read that file','无法读取该文件');
+  if(/svg/.test(f.type)){
+    rd.onload=()=>brandSave('logo',{logo:String(rd.result||'')},'Logo updated','徽标已更新');
+    rd.readAsDataURL(f); return;
+  }
+  rd.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      let data=null;
+      try{
+        const MAX=512, sc=Math.min(1,MAX/Math.max(img.width||1,img.height||1));
+        const w=Math.round((img.width||1)*sc), h=Math.round((img.height||1)*sc);
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        data=cv.toDataURL('image/png');
+      }catch(e){ data=null; }
+      if(!data) return say('Couldn’t read that image','无法读取该图片');
+      brandSave('logo',{logo:data},'Logo updated','徽标已更新');
+    };
+    img.onerror=()=>say('Couldn’t read that image','无法读取该图片');
+    img.src=String(rd.result||'');
+  };
+  rd.readAsDataURL(f);
+});
+reg('brandRetry', ()=>{ state.brand.tried=false; render(); brandLoad(); });
+const brandErrLine=m=>m?`<div style="font-size:13.5px;color:var(--brick-ink);padding:10px 2px 0">${String(m)}</div>`:'';
+function screenBrand(){
+  const b=state.brand; brandLoad();
+  if(b.readErr&&!b.data) return x1Err(String(b.readErr),'brandRetry');
+  if(!b.data) return x1Loading();
+  const url=b.data.brandLogoUrl||null, busy=b.busy;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px">${T('Your logo and name lead the admin, sign-in page and customer emails. Everything else keeps the tacet look.','您的徽标与名称将展示在后台、登录页与顾客邮件上。其余部分保持 tacet 外观。')}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="width:72px;height:72px;border-radius:16px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${url?`<img src="${escAttr(url)}" alt="" style="max-width:100%;max-height:100%;object-fit:contain">`:ic('image',24)}</span>
+        <span style="display:flex;gap:8px;flex-wrap:wrap">
+          <label class="btn2" style="min-height:38px;padding:0 12px;font-size:14px;${busy?'opacity:.55;pointer-events:none':''}">${busy==='logo'?T('Saving…','保存中…'):T('Upload logo','上传徽标')}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none" onchange="APP.cmd('brandLogo',this)"></label>
+          ${url?`<button class="btn2" style="min-height:38px;padding:0 12px;font-size:14px" ${busy?'disabled':''} onclick="APP.cmd('brandLogoClear')">${T('Remove','移除')}</button>`:''}</span></div>
+      ${brandErrLine(b.logoErr)}
+      <label style="display:block">
+        <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Brand name','品牌名称')}</span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <input id="mBrandName" type="text" maxlength="60" spellcheck="false" placeholder="${T('Your brand','您的品牌')}" value="${escAttr(b.name)}" style="flex:1;min-width:0" oninput="APP.cmd('brandName',this.value)">
+          <button class="btn2" style="width:auto;flex:none;padding:0 16px" ${busy?'disabled':''} onclick="APP.cmd('brandNameSave')">${busy==='name'?T('Saving…','保存中…'):T('Save','保存')}</button></span></label>
+      ${brandErrLine(b.nameErr)}</div>
+    ${canRoute('brandstudio')?`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:16px;font-weight:500">${T('Not sure where to start?','还没有想好?')}</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${T('Describe your shop in a sentence and the brand studio will draft a name, a mark and a palette for you to look at. Nothing changes until you apply one.','用一句话描述你的店铺,品牌工作室会为你草拟名称、标志与配色供你挑选。在你确认应用前不会有任何改动。')}</div>
+      <button class="btn2" onclick="APP.cmd('push','brandstudio')">${T('Open the brand studio','打开品牌工作室')}</button></div>`:''}
+  </div>`;
+}
+SUBS.brand={title:['Brand','品牌'],render:()=>screenBrand()};
+
+/* ── The brand studio ─────────────────────────────────────────────────────── */
+/* [value sent, English shown, Chinese shown]. The value is the desktop's. */
+const BST_WORDS=[['Playful','Playful','活泼'],['Premium','Premium','高端'],['Minimal','Minimal','简约'],['Bold','Bold','大胆'],
+  ['Natural','Natural','自然'],['Warm','Warm','温暖'],['Modern','Modern','现代'],['Heritage','Heritage','传统'],['Quirky','Quirky','俏皮'],['Calm','Calm','沉静']];
+const BST_CUST=[['young-trendy','young-trendy','年轻潮流'],['families','families','家庭'],['premium-professional','premium-professional','高端职场人士'],
+  ['budget-conscious','budget-conscious','注重实惠'],['health-conscious','health-conscious','注重健康']];
+const BST_AUDIENCE=[['mixed','A mix of both','两者都有'],['chinese','Mostly Chinese','以中国顾客为主'],['international','Mostly international','以外国顾客为主']];
+const BST_LANGUAGE=[['bilingual','Bilingual','双语'],['en','English','English'],['cn','中文','中文']];
+const BST_COLOUR=[['','Surprise me','随你发挥'],['Earthy','Earthy','大地色'],['Vibrant','Vibrant','鲜艳'],['Soft/Pastel','Soft/Pastel','柔和粉彩'],
+  ['Dark/Moody','Dark/Moody','深沉'],['Monochrome','Monochrome','单色'],['Warm','Warm','暖色'],['Cool','Cool','冷色']];
+const BST_TYPE=[['','Match my vibe','配合我的风格'],['Modern sans','Modern sans','现代无衬线'],['Classic serif','Classic serif','经典衬线'],
+  ['Friendly rounded','Friendly rounded','亲和圆体'],['Bold display','Bold display','醒目标题体'],['Elegant','Elegant','优雅']];
+const BST_POLL_MS=2000, BST_POLL_MAX=60;
+/* The page's humErr: the server's own sentence, unless it names the model
+   provider, which an operator has no use for. */
+function bstErr(e){
+  if(e&&e.refused) return E(...e.words);
+  const m=String((e&&e.message)||'');
+  return (m&&!/^HTTP \d+$/.test(m)&&!/anthropic|claude/i.test(m))?{toString(){ return tmOneLang(m); }}
+    :E('The design service is busy — please try again.','设计服务繁忙，请稍后再试。');
+}
+function bstInputs(){
+  const s=state.bst;
+  return {about:s.about, audience:s.audience, language:s.language, words:s.words.slice(), customerType:s.cust.slice(),
+    colourDirection:s.colour, typographyFeel:s.type};
+}
+reg('bstField', (k,v)=>{ const s=state.bst; if(['about','audience','language','colour','type'].includes(k)) s[k]=String(v==null?'':v); });
+reg('bstPick', (k,v)=>{
+  const s=state.bst, list=k==='cust'?s.cust:s.words, i=list.indexOf(v);
+  if(i<0) list.push(v); else list.splice(i,1);
+  render();
+});
+reg('bstGo', ()=>{
+  const s=state.bst; if(s.busy||!canRoute('brandstudio')) return;
+  s.busy=true; s.err=null; s.seq++; const seq=s.seq; render();
+  apiWrite('/brand/generate',bstInputs(),'POST').then(j=>{
+    if(seq!==s.seq) return;
+    const id=j&&j.data&&j.data.job_id;
+    if(!id) throw new Error('');
+    bstPoll(id,0,seq);
+  }).catch(e=>{
+    if(seq!==s.seq||String(e&&e.message)==='auth') return;
+    s.busy=false; s.err=bstErr(e); render();
+  });
+});
+/* Every two seconds, sixty times — the page's own clock. A read that fails is
+   tried again on the next tick, as the page does; only the job's own answer
+   or the clock running out ends it. */
+function bstPoll(id,n,seq){
+  const s=state.bst;
+  if(n>=BST_POLL_MAX){ s.busy=false; s.err=E('This is taking a while — please try again.','耗时较长，请稍后再试。'); render(); return; }
+  setTimeout(()=>{
+    if(seq!==s.seq) return;
+    api('/brand/job/'+encodeURIComponent(id)).then(job=>{
+      if(seq!==s.seq) return;
+      if(job&&job.state==='ready'){ s.busy=false; s.result=job.result||null; s.applyMsg=null; s.applyErr=null; render(); return; }
+      if(job&&job.state==='error'){ s.busy=false; s.err=job.error?{toString(){ return tmOneLang(job.error); }}:E('Please try again.','请重试。'); render(); return; }
+      bstPoll(id,n+1,seq);
+    }).catch(e=>{
+      if(String(e&&e.message)==='auth') return;
+      /* A missed poll is not the job failing — the page's rule (`continue`). */
+      bstPoll(id,n+1,seq);
+    });
+  },BST_POLL_MS);
+}
+reg('bstApply', ()=>{
+  const s=state.bst; if(!s.result||s.applyBusy||!canRoute('brandstudio')) return;
+  s.applyBusy=true; s.applyErr=null; s.applyMsg=null; render();
+  apiWrite('/brand/apply',{theme:s.result.theme,layout:s.result.layout},'POST').then(()=>{
+    s.applyBusy=false; s.applyMsg=E('Saved as a draft — preview it in the Mini App Editor.','已保存为草稿 — 请在小程序编辑器中预览。'); render();
+  }).catch(e=>{
+    s.applyBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    s.applyErr=bstErr(e); render();
+  });
+});
+reg('bstAgain', ()=>{ const s=state.bst; s.result=null; s.busy=false; s.err=null; s.applyMsg=null; s.applyErr=null; s.seq++; render(); });
+function bstSelect(k,cur,opts){
+  return `<select style="width:100%" onchange="APP.cmd('bstField','${k}',this.value)">${opts.map(([v,en,zh])=>
+    `<option value="${escAttr(v)}"${v===cur?' selected':''}>${escAttr(T(en,zh))}</option>`).join('')}</select>`;
+}
+function bstChips(k,chosen,opts){
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px">${opts.map(([v,en,zh])=>
+    `<button class="chip ${chosen.includes(v)?'on':''}" onclick="APP.cmd('bstPick','${k}','${escAttr(v)}')"><span>${escAttr(T(en,zh))}</span></button>`).join('')}</div>`;
+}
+const bstLabel=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin:4px 0 8px">${t}</span>`;
+function bstResult(){
+  const s=state.bst, r=s.result||{}, th=r.theme||{}, p=th.palette||{}, f=th.fonts||{}, sh=th.shape||{};
+  const sw=['primary','accent','surface','ink','muted'].filter(k=>p[k]).map(k=>`<span style="width:64px;display:flex;flex-direction:column;gap:4px;align-items:center">
+      <span style="width:64px;height:42px;border-radius:8px;border:1px solid var(--border-default);background:${escAttr(p[k])}"></span>
+      <span class="num" style="font-size:11px;color:var(--text-secondary);text-align:center;line-height:1.3">${escAttr(k)}<br>${escAttr(p[k])}</span></span>`).join('');
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:17px;font-weight:500">${T('Your brand','您的品牌')}</div>
+    ${sw?`<div style="display:flex;flex-wrap:wrap;gap:10px">${sw}</div>`:''}
+    <div style="font-size:13.5px;line-height:1.55">${T('Fonts — display: ','字体 — 标题：')}${escAttr((f.display&&f.display.family)||'—')} · ${T('body: ','正文：')}${escAttr((f.body&&f.body.family)||'—')}</div>
+    <div style="font-size:13.5px;line-height:1.55">${T('Shape: ','形状：')}${escAttr(sh.radius||'—')} / ${escAttr(sh.energy||'—')} · ${T('density: ','密度：')}${escAttr(th.density||'—')} · ${T('audience: ','受众：')}${escAttr(th.audience||'—')}</div>
+    ${(r.warnings||[]).map(w=>`<div style="background:var(--amber-tint);color:var(--amber-ink);border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.5">${escAttr(w.msg||w.code||'')}</div>`).join('')}
+    ${(r.layout||[]).length?`<div class="list">${r.layout.map((b2,i)=>`${i?'<div class="sep"></div>':''}<div style="padding:10px 14px;font-size:14px">${i+1}. ${escAttr(b2&&b2.type)}</div>`).join('')}</div>`:''}
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1" ${s.applyBusy?'disabled':''} onclick="APP.cmd('bstApply')">${s.applyBusy?T('Saving draft…','正在保存草稿…'):T('Apply as draft','应用为草稿')}</button>
+      <button class="btn2" style="flex:1" ${s.applyBusy?'disabled':''} onclick="APP.cmd('bstAgain')">${T('Start over','重新开始')}</button></div>
+    ${s.applyErr?brandErrLine(s.applyErr):''}
+    ${s.applyMsg?`<div style="font-size:13.5px;color:var(--text-secondary)">${String(s.applyMsg)}</div>`:''}</div>`;
+}
+function screenBrandStudio(){
+  const s=state.bst;
+  const foot=`<div style="font-size:12.5px;color:var(--text-secondary);padding:0 4px">${T('Drafts preview in the Mini App Editor before they go live.','草稿会先在小程序编辑器中预览，确认后才会上线。')}</div>`;
+  if(s.result) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">${bstResult()}${foot}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px">${T('Tell us about your shop and we’ll design your storefront — colours, fonts, and layout.','介绍一下你的店铺，我们来设计你的店面 — 配色、字体与版式。')}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      <label>${bstLabel(T('What’s your shop about?','你的店铺是做什么的？'))}
+        <textarea style="min-height:72px;resize:none" placeholder="${T('e.g. plant-based bakery with seasonal sourdough','例如：主打时令酸种面包的植物基烘焙店')}" oninput="APP.cmd('bstField','about',this.value)">${escAttr(s.about)}</textarea></label>
+      <label>${bstLabel(T('Who are your shoppers?','你的顾客是谁？'))}${bstSelect('audience',s.audience,BST_AUDIENCE)}</label>
+      <label>${bstLabel(T('Storefront language','店面语言'))}${bstSelect('language',s.language,BST_LANGUAGE)}</label>
+      <div>${bstLabel(T('Pick the words that describe your brand','选出描述你品牌的词'))}${bstChips('words',s.words,BST_WORDS)}</div>
+      <label>${bstLabel(T('Colour direction','配色方向'))}${bstSelect('colour',s.colour,BST_COLOUR)}</label>
+      <label>${bstLabel(T('Typography feel','字体风格'))}${bstSelect('type',s.type,BST_TYPE)}</label>
+      <div>${bstLabel(T('Who are your customers?','你的客户群体是？'))}${bstChips('cust',s.cust,BST_CUST)}</div>
+      <button class="cta" ${s.busy?'disabled':''} onclick="APP.cmd('bstGo')">${s.busy?T('Designing your storefront…','正在设计你的店面…'):T('Design my brand','设计我的品牌')}</button>
+      ${s.err?brandErrLine(s.err):''}</div>
+    ${foot}</div>`;
+}
+SUBS.brandstudio={title:['AI Brand Studio','AI 品牌工作室'],render:()=>screenBrandStudio()};
+/* §325 X4 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X5 — THE SHOP TAB AND THE CUSTOMER-SERVICE BUTTON
+   --------------------------------------------------------------------------
+   Two desktop Settings panels the phone did not have: Shop tab (how the
+   mini app's Shop arranges itself — layout, default sort, the filter bar) and
+   Customer service (the chat button: how customers reach you, its label and
+   hours, where it shows and how it looks). Both are §279 autosave cards on the
+   desktop (05-marketing.js SHOP_CARD, CS_CARD), and both are here too, through
+   the same engine (public/tacet-autosave.js): each edit is sent after a short
+   pause as the desktop's whole card body, PUT /config?history=<card>, filed on
+   the same history the desktop's Version history reads
+   (GET /config/history?card=<card>). Undo, Version history and the save state
+   sit at the foot, as they do there.
+
+   Opened from Settings with the Settings screen's own keys; the server gates
+   both families (shop.*, customer_service.*) on the desktop Settings set,
+   which contains them (configKeyCap). The QR code is uploaded the desktop's
+   way, POST /cms/media, which admits the same keys.
+
+   The values seeded from the stored config are the desktop's loadConfig
+   readings, default for default, so a card opened on the phone and on the
+   desktop starts from the same body and neither sends a change nobody made.
+   ══════════════════════════════════════════════════════════════════════════ */
+const cfgAuto={shop:null, cs:null};
+/* A stored dotted key, written back into the cached config so other screens
+   reading state.cfg see what was saved. */
+function cfgMerge(body){
+  state.cfg=state.cfg||{};
+  Object.keys(body||{}).forEach(k=>{
+    const parts=k.split('.'); let o=state.cfg;
+    for(let i=0;i<parts.length-1;i++){ if(!o[parts[i]]||typeof o[parts[i]]!=='object') o[parts[i]]={}; o=o[parts[i]]; }
+    o[parts[parts.length-1]]=body[k];
+  });
+}
+const cfgSendErr=e=>new Error(e&&e.refused?T(...e.words):tmOneLang((e&&e.message)||''));
+function cfgFootHtml(which){
+  const a=cfgAuto[which]; if(!a) return '';
+  const st=a.state;
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message)
+    :st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||'')):T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<span style="flex:1;min-width:0;font-size:12.5px;color:${tone}">${line}</span>
+    ${a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('cfgUndo','${which}')">${T('Undo','撤销')}</button>`:''}
+    <button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('cfgHistory','${which}')">${T('Version history','历史版本')}</button>`;
+}
+const cfgFootPaint=which=>()=>{ const f=(typeof document!=='undefined')?document.getElementById('mCfgFoot-'+which):null; if(f) f.innerHTML=cfgFootHtml(which); };
+function cfgFlushAll(){ ['shop','cs'].forEach(k=>{ if(cfgAuto[k]) cfgAuto[k].flush(); }); }
+/* The two cards' own state, re-read from the server on every entry. */
+function cfgCardLoad(which){
+  const s=state.cfgc; if(s.tried[which]) return Promise.resolve();
+  s.tried[which]=true; s.err[which]=null;
+  return api('/config').then(c=>{
+    state.cfg=c||{};
+    if(which==='shop') shopdStart(); else csStart();
+    render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    s.err[which]=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render();
+  });
+}
+reg('cfgRetry', which=>{ state.cfgc.tried[which]=false; render(); cfgCardLoad(which); });
+reg('cfgUndo', which=>{
+  const a=cfgAuto[which]; if(!a) return;
+  a.undo(b=>{ (which==='shop'?shopdApply:csApply)(b); render(); });
+});
+/* What each key is called in a version's "changed" line. */
+const CFG_KEY_WORDS={
+  'shop.layout':['Layout','布局'], 'shop.defaultSort':['Default sort','默认排序'],
+  'shop.showSort':['Show sort dropdown','显示排序下拉'], 'shop.showDietary':['Show dietary chips','显示饮食标签'],
+  'shop.showStockFilter':['Show "In stock" toggle','显示「有货」开关'], 'shop.showBadgeFilter':['Show NEW / POP / SALE filter','显示 NEW / POP / SALE 筛选'],
+  'shop.showPriceFilter':['Show price ¥min – ¥max','显示价格 ¥min – ¥max 筛选'], 'shop.hideOutOfStock':['Hide out-of-stock products entirely','完全隐藏缺货产品'],
+  'shop.lockLayout':['Lock layout (hide customer\'s view-switcher)','锁定布局(隐藏顾客的视图切换)'],
+  'customer_service.mode':['How customers reach you','顾客联系方式'],
+};
+reg('cfgHistory', which=>{
+  const a=cfgAuto[which]; if(!a) return;
+  const card=which==='shop'?'shop.display':'customer_service';
+  Promise.resolve(a.flush()).then(()=>api('/config/history?card='+encodeURIComponent(card))).then(j=>{
+    const list=Array.isArray(j&&j.versions)?j.versions:[];
+    if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+    liveHistorySheet(list, v=>(v.changed||[]).map(k=>CFG_KEY_WORDS[k]?T(...CFG_KEY_WORDS[k]):k.replace(/^[a-z_]+\./,'').replace(/_/g,' ')).join(' · '),
+      v=>{ (which==='shop'?shopdApply:csApply)(v.snapshot||{}); render();
+        return Promise.resolve(a.flush('restore')).then(()=>{ if(a.state==='error') throw new Error(a.message||''); }); });
+  }).catch(e=>{ if(String(e&&e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+});
+
+/* ── Shop tab ─────────────────────────────────────────────────────────────── */
+const SHOPD_BOOLS=['showSort','showDietary','showStockFilter','showBadgeFilter','showPriceFilter','hideOutOfStock','lockLayout'];
+const SHOPD_LAYOUTS=[['list','List with sidebar','列表 + 侧栏'],['list-compact','List compact','紧凑列表'],
+  ['grid-2col','Grid — 2 col','网格 — 2 列'],['grid-3col','Grid — 3 col','网格 — 3 列'],['gallery','Gallery','画廊']];
+const SHOPD_SORTS=[['','Featured (curated order)','精选(手动排序)'],['newest','Newest','最新'],['price_asc','Price ↑ (low to high)','价格升序'],
+  ['price_desc','Price ↓ (high to low)','价格降序'],['popular','Popular (most ordered)','最热销']];
+/* loadConfig's readings: a legacy 'grid' is the 2-column grid; dietary chips
+   default ON; every other switch defaults off. */
+function shopdSeed(){
+  const sh=(state.cfg&&state.cfg.shop)||{};
+  const d={layout:sh.layout==='grid'?'grid-2col':(sh.layout||'list'), defaultSort:sh.defaultSort||''};
+  SHOPD_BOOLS.forEach(k=>{ d[k]=k==='showDietary'?sh.showDietary!==false:!!sh[k]; });
+  return d;
+}
+/* SHOP_CARD.read, key for key and in its order. */
+function shopdBody(){
+  const d=state.cfgc.shop, b={};
+  b['shop.layout']=d.layout; b['shop.defaultSort']=d.defaultSort;
+  SHOPD_BOOLS.forEach(k=>{ b['shop.'+k]=!!d[k]; });
+  return b;
+}
+function shopdApply(b){ const d=state.cfgc.shop; if(!d) return;
+  ['layout','defaultSort'].concat(SHOPD_BOOLS).forEach(k=>{ if(('shop.'+k) in b) d[k]=b['shop.'+k]; }); }
+function shopdStart(){
+  if(cfgAuto.shop){ cfgAuto.shop.flush(); cfgAuto.shop=null; }
+  state.cfgc.shop=shopdSeed();
+  if(!canRoute('shopdisplay')||typeof TacetAutosave==='undefined') return;
+  cfgAuto.shop=TacetAutosave.create({
+    read:()=>shopdBody(),
+    send:(b,note)=>apiWrite('/config?history='+encodeURIComponent('shop.display')+(note?'&note='+note:''),b,'PUT')
+      .then(()=>cfgMerge(b)).catch(e=>{ throw cfgSendErr(e); }),
+    onChange:cfgFootPaint('shop'),
+  });
+  cfgAuto.shop.start();
+}
+reg('shopdSet', (k,v)=>{
+  const d=state.cfgc.shop; if(!d||!cfgAuto.shop) return;
+  if(k==='layout'){ if(!SHOPD_LAYOUTS.some(x=>x[0]===v)) return; d.layout=v; }
+  else if(k==='defaultSort'){ if(!SHOPD_SORTS.some(x=>x[0]===v)) return; d.defaultSort=v; }
+  else if(SHOPD_BOOLS.includes(k)) d[k]=!d[k];
+  else return;
+  cfgAuto.shop.touch(); render();
+});
+const cfgSel=(cmd,key,cur,opts)=>`<select style="width:100%" onchange="APP.cmd('${cmd}','${key}',this.value)">${opts.map(([v,en,zh])=>
+  `<option value="${escAttr(v)}"${String(v)===String(cur)?' selected':''}>${escAttr(T(en,zh))}</option>`).join('')}</select>`;
+const cfgHead=(t,d)=>`<div style="display:flex;flex-direction:column;gap:4px;padding:0 4px 8px"><span style="font-size:15px;font-weight:500">${t}</span>${d?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${d}</span>`:''}</div>`;
+const cfgToggleRows=(cmd,list,d)=>`<div class="list">${list.map(([k,en,zh],i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+  <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;min-height:52px"><span style="flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere">${T(en,zh)}</span>${toggle(!!d[k],`APP.cmd('${cmd}','${k}')`)}</div>`).join('')}</div>`;
+const cfgFoot=which=>`<div id="mCfgFoot-${which}" class="card" style="display:flex;align-items:center;gap:8px;padding:10px 12px">${cfgFootHtml(which)}</div>`;
+function screenShopDisplay(){
+  const s=state.cfgc; cfgCardLoad('shop');
+  if(s.err.shop&&!s.shop) return x1Err(String(s.err.shop),'cfgRetry');
+  if(!s.shop||!s.tried.shop) return x1Loading();
+  const d=s.shop;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:18px">
+    <div>${cfgHead(T('Layout','布局'),T('The default arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top.',
+      '顾客打开商城时的默认排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。'))}
+      ${cfgSel('shopdSet','layout',d.layout,SHOPD_LAYOUTS)}</div>
+    <div>${cfgHead(T('Default sort','默认排序'),T('The order products appear in when a customer opens the Shop. "Featured" follows the manual order you set on the Products page (drag-and-drop).','顾客打开商城时的默认排序;"精选"沿用产品页手动排序(拖拽)。'))}
+      ${cfgSel('shopdSet','defaultSort',d.defaultSort,SHOPD_SORTS)}</div>
+    <div>${cfgHead(T('Filter & controls bar','筛选与操作条'),T('Toggle which filter widgets appear above the product list. Each adds a row to the top of the Shop.','控制产品列表上方显示哪些筛选控件;每项会在商城顶部加一行。'))}
+      ${cfgToggleRows('shopdSet',[['showSort','Show sort dropdown','显示排序下拉'],['showDietary','Show dietary chips','显示饮食标签'],
+        ['showStockFilter','Show "In stock" toggle','显示「有货」开关'],['showBadgeFilter','Show NEW / POP / SALE filter','显示 NEW / POP / SALE 筛选'],
+        ['showPriceFilter','Show price ¥min – ¥max','显示价格 ¥min – ¥max 筛选'],['hideOutOfStock','Hide out-of-stock products entirely','完全隐藏缺货产品'],
+        ['lockLayout','Lock layout (hide customer\'s view-switcher)','锁定布局(隐藏顾客的视图切换)']],d)}</div>
+    ${cfgFoot('shop')}</div>`;
+}
+SUBS.shopdisplay={title:['Shop tab','商城页'],render:()=>screenShopDisplay()};
+
+/* ── Customer service ─────────────────────────────────────────────────────── */
+const CS_TEXT_M=['corp_id','url','label_en','label_cn','hours_en','hours_cn','phone','fab_icon_emoji'];
+const CS_SHOW_M=['show_me','show_home','show_product','show_checkout','show_order'];
+const CS_MODES=[['off','Off — hide the button entirely','关闭 — 完全隐藏按钮'],['wecom','WeCom — recommended','企业微信 — 推荐'],
+  ['kf','WeChat customer service — public account','微信客服 — 公众号客服'],['qr','QR code — show a scannable image','二维码 — 显示可扫描图片']];
+const CS_SIZES=[['sm','Small','小'],['md','Medium','中'],['lg','Large','大']];
+const CS_SHAPES=[['circle','Circle','圆形'],['rounded','Rounded square','圆角方形'],['pill','Pill + label','胶囊带文字']];
+const CS_ICONS=[['dots','Dots •••','圆点'],['bubble','Chat bubble 💬','对话气泡'],['question','Question ?','问号'],['headset','Headset 🎧','耳麦'],['custom','Custom emoji','自定义表情']];
+const CS_SIDES=[['right','Right','右'],['left','Left','左']];
+const CS_SWATCHES=[['#365329','Forest green'],['#E8DCCB','Oat'],['#C2674A','Terracotta']];
+/* loadConfig's readings, default for default. */
+function csSeed(){
+  const c=(state.cfg&&state.cfg.customer_service)||{};
+  const d={mode:c.mode||'off', qr_image_url:c.qr_image_url||''};
+  CS_TEXT_M.forEach(k=>{ d[k]=c[k]||''; });
+  CS_SHOW_M.forEach(k=>{ d[k]=k==='show_home'?!!c.show_home:c[k]!==false; });
+  d.fab_size=c.fab_size||'md'; d.fab_shape=c.fab_shape||'circle'; d.fab_color=c.fab_color||'#365329';
+  d.fab_icon=c.fab_icon||'dots'; d.fab_side=c.fab_side||'right';
+  d.fab_bottom=c.fab_bottom!=null?String(c.fab_bottom):'220';
+  return d;
+}
+/* CS_CARD.read, key for key and in its order: texts trimmed, the height a
+   whole number with the desktop's 220 when it is not one. */
+function csBody(){
+  const d=state.cfgc.cs, t=k=>String(d[k]||'').trim(), b={};
+  b['customer_service.mode']=d.mode;
+  b['customer_service.corp_id']=t('corp_id'); b['customer_service.url']=t('url');
+  b['customer_service.qr_image_url']=d.qr_image_url||'';
+  ['label_en','label_cn','hours_en','hours_cn','phone'].forEach(k=>{ b['customer_service.'+k]=t(k); });
+  CS_SHOW_M.forEach(k=>{ b['customer_service.'+k]=!!d[k]; });
+  ['fab_size','fab_shape','fab_color','fab_icon'].forEach(k=>{ b['customer_service.'+k]=d[k]; });
+  b['customer_service.fab_icon_emoji']=t('fab_icon_emoji');
+  b['customer_service.fab_side']=d.fab_side;
+  b['customer_service.fab_bottom']=parseInt(d.fab_bottom,10)||220;
+  return b;
+}
+function csApply(b){ const d=state.cfgc.cs; if(!d) return;
+  const g=k=>b['customer_service.'+k];
+  CS_TEXT_M.concat(['mode','fab_size','fab_shape','fab_color','fab_icon','fab_side']).forEach(k=>{ if(('customer_service.'+k) in b) d[k]=g(k)==null?'':g(k); });
+  CS_SHOW_M.forEach(k=>{ if(('customer_service.'+k) in b) d[k]=g(k)!==false; });
+  if('customer_service.qr_image_url' in b) d.qr_image_url=g('qr_image_url')||'';
+  if('customer_service.fab_bottom' in b) d.fab_bottom=String(g('fab_bottom')!=null?g('fab_bottom'):220);
+}
+function csStart(){
+  if(cfgAuto.cs){ cfgAuto.cs.flush(); cfgAuto.cs=null; }
+  state.cfgc.cs=csSeed();
+  if(!canRoute('custservice')||typeof TacetAutosave==='undefined') return;
+  cfgAuto.cs=TacetAutosave.create({
+    read:()=>csBody(),
+    send:(b,note)=>apiWrite('/config?history='+encodeURIComponent('customer_service')+(note?'&note='+note:''),b,'PUT')
+      .then(()=>cfgMerge(b)).catch(e=>{ throw cfgSendErr(e); }),
+    onChange:cfgFootPaint('cs'),
+  });
+  cfgAuto.cs.start();
+}
+const CS_PICKS={mode:CS_MODES, fab_size:CS_SIZES, fab_shape:CS_SHAPES, fab_icon:CS_ICONS, fab_side:CS_SIDES};
+/* A typed field nudges the engine and repaints nothing — the operator is
+   typing. A pick or a switch repaints, because it changes what is shown. */
+reg('csText', (k,v)=>{
+  const d=state.cfgc.cs; if(!d||!cfgAuto.cs) return;
+  if(CS_TEXT_M.includes(k)||k==='fab_bottom'||k==='fab_color'){ d[k]=String(v==null?'':v); cfgAuto.cs.touch(); }
+});
+reg('csSet', (k,v)=>{
+  const d=state.cfgc.cs; if(!d||!cfgAuto.cs) return;
+  if(CS_PICKS[k]){ if(!CS_PICKS[k].some(x=>x[0]===v)) return; d[k]=v; }
+  else if(CS_SHOW_M.includes(k)) d[k]=!d[k];
+  else if(k==='fab_color'){ if(!/^#[0-9a-f]{6}$/i.test(String(v||''))) return; d.fab_color=v; }
+  else return;
+  cfgAuto.cs.touch(); render();
+});
+/* The QR code goes up the desktop's way (uploadCsQr): POST /cms/media, the
+   file as `file`, and the URL it answers with is what the card stores. */
+reg('csQr', input=>{
+  const f=input&&input.files&&input.files[0]; if(!f) return;
+  input.value='';
+  const s=state.cfgc; if(s.qrBusy||!cfgAuto.cs) return;
+  s.qrBusy=true; s.qrErr=null; render();
+  const fd=new FormData(); fd.append('file',f);
+  fetch(API+'/cms/media',{method:'POST',credentials:'same-origin',body:fd}).then(async r=>{
+    if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+    if(r.status===403) throw await apiRefusal(r);
+    const j=await r.json().catch(()=>({}));
+    if(!j||!j.success||!j.data||!j.data.url) throw new Error((j&&j.error)||'');
+    s.qrBusy=false; s.cs.qr_image_url=j.data.url; cfgAuto.cs.touch(); render();
+    showToast(T('QR uploaded','二维码已上传'));
+  }).catch(e=>{
+    s.qrBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    s.qrErr=e&&e.refused?E(...e.words):E('Upload failed'+(e&&e.message?': '+e.message:''),'上传失败'+(e&&e.message?': '+e.message:'')); render();
+  });
+});
+reg('csQrClear', ()=>{ const s=state.cfgc; if(!s.cs||!cfgAuto.cs) return; s.cs.qr_image_url=''; cfgAuto.cs.touch(); render(); });
+const csField=(k,label,ph,attrs)=>`<label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${label}</span>
+  <input type="text" value="${escAttr(state.cfgc.cs[k])}" placeholder="${escAttr(ph)}" ${attrs||''} style="width:100%" oninput="APP.cmd('csText','${k}',this.value)"></label>`;
+function screenCustService(){
+  const s=state.cfgc; cfgCardLoad('cs');
+  if(s.err.cs&&!s.cs) return x1Err(String(s.err.cs),'cfgRetry');
+  if(!s.cs||!s.tried.cs) return x1Loading();
+  const d=s.cs, lbl=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>`;
+  const card=inner=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">${inner}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:18px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px">${T('Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team. WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.','在"我的"页、结算页和订单页显示一个聊天气泡按钮,点击即可与你的团队对话。推荐使用企业微信(WeCom)模式 —— 顾客可与客服人员实时交流。')}</div>
+    <div>${cfgHead(T('How customers reach you','顾客联系方式'),T('Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet.','三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。'))}
+      ${cfgSel('csSet','mode',d.mode,CS_MODES)}</div>
+    ${d.mode==='wecom'?`<div>${cfgHead(T('WeCom credentials','企业微信凭证'),'')}${card(
+      csField('corp_id',T('Corp ID','企业ID'),'ww1234abcd567890ef','autocapitalize="off" spellcheck="false"')+
+      csField('url',T('Service URL','客服链接'),'https://work.weixin.qq.com/kfid/kfc...','autocapitalize="off" spellcheck="false"'))}</div>`:''}
+    ${d.mode==='qr'?`<div>${cfgHead(T('QR code image','二维码图片'),T('Upload the scannable code. PNG/JPG, ideally square ≥600×600.','上传可扫码图片,PNG/JPG,建议方形 ≥600×600。'))}${card(
+      (d.qr_image_url?`<img src="${escAttr(d.qr_image_url)}" alt="QR" style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid var(--border-default)">`
+        :`<span style="font-size:13px;color:var(--text-secondary)">${T('No QR uploaded yet.','尚未上传二维码。')}</span>`)+
+      `<span style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="btn2" style="width:auto;padding:0 14px;${s.qrBusy?'opacity:.55;pointer-events:none':''}">${s.qrBusy?T('Uploading QR…','上传二维码中…'):T('Upload a QR code image','上传二维码图片')}
+          <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('csQr',this)"></label>
+        ${d.qr_image_url?`<button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('csQrClear')">${T('Remove','移除')}</button>`:''}</span>`+
+      (s.qrErr?`<span style="font-size:13.5px;color:var(--brick-ink)">${String(s.qrErr)}</span>`:''))}</div>`:''}
+    <div>${cfgHead(T('Button label & hours','按钮文案与营业时间'),T('Both languages — customers see one. Hours shown beneath the button on the Me tab; leave blank to hide.','两种语言都填,顾客看到其中一种;营业时间显示在"我的"页按钮下方,留空则隐藏。'))}${card(
+      csField('label_en',T('EN label','英文标签'),'Help')+csField('label_cn',T('Chinese label','中文标签'),'联系客服')+
+      csField('hours_en',T('EN hours line','英文营业时间'),'Mon–Sat · 9am–6pm')+csField('hours_cn',T('Chinese hours line','中文营业时间'),'周一至周六 · 9:00–18:00')+
+      csField('phone',T('Phone number (optional)','电话(可选)'),'+86 20 1234 5678','inputmode="tel"')+
+      `<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('Shown as the Call button on the FAQ help screen. Leave blank to hide.','显示为常见问题帮助页上的拨打按钮;留空则隐藏。')}</span>`)}</div>
+    <div>${cfgHead(T('Where to show','显示位置'),T('Pick which pages show the floating chat bubble. The look below applies to every page you tick.','选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。'))}
+      ${cfgToggleRows('csSet',[['show_me','Me tab','我的页'],['show_home','Home tab','首页'],['show_product','Product detail','商品详情'],
+        ['show_checkout','Checkout','结算页'],['show_order','Order detail','订单详情']],d)}</div>
+    <div>${cfgHead(T('Floating bubble look','悬浮按钮样式'),T('Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above.','自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。'))}${card(
+      `<label>${lbl(T('Size','大小'))}${cfgSel('csSet','fab_size',d.fab_size,CS_SIZES)}</label>`+
+      `<label>${lbl(T('Shape','形状'))}${cfgSel('csSet','fab_shape',d.fab_shape,CS_SHAPES)}</label>`+
+      `<label>${lbl(T('Icon','图标'))}${cfgSel('csSet','fab_icon',d.fab_icon,CS_ICONS)}</label>`+
+      (d.fab_icon==='custom'?csField('fab_icon_emoji',T('Custom emoji','自定义'),'🌱','maxlength="4" style="width:100%;text-align:center;font-size:18px"'):'')+
+      `<div>${lbl(T('Colour','颜色'))}<span style="display:flex;align-items:center;gap:10px">
+        <input type="color" value="${escAttr(d.fab_color)}" aria-label="${T('Button colour','按钮颜色')}" style="width:48px;height:38px;padding:0" onchange="APP.cmd('csSet','fab_color',this.value)">
+        ${CS_SWATCHES.map(([c,n])=>`<button aria-label="${escAttr(n)}" onclick="APP.cmd('csSet','fab_color','${c}')" style="width:28px;height:28px;border-radius:7px;background:${c};border:${d.fab_color.toLowerCase()===c.toLowerCase()?'2px solid var(--text-primary)':'1px solid var(--border-default)'};cursor:pointer"></button>`).join('')}</span></div>`+
+      `<label>${lbl(T('Side','位置'))}${cfgSel('csSet','fab_side',d.fab_side,CS_SIDES)}</label>`+
+      `<label>${lbl(T('Height off bottom (rpx)','距底高度'))}<input type="number" inputmode="numeric" min="0" max="800" placeholder="220" value="${escAttr(d.fab_bottom)}" style="width:100%" oninput="APP.cmd('csText','fab_bottom',this.value)"></label>`)}</div>
+    ${cfgFoot('cs')}</div>`;
+}
+SUBS.custservice={title:['Customer service','客户服务'],render:()=>screenCustService()};
+/* §325 X5 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -26366,7 +27417,12 @@ function screenSettings(){
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
       /* §325 X1 — the desktop's two read-only records, beside the team whose work they record. */
       ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
-      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[])]},
+      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[]),
+      /* §325 X4 — the desktop's Brand page, from the same nav it sits in there. */
+      ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[]),
+      /* §325 X5 — the desktop's Shop tab and Customer service panels. */
+      ...(canRoute('shopdisplay')?[{label:T('Shop tab','商城页'),cmd:"APP.cmd('push','shopdisplay')",chev:true}]:[]),
+      ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[])]},
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -35050,6 +36106,15 @@ const ROUTE_CAP={
   changes:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   sent:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   mirror_eleme:'eleme:view', elemecat:'eleme:view', needspoint:'orders:view',
+  /* §325 X4. Brand: the key the desktop's link carries and the server's
+     callerHas check (PUT /api/backend/brand). The studio: the server's own gate
+     on all three of its calls (lib/cap-routes.js, ai:generate). */
+  brand:'settings:shop', brandstudio:'ai:generate',
+  /* §325 X5. Two Settings panels, reached from Settings; the server gates
+     shop.* and customer_service.* on the desktop Settings set, which holds
+     this one (configKeyCap). */
+  shopdisplay:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  custservice:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -35903,6 +36968,7 @@ function render(){
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
   if(state.poId!=null&&state.poPrint&&state.poDetail) html += layer('poprint:'+state.poId, sheetPOPrint());
+  if(state.countPrint) html += layer('countprint', sheetCountPrint());
   if(state.pwSheet&&state.pw&&pwOnTop()) html += layer('pw:'+state.pwSheet.kind, sheetPW());
   if(state.pk) html += layer('pk', sheetPK());
   if(state.pinv.sheet) html += layer('pinv:'+state.pinv.sheet.kind, sheetPinv());
@@ -36338,7 +37404,7 @@ function layers(){
   /* A recipe being edited puts its work on the wire on the way out (§300 R2) —
      the edge swipe cannot wait for an answer, the desktop's browser Back. */
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
-    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false);
+    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll();   // §325 X5: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
     if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
@@ -36375,6 +37441,8 @@ function layers(){
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   // Over the order it prints, so Back closes the print view first (§300).
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
+  // §325 X3 — the count sheet opens over Products; Back closes it first.
+  if(state.countPrint) L.push(()=>{ state.countPrint=false; });
   if(state.pwSheet&&state.pw&&pwOnTop()) L.push(()=>{ state.pwSheet=null; });
   if(state.pk) L.push(()=>{ state.pk=null; });
   if(state.pinv.sheet) L.push(()=>{ state.pinv.sheet=null; });

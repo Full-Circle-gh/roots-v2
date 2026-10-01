@@ -110,7 +110,7 @@
   // is deliberately not blocked - listings get renamed and the review queue
   // rejects writes while the channel itself is fine.
   const EL_BLOCK_TXT = {
-    no_shop:     ['has no Eleme shop linked yet', '\u5c1a\u672a\u5173\u8054\u9976\u4e86\u4e48\u5e97\u94fa'],
+    no_shop:     ['has no Eleme shop linked yet', '\u5c1a\u672a\u5173\u8054\u997f\u4e86\u4e48\u5e97\u94fa'],
     needs_login: ['is signed out', '\u5df2\u9000\u51fa\u767b\u5f55'],
   };
 
@@ -364,7 +364,7 @@
     { id: 'all',   en: 'All',             cn: '\u5168\u90e8' },
     { id: 'att',   en: 'Needs attention', cn: '\u5f85\u5904\u7406' },
     { id: 'ok',    en: 'Synced',          cn: '\u5df2\u540c\u6b65' },
-    { id: 'nomap', en: 'Not on Eleme',    cn: '\u672a\u4e0a\u67b6\u9976\u4e86\u4e48' },
+    { id: 'nomap', en: 'Not on Eleme',    cn: '\u672a\u4e0a\u67b6\u997f\u4e86\u4e48' },
   ];
 
   function elChipMatch(p, id) {
