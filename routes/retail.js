@@ -31827,6 +31827,19 @@ router.post('/api/retail-admin/wecom/test', requireRetailAdmin, express.json(), 
 
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {
   const body = req.body || {};
+  /* §325 — EACH SERVICE ON ITS OWN PANEL'S KEYS. The choke point let the union
+     through (it cannot see which services the body names); a delivery
+     courier's credentials are the Delivery panel's, a printer's the Operations
+     card's, the WeCom app's and SMS's Settings → Push's
+     (lib/cap-routes.js integrationServiceCap). Refused before anything is
+     written, naming the service. */
+  for (const svc of Object.keys(INTEGRATION_KEYS)) {
+    if (!body[svc] || typeof body[svc] !== 'object') continue;
+    const need = capRoutes.integrationServiceCap(svc);
+    if (capRoutes.capDenied(req, need)) {
+      return res.status(403).json({ error: 'forbidden_capability', need, service: svc });
+    }
+  }
   const tid = currentTenantId();
   const isRoots = tid === ROOTS_TENANT_ID;
   const changedKeys = [];

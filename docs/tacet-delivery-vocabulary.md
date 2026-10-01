@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.241 · 2026-09-30 · §342 THE PAGE EDITOR'S FIELDS AND ONBOARDING ON THE PHONE — NOTHING COMPOSED; THE FIELDS ARE THE DESKTOP INSPECTOR'S OWN WORDS.** See *The page editor's fields on the phone (§342)*.
+
+**v1.240 · 2026-09-30 · §341 PICTURES, VIDEO AND BUTTON LINKS IN THE PHONE PAGE EDITOR — 7 STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Pictures, video and links in the phone page editor (§341)*.
+
 **v1.239 · 2026-09-30 · §337 A SAVE REFUSED AS STALE ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, FROM THE DESKTOP'S OWN REFUSAL.** See *A save someone else got to first, on the phone (§337)*.
 
 **v1.238 · 2026-09-30 · §334 PHONE SAFETY FOLLOW-UPS — NOTHING COMPOSED; §222'S BLOCK COPIED WHOLE.** See *The safety follow-ups (§334)*.
@@ -10572,3 +10576,85 @@ that, and no live pair does.
 
 **Copied whole, unchanged:** `Save failed · 保存失败`, `Saved · 已保存`, `Pop-up is on · 弹窗已启用`,
 `Pop-up is off · 弹窗已停用`.
+
+## Pictures, video and links in the phone page editor (§341)
+
+Operator register only (Rule 1): the phone page editor's edit sheet
+(`public/cms-mobile.html`).
+
+**Copied whole.** Every field label and hint is the desktop inspector's own
+pair (`public/cms.html`): `Picture · 图片` and its two hints,
+`Desktop picture (optional) · 电脑端图片(可选)`, `Video (optional) · 视频(可选)`,
+`Video clip · 视频短片`, `Poster (optional) · 封面图(可选)`, `Image · 图片`,
+`QR code image · 二维码图片`, `Link (optional) · 链接(可选)`,
+`Tap link (optional) · 点击跳转(可选)`, `SEE ALL link · 「查看全部」跳转`,
+`Button link · 按钮链接`, `Tap target · 点击跳转`,
+`Tap link (whole block) · 整块点击链接`, each with its hint; the link picker's
+`No link chosen — uses this block’s default. · 未选择链接 — 使用此模块的默认跳转。`,
+`Pages · 页面`, `Products · 商品`, `Categories · 分类`, `SUGGESTED · 推荐`,
+`Product # · 商品 #`, `Category # · 分类 #`, `Custom · 自定义`, the page names,
+`Type a target manually · 手动输入跳转目标`, `DRAFT` (one word in both
+languages, as on desktop); the hero's `Buttons (n) · 按钮(n)`,
+`No buttons. The banner shows the image alone. · 暂无按钮。横幅仅显示图片。`,
+`Add button · 添加按钮`, `Style · 样式`. From the phone sheet itself:
+`Button label · 按钮文字`, `Button label (中文) · 按钮文字(中文)`,
+`Replace picture · 更换图片`, `Remove · 删除`, `Uploading… · 上传中…`,
+`Upload failed · 上传失败`, `Could not load · 加载失败`. From the phone app
+(`public/m.html`): `Cancel · 取消`, `Nothing in the library · 媒体库是空的`, and
+the picture refusals (`MEDIA_ERR`: too large, not an image, nothing picked).
+The no-permission screen: `You do not have permission to do that. ·
+你没有执行该操作的权限。` (`public/retail-admin/01-core.js`), the old message's
+own frame `Ask an admin to grant you the … permission. · 请管理员授予你 … 权限。`,
+and the `content:edit` capability's label `Edit content (about/legal/FAQ/copy)
+· 编辑内容(关于/条款/常见问题/文案)` (`lib/capabilities.js`).
+
+**Trimmed from a live pair, not composed**: `Video · 视频` (from
+`Video (optional) · 视频(可选)`); the foot note `Advanced options for this
+block are tuned on desktop. · 此模块的高级选项请在电脑上调整。` (from the
+sheet's `Images, colours & advanced options …`, which it replaces).
+
+**Composed by Claude, 2026-10-01:**
+
+| String | Built from |
+|---|---|
+| `Primary · 主按钮` | EN the inspector's style option (English only there); 主按钮 from `Primary button colour · 主按钮颜色` |
+| `Secondary · 次按钮` | EN the inspector's; 次按钮 by analogy with 主按钮 |
+| `Link only · 仅链接` | EN the inspector's; 仅 as in `仅小程序` / `仅图片`, 链接 as in `按钮链接` |
+| `Media library · 媒体库` | EN the desktop library's title (English only there); 媒体库 from the phone app's `Media · 媒体库` row |
+| `Replace video · 更换视频` | `Replace picture · 更换图片`, with the clip's word |
+| `Video too large (20MB max) · 视频太大(最大 20MB)` and `That file isn't an MP4 video · 该文件不是 MP4 视频` | EN the desktop's refusals (English only there); CN after `图片太大` / `该文件不是可用的图片格式` in `MEDIA_ERR` |
+
+**Live candidates rejected**: `Upload` (the desktop picker's button, English
+only, and it names the act rather than the field, unlike §299's `Picture`);
+`Add photos · 添加图片` (the phone's Media screen: plural, and wrong for a
+clip); `No retail permission · 没有零售权限` (names a permission that no
+longer exists).
+
+## The page editor's fields on the phone (§342)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1).
+
+- **Every field's label, hint, section title, option and button text in the
+  phone editor's sheet is the desktop inspector's own** (`public/cms.html`),
+  read off the inspector in the editor's language and drawn as it is. The
+  phone adds no word for them, so there is no second copy to correct: a wrong
+  word is corrected once, in the inspector. The sheet's own labels for text
+  fields (`Kicker · 小标题`, `Kicker (中文) · 小标题(中文)`, `Banner text ·
+  横幅文字`, `Empty text · 无订单文字` and the rest of the retired list) are
+  retired with it.
+- **The phone's few words of its own**, all copied: the single product list's
+  `— none — · — 无 —` and the multiple one's `— pick one — · — 选择一个 —`
+  (both the inspector's), `Remove · 删除` (the sheet's), `DRAFT` (the
+  inspector's, one word in both languages).
+- **Onboarding** (`public/cms-mobile.html`), copied whole from the desktop's
+  `renderOnboardingSettings`: `Onboarding · 引导页`, `show to · 显示给`,
+  `New users only · 仅新用户`, `Everyone until I re-show · 所有用户(到下次重置)`,
+  `Everyone, every launch · 每个用户每次启动`, `Off · 关闭`,
+  `Re-show to all · 向所有人重新显示` and its hint, the confirm's question and
+  body, `Button label · 按钮文字`, `Updated · 已更新`,
+  `Will re-show — now at vN · 将重新显示 — 当前 vN`. From the phone editor:
+  `Loading… · 加载中…`, `Could not load · 加载失败`, `Could not save · 保存失败`,
+  `Saving… · 保存中…`, `Cancel · 取消`; from the phone app: `Try again · 重试`.
+- **The desktop editor's no-permission screen** now uses the pair the phone
+  editor's uses (declared with §325 M2): `You do not have permission to do
+  that. · 你没有执行该操作的权限。` and the `content:edit` capability's label.

@@ -5930,7 +5930,13 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
        where a refusal actually belongs. */
     const caps = Array.isArray(u.caps) ? u.caps : null;
     if (caps && !caps.includes('content:edit')) {
-      document.body.innerHTML = '<main style="padding:60px;text-align:center;color:#aeaba2"><h2 style="font-weight:500;margin-bottom:12px">No retail permission</h2><p>Ask an admin to grant you the <code>retail</code> permission.</p></main>';
+      // §325 — names the permission this gate checks, by the Roles screen's
+      // name for it (lib/capabilities.js); it used to name a `retail`
+      // permission that no longer exists. The phone editor says the same.
+      document.body.innerHTML = '<main style="padding:60px;text-align:center;color:#aeaba2"><h2 style="font-weight:500;margin-bottom:12px">'
+        + B('You do not have permission to do that.', '你没有执行该操作的权限。') + '</h2><p>'
+        + B('Ask an admin to grant you the <code>Edit content (about/legal/FAQ/copy)</code> permission.', '请管理员授予你 <code>编辑内容(关于/条款/常见问题/文案)</code> 权限。')
+        + '</p></main>';
       return;
     }
     // Categories + products are page-agnostic; load once. flashSales is
@@ -11208,7 +11214,7 @@ function renderInspector() {
   }
   const b = findBlock(state.selectedId);
   if (!b) {
-    if (window.__fcPreviewEmbed) { state.designFields = []; state.designVariants = []; }
+    if (window.__fcPreviewEmbed) { state.designFields = []; state.designVariants = []; state.formNodes = []; state.formEls = []; }
     mount.innerHTML = `
       <div class="empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -11219,7 +11225,7 @@ function renderInspector() {
   // Mobile preview embed: start collecting this block's colour controls. Each
   // colorSelect() below pushes into the buffer; we snapshot it into
   // state.designFields after empty sections are pruned (see below).
-  if (window.__fcPreviewEmbed) __fcColorRegBuf = [];
+  if (window.__fcPreviewEmbed) { __fcColorRegBuf = []; __fcPickRegBuf = []; }
   mount.innerHTML = `
     <div class="inspector-head">
       <div class="type-row">
@@ -11324,6 +11330,9 @@ function renderInspector() {
         el: selEl,
       });
     });
+    // §325 M3 — everything else in the inspector, for the phone's edit sheet.
+    fcFormSnapshot(body);
+    __fcPickRegBuf = null;
   }
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
@@ -11680,6 +11689,143 @@ function sel(value, options, onChange) {
 // not collecting, so stray colorSelect() calls elsewhere are ignored.
 let __fcColorRegBuf = null;
 
+/* ── §325 M3 · THE INSPECTOR, MIRRORED FOR THE PHONE ─────────────────────
+   Embed only (window.__fcPreviewEmbed). The phone editor's sheet draws every
+   control this inspector draws for the selected block, in its order, with its
+   labels and hints in the editor's language, and a tap there drives THIS
+   control: a value is set and the control's own 'input' / 'change' fired, a
+   button or chip is clicked, a picker's own onChange / commit is called. So
+   every rule a control carries (clamps, conversions, which fields it clears,
+   what it writes into a list) runs exactly as on desktop, and a block type
+   added later reaches the phone with nothing written for it there.
+
+   The four pickers that are not native controls (product, picture, video,
+   link) register themselves while the inspector is built, in __fcPickRegBuf,
+   carrying their value and their own setter. The rest is read off the DOM.
+   Left out: the colours and the layout choices (the phone's Design sheet has
+   them), the "Show on" and "Frame, radius & width" sections (the sheet's own
+   controls, §325 M1), anything marked data-mirror-skip (the phone has a
+   control of its own for it), and Delete (the phone has its own). */
+let __fcPickRegBuf = null;
+function fcSkip(el) { el.dataset.mirrorSkip = '1'; return el; }
+function fcPickReg(entry) { if (__fcPickRegBuf) __fcPickRegBuf.push(entry); }
+// An element's text in the editor's language: of a B() pair only the side
+// shown; never the hover help icon.
+function fcLangText(el) {
+  let out = '';
+  el.childNodes.forEach(n => {
+    if (n.nodeType === 3) { out += n.nodeValue; return; }
+    if (n.nodeType !== 1) return;
+    const c = n.classList;
+    if (c.contains('mc-info') || n.tagName === 'svg' || n.tagName === 'SVG' || n.tagName === 'STYLE') return;
+    if (c.contains('i18n-en') && state.lang === 'cn') return;
+    if (c.contains('i18n-cn') && state.lang !== 'cn') return;
+    if (n.tagName === 'BR') { out += '\n'; return; }
+    out += fcLangText(n);
+  });
+  return out;
+}
+const FC_INLINE = new Set(['B', 'STRONG', 'CODE', 'I', 'EM', 'BR', 'SMALL', 'SPAN', 'A', 'U', 'svg', 'SVG']);
+function fcFormSnapshot(body) {
+  const variantEls = new Set((state.designVariants || []).map(v => v.el));
+  const picks = new Map((__fcPickRegBuf || []).map(p => [p.el, p]));
+  const els = [], picksAt = [], kinds = [];
+  const ctl = (node, el, pick) => { node.i = els.length; els.push(el); picksAt.push(pick || null); kinds.push(node.k); return node; };
+  const consumed = new Set();
+  const isLeaf = (el) => Array.from(el.children).every(c => FC_INLINE.has(c.tagName) && !c.querySelector('input,select,textarea,button'));
+  function walk(parent, out) {
+    Array.from(parent.children).forEach(c => {
+      if (consumed.has(c) || c.hidden || c.style.display === 'none') return;
+      const cl = c.classList;
+      if (c.dataset.mirrorSkip) return;
+      if (picks.has(c)) {
+        const p = picks.get(c);
+        out.push(ctl({ k: p.kind, value: p.value, multi: !!p.multi, suggest: p.suggest || null, options: p.options || null, empty: p.empty || '' }, c, p));
+        return;
+      }
+      if (cl.contains('insp-sec')) {
+        if (c.dataset.secKey === 'show' || c.dataset.secKey === 'frame') return;
+        const t = c.querySelector('.insp-sec-title');
+        const node = { k: 'sec', title: t ? t.textContent.trim() : '', items: [] };
+        const inner = c.querySelector('.insp-sec-body');
+        if (inner) walk(inner, node.items);
+        if (node.items.length) out.push(node);
+        return;
+      }
+      if (cl.contains('danger-zone') || cl.contains('color-select') || cl.contains('insp-seg') || cl.contains('insp-sec-head') || cl.contains('lang-tag') || cl.contains('mc-info')) return;
+      if (cl.contains('field')) {
+        const first = c.firstElementChild;
+        const node = { k: 'field', label: '', help: '', items: [] };
+        if (first && first.tagName === 'LABEL') {
+          consumed.add(first);
+          node.label = fcLangText(first).trim();
+          const info = first.querySelector('.mc-info');
+          node.help = info ? (info.getAttribute('data-tip') || '') : '';
+        }
+        walk(c, node.items);
+        // A field whose control the phone shows elsewhere (a colour, a layout
+        // choice, something skipped) leaves no label behind on its own.
+        if (node.items.length) out.push(node);
+        return;
+      }
+      const tag = c.tagName;
+      if (tag === 'SELECT') {
+        if (variantEls.has(c) || cl.contains('insp-shadow-select')) return;
+        out.push(ctl({ k: 'select', value: c.value, options: Array.from(c.options).map(o => ({ value: o.value, label: o.textContent.trim() })) }, c));
+        return;
+      }
+      if (tag === 'INPUT') {
+        const ty = (c.type || 'text').toLowerCase();
+        if (ty === 'file' || ty === 'hidden') return;
+        if (ty === 'checkbox' || ty === 'radio') {
+          let label = '';
+          const wrapLbl = c.closest('label');
+          if (wrapLbl && parent.contains(wrapLbl)) label = fcLangText(wrapLbl).trim();
+          else if (c.nextElementSibling && c.nextElementSibling.tagName === 'LABEL') {
+            consumed.add(c.nextElementSibling); label = fcLangText(c.nextElementSibling).trim();
+          }
+          out.push(ctl({ k: ty === 'radio' ? 'radio' : 'check', checked: !!c.checked, label }, c));
+          return;
+        }
+        const prev = c.previousElementSibling;
+        out.push(ctl({ k: 'input', type: ty, value: c.value, placeholder: c.placeholder || '',
+          min: c.min || '', max: c.max || '', step: c.step || '', maxlength: c.maxLength > 0 ? c.maxLength : 0,
+          tag: prev && prev.classList.contains('lang-tag') ? prev.textContent.trim() : '' }, c));
+        return;
+      }
+      if (tag === 'TEXTAREA') {
+        const prev = c.previousElementSibling;
+        out.push(ctl({ k: 'input', type: 'textarea', value: c.value, placeholder: c.placeholder || '', rows: c.rows || 3,
+          tag: prev && prev.classList.contains('lang-tag') ? prev.textContent.trim() : '' }, c));
+        return;
+      }
+      if (tag === 'BUTTON') {
+        const text = fcLangText(c).trim() || c.title || c.getAttribute('aria-label') || '';
+        if (!text) return;
+        out.push(ctl({ k: 'button', text, disabled: !!c.disabled, danger: cl.contains('btn-danger') || cl.contains('cta-remove') }, c));
+        return;
+      }
+      if (cl.contains('chip')) { out.push(ctl({ k: 'chip', text: fcLangText(c).trim(), on: cl.contains('on') }, c)); return; }
+      if (tag === 'LABEL' || tag === 'svg' || tag === 'SVG' || tag === 'IMG' || tag === 'VIDEO' || tag === 'STYLE') {
+        if (tag === 'LABEL') { const t = fcLangText(c).trim(); if (t) out.push({ k: 'text', text: t }); }
+        return;
+      }
+      if (isLeaf(c)) {
+        const t = fcLangText(c).trim();
+        if (t) out.push({ k: 'text', text: t, helper: cl.contains('helper') || cl.contains('insp-note') });
+        return;
+      }
+      walk(c, out);
+    });
+  }
+  const nodes = [];
+  walk(body, nodes);
+  state.formNodes = nodes;
+  state.formEls = els;
+  state.formPicks = picksAt;
+  state.formKinds = kinds;
+}
+
 // Custom colour picker — a trigger showing the current swatch + name, opening
 // a popover list where every option shows its colour chip beside the label.
 // Returns one node so existing field() wrapping + appendChild callers are
@@ -11845,6 +11991,7 @@ function buildHeroForm(m, b) {
   const ctas = getCtas(b);
   const btnWrap = document.createElement('div');
   btnWrap.className = 'field';
+  btnWrap.dataset.mirrorSkip = '1';   // the phone sheet edits this list itself (§325 M2)
   const btnLbl = document.createElement('label');
   btnLbl.textContent = T(`Buttons (${ctas.length})`, `按钮(${ctas.length})`);
   btnWrap.appendChild(btnLbl);
@@ -12920,7 +13067,7 @@ function buildCouponForm(m, b) {
     note.className = 'helper';
     note.style.lineHeight = '1.5';
     note.textContent = T('No coupons exist yet. Create one in the Mini App Backend → Marketing → Coupons, then pick it here.', '尚未创建优惠券。请到「小程序后台 → 营销 → 优惠券」中创建,然后在此处选择。');
-    secContent.appendChild(field(T('Coupon', '优惠券'), '', note));
+    secContent.appendChild(fcSkip(field(T('Coupon', '优惠券'), '', note)));
   } else {
     // Pick a REAL coupon. Selecting one fills the code + discount label from
     // that coupon (and seeds the headline/subtitle); the operator never types
@@ -12932,12 +13079,13 @@ function buildCouponForm(m, b) {
         label: (v.code || ('#' + v.id)) + (v.title_en ? ' — ' + v.title_en : ''),
       })),
     ];
-    secContent.appendChild(field(T('Coupon', '优惠券'), T('The real coupon this block hands out. Manage coupons in the Mini App Backend → Marketing.', '本区块发放的真实优惠券。请在「小程序后台 → 营销」中管理优惠券。'),
+    // data-mirror-skip (below): the phone sheet has its own picker for this (§325 M1).
+    secContent.appendChild(fcSkip(field(T('Coupon', '优惠券'), T('The real coupon this block hands out. Manage coupons in the Mini App Backend → Marketing.', '本区块发放的真实优惠券。请在「小程序后台 → 营销」中管理优惠券。'),
       sel(b.voucher_id ? String(b.voucher_id) : '', vOptions, val => {
         if (!val) { updateBlock(b.id, { voucher_id: null }); return; }
         const v = vouchers.find(x => String(x.id) === String(val));
         if (v) updateBlock(b.id, couponDisplayFromVoucher(v));
-      })));
+      }))));
   }
 
   secContent.appendChild(field(T('Small heading', '小标题'), T('Your own marketing line above the headline — this is the one piece you write.', '标题上方的自定义营销文案 — 这是唯一由你自由填写的部分。'),
@@ -12948,18 +13096,19 @@ function buildCouponForm(m, b) {
   // voucher, not the stored snapshot) so the editor reflects what will display.
   const liveDisp = liveCouponDisplay(b);
   const roLine = (text) => { const d = document.createElement('div'); d.className = 'helper'; d.textContent = text; return d; };
-  secContent.appendChild(field(T('Headline', '标题'), T('Follows the coupon — change it by editing the coupon’s name in Marketing.', '自动跟随优惠券 — 如需修改请在「营销」中编辑优惠券名称。'),
-    roLine(liveDisp ? pickLang(liveDisp.title_en, liveDisp.title_cn) : T('Pick a coupon above.', '请在上方选择优惠券。'))));
+  // The three read-only lines are fcSkip'd: the phone's coupon picker draws them (§325 M1).
+  secContent.appendChild(fcSkip(field(T('Headline', '标题'), T('Follows the coupon — change it by editing the coupon’s name in Marketing.', '自动跟随优惠券 — 如需修改请在「营销」中编辑优惠券名称。'),
+    roLine(liveDisp ? pickLang(liveDisp.title_en, liveDisp.title_cn) : T('Pick a coupon above.', '请在上方选择优惠券。')))));
   if (liveDisp && (liveDisp.subtitle_en || liveDisp.subtitle_cn)) {
-    secContent.appendChild(field(T('Subtitle', '副标题'), T('Follows the coupon (min spend / expiry).', '自动跟随优惠券(最低消费 / 到期)。'),
-      roLine(pickLang(liveDisp.subtitle_en, liveDisp.subtitle_cn))));
+    secContent.appendChild(fcSkip(field(T('Subtitle', '副标题'), T('Follows the coupon (min spend / expiry).', '自动跟随优惠券(最低消费 / 到期)。'),
+      roLine(pickLang(liveDisp.subtitle_en, liveDisp.subtitle_cn)))));
   }
   // Discount label + code are READ-ONLY mirrors of the selected coupon — shown
   // for confidence, not editable, so the block can't advertise a fake offer.
-  secContent.appendChild(field(T('Discount & code', '折扣与券码'), '',
+  secContent.appendChild(fcSkip(field(T('Discount & code', '折扣与券码'), '',
     roLine((liveDisp && (liveDisp.discount_label_en || liveDisp.code))
       ? T('Big number: ', '左侧大号数字:') + (liveDisp.discount_label_en || '—') + (liveDisp.code ? '   ·   CODE: ' + liveDisp.code : '')
-      : T('Pick a coupon above to set the discount and code.', '请在上方选择优惠券以设置折扣与券码。'))));
+      : T('Pick a coupon above to set the discount and code.', '请在上方选择优惠券以设置折扣与券码。')))));
   secContent.appendChild(field(T('Button text', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   secContent.appendChild(field(T('Button link', '按钮链接'), T('Pick where this button takes the customer.', '选择按钮将顾客带到哪里。'),
@@ -14521,6 +14670,11 @@ function productPicker({ multi, value, onChange, bundlesOnly }) {
   // row whose bundle_items recipe is non-empty), via the shared bundleRecipe().
   const isBundleProduct = p => bundleRecipe(p).length > 0;
   const pool = bundlesOnly ? state.products.filter(isBundleProduct) : state.products;
+  // §325 M3 — the phone's copy of this picker: its pool, its value, its onChange.
+  fcPickReg({ kind: 'product', el: wrap, multi: !!multi, value: multi ? (value || []) : (value || null),
+    options: pool.map(p => ({ id: p.id, name_en: p.name_en || '', name_cn: p.name_cn || '', sku: p.sku || '', is_published: !!p.is_published })),
+    empty: pool.length ? '' : (bundlesOnly ? 'No bundle products yet. Create one on the Products page — add components under "What\'s inside".' : 'No products in the system. Add some via the main admin first.'),
+    set: (v) => onChange(v) });
 
   if (!pool.length) {
     wrap.innerHTML = bundlesOnly
@@ -14681,6 +14835,7 @@ function targetPicker({ value, onChange, suggest }) {
   const prodFallback = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
 
   let current = (value || '').trim();
+  fcPickReg({ kind: 'link', el: wrap, value: current, suggest: suggest || null, set: (v) => onChange(String(v || '').trim()) });   // §325 M3
 
   // Turn the stored string into a plain-words { kind, label } for the header
   // chip — and resolve product:/category: ids to their real names so a chosen
@@ -14864,6 +15019,7 @@ function imgPicker(currentUrl, onSet) {
   };
 
   const container = document.createElement('div');
+  fcPickReg({ kind: 'image', el: container, value: currentUrl || '', set: (url) => commit(String(url || '').trim()) });   // §325 M3
 
   const wrap = document.createElement('div');
   wrap.className = 'img-picker';
@@ -15004,6 +15160,7 @@ async function uploadImage(file) {
 // button: clips aren't browsable in the media grid (that's image-only).
 function videoPicker(currentUrl, onSet) {
   const container = document.createElement('div');
+  fcPickReg({ kind: 'video', el: container, value: currentUrl || '', set: (url) => onSet(String(url || '').trim()) });   // §325 M3
 
   const wrap = document.createElement('div');
   wrap.className = 'img-picker';
@@ -15925,8 +16082,20 @@ document.addEventListener('keydown', (e) => {
       x.coupons = (state.vouchers || []).map(v => ({ id: v.id, code: v.code || '', title_en: v.title_en || '' }));
       x.couponLive = liveCouponDisplay(b);
     }
+    // §325 M2 — a hero's buttons as the inspector reads them (getCtas folds
+    // the old single cta_label / cta_target into the list), so the phone
+    // edits the same list the inspector does.
+    if (b.type === 'hero_banner') x.ctas = getCtas(b);
     return x;
   };
+  // §325 M2 — the link picker's lists: the inspector's own pages, and the
+  // products and categories it loaded, cut to what a choice needs.
+  const postTargets = () => POST({
+    evt: 'targets',
+    pages: TARGET_PAGES.map(p => ({ v: p.v, en: p.en, cn: p.cn })),
+    products: (state.products || []).map(p => ({ id: p.id, name_en: p.name_en || '', name_cn: p.name_cn || '', sku: p.sku || '', is_published: !!p.is_published })),
+    categories: (state.categories || []).map(c => ({ id: c.id, name: c.name || '', name_cn: c.name_cn || '' })),
+  });
   const postSelected = () => { const b = selectedBlock(); POST({ evt: 'selected', block: b, extra: selectedExtra(b) }); };
   // Per-block colour controls for the mobile Design sheet. state.designFields is
   // rebuilt by renderInspector() on every render (preview embed only); we strip
@@ -15967,7 +16136,23 @@ document.addEventListener('keydown', (e) => {
   // Notify the shell on every change. render()/renderPreview() run after
   // every mutation, and setDirty() runs on save-state changes — hook both.
   let _postT = null;
-  const schedulePost = () => { clearTimeout(_postT); _postT = setTimeout(() => { postState(); postSelected(); postDesign(); }, 0); };
+  // §325 M3 — the inspector's controls (fcFormSnapshot), with each value read
+  // off its control at the moment of sending: a box typed into from the phone
+  // holds what was typed even when nothing rebuilt the inspector since.
+  const fcLive = (n) => {
+    const el = n.i != null ? state.formEls[n.i] : null;
+    const out = Object.assign({}, n);
+    if (el && (n.k === 'input' || n.k === 'select')) out.value = el.value;
+    if (el && (n.k === 'check' || n.k === 'radio')) out.checked = !!el.checked;
+    if (el && n.k === 'chip') out.on = el.classList.contains('on');
+    if (n.items) out.items = n.items.map(fcLive);
+    return out;
+  };
+  const postForm = () => {
+    const b = selectedBlock();
+    POST({ evt: 'form', blockId: b ? b.id : null, nodes: b ? (state.formNodes || []).map(fcLive) : [] });
+  };
+  const schedulePost = () => { clearTimeout(_postT); _postT = setTimeout(() => { postState(); postSelected(); postDesign(); postForm(); }, 0); };
   const _origRenderPreview = renderPreview;
   renderPreview = function () { const r = _origRenderPreview.apply(this, arguments); schedulePost(); return r; };
   const _origSetDirty = setDirty;
@@ -15979,7 +16164,7 @@ document.addEventListener('keydown', (e) => {
     try {
       switch (d.cmd) {
         case 'hello':      postReady(); break;
-        case 'select':     selectBlock(d.id); postSelected(); break;
+        case 'select':     selectBlock(d.id); postSelected(); postForm(); break;
         case 'deselect':   selectBlock(null); break;
         case 'add':        insertBlock(d.blockType, typeof d.at === 'number' ? d.at : state.draft.length); break;
         case 'move':       { const i = state.draft.findIndex(b => b.id === d.id); if (i >= 0) moveBlock(i, d.delta); break; }
@@ -15988,6 +16173,19 @@ document.addEventListener('keydown', (e) => {
         case 'patch':      updateBlockSilent(d.id, d.patch || {}); break;
         // §325 — the coupon block's picker, exactly as the inspector's select:
         // none unlinks, a coupon fills the block from that coupon.
+        // §325 M2 — a picture chosen on the phone, committed the way the
+        // inspector's picture field commits it: a field that records the
+        // picture's shape (image_aspect) gets it measured here, and clearing
+        // sets it to null. Video, links and buttons ride 'patch'.
+        case 'setImage': {
+          if (typeof d.key !== 'string' || !d.key) break;
+          const url = typeof d.url === 'string' ? d.url.trim() : '';
+          const patch = { [d.key]: url };
+          if (typeof d.aspectKey === 'string' && d.aspectKey) patch[d.aspectKey] = url ? await probeImage(url) : null;
+          updateBlock(d.id, patch);
+          break;
+        }
+        case 'getTargets': postTargets(); break;
         case 'pickCoupon': {
           if (!d.voucherId) { updateBlock(d.id, { voucher_id: null }); break; }
           const v = (state.vouchers || []).find(x => String(x.id) === String(d.voucherId));
@@ -15999,7 +16197,40 @@ document.addEventListener('keydown', (e) => {
         case 'save':       saveDraft(); break;
         case 'publish':    publish(); break;                    // self-confirms
         case 'revert':     revertDraft(); break;                // self-confirms
-        case 'getSelected':postSelected(); break;
+        case 'getSelected':postSelected(); postForm(); break;
+        // §325 M3 — a tap on the phone's copy of an inspector control. `k` is
+        // what the phone believes the control is; a mismatch (the inspector
+        // was rebuilt differently meanwhile) is refused, never guessed at.
+        case 'ctl': {
+          const el = (state.formEls || [])[d.i];
+          if (!el || (state.formKinds || [])[d.i] !== d.k) break;
+          const isText = d.k === 'input';
+          if (d.k === 'input' || d.k === 'select') {
+            if (!(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) break;
+            el.value = d.value == null ? '' : String(d.value);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          } else if (d.k === 'check' || d.k === 'radio') {
+            if (el.tagName !== 'INPUT') break;
+            el.checked = !!d.value;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          } else if (d.k === 'button' || d.k === 'chip') {
+            el.click();
+          } else break;
+          // A typed letter changed only the preview; anything else may have
+          // changed what the inspector shows, so it is read again.
+          if (!isText && state.selectedId != null) renderInspector();
+          schedulePost();
+          break;
+        }
+        case 'pickSet': {
+          const p = (state.formPicks || [])[d.i];
+          if (!p || p.kind !== d.k) break;
+          await p.set(d.value);
+          if (state.selectedId != null) renderInspector();
+          schedulePost();
+          break;
+        }
         case 'getState':   postState(); break;
         case 'getDesign':  postDesign(); break;                 // per-block colours
         case 'setColor':   {                                    // tap on the phone

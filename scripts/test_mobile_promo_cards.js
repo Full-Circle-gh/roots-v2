@@ -94,8 +94,9 @@ section('1 · the sheet');
     assert.ok(start > 0 && end > start);
     assert.ok(/else if \(type === 'promo_cards'\) \{\s*renderPromoEdit\(body, blk\);/.test(SRC_ALL));
   });
-  it('the "images are tuned on desktop" note is skipped for this block', () => {
-    assert.ok(/if \(type === 'promo_cards'\) return;\s*body\.insertAdjacentHTML\('beforeend',/.test(SRC_ALL));
+  it('no "images are tuned on desktop" note on this block (since §325 M3, on no block)', () => {
+    assert.ok(!/are tuned on desktop\. ', '此模块的/.test(SRC_ALL));
+    assert.ok(!/class="desk-note"[^']*'\s*\+\s*'<div>' \+ cuT\('<b>Images/.test(SRC_ALL));
   });
   it('each card: picture, status, link, dates, move, remove', () => {
     const { ctx } = mk();

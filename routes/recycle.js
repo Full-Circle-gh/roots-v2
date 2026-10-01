@@ -15,6 +15,7 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
 const recycle = require('../lib/recycle');
+const capRoutes = require('../lib/cap-routes');
 
 router.get('/api/retail-admin/deleted', requireRetailAdmin, (req, res) => {
   try {
@@ -26,7 +27,23 @@ router.get('/api/retail-admin/deleted', requireRetailAdmin, (req, res) => {
 
 router.post('/api/retail-admin/deleted/:id/restore', requireRetailAdmin, (req, res) => {
   const who = (req.user && req.user.username) || null;
-  const r = recycle.restore(tdb(), parseInt(req.params.id, 10), who);
+  const deletedId = parseInt(req.params.id, 10);
+  /* §325 — THE KEY FOR THIS KIND OF RECORD. The choke point let any of the
+     kinds' keys through (it cannot see which kind this copy is); here the copy
+     is read and the operator must hold the key that edits ITS kind — a
+     delivery zone is delivery:edit, a ledger row finance:record, a coupon
+     coupons:edit or coupons:delete, a draft purchase order purchasing:edit.
+     Before anything is written, in the choke point's shape. A copy that does
+     not exist falls through to restore(), which answers not_found. */
+  let rec = null;
+  try { rec = tdb().prepare('SELECT kind FROM deleted_records WHERE id = ?').get(deletedId); } catch (e) { rec = null; }
+  if (rec) {
+    const need = capRoutes.restoreKindCap(rec.kind);
+    if (capRoutes.capDenied(req, need)) {
+      return res.status(403).json({ success: false, error: 'forbidden_capability', need });
+    }
+  }
+  const r = recycle.restore(tdb(), deletedId, who);
   if (!r.ok) {
     // `taken` and `gone` are the two an operator can act on, so they get their
     // own status rather than a 500: nothing failed, the world moved.
