@@ -199,7 +199,14 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['features.socialProof', list(route('social')), 'phone Social proof switch'],
       ['features.faq', list(tab('faq')), 'desktop FAQ switch'],
     ];
-    for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq']) {
+    // §325 X2 / X3 — the phone's Operations screen writes the same three
+    // families as the desktop's Settings → Operations, drawn for the phone
+    // Settings screen's keys (m.html opsxCan → ROUTE_CAP.settings), and Settings
+    // → Features gained the three switches the desktop hosts there.
+    rows.push(['inventory.lowStockThreshold', phoneSettings, 'phone Operations — low-stock default (§325 X2)']);
+    rows.push(['inventory.lowStockDigest', phoneSettings, 'phone Operations — daily low-stock list (§325 X2)']);
+    rows.push(['product_page.sections', phoneSettings, 'phone Operations — product page sections (§325 X3)']);
+    for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq', 'production', 'waste', 'lowStockHints']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
     }
     for (const [key, screen, who] of rows) {
@@ -208,6 +215,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         'need ' + JSON.stringify(need));
     }
     is(configKeyCap('support.hidden'), null, 'support.hidden stays open: the floating Support panel\'s Hide is drawn for everybody');
+    // The phone's Operations switch for it (§325 X2) is drawn for its Settings
+    // keys, a narrower set than "everybody", so the open gate admits it too.
 
     section('3 · …and the families do not bleed into each other');
     ok(!has(configKeyCap('tax.rateMicro'), 'popups:view'), 'a pop-up editor cannot set the tax rate');
@@ -259,6 +268,12 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(r.status, 200, 'a settings:shop account saves the Shop tab and the currency');
     r = await call('settings', 'PUT', '/api/retail-admin/config', { 'features.membership': true });
     is(r.status, 200, 'and flips a feature from the phone\'s Settings');
+    r = await call('settings', 'PUT', '/api/retail-admin/config', {
+      'inventory.lowStockThreshold': 4, 'inventory.lowStockDigest': { enabled: true, hour: 0 }, 'product_page.sections': { order: ['basics'], hidden: [] },
+    });
+    is(r.status, 200, 'and saves the phone Operations screen\'s low-stock and product-page settings (§325 X2/X3)');
+    r = await call('orders', 'PUT', '/api/retail-admin/config', { 'inventory.lowStockThreshold': 4 });
+    is(r.status, 403, '…which an orders account may not');
     r = await call('delivery', 'PUT', '/api/retail-admin/config', { 'delivery.holidayMode': false });
     is(r.status, 200, 'the phone\'s Resume delivery still works for a delivery:view account');
     r = await call('broadcast', 'PUT', '/api/retail-admin/config', { 'notifications.categories.order': true });
@@ -340,7 +355,9 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const inlineFam = (M.match(/apiWrite\('\/config',\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\('\/config',\{\[?'?/, '').split(/['\]]/)[0]);
       const historyFam = (M.match(/const body=\{'([a-zA-Z.]+)'[^}]*\};[\s\S]{0,300}?apiWrite\('\/config\?history=/g) || []).map((s) => s.match(/const body=\{'([a-zA-Z.]+)'/)[1]);
       is([...inlineFam, ...historyFam].sort(),
-        ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'], 'the phone writes four families, each asserted in section 2');
+        ['delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
+          'notifications.categories.', 'popups.list', 'product_page.sections', 'support.hidden'],
+        'the phone writes eight families, each asserted in section 2 (support.hidden as the open one)');
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
