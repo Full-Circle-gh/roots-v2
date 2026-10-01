@@ -173,6 +173,16 @@ section('2 · the low-stock default');
     assert.strictEqual(h.ctx.state.cfg.inventory.lowStockThreshold, 7);
     assert.deepStrictEqual(h.calls.toasts, [], 'a toast never reports failure');
   });
+  it('a permission refusal says the server\'s reason, not "did not save" (§331)', async () => {
+    const h = mk();
+    h.CMD.lowStockSet('4');
+    const e = new Error('refused'); e.refused = true; e.words = ['You do not have permission for this.', '你没有此操作的权限。'];
+    h.calls.writes[0].rej(e); await tick();
+    assert.ok(h.text(h.ctx.opsxLowCard()).includes('You do not have permission for this.'));
+    const g = mk(); g.CMD.geoBackfill(); g.ctx.state.ask.run();
+    g.calls.writes[0].rej(e); await tick();
+    assert.ok(g.text(g.ctx.opsxGeoAction()).includes('You do not have permission for this.'));
+  });
 }
 
 section('3 · the daily low-stock list');

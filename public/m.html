@@ -23396,7 +23396,7 @@ function opsxCfgSet(key,body,apply,okMsg){
   }).catch(e=>{
     x.busy=null;
     if(String(e&&e.message)==='auth') return;
-    x.err={key, msg:E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。')}; render();
+    x.err={key, msg:e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。')}; render();
   });
 }
 const opsxInv=(c,patch)=>{ c.inventory=Object.assign({},c.inventory||{},patch); };
@@ -23466,7 +23466,7 @@ function opsxGeoRun(){
     x.geoBusy=false;
     if(String(e&&e.message)==='auth') return;
     const c=e&&e.code;
-    x.geoErr=(c==='tencent_maps_key_missing'||c==='maps_key_missing')
+    x.geoErr=e.refused?E(...e.words):(c==='tencent_maps_key_missing'||c==='maps_key_missing')
       ? E('Set AMAP_MAPS_KEY or TENCENT_MAPS_KEY in /root/roots-v2/.env first','请先在 /root/roots-v2/.env 配置地图 key')
       : E('Failed: '+String((e&&e.message)||''),'操作失败: '+String((e&&e.message)||''));
     render();
@@ -23506,7 +23506,7 @@ reg('binRestore', id=>{
     x.binBusy=null;
     if(String(e&&e.message)==='auth') return;
     const c=e&&e.code, m=String((e&&e.message)||'');
-    x.binRowErr={[r.id]: c==='taken'
+    x.binRowErr={[r.id]: e.refused?E(...e.words):c==='taken'
       ? E('Something else now uses that record’s place. It cannot be put back.','该记录的位置已被其他内容占用，无法恢复。')
       : c==='gone'
         ? E('The record itself is no longer here, so there is nothing to switch back on.','该记录已不存在，无法恢复。')
