@@ -64,11 +64,13 @@ ok(!/state\.fapiao\b/.test(M_SRC) && !/fapiaoTried|fapiaoBusy|fapiaoLoading/.tes
 console.log('\nThe note bar');
 ok(!/自动开票已关闭|自动开票已开启|Auto-issue is (on|off)/.test(M_SRC),
    'it no longer reports a state nobody can change');
-ok(/请在电脑端开具/.test(M_SRC),
-   'but it still says where a fapiao IS issued, which is the half an operator can act on');
-ok(/T\('Issue fapiao on desktop','请在电脑端开具'\)/.test(M_SRC),
-   'NOTHING WAS COMPOSED — the pair is the live string\'s own tail with its first '
-   + 'clause dropped');
+/* §325 — "Issue fapiao on desktop" stopped being true when §314 put issuing on
+   the phone's order sheet. The line is gone, and each request row opens its
+   order's sheet instead, which is the half an operator can act on. */
+ok(!/T\('Issue fapiao on desktop'/.test(M_SRC) && !/'请在电脑端开具'/.test(M_SRC),
+   'the line that sent issuing to the desktop is gone in both languages');
+ok(/APP\.cmd\('openInvoiceOrder',\$\{\(DB\.invoices\|\|\[\]\)\.indexOf\(v\)\}\)/.test(M_SRC),
+   'and each request row opens its order, where the fapiao is issued');
 
 // ── 3. The server path is untouched and still dormant ───────────────────────
 console.log('\nThe server, deliberately left alone');

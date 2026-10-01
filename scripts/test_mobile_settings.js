@@ -433,16 +433,24 @@ CASES.push(['an answer opens', FAQ + `APP.cmd('faqToggle',0);`, [
 
 CASES.push(['a long legal document says it is clipped',
   `state.cfg=Object.assign({},state.cfg,{legal:{terms:{body_en:'x'.repeat(2000),updated_at:'2026-05-01'},
-    privacy:{body_en:'short one',updated_at:'2026-05-01'}}}); state.faqOpen=0; APP.cmd('push','legal');`, [
+    privacy:{body_en:'short one',updated_at:'2026-05-01'}}}); state.legalOpen=0; APP.cmd('push','legal');`, [
   // It has always cut at 1200 characters and said nothing, so an operator
   // could read a partial terms document believing it was the whole thing.
   ['it says so',  `txt('content').includes('Clipped here')`],
   ['and where the rest is', `txt('content').includes('on desktop')`],
 ]]);
 
+// §325 — Legal has its own open row now (legalOpen); an FAQ answer left open
+// no longer opens a legal document with the same index, and vice versa.
+CASES.push(['an FAQ answer left open does not open a legal document',
+  `state.cfg=Object.assign({},state.cfg,{legal:{terms:{body_en:'Terms body here',updated_at:'2026-05-01'}}});
+   state.faqOpen=0; state.legalOpen=null; APP.cmd('push','legal');`, [
+  ['the document stays shut', `!txt('content').includes('Terms body here')`],
+]]);
+
 CASES.push(['a short one is not marked clipped',
   `state.cfg=Object.assign({},state.cfg,{legal:{terms:{body_en:'short one',updated_at:'2026-05-01'}}});
-   state.faqOpen=0; APP.cmd('push','legal');`, [
+   state.legalOpen=0; APP.cmd('push','legal');`, [
   ['no clip note', `!txt('content').includes('Clipped here')`],
 ]]);
 
