@@ -1127,6 +1127,10 @@ const state = {
      the search over those names, which write is in flight and each
      section's refusal. `seq` drops an answer that lands after a reopen. */
   chm:{ch:null, pid:null, seq:0, tried:false, prod:null, stores:null, names:null, cat:{}, err:null, busy:null, note:{}, q:''},
+  /* §325 X8c-2 — Meituan's Match names run: its stage, the counts it ends
+     with, what is left for a person, the names it read or was pasted, and
+     which write is in flight. Built by mtmBlank(), which Open also uses. */
+  mtm:mtmBlank(),
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
      flight (one at a time, per screen, exactly as the desktop page does it), and
      csNote is { pid, text } so a refusal lands on the card that caused it rather
@@ -31156,6 +31160,7 @@ function x8MtCard(){
       <span class="num" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;overflow-wrap:anywhere">${escAttr(cat==null?T('Loading…','加载中…'):(per||T('never read','从未读取')))}</span>
       ${sync?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('Reads the current listing names. Changes nothing and matches nothing.','读取当前商品名称,不改动也不匹配任何内容。')}</span>`:''}</div>
     ${x8Err('mtcat')}
+    ${canRoute('mtmatch')?`<button class="cta" style="width:100%" onclick="APP.cmd('mtmOpen')">${T('Match names','匹配名称')}</button>`:''}
     ${sync?`<span style="display:flex;gap:8px;flex-wrap:wrap">
       ${x8Btn('x8MtCat',s.catReading?T('Reading…','读取中…'):T('Refresh catalogue','刷新商品名称'),'mtcat',T('Reading…','读取中…'))}
       ${x8Btn('x8MtPush',T('Sync now','立即同步'),'mtpush',T('Queuing…','排队中…'))}</span>
@@ -31524,6 +31529,250 @@ SUBS.chmatch={title:['Channel sync','渠道同步'],
   titleOf:()=>{ const c=chm().ch; return c==='meituan'?T('Meituan','美团'):c==='eleme'?T('Eleme','饿了么'):'GZ Grocery'; },
   render:()=>screenChMatch()};
 /* §325 X8c ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X8c-2 — MEITUAN'S MATCH NAMES, PASTE NAMES, AND START OVER
+   --------------------------------------------------------------------------
+   The desktop Meituan page's guided flow (11-meituan.js mtOpenMatch,
+   mtMatchStart, mtMatchApply, mtMatchPick, mtMatchFallback(All),
+   mtMatchStartOver / mtClearAll, mtOpenPaste / mtPasteApply), on the phone:
+
+   1. Start matching reads the delivery store's listings (POST
+      /meituan/listings/refresh, then GET /meituan/listings until no job runs),
+      or Paste takes the names from the operator, one per line.
+   2. Every active product with no name on the delivery store is matched with
+      the desktop's own rule (mtMatchListing: 货号 first, then the Chinese name
+      exact, then a unique substring, then the size to break a tie, then the
+      English name) and every confident match is saved —
+      POST /meituan/products/:id/map {storeId, storeCode, meituanName,
+      syncEnabled (kept), source:'match_names'}. A name the operator already
+      set is never touched.
+   3. What is left is shown: the ambiguous ones as names to tap, the ones
+      Meituan does not have with the suggested name where it is a real
+      listing, "use suggested names for all", and the refusals counted apart
+      from the failures because their remedy is different.
+   4. Start over clears every name on the delivery store after asking
+      (source:'remove', sync off) and goes back to the start. The 闪购 store
+      links itself by 货号 and is never touched — the desktop's own rule.
+
+   Drawn for meituan:map, the key every write here asks; reading the listings
+   again is meituan:sync's, so Start matching needs both and Paste needs only
+   the first.
+   ══════════════════════════════════════════════════════════════════════════ */
+const mtm=()=>state.mtm;
+function mtmBlank(){ return {stage:'intro', running:false, applied:0, failed:0, refused:0, amb:[], unm:[], prog:'', read:0,
+  prod:null, stores:null, tried:false, err:null, listings:{}, skus:{}, paste:false, pasteText:'', pasteErr:null, busy:null, note:null, seq:0}; }
+function mtmStore(){
+  const st=mtm().stores||[];
+  return st.find(s=>s.code==='tianhe'||String(s.name||'').includes('天河'))||st[0]||null;
+}
+function mtmLoad(){
+  const s=mtm(); if(s.tried) return; s.tried=true; s.err=null; const seq=s.seq;
+  const fail=e=>{ if(seq!==s.seq||String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); };
+  apiRaw('/meituan/products?includeInactive=1').then(j=>{ if(seq===s.seq){ s.prod=(j&&j.data)||[]; render(); } }).catch(fail);
+  api('/meituan/stores').then(r=>{ if(seq===s.seq){ s.stores=Array.isArray(r)?r:[]; render(); } }).catch(fail);
+}
+const mtmReread=()=>{ const s=mtm(); return apiRaw('/meituan/products?includeInactive=1').then(j=>{ s.prod=(j&&j.data)||s.prod; }).catch(()=>{}); };
+/* 11-meituan.js mtMatchListing, rule for rule and in its order. */
+function mtmMatch(p,code){
+  const s=mtm(), list=s.listings[code]||[];
+  if(!list.length) return {name:'',reason:'no-listings'};
+  const psku=String(p.sku||'').trim();
+  const bySku=psku&&(s.skus[code]||{})[psku];
+  if(bySku) return {name:bySku,reason:'sku'};
+  const cn=String(p.name_cn||'').trim(), en=String(p.name_en||'').trim().toLowerCase();
+  if(cn){
+    const exact=list.find(n=>n===cn); if(exact) return {name:exact,reason:'exact'};
+    const subs=list.filter(n=>n.includes(cn));
+    if(subs.length===1) return {name:subs[0],reason:'substring'};
+    if(subs.length>1){
+      const v=String(p.variant_label||'').trim().toLowerCase();
+      if(v){ const vm=subs.filter(n=>n.toLowerCase().includes(v)); if(vm.length===1) return {name:vm[0],reason:'variant'}; }
+      return {name:'',reason:'ambiguous',candidates:subs};
+    }
+  }
+  if(en){ const subs=list.filter(n=>n.toLowerCase().includes(en)); if(subs.length===1) return {name:subs[0],reason:'substring-en'}; }
+  return {name:'',reason:'unmatched'};
+}
+/* Our own name and size, offered only when Meituan really carries exactly
+   that string (mtSuggestionIfListed): a composed name is never sent on its
+   own word. */
+function mtmSuggest(p,code){
+  const base=String(p.name_cn||p.name_en||'').trim(); if(!base) return '';
+  const v=String(p.variant_label||'').trim(); const n=v?base+'（'+v+'）':base;
+  return (mtm().listings[code]||[]).some(x=>String(x||'').trim()===n)?n:'';
+}
+const mtmLabel=p=>{ const main=[p.name_cn,p.name_en].filter(Boolean).join('  '); return p.variant_label?main+' · '+p.variant_label:main; };
+function mtmKeep(pid,code){ const p=(mtm().prod||[]).find(x=>x.id===pid), m=p&&(p.stores||{})[code]; return !m?0:(m.sync_enabled===0?0:1); }
+const mtmRefusal=e=>!!(e&&(e.code==='name_not_in_catalogue'||e.code==='catalogue_not_read'));
+async function mtmApply(store){
+  const s=mtm(), code=store.code;
+  s.running=true; s.stage='working'; render();
+  const targets=[]; s.amb=[]; s.unm=[];
+  (s.prod||[]).forEach(p=>{
+    if(!p.is_active) return;
+    if(String(((p.stores||{})[code]||{}).meituan_name||'').trim()) return;   // the operator's own names stay
+    const m=mtmMatch(p,code);
+    const base={pid:p.id, label:mtmLabel(p), suggestion:mtmSuggest(p,code)};
+    if(m.name) targets.push({pid:p.id, name:m.name});
+    else if(m.reason==='ambiguous') s.amb.push(Object.assign({candidates:m.candidates},base));
+    else if(m.reason!=='no-listings') s.unm.push(base);
+  });
+  let done=0, failed=0; s.refused=0;
+  for(const t of targets){
+    try{
+      await apiWrite('/meituan/products/'+t.pid+'/map',{storeId:store.id,storeCode:code,meituanName:t.name,syncEnabled:mtmKeep(t.pid,code),source:'match_names'},'POST');
+      done++;
+    }catch(e){ if(String(e&&e.message)==='auth') return; if(mtmRefusal(e)) s.refused++; else failed++; }
+    s.prog=T('Matching… '+(done+failed+s.refused)+'/'+targets.length,'匹配中… '+(done+failed+s.refused)+'/'+targets.length);
+    x1Paint('mMtmProg',()=>escAttr(s.prog));
+  }
+  s.applied=done; s.failed=failed; s.running=false; s.stage='done';
+  await mtmReread(); render();
+}
+reg('mtmStart', async ()=>{
+  const s=mtm(); if(s.running||!mCan('meituan:map')||!mCan('meituan:sync')) return;
+  const store=mtmStore(); if(!store){ s.note=E('No stores detected.','未检测到门店。'); render(); return; }
+  s.running=true; s.stage='working'; s.note=null; s.prog=T('Reading your Meituan listings…','正在读取美团商品…'); render();
+  try{
+    const r=await apiWrite('/meituan/listings/refresh',{},'POST');
+    if(((r&&r.queued)||[]).length||((r&&r.alreadyRunning)||[]).length){
+      const t0=Date.now(); let data=null;
+      while(Date.now()-t0<180000){
+        await x8Wait(3000);
+        data=await apiRaw('/meituan/listings');
+        s.read=Object.values((data&&data.listings)||{}).reduce((a,b)=>a+(Array.isArray(b)?b.length:0),0);
+        x1Paint('mMtmSub',mtmSubLine);
+        if(!data||!data.running) break;
+      }
+      s.listings=(data&&data.listings)||{}; s.skus=(data&&data.skus)||{};
+      const errs=((data&&data.jobs)||[]).filter(j=>j.status==='error');
+      if(errs.length&&!Object.values(s.listings).some(l=>l.length))
+        throw new Error(errs[0].error||T('could not read the listings — is the sync service logged in?','无法读取商品 —— 同步服务是否已登录?'));
+    } else {
+      const data=await apiRaw('/meituan/listings'); s.listings=(data&&data.listings)||{}; s.skus=(data&&data.skus)||{};
+    }
+    await mtmApply(store);
+  }catch(e){
+    s.running=false; s.stage='intro'; if(String(e&&e.message)==='auth') return;
+    s.note=e&&e.refused?E(...e.words):E('Match failed: '+tmOneLang((e&&e.message)||''),'匹配失败:'+tmOneLang((e&&e.message)||'')); render();
+  }
+});
+function mtmSubLine(){
+  const s=mtm(), n=(s.prod||[]).filter(p=>p.is_active).length;
+  return escAttr(s.read?T(s.read+' listings read · matching against '+n+' products','已读取 '+s.read+' 个商品 · 对比 '+n+' 个商品')
+    :T('matching against '+n+' products','对比 '+n+' 个商品'));
+}
+/* One review write: the same body, then the row leaves the list. */
+async function mtmReview(list,i,name){
+  const s=mtm(), it=s[list][i], store=mtmStore(); if(!it||!store||!name) return false;
+  s.busy=list+':'+i; s.note=null; render();
+  try{
+    await apiWrite('/meituan/products/'+it.pid+'/map',{storeId:store.id,storeCode:store.code,meituanName:name,syncEnabled:mtmKeep(it.pid,store.code),source:'match_names'},'POST');
+    s[list].splice(s[list].indexOf(it),1); s.applied++; s.busy=null; return true;
+  }catch(e){
+    s.busy=null; if(String(e&&e.message)==='auth') return false;
+    s.note=e&&e.refused?E(...e.words):mtmRefusal(e)?E(tmOneLang(e.message),tmOneLang(e.message))
+      :E('Save failed: '+tmOneLang((e&&e.message)||''),'保存失败:'+tmOneLang((e&&e.message)||'')); render(); return false;
+  }
+}
+reg('mtmPick', async (i,j)=>{ const s=mtm(); if(s.busy||!mCan('meituan:map')) return; const it=s.amb[Number(i)]; if(!it) return;
+  if(await mtmReview('amb',Number(i),it.candidates[Number(j)])){ await mtmReread(); render(); } });
+reg('mtmUse', async i=>{ const s=mtm(); if(s.busy||!mCan('meituan:map')) return; const it=s.unm[Number(i)]; if(!it||!it.suggestion) return;
+  if(await mtmReview('unm',Number(i),it.suggestion)){ await mtmReread(); render(); } });
+reg('mtmUseAll', async ()=>{
+  const s=mtm(); if(s.busy||!mCan('meituan:map')) return;
+  for(const it of s.unm.filter(x=>x.suggestion)){
+    const ok=await mtmReview('unm',s.unm.indexOf(it),it.suggestion);
+    if(!ok&&s.note) break;
+  }
+  await mtmReread(); render();
+});
+/* mtClearAll: every name on the delivery store, after asking; the 闪购 store
+   is never touched. */
+reg('mtmStartOver', ()=>{
+  const s=mtm(); if(s.busy||s.running||!mCan('meituan:map')) return;
+  const store=mtmStore(); if(!store) return;
+  const targets=(s.prod||[]).filter(p=>String(((p.stores||{})[store.code]||{}).meituan_name||'').trim());
+  const nm=LANG==='en'?(store.nameEn||store.name||store.code):(store.name||store.nameEn||store.code);
+  if(!targets.length){ s.note=E('Nothing to clear — no names are set on '+nm+'.','无可清除 — '+nm+' 尚未设置任何名称。'); render(); return; }
+  state.askErr=null;
+  state.ask={title:T('Clear all '+targets.length+' Meituan names on '+nm+'?','清除 '+nm+' 的全部 '+targets.length+' 个美团名称?'),
+    body:T('The store that links itself by 货号 is left untouched. This deletes the names on '+nm+' — you can fill them again afterwards.',
+           '按货号自动关联的门店不受影响。将删除 '+nm+' 的名称 — 之后可以重新填写。'),
+    confirmLabel:T('Clear mappings','清除映射'), danger:true,
+    run:async ()=>{
+      s.busy='clear'; s.note=null; render();
+      let done=0, failed=0;
+      for(const p of targets){
+        try{ await apiWrite('/meituan/products/'+p.id+'/map',{storeId:store.id,storeCode:store.code,meituanName:'',syncEnabled:0,source:'remove'},'POST'); done++; }
+        catch(e){ if(String(e&&e.message)==='auth') return; failed++; }
+      }
+      s.busy=null; Object.assign(s,{stage:'intro',applied:0,failed:0,refused:0,amb:[],unm:[]});
+      showToast(T('Cleared '+done+' mapping(s)'+(failed?', '+failed+' failed':'')+'.','已清除 '+done+' 个映射'+(failed?','+failed+' 个失败':'')+'。'));
+      await mtmReread(); render();
+    }};
+  render();
+});
+reg('mtmPasteOpen', ()=>{ const s=mtm(); if(s.running||!mCan('meituan:map')) return; s.paste=true; s.pasteErr=null; render(); });
+reg('mtmPasteClose', ()=>{ const s=mtm(); s.paste=false; s.pasteErr=null; render(); });
+reg('mtmPasteText', v=>{ mtm().pasteText=String(v==null?'':v); });
+reg('mtmPasteApply', async ()=>{
+  const s=mtm(); if(s.running||!mCan('meituan:map')) return;
+  const store=mtmStore(); if(!store){ s.pasteErr=E('Pick a store first.','请先选择门店。'); render(); return; }
+  const names=Array.from(new Set(String(s.pasteText||'').split('\n').map(x=>x.replace(/^[\s•\-–·]+/,'').trim()).filter(Boolean)));
+  if(!names.length){ s.pasteErr=E('Paste at least one title.','请至少粘贴一个名称。'); render(); return; }
+  s.listings=Object.assign({},s.listings,{[store.code]:names}); s.skus={};
+  s.paste=false; s.pasteErr=null;
+  await mtmApply(store);
+});
+function screenMtMatch(){
+  const s=mtm(); mtmLoad();
+  if(s.err&&!(s.prod&&s.stores)) return x1Err(escAttr(String(s.err)),'mtmRetry');
+  if(!s.prod||!s.stores) return x1Loading();
+  const store=mtmStore(), nm=store?(LANG==='en'?(store.nameEn||store.name||store.code):(store.name||store.nameEn||store.code)):'';
+  const note=s.note?`<div style="font-size:13.5px;color:var(--brick-ink);line-height:1.5">${escAttr(String(s.note))}</div>`:'';
+  const wrap=inner=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">${inner}</div>`;
+  if(s.paste){
+    return wrap(`<div style="font-size:15px;font-weight:500">${T('Paste Meituan names','粘贴美团商品名')}</div>
+      <div style="font-size:13px;color:var(--text-secondary)">${T('Store','门店')}: ${escAttr(nm)}</div>
+      <label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T('Meituan titles — one per line, copied exactly as they appear on Meituan','美团商品名 — 每行一个，与美团上完全一致')}</span>
+        <textarea rows="10" style="width:100%" oninput="APP.cmd('mtmPasteText',this.value)">${escAttr(s.pasteText)}</textarea></label>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Each title is matched to a product by its Chinese name, and only empty fields are filled. Anything unsure goes to the review panel.','每个名称按中文名匹配商品，仅填写空字段。不确定的进入待确认列表。')}</div>
+      ${s.pasteErr?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.pasteErr))}</div>`:''}
+      <span style="display:flex;gap:8px"><button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('mtmPasteClose')">${T('Cancel','取消')}</button>
+        <button class="cta" style="flex:1" onclick="APP.cmd('mtmPasteApply')">${T('Match and fill','匹配并填写')}</button></span>`);
+  }
+  if(s.stage==='intro'){
+    const both=mCan('meituan:sync');
+    return wrap(`<div style="font-size:14px;line-height:1.55">${T('Reads the product names from your Meituan '+nm+' store and links them to the products here. It takes about a minute, and it changes nothing on Meituan.',
+        '从美团'+nm+'读取商品名称，并与这里的商品关联。大约一分钟，不会改动美团上的任何内容。')}</div>
+      ${note}
+      ${both?`<button class="cta" style="width:100%" onclick="APP.cmd('mtmStart')">${T('Start matching','开始匹配')}</button>`:''}
+      <button class="btn2" style="width:100%" onclick="APP.cmd('mtmPasteOpen')">${T('Cannot connect? Paste the names yourself','无法连接？自己粘贴名称')}</button>`);
+  }
+  if(s.stage==='working'){
+    return wrap(`<div id="mMtmProg" style="font-size:14.5px">${escAttr(s.prog||T('Reading your Meituan listings…','正在读取美团商品…'))}</div>
+      <div id="mMtmSub" style="font-size:12.5px;color:var(--text-secondary)">${mtmSubLine()}</div>`);
+  }
+  const chip=(cmd,args,label)=>`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13px;text-align:left" ${s.busy?'disabled':''} onclick="APP.cmd('${cmd}',${args})">${escAttr(label)}</button>`;
+  return wrap(`<div style="display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--sage-ink)">${ic('check',18)}${escAttr(T(s.applied+' matched automatically','已自动匹配 '+s.applied+' 个'))}</div>
+    ${s.failed?`<div style="font-size:13px;color:var(--text-secondary)">${escAttr(T(s.failed+' failed to save — try again in a minute.',s.failed+' 个保存失败，请稍后重试。'))}</div>`:''}
+    ${s.refused?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5">${escAttr(T(s.refused+' were refused — those names are not in the catalogue read from this store. Refresh the catalogue on the Meituan page, then run this again.',
+        s.refused+' 个被拒绝 — 这些名称不在从本门店读取的商品名称中。请在美团页面刷新商品名称后再运行一次。'))}</div>`:''}
+    ${note}
+    ${s.amb.length?`<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:13.5px;font-weight:500">${escAttr(T(s.amb.length+' need your pick — choose the right Meituan listing',s.amb.length+' 个需要你选择 — 选中正确的美团商品'))}</div>
+      ${s.amb.map((it,i)=>`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><span style="font-size:14px">${escAttr(it.label)}</span>
+        <span style="display:flex;gap:6px;flex-wrap:wrap">${it.candidates.map((c,j)=>chip('mtmPick',i+','+j,c)).join('')}</span></div>`).join('')}</div>`:''}
+    ${s.unm.length?`<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:13.5px;font-weight:500">${escAttr(T(s.unm.length+' are not on Meituan — their stock stays frozen until they are listed there',s.unm.length+' 个在美团上未找到 — 上架前库存不会同步'))}</div>
+      ${tmList(s.unm.map((it,i)=>tmRow({label:escAttr(it.label),right:it.suggestion?chip('mtmUse',i,T('Use','使用')+' “'+it.suggestion+'”'):`<span style="font-size:12.5px;color:var(--text-secondary)">${T('no suggestion','无建议')}</span>`})))}
+      ${s.unm.filter(u=>u.suggestion).length>1?`<button class="btn2" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('mtmUseAll')">${T('Use suggested names for all','全部使用建议名称')}</button>`:''}</div>`:''}
+    ${!s.amb.length&&!s.unm.length?`<div style="font-size:13.5px;color:var(--text-secondary)">${T('Everything is matched.','全部匹配完成。')}</div>`:''}
+    <button class="btn2" style="width:100%;color:var(--brick-ink)" ${s.busy?'disabled':''} onclick="APP.cmd('mtmStartOver')">${s.busy==='clear'?T('Saving…','保存中…'):T('Start over — clear every matched name','重新开始 — 清除所有已匹配名称')}</button>`);
+}
+reg('mtmRetry', ()=>{ const s=mtm(); s.tried=false; s.err=null; render(); });
+reg('mtmOpen', ()=>{ if(!canRoute('mtmatch')) return; const seq=(mtm().seq||0)+1; state.mtm=Object.assign(mtmBlank(),{seq}); push('mtmatch'); });
+SUBS.mtmatch={title:['Match names with Meituan','与美团匹配商品名'],render:()=>screenMtMatch()};
+/* §325 X8c-2 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -42398,6 +42647,9 @@ const ROUTE_CAP={
      controls are drawn for — {channel}:map for the name and the binding,
      {channel}:sync for the option claims (lib/cap-routes.js). */
   chmatch:['meituan:map','meituan:sync','eleme:map','eleme:sync','guanyi:map'],
+  /* §325 X8c-2. Match names writes names, meituan:map; its Start matching also
+     reads the listings again (meituan:sync) and is drawn only with both. */
+  mtmatch:'meituan:map',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
