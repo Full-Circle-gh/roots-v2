@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.304 · 2026-09-30 · §417 STOCK STAFF AT ANOTHER STORE — 1 STRING COMPOSED BY CLAUDE.** See *Stock staff only at your own stores (§417)*.
+
 **v1.303 · 2026-09-30 · §416 CHOOSING A PLAN WHILE PAID UP — 1 STRING COMPOSED BY CLAUDE.** See *Choosing a plan while paid up, on the phone (§416)*.
 
 **v1.302 · 2026-09-30 · §414 ONE CHINESE WORD PER THING (§412.7) — FIVE WORDS SETTLED, NOTHING COMPOSED; EARLIER ENTRIES THAT RECORDED THE OLD WORDS ARE AMENDED.** See *One Chinese word per thing (§414)*.
@@ -13113,3 +13115,14 @@ means they keep theirs.
 The other wording, `Until it is paid, billing shows the account as past due. ·
 付款前，账单将显示为逾期。` (X13), stays live for every shop that is not paid
 up.
+
+## Stock staff only at your own stores (§417)
+
+**Operator register (Rule 1), 2026-10-01.** The server's refusal
+(`routes/backend-team.js` requireOwnStore). Both surfaces show it as they show
+that router's other refusals. The controls are hidden, so this is said only to
+a stale screen.
+
+| String | Status |
+|---|---|
+| `You can manage stock staff only at your own stores · 你只能管理自己门店的库存员` | **composed by Claude.** `库存员` is copied from the live `Stock staff · 库存员`; `门店` is live throughout. Rejected: the live `所属门店`, which names a record's store rather than the operator's own. |
