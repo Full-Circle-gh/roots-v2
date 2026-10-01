@@ -27070,6 +27070,10 @@ function csErrText(e){
   if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   if(e.code==='not_mapped'||e.code==='not_syncing')
     return T('Somebody else changed this while you had it open — reload and try again.','该记录已被他人修改,请刷新后重试。');
+  /* §325 S2j — an Eleme mapping with no listing name is not switched on. The
+     Eleme panel's own sentence for this (14-eleme.js), copied whole. */
+  if(e.code==='no_listing_name')
+    return T('Sync cannot be switched on until this mapping names an Eleme listing.','未选择饿了么商品名前无法开启同步。');
   return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
 }
 /* ONE WRITE AT A TIME, per screen, as the desktop page does it. The RELOAD is the
