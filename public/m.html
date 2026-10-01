@@ -1706,6 +1706,7 @@ function pop(){
   if(top==='affsettings'&&!affMayLeave()) return;   // §325 M9 — so does an unsaved offer
   if(top==='pointsrules'&&!prMayLeave()) return;    // §325 M11 — and unsaved points rules,
   if(top==='tiersedit'&&!teMayLeave()) return;      // and an unsaved ladder
+  if(top==='popupedit'&&!puMayLeave()) return;      // §325 M12 — and an unsaved new pop-up
   if(top==='affeligible') loadAffElig();   // the count on the offer is re-read, as the desktop's dialog does on close
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
@@ -9663,7 +9664,7 @@ function screenPopups(){
   const list=cfgGet('popups.list',null);
   if(!Array.isArray(list)) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!list.length) return nothingYet(T('The app is quiet','暂无弹窗'),
-    T('Nothing is interrupting your customers. Pop-ups are written on desktop — a promo, a review nudge, a holiday notice.','目前没有弹窗打扰顾客。弹窗在电脑端创建 — 活动、邀请评价或歇业通知。'));
+    T('Add one when you have something worth interrupting for — a promo, a review nudge, a holiday notice.','有值得打扰顾客的事时再新建一个——活动、邀请评价或歇业通知。'));
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     ${state.puErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -9687,9 +9688,284 @@ function screenPopups(){
         ${puWindow(p,st)?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${puWindow(p,st)}</div>`:''}
         <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
           <span style="flex:1;font-size:13.5px;color:var(--text-secondary)">${busy?T('Saving…','保存中…'):(p.enabled?T('On','已启用'):T('Off','已停用'))}</span>
+          ${puCan()?`<button class="btn2" style="min-height:34px;padding:0 14px;font-size:13px" onclick="APP.cmd('puEdit','${escAttr(p.id)}')">${T('Edit','编辑')}</button>`:''}
           ${toggle(!!p.enabled,`APP.cmd('togglePopup','${escAttr(p.id)}')`)}</div></div>`;
-    }).join('')}
-    ${noteBar(T('Pop-ups are written, scheduled and previewed on desktop.','弹窗的撰写、排期与预览在电脑端进行。'))}</div>`;
+    }).join('')}</div>`;
+}
+
+/* ==========================================================================
+   §325 M12 — POP-UPS ARE WRITTEN ON THE PHONE (desktop: 05-marketing.js
+   openPopupEditor / PU_CARD / savePopup / deletePopup / duplicatePopup)
+   --------------------------------------------------------------------------
+   The phone could switch a pop-up on and off and said the rest was "written,
+   scheduled and previewed on desktop". The desktop's editor is here now, field
+   for field: the internal name, the picture (POST /cms/media), the headline,
+   message and button in both languages and what the button opens, the pages,
+   when and how often, the dates, live and closable.
+
+   The pop-ups are ONE stored list written whole, so every write here goes
+   through puPut, which sends the version of the list it was built from
+   (§337, ?expect=popups.list:<v>). A stale list is refused and the screen is
+   handed the list as it is now:
+     · an EXISTING pop-up saves itself (§279, the desktop's PU_CARD, card
+       'popup.<id>', with Undo and Version history). Refused as stale, it is
+       sent again on the fresh list at once if nobody else changed THIS pop-up
+       — nothing of theirs is overwritten, because only this one is swapped
+       in; if somebody did, the editor takes their copy and says so;
+     · a NEW one keeps its Save (it creates the record), as do Duplicate and
+       Delete (asks): refused as stale, nothing is written and the sentence
+       says so — the next press saves on the fresh list.
+   On the pop-ups family's keys (popups:view or popups:edit), as the desktop.
+   ========================================================================== */
+const PU_KEYS=['popups:view','popups:edit'];
+const puCan=()=>mCan(PU_KEYS);
+let PUE=null;   // {id, isNew, d, loaded, openStamp, err, busy, img:{busy,err}}
+const puList=()=>{ const l=cfgGet('popups.list',null); return Array.isArray(l)?l:[]; };
+const puUid=()=>'pu_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+function puBlank(){
+  return {id:puUid(), enabled:true, name:'', pages:['home'], trigger:'on_load', delay_seconds:3, frequency:'once',
+    start_at:'', end_at:'', image_url:'', title_en:'', title_cn:'', body_en:'', body_cn:'',
+    cta_label_en:'', cta_label_cn:'', cta_target:'', dismissible:true, updated_at:Date.now()};
+}
+function puDraft(p){
+  return {id:p.id, enabled:!!p.enabled, name:String(p.name||''), pages:Array.isArray(p.pages)?p.pages.slice():[],
+    trigger:p.trigger||'on_load', delay_seconds:p.delay_seconds!=null?p.delay_seconds:3, frequency:p.frequency||'once',
+    start_at:String(p.start_at||'').slice(0,10), end_at:String(p.end_at||'').slice(0,10), image_url:String(p.image_url||''),
+    title_en:String(p.title_en||''), title_cn:String(p.title_cn||''), body_en:String(p.body_en||''), body_cn:String(p.body_cn||''),
+    cta_label_en:String(p.cta_label_en||''), cta_label_cn:String(p.cta_label_cn||''), cta_target:String(p.cta_target||''),
+    dismissible:p.dismissible!==false};
+}
+// The desktop's popupFromForm: the pop-up the form holds, as the list stores it.
+function puFromDraft(d){
+  return {id:d.id, enabled:!!d.enabled, name:String(d.name||'').trim(), pages:d.pages.slice(), trigger:d.trigger,
+    delay_seconds:Number(d.delay_seconds)||0, frequency:d.frequency, start_at:String(d.start_at||'').trim(), end_at:String(d.end_at||'').trim(),
+    image_url:d.image_url, title_en:d.title_en, title_cn:d.title_cn, body_en:d.body_en, body_cn:d.body_cn,
+    cta_label_en:d.cta_label_en, cta_label_cn:d.cta_label_cn, cta_target:String(d.cta_target||'').trim(), dismissible:!!d.dismissible};
+}
+/* EVERY pop-up write: the whole list, the version it was built from, and —
+   for the self-saving card — its history card. A stale list is refused by the
+   server with the list as it is now, which becomes the loaded list here. */
+function puPut(list, card, note){
+  const ver=((state.cfg||{})._versions||{})['popups.list'];
+  const q=[ver?'expect='+encodeURIComponent('popups.list:'+ver):'', card?'history='+encodeURIComponent(card)+(note?'&note='+note:''):''].filter(Boolean).join('&');
+  const cfgPath='/config'+(q?'?'+q:'');
+  return apiWrite(cfgPath,{'popups.list':list},'PUT').then(j=>{
+    const d=j&&j.data;
+    if(d&&typeof d==='object') state.cfg=d;
+    else state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list})});
+    return j;
+  }).catch(e=>{
+    if(e&&e.code==='stale_config'&&e.body){
+      state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list:Array.isArray(e.body.value)?e.body.value:[]}),
+        _versions:Object.assign({},(state.cfg||{})._versions||{},{'popups.list':e.body.version})});
+      e.stale=true;
+    }
+    throw e;
+  });
+}
+const puSame=(a,b)=>JSON.stringify(a||null)===JSON.stringify(b||null);
+/* The card holds ITS editor's state, not whatever PUE is now: leaving sends
+   what is pending, and that send reads after the screen has gone. */
+function puCard(id, st){
+  return cfgCard('popup.'+id,{
+    read:()=>({'popups.list':puList().map(p=>p.id===id?Object.assign(puFromDraft(st.d),{updated_at:st.openStamp}):p)}),
+    hold:()=>st.d.pages.length?'':T('Pick at least one page','至少选择一个页面'),
+    put:(b,note)=>{
+      // `updated_at` is stamped on what is SENT, never on what is compared.
+      const stamp=list=>list.map(p=>p.id===id?Object.assign({},b['popups.list'].find(x=>x.id===id)||p,{updated_at:Date.now()}):p);
+      return puPut(stamp(b['popups.list']),'popup.'+id,note).catch(e=>{
+        if(!e.stale) throw e;
+        const now=puList().find(p=>p.id===id);
+        if(now&&puSame(now,st.loaded)) return puPut(stamp(puList()),'popup.'+id,note);
+        // Somebody changed THIS pop-up meanwhile: the editor takes their copy.
+        if(now){ st.d=puDraft(now); st.loaded=JSON.parse(JSON.stringify(now)); st.openStamp=now.updated_at||null; }
+        st.err=staleSaveText();
+        setTimeout(()=>{ const c=CFG_CARD['popup.'+id]; if(c&&PUE===st) cfgCardStart(c); render(); },0);
+        throw new Error(String(staleSaveText()));
+      }).then(()=>{ const now=puList().find(p=>p.id===id); if(now) st.loaded=JSON.parse(JSON.stringify(now)); });
+    },
+    apply:b=>{ const p=((b&&b['popups.list'])||[]).find(x=>x.id===id); if(p) st.d=puDraft(p); },
+    // A restored version is the whole stored list; only THIS pop-up is taken from it.
+    fromSnapshot:s=>{ const old=(s['popups.list']||[]).find(x=>x.id===id); return {'popups.list':puList().map(p=>p.id===id&&old?old:p)}; },
+    words:{'popups.list':['Pop-up','弹窗']},
+  });
+}
+function puOpen(p, isNew){
+  PUE={id:p.id, isNew, d:puDraft(p), loaded:isNew?null:JSON.parse(JSON.stringify(p)), openStamp:p.updated_at||null, err:'', busy:null, img:{busy:false,err:''}, pq:'', pres:null, cats:null};
+  if(!isNew) cfgCardStart(puCard(p.id, PUE));
+  CMD.push('popupedit');
+}
+reg('puNew', ()=>{ if(!puCan()||!Array.isArray(cfgGet('popups.list',null))) return; puOpen(puBlank(), true); });
+reg('puEdit', id=>{ if(!puCan()) return; const p=puList().find(x=>String(x.id)===String(id)); if(p) puOpen(p,false); });
+const puTouch=()=>{ if(!PUE) return; if(!PUE.isNew){ const c=CFG_CARD['popup.'+PUE.id]; if(c&&c.auto) c.auto.touch(); } else PUE.dirty=true; };
+const PU_TEXT=['name','title_en','title_cn','body_en','body_cn','cta_label_en','cta_label_cn','delay_seconds','start_at','end_at'];
+reg('puSet', (k,v)=>{ if(!PUE||!puCan()) return;
+  if(PU_TEXT.indexOf(k)>=0){ PUE.d[k]=String(v==null?'':v); puTouch(); return; }
+  if(k==='trigger'||k==='frequency'){ PUE.d[k]=String(v); puTouch(); render(); return; }
+  if(k==='enabled'||k==='dismissible'){ PUE.d[k]=!PUE.d[k]; puTouch(); render(); } });
+// "All pages" overrides the rest; picking a page drops "All pages" (renderPopupPageChips).
+reg('puPage', k=>{ if(!PUE||!puCan()||!PU_PAGE[k]) return;
+  const on=PUE.d.pages.indexOf(k)>=0;
+  if(k==='all') PUE.d.pages=on?[]:['all'];
+  else { PUE.d.pages=PUE.d.pages.filter(x=>x!=='all'&&x!==k); if(!on) PUE.d.pages.push(k); }
+  puTouch(); render(); });
+/* What the button opens: the desktop's simple destinations, a product (found
+   by name or SKU) or a category (the desktop's own category list). */
+const PU_TARGETS=[['',['— No button, just close','无按钮,仅关闭']],['shop',['Opens Shop tab','打开商城页']],['cart',['Opens Cart tab','打开购物车页']],
+  ['home',['Opens Home tab','打开首页']],['me',['Opens Me tab','打开我的']],['membership',['Opens Membership page','打开会员页']],
+  ['promotions',['Opens CMS page · Promotions','Opens CMS page · Promotions']],['about',['Opens CMS page · About','Opens CMS page · About']],
+  ['categories',['Opens CMS page · Categories','Opens CMS page · Categories']],['product',['Opens a specific product…','指定产品…']],['category',['Opens a specific category…','指定分类…']]];
+const puTargetKind=t=>!t?'':t.indexOf('product:')===0?'product':t.indexOf('category:')===0?'category':(PU_TARGETS.some(x=>x[0]===t)?t:'');
+reg('puTarget', k=>{ if(!PUE||!puCan()) return;
+  if(k==='product'){ PUE.pick='product'; PUE.pres=null; PUE.pq=''; render(); return; }
+  if(k==='category'){ PUE.pick='category'; render();
+    if(!PUE.cats) api('/categories').then(r=>{ if(PUE){ PUE.cats=Array.isArray(r)?r:[]; render(); } }).catch(()=>{ if(PUE){ PUE.cats=[]; render(); } });
+    return; }
+  PUE.pick=null; PUE.d.cta_target=k; puTouch(); render(); });
+let puPQT=null;
+reg('puProdQ', v=>{ if(!PUE) return; PUE.pq=String(v||''); clearTimeout(puPQT);
+  puPQT=setTimeout(()=>{ const q=PUE&&PUE.pq.trim(); if(!q){ PUE.pres=null; render(); return; }
+    api('/products?limit=10&q='+encodeURIComponent(q)).then(r=>{ if(PUE){ PUE.pres=Array.isArray(r)?r:[]; const h=document.getElementById('mPuPick'); if(h) h.innerHTML=puPickHtml(); else render(); } }).catch(()=>{}); },250); });
+reg('puPickProduct', id=>{ if(!PUE||!puCan()) return; PUE.d.cta_target='product:'+Number(id); PUE.pick=null; puTouch(); render(); });
+reg('puPickCategory', i=>{ if(!PUE||!puCan()||!PUE.cats) return; const c=PUE.cats[Number(i)]; if(!c) return; PUE.d.cta_target='category:'+c.id; PUE.pick=null; puTouch(); render(); });
+function puPickHtml(){
+  const rows=PUE.pres||[];
+  return rows.length?`<div class="list">${rows.map((p,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:44px;padding:8px 14px" onclick="APP.cmd('puPickProduct',${Number(p.id)})"><span style="flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([p.name_en,p.name_cn].filter(Boolean).join(' · ')||('#'+p.id))}${p.sku?` <span class="num" style="color:var(--text-secondary)">[${escAttr(p.sku)}]</span>`:''}</span></button>`).join('')}</div>`
+    :PUE.pq.trim()&&PUE.pres?`<div style="font-size:13px;color:var(--text-secondary)">${T('(no matches)','(无匹配)')}</div>`:'';
+}
+function puTargetLabel(t){
+  if(!t) return T('No destination — pop-up just dismisses.','无跳转 — 弹窗仅关闭。');
+  if(t.indexOf('product:')===0) return '→ '+T('Product','商品')+' #'+t.split(':')[1];
+  if(t.indexOf('category:')===0){ const k=t.split(':')[1], c=(PUE&&PUE.cats||[]).find(x=>String(x.id)===k); return '→ '+T('Category','分类')+' '+(c?c.name:k); }
+  const x=PU_TARGETS.find(y=>y[0]===t); return '→ '+(x?T(...x[1]):t);
+}
+// The picture: POST /cms/media, as the desktop's uploadPopupImage.
+reg('puPic', ()=>{ if(!PUE||!puCan()||PUE.img.busy) return;
+  const el=document.createElement('input'); el.type='file'; el.accept='image/*';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) puUpload(f); }; el.click(); });
+async function puUpload(file){
+  if(!PUE||!puCan()) return;
+  PUE.img={busy:true,err:''}; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'popup.jpg');
+    const r=await fetch(API+'/cms/media',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401){ location.href='/backend/login'; return; }
+    if(r.status===403){ PUE.img.err=(await apiRefusal(r)).message; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data){ const reason=MEDIA_ERR[j&&j.error]; PUE.img.err=T('Upload failed','上传失败')+(reason?' '+T(...reason):''); return; }
+    PUE.d.image_url=j.data.url||('/api/retail/media/'+j.data.id); puTouch(); showToast(T('Uploaded','已上传'));
+  }catch(e){ if(PUE) PUE.img.err=T('Upload failed','上传失败'); }
+  finally{ if(PUE) PUE.img.busy=false; render(); }
+}
+reg('puPicClear', ()=>{ if(!PUE||!puCan()) return; PUE.d.image_url=''; puTouch(); render(); });
+/* Save (a NEW pop-up), Duplicate, Delete — each one press, each on the list
+   as loaded, each refused as stale rather than applied over somebody else. */
+function puWrite(list, done, okText){
+  PUE.busy=true; PUE.err=''; render();
+  puPut(list).then(()=>{ if(PUE) PUE.busy=null; if(okText) showToast(okText); done(); })
+    .catch(e=>{ if(!PUE) return; PUE.busy=null; if(String(e.message)==='auth') return;
+      PUE.err=e.stale?String(staleSaveText()):e.refused?T(...e.words):T('Save failed','保存失败')+(e.message?': '+e.message:''); render(); });
+}
+const puLeave=()=>{ PUE=null; const top=state.stack.length?state.stack[state.stack.length-1].route:null; if(top==='popupedit'){ forgetScroll(); state.stack.pop(); } render(); };
+reg('puSave', ()=>{
+  if(!PUE||!PUE.isNew||PUE.busy||!puCan()) return;
+  if(!PUE.d.pages.length){ PUE.err=T('Pick at least one page','至少选择一个页面'); render(); return; }
+  const next=Object.assign(puFromDraft(PUE.d),{updated_at:Date.now()});
+  puWrite([next].concat(puList().filter(p=>p.id!==next.id)), puLeave, T('Pop-up saved','弹窗已保存'));
+});
+reg('puDuplicate', ()=>{
+  if(!PUE||PUE.isNew||PUE.busy||!puCan()) return;
+  const c=CFG_CARD['popup.'+PUE.id];
+  Promise.resolve(c&&c.auto?c.auto.flush():null).then(()=>{
+    const src=puList().find(p=>p.id===PUE.id); if(!src) return;
+    // A fresh id, "(copy)" on the name, left OFF so nothing goes live by accident.
+    const copy=Object.assign(JSON.parse(JSON.stringify(src)),{id:puUid(), enabled:false, updated_at:Date.now(),
+      name:(src.name||T('Untitled','未命名'))+T(' (copy)','(副本)')});
+    puWrite([copy].concat(puList()), ()=>{ if(c&&c.auto) c.auto.stop(); state.stack.pop(); puOpen(copy,false); },
+      T('Duplicated · edit the copy','已复制 · 编辑副本'));
+  });
+});
+reg('puDelete', ()=>{
+  if(!PUE||PUE.isNew||PUE.busy||!puCan()) return;
+  const id=PUE.id;
+  state.ask={title:T('Delete this pop-up?','删除此弹窗?'), confirmLabel:T('Delete','删除'), danger:true, run:()=>{
+    const c=CFG_CARD['popup.'+id];
+    // What was waiting goes first, then the card stops: a pop-up that is gone
+    // must not be written back by a pause that outlived it.
+    Promise.resolve(c&&c.auto?c.auto.flush():null).then(()=>{ if(c&&c.auto) c.auto.stop();
+      puWrite(puList().filter(p=>p.id!==id), puLeave, T('Pop-up deleted','弹窗已删除')); });
+  }};
+  render();
+});
+/* A NEW pop-up asks before it is dropped; an existing one sends what is
+   pending on the way out (it saves itself). */
+function puMayLeave(){
+  if(!PUE) return true;
+  if(PUE.isNew&&PUE.dirty){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ PUE=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  if(!PUE.isNew){ const c=CFG_CARD['popup.'+PUE.id]; if(c&&c.auto) c.auto.flush(); }
+  PUE=null; return true;
+}
+function screenPopupEdit(){
+  if(!PUE) return screenPopups();
+  const d=PUE.d, busy=!!PUE.busy;
+  const lab=(t,opt)=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}${opt?` <span style="font-weight:400">${opt}</span>`:''}</span>`;
+  const hint=t=>`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.5">${t}</div>`;
+  const inp=(k,ph,type)=>`<input ${type?`type="${type}"`:''} value="${escAttr(d[k])}" placeholder="${escAttr(ph||'')}" style="width:100%" oninput="APP.cmd('puSet','${k}',this.value)">`;
+  const area=(k,ph)=>`<textarea style="width:100%;min-height:64px;resize:none" placeholder="${escAttr(ph||'')}" oninput="APP.cmd('puSet','${k}',this.value)">${escAttr(d[k])}</textarea>`;
+  const two=(a,b)=>`<div style="display:flex;flex-direction:column;gap:8px">${a}${b}</div>`;
+  const card=(title,body)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px"><div class="eyebrow">${title}</div>${body}</div>`;
+  const kind=PUE.pick||puTargetKind(d.cta_target);
+  const c=PUE.isNew?null:CFG_CARD['popup.'+PUE.id];
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <label style="display:block">${lab(T('Internal name','内部名称'),T('— admin only, never shown to customers','仅管理员可见'))}${inp('name','e.g. Spring promo · home')}</label>
+    ${card(T('The message','内容'),`
+      <div>${lab(T('Picture','图片'),T('— optional','可选'))}
+        ${d.image_url?`<img src="${escAttr(d.image_url)}" alt="" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--border-default);display:block">`
+          :`<div style="font-size:12.5px;color:var(--text-secondary)">${T('No image yet — text-only pop-up.','暂无图片 — 纯文字弹窗。')}</div>`}
+        ${PUE.img.err?`<div style="font-size:13px;color:var(--brick-ink);margin-top:8px">${escAttr(PUE.img.err)}</div>`:''}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn2" style="flex:1" ${PUE.img.busy?'disabled':''} onclick="APP.cmd('puPic')">${PUE.img.busy?T('Uploading…','上传中…'):T('Add or replace an image','添加或替换图片')}</button>
+          ${d.image_url?`<button class="btn2" style="flex:1" onclick="APP.cmd('puPicClear')">${T('Remove image','移除图片')}</button>`:''}</div></div>
+      <div>${lab(T('Headline','标题'))}${two(inp('title_en','Welcome'),inp('title_cn','欢迎'))}
+        ${hint(T('English · 中文 — customers see one, based on their WeChat language.','顾客按微信语言看到其中一种。'))}</div>
+      <div>${lab(T('Message','消息'),T('— optional, one or two short lines','可选,一两句'))}${two(area('body_en','One or two short lines.'),area('body_cn','一两句简短文字。'))}</div>
+      <div>${lab(T('Button text','按钮文字'),T('— optional','可选'))}${two(inp('cta_label_en','Shop now'),inp('cta_label_cn','立即购买'))}
+        <select style="width:100%;margin-top:8px" aria-label="${escAttr(T('What the button opens','按钮打开的内容'))}" onchange="APP.cmd('puTarget',this.value)">
+          ${PU_TARGETS.map(([v,l])=>`<option value="${v}"${kind===v?' selected':''}>${escAttr(T(...l))}</option>`).join('')}</select>
+        ${PUE.pick==='product'?`<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+            <input id="mPuProdQ" value="${escAttr(PUE.pq)}" placeholder="${escAttr(T('Type to search products by name or SKU…','按名称或货号搜索'))}" style="width:100%" oninput="APP.cmd('puProdQ',this.value)">
+            <div id="mPuPick">${puPickHtml()}</div></div>`:''}
+        ${PUE.pick==='category'?`<div style="margin-top:8px">${!PUE.cats?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+            :PUE.cats.length?`<div class="list">${PUE.cats.map((x,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<button class="row" style="min-height:44px;padding:8px 14px" onclick="APP.cmd('puPickCategory',${i})"><span style="flex:1;font-size:14px">${escAttr(x.name)}</span></button>`).join('')}</div>`
+            :`<div style="font-size:13px;color:var(--text-secondary)">${T('(no categories yet)','(暂无分类)')}</div>`}</div>`:''}
+        ${hint(escAttr(puTargetLabel(d.cta_target)))}</div>`)}
+    ${card(T('The rules','规则'),`
+      <div>${lab(T('Where','位置'))}${hint(T('Pick one or more pages. "All pages" overrides the rest.','选择一个或多个页面;"全部页面"将覆盖其余选项。'))}
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${Object.keys(PU_PAGE).map(k=>`<button class="chip ${d.pages.indexOf(k)>=0?'on':''}" onclick="APP.cmd('puPage','${k}')"><span>${T(...PU_PAGE[k])}</span></button>`).join('')}</div></div>
+      <div>${lab(T('Appears','触发时机'))}<select style="width:100%" onchange="APP.cmd('puSet','trigger',this.value)">
+          <option value="on_load"${d.trigger==='on_load'?' selected':''}>${T('The moment the page opens','打开页面即弹出')}</option>
+          <option value="after_seconds"${d.trigger==='after_seconds'?' selected':''}>${T('A few seconds after','数秒后弹出')}</option></select>
+        ${d.trigger==='after_seconds'?`<div style="margin-top:10px">${lab(T('Delay in seconds','延时(秒)'))}${inp('delay_seconds','3','number')}</div>`:''}</div>
+      <div>${lab(T('How often','频率'))}<select style="width:100%" onchange="APP.cmd('puSet','frequency',this.value)">
+          ${[['once',['Once per customer, ever','每位顾客仅一次']],['daily',['Once a day','每天一次']],['session',['Once per app session','每次打开小程序一次']],['every_visit',['Every time the page opens','每次打开页面']]]
+            .map(([v,l])=>`<option value="${v}"${d.frequency===v?' selected':''}>${T(...l)}</option>`).join('')}</select></div>
+      <div style="display:flex;gap:10px"><label style="flex:1;display:block">${lab(T('Start','开始'))}${inp('start_at','','date')}</label>
+        <label style="flex:1;display:block">${lab(T('End','结束'))}${inp('end_at','','date')}</label></div>
+      ${hint(T('Leave blank to run until you turn it off.','留空则一直显示,直到你停用它。'))}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-size:15px">${T('Live — show this to customers now','启用 — 立即向顾客显示')}</span>${toggle(!!d.enabled,"APP.cmd('puSet','enabled')")}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-size:15px">${T('Closable — show a close button','可关闭 — 显示关闭按钮')}</span>${toggle(!!d.dismissible,"APP.cmd('puSet','dismissible')")}</div>`)}
+    ${PUE.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(PUE.err)}</div>`:''}
+    ${PUE.isNew?`<button class="cta" ${busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('puSave')">${busy?T('Saving…','保存中…'):T('Save','保存')}</button>`
+      :`${c&&c.auto?cardFoot(c):''}
+        <div style="display:flex;gap:8px">
+          <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('puDuplicate')">${T('Duplicate','复制')}</button>
+          <button class="btn2" style="flex:1;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('puDelete')">${busy?T('Working…','处理中…'):T('Delete','删除')}</button></div>`}
+  </div>`;
 }
 
 /* ==========================================================================
@@ -18081,7 +18357,14 @@ const SUBS={
     titleOf:()=>{ const pg=scPage(state.scSel); return pg?T(...pg.name):T('Share cards','分享卡片'); },
     backLabel:()=>T('Share cards','分享卡片'),
     render:()=>screenShareCard()},
-  popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),render:()=>screenPopups()},
+  popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),
+    cta:()=>puCan()&&Array.isArray(cfgGet('popups.list',null))?`<button class="cta inhead" onclick="APP.cmd('puNew')">${T('New pop-up','新建弹窗')}</button>`:'',
+    render:()=>screenPopups()},
+  /* §325 M12 — the desktop's pop-up editor. */
+  popupedit:{title:['Pop-up','弹窗'],
+    titleOf:()=>PUE?(PUE.isNew?T('New pop-up','新建弹窗'):T('Edit pop-up','编辑弹窗')):T('Pop-ups','弹窗'),
+    backLabel:()=>T('Pop-ups','弹窗'),
+    render:()=>screenPopupEdit()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
   /* §325 M9 — the offer, and who earns the repeat-order share. */
   affsettings:{title:['The offer','奖励方案'],backLabel:()=>T('Affiliate','分销'),render:()=>screenAffSettings()},
@@ -40479,7 +40762,7 @@ const ROUTE_CAP={
      advances than that it advances into a dead end. */
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
-  coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
+  coupons:'coupons:view', flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
   sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
@@ -41822,7 +42105,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -42038,6 +42321,8 @@ function mUnsavedWork(){
     /* The points rules and the ladder, changed and not yet saved (§325 M11). */
     if(prDirty()&&(state.stack||[]).some(f=>f&&f.route==='pointsrules')) return true;
     if(teDirty()&&(state.stack||[]).some(f=>f&&f.route==='tiersedit')) return true;
+    /* A new pop-up typed and not yet saved (§325 M12); an existing one is a card. */
+    if(PUE&&PUE.isNew&&PUE.dirty&&(state.stack||[]).some(f=>f&&f.route==='popupedit')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;

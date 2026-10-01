@@ -450,7 +450,17 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // auto top-up — each its own site, as the desktop's saveReviewReward /
       // saveReviewTopup; the review tags are a cfgCard below.
       const SITE_FAMS = FAMS.filter((f) => f !== 'notifications.order_status_template_id' && f !== 'system_alerts.')
-        .concat(['notifications.order_status_template_id|system_alerts.']).sort();
+        .concat(['notifications.order_status_template_id|system_alerts.'])
+        // §325 M12 — popups.list has TWO phone sites: the list's switch and the
+        // pop-up editor's puPut. Both send the list's version (§337), pinned below.
+        .concat(['popups.list']).sort();
+      {
+        const puAt = M.indexOf('function puPut(list, card, note){');
+        const puSrc = M.slice(puAt, M.indexOf('\n}\n', puAt));
+        ok(puAt !== -1 && /apiWrite\(cfgPath,\{'popups\.list':list\},'PUT'\)/.test(puSrc), 'the pop-up editor writes the list through one helper');
+        ok(puSrc.includes("'expect='+encodeURIComponent('popups.list:'+ver)"), '…which sends the version it was built from (§337)');
+        ok(list(route('popupedit')).every((k) => has(configKeyCap('popups.list'), k)), 'phone pop-up editor may write popups.list');
+      }
       // A site whose body is written inline names its family in the call itself;
       // only one that builds its body first (Resume delivery, the pop-up switch)
       // is read in the 900 characters before it. Several sites now sit within
@@ -477,7 +487,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
       }
       is(famSites.filter((i) => i !== CARD_SITE).map((i) => famAt(i).join('|')).sort(),
-        SITE_FAMS, 'the phone writes fifteen families at fourteen write sites, each asserted in section 2 (support.hidden as the open one)');
+        SITE_FAMS, 'the phone writes fifteen families at fifteen write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'
