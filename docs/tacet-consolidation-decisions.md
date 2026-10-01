@@ -27836,3 +27836,44 @@ the server would now refuse, so nobody is refused after a tap.
      `test_settings_write_gates.js`, `test_last_open_writes.js`,
      `test_mobile_payments_settings.js`, `test_mobile_wechat_miniapp.js`
      and `test_alipay_manual_unread_save.js`.
+
+## §416 — CHOOSING A BILLING PLAN DOES NOT MAKE A PAID SHOP PAST DUE
+
+**Built 2026-10-01 under §412.3.** `POST /api/backend/billing/select-plan`
+(`routes/billing-pay.js`) used to set the subscription to `past_due` the
+moment it raised the new plan's invoice. It did this even for a shop paid up to
+a date weeks away (§391, §392 item 4). The shop then showed "Payment is past
+due" for a period it had already paid for.
+
+1. **A shop paid up to a date ahead keeps that period.** This means a
+   subscription that is `active`, not internal, with `current_period_end`
+   still in the future. On a plan change:
+   - **The subscription:** it stays `active`, its paid period is untouched,
+     and only the plan it renews onto changes.
+   - **The new plan's invoice:** it covers the period that starts when the
+     paid one ends, at the new plan's price and interval. It is owed from
+     then (`due_date` = that start).
+   - **The answer:** it says `deferred: true` and `owedFrom`.
+2. **Choosing again for the same next period replaces the earlier choice.**
+   The earlier choice's open invoice for that period is voided, so the shop
+   never owes two plans for one period.
+3. **At the paid end the lifecycle needs no change.** Its renewal looks for
+   an open invoice with the same subscription and period start. It finds this
+   one and raises no second invoice. If that invoice is still unpaid, the
+   ladder moves the shop to `past_due`, then grace, then suspended, exactly as
+   for any unpaid renewal. Paying early works as before: `activateInvoice`
+   sets the subscription active over the invoice's period.
+4. **Every other shop is unchanged.** That means no subscription, trialing,
+   `past_due`, grace, suspended, cancelled, or a paid period already over. The
+   invoice starts now, net-7, and the subscription waits on it as `past_due`.
+   Internal plans are still refused.
+5. **The phone's confirm (§391) now says which case applies.** A paid shop
+   reads *Your current plan stays active until DATE, when its paid period
+   ends; the new plan is owed from then.* Any other shop keeps *Until it is
+   paid, billing shows the account as past due.*, which is still true there.
+   The desktop's confirm says only that an invoice is raised, which is true in
+   both cases, and is unchanged.
+6. **Tests:**
+   - New `scripts/test_billing_plan_keeps_paid_period.js`: the real routers
+     and the real lifecycle on a scratch database.
+   - `test_mobile_billing.js` asserts both wordings, in both languages.
