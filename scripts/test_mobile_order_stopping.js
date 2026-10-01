@@ -295,6 +295,26 @@ section('2 · the online store and everything — /store-status');
     W(h, 0).res({ success: true }); await tick();
     assert.deepStrictEqual(h.calls.toasts, ['Opening every channel']);
   });
+  it('§412.4 — and afterwards says which stayed closed, from the server\'s answer, until the next write', async () => {
+    const h = await oc({}, { master: 'closed' });
+    h.CMD.ocMaster(1); h.st.ask.run();
+    W(h, 0).res({ success: true, target: 'open', stayedClosed: [
+      { storeCode: 'yuexiu', name: '越秀店', nameEn: 'Yuexiu', nameCn: '越秀店', channels: ['mini_app', 'eleme'] },
+      { storeCode: 'tianhe', name: '天河店', nameEn: 'Tianhe', nameCn: '天河店', channels: ['pos'] }] });
+    await tick();
+    const line = 'Still closed — closed at the shop with its own switch: Yuexiu: Mini app, Eleme; Tianhe: In store';
+    assert.ok(h.text(fn(h, 'ocCard')()).includes(line), 'the card names them');
+    h.ctx.LANG = 'zh';
+    assert.ok(h.text(fn(h, 'ocCard')()).includes('仍关闭 — 在门店单独关闭: 越秀店: 小程序、饿了么;天河店: 门店'));
+    h.ctx.LANG = 'en';
+    h.CMD.ocMaster(0); h.st.ask.run();
+    assert.ok(!h.text(fn(h, 'ocCard')()).includes('Still closed'), 'the next write clears it');
+    W(h, 1).res({ success: true, target: 'closed', stayedClosed: [] }); await tick();
+    assert.ok(!h.text(fn(h, 'ocCard')()).includes('Still closed'), 'closing leaves nothing to name');
+    const n = await oc({}, { master: 'closed' });
+    n.CMD.ocMaster(1); n.st.ask.run(); W(n, 0).res({ success: true, stayedClosed: [] }); await tick();
+    assert.ok(!n.text(fn(n, 'ocCard')()).includes('Still closed'), 'everything opened: no line');
+  });
   it('a refusal stays on the card, and no toast claims it', async () => {
     const h = await oc();
     h.CMD.ocMaster(0); h.st.ask.run(); W(h, 0).rej(REFUSED()); await tick();
