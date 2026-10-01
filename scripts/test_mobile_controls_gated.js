@@ -147,7 +147,9 @@ section('1 · the order sheet');
   it('every key: the row and the More sheet as before', () => {
     const h = mk(ALL_ORDER, { noteReady: true });
     assert.deepStrictEqual(cmds(h.ctx.orderActionRow(h.order)), ['advance', 'printOrder', 'detailActions']);
-    assert.deepStrictEqual(cmds(h.ctx.sheetActions()), ['printOrder', 'advance', 'refundOrder', 'cancelOrder', 'ordNoteOpen']);
+    // §325 O6: a paid order gains §136's Hold for restock (advance → awaiting_restock), first, as on the desktop.
+    assert.deepStrictEqual(cmds(h.ctx.sheetActions()), ['printOrder', 'advance', 'advance', 'refundOrder', 'cancelOrder', 'ordNoteOpen']);
+    assert.ok(h.ctx.sheetActions().includes("APP.cmd('advance','awaiting_restock')"));
   });
   it('orders:view alone: no action row at all, and nothing in More', () => {
     const h = mk(['orders:view'], { noteReady: true });
@@ -156,7 +158,9 @@ section('1 · the order sheet');
   });
   it('orders:edit without orders:refund: Cancel and forward, no Refund', () => {
     const h = mk(['orders:view', 'orders:edit']);
-    assert.deepStrictEqual(cmds(h.ctx.sheetActions()), ['printOrder', 'advance', 'cancelOrder']);
+    assert.deepStrictEqual(cmds(h.ctx.sheetActions()), ['printOrder', 'advance', 'advance', 'cancelOrder']);
+    // …and Hold for restock is orders:edit, so an account without it does not get it.
+    assert.ok(!mk(['orders:view', 'orders:refund']).ctx.sheetActions().includes('awaiting_restock'));
   });
   it('orders:refund without orders:edit: Refund only (the two Parts; Full is offered with both keys)', async () => {
     const h = mk(['orders:view', 'orders:refund']);
