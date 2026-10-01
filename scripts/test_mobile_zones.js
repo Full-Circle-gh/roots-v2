@@ -74,7 +74,7 @@ function mk(opts = {}) {
     searchBox: (inner) => inner, searchClearShow: () => {}, searchClearRun: () => {},
     mCan: (k) => (opts.caps ? opts.caps.includes(k) : true),
     state: { zones: opts.zones === undefined ? ZONES() : opts.zones, ask: null, askErr: null, focus: null,
-      zn: { q: '', loading: false, loadErr: null, regions: null, regionsBusy: false, busy: null, err: null, edit: null } },
+      zn: { q: '', loading: false, readErr: null, regions: null, regionsBusy: false, busy: null, err: null, edit: null } },
     render: () => {}, reg: (k, f) => { CMD[k] = f; },
     showToast: (m) => calls.toasts.push(String(m)),
     api: (p) => {
@@ -293,6 +293,16 @@ async function main() {
     for (const d of ["'Edit zone · 编辑配送区'", "'Zone saved · 配送区已保存'", 'Zone deleted · 配送区已删除', 'Pick at least one district · 请至少选一个区', 'Add at least one city · 请至少添加一个城市',
       'Duplicate · 复制配送区', 'No zones yet — click + Add zone above. · 暂无配送区,请点上方「+ 添加配送区」', 'Day-only · 仅按日', 'Time-slot · 按时段',
       "dzLangSpan('City-wide', '全市')", "dzLangSpan('Province', '全省')", 'Apply settings · 应用']) has(DESK, d, 'desktop: ' + d);
+  }
+
+  console.log('\n· the read-failure flag is not a load-shaped name');
+  {
+    // test_mobile_screens.js (slow shard) treats every load+Capital word as a
+    // helper that must be defined; the zones read's flag was `loadErr` and so
+    // read as a call to a missing loadErr(). It is `readErr`, as X4's is.
+    const sm = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    is((sm.match(/\bloadErr\b/g) || []).length, 0, 'no `loadErr` anywhere in the app');
+    has(src, 'zn:{q:\'\', loading:false, readErr:null,', 'the zones slot carries readErr');
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
