@@ -23665,10 +23665,13 @@ reg('elmCatRetry', ()=>{ const code=state.elm.catStore; if(!code) return; elmCat
    stays where it was caused, a toast only confirms.
    ══════════════════════════════════════════════════════════════════════════ */
 const opsxCan=()=>canRoute('settings');
-function opsxCfgSet(key,body,apply,okMsg){
+/* `send` is the write itself, written out at each caller as a literal PUT
+   /config with its key in the body, so every family the phone writes can be
+   read off this file (§325 S2a pins them in scripts/test_settings_write_gates.js). */
+function opsxCfgSet(key,send,apply,okMsg){
   const x=state.opsx; if(x.busy||!opsxCan()) return Promise.resolve();
   x.busy=key; x.err=null; render();
-  return apiWrite('/config',body,'PUT').then(()=>{
+  return send().then(()=>{
     state.cfg=state.cfg||{}; apply(state.cfg);
     x.busy=null; render(); showToast(okMsg);
   }).catch(e=>{
@@ -23694,11 +23697,15 @@ function opsxDigest(){
 }
 reg('lowStockSet', v=>{
   const n=Math.max(0,parseInt(v,10)||0);
-  opsxCfgSet('low',{'inventory.lowStockThreshold':n},c=>opsxInv(c,{lowStockThreshold:n}),T('Saved','已保存'));
+  opsxCfgSet('low',()=>apiWrite('/config',{'inventory.lowStockThreshold':n},'PUT'),c=>opsxInv(c,{lowStockThreshold:n}),T('Saved','已保存'));
 });
+/* One write for the pair, whichever of its two controls moved. */
+function opsxDigestSave(v,okMsg){
+  return opsxCfgSet('digest',()=>apiWrite('/config',{'inventory.lowStockDigest':v},'PUT'),c=>opsxInv(c,{lowStockDigest:v}),okMsg);
+}
 reg('lowDigestToggle', ()=>{
   const d=opsxDigest(), v={enabled:!d.enabled,hour:d.hour};
-  opsxCfgSet('digest',{'inventory.lowStockDigest':v},c=>opsxInv(c,{lowStockDigest:v}),v.enabled?T('Turned on','已开启'):T('Turned off','已关闭'));
+  opsxDigestSave(v,v.enabled?T('Turned on','已开启'):T('Turned off','已关闭'));
 });
 /* Only the hour is kept — a once-a-day message, so a minute would be a promise
    the sweeper does not keep. Midnight is an hour like any other: 0 is a real
@@ -23706,12 +23713,12 @@ reg('lowDigestToggle', ()=>{
 reg('lowDigestHour', h=>{
   const n=parseInt(h,10); if(!Number.isInteger(n)||n<0||n>23) return;
   const v={enabled:opsxDigest().enabled,hour:n};
-  opsxCfgSet('digest',{'inventory.lowStockDigest':v},c=>opsxInv(c,{lowStockDigest:v}),T('Saved','已保存'));
+  opsxDigestSave(v,T('Saved','已保存'));
 });
 const opsxSupportShown=()=>!cfgGet('support.hidden',false);
 reg('supportToggle', ()=>{
   const hidden=opsxSupportShown();
-  opsxCfgSet('support',{'support.hidden':hidden},c=>{ c.support=Object.assign({},c.support||{},{hidden}); },
+  opsxCfgSet('support',()=>apiWrite('/config',{'support.hidden':hidden},'PUT'),c=>{ c.support=Object.assign({},c.support||{},{hidden}); },
     hidden?T('Turned off','已关闭'):T('Turned on','已开启'));
 });
 
