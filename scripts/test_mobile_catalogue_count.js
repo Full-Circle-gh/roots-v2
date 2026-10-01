@@ -265,7 +265,9 @@ function serveFrom(rows, opts) {
   const SRC_REFRESH = liftConst('M_JOB_MS') + '\n' + lift('mSettled') + '\n' + lift('refreshNow');
   function refreshBox(catalogueTried, tab) {
     const box = {
-      state: { refreshing: false, catalogueTried, tab },
+      // prodGrid / prodHi (§325 PD1) at rest: never read, so a refresh asks
+      // for neither — this box is about the catalogue alone.
+      state: { refreshing: false, catalogueTried, tab, prodGrid: { tried: false }, prodHi: { tried: false } },
       forced: [], render() {}, setTimeout, clearTimeout,
       loadLive: () => Promise.resolve(),
       loadOrdersPage: () => Promise.resolve(),
