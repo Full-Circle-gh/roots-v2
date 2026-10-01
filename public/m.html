@@ -4686,6 +4686,17 @@ reg('closeReply', ()=>{ state.reply=null; state.thread=null; render(); });
    purchase order is received in sheetPO now, which actually PUTs. */
 reg('toggleCoupon', code=>toggleCoupon(code));
 reg('recallBroadcast', id=>recallBroadcast(Number(id)));
+/* §325 M6 — Recall takes a sent broadcast out of every customer's inbox, so it
+   asks first, in the desktop's words. */
+reg('recallAsk', id=>{
+  id=Number(id);
+  const b=(DB.broadcasts||[]).find(x=>x.id===id);
+  if(!b||b.st!=='sent'||b.ended||!mCan('broadcasts:send')) return;
+  state.ask={title:T('Recall this broadcast (remove from every customer\'s inbox)?','撤回此群发消息（从每位客户的收件箱中移除）?'),
+    confirmLabel:T('Recall','撤回'), danger:true, run:()=>recallBroadcast(id)};
+  render();
+});
+reg('bcAgain', id=>bcSendAgain(Number(id)));
 reg('togglePrint', ()=>togglePrint());
 /* qsInc/qsDec went the same way: Quick stock has counted in Products since the
    parity sweep, and these two moved a number nothing ever saved. */
@@ -7464,7 +7475,8 @@ function screenBcNew(){
         // The INDEX, not the city name: a name reaches the handler through an
         // HTML attribute and a JS string literal, and one apostrophe in it
         // would end the argument early. Nothing is escaped that is not sent.
-        `<div style="display:flex;flex-wrap:wrap;gap:8px">${regions.slice(0,12).map((r,i)=>
+        // §325 M6 — every region, as the desktop lists them; it stopped at twelve.
+        `<div style="display:flex;flex-wrap:wrap;gap:8px">${regions.map((r,i)=>
           `<button class="chip ${f.cities.indexOf(r.city)>=0?'on':''}" onclick="APP.cmd('bcfCity',${i})"><span>${escAttr(LANG==='en'&&r.city_en?r.city_en:r.city)}</span><span class="c">${r.n}</span></button>`).join('')}</div>`,
         T('None chosen reaches every region.','不选则包含所有地区。')):''}`;
   } else if(step===3){
@@ -14215,7 +14227,12 @@ const SUBS={
         ${ic('link',14)}<span class="num" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(b.deeplink)}</span></div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--border-default)">
         <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.meta)}</span>
-        ${b.st==='scheduled'&&b.id!=null&&mCan('broadcasts:send')?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}</div>
+        ${b.st==='scheduled'&&b.id!=null&&mCan('broadcasts:send')?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}
+        ${/* §325 M6 — the desktop's other two: Send again on everything that is
+              not waiting to go, and Recall while a sent one is still showing. */''}
+        ${b.st!=='scheduled'&&b.id!=null&&b.raw&&mCan('broadcasts:send')?`<span style="display:flex;gap:8px;flex:none">
+          ${b.st==='sent'&&!b.ended?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;color:var(--brick-ink)" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallAsk','${b.id}')">${T('Recall','撤回')}</button>`:''}
+          <button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px" onclick="APP.cmd('bcAgain','${b.id}')">${T('Send again','再次发送')}</button></span>`:''}</div>
     </div>`).join('')}</div>`;
     // No desktopNote: this screen writes and sends now (§63), so "best edited
     // on desktop" would be sending an operator away from the tool they are in.
@@ -23202,9 +23219,11 @@ function recallBroadcast(id){
   state.bcBusy=id; state.bcErr=null; render();
   apiWrite('/broadcasts/'+id+'/recall',{}).then(r=>{
     const st=(r&&r.data&&r.data.status)||'cancelled';
-    b.st=st; b.status=st==='cancelled'?['Cancelled','已取消']:['Sent','已发送']; b.kind=st==='cancelled'?'off':'delivered';
+    // §325 M6 — the server's answer names what happened: a scheduled send that
+    // went out in the meantime is RECALLED by the same call, not left "Sent".
+    b.st=st; b.status=BC_LABEL[st]||BC_LABEL.cancelled; b.kind=BC_KIND[st]||'off';
     state.bcBusy=null; render();
-    showToast(st==='cancelled'?T('Send cancelled','已取消发送'):T('It had already gone out','已经发送完成'));
+    showToast(st==='cancelled'?T('Send cancelled','已取消发送'):st==='recalled'?T('Recalled','已撤回'):T('It had already gone out','已经发送完成'));
   }).catch(e=>{
     state.bcBusy=null;
     if(String(e.message)==='auth') return;
@@ -23264,6 +23283,42 @@ function bcfCount(){
     }).catch(()=>{ if(seq!==f.countSeq) return; f.count=null; f.countBusy=false; render(); });
   },250);
 }
+/* §325 M6 — SEND AGAIN (desktop bxSendAgain): a past broadcast's words, link
+   and audience become a new one, opened at its last look. Like the desktop it
+   always starts "now" and with no end date: an old schedule, or an end date
+   from a window that has already run out, would only have to be corrected.
+   The words keep their columns — the operator's language in the first field,
+   the other in the second — so nothing written in Chinese is re-filed as
+   English. */
+function bcSendAgain(id){
+  if(!mCan('broadcasts:send')) return;
+  const b=(DB.broadcasts||[]).find(x=>x.id===id);
+  if(!b||!b.raw||b.st==='scheduled') return;
+  push('bcnew');   // resets the form, as every new broadcast does
+  const f=state.bcf, r=b.raw;
+  const prime=LANG==='cn'?'cn':'en', other=LANG==='cn'?'en':'cn';
+  f.title=r['title_'+prime]||''; f.body=r['body_'+prime]||'';
+  f.title2=r['title_'+other]||''; f.body2=r['body_'+other]||'';
+  f.lang2=!!(f.title2||f.body2);
+  f.deeplink=r.deeplink||'';
+  let aud={};
+  if(r.audience&&typeof r.audience==='object') aud=r.audience;
+  else { try{ aud=JSON.parse(r.audience||'{}')||{}; }catch(e){ aud={}; } }
+  f.activity=BC_ACT[aud.activity]?aud.activity:'all';
+  f.tiers=Array.isArray(aud.tiers)?aud.tiers.slice():[];
+  f.cities=Array.isArray(aud.cities)?aud.cities.slice():[];
+  bcfKnownCities();
+  f.when='now'; f.at=''; f.ends='never'; f.endsAt='';
+  f.step=4;
+  bcfLoadRegions(); bcfCount();
+  render();
+}
+/* A city carried over by Send again that no saved address is in any more is
+   dropped, as the desktop's composer drops it (it has no box to tick). */
+function bcfKnownCities(){
+  const f=state.bcf, known=f.regions;
+  if(Array.isArray(known)) f.cities=f.cities.filter(c=>known.some(x=>x.city===c));
+}
 /* Cities customers have actually saved an address in. Best-effort: the region
    filter is optional, so a shop whose regions cannot be read still sends — it
    just cannot narrow by one. */
@@ -23271,7 +23326,7 @@ function bcfLoadRegions(){
   const f=state.bcf;
   if(f.regions||f.regionsTried) return;
   f.regionsTried=true;
-  api('/broadcasts/regions').then(r=>{ f.regions=Array.isArray(r)?r:[]; render(); })
+  api('/broadcasts/regions').then(r=>{ f.regions=Array.isArray(r)?r:[]; bcfKnownCities(); render(); })
     .catch(()=>{ f.regions=[]; render(); });
 }
 /* Local wall-clock ("2026-09-08T09:00") as the server's UTC instant. The input
@@ -35714,7 +35769,11 @@ function mapFlash(r){
     noCoupon:!!Number(r.no_coupon_on_flash),
     status:label, kind:FLASH_KIND[state]||'draft'};
 }
-const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft'};
+const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft',recalled:'off',cancelled:'off',expired:'off',ended:'off'};
+/* §325 M6 — every status the desktop names (05-marketing.js bxFeedRow). A
+   recalled, cancelled or expired broadcast read "Draft" here. */
+const BC_LABEL={sent:['Sent','已发送'],scheduled:['Scheduled','已排期'],draft:['Draft','草稿'],
+  recalled:['Recalled','已撤回'],cancelled:['Cancelled','已取消'],expired:['Expired','已过期']};
 /* WHO a broadcast goes to, in the desktop's own words. "Sent to 2,140" is a
    number without a population behind it — the operator cancelling a scheduled
    send needs to know whether it is about to reach every customer or forty
@@ -35740,7 +35799,11 @@ function bcAudience(raw){
 }
 function mapBroadcast(r){
   const st=String(r.status||'draft').toLowerCase();
-  const label=st==='sent'?['Sent','已发送']:st==='scheduled'?['Scheduled','已排期']:['Draft','草稿'];
+  /* A sent broadcast whose end date has passed still reads 'sent' in the
+     database; the desktop says "Ended" and offers no Recall, and so does this. */
+  const endMs=r.expires_at?new Date(String(r.expires_at).replace(' ','T')+(/Z|[+-]\d\d:?\d\d$/.test(String(r.expires_at))?'':'Z')).getTime():NaN;
+  const ended=st==='sent'&&!isNaN(endMs)&&endMs<=Date.now();
+  const label=ended?['Ended','已结束']:(BC_LABEL[st]||BC_LABEL.draft);
   // fmtDay, not the raw column: a scheduled send read "Scheduled 2026-08-27T09:00:00Z".
   const meta = st==='sent'
     ? ['Sent '+fmtDay(r.sent_at)+' to '+(r.recipient_count||0), fmtDay(r.sent_at)+' 发送给 '+(r.recipient_count||0)+' 人']
@@ -35755,7 +35818,11 @@ function mapBroadcast(r){
     body:[(r.body_en||r.body_cn||'').trim(),(r.body_cn||r.body_en||'').trim()],
     audience:bcAudience(r.audience),
     deeplink:r.deeplink||null,
-    meta, status:label, kind:BC_KIND[st]||'draft'};
+    meta, status:label, kind:ended?BC_KIND.ended:(BC_KIND[st]||'draft'), ended,
+    // §325 M6 — what Send again copies: the words in both languages, the link
+    // and the audience, exactly as stored.
+    raw:{title_en:r.title_en||'', title_cn:r.title_cn||'', body_en:r.body_en||'', body_cn:r.body_cn||'',
+      deeplink:r.deeplink||'', audience:r.audience||null}};
 }
 /* A feedback row is a THREAD, and the desktop's leads with its NEWEST turn for
    a stated reason: on a conversation staff started, the root is the operator's
