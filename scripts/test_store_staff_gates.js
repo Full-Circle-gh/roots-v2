@@ -153,8 +153,12 @@ const row = (id) => db.prepare('SELECT is_active, password FROM tenant_users WHE
       '…and sits in Settings → Operations, which opens on the Settings keys');
     const M = read('public/m.html');
     if (/backend\/stores/.test(M) && /\/staff/.test(M)) {
-      ok(/mCan\(\['stores:edit','team:manage'\]\)|mCan\('stores:edit'\)\s*\|\|\s*mCan\('team:manage'\)/.test(M),
-        'the phone draws it for stores:edit or team:manage, both admitted');
+      /* The phone gates the screen by its route key (ROUTE_CAP + canRoute,
+         §325 X6), and every write command re-checks it. */
+      ok(/storestaff:\['stores:edit','team:manage'\]/.test(M), 'the phone draws it for stores:edit or team:manage, both admitted');
+      const writes = M.split(/\n/).filter((l) => /apiWrite\('\/api\/backend\/stores\/'/.test(l) && /\/staff/.test(l)).length;
+      const guarded = (M.match(/staffBusy\|\|!canRoute\('storestaff'\)/g) || []).length;
+      ok(writes === 3 && guarded === 3, 'each of the phone\'s three staff writes refuses without that key', `writes ${writes}, guarded ${guarded}`);
     }
   } finally {
     server.close();
