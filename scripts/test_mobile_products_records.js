@@ -119,13 +119,13 @@ function liftReg(name) {
   return M.slice(at + 1, skipBalanced(M, open)) + ';';
 }
 
-const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'nothingYet', 'E', 'pill', 'mCan', 'canRoute',
+const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'nothingYet', 'E', 'pill', 'toggle', 'mCan', 'canRoute',
   'loadProdSales', 'psWhen', 'psContext', 'psTitle', 'salesCard', 'versionsRow', 'loadProdVersions', 'pvWhen',
-  'sheetVersions',
+  'sheetVersions', 'pvCanRestore', 'prodCanEdit',
   'shmName', 'shmLocName', 'loadShopMenus', 'loadShopMenu', 'shmErrBox', 'screenShopMenus', 'shmProdName',
   'shmShown', 'shmListHtml', 'screenShopMenu'];
 const CONSTS = ['PILL', 'KIND2PILL', 'MCAN_MONEY_ONLY', 'ROUTE_CAP', 'money', 'money0', 'shopDayAdd', 'PS_RANGES',
-  'shmLoading'];
+  'shmLoading', 'shmCanEdit'];
 const REGS = ['psDays', 'pvOpen', 'pvClose', 'shmRetry', 'shmOneRetry', 'shmOpen', 'shmQ'];
 const SRC = [...CONSTS.map(liftConst), ...FNS.map(liftFn), ...REGS.map(liftReg)].join('\n');
 
@@ -140,7 +140,9 @@ function mk(opts = {}) {
     escAttr: (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
     ic: (n) => `<i data-ic="${n}"></i>`,
     state: Object.assign({
-      caps: opts.caps === undefined ? null : opts.caps, pos: opts.pos || 'owner', prodMounted: true,
+      // A reader by default: these are PD2's read screens. PD4's edits, which
+      // stores:edit adds to the same rows, are test_mobile_shop_menu_edits.js's.
+      caps: opts.caps === undefined ? ['dashboard:view', 'products:view'] : opts.caps, pos: opts.pos || 'owner', prodMounted: true,
       prodSales: { pid: null, days: '30', data: null, err: null, seq: 0 },
       prodVer: { pid: null, open: false, rows: null, err: null, seq: 0 },
       shm: { list: null, err: null, tried: false, seq: 0, id: null, oneFor: null, shop: null, rows: null, oneErr: null, oneSeq: 0, qr: null, q: '' },
@@ -285,7 +287,9 @@ it('newest first, Current on the newest, Original on the baseline, and who saved
   assert.strictEqual((t.match(/Current/g) || []).length, 1);
   assert.ok(t.includes('by Mei') && t.includes('by Ash'));
   assert.ok(t.includes('Today '), 'today is said as Today');
-  assert.ok(!/Restore/.test(t) && !html.includes('restore'), 'read-only in this step: no Restore');
+  // Restore is §325 PD7's, for products:edit (test_mobile_product_restore_duplicate.js);
+  // this suite's reader holds products:view alone, so the list stays read-only.
+  assert.ok(!/Restore/.test(t) && !html.includes('restore'), 'a reader gets no Restore');
 });
 it('nothing yet says the desktop’s sentence', async () => {
   const h = mk(); h.CMD.pvOpen('7'); await h.answer(0, { success: true, versions: [] });

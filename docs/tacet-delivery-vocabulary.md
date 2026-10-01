@@ -1,5 +1,17 @@
 # Tacet delivery vocabulary — locked
 
+**v1.251 · 2026-09-30 · §352 CATEGORIES ARRANGED ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SHELF.** See *Arranging categories on the phone (§352)*.
+
+**v1.250 · 2026-09-30 · §351 DUPLICATE AND RESTORE ON THE PHONE — TWO PROGRESS WORDS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Duplicating a product, and restoring a version, on the phone (§351)*.
+
+**v1.249 · 2026-09-30 · §350 A PRODUCT'S PHOTOS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's photos on the phone (§350)*.
+
+**v1.248 · 2026-09-30 · §349 A PRODUCT'S DETAILS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (THE COST TAG'S CHINESE), THE REST COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's details on the phone (§349)*.
+
+**v1.247 · 2026-09-30 · §348 A SHOP MENU'S DAILY EDITS ON THE PHONE — TWO STRINGS COMPOSED BY CLAUDE (THE REMOVE CONFIRM THE DESKTOP NEVER ASKED, AND ITS PROGRESS WORD), THE REST COPIED WHOLE.** See *A shop menu's daily edits on the phone (§348)*.
+
+**v1.246 · 2026-09-30 · §347 VOIDING WASTE ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM THE DESKTOP WASTE SCREEN.** See *Voiding a waste entry on the phone (§347)*.
+
 **v1.245 · 2026-09-30 · §346 A PRODUCT'S SALES AND VERSIONS, AND THE SHOP MENUS, ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's sales, its versions, and the shop menus on the phone (§346)*.
 
 **v1.244 · 2026-09-30 · §345 DELIVERY SETTINGS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Delivery settings on the phone (§345)*.
@@ -10807,3 +10819,172 @@ Categories screen's); `No stores · 没有门店`; `Try again · 重试`; `Loadi
 The public shop code stays unlabelled, as on the desktop: there is still no
 live Chinese source for "shop code", and restructuring around it was
 preferred over composing one.
+
+## Voiding a waste entry on the phone (§347)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's Waste ledger (`public/m.html`). Every string is the desktop Waste
+screen's own (`public/retail-admin/20-waste.js`): `Void · 作废`, `Voiding… ·
+作废中…`, `Voided · 已作废`, the confirm's title `Void this waste entry? ·
+作废这条损耗记录?` and its sentence `N × product goes back into stock. The
+entry stays in the list, marked voided. · product × N 将退回库存。该记录仍保留在
+列表中,标记为已作废。` (no measure word in either language, as the desktop
+decided). The confirm's Cancel is the phone sheet's own `Cancel · 取消`. A
+failed void reuses the phone's live `That did not go through. Nothing has
+changed — try again. · 没有成功。数据没有变化 — 请重试。`, and a refusal uses
+§325's refusal words. The server's two 409 sentences ("This entry has
+already been voided.", "This row is itself a reversal.") are shown as the
+server sends them, in English only, as the desktop shows them.
+
+## A shop menu's daily edits on the phone (§348)
+
+Operator register only (Rule 1): the phone admin's Shop menu record
+(`public/m.html`). Copied whole from the desktop shop menu
+(`public/retail-admin/28-shops.js`): `Price · 价格`, `Kind · 类型`, `Stocked ·
+备货`, `Made here · 现做`, `Available · 有货`, `Sold out · 售罄`, `Remove · 移除`,
+`+ Add product · + 添加商品`, `Adding… · 添加中…`, `Search a product to add… ·
+搜索商品以添加…`, `Cancel · 取消`, `Saved · 已保存`, `No products match this
+filter · 没有匹配此筛选条件的产品`, `No products yet · 还没有商品`, `Load failed ·
+加载失败`, `+ Add all N Online store products · + 添加全部 N 个线上商城商品`, and
+the Add all confirm whole: `Add N products to this menu? · 添加 N 个商品到此菜单？`,
+its body, `Add · 添加`. The phone's own live pairs: `Save · 保存`, `Saving… ·
+保存中…`, `Removed · 已移除`, `Enter a price — a number, 0 or more. · 请输入价格 —
+0 或以上的数字。`, `That did not go through. Nothing has changed — try again. ·
+没有成功。数据没有变化 — 请重试。`, and §325's refusal words.
+
+**Composed by Claude, 2026-10-01** — the desktop removes a listing without
+asking, so it has no question and no progress word to copy:
+
+| shipped | built from |
+|---|---|
+| `Remove from this menu? · 从此菜单移除？` | `Remove · 移除` (28-shops.js) + `此菜单` from the live `Add N products to this menu? · 添加 N 个商品到此菜单？`, with that title's full-width `？` |
+| `Removing… · 移除中…` | `移除` + `中…`, the shape of the live `保存中…` / `添加中…` |
+
+**Live candidates rejected:** `Remove this line? · 移除该行？` (purchasing — a
+listing is not a line); `Remove this photo? · 删除这张照片?` (删除 is delete,
+and a listing comes back when the product is added again); `Removing… ·
+删除中…` (desktop, live, but it says 删除 under a button that says 移除).
+
+## A product's details on the phone (§349)
+
+Operator register only (Rule 1): the phone admin's Details screen
+(`public/m.html`). Copied whole from the desktop product editor
+(`public/retail-admin.html`, `public/retail-admin/09-products.js`,
+`01-core.js`):
+- **Section and field labels:** `Details · 详情`, `Basics · 基础`, `Name · 名称`,
+  `Name (second language) · 名称(第二语言)`, `SKU · 货号`, `Where it shows ·
+  分类与陈列`, `Shop section · 商店分区`, `Subcategory · 子分类`, `Badge · 标签`
+  and its options (`None · 无`, `Auto · 自动`, `NEW · 新品`, `POP · 热门`,
+  `SALE · 特价`, `HOT · 推荐`), `Size / weight · 规格`, `Was price · 划线价`,
+  `Stock · 库存`, `Low-stock alert at · 低库存提醒阈值` and its placeholder
+  `Default N · 默认 N`.
+- **Product details:** `Product details · 产品详情` and the five facts (`Origin ·
+  产地`, `Ingredients · 配料`, `Storage · 储存方式`, `Shelf life · 保质期`,
+  `Serving suggestion · 食用建议`) with each box's own placeholder, English in
+  the English box and Chinese in the Chinese one, as on the desktop.
+- **Description:** `Description · 描述`, the toolbar names `Bold · 加粗`,
+  `Italic · 斜体`, `Underline · 下划线`, `Bulleted list · 项目符号`, `Numbered
+  list · 编号`, `Clear formatting · 清除格式`, and the box labels `English` /
+  `中文`, which are data, as on the desktop.
+- **Shipping, flags, free-of, notes:** `Shipping · 配送方式`, `Air · 空运`,
+  `Land · 陆运`, `Local only · 仅广州`, `Flags · 标记`, `Sold at markets ·
+  市集销售`, `Made fresh in batches · 分批现做`, `Restock-only, internal ·
+  仅内部补货`, `Free of · 不含`, `Nuts · 无坚果`, `Soy · 无大豆`, `Gluten ·
+  无麸质`, `5 Spice · 无五香`, `Internal notes · 内部备注`.
+- **Autosave and refusals:** `Add a name to start autosaving · 填写名称后自动保存`,
+  `skuTakenMsg`'s sentences whole, `A SKU is required · 需要填写货号`, `This
+  catalog is managed by the upstream system · 该商品目录由上游系统管理`.
+
+The phone's own live pairs: `Price · 价格`, `Cost · 成本`, `Products · 产品`,
+`Saving… · 保存中…`, `All changes saved · 已自动保存`, `Save failed: · 保存失败:`,
+`Undo · 撤销`, `Version history · 历史版本`, `Enter a price — a number, 0 or
+more. · 请输入价格 — 0 或以上的数字。`, `That did not save. Nothing has changed —
+try again. · 没有保存成功。数据没有变化 — 请重试。`, `Could not load this. ·
+无法加载。`, `Loading… · 加载中…`.
+
+**Composed by Claude, 2026-10-01:**
+
+| shipped | built from |
+|---|---|
+| `This cost is not complete · 成本不完整` | The desktop's checkbox label is English only (`This cost is not complete`). The Chinese is the phrase the desktop already uses for this tag in its live margin note, `已标记“成本不完整”` (09-products.js). |
+
+**Live candidates rejected:** `显示成本不完整` (from the recipe-unit warning; it
+says "the displayed cost is incomplete", a reading, not the operator's
+statement).
+
+## A product's photos on the phone (§350)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the Photos
+card and the library sheet on the phone's Details screen (`public/m.html`).
+
+Copied whole from the desktop product editor (`public/retail-admin.html`,
+`public/retail-admin/09-products.js`): `Photos · 图片`, `Main · 主图`, `Add ·
+添加`, `From library · 从图库选择`, `Up to 8 · 最多 8 张`, `No photos yet ·
+暂无图片`, `Up to 8 photos · 最多 8 张图片`, `Shared from another variant — add
+a photo here to give this variant its own. · 与其他规格共用图片 —
+在此添加图片可为本规格单独设置。`, `Image too huge (max 25MB) · 图片过大,上限 25MB`,
+`Failed to process image · 图片处理失败`, `Optimized · 已优化`, `Remove · 移除`,
+and the library picker's `Choose from library · 从图库选择`, `Search photos… ·
+搜索图片…`, `Load more · 加载更多`, `Add selected · 添加所选`, `N selected ·
+已选 N 张`, `Adding… · 添加中…`, `Added N · 已添加 N 张`, `No photos match your
+search · 没有匹配的图片`, `Your media library is empty — upload photos in
+Content → Media · 图库为空 — 请在「内容 → 媒体」中上传图片`, `Load failed ·
+加载失败`.
+
+The reorder buttons reuse the live `Move up · 上移` / `Move down · 下移` (the
+promo-card editor's). `Close · 关闭`, `Try again · 重试` and `Loading… · 加载中…`
+are the phone's own.
+
+## Duplicating a product, and restoring a version, on the phone (§351)
+
+Operator register only (Rule 1): the phone's product sheet and its Version
+history list (`public/m.html`). Copied whole from the desktop product editor
+(`public/retail-admin/09-products.js`): `Restore · 还原`, `Restore this
+version? · 还原此版本?` and its sentence, `Restored to the chosen version. ·
+已还原到所选版本。`, `Restore failed: · 还原失败:`, `Roll this product back to
+any saved version. Stock counts are never changed. ·
+将此产品还原到任意已保存的版本。库存数量不会被更改。`, `Duplicate · 复制`,
+`Duplicated — set the new SKU / price / size, then publish. · 已复制 —
+请设置新货号 / 价格 / 规格后再上架。`, `Duplicate failed: · 复制失败:`.
+
+**Composed by Claude, 2026-10-01.** The desktop shows no progress word on
+either button:
+
+| shipped | built from |
+|---|---|
+| `Restoring… · 还原中…` | `Restore · 还原` + `中…`, the shape of the live `保存中…` / `添加中…` |
+| `Duplicating… · 复制中…` | `Duplicate · 复制` + `中…`, the same shape |
+
+**Live candidates rejected:** `Restoring… · 恢复中…` (live on the desktop
+elsewhere, but it says 恢复 under a button that says 还原).
+
+## Arranging categories on the phone (§352)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's Categories screen (`public/m.html`).
+
+Copied whole from the desktop shelf (`public/retail-admin/01-core.js`,
+`public/retail-admin.html`):
+- **The views and the QR menu:** `Mini app · 小程序`, `QR menu · 二维码菜单`,
+  `Own order for the QR menu · 二维码菜单独立顺序`, `Reset to mini app order ·
+  重置为小程序顺序`, `Same order as the mini app · 与小程序顺序相同`, `N hidden on
+  the QR menu · 二维码菜单已隐藏`, `Hidden on the QR menu · 二维码菜单已隐藏`, the
+  eye's two names.
+- **The tree:** `Add top category · 新增主分类`, `Add subcategory · 新增子分类`,
+  `Rename · 重命名`, `Remove category · 删除主分类`, `Remove subcategory ·
+  删除子分类`, the rename card's four field names, `Save name · 保存名称`,
+  `Give it an English name first · 请先填写英文名`, `N products re-tag themselves
+  when you save · 保存后 N 件产品自动跟随`, both remove questions whole, `The shop
+  needs at least one category · 店面至少需要一个主分类`, `Subcategories — the
+  section headings · 子分类 — 区块标题`, `Add a top category to start arranging
+  the shop. · 新增一个主分类，开始整理店面。`, `Saved · N products re-tagged ·
+  已保存 · 迁移 N 个产品`, `Save failed: · 保存失败:`.
+- **The products on a shelf:** `Products on this shelf · 货架上的产品`, `Nothing
+  stands on this shelf yet. · 该分类下暂无产品。`, `Could not load the products on
+  this shelf. · 加载该分类的产品失败。`, `Move to another shelf · 移动到其他分类`,
+  `no heading · 无区块`, `draft · 未上架`, `Moved · 已移动`, `Could not move it ·
+  移动失败`, `Reorder failed: · 排序失败:`.
+
+The reorder buttons reuse the live `Move up · 上移` / `Move down · 下移`.
+`Saved · 已保存`, `this category · 该主分类` and the stale-save sentence are
+existing pairs.

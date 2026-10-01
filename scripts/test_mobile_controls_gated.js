@@ -81,6 +81,10 @@ function mk(caps, opts = {}) {
     // §325 PD2's two read-only cards on the sheet; they carry no control this
     // suite gates (test_mobile_products_records.js holds them).
     salesCard: () => '', versionsRow: () => '',
+    // §325 PD5's Details row, products:edit's; test_mobile_product_details.js holds it.
+    peEntryRow: () => '',
+    // §325 PD7's Duplicate row, products:create's; test_mobile_product_restore_duplicate.js holds it.
+    dupRow: () => '',
     money: (c, n) => c + Number(n).toFixed(2),
     state: { caps, capsLoaded: true, ask: null, askErr: null, orderBusy: null, orderErr: null, detailActions: false,
       detailId: 'R-9', liveDetail: null, ordNote: null, ordNoteOpen: null, parcelBusy: null,
