@@ -56,7 +56,9 @@ const NEWORDER = src.slice(src.lastIndexOf('/* ===', NO0), src.lastIndexOf('/* =
 const CODE = [
   sliceBetween('/* ── §325 O10 — DESK WORK ON THE PHONE', "/* ── §325 O2 — SAVED VIEWS"),
   NEWORDER,
-  sliceFn('orderErrorText'), sliceFn('setupRow'),
+  sliceFn('orderErrorText'),
+  // §325 X11 — the setup row and its chooser, which now carries O10's wizard.
+  sliceBetween('const SU_KEYS=', 'function screenSetup(){'),
   sliceBetween("reg('askRun', key=>{", "reg('copyWaybill'"),
   // const-declared gates are not properties of the sandbox; hand them over.
   'globalThis.__x={btrkOn,draftsOn};',
@@ -81,6 +83,7 @@ function mk(opts = {}) {
     dlvCanWrite: () => opts.dlvWrite !== false, dlvUnconfigured: () => opts.unconfigured !== false,
     PAY_METHODS: [['cash', 'Cash', '现金'], ['bank_transfer', 'Bank transfer', '银行转账'], ['wechat_offline', 'WeChat (off app)', '微信（线下）'],
       ['alipay_offline', 'Alipay (off app)', '支付宝（线下）'], ['other', 'Other', '其他']],
+    mCanKnown: (k) => (opts.caps ? [].concat(k).some((x) => opts.caps.includes(x)) : true), peCanCreate: () => false,
     SETUP_LABEL: { fulfillment: ['Set up delivery or pickup', '设置配送或自提'], store: ['Your store', '门店信息'] }, setupDetail: () => '',
     courierAgo: (v) => 'ago(' + v + ')',
     state: { ordSel: null, ordBulkBusy: false, btrk: null, drafts: null, draftCount: null, ask: null, askErr: null, stores: [], carriers: opts.carriers || null, onw: null, stack: [] },
@@ -104,6 +107,7 @@ function mk(opts = {}) {
   ctx.T = (en, zh) => (ctx.LANG === 'en' ? en : (zh || en));
   ctx.E = (en, zh) => ({ toString() { return ctx.T(en, zh); } });
   ctx.globalThis = ctx;
+  ctx.APP = { cmd: (n, ...a) => { calls.cmds = (calls.cmds || []).concat(n); if (CMD[n]) CMD[n](...a); } };
   vm.createContext(ctx);
   vm.runInContext(CODE, ctx);
   ctx.state.onw = ctx.onwBlank([]);
@@ -297,10 +301,16 @@ async function main() {
 
   console.log('\n5 · the setup guide opens the delivery wizard');
   {
-    has(mk().ctx.setupRow({ key: 'fulfillment', done: false }, 0, true), "APP.cmd('dwizOpen')", 'the handover step offers Set up delivery');
-    hasnt(mk().ctx.setupRow({ key: 'fulfillment', done: true }, 0, false), 'dwizOpen', 'not once it is done');
-    hasnt(mk({ unconfigured: false }).ctx.setupRow({ key: 'fulfillment', done: false }, 0, true), 'dwizOpen', 'nor once delivery is set up');
-    hasnt(mk({ dlvWrite: false }).ctx.setupRow({ key: 'fulfillment', done: false }, 0, true), 'dwizOpen', 'nor without the Delivery panel\'s key');
+    /* §325 X11 widened the step's button to the desktop's whole chooser; the
+       wizard is its first option, offered on exactly O10's conditions. */
+    const offers = (m) => { m.CMD.suFulfil(); return ((m.ctx.state.ask && m.ctx.state.ask.options) || []).map((o) => o.key); };
+    has(mk().ctx.setupRow({ key: 'fulfillment', done: false }, 0, true), "APP.cmd('suFulfil')", 'the handover step offers its chooser');
+    const d = mk(); is(offers(d), ['delivery', 'pickup'], '…whose first choice is Set up delivery');
+    d.CMD.askRun('delivery');
+    is((d.calls.cmds || []).includes('dwizOpen'), true, 'which opens the delivery wizard');
+    hasnt(mk().ctx.setupRow({ key: 'fulfillment', done: true }, 0, false), 'suFulfil', 'not once it is done');
+    is(offers(mk({ unconfigured: false })), ['pickup'], 'no wizard once delivery is set up');
+    is(offers(mk({ dlvWrite: false })), ['pickup'], 'nor without the Delivery panel\'s key');
     hasnt(mk().ctx.setupRow({ key: 'store', done: false }, 0, true), 'dwizOpen', 'and only on that step');
     has(src, "if(state.setup) api('/setup').then(", 'finishing the wizard reads the guide again');
   }
