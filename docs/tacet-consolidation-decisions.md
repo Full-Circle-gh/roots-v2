@@ -25840,3 +25840,37 @@ operator who closed the drawer before that lost them.
      store the other two, and gets no cost back.
    - **The INSERT itself** lists the four columns, with one value per column.
 4. **Nothing composed.** No operator strings were added.
+
+## §377 — SHIPPING IS ONE SETTING FOR THE WHOLE PRODUCT, NOT ONE PER SIZE
+
+**Decided by Ash 2026-10-01** (*"fix it"*, to Claude's proposal to copy the
+Shipping setting to every size). Found on TC000899: *Misfit Medjool Dates*
+went in an Air parcel while the product page read Land.
+
+1. **The trap.** Each size is its own `store_products` row with its own
+   `ship_modes`. The Shipping chips (desktop and phone) PATCH only the size
+   that is open, so one size could read Land while another still said
+   *Air only*. Checkout snapshots the bought size's own value onto the order
+   line, and `planShipments` / `bucketForItem` put an *Air only* line in an
+   Air parcel.
+2. **The rule.** A write of `ship_modes` to one size is a write to the whole
+   family: every other active size gets the same value. A lone product is a
+   family of one. This is how *Local only* was already read at checkout
+   (`filterLocalOnly`), so Air and Land now match it. Archived sizes are left
+   alone.
+3. **Where it lives.** `syncFamilyShipModes` in `lib/family-ship-modes.js`,
+   called by the product PATCH and by `restore-version`. Each size written
+   gets its own version checkpoint and activity entry, as §294's
+   family-publish does. Covered: desktop editor, phone editor, bulk *Set
+   shipping*, version restore. The response carries `ship_modes_family`, and
+   the desktop editor copies the new value into those sizes in its list, so
+   opening one cannot autosave the old value back over the family.
+4. **Not changed.** Orders already placed keep the setting saved on their
+   lines at checkout. Families whose sizes disagree today stay that way until
+   someone saves Shipping on any one size. There is no automatic repair,
+   because nothing can tell which size held the intended value.
+5. **Tests.** `scripts/test_family_ship_modes.js` (fast shard, 11 checks),
+   on a real database through the real router. With the route hook removed,
+   7 of them fail.
+
+No new words; nothing composed in Chinese. No schema change.
