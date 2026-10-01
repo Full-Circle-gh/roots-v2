@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.268 · 2026-09-30 · §372 CHANNEL UPKEEP ON THE PHONE — 13 STRINGS COMPOSED BY CLAUDE (MOSTLY THE DESKTOP'S ENGLISH-ONLY MEITUAN CATALOGUE AND GZGROCERY LINES), THE REST COPIED.** See *Channel upkeep on the phone (§372)*.
+
+**v1.267 · 2026-09-30 · §371 SIZES ON THE PHONE — TWO STRINGS COMPOSED BY CLAUDE, TWO LIFTED AS HALVES OF A DESKTOP PAIR, THE REST COPIED WHOLE.** See *A product's sizes, edited on the phone (§371)*.
+
 **v1.266 · 2026-09-30 · §369 SAME-CITY RIDER OPERATIONS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Same-city rider operations on the phone (§369)*.
 
 **v1.265 · 2026-09-30 · §368 SOCIAL PROOF AND SHARE CARDS ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Social proof and share cards on the phone (§368)*.
@@ -11636,3 +11640,108 @@ renderQyShipFrom / renderQyDispatch / the parked surfaces and their handlers):**
 | String | Note |
 |---|---|
 | `Edit ship-to` on the parked and expired surfaces | The desktop's quick panels say 修改收货信息. The phone keeps the 修改收货地址 it already uses on the Ship to card (O7), so one English button never carries two Chinese renderings on the phone. The O7 note asks Ash to pick one for both screens. |
+
+## A product's sizes, edited on the phone (§371)
+
+Operator register only (Rule 1). These strings appear on the Variants card of
+the phone's product Details screen (`public/m.html`).
+
+**Copied whole from the desktop's Variants table**
+(`public/retail-admin/09-products.js`):
+
+- **The card:**
+  - `Variants · 规格`
+  - `Single option · tap to add · 单一规格 · 点击添加`
+  - `+ Add variant · + 新增规格`
+  - `Show · 上架`
+  - `Show this variant in the shop · 在店面显示此规格`
+  - `Edit this variant · 编辑此规格`
+  - `Delete this variant · 删除此规格`
+- **The label boxes:**
+  - `English · e.g. Big 200g · 英文 · 如 Big 200g`
+  - `中文 · 如 大 200克`
+- **The picker word:**
+  - `English · e.g. size, color, flavor · 英文 · 如 size, color`
+  - `中文 · 如 规格、颜色、口味 · 中文 · 如 颜色`
+  - `Picker heading — blank = “size / 规格”. · 选择器标题 — 留空为「size / 规格」。`
+- **The photo:**
+  - the three photo names: `Shared from another variant — click to give this one its own photo`, `Change this variant’s photo`, `Add a photo for this variant`, with their pairs
+  - `Variant photo updated · 规格图片已更新`
+  - `Photo update failed: · 图片更新失败:`
+- **Deleting:**
+  - `Delete the variant “…”? · 删除规格“…”?`
+  - `This removes that product for good. · 将永久删除该产品。`
+  - `Size deleted · 规格已删除`
+  - `Delete failed: · 删除失败:`
+- **Adding:** `Could not add variant: · 无法添加规格:`
+- **A taken SKU:** the size clause ` (size “…”) · (规格“…”)` from `skuTakenMsg`
+
+**Phone live pairs reused:** `Hidden · 已隐藏`, `Stock · 库存`, `SKU · 货号`,
+`Size / weight · 规格`, `Price · 价格`, `Was price · 划线价`, `Uploading… ·
+上传中…`, `Adding… · 添加中…`, `Saving… · 保存中…`, `Move up · 上移`, `Move down ·
+下移`, `Load failed · 加载失败`, `Try again · 重试`, and `Enter a price — a number,
+0 or more. · 请输入价格 — 0 或以上的数字。`.
+
+**Lifted, 2026-10-01, by Claude.** On the desktop these are two languages
+glued into one string. Each half is used here on its own, in the language it
+was written in. No words were changed.
+
+| shipped | lifted from |
+|---|---|
+| `What are these variants? · 这些规格是什么?` | the desktop's `What are these variants? · 这些规格是什么?` heading |
+| `Single option · 单一规格` | `Single option · tap to add · 单一规格 · 点击添加`, without the tap. It is shown only to someone who may not add a size. |
+
+**Composed by Claude, 2026-10-01:**
+
+| shipped | built from |
+|---|---|
+| `Variant added · 已添加规格` | the first clause of the desktop's `Variant added — set its name, SKU, price & stock, then Save. · 已添加规格 — 设置名称、货号、价格、库存后保存。` |
+| `Deleting… · 删除中…` | `Delete · 删除` + `中…`, the shape of the live `保存中…` / `添加中…` |
+
+**Live candidates rejected:**
+
+- The desktop's whole `Variant added — … then Save.` sentence. The phone has
+  no Save, and the size is already written. The phone opens the new size's
+  sheet instead.
+- `Saving… · 保存中…` under a delete. It names the wrong action.
+
+## Channel upkeep on the phone (§372)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's channel upkeep cards
+(`public/m.html`, the §325 X8a block) on the Meituan, Eleme and gzgrocery
+screens. Most of the desktop's strings here are English-only:
+- `11-meituan.js` keeps its catalogue line in `MT_PENDING_CN`;
+- `12-guanyi.js`'s auto-match and push buttons and toasts have no Chinese.
+
+The Chinese below is composed under the 2026-09-06 amendment. No live
+Chinese existed for any of these; each was searched for across `public/`.
+
+| String | Status |
+|---|---|
+| `Listing names read from Meituan · 从美团读取的商品名称` | **Chinese composed by Claude (X8a)**. English: `MT_PENDING_CN.catLabel`. |
+| `never read · 从未读取` | **Chinese composed by Claude (X8a)**. English: `catNever`. |
+| `Reads the current listing names. Changes nothing and matches nothing. · 读取当前商品名称,不改动也不匹配任何内容。` | **Chinese composed by Claude (X8a)**. English: `catHint`. |
+| `Refresh catalogue · 刷新商品名称` | **Chinese composed by Claude (X8a)**. English: `catRefresh`. It says 商品名称 rather than 目录 because what is read is the names. Rejected: `刷新` alone (the gzgrocery button's word, and too bare beside Sync now). |
+| `Reading… · 读取中…` | **Chinese composed by Claude (X8a)**. English: `catReading`. |
+| `Catalogue updated. Nothing was matched or changed. · 商品名称已更新,未匹配或改动任何内容。` | **Chinese composed by Claude (X8a)**. English: `catDone`. |
+| `Could not read the listings — is the sync service signed in? · 无法读取商品名称 — 同步服务是否已登录?` | **Chinese composed by Claude (X8a)**. English: `catFailed`. |
+| `Refresh failed · 刷新失败` | **Chinese composed by Claude (X8a)**. English from `gyRefreshListings`. |
+| `Auto-match by SKU · 按货号自动匹配` | **Chinese composed by Claude (X8a)**. English from the desktop button (its ✨ dropped). 货号 is the word the live gzgrocery hint uses for that SKU. |
+| `Matching… · 匹配中…` | **composed by Claude (X8a), both halves.** The desktop's button has no busy label. |
+| `Matched N product(s) · N ambiguous · N unmatched · 已匹配 N 个商品 · N 个有歧义 · N 个未匹配` | **Chinese composed by Claude (X8a)**. English from `gyAutoMatch`. |
+| `Auto-match failed · 自动匹配失败` | **Chinese composed by Claude (X8a)**. English from `gyAutoMatch`. |
+| `No cached Guanyi listings — click Refresh first. · 尚无已缓存的管易商品 — 请先点击刷新。` | **Chinese composed by Claude (X8a)**. The English is the server's own note (`routes/guanyi-admin.js`). Any other note the server sends is shown as it comes. |
+| `Push all stock · 推送全部库存` on gzgrocery | **a live pair (Eleme's) used in place of** the desktop's English-only `Push all stock now`. |
+| `Queued N product(s) · 已排队 N 个商品` on gzgrocery | **a live pair (Eleme's) used in place of** `Queued N reconcile(s) to Guanyi`. |
+| `Refresh list · 刷新` | **trimmed** (the ⟳). |
+| `Guanyi product list refreshed · 已刷新` | **copied** from the desktop's toast. |
+
+Copied whole: `Sync now · 立即同步`; `Queuing… · 排队中…`; `Queued N stock
+push(es) to Meituan · 已排队 N 个库存推送`; `Push failed · 推送失败`; `Queue a
+fresh stock push for every mapped product · 为所有已匹配商品排队推送库存`;
+`Sync from · 同步开始` and its sentence, `defaults to … · 默认 …`, `no opening
+hours set — syncs all day · 未设营业时间 — 全天同步`; `Syncing this store from
+… · 该门店 … 起同步`; `Could not save the sync start: · 同步开始时间保存失败:`;
+the gzgrocery list line (`N listings read · 已读取 N 个商品`, `refreshing… ·
+刷新中`, `cached · 已缓存`, `never refreshed · 未刷新`); and the auto-match
+hint (`Products are matched by the SKU embedded in the Guanyi name …`).

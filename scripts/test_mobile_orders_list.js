@@ -69,7 +69,7 @@ const CODE = [
   sliceFn('orderNotes'),
   sliceFn('ordNoteLabel'),
   sliceFn('mapOrderRow'),
-  sliceBetween("reg('statusF',", "reg('openOrder',"),
+  sliceBetween("reg('statusF',", "reg('closeOrder',"),
 ].join('\n');
 
 const tick = () => new Promise((r) => setImmediate(r));
