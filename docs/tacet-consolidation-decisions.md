@@ -23630,3 +23630,332 @@ cannot be resolved.
    - **Unchanged:** an order that does not exist is still a 404, and both screens
      still draw the button on Ordered only.
 6. **Nothing composed.** No operator strings were added.
+
+## §339 — PUTTING A DELETED RECORD BACK, AND THE MAPS BACKFILL, NEED A PERMISSION
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Two writes matched no rule in `lib/cap-routes.js`, so any signed-in operator
+could make them, enforcement on or not. Both are now gated by §325.3: the keys
+that open every screen calling them today. As with every gate in that file,
+nothing changes for the owner, for a shop with enforcement off, or while an
+operator's permissions cannot be resolved.
+
+1. **Put a deleted record back** (`POST /deleted/:id/restore`) needs the key
+   that edits that kind of record. These are the keys the phone draws "Put it
+   back" on:
+
+   | Kind | Key needed |
+   |---|---|
+   | delivery zone | `delivery:edit` |
+   | ledger row (money in or out) | `finance:record` |
+   | coupon | `coupons:edit` or `coupons:delete` |
+   | draft purchase order | `purchasing:edit` |
+
+   The path does not say which kind a copy is, so the choke point admits anyone
+   holding any of these keys. `routes/recycle.js` then reads the stored copy and
+   asks `restoreKindCap(kind)` (new) before anything is written. A refusal comes
+   back as `403 {error:'forbidden_capability', need}`. A copy that does not exist
+   still gets a 404.
+2. **No desktop operator loses anything.** The desktop's Recently deleted list
+   draws its button for `settings:edit`. That key does not exist, so the button
+   is drawn for nobody who holds a real permission set.
+3. **A new kind must be given a key.** The suite fails if `lib/recycle.js` gains a
+   kind this table does not name. Until it is named, an unlisted kind takes the
+   union of the keys above.
+4. **Geocode every store and address now** (`POST /inventory/geocode-backfill`)
+   uses up the maps quota. It needs one of the Settings tab's keys: `settings:shop`,
+   `settings:push`, `settings:payments`, `stores:view`, `shipping:config` or
+   `delivery:view`. Its only button is in desktop Settings → Operations, which has
+   no gate of its own. The phone's Operations screen only reads the counts.
+5. **The sweep: writes that still match no rule. Listed, not gated, for the
+   coordinator to decide.** Every `router.(post|put|patch|delete)` under
+   `/api/retail-admin` in `routes/*.js` was checked against `requiredCapFor`. The
+   sweep found 40 with no rule. Two of those are false positives from the sweep's
+   placeholder ids (the channel-sync push and sync routes, which are gated as
+   `{channel}:sync` and `{channel}:map`). That leaves 38. Line numbers are as of
+   this commit.
+   - **Already gated another way:**
+     - `PUT /config` (`routes/retail.js:23343`) is checked in its handler, key by
+       key (S2a).
+     - `POST /channel-signin/start|finish` (`routes/channel-signin.js:33, 89`)
+       checks `integrations:signin` itself (`lib/channel-signin.js`).
+     - The `/shops` writes check `stores:edit` (or `till:use` for sold-out) in
+       their own handler (`routes/retail-shops.js:54`):
+       - `POST /shops` (`retail-shops.js:186`)
+       - `PATCH /shops/:id` (`:214`)
+       - `POST /shops/:id/move` (`:256`)
+       - `POST /shops/:id/listings` (`:405`)
+       - `POST /shops/:id/listings/add-published` (`:459`)
+       - `PATCH /shops/:id/listings/:lid` (`:486`)
+       - `POST /shops/:id/listings/reorder` (`:564`)
+       - `DELETE /shops/:id/listings/:lid` (`:576`)
+   - **Open, in `routes/meituan-admin.js`:** opening and closing stores and
+     channels.
+     - `POST /store-status/online` (`:978`)
+     - `POST /store-status/master` (`:999`)
+     - `POST /store-status/store/:code` (`:1039`)
+     - `POST /channel-status/cell` (`:1207`)
+     - `POST /channel-status/channel` (`:1230`)
+     - `POST /channel-status/location` (`:1251`)
+   - **Open, settings and connections in `routes/retail.js`:**
+     - `PUT /alipay-manual` (`:23587`): a payment QR code and an API key.
+     - `PUT /fapiao-settings` (`:28749`)
+     - `PUT /integrations` (`:31828`): credentials.
+     - `PUT /printer` (`:32394`)
+     - `POST /integrations/qingyun/autopush` (`:30483`)
+     - `POST /integrations/qingyun/request` (`:31778`)
+   - **Open, tests and probes that send something out but store nothing:**
+     - `POST /system-alerts/test` (`retail.js:23542`)
+     - `POST /wecom/test` (`:31804`)
+     - `POST /integrations/jd/test` (`:31910`)
+     - `POST /integrations/nuonuo/test` (`:31930`)
+     - `POST /integrations/aliyun_sms/test` (`:31940`)
+     - `POST /printer/test` (`:32534`)
+     - `POST /integrations/kd100/test` (`:32608`)
+     - `POST /poi-search` (`:10032`)
+     - `POST /geocode` (`retail-inventory.js:231`)
+   - **Open, other:**
+     - `POST /setup` (`routes/retail-setup.js:156`): the setup guide's own flags.
+     - `POST /page-templates` and `DELETE /page-templates/:id`
+       (`routes/retail-page-templates.js:56, 108`).
+     - `POST /views`, `PATCH /views/:id` and `DELETE /views/:id`
+       (`routes/saved-views.js:103, 140, 166`): an operator's own saved filters.
+6. **Tests.** `scripts/test_restore_geocode_gates.js` (fast shard, 38 checks)
+   runs the real `routes/recycle.js` and `routes/retail-inventory.js` over a
+   scratch database with enforcement on. It checks:
+   - the rules, including that every kind `lib/recycle.js` keeps has a key;
+   - a real delivery zone, deleted and captured: refused to a finance account
+     with nothing written, and put back under its own id by `delivery:edit`;
+   - each other kind, with the wrong key and the right key;
+   - the owner, and a missing copy (404);
+   - the backfill, with the wrong key and two Settings keys;
+   - the callers, including that `settings:edit` is not a real key.
+7. **Nothing composed.** No operator strings were added.
+
+## §340 — THE LAST OPEN WRITES ARE GATED; WHAT STAYS OPEN, AND WHY
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+This step closes the open writes that the S2e sweep found. Each now takes the
+permissions that open every desktop and phone screen making that write today, as an
+any-of (§325.3). What this closes is the account that can open none of those
+screens. As with every gate in `lib/cap-routes.js`, nothing changes for the owner,
+for a shop with enforcement off, or while an operator's permissions cannot be
+resolved. No screen changed.
+
+1. **Shop and channel open/close, per channel, per shop and per cell**
+   (`POST /channel-status/cell|channel|location`).
+   - These need one of the desktop Sales page's permissions: `dashboard:view`,
+     `meituan:view`, `guanyi:view`, `eleme:view` or `integrations:view`
+     (`TAB_CAP.sales`). The switches on that page carry no gate of their own.
+   - The phone's per-shop and per-cell switches (§181, §253) are on its Sales
+     screen, which opens on `dashboard:view`. That key is in the list, so the
+     phone keeps them.
+2. **Open or close everything, the online store, or one shop**
+   (`POST /store-status/online|master|store/:code`).
+   - They take the Sales permissions above plus the Settings tab's
+     (`settings:shop|push|payments`, `stores:view`, `shipping:config`,
+     `delivery:view`).
+   - The only buttons are in the desktop's Settings → Operations, and they are
+     drawn for `settings:edit`, which is not a real permission, so nobody presses
+     them today.
+   - §326.2 brings these switches to the phone. Using the same permissions as the
+     per-channel switches means a phone screen built on either door is not refused
+     from the start.
+3. **Manual Alipay** (`PUT /alipay-manual`: the payment QR code, the AI key and
+   auto-mark-paid) and **the printer** (`PUT /printer`) take the Settings tab's
+   permissions.
+   - Alipay is written from Settings → Push and from the setup guide, whose
+     permission pair (`settings:shop` or `stores:view`) is part of the Settings set.
+   - The printer is written from the desktop's Operations card and from the phone's
+     auto-print switch on Operations, which is reached from Settings.
+4. **Integration credentials** (`PUT /integrations`) are checked per service, in
+   the handler (`integrationServiceCap`), the way S2a checks settings per key.
+   - **kd100 and jd** (the couriers' keys) are the Delivery panel's: `delivery:view`
+     or `delivery:edit`, or `shipping:config`.
+   - **feie and spyun** (the Operations printer card) take the Settings permissions.
+   - **wecom_app and aliyun_sms** (Settings → Push) take the Settings permissions.
+   - **nuonuo** is written by no screen today, so it closes to `invoices:manage`.
+   - If any one service in a save is refused, the whole save is refused and nothing
+     is written. The refusal names the service.
+5. **The fapiao settings** (`PUT /fapiao-settings`) are written by no screen, so they
+   close to `invoices:manage`, the permission for issuing fapiao.
+6. **Qingyun: request setup and auto-push** (`POST /integrations/qingyun/request|autopush`)
+   need `delivery:view` or `delivery:edit`. Their only buttons are on the Delivery
+   panel's Qingyun view.
+7. **The setup guide's flags** (`POST /setup`) are checked per flag, in the handler
+   (`setupFlagCap`).
+   - `welcomeSeen` stays open: it is set when the first-login welcome is
+     dismissed, and every operator sees that welcome.
+   - `pickupConfirmed`, `storeOpened` and `storeInfoDone` are steps of the guide.
+     They take the phone's Setup pair, `settings:shop` or `stores:view`.
+   - This carries the same narrow edge as the currency key in S2a. The desktop's
+     setup rail row has no gate of its own, so a narrowed operator who holds
+     neither permission, on a shop that has not finished setup and has turned
+     enforcement on, now loses those three steps.
+8. **Product page templates** (`POST /page-templates`, `DELETE /page-templates/:id`)
+   are written only by the product editor. They take the permissions of every way
+   into that editor: `products:view` or `products:edit` (from Products),
+   `editor:view` or `editor:edit` (the desktop Editor tab), and `content:edit` (the
+   mini-app editor).
+9. **Decided open, left ungated on purpose** (the coordinator's ruling):
+   - **Connection tests**: `system-alerts/test`, `wecom/test`,
+     `integrations/jd|nuonuo|aliyun_sms|kd100/test`, `printer/test`. Each sends one
+     probe using credentials already saved, or ones typed into the form, and stores
+     nothing.
+   - **`poi-search`**: a place lookup for an address being typed. It reads from the
+     maps provider and writes nothing.
+   - **`geocode`**: turns one typed address into coordinates for the form in front
+     of the operator, and writes nothing.
+   - **`views` (`POST`, `PATCH /:id`, `DELETE /:id`)**: each operator's own saved
+     filters, scoped to that operator. They grant nothing and move nothing.
+
+   Still unmapped on the path, but gated elsewhere: `PUT /config` (per key, S2a),
+   `POST /setup` (per flag, item 7), the channel sign-in (`integrations:signin`,
+   checked in its own handler), and the `/shops` writes (`stores:edit`, checked in
+   their handler). A re-run of the sweep finds those plus the two channel-sync false
+   positives, and nothing else.
+10. **Open for Ash, not decided here.** Following the screens means some gates are
+    weaker than the write deserves:
+    - Anyone who can open Sales (`dashboard:view`) may close a channel or a shop.
+    - Anyone who can open Settings may change where the Alipay takings land, or
+      switch on auto-mark-paid.
+    - `delivery:view` may switch on Qingyun auto-push, which books couriers and
+      spends the courier account's balance (`orders:dispatch_courier` is the
+      permission that otherwise means that).
+
+    Narrowing any of these takes a working switch from somebody, so it is Ash's
+    call.
+11. **Tests.** `scripts/test_last_open_writes.js` (fast shard, 65 checks) runs the
+    real routers over a scratch database with enforcement on. It checks:
+    - each write refused to an account outside its screens, and let through for
+      each screen's permission;
+    - integrations per service, including the whole save refused with nothing
+      written;
+    - setup per flag, including a refused save writing nothing;
+    - the owner, and enforcement off;
+    - the screen permissions and the caller list each gate is built from.
+12. **Nothing composed.** No operator strings were added.
+
+## §341 — THE PHONE PAGE EDITOR SETS PICTURES, VIDEO AND BUTTON LINKS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone editor's sheet edited words and sent everything else to desktop
+("Images, colours & advanced options for this block are tuned on desktop").
+It now sets what the desktop inspector's picture, video and link pickers set,
+field for field and in the inspector's words: a hero's picture, desktop
+picture, video and buttons; a video banner's clip, poster and tap link; a
+recipe story's image; the WeCom QR; and the button or tap link of every block
+that has one. The block pickers (product, category, coupon list, poll, store,
+review list), sizes and behaviour, and onboarding are M3, not this step.
+
+1. **A picture is uploaded, taken from the media library, pasted as a link,
+   or removed** — the desktop picker's four ways. It is committed through a
+   new bridge command, `setImage`, so the editor underneath runs the
+   inspector's own commit: a field that records the picture's shape
+   (`image_aspect`, on the hero and the recipe story) is measured there, and
+   removing the picture sets both to empty.
+2. **The phone shrinks a picture by the inspector's rules**
+   (`prepareImageForUpload`): 1600px long side; GIFs and pictures already
+   small in pixels and bytes go as they are; PNG and WebP keep transparency;
+   a result no smaller than the original is dropped. Promo cards keep §299's
+   own shrink, unchanged.
+3. **The media library** lists the pictures already uploaded to the editor
+   (`GET /cms/media`), newest first, clips left out (the desktop grid is meant
+   to be pictures only); one tap uses one. Loading, empty and failed states.
+4. **A video is uploaded** to `/cms/media/video` (an MP4, 20 MB at most, the
+   server's own limit), pasted, or removed — a `patch` of the one field, as
+   the inspector's is. No library: the desktop has none for clips.
+5. **A link is the inspector's link picker as a list**: no link, the
+   inspector's pages with the block's suggested page first, the products, the
+   categories, or typed by hand. A saved link in none of them is kept and
+   named as the inspector names it (Product #, Category #, Custom). The lists
+   come from the editor underneath (`getTargets`), so they are the ones the
+   desktop offers.
+6. **A hero's buttons are its list**: label in both languages, style, link,
+   remove, add. Every change sends the whole list with the old single-button
+   fields cleared, exactly as the inspector does (`getCtas` reads the list for
+   the phone, so an old one-button hero is edited the same way there).
+7. **Countdown and kitchen status get their button text**, so their new link
+   is not a link on a button that has no words.
+8. **The sheet is no longer redrawn under a box being typed in.** Every
+   keystroke is a `patch` that comes back from the editor as `selected`, and
+   the sheet redrew itself on it — throwing away the box and closing the
+   phone's keyboard after one letter, in every text field the sheet has ever
+   had. The redraw now waits while a text box in the sheet has focus, which is
+   the desktop inspector's own rule (`renderInspector`).
+9. **The foot note now says only "Advanced options for this block are tuned on
+   desktop"**: pictures are set here now and colours in Design.
+10. **The no-permission screen names the permission it checks.** It said "No
+    retail permission … grant you the `retail` permission"; the gate checks
+    `content:edit`, so it now names that permission by the Roles screen's name
+    for it. The desktop editor (`cms.html`) shows the same wrong sentence and
+    is not changed here.
+11. **No new server route.** Two bridge commands (`setImage`, `getTargets`)
+    and one more fact on `selected` (a hero's buttons), active only in
+    `?embed=preview`. Every upload is behind the editor's own `content:edit`
+    gate, which the server's `/cms/*` rule includes.
+12. **Not here**: a Bento tile's pictures (they come with the category
+    picker, M3) and a review's avatar (with the review list, M3); a store's
+    button link (with the store picker, M3).
+
+## §342 — THE PHONE PAGE EDITOR SHOWS EVERY FIELD THE DESKTOP INSPECTOR SHOWS, AND THE ONBOARDING PAGE'S SETTINGS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+After M1 and M2 the phone editor's sheet still offered only a curated
+handful of text fields per block; sizes, behaviour, the product, category and
+poll pickers, a review list, a store list and a bundle's variants were "tuned
+on desktop". Rather than copy twenty-six block forms (about 2,700 lines) into
+the phone and keep them in step, the desktop editor running underneath the
+phone (§299's bridge) now reads its own inspector for the selected block and
+sends it; the phone draws it, and every tap drives the very control it copies.
+The Onboarding page's settings come to the phone too.
+
+1. **One inspector, drawn twice.** `cms.html` `fcFormSnapshot` turns the
+   inspector built for the selected block into a tree: sections, fields with
+   their label and hint, and the controls — text boxes (a two-language pair
+   arrives as two boxes tagged EN and 中), lists, numbers, ticks, radios,
+   buttons, chips and short notes — in the inspector's order and in the
+   editor's language (which follows the phone sheet's). A block type added
+   later reaches the phone with nothing written for it there.
+2. **A tap drives the desktop's own control.** The phone sends `ctl` (the
+   control's number, its kind, the value); the bridge sets the value and fires
+   the control's own `input` / `change`, or clicks the button or chip. So every
+   rule a control carries — a clamp (columns 3–5), a conversion (the countdown's
+   local time), which old fields it clears, what it writes into a list — runs
+   exactly as on desktop, with no second copy to drift. A tap meant for a
+   different kind of control than the one now at that number is refused, never
+   guessed at. Values are read off the controls when the tree is sent, so text
+   typed from the phone is what comes back.
+3. **The four pickers that are not plain controls register themselves**
+   (`productPicker`, `imgPicker`, `videoPicker`, `targetPicker`) with their
+   value and their own setter; the phone's `pickSet` calls that setter. A
+   product is chosen from a list (one, or several with remove and add); a
+   picture, video or link inside a list — a review's avatar, a Bento tile's
+   picture, a store's button link — uses §325 M2's fields, driving the
+   inspector's picker. Categories to show are the inspector's chips; a poll is
+   pinned with the inspector's list, which the Design sheet already carried.
+4. **What the mirror leaves out**: colours and layout choices (the Design
+   sheet has them), Show on and Frame (the sheet's own, M1), the coupon picker
+   and its read-only lines and a hero's buttons (the sheet's own, M1 and M2;
+   marked `data-mirror-skip` on desktop), and Delete (the action bar). The
+   sheet's own picture, video and link fields (M2) are drawn where the
+   inspector's first such field stands.
+5. **The curated text-field list is retired**, and with it the sheet's own
+   labels ("Kicker", "Empty text"): the phone now shows every text field the
+   inspector shows, by the inspector's names. The "advanced options are tuned
+   on desktop" note goes: there is nothing left that only the desktop sheet has.
+6. **The Onboarding page's settings**: on that page a strip under the view
+   switch shows who sees it and its version, and opens a sheet with the
+   desktop's controls on the desktop's endpoints — who sees it (`PUT
+   {show_to}`), the Get Started button's two words (`PUT {next_label}`, saved
+   when a box is left, as desktop saves on blur), and Re-show to all (`POST
+   /bump`), which asks first in the desktop's words because it puts the page
+   back in front of every returning customer. A refusal stays in the sheet.
+   The "is this page linked from Home" banner the desktop shows on the other
+   pages is not brought over in this step.
+7. **The desktop editor's no-permission screen** now says what the phone's
+   says (M2): it names `content:edit` by the Roles screen's name for it, not a
+   `retail` permission that no longer exists.
+8. **No new server route.** The mirror lives in the bridge, active only in
+   `?embed=preview`; the onboarding endpoints are the desktop's, behind the
+   editor's `content:edit` gate, which the server's `/cms/*` rule includes.
