@@ -86,9 +86,11 @@ function mk(opts = {}) {
     courierAgo: (v) => (v ? 'ago(' + v + ')' : ''),
     _date: (v) => { if (!v) return null; let t = String(v).replace(' ', 'T'); if (!/[zZ]$|[+-]\d\d:?\d\d$/.test(t)) t += 'Z'; const d = new Date(t); return isNaN(d.getTime()) ? null : d; },
     recapNoMoney: () => !!opts.noMoney,
+    mCan: (k) => (opts.caps || []).includes(k),
     location: { origin: 'https://shop.example' },
     state: {
       rfHist: { open: false, id: null, busy: false, err: false, rows: null },
+      orderBusy: null,
       liveDetail: opts.detail || null, detailId: opts.detail ? opts.detail.id : null,
     },
     render: () => { calls.renders++; },
@@ -200,8 +202,8 @@ async function main() {
     has(html, 'Payment received', 'a sent one is listed too'); has(html, 'Text', 'SMS reads as Text');
     has(html, 'Pickup ready', 'an unknown kind reads as words'); has(html, 'Mailbox full', 'and so does an unknown reason');
     has(html, 'W(2026-10-01 03:00:00)', 'with when');
-    hasnt(html, 'renotify', 'no Try-again yet — the write is a later step');
-    hasnt(html, 'APP.cmd', 'the card has no control at all');
+    hasnt(html, 'renotify', 'without orders:edit, no Try-again (the write is §325 O7, test_mobile_customer_writes.js)');
+    hasnt(html, 'APP.cmd', 'and for a reader the card has no control at all');
     is(ctx.toldCard(ctx.mapDetail(raw({ notifications: [] }))), '', 'nothing attempted, no card');
     is(ctx.toldCard(ctx.mapDetail(raw({}))), '', 'no field, no card');
     const z = mk({ lang: 'zh' });
