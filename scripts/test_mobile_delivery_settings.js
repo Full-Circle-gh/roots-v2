@@ -87,7 +87,7 @@ function mk(opts = {}) {
     state: { cfg: opts.cfg || CFG(), ask: null, askErr: null, dlvBusy: false, dlvErr: null, dlvSetErr: null, dlvOpening: null },
     render: () => {}, reg: (n, f) => { CMD[n] = f; },
     showToast: (m) => calls.toasts.push(String(m)),
-    askLiveRepaint: () => {},
+    askLiveRepaint: () => {}, dlvZoneFacts: () => null, canRoute: () => true,
     api: (p) => {
       calls.reads.push(p);
       if (opts.readFails) return Promise.reject(new Error('HTTP 500'));
@@ -130,7 +130,8 @@ async function main() {
     no.CMD.dlvLive('cutoff'); no.CMD.dlvSwitch('bulk');
     is([no.ctx.state.ask, no.calls.writes.length, no.calls.reads.length], [null, 0, 0], 'without the panel\'s keys every command refuses: no sheet, no read, no write (capability-denied)');
     const card = no.ctx.dlvSettingsCard(false, 20);
-    hasnt(card, 'APP.cmd', 'and the rows are drawn as read-only lines');
+    hasnt(card, "APP.cmd('dlv", 'and the rows are drawn as read-only lines — no setting opens, no switch flips');
+    is([...card.matchAll(/APP\.cmd\('([\w$]+)'/g)].map((m) => m[1]), ['push'], '…the one tap left is the zones list, which is a read (§325 O5)');
     has(card, '20 min before close', '…which still say what is set');
   }
 
