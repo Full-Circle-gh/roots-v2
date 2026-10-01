@@ -141,6 +141,7 @@ function mk(opts = {}) {
       wst: { rows: null, totals: null, tried: false, loading: false, err: null, listSeq: 0,
              range: 'week', reason: '', store: '', reasons: [], from: null, to: null, voidBusy: null, voidErr: null },
       stack: [], pinv: {}, fin: {}, kq: {}, prodVer: { open: false }, prodSales: { pid: null, seq: 0 },
+      shm: { edit: null, pick: null },   // §325 PD4's two shop-menu sheets, closed
     }, opts.state || {}),
     render: () => { calls.renders++; },
     reg: (n, f) => { CMD[n] = f; },

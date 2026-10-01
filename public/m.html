@@ -913,7 +913,11 @@ const state = {
   prodVer:{pid:null,open:false,rows:null,err:null,seq:0},
   /* §325 PD2 — shop menus, read-only: every location's shop (`list`), and the
      one open (`id`) with its listings, its QR answer and the menu filter. */
-  shm:{list:null,err:null,tried:false,seq:0,id:null,oneFor:null,shop:null,rows:null,oneErr:null,oneSeq:0,qr:null,q:''},
+  shm:{list:null,err:null,tried:false,seq:0,id:null,oneFor:null,shop:null,rows:null,oneErr:null,oneSeq:0,qr:null,q:'',
+       /* §325 PD4 — listing ids with a write in flight, a refused row write's
+          sentence (above the list), the row sheet (price / kind / remove) and
+          the Add product picker. */
+       busy:{},writeErr:null,edit:null,pick:null},
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   /* Which later step of a delay case has its controls out, as `<shipment>:<index>`,
      or null. STATE RATHER THAN A DOM TOGGLE because this sheet repaints on the
@@ -1880,6 +1884,7 @@ reg('rqSearch', v=>{
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mShmQ','mShmClr','shmQ'],
+ ['mShmPickQ','mShmPickClr','shmPickQ'],
  ['mChlQ','mChlClr','chlQ'],
  ['mNlgQ','mNlgClr','nlgQ'],
  ['mElmCatQ','mElmCatClr','elmCatQ'],
@@ -13487,15 +13492,26 @@ function shmListHtml(){
   const list=shmShown();
   const count=String(s.q||'').trim()?`<div class="num" style="padding:0 2px 8px;font-size:12.5px;color:var(--text-secondary);text-align:right">${list.length} / ${rows.length}</div>`:'';
   if(!list.length) return count+`<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No products match this filter','没有匹配此筛选条件的产品')}</div>`;
-  return count+`<div class="list">${list.map((r,i)=>{
-    const on=Number(r.is_available)===1;
-    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
-      <span style="display:flex;flex-direction:column;min-width:0;gap:3px">
+  /* §325 PD4 — with stores:edit the row opens its sheet (price, kind,
+     remove) and carries the availability switch, the desktop's daily
+     control; without it the row is PD2's read-only line. */
+  const edit=shmCanEdit();
+  const errBar=s.writeErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;margin-bottom:10px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(s.writeErr)}</span></div>`:'';
+  return errBar+count+`<div class="list">${list.map((r,i)=>{
+    const on=Number(r.is_available)===1, busy=!!(s.busy||{})[r.id];
+    const info=`<span style="display:flex;flex-direction:column;min-width:0;gap:3px;flex:1">
         <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shmProdName(r)}</span>
-        <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr([r.sku,r.fulfilment_mode==='made_here'?T('Made here','现做'):T('Stocked','备货')].filter(Boolean).join(' · '))}</span></span>
-      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none">
-        <span class="num" style="font-size:15px;font-weight:500">${money(CUR,r.price)}</span>
-        ${on?pill('on',T('Available','有货')):pill('off',T('Sold out','售罄'))}</span></div>`;
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr([r.sku,r.fulfilment_mode==='made_here'?T('Made here','现做'):T('Stocked','备货')].filter(Boolean).join(' · '))}</span>
+        <span class="num" style="font-size:14px;font-weight:500;margin-top:2px">${money(CUR,r.price)}</span></span>`;
+    const word=on?T('Available','有货'):T('Sold out','售罄');
+    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+      ${edit?`<button onclick="APP.cmd('shmEdit',${Number(r.id)})" style="display:flex;flex:1;min-width:0;background:none;border:none;padding:0;text-align:left;cursor:pointer;font-family:inherit;color:var(--text-primary)">${info}</button>`:info}
+      <span style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:none">
+        ${edit?(busy?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">…</span>`:toggle(on,`APP.cmd('shmAvail',${Number(r.id)})`))
+              +`<span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${word}</span>`
+             :(on?pill('on',word):pill('off',word))}</span></div>`;
   }).join('')}</div>`;
 }
 /* The record: the location, the unlabelled code, the QR with the address it
@@ -13533,13 +13549,248 @@ SUBS.shopmenus={title:['Shop menu','门店商品'],render:()=>screenShopMenus()}
 SUBS.shopmenu={title:['Shop menu','门店商品'],backLabel:()=>T('Shop menu','门店商品'),render:()=>screenShopMenu()};
 reg('shmRetry', ()=>{ loadShopMenus(true); render(); });
 reg('shmOneRetry', ()=>{ loadShopMenu(true); render(); });
-reg('shmOpen', id=>{ const s=state.shm; s.id=Number(id); s.q=''; s.oneFor=null; push('shopmenu'); });
+reg('shmOpen', id=>{ const s=state.shm; s.id=Number(id); s.q=''; s.oneFor=null;
+  s.busy={}; s.writeErr=null; s.edit=null; s.pick=null; push('shopmenu'); });
 /* The filter repaints the list alone, so the keyboard stays (prodSearch's rule). */
 reg('shmQ', v=>{
   state.shm.q=String(v||'');
   searchClearShow('mShmClr', !!state.shm.q);
   const host=document.getElementById('mShmBody');
   if(host) host.innerHTML=shmListHtml(); else render();
+});
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 PD4 — A SHOP MENU'S DAILY EDITS (desktop: 28-shops.js, THE WRITES)
+   --------------------------------------------------------------------------
+   Each is the desktop's request with the desktop's body, behind stores:edit
+   (the desktop's RO() / data-cap, and the server's requireStoresEdit):
+
+     Available on/off   PATCH /shops/:id/listings/:lid {is_available: 1|0}
+                        — on the row, optimistic, put back if refused
+                        (shpToggleAvail)
+     Price, Kind        PATCH /shops/:id/listings/:lid {price} / {fulfilment_mode}
+                        — one PATCH per changed field, as the desktop's
+                        shpSaveField sends one per change; from the row's sheet
+     Remove             DELETE /shops/:id/listings/:lid — WITH a confirm,
+                        which the desktop does not ask (the §325 survey's
+                        defect 14); the phone asks first
+     + Add product      GET /shops/:id/candidates?q=, then
+                        POST /shops/:id/listings {store_product_id}
+     Add all            POST /shops/:id/listings/add-published, behind the
+                        desktop's confirm naming the count and the §47 caveat
+
+   A refusal stays where the operator is looking — above the list, or in the
+   sheet that asked — and a toast only ever confirms. Without stores:edit the
+   menu is exactly PD2's read-only screen: no switch, no sheet, no Add. */
+const shmCanEdit=()=>mCan('stores:edit');
+function shmWriteErr(e){
+  if(e&&e.refused) return T(...e.words);
+  if(e&&e.code==='bad_price') return T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。');
+  return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+}
+const shmRow=id=>(state.shm.rows||[]).find(r=>Number(r.id)===Number(id));
+/* Repaint the listings alone when they are on screen, so a write never takes
+   down the filter field the operator may be typing in. */
+function shmRepaint(){ const host=document.getElementById('mShmBody'); if(host) host.innerHTML=shmListHtml(); else render(); }
+/* The row's sheet: price and kind, Save, and Remove. Price is held in state as
+   typed and never repaints on a keystroke; the kind chips repaint and keep it. */
+function sheetShmEdit(){
+  const s=state.shm, ed=s.edit; if(!ed) return '';
+  const r=shmRow(ed.id); if(!r) return '';
+  const chip=(k,label)=>`<button class="chip ${ed.mode===k?'on':''}" ${ed.busy?'disabled':''} onclick="APP.cmd('shmEditMode','${k}')"><span>${label}</span></button>`;
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shmEditClose')"></div>
+   <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">
+     <div class="grabber" style="margin-bottom:12px"></div>
+     <div style="padding:0 20px 4px;font-size:18px;font-weight:500">${shmProdName(r)}</div>
+     <div class="num" style="padding:0 20px 12px;font-size:12.5px;color:var(--text-secondary)">${escAttr(r.sku||'')}</div>
+     <div style="padding:0 20px;display:flex;flex-direction:column;gap:16px">
+       <label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Price','价格')}</span>
+         <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px;color:var(--text-secondary)">${CUR}</span>
+         <input id="mShmPrice" class="num" inputmode="decimal" value="${escAttr(ed.price)}" ${ed.busy?'disabled':''} oninput="APP.cmd('shmEditPrice',this.value)" style="flex:1;min-width:0"></div></label>
+       <div><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Kind','类型')}</span>
+         <div style="display:flex;gap:8px">${chip('stocked',T('Stocked','备货'))}${chip('made_here',T('Made here','现做'))}</div></div>
+       ${ed.err?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${escAttr(ed.err)}</span></div>`:''}
+     </div>
+     <div style="display:flex;gap:8px;padding:18px 20px 0">
+       <button class="btn2" style="flex:1;color:var(--brick-ink)" ${ed.busy?'disabled':''} onclick="APP.cmd('shmRemove',${Number(r.id)})">${ed.busy==='remove'?T('Removing…','移除中…'):T('Remove','移除')}</button>
+       <button class="cta" style="flex:1" ${ed.busy?'disabled':''} onclick="APP.cmd('shmEditSave')">${ed.busy==='save'?T('Saving…','保存中…'):T('Save','保存')}</button></div>
+   </div>`;
+}
+/* The Add product picker: the desktop's in-flow panel, as a sheet. The search
+   box is painted once and only #mShmPickList repaints under it, for the
+   desktop's reason (a field rebuilt mid-word loses the keyboard). */
+function shmPickListHtml(){
+  const s=state.shm, p=s.pick; if(!p) return '';
+  if(p.err) return `<div style="padding:20px;font-size:14px;color:var(--brick-ink)">${escAttr(p.err)}</div>`;
+  if(p.loading&&!p.rows.length) return `<div style="padding:20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  // Kept while a search narrows the rows below (addAllRow's rule).
+  const all = p.pubMissing&&shmCanEdit() ? `<div style="padding:4px 20px 10px">
+      <button class="btn2" style="width:100%" ${p.busy?'disabled':''} onclick="APP.cmd('shmAddAll')">${p.busy==='all'?T('Adding…','添加中…')
+        :T('+ Add all '+p.pubMissing+' Online store products','+ 添加全部 '+p.pubMissing+' 个线上商城商品')}</button></div>` : '';
+  if(!p.rows.length) return all+`<div style="padding:20px;text-align:center;font-size:14px;color:var(--text-secondary)">${p.q?T('No products match this filter','没有匹配此筛选条件的产品'):T('No products yet','还没有商品')}</div>`;
+  return all+`<div>${p.rows.map((c,i)=>`${i?'<div class="sep" style="margin:0 20px"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:10px 20px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shmProdName(c)}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr(c.sku||'')}${c.sku?' · ':''}${money(CUR,c.sell_price)}</span></span>
+      <button class="btn2" style="width:auto;flex:none;padding:6px 12px;font-size:13px" ${p.busy?'disabled':''} onclick="APP.cmd('shmAdd',${Number(c.id)})">${p.busy===c.id?T('Adding…','添加中…'):T('+ Add product','+ 添加商品')}</button></div>`).join('')}</div>`;
+}
+function sheetShmPick(){
+  const p=state.shm.pick; if(!p) return '';
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shmPickClose')"></div>
+   <div class="sheet" style="top:80px;z-index:48;overflow:hidden">
+     <div style="flex:none;padding:8px 16px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:10px">
+         <div style="flex:1;min-width:0">${searchBox(`<input id="mShmPickQ" inputmode="search" enterkeyhint="search" value="${escAttr(p.q)}"
+           placeholder="${T('Search a product to add…','搜索商品以添加…')}" style="width:100%" oninput="APP.cmd('shmPickQ',this.value)"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mShmPickClr',!!p.q)}</div>
+         <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('shmPickClose')">${T('Cancel','取消')}</button></div>
+       ${p.addErr?`<div style="margin-top:10px;font-size:13.5px;color:var(--brick-ink)">${escAttr(p.addErr)}</div>`:''}</div>
+     <div id="mShmPickList" style="flex:1;min-height:0;overflow-y:auto;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">${shmPickListHtml()}</div></div>`;
+}
+function shmPickRepaint(){ const host=document.getElementById('mShmPickList'); if(host) host.innerHTML=shmPickListHtml(); else render(); }
+/* fetchPick: one request per settled keystroke, the last one asked wins, and
+   the rows on screen stay up while the next answer is in flight. The Add all
+   count comes from the UNFILTERED answer only — the one that sees them all. */
+let _shmPickTimer=null;
+function shmFetchPick(){
+  const s=state.shm, p=s.pick; if(!p||s.id==null) return;
+  const seq=++p.seq; p.loading=true;
+  if(!p.rows.length) shmPickRepaint();
+  api('/shops/'+s.id+'/candidates?q='+encodeURIComponent(p.q)).then(rows=>{
+    if(!s.pick||seq!==s.pick.seq) return;
+    p.rows=Array.isArray(rows)?rows:[]; p.err=null;
+    if(!p.q) p.pubMissing=p.rows.filter(c=>Number(c.is_published)===1).length;
+    p.loading=false; shmPickRepaint();
+  }).catch(e=>{
+    if(!s.pick||seq!==s.pick.seq||String(e&&e.message)==='auth') return;
+    p.rows=[]; p.loading=false; p.err=e&&e.refused?T(...e.words):String(E('Load failed','加载失败')); shmPickRepaint();
+  });
+}
+SUBS.shopmenu.cta=()=>(shmCanEdit()&&state.shm.shop)
+  ? `<button class="cta inhead" onclick="APP.cmd('shmPickOpen')">${T('+ Add product','+ 添加商品')}</button>` : '';
+/* Available — the row's switch. Optimistic, then the server's row; put back
+   and said above the list if it is refused, so the switch never lies. */
+reg('shmAvail', id=>{
+  const s=state.shm, r=shmRow(id);
+  if(!r||!s.shop||!shmCanEdit()||s.busy[r.id]) return;
+  const was=Number(r.is_available)===1?1:0, want=was?0:1;
+  r.is_available=want; s.busy[r.id]=1; s.writeErr=null; shmRepaint();
+  apiWrite('/shops/'+s.shop.id+'/listings/'+r.id,{is_available:want},'PATCH').then(j=>{
+    if(j&&j.data) Object.assign(r,j.data);
+  }).catch(e=>{
+    r.is_available=was;
+    if(String(e&&e.message)!=='auth') s.writeErr=shmWriteErr(e);
+  }).then(()=>{ delete s.busy[r.id]; render(); });
+});
+reg('shmEdit', id=>{
+  const r=shmRow(id); if(!r||!shmCanEdit()) return;
+  state.shm.edit={id:r.id,price:Number(r.price).toFixed(2),mode:r.fulfilment_mode==='made_here'?'made_here':'stocked',busy:null,err:null};
+  render();
+});
+reg('shmEditClose', ()=>{ const ed=state.shm.edit; if(ed&&ed.busy) return; state.shm.edit=null; render(); });
+reg('shmEditPrice', v=>{ const ed=state.shm.edit; if(ed) ed.price=String(v==null?'':v); });   // no render: it would eat the keystroke
+reg('shmEditMode', k=>{ const ed=state.shm.edit; if(!ed||ed.busy||(k!=='stocked'&&k!=='made_here')) return; ed.mode=k; render(); });
+/* Save sends what changed and nothing else: {price} and/or {fulfilment_mode},
+   one PATCH each, the desktop's shpSaveField body. A price that is not a
+   number of 0 or more is refused here, before the server is asked. */
+reg('shmEditSave', ()=>{
+  const s=state.shm, ed=s.edit; if(!ed||ed.busy||!s.shop||!shmCanEdit()) return;
+  const r=shmRow(ed.id); if(!r) return;
+  const priceTxt=String(ed.price).trim(), n=Number(priceTxt);
+  if(priceTxt===''||!Number.isFinite(n)||n<0){ ed.err=T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'); render(); return; }
+  const jobs=[];
+  if(Math.round(n*100)!==Math.round(Number(r.price)*100)) jobs.push({price:priceTxt});
+  if(ed.mode!==r.fulfilment_mode) jobs.push({fulfilment_mode:ed.mode});
+  if(!jobs.length){ s.edit=null; render(); return; }
+  ed.busy='save'; ed.err=null; render();
+  (async()=>{
+    for(const body of jobs){
+      const j=await apiWrite('/shops/'+s.shop.id+'/listings/'+r.id,body,'PATCH');
+      if(j&&j.data) Object.assign(r,j.data);
+    }
+  })().then(()=>{
+    s.edit=null; showToast(T('Saved','已保存')); render();
+  }).catch(e=>{
+    ed.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    ed.err=shmWriteErr(e); render();
+  });
+});
+/* Remove — asked first, though the desktop does not ask (§325 survey, defect
+   14): a listing is a join and adding it back restores it, but the price and
+   kind set on it here do not come back with it. */
+reg('shmRemove', id=>{
+  const s=state.shm, r=shmRow(id); if(!r||!s.shop||!shmCanEdit()) return;
+  if(s.edit&&s.edit.busy) return;
+  state.ask={title:T('Remove from this menu?','从此菜单移除？'), body:shmProdName(r),
+    confirmLabel:T('Remove','移除'), danger:true,
+    run:()=>{
+      const ed=s.edit&&Number(s.edit.id)===Number(r.id)?s.edit:null;
+      if(ed){ ed.busy='remove'; ed.err=null; }
+      s.writeErr=null; render();
+      apiWrite('/shops/'+s.shop.id+'/listings/'+r.id,{},'DELETE').then(()=>{
+        s.rows=(s.rows||[]).filter(x=>Number(x.id)!==Number(r.id));
+        if(ed) s.edit=null;
+        showToast(T('Removed','已移除')); render();
+      }).catch(e=>{
+        if(ed) ed.busy=null;
+        if(String(e&&e.message)==='auth') return;
+        if(ed) ed.err=shmWriteErr(e); else s.writeErr=shmWriteErr(e);
+        render();
+      });
+    }};
+  render();
+});
+reg('shmPickOpen', ()=>{
+  const s=state.shm; if(!s.shop||!shmCanEdit()) return;
+  s.pick={q:'',rows:[],loading:false,err:null,addErr:null,busy:null,seq:0,pubMissing:0};
+  render(); shmFetchPick();
+});
+reg('shmPickClose', ()=>{ const p=state.shm.pick; if(p&&p.busy) return; clearTimeout(_shmPickTimer); state.shm.pick=null; render(); });
+reg('shmPickQ', v=>{
+  const p=state.shm.pick; if(!p) return;
+  p.q=String(v||''); searchClearShow('mShmPickClr',!!p.q);
+  clearTimeout(_shmPickTimer); _shmPickTimer=setTimeout(shmFetchPick,220);
+});
+reg('shmAdd', id=>{
+  const s=state.shm, p=s.pick; if(!p||p.busy||!s.shop||!shmCanEdit()) return;
+  const pid=Number(id);
+  p.busy=pid; p.addErr=null; shmPickRepaint();
+  apiWrite('/shops/'+s.shop.id+'/listings',{store_product_id:pid},'POST').then(j=>{
+    p.busy=null;
+    if(j&&j.data) (s.rows=s.rows||[]).push(j.data);
+    p.rows=p.rows.filter(c=>Number(c.id)!==pid);
+    shmPickRepaint(); shmRepaint();
+  }).catch(e=>{
+    p.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    p.addErr=shmWriteErr(e); render();
+  });
+});
+/* Add all — the desktop's confirm, then one POST with no body. The count on
+   the button is re-asked of the server afterwards, never worked out here. */
+reg('shmAddAll', ()=>{
+  const s=state.shm, p=s.pick; if(!p||p.busy||!p.pubMissing||!s.shop||!shmCanEdit()) return;
+  const n=p.pubMissing;
+  state.ask={title:T('Add '+n+' product'+(n===1?'':'s')+' to this menu?','添加 '+n+' 个商品到此菜单？'),
+    body:T('Every Online store product not on this menu is added at its catalogue price, as Stocked. Anything this shop has never counted shows as sold out on the QR menu. Remove what this shop does not sell.',
+           '所有尚未在此菜单上的线上商城商品将按商品价格添加,类型为备货。此门店从未盘点过的商品会在二维码菜单上显示为售罄。请移除此门店不卖的商品。'),
+    confirmLabel:T('Add','添加'),
+    run:()=>{
+      p.busy='all'; p.addErr=null; render();
+      apiWrite('/shops/'+s.shop.id+'/listings/add-published',{},'POST').then(j=>{
+        p.busy=null;
+        if(j&&j.data&&Array.isArray(j.data.listings)) s.rows=j.data.listings;
+        showToast(T('Saved','已保存'));
+        p.pubMissing=0; p.q=''; p.rows=[]; render(); shmFetchPick();
+      }).catch(e=>{
+        p.busy=null;
+        if(String(e&&e.message)==='auth') return;
+        p.addErr=shmWriteErr(e); render();
+      });
+    }};
+  render();
 });
 /* ══════════════════════════════════════════════════════════════════════════
    ADD STOCK — the kitchen's other tool, in this app rather than beside it
@@ -32423,6 +32674,9 @@ function render(){
   if(state.detailId) html += layer('detail:'+state.detailId, sheetOrderDetail());
   if(state.detailActions) html += layer('actions', sheetActions());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
+  // §325 PD4 — a shop menu's row sheet and its Add product picker.
+  if(state.shm.edit) html += layer('shmedit:'+state.shm.edit.id, sheetShmEdit());
+  if(state.shm.pick) html += layer('shmpick', sheetShmPick());
   // §325 PD2 — over the product it lists, and only while that product is open.
   if(state.productSku&&state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
@@ -32886,6 +33140,9 @@ function layers(){
      record it was opened from, exactly as its z-index says. */
   if(state.caddr) L.push(()=>{ state.caddr=null; });
   if(state.productSku) L.push(()=>{ state.productSku=null; prodRecordsDrop(); });
+  // §325 PD4 — over the shop menu they belong to; not while a write is out.
+  if(state.shm.edit) L.push(()=>{ if(!state.shm.edit.busy) state.shm.edit=null; });
+  if(state.shm.pick) L.push(()=>{ if(!state.shm.pick.busy){ clearTimeout(_shmPickTimer); state.shm.pick=null; } });
   // After the product, so Back closes the version list first (§325 PD2).
   if(state.productSku&&state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
   /* "When it runs out" sits OVER the product sheet it was opened from (z-index
