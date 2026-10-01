@@ -213,7 +213,20 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['pickup.leadMinutes', list(route('delivery')), 'phone Delivery — Store pickup'],
       ['notice.preorder', list(route('delivery')), 'phone Delivery — Pre-orders'],
     ];
-    for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq']) {
+    // §325 X2 / X3 — the phone's Operations screen writes the same three
+    // families as the desktop's Settings → Operations, drawn for the phone
+    // Settings screen's keys (m.html opsxCan → ROUTE_CAP.settings), and Settings
+    // → Features gained the three switches the desktop hosts there.
+    rows.push(['inventory.lowStockThreshold', phoneSettings, 'phone Operations — low-stock default (§325 X2)']);
+    rows.push(['inventory.lowStockDigest', phoneSettings, 'phone Operations — daily low-stock list (§325 X2)']);
+    rows.push(['product_page.sections', phoneSettings, 'phone Operations — product page sections (§325 X3)']);
+    // §325 X5 — the phone's Shop tab and Customer service screens (autosave
+    // cards, the desktop's SHOP_CARD and CS_CARD bodies), on the same keys.
+    rows.push(['shop.layout', phoneSettings, 'phone Settings → Shop tab (§325 X5)']);
+    rows.push(['shop.showSort', phoneSettings, 'phone Settings → Shop tab (§325 X5)']);
+    rows.push(['customer_service.mode', phoneSettings, 'phone Settings → Customer service (§325 X5)']);
+    rows.push(['customer_service.fab_bottom', phoneSettings, 'phone Settings → Customer service (§325 X5)']);
+    for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq', 'production', 'waste', 'lowStockHints']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
     }
     for (const [key, screen, who] of rows) {
@@ -222,6 +235,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         'need ' + JSON.stringify(need));
     }
     is(configKeyCap('support.hidden'), null, 'support.hidden stays open: the floating Support panel\'s Hide is drawn for everybody');
+    // The phone's Operations switch for it (§325 X2) is drawn for its Settings
+    // keys, a narrower set than "everybody", so the open gate admits it too.
 
     section('3 · …and the families do not bleed into each other');
     ok(!has(configKeyCap('tax.rateMicro'), 'popups:view'), 'a pop-up editor cannot set the tax rate');
@@ -273,6 +288,14 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(r.status, 200, 'a settings:shop account saves the Shop tab and the currency');
     r = await call('settings', 'PUT', '/api/retail-admin/config', { 'features.membership': true });
     is(r.status, 200, 'and flips a feature from the phone\'s Settings');
+    r = await call('settings', 'PUT', '/api/retail-admin/config', {
+      'inventory.lowStockThreshold': 4, 'inventory.lowStockDigest': { enabled: true, hour: 0 }, 'product_page.sections': { order: ['basics'], hidden: [] },
+    });
+    is(r.status, 200, 'and saves the phone Operations screen\'s low-stock and product-page settings (§325 X2/X3)');
+    r = await call('orders', 'PUT', '/api/retail-admin/config', { 'inventory.lowStockThreshold': 4 });
+    is(r.status, 403, '…which an orders account may not');
+    r = await call('settings', 'PUT', '/api/retail-admin/config?history=customer_service', { 'customer_service.mode': 'qr', 'customer_service.fab_bottom': 220 });
+    is(r.status, 200, 'and the phone\'s Customer service card, filed on its history (§325 X5)');
     r = await call('delivery', 'PUT', '/api/retail-admin/config', { 'delivery.holidayMode': false });
     is(r.status, 200, 'the phone\'s Resume delivery still works for a delivery:view account');
     r = await call('broadcast', 'PUT', '/api/retail-admin/config', { 'notifications.categories.order': true });
@@ -363,9 +386,23 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const dlvSites = sites.filter((i) => i > dlvSite && i < M.indexOf('\n}\n', dlvSite));
       is(dlvSites.length, 1, 'the Delivery settings helper is one write site');
       const famSites = sites.filter((i) => !dlvSites.includes(i));
-      const FAMS = ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'];
-      is(famSites.map((i) => FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f)).join('|')).sort(),
-        FAMS, 'the phone writes four families, one per write site, each asserted in section 2');
+      // §325 X2/X3: the phone's Operations screen adds four families —
+      // inventory.lowStockThreshold, inventory.lowStockDigest, support.hidden
+      // (the open one) and product_page.sections — each its own write site.
+      // §325 X5 adds the two autosave cards, each filed on its own history
+      // card: 'shop.display' (the shop.* family) and 'customer_service'.
+      const FAMS = ['customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
+        'notifications.categories.', 'popups.list', 'product_page.sections', 'shop.', 'support.hidden'];
+      // A site whose body is written inline names its family in the call itself;
+      // only one that builds its body first (Resume delivery, the pop-up switch)
+      // is read in the 900 characters before it. Several sites now sit within
+      // 900 characters of each other (§325 X2), so the call is asked first.
+      const famAt = (i) => {
+        const own = FAMS.filter((f) => M.slice(i, i + 200).includes("'" + f));
+        return own.length ? own : FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f));
+      };
+      is(famSites.map((i) => famAt(i).join('|')).sort(),
+        FAMS, 'the phone writes ten families, one per write site, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'

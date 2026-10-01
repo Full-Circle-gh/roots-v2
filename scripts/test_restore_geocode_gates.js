@@ -150,7 +150,18 @@ const restoredAt = (id) => db.prepare('SELECT restored_at FROM deleted_records W
     const btn = html.indexOf('onclick="_geocodeBackfill()"');
     const panel = html.lastIndexOf('class="sub-panel', btn);
     ok(btn > 0 && /id="sub-ops"/.test(html.slice(panel, panel + 60)), '…and it sits in Settings → Operations');
-    ok(!/geocode-backfill/.test(read('public/m.html')), 'the phone does not call it');
+    /* §325 X2 brought the button to the phone's Operations screen, behind the
+       desktop's quota confirm and drawn for the phone Settings screen's keys
+       (opsxCan → ROUTE_CAP.settings). It is the only phone caller, and every
+       key that draws it passes the gate above. */
+    const M = read('public/m.html');
+    is((M.match(/apiWrite\('\/inventory\/geocode-backfill'/g) || []).length, 1, 'the phone calls it from one place');
+    const run = M.slice(M.indexOf('function opsxGeoRun()'), M.indexOf('function opsxGeoRun()') + 400);
+    ok(run.includes("apiWrite('/inventory/geocode-backfill',{},'POST')"), '…the Operations screen\'s locate-everything run');
+    ok(/const opsxCan=\(\)=>canRoute\('settings'\);/.test(M), '…drawn for the phone Settings screen\'s keys');
+    const phoneSettings = (M.match(/\n  settings:\[([^\]]+)\]/) || [])[1].split(',').map((x) => x.trim().replace(/'/g, ''));
+    const need = requiredCapFor('POST', '/api/retail-admin/inventory/geocode-backfill');
+    ok(phoneSettings.length && phoneSettings.every((k) => need.includes(k)), '…every one of which the gate admits', JSON.stringify({ phoneSettings, need }));
     ok(/data-cap="settings:edit" onclick="recycleRestore/.test(S), 'the desktop draws Put it back for settings:edit…');
     ok(!/'settings:edit'/.test(read('lib/capabilities.js')), '…a key that does not exist, so no desktop operator uses it today');
   } finally {

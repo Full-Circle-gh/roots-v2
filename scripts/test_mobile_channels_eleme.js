@@ -250,20 +250,17 @@ section('2 · the reads');
     assert.ok(t.includes('天河 3 条库存待推送 · 已读取 120 个商品'));
     assert.ok(t.includes('鹰嘴豆泥 → 4') && t.includes('库存推送') && t.includes('系统事件'));
   });
-  /* The desktop writes these in \\u escapes, and one of them carries 饶 (ráo,
-     U+9976) where the platform's name is 饿 (è, U+997F) — the misprint the
-     vocabulary's Eleme entry already corrected once in that tab's plain-text
-     strings. The phone copies the pair with the platform's real name, and this
-     pins exactly that one character as the difference. */
+  /* The desktop writes these in \\u escapes, and until §325 X2 one of them
+     carried 饶 (ráo, U+9976) where the platform's name is 饿 (è, U+997F). Both
+     surfaces print 饿 now, and the guard stays so the misprint cannot return. */
   it('the words are the desktop\'s: the blocked reasons, decoded from its source', () => {
     const desk = vm.runInNewContext('(' + slice(EL, 'const EL_BLOCK_TXT = {', '};').replace('const EL_BLOCK_TXT = ', '') + '})');
-    const phone = JSON.parse(JSON.stringify(vm.runInContext('ELM_BLOCK', mk().ctx)));
-    assert.deepStrictEqual(Object.keys(phone).sort(), Object.keys(desk).sort());
-    for (const k of Object.keys(desk)) {
-      assert.strictEqual(phone[k][0], desk[k][0], k + ' English');
-      assert.strictEqual(phone[k][1], desk[k][1].replace(/\u9976\u4e86\u4e48/g, '饿了么'), k + ' Chinese');
-    }
-    assert.ok(!/\u9976/.test(JSON.stringify(phone)), 'the phone never prints 饶 for Eleme');
+    const phone = vm.runInContext('ELM_BLOCK', mk().ctx);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(phone)), JSON.parse(JSON.stringify(desk)));
+    // The tab's own comment still quotes the old misprint as history, so the
+    // check is on the escapes the strings are written in, not on the file.
+    assert.ok(!/\\u9976/i.test(EL), 'the desktop Eleme tab never writes 饶 for Eleme');
+    assert.ok(!/\u9976/.test(JSON.stringify(phone)));
   });
 }
 
