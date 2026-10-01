@@ -141,6 +141,8 @@ function mk(opts = {}) {
       prodVer: { open: false }, prodSales: { pid: null, seq: 0 }, pe: null },
     render: () => {},
     reg: (n, f) => { CMD[n] = f; },
+    // The sizes card (§325 PD9) has its own suite, test_mobile_product_sizes.js.
+    loadPeSizes: () => {}, peSizesCard: () => '',
     push: (route) => { ctx.state.stack.push({ route }); },
     loadCategories: () => {}, recapNoMoney: () => false, featOn: () => true, navTabs: () => [],
     showToast: (m) => calls.toasts.push(String(m)),
