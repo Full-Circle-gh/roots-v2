@@ -884,6 +884,8 @@ const state = {
      same shape, and their vocabulary is the server's (`tag_vocabulary`) so the
      row offers groups somebody actually used rather than a list to remember. */
   custSeg:'all', custTier:[], custChan:[], custTags:[], custTagVocab:null,
+  /* §325 O11 — the roster's found-but-filtered count, and the statement sheet. */
+  custHidden:null, stmt:null,
   custQ:'', customers:null, custMeta:null, custLoaded:false,
   custTotal:null, custMore:false, custSort:'last_seen', custDir:null,
   custId:null, custDetail:null, prodView:'catalogue',
@@ -945,7 +947,7 @@ const state = {
   /* §325 O5 — the zones screen: search, the list's read, the region catalogue,
      a row switch or refusal, and the zone sheet's draft (edit / add / copy, and
      its copy-to-others panel). */
-  zn:{q:'', loading:false, loadErr:null, regions:null, regionsBusy:false, busy:null, err:null, edit:null},
+  zn:{q:'', loading:false, readErr:null, regions:null, regionsBusy:false, busy:null, err:null, edit:null},
   /* §325 O9 — the Fresh batches sheet's draft, and the delivery set-up wizard. */
   fb:null, dwiz:null,
   /* THREE KEYS THAT WORKED WITHOUT BEING DECLARED, WHICH IS THE PROBLEM. §181
@@ -4173,8 +4175,8 @@ function sheetShipTo(){
   let body;
   if(!s.f){
     // The proposal is still being read, or could not be: no form yet.
-    body=s.loadErr
-      ?`<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start"><span style="font-size:15px;color:var(--brick-ink)">${s.loadErr}</span>
+    body=s.readErr
+      ?`<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start"><span style="font-size:15px;color:var(--brick-ink)">${s.readErr}</span>
           <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('shipToRetry')">${T('Try again','重试')}</button></div>`
       :`<div style="font-size:15px;color:var(--text-secondary)">${T('Translating address…','正在翻译地址…')}</div>`;
     return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shipToClose')"></div>
@@ -4215,7 +4217,7 @@ function sheetShipTo(){
    AI's street, the region table's names, and what the map matched. */
 function shipToPropose(o){
   const s=state.shipTo; if(!s) return;
-  s.f=null; s.loadErr=null; render();
+  s.f=null; s.readErr=null; render();
   apiWrite('/orders/'+o._id+'/address/to-chinese',{}).then(r=>{
     const t=state.shipTo; if(!t||t.oid!==o.id||t.mode!=='cn') return;
     const d=(r&&r.data)||{}, c=d.chinese||{};
@@ -4227,7 +4229,7 @@ function shipToPropose(o){
   }).catch(e=>{
     const t=state.shipTo; if(!t||t.oid!==o.id) return;
     if(String(e.message)==='auth') return;
-    t.loadErr=e.refused?T(...e.words)
+    t.readErr=e.refused?T(...e.words)
       :e.code==='ai_not_configured'?T('Translation service is off','翻译服务未启用')
       :e.code==='pickup_order'?T('Pickup order — no shipping address','自提订单 — 无收货地址')
       :T('Couldn’t translate the address','地址翻译失败');
@@ -4238,7 +4240,7 @@ reg('shipToOpen', mode=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null||o.viewOnly||!o.shipTo||state.shipTo) return;
   if(mode==='cn'){
-    state.shipTo={mode:'cn', oid:o.id, f:null, loadErr:null, geo:null, original:'', saveOrder:true, saveCust:true, busy:false, err:null};
+    state.shipTo={mode:'cn', oid:o.id, f:null, readErr:null, geo:null, original:'', saveOrder:true, saveCust:true, busy:false, err:null};
     shipToPropose(o); return;
   }
   const a=o.shipTo;
@@ -6438,9 +6440,9 @@ function znGroups(rows){
   return order.map(k=>map.get(k)).sort((a,b)=>(rank(a)-rank(b))||String(a.en||'').localeCompare(String(b.en||'')));
 }
 function loadZones(){
-  const z=state.zn; z.loading=true; z.loadErr=null;
+  const z=state.zn; z.loading=true; z.readErr=null;
   return api('/delivery-zones').then(r=>{ state.zones=Array.isArray(r)?r:[]; z.loading=false; render(); })
-    .catch(e=>{ z.loading=false; if(String(e.message)==='auth') return; z.loadErr=E('Could not load this.','无法加载。'); render(); });
+    .catch(e=>{ z.loading=false; if(String(e.message)==='auth') return; z.readErr=E('Could not load this.','无法加载。'); render(); });
 }
 function loadRegions(){
   const z=state.zn; if(z.regions||z.regionsBusy) return;
@@ -6451,7 +6453,7 @@ function loadRegions(){
 }
 function znListHtml(){
   const z=state.zn, all=Array.isArray(state.zones)?state.zones:null;
-  if(z.loadErr&&!all) return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:20px 4px;font-size:15px;color:var(--brick-ink)">${z.loadErr}
+  if(z.readErr&&!all) return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:20px 4px;font-size:15px;color:var(--brick-ink)">${z.readErr}
     <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('znReload')">${T('Try again','重试')}</button></div>`;
   if(!all) return `<div style="padding:24px 4px;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const q=z.q.trim().toLowerCase();
@@ -6475,7 +6477,7 @@ function znListHtml(){
 }
 function screenZones(){
   const z=state.zn;
-  if(state.zones===null&&!z.loading&&!z.loadErr) loadZones();
+  if(state.zones===null&&!z.loading&&!z.readErr) loadZones();
   return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
     ${searchBox(`<input id="mZnQ" inputmode="search" enterkeyhint="search" value="${escAttr(z.q)}" placeholder="${T('Search zone','搜索配送区…')}" style="width:100%" oninput="APP.cmd('znQ',this.value)">`,'mZnClr',!!z.q)}
     ${z.err?`<div style="padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${z.err}</div>`:''}
@@ -6502,7 +6504,7 @@ reg('znQ', v=>{ const z=state.zn, el=document.getElementById('mZnQ');
   searchClearShow('mZnClr',!!z.q);
   const box=document.getElementById('mZnList'); if(box) box.innerHTML=znListHtml(); });
 reg('mZnClr', ()=>searchClearRun('mZnQ','mZnClr','znQ'));
-reg('znReload', ()=>{ state.zones=null; state.zn.loadErr=null; render(); loadZones(); });
+reg('znReload', ()=>{ state.zones=null; state.zn.readErr=null; render(); loadZones(); });
 reg('znOpen', id=>{
   const z=(state.zones||[]).find(x=>x.id===id); if(!z) return;
   state.zn.edit={mode:'edit', id, type:z.zone_type, f:znFromZone(z,true), picksD:[], picksC:[], cityQ:'', busy:false, err:null, apply:null};
@@ -29936,6 +29938,8 @@ function custWrite(kind, run, okMsg){
       :e.code==='name_or_phone_required'?T('A name or a phone number — one of the two.','姓名或手机号，至少填一项。')
       :e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
       :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
+      /* §325 O11 — the desktop's sentence (01-core.js TD_ERR). */
+      :e.code==='already_reset'?T('That customer has already been reset — they are waiting to arrive as a new customer.','该顾客已重置，正等待以新顾客身份进入。')
       /* THE ONE REFUSAL THAT NAMES AN AMOUNT. Both adjust endpoints answer
          `would_go_negative` when the change would take a balance below zero,
          and the blanket sentence below turns that into "try again" — which is
@@ -36417,6 +36421,8 @@ function screenCustomers(){
       <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('custRetry')">${T('Try again','重试')}</button></div>`;
   } else if(!state.custLoaded){
     body=`${custSkeleton()}${custSkeleton()}${custSkeleton()}${custSkeleton()}`;
+  } else if(!rows.length && state.custHidden){
+    body=custHiddenState();   // §325 O11
   } else if(!rows.length && custFiltered0()){
     body=emptyState(T('No customers yet','还没有顾客'),
       T('They settle in here as soon as someone orders — every channel, remembered without you asking.',
@@ -36831,16 +36837,202 @@ function custActivity(d){
    routine controls, not proximity. So it keeps the foot to itself, as the
    outline §5 asks for — which also stops it reading at the same weight as
    Reissue, which is undone in one tap. */
+/* ── §325 O11 — CUSTOMERS: WHAT THE DESKTOP DRAWER AND ROSTER STILL HAD ─────
+   Four things from 08-customers.js / 26-print.js:
+     · FOUND, BUT FILTERED (cuHiddenMatchState): a search that matched nobody
+       on screen but somebody on file — a blocked account, or one outside the
+       tier / channel / tag / segment chosen — says so, how many, and goes and
+       gets them, keeping the search.
+     · DIAGNOSTICS (renderDiagnosticsBlock, cuCopyDiagnostics): the device and
+       app build, errors in 7 days, the last 25 log rows with their stacks,
+       and Copy summary. Read-only, open to whoever opens the record.
+     · PRINT STATEMENT (cuPrintStatement): every order this customer placed,
+       what each came to, and a total of the ones that count — a record, not an
+       invoice. §326.4 brought it to the phone.
+     · RESET TO A NEW CUSTOMER (cuResetTestCustomer): §326.4 brought it to the
+       phone with the desktop's typed RESET and customers:block — the key
+       lib/cap-routes.js asks of POST /customers/:id/reset-test. */
+function custFilterSummaryText(){
+  const q=String(state.custQ||'').trim();
+  return q?'“'+escAttr(q)+'”':T('these filters','当前筛选');
+}
+function custHiddenState(){
+  const h=state.custHidden; if(!h) return '';
+  const n=Number(h.total||0), blocked=Number(h.blocked||0), allBlocked=blocked>=n;
+  const who=n===1?T('1 customer','1 位顾客'):T(n+' customers',n+' 位顾客');
+  const f=custFilterSummaryText();
+  const body=allBlocked
+    ?T(who+' matching '+f+' is blocked, and blocked accounts show up nowhere but the Blocked list.','有'+who+'匹配'+f+',但已被封禁 — 封禁的账号只出现在“已封禁”名单中。')
+    :T(who+' matching '+f+' '+(n===1?'is':'are')+" outside the filters you've set.",'有'+who+'匹配'+f+',但不在当前筛选范围内。');
+  const label=allBlocked?(n===1?T('Show the blocked match','查看该封禁顾客'):T('Show the blocked matches','查看这些封禁顾客')):T('Show them','查看');
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
+    <div style="font-size:18px;font-weight:500">${T('Found — but your filters are hiding '+(n===1?'it':'them'),'找到了 — 但被当前筛选隐藏')}</div>
+    <div style="font-size:15px;color:var(--text-secondary);max-width:280px;line-height:1.5">${body}</div>
+    <button class="btn2" style="width:auto;padding:11px 22px" onclick="APP.cmd('custReveal')">${label}</button></div>`;
+}
+/* Every filter but the search comes off — the server counted the hidden ones
+   under the search term ALONE, so that is what makes "your filters are hiding
+   N" true — and an all-blocked match lands on the Blocked list. (The desktop
+   leaves a tag filter standing here, which can hide the very match it is
+   revealing; the phone does not.) */
+reg('custReveal', ()=>{
+  const h=state.custHidden; if(!h) return;
+  const allBlocked=Number(h.blocked||0)>=Number(h.total||0);
+  state.custTier=[]; state.custChan=[]; state.custTags=[];
+  state.custSeg=allBlocked?'blocked':'all';
+  loadCustomers();
+});
+/* ── diagnostics ── */
+function custDiagnostics(d){
+  const g=d&&d.diagnostics;
+  if(g&&g.unavailable) return custSection(T('Diagnostics','诊断'),
+    `<div style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T("Diagnostics couldn't be read for this customer. This is not an all-clear — the check itself failed.",'无法读取该顾客的诊断数据。这不代表一切正常 — 是检查本身失败了。')}</div>`);
+  const dev=g&&g.device_last_seen, logs=(g&&g.recent_logs)||[], errs=Number(g&&g.error_count_7d)||0;
+  const badge=errs?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${errs} ${T('errors in 7 days','近7天报错')}</span>`
+    :`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No errors in 7 days','近7天无报错')}</span>`;
+  const devRows=dev?[[T('App version','小程序版本'),dev.app_version],[T('Phone','手机'),dev.device_model],[T('System','系统'),dev.system],
+      [T('WeChat','微信版本'),dev.wx_version],[T('Base library','基础库'),dev.lib_version],
+      [T('Last seen','最近一次'),dev.created_at?tdWhen(dev.created_at,'dateTime',_tdL()):'']].filter(r=>r[1]).map(r=>custRow(r[0],escAttr(String(r[1]))))
+    :[];
+  /* The log is forensic: times stay absolute, and a dash is the row carrying
+     no value for that field — a fact about the record, not a stand-in. */
+  const logHtml=logs.length?logs.map((l,i)=>{ const err=l.kind==='error', detail=[l.stack,l.extra].filter(Boolean).join('\n');
+      return `${i?'<div class="sep"></div>':''}<div style="padding:10px 16px;display:flex;flex-direction:column;gap:4px${err?';background:var(--brick-tint)':''}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--text-secondary)">
+          <span class="num">${escAttr(tdWhen(l.created_at,'dateTime',_tdL())||'')}</span>
+          <span class="pill" style="background:${err?'var(--brick-tint)':PILL.muted[0]};color:${err?'var(--brick-ink)':PILL.muted[1]}">${err?T('error','报错'):T('open','启动')}</span>
+          <span style="overflow-wrap:anywhere">${escAttr(l.page||'—')}</span></div>
+        <div style="font-size:13.5px;overflow-wrap:anywhere">${escAttr(l.message||(err?'—':(l.app_version||'—')))}</div>
+        ${detail?`<details><summary style="font-size:12.5px;color:var(--text-secondary);cursor:pointer">${T('stack / details','堆栈 / 详情')}</summary><pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;margin:6px 0 0;max-height:220px;overflow:auto">${escAttr(detail)}</pre></details>`:''}
+      </div>`; }).join('')
+    :`<div style="padding:12px 16px;font-size:13.5px;color:var(--text-secondary)">${T('No diagnostics logged yet.','暂无诊断记录。')}</div>`;
+  return custSection(T('Diagnostics','诊断'),
+    `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">${badge}
+      <button onclick="APP.cmd('custDiagCopy')" style="background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Copy summary','复制摘要')}</button></div>
+    <div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);margin:4px 0 6px">${T('Device & app','设备与版本')}</div>
+    ${devRows.length?custList(devRows):`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('No device data yet. It appears once this customer opens the app build that reports diagnostics (needs a WeChat publish).','暂无设备数据。顾客打开包含诊断上报的版本后才会出现（需先发布微信版本）。')}</div>`}
+    <div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);margin:12px 0 6px">${T('Recent activity & errors (last 25)','近期活动与报错（最近25条）')}</div>
+    <div class="list">${logHtml}</div>`);
+}
+/* The desktop's plain-text snapshot, line for line (cuCopyDiagnostics): for a
+   support chat or engineering. Field names stay English — it is a log. */
+function custDiagText(d){
+  const c=(d&&d.customer)||{}, g=(d&&d.diagnostics)||{}, dev=g.device_last_seen||{};
+  const lines=['Customer #'+c.id+(c.phone?' · '+c.phone:'')+(c.nickname?' · '+c.nickname:''),
+    'App: '+(dev.app_version||'—')+' · Phone: '+(dev.device_model||'—')+' · System: '+(dev.system||'—')+' · WeChat: '+(dev.wx_version||'—'),
+    'Errors (7d): '+(g.error_count_7d||0)+' · Active sessions: '+((d&&d.stats&&d.stats.active_sessions)||0),
+    '', 'Recent log:'];
+  (g.recent_logs||[]).slice(0,10).forEach(l=>{
+    lines.push('  ['+(tdWhen(l.created_at,'dateTime',_tdL())||'')+'] '+l.kind+' '+(l.page||'')+' — '+(l.message||l.app_version||''));
+    const detail=[l.stack,l.extra].filter(Boolean).join('\n');
+    if(detail) detail.split('\n').forEach(s=>lines.push('      '+s));
+  });
+  return lines.join('\n');
+}
+reg('custDiagCopy', ()=>{ const d=state.custDetail; if(!d) return; copyText(custDiagText(d)); });
+/* ── print statement ──
+   GET /orders?customer_id=&limit=500, as the desktop reads it. Cancelled,
+   refunded and unpaid orders are LISTED and say which they are, and only the
+   rest count towards the total — a statement that quietly drops a cancelled
+   order is one the customer cannot reconcile. Drawn for orders:view, the key
+   that opens the orders it lists. */
+const STMT_WORD={paid:['Paid','已付款'],preparing:['Preparing','备货中'],dispatched:['Sent','已发出'],delivered:['Delivered','已送达'],
+  completed:['Completed','已完成'],cancelled:['Cancelled','已取消'],refunded:['Refunded','已退款'],pending_payment:['Unpaid','未付款']};
+const stmtWord=s=>{ const m=STMT_WORD[s]; return m?T(m[0],m[1]):String(s||''); };
+reg('custStatement', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(c.id==null||!mCan('orders:view')) return;
+  const s=state.stmt={id:c.id, who:c.nickname||c.phone||('#'+c.id), loading:true, err:null, orders:null, failed:false}; render();
+  api('/orders?customer_id='+encodeURIComponent(c.id)+'&limit=500').then(rows=>{
+    if(state.stmt!==s) return; s.loading=false; s.orders=Array.isArray(rows)?rows:[]; render();
+  }).catch(e=>{ if(state.stmt!==s||String(e.message)==='auth') return;
+    s.loading=false; s.err=e.refused?E(...e.words):E('Could not read the orders','无法读取订单'); render(); });
+});
+reg('stmtClose', ()=>{ state.stmt=null; render(); });
+reg('stmtPrint', ()=>{
+  const f=document.getElementById('mStmtFrame'), s=state.stmt; if(!s) return;
+  try{ f.contentWindow.focus(); f.contentWindow.print(); if(s.failed){ s.failed=false; render(); } }
+  catch(e){ s.failed=true; render(); }
+});
+function stmtTotal(orders){
+  return orders.filter(o=>['cancelled','refunded','pending_payment'].indexOf(o.status)<0).reduce((t,o)=>t+(Number(o.total)||0),0);
+}
+/* The desktop's tdPrintTable document, its columns and its note. */
+function stmtDoc(s){
+  const e2=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const orders=s.orders||[], shop=state.storeName||'';
+  const rows=orders.map((o,i)=>`<tr><td class="idx">${i+1}</td><td>${e2((o.placed_at||'').slice(0,10))}</td><td>${e2(o.order_no||('#'+o.id))}</td>
+    <td>${e2(stmtWord(o.status))}</td><td class="r">${e2(money(CUR,Number(o.total)||0))}</td></tr>`).join('');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Statement</title><style>
+  body{font:13px/1.5 -apple-system,"PingFang SC",sans-serif;color:#111;margin:0;padding:18px}
+  h1{font-size:20px;margin:0}.cn{color:#555}.sub{margin-top:4px;color:#555}
+  .head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
+  dl{display:grid;grid-template-columns:auto auto;gap:2px 12px;margin:0;font-size:12px}dt{color:#555}dd{margin:0;text-align:right}
+  table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 4px;border-bottom:1px solid #ddd;font-size:12px}
+  .r{text-align:right}.idx{color:#888;width:22px}.note{margin-top:18px;padding:8px 10px;border-left:2px solid #ccc;font-size:11.5px;color:#555}
+  .foot{margin-top:24px;display:flex;justify-content:space-between;font-size:10px;color:#888}
+  </style></head><body>
+  <div class="head"><div>${shop?`<div>${e2(shop)}</div>`:''}<h1>Statement</h1><div class="cn">对账单</div><div class="sub">${e2(s.who)}</div></div>
+  <dl><dt>${e2(T('Date','日期'))}</dt><dd>${e2(tdWhen(new Date(),'date',_tdL()))}</dd><dt>${e2(T('Orders','订单数'))}</dt><dd>${orders.length}</dd>
+  <dt>${e2(T('Total','合计'))}</dt><dd>${e2(money(CUR,stmtTotal(orders)))}</dd></dl></div>
+  <table><thead><tr><th>#</th><th>${e2(T('Date 日期','日期 Date'))}</th><th>${e2(T('Order 订单','订单 Order'))}</th><th>${e2(T('Status 状态','状态 Status'))}</th><th class="r">${e2(T('Total 金额','金额 Total'))}</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan="5" style="padding:20px;text-align:center;color:#888">Nothing to show · 暂无内容</td></tr>'}</tbody></table>
+  <div class="note">${e2(T('The total counts orders that were not cancelled, refunded or left unpaid. This is a record of orders, not an invoice.','合计仅包含未取消、未退款且已付款的订单。本表为订单记录，非发票。'))}</div>
+  <div class="foot"><span>${e2(shop)}</span><span>${e2(tdWhen(new Date(),'dateTime',_tdL()))}</span></div>
+<\/body><\/html>`;
+}
+function sheetStatement(){
+  const s=state.stmt; if(!s) return '';
+  const head=`<div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" aria-label="${T('Close','关闭')}" onclick="APP.cmd('stmtClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Print statement','打印对账单')}</span>
+         ${s.orders?`<button class="btn2" style="width:auto;padding:0 18px;flex:none" onclick="APP.cmd('stmtPrint')">${ic('printer',18)}${T('Print','打印')}</button>`:''}</div>
+       ${s.failed?`<div style="font-size:13.5px;color:var(--brick-ink);margin-top:8px">${T('Print failed','打印失败')}</div>`:''}</div>`;
+  const body=s.orders?`<iframe id="mStmtFrame" title="${escAttr(s.who)}" srcdoc="${escAttr(stmtDoc(s))}" style="flex:1;min-height:0;width:100%;border:0;background:#fff"></iframe>`
+    :`<div style="padding:20px;font-size:15px;color:${s.err?'var(--brick-ink)':'var(--text-secondary)'}">${s.err||T('Loading…','加载中…')}</div>`;
+  return `<div class="scrim" style="z-index:51" onclick="APP.scrimClose('stmtClose')"></div>
+   <div class="sheet" style="top:40px;z-index:52;overflow:hidden">${head}${body}</div>`;
+}
+/* ── reset to a new customer ── */
+const custIsReset=c=>String((c&&c.openid)||'').startsWith('_reset_');
+reg('custResetTest', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{};
+  if(!state.custId||!mCan('customers:block')||c.id==null||custIsReset(c)) return;
+  const who=escAttr(c.nickname||c.phone||('#'+c.id));
+  state.ask={title:T('Reset '+who+' to a new customer?','将 '+who+' 重置为新顾客？'),
+    body:T('Their WeChat sign-in is detached from this record. Next time they open the mini app they arrive as a new customer with no orders, points, balance or addresses. This record is kept here and is not deleted, but their phone can never reach it again. For testing signup on your own phone. Not for a real customer.',
+           '将其微信登录与此记录解除关联。下次打开小程序时，将以新顾客身份进入，没有订单、积分、余额和地址。此记录会保留，不会删除，但其手机将无法再次访问。仅用于在自己手机上测试注册流程，请勿用于真实顾客。'),
+    fields:[{id:'word', label:T('Type RESET to continue','输入 RESET 以继续'), placeholder:'RESET'}],
+    validate:v=>v.word==='RESET'?null:T('Type RESET to continue','输入 RESET 以继续'),
+    confirmLabel:T('Reset to a new customer','重置为新顾客'), danger:true,
+    run:()=>{ if(!mCan('customers:block')) return;
+      custWrite('reset', ()=>apiWrite('/customers/'+c.id+'/reset-test',{}).then(j=>{
+        const n=Number(j&&j.revoked)||0;
+        showToast(n?T('Reset — '+n+' session'+(n===1?'':'s')+' revoked, they arrive as a new customer next time','已重置，已撤销 '+n+' 个会话，下次进入将是新顾客')
+                   :T('Reset — they arrive as a new customer next time','已重置，下次进入将是新顾客'));
+      }), null); }};
+  render();
+});
 function custFooterActions(d,c){
-  if(!mCan('customers:block')) return '';
-  const blocked=!!c.is_blocked;
+  /* §325 O11 — Print statement for whoever may read the orders it lists; Block,
+     and below it Reset (§326.4), for customers:block. */
+  const stmt=mCan('orders:view')?`<div style="margin-top:24px"><button class="btn2" style="width:100%;gap:8px" onclick="APP.cmd('custStatement')">${ic('printer',18)}${T('Print statement','打印对账单')}</button></div>`:'';
+  if(!mCan('customers:block')) return stmt;
+  const blocked=!!c.is_blocked, spent=custIsReset(c);
   /* Unblock is NOT destructive — it gives something back — so it renders as the
      ordinary secondary button and only Block wears the Brick outline. */
-  return `<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default)">
-    <button class="${blocked?'btn2':'dangerbtn'}" style="width:100%" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">
+  return `${stmt}<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default)">
+    <div><button class="${blocked?'btn2':'dangerbtn'}" style="width:100%" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">
       ${blocked?ic('circle-check',18):ic('ban',18)}${state.custBusy==='block'?T('Saving…','保存中…')
         :(blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'))}
-    </button></div>`;
+    </button></div>
+    ${/* §325 O11 — the one control here that makes the operator TYPE a word. A
+          spent reset stays in view, disabled, saying so — an operator who cannot
+          see why it vanished asks whether the reset worked. */''}
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-default)">
+      <button class="dangerbtn" style="width:100%" ${state.custBusy||spent?'disabled':''} onclick="APP.cmd('custResetTest')">
+        ${ic('rotate-ccw',18)}${state.custBusy==='reset'?T('Saving…','保存中…'):T('Reset to a new customer','重置为新顾客')}
+        <span style="font-size:12px;font-weight:400;opacity:.8">· ${spent?T('already reset','已重置'):T('testing','测试')}</span></button></div></div>`;
 }
 function sheetCustomer(){
   const d=state.custDetail;
@@ -36871,10 +37063,7 @@ function sheetCustomer(){
     ${custAffiliate(d)}
     ${custFacts(d,c,st)}
     ${custActivity(d)}
-    <div style="margin-top:16px;font-size:13px;color:var(--text-secondary)">${
-      d.diagnostics && d.diagnostics.unavailable ? T('Diagnostics could not be read.','诊断数据读取失败。')
-      : d.diagnostics && d.diagnostics.error_count_7d ? T(d.diagnostics.error_count_7d+' app errors in 7 days', '近 7 天 '+d.diagnostics.error_count_7d+' 次报错')
-      : T('No app errors in 7 days','近 7 天无报错')}</div>`;
+    ${custDiagnostics(d)}`;
   /* Every sheet is rebuilt from scratch on each render, so its rise replays
      every time — and this one renders again the moment its read lands. A replay
      is not a flicker: the sheet drops back to translateY(100%), parked below the
@@ -38556,6 +38745,7 @@ function render(){
   if(state.zn.edit) html += layer('zn:'+(state.zn.edit.id||state.zn.edit.mode), sheetZone());
   if(state.fb) html += layer('fb', sheetBatch());
   if(state.btrk) html += layer('btrk', sheetBulkTracking());
+  if(state.stmt) html += layer('stmt:'+state.stmt.id, sheetStatement());
   if(state.drafts) html += layer('drafts', sheetDrafts());
   if(state.dwiz) html += layer('dwiz:'+state.dwiz.step, sheetDlvWiz());
   if(state.custId) html += layer('cust:'+state.custId, sheetCustomer());
@@ -39652,12 +39842,14 @@ async function loadCustomers(more){
        guard costs nothing and stops a future narrowing of that query from
        quietly deleting the chip an operator is standing on. */
     if(j&&Array.isArray(j.tag_vocabulary)) state.custTagVocab=j.tag_vocabulary;
+    // §325 O11 — a search that matched only what the filters hide.
+    state.custHidden=(!more&&j&&j.hidden_by_filters&&Number(j.hidden_by_filters.total)>0)?j.hidden_by_filters:null;
     state.custLoaded=true;
   }catch(e){
     if(String(e.message)==='auth') return;
     // Same rule as the orders list: a failed load says so rather than handing
     // back five sample customers with real-looking names and spend.
-    if(!more){ state.customers=[]; state.custTotal=null; state.custMore=false; state.custLoaded=true; }
+    if(!more){ state.customers=[]; state.custTotal=null; state.custMore=false; state.custLoaded=true; state.custHidden=null; }
     state.custLoadErr=E('Could not load customers.','无法加载客户。');
   }
   state.custLoading=false;
