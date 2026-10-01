@@ -6196,6 +6196,236 @@ function setupState(){
   return {pct:null, real:false, allDone:false};
 }
 /* ==========================================================================
+   §325 M4 — CONTENT THAT SAVES ITSELF: a settings card on the phone (§279)
+   --------------------------------------------------------------------------
+   Legal, FAQ, About and the mini-app copy are §279 cards on the desktop
+   (autosaveCard in 01-core.js): the page's whole payload is read, held if the
+   server would refuse it, sent after a pause as PUT /config?history=<card>,
+   and Undo / Version history work on that card's own history. This is the
+   same card for the phone, on the same engine (TacetAutosave), the same card
+   names and the same payloads, so a version saved on one surface is a version
+   on the other, and a restore on either puts back the same keys.
+
+   The card holds its own draft (the screen draws from the draft, never from
+   state.cfg, which the save replaces under it). A field in a live sheet writes
+   into the draft and nudges the engine; a list change (add, move, remove)
+   does the same from the screen. Leaving, or the app going to the
+   background, sends what is pending; the reload guard waits for it.
+
+   Drawn for the keys that open these screens: the server's rule for the
+   legal / faq / about / copy keys is content:view OR content:edit, the
+   desktop tabs' own (TAB_CAP). ========================================== */
+const CONTENT_KEYS=['content:view','content:edit'];
+const CFG_CARD={};
+function cfgCard(card, o){
+  const c=CFG_CARD[card]||(CFG_CARD[card]={card, auto:null});
+  Object.assign(c,o);
+  return c;
+}
+/* The visit starts once the draft holds the server's values. */
+function cfgCardStart(c){
+  if(typeof TacetAutosave==='undefined') return;
+  if(c.auto) c.auto.stop();
+  c.auto=TacetAutosave.create({
+    read:()=>c.read(),
+    hold:p=>c.hold?c.hold(p):'',
+    send:(body,note)=>apiWrite('/config?history='+encodeURIComponent(c.card)+(note?'&note='+note:''),body,'PUT').then(j=>{
+      // The rest of the app reads state.cfg; the screen reads its draft.
+      if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
+      if(c.after) c.after(body);
+    }),
+    onChange:()=>{ askLiveRepaint(); cfgFootRepaint(c); },
+  });
+  c.auto.start();
+}
+function cfgFootHtml(c){
+  const A=c.auto, st=A?A.state:'saved';
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…')
+    : st==='hold'?escAttr(A.message)
+    : st==='error'?escAttr(T('Save failed: ','保存失败:')+(A.message||''))
+    : T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<div style="font-size:12.5px;color:${tone};text-align:center">${line}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      ${A&&A.canUndo()?`<button class="btn2" style="flex:1" onclick="APP.cmd('cfgUndo','${c.card}')">${T('Undo','撤销')}</button>`:''}
+      <button class="btn2" style="flex:1" onclick="APP.cmd('cfgHistory','${c.card}')">${T('Version history','历史版本')}</button></div>`;
+}
+function cfgFoot(c){ return `<div id="mCfgFoot-${c.card.replace(/[^a-z0-9]/gi,'_')}">${cfgFootHtml(c)}</div>`; }
+function cfgFootRepaint(c){ const el=document.getElementById('mCfgFoot-'+c.card.replace(/[^a-z0-9]/gi,'_')); if(el) el.innerHTML=cfgFootHtml(c); }
+function cfgBusy(){ return Object.keys(CFG_CARD).some(k=>{ const a=CFG_CARD[k].auto; return !!(a&&a.busy()); }); }
+reg('cfgUndo', card=>{ const c=CFG_CARD[card]; if(!c||!c.auto) return; c.auto.undo(p=>{ c.apply(p); render(); }); });
+reg('cfgHistory', card=>{ const c=CFG_CARD[card]; if(c) cfgHistory(c); });
+/* The card's versions, newest first; a restore puts the snapshot into the
+   draft and sends it as a restore — what the desktop's history does. */
+function cfgHistory(c){
+  if(!c.auto) return;
+  Promise.resolve(c.auto.flush()).then(()=>api('/config/history?card='+encodeURIComponent(c.card))).then(j=>{
+    const list=Array.isArray(j&&j.versions)?j.versions:[];
+    if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+    liveHistorySheet(list, v=>(v.changed||[]).map(k=>c.words&&c.words[k]?T(...c.words[k]):k).join(' · '),
+      v=>{ c.apply(v.snapshot||{}); render(); return c.auto.flush('restore').then(()=>{
+        if(c.auto.state==='error') throw new Error(c.auto.message||''); }); });
+  }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+}
+/* A live sheet on a card: `fields` read and write the card's draft through
+   get / set; `acts` are the item's own buttons (move, remove). */
+function cfgSheet(c, title, body, fields, get, set, acts){
+  if(!c.auto) return;
+  state.ask={title, body, fields, live:{auto:c.auto, get, set:(k,v)=>set(k,v), apply:p=>c.apply(p),
+    history:()=>cfgHistory(c), acts:acts||null,
+    close:()=>{ Promise.resolve(c.auto.flush()).then(()=>render()); }}};
+  state.askErr=null;
+  render();
+}
+reg('askLiveAct', k=>{ const L=state.ask&&state.ask.live; if(!L||!L.acts) return; const a=L.acts.find(x=>x.key===k); if(a) a.run(); });
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden') Object.keys(CFG_CARD).forEach(k=>{ const a=CFG_CARD[k].auto; if(a) a.flush(); });
+});
+
+/* ── Legal pages (desktop: LEGAL_CARD, 05-marketing.js) ────────────────────
+   Both documents in both languages, as one card ('legal'), and every save
+   stamps today (the shop's day) as both pages' "updated" line — what the
+   desktop card sends. */
+let LEGAL_D=null;
+const LEGAL_KEYS=['legal.privacy.body_en','legal.privacy.body_cn','legal.terms.body_en','legal.terms.body_cn'];
+const legalCard=()=>cfgCard('legal',{
+  read:()=>{ const today=shopToday(); return {
+    'legal.privacy.body_en':LEGAL_D['legal.privacy.body_en'], 'legal.privacy.body_cn':LEGAL_D['legal.privacy.body_cn'],
+    'legal.terms.body_en':LEGAL_D['legal.terms.body_en'],     'legal.terms.body_cn':LEGAL_D['legal.terms.body_cn'],
+    'legal.privacy.updated_at':today, 'legal.terms.updated_at':today}; },
+  apply:b=>{ LEGAL_KEYS.forEach(k=>{ LEGAL_D[k]=String((b&&b[k])||''); }); },
+  words:{'legal.privacy.body_en':['Privacy policy','隐私政策'],'legal.privacy.body_cn':['Privacy policy','隐私政策'],
+    'legal.terms.body_en':['Terms of service','服务条款'],'legal.terms.body_cn':['Terms of service','服务条款']},
+});
+function legalEnsure(){
+  if(LEGAL_D||!state.cfg) return;
+  LEGAL_D={}; LEGAL_KEYS.forEach(k=>{ LEGAL_D[k]=String(cfgGet(k,'')||''); });
+  if(mCan(CONTENT_KEYS)) cfgCardStart(legalCard());
+}
+reg('legalEdit', key=>{
+  if(!mCan(CONTENT_KEYS)||!LEGAL_D||(key!=='terms'&&key!=='privacy')) return;
+  const name=key==='terms'?T('Terms of service','服务条款'):T('Privacy policy','隐私政策');
+  cfgSheet(legalCard(), name, null,
+    [{id:'en',label:T('English body','英文正文'),multiline:true},
+     {id:'cn',label:'中文正文',multiline:true}],
+    f=>LEGAL_D['legal.'+key+'.body_'+f], (f,v)=>{ LEGAL_D['legal.'+key+'.body_'+f]=v; });
+});
+
+/* ── FAQ & help (desktop: 07-content-billing.js FAQ_CARD) ─────────────────
+   Two lists — categories and questions — saved whole as one card ('faq'),
+   held for the desktop's reasons in the desktop's words, questions given an
+   id from their text the way the desktop gives them one, and that id kept. */
+const FAQ_DEFAULT_CATS=[{id:'orders',en:'Orders',cn:'订单',color:'lime'},{id:'delivery',en:'Delivery',cn:'配送',color:'papaya'},
+  {id:'products',en:'Products',cn:'产品',color:'pink'},{id:'wallet',en:'Wallet',cn:'钱包',color:'sky'},
+  {id:'membership',en:'Membership',cn:'会员',color:'corn'},{id:'account',en:'Account',cn:'账户',color:'avocado'}];
+const FAQ_COLOURS=['lime','papaya','sky','corn','pea','cucumber','pink','berry','carrot','lotus','almond','lemon','avocado','forest'];
+let FAQ_D=null;   // {cats:[{id,en,cn,color}], qs:[{id,cat,q_en,q_cn,a_en,a_cn}]}
+const faqSlug=v=>String(v).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
+function faqPayload(){
+  const qIds=new Set();
+  const qs=FAQ_D.qs.map((q,i)=>{
+    let id=q.id;
+    if(!id){ const base=(q.q_en||q.q_cn||`q-${i+1}`).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+      id=`q-${base||(i+1)}`; }
+    let unique=id, n=2;
+    while(qIds.has(unique)) unique=`${id}-${n++}`;
+    qIds.add(unique);
+    return {id:unique, cat:q.cat, q_en:q.q_en, q_cn:q.q_cn, a_en:q.a_en, a_cn:q.a_cn};
+  });
+  return {'faq.categories':FAQ_D.cats.map(c=>({id:c.id, en:c.en, cn:c.cn, color:c.color})), 'faq.questions':qs};
+}
+function faqHold(b){
+  const catIds=new Set();
+  for(const c of b['faq.categories']){
+    if(!c.id) return T('Every category needs an id','每个分类都需要 id');
+    if(catIds.has(c.id)) return T('Duplicate category id "'+c.id+'"','分类 id 重复 "'+c.id+'"');
+    if(!c.en&&!c.cn) return T('Category "'+c.id+'" needs a label','分类需要名称');
+    catIds.add(c.id);
+  }
+  for(const q of b['faq.questions']){
+    if(!q.cat) return T('Question "'+(q.q_en||q.q_cn||q.id)+'" needs a category','该问题需要选择分类');
+    if(!q.q_en&&!q.q_cn) return T('Question "'+q.id+'" needs a Q in at least one language','问题至少需一种语言');
+    if(!q.a_en&&!q.a_cn) return T('Question "'+q.id+'" needs an A in at least one language','回答至少需一种语言');
+  }
+  return '';
+}
+const faqCard=()=>cfgCard('faq',{
+  read:faqPayload, hold:faqHold,
+  apply:b=>{ FAQ_D={cats:((b&&b['faq.categories'])||[]).map(c=>Object.assign({},c)), qs:((b&&b['faq.questions'])||[]).map(q=>Object.assign({},q))}; },
+  /* The ids the save assigned are kept, matched on the text as well as the
+     place, without repainting: the operator may be mid-answer. */
+  after:b=>{ (b['faq.questions']||[]).forEach((q,i)=>{ const cur=FAQ_D&&FAQ_D.qs[i];
+    if(cur&&!cur.id&&cur.q_en===q.q_en&&cur.q_cn===q.q_cn) cur.id=q.id; }); },
+  words:{'faq.categories':['Categories','分类'],'faq.questions':['Questions & answers','问题与答案']},
+});
+function faqEnsure(){
+  if(FAQ_D||!state.cfg) return;
+  const cats=cfgGet('faq.categories',null), qs=cfgGet('faq.questions',null);
+  FAQ_D={
+    cats:Array.isArray(cats)&&cats.length?cats.map(c=>({id:String(c.id||''),en:String(c.en||''),cn:String(c.cn||''),color:String(c.color||'lime')})):FAQ_DEFAULT_CATS.map(c=>Object.assign({},c)),
+    qs:Array.isArray(qs)&&qs.length?qs.map(q=>({id:String(q.id||''),cat:String(q.cat||''),q_en:String(q.q_en||''),q_cn:String(q.q_cn||''),a_en:String(q.a_en||''),a_cn:String(q.a_cn||'')})):[],
+  };
+  if(mCan(CONTENT_KEYS)) cfgCardStart(faqCard());
+}
+function faqTouch(){ const c=CFG_CARD.faq; if(c&&c.auto) c.auto.touch(); }
+function faqQSheet(i){
+  const q=FAQ_D&&FAQ_D.qs[i]; if(!q) return;
+  const n=FAQ_D.qs.length;
+  const acts=[];
+  if(i>0) acts.push({key:'up',label:T('Move up','上移'),run:()=>{ faqMove(i,-1); faqQSheet(i-1); }});
+  if(i<n-1) acts.push({key:'down',label:T('Move down','下移'),run:()=>{ faqMove(i,1); faqQSheet(i+1); }});
+  acts.push({key:'rm',label:T('Remove','删除'),danger:true,run:()=>faqRemoveQ(i)});
+  cfgSheet(faqCard(), T('Question','问题')+' '+String(i+1).padStart(2,'0'), null,
+    [{id:'cat',label:T('Category','分类'),choices:[['',T('— pick category —','— 选择分类 —')]].concat(FAQ_D.cats.filter(c=>c.id).map(c=>[c.id,escAttr(c.id+' · '+(c.en||c.cn))]))},
+     {id:'q_en',label:'EN question',placeholder:'When will my order arrive?'},
+     {id:'q_cn',label:'中文问题',placeholder:'订单什么时候到？'},
+     {id:'a_en',label:'EN answer',multiline:true,placeholder:'Standard orders ship within 24 hours…'},
+     {id:'a_cn',label:'中文回答',multiline:true,placeholder:'标准订单 24 小时内发货…'},
+     {id:'id',label:T('id (optional)','选填'),placeholder:'auto',commit:true}],
+    f=>{ const cur=FAQ_D.qs[i]; return cur?cur[f]:''; },
+    (f,v)=>{ const cur=FAQ_D.qs[i]; if(cur) cur[f]=f==='id'?faqSlug(v):v; }, acts);
+}
+function faqMove(i,dir){ const j=i+dir; if(!FAQ_D||j<0||j>=FAQ_D.qs.length) return;
+  const t=FAQ_D.qs[i]; FAQ_D.qs[i]=FAQ_D.qs[j]; FAQ_D.qs[j]=t; faqTouch(); }
+function faqRemoveQ(i){
+  const q=FAQ_D&&FAQ_D.qs[i]; if(!q) return;
+  const go=()=>{ FAQ_D.qs.splice(i,1); faqTouch(); state.ask=null; render(); };
+  if(!(q.q_en||q.q_cn)){ go(); return; }
+  const t=q.q_en||q.q_cn;
+  state.ask={title:T('Remove "'+t+'"?','移除 "'+t+'"？'), confirmLabel:T('Remove','删除'), danger:true, run:go};
+  render();
+}
+reg('faqEditQ', i=>{ if(mCan(CONTENT_KEYS)) faqQSheet(Number(i)); });
+reg('faqAddQ', ()=>{ if(!mCan(CONTENT_KEYS)||!FAQ_D) return;
+  FAQ_D.qs.push({id:'',cat:(FAQ_D.cats[0]&&FAQ_D.cats[0].id)||'',q_en:'',q_cn:'',a_en:'',a_cn:''});
+  faqTouch(); faqQSheet(FAQ_D.qs.length-1); });
+function faqCatSheet(i){
+  const c=FAQ_D&&FAQ_D.cats[i]; if(!c) return;
+  cfgSheet(faqCard(), T('Category','分类'), null,
+    [{id:'id',label:'id',commit:true},
+     {id:'en',label:T('English label','英文名称')},
+     {id:'cn',label:'中文标签'},
+     {id:'color',label:T('Colour','颜色'),choices:FAQ_COLOURS.map(x=>[x,x])}],
+    f=>{ const cur=FAQ_D.cats[i]; return cur?cur[f]:''; },
+    (f,v)=>{ const cur=FAQ_D.cats[i]; if(cur) cur[f]=f==='id'?faqSlug(v):v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>faqRemoveCat(i)}]);
+}
+function faqRemoveCat(i){
+  const c=FAQ_D&&FAQ_D.cats[i]; if(!c) return;
+  const used=FAQ_D.qs.filter(q=>q.cat===c.id).length;
+  const go=()=>{ FAQ_D.cats.splice(i,1); faqTouch(); state.ask=null; render(); };
+  if(!used){ go(); return; }
+  const nm=c.id||'(empty)';
+  state.ask={title:T('Remove "'+nm+'"? '+used+' question(s) still reference it and will be left uncategorised.',
+                     '移除 "'+nm+'"？仍有 '+used+' 个问题引用它，将变为未分类。'),
+    confirmLabel:T('Remove','删除'), danger:true, run:go};
+  render();
+}
+reg('faqEditCat', i=>{ if(mCan(CONTENT_KEYS)) faqCatSheet(Number(i)); });
+reg('faqAddCat', ()=>{ if(!mCan(CONTENT_KEYS)||!FAQ_D) return;
+  FAQ_D.cats.push({id:'',en:'',cn:'',color:'lime'}); faqTouch(); faqCatSheet(FAQ_D.cats.length-1); });
+
+/* ==========================================================================
    FAQ & help (desktop: 07-content-billing.js)
    --------------------------------------------------------------------------
    The questions were live already; what the phone dropped was the shape. Help
@@ -6208,6 +6438,7 @@ function setupState(){
    ========================================================================== */
 function screenFaq(){
   if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(mCan(CONTENT_KEYS)){ faqEnsure(); if(FAQ_D) return screenFaqEdit(); }
   const qs=cfgGet('faq.questions',null);
   const cats=cfgGet('faq.categories',null);
   const list=Array.isArray(qs)?qs:[];
@@ -6239,7 +6470,38 @@ function screenFaq(){
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${groups.map(g=>`<div>${g.name?`<div class="eyebrow" style="padding:2px 4px 8px">${escAttr(g.name)}</div>`:''}
       <div class="list">${g.rows.map((q,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${row(q)}`).join('')}</div></div>`).join('')}
-    ${desktopNote()}</div>`;
+    </div>`;
+}
+/* §325 M4 — the FAQ as the desktop edits it: the questions in the order
+   customers see them (the desktop's list, numbered), each opening its own
+   live sheet; the categories below; the card's foot last. */
+function screenFaqEdit(){
+  const c=CFG_CARD.faq;
+  const catOf=id=>FAQ_D.cats.find(x=>x.id===id);
+  const qRow=(q,i)=>{ const qt=LANG==='en'?(q.q_en||q.q_cn):(q.q_cn||q.q_en); const cat=catOf(q.cat);
+    return `${i?'<div class="sep" style="margin-left:52px"></div>':''}
+    <button class="row" style="min-height:56px;padding:12px 14px" onclick="APP.cmd('faqEditQ',${i})">
+      <span class="num" style="width:24px;flex:none;font-size:12px;color:var(--text-secondary)">${String(i+1).padStart(2,'0')}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${qt?escAttr(qt):`<span style="color:var(--text-secondary)">—</span>`}</span>
+        <span style="font-size:12.5px;color:${q.cat&&!cat?'var(--amber-ink)':'var(--text-secondary)'};margin-top:2px">${escAttr(cat?(LANG==='en'?(cat.en||cat.cn):(cat.cn||cat.en)):(q.cat||T('— pick category —','— 选择分类 —')))}</span></span>
+      <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`; };
+  const cRow=(k,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+    <button class="row" style="min-height:52px;padding:12px 14px" onclick="APP.cmd('faqEditCat',${i})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px">${escAttr((LANG==='en'?(k.en||k.cn):(k.cn||k.en))||'—')}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${escAttr(k.id||'—')} · ${escAttr(k.color)}</span></span>
+      <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Questions & answers','问题与答案')}</div>
+      ${FAQ_D.qs.length?`<div class="list">${FAQ_D.qs.map(qRow).join('')}</div>`
+        :nothingYet(T('No questions yet','还没有常见问题'),T('Questions you publish appear here, and in the mini app under Help.','发布后会出现在这里，也会出现在小程序帮助页。'))}
+      <button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('faqAddQ')">${T('+ Add question','添加问题')}</button></div>
+    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Categories','分类')}</div>
+      ${FAQ_D.cats.length?`<div class="list">${FAQ_D.cats.map(cRow).join('')}</div>`:''}
+      <button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('faqAddCat')">${T('+ Add category','添加分类')}</button></div>
+    ${c&&c.auto?cfgFoot(c):''}
+  </div>`;
 }
 
 /* ==========================================================================
@@ -13264,16 +13526,21 @@ const SUBS={
   legal:{title:['Legal pages','法律条款'],render:()=>{
     // Both documents live in storefront_config; the dates are theirs, not a
     // pair of numbers typed into a mockup.
+    // §325 M4 — and they are edited here: each one in a live sheet on the
+    // desktop's own card ('legal'), the whole text shown, no "on desktop".
+    const canEdit=mCan(CONTENT_KEYS);
+    if(canEdit) legalEnsure();
     const docs=[
       {key:'terms',   name:['Terms of service','服务条款']},
       {key:'privacy', name:['Privacy policy','隐私政策']},
     ].map(d=>{
-      const body=cfgGet('legal.'+d.key+'.body_'+(LANG==='en'?'en':'cn'),'')||cfgGet('legal.'+d.key+'.body_en','');
+      const get=k=>LEGAL_D?LEGAL_D[k]:cfgGet(k,'');
+      const body=get('legal.'+d.key+'.body_'+(LANG==='en'?'en':'cn'))||get('legal.'+d.key+'.body_en');
       return Object.assign({},d,{body:String(body||''), updated:cfgGet('legal.'+d.key+'.updated_at','')});
     });
     const any=docs.some(d=>d.body);
     if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    if(!any) return nothingYet(T('Nothing published yet','尚未发布'),
+    if(!any&&!canEdit) return nothingYet(T('Nothing published yet','尚未发布'),
       T('Your terms and privacy policy are written on desktop. Once published they show here and in the mini app.','服务条款与隐私政策在电脑端撰写，发布后会显示在这里和小程序中。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     <div class="list">${docs.map((d,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
@@ -13284,9 +13551,9 @@ const SUBS={
             <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d.updated?T('Updated '+fmtDay(d.updated),'更新于 '+fmtDay(d.updated)):T('Not published','未发布')}</span>
           </span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.legalOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>
-        ${String(d.body).length>1200?`<span style="font-size:12.5px;color:var(--text-secondary);opacity:.85">${T('Clipped here — the rest is on desktop.','此处已截断 — 完整内容见电脑端。')}</span>`:''}`:''}</button>`).join('')}</div>
-    ${desktopNote()}</div>`;
+        ${state.legalOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).replace(/</g,'&lt;')}</span>`:''}</button>
+      ${canEdit?`<div style="padding:0 14px 14px"><button class="btn2" style="width:100%" onclick="APP.cmd('legalEdit','${d.key}')">${T('Edit','编辑')}</button></div>`:''}`).join('')}</div>
+    ${canEdit&&CFG_CARD.legal&&CFG_CARD.legal.auto?cfgFoot(CFG_CARD.legal):''}</div>`;
   }},
   faq:{title:['FAQ & help','常见问题'],render:()=>screenFaq()},
   /* No `quickstock` screen. It was a menu row that led to a signpost — its
@@ -27273,7 +27540,7 @@ function sheetAsk(){
      </div>`:''}
      ${/* Capped and scrolled: a role's version history can run to thirty rows,
           which is taller than the phone. Short lists never reach the cap. */''}
-     ${L?`<div style="padding:16px 20px 0"><div id="mAskLiveFoot">${askLiveFoot()}</div>
+     ${L?`<div style="padding:16px 20px 0">${L.acts&&L.acts.length?`<div style="display:flex;gap:8px;margin-bottom:12px">${L.acts.map(x=>`<button class="btn2" style="flex:1;${x.danger?'color:var(--brick-ink)':''}" onclick="APP.cmd('askLiveAct','${x.key}')">${x.label}</button>`).join('')}</div>`:''}<div id="mAskLiveFoot">${askLiveFoot()}</div>
           <div style="display:flex;gap:8px;margin-top:10px">
             ${L.history?`<button class="btn2" style="flex:1" onclick="APP.cmd('askLiveHistory')">${T('Version history','历史版本')}</button>`:''}
             <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Done','完成')}</button></div></div>`
@@ -32675,6 +32942,8 @@ function mUnsavedWork(){
     if(rcpAuto&&rcpAuto.busy()) return true;
     /* A material edit likewise (§300 R5). */
     if(matAuto&&matAuto.busy()) return true;
+    /* A content card (Legal, FAQ, About, copy) likewise (§325 M4). */
+    if(cfgBusy()) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;

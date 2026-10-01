@@ -437,7 +437,8 @@ section('8 · Legal and FAQ keep their own open row');
     assert.strictEqual(h.ctx.state.legalOpen, 1); assert.strictEqual(h.ctx.state.faqOpen, 0);
   });
   it('the legal screen reads legalOpen and calls legalToggle; the key is declared', () => {
-    const legal = slice("{key:'terms',   name:['Terms of service','服务条款']}", 'Clipped here');
+    // §325 M4 retired the clip (the whole text shows), so the screen ends at FAQ's entry.
+    const legal = slice("{key:'terms',   name:['Terms of service','服务条款']}", "faq:{title:['FAQ & help'");
     assert.ok(legal.includes("APP.cmd('legalToggle',${i})") && legal.includes('state.legalOpen===i'));
     assert.ok(!legal.includes('faqOpen') && !legal.includes('faqToggle'));
     has(M, 'faqOpen:null, legalOpen:null,');
