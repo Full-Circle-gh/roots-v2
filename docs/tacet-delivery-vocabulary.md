@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.243 · 2026-09-30 · §344 THE REFUND WORKFLOW ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *The refund workflow on the phone (§344)*.
+
+**v1.242 · 2026-09-30 · §343 THE ORDERS LIST ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *The Orders list's chips, customer scope, export and saved views on the phone (§343)*.
+
 **v1.241 · 2026-09-30 · §342 THE PAGE EDITOR'S FIELDS AND ONBOARDING ON THE PHONE — NOTHING COMPOSED; THE FIELDS ARE THE DESKTOP INSPECTOR'S OWN WORDS.** See *The page editor's fields on the phone (§342)*.
 
 **v1.240 · 2026-09-30 · §341 PICTURES, VIDEO AND BUTTON LINKS IN THE PHONE PAGE EDITOR — 7 STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Pictures, video and links in the phone page editor (§341)*.
@@ -10658,3 +10662,72 @@ longer exists).
 - **The desktop editor's no-permission screen** now uses the pair the phone
   editor's uses (declared with §325 M2): `You do not have permission to do
   that. · 你没有执行该操作的权限。` and the `content:edit` capability's label.
+
+## The Orders list's chips, customer scope, export and saved views on the phone (§343)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone's
+Orders list, the customer record's recent orders and the Views sheet
+(`public/m.html`).
+
+Copied whole from the desktop:
+
+- status chips, from the desktop strip and its dictionary (`10-extras.js`
+  `EN_ONLY_MAP`): `Rider coming · 骑手前往取货`, `Cancelled · 已取消`,
+  `To recover · 待收回`, `Refunded · 已退款`;
+- customer scope (`04-orders.js`, `08-customers.js`): `View all N orders · 查看全部 N 笔订单`,
+  `Showing orders for · 仅显示以下顾客的订单`, `Clear customer filter · 清除顾客筛选`;
+- saved views (`25-views.js`): `Views · 视图`, `Could not load your views. · 无法加载视图。`,
+  `Shared with the team · 团队共享`, `shared by · 共享者`, `Shared · 已共享`, `Share · 共享`,
+  `Save this view… · 保存当前视图…`, `Filter the list first · 请先筛选列表`,
+  `No saved views yet. Filter the list, then save it. · 暂无保存的视图。先筛选列表，再保存。`,
+  `Name this view · 为视图命名` and its sentence, `Unpaid at Tianhe · 天河店未付款`,
+  `View saved · 视图已保存`, `Shared with the team · 已共享给团队`,
+  `Yours alone again · 已改为仅自己可见`, `Could not save the view · 保存视图失败`,
+  `Could not change sharing · 修改共享设置失败`, `Could not delete the view · 删除视图失败`,
+  `Delete this view? · 删除此视图?` and its two bodies;
+- `Name is required · 名称必填` (`16-purchasing.js`), `Shipping · 运费` (the desktop's
+  `shipping · 运费`, capitalised), `Subtotal · 小计`.
+
+| String | Status |
+|---|---|
+| `Fapiao · 发票` on the `needs_invoice` chip | **an existing phone pair, reused.** The desktop chip reads *Invoice* in English only (no dictionary entry). The phone's order sheet already heads the same request *Fapiao · 发票*. Rejected: *Invoice to issue · 待开票*, because the chip lists issued requests too. |
+| `Delivery needs a call · 配送需要跟进` on the `delayed` chip | **an existing phone pair, reused** — the Home card's and the clearable chip's. The desktop chip's *Needs a call* has no Chinese. |
+| `Shipping · 运费` under the order total | **replaces** *Delivery*, which was never translated, so that the live pair fits. |
+
+The phone's own, already live: `Export · 导出`, `Name · 名称`, `Save · 保存`, `Saving… · 保存中…`,
+`Delete · 删除`, `Close · 关闭`, `Loading… · 加载中…`, `Try again · 重试`, and the
+note-chip pairs `orderNotes` already carried.
+
+## The refund workflow on the phone (§344)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the order
+sheet's refund rows, the review and reject asks, and the approve, payout and
+refund-by-items sheet (`public/m.html`). Copied whole from the desktop
+(`public/retail-admin/04-orders.js`):
+
+- Start review: `Start review · 开始处理`, its sentence,
+  `Note for customer · 给顾客的备注`, `We're looking into it… · 我们正在处理…`,
+  `Mark reviewing · 开始处理`, `Marked as reviewing · 已开始处理`;
+- Reject: `Reject refund · 拒绝退款`, its sentence, `Reason (shown to customer) · 原因(顾客可见)`,
+  `Reject · 拒绝`, `Refund rejected · 退款已拒绝`;
+- Approve: `Approve refund · 批准退款`, its sentence, `Mode · 模式`, `Full · 全额`,
+  `Partial — amount · 部分金额`, `Partial — by items · 按商品`, `Lines · 商品`,
+  `Lines total · 商品合计`, `No items · 无商品`, `customer asked for · 顾客申请`,
+  `Staff note (shown to customer) · 客服备注(顾客可见)`,
+  `Also reverse earned + redeemed points · 同时退还积分` and its note, the full and
+  partial consequence sentences, `A rider is on this order right now — approving cancels that delivery. · 当前已有骑手接单 — 批准后该配送会被取消。`,
+  the delivery-day sentence, `Approve · 批准`, `Approved · 已批准`,
+  `Select at least one line · 至少选一项`;
+- Payout: `Record payout · 记录退款`, its sentence, `Method · 退款方式`, the seven
+  methods (`WeChat Pay · 微信` … `Store credit · 店铺余额` … `Other · 其他`), the
+  WeChat warning, `Reference / txn id · 凭证号`, `Provider txn id, bank ref, etc. · 第三方交易号、银行参考号等`,
+  `Approved ¥N — usually paid in full · 已批准金额,通常一次性退还`, `Note (optional) · 备注(可选)`,
+  `Mark paid · 确认已退款`, `Payout recorded · 退款已记录`;
+- By items: `Part — by items · 部分 — 按商品`, `Items to refund · 退款商品`,
+  `Items total · 商品合计`, `already refunded · 已退`,
+  `Everything has already been refunded · 已全部退款`, `Select at least one item · 至少选一项`.
+
+The phone's own, already live: `Working… · 处理中…`, `Cancel · 取消`, `Close · 关闭`,
+`Amount · 金额`, `Optional · 可选`, `Reason / note · 原因 / 备注`, `Refund order · 退款订单`,
+`Refund · 退款`, `Enter an amount above 0 · 请输入大于 0 的金额`,
+`Enter an amount first. · 请先填写金额。`, and the by-amount path's two toasts.
