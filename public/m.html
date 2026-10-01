@@ -913,6 +913,22 @@ const state = {
   prodSub:'all', prodStore:'', catalogMode:'self',
   prodGrid:{tried:false,seq:0,ready:false,stores:[],qty:{}},
   prodHi:{tried:false,seq:0,data:null},
+  /* §325 PD2 — the product sheet's Sales card (GET /products/:id/sales?days=)
+     and its Version history list (GET /products/:id/versions), each keyed by
+     the size it was read for. */
+  prodSales:{pid:null,days:'30',data:null,err:null,seq:0},
+  prodVer:{pid:null,open:false,rows:null,err:null,seq:0},
+  /* §325 PD5 — the Details screen: the product's row as read, the draft the
+     screen shows, the payload last saved (`base`), whether a Product details
+     box has been touched, and whether the cost is loaded and the operator's. */
+  pe:null,
+  /* §325 PD2 — shop menus, read-only: every location's shop (`list`), and the
+     one open (`id`) with its listings, its QR answer and the menu filter. */
+  shm:{list:null,err:null,tried:false,seq:0,id:null,oneFor:null,shop:null,rows:null,oneErr:null,oneSeq:0,qr:null,q:'',
+       /* §325 PD4 — listing ids with a write in flight, a refused row write's
+          sentence (above the list), the row sheet (price / kind / remove) and
+          the Add product picker. */
+       busy:{},writeErr:null,edit:null,pick:null},
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   /* Which later step of a delay case has its controls out, as `<shipment>:<index>`,
      or null. STATE RATHER THAN A DOM TOGGLE because this sheet repaints on the
@@ -1400,6 +1416,9 @@ const state = {
        range:'week',reason:'',store:'',reasons:null,
        /* §325 PD1 — the desktop's free date range: a Custom window's two days. */
        from:null,to:null,
+       /* §325 PD3 — the row whose void is in flight, and a refused void's
+          sentence, which stays above the list until the next void or filter. */
+       voidBusy:null,voidErr:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
           tap. render() rebuilds the whole app with innerHTML, so the .sheet
           node is DESTROYED AND RECREATED on each keystroke and each chip —
@@ -1636,7 +1655,9 @@ function pop(){
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
   if(top==='shopdisplay'||top==='custservice') cfgFlushAll();   // §325 X5 — a pending edit goes on the way out
-  forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone); render(); }
+  forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone);
+  if(top==='productedit') pePopped(gone);   // §325 PD5 — its edits go, and the sheet comes back
+  render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
 /* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
@@ -1915,6 +1936,8 @@ reg('rqSearch', v=>{
  ['mPsupQ','mPsupClr','psupQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
+ ['mShmQ','mShmClr','shmQ'],
+ ['mShmPickQ','mShmPickClr','shmPickQ'],
  ['mChlQ','mChlClr','chlQ'],
  ['mNlgQ','mNlgClr','nlgQ'],
  ['mElmCatQ','mElmCatClr','elmCatQ'],
@@ -3577,7 +3600,10 @@ reg('priceTyped', v=>{
   const p=DB.products.find(x=>x.sku===state.productSku);
   if(p&&p._id!=null) sheetPrice[p._id]=v;   // no render: it would eat the keystroke
 });
-reg('closeProduct', ()=>{ state.productSku=null; state.oosSku=null; render(); });
+/* §325 PD2 — closing the sheet lets its Sales card and version list go, so
+   the next open reads them fresh, as the desktop's pdOpen does. */
+function prodRecordsDrop(){ state.prodVer.open=false; state.prodSales.pid=null; state.prodSales.seq++; }
+reg('closeProduct', ()=>{ state.productSku=null; state.oosSku=null; prodRecordsDrop(); render(); });
 reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; loadCustomers(); });
 /* THE THREE MULTI-SELECT ROWS, one toggle. 'all' is the row's clear — it empties
@@ -4067,7 +4093,7 @@ reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loa
    arithmetic over the OLD filter and would sit there looking authoritative.
    Rows after a write are merely one entry short, which the arriving answer
    fixes without ever having shown anything false. */
-function wstRefilter(){ const w=state.wst; w.rows=null; w.totals=null; loadWaste(true); render(); }
+function wstRefilter(){ const w=state.wst; w.rows=null; w.totals=null; w.voidErr=null; loadWaste(true); render(); }
 /* §325 PD1 — Custom asks for its two days, as Stock activity's does. */
 reg('wstRange',  v=>{
   const w=state.wst;
@@ -4089,6 +4115,40 @@ reg('wstReason', v=>{ state.wst.reason=v; wstRefilter(); });
 reg('wstStore',  v=>{ state.wst.store=v;  wstRefilter(); });
 reg('wstClear',  ()=>{ const w=state.wst; w.range='week'; w.from=null; w.to=null; w.reason=''; w.store=''; wstRefilter(); });
 reg('wstRetry',  ()=>{ state.wst.err=null; wstRefilter(); });
+/* §325 PD3 — VOID, the desktop's doVoid: a reversal, never an edit or a
+   delete (§32 rule 11). It moves live stock, so it asks first, and the
+   question says what moves — the desktop's own sentence, with no measure word
+   (a waste entry is not always pieces). Then POST /waste/:id/void with the
+   desktop's empty body; the row says Voiding… and every Void waits. A refusal
+   stays above the list in words; the toast only ever confirms. Either way the
+   list is read again, because a 409 means this screen was already out of date. */
+reg('wstVoid', id=>{
+  const w=state.wst;
+  if(w.voidBusy!=null||!mCan('waste:void')) return;
+  const r=(w.rows||[]).find(x=>Number(x.id)===Number(id));
+  if(!r||r.voided_by_waste_id!=null||r.reverses_waste_id!=null) return;
+  const qty=r.qty, what=wstProductName(r);
+  state.ask={title:T('Void this waste entry?','作废这条损耗记录?'),
+    body:escAttr(T(qty+' × '+what+' goes back into stock. The entry stays in the list, marked voided.',
+                   what+' × '+qty+' 将退回库存。该记录仍保留在列表中,标记为已作废。')),
+    confirmLabel:T('Void','作废'), danger:true,
+    run:()=>{
+      w.voidBusy=r.id; w.voidErr=null; render();
+      apiWrite('/waste/'+r.id+'/void',{},'POST').then(()=>{
+        w.voidBusy=null;
+        showToast(T('Voided','已作废'));
+        loadWaste(true); render();
+      }).catch(e=>{
+        w.voidBusy=null;
+        if(String(e&&e.message)==='auth') return;
+        w.voidErr = e&&e.refused ? T(...e.words)
+          : (e&&(e.code==='already_voided'||e.code==='cannot_void_a_reversal')) ? e.message
+          : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+        loadWaste(true); render();
+      });
+    }};
+  render();
+});
 /* Opening the sheet RESETS the form half, always. A sheet that reopens
    carrying the last entry's product is how the second jar of the morning gets
    logged against the first one's SKU. The store is the exception and is
@@ -6676,6 +6736,10 @@ const MORE_GROUPS=[
     ['till','calculator','Counter till','前台收银','/till']]},
   {h:['Money and numbers','营收与数据'],rows:[
     ['sales','store','Sales','销售'],
+    /* §325 PD2 — the shop menus (desktop 28-shops.js), whose desktop door is
+       the Sales board's location card. A row of its own, beside Sales, because
+       the board opens for five keys and the phone's Sales for one. */
+    ['shopmenus','qr-code','Shop menu','门店商品'],
     ['trend','trending-up','Trend','趋势'],
     /* §300 F1 — the desktop's Finance tab, read-only for now. Beside Sales and
        Trend because it is the same kind of question at a longer reach. */
@@ -8626,13 +8690,15 @@ function screenActivity(){
        second copy in the browser is exactly how the kitchen screen ended up
        with a vocabulary that existed only in a browser constant.
 
-   THREE THINGS THE DESKTOP HAS THAT THIS DELIBERATELY DID NOT — §325 PD1
-   brings the date range back (below), and void follows in its own step:
-     • NO VOID. It is waste:void — an owner capability that neither warehouse
-       nor store_manager holds, so it would be a control almost nobody
-       standing in the aisle can press. Voided rows still LIST, greyed, with
-       their reversal beside them: a ledger that hides its own corrections is
-       how one goes unnoticed, and that is true on a phone too.
+   THREE THINGS THE DESKTOP HAS THAT THIS DELIBERATELY DID NOT — §325 brought
+   back the first two (PD1, PD3):
+     • NO VOID — retired by §325 PD3. It is still waste:void, an owner
+       capability that neither warehouse nor store_manager holds, so the
+       button is drawn only for an account holding it, on a live loss only
+       (never a reversal, never twice), behind the desktop's confirm that says
+       what goes back into stock. Voided rows still LIST, greyed, with their
+       reversal beside them: a ledger that hides its own corrections is how
+       one goes unnoticed, and that is true on a phone too.
      • NO FREE DATE RANGE — retired by §325 PD1. The three presets still
        answer the usual question in one tap; a fourth, Custom, asks for the
        two days in the ask-sheet (Finance's, Trend's and now Stock
@@ -8793,7 +8859,17 @@ function wstRow(r){
            the PHONE's. They agree for a phone in the shop's timezone, which is
            every phone this ships to, and a traveller sees a date rather than a
            wrong word. Same helper and same trade as the PO arrival dates. */''}
-      <span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDateOnly(r.business_date)}</span></span></div>`;
+      <span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDateOnly(r.business_date)}</span>
+      ${wstVoidBtn(r)}</span></div>`;
+}
+/* §325 PD3 — Void, the desktop's row action: a live loss only, never a
+   reversal and never twice, and only for an account holding waste:void (the
+   desktop's data-cap). Every Void waits while one is in flight. */
+function wstVoidBtn(r){
+  if(r.voided_by_waste_id!=null||r.reverses_waste_id!=null||!mCan('waste:void')) return '';
+  const w=state.wst, busy=w.voidBusy===r.id;
+  return `<button class="btn2" style="width:auto;min-height:0;padding:5px 12px;font-size:13px;margin-top:4px" ${w.voidBusy!=null?'disabled':''}
+    onclick="APP.cmd('wstVoid',${Number(r.id)})">${busy?T('Voiding…','作废中…'):T('Void','作废')}</button>`;
 }
 function screenWaste(){
   loadWasteReasons(); loadWaste();
@@ -8835,6 +8911,9 @@ function screenWaste(){
         T('Long may it last. Anything written off here comes straight off the shelf count.','希望一直如此。在此登记的损耗会直接从库存中扣减。'))+'</div>');
   return head+`
     ${wstPulse()}
+    ${w.voidErr?`<div style="margin:0 16px;display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(w.voidErr)}</span></div>`:''}
     <div style="padding:0 16px 24px"><div class="list">${w.rows.map((r,i)=>
       `${i?'<div class="sep" style="margin-left:14px"></div>':''}${wstRow(r)}`).join('')}</div></div>
   </div>`;
@@ -14172,6 +14251,416 @@ const SUBS={
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
 SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
+/* ==========================================================================
+   §325 PD2 — SHOP MENUS, READ-ONLY (desktop: retail-admin/28-shops.js)
+   --------------------------------------------------------------------------
+   The phone had no shop menu at all. This is the desktop's read half: every
+   location with its shop (GET /shops), and one shop's record — its public
+   code, its QR with the address a scan opens, and its listings with price,
+   kind and whether each is available (GET /shops/:id, GET /shops/:id/qr,
+   GET /shops/:id/qr.png). The daily edits (PD4) and the structure (PD13) come
+   in their own steps; nothing on these two screens writes.
+
+   THE DOOR. On the desktop it is the Sales board's location card, and the
+   board opens for any of five keys (TAB_CAP.sales) — so a Meituan-only
+   operator reaches it. The phone's Sales screen opens for dashboard:view
+   alone, so a door there would shut that operator out. A More row beside
+   Sales, gated on the desktop board's own any-of, is what lets every account
+   that reaches the desktop's page reach this one.
+
+   EVERY STRING IS THE DESKTOP SCREEN'S OWN, and so is its one omission: the
+   public code is shown unlabelled, because no live Chinese source exists for
+   "shop code" (28-shops.js's header). */
+function shmName(en,cn){ en=en||''; cn=cn||''; return (en||cn)?T(en||cn,cn||en):''; }
+function shmLocName(l){ return l?shmName(l.name_en||l.code,l.name_cn||l.code):''; }
+function loadShopMenus(force){
+  const s=state.shm;
+  if(s.tried&&!force) return;
+  s.tried=true; s.err=null;
+  const seq=++s.seq;
+  api('/shops').then(rows=>{
+    if(seq!==s.seq) return;
+    s.list=Array.isArray(rows)?rows:[]; render();
+  }).catch(e=>{
+    if(seq!==s.seq||String(e.message)==='auth') return;
+    s.list=null; s.err=E('Load failed','加载失败'); render();
+  });
+}
+/* One shop's record, and the address its QR opens — two reads, because the
+   desktop makes them as two: a tenant with no public domain still has a menu,
+   and its QR answer (`url: null`) must not take the listings down with it. */
+function loadShopMenu(force){
+  const s=state.shm, id=s.id;
+  if(id==null) return;
+  if(s.oneFor===id&&!force) return;
+  s.oneFor=id; s.oneErr=null; s.qr=null;
+  if(!force){ s.shop=null; s.rows=null; }
+  const seq=++s.oneSeq;
+  api('/shops/'+id).then(d=>{
+    if(seq!==s.oneSeq) return;
+    s.shop=(d&&d.shop)||null; s.rows=Array.isArray(d&&d.listings)?d.listings:[];
+    render();
+    if(s.shop&&s.shop.is_active) api('/shops/'+id+'/qr').then(q=>{
+      if(seq!==s.oneSeq) return;
+      s.qr={url:(q&&q.url)||null}; render();
+    }).catch(()=>{});
+  }).catch(e=>{
+    if(seq!==s.oneSeq||String(e.message)==='auth') return;
+    s.shop=null; s.rows=null; s.oneErr=E('Load failed','加载失败'); render();
+  });
+}
+function shmErrBox(msg,cmd){
+  return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${msg}</span></div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('${cmd}')">${T('Try again','重试')}</button></div>`;
+}
+const shmLoading=()=>`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+/* Every location, the Sales board's cards as a list: a location with no shop
+   says so in the board's own word and does not open (there is nothing to read
+   until one is set up, which is PD13's); an inactive shop wears the desktop's
+   Inactive pill; an active one counts what it lists. */
+function screenShopMenus(){
+  loadShopMenus();
+  const s=state.shm;
+  if(s.err) return shmErrBox(s.err,'shmRetry');
+  if(!s.list) return shmLoading();
+  if(!s.list.length) return nothingYet(T('No stores','没有门店'),'');
+  return `<div style="padding:14px 16px 24px"><div class="list">${s.list.map((x,i)=>{
+    const l=x.location||{}, sh=x.shop;
+    const n=sh?Number(sh.listing_count||0):0;
+    const sub=!sh ? T('Not set up','未开通') : n+' '+T(n===1?'product':'products','件商品');
+    const pillHtml=sh&&!sh.is_active?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Inactive','已停用')}</span>`:'';
+    const inner=`<span class="rowico">${ic('qr-code',18)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(shmLocName(l))}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(sub)}</span></span>
+      ${pillHtml}`;
+    return `${i?'<div class="sep"></div>':''}${sh
+      ? `<button class="row" onclick="APP.cmd('shmOpen',${Number(sh.id)})">${inner}<span style="color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span></button>`
+      : `<div class="row" style="cursor:default">${inner}</div>`}`;
+  }).join('')}</div></div>`;
+}
+/* A listing's name and, for one size of a family, that size — prodName's rule
+   in 28-shops.js: each language falls back to the other. */
+function shmProdName(r){
+  const size=String(T(r.variant_label||r.variant_label_cn||'',r.variant_label_cn||r.variant_label||'')||'').trim();
+  return escAttr(shmName(r.name_en,r.name_cn))+(size?` <span style="color:var(--text-secondary)">· ${escAttr(size)}</span>`:'');
+}
+/* The desktop's menu filter: name in either language, the size, or the SKU —
+   what the row shows. Local, over the listings already held. */
+function shmShown(){
+  const q=String(state.shm.q||'').trim().toLowerCase();
+  const rows=state.shm.rows||[];
+  if(!q) return rows;
+  return rows.filter(r=>[r.name_en,r.name_cn,r.variant_label,r.variant_label_cn,r.sku].map(v=>String(v||'')).join(' ').toLowerCase().indexOf(q)>=0);
+}
+function shmListHtml(){
+  const s=state.shm, rows=s.rows||[];
+  if(!rows.length) return `<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No products yet','还没有商品')}</div>`;
+  const list=shmShown();
+  const count=String(s.q||'').trim()?`<div class="num" style="padding:0 2px 8px;font-size:12.5px;color:var(--text-secondary);text-align:right">${list.length} / ${rows.length}</div>`:'';
+  if(!list.length) return count+`<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No products match this filter','没有匹配此筛选条件的产品')}</div>`;
+  /* §325 PD4 — with stores:edit the row opens its sheet (price, kind,
+     remove) and carries the availability switch, the desktop's daily
+     control; without it the row is PD2's read-only line. */
+  const edit=shmCanEdit();
+  const errBar=s.writeErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;margin-bottom:10px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(s.writeErr)}</span></div>`:'';
+  return errBar+count+`<div class="list">${list.map((r,i)=>{
+    const on=Number(r.is_available)===1, busy=!!(s.busy||{})[r.id];
+    const info=`<span style="display:flex;flex-direction:column;min-width:0;gap:3px;flex:1">
+        <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shmProdName(r)}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr([r.sku,r.fulfilment_mode==='made_here'?T('Made here','现做'):T('Stocked','备货')].filter(Boolean).join(' · '))}</span>
+        <span class="num" style="font-size:14px;font-weight:500;margin-top:2px">${money(CUR,r.price)}</span></span>`;
+    const word=on?T('Available','有货'):T('Sold out','售罄');
+    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+      ${edit?`<button onclick="APP.cmd('shmEdit',${Number(r.id)})" style="display:flex;flex:1;min-width:0;background:none;border:none;padding:0;text-align:left;cursor:pointer;font-family:inherit;color:var(--text-primary)">${info}</button>`:info}
+      <span style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:none">
+        ${edit?(busy?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">…</span>`:toggle(on,`APP.cmd('shmAvail',${Number(r.id)})`))
+              +`<span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${word}</span>`
+             :(on?pill('on',word):pill('off',word))}</span></div>`;
+  }).join('')}</div>`;
+}
+/* The record: the location, the unlabelled code, the QR with the address it
+   opens (or the reason there is none), Download, then the listings under the
+   desktop's filter. */
+function screenShopMenu(){
+  loadShopMenu();
+  const s=state.shm;
+  if(s.oneErr) return shmErrBox(s.oneErr,'shmOneRetry');
+  if(!s.shop) return shmLoading();
+  const sh=s.shop, id=Number(sh.id);
+  const loc=((s.list||[]).find(x=>x.shop&&Number(x.shop.id)===id)||{}).location;
+  const qrDead=s.qr&&!s.qr.url;
+  const qr=sh.is_active?`<div class="card" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px">
+      <div class="eyebrow" style="align-self:flex-start">${T('QR code','二维码')}</div>
+      ${qrDead?'':`<img alt="" src="${escAttr(API+'/shops/'+id+'/qr.png?v='+encodeURIComponent(sh.updated_at||''))}" style="width:180px;height:180px;image-rendering:pixelated" onerror="this.style.display='none'">`}
+      ${s.qr?`<div class="num" style="font-size:12.5px;text-align:center;word-break:break-all;color:${qrDead?'var(--amber-ink)':'var(--text-secondary)'}">${qrDead?T('QR unavailable','二维码不可用'):escAttr(s.qr.url)}</div>`:''}
+      ${qrDead?'':`<a class="btn2" style="width:auto;padding:0 20px;gap:6px;text-decoration:none" href="${escAttr(API+'/shops/'+id+'/qr.png?download=1&scale=20')}" download="shop-${escAttr(sh.public_code)}.png">${ic('download',16)}${T('Download','下载')}</a>`}
+    </div>`:'';
+  const filter=(s.rows||[]).length?`<div style="padding:0 0 10px">${searchBox(`<input id="mShmQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}"
+      placeholder="${T('Search by name or SKU…','按名称或货号搜索…')}" style="width:100%"
+      oninput="APP.cmd('shmQ',this.value)"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mShmClr',!!s.q)}</div>`:'';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:17px;font-weight:500">${escAttr(shmLocName(loc)||shmName(sh.display_name_en,sh.display_name_cn))}</span>
+        ${sh.is_active?'':`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Inactive','已停用')}</span>`}</div>
+      <code class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(sh.public_code||'')}</code></div>
+    ${qr}
+    <div>${filter}<div id="mShmBody">${shmListHtml()}</div></div>
+  </div>`;
+}
+SUBS.shopmenus={title:['Shop menu','门店商品'],render:()=>screenShopMenus()};
+SUBS.shopmenu={title:['Shop menu','门店商品'],backLabel:()=>T('Shop menu','门店商品'),render:()=>screenShopMenu()};
+reg('shmRetry', ()=>{ loadShopMenus(true); render(); });
+reg('shmOneRetry', ()=>{ loadShopMenu(true); render(); });
+reg('shmOpen', id=>{ const s=state.shm; s.id=Number(id); s.q=''; s.oneFor=null;
+  s.busy={}; s.writeErr=null; s.edit=null; s.pick=null; push('shopmenu'); });
+/* The filter repaints the list alone, so the keyboard stays (prodSearch's rule). */
+reg('shmQ', v=>{
+  state.shm.q=String(v||'');
+  searchClearShow('mShmClr', !!state.shm.q);
+  const host=document.getElementById('mShmBody');
+  if(host) host.innerHTML=shmListHtml(); else render();
+});
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 PD4 — A SHOP MENU'S DAILY EDITS (desktop: 28-shops.js, THE WRITES)
+   --------------------------------------------------------------------------
+   Each is the desktop's request with the desktop's body, behind stores:edit
+   (the desktop's RO() / data-cap, and the server's requireStoresEdit):
+
+     Available on/off   PATCH /shops/:id/listings/:lid {is_available: 1|0}
+                        — on the row, optimistic, put back if refused
+                        (shpToggleAvail)
+     Price, Kind        PATCH /shops/:id/listings/:lid {price} / {fulfilment_mode}
+                        — one PATCH per changed field, as the desktop's
+                        shpSaveField sends one per change; from the row's sheet
+     Remove             DELETE /shops/:id/listings/:lid — WITH a confirm,
+                        which the desktop does not ask (the §325 survey's
+                        defect 14); the phone asks first
+     + Add product      GET /shops/:id/candidates?q=, then
+                        POST /shops/:id/listings {store_product_id}
+     Add all            POST /shops/:id/listings/add-published, behind the
+                        desktop's confirm naming the count and the §47 caveat
+
+   A refusal stays where the operator is looking — above the list, or in the
+   sheet that asked — and a toast only ever confirms. Without stores:edit the
+   menu is exactly PD2's read-only screen: no switch, no sheet, no Add. */
+const shmCanEdit=()=>mCan('stores:edit');
+function shmWriteErr(e){
+  if(e&&e.refused) return T(...e.words);
+  if(e&&e.code==='bad_price') return T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。');
+  return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+}
+const shmRow=id=>(state.shm.rows||[]).find(r=>Number(r.id)===Number(id));
+/* Repaint the listings alone when they are on screen, so a write never takes
+   down the filter field the operator may be typing in. */
+function shmRepaint(){ const host=document.getElementById('mShmBody'); if(host) host.innerHTML=shmListHtml(); else render(); }
+/* The row's sheet: price and kind, Save, and Remove. Price is held in state as
+   typed and never repaints on a keystroke; the kind chips repaint and keep it. */
+function sheetShmEdit(){
+  const s=state.shm, ed=s.edit; if(!ed) return '';
+  const r=shmRow(ed.id); if(!r) return '';
+  const chip=(k,label)=>`<button class="chip ${ed.mode===k?'on':''}" ${ed.busy?'disabled':''} onclick="APP.cmd('shmEditMode','${k}')"><span>${label}</span></button>`;
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shmEditClose')"></div>
+   <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">
+     <div class="grabber" style="margin-bottom:12px"></div>
+     <div style="padding:0 20px 4px;font-size:18px;font-weight:500">${shmProdName(r)}</div>
+     <div class="num" style="padding:0 20px 12px;font-size:12.5px;color:var(--text-secondary)">${escAttr(r.sku||'')}</div>
+     <div style="padding:0 20px;display:flex;flex-direction:column;gap:16px">
+       <label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Price','价格')}</span>
+         <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px;color:var(--text-secondary)">${CUR}</span>
+         <input id="mShmPrice" class="num" inputmode="decimal" value="${escAttr(ed.price)}" ${ed.busy?'disabled':''} oninput="APP.cmd('shmEditPrice',this.value)" style="flex:1;min-width:0"></div></label>
+       <div><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Kind','类型')}</span>
+         <div style="display:flex;gap:8px">${chip('stocked',T('Stocked','备货'))}${chip('made_here',T('Made here','现做'))}</div></div>
+       ${ed.err?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${escAttr(ed.err)}</span></div>`:''}
+     </div>
+     <div style="display:flex;gap:8px;padding:18px 20px 0">
+       <button class="btn2" style="flex:1;color:var(--brick-ink)" ${ed.busy?'disabled':''} onclick="APP.cmd('shmRemove',${Number(r.id)})">${ed.busy==='remove'?T('Removing…','移除中…'):T('Remove','移除')}</button>
+       <button class="cta" style="flex:1" ${ed.busy?'disabled':''} onclick="APP.cmd('shmEditSave')">${ed.busy==='save'?T('Saving…','保存中…'):T('Save','保存')}</button></div>
+   </div>`;
+}
+/* The Add product picker: the desktop's in-flow panel, as a sheet. The search
+   box is painted once and only #mShmPickList repaints under it, for the
+   desktop's reason (a field rebuilt mid-word loses the keyboard). */
+function shmPickListHtml(){
+  const s=state.shm, p=s.pick; if(!p) return '';
+  if(p.err) return `<div style="padding:20px;font-size:14px;color:var(--brick-ink)">${escAttr(p.err)}</div>`;
+  if(p.loading&&!p.rows.length) return `<div style="padding:20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  // Kept while a search narrows the rows below (addAllRow's rule).
+  const all = p.pubMissing&&shmCanEdit() ? `<div style="padding:4px 20px 10px">
+      <button class="btn2" style="width:100%" ${p.busy?'disabled':''} onclick="APP.cmd('shmAddAll')">${p.busy==='all'?T('Adding…','添加中…')
+        :T('+ Add all '+p.pubMissing+' Online store products','+ 添加全部 '+p.pubMissing+' 个线上商城商品')}</button></div>` : '';
+  if(!p.rows.length) return all+`<div style="padding:20px;text-align:center;font-size:14px;color:var(--text-secondary)">${p.q?T('No products match this filter','没有匹配此筛选条件的产品'):T('No products yet','还没有商品')}</div>`;
+  return all+`<div>${p.rows.map((c,i)=>`${i?'<div class="sep" style="margin:0 20px"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:10px 20px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shmProdName(c)}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr(c.sku||'')}${c.sku?' · ':''}${money(CUR,c.sell_price)}</span></span>
+      <button class="btn2" style="width:auto;flex:none;padding:6px 12px;font-size:13px" ${p.busy?'disabled':''} onclick="APP.cmd('shmAdd',${Number(c.id)})">${p.busy===c.id?T('Adding…','添加中…'):T('+ Add product','+ 添加商品')}</button></div>`).join('')}</div>`;
+}
+function sheetShmPick(){
+  const p=state.shm.pick; if(!p) return '';
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shmPickClose')"></div>
+   <div class="sheet" style="top:80px;z-index:48;overflow:hidden">
+     <div style="flex:none;padding:8px 16px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:10px">
+         <div style="flex:1;min-width:0">${searchBox(`<input id="mShmPickQ" inputmode="search" enterkeyhint="search" value="${escAttr(p.q)}"
+           placeholder="${T('Search a product to add…','搜索商品以添加…')}" style="width:100%" oninput="APP.cmd('shmPickQ',this.value)"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mShmPickClr',!!p.q)}</div>
+         <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('shmPickClose')">${T('Cancel','取消')}</button></div>
+       ${p.addErr?`<div style="margin-top:10px;font-size:13.5px;color:var(--brick-ink)">${escAttr(p.addErr)}</div>`:''}</div>
+     <div id="mShmPickList" style="flex:1;min-height:0;overflow-y:auto;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">${shmPickListHtml()}</div></div>`;
+}
+function shmPickRepaint(){ const host=document.getElementById('mShmPickList'); if(host) host.innerHTML=shmPickListHtml(); else render(); }
+/* fetchPick: one request per settled keystroke, the last one asked wins, and
+   the rows on screen stay up while the next answer is in flight. The Add all
+   count comes from the UNFILTERED answer only — the one that sees them all. */
+let _shmPickTimer=null;
+function shmFetchPick(){
+  const s=state.shm, p=s.pick; if(!p||s.id==null) return;
+  const seq=++p.seq; p.loading=true;
+  if(!p.rows.length) shmPickRepaint();
+  api('/shops/'+s.id+'/candidates?q='+encodeURIComponent(p.q)).then(rows=>{
+    if(!s.pick||seq!==s.pick.seq) return;
+    p.rows=Array.isArray(rows)?rows:[]; p.err=null;
+    if(!p.q) p.pubMissing=p.rows.filter(c=>Number(c.is_published)===1).length;
+    p.loading=false; shmPickRepaint();
+  }).catch(e=>{
+    if(!s.pick||seq!==s.pick.seq||String(e&&e.message)==='auth') return;
+    p.rows=[]; p.loading=false; p.err=e&&e.refused?T(...e.words):String(E('Load failed','加载失败')); shmPickRepaint();
+  });
+}
+SUBS.shopmenu.cta=()=>(shmCanEdit()&&state.shm.shop)
+  ? `<button class="cta inhead" onclick="APP.cmd('shmPickOpen')">${T('+ Add product','+ 添加商品')}</button>` : '';
+/* Available — the row's switch. Optimistic, then the server's row; put back
+   and said above the list if it is refused, so the switch never lies. */
+reg('shmAvail', id=>{
+  const s=state.shm, r=shmRow(id);
+  if(!r||!s.shop||!shmCanEdit()||s.busy[r.id]) return;
+  const was=Number(r.is_available)===1?1:0, want=was?0:1;
+  r.is_available=want; s.busy[r.id]=1; s.writeErr=null; shmRepaint();
+  apiWrite('/shops/'+s.shop.id+'/listings/'+r.id,{is_available:want},'PATCH').then(j=>{
+    if(j&&j.data) Object.assign(r,j.data);
+  }).catch(e=>{
+    r.is_available=was;
+    if(String(e&&e.message)!=='auth') s.writeErr=shmWriteErr(e);
+  }).then(()=>{ delete s.busy[r.id]; render(); });
+});
+reg('shmEdit', id=>{
+  const r=shmRow(id); if(!r||!shmCanEdit()) return;
+  state.shm.edit={id:r.id,price:Number(r.price).toFixed(2),mode:r.fulfilment_mode==='made_here'?'made_here':'stocked',busy:null,err:null};
+  render();
+});
+reg('shmEditClose', ()=>{ const ed=state.shm.edit; if(ed&&ed.busy) return; state.shm.edit=null; render(); });
+reg('shmEditPrice', v=>{ const ed=state.shm.edit; if(ed) ed.price=String(v==null?'':v); });   // no render: it would eat the keystroke
+reg('shmEditMode', k=>{ const ed=state.shm.edit; if(!ed||ed.busy||(k!=='stocked'&&k!=='made_here')) return; ed.mode=k; render(); });
+/* Save sends what changed and nothing else: {price} and/or {fulfilment_mode},
+   one PATCH each, the desktop's shpSaveField body. A price that is not a
+   number of 0 or more is refused here, before the server is asked. */
+reg('shmEditSave', ()=>{
+  const s=state.shm, ed=s.edit; if(!ed||ed.busy||!s.shop||!shmCanEdit()) return;
+  const r=shmRow(ed.id); if(!r) return;
+  const priceTxt=String(ed.price).trim(), n=Number(priceTxt);
+  if(priceTxt===''||!Number.isFinite(n)||n<0){ ed.err=T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'); render(); return; }
+  const jobs=[];
+  if(Math.round(n*100)!==Math.round(Number(r.price)*100)) jobs.push({price:priceTxt});
+  if(ed.mode!==r.fulfilment_mode) jobs.push({fulfilment_mode:ed.mode});
+  if(!jobs.length){ s.edit=null; render(); return; }
+  ed.busy='save'; ed.err=null; render();
+  (async()=>{
+    for(const body of jobs){
+      const j=await apiWrite('/shops/'+s.shop.id+'/listings/'+r.id,body,'PATCH');
+      if(j&&j.data) Object.assign(r,j.data);
+    }
+  })().then(()=>{
+    s.edit=null; showToast(T('Saved','已保存')); render();
+  }).catch(e=>{
+    ed.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    ed.err=shmWriteErr(e); render();
+  });
+});
+/* Remove — asked first, though the desktop does not ask (§325 survey, defect
+   14): a listing is a join and adding it back restores it, but the price and
+   kind set on it here do not come back with it. */
+reg('shmRemove', id=>{
+  const s=state.shm, r=shmRow(id); if(!r||!s.shop||!shmCanEdit()) return;
+  if(s.edit&&s.edit.busy) return;
+  state.ask={title:T('Remove from this menu?','从此菜单移除？'), body:shmProdName(r),
+    confirmLabel:T('Remove','移除'), danger:true,
+    run:()=>{
+      const ed=s.edit&&Number(s.edit.id)===Number(r.id)?s.edit:null;
+      if(ed){ ed.busy='remove'; ed.err=null; }
+      s.writeErr=null; render();
+      apiWrite('/shops/'+s.shop.id+'/listings/'+r.id,{},'DELETE').then(()=>{
+        s.rows=(s.rows||[]).filter(x=>Number(x.id)!==Number(r.id));
+        if(ed) s.edit=null;
+        showToast(T('Removed','已移除')); render();
+      }).catch(e=>{
+        if(ed) ed.busy=null;
+        if(String(e&&e.message)==='auth') return;
+        if(ed) ed.err=shmWriteErr(e); else s.writeErr=shmWriteErr(e);
+        render();
+      });
+    }};
+  render();
+});
+reg('shmPickOpen', ()=>{
+  const s=state.shm; if(!s.shop||!shmCanEdit()) return;
+  s.pick={q:'',rows:[],loading:false,err:null,addErr:null,busy:null,seq:0,pubMissing:0};
+  render(); shmFetchPick();
+});
+reg('shmPickClose', ()=>{ const p=state.shm.pick; if(p&&p.busy) return; clearTimeout(_shmPickTimer); state.shm.pick=null; render(); });
+reg('shmPickQ', v=>{
+  const p=state.shm.pick; if(!p) return;
+  p.q=String(v||''); searchClearShow('mShmPickClr',!!p.q);
+  clearTimeout(_shmPickTimer); _shmPickTimer=setTimeout(shmFetchPick,220);
+});
+reg('shmAdd', id=>{
+  const s=state.shm, p=s.pick; if(!p||p.busy||!s.shop||!shmCanEdit()) return;
+  const pid=Number(id);
+  p.busy=pid; p.addErr=null; shmPickRepaint();
+  apiWrite('/shops/'+s.shop.id+'/listings',{store_product_id:pid},'POST').then(j=>{
+    p.busy=null;
+    if(j&&j.data) (s.rows=s.rows||[]).push(j.data);
+    p.rows=p.rows.filter(c=>Number(c.id)!==pid);
+    shmPickRepaint(); shmRepaint();
+  }).catch(e=>{
+    p.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    p.addErr=shmWriteErr(e); render();
+  });
+});
+/* Add all — the desktop's confirm, then one POST with no body. The count on
+   the button is re-asked of the server afterwards, never worked out here. */
+reg('shmAddAll', ()=>{
+  const s=state.shm, p=s.pick; if(!p||p.busy||!p.pubMissing||!s.shop||!shmCanEdit()) return;
+  const n=p.pubMissing;
+  state.ask={title:T('Add '+n+' product'+(n===1?'':'s')+' to this menu?','添加 '+n+' 个商品到此菜单？'),
+    body:T('Every Online store product not on this menu is added at its catalogue price, as Stocked. Anything this shop has never counted shows as sold out on the QR menu. Remove what this shop does not sell.',
+           '所有尚未在此菜单上的线上商城商品将按商品价格添加,类型为备货。此门店从未盘点过的商品会在二维码菜单上显示为售罄。请移除此门店不卖的商品。'),
+    confirmLabel:T('Add','添加'),
+    run:()=>{
+      p.busy='all'; p.addErr=null; render();
+      apiWrite('/shops/'+s.shop.id+'/listings/add-published',{},'POST').then(j=>{
+        p.busy=null;
+        if(j&&j.data&&Array.isArray(j.data.listings)) s.rows=j.data.listings;
+        showToast(T('Saved','已保存'));
+        p.pubMissing=0; p.q=''; p.rows=[]; render(); shmFetchPick();
+      }).catch(e=>{
+        p.busy=null;
+        if(String(e&&e.message)==='auth') return;
+        p.addErr=shmWriteErr(e); render();
+      });
+    }};
+  render();
+});
 /* ══════════════════════════════════════════════════════════════════════════
    ADD STOCK — the kitchen's other tool, in this app rather than beside it
    --------------------------------------------------------------------------
@@ -29342,6 +29831,510 @@ function sheetOos(){
    <div style="display:flex;gap:8px;padding:14px 20px 0">
      <button class="btn2" style="flex:1" onclick="APP.cmd('closeOos')">${T('Cancel','取消')}</button></div></div>`;
 }
+/* ==========================================================================
+   §325 PD2 — THE PRODUCT'S SALES CARD AND ITS VERSION HISTORY, READ
+   (desktop: 09-products.js pdLoadSales / pdOpenVersions)
+   --------------------------------------------------------------------------
+   SALES is the editor's card: units, revenue and rank over 7 / 30 / 90 days
+   or all time, and the two facts that stand in for a chart — when it last
+   sold, and on how many days. Same endpoint, same windows, same sentences.
+   Read for the size on screen, as the desktop reads it for the product open.
+
+   REVENUE IS THE ONE MONEY FIGURE, and the desktop shows it to anyone who can
+   open a product. The phone keeps that, with the phone's standing money rule
+   on top: a warehouse, dispatch or customer-service board (recapNoMoney) gets
+   units and rank and no revenue tile at all, as Trend and Home do.
+
+   VERSION HISTORY is the list the editor's button opens: every saved version,
+   newest first, Current on the newest, Original on the pre-edit baseline, and
+   who saved it. READ-ONLY IN THIS STEP — Restore is a write and comes with its
+   confirm in its own step, so no row carries a button that does nothing. */
+const PS_RANGES=[{key:'7',en:'7 days',zh:'7 天'},{key:'30',en:'30 days',zh:'30 天'},
+  {key:'90',en:'90 days',zh:'90 天'},{key:'all',en:'All',zh:'全部'}];
+function loadProdSales(pid,force){
+  const s=state.prodSales;
+  if(pid==null) return;
+  if(!force&&s.pid===pid&&(s.data||s.err||s.loading)) return;
+  s.pid=pid; s.data=null; s.err=null; s.loading=true;
+  const seq=++s.seq;
+  apiRaw('/products/'+pid+'/sales?days='+encodeURIComponent(s.days)).then(j=>{
+    if(seq!==s.seq) return;
+    s.loading=false;
+    if(!j||!j.success) throw new Error('load_failed');
+    s.data=j.data||{}; render();
+  }).catch(e=>{
+    if(seq!==s.seq||String(e&&e.message)==='auth') return;
+    s.loading=false; s.data=null; s.err=E('Couldn’t load sales','无法加载销量'); render();
+  });
+}
+/* pdSalesWhen: today, yesterday, N days ago inside a month, a date past it. */
+function psWhen(iso){
+  if(!iso) return '';
+  const today=shopToday();
+  if(iso===today) return T('today','今天');
+  if(iso===shopDayAdd(today,-1)) return T('yesterday','昨天');
+  const days=Math.round((Date.parse(today)-Date.parse(iso))/86400000);
+  if(days>1&&days<=30) return T(days+' days ago',days+' 天前');
+  return tdWhen(iso,'date',_tdL());
+}
+function psContext(d){
+  const n=Number(d.selling_days||0);
+  if(!n) return T('No sales in this window','此区间暂无销量');
+  const when=psWhen(d.last_sale);
+  const days=n===1?T('1 selling day','1 天有销量'):T(n+' selling days',n+' 天有销量');
+  return when?T('Last sale '+when,'最近售出 '+when)+' · '+days:days;
+}
+function psTitle(){
+  const d=state.prodSales.days;
+  if(d==='all') return T('Sales · all time','销量 · 全部时间');
+  return T('Sales · last '+d+' days','销量 · 最近 '+d+' 天');
+}
+function salesCard(p){
+  if(p._id==null) return '';
+  // The sheet's first paint (openProduct renders once with prodMounted false)
+  // reads afresh, however this size was last read — the desktop's pdOpen does.
+  loadProdSales(p._id,!state.prodMounted);
+  const s=state.prodSales, d=(s.pid===p._id)?s.data:null, err=(s.pid===p._id)?s.err:null;
+  const v=(x)=>d?x:(err?'—':'…');
+  const kpi=(val,label)=>`<div style="flex:1;min-width:0"><div class="num" style="font-size:20px;font-weight:500">${val}</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${label}</div></div>`;
+  const rank=d?(d.rank?'#'+d.rank+' / '+d.total_products:T('No sales','暂无销量')):v('');
+  return `<div class="card" style="padding:16px 0 14px;display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow" style="padding:0 16px">${psTitle()}</div>
+    ${chipRow(PS_RANGES,s.days,'psDays')}
+    <div style="display:flex;gap:12px;padding:0 16px">
+      ${kpi(v(d?Number(d.units||0).toLocaleString():''),T('units sold','售出件数'))}
+      ${recapNoMoney()?'':kpi(v(d?money0(CUR,d.revenue):''),T('revenue','营业额'))}
+      ${kpi(rank,T('rank','排名'))}</div>
+    <div style="padding:0 16px;font-size:13px;color:${err?'var(--brick-ink)':'var(--text-secondary)'}">${err?err:(d?escAttr(psContext(d)):'')}</div>
+  </div>`;
+}
+/* The row that opens the list. A product not saved yet has nothing to list,
+   which on the phone cannot happen (the sheet opens saved products only). */
+function versionsRow(p){
+  if(p._id==null) return '';
+  return `<div class="card" style="padding:0">
+    <button class="row" onclick="APP.cmd('pvOpen',${Number(p._id)})">
+      <span class="rowico">${ic('history',18)}</span>
+      <span style="flex:1;min-width:0;font-size:15px">${T('Version history','历史版本')}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',20)}</span></button></div>`;
+}
+function loadProdVersions(pid){
+  const v=state.prodVer;
+  v.pid=pid; v.rows=null; v.err=null;
+  const seq=++v.seq;
+  apiRaw('/products/'+pid+'/versions').then(j=>{
+    if(seq!==v.seq) return;
+    if(!j||!j.success) throw new Error('load_failed');
+    v.rows=Array.isArray(j.versions)?j.versions:[]; render();
+  }).catch(e=>{
+    if(seq!==v.seq||String(e&&e.message)==='auth') return;
+    v.err=T('Could not load versions: ','无法加载版本:')+escAttr(e&&e.message||''); render();
+  });
+}
+/* pdFmtVersionTime: "Today 14:32", "Yesterday 09:10", else the full stamp —
+   a history is read as "how long ago". The server's stamp is UTC. */
+function pvWhen(s){
+  if(!s) return '';
+  const d=new Date(String(s).replace(' ','T')+'Z');
+  if(isNaN(d.getTime())) return String(s);
+  const t=tdWhen(d,'time',_tdL()), day=tdWhen(d,'date',_tdL()), now=new Date();
+  if(day===tdWhen(now,'date',_tdL())) return T('Today ','今天 ')+t;
+  if(day===tdWhen(new Date(now.getTime()-86400000),'date',_tdL())) return T('Yesterday ','昨天 ')+t;
+  return tdWhen(d,'dateTime',_tdL());
+}
+function sheetVersions(){
+  const v=state.prodVer; if(!v.open) return '';
+  const tag=(t,ink)=>`<span class="pill" style="background:${PILL.muted[0]};color:${ink}">${t}</span>`;
+  const body = v.err
+    ? `<div style="display:flex;align-items:flex-start;gap:12px;margin:0 20px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${v.err}</span></div>`
+    : !v.rows ? `<div style="padding:28px 20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+    : !v.rows.length ? `<div style="padding:20px;font-size:14px;color:var(--text-secondary);line-height:1.55">${T('No earlier versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')}</div>`
+    : v.rows.map((r,i)=>`${i?'<div class="sep" style="margin:0 20px"></div>':''}<div style="display:flex;flex-direction:column;gap:3px;padding:12px 20px">
+        <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="num" style="font-size:15px">${escAttr(pvWhen(r.created_at))}</span>
+          ${r.is_baseline?tag(T('Original','原始版本'),'var(--text-secondary)'):(i===0?tag(T('Current','当前'),'var(--sage-ink)'):'')}</span>
+        ${r.edited_by?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('by ','操作人:')}${escAttr(r.edited_by)}</span>`:''}</div>`).join('');
+  return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('pvClose')"></div>
+   <div class="sheet" style="top:120px;z-index:48;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('pvClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500">${T('Version history','历史版本')}</span><span style="width:36px;flex:none"></span></div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div></div>`;
+}
+reg('psDays', k=>{
+  const s=state.prodSales;
+  if(!PS_RANGES.some(r=>r.key===k)||s.days===k) return;
+  s.days=k;
+  // A newer range supersedes the read in flight (the desktop's _pdSalesSeq).
+  if(s.pid!=null) loadProdSales(s.pid,true);
+  render();
+});
+reg('pvOpen', id=>{ state.prodVer.open=true; loadProdVersions(Number(id)); render(); });
+reg('pvClose', ()=>{ const v=state.prodVer; v.open=false; v.seq++; render(); });
+/* ==========================================================================
+   §325 PD5 — A PRODUCT'S CORE FIELDS AND ITS DESCRIPTION, EDITED ON THE PHONE
+   (desktop: 09-products.js pdOpen / pdCollectBody / pdSaveCore / pdAutoSaveNow)
+   --------------------------------------------------------------------------
+   One screen, Details, reached from the product sheet for products:edit — the
+   desktop editor's Basics, Where it shows, price, low-stock line, Product
+   details, Description, Shipping, Flags, Free of and Internal notes, saving
+   itself as the desktop does: the shared engine (public/tacet-autosave.js),
+   800ms after the last edit, one write in flight, PATCH /products/:id.
+
+   IT SENDS ONLY WHAT CHANGED, with the desktop's keys and the desktop's
+   meanings. The desktop sends its whole form; the server writes only the keys
+   it is given (an absent key is "not touched", the contract every guard below
+   leans on), so a smaller body is the same write with fewer chances to put a
+   stale value back over another screen's. The autosave rules travel with it:
+     • a NAME is required before anything is sent (pdAutoSaveNow's hold);
+     • an EMPTY PRICE is never sent — it would make the product free;
+     • UNIT_COST is sent only when it was LOADED and is the operator's to type:
+       products:costs on a board that may read money, the server sent the key,
+       and no recipe, bundle or build list owns the figure (pdApplyCostSource).
+       Anything else and the box is not drawn and the key never leaves; the tag
+       "this cost is not complete" travels with it, never apart;
+     • PRODUCT FACTS are sent only once a box has been touched (§156) — an
+       untouched card must not write its empties over what the page editor
+       filled in;
+     • the two DESCRIPTIONS travel together with description_format 'rich';
+     • sku_taken says which product holds the code, in the desktop's words.
+   Status, the shop switch, the out-of-stock rule and the supplier switches
+   stay where they already are on the phone; nothing here sends them. */
+const PE_FACTS=[['origin','origin',['Origin','产地'],'e.g. Guangzhou, China','例如:中国广州'],
+  ['ingredients','ingredients',['Ingredients','配料'],'Comma-separated','用逗号分隔'],
+  ['storage','storage',['Storage','储存方式'],'e.g. Keep refrigerated','例如:冷藏保存'],
+  ['shelflife','shelf_life',['Shelf life','保质期'],'e.g. Best within 7 days','例如:7 天内最佳'],
+  ['serving','serving',['Serving suggestion','食用建议'],'How to enjoy it','如何享用']];
+const PE_FREE_OF=[['nuts','Nuts','无坚果'],['soy','Soy','无大豆'],['gluten','Gluten','无麸质'],['5 spice','5 Spice','无五香']];
+const PE_FREE_ALIAS={'5spice':'5 spice','5-spice':'5 spice'};
+const PE_BADGES=[['','None','无'],['auto','Auto','自动'],['new','NEW','新品'],['pop','POP','热门'],['sale','SALE','特价'],['hot','HOT','推荐']];
+let peAuto=null;
+function peBadgeOf(tags){
+  const t=String(tags||'').trim().toLowerCase();
+  if(t==='auto') return 'auto';
+  if(/\bnew\b/.test(t)) return 'new';
+  if(/\bpop|popular\b/.test(t)) return 'pop';
+  if(/\bsale\b/.test(t)) return 'sale';
+  if(/\bhot\b/.test(t)) return 'hot';
+  return '';
+}
+/* pdPlainToHtml / pdRichForEdit: a legacy plain description becomes HTML, a
+   rich one loses the non-breaking spaces that stop it wrapping. */
+const pePlainToHtml=t=>String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\n/g,'<br>');
+const peRichForEdit=h=>String(h||'').replace(/&nbsp;| /g,' ');
+/* pdRteClean: a box with no visible text and no embedded media saves as ''. */
+function peRteClean(html){
+  const h=String(html||'');
+  const text=h.replace(/<[^>]*>/g,'').replace(/&nbsp;| /g,' ').trim();
+  const media=/<(img|table|hr|video|iframe|audio|svg)\b/i.test(h);
+  return (text||media)?h.trim():'';
+}
+/* The draft is what the screen shows, in strings and flags; peBody turns it
+   into the payload in the desktop's key order. */
+function peDraftFrom(p){
+  const fo=String(p.free_of||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const known=PE_FREE_OF.map(x=>x[0]);
+  const free=[], extra=[];
+  fo.forEach(t=>{ const k=t.toLowerCase(), id=PE_FREE_ALIAS[k]||k; if(known.indexOf(id)>=0){ if(free.indexOf(id)<0) free.push(id); } else extra.push(t); });
+  const modes=String(p.ship_modes||'air,land').toLowerCase();
+  const local=/(^|,)\s*local\s*(,|$)/.test(modes);
+  const f=(p.product_facts&&typeof p.product_facts==='object')?p.product_facts:{};
+  const facts={};
+  PE_FACTS.forEach(([,col])=>{ facts[col+'_en']=f[col+'_en']==null?'':String(f[col+'_en']); facts[col+'_cn']=f[col+'_cn']==null?'':String(f[col+'_cn']); });
+  const rich=p.description_format==='rich';
+  const s=v=>v==null?'':String(v);
+  return {name_en:s(p.name_en),name_cn:s(p.name_cn),sku:s(p.sku),weight:s(p.size!=null?p.size:p.weight),
+    top_category:s(p.top_category||p.category),subcategory:s(p.subcategory),tags:peBadgeOf(p.tags),
+    sell_price:p.sell_price==null?'':s(p.sell_price),compare_at_price:p.compare_at_price==null?'':s(p.compare_at_price),
+    unit_cost:p.unit_cost==null?'':s(p.unit_cost),cost_incomplete:Number(p.cost_incomplete)===1?1:0,
+    low_stock_threshold:p.low_stock_threshold==null?'':s(p.low_stock_threshold),
+    free, freeExtra:extra, notes:s(p.notes), facts,
+    is_market:Number(p.is_market)===1?1:0, is_restock_only:Number(p.is_restock_only)===1?1:0, is_batch_made:Number(p.is_batch_made)===1?1:0,
+    air:!local&&modes.indexOf('air')>=0, land:!local&&modes.indexOf('land')>=0, local,
+    desc_en:rich?peRichForEdit(p.description_en):pePlainToHtml(p.description_en),
+    desc_cn:rich?peRichForEdit(p.description_cn):pePlainToHtml(p.description_cn)};
+}
+function peBody(d,e){
+  const t=v=>String(v==null?'':v).trim();
+  const modes=d.local?['local']:[d.air?'air':'',d.land?'land':''].filter(Boolean);
+  /* The five boxes, over whatever ELSE the bag holds. The bag is generic (a
+     page editor or another product type can file keys these boxes do not
+     show), and a phone that only knows five of them must not drop the rest
+     when it writes the bag back. */
+  const facts={}, known=[];
+  PE_FACTS.forEach(([,col])=>{ known.push(col+'_en',col+'_cn'); });
+  const orig=(e.factsOrig&&typeof e.factsOrig==='object')?e.factsOrig:{};
+  Object.keys(orig).forEach(k=>{ if(known.indexOf(k)<0&&orig[k]!=null&&String(orig[k]).trim()) facts[k]=String(orig[k]).trim(); });
+  PE_FACTS.forEach(([,col])=>{ const en=t(d.facts[col+'_en']), cn=t(d.facts[col+'_cn']); if(en) facts[col+'_en']=en; if(cn) facts[col+'_cn']=cn; });
+  return Object.assign({name_en:t(d.name_en),name_cn:t(d.name_cn),sku:t(d.sku),weight:t(d.weight),
+    top_category:t(d.top_category),subcategory:t(d.subcategory),tags:d.tags||''},
+    t(d.sell_price)!==''?{sell_price:parseFloat(t(d.sell_price))||0}:{},
+    {compare_at_price:parseFloat(t(d.compare_at_price))||0},
+    e.costOn?{unit_cost:t(d.unit_cost),cost_incomplete:d.cost_incomplete?1:0}:{},
+    {low_stock_threshold:t(d.low_stock_threshold),
+     free_of:d.free.concat(d.freeExtra).join(', '), notes:t(d.notes)},
+    e.factsTouched?{product_facts:facts}:{},
+    {is_market:d.is_market,is_restock_only:d.is_restock_only,is_batch_made:d.is_batch_made,
+     ship_modes:modes.join(',')||'air,land',
+     description_en:peRteClean(d.desc_en),description_cn:peRteClean(d.desc_cn),description_format:'rich'});
+}
+/* What one save sends: the keys whose value moved since the last save that
+   landed, the two descriptions together with their format, and the cost with
+   its tag. */
+function peDiff(b,base){
+  const out={}, moved=k=>JSON.stringify(b[k])!==JSON.stringify(base?base[k]:undefined);
+  Object.keys(b).forEach(k=>{ if(moved(k)) out[k]=b[k]; });
+  if('description_en' in out||'description_cn' in out){ out.description_en=b.description_en; out.description_cn=b.description_cn; out.description_format='rich'; }
+  else delete out.description_format;
+  if('unit_cost' in out||'cost_incomplete' in out){ out.unit_cost=b.unit_cost; out.cost_incomplete=b.cost_incomplete; }
+  return out;
+}
+/* skuTakenMsg (01-core.js), word for word. */
+function peSkuTaken(sku,c){
+  const s=String(sku||'').trim();
+  const skuTxt=s?T('SKU “','货号“')+s+'”':T('That SKU','该货号');
+  if(c){
+    const nm=T(c.name_en||c.name_cn||('#'+c.id), c.name_cn||c.name_en||('#'+c.id));
+    const vl=c.variant_label?' · '+c.variant_label:'';
+    const hidden=Number(c.is_active)===0
+      ? T(' — that product is archived/deleted, so it won’t show in the list. Restore it or change its SKU to free this code.',' — 该商品已归档/删除,因此不会显示在列表中。请恢复它或修改其货号以释放该编号。')
+      : (Number(c.is_published)===0?T(' (hidden product — use the “Hidden” filter to find it)','(已隐藏的商品 — 用“隐藏”筛选查看)'):'');
+    return skuTxt+T(' is already used by ',' 已被 ')+'“'+nm+vl+'”'+hidden;
+  }
+  return skuTxt+T(' is already in use',' 已被占用');
+}
+function peErrText(e,body){
+  if(e&&e.refused) return T(...e.words);
+  if(e&&e.code==='sku_taken') return peSkuTaken(body&&body.sku, e.body&&e.body.conflict);
+  if(e&&e.code==='sku_required') return T('A SKU is required','需要填写货号');
+  if(e&&e.code==='catalog_locked') return T('This catalog is managed by the upstream system','该商品目录由上游系统管理');
+  return T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+}
+/* The catalogue row the rest of the phone reads, brought up to what was just
+   saved — the fields this screen writes and nothing else, so the list's
+   per-store stock and every other mapped fact stay exactly as they were. */
+function peApplyToCatalogue(pid,row){
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(pid)); if(!p||!row) return;
+  const ne=row.name_en||row.name_cn||'—', nc=row.name_cn||row.name_en||'—';
+  p.name=[ne,nc];
+  if(row.sku){ p.sku='SKU '+row.sku; p.rawSku=String(row.sku); }
+  if(row.sell_price!=null){ p.priceNum=Number(row.sell_price)||0; p.price=money(CUR,p.priceNum); }
+  p.cat=String(row.top_category||row.category||'').trim(); p.sub=String(row.subcategory||'').trim();
+  if(row.size!=null) p.size=String(row.size||'').trim();
+  p.hay=[row.name_en||'',row.name_cn||'',row.sku||''].join(' ').toLowerCase();
+}
+function peCostOn(e){ return !!(e&&e.costLoaded&&pcMoney()&&!e.costOwned); }
+function peAutoStart(){
+  if(peAuto){ peAuto.flush(); if(peAuto.stop) peAuto.stop(); peAuto=null; }
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()||typeof TacetAutosave==='undefined') return;
+  const pid=e.pid;
+  const auto=TacetAutosave.create({
+    read:()=>peBody(state.pe.draft,{costOn:peCostOn(state.pe),factsTouched:state.pe.factsTouched,factsOrig:state.pe.row&&state.pe.row.product_facts}),
+    hold:b=>(!b.name_en&&!b.name_cn)?T('Add a name to start autosaving','填写名称后自动保存')
+      :(state.pe.draft.sell_price.trim()!==''&&!(Number(state.pe.draft.sell_price)>=0))?T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。')
+      :'',
+    send:b=>{
+      const cur=state.pe; if(!cur||cur.pid!==pid) return Promise.resolve();
+      const body=peDiff(b,cur.base);
+      if(!Object.keys(body).length){ cur.base=b; return Promise.resolve(); }
+      return apiWrite('/products/'+pid,body,'PATCH').then(j=>{
+        if(state.pe===cur) cur.base=b;
+        peApplyToCatalogue(pid,j&&j.data);
+      }).catch(err=>{ throw new Error(peErrText(err,body)); });
+    },
+    onChange:()=>{ const f=document.getElementById('mPeFoot'); if(f) f.innerHTML=peFootHtml(); },
+  });
+  peAuto=auto; auto.start();
+}
+/* The row, the build list and the money question, then the engine. The cost
+   box is offered only once all three are answered — an unanswered build-list
+   read is not "no build list". */
+function loadPe(pid){
+  const e={pid,row:null,err:null,draft:null,base:null,factsTouched:false,costLoaded:false,costOwned:true,tried:true};
+  state.pe=e;
+  const wantCost=pcMoney();
+  Promise.all([api('/products/'+pid),
+    wantCost?api('/products/'+pid+'/build-lines').then(d=>({ok:true,lines:(d&&Array.isArray(d.lines))?d.lines:[]})).catch(()=>({ok:false})):Promise.resolve({ok:false})])
+  .then(([row,bl])=>{
+    if(state.pe!==e) return;
+    e.row=row||{};
+    e.costLoaded=wantCost&&Object.prototype.hasOwnProperty.call(e.row,'unit_cost')&&bl.ok;
+    e.costOwned=!!(e.row.recipe_id||e.row.is_bundle||(bl.lines&&bl.lines.length));
+    e.draft=peDraftFrom(e.row);
+    e.base=peBody(e.draft,{costOn:peCostOn(e),factsTouched:false,factsOrig:e.row.product_facts});
+    peAutoStart(); render();
+  }).catch(err=>{
+    if(state.pe!==e||String(err&&err.message)==='auth') return;
+    e.err=err&&err.refused?T(...err.words):String(E('Could not load this.','无法加载。')); render();
+  });
+}
+function peFootHtml(){
+  const a=peAuto; if(!a) return '';
+  const st=a.state;
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message):st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||'')):T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<span style="flex:1;min-width:0;font-size:12.5px;color:${tone}">${line}</span>
+    ${a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('peUndo')">${T('Undo','撤销')}</button>`:''}
+    <button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('pvOpen',${Number(state.pe&&state.pe.pid)})">${T('Version history','历史版本')}</button>`;
+}
+function peSubcats(top){
+  const node=(state.cats||[]).find(t=>t&&t.name===top);
+  return node?(node.subs||[]).filter(x=>x&&x.name):[];
+}
+function screenProductEdit(){
+  const e=state.pe;
+  if(!e) return nothingYet(T('Products','产品'),'');
+  if(e.err) return `<div style="padding:24px 16px;font-size:14px;color:var(--brick-ink)">${escAttr(e.err)}</div>`;
+  if(!e.draft) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  loadCategories();
+  const d=e.draft;
+  const lab=t=>`<span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</span>`;
+  const inp=(k,label,extra)=>`<label style="display:flex;flex-direction:column;gap:6px">${lab(label)}<input value="${escAttr(d[k])}" ${extra||''} oninput="APP.cmd('peField','${k}',this.value)"></label>`;
+  const card=(title,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">${title}</div>${inner}</div>`;
+  const tick=(on,cmd,label)=>`<button onclick="${cmd}" style="display:flex;align-items:center;gap:12px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+      <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${on?ic('check',15,2.5):''}</span>
+      <span style="font-size:15px">${label}</span></button>`;
+  const tops=(state.cats||[]).filter(t=>t&&t.name);
+  const sel=(k,opts)=>`<select style="width:100%" onchange="APP.cmd('peField','${k}',this.value)">${opts.map(([v,label])=>`<option value="${escAttr(v)}"${String(d[k])===String(v)?' selected':''}>${escAttr(label)}</option>`).join('')}</select>`;
+  const none=['',T('None','无')];
+  // A value the tree does not name (a rename's leftover) stays selectable as itself.
+  const topOpts=[none].concat(tops.map(t=>[t.name,T(t.name,t.name_cn||t.name)]));
+  if(d.top_category&&!tops.some(t=>t.name===d.top_category)) topOpts.push([d.top_category,d.top_category]);
+  const subs=peSubcats(d.top_category);
+  const subOpts=[none].concat(subs.map(x=>[x.name,T(x.name,x.name_cn||x.name)]));
+  if(d.subcategory&&!subs.some(x=>x.name===d.subcategory)) subOpts.push([d.subcategory,d.subcategory]);
+  const rteBtn=(cmd,icon,label)=>`<button class="iconbtn" style="width:36px;height:36px" aria-label="${label}" title="${label}" onmousedown="event.preventDefault()" onclick="APP.cmd('peRte','${cmd}')">${ic(icon,17,2)}</button>`;
+  const rte=(k,langLabel)=>`<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;color:var(--text-secondary)">${langLabel}</span>
+      <div id="mPeRte_${k}" contenteditable="true" data-k="${k}" oninput="APP.cmd('peDesc','${k}',this.innerHTML)"
+        style="min-height:110px;padding:10px 12px;border:1px solid var(--border-default);border-radius:12px;background:var(--surface-card);font-size:15px;line-height:1.55;outline:none;overflow-wrap:anywhere">${d[k]}</div></div>`;
+  const costOn=peCostOn(e);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${card(T('Basics','基础'),`${inp('name_en',T('Name','名称'))}${inp('name_cn',T('Name (second language)','名称(第二语言)'))}${inp('sku',T('SKU','货号'),'autocapitalize="characters"')}`)}
+    ${card(T('Where it shows','分类与陈列'),`<label style="display:flex;flex-direction:column;gap:6px">${lab(T('Shop section','商店分区'))}${sel('top_category',topOpts)}</label>
+      <label style="display:flex;flex-direction:column;gap:6px">${lab(T('Subcategory','子分类'))}${sel('subcategory',subOpts)}</label>
+      <label style="display:flex;flex-direction:column;gap:6px">${lab(T('Badge','标签'))}${sel('tags',PE_BADGES.map(([v,en,zh])=>[v,T(en,zh)]))}</label>
+      ${inp('weight',T('Size / weight','规格'))}`)}
+    ${card(T('Price','价格'),`${inp('sell_price',T('Price','价格'),'inputmode="decimal"')}${inp('compare_at_price',T('Was price','划线价'),'inputmode="decimal"')}
+      ${costOn?`${inp('unit_cost',T('Cost','成本'),'inputmode="decimal"')}${tick(d.cost_incomplete,"APP.cmd('peFlag','cost_incomplete')",T('This cost is not complete','成本不完整'))}`:''}`)}
+    ${card(T('Stock','库存'),inp('low_stock_threshold',T('Low-stock alert at','低库存提醒阈值'),'inputmode="numeric" placeholder="'+escAttr(T('Default','默认')+' '+prodLowThreshold({}))+'"'))}
+    ${card(T('Product details','产品详情'),PE_FACTS.map(([dom,col,label,phEn,phCn])=>`<div style="display:flex;flex-direction:column;gap:6px">${lab(T(...label))}
+      <input value="${escAttr(d.facts[col+'_en'])}" placeholder="${escAttr(phEn)}" oninput="APP.cmd('peFact','${col}_en',this.value)">
+      <input value="${escAttr(d.facts[col+'_cn'])}" placeholder="${escAttr(phCn)}" oninput="APP.cmd('peFact','${col}_cn',this.value)"></div>`).join(''))}
+    ${card(T('Description','描述'),`<div class="hscroll" style="display:flex;gap:4px">
+        ${rteBtn('bold','bold',T('Bold','加粗'))}${rteBtn('italic','italic',T('Italic','斜体'))}${rteBtn('underline','underline',T('Underline','下划线'))}
+        ${rteBtn('insertUnorderedList','list',T('Bulleted list','项目符号'))}${rteBtn('insertOrderedList','list-ordered',T('Numbered list','编号'))}${rteBtn('removeFormat','remove-formatting',T('Clear formatting','清除格式'))}</div>
+      ${rte('desc_en','English')}${rte('desc_cn','中文')}`)}
+    ${card(T('Shipping','配送方式'),`${tick(d.air,"APP.cmd('peShip','air')",T('Air','空运'))}${tick(d.land,"APP.cmd('peShip','land')",T('Land','陆运'))}${tick(d.local,"APP.cmd('peShip','local')",T('Local only','仅广州'))}`)}
+    ${card(T('Flags','标记'),`${tick(d.is_market,"APP.cmd('peFlag','is_market')",T('Sold at markets','市集销售'))}${tick(d.is_batch_made,"APP.cmd('peFlag','is_batch_made')",T('Made fresh in batches','分批现做'))}${tick(d.is_restock_only,"APP.cmd('peFlag','is_restock_only')",T('Restock-only, internal','仅内部补货'))}`)}
+    ${card(T('Free of','不含'),PE_FREE_OF.map(([id,en,zh])=>tick(d.free.indexOf(id)>=0,`APP.cmd('peFree','${escAttr(id)}')`,T(en,zh))).join('')
+      +(d.freeExtra.length?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(d.freeExtra.join(', '))}</span>`:''))}
+    ${card(T('Internal notes','内部备注'),`<textarea rows="3" style="resize:none" oninput="APP.cmd('peField','notes',this.value)">${escAttr(d.notes)}</textarea>`)}
+  </div>${footBar(`<div id="mPeFoot" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;justify-content:flex-end">${peFootHtml()}</div>`,'mPeBar')}`;
+}
+/* The sheet's door. The desktop hides the whole editor from an upstream-
+   catalogue tenant, whose core fields the server refuses (catalog_locked). */
+function peEntryRow(p){
+  if(!p||p._id==null||!prodCanEdit()||state.catalogMode==='upstream'||!canRoute('productedit')) return '';
+  return `<div class="card" style="padding:0">
+    <button class="row" ${state.prodBusy?'disabled':''} onclick="APP.cmd('peOpen',${Number(p._id)})">
+      <span style="flex:1;min-width:0;font-size:15px">${T('Details','详情')}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',20)}</span></button></div>`;
+}
+SUBS.productedit={title:['Details','详情'],
+  titleOf:()=>{ const e=state.pe, d=e&&e.draft; return d?escAttr(T(d.name_en||d.name_cn,d.name_cn||d.name_en)||T('Details','详情')):T('Details','详情'); },
+  backLabel:()=>T('Products','产品'),
+  render:()=>screenProductEdit()};
+/* Opening closes the sheet and stacks the screen, as Cost & Pricing does;
+   Back hands the operator back to the sheet of the same product. */
+reg('peOpen', id=>{
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(id));
+  if(!p||state.prodBusy||!prodCanEdit()||state.catalogMode==='upstream'||!canRoute('productedit')) return;
+  state.productSku=null; state.oosSku=null; prodRecordsDrop();
+  loadPe(p._id);
+  push('productedit');
+  const t=state.stack[state.stack.length-1];
+  if(t&&t.route==='productedit') t.pid=p._id;
+  render();
+});
+function pePopped(f){
+  // What the fields still hold goes on the wire first (the write starts in this
+  // task), then the screen's state is let go so a late read cannot restart it.
+  if(peAuto){ peAuto.flush(); if(peAuto.stop) peAuto.stop(); peAuto=null; }
+  state.pe=null; state.prodVer.open=false;
+  if(!f||f.route!=='productedit') return;
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(f.pid));
+  if(p) state.productSku=p.sku;
+}
+reg('peField', (k,v)=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()) return;
+  if(['name_en','name_cn','sku','weight','top_category','subcategory','tags','sell_price','compare_at_price','unit_cost','low_stock_threshold','notes'].indexOf(k)<0) return;
+  if(k==='unit_cost'&&!peCostOn(e)) return;
+  e.draft[k]=String(v==null?'':v);
+  // A new shop section resets the subcategory (pdOnTopCatChange), and repaints its list.
+  if(k==='top_category'){ e.draft.subcategory=''; render(); }
+  if(peAuto) peAuto.touch();
+});
+reg('peFact', (k,v)=>{
+  const e=state.pe; if(!e||!e.draft||!(k in e.draft.facts)||!prodCanEdit()) return;
+  e.draft.facts[k]=String(v==null?'':v); e.factsTouched=true;
+  if(peAuto) peAuto.touch();
+});
+reg('peFlag', k=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()) return;
+  if(['is_market','is_batch_made','is_restock_only','cost_incomplete'].indexOf(k)<0) return;
+  if(k==='cost_incomplete'&&!peCostOn(e)) return;
+  e.draft[k]=e.draft[k]?0:1; render(); if(peAuto) peAuto.touch();
+});
+/* pdShipModeChanged: Local only is exclusive — it clears Air and Land, and
+   ticking either of them clears it. */
+reg('peShip', k=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()||['air','land','local'].indexOf(k)<0) return;
+  const d=e.draft; d[k]=!d[k];
+  if(k==='local'&&d.local){ d.air=false; d.land=false; }
+  if((k==='air'||k==='land')&&d[k]) d.local=false;
+  render(); if(peAuto) peAuto.touch();
+});
+reg('peFree', id=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()||!PE_FREE_OF.some(x=>x[0]===id)) return;
+  const f=e.draft.free, i=f.indexOf(id);
+  if(i>=0) f.splice(i,1); else f.push(id);
+  render(); if(peAuto) peAuto.touch();
+});
+/* Typing in a description repaints nothing — the box is the live copy. */
+reg('peDesc', (k,html)=>{
+  const e=state.pe; if(!e||!e.draft||(k!=='desc_en'&&k!=='desc_cn')||!prodCanEdit()) return;
+  e.draft[k]=String(html==null?'':html);
+  if(peAuto) peAuto.touch();
+});
+/* The toolbar acts on whichever box holds the caret (the buttons keep it
+   there by refusing focus), then reads that box back into the draft. */
+reg('peRte', cmd=>{
+  if(['bold','italic','underline','insertUnorderedList','insertOrderedList','removeFormat'].indexOf(cmd)<0) return;
+  const el=document.activeElement;
+  if(!el||!el.getAttribute||el.getAttribute('contenteditable')!=='true') return;
+  try{ document.execCommand(cmd,false,null); }catch(err){}
+  CMD.peDesc(el.getAttribute('data-k'), el.innerHTML);
+});
+reg('peUndo', ()=>{ if(!peAuto) return; peAuto.undo(b=>{ const e=state.pe; if(!e) return;
+  /* Back to the visit's start: every field the payload carries, as loaded. */
+  const d=e.draft;
+  ['name_en','name_cn','sku','weight','top_category','subcategory','tags','low_stock_threshold','notes'].forEach(k=>{ d[k]=String(b[k]==null?'':b[k]); });
+  d.sell_price='sell_price' in b?String(b.sell_price):d.sell_price;
+  d.compare_at_price=b.compare_at_price?String(b.compare_at_price):'';
+  if('unit_cost' in b){ d.unit_cost=String(b.unit_cost); d.cost_incomplete=b.cost_incomplete?1:0; }
+  d.is_market=b.is_market; d.is_restock_only=b.is_restock_only; d.is_batch_made=b.is_batch_made;
+  const m=String(b.ship_modes||''); d.local=/(^|,)local(,|$)/.test(m); d.air=!d.local&&m.indexOf('air')>=0; d.land=!d.local&&m.indexOf('land')>=0;
+  const fo=String(b.free_of||'').split(',').map(s=>s.trim()).filter(Boolean);
+  d.free=fo.filter(x=>PE_FREE_OF.some(y=>y[0]===x)); d.freeExtra=fo.filter(x=>!PE_FREE_OF.some(y=>y[0]===x));
+  if(b.product_facts){ PE_FACTS.forEach(([,col])=>{ d.facts[col+'_en']=b.product_facts[col+'_en']||''; d.facts[col+'_cn']=b.product_facts[col+'_cn']||''; }); }
+  d.desc_en=b.description_en; d.desc_cn=b.description_cn;
+  render(); }); });
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden'&&peAuto) peAuto.flush();
+});
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
   const noAnim=state.prodMounted?'animation:none;':'';
@@ -29370,6 +30363,9 @@ function sheetProduct(){
        ${stockCard(p)}
        ${oosCard(p)}
        ${pcEntryRow(p)}
+       ${peEntryRow(p)}
+       ${salesCard(p)}
+       ${versionsRow(p)}
      </div>
      ${(prodCanEdit()||prodCanStock())?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div>`:''}</div>`;
@@ -32961,6 +33957,10 @@ const ROUTE_CAP={
   // on the capability that endpoint belongs to and not on a reports key they
   // never touch.
   inbox:['reviews:view','feedback:view'], sales:'dashboard:view', trend:'dashboard:view',
+  // §325 PD2 — the desktop Sales board's own any-of (TAB_CAP.sales), the door
+  // to the shop menu there.
+  shopmenus:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],
+  shopmenu:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],
   delivery:'delivery:view', invoices:'invoices:view', purchasing:'purchasing:view',
   /* §286 — a read of the same orders Purchasing shows, so the same key. Its
      writes (a payment, a correction) are purchasing:edit on the server and the
@@ -32998,6 +33998,8 @@ const ROUTE_CAP={
      tab gate; every write inside carries `materials:edit`, and every price
      `materials:costs` (failing closed). */
   materials:'materials:view', materialone:'materials:view',
+  // §325 PD5 — the product's Details screen: every write on it is products:edit.
+  productedit:'products:edit',
   /* A product's Cost & Pricing (§300 R6) opens with the catalogue; its link
      picker is a write, and a named branch in canRoute() below. */
   productcost:'products:view', productrecipe:'products:edit',
@@ -33952,6 +34954,11 @@ function render(){
   if(state.detailActions) html += layer('actions', sheetActions());
   if(state.rf&&state.detailId) html += layer('rf:'+state.rf.kind, sheetRefundForm());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
+  // §325 PD4 — a shop menu's row sheet and its Add product picker.
+  if(state.shm.edit) html += layer('shmedit:'+state.shm.edit.id, sheetShmEdit());
+  if(state.shm.pick) html += layer('shmpick', sheetShmPick());
+  // §325 PD2 — over the product it lists, and only while that product is open.
+  if(state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
@@ -34395,7 +35402,8 @@ function layers(){
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll();   // §325 X5: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
     if(t&&t.route==='productcost'&&!pcMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays
-    forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone); });
+    forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
+    if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
   // record is what opened the ORDER — a Recent orders row — the pair is stacked
@@ -34413,8 +35421,17 @@ function layers(){
   /* After the record, so Back closes it FIRST: the address sheet sits over the
      record it was opened from, exactly as its z-index says. */
   if(state.caddr) L.push(()=>{ state.caddr=null; });
+  if(state.productSku) L.push(()=>{ state.productSku=null; prodRecordsDrop(); });
+  // §325 PD4 — over the shop menu they belong to; not while a write is out.
+  if(state.shm.edit) L.push(()=>{ if(!state.shm.edit.busy) state.shm.edit=null; });
+  if(state.shm.pick) L.push(()=>{ if(!state.shm.pick.busy){ clearTimeout(_shmPickTimer); state.shm.pick=null; } });
+  // After the product, so Back closes the version list first (§325 PD2).
+  if(state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
+  /* "When it runs out" sits OVER the product sheet it was opened from (z-index
+     48 over 46), so it is listed after it and Back closes it first. It was
+     listed before, so Back took the product away from under an open picker
+     (§325 PD3, found in PD2). */
   if(state.oosSku) L.push(()=>{ state.oosSku=null; });
-  if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   // Over the order it prints, so Back closes the print view first (§300).
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });

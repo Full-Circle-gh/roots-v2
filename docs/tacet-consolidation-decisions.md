@@ -24170,3 +24170,188 @@ the desktop card's keys and body.
    `scripts/test_mobile_settings.js` (slow shard, not run) pinned "no way to
    switch it ON" — the hold §326.2 overturned; its case now asserts the row,
    and three new cases drive ON through both asks to the request.
+
+## §346 — A PRODUCT'S SALES AND VERSION HISTORY, AND THE SHOP MENUS, READ ON THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Three read-only records reached the phone. The product sheet now carries the
+editor's Sales card (units, revenue and rank over 7 / 30 / 90 days or all
+time, plus when the product last sold and on how many days) and a Version
+history row that opens the list of saved versions. A new **Shop menu** row in
+More lists every location's shop and opens one shop's record: its public
+code, its QR picture, the address a scan opens, a Download link, and its
+listings with price, kind and availability, under the desktop's menu filter.
+Nothing on these screens writes. Version restore (PD7), shop menu daily edits
+(PD4) and shop menu structure (PD13) come in their own steps, each with its
+desktop confirm.
+
+1. **Same endpoints, same windows, same sentences.** The Sales card calls
+   `GET /products/:id/sales?days=` with the desktop's four windows, for the
+   size on screen, and says "Last sale … · N selling days" exactly as
+   `pdSalesContext` does. A newer window wins over a slower, older answer (the
+   desktop's `_pdSalesSeq`). The card reads afresh each time the sheet opens.
+2. **Revenue follows the phone's money rule on top of the desktop's.** The
+   desktop shows revenue to anyone who can open a product, and so does the
+   phone, except a warehouse, dispatch or customer-service board
+   (`recapNoMoney`), which gets units and rank and no revenue tile at all, as
+   Trend and Home already do.
+3. **Version history is read-only until PD7.** The list shows Current on the
+   newest, Original on the baseline, and who saved each version. It carries no
+   Restore button yet: a row offering a write that is not built would be a
+   control that does nothing. The desktop's "Roll this product back…" subline
+   is left off for the same reason.
+4. **The shop menu's door is a More row, beside Sales.** On the desktop the
+   door is the Sales board's location card, and the board opens for any of
+   five keys (`dashboard:view`, `meituan:view`, `guanyi:view`, `eleme:view`,
+   `integrations:view`). The phone's Sales screen opens for `dashboard:view`
+   alone, so a door there would shut out a Meituan-only operator who reaches
+   the desktop page. The More row and both routes are gated on the board's
+   own any-of. This is the 29th row under Operations.
+5. **A location with no shop says "Not set up" and does not open.** There is
+   nothing to read until a shop is created, and creating one is PD13's.
+6. **The QR is the desktop's, including its honesty.** The picture is
+   `qr.png`, and the address underneath comes from `GET /shops/:id/qr`. A
+   tenant with no public domain gets "QR unavailable" and neither the picture
+   nor a Download link that would only answer with a refusal. An inactive
+   shop shows no QR and does not ask for one. The public code stays
+   unlabelled, as on the desktop (no live Chinese source for "shop code").
+7. **Prices on the menu are shown as the desktop shows them**: to anyone who
+   reaches the page. They are catalogue-level prices, already shown on the
+   phone's Products list.
+
+## §347 — A WASTE ENTRY CAN BE VOIDED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Waste ledger gained the desktop's Void. On a live loss, an account
+holding `waste:void` sees Void on the row. It asks the desktop's question,
+which says what goes back into stock, then sends the desktop's request,
+`POST /waste/:id/void` with an empty body. The server writes the reversal and
+returns the stock; nothing about that changed. The rule this file's Waste
+comment recorded, "No void" (it was an owner's key, rarely held in the aisle),
+is retired: the key still decides, and the button is drawn only for whoever
+holds it. A Back-order defect found in PD2 is fixed here too.
+
+1. **Void is offered where the desktop offers it**: on a live loss only, never
+   on a reversal and never on a row already voided, and only for `waste:void`
+   (the desktop's `data-cap`). The server's own 409s back both rules.
+2. **The confirm is the desktop's, word for word**: "Void this waste entry?",
+   "N × product goes back into stock. The entry stays in the list, marked
+   voided.", with no measure word in either language, because a waste entry
+   is not always pieces. Nothing is sent before it is confirmed.
+3. **While it is in flight the row says Voiding… and every Void waits.**
+   Success is confirmed by a toast and the list is read again.
+4. **A void that does not go through says so above the list and stays there**
+   until the next void or filter, never in a toast. A permission refusal says
+   why (§325's refusal words). A row already voided elsewhere shows the
+   server's own sentence, as the desktop does, and the list is read again,
+   because the screen was out of date. Anything else shows the phone's
+   "Nothing has changed — try again".
+5. **Back closes the "When it runs out" picker before the product sheet under
+   it.** The Back stack listed the picker before the product, so Back took the
+   product away and left the picker standing over nothing. It now follows the
+   z-order, as the version list added in PD2 already did.
+
+## §348 — A SHOP MENU'S DAILY EDITS COME TO THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The read-only Shop menu screens from PD2 gained the desktop's daily writes,
+each behind `stores:edit` as on the desktop. A row's switch makes the
+listing available or not. Tapping a row opens a sheet for its price and kind
+(Stocked / Made here) and for Remove. **+ Add product** opens a picker that
+searches the shop's candidates and adds one at a time, with the desktop's
+**Add all N Online store products**. Each write is the desktop's request:
+`PATCH /shops/:id/listings/:lid` (`{is_available}`, `{price}`,
+`{fulfilment_mode}`), `DELETE /shops/:id/listings/:lid`,
+`GET /shops/:id/candidates?q=`, `POST /shops/:id/listings
+{store_product_id}`, `POST /shops/:id/listings/add-published`. Creating a
+shop, renaming it, switching it on and off, and moving its products stay for
+PD13.
+
+1. **Without `stores:edit` the menu is exactly PD2's read-only screen**: no
+   switch, no row sheet, no + Add product, and each command refuses. The
+   server's `requireStoresEdit` is unchanged.
+2. **Available is the row's switch, as on the desktop**: it flips at once,
+   sends `{is_available: 1|0}`, takes the server's row, and if refused flips
+   back and says why above the list (the refusal stays; a toast never reports
+   a failure).
+3. **Price and kind share one sheet, and Save sends one PATCH per field that
+   changed**: the desktop's body, `{price}` or `{fulfilment_mode}`, with
+   `price` sent as typed, as the desktop's input sends it. Nothing changed
+   sends nothing. A price that is not a number of 0 or more is refused in the
+   sheet before anything is sent, using the phone's existing price sentence;
+   the server's `bad_price` gives the same sentence.
+4. **Remove asks first, though the desktop does not** (the §325 survey's
+   defect 14). The desktop's reasoning was that a listing is only a join and
+   adding the product back restores it. But the price and kind set on that
+   listing do not come back, so a stray tap on a phone costs something. The
+   confirm names the product. The desktop's own Remove is unchanged.
+5. **The picker is the desktop's panel as a sheet**: the search waits for a
+   220 ms pause, the last search asked wins, and only the list under the box
+   repaints, so the keyboard stays. A product added leaves the picker and
+   joins the menu, and the picker stays open for the next one. **Add all**
+   shows while the unfiltered answer counts Online store products this menu
+   lacks, keeps its count while a search narrows the list, asks the desktop's
+   question (count first, the §47 caveat in the body), and afterwards
+   re-reads the count from the server rather than working it out on the
+   phone.
+6. **Back closes the row sheet and the picker before the menu, but not while
+   a write from them is in flight.**
+
+## §349 — A PRODUCT'S CORE FIELDS AND DESCRIPTION ARE EDITED ON THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The product sheet gained a **Details** row, for `products:edit`, which opens
+a screen holding the desktop editor's core fields: Basics (both names, SKU),
+Where it shows (shop section, subcategory, badge, size), price and was-price,
+the hand-typed cost where it is the operator's, the low-stock line, Product
+details (the five facts in both languages), the two-language rich
+Description, Shipping, Flags, Free of and Internal notes. It saves itself as
+the desktop does: through the shared autosave engine (`tacet-autosave.js`),
+800 ms after the last edit, one write in flight, `PATCH /products/:id`, with
+Undo and Version history on its foot. Photos (PD6), sizes (PD9), bundles
+(PD10), customer choices (PD11) and the page designer (§326.7) are not on it.
+
+1. **It sends only the fields that changed, under the desktop's keys and
+   meanings.** The desktop sends its whole form. The server writes only the
+   keys it is given (an absent key means "not touched", the contract the
+   cost and facts guards already depend on). So a smaller body is the same
+   write, with fewer ways to put a stale value back over another screen's.
+   The two descriptions always travel together with `description_format:
+   'rich'`, and the cost always travels with its "not complete" tag.
+2. **The desktop's autosave rules, each one asserted:**
+   - nothing is sent until there is a name (the desktop's hold, in its words);
+   - an emptied price is never sent, because it would make the product free;
+   - a price that is not a number of 0 or more is held, with the phone's
+     existing price sentence;
+   - **`unit_cost` is sent only when it was loaded and is the operator's to
+     type**: `products:costs` on a board that may read money, the server sent
+     the key, the build-list read came back, and no recipe, bundle or build
+     list owns the figure (`pdApplyCostSource`'s order). In every other case
+     the box is not drawn and the key never leaves the phone. A build list
+     that could not be read counts as "do not know", never as "none";
+   - **Product facts are sent only once a box has been touched** (§156);
+   - **`sku_taken`** names the product holding the code, in `skuTakenMsg`'s
+     words, on the screen's foot. A refusal says why there too.
+3. **Product facts keep keys the phone does not show.** The bag is generic, so
+   a page editor or another product type can file keys beyond the five boxes.
+   When the phone writes the bag, it carries those keys back rather than
+   dropping them. The desktop's `pdFactsGet` drops them; that is recorded
+   here as a desktop gap, not fixed.
+4. **Rich text on a phone is the formatting a thumb can reach**: bold,
+   italic, underline, bulleted and numbered lists, and clear formatting, with
+   the desktop's own names. Everything else the desktop toolbar does (colour,
+   highlight, alignment, indent, links, inline images, tables, rules,
+   fullscreen) is not offered, but markup already in a description is kept
+   as it is. A legacy plain description opens as HTML and saves as rich, as
+   on the desktop.
+5. **What it does not send.** Status is left alone (the desktop's dead field
+   heals itself on its own saves). The shop switch, the out-of-stock rule and
+   the supplier switches stay on the product sheet, where §325's safety step
+   gated them. AI "Auto-fill from text" for the facts is not on the phone in
+   this step.
+6. **An upstream-catalogue tenant gets no Details door**, as its desktop shows
+   no editor (the server refuses those core fields with `catalog_locked`).
+7. **Leaving sends what is pending and hands back the product's sheet**, as
+   Cost & Pricing does. After each save, the catalogue row the rest of the
+   phone reads takes the saved name, code, price and section, and keeps its
+   per-store stock.

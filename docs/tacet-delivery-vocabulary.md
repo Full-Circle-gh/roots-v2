@@ -1,5 +1,13 @@
 # Tacet delivery vocabulary — locked
 
+**v1.248 · 2026-09-30 · §349 A PRODUCT'S DETAILS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (THE COST TAG'S CHINESE), THE REST COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's details on the phone (§349)*.
+
+**v1.247 · 2026-09-30 · §348 A SHOP MENU'S DAILY EDITS ON THE PHONE — TWO STRINGS COMPOSED BY CLAUDE (THE REMOVE CONFIRM THE DESKTOP NEVER ASKED, AND ITS PROGRESS WORD), THE REST COPIED WHOLE.** See *A shop menu's daily edits on the phone (§348)*.
+
+**v1.246 · 2026-09-30 · §347 VOIDING WASTE ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM THE DESKTOP WASTE SCREEN.** See *Voiding a waste entry on the phone (§347)*.
+
+**v1.245 · 2026-09-30 · §346 A PRODUCT'S SALES AND VERSIONS, AND THE SHOP MENUS, ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's sales, its versions, and the shop menus on the phone (§346)*.
+
 **v1.244 · 2026-09-30 · §345 DELIVERY SETTINGS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Delivery settings on the phone (§345)*.
 
 **v1.243 · 2026-09-30 · §344 THE REFUND WORKFLOW ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *The refund workflow on the phone (§344)*.
@@ -10770,3 +10778,130 @@ The phone's own, already live: `Shoppers are told · 顾客看到`,
 `Loading… · 加载中…`, `Could not load this. · 无法加载。`,
 `Enter a price — a number, 0 or more. · 请输入价格 — 0 或以上的数字。`, the version-history
 strings, and the save-refusal sentence.
+
+## A product's sales, its versions, and the shop menus on the phone (§346)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's product sheet and its two new Shop menu screens (`public/m.html`).
+
+From the desktop product editor (`public/retail-admin/09-products.js`,
+`public/retail-admin.html`): the Sales card's title `Sales · last N days ·
+销量 · 最近 N 天` and `Sales · all time · 销量 · 全部时间`; `units sold ·
+售出件数`, `revenue · 营业额`, `rank · 排名`; `No sales · 暂无销量`;
+`No sales in this window · 此区间暂无销量`; `Last sale … · 最近售出 …`, `today ·
+今天`, `yesterday · 昨天`, `N days ago · N 天前`, `1 selling day · 1 天有销量`,
+`N selling days · N 天有销量`; `Couldn’t load sales · 无法加载销量`. The
+version list's `Version history · 历史版本`, `Current · 当前`, `Original ·
+原始版本`, `by · 操作人:`, `Today · 今天`, `Yesterday · 昨天`, `Could not load
+versions: · 无法加载版本:` and `No earlier versions yet — they’re saved
+automatically as you edit. · 暂无历史版本 — 编辑时会自动保存。`
+
+From the desktop shop menu (`public/retail-admin/28-shops.js`, and the Sales
+board's `Shop menu · 门店商品` link in `01-core.js`): `Shop menu · 门店商品`,
+`QR code · 二维码`, `QR unavailable · 二维码不可用`, `Download · 下载`,
+`Inactive · 已停用`, `Not set up · 未开通`, `Load failed · 加载失败`, `Search by
+name or SKU… · 按名称或货号搜索…`, `No products yet · 还没有商品`, `No products
+match this filter · 没有匹配此筛选条件的产品`, `Stocked · 备货`, `Made here ·
+现做`, `Available · 有货`, `Sold out · 售罄`. The filter's count is bare
+numerals ("1 / 3"), as on the desktop.
+
+The phone's own live pairs: the window chips `7 days · 7 天`, `30 days · 30 天`,
+`90 days · 90 天`, `All · 全部`; a shop's count `N products · 件商品` (the
+Categories screen's); `No stores · 没有门店`; `Try again · 重试`; `Loading… ·
+加载中…`.
+
+The public shop code stays unlabelled, as on the desktop: there is still no
+live Chinese source for "shop code", and restructuring around it was
+preferred over composing one.
+
+## Voiding a waste entry on the phone (§347)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's Waste ledger (`public/m.html`). Every string is the desktop Waste
+screen's own (`public/retail-admin/20-waste.js`): `Void · 作废`, `Voiding… ·
+作废中…`, `Voided · 已作废`, the confirm's title `Void this waste entry? ·
+作废这条损耗记录?` and its sentence `N × product goes back into stock. The
+entry stays in the list, marked voided. · product × N 将退回库存。该记录仍保留在
+列表中,标记为已作废。` (no measure word in either language, as the desktop
+decided). The confirm's Cancel is the phone sheet's own `Cancel · 取消`. A
+failed void reuses the phone's live `That did not go through. Nothing has
+changed — try again. · 没有成功。数据没有变化 — 请重试。`, and a refusal uses
+§325's refusal words. The server's two 409 sentences ("This entry has
+already been voided.", "This row is itself a reversal.") are shown as the
+server sends them, in English only, as the desktop shows them.
+
+## A shop menu's daily edits on the phone (§348)
+
+Operator register only (Rule 1): the phone admin's Shop menu record
+(`public/m.html`). Copied whole from the desktop shop menu
+(`public/retail-admin/28-shops.js`): `Price · 价格`, `Kind · 类型`, `Stocked ·
+备货`, `Made here · 现做`, `Available · 有货`, `Sold out · 售罄`, `Remove · 移除`,
+`+ Add product · + 添加商品`, `Adding… · 添加中…`, `Search a product to add… ·
+搜索商品以添加…`, `Cancel · 取消`, `Saved · 已保存`, `No products match this
+filter · 没有匹配此筛选条件的产品`, `No products yet · 还没有商品`, `Load failed ·
+加载失败`, `+ Add all N Online store products · + 添加全部 N 个线上商城商品`, and
+the Add all confirm whole: `Add N products to this menu? · 添加 N 个商品到此菜单？`,
+its body, `Add · 添加`. The phone's own live pairs: `Save · 保存`, `Saving… ·
+保存中…`, `Removed · 已移除`, `Enter a price — a number, 0 or more. · 请输入价格 —
+0 或以上的数字。`, `That did not go through. Nothing has changed — try again. ·
+没有成功。数据没有变化 — 请重试。`, and §325's refusal words.
+
+**Composed by Claude, 2026-10-01** — the desktop removes a listing without
+asking, so it has no question and no progress word to copy:
+
+| shipped | built from |
+|---|---|
+| `Remove from this menu? · 从此菜单移除？` | `Remove · 移除` (28-shops.js) + `此菜单` from the live `Add N products to this menu? · 添加 N 个商品到此菜单？`, with that title's full-width `？` |
+| `Removing… · 移除中…` | `移除` + `中…`, the shape of the live `保存中…` / `添加中…` |
+
+**Live candidates rejected:** `Remove this line? · 移除该行？` (purchasing — a
+listing is not a line); `Remove this photo? · 删除这张照片?` (删除 is delete,
+and a listing comes back when the product is added again); `Removing… ·
+删除中…` (desktop, live, but it says 删除 under a button that says 移除).
+
+## A product's details on the phone (§349)
+
+Operator register only (Rule 1): the phone admin's Details screen
+(`public/m.html`). Copied whole from the desktop product editor
+(`public/retail-admin.html`, `public/retail-admin/09-products.js`,
+`01-core.js`):
+- **Section and field labels:** `Details · 详情`, `Basics · 基础`, `Name · 名称`,
+  `Name (second language) · 名称(第二语言)`, `SKU · 货号`, `Where it shows ·
+  分类与陈列`, `Shop section · 商店分区`, `Subcategory · 子分类`, `Badge · 标签`
+  and its options (`None · 无`, `Auto · 自动`, `NEW · 新品`, `POP · 热门`,
+  `SALE · 特价`, `HOT · 推荐`), `Size / weight · 规格`, `Was price · 划线价`,
+  `Stock · 库存`, `Low-stock alert at · 低库存提醒阈值` and its placeholder
+  `Default N · 默认 N`.
+- **Product details:** `Product details · 产品详情` and the five facts (`Origin ·
+  产地`, `Ingredients · 配料`, `Storage · 储存方式`, `Shelf life · 保质期`,
+  `Serving suggestion · 食用建议`) with each box's own placeholder, English in
+  the English box and Chinese in the Chinese one, as on the desktop.
+- **Description:** `Description · 描述`, the toolbar names `Bold · 加粗`,
+  `Italic · 斜体`, `Underline · 下划线`, `Bulleted list · 项目符号`, `Numbered
+  list · 编号`, `Clear formatting · 清除格式`, and the box labels `English` /
+  `中文`, which are data, as on the desktop.
+- **Shipping, flags, free-of, notes:** `Shipping · 配送方式`, `Air · 空运`,
+  `Land · 陆运`, `Local only · 仅广州`, `Flags · 标记`, `Sold at markets ·
+  市集销售`, `Made fresh in batches · 分批现做`, `Restock-only, internal ·
+  仅内部补货`, `Free of · 不含`, `Nuts · 无坚果`, `Soy · 无大豆`, `Gluten ·
+  无麸质`, `5 Spice · 无五香`, `Internal notes · 内部备注`.
+- **Autosave and refusals:** `Add a name to start autosaving · 填写名称后自动保存`,
+  `skuTakenMsg`'s sentences whole, `A SKU is required · 需要填写货号`, `This
+  catalog is managed by the upstream system · 该商品目录由上游系统管理`.
+
+The phone's own live pairs: `Price · 价格`, `Cost · 成本`, `Products · 产品`,
+`Saving… · 保存中…`, `All changes saved · 已自动保存`, `Save failed: · 保存失败:`,
+`Undo · 撤销`, `Version history · 历史版本`, `Enter a price — a number, 0 or
+more. · 请输入价格 — 0 或以上的数字。`, `That did not save. Nothing has changed —
+try again. · 没有保存成功。数据没有变化 — 请重试。`, `Could not load this. ·
+无法加载。`, `Loading… · 加载中…`.
+
+**Composed by Claude, 2026-10-01:**
+
+| shipped | built from |
+|---|---|
+| `This cost is not complete · 成本不完整` | The desktop's checkbox label is English only (`This cost is not complete`). The Chinese is the phrase the desktop already uses for this tag in its live margin note, `已标记“成本不完整”` (09-products.js). |
+
+**Live candidates rejected:** `显示成本不完整` (from the recipe-unit warning; it
+says "the displayed cost is incomplete", a reading, not the operator's
+statement).
