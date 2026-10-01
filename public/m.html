@@ -35450,7 +35450,9 @@ function peDraftFrom(p){
     desc_en:rich?peRichForEdit(p.description_en):pePlainToHtml(p.description_en),
     desc_cn:rich?peRichForEdit(p.description_cn):pePlainToHtml(p.description_cn),
     // §325 PD10 — the two bundles (buLoad / bpLoad).
-    ...peBundleDraft(p)};
+    ...peBundleDraft(p),
+    // §325 PD11 — the customer's choices; null when the row did not carry them (never "none").
+    opts:peOptsDraft(p.options)};
 }
 function peBody(d,e){
   const t=v=>String(v==null?'':v).trim();
@@ -35477,6 +35479,8 @@ function peBody(d,e){
      description_en:peRteClean(d.desc_en),description_cn:peRteClean(d.desc_cn),description_format:'rich'},
     // §325 PD10 — buBody / bpBody / bpModeBody, the desktop's three keys.
     d.bu?{bundle:peBuBody(d.bu),bundle_items:peBpBody(d),bundle_mode:peBpModeBody(d)}:{},
+    // §325 PD11 — optBody, and only once they were read (OPT_LOADED).
+    Array.isArray(d.opts)?{options:peOptBody(d.opts)}:{},
     Array.isArray(e.images)?{images:e.images.slice()}:{});
 }
 /* What one save sends: the keys whose value moved since the last save that
@@ -35490,6 +35494,9 @@ function peDiff(b,base){
   if('unit_cost' in out||'cost_incomplete' in out){ out.unit_cost=b.unit_cost; out.cost_incomplete=b.cost_incomplete; }
   // §325 PD10 — a bundle's parts and how it is stocked travel together, as the desktop sends them.
   if('bundle_items' in out||'bundle_mode' in out){ out.bundle_items=b.bundle_items; out.bundle_mode=b.bundle_mode; }
+  // §325 PD11 — an empty list removes questions only when said out loud
+  // (options_clear), and it is said only when the server last held some.
+  if('options' in out&&!out.options.length&&base&&Array.isArray(base.options)&&base.options.length) out.options_clear=true;
   return out;
 }
 /* skuTakenMsg (01-core.js), word for word. */
@@ -35636,6 +35643,7 @@ function screenProductEdit(){
     ${peSizesCard()}
     ${peBuCard()}
     ${peBpCard()}
+    ${peOptCard()}
     ${card(T('Stock','库存'),inp('low_stock_threshold',T('Low-stock alert at','低库存提醒阈值'),'inputmode="numeric" placeholder="'+escAttr(T('Default','默认')+' '+prodLowThreshold({}))+'"'))}
     ${card(T('Product details','产品详情'),PE_FACTS.map(([dom,col,label,phEn,phCn])=>`<div style="display:flex;flex-direction:column;gap:6px">${lab(T(...label))}
       <input value="${escAttr(d.facts[col+'_en'])}" placeholder="${escAttr(phEn)}" oninput="APP.cmd('peFact','${col}_en',this.value)">
@@ -35752,6 +35760,8 @@ reg('peUndo', ()=>{ if(!peAuto) return; peAuto.undo(b=>{ const e=state.pe; if(!e
   if(e.galDirty&&e.galOrig) e.gallery=e.galOrig.slice();
   // §325 PD10 — both bundles, as they were when the screen opened.
   if('bundle' in b) Object.assign(d,peBundleDraft({bundle:b.bundle,bundle_items:b.bundle_items,bundle_mode:b.bundle_mode}));
+  // §325 PD11 — the questions as they were read.
+  if('options' in b) d.opts=peOptsDraft(b.options);
   render(); }); });
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden'&&peAuto) peAuto.flush();
@@ -35858,7 +35868,8 @@ function peBpCard(){
 function pePickRows(){
   const e=state.pe, P=e&&e.pick, d=e&&e.draft; if(!P||!d) return [];
   const q=String(P.q||'').toLowerCase().trim();
-  const have=new Set(P.kind==='bp'?d.bp.map(c=>c.id):d.bu.ids);
+  // §325 PD11 — a stock source may be any product but this one (optPickerList).
+  const have=new Set(P.kind==='bp'?d.bp.map(c=>c.id):P.kind==='opt'?[Number(e.pid)]:d.bu.ids);
   return (DB.products||[]).filter(p=>!have.has(Number(p._id))&&(P.kind!=='bp'||(Number(p._id)!==Number(e.pid)&&!p.parts)))
     .filter(p=>!q||String(p.hay||'').indexOf(q)>=0).slice(0,40);
 }
@@ -35869,7 +35880,9 @@ function pePickListHtml(){
     <span style="font-size:14px;color:var(--brick-ink)">${T('Load failed','加载失败')}</span>
     <button class="btn2" style="width:auto;padding:0 16px" onclick="APP.cmd('pePickRetry')">${T('Try again','重试')}</button></div>`;
   if(!rows.length) return `<div style="padding:24px 20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No matches','无匹配')}</div>`;
-  return rows.map(p=>{ const tag=String(p.vLabel||p.size||p.rawSku||'').trim();
+  const kind=state.pe&&state.pe.pick&&state.pe.pick.kind;
+  // A stock source spells out size and SKU (_optStockName): two jars of one paste must not read alike.
+  return rows.map(p=>{ const tag=kind==='opt'?[p.vLabel,p.size,p.rawSku].map(x=>String(x||'').trim()).filter(Boolean).join(' · '):String(p.vLabel||p.size||p.rawSku||'').trim();
     return `<button class="row" style="min-height:52px;padding:10px 16px" onclick="APP.cmd('pePickAdd',${Number(p._id)})">
       <span style="flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere">${escAttr(T(...p.name))}${tag?` <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(tag)}</span>`:''}</span>
       <span style="flex:none;color:var(--text-secondary);display:flex">${ic('plus',18,2)}</span></button>`; }).join('');
@@ -35881,7 +35894,7 @@ function sheetPePick(){
      <div style="flex:none;padding:8px 16px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:center;gap:10px">
          <div style="flex:1;min-width:0">${searchBox(`<input id="mPePickQ" inputmode="search" enterkeyhint="search" value="${escAttr(P.q)}"
-           placeholder="${T('Search a product to add…','搜索商品以添加…')}" style="width:100%" oninput="APP.cmd('pePickQ',this.value)"
+           placeholder="${P.kind==='opt'?T('Search a product to use for stock…','搜索作为库存来源的商品…'):T('Search a product to add…','搜索商品以添加…')}" style="width:100%" oninput="APP.cmd('pePickQ',this.value)"
            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mPePickClr',!!P.q)}</div>
          <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('pePickClose')">${T('Close','关闭')}</button></div></div>
      <div id="mPePickList" style="flex:1;min-height:0;overflow-y:auto;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">${pePickListHtml()}</div></div>`;
@@ -35927,12 +35940,197 @@ reg('pePickQ', v=>{
 reg('pePickAdd', id=>{
   const e=state.pe, d=e&&e.draft, P=e&&e.pick; if(!d||!P||!prodCanEdit()) return;
   const n=Number(id); if(!pePickRows().some(p=>Number(p._id)===n)) return;
+  if(P.kind==='opt'){ peOptLinkTo(P.oi,P.ci,n); e.pick=null; render(); if(peAuto) peAuto.touch(); return; }
   if(P.kind==='bp'){ if(!d.bp.some(c=>c.id===n)) d.bp.push({id:n,qty:1}); }
   else if(d.bu.ids.indexOf(n)<0) d.bu.ids.push(n);
   P.q=''; render(); if(peAuto) peAuto.touch();
 });
 reg('pePickClose', ()=>{ const e=state.pe; if(e&&e.pick){ e.pick=null; render(); } });
 reg('pePickRetry', ()=>{ loadCatalogue(true); pePickRepaint(); });
+/* ==========================================================================
+   §325 PD11 — WHAT THE CUSTOMER CHOOSES, ON THE DETAILS SCREEN
+   (desktop: 09-products.js optLoad / optRender / _optChoiceRow / optType /
+    optReq / optLimit / optDefault / optAddOption / optAddExtras / optPick /
+    optUnlink / optBody, and pdCollectBody's OPT_LOADED / options_clear gate)
+   --------------------------------------------------------------------------
+   Questions a shopper answers when adding the product: a free pick (dressing,
+   spice — "Pick one", never touches stock) or paid extras ("Pick any", each
+   with a charge and, optionally, a linked product whose stock it draws on and
+   which sells out with it). They ride the Details autosave as `options`, in
+   optBody's shape, and the server's save is REPLACE-ALL — which is why two
+   rules travel with them, the two that stopped 39 products losing their
+   questions:
+     • NOT READ, NOT SENT (OPT_LOADED). The questions come in the same answer
+       as the rest of the product; a row that did not carry them leaves the
+       draft's list null, the card says it could not load, and no save ever
+       mentions options;
+     • AN EMPTY LIST IS SAID OUT LOUD (options_clear), and only when the server
+       last held questions and the operator took them all away. Silence leaves
+       them standing. The desktop measures "last held" from the load; the
+       phone from the last save that landed, so a question added and then
+       removed in one visit is cleared too.
+   Like every field on this screen only what changed is sent; a half-typed
+   question or choice is not part of the list (optBody's filter) until it has
+   words. Order is Move up / Move down rather than the desktop's drag. */
+function peOptsDraft(list){
+  if(!Array.isArray(list)) return null;
+  return list.map(o=>({question_en:String((o&&o.question_en)||''),question_cn:String((o&&o.question_cn)||''),
+    type:(o&&o.type)||'single', is_required:o&&o.is_required?1:0,
+    min_choices:Number(o&&o.min_choices)||0, max_choices:Number(o&&o.max_choices)||0,
+    choices:((o&&o.choices)||[]).map(c=>({label_en:String((c&&c.label_en)||''),label_cn:String((c&&c.label_cn)||''),
+      price_delta:Number(c&&c.price_delta)||0, is_default:c&&c.is_default?1:0,
+      stock_product_id:(c&&c.stock_product_id)?Number(c.stock_product_id):null}))}));
+}
+/* optBody, word for word: drop empty choices, then questions with nothing to ask. */
+function peOptBody(opts){
+  return (opts||[]).map(o=>{
+    const type=['single','multi','text'].indexOf(o.type)>=0?o.type:'single';
+    const choices=type==='text'?[]:(o.choices||[])
+      .map(c=>({label_en:String(c.label_en||'').trim(),label_cn:String(c.label_cn||'').trim(),price_delta:Number(c.price_delta)||0,is_default:c.is_default?1:0,stock_product_id:c.stock_product_id||null}))
+      .filter(c=>c.label_en||c.label_cn);
+    const lim=type==='multi'
+      ? {min:Math.max(0,Math.floor(Number(o.min_choices)||0)),max:Math.max(0,Math.floor(Number(o.max_choices)||0))}
+      : {min:0,max:0};
+    return {question_en:String(o.question_en||'').trim(),question_cn:String(o.question_cn||'').trim(),type,
+      is_required:(o.is_required||lim.min>0)?1:0,min_choices:lim.min,max_choices:lim.max,choices};
+  }).filter(o=>(o.question_en||o.question_cn)&&(o.type==='text'||o.choices.length));
+}
+const peOptBlank=()=>({label_en:'',label_cn:'',price_delta:0,is_default:0,stock_product_id:null});
+/* optPick: the link, the labels seeded when still blank, the charge from the product's own price. */
+function peOptLinkTo(oi,ci,pid){
+  const d=state.pe&&state.pe.draft, o=d&&d.opts&&d.opts[oi], c=o&&o.choices[ci]; if(!c||o.type==='single') return;
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(pid));
+  c.stock_product_id=Number(pid);
+  if(p){
+    if(!c.label_en) c.label_en=p.name[0]==='—'?'':p.name[0];
+    // mapProduct fills a missing Chinese name with the English one; that is not a Chinese name.
+    if(!c.label_cn&&p.name[1]!==p.name[0]&&p.name[1]!=='—') c.label_cn=p.name[1];
+    if(!(Number(c.price_delta)>0)&&Number(p.priceNum)>0) c.price_delta=Number(p.priceNum);
+  }
+}
+function peOptCard(){
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu) return '';
+  const head=`<div class="eyebrow">${T('Options (customer chooses)','选项(顾客选择)')}</div>`;
+  if(!Array.isArray(d.opts)) return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">${head}
+    <span style="font-size:14px;color:var(--brick-ink)">${T('Could not load. Close and try again.','加载失败，请关闭后重试。')}</span></div>`;
+  const edit=prodCanEdit(), opts=d.opts, dis=edit?'':'disabled';
+  const sm=(cmd,icon,label,off)=>edit?`<button class="iconbtn" style="width:32px;height:32px" ${off?'disabled':''} aria-label="${label}" onclick="${cmd}">${ic(icon,16,2)}</button>`:'';
+  const blocks=opts.map((o,oi)=>{
+    const paid=o.type!=='single';
+    const typeSel=`<select style="flex:1;min-width:0" ${dis} aria-label="${T('How the customer answers','顾客如何选择')}" onchange="APP.cmd('peOptType',${oi},this.value)">
+        <option value="single"${o.type==='single'?' selected':''}>${T('Pick one','单选')}</option><option value="multi"${o.type==='multi'?' selected':''}>${T('Pick any','多选')}</option>
+        ${o.type==='text'?`<option value="text" selected disabled>${T('Type an answer (unsupported)','填写(暂不支持)')}</option>`:''}</select>`;
+    const limBox=(k,title)=>`<input value="${Number(o[k])>0?Number(o[k]):''}" placeholder="0" inputmode="numeric" style="width:52px;text-align:center" ${dis} title="${title}" aria-label="${title}" onchange="APP.cmd('peOptLimit',${oi},'${k}',this.value)">`;
+    const lim=o.type==='multi'?`<span style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text-secondary)" title="${T('0 in a box means no limit','填 0 表示不限')}">${T('Pick','选')}${limBox('min_choices',T('Fewest they must pick (0 = no limit)','至少选几项(0 = 不限)'))}–${limBox('max_choices',T('Most they can pick (0 = no limit)','最多选几项(0 = 不限)'))}${T('','项')}</span>`:'';
+    const req=`<button onclick="APP.cmd('peOptReq',${oi})" ${dis} aria-pressed="${!!o.is_required}" title="${T('Customer must choose before adding to cart','加入购物车前必须选择')}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;color:var(--text-primary);font-size:14px">
+        <span style="flex:none;width:20px;height:20px;border-radius:6px;border:1.75px solid ${o.is_required?'var(--text-primary)':'var(--border-strong)'};background:${o.is_required?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${o.is_required?ic('check',13,2.5):''}</span>${T('Required','必选')}</button>`;
+    const choices=o.type==='text'?'':(o.choices.length?o.choices.map((c,ci)=>{
+      const def=`<button onclick="APP.cmd('peOptDefault',${oi},${ci})" ${dis} aria-pressed="${!!c.is_default}" aria-label="${o.type==='single'?T('Default pick','默认选项'):T('Pre-selected','默认勾选')}" title="${o.type==='single'?T('Default pick','默认选项'):T('Pre-selected','默认勾选')}"
+          style="flex:none;width:22px;height:22px;border-radius:${o.type==='single'?'50%':'6px'};border:1.75px solid ${c.is_default?'var(--text-primary)':'var(--border-strong)'};background:${c.is_default&&o.type!=='single'?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer">${c.is_default?(o.type==='single'?'<span style="width:10px;height:10px;border-radius:50%;background:var(--text-primary)"></span>':ic('check',13,2.5)):''}</button>`;
+      let link='';
+      if(paid&&c.stock_product_id){
+        const lp=(DB.products||[]).find(x=>Number(x._id)===Number(c.stock_product_id));
+        const stk=lp&&lp.stock!=null?` · ${lp.stock} ${T('in stock','库存')}`:'';
+        link=`<span style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary)" title="${T('Draws from this product’s stock','占用该商品库存')}">${ic('link',14,2)}<span style="flex:1;min-width:0;overflow-wrap:anywhere">${escAttr(peProdName(c.stock_product_id))}${escAttr(stk)}</span>
+          ${edit?`<button class="iconbtn" style="width:30px;height:30px" aria-label="${T('Unlink','取消关联')}" onclick="APP.cmd('peOptUnlink',${oi},${ci})">${ic('x',15,2)}</button>`:''}</span>`;
+      }else if(paid&&edit){
+        link=`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px;min-height:34px;font-size:13px" title="${T('Link a product so this extra uses its stock','关联商品,使此加项占用其库存')}" onclick="APP.cmd('peOptLinkOpen',${oi},${ci})">${T('+ Stock product','+ 关联库存商品')}</button>`;
+      }
+      return `${ci?'<div class="sep"></div>':''}<div style="display:flex;flex-direction:column;gap:6px;padding:8px 0">
+        <div style="display:flex;align-items:center;gap:8px">${def}
+          <input value="${escAttr(c.label_en)}" placeholder="${T('Choice EN','选项(英文)')}" style="flex:1;min-width:0" ${dis} oninput="APP.cmd('peOptC',${oi},${ci},'label_en',this.value)">
+          ${sm(`APP.cmd('peOptChoiceMove',${oi},${ci},-1)`,'chevron-up',T('Move up','上移'),ci===0)}${sm(`APP.cmd('peOptChoiceMove',${oi},${ci},1)`,'chevron-down',T('Move down','下移'),ci===o.choices.length-1)}${sm(`APP.cmd('peOptChoiceRemove',${oi},${ci})`,'x',T('Remove','移除'),false)}</div>
+        <div style="display:flex;align-items:center;gap:8px;padding-left:30px">
+          <input value="${escAttr(c.label_cn)}" placeholder="${T('Choice 中文','选项(中文)')}" style="flex:1;min-width:0" ${dis} oninput="APP.cmd('peOptC',${oi},${ci},'label_cn',this.value)">
+          ${paid?`<label style="flex:none;display:flex;align-items:center;gap:4px;font-size:14px;color:var(--text-secondary)" title="${T('Extra charge for this choice (0 = free)','此选项加价(0 = 免费)')}">+${escAttr(CUR)}<input value="${Number(c.price_delta)||0}" inputmode="decimal" style="width:72px" ${dis} aria-label="${T('Extra charge for this choice (0 = free)','此选项加价(0 = 免费)')}" oninput="APP.cmd('peOptC',${oi},${ci},'price_delta',this.value)"></label>`:''}</div>
+        ${link?`<div style="padding-left:30px;display:flex;flex-direction:column">${link}</div>`:''}</div>`;
+    }).join(''):`<span style="font-size:13px;color:var(--text-secondary)">${T('Add at least one choice.','请至少添加一个选项。')}</span>`);
+    return `<div style="border:1px solid var(--border-default);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <input value="${escAttr(o.question_en)}" placeholder="${T('Question EN (e.g. Choose your dressing)','问题(英文,如:选择酱料)')}" style="flex:1;min-width:0" ${dis} oninput="APP.cmd('peOptQ',${oi},'question_en',this.value)">
+        ${sm(`APP.cmd('peOptMove',${oi},-1)`,'chevron-up',T('Move up','上移'),oi===0)}${sm(`APP.cmd('peOptMove',${oi},1)`,'chevron-down',T('Move down','下移'),oi===opts.length-1)}${sm(`APP.cmd('peOptRemove',${oi})`,'x',T('Remove this option','移除此选项'),false)}</div>
+      <input value="${escAttr(o.question_cn)}" placeholder="${T('Question 中文','问题(中文)')}" ${dis} oninput="APP.cmd('peOptQ',${oi},'question_cn',this.value)">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${typeSel}${req}</div>
+      ${lim}
+      ${o.type==='multi'?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Pick-any extras. Link each to a product so it draws from that product’s stock and sells out when it runs low.','多选加项。将每项关联到商品,即可占用该商品库存,售罄时自动隐藏。')}</span>`:''}
+      ${o.type==='text'?'':`<div>${choices}</div>${edit?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 14px" onclick="APP.cmd('peOptChoiceAdd',${oi})">${T('+ Add choice','+ 添加选项')}</button>`:''}`}</div>`;
+  }).join('');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">${head}
+    <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Let customers choose. A free pick (dressing) never affects stock. A paid extra (pickles, sauce) can be linked to a product so it draws from that product’s stock and sells out when low.','让顾客自由选择。免费选项(酱料)不影响库存;付费加项(腌菜、酱汁)可关联商品,从而占用其库存并在不足时售罄。')}</span>
+    ${opts.length?blocks:`<span style="font-size:13.5px;color:var(--text-secondary)">${T('None · tap to add a choice','无 · 点击添加选项')}</span>`}
+    ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('peOptAdd','pick')">${T('+ Add a pick (free)','+ 添加选择(免费)')}</button>
+      <button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('peOptAdd','extras')">${T('+ Add paid extras','+ 添加付费加项')}</button></div>`:''}</div>`;
+}
+/* Every command: the list must have been read, and the operator may edit. */
+function peOptAt(oi,ci){
+  const d=state.pe&&state.pe.draft; if(!d||!Array.isArray(d.opts)||!prodCanEdit()) return null;
+  const o=d.opts[Number(oi)]; if(!o) return null;
+  if(ci===undefined) return {d,o};
+  const c=o.choices[Number(ci)]; return c?{d,o,c}:null;
+}
+const peOptTouched=(paint)=>{ if(paint) render(); if(peAuto) peAuto.touch(); };
+/* Typing repaints nothing — the box is the live copy. */
+reg('peOptQ', (oi,k,v)=>{ const a=peOptAt(oi); if(!a||(k!=='question_en'&&k!=='question_cn')) return; a.o[k]=String(v==null?'':v); peOptTouched(false); });
+reg('peOptC', (oi,ci,k,v)=>{
+  const a=peOptAt(oi,ci); if(!a||['label_en','label_cn','price_delta'].indexOf(k)<0) return;
+  if(k==='price_delta'&&a.o.type==='single') return;
+  a.c[k]=k==='price_delta'?(parseFloat(v)||0):String(v==null?'':v); peOptTouched(false);
+});
+/* optType: a free pick drops every charge and link; limits belong to pick-any alone. */
+reg('peOptType', (oi,v)=>{
+  const a=peOptAt(oi); if(!a||(v!=='single'&&v!=='multi')) return;
+  a.o.type=v;
+  if(v!=='multi'){ a.o.min_choices=0; a.o.max_choices=0; }
+  if(v==='single') a.o.choices.forEach(c=>{ c.price_delta=0; c.stock_product_id=null; });
+  peOptTouched(true);
+});
+/* optReq: un-ticking Required on a group with a floor drops the floor — the floor IS the requirement. */
+reg('peOptReq', oi=>{
+  const a=peOptAt(oi); if(!a) return;
+  a.o.is_required=a.o.is_required?0:1;
+  if(!a.o.is_required&&a.o.type==='multi'&&Number(a.o.min_choices)>0) a.o.min_choices=0;
+  peOptTouched(true);
+});
+/* optLimit: a whole number, 0 = no limit; a floor of 1 or more is Required. */
+reg('peOptLimit', (oi,k,v)=>{
+  const a=peOptAt(oi); if(!a||a.o.type!=='multi'||(k!=='min_choices'&&k!=='max_choices')) return;
+  const n=Math.max(0,Math.floor(Number(v)||0)); a.o[k]=n;
+  if(k==='min_choices'&&n>0) a.o.is_required=1;
+  peOptTouched(true);
+});
+/* optDefault / optDefaultMulti: one default on a pick-one, any number pre-ticked on a pick-any. */
+reg('peOptDefault', (oi,ci)=>{
+  const a=peOptAt(oi,ci); if(!a) return;
+  if(a.o.type==='single') a.o.choices.forEach((c,i)=>{ c.is_default=i===Number(ci)?1:0; });
+  else a.c.is_default=a.c.is_default?0:1;
+  peOptTouched(true);
+});
+/* optAddOption / optAddExtras, with the desktop's seeds. */
+reg('peOptAdd', kind=>{
+  const d=state.pe&&state.pe.draft; if(!d||!Array.isArray(d.opts)||!prodCanEdit()||(kind!=='pick'&&kind!=='extras')) return;
+  d.opts.push(kind==='pick'
+    ? {question_en:'',question_cn:'',type:'single',is_required:1,min_choices:0,max_choices:0,choices:[peOptBlank(),peOptBlank()]}
+    : {question_en:'Add extras?',question_cn:'加点配料?',type:'multi',is_required:0,min_choices:0,max_choices:0,choices:[peOptBlank()]});
+  peOptTouched(true);
+});
+reg('peOptRemove', oi=>{ const a=peOptAt(oi); if(!a) return; a.d.opts.splice(Number(oi),1); peOptTouched(true); });
+reg('peOptMove', (oi,dir)=>{
+  const a=peOptAt(oi); if(!a) return; const i=Number(oi), j=i+Number(dir);
+  if(j<0||j>=a.d.opts.length) return; const [m]=a.d.opts.splice(i,1); a.d.opts.splice(j,0,m); peOptTouched(true);
+});
+reg('peOptChoiceAdd', oi=>{ const a=peOptAt(oi); if(!a||a.o.type==='text') return; a.o.choices.push(peOptBlank()); peOptTouched(true); });
+reg('peOptChoiceRemove', (oi,ci)=>{ const a=peOptAt(oi,ci); if(!a) return; a.o.choices.splice(Number(ci),1); peOptTouched(true); });
+reg('peOptChoiceMove', (oi,ci,dir)=>{
+  const a=peOptAt(oi,ci); if(!a) return; const i=Number(ci), j=i+Number(dir);
+  if(j<0||j>=a.o.choices.length) return; const [m]=a.o.choices.splice(i,1); a.o.choices.splice(j,0,m); peOptTouched(true);
+});
+/* + Stock product: the shared picker, over the catalogue, every product but this one. */
+reg('peOptLinkOpen', (oi,ci)=>{
+  const a=peOptAt(oi,ci); if(!a||a.o.type==='single') return;
+  state.pe.pick={kind:'opt',oi:Number(oi),ci:Number(ci),q:''}; render(); loadCatalogue();
+});
+reg('peOptUnlink', (oi,ci)=>{ const a=peOptAt(oi,ci); if(!a) return; a.c.stock_product_id=null; peOptTouched(true); });
 /* ==========================================================================
    §325 PD9 — A PRODUCT'S SIZES, ON THE DETAILS SCREEN
    (desktop: 09-products.js vaLoad / vaRender / vaSelfField / vaField /
