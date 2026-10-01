@@ -244,13 +244,25 @@ section('2 · reading it');
 
 section('3 · choosing a plan');
 {
-  it('asks first: the desktop\'s question, and that the account reads past due until paid', async () => {
-    const h = await loaded();
+  it('asks first: the desktop\'s question, and what happens to the account (§412.3)', async () => {
+    // A shop paid up to a date ahead stays active until then; the new plan is owed from that date.
+    const h = await loaded({}, VIEW({ subscription: { id: 1, status: 'active', current_period_end: '2099-01-20 00:00:00', is_internal: 0 } }));
     h.CMD.billChoose('growth');
     const a = h.st.ask;
     assert.strictEqual(String(a.title), 'Select the Growth plan?');
     assert.ok(String(a.body).startsWith('An invoice will be created for you to pay.'));
-    assert.ok(String(a.body).includes('Until it is paid, billing shows the account as past due.'));
+    assert.ok(String(a.body).includes('Your current plan stays active until 2099-01-20, when its paid period ends; the new plan is owed from then.'));
+    assert.ok(!String(a.body).includes('past due'), 'a paid shop is not told it will read past due');
+    // Any other shop waits on the invoice as past due, and is told so.
+    for (const sub of [{ status: 'past_due', current_period_end: '2099-01-20 00:00:00' }, { status: 'trialing', current_period_end: '2099-01-20 00:00:00' },
+      { status: 'active', current_period_end: '2020-01-01 00:00:00' }]) {
+      const u = await loaded({}, VIEW({ subscription: sub }));
+      u.CMD.billChoose('growth');
+      assert.ok(String(u.st.ask.body).includes('Until it is paid, billing shows the account as past due.'), JSON.stringify(sub));
+    }
+    const z = await loaded({ lang: 'zh' }, VIEW({ subscription: { id: 1, status: 'active', current_period_end: '2099-01-20 00:00:00', is_internal: 0 } }));
+    z.CMD.billChoose('growth');
+    assert.ok(String(z.st.ask.body).includes('当前套餐在已付周期结束前（2099-01-20）保持有效；新套餐自该日起计费。'));
     assert.strictEqual(String(a.confirmLabel), 'Select plan');
     assert.ok(DESK.includes("'Select the ' + name + ' plan? An invoice will be created for you to pay. · 选择「' + name + '」套餐?系统将生成一张待支付发票。'"), 'split from the desktop\'s own');
     assert.strictEqual(h.calls.writes.length, 0);

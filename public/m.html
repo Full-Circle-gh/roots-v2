@@ -35886,20 +35886,30 @@ function screenBilling(){
 SUBS.billing={title:['Billing','账单'],render:()=>screenBilling()};
 /* CHOOSING A PLAN — the desktop's onChoosePlan, step for step: ask, raise the
    invoice, pick the provider the way it does (WeChat Pay when configured, else
-   manual), ask for the checkout, show it. The question says one thing the
-   desktop's does not, because it is true and nobody would guess it: the server
-   puts the subscription in past_due the moment the invoice is raised
-   (routes/billing-pay.js select-plan), so the account reads as owing until the
-   invoice is paid. */
+   manual), ask for the checkout, show it. The question says what the server
+   does with the account, which the desktop's does not (routes/billing-pay.js
+   select-plan, §412.3): a shop paid up to a date still ahead stays active
+   until then and the new plan is owed from that date; any other shop waits
+   on the new invoice as past due until it is paid. */
+function billPaidUntil(){
+  const sub=state.bill.view&&state.bill.view.subscription;
+  if(!sub||sub.status!=='active'||sub.is_internal||!sub.current_period_end) return null;
+  const d=new Date(String(sub.current_period_end).replace(' ','T')+'Z');
+  return !isNaN(d.getTime())&&d.getTime()>Date.now()?sub.current_period_end:null;
+}
 reg('billChoose', code=>{
   const b=state.bill;
   if(b.busy||!mCanKnown('billing:pay')) return;
   const p=(b.plans||[]).find(x=>x.code===code); if(!p) return;
   const name=LANG==='en'?(p.name||p.name_cn):(p.name_cn||p.name);
+  const paidUntil=billPaidUntil(), until=paidUntil?billDate(paidUntil):'';
   state.ask={
     title:T('Select the '+name+' plan?','选择「'+name+'」套餐?'),
-    body:T('An invoice will be created for you to pay. Until it is paid, billing shows the account as past due.',
-           '系统将生成一张待支付发票。付款前，账单将显示为逾期。'),
+    body:paidUntil
+      ? T('An invoice will be created for you to pay. Your current plan stays active until '+until+', when its paid period ends; the new plan is owed from then.',
+          '系统将生成一张待支付发票。当前套餐在已付周期结束前（'+until+'）保持有效；新套餐自该日起计费。')
+      : T('An invoice will be created for you to pay. Until it is paid, billing shows the account as past due.',
+          '系统将生成一张待支付发票。付款前，账单将显示为逾期。'),
     confirmLabel:T('Select plan','选择套餐'),
     run:()=>{
       b.busy='choose:'+code; b.err=null; render();
