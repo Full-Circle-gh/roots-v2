@@ -32410,20 +32410,27 @@ function peCostOn(e){ return !!(e&&e.costLoaded&&pcMoney()&&!e.costOwned&&!peBun
 function peAutoStart(){
   if(peAuto){ peAuto.flush(); if(peAuto.stop) peAuto.stop(); peAuto=null; }
   const e=state.pe; if(!e||!e.draft||!prodCanEdit()||typeof TacetAutosave==='undefined') return;
-  const pid=e.pid;
   const auto=TacetAutosave.create({
-    read:()=>peBody(state.pe.draft,{costOn:peCostOn(state.pe),factsTouched:state.pe.factsTouched,factsOrig:state.pe.row&&state.pe.row.product_facts,
+    // Read from THIS visit, not state.pe: a write that lands after Back has let
+    // the screen go still asks whether anything is left to send (§325 PD12).
+    read:()=>peBody(e.draft,{costOn:peCostOn(e),factsTouched:e.factsTouched,factsOrig:e.row&&e.row.product_facts,
       // §325 PD6 — the gallery goes only once it was loaded and then changed here.
-      images:(state.pe.gallery&&state.pe.galDirty)?state.pe.gallery:null}),
+      images:(e.gallery&&e.galDirty)?e.gallery:null}),
     hold:b=>(!b.name_en&&!b.name_cn)?T('Add a name to start autosaving','填写名称后自动保存')
-      :(state.pe.draft.sell_price.trim()!==''&&!(Number(state.pe.draft.sell_price)>=0))?T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。')
+      :(e.draft.sell_price.trim()!==''&&!(Number(e.draft.sell_price)>=0))?T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。')
       :'',
     send:b=>{
-      const cur=state.pe; if(!cur||cur.pid!==pid) return Promise.resolve();
+      // The visit this engine belongs to — compared by identity, because a new
+      // product's id arrives with its first save (§325 PD12).
+      const cur=state.pe; if(!cur||cur!==e) return Promise.resolve();
+      if(cur.pid==null) return peCreate(cur,b);
+      const pid=cur.pid;
       const body=peDiff(b,cur.base);
       if(!Object.keys(body).length){ cur.base=b; return Promise.resolve(); }
       return apiWrite('/products/'+pid,body,'PATCH').then(j=>{
-        if(state.pe===cur) cur.base=b;
+        // What the server holds: what it held, with this payload over it — a key
+        // this read did not carry (choices read since) is still held.
+        if(state.pe===cur) cur.base=Object.assign({},cur.base,b);
         peApplyToCatalogue(pid,j&&j.data);
       }).catch(err=>{ throw new Error(peErrText(err,body)); });
     },
@@ -32459,11 +32466,13 @@ function loadPe(pid){
 function peFootHtml(){
   const a=peAuto; if(!a) return '';
   const st=a.state;
-  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message):st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||'')):T('All changes saved','已自动保存');
+  const fresh=!!(state.pe&&state.pe.pid==null);   // §325 PD12 — nothing saved yet
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message):st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||''))
+    :fresh?T('Add a name & SKU to start autosaving','填写名称和货号后自动保存'):T('All changes saved','已自动保存');
   const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
   return `<span style="flex:1;min-width:0;font-size:12.5px;color:${tone}">${line}</span>
-    ${a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('peUndo')">${T('Undo','撤销')}</button>`:''}
-    <button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('pvOpen',${Number(state.pe&&state.pe.pid)})">${T('Version history','历史版本')}</button>`;
+    ${a.canUndo()&&!(state.pe&&(state.pe.created||state.pe.pid==null))?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('peUndo')">${T('Undo','撤销')}</button>`:''}
+    ${fresh?'':`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('pvOpen',${Number(state.pe&&state.pe.pid)})">${T('Version history','历史版本')}</button>`}`;
 }
 function peSubcats(top){
   const node=(state.cats||[]).find(t=>t&&t.name===top);
@@ -32534,7 +32543,8 @@ function peEntryRow(p){
       <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',20)}</span></button></div>`;
 }
 SUBS.productedit={title:['Details','详情'],
-  titleOf:()=>{ const e=state.pe, d=e&&e.draft; return d?escAttr(T(d.name_en||d.name_cn,d.name_cn||d.name_en)||T('Details','详情')):T('Details','详情'); },
+  titleOf:()=>{ const e=state.pe, d=e&&e.draft, none=e&&e.pid==null?T('New product','新增产品'):T('Details','详情');
+    return d?escAttr(T(d.name_en||d.name_cn,d.name_cn||d.name_en)||none):none; },
   backLabel:()=>T('Products','产品'),
   render:()=>screenProductEdit()};
 /* Opening closes the sheet and stacks the screen, as Cost & Pricing does;
@@ -32689,7 +32699,9 @@ function peProdName(id){
   return '#'+id;
 }
 function peBuCard(){
-  const e=state.pe, d=e&&e.draft; if(!d||!d.bu) return '';
+  const e=state.pe, d=e&&e.draft;
+  if(e&&e.pid==null) return peNewCard(T('Suggested add-ons','推荐搭配'),T('Add a name & SKU above — it saves automatically, then suggest add-ons here.','请先在上方填写名称和货号 — 系统会自动保存,随后即可在此推荐搭配商品。'));
+  if(!d||!d.bu) return '';
   const bu=d.bu, edit=prodCanEdit();
   const lab=t=>`<span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</span>`;
   const inp=(k,label,ph,extra)=>`<label style="display:flex;flex-direction:column;gap:6px">${lab(label)}<input value="${escAttr(bu[k])}" placeholder="${escAttr(ph)}" ${extra||''} ${edit?'':'disabled'} oninput="APP.cmd('peBu','${k}',this.value)"></label>`;
@@ -32707,7 +32719,9 @@ function peBuCard(){
     ${inp('voucher',T('Auto voucher (optional)','自动优惠券(可选)'),T('code','券码'),'autocapitalize="characters"')}</div>`;
 }
 function peBpCard(){
-  const e=state.pe, d=e&&e.draft; if(!d||!d.bu) return '';
+  const e=state.pe, d=e&&e.draft;
+  if(e&&e.pid==null) return peNewCard(T('Bundle — sold as one','套装产品'),T('Add a name & SKU above — it saves automatically, then set this up as a bundle.','请先在上方填写名称和货号 — 系统会自动保存,随后即可将其设置为套装。'));
+  if(!d||!d.bu) return '';
   const edit=prodCanEdit(), mode=d.bpMode;
   const opt=(m,title,desc)=>{ const on=mode===m;
     return `<button onclick="APP.cmd('peBpMode','${m}')" ${edit?'':'disabled'} aria-pressed="${on}" style="display:flex;align-items:flex-start;gap:12px;background:none;border:1.5px solid ${on?'var(--text-primary)':'var(--border-default)'};border-radius:12px;padding:12px;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
@@ -32766,7 +32780,7 @@ function sheetPePick(){
 }
 function pePickRepaint(){ const host=document.getElementById('mPePickList'); if(host) host.innerHTML=pePickListHtml(); else render(); }
 reg('peBu', (k,v)=>{
-  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||!prodCanEdit()||['title_en','title_cn','price','voucher'].indexOf(k)<0) return;
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||e.pid==null||!prodCanEdit()||['title_en','title_cn','price','voucher'].indexOf(k)<0) return;
   d.bu[k]=String(v==null?'':v);
   if(peAuto) peAuto.touch();
 });
@@ -32776,7 +32790,7 @@ reg('peBuRemove', id=>{
 });
 /* bpSetMode with bpRadioClick: the chosen way tapped again means "not a set". */
 reg('peBpMode', m=>{
-  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||!prodCanEdit()||(m!=='assembled'&&m!=='prepacked')) return;
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||e.pid==null||!prodCanEdit()||(m!=='assembled'&&m!=='prepacked')) return;
   d.bpMode=d.bpMode===m?null:m;
   if(d.bpMode!=='assembled'&&e.pick&&e.pick.kind==='bp') e.pick=null;
   render(); if(peAuto) peAuto.touch();
@@ -32793,7 +32807,7 @@ reg('peBpRemove', id=>{
   d.bp=d.bp.filter(x=>x.id!==Number(id)); render(); if(peAuto) peAuto.touch();
 });
 reg('pePickOpen', kind=>{
-  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||!prodCanEdit()||(kind!=='bu'&&kind!=='bp')) return;
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||e.pid==null||!prodCanEdit()||(kind!=='bu'&&kind!=='bp')) return;
   if(kind==='bp'&&d.bpMode!=='assembled') return;
   e.pick={kind,q:''}; render(); loadCatalogue();
 });
@@ -32874,7 +32888,9 @@ function peOptLinkTo(oi,ci,pid){
   }
 }
 function peOptCard(){
-  const e=state.pe, d=e&&e.draft; if(!d||!d.bu) return '';
+  const e=state.pe, d=e&&e.draft;
+  if(e&&e.pid==null) return peNewCard(T('Options (customer chooses)','选项(顾客选择)'),T('Add a name & SKU above — it saves automatically, then add a choice like a dressing here.','请先在上方填写名称和货号 — 系统会自动保存,随后即可在此添加如酱料等选项。'));
+  if(!d||!d.bu) return '';
   const head=`<div class="eyebrow">${T('Options (customer chooses)','选项(顾客选择)')}</div>`;
   if(!Array.isArray(d.opts)) return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">${head}
     <span style="font-size:14px;color:var(--brick-ink)">${T('Could not load. Close and try again.','加载失败，请关闭后重试。')}</span></div>`;
@@ -32997,6 +33013,97 @@ reg('peOptLinkOpen', (oi,ci)=>{
 });
 reg('peOptUnlink', (oi,ci)=>{ const a=peOptAt(oi,ci); if(!a) return; a.c.stock_product_id=null; peOptTouched(true); });
 /* ==========================================================================
+   §325 PD12 — A NEW PRODUCT, FROM THE PHONE
+   (desktop: Products → Add product ▾ → Add manually — pdOpen(null),
+    pdAutoSaveNow's name hold, pdSaveCore's POST and its promotion to edit)
+   --------------------------------------------------------------------------
+   The Details screen opened on nothing: the same fields, the same autosave.
+   The first save that has a name is the create, POST /products; the server
+   mints a DRAFT-… SKU when none was typed and the box shows it. From then on
+   the screen is that product's, exactly as if it had been opened from the
+   list: PATCH for every later edit, and the sizes, bundles and choices cards —
+   which, as on the desktop, wait until there is a product to hang them on.
+
+   THE CREATE IS ONE WRITE OR TWO, never a lost field. POST /products stores
+   only part of what the screen holds (names, SKU, size, sections, badge,
+   price and was-price, shipping, the descriptions, photos, Free of, notes,
+   facts, two flags). The rest — cost, the low-stock line, made in batches —
+   the desktop sends with its next whole-form save; the phone sends only what
+   changed, so it sends them straight after, in a PATCH of the new product,
+   and only those that are not already the new row's empty default. A new
+   product is HIDDEN until someone turns it on, as on the desktop (its
+   is_published box starts unticked). It needs products:create and
+   products:edit — the second for every save after the first — and is not
+   offered where the catalogue is kept upstream. Undo is not offered for a
+   product made in this visit: its visit-start is a blank form. */
+const PE_CREATE_KEYS=['name_en','name_cn','sku','weight','top_category','subcategory','tags','sell_price','compare_at_price',
+  'free_of','notes','product_facts','is_market','is_restock_only','ship_modes','description_en','description_cn','description_format','images'];
+/* What a fresh row already holds for the keys the create does not store. */
+const PE_NEW_DEFAULT={unit_cost:'',cost_incomplete:0,low_stock_threshold:'',is_batch_made:0,bundle:null,bundle_items:null,bundle_mode:null};
+function peCanCreate(){ return mCan('products:create')&&prodCanEdit()&&state.catalogMode!=='upstream'&&canRoute('productedit'); }
+function peNewCard(title,line){
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div class="eyebrow">${title}</div>
+    <span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${line}</span></div>`;
+}
+function loadPeNew(){
+  const e={pid:null,created:false,row:{},err:null,draft:null,base:null,factsTouched:false,costLoaded:pcMoney(),costOwned:false,tried:true,
+    gallery:[],galOrig:[],galInherited:false,galDirty:false,galErr:null,photoBusy:false,photoErr:null,lib:null,va:null,pick:null};
+  state.pe=e;
+  e.draft=peDraftFrom({});
+  peAutoStart();
+  return e;
+}
+function peCreate(e,b){
+  const post={};
+  Object.keys(b).forEach(k=>{ if(PE_CREATE_KEYS.indexOf(k)>=0) post[k]=b[k]; });
+  return apiWrite('/products',post,'POST').catch(err=>{ throw new Error(peErrText(err,post)); }).then(j=>{
+    const row=j&&j.data; if(!row||row.id==null) throw new Error(peErrText(null,post));
+    e.pid=Number(row.id); e.created=true; e.row=Object.assign({},row);
+    // pdSaveCore: a minted DRAFT-… code goes into the box, so the next save keeps it.
+    if(!String(e.draft.sku||'').trim()&&row.sku) e.draft.sku=String(row.sku);
+    // What the server now holds: what the create stored, and the fresh row's empty defaults.
+    const held={};
+    Object.keys(b).forEach(k=>{ if(k in post||(k in PE_NEW_DEFAULT&&JSON.stringify(b[k])===JSON.stringify(PE_NEW_DEFAULT[k]))) held[k]=b[k]; });
+    const rest=peDiff(b,held);
+    const sku=row.sku?{sku:String(row.sku)}:{};
+    e.base=Object.assign({},held,sku);
+    DB.products=[mapProduct(row)].concat((DB.products||[]).filter(x=>Number(x._id)!==e.pid));
+    // Back now leads to this product's sheet.
+    if(state.pe===e){ const f=(state.stack||[]).slice().reverse().find(x=>x.route==='productedit'&&x.pid==null); if(f) f.pid=e.pid; }
+    try{ loadCatalogue(true); }catch(x){}
+    peAfterCreate(e);
+    if(state.pe===e) render();
+    if(!Object.keys(rest).length) return;
+    return apiWrite('/products/'+e.pid,rest,'PATCH').then(j2=>{
+      e.base=Object.assign({},e.base,rest); peApplyToCatalogue(e.pid,j2&&j2.data);
+    }).catch(err=>{ throw new Error(peErrText(err,rest)); });
+  });
+}
+/* The cards that wait for an id: the family, and the product as the server now
+   holds it — its choices are read, not assumed, before that card offers a control. */
+function peAfterCreate(e){
+  if(state.pe!==e) return;
+  loadPeSizes(e);
+  api('/products/'+e.pid).then(row=>{
+    if(state.pe!==e||!row) return;
+    e.row=Object.assign({},e.row,row);
+    if(e.draft&&!Array.isArray(e.draft.opts)&&Array.isArray(row.options)){
+      e.draft.opts=peOptsDraft(row.options);
+      if(e.base) e.base.options=peOptBody(e.draft.opts);
+    }
+    render();
+  }).catch(()=>{});
+}
+reg('peNew', ()=>{
+  if(!peCanCreate()||state.prodBusy) return;
+  state.productSku=null; state.oosSku=null; prodRecordsDrop();
+  loadPeNew();
+  push('productedit');
+  const t=state.stack[state.stack.length-1];
+  if(t&&t.route==='productedit') t.pid=null;
+  render();
+});
+/* ==========================================================================
    §325 PD9 — A PRODUCT'S SIZES, ON THE DETAILS SCREEN
    (desktop: 09-products.js vaLoad / vaRender / vaSelfField / vaField /
     vaPhotoUpload / vaRemove / vaAddSize / vaPersist / vaPersistSiblings)
@@ -33094,7 +33201,9 @@ function vaFind(id){
   return (va&&va.members||[]).find(x=>x.id===Number(id))||null;
 }
 function peSizesCard(){
-  const e=state.pe, va=e&&e.va; if(!va) return '';
+  const e=state.pe, va=e&&e.va;
+  if(e&&e.pid==null) return peNewCard(T('Variants','规格'),T('Add a name & SKU above — it saves automatically, then variants open here.','请先在上方填写名称和货号 — 系统会自动保存,随后即可在此添加规格。'));
+  if(!va) return '';
   const wrap=inner=>`<div class="card" id="mPeSizes" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div class="eyebrow">${T('Variants','规格')}</div>${inner}</div>`;
   if(va.loadErr) return wrap(`<span style="font-size:14px;color:var(--brick-ink)">${escAttr(va.loadErr)}</span>
     <button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" onclick="APP.cmd('vaRetry')">${T('Try again','重试')}</button>`);
@@ -37061,7 +37170,9 @@ function screenProducts(){
         ${T(...label)}${on?`<span style="position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--text-primary)"></span>`:''}</button>`;}).join('')}
   </div>`;
   const sub=PROD_VIEWS.find(x=>x[0]===v)[2];
-  return `${pageHead({title:T('Products','产品'), controls:true})}${strip}${SUBS[sub].render()}`;
+  /* §325 PD12 — Add product: the desktop's "Add manually", a blank Details screen. */
+  const add=v==='catalogue'&&peCanCreate()?`<button class="cta inhead" onclick="APP.cmd('peNew')">${T('Add product','新增产品')}</button>`:'';
+  return `${pageHead({title:T('Products','产品'), cta:add, controls:true})}${strip}${SUBS[sub].render()}`;
 }
 
 /* ==========================================================================
