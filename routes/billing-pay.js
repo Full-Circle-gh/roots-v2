@@ -92,8 +92,24 @@ router.post('/api/backend/billing/select-plan', requireBillingAccess, express.js
   if (!plan) return res.status(404).json({ error: 'Unknown plan · 未知套餐' });
 
   const now = new Date();
-  const periodEnd = addInterval(now, plan.billing_interval);
-  const dueDate = new Date(now.getTime() + 7 * 86400000);                          // net-7
+  /* §412.3 — CHOOSING A PLAN DOES NOT MAKE A PAID SHOP PAST DUE. A
+     subscription that is active and paid up to a date still ahead keeps that
+     status and that period: the new plan's invoice covers the period that
+     starts when the paid one ends, and is owed from then. The lifecycle's
+     renewal at that date finds this invoice (same subscription, same period
+     start) and raises no second one; if it is still unpaid then, the ladder
+     moves the shop to past_due exactly as an unpaid renewal does. A plan
+     chosen again for the same next period replaces the earlier choice's
+     invoice (voided), so the shop never owes two plans for one period.
+     A shop with no paid period running (no subscription, trialing, past_due,
+     grace, suspended, cancelled, or a paid period already over) is unchanged:
+     the invoice starts now and the subscription waits on it as past_due. */
+  const paidUntil = sub && sub.status === 'active' && sub.current_period_end
+    ? new Date(String(sub.current_period_end).replace(' ', 'T') + 'Z') : null;
+  const deferred = !!(paidUntil && !isNaN(paidUntil.getTime()) && paidUntil > now);
+  const periodStart = deferred ? paidUntil : now;
+  const periodEnd = addInterval(periodStart, plan.billing_interval);
+  const dueDate = deferred ? periodStart : new Date(now.getTime() + 7 * 86400000);   // owed from the period's start; net-7 when it starts now
   const invoiceNo = genInvoiceNo(tenantId);
 
   const tx = db.transaction(() => {
@@ -102,17 +118,22 @@ router.post('/api/backend/billing/select-plan', requireBillingAccess, express.js
     if (!sub) {
       const r = db.prepare(`INSERT INTO billing_subscriptions (tenant_id, plan_id, status) VALUES (?, ?, 'past_due')`).run(tenantId, plan.id);
       subId = r.lastInsertRowid;
+    } else if (deferred) {
+      // The plan it renews onto changes; the status and the paid period do not.
+      db.prepare(`UPDATE billing_subscriptions SET plan_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(plan.id, sub.id);
+      db.prepare(`UPDATE billing_invoices SET status = 'void' WHERE subscription_id = ? AND status = 'open' AND period_start = ?`)
+        .run(sub.id, sqlDt(periodStart));
     } else {
       db.prepare(`UPDATE billing_subscriptions SET plan_id = ?, status = 'past_due', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(plan.id, sub.id);
     }
     const inv = db.prepare(`INSERT INTO billing_invoices (tenant_id, subscription_id, invoice_no, period_start, period_end, amount_cents, currency, status, due_date)
                             VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`)
-      .run(tenantId, subId, invoiceNo, sqlDt(now), sqlDt(periodEnd), plan.price_cents, plan.currency, sqlDt(dueDate));
+      .run(tenantId, subId, invoiceNo, sqlDt(periodStart), sqlDt(periodEnd), plan.price_cents, plan.currency, sqlDt(dueDate));
     return inv.lastInsertRowid;
   });
   const invoiceId = tx();
   const invoice = db.prepare('SELECT * FROM billing_invoices WHERE id = ?').get(invoiceId);
-  res.json({ success: true, invoice, providers: providers.listProviders() });
+  res.json({ success: true, invoice, deferred, owedFrom: deferred ? sqlDt(periodStart) : null, providers: providers.listProviders() });
 });
 
 // ── POST checkout — get a payment descriptor for an open invoice ──────────
