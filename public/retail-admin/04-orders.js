@@ -9117,7 +9117,7 @@ async function submitJdLabel(orderId, shipmentId, product, btn, pieces) {
 // it says the airline REFUSES these goods, which is more than "the plan said
 // land", and it is drawn from the same ship_modes_arr renderPackBadges reads.
 //
-// §378 — GROUND IS ON AN AIR PARCEL'S LIST TOO, AND PICKING IT ASKS. The mirror
+// §380 — GROUND IS ON AN AIR PARCEL'S LIST TOO, AND PICKING IT ASKS. The mirror
 // of the rule above. A plain air parcel used to get no list at all — 生鲜特快
 // was simply what got sent — so a parcel the plan made AIR (a combined parcel
 // included) could not be booked on the ground at all. Ash (2026-10-01): "there
@@ -9175,7 +9175,7 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   // — it is the exception, and the pre-selected row stays at the top where the
   // operator's eye already is. Nothing is pre-selected that was not before.
   const JD_GROUND_ORDER = ['LL-HD-M', 'ed-m-0001', 'LL-SD-M'];
-  // Air list order (§378): air first, pre-selected, then the two ground
+  // Air list order (§380): air first, pre-selected, then the two ground
   // services — the mirror of the ground list, the exception last.
   const JD_AIR_ORDER = ['LL-SD-M', 'LL-HD-M', 'ed-m-0001'];
   const services = landDefault
@@ -9265,7 +9265,7 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
       });
     });
   }
-  // §378 — the mirror: picking GROUND on a parcel the plan made AIR asks, on
+  // §380 — the mirror: picking GROUND on a parcel the plan made AIR asks, on
   // the click, and declining puts air back. Not on the Fujian / Guangxi list,
   // where ground is the default and asking about it would be noise.
   if (isAir && !landDefault) {
@@ -9309,7 +9309,7 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
     //
     // ASKED AT SUBMIT, not on the radio like the land-only question above, and
     // that is forced rather than chosen: on an air parcel LL-SD-M is already
-    // the selected row (§378), so an operator who leaves it alone never fires
+    // the selected row (§380), so an operator who leaves it alone never fires
     // a change event and a listener would never run. Submit is the one moment
     // that covers both an air parcel and a land parcel pushed onto air.
     //
