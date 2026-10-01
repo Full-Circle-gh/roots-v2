@@ -1115,6 +1115,10 @@ const state = {
      two searches, which write is in flight, and each refusal. */
   /* §325 X8e — gzgrocery billing: the period and range asked for, the
      answer, and the read's and the file's refusals. */
+  /* §325 X9a — the channel hub: its cards and stores, which write is in flight,
+     each card's refusal, the channel whose box screen is open, and Eleme's
+     stores with the shop ids being typed. */
+  hub:{cards:null, stores:null, tried:false, err:null, busy:null, note:{}, boxKind:null, elStores:null, elTried:false, elErr:null, shopIds:{}},
   gzb:{period:'', from:'', to:'', data:null, tried:false, err:null, err2:null, seq:0},
   mtb:{list:null, tried:false, err:null, stores:null, names:null, prod:null, draft:null, q:'', pq:'', busy:null, note:null, saveErr:null, suggest:null, hint:null},
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
@@ -8310,6 +8314,7 @@ function screenSales(){
          above it teaches an operator to stop trying. What IS still desktop-only
          is the whole-channel flip — every shop at once — and the sheet's own
          note already says so, where it applies. */''}
+    ${x9HubDoor()/* §325 X9a — the channel hub: set up, fix, get help */}
     <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Closing a whole channel everywhere is on desktop','一次性关闭整个渠道在电脑端')}</div>
   </div>`;
 }
@@ -31664,6 +31669,207 @@ function screenGzBilling(){
 SUBS.gzbilling={title:['Billing','对账'],render:()=>screenGzBilling()};
 reg('gzbOpen', ()=>{ if(!canRoute('gzbilling')) return; const s=gzb(); Object.assign(s,{period:'',from:'',to:'',data:null,tried:false,err:null,err2:null}); push('gzbilling'); });
 /* §325 X8e ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X9a — THE CHANNEL HUB: EVERY CHANNEL'S STATE, ITS TO-DOS, GET HELP,
+   AND THE MEITUAN / QINGYUN AND ELEME SETUP WIZARDS
+   --------------------------------------------------------------------------
+   The desktop's channel hub (15-integrations.js, painted on the Sales page
+   and its Configure overlay), on the phone:
+
+   • Every channel and logistics card from GET /channel-hub: its state in the
+     desktop's seven words, its health line or blurb, and its open to-dos
+     ("New location … — link it here"), each dismissable —
+     POST /channel-hub/:kind/todos/dismiss {todoId}.
+   • Get help on every card — POST /channel-hub/help {kind, note}, the note
+     optional, as the desktop's askReason makes it.
+   • Meituan and Qingyun set up through a box we ship (§257): the box's state
+     from the card, Request the box — POST /channel-hub/:kind/box-request {} —
+     and, once it is there, Get help, which is how a box is connected.
+   • Eleme's two steps: link each store's shop id — POST /eleme/shop {storeId,
+     storeCode, shopId} — then, with every store linked, the stores that still
+     need their one-time login and Enable channel — POST /eleme/enable
+     {enabled:true}; Map products opens the phone's Eleme screen.
+   • JD opens the phone's JD Logistics keys (§325 X7).
+   • The WeChat mini program and the web store wizards are X9b and X9c; until
+     then their cards show their state and say where they are set up.
+
+   Each control is the server's key (lib/cap-routes.js): integrations:manage
+   for help, the box and the to-dos; eleme:sync for the shop ids and Enable.
+   The hub itself reads for the Sales page's keys.
+   ══════════════════════════════════════════════════════════════════════════ */
+const hub=()=>state.hub;
+const HUB_STATUS={
+  connected:['Connected','已连接','success'], configured:['Ready to set up','待设置','warning'], in_setup:['In setup','设置中','warning'],
+  connecting:['Connecting…','连接中…','warning'], error:['Needs attention','需处理','danger'], paused:['Paused','已暂停','muted'],
+  not_configured:['Not set up','未配置','muted'],
+};
+function hubLoad(force){
+  const s=hub(); if(s.tried&&!force) return; s.tried=true; s.err=null;
+  apiRaw('/channel-hub').then(j=>{ s.cards=(j&&j.data)||[]; s.stores=(j&&j.stores)||[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+reg('hubRetry', ()=>{ hub().tried=false; render(); });
+const hubCard=k=>(hub().cards||[]).find(c=>c.kind===k)||null;
+const hubLabel=c=>c?T(c.labelEn||c.kind,c.labelCn||c.labelEn||c.kind):'';
+const hubManage=()=>mCan('integrations:manage');
+function hubPill(status){ const [en,zh,tone]=HUB_STATUS[status]||HUB_STATUS.not_configured; const [bg,fg]=PILL[tone];
+  return `<span class="pill" style="background:${bg};color:${fg};flex:none">${T(en,zh)}</span>`; }
+/* Which phone screen a card's Set up / Manage / Fix opens, if any yet. */
+function hubOpenFor(kind){
+  if(kind==='meituan'||kind==='qingyun') return canRoute('hubbox')?`APP.cmd('hubBoxOpen','${kind}')`:'';
+  if(kind==='eleme') return canRoute('hubeleme')?"APP.cmd('hubElemeOpen')":'';
+  if(kind==='jd') return canRoute('jdcfg')?"APP.cmd('push','jdcfg')":'';
+  return '';
+}
+function screenHub(){
+  const s=hub(); hubLoad();
+  if(s.err&&!s.cards) return x1Err(escAttr(String(s.err)),'hubRetry');
+  if(!s.cards) return x1Loading();
+  if(!s.cards.length) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No channels available.','暂无可用渠道。')}</div>`;
+  const can=hubManage();
+  const cards=s.cards.map(c=>{
+    const health=c.health&&(c.health.last_error||c.health.detail);
+    const todos=(c.config&&Array.isArray(c.config.todos))?c.config.todos:[];
+    const open=hubOpenFor(c.kind);
+    const verb=c.status==='error'?T('Fix','修复'):(c.status==='connected'||c.category==='first_party')?T('Manage','管理'):T('Set up','开始设置');
+    return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:15.5px;font-weight:500;min-width:0">${escAttr(hubLabel(c))}</span>${hubPill(c.status)}</div>
+      <div style="font-size:13px;line-height:1.5;color:${health?'var(--brick-ink)':'var(--text-secondary)'};overflow-wrap:anywhere">${escAttr(health||T(c.blurbEn||'',c.blurbCn||c.blurbEn||''))}</div>
+      ${todos.map(t=>`<div style="display:flex;align-items:center;gap:10px;background:var(--amber-tint);border-radius:10px;padding:8px 10px">
+        <span style="flex:1;min-width:0;font-size:13px;color:var(--amber-ink)">⚑ ${escAttr(T('New location '+(t.store_name||t.store_code)+' — link it here','新门店 '+(t.store_name||t.store_code)+' — 请在此关联'))}</span>
+        ${can?`<button class="btn2" style="width:auto;min-height:30px;padding:0 10px;font-size:12.5px" aria-label="${escAttr(T('Dismiss','忽略'))}" ${s.busy?'disabled':''} onclick="APP.cmd('hubDismiss','${escAttr(c.kind)}','${escAttr(t.id)}')">${T('Dismiss','忽略')}</button>`:''}</div>`).join('')}
+      ${s.note[c.kind]?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(String(s.note[c.kind]))}</div>`:''}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${open?`<button class="${c.status==='connected'?'btn2':'cta'}" style="width:auto;padding:0 14px;min-height:36px" onclick="${open}">${verb}</button>`
+          :(c.kind==='wechat_miniapp'||c.kind==='web')?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('Set up on desktop for now','暂请在电脑端设置')}</span>`:''}
+        <span style="flex:1"></span>
+        ${can?`<button class="btn2" style="width:auto;min-height:32px;padding:0 10px;font-size:13px" onclick="APP.cmd('hubHelp','${escAttr(c.kind)}')">? ${T('Get help','获取帮助')}</button>`:''}</div>
+    </div>`;
+  });
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${cards.join('')}</div>`;
+}
+SUBS.chhub={title:['Channels','渠道'],render:()=>screenHub()};
+reg('hubOpen', ()=>{ if(!canRoute('chhub')) return; const s=hub(); s.tried=false; s.note={}; push('chhub'); });
+function x9HubDoor(){ return canRoute('chhub')?`<button class="btn2" style="width:100%" onclick="APP.cmd('hubOpen')">${T('Configure','配置')}</button>`:''; }
+reg('hubDismiss', (kind,id)=>{
+  const s=hub(); if(s.busy||!hubManage()) return;
+  const c=hubCard(kind); if(!c||!((c.config&&c.config.todos)||[]).some(t=>String(t.id)===String(id))) return;
+  s.busy='todo'; s.note[kind]=null; render();
+  apiWrite('/channel-hub/'+encodeURIComponent(kind)+'/todos/dismiss',{todoId:id},'POST').then(()=>{ s.busy=null; hubLoad(true); })
+    .catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note[kind]=x6Words(e,'Failed','操作失败'); render(); });
+});
+/* Get help: the note is optional, as on the desktop, and sent as typed. */
+reg('hubHelp', kind=>{
+  if(!hubManage()) return;
+  const c=hubCard(kind), label=c?hubLabel(c):T('setup','设置');
+  state.askErr=null;
+  state.ask={title:T('Tell us what you\'re stuck on with '+label+' (optional):','请告诉我们您在'+label+'遇到的问题(可选):'),
+    fields:[{id:'note',label:T('Note','备注'),multiline:true}],
+    confirmLabel:T('Send request','发送求助'),
+    run:v=>{ const s=hub(); s.note[kind]=null;
+      apiWrite('/channel-hub/help',{kind:kind||'general',note:(v&&v.note)||''},'POST').then(()=>{ showToast(T('Help request sent — we’ll be in touch.','求助已发送 — 我们会尽快联系您。')); })
+        .catch(e=>{ if(String(e&&e.message)==='auth') return; s.note[kind]=x6Words(e,'Failed','操作失败'); render(); }); }};
+  render();
+});
+
+/* ── Meituan / Qingyun: the box (§257) ───────────────────────────────────── */
+reg('hubBoxOpen', kind=>{ if(!canRoute('hubbox')||!['meituan','qingyun'].includes(kind)) return; hub().boxKind=kind; push('hubbox'); });
+reg('hubBoxRequest', ()=>{
+  const s=hub(), kind=s.boxKind; if(s.busy||!hubManage()||!kind) return;
+  s.busy='box'; s.note.box=null; render();
+  apiWrite('/channel-hub/'+encodeURIComponent(kind)+'/box-request',{},'POST').then(()=>{
+    s.busy=null; showToast(T('Box requested — we’ll contact you','已申请 — 我们会联系您')); hubLoad(true);
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note.box=e&&e.refused?E(...e.words):E('Request failed — try again','申请失败,请重试'); render(); });
+});
+function screenHubBox(){
+  const s=hub(); hubLoad();
+  if(s.err&&!s.cards) return x1Err(escAttr(String(s.err)),'hubRetry');
+  if(!s.cards) return x1Loading();
+  const c=hubCard(s.boxKind)||{kind:s.boxKind}, label=hubLabel(c)||s.boxKind;
+  const b=(c.config&&c.config.box)||null, st=b&&b.status, can=hubManage();
+  const help=can?`<button class="btn2" style="width:100%" onclick="APP.cmd('hubHelp','${escAttr(s.boxKind)}')">${st==='requested'||st==='shipped'||st==='delivered'?T('Box is plugged in — continue','盒子已接入 — 继续'):T('I already have it — continue','已有盒子 — 继续')}</button>`:'';
+  let body;
+  if(st==='requested'||st==='shipped'||st==='delivered'){
+    const when=String((st==='delivered'?b.delivered_at:st==='shipped'?b.shipped_at:b.requested_at)||'').slice(0,10);
+    const head=st==='delivered'?T('Box delivered','盒子已送达'):st==='shipped'?T('Box shipped — on its way','盒子已寄出 — 在路上'):T('Box requested','已申请盒子');
+    const copy=st==='delivered'?T('Your box has arrived. Plug it into your shop’s internet, then continue below.','盒子已送达。请接入门店网络,然后点击继续。')
+      :st==='shipped'?T('Your box is on the way. When it arrives, plug it into your shop’s internet and continue below.','盒子已在路上。到货后请接入门店网络,然后点击继续。')
+      :T('We got your request. Our team will contact you to arrange delivery and any cost. Once the box arrives, plug it into your shop’s internet and continue below.','我们已收到申请。团队会联系您安排寄送及费用。盒子到货后,请接入门店网络,然后点击继续。');
+    body=`<div style="font-size:15px;font-weight:500;color:var(--sage-ink)">✓ ${head}${when?` <span class="num" style="color:var(--text-secondary);font-weight:400">${escAttr(when)}</span>`:''}</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${copy}</div>
+      ${b.tracking?`<div style="font-size:13px">${T('Tracking','快递')}: <span class="num" style="font-family:monospace">${escAttr(b.tracking)}</span></div>`:''}
+      ${help}`;
+  } else {
+    body=`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${escAttr(T(label+' setup starts with a small box we ship to you. Plug it into your shop’s internet — it makes your '+label+' logins come from your own shop, which keeps your account safe. We set this up together and help at every step.',
+        label+'设置的第一步是我们寄给您的小盒子。将它接入门店网络后,'+label+'的登录都来自您自己的门店,账号更安全。我们会全程协助您完成设置。'))}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('After you request it, our team contacts you to arrange delivery and any cost.','提交申请后,团队会联系您安排寄送及费用。')}</div>
+      ${can?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('hubBoxRequest')">${s.busy==='box'?T('Sending…','提交中…'):T('Request the box','申请盒子')}</button>`:''}
+      ${help}`;
+  }
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${body}
+    ${s.note.box?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.note.box))}</div>`:''}
+    ${s.note[s.boxKind]?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.note[s.boxKind]))}</div>`:''}</div>`;
+}
+SUBS.hubbox={title:['Set up','设置'],titleOf:()=>T('Set up','设置')+' '+escAttr(hubLabel(hubCard(hub().boxKind))||hub().boxKind||''),render:()=>screenHubBox()};
+
+/* ── Eleme: link the shops, then verify and enable ───────────────────────── */
+function hubElemeLoad(){
+  const s=hub(); if(s.elTried) return; s.elTried=true; s.elErr=null;
+  api('/eleme/stores').then(r=>{ s.elStores=Array.isArray(r)?r:((r&&(r.stores||r.data))||[]); render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.elErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+reg('hubElemeOpen', ()=>{ if(!canRoute('hubeleme')) return; const s=hub(); s.elTried=false; s.elStores=null; s.shopIds={}; s.note.el=null; push('hubeleme'); });
+reg('hubShopId', (id,v)=>{ hub().shopIds[Number(id)]=String(v==null?'':v); });
+reg('hubElemeShop', id=>{
+  const s=hub(); id=Number(id); if(s.busy||!mCan('eleme:sync')) return;
+  const st=(s.elStores||[]).find(x=>x.id===id); const shopId=String(s.shopIds[id]||'').trim();
+  if(!st||!shopId) return;
+  s.busy='shop:'+id; s.note.el=null; render();
+  apiWrite('/eleme/shop',{storeId:id,storeCode:st.code,shopId},'POST').then(()=>{
+    s.busy=null; s.shopIds[id]=''; s.elTried=false; hubLoad(true); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note.el=x6Words(e,'Failed','操作失败'); render(); });
+});
+reg('hubElemeEnable', ()=>{
+  const s=hub(); if(s.busy||!mCan('eleme:sync')) return;
+  s.busy='enable'; s.note.el=null; render();
+  apiWrite('/eleme/enable',{enabled:true},'POST').then(()=>{
+    s.busy=null; showToast(T('Eleme enabled','已开启')); hubLoad(true);
+    if(state.stack.length&&state.stack[state.stack.length-1].route==='hubeleme') pop();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.note.el=x6Words(e,'Failed','操作失败'); render(); });
+});
+function screenHubEleme(){
+  const s=hub(); hubElemeLoad();
+  if(s.elErr&&!s.elStores) return x1Err(escAttr(String(s.elErr)),'hubElemeRetry');
+  if(!s.elStores) return x1Loading();
+  const stores=s.elStores, linked=stores.filter(x=>!!x.shop_id).length, can=mCan('eleme:sync');
+  const step=(stores.length&&linked===stores.length)?'verify':'shop';
+  const rail=`<div style="font-size:12.5px;color:var(--text-secondary)">${step==='shop'?`<b style="color:var(--text-primary)">1. ${T('Link shops','关联门店')}</b> › 2. ${T('Verify & enable','验证并开启')}`
+    :`✓ ${T('Link shops','关联门店')} › <b style="color:var(--text-primary)">2. ${T('Verify & enable','验证并开启')}</b>`}</div>`;
+  const nm=x=>escAttr(LANG==='en'?(x.nameEn||x.name||x.code):(x.name||x.nameEn||x.code));
+  let body;
+  if(step==='shop'){
+    body=`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${T('Enter each store’s Eleme shop id, found in the Eleme merchant backend’s URL (…/app/shop/<id>/…).','在饿了么商家后台地址栏中找到店铺ID(…/app/shop/<id>/…),并在此为每个门店填写。').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      ${stores.length?tmList(stores.map(x=>tmRow({label:nm(x),
+        right:x.shop_id?`<span style="font-size:13px;color:var(--sage-ink)">✓ ${escAttr(x.shop_name||x.shop_id)}</span>`
+          :can?`<span style="display:flex;gap:6px;align-items:center"><input inputmode="numeric" placeholder="${escAttr(T('Eleme shop id','店铺ID'))}" style="width:120px" value="${escAttr(s.shopIds[x.id]||'')}" oninput="APP.cmd('hubShopId',${Number(x.id)},this.value)">
+            <button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px" ${s.busy?'disabled':''} onclick="APP.cmd('hubElemeShop',${Number(x.id)})">${s.busy==='shop:'+x.id?T('Saving…','保存中…'):T('Save','保存')}</button></span>`:''})))
+        :`<div style="font-size:13.5px;color:var(--text-secondary)">${T('No stores yet.','暂无门店。')}</div>`}`;
+  } else {
+    const need=stores.filter(x=>!x.sessionActive);
+    body=`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${T('All stores linked to an Eleme shop. Map products by SKU on the Eleme page, then switch the channel on.','所有门店已关联饿了么店铺。请在饿了么页面按货号映射商品,然后开启渠道。')}</div>
+      ${need.length?`<div style="background:var(--amber-tint);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--amber-ink);line-height:1.5">${T('These stores still need a one-time login (an ops task, not a click here):','以下门店还需要一次性登录(需运维操作,非此处点击):')} <b>${need.map(nm).join(', ')}</b></div>`
+        :`<div style="font-size:13px;color:var(--sage-ink)">✓ ${T('Every linked store has an active login session.','所有已关联门店均已登录。')}</div>`}
+      ${can?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('hubElemeEnable')">${s.busy==='enable'?T('Saving…','保存中…'):T('Enable channel','开启渠道')}</button>`:''}
+      ${canRoute('mirror_eleme')?`<button class="btn2" style="width:100%" onclick="APP.cmd('push','mirror_eleme')">${T('Map products','商品映射')}</button>`:''}`;
+  }
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${rail}${body}
+    ${s.note.el?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.note.el))}</div>`:''}
+    ${hubManage()?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('hubHelp','eleme')">? ${T('Get help','获取帮助')}</button>`:''}</div>`;
+}
+reg('hubElemeRetry', ()=>{ hub().elTried=false; render(); });
+SUBS.hubeleme={title:['Set up Eleme','设置饿了么'],render:()=>screenHubEleme()};
+/* §325 X9a ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -41364,6 +41570,12 @@ const ROUTE_CAP={
   mtbundles:['meituan:view','meituan:sync'], mtbundle:'meituan:sync',
   /* §325 X8e. Answered in canRoute (guanyi:view, and money). */
   gzbilling:'guanyi:view',
+  /* §325 X9a. The hub reads for the Sales page's keys and the hub's own; its
+     writes are integrations:manage (help, the box, to-dos) and eleme:sync
+     (shop ids, Enable), each drawn for its key. */
+  chhub:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
+  hubbox:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
+  hubeleme:['eleme:view','eleme:sync'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
