@@ -309,6 +309,9 @@ console.log('\n══ screenProductCatalogue · Products ══');
     loadProdGrid: () => {}, loadProdHi: () => {},
     prodRows: () => PRODS.slice(), prodSubcats: () => [], prodStoreOn: () => false,
     mCan: () => false,
+    // §325 X3: the Count sheet button beside Export. With mCan false it is not
+    // drawn, exactly as Export is not, so the two outputs still compare.
+    countButton: () => '',
     prodCategories: () => [],
     prodFiltered: () => PRODS.slice(),
     prodUnits: (r) => r,

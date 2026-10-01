@@ -1,5 +1,19 @@
 # Tacet delivery vocabulary — locked
 
+**v1.256 · 2026-09-30 · §357 STORES, STOCK STAFF AND TEAM DEVICES ON THE PHONE — 2 STRINGS COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP OR THE PHONE.** See *Stores, their stock staff, and team devices on the phone (§357)*.
+
+**v1.255 · 2026-09-30 · §356 THE SHOP TAB AND CUSTOMER SERVICE ON THE PHONE — 4 STRINGS COMPOSED BY CLAUDE (TWO OF THEM UNGLUING A DESKTOP OPTION), THE REST COPIED WHOLE.** See *The Shop tab and the customer-service button on the phone (§356)*.
+
+**v1.254 · 2026-09-30 · §355 BRAND AND THE BRAND STUDIO ON THE PHONE — THE BRAND PAGE COPIED WHOLE; THE STUDIO, ENGLISH-ONLY ON THE DESKTOP, COMPOSED IN CHINESE BY CLAUDE (55 STRINGS).** See *The brand and the brand studio on the phone (§355)*.
+
+**v1.253 · 2026-09-30 · §354 THE PRODUCT PAGE'S SECTIONS AND THE COUNT SHEET ON THE PHONE — NOTHING COMPOSED, EVERYTHING COPIED WHOLE.** See *The product page's sections and the count sheet on the phone (§354)*.
+
+**v1.252 · 2026-09-30 · §353 THE OPERATIONS SWITCHES ON THE PHONE — 1 STRING COMPOSED BY CLAUDE (A TRIM), 2 LIVE DESKTOP STRINGS CORRECTED (饶 → 饿), THE REST COPIED WHOLE.** See *The Operations panel's switches on the phone (§353)*.
+
+**v1.251 · 2026-09-30 · §352 CATEGORIES ARRANGED ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SHELF.** See *Arranging categories on the phone (§352)*.
+
+**v1.250 · 2026-09-30 · §351 DUPLICATE AND RESTORE ON THE PHONE — TWO PROGRESS WORDS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Duplicating a product, and restoring a version, on the phone (§351)*.
+
 **v1.249 · 2026-09-30 · §350 A PRODUCT'S PHOTOS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's photos on the phone (§350)*.
 
 **v1.248 · 2026-09-30 · §349 A PRODUCT'S DETAILS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (THE COST TAG'S CHINESE), THE REST COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's details on the phone (§349)*.
@@ -10930,3 +10944,300 @@ Content → Media · 图库为空 — 请在「内容 → 媒体」中上传图�
 The reorder buttons reuse the live `Move up · 上移` / `Move down · 下移` (the
 promo-card editor's). `Close · 关闭`, `Try again · 重试` and `Loading… · 加载中…`
 are the phone's own.
+
+## Duplicating a product, and restoring a version, on the phone (§351)
+
+Operator register only (Rule 1): the phone's product sheet and its Version
+history list (`public/m.html`). Copied whole from the desktop product editor
+(`public/retail-admin/09-products.js`): `Restore · 还原`, `Restore this
+version? · 还原此版本?` and its sentence, `Restored to the chosen version. ·
+已还原到所选版本。`, `Restore failed: · 还原失败:`, `Roll this product back to
+any saved version. Stock counts are never changed. ·
+将此产品还原到任意已保存的版本。库存数量不会被更改。`, `Duplicate · 复制`,
+`Duplicated — set the new SKU / price / size, then publish. · 已复制 —
+请设置新货号 / 价格 / 规格后再上架。`, `Duplicate failed: · 复制失败:`.
+
+**Composed by Claude, 2026-10-01.** The desktop shows no progress word on
+either button:
+
+| shipped | built from |
+|---|---|
+| `Restoring… · 还原中…` | `Restore · 还原` + `中…`, the shape of the live `保存中…` / `添加中…` |
+| `Duplicating… · 复制中…` | `Duplicate · 复制` + `中…`, the same shape |
+
+**Live candidates rejected:** `Restoring… · 恢复中…` (live on the desktop
+elsewhere, but it says 恢复 under a button that says 还原).
+
+## Arranging categories on the phone (§352)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's Categories screen (`public/m.html`).
+
+Copied whole from the desktop shelf (`public/retail-admin/01-core.js`,
+`public/retail-admin.html`):
+- **The views and the QR menu:** `Mini app · 小程序`, `QR menu · 二维码菜单`,
+  `Own order for the QR menu · 二维码菜单独立顺序`, `Reset to mini app order ·
+  重置为小程序顺序`, `Same order as the mini app · 与小程序顺序相同`, `N hidden on
+  the QR menu · 二维码菜单已隐藏`, `Hidden on the QR menu · 二维码菜单已隐藏`, the
+  eye's two names.
+- **The tree:** `Add top category · 新增主分类`, `Add subcategory · 新增子分类`,
+  `Rename · 重命名`, `Remove category · 删除主分类`, `Remove subcategory ·
+  删除子分类`, the rename card's four field names, `Save name · 保存名称`,
+  `Give it an English name first · 请先填写英文名`, `N products re-tag themselves
+  when you save · 保存后 N 件产品自动跟随`, both remove questions whole, `The shop
+  needs at least one category · 店面至少需要一个主分类`, `Subcategories — the
+  section headings · 子分类 — 区块标题`, `Add a top category to start arranging
+  the shop. · 新增一个主分类，开始整理店面。`, `Saved · N products re-tagged ·
+  已保存 · 迁移 N 个产品`, `Save failed: · 保存失败:`.
+- **The products on a shelf:** `Products on this shelf · 货架上的产品`, `Nothing
+  stands on this shelf yet. · 该分类下暂无产品。`, `Could not load the products on
+  this shelf. · 加载该分类的产品失败。`, `Move to another shelf · 移动到其他分类`,
+  `no heading · 无区块`, `draft · 未上架`, `Moved · 已移动`, `Could not move it ·
+  移动失败`, `Reorder failed: · 排序失败:`.
+
+The reorder buttons reuse the live `Move up · 上移` / `Move down · 下移`.
+`Saved · 已保存`, `this category · 该主分类` and the stale-save sentence are
+existing pairs.
+
+## The Operations panel's switches on the phone (§353)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Settings → Features
+group and its Operations screen (`public/m.html`, the §325 X2 block). Copied
+whole from the desktop (`public/retail-admin/02-settings-ops.js`,
+`05-marketing.js`, `09-products.js` and their markup in
+`public/retail-admin.html`), except the rows below.
+
+| String | Status |
+|---|---|
+| `Geocode now · 立即定位` | **composed by Claude (X2), as a trim.** The confirm's button. The desktop's confirm label is English-only (`Geocode now`), so its English is copied. The Chinese is cut from the desktop's own button, `Geocode all stores & addresses now · 立即定位所有门店与地址`, down to its verb. Rejected: the whole button label as the confirm, because the question above it already says *all stores and addresses*; `Confirm · 确认`, because it says nothing about spending the quota. |
+| `Flag any product low when it drops to this many units. · 商品降到此数量时提醒。` | **trimmed**, not composed. This is the desktop's sub-label under *Low-stock alert at*, with its second clause (*Each store can set its own number below. · 每个门店可在下方单独设置。*) cut. The per-store number is not editable on the phone until the store step (X6). |
+| `尚未关联饿了么店铺` (*has no Eleme shop linked yet*) and `未上架饿了么` (*Not on Eleme*) on the desktop | **corrected, live strings.** Both were written in `14-eleme.js` as `\u` escapes whose 饿 was `饶`, which is 饶 (ráo). This is the misprint this document's Eleme entry corrected once in that tab's plain-text strings; the escapes hid the same error from that sweep. Both now carry `饿` (饿). The phone already printed 饿 (§325 X1). No other word changes. |
+| `The floating Support button in the bottom-right corner opens a chat with platform support. Turn it off to hide it. · 右下角悬浮的客服按钮用于联系平台客服。关闭即可隐藏。` | **copied**, with the desktop's `<b>` around *Support* / *客服* dropped. The desktop writes the two languages as two blocks, not a pair. |
+| `Geocoded a/b stores · c/d addresses · 已定位 门店与地址` | **copied as the desktop has it.** Its Chinese half carries no numbers. The counts are on the screen directly above, read again after the run. |
+
+Copied whole from the desktop:
+
+- Features: `Production · 生产`, `Waste · 损耗`, `Running low here · 此门店库存偏低`, and each one's off-state sentence (`descOff`), split at its ` · `.
+- Low stock: `Low-stock alert at · 低库存提醒`,
+  `Flag a product low at this many units · 低库存提醒数量` (the field's label),
+  `units · 件`,
+  `Send me a daily list of what is running low · 每天发送库存偏低清单`,
+  `at · 时间`, and the sentence about who receives it
+  (`One message a day, naming the shortest few … · 每天一条消息,…`).
+- Support: `Support button · 客服按钮`, `Show the Support button · 显示客服按钮`.
+- Locating: `Geocode all stores & addresses now · 立即定位所有门店与地址`,
+  `Geocoding… · 定位中…`, the quota question (`Geocode all stores + customer
+  addresses now? Uses your maps quota. · 现在为所有门店与客户地址重新定位?将消耗地图配额。`),
+  `Daily map quota exhausted — geocoding stopped. Fix the key (see panel), quota
+  resets next day. · 地图配额已用尽,已停止。请修复 key,次日重置。` (its 🚫 dropped),
+  `Could not geocode addresses · 地址定位失败` (its ⚠ dropped),
+  `Set AMAP_MAPS_KEY or TENCENT_MAPS_KEY in /root/roots-v2/.env first · 请先在
+  /root/roots-v2/.env 配置地图 key`, `Failed · 操作失败`.
+- Recently deleted: `Recently deleted · 最近删除`, its helper sentence,
+  `Nothing has been deleted in the last N days. · 最近 N 天内没有删除记录。`,
+  `Could not read what was deleted · 无法读取删除记录`, `Put it back · 恢复`,
+  `Put back · 已恢复`, the *taken* and *gone* sentences,
+  `Could not put it back · 恢复失败`, and the record kinds as the server sends them.
+
+The phone's own, already live: `Saved · 已保存`, `Turned on · 已开启`,
+`Turned off · 已关闭`, `Saving… · 保存中…`, `Loading… · 加载中…`, `Try again · 重试`,
+`That did not save. The setting is unchanged. · 没有保存成功。设置没有变化。`.
+
+## The product page's sections and the count sheet on the phone (§354)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Operations screen and
+its Products catalogue (`public/m.html`, the §325 X3 block). **Nothing
+composed.** Everything is copied from the desktop, as follows.
+
+- **Product page** (`public/retail-admin/31-product-page.js` and its card in
+  `public/retail-admin.html`):
+  - the card: `Product page · 产品页`, its description (`The order your product
+    page shows its sections in, and which ones it shows at all. · 产品页各分区的显示顺序，以及显示哪些分区。`),
+    its note (`A hidden section keeps its data. … · 隐藏的分区会保留其数据，…`) and
+    `Reset to default order · 重置为默认顺序`;
+  - the six sections and their descriptions, from `PPG_SECTIONS`: `Basics · 基础`,
+    `Where it shows · 分类与陈列`, `Cost & Pricing · 成本与定价`, `Stock · 库存`,
+    `How it’s sold · 售卖方式`, `Shopper page · 顾客页面`;
+  - the controls: `Always shown · 始终显示`, `Show this section · 显示此分区`,
+    `Move up · 上移`, `Move down · 下移`;
+  - the save state: `Save failed · 保存失败` (the desktop's status line, without its
+    trailing colon and the server's code). `Saving… · 保存中…` and `Saved · 已保存`
+    are both live on both surfaces.
+- **Count sheet** (`public/retail-admin/26-print.js` `paPrintCountSheet`, and its
+  button in `public/retail-admin.html`):
+  - the button and its sheet: `Count sheet · 盘点表` and, as the button's label for
+    screen readers, its tooltip `A sheet to take to the shelves · 打印盘点表`;
+  - the document's title, `Stock count` over `盘点表`, with `All locations · 全部门店`;
+  - the facts: `Date · 日期`, `Lines · 行数`, `Counted by · 盘点人`;
+  - the column headings in the desktop's language-ordered form: `Product 商品 / 商品 Product`,
+    `System 系统 / 系统 System`, `Counted 实盘 / 实盘 Counted`, `Difference 差异 / 差异 Difference`;
+  - the note (`Write the counted figure at the shelf. … · 请在货架前填写实盘数量。…`) and
+    `Nothing to show · 暂无内容`.
+- **The phone's own, already live:** `Print · 打印`, `Print failed · 打印失败` and
+  `Close · 关闭`, from the purchase order's print view.
+
+## The brand and the brand studio on the phone (§355)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Brand and AI Brand
+Studio screens (`public/m.html`, the §325 X4 block).
+
+**Brand: copied whole** from `public/backend-brand.html`:
+- the head sentence: `Your logo and name lead the admin, sign-in page and customer emails.
+  Everything else keeps the tacet look. · 您的徽标与名称将展示在后台、登录页与顾客邮件上。其余部分保持 tacet 外观。`;
+- the logo: `Upload logo · 上传徽标`, `Remove · 移除`, `Logo updated · 徽标已更新`,
+  `Logo removed · 徽标已移除`;
+- the name: `Brand name · 品牌名称`, `Your brand · 您的品牌`, `Save · 保存`, `Saved · 已保存`;
+- the failures: `Please choose an image file · 请选择图片文件`,
+  `Couldn’t read that file · 无法读取该文件`, `Couldn’t read that image · 无法读取该图片`,
+  `Couldn’t save — please try again · 保存失败，请重试`,
+  `Network error — please try again · 网络错误，请重试`;
+- the studio card: `Not sure where to start? · 还没有想好?`, its sentence, and
+  `Open the brand studio · 打开品牌工作室`.
+
+`Brand · 品牌` is the desktop nav's own pair.
+
+**Studio.** `public/brand-studio.html` has no Chinese at all, so every string
+below is **composed by Claude (X4)**, except four that reuse live words:
+`Bilingual · 双语` (live), `Your brand · 您的品牌` (the Brand page's own placeholder),
+`Start over · 重新开始` (the live `Start over — clear every matched name · 重新开始 —
+清除所有已匹配名称`, cut at its dash), and the editor's name 小程序编辑器 (live
+`Mini App Editor · 小程序编辑器`), used inside two composed sentences.
+
+| English (the desktop's) | Composed Chinese | Built from / why |
+|---|---|---|
+| AI Brand Studio | AI 品牌工作室 | 品牌工作室 is live (the Brand page's `Open the brand studio · 打开品牌工作室`). |
+| Tell us about your shop and we’ll design your storefront — colours, fonts, and layout. | 介绍一下你的店铺，我们来设计你的店面 — 配色、字体与版式。 | 版式 live (`Layout · 版式`). |
+| What’s your shop about? | 你的店铺是做什么的？ | |
+| e.g. plant-based bakery with seasonal sourdough | 例如：主打时令酸种面包的植物基烘焙店 | |
+| Who are your shoppers? / Who are your customers? | 你的顾客是谁？ / 你的客户群体是？ | Two different desktop questions, kept different. |
+| A mix of both / Mostly Chinese / Mostly international | 两者都有 / 以中国顾客为主 / 以外国顾客为主 | |
+| Storefront language | 店面语言 | |
+| Pick the words that describe your brand | 选出描述你品牌的词 | |
+| Playful, Premium, Minimal, Bold, Natural, Warm, Modern, Heritage, Quirky, Calm | 活泼, 高端, 简约, 大胆, 自然, 温暖, 现代, 传统, 俏皮, 沉静 | 活泼 is live (`Playful — bigger, chunkier · 活泼 — 更大更粗`). |
+| young-trendy, families, premium-professional, budget-conscious, health-conscious | 年轻潮流, 家庭, 高端职场人士, 注重实惠, 注重健康 | The desktop shows these slugs as they are. The phone shows Chinese and keeps the slug as the value sent. |
+| Colour direction / Surprise me, Earthy, Vibrant, Soft/Pastel, Dark/Moody, Monochrome, Warm, Cool | 配色方向 / 随你发挥, 大地色, 鲜艳, 柔和粉彩, 深沉, 单色, 暖色, 冷色 | |
+| Typography feel / Match my vibe, Modern sans, Classic serif, Friendly rounded, Bold display, Elegant | 字体风格 / 配合我的风格, 现代无衬线, 经典衬线, 亲和圆体, 醒目标题体, 优雅 | |
+| Design my brand / Designing your storefront… | 设计我的品牌 / 正在设计你的店面… | |
+| The design service is busy — please try again. | 设计服务繁忙，请稍后再试。 | |
+| This is taking a while — please try again. | 耗时较长，请稍后再试。 | |
+| Please try again. | 请重试。 | Live as the second clause of `保存失败，请重试`. |
+| Fonts — display: … · body: … | 字体 — 标题：… · 正文：… | |
+| Shape: … · density: … · audience: … | 形状：… · 密度：… · 受众：… | 形状 and 密度 live (`Shape · 形状`, `Density · 密度`). |
+| Apply as draft / Saving draft… | 应用为草稿 / 正在保存草稿… | 草稿 live. |
+| Saved as a draft — preview it in the Mini App Editor. | 已保存为草稿 — 请在小程序编辑器中预览。 | |
+| Drafts preview in the Mini App Editor before they go live. | 草稿会先在小程序编辑器中预览，确认后才会上线。 | |
+
+**Rejected candidates.**
+- 您 throughout the studio. The Brand page uses 您, but the studio is a
+  conversational quiz. Its questions read as 你 in this app's other
+  conversational screens (the ask strip: `需要补货`, `我个人支付了费用`).
+  `您的品牌` is kept where it is the Brand page's own live string.
+- `设计 · Design` as the button. It names the act, not the result the operator
+  is asking for.
+
+**Left in English, as the server sends them:** the job's error, and the
+contrast and colour warnings (`lib/brand-gates.js`).
+
+## The Shop tab and the customer-service button on the phone (§356)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Shop tab and Customer
+service screens (`public/m.html`, the §325 X5 block). Copied whole from the
+desktop's two Settings panels (`public/retail-admin.html` `#sub-shop` and
+`#sub-cs`, and `05-marketing.js`), except the rows below.
+
+| String | Status |
+|---|---|
+| `WeCom — recommended · 企业微信 — 推荐` | **composed by Claude (X5), from the desktop's own option.** The desktop writes `WeCom (企业微信) — recommended · 推荐`, whose English half carries Chinese. The language pass therefore never splits it, and a Chinese reader sees the whole glued line. Rewritten as a clean pair from its own words. |
+| `WeChat customer service — public account · 微信客服 — 公众号客服` | **composed by Claude (X5), the same way**, from `WeChat 客服 — public-account customer service · 公众号客服`. |
+| `Chinese label · 中文标签` | **composed by Claude (X5).** The desktop field's label is `中文 label` in both languages. Built to sit beside the live `EN label · 英文标签`, which it mirrors. |
+| `Chinese hours line · 中文营业时间` | **English composed by Claude (X5).** The Chinese is the desktop's own label (`中文营业时间`); the English mirrors the live `EN hours line · 英文营业时间`. |
+| `Corp ID · 企业ID`, `Service URL · 客服链接` | **split, not composed.** The desktop prints these as `Corp ID (企业ID)` and `Service URL (客服链接)`. Each half is shown in its own language. |
+| `QR uploaded · 二维码已上传` | **trimmed.** This is the desktop's `QR uploaded — remember to Save · 二维码已上传 — 记得点保存` with its second clause cut. The card saves itself, so there is nothing to remember. |
+| `Toggle which filter widgets appear above the product list. Each adds a row to the top of the Shop. · 控制产品列表上方显示哪些筛选控件;每项会在商城顶部加一行。` | **trimmed.** The desktop's sentence ends by pointing at a live preview the phone does not draw; that last sentence is cut in both halves. |
+
+Copied whole from the desktop:
+
+- **Shop tab:** `Shop tab · 商城页`, `Layout · 布局` and its two-block description,
+  the five layouts (`List with sidebar · 列表 + 侧栏` …), `Default sort · 默认排序`
+  and its sentence, the five sorts (`Featured (curated order) · 精选(手动排序)` …),
+  `Filter & controls bar · 筛选与操作条`, and the seven switch labels.
+- **Customer service:**
+  - the panel: `Customer service · 客户服务` and its introduction;
+    `How customers reach you · 顾客联系方式` and its sentence;
+    `Off — hide the button entirely · 关闭 — 完全隐藏按钮`;
+    `QR code — show a scannable image · 二维码 — 显示可扫描图片`;
+  - WeCom: `WeCom credentials · 企业微信凭证`;
+  - the QR image: `QR code image · 二维码图片` and its sentence,
+    `No QR uploaded yet. · 尚未上传二维码。`, `Upload a QR code image · 上传二维码图片`,
+    `Uploading QR… · 上传二维码中…`, `Upload failed · 上传失败`, `Remove · 移除`;
+  - the label and hours: `Button label & hours · 按钮文案与营业时间` and its sentence,
+    `EN label · 英文标签`, `EN hours line · 英文营业时间`,
+    `Phone number (optional) · 电话(可选)` and its note (the desktop's `<b>` dropped);
+  - where it shows: `Where to show · 显示位置` and its sentence, and the five pages;
+  - the bubble: `Floating bubble look · 悬浮按钮样式` and its sentence, `Size · 大小`
+    with its three sizes, `Shape · 形状` with its three shapes, `Icon · 图标` with its
+    five icons, `Custom emoji · 自定义`, `Colour · 颜色`, `Button colour · 按钮颜色`,
+    `Side · 位置` with `Right · 右` and `Left · 左`, and
+    `Height off bottom (rpx) · 距底高度`.
+  - The swatch names (Forest green, Oat, Terracotta) are the desktop's titles.
+    They are read only by screen readers and are English on both surfaces.
+
+The autosave foot is the phone's own, already live: `Saving… · 保存中…`,
+`All changes saved · 已自动保存`, `Save failed: · 保存失败:`, `Undo · 撤销`,
+`Version history · 历史版本`, `No versions yet — they’re saved automatically as you
+edit. · 暂无历史版本 — 编辑时会自动保存。`, `Could not load the history · 无法加载历史版本`.
+
+## Stores, their stock staff, and team devices on the phone (§357)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's store editor, a
+store's stock staff, and Team devices (`public/m.html`, the §325 X6 block).
+Copied from the desktop's Operations → Stores panel and Team → Team devices
+card (`public/retail-admin/02-settings-ops.js`, `public/retail-admin.html`),
+except the rows below.
+
+| String | Status |
+|---|---|
+| `That code is already used by another store. · 该编号已被其他门店使用。` | **composed by Claude (X6).** The server answers a taken code with the bare `code_taken`, and the desktop prints `Failed · 操作失败: code_taken`. Modelled on the live `That AppID is already used by another account here. · 该 AppID 已被其他账户使用。` (15-integrations.js). Rejected: the desktop's bare code (not words); `That username is already taken · 该用户名已被占用` (wrong thing). |
+| `Lower = preferred · 数字越小越优先` | **Chinese composed by Claude (X6).** The English is the desktop's `(lower = preferred)`, which has no Chinese half. No live Chinese candidate was found. |
+| `Username may use letters, numbers, . _ - only · 用户名仅限字母、数字和 . _ -` | **another live pair, used in place of the desktop's English-only hint** `— letters/numbers . _ -` under the login field. It is the server's own rule sentence (routes/backend-team.js) and the phone's Add someone check. |
+| `GPS coordinates · 经纬度` hint: `Optional manual override. Leave blank to auto-locate from the address on save. Only fill these to pin an exact spot. · 留空则保存时按地址自动定位;仅在需要精确指定时填写。` | **trimmed.** The desktop's English also links to a coordinate picker site; that clause is cut. The Chinese is the desktop's own, whole. |
+| `Latitude · 纬度`, `Longitude · 经度` | **split, not composed**, from the desktop placeholders `Latitude 纬度 23.1519` and `Longitude 经度 113.4061`. Each half is shown in its own language, with the example number kept. |
+| `GPS located · 已定位` | **trimmed.** The desktop's `📍 GPS located · 已定位` without the emoji. |
+| `Sets the store GPS, auto-geocoded on save · 决定门店 GPS,保存时自动定位`, `At least 10 characters · 至少 10 位` | **copied, capitalised.** These are hints that follow a dash on the desktop and start a line on the phone. |
+| `Printers and payment keys are set on desktop. · 打印机与支付密钥在电脑端设置。` | **trimmed from a live phone pair.** It was `Store details, printers and payment keys are set on desktop. · 门店资料、打印机与支付密钥在电脑端设置。`. Store details are edited on the phone now, so that item is cut from both halves. This is the same cut §325 made earlier when "staff" came out. |
+
+Copied whole:
+
+- **Store editor (desktop):**
+  - the actions: `+ Add store · 添加门店`, `Edit · 编辑`, `Edit store · 编辑门店`, `New store · 新建门店`;
+  - the fields: `Code · 短标识`, `Phone · 电话`, `City · 城市`, `District · 区`, `Street address · 详细地址`, `Opens · 开门`, `Closes · 关门`;
+  - `Channel sync starts · 渠道同步开始` and its sentence;
+  - `Sort priority · 排序`;
+  - `Low-stock alert at · 低库存提醒` and its sentence, and `Store default · 全店默认`;
+  - `Offer store pickup · 到店自提`;
+  - `no GPS — set a street address · 未定位,请填写详细地址`;
+  - `No stores yet. Add one below. · 暂无门店,请在下方添加。`;
+  - `Invalid coordinates · 坐标无效`, `Code required · 请填写编号`, `Saved · 已保存`, `Failed · 操作失败`.
+- **Store editor (phone):** `Name (English) · 名称(英文)` and `Name (中文) · 名称(中文)` (the recipe details' pair; the desktop labels are one language each); `Store · 门店`; `Operations · 运营`; `Could not load this. · 无法加载。`; the autosave foot (`Saving… · 保存中…`, `All changes saved · 已自动保存`, `Save failed: · 保存失败:`, `Undo · 撤销`, `Version history · 历史版本`, and the no-versions toast); `Could not load the history · 无法加载历史版本`.
+- **Stock staff (desktop):**
+  - the screen: `Stock staff · 库存员`, the line *These people can only open the Quick Stock app, and only for … — never another store. · 这些成员仅可使用快捷库存,且只能操作…,无法操作其他门店。*, `No stock staff yet for this store. · 该门店暂无库存员。`;
+  - the form: `Name · 姓名`, `Login · 登录名`, `Password · 密码`, `+ Add stock staff · 添加库存员`;
+  - the row actions: `Reset password · 重置密码`, `Remove · 移除`;
+  - the remove confirm: `Remove this stock staff member? They will lose access immediately. · 移除该库存员?其访问权限将立即失效。`;
+  - the reset prompt: `New password (at least 10 characters) · 新密码(至少 10 位)`;
+  - the checks: `Login required · 请填写登录名`, `Password must be at least 10 characters · 密码至少需要 10 位`;
+  - the toasts: `Added · 已添加`, `Removed · 已移除`, `Password reset · 密码已重置`;
+  - `Failed to load staff · 加载失败`.
+- **Team devices (desktop):**
+  - the card: `Team devices · 团队设备` and its line;
+  - the filter: `All · 全部`, `Desktop · 桌面`, `Mobile · 移动`;
+  - the rows: `Phone · 手机`, `Tablet · 平板`, `Active now · 当前活动`, the "… ago" forms, `since … · …以来`, `(You) · (你)`, `This device · 当前设备`;
+  - the actions: `Sign out · 登出`, `Sign out of this device · 登出此设备`, `Signing out… · 正在登出…`;
+  - the count: `device(s) signed in · 台设备已登录`;
+  - the empty states: `No devices match this filter. · 没有符合筛选条件的设备。`, `No devices signed in. · 没有已登录的设备。`;
+  - the errors: `Couldn’t load devices. · 无法加载设备。`, `Couldn’t sign out device · 无法登出设备`;
+  - the confirm: `Sign out of this device? · 登出此设备？`, `You’ll be returned to the login page. · 您将返回登录页面。`.
+
+Server sentences that arrive as `English · 中文` (for example `That username is
+already taken · 该用户名已被占用`) are shown one half per language. They are not
+new strings.

@@ -24392,3 +24392,378 @@ main photo on its first entry.
    Any change makes them this size's own, as on the desktop.
 6. **Undo puts back the gallery as it was loaded and sends that list.** The
    catalogue card's picture follows the saved main photo.
+
+## §351 — A PRODUCT CAN BE DUPLICATED, AND ONE OF ITS VERSIONS RESTORED, FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Two desktop actions reached the phone. The Version history list PD2 made
+read-only now offers **Restore** on every version except the newest. The
+product sheet gains **Duplicate**. Each sends the desktop's request:
+`POST /products/:id/restore-version {version_id}` behind the desktop's
+confirm, and `POST /products/:id/duplicate {as_variant: false, label: null}`,
+the only form the desktop's two Duplicate buttons send.
+
+1. **Restore is gated on `products:edit`**, the key the server maps the
+   restore to. A reader keeps PD2's read-only list. The newest version
+   carries no Restore (it is what the product already is), and the desktop's
+   line saying what Restore does ("…Stock counts are never changed") heads
+   the list only for someone who can use it.
+2. **The confirm is the desktop's, word for word**, and nothing is sent before
+   it is answered. While it runs, the row says so and the list cannot be
+   closed. Success closes the list with the desktop's toast, and the
+   catalogue is read again so the sheet and the list show the restored
+   product. A refusal stays in the list, never in a toast.
+3. **Edits still waiting on the Details screen are saved before the restore,
+   never after.** A pending autosave that landed after the restore would put
+   the edit back over the version just chosen. So the restore waits for that
+   save, and afterwards the Details screen reads the product again.
+4. **Duplicate is gated on `products:create`**, the key the server gives a
+   duplicate because it creates a product. It is not offered on an upstream
+   catalogue, which the server refuses (`catalog_locked`). The desktop's
+   Duplicate carries no `data-cap` at all; the phone draws no button the
+   server would refuse.
+5. **No confirm on Duplicate, as on the desktop**: nothing that exists changes.
+   The copy joins the catalogue and opens for tweaking, with the desktop's
+   reminder to set the new SKU, price and size. An editor gets the copy's
+   Details screen; a creator who may not edit gets its sheet. A failure is
+   said on the sheet.
+6. **Not built:** "Duplicate as a size of this product" (`as_variant: true`
+   with a label). The endpoint takes it, but no desktop control sends it, so
+   it is not a desktop capability to match. Sizes are PD9's.
+
+## §352 — CATEGORIES ARE ARRANGED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Categories screen gained everything the desktop's Products →
+Categories shelf does, with taps instead of drags. It has the **Mini app /
+QR menu** views (§288). In the QR menu's view, Move up / Move down and the
+eye change only the QR menu, and Reset to mini app order is there. On an
+open shelf, the products appear in the order of the view on screen, with Move
+up / Move down inside their heading and Move to another shelf. The tree itself
+can be changed: add, rename and remove top categories and subcategories, and
+reorder them. Every write is the desktop's request:
+`PUT /category-tree {tree, version}` (S2c's version check),
+`PUT /category-tree/qr-order` (the whole small value),
+`POST /products/reorder {ids}`, and
+`PATCH /products/:id {top_category, subcategory}`.
+
+1. **Each committed change is one save, made at once, and the screen waits
+   for it.** The desktop autosaves a working copy 1.2 s after the last drag.
+   A phone has no working copy to come back to. So the tree on screen is
+   only ever the one the server last answered with, a second change cannot
+   start while a save is out, and a refusal stays above the shelf. Toasts
+   only confirm. A rename that re-tags products says how many, in the
+   desktop's words.
+2. **Every tree save carries the version it was read at.** A phone that
+   loaded the tree before somebody else's edit is refused (`stale_tree`),
+   says so, and reads the tree again, instead of putting the old tree back
+   and re-tagging products a second time. This is the S2c check the brief
+   reserved this part of PD8 for.
+3. **The desktop's guards come with each write**:
+   - the rename card's English-name requirement;
+   - "The shop needs at least one category", checked before a remove is asked;
+   - Remove category always asks, naming the subcategories that go with it;
+   - Remove subcategory asks only when products stand under it, as on the
+     desktop;
+   - the server's own refusals (duplicate names) are shown as it words them.
+4. **Gates are what the server checks**: `categories:edit` for the tree,
+   the QR order and the eye, and `products:edit` for a product's order and
+   shelf. A reader sees the shelves exactly as before and no control. A
+   category editor without `products:edit` arranges the tree but not the
+   products.
+5. **The products on a shelf are grouped the way each menu draws them**
+   (`catProdBuildGroups`):
+   - In the mini app's view: headings in the tree's order, a heading the tree
+     no longer names after them, and the products with no heading last.
+   - In the QR menu's view: only products on a QR menu; the no-heading group
+     comes first, with stray headings folded into it.
+   - A variant family moves as one.
+6. **Retired**: the phone note "Rename, reorder, add and remove on desktop".
+   The slow browser suite's case that pinned it now pins the doors instead.
+   It was edited, but not run, because the slow shard is not run.
+
+## §353 — THE PHONE TURNS ON AND OFF WHAT THE DESKTOP'S OPERATIONS PANEL DOES, AND PUTS DELETED THINGS BACK
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step X2 of the Settings / Channels / Dashboard / Billing lane. The desktop's
+Settings → Operations panel holds a set of whole-shop switches and two
+one-off actions the phone did not have. They are on the phone now, each
+sending the desktop's own request, behind the desktop's own guard. Stores,
+staff, printers and keys stay for later steps (X6, X7). The phone's sentence
+saying so is unchanged, because it is still true.
+
+1. **The three missing feature switches.** *Production*, *Waste* and *Running
+   low here* join the six in Settings → Features. They use the desktop's names and
+   its own off-state sentences, and the same write (`PUT /config`,
+   `features.<key>`). The server already gates all three on the Settings
+   screen's keys.
+2. **The low-stock default and the daily list** (Operations): the number of units
+   at which a product counts as low (`inventory.lowStockThreshold`, a whole
+   number, floored at 0, default 5), the daily low-stock list's on/off switch, and
+   the hour it is sent (`inventory.lowStockDigest`, `{enabled, hour}`, on at 09:00
+   unless changed). All three save on change, as on the desktop. **Midnight can be
+   chosen on the phone.** The desktop reads hour 0 as "missing" and sends 9
+   (`parseInt(…) || 9`), so its own picker cannot choose midnight. The phone does
+   not copy that.
+3. **The Support button** (Operations): show/hide the desktop's floating Support
+   launcher (`support.hidden`). It uses the desktop's sentence about what the
+   button is, because the button lives on the desktop.
+4. **Geocode all stores & addresses now** (Operations, under Locating): the
+   desktop's `POST /inventory/geocode-backfill`, behind its question about the
+   maps quota. Two outcomes arrive as a success and are not one: the quota ran
+   out part way, or not one address could be placed. Both are said under the
+   button and stay there. A real success is a toast, and the counts above it are
+   read again.
+5. **Recently deleted** (Operations): what was removed in the last 60 days
+   (`GET /deleted`), and *Put it back* (`POST /deleted/:id/restore`). There is
+   no confirm, as on the desktop: it is the reversible direction. *Taken* and
+   *gone* get the desktop's own sentences, on the row. The delivery-zone and
+   coupon lists are re-read after a restore, as the desktop does.
+6. **Who.** Everything here is inside Settings, so it is drawn for exactly the
+   Settings screen's keys. **Put it back is the one decision, not a copy.** The
+   desktop draws that button for `settings:edit`, a key that `lib/capabilities.js`
+   does not define. So for every account whose permissions resolve, the desktop
+   draws it for nobody. The phone draws it for whoever may make the deletion it
+   undoes:
+   - a delivery zone: `delivery:edit`
+   - a ledger row: `finance:record` (money, so it fails closed)
+   - a coupon: `coupons:edit` or `coupons:delete`
+   - a draft purchase order: `purchasing:edit`
+
+   Nobody loses a button, because nobody had one. The desktop's dead key, and the
+   server leaving `POST /deleted/:id/restore` ungated, are recorded here and not
+   changed by this step.
+7. **A misprint on the desktop is corrected.** Two Eleme strings in
+   `public/retail-admin/14-eleme.js` were written as `\u` escapes carrying 饶
+   (ráo) where the platform is 饿 (è): *has no Eleme shop linked yet* and the
+   *Not on Eleme* chip. Both print 饿了么 now. The phone suite pins the escapes so
+   the misprint cannot come back.
+8. **Not done, deliberately.** Turning Waste off does not hide the phone's Waste
+   row. That row predates any gate, and this file's rule is that an old row is
+   not gated retroactively inside an unrelated step. The server already refuses
+   to record waste while the switch is off.
+
+## §354 — THE PHONE SETS THE PRODUCT PAGE'S SECTIONS, AND PRINTS A STOCK COUNT SHEET
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step X3 of the Settings / Channels / Dashboard / Billing lane. Two desktop
+things the phone did not have. Both are on the phone now. Each uses the
+desktop's own request or document.
+
+1. **The product page's sections** (Operations → Product page). This sets the
+   order in which the desktop's full product page shows its six sections, and
+   which ones it shows.
+   - The six sections are the desktop's, with its names and its one-line
+     descriptions. *Basics* is always shown.
+   - Up and down arrows move a section. A switch hides it. *Reset to default
+     order* puts everything back.
+   - Every change sends the desktop's `PUT /config {'product_page.sections':
+     {order, hidden}}`, one change at a time. It saves on change, as the desktop
+     does (§279).
+   - The list is drawn from what the server holds. So a refused save leaves the
+     list as it was, and says so beside it.
+   - The phone resolves a stored layout with the desktop's own rules: an unknown
+     key is dropped, a missing one is appended, a locked one is never hidden. The
+     suite checks the two resolvers against each other.
+   - The controls are drawn for the Settings screen's keys. The server gates
+     `product_page.*` on the same keys.
+2. **What it does not do.** The page itself — the product page designer — stays
+   off the phone until it has a phone design (§326.7). The setting is a list of
+   switches and an order, which a phone can show as it is.
+3. **The count sheet** (Products, beside Export CSV). This is the desktop's
+   `paPrintCountSheet` document:
+   - every product, its SKU, and the system's figure, for the store the catalogue
+     is showing, or every store's total when no store is picked;
+   - two empty columns to write the count and the difference in at the shelf;
+   - the desktop's headings and its note that nothing on the sheet changes the
+     system.
+
+   It is shown in a frame over Products and handed to the phone's own print sheet,
+   as the purchase order's print view is, because a phone's in-app browser often
+   refuses the desktop's pop-up. A figure the phone does not know is left blank,
+   never written as 0.
+4. **The count sheet is offered only when the phone holds the whole
+   catalogue.** A sheet that stops at the first few hundred products is a
+   stocktake that silently skips the rest. It is drawn for `products:view`, the
+   key that opens Products; the desktop's button carries no gate beyond that.
+
+## §355 — THE BRAND AND THE BRAND STUDIO COME TO THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step X4 of the Settings / Channels / Dashboard / Billing lane. Two desktop
+pages, `public/backend-brand.html` and `public/brand-studio.html`, are on the
+phone now. They are reached from Settings → Store, the way the desktop reaches
+them from Settings' nav. Every write is the page's own request with its own
+body.
+
+1. **Brand.** The logo and the brand name, which lead the admin, the sign-in page
+   and customer emails.
+   - *Upload logo* sends `PUT /api/backend/brand {logo}`. A raster image is first
+     drawn onto a canvas no larger than 512px and sent as PNG, as the desktop does.
+     An SVG is sent as it is.
+   - *Remove* sends `{logo: null}`, with no confirm, as on the desktop.
+   - The brand name (at most 60 characters) saves behind its own *Save* with
+     `{name}`. It keeps the desktop's explicit Save rather than saving as you type
+     (§279), because this name is what customers see.
+   - The server's refusal is shown in the operator's language beside the half it
+     belongs to. A toast only confirms.
+   - The screen re-reads what is stored every time it is opened.
+2. **Who.** Brand is gated on `settings:shop`. That is the key on the desktop's link
+   and the key the server checks (`callerHas`). The studio is gated on
+   `ai:generate`, which the server requires for all three of its calls. The
+   studio's door on the Brand screen is drawn only for that key.
+3. **Brand studio.** Describe the shop, pick a few words, and the studio drafts a
+   palette, fonts, a shape and a Home layout.
+   - It calls `POST /brand/generate`, then `GET /brand/job/:id` every two seconds,
+     up to sixty times. A missed read is tried again rather than treated as the
+     job failing — the page's own rule.
+   - *Apply as draft* sends `POST /brand/apply {theme, layout}`. It writes a DRAFT
+     for the Mini App Editor and never anything live.
+   - *Start over* returns to the form and stops polling a job still running.
+4. **The desktop studio is English-only.** Every Chinese string on the phone's
+   studio is composed and declared. The values sent to the designer stay the
+   desktop's English, read out of its page by the suite: the brand words, the
+   customer types and the four selects. Only what is *shown* is translated.
+   - What the server writes back — the job's error, the contrast and colour
+     warnings — is English, and is shown as it arrives.
+   - A message naming the model provider is replaced by the page's own *busy*
+     sentence, as the desktop does.
+5. **Not done.** The studio's *publish* (`/brand/publish`, `ai:publish`) is not
+   on the desktop page either. Publishing happens in the Mini App Editor, which
+   is §97's page-editor door.
+
+## §356 — THE SHOP TAB AND THE CUSTOMER-SERVICE BUTTON ARE SET FROM THE PHONE, AND SAVE THEMSELVES THERE TOO
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step X5 of the Settings / Channels / Dashboard / Billing lane. Two desktop
+Settings panels the phone did not have are on the phone now: **Shop tab** and
+**Customer service**. Both are reached from Settings → Store.
+
+1. **Shop tab.**
+   - The mini app Shop's default layout: list, compact list, 2- or 3-column grid,
+     or gallery.
+   - Its default sort.
+   - The seven switches of the filter bar: the sort dropdown, dietary chips, the
+     "In stock" toggle, the NEW / POP / SALE filter, the price filter, hiding
+     out-of-stock products, and locking the layout.
+2. **Customer service.**
+   - How customers reach you: off, WeCom, WeChat 客服, or a QR code. Choosing WeCom
+     asks for its two credentials; choosing QR asks for its image.
+   - The button's label and hours, in both languages, and the phone number for the
+     FAQ's Call button.
+   - The five pages the button shows on.
+   - The floating bubble's size, shape, icon (with a custom emoji when chosen),
+     colour (with the desktop's three swatches), side and height.
+   - The QR image is uploaded the desktop's way, `POST /cms/media` with the file as
+     `file`, and its URL is what the card saves.
+3. **They save themselves, through the same engine the desktop uses (§279).**
+   Both are autosave cards on the desktop (`SHOP_CARD`, `CS_CARD`). On the phone
+   they run on `public/tacet-autosave.js`:
+   - each edit is sent after a short pause as the desktop's whole card body,
+     key for key and in its order, to `PUT /config?history=<card>`;
+   - the history cards are the desktop's own, `shop.display` and
+     `customer_service`;
+   - *Undo* sends the visit's first body back, filed as an undo;
+   - *Version history* reads `GET /config/history?card=…`, the same history the
+     desktop's button reads, and restores a version, filed as a restore;
+   - a refusal stays at the foot in the server's words;
+   - leaving the screen sends what is still waiting.
+4. **The seed is the desktop's.** Each value is read from the stored config with
+   the defaults the desktop's `loadConfig` uses: a legacy `grid` layout is the
+   2-column grid; dietary chips are on unless turned off; four of the five button
+   pages are on unless turned off; the bubble defaults to medium, round, ••• and
+   the brand green at 220rpx. So a card opened on the phone starts from the same
+   body as on the desktop, and opening it sends nothing.
+5. **Who.** Both are drawn for the Settings screen's own keys. The server gates
+   `shop.*` and `customer_service.*` on the desktop Settings set, which contains
+   them, and `POST /cms/media` admits the same keys. The S2a write-gates suite
+   now pins both families: one write site each, and a live save by a
+   `settings:shop` account.
+6. **Not done, deliberately.**
+   - The desktop's live previews: the layout pictures and the sample filter bar
+     redrawn as you click. They are illustrations of the setting, not the setting.
+   - The desktop's per-mode setup instructions for WeCom, which point at another
+     company's admin site to be followed at a desk.
+
+## §357 — STORES ARE ADDED AND EDITED ON THE PHONE, WITH THEIR STOCK STAFF; THE TEAM'S DEVICES CAN BE SEEN AND SIGNED OUT THERE (§326.5)
+
+**Built 2026-10-01 under §325.** This is step X6 of the Settings / Channels /
+Dashboard / Billing lane. Before it, the phone only listed stores on
+Operations and had no team devices view. The desktop's own panels are the
+spec: `02-settings-ops.js` `_opsStoreForm`, `_opsStoreStaff` and the Team
+devices card.
+
+1. **A store is edited on the phone, and saves itself (§279).** On
+   Operations, each store row has **Edit**.
+   - **What can be changed:** both names, phone, city, district, street
+     address, opening and closing times, when channel sync starts, sort
+     priority, the store's low-stock line, and store pickup.
+   - **How it saves:** each pause sends the desktop's whole body (key for key
+     and in its order) to `PATCH /stores/:id?history=store.<id>`. It runs on
+     the same engine the desktop uses (`public/tacet-autosave.js`). Undo and
+     Version history read the desktop's history (`GET /stores/:id/history`).
+   - **Address fields wait until you leave them.** City, district and street
+     address are sent when the field is left, not on every key, because a
+     change there makes the server re-locate the store. The desktop marks
+     these same fields `data-as-commit`.
+   - **The located line catches up.** The store list is read again shortly
+     after each save, as the desktop does, so the located line shows the new
+     position.
+   - **The code cannot be changed** once the store exists.
+   - **The manual GPS pin keeps its own Save.** It sends `PATCH {lat,lng}`
+     alone, after the desktop's range check.
+2. **A store is added on the phone.** **+ Add store** sits under the list.
+   - **New stores keep Save**, because saving one creates it. It sends
+     `POST /stores` with the same body plus `code`, which is required.
+   - **Coordinates go only when both are typed and in range.** Never
+     `lat:null`: that would clear them and stop the address locating the
+     store.
+   - **Who can do it:** `stores:edit` for both editing and adding. That is
+     the key `lib/cap-routes.js` asks of every `/stores` write.
+3. **A store's stock staff are managed on the phone.** Stock staff are the
+   people who can only open Quick Stock, and only for that store. From the
+   store row or the store screen you can:
+   - list them;
+   - add one, as `POST {display_name, username, password}`, after the
+     desktop's checks (a login is required; the password needs at least 10
+     characters);
+   - remove one, after the desktop's confirm, as `DELETE`;
+   - set a new password, as `POST …/password {new_password}`, with the same
+     10-character check.
+4. **DECISION FOR ASH — who manages stock staff.** The server asks only for a
+   signed-in session on these four endpoints (`routes/backend-team.js`,
+   `requireBackend`). The desktop draws the button for anyone who reaches
+   Operations.
+   - **What the phone does:** it offers them to `stores:edit` **or**
+     `team:manage`, the key that edits the store or the key that manages
+     people.
+   - **Why:** these endpoints create sign-ins, so offering them to everybody
+     felt wrong to build.
+   - **What it does not change:** the server and the desktop are untouched,
+     so nobody loses access they had.
+   - **Your call:** narrowing it to one key, or closing the server gap. That
+     is a SERVER-lane change; the gap is reported separately.
+5. **Team devices (§326.5).** It is reached from Team → People, under the
+   list, where the desktop's card sits.
+   - **What it shows:** every device the team is signed in on, whose it is
+     ("(You)" on your own), this device, when it was last seen, the kind, and
+     where.
+   - **The filter:** the desktop's All / Desktop / Mobile, where Mobile
+     means phones and tablets.
+   - **Signing a device out** sends `POST /sessions/revoke {sid}`.
+   - **Signing out the device in hand** asks first, with the desktop's
+     words. When the server says it was this session, the app goes to the
+     sign-in page.
+   - **Who can do it:** `team:manage`, the key `GET /sessions/team` checks
+     and the desktop card is shown on.
+6. **The Operations line changed.** It read "Store details, printers and
+   payment keys are set on desktop." Store details came out, because they
+   are edited above it now.
+7. **Not done, on purpose.**
+   - **No store search box.** The desktop shows one from six stores up; the
+     phone list is short enough to scroll. Add it if a tenant reaches that
+     size.
+   - **No delete or deactivate for a store.** The desktop panel has none
+     either.
+   - **No phone for the setup wizard's map-pin confirmation.** That belongs
+     to X11 / setup.
