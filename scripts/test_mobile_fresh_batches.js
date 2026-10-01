@@ -323,6 +323,7 @@ async function main() {
         T: (en, zh) => (ctx.LANG === 'en' ? en : (zh || en)), ic: (n) => `<i data-ic="${n}"></i>`, escAttr: String,
         loadPrinter: () => {}, loadGeo: () => {}, dlvZoneFacts: () => null, settingsGroupCard: () => '', dlvSetupCard: () => '',
         dlvSettingsCard: () => '', noteBar: (t) => t, desktopNote: () => '',
+        x7DeliveryDoors: () => '',   // X7's own row on this screen (another lane), not under test here
         canRoute: (k) => (k === 'storeone' ? !!opts.edit : true),
       };
       vm.createContext(ctx); vm.runInContext(SD, ctx); return ctx.screenDelivery();

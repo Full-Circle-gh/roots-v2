@@ -94,6 +94,8 @@ const ctx = {
                 ['wechat_offline', 'WeChat (off app)', '微信（线下）'],
                 ['alipay_offline', 'Alipay (off app)', '支付宝（线下）'], ['other', 'Other', '其他']],
   canRoute: () => true,
+  // §325 O10 — Save draft is drawn for orders:edit (lib/cap-routes.js /order-drafts).
+  mCan: () => true,
   render: () => { calls.render++; },
   showToast: (m) => { calls.toast = String(m); },
   forgetPushed: () => { calls.forgetPushed++; },
@@ -569,10 +571,12 @@ function wiring() {
   yes(!A.ONW_FULS.some((x) => x.k === 'counter'),
       'and counter is not one of them — a walk-in rings up at the till, which is built for it');
 
-  // One endpoint, not two. A second write path here is a second contract.
+  // One endpoint for the order, not two. A second write path here is a second
+  // contract. §325 O10 adds the drafts — the desktop's own /order-drafts, which
+  // hold a form and create nothing — and nothing else.
   const writes = [...BLOCK.matchAll(/apiWrite\('([^']+)'/g)].map((m) => m[1]).sort();
-  is([...new Set(writes)].join(','), '/order-fees,/orders',
-     'the screen writes to exactly two endpoints: the fee quote, and the order');
+  is([...new Set(writes)].join(','), '/order-drafts,/order-drafts/,/order-fees,/orders',
+     'the screen writes to the fee quote, the order, and its drafts (§325 O10) — nothing else');
 }
 
 (async () => {
