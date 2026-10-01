@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.284 · 2026-09-30 · §395 CHANNEL SYNC PICKER, SEARCH AND SWITCH ON THE PHONE — 3 STRINGS COMPOSED BY CLAUDE (THE LASTING-CHANGE CONFIRM §326.3 ASKED FOR), THE REST COPIED.** See *The channel sync switch's confirm, and the picker (§395)*.
+
 **v1.283 · 2026-09-30 · §394 THE SETUP GUIDE'S ACTIONS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE FROM THE DESKTOP GUIDE.** See *The setup guide's actions on the phone (§394)*.
 
 **v1.282 · 2026-09-30 · §393 CLOSING ELEME SAYS WHAT IT DOES — 5 STRINGS COMPOSED BY CLAUDE, ONE SENTENCE NO LONGER SHOWN FOR ELEME.** See *Closing Eleme at a store, said truthfully (§393)*.
@@ -12391,3 +12393,21 @@ The blocker list uses the phone's own step labels (SETUP_LABEL), joined with
 **Retired:** `Each step is a wizard on desktop — a store with its address and
 hours, a payment method, delivery or pickup. ·
 每一步在电脑端以引导方式完成 — 门店地址与营业时间、收款方式、配送或自提。`
+
+## The channel sync switch's confirm, and the picker (§395)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Channel sync screen
+(`public/m.html`, the §325 X8b block). The desktop switch has no confirm.
+§326.3 asked for one that says the change is lasting, so its words are new.
+
+| String | Status |
+|---|---|
+| `Stop syncing {item} to {channel}? · 停止将「{item}」同步到{channel}?` | **composed by Claude (X8b)**. No live candidate: the desktop's switch asks nothing. |
+| `{channel} keeps the number it shows now and stops following your shelf. This is a lasting change: it stays off until somebody turns it back on, and nothing reminds you. · {channel}将保持当前显示的数量,不再跟随货架库存。这是一项持久的更改:在有人重新开启之前会一直保持关闭,且不会有任何提醒。` | **composed by Claude (X8b)**, as §326.3 asked: "says it is a lasting change". |
+| `Turn sync off · 关闭同步` | **composed by Claude (X8b)**. Rejected: `Sync off · 已关闭`, the live STATE word, which names where the switch ends up rather than the act. |
+
+Copied whole:
+- `Channel · 渠道` and `All channels · 全部渠道` (the desktop picker).
+- `Sync on / off · 同步开关` (the switch's title on the desktop and both channel panels).
+- `Name not checked · 尚未读取商品` (the phone's own state word, now as a chip).
+- `Search · 搜索`, `Saving… · 保存中…`.
