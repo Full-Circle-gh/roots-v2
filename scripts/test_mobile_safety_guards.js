@@ -488,7 +488,10 @@ section('9 · Notes that were no longer true');
     assert.ok(!M.includes("'Store details, printers and payment keys are set on desktop.'"));
     // §325 X7 — and printers: they have their own screen now.
     assert.ok(!M.includes("'Printers and payment keys are set on desktop.'"));
-    has(M, "noteBar(T('Payment keys are set on desktop.','支付密钥在电脑端设置。'))");
+    // §325 X10 — and payment keys: WeChat Pay's are set from the channel hub
+    // (X9b), Alipay's QR, tax and currency from Payments. Nothing is left.
+    assert.ok(!M.includes("'Payment keys are set on desktop.'"));
+    assert.ok(M.includes(`...(canRoute('paycfg')?{cmd:"APP.cmd('payOpen')",chev:true}:{})`), 'the Alipay row opens Payments');
     has(M, "why:['The screenshot was read and matches.',\n         '付款截图已核对一致。']};");
   });
 }

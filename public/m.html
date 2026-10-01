@@ -1148,6 +1148,10 @@ const state = {
      the site's words being edited (kept across a re-read after a domain
      change), the domain being typed, and the two in-place lines. */
   wcf:{cfg:null, tried:false, err:null, keep:false, signin:{}, site:null, newHost:'', busy:null, msg:null, dmsg:null, customOpen:false},
+  /* §325 X10 — the Payments screen: the config and the Alipay record as read,
+     the tax and Alipay fields being edited, a newly picked QR image, and each
+     card's in-place line. */
+  pay:{cfg:null, cfgTried:false, cfgErr:null, cur:'', tax:null, ali:null, aliTried:false, aliErr:null, alid:null, newQr:null, busy:null, curNote:null, taxNote:null, aliNote:null},
   gzb:{period:'', from:'', to:'', data:null, tried:false, err:null, err2:null, seq:0},
   mtb:{list:null, tried:false, err:null, stores:null, names:null, prod:null, draft:null, q:'', pq:'', busy:null, note:null, saveErr:null, suggest:null, hint:null},
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
@@ -9900,7 +9904,9 @@ function screenOperations(){
       ${settingsGroupCard([{label:T('Alipay by QR code','支付宝收款码'),
         value: !ali ? T('Loading…','加载中…')
           : aliOn ? (ali.account?T('on · '+ali.account,'已开启 · '+ali.account):T('on','已开启'))
-          : T('off','已关闭')}])}</div>
+          : T('off','已关闭'),
+        /* §325 X10 — the row opens Payments: currency, tax and this. */
+        ...(canRoute('paycfg')?{cmd:"APP.cmd('payOpen')",chev:true}:{})}])}</div>
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Locating','定位')}</div>
       ${settingsGroupCard([
         {label:T('Maps provider','地图服务'),value: !g?T('Loading…','加载中…'):(noKey?T('no key','未配置密钥'):provider)},
@@ -9919,7 +9925,10 @@ function screenOperations(){
           still is. The live pair with one item dropped, in both halves. */''}
     ${/* §325 X6 — store details came out too: they are edited above. §325 X7 —
           and printers: they have their own screen, the row above. */''}
-    ${noteBar(T('Payment keys are set on desktop.','支付密钥在电脑端设置。'))}</div>`;
+    ${/* §325 X10 — "Payment keys are set on desktop." came out: WeChat Pay's
+          keys are set from the channel hub (§325 X9b) and Alipay's QR, tax
+          and currency from Payments (the row above), so no payment setting
+          is desktop-only now. */''}</div>`;
 }
 
 /* ==========================================================================
@@ -16392,9 +16401,17 @@ function settingsGroupCard(rows){
           ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
           : toggle(featOn(r.feat),`APP.cmd('toggleFeature','${r.feat}')`))
       : `<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`;
+  /* §325 X10 — a row with `cmd` is a door: the whole row is the button, with
+     its chevron. The doors added in §325 X7 (Receipt printing, Package
+     tracking, JD Logistics) passed `cmd` and `chev` to a card that drew
+     neither, so they showed a row that did nothing when tapped. */
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-    <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
-    ${ctl(r)}</div>`).join('')}
+    ${r.cmd?`<button class="row" onclick="${r.cmd}" style="display:flex;align-items:center;gap:16px;width:100%;padding:12px 16px;min-height:56px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+      <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
+      ${r.value!=null?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}
+      ${r.chev?`<span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span>`:''}</button>`
+    :`<div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
+    ${ctl(r)}</div>`}`).join('')}
     ${state.printerErr&&rows.some(r=>r.printer)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
 /* ==========================================================================
@@ -32640,8 +32657,8 @@ SUBS.wxmini={title:['WeChat configuration','小程序配置'],
    • Save changes sends the desktop's two writes, each reported on its own:
      POST /channel-hub/web/signin {phone, email, google, apple, wechat} and
      POST /channel-hub/web/site with the eight fields.
-   • Payments: WeChat Pay with Open WeChat config (§325 X9b); Alipay's state.
-     (Alipay's QR is set up in §325 X10.)
+   • Payments: WeChat Pay with Open WeChat config (§325 X9b); Alipay with
+     Set up, which opens the Payments screen (§325 X10).
 
    One difference, on purpose: the desktop reloads the whole page after a
    domain is added or removed, which throws away sign-in switches and site
@@ -32854,7 +32871,8 @@ function screenWebCfg(){
     ${canRoute('wxmini')?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('wxmOpen')">${T('Open WeChat config','打开小程序配置')}</button>`:''}
     <div style="display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0"><div style="font-size:14.5px">${T('Alipay','支付宝')}</div><div style="font-size:12.5px;color:var(--text-secondary)">${T('Show your Alipay collection QR at checkout; staff confirm the transfer.','结账时展示收款码,由店员核实到账。')}</div></div>
-      ${wcfChip(!!pay.alipayConfigured,pay.alipayConfigured?'On':'Optional',pay.alipayConfigured?'已开启':'选填')}</div>`;
+      ${wcfChip(!!pay.alipayConfigured,pay.alipayConfigured?'On':'Optional',pay.alipayConfigured?'已开启':'选填')}</div>
+    ${canRoute('paycfg')?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 12px" onclick="APP.cmd('payOpen')">${T('Set up','设置')}</button>`:''}`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;flex-wrap:wrap;gap:6px">${wcfChip(!!primary,'Store online','商店在线')}${wcfChip(WCF_ORDER.some(m=>saved[m]),'Sign-in ready','登录可用')}${wcfChip(payReady,'Payments ready','收款可用')}</div>
     ${wcfSec(T('Shop address','商店网址'),addr+customHtml)}
@@ -32868,6 +32886,330 @@ function screenWebCfg(){
 }
 SUBS.webcfg={title:['Web store configuration','网页商店配置'],render:()=>screenWebCfg()};
 /* §325 X9c ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X10 — PAYMENTS: THE DISPLAY CURRENCY, TAX, AND ALIPAY BY QR CODE
+   --------------------------------------------------------------------------
+   The three money cards of the desktop's Push notifications panel, on one
+   phone screen, each on its desktop endpoint and body:
+
+   • Currency (05-marketing.js renderCurrencyControl): the desktop's ten
+     presets; PUT /config {currency:{code, symbol, decimals, position}}.
+   • Tax (taxCardSync, saveTaxSettings): the switch, how prices are shown, the
+     rate in percent (stored in micro: 20 → 200000), its name in both
+     languages, the registration number, whether delivery is taxed, and the
+     desktop's live preview of what a ¥100 order becomes. The desktop's two
+     checks before sending (a rate between 0 and 100; on with no rate is
+     refused); PUT /config with its seven tax.* keys.
+   • Alipay by QR code (02-settings-ops.js loadAlipayManual,
+     saveAlipayManualInline): on or off, the payee label, the 收款码 image
+     (downscaled before it is sent, as there), and the AI auto-read with its
+     key, accepted payee names, pay window, screenshot age and auto-mark.
+     PUT /alipay-manual with the desktop's fields; the image only when a new
+     one was picked, the key only when typed — never shown, only the
+     server's own mask. The record is replaced whole, so every field is sent.
+
+   STRONG CONFIRMS. The desktop saves these on a change or a button with no
+   question asked. On a phone a slip of the thumb changes what every customer
+   is charged or where their money goes, so each save asks first and says
+   what changes: the currency from and to; the tax preview; for Alipay each
+   field that moved, with the desktop's own warning when the QR changes, the
+   channel is switched, or auto-mark is turned on.
+
+   FAILS CLOSED. The screen opens only once the keys are known
+   (mCanKnown), for the keys the server asks of these writes (the desktop
+   Settings set — lib/cap-routes.js configKeyCap and requiredCapFor), and
+   never on the boards that see no money (recapNoMoney). A card whose read
+   failed has no Save: the Alipay record is replaced whole, so saving a card
+   that never loaded would switch Alipay off.
+   ══════════════════════════════════════════════════════════════════════════ */
+const payS=()=>state.pay;
+const PAY_KEYS=['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'];
+const payCan=()=>mCanKnown(PAY_KEYS)&&!recapNoMoney();
+/* The desktop's CURRENCY_PRESETS. Its labels are English for both languages,
+   except the yuan's, whose two halves are shown one at a time here. */
+const PAY_CURRENCIES=[
+  {code:'CNY', symbol:'¥', decimals:2, position:'before', en:'Chinese Yuan (¥)', zh:'人民币 (¥)'},
+  {code:'USD', symbol:'$', decimals:2, position:'before', en:'US Dollar ($)'},
+  {code:'EUR', symbol:'€', decimals:2, position:'before', en:'Euro (€)'},
+  {code:'GBP', symbol:'£', decimals:2, position:'before', en:'British Pound (£)'},
+  {code:'JPY', symbol:'¥', decimals:0, position:'before', en:'Japanese Yen (¥)'},
+  {code:'HKD', symbol:'HK$', decimals:2, position:'before', en:'Hong Kong Dollar (HK$)'},
+  {code:'SGD', symbol:'S$', decimals:2, position:'before', en:'Singapore Dollar (S$)'},
+  {code:'AUD', symbol:'A$', decimals:2, position:'before', en:'Australian Dollar (A$)'},
+  {code:'CAD', symbol:'C$', decimals:2, position:'before', en:'Canadian Dollar (C$)'},
+  {code:'THB', symbol:'฿', decimals:2, position:'before', en:'Thai Baht (฿)'},
+];
+const payCurLabel=p=>p?T(p.en,p.zh||p.en):'';
+/* The desktop's acCurrency / acMoney, on the config this screen read. */
+function payCurrency(){
+  const raw=payS().cfg&&payS().cfg.currency, c=(raw&&typeof raw==='object')?raw:{};
+  return {symbol:typeof c.symbol==='string'&&c.symbol.trim()?c.symbol.trim().slice(0,4):'¥',
+    decimals:Number.isInteger(c.decimals)&&c.decimals>=0&&c.decimals<=3?c.decimals:2, position:c.position==='after'?'after':'before'};
+}
+function payMoney(n){ const c=payCurrency();
+  const s=Number(n||0).toLocaleString('en-US',{minimumFractionDigits:c.decimals, maximumFractionDigits:c.decimals});
+  return c.position==='after'?s+c.symbol:c.symbol+s; }
+const PAY_TAX_MAX=1000000;   /* 100%, lib/tax.js MAX_RATE_MICRO */
+function payTaxFrom(t){ t=t||{};
+  return {enabled:t.enabled===true, mode:t.mode==='inclusive'?'inclusive':'exclusive',
+    rate:Number.isInteger(t.rateMicro)&&t.rateMicro>0?String(t.rateMicro/10000):'',
+    label_en:(t.label&&t.label.en)||'', label_cn:(t.label&&t.label.cn)||'', number:t.number||'', shipping:t.shippingTaxable===true}; }
+/* The desktop's taxRateMicroTyped: blank is 0; not a number, negative or over 100% is null. */
+function payTaxMicro(){
+  const raw=String((payS().tax||{}).rate||'').trim(); if(!raw) return 0;
+  const pct=Number(raw); if(!Number.isFinite(pct)||pct<0) return null;
+  const micro=Math.round(pct*10000); return micro>PAY_TAX_MAX?null:micro;
+}
+/* The desktop's preview, word for word, on a round ¥100. */
+function payTaxPreview(){
+  const t=payS().tax; if(!t||!t.enabled) return '';
+  const micro=payTaxMicro();
+  if(micro==null) return T('That rate is not a number between 0 and 100.','税率需为 0 到 100 之间的数字。');
+  if(!micro) return T('A rate of zero charges no tax — the switch above stays on but nothing is added.','税率为 0 时不收取税费 — 开关虽开启,但不会加收任何金额。');
+  const base=10000, inc=t.mode==='inclusive';
+  const taxMinor=inc?Math.floor((base*micro)/(PAY_TAX_MAX+micro)+0.5):Math.floor((base*micro)/PAY_TAX_MAX+0.5);
+  const pays=inc?base:base+taxMinor, m=x=>payMoney(x/100);
+  return inc?T(`A ${m(base)} price stays ${m(pays)} — of which ${m(taxMinor)} is tax, and ${m(base-taxMinor)} is yours.`,
+               `标价 ${m(base)} 的商品仍收 ${m(pays)} — 其中 ${m(taxMinor)} 为税费,${m(base-taxMinor)} 归本店。`)
+    :T(`A ${m(base)} price is charged as ${m(pays)} — ${m(taxMinor)} of tax added at checkout.`,
+       `标价 ${m(base)} 的商品结账收 ${m(pays)} — 结账时加收 ${m(taxMinor)} 税费。`);
+}
+function payAliFrom(d){ d=d||{};
+  return {enabled:!!d.enabled, account:d.account||'', ocr:!!d.ocrEnabled, autoFlip:!!d.autoFlip, payee:d.payeeMatch||'',
+    win:d.timeWindowMin?String(d.timeWindowMin):'', age:d.proofAgeMin?String(d.proofAgeMin):'', key:''}; }
+
+/* ── Reads ──────────────────────────────────────────────────────────────── */
+function payLoad(){
+  const s=payS();
+  if(!s.cfgTried){ s.cfgTried=true; s.cfgErr=null;
+    api('/config').then(c=>{ c=c||{}; s.cfg=c; s.cur=(c.currency&&c.currency.code)||'CNY'; s.tax=payTaxFrom(c.tax); render(); })
+      .catch(e=>{ if(String(e&&e.message)==='auth') return; s.cfgErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); }); }
+  if(!s.aliTried){ s.aliTried=true; s.aliErr=null;
+    api('/alipay-manual').then(d=>{ d=d||{}; s.ali=d; s.alid=payAliFrom(d); s.newQr=null; render(); })
+      .catch(e=>{ if(String(e&&e.message)==='auth') return; s.aliErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); }); }
+}
+reg('payRetryCfg', ()=>{ const s=payS(); s.cfgTried=false; s.cfgErr=null; render(); });
+reg('payRetryAli', ()=>{ const s=payS(); s.aliTried=false; s.aliErr=null; render(); });
+reg('payOpen', ()=>{
+  if(!canRoute('paycfg')) return;
+  Object.assign(state.pay,{cfg:null, cfgTried:false, cfgErr:null, cur:'', tax:null, ali:null, aliTried:false, aliErr:null, alid:null, newQr:null,
+    busy:null, curNote:null, taxNote:null, aliNote:null});
+  push('paycfg');
+});
+const payFail=(e,fallback)=>e&&e.refused?E(...e.words):fallback;
+const payEsc=t=>escAttr(String(t));
+
+/* ── Currency ────────────────────────────────────────────────────────────── */
+reg('payCur', code=>{
+  const s=payS(); if(s.busy||!payCan()||!s.cfg) return;
+  const p=PAY_CURRENCIES.find(x=>x.code===code), from=PAY_CURRENCIES.find(x=>x.code===s.cur)||PAY_CURRENCIES[0];
+  if(!p||p.code===s.cur) return;
+  state.askErr=null;
+  state.ask={title:T('Display currency','显示货币'),
+    body:`<b>${payEsc(payCurLabel(from))} → ${payEsc(payCurLabel(p))}</b><br><br>${payEsc(T('The currency your prices, cart and balances show in. Enter your product prices in this currency. WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it\'s for cash / bank / manual-payment stores until a matching payment method is added.','店铺价格、购物车和余额显示所用的货币。请以此货币填写商品价格。微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式。'))}`,
+    confirmLabel:T('Save','保存'), danger:true,
+    run:()=>{ s.busy='cur'; s.curNote=null; render();
+      const currency={code:p.code, symbol:p.symbol, decimals:p.decimals, position:p.position};
+      apiWrite('/config',{'currency':currency},'PUT').then(()=>{
+        s.busy=null; s.cur=p.code; s.cfg.currency=currency; showToast(T('Currency saved','货币已保存')); render();
+      }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+        s.curNote=payFail(e,E('Save failed: '+tmOneLang((e&&e.message)||''),'保存失败: '+tmOneLang((e&&e.message)||''))); render(); }); }};
+  render();
+});
+
+/* ── Tax ─────────────────────────────────────────────────────────────────── */
+/* Typing repaints only the preview and the chip, so the keyboard stays. */
+function payTaxRepaint(){
+  if(typeof document==='undefined') return;
+  const pv=document.getElementById('mPayTaxPv'); if(pv) pv.textContent=payTaxPreview();
+  const ch=document.getElementById('mPayTaxChip'); if(ch) ch.innerHTML=payTaxChip();
+}
+reg('payTaxIn', (k,v)=>{ const t=payS().tax; if(!t||!['rate','label_en','label_cn','number'].includes(k)) return; t[k]=String(v==null?'':v); if(k==='rate') payTaxRepaint(); });
+reg('payTaxFlip', k=>{ const t=payS().tax; if(!t||!payCan()||!['enabled','shipping'].includes(k)) return; t[k]=!t[k]; render(); });
+reg('payTaxMode', v=>{ const t=payS().tax; if(!t||!payCan()) return; t.mode=v==='inclusive'?'inclusive':'exclusive'; render(); });
+function payTaxChip(){ const t=payS().tax, micro=payTaxMicro(), on=t&&t.enabled&&micro;
+  const [bg,fg]=PILL[on?'success':'muted'];
+  return `<span class="pill" style="background:${bg};color:${fg}">${on?escAttr(String(micro/10000))+'%':T('Off','关闭')}</span>`; }
+reg('payTaxSave', ()=>{
+  const s=payS(), t=s.tax; if(s.busy||!payCan()||!t) return;
+  const micro=payTaxMicro();
+  s.taxNote=null;
+  if(micro==null){ s.taxNote=E('That rate is not a number between 0 and 100.','税率需为 0 到 100 之间的数字。'); render(); return; }
+  if(t.enabled&&!micro){ s.taxNote=E('Set a rate above zero, or turn tax off.','请填写大于 0 的税率,或关闭税费。'); render(); return; }
+  const mode=t.mode==='inclusive'?'inclusive':'exclusive', label={en:String(t.label_en||'').trim(), cn:String(t.label_cn||'').trim()},
+    number=String(t.number||'').trim(), shipping=!!t.shipping;
+  state.askErr=null;
+  state.ask={title:T('Save tax settings','保存税费设置'),
+    body:t.enabled?payEsc(payTaxPreview()):`${payEsc(T('Charge tax on orders','订单收取税费'))}: <b>${payEsc(T('Off','关闭'))}</b>`,
+    confirmLabel:T('Save','保存'), danger:true,
+    run:()=>{ s.busy='tax'; render();
+      /* The desktop's saveTaxSettings body, its seven keys written out here. */
+      apiWrite('/config',{'tax.enabled':t.enabled, 'tax.mode':mode, 'tax.rateMicro':micro, 'tax.label':label, 'tax.number':number, 'tax.shippingTaxable':shipping},'PUT').then(()=>{
+        s.busy=null; s.cfg.tax={enabled:t.enabled, mode, rateMicro:micro, label, number, shippingTaxable:shipping};
+        showToast(T('Tax settings saved','税费设置已保存')); render();
+      }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+        const code=e&&!e.refused&&(e.code||e.message);
+        s.taxNote=payFail(e, code==='bad_tax_rate'?E('That rate is not a number between 0 and 100.','税率需为 0 到 100 之间的数字。')
+          :code==='bad_tax_mode'?E('Pick how prices are shown.','请选择价格含税方式。'):E((e&&e.message)||'Save failed',(e&&e.message)||'保存失败'));
+        render(); }); }};
+  render();
+});
+
+/* ── Alipay by QR code ───────────────────────────────────────────────────── */
+reg('payAliIn', (k,v)=>{ const a=payS().alid; if(!a||!['account','payee','win','age','key'].includes(k)) return; a[k]=String(v==null?'':v); });
+reg('payAliFlip', k=>{ const a=payS().alid; if(!a||!payCan()||!['enabled','ocr','autoFlip'].includes(k)) return; a[k]=!a[k]; render(); });
+/* A picked image, as the desktop's _alipayManualPickFile: refused over 10 MB,
+   then drawn onto a white canvas no wider or taller than 1000px and sent as
+   JPEG when that is smaller — a phone photo of a QR is several MB, which the
+   proxy refuses before the server sees it. */
+function payAliSetQr(url){ const s=payS(); s.newQr=url?String(url):null; s.aliNote=null; render(); }
+reg('payAliPick', input=>{
+  const s=payS(); if(!payCan()||!s.alid) return;
+  const file=input&&input.files&&input.files[0]; if(!file) return;
+  if(file.size>10*1024*1024){ s.aliNote=E('Image too large (max 10MB)','图片过大(最大10MB)'); input.value=''; render(); return; }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const raw=reader.result, img=new Image();
+    img.onload=()=>{ let out=raw;
+      try{ const MAX=1000, sc=Math.min(1,MAX/Math.max(img.naturalWidth||MAX,img.naturalHeight||MAX));
+        const w=Math.max(1,Math.round((img.naturalWidth||MAX)*sc)), h=Math.max(1,Math.round((img.naturalHeight||MAX)*sc));
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h; const cx=cv.getContext('2d');
+        cx.fillStyle='#fff'; cx.fillRect(0,0,w,h); cx.drawImage(img,0,0,w,h);
+        const j=cv.toDataURL('image/jpeg',0.85); if(j&&j.length<raw.length) out=j; }catch(_){}
+      payAliSetQr(out); };
+    img.onerror=()=>payAliSetQr(raw);
+    img.src=raw;
+  };
+  reader.readAsDataURL(file);
+});
+reg('payAliDropQr', ()=>{ payAliSetQr(null); });
+function payAliBody(){
+  const s=payS(), a=s.alid, n=v=>parseInt(String(v||'').trim(),10)||0;
+  const body={enabled:a.enabled, account:String(a.account||'').trim(), ocrEnabled:a.ocr, autoFlip:a.autoFlip,
+    payeeMatch:String(a.payee||'').trim(), timeWindowMin:n(a.win), proofAgeMin:n(a.age)};
+  const key=String(a.key||'').trim(); if(key) body.anthropicKey=key;
+  if(s.newQr) body.qr=s.newQr;
+  return body;
+}
+const PAY_ALI_ABOUT=['Temporary fallback while 当面付 API access is pending. Customer picks Alipay → sees this收款码 + the amount → scans, pays, and uploads the payment screenshot in the app. Staff verify the screenshot on the order and click "Mark paid". Money lands in whatever account this收款码 belongs to.',
+  '当面付接口开通前的临时方案。顾客选择支付宝后看到此收款码与金额,扫码付款并在小程序上传付款截图;客服在订单中核对截图后点击「标记已付款」。款项进入此收款码所属账户。'];
+const PAY_ALI_FLIP=['Leave OFF at first: AI shows a verdict but staff still tap Mark paid. Turn ON only once you trust it — a perfect fake screenshot can then auto-pass. Reuse is blocked by the transaction-id check.',
+  '建议先关闭:AI 仅给出判断,仍由人工点击「标记已付款」。信任后再开启 — 开启后伪造完美的截图也会自动通过;重复使用由交易号去重拦截。'];
+reg('payAliSave', ()=>{
+  const s=payS(); if(s.busy||!payCan()||!s.alid||!s.ali) return;
+  const body=payAliBody(), was=payAliFrom(s.ali), now=s.alid, n=v=>parseInt(String(v||'').trim(),10)||0;
+  const onOff=v=>v?T('On','开'):T('Off','关');
+  const lines=[]; let warnMoney=false, warnFlip=false;
+  if(now.enabled!==was.enabled){ lines.push([T('Enable manual Alipay','启用手动支付宝收款'), now.enabled?T('✓ LIVE','✓ 已启用'):T('✗ OFF','✗ 未启用')]); warnMoney=true; }
+  if(s.newQr){ lines.push([T('收款码 image','收款二维码图片'), '<img src="'+escAttr(s.newQr)+'" alt="" style="display:block;max-width:120px;max-height:160px;margin-top:6px;border-radius:8px">', true]); warnMoney=true; }
+  if(String(now.account||'').trim()!==was.account){ lines.push([T('Payee label (shown to customer)','收款方名称(展示给顾客)'), now.account.trim()]); warnMoney=true; }
+  if(now.ocr!==was.ocr) lines.push([T('Auto-read payment screenshots (AI)','自动识别付款截图'), onOff(now.ocr)]);
+  if(body.anthropicKey) lines.push([T('Anthropic API key (sk-…)','密钥'), '••••••••']);
+  if(String(now.payee||'').trim()!==was.payee) lines.push([T('Accepted payee names','收款方名称(可多个)'), now.payee.trim()]);
+  if(n(now.win)!==n(was.win)) lines.push([T('Pay within (minutes, 0 = no deadline)','付款期限(分钟,0=不限)'), String(n(now.win))]);
+  if(n(now.age)!==n(was.age)) lines.push([T('Screenshot may be up to (minutes old, 0 = same as above)','截图最长可早于上传(分钟,0=同上)'), String(n(now.age))]);
+  if(now.autoFlip!==was.autoFlip){ lines.push([T('Auto-mark paid on full match (no human review)','完全匹配时自动标记付款(无需人工)'), onOff(now.autoFlip)]); if(now.autoFlip) warnFlip=true; }
+  const send=()=>{ s.busy='ali'; s.aliNote=null; render();
+    apiWrite('/alipay-manual',body,'PUT').then(j=>{
+      if(j&&j.success===false) throw Object.assign(new Error(j.error||'save failed'),{code:j.error});
+      s.busy=null; showToast(T('Saved','已保存'));
+      s.aliTried=false; s.newQr=null; state.alipay=null; state.alipayTried=false; render();
+    }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+      const c=e&&!e.refused&&e.code;
+      s.aliNote=payFail(e, c==='qr_required'?E('Upload a收款码 image first','请先上传收款码图片'):c==='image_too_big'?E('Image too large','图片过大')
+        :c==='ocr_key_required'?E('Enter the Anthropic API key to enable auto-read','请填写 API 密钥以启用自动识别'):c==='bad_image'?E('Not a valid image','图片格式无效')
+        :E((e&&e.message)||'save failed',(e&&e.message)||'保存失败'));
+      render(); }); };
+  if(!lines.length){ send(); return; }
+  state.askErr=null;
+  state.ask={title:T('Alipay manual收款 (静态收款码)','支付宝手动收款'),
+    body:lines.map(([k,v,html])=>`<div style="margin-bottom:6px">${payEsc(k)}: <b>${html?v:payEsc(v||'—')}</b></div>`).join('')
+      +(warnMoney?`<div style="margin-top:10px">${payEsc(T(...PAY_ALI_ABOUT))}</div>`:'')
+      +(warnFlip?`<div style="margin-top:10px;color:var(--brick-ink)">${payEsc(T(...PAY_ALI_FLIP))}</div>`:''),
+    confirmLabel:T('Save','保存'), danger:warnMoney||warnFlip, run:send};
+  render();
+});
+
+/* ── Drawing ─────────────────────────────────────────────────────────────── */
+const payNote=n=>n?`<div style="font-size:13.5px;color:var(--brick-ink);line-height:1.5;overflow-wrap:anywhere">${payEsc(n)}</div>`:'';
+const payHelp=t=>`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${t}</div>`;
+const payLbl=t=>`<div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</div>`;
+const payCard=(head,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:10px;font-size:15px;font-weight:500">${head}</div>${inner}</div>`;
+function payIn(cmd,k,v,o){ o=o||{};
+  return `<input type="${o.type||'text'}" value="${escAttr(v||'')}" placeholder="${escAttr(o.ph||'')}" ${o.max?`maxlength="${o.max}"`:''} ${o.num?'inputmode="decimal"':''}
+    autocapitalize="off" spellcheck="false" autocomplete="${o.type==='password'?'new-password':'off'}" ${o.off?'disabled':''} ${payCan()?'':'readonly'}
+    style="width:100%;${o.mono?'font-family:monospace':''}" oninput="APP.cmd('${cmd}','${k}',this.value)">`; }
+const paySwitch=(on,cmd,label,o)=>{ o=o||{};
+  return `<div style="display:flex;align-items:center;gap:12px;${o.off?'opacity:.55':''}"><span style="flex:1;min-width:0;font-size:14.5px;${o.warn?'color:var(--brick-ink);font-weight:500':''}">${label}</span>
+    ${payCan()&&!o.off?toggle(on,cmd):`<span style="font-size:13px;color:var(--text-secondary)">${on?T('On','开'):T('Off','关')}</span>`}</div>`; };
+function payCurHtml(){
+  const s=payS();
+  if(!s.cfg) return s.cfgErr?x1Err(payEsc(s.cfgErr),'payRetryCfg'):x1Loading();
+  return payHelp(T('The currency your prices, cart and balances show in. Enter your product prices in this currency. WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it\'s for cash / bank / manual-payment stores until a matching payment method is added.','店铺价格、购物车和余额显示所用的货币。请以此货币填写商品价格。微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式。'))
+    +`<label style="display:block">${payLbl(T('Display currency','显示货币'))}<select style="width:100%" ${payCan()&&!s.busy?'':'disabled'} onchange="APP.cmd('payCur',this.value)">${PAY_CURRENCIES.map(p=>
+        `<option value="${p.code}"${p.code===s.cur?' selected':''}>${escAttr(payCurLabel(p))}</option>`).join('')}</select></label>
+    ${s.busy==='cur'?`<div style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`:''}${payNote(s.curNote)}`;
+}
+function payTaxHtml(){
+  const s=payS(), t=s.tax;
+  if(!s.cfg) return s.cfgErr?x1Err(payEsc(s.cfgErr),'payRetryCfg'):x1Loading();
+  return payHelp(T('Sales tax or VAT on what the customer pays. Choose whether your prices already include it or it is added at checkout, and the rate. The tax lands on the order, the receipt and the finance report. Leave it off if your prices carry no tax.','顾客支付金额中的销售税/增值税。请选择价格是否已含税、以及税率。税额会记录在订单、小票与财务报表中。若价格不含税,保持关闭即可。'))
+    +paySwitch(t.enabled,"APP.cmd('payTaxFlip','enabled')",T('Charge tax on orders','订单收取税费'))
+    +(t.enabled?`<label style="display:block">${payLbl(T('How prices are shown','价格含税方式'))}<select style="width:100%" ${payCan()?'':'disabled'} onchange="APP.cmd('payTaxMode',this.value)">
+        <option value="exclusive"${t.mode!=='inclusive'?' selected':''}>${T('Tax added at checkout','结账时另加')}</option>
+        <option value="inclusive"${t.mode==='inclusive'?' selected':''}>${T('Prices already include tax','价格已含税')}</option></select></label>
+      <label style="display:block">${payLbl(T('Rate %','税率 %'))}${payIn('payTaxIn','rate',t.rate,{num:true, mono:true})}</label>
+      <label style="display:block">${payLbl(T('What to call it','税费名称')+' (EN)')}${payIn('payTaxIn','label_en',t.label_en,{ph:'VAT', max:24})}</label>
+      <label style="display:block">${payLbl(T('What to call it','税费名称')+' (中文)')}${payIn('payTaxIn','label_cn',t.label_cn,{ph:'增值税', max:24})}</label>
+      <label style="display:block">${payLbl(T('Registration number','税号')+` <span style="font-weight:400">— ${T('optional','选填')}</span>`)}${payIn('payTaxIn','number',t.number,{max:40})}</label>
+      ${paySwitch(t.shipping,"APP.cmd('payTaxFlip','shipping')",T('Tax the delivery fee too','运费同样计税'))}
+      <div id="mPayTaxPv" style="font-size:13.5px;line-height:1.55;background:var(--surface-raised);border-radius:10px;padding:10px 12px">${escAttr(payTaxPreview())}</div>`:'')
+    +payNote(s.taxNote)
+    +(payCan()?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('payTaxSave')">${s.busy==='tax'?T('Saving…','保存中…'):T('Save tax settings','保存税费设置')}</button>`:'');
+}
+function payAliChip(){ const on=!!(payS().ali&&payS().ali.enabled), [bg,fg]=PILL[on?'success':'danger'];
+  return `<span class="pill" style="background:${bg};color:${fg}">${on?T('✓ LIVE','✓ 已启用'):T('✗ OFF','✗ 未启用')}</span>`; }
+function payAliHtml(){
+  const s=payS(), a=s.alid, d=s.ali;
+  if(!a) return s.aliErr?x1Err(payEsc(s.aliErr),'payRetryAli'):x1Loading();
+  const can=payCan(), qr=s.newQr||d.qr||'';
+  const keyPh=d.hasKey?T(d.keyMasked+' — leave blank to keep',d.keyMasked+' — 留空保持不变')
+    :d.serverKeyAvailable?T('Using the existing server key — leave blank','已使用服务器密钥,可留空'):T('sk-ant-… — paste once','sk-ant-… — 粘贴一次');
+  return payHelp(payEsc(T(...PAY_ALI_ABOUT)))
+    +paySwitch(a.enabled,"APP.cmd('payAliFlip','enabled')",T('Enable manual Alipay','启用手动支付宝收款'))
+    +`<label style="display:block">${payLbl(T('Payee label (shown to customer)','收款方名称(展示给顾客)'))}${payIn('payAliIn','account',a.account,{ph:'e.g. 哈素萌 / 柏玲'})}</label>
+    <div>${payLbl(T('收款码 image','收款二维码图片'))}
+      ${qr?`<img src="${escAttr(qr)}" alt="" style="display:block;max-width:160px;max-height:220px;border:1px solid var(--border-default);border-radius:8px;margin-bottom:8px">`:''}
+      ${s.newQr?`<div style="font-size:12.5px;color:var(--amber-ink);margin-bottom:6px">${T('Not saved yet','尚未保存')} — <button class="btn2" style="width:auto;min-height:28px;padding:0 10px;font-size:12.5px" onclick="APP.cmd('payAliDropQr')">${T('Remove','移除')}</button></div>`:''}
+      ${can?`<input type="file" accept="image/*" onchange="APP.cmd('payAliPick',this)">`:''}</div>
+    <div style="border-top:1px dashed var(--border-default);padding-top:12px;display:flex;flex-direction:column;gap:12px">
+      ${paySwitch(a.ocr,"APP.cmd('payAliFlip','ocr')",'🔍 '+T('Auto-read payment screenshots (AI)','自动识别付款截图'))}
+      ${payHelp(T('When a customer uploads their Alipay screenshot, AI reads the amount, payee and time and checks them against the order — shown as a green ✓ / red ⚠ on the order. ~¥0.03/order.','顾客上传支付宝截图后,AI 自动读取金额、收款方、时间并与订单核对,在订单上显示 ✓/⚠。约¥0.03/单。'))}
+      <div style="display:flex;flex-direction:column;gap:12px;${a.ocr?'':'opacity:.55'}">
+        <label style="display:block">${payLbl(T('Anthropic API key (sk-…)','密钥'))}${payIn('payAliIn','key',a.key,{type:'password', ph:keyPh, mono:true, off:!a.ocr})}</label>
+        <label style="display:block">${payLbl(T('Accepted payee names','收款方名称(可多个)'))}${payIn('payAliIn','payee',a.payee,{ph:T('哈素萌, 玲 — separate with commas','多个用逗号分隔'), off:!a.ocr})}</label>
+        ${payHelp(T('List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop\'s display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored.','请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。'))}
+        <label style="display:block">${payLbl(T('Pay within (minutes, 0 = no deadline)','付款期限(分钟,0=不限)'))}${payIn('payAliIn','win',a.win,{ph:'30', num:true, mono:true, off:!a.ocr})}</label>
+        ${payHelp(T('The deadline shown to the customer: an Alipay order with no screenshot uploaded by then is auto-cancelled and its stock released. Keep it tight.','顾客看到的付款期限:到期仍未上传截图的支付宝订单会自动取消并释放库存,建议设短一些。'))}
+        <label style="display:block">${payLbl(T('Screenshot may be up to (minutes old, 0 = same as above)','截图最长可早于上传(分钟,0=同上)'))}${payIn('payAliIn','age',a.age,{ph:'120', num:true, mono:true, off:!a.ocr})}</label>
+        ${paySwitch(a.autoFlip,"APP.cmd('payAliFlip','autoFlip')",'⚡ '+T('Auto-mark paid on full match (no human review)','完全匹配时自动标记付款(无需人工)'),{warn:true, off:!a.ocr})}
+        ${payHelp(payEsc(T(...PAY_ALI_FLIP)))}
+      </div></div>
+    ${payHelp(T('Open Alipay App → 收付款 → 收款 → save the收款码 image, then upload it here. The static code carries no amount, so the customer types the shown amount when paying. Uncheck Enable (or clear the image) to turn off and fall back to WeChat-only.','支付宝 App → 收付款 → 收款 → 保存收款码图片,上传到这里。静态码不含金额,顾客付款时手动输入页面显示的金额。取消勾选或清除图片即关闭。'))}
+    ${payNote(s.aliNote)}
+    ${can?`<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('payAliSave')">${s.busy==='ali'?T('Saving…','保存中…'):T('Save','保存')}</button>`:''}`;
+}
+function screenPay(){
+  payLoad();
+  const s=payS();
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${payCard(T('Currency','货币'),payCurHtml())}
+    ${payCard(`<span style="flex:1">${T('Tax','税费')}</span>${s.tax?`<span id="mPayTaxChip">${payTaxChip()}</span>`:''}`,s.tax||!s.cfg?payTaxHtml():'')}
+    ${payCard(`<span style="flex:1">${T('Alipay manual收款 (静态收款码)','支付宝手动收款')}</span>${s.ali?payAliChip():''}`,payAliHtml())}
+  </div>`;
+}
+SUBS.paycfg={title:['Payments','收款'],render:()=>screenPay()};
+/* §325 X10 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -43762,6 +44104,10 @@ const ROUTE_CAP={
   /* §325 X9c. The web store's page reads as the hub does; every save on it
      is integrations:manage, drawn for that key, read-only without it. */
   webcfg:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view','integrations:manage'],
+  /* §325 X10. Payments: the keys the server asks of currency, tax.* and
+     /alipay-manual (the desktop Settings set). canRoute adds that the keys
+     must be known and the board must see money. */
+  paycfg:['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -43836,6 +44182,7 @@ function canRoute(k){
   /* §325 X8e — gzgrocery's billing is what another business owes the shop:
      the GZ Grocery tab's key, as on the desktop, and the same money rule. */
   if(k==='gzbilling') return mCan('guanyi:view') && !recapNoMoney();
+  if(k==='paycfg') return mCanKnown(ROUTE_CAP.paycfg) && !recapNoMoney();   /* §325 X10 — money settings fail closed */
   return mCan(ROUTE_CAP[k]);
 }
 /* NAMED FOR THE JOB THEY HOLD, not for where the screen lives. Someone who can

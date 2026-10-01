@@ -69,6 +69,7 @@ const SRC = [
   block(M, 'function toggle('),
   block(M, 'function chipRow('),
   block(M, 'function noteBar('),
+  block(M, 'function settingsGroupCard('),
   block(M, 'function tmRow('),
   block(M, 'function tmList('),
   block(M, 'function tmCaption('),
@@ -117,7 +118,6 @@ function mk(opts = {}) {
     render: () => { calls.renders++; },
     reg: (n, f) => { CMD[n] = f; },
     push: () => {}, pop: () => {}, showToast: (m) => calls.toasts.push(String(m)),
-    settingsGroupCard: (rows) => rows.map((r) => `<button onclick="${r.cmd}">${r.label}</button>`).join(''),
     recapNoMoney: () => false, featOn: () => true, acctAgo: () => '', tdWhen: () => '', _tdL: () => ({}),
     api: (p) => new Promise((res, rej) => { calls.api.push({ p, res, rej }); }),
     apiRaw: (p) => new Promise((res, rej) => { calls.api.push({ p, raw: true, res, rej }); }),
@@ -175,6 +175,11 @@ section('1 · who reaches them');
   it('the doors: Operations for printers, Settings for push and the three delivery cards, the Delivery screen for those three', () => {
     const h = mk();
     assert.ok(h.text(fn(h, 'x7PrinterDoor')()).includes('Receipt printing'));
+    /* The real card, not a stand-in: a stand-in that drew `cmd` is how these
+       doors shipped as rows that did nothing when tapped (fixed in §325 X10). */
+    assert.ok(fn(h, 'x7PrinterDoor')().includes(`<button class="row" onclick="APP.cmd('push','printers')"`), 'the printer row is a door');
+    const dd = fn(h, 'x7DeliveryDoors')();
+    for (const r of ['kd100cfg', 'jdcfg', 'qycfg']) assert.ok(dd.includes(`onclick="APP.cmd('push','${r}')"`), r + ' is a door');
     const rows = fn(h, 'x7DeliveryRows')().map((r) => r.label);
     assert.deepStrictEqual(plain(rows), ['Package tracking', 'JD Logistics', 'Qingyun riders']);
     const none = mk({ caps: ['orders:view'] });
