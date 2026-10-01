@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.302 · 2026-09-30 · §414 ONE CHINESE WORD PER THING (§412.7) — FIVE WORDS SETTLED, NOTHING COMPOSED; EARLIER ENTRIES THAT RECORDED THE OLD WORDS ARE AMENDED.** See *One Chinese word per thing (§414)*.
+
 **v1.301 · 2026-09-30 · §413 "OPEN EVERYTHING" SAYS WHAT STAYED CLOSED — ONE STRING COMPOSED BY CLAUDE, ON THE DESKTOP AND THE PHONE ALIKE.** See *What "Open everything" left closed (§413)*.
 
 **v1.300 · 2026-09-30 · §411 FLASH SALES ON THE PHONE — NOTHING COMPOSED; TWO DESKTOP LINES WITH A HALF IN ONE LANGUAGE ARE SPLIT, AND EVERYTHING ELSE IS COPIED WHOLE.** See *Flash sales run from the phone (§411)*.
@@ -13058,3 +13060,41 @@ The rest is not new:
   changed here; §412.7 settles named words only.
 - Separators follow each language: `, ` and `; ` in English, `、` and `;` in
   Chinese.
+
+## One Chinese word per thing (§414)
+
+**Operator register (Rule 1), 2026-10-01.** Ash's §412.7. Nothing composed:
+each settled word was already live on one surface.
+
+| Thing | Settled word | Retired | Where it changed |
+|---|---|---|---|
+| Holiday mode | `假期模式` (desktop panel, mini app checkout) | `假日模式` | phone: Delivery summary row and banner, the Holiday mode confirm, toast, refusal and key label (8) |
+| Delivery zones | `配送区` (desktop Delivery zones panel) | `配送范围` for zones; `配送区域` for zones | phone summary card row and its "zones switched off" warning; desktop integration card (2) and `no_zone_match`; `lib/capabilities.js` (4); `lib/onboarding-steps.js`; `lib/recycle.js`; the recycle-bin note on both surfaces |
+| Edit ship-to | `修改收货地址` (order drawer) | `修改收货信息` | desktop quick panels (3) and the rider-failure sentence on both surfaces |
+| Your store is open | `店铺已开业` (phone setup guide) | `你的店开张了` | phone toast after *Open the doors*; desktop setup guide heading |
+| Drafts (Orders chip) | `草稿` (drafts view, `草稿未能加载`) | — (English-only in Chinese mode) | `EN_ONLY_MAP` in `retail-admin.html` and `10-extras.js` gain `'Drafts': '草稿'` |
+
+**Deliberately not changed:**
+- **The customer's own delivery area.** `配送区域` is kept in the shop's and
+  the mini app's address pickers (`点击选择配送区域`, `请选择配送区域`) and in
+  `超出本订单的配送区域`.
+- **Coverage.** `配送范围` is kept in the mini app's `此地址暂不在配送范围内` and
+  in the desktop's `Coverage & pricing · 配送范围与费用`.
+
+These are different things from the operator's zones. One word per thing
+means they keep theirs.
+
+**Earlier entries to amend** (they recorded the old words as live):
+- *Delivery settings on the phone (§345)*: the `Holiday mode · 假日模式` row
+  ("the phone's own live pair, kept") and the copied list's
+  `假日模式已开启 — 配送已暂停`. Both now read 假期模式, by §412.7.
+- *Delivery zones on the phone (§360)*: "The phone's own, already live:
+  `Delivery zones · 配送范围`". Now `配送区`.
+- *Customer-facing order writes on the phone (§362)*: the `Edit ship-to` row
+  naming the desktop's two renderings. The quick panels now say 修改收货地址 too.
+- *Same-city rider operations on the phone (§369)*: the `Edit ship-to` row
+  ("The desktop's quick panels say 修改收货信息"). They no longer do.
+- *The setup guide's actions on the phone (§394)*:
+  `Your store is open · 你的店开张了` (two places). Now `店铺已开业`.
+- *Desk work on the phone (§378)*: the `Drafts · 草稿` row says the desktop
+  chip is English-only in Chinese mode. It now says 草稿.
