@@ -23835,3 +23835,266 @@ resolved. No screen changed.
     - the owner, and enforcement off;
     - the screen permissions and the caller list each gate is built from.
 12. **Nothing composed.** No operator strings were added.
+
+## §341 — THE PHONE PAGE EDITOR SETS PICTURES, VIDEO AND BUTTON LINKS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone editor's sheet edited words and sent everything else to desktop
+("Images, colours & advanced options for this block are tuned on desktop").
+It now sets what the desktop inspector's picture, video and link pickers set,
+field for field and in the inspector's words: a hero's picture, desktop
+picture, video and buttons; a video banner's clip, poster and tap link; a
+recipe story's image; the WeCom QR; and the button or tap link of every block
+that has one. The block pickers (product, category, coupon list, poll, store,
+review list), sizes and behaviour, and onboarding are M3, not this step.
+
+1. **A picture is uploaded, taken from the media library, pasted as a link,
+   or removed** — the desktop picker's four ways. It is committed through a
+   new bridge command, `setImage`, so the editor underneath runs the
+   inspector's own commit: a field that records the picture's shape
+   (`image_aspect`, on the hero and the recipe story) is measured there, and
+   removing the picture sets both to empty.
+2. **The phone shrinks a picture by the inspector's rules**
+   (`prepareImageForUpload`): 1600px long side; GIFs and pictures already
+   small in pixels and bytes go as they are; PNG and WebP keep transparency;
+   a result no smaller than the original is dropped. Promo cards keep §299's
+   own shrink, unchanged.
+3. **The media library** lists the pictures already uploaded to the editor
+   (`GET /cms/media`), newest first, clips left out (the desktop grid is meant
+   to be pictures only); one tap uses one. Loading, empty and failed states.
+4. **A video is uploaded** to `/cms/media/video` (an MP4, 20 MB at most, the
+   server's own limit), pasted, or removed — a `patch` of the one field, as
+   the inspector's is. No library: the desktop has none for clips.
+5. **A link is the inspector's link picker as a list**: no link, the
+   inspector's pages with the block's suggested page first, the products, the
+   categories, or typed by hand. A saved link in none of them is kept and
+   named as the inspector names it (Product #, Category #, Custom). The lists
+   come from the editor underneath (`getTargets`), so they are the ones the
+   desktop offers.
+6. **A hero's buttons are its list**: label in both languages, style, link,
+   remove, add. Every change sends the whole list with the old single-button
+   fields cleared, exactly as the inspector does (`getCtas` reads the list for
+   the phone, so an old one-button hero is edited the same way there).
+7. **Countdown and kitchen status get their button text**, so their new link
+   is not a link on a button that has no words.
+8. **The sheet is no longer redrawn under a box being typed in.** Every
+   keystroke is a `patch` that comes back from the editor as `selected`, and
+   the sheet redrew itself on it — throwing away the box and closing the
+   phone's keyboard after one letter, in every text field the sheet has ever
+   had. The redraw now waits while a text box in the sheet has focus, which is
+   the desktop inspector's own rule (`renderInspector`).
+9. **The foot note now says only "Advanced options for this block are tuned on
+   desktop"**: pictures are set here now and colours in Design.
+10. **The no-permission screen names the permission it checks.** It said "No
+    retail permission … grant you the `retail` permission"; the gate checks
+    `content:edit`, so it now names that permission by the Roles screen's name
+    for it. The desktop editor (`cms.html`) shows the same wrong sentence and
+    is not changed here.
+11. **No new server route.** Two bridge commands (`setImage`, `getTargets`)
+    and one more fact on `selected` (a hero's buttons), active only in
+    `?embed=preview`. Every upload is behind the editor's own `content:edit`
+    gate, which the server's `/cms/*` rule includes.
+12. **Not here**: a Bento tile's pictures (they come with the category
+    picker, M3) and a review's avatar (with the review list, M3); a store's
+    button link (with the store picker, M3).
+
+## §342 — THE PHONE PAGE EDITOR SHOWS EVERY FIELD THE DESKTOP INSPECTOR SHOWS, AND THE ONBOARDING PAGE'S SETTINGS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+After M1 and M2 the phone editor's sheet still offered only a curated
+handful of text fields per block; sizes, behaviour, the product, category and
+poll pickers, a review list, a store list and a bundle's variants were "tuned
+on desktop". Rather than copy twenty-six block forms (about 2,700 lines) into
+the phone and keep them in step, the desktop editor running underneath the
+phone (§299's bridge) now reads its own inspector for the selected block and
+sends it; the phone draws it, and every tap drives the very control it copies.
+The Onboarding page's settings come to the phone too.
+
+1. **One inspector, drawn twice.** `cms.html` `fcFormSnapshot` turns the
+   inspector built for the selected block into a tree: sections, fields with
+   their label and hint, and the controls — text boxes (a two-language pair
+   arrives as two boxes tagged EN and 中), lists, numbers, ticks, radios,
+   buttons, chips and short notes — in the inspector's order and in the
+   editor's language (which follows the phone sheet's). A block type added
+   later reaches the phone with nothing written for it there.
+2. **A tap drives the desktop's own control.** The phone sends `ctl` (the
+   control's number, its kind, the value); the bridge sets the value and fires
+   the control's own `input` / `change`, or clicks the button or chip. So every
+   rule a control carries — a clamp (columns 3–5), a conversion (the countdown's
+   local time), which old fields it clears, what it writes into a list — runs
+   exactly as on desktop, with no second copy to drift. A tap meant for a
+   different kind of control than the one now at that number is refused, never
+   guessed at. Values are read off the controls when the tree is sent, so text
+   typed from the phone is what comes back.
+3. **The four pickers that are not plain controls register themselves**
+   (`productPicker`, `imgPicker`, `videoPicker`, `targetPicker`) with their
+   value and their own setter; the phone's `pickSet` calls that setter. A
+   product is chosen from a list (one, or several with remove and add); a
+   picture, video or link inside a list — a review's avatar, a Bento tile's
+   picture, a store's button link — uses §325 M2's fields, driving the
+   inspector's picker. Categories to show are the inspector's chips; a poll is
+   pinned with the inspector's list, which the Design sheet already carried.
+4. **What the mirror leaves out**: colours and layout choices (the Design
+   sheet has them), Show on and Frame (the sheet's own, M1), the coupon picker
+   and its read-only lines and a hero's buttons (the sheet's own, M1 and M2;
+   marked `data-mirror-skip` on desktop), and Delete (the action bar). The
+   sheet's own picture, video and link fields (M2) are drawn where the
+   inspector's first such field stands.
+5. **The curated text-field list is retired**, and with it the sheet's own
+   labels ("Kicker", "Empty text"): the phone now shows every text field the
+   inspector shows, by the inspector's names. The "advanced options are tuned
+   on desktop" note goes: there is nothing left that only the desktop sheet has.
+6. **The Onboarding page's settings**: on that page a strip under the view
+   switch shows who sees it and its version, and opens a sheet with the
+   desktop's controls on the desktop's endpoints — who sees it (`PUT
+   {show_to}`), the Get Started button's two words (`PUT {next_label}`, saved
+   when a box is left, as desktop saves on blur), and Re-show to all (`POST
+   /bump`), which asks first in the desktop's words because it puts the page
+   back in front of every returning customer. A refusal stays in the sheet.
+   The "is this page linked from Home" banner the desktop shows on the other
+   pages is not brought over in this step.
+7. **The desktop editor's no-permission screen** now says what the phone's
+   says (M2): it names `content:edit` by the Roles screen's name for it, not a
+   `retail` permission that no longer exists.
+8. **No new server route.** The mirror lives in the bridge, active only in
+   `?embed=preview`; the onboarding endpoints are the desktop's, behind the
+   editor's `content:edit` gate, which the server's `/cms/*` rule includes.
+
+## §343 — THE PHONE'S ORDERS LIST GETS THE DESKTOP'S CHIPS, ONE CUSTOMER'S ORDERS, THE CSV AND SAVED VIEWS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O2 of the Orders lane. The phone's Orders list filtered by eight of the
+desktop's fourteen status chips, could not be narrowed to one customer, could
+not export, and had no saved views. It now has all four, each calling the
+desktop's endpoint with the desktop's parameters. Two language bugs found in O1
+are fixed with it. Order drafts (the desktop's Drafts chip) are not a status
+and are step O10.
+
+1. **Six status chips added**, in the desktop strip's order: *Rider coming*
+   (`rider_pickup`, with its count), *Delivery needs a call* (`delayed`),
+   *Cancelled*, *To recover* (`recover_parcel`, §189), *Refunded*, and
+   *Fapiao* (`needs_invoice`, counting the ones still to issue, as the
+   desktop's badge does). Every desktop status chip now has a phone chip; a
+   test reads the desktop strip and checks it. Terminal states and the two
+   pseudo-statuses carry no badge, as on the desktop. The phone's existing
+   clearable *Delivery needs a call* chip over the rows stays: the chip row
+   scrolls sideways and the lit chip can be off screen.
+2. **The fapiao chip is labelled *Fapiao · 发票*,** the phone order sheet's own
+   heading for the same request, not the desktop's English-only *Invoice*
+   (which has no Chinese).
+3. **"View all N orders" on the customer record** when the customer has more
+   orders than the record lists, for anyone who may open Orders. It opens
+   Orders scoped to that customer by `customer_id`, with every other filter
+   reset to All ("all N" must mean all), closes the record, and shows a
+   clearable *Showing orders for <name>* chip. Clear filters, and any Home row
+   that opens a worklist, drop the scope.
+4. **Export** downloads `GET /orders/export.csv` at exactly the list's filters
+   (status, channel, search, store, customer scope) — one builder,
+   `ordersFilterParams`, serves the list, the export and saved views, as the
+   desktop's `ordFilterQuery` does. **It is drawn for `orders:export`**, the
+   capability made for it and the one the customers screen's Export already
+   follows (`customers:export`). The desktop's Export button and the server
+   route gate on nothing, so this is narrower than the desktop; recorded as a
+   desktop/server gap, not changed here.
+5. **Saved views** (screen `orders`): a *Views* sheet lists one's own views
+   (apply, Share/Shared, Delete with the desktop's confirm) and the team's
+   shared ones with who shared them; *Save this view…* asks for a name and is
+   offered only while something narrows the list. Views store the server's
+   filter keys, so a view saved on either surface applies on the other. A
+   saved store that no longer exists, or a status the phone has no chip for,
+   falls to All — showing more than promised is the desktop's own safe
+   direction. The customer scope is never saved or restored, as on the
+   desktop. Share and Delete are drawn only on one's own views because the
+   server refuses anyone else's. No capability gates the views routes, and
+   none is added.
+6. **The order total's labels follow the language.** They were bare English
+   words passed through `T(l,l)`, so a Chinese screen read *Subtotal* and
+   *Delivery*. They are pairs now: *Subtotal · 小计* and *Shipping · 运费* —
+   the desktop's own word for this fee (`orderTotalSubline`), in place of
+   *Delivery*, so that a live pair fits.
+7. **The list's note chips follow the language.** `orderNotes` worded each
+   chip when the list was fetched, so a language switch left them in the old
+   language. It now carries the same pairs and the row says them at render.
+8. **Tests.** `scripts/test_mobile_orders_list.js` (fast shard, no browser):
+   every chip's status value, the customer scope from the record to the read
+   to the chip and out, the export URL with and without filters, every views
+   request (method, path, every body field), loading / empty / failed /
+   refused states, both languages, and the capability-denied cases (no
+   `orders:export`; no Orders access for View all).
+
+## §344 — THE REFUND WORKFLOW IS FINISHED ON THE PHONE: REVIEW, APPROVE BY AMOUNT OR LINES, REJECT WITH A REASON, A REAL PAYOUT, REFUND BY ITEMS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O3 of the Orders lane. The phone had the refund steps as bare confirms:
+Approve accepted whatever the customer asked for, Reject told the customer
+nothing, and Pay recorded a method and nothing else — no reference, no amount,
+no note, no store credit. Each now carries the desktop dialog's fields
+(`04-orders.js` `refundReview`, `openRefundApproveDialog`, `rejectRefund`,
+`openRefundPayoutDialog`, `openDirectRefundDialog`), posting the same bodies
+to the same endpoints.
+
+1. **Start review** (new, for a request still *pending*): a note for the
+   customer, optional; `POST /refund/review {note}`.
+2. **Approve** opens a sheet on what the customer asked for — their picked
+   lines, else their part amount, else Full — with the three modes, the
+   amount, the lines (checkbox and quantity per line, with the running total),
+   the staff note shown to the customer, and *Also reverse earned + redeemed
+   points* for a partial (Full always reverses). `POST /refund/approve` with
+   `{note, amount, reverse_points}` or `{note, lines:[{item_id, qty}],
+   reverse_points}`, exactly the desktop's bodies.
+3. **The consequence line above Approve** is §222's block (desktop, and the
+   phone's S1d one-tap version it replaces): full or partial, the rider when
+   one is on the order, and that a refund never changes the delivery day, with
+   a brick edge on a full one. Full or partial is decided the SERVER's way, on
+   the amount the form will send against the gross tenders not yet approved
+   (`refund.gross`, S1c) — never off the chosen mode. So typing the whole total
+   into Partial reads as full; and **"Full" on an order paid partly with points
+   or wallet reads as partial**, because it sends the cash total and the server
+   caps the amount there and compares it with the gross. The desktop keys its
+   line on the radio and says "full" in that case; the phone says what the
+   server will do. The block is recomputed as the mode, amount or lines change.
+   **The form never opens on list-row figures:** until the order's detail read
+   is in hand it says *Loading…*, reads it, and only then opens — no claim and
+   no button before (S1d's "figures not read" case, closed rather than worded
+   around).
+4. **Reject** asks for a reason the customer sees (optional);
+   `POST /refund/reject {note}`.
+5. **Record payout** opens on the tender the customer paid with (the desktop's
+   `_payoutDefaultMethod`: only an online WeChat order defaults to WeChat),
+   with all seven methods including *Store credit*, the reference, the amount
+   (the approved figure), a note, and the desktop's warning when WeChat is
+   picked for an order not paid online by WeChat.
+   `POST /refund/payout {method, reference, amount, note}`.
+6. **Refund → Part — by items** (new third choice beside Full and by amount):
+   only lines with units left to refund, each capped at what is left, a
+   part-refunded line saying how much already went; `POST /refund/direct
+   {note, lines}`. An off-app order's answer says to pay the customer back by
+   hand, as the by-amount path already did.
+7. **Capabilities.** Every one of these paths is `orders:refund` on the
+   server. Every command refuses without it, and the order sheet's rows are
+   drawn only for it; Full by status also needs `orders:edit` (S1b's gates,
+   kept; S1b's `orders:edit` gates on Cancel and Mark dispatched are kept as
+   they are). S1c's one-tap approve and its `refundRiderWarn` /
+   `refundApproveFull` helpers are replaced by the form, which carries the same
+   stage list (`REFUND_RIDER_ON_IT`) and the same sentences.
+8. **Three states.** The sheet's button says *Working…* and the sheet locks
+   while a write is out; a refusal stays on the sheet (or, for review and
+   reject, on the order) until the next try; a toast confirms success with the
+   server's own amount. A successful write folds the refund history so it is
+   read fresh.
+9. **Not done:** nothing in scope left out.
+10. **Tests.** `scripts/test_mobile_refund_workflow.js` (fast shard): every
+    request on method, path and every body field; the opening mode for each
+    kind of request; full/partial by the server's rule, points included; the
+    rider warning; the WeChat warning; the refusals on the sheet; and the
+    capability-denied case. `test_mobile_orders.js` (slow shard, not run) had
+    pinned the old one-tap payout; its case now drives the payout sheet.
+    The safety lane's `test_mobile_safety_guards.js` §1,
+    `test_mobile_safety_followups.js` §3 and `test_mobile_controls_gated.js`
+    asked their questions of the one-tap confirm; each case is now asked of
+    the form, and several are stronger (the sentence must sit above the
+    form's button; ticking the rest of the lines turns the warning on;
+    switching Full to a small amount turns the block partial; nothing can be
+    sent before the figures are read; a new request offers Start review and a
+    reviewing one does not; the refusal list includes reviewRefund and
+    rfSubmit and asserts no form opens).

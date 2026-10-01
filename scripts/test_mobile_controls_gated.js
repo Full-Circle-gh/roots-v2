@@ -163,13 +163,14 @@ section('1 · the order sheet');
     const h = mk(['orders:view', 'orders:edit']);
     assert.deepStrictEqual(cmds(h.ctx.sheetActions()), ['printOrder', 'advance', 'cancelOrder']);
   });
-  it('orders:refund without orders:edit: Refund only (Part; Full is offered with both keys)', async () => {
+  it('orders:refund without orders:edit: Refund only (the two Parts; Full is offered with both keys)', async () => {
     const h = mk(['orders:view', 'orders:refund']);
     assert.deepStrictEqual(cmds(h.ctx.sheetActions()), ['refundOrder']);
     h.CMD.refundOrder();
-    assert.deepStrictEqual(plain(h.ctx.state.ask.options.map((o) => o.key)), ['amount']);
+    // §325 O3 added the desktop's third way, by items — /refund/direct, orders:refund alone.
+    assert.deepStrictEqual(plain(h.ctx.state.ask.options.map((o) => o.key)), ['amount', 'lines']);
     const both = mk(ALL_ORDER); both.CMD.refundOrder();
-    assert.deepStrictEqual(plain(both.ctx.state.ask.options.map((o) => o.key)), ['full', 'amount']);
+    assert.deepStrictEqual(plain(both.ctx.state.ask.options.map((o) => o.key)), ['full', 'amount', 'lines']);
   });
   it('a customer\'s refund request: Approve / Reject for orders:refund only; Pay likewise', () => {
     // A counter sale: no parcel, so no "Undo delivery" row to muddy the list.
@@ -177,7 +178,10 @@ section('1 · the order sheet');
     const e = mk(['orders:view', 'orders:edit'], { order: req });
     assert.deepStrictEqual(plain(e.ctx.orderActs(e.order)), []);
     const r = mk(['orders:view', 'orders:refund'], { order: req });
-    assert.deepStrictEqual(plain(r.ctx.orderActs(r.order).map((a) => a[2])), ["APP.cmd('approveRefund')", "APP.cmd('rejectRefund')"]);
+    // §325 O3: a NEW request also offers the desktop's Start review (orders:refund too).
+    assert.deepStrictEqual(plain(r.ctx.orderActs(r.order).map((a) => a[2])), ["APP.cmd('reviewRefund')", "APP.cmd('approveRefund')", "APP.cmd('rejectRefund')"]);
+    const rv = mk(['orders:view', 'orders:refund'], { order: Object.assign({}, req, { refundStatus: 'reviewing' }) });
+    assert.deepStrictEqual(plain(rv.ctx.orderActs(rv.order).map((a) => a[2])), ["APP.cmd('approveRefund')", "APP.cmd('rejectRefund')"]);
     const pay = mk(['orders:view', 'orders:refund'], { order: { refundStatus: 'approved', raw: 'delivered', counter: true } });
     assert.deepStrictEqual(plain(pay.ctx.orderActs(pay.order).map((a) => a[2])), ["APP.cmd('payRefund')"]);
   });
@@ -187,9 +191,11 @@ section('1 · the order sheet');
   });
   it('the commands refuse on the same keys: nothing is sent', async () => {
     const h = mk(['orders:view']);
-    for (const c of ['advance', 'cancelOrder', 'markPaid', 'undoDispatch', 'undoPreparing', 'refundOrder', 'approveRefund', 'rejectRefund', 'payRefund']) {
+    for (const c of ['advance', 'cancelOrder', 'markPaid', 'undoDispatch', 'undoPreparing', 'refundOrder', 'approveRefund', 'rejectRefund', 'payRefund',
+      'reviewRefund', 'rfSubmit']) {
       h.CMD[c]('dispatched');
       assert.strictEqual(h.ctx.state.ask, null, c + ' opened a sheet');
+      assert.ok(!h.ctx.state.rf, c + ' opened the refund form');
     }
     h.ctx.askRefundFull(h.order); h.ctx.askRefundAmount(h.order);
     assert.strictEqual(h.ctx.state.ask, null);
@@ -205,8 +211,10 @@ section('1 · the order sheet');
     const h = mk(ALL_ORDER);
     h.CMD.advance('preparing'); await tick(); await tick();
     assert.deepStrictEqual(plain(h.calls.writes[0]), { p: '/orders/9/status', body: { status: 'preparing' }, method: 'PATCH' });
-    h.CMD.approveRefund(); h.ctx.state.ask.run(); await tick(); await tick();
-    assert.deepStrictEqual(plain(h.calls.writes[1]), { p: '/orders/9/refund/approve', body: {}, method: 'POST' });
+    // §325 O3: Approve is the desktop's approve form; its button sends the desktop's body.
+    Object.assign(h.order, { refundStatus: 'pending', rfItems: [], refundLineIds: [], refund: { gross: 120, approved: 0 } });
+    h.CMD.approveRefund(); h.CMD.rfSubmit(); await tick(); await tick();
+    assert.deepStrictEqual(plain(h.calls.writes[1]), { p: '/orders/9/refund/approve', body: { note: '', amount: 120, reverse_points: true }, method: 'POST' });
   });
   it('tracking and arrival time: read for everyone, written for orders:edit', () => {
     const sp = { id: 3, trk: { number: 'SF123', carrier_name_en: 'SF' }, lastError: 'x', localEta: '17:30', etaSource: 'manual' };

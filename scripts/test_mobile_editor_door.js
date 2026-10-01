@@ -206,7 +206,10 @@ const chrome = (ctx, blk) => { const body = el(); ctx.renderChrome(body, blk); r
 section('2 · every block: Show on, Frame, Corner radius, Full width');
 {
   it('the sheet draws them on every block with a loaded copy, promo cards included', () => {
-    assert.ok(/if \(blk\) renderChrome\(body, blk\);\s*\/\/ Promo cards ARE pictures[\s\S]*?if \(type === 'promo_cards'\) return;/.test(CM));
+    const re = CM.slice(CM.indexOf('function renderEdit() {'), CM.indexOf("/* ── §325 · THE COUPON BLOCK'S PICKER"));
+    assert.ok(/\n  if \(blk\) renderChrome\(body, blk\);\n/.test(re));
+    const afterPromo = re.slice(re.indexOf('renderPromoEdit(body, blk);'), re.indexOf('if (blk) renderChrome(body, blk);'));
+    assert.ok(afterPromo.length > 0 && !/\breturn\b/.test(afterPromo), 'nothing returns between the promo editor and the chrome');
   });
   it('the effective Show on, as the bridge worked it out, with the inspector\'s words', () => {
     const { ctx } = mkC({ extra: { showOn: 'web', showOnDefault: 'both' } });
@@ -269,11 +272,16 @@ section('3 · the coupon block links a real coupon');
   const LIVE = { title_en: 'Welcome back', title_cn: '欢迎回来', subtitle_en: 'Min spend ¥50', subtitle_cn: '满 50 元可用', discount_label_en: '¥10', code: 'HELLO10' };
   const pick = (ctx, blk) => { const body = el(); ctx.renderCouponPick(body, blk); return body.kids; };
   it('no title, subtitle or code to type any more; the kicker and button stay', () => {
-    const line = CM.split('\n').find((l) => /^\s*coupon_block:\s*\[/.test(l));
-    assert.ok(line, 'coupon_block fields');
-    assert.ok(!/'title_en'|'subtitle_en'|'code'/.test(line), line);
-    assert.ok(/'kicker_en'/.test(line) && /'cta_label_en'/.test(line));
+    // Since §325 M3 the sheet's fields are the inspector's own (mirrored), so
+    // what can be typed is what the desktop coupon form lets be typed.
+    const form = CD.slice(CD.indexOf('function buildCouponForm('), CD.indexOf('function buildPointsForm('));
+    const typed = [...form.matchAll(/txtPair\(b\.(\w+)_en/g)].map((m) => m[1]);
+    assert.deepStrictEqual(typed, ['kicker', 'cta_label']);
+    assert.ok(!/txt\(b\.code|txtPair\(b\.title_en|txtPair\(b\.subtitle_en/.test(form));
+    // the picker and the three read-only lines are the sheet's own, not mirrored twice
+    assert.strictEqual((form.match(/fcSkip\(field\(/g) || []).length, 5);
     assert.ok(/if \(type === 'coupon_block'\) renderCouponPick\(body, blk\);/.test(CM));
+    assert.ok(!/^const F = \{/m.test(CM), 'the curated text-field list is gone');
   });
   it('the active coupons, the linked one chosen, and the read-only lines from it', () => {
     const { ctx } = mkC({ extra: { coupons: [{ id: 3, code: 'HELLO10', title_en: 'Welcome back' }, { id: 4, code: '', title_en: '' }], couponLive: LIVE } });
