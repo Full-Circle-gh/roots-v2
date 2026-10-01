@@ -303,7 +303,23 @@ router.post('/api/retail-admin/eleme/products/:id/map', requireRetailAdmin, expr
                   .get(productId, storeId) || {};
     const { nextExtend, nextName, nextSpecId, nextSpecName } =
       mergeMapFields(cur, { extendCode, elemeName, specId, specName });
-    const sync = syncEnabled === undefined ? 1 : (syncEnabled ? 1 : 0);
+    /* §325 S2k — A MAPPING THAT NAMES NO LISTING IS NEVER LEFT SWITCHED ON.
+       Eleme matches a push by name only, and the daemon fills a missing name
+       with the product's own Chinese name (docs/eleme-findings.md finding 6),
+       so a nameless mapping that is on pushes to a stranger or to nothing.
+       mergeMapFields() has already trimmed, so a name of spaces is null here.
+         • `syncEnabled` sent truthy with no name → refused, `no_listing_name`,
+           the code lib/channel-sync-write.js setSync gives (S2j); nothing is
+           written.
+         • `syncEnabled` not sent and no name → stored OFF. Before this the
+           default was ON, which is how the switch made nameless mappings
+           (finding 8).
+         • A mapping WITH a name keeps today's default (on when not sent). */
+    const nameless = !nextName;
+    if (nameless && syncEnabled !== undefined && syncEnabled) {
+      return res.status(409).json({ success: false, error: 'no_listing_name', stores: [String(storeCode)] });
+    }
+    const sync = syncEnabled === undefined ? (nameless ? 0 : 1) : (syncEnabled ? 1 : 0);
     const renamed = nextName !== (cur.eleme_name == null ? null : cur.eleme_name);
 
     db.transaction(() => {
