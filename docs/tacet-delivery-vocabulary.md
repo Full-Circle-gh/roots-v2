@@ -1,5 +1,17 @@
 # Tacet delivery vocabulary — locked
 
+**v1.266 · 2026-09-30 · §369 SAME-CITY RIDER OPERATIONS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Same-city rider operations on the phone (§369)*.
+
+**v1.265 · 2026-09-30 · §368 SOCIAL PROOF AND SHARE CARDS ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Social proof and share cards on the phone (§368)*.
+
+**v1.264 · 2026-09-30 · §367 POLLS, VOTING SETTINGS AND LEADERBOARD SETTINGS ON THE PHONE — NOTHING COMPOSED; SIX LABELS LIFTED FROM DESKTOP PAIRS.** See *Polls, voting settings and leaderboard settings on the phone (§367)*.
+
+**v1.263 · 2026-09-30 · §366 BROADCASTS SENT AGAIN AND RECALLED ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Sending a broadcast again on the phone (§366)*.
+
+**v1.262 · 2026-09-30 · §365 THE MEDIA LIBRARY ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *The media library on the phone (§365)*.
+
+**v1.261 · 2026-09-30 · §364 LEGAL, FAQ, ABOUT AND THE MINI-APP COPY ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Legal, FAQ, About and the mini-app copy on the phone (§364)*.
+
 **v1.260 · 2026-09-30 · §362 CUSTOMER-FACING ORDER WRITES ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Customer-facing order writes on the phone (§362)*.
 
 **v1.259 · 2026-09-30 · §361 PARCELS AND STATUS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Parcels and status on the phone (§361)*.
@@ -11406,3 +11418,221 @@ refusal and "did not go through" sentences.
 | String | Note |
 |---|---|
 | `Edit ship-to` | The desktop has two Chinese renderings: 修改收货地址 on the order drawer's Ship to card, 修改收货信息 on the three quick panels (missed delivery date, place the point). The phone uses the drawer's, because its button sits on the same card. **For Ash:** pick one for both. |
+
+## Legal, FAQ, About and the mini-app copy on the phone (§364)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1):
+`public/m.html`.
+
+- **The card's foot and sheets** are the phone's live-sheet words:
+  `Saving… · 保存中…`, `All changes saved · 已自动保存`, `Save failed: · 保存失败:`,
+  `Undo · 撤销`, `Version history · 历史版本`, `Done · 完成`, the version list's
+  words, `No versions yet — they’re saved automatically as you edit. ·
+  暂无历史版本 — 编辑时会自动保存。`, `Could not load the history · 无法加载历史版本`;
+  and `Edit · 编辑`, `Remove · 删除`, `Move up · 上移`, `Move down · 下移`,
+  `Uploading… · 上传中…`, `That did not upload. · 上传失败。` with the photo
+  library's reasons.
+- **Legal** (desktop `#tab-legal`): `English body · 英文正文`, and the desktop's
+  Chinese field label `中文正文` shown as it is in both languages.
+- **FAQ** (desktop `07-content-billing.js` and `#tab-faq`): `Questions &
+  answers · 问题与答案`, `Categories · 分类`, `+ Add question · 添加问题`,
+  `+ Add category · 添加分类`, `Category · 分类`, `— pick category · 选择分类 —`
+  (split into its two sides), `id (optional) · 选填`, `English label · 英文名称`,
+  `Colour · 颜色`, the desktop's single-language field labels `EN question`,
+  `中文问题`, `EN answer`, `中文回答`, `中文标签`, `id` shown as they are, the
+  colour names as they are, both remove questions, and the five hold sentences.
+  `Question · 问题` is the desktop voting editor's.
+- **About** (desktop `#tab-about`): every section title, field label, button
+  and empty line is the desktop editor's `English · 中文` pair, split into its
+  sides (`Manifesto · 宣言`, `Kicker suffix (CN) · 引题后缀(中文)`,
+  `+ Add OUT item · 添加「否」项`, `Choose image… · 选择图片…`,
+  `Remove · 移除`, …); `Body — 中文`, `IN · 是`, `OUT · 否`, `EN`, `CN` as the
+  desktop shows them.
+- **Mini-app copy** (desktop `05-marketing.js` SNIPPETS, `#tab-snippets`): the
+  screen's name `Mini-app copy · 小程序文案`, its intro, and every group, label
+  and hint, split into their sides; the field tags `EN`, `中`.
+
+## The media library on the phone (§365)
+
+Operator register only (Rule 1): `public/m.html`, the Media screen.
+
+**Copied whole** from the desktop Media tab (`retail-admin.html` `#tab-media`
+and `07-content-billing.js`), each `English · 中文` pair split into its sides:
+`All media · 全部`, `Unsorted · 未分组`, `(unsorted) · 未分组`, `All · 全部`,
+`Search filename or alt text · 搜索文件名/alt`, `Load more · 加载更多`,
+`n of N · 共 N 项`, `selected · 已选`, `Move to · 移到`, `Tag · 加标签`,
+`Delete · 删除`, `Move to folder · 移到文件夹`, `Filename · 文件名`,
+`Alt text · 替代文字` with `(for screen readers and SEO) · (用于读屏与 SEO)`,
+`Folder · 文件夹`, `Tags · 标签`, `Copy · 复制`, `Used in · 引用`,
+`Used in n places · 被引用 n 处`, `Not used yet · 未使用`, `Tag selected · 批量加标签`,
+`Add tags · 添加标签` with `(comma or Enter) · (逗号或回车)`,
+`Remove tags · 移除标签`, `Apply · 应用`, `Nothing to apply · 无变更`,
+`Tags updated · 标签已更新`, `Moved n · 已移动 n`, `Deleted · 已删除`,
+`+ New folder · + 新建文件夹`, `Folder created · 文件夹已创建`,
+`Rename folder · 重命名文件夹`, `Rename · 重命名`, `Renamed · 已重命名`,
+`Folder deleted · 文件夹已删除`, `Load failed · 加载失败`, the three delete
+questions and the two folder-delete questions; `unused` and `未被引用` are the
+two halves of the desktop's usage badge (its text and its tooltip). From the
+phone: `Done · 完成`, `Save · 保存`, `Loading… · 加载中…`, the live-sheet words,
+`That did not save. Nothing has changed. · 没有保存成功。数据没有变化。`, and
+the empty library's own lines.
+
+**Composed by Claude, 2026-10-01:**
+
+| String | Built from |
+|---|---|
+| `Select · 选择` | the button that turns taps into picking, which the desktop does with ctrl-click and so never names; 选 as in `选择分类`, `选择图片…` |
+
+**Live candidates rejected**: `Choose image… · 选择图片…` (says what is picked
+is an image to add, not pictures to act on).
+
+## Sending a broadcast again on the phone (§366)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1):
+`public/m.html`, the Broadcasts list. From the desktop feed
+(`05-marketing.js` bxFeedRow and recallBroadcast): `Send again · 再次发送`,
+`Recall · 撤回`, the recall question `Recall this broadcast (remove from every
+customer's inbox) · 撤回此群发消息（从每位客户的收件箱中移除）` with `?`, and the
+statuses `Recalled · 已撤回`, `Cancelled · 已取消`, `Expired · 已过期`,
+`Ended · 已结束` beside the phone's own `Sent · 已发送`, `Scheduled · 已排期`,
+`Draft · 草稿`. Everything in the composer is the phone's own (§63).
+
+## Polls, voting settings and leaderboard settings on the phone (§367)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1):
+`public/m.html`, the Voting and Leaderboard screens and the new poll editor.
+
+- **Poll editor** (desktop `10-extras.js` votRenderEditor, votSavePoll,
+  votDeletePoll, votSetStatus): every heading, label, hint, button, state line,
+  confirm, hold and toast copied whole — `The question · 问题`, `Options · 选项`,
+  `Rules · 规则`, `What customers see as the count · 顾客看到的票数`,
+  `Small label above it · 上方的小标签`, `Line under the question ·
+  问题下方的一行字`, `Points for voting · 投票奖励积分`, `Closes · 截止时间`,
+  `Feature it · 设为精选`, `Featured · 精选`, `Order · 排序`, `Winner · 获胜选项`,
+  `The most-voted option · 票数最高的选项`, `Show at least · 至少显示` and their
+  hints; the boost lines; `Publish · 发布`, `Save draft · 保存草稿`,
+  `Save changes · 保存更改`, `Close poll · 关闭投票`, `Reopen · 重新开启`,
+  `Delete · 删除`, `Add option · 添加选项`, `New poll · 新建投票`; the four
+  state lines; the publish / reopen / close / clear-votes / delete / leave
+  confirms and their buttons; `Poll published · 投票已发布`, `Poll saved ·
+  投票已保存`, `Poll created · 投票已创建`, `Poll deleted · 投票已删除`,
+  `Save failed · 保存失败`, `Could not create the poll · 创建投票失败`,
+  `Delete failed · 删除失败`. The language switch shows `English` and `中文` as
+  the desktop does. `Working… · 处理中…` and `Saving… · 保存中…` are the
+  phone's.
+- **Voting page settings** (desktop `#vot-set-body`, VOT_CARD):
+  `Page settings · 页面设置`, `The line under “Your say” · “你说了算”下方的一行字`
+  with its two language blocks as one pair (the `<code>` tag around `{pts}`
+  dropped, the words unchanged), `Show vote counts to customers ·
+  向顾客显示票数` and its two state lines, the fields `English` and `中文` with
+  their placeholders. The empty list's line is the desktop stage's
+  `Your first poll takes about a minute. It lands on Me → Your say. ·
+  第一个投票大约一分钟就能建好,会出现在“我的 → 你说了算”。`. A failed read of the
+  settings says the phone's `Could not load this. · 无法加载。`.
+- **Leaderboard settings** (desktop `#tab-leaderboard`, LB_CARD, lbGenerateSeed):
+  every section title and its line (`Visibility · 可见度`, `Headline copy ·
+  标题文案`, `Ranking rules · 排序规则`, `Rewards (optional) · 奖励(可选)`,
+  `Placeholder board (temporary) · 占位榜单(临时)`), every choice of Metric,
+  Period and Reveal nicknames, `Show top N · 显示前 N 名` (N filled in on the
+  summary), the points-balance note, `Show placeholder members · 显示占位会员`
+  and its line, `Generate placeholder members · 生成占位会员`, `Top spender (¥) ·
+  榜首消费`, `How many members · 会员数量`, the placeholder summary lines,
+  `Placeholder members generated · 已生成占位会员`, `Hide these real members ·
+  隐藏指定真实会员` and its hint, `Failed to load leaderboard config ·
+  加载排行榜配置失败`. The reward placeholders keep the desktop's words with the
+  amount in the shop's own currency (money0), never a ¥ literal.
+- **Lifted, not composed: six field words.** The desktop labels its language
+  fields as fused triples (`Kicker · EN · 引题 · 英文`, `Kicker · 中文`). The
+  phone takes the word from the desktop pair and adds the language it is typed
+  in, rather than minting a pair per field: `Kicker · 引题`, `Title · 标题`,
+  `Subhead · 副标题`, `Top 1 reward · 第 1 名奖励`, `Top 3 reward · 前 3 名奖励`,
+  `Top 10 reward · 前 10 名奖励`, each followed by ` · EN` or ` · 中文`. Rejected:
+  copying the desktop's full labels, because `Kicker · 中文` has no Chinese side
+  of its own and would read as English to a Chinese reader.
+
+## Social proof and share cards on the phone (§368)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1):
+`public/m.html`, the Social proof and Share cards screens.
+
+- **Social proof** (desktop `#tab-social`, 05-marketing.js): every widget
+  title and line (`"N people bought this" — product page · "X 人买了这个" — 商品页`,
+  `Recent-buyers ticker — home · 最近购买滚动条 — 首页`, `"N viewing now" —
+  product page`, `"Last ordered X ago" — product page`, `"X SOLD" badge — shop &
+  home cards · "已售 X 件"标签`), every switch (`Show this widget · 显示此组件`,
+  `Show the ticker · 显示滚动条`, `Track viewer counts (powers the dashboard LIVE
+  pane)`, `Also show the "N viewing now" badge to customers`, `Show "last
+  ordered"`, `Show "X SOLD" badges`) and the viewing-now hint. The number
+  fields are labelled with the desktop's own accessible names for each box,
+  which carry the unit (`Look-back window in days · 回溯天数`, `Extra buyers per
+  day, lowest · 每日额外买家下限`, `Freshness for active products, highest
+  minutes · 活跃商品新鲜度上限(分钟)`, …); the suite checks each pair against
+  retail-admin.html. The manual entries: `Manual fake entries · 手动虚拟条目`
+  and its line, `No fake entries yet. · 暂无虚拟条目。`, `+ Add fake entry ·
+  添加虚拟条目`, the row placeholders as labels (`Masked name, e.g. W** ·
+  已脱敏姓名,如 李**`, `Product (English) · 产品名(英文)`, `Product (Chinese) ·
+  产品名(中文)`), `min ago · 分钟前`. The upsell card: its title, line, three
+  switches, `Content it may offer · 可展示的内容`, `Max items shown · 最多展示数量`.
+  The `<b>` marks in the last-ordered line are dropped, the words unchanged.
+- **Share cards** (desktop 10-extras.js scRenderStage, scUpload, scClear,
+  scLoad): `Card title · 卡片标题` with `· English`, and `卡片标题 · 中文` as the
+  desktop shows it; `e.g. Fresh this week · 例如:本周上新`; `Picture · 图片`,
+  `about 500 × 400 · 约 500 × 400`, `Replace the picture · 更换图片`,
+  `Remove picture · 移除图片`, `PNG or JPG · shown at 5:4 · PNG 或 JPG · 按 5:4
+  显示`, `Leave empty to use the page’s own look. · 留空则使用该页面自带样式。`, the
+  product and invite notes, `Picture removed · 已移除图片`, `Uploaded · 已上传`,
+  `Upload failed · 上传失败`, `Couldn’t load invite card · 邀请卡片加载失败`.
+  `Choose image… · 选择图片…`, `Uploading… · 上传中…` and `Edit · 编辑` are the
+  phone's own.
+
+## Same-city rider operations on the phone (§369)
+
+**Nothing composed, 2026-10-01.** These are operator strings only (Rule 1):
+the *Same-city courier* card in `public/m.html`.
+
+**Copied whole from the desktop (`public/retail-admin/04-orders.js`,
+renderQyShipFrom / renderQyDispatch / the parked surfaces and their handlers):**
+
+- **Retry push:**
+  - `Retry push · 重新发单`, `Queuing… · 排队中…`
+  - `Queued — sending it to the channel, about a minute · 已排队 — 约一分钟内发单`
+  - `Already on the courier platform · 已在配送平台`, `Could not queue it · 排队失败`
+  - the refused-push instruction (Fix the delivery address … or press Retry)
+- **Remove the old job:**
+  - `Remove it · 删除原单`, `Removing… · 删除中…`, `Old job removed · 原配送单已删除`
+  - `Could not remove it — do it in the Qingyun app · 删除失败 — 请在青云 App 中删除`
+- **Pick a place:**
+  - `Picked X — sending it to the channel, about a minute · 已选择 X — 约一分钟内发单`
+  - `That option is gone — reopen the order · 该选项已失效，请重新打开订单`
+  - `It moved on while you were looking — reopen the order · 状态已变更，请重新打开订单`
+  - `This order is closed · 该订单已关闭`, `Could not pick it · 选择失败`
+- **Ship from:**
+  - `Change · 更改`, `This order has no Qingyun job to move. · 该订单在青云没有可转移的配送单。`
+  - `No other location is set up for same-city delivery. · 暂无其他门店开通同城配送。`
+  - `not connected to Qingyun · 未连接青云`, `Ship from here · 改为此门店取货`, `Pick a location · 请选择门店`
+  - the confirm `Collect this order at X instead? · 改由 X 取货?` with its body, `Move it · 确认更改`, `Moving… · 更改中…`
+  - `Now collected at X · 已改为 X 取货` and its old-job-left variant
+  - the three refusals (courier already called, not connected, not wired up), `Could not move it · 更改失败`
+  - the blocked sentence (A courier is already on this one. To collect it somewhere else …), `Load failed · 加载失败`
+- **The day:**
+  - `Reschedule delivery · 改期配送`, `Change delivery day · 更改配送日期`, `today · 今天`, `tomorrow · 明天`
+  - the pick note, the confirm (Move this delivery from X to Y? …)
+  - `Move the delivery · 确认改期`, `Keep the current date · 保持原日期`, `Moving… · 处理中…`
+  - the four outcome sentences, `Could not move it · 改期失败`
+- **Couriers:**
+  - `Compare couriers · 查看运力比价`, `Call another courier · 再叫一家运力`, `Refresh prices · 刷新比价`
+  - the booked sentence (… nothing is charged until you dispatch)
+  - `Could not load couriers — is the store connected to Qingyun? · 无法获取运力 — 门店是否已连接青云?`
+  - the not-in-Qingyun sentence, `No couriers available right now. · 当前暂无可用运力。`
+  - `cheapest · 最便宜`, `Dispatch courier · 发起配送`, `Dispatching… · 发单中…`, `Pick at least one courier · 请至少选择一个运力`
+  - the two dispatch confirms, `Dispatch · 发起配送`
+  - `Courier dispatched · 已发起配送`, `Dispatched · 已发单`, `first to accept wins · 谁先接单谁配送`
+  - `Qingyun balance too low — top up first · 青云余额不足,请先充值`
+  - `A courier is already on this order · 该订单已呼叫运力`, `Dispatch failed · 发起配送失败` (with Qingyun's own reason appended, as the desktop appends it)
+
+**Phone pairs already live:** `Same-city courier · 同城配送`, `Edit ship-to · 修改收货地址`,
+`Close · 关闭`, `Loading… · 加载中…`, `Working… · 处理中…`.
+
+| String | Note |
+|---|---|
+| `Edit ship-to` on the parked and expired surfaces | The desktop's quick panels say 修改收货信息. The phone keeps the 修改收货地址 it already uses on the Ship to card (O7), so one English button never carries two Chinese renderings on the phone. The O7 note asks Ash to pick one for both screens. |

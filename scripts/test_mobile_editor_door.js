@@ -183,12 +183,11 @@ function el() {
   };
   return e;
 }
-const FRAMES = [{ value: 'lime-leaf', label: 'Lime · 青柠', hex: '#CCD900' }, { value: 'ink', label: 'Ink · 墨黑', hex: '#1a1a17' }];
 const CORNERS = [{ value: 'sharp', label: 'Sharp · 直角' }, { value: 'subtle', label: 'Subtle · 微圆角' }, { value: 'bold', label: 'Bold · 大圆角' }];
 function mkC(opts = {}) {
   const sent = [];
   const ctx = {
-    M: Object.assign({ lang: opts.lang || 'en', editId: 'b1', extra: opts.extra || null, frameColors: FRAMES, corners: CORNERS }),
+    M: Object.assign({ lang: opts.lang || 'en', editId: 'b1', extra: opts.extra || null, corners: CORNERS }),
     cuT: (en, cn) => (opts.lang === 'cn' ? cn : en),
     esc: (s) => (s == null ? '' : String(s)).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])),
     // Raw, as postMessage's structured clone keeps it: an undefined value is
@@ -230,17 +229,16 @@ section('2 · every block: Show on, Frame, Corner radius, Full width');
     chrome(ctx, { id: 'b1' }).controls.showon.onchange({ target: { value: 'miniapp' } });
     assert.deepStrictEqual(plain(sent), [{ cmd: 'patch', x: { id: 'b1', patch: { show_on: 'miniapp' } } }]);
   });
-  it('Frame: none plus the inspector\'s colours; the current one lit; none clears the key', () => {
+  it('Frame: no swatches of its own — the colour is the Design sheet\'s (one control per field, §325 M4)', () => {
     const { ctx, sent } = mkC({ extra: {} });
     const w = chrome(ctx, { id: 'b1', frame_color: 'ink' });
-    assert.ok(/<div class="sw none" data-frame="" title="— none —"><\/div>/.test(w.html));
-    assert.ok(/<div class="sw on" data-frame="ink" title="Ink" style="background:#1a1a17"><\/div>/.test(w.html));
-    assert.ok(/Add a coloured outline around this block\./.test(w.html));
-    w.groups.frame[1].onclick();
-    w.groups.frame[0].onclick();
-    assert.strictEqual(sent[0].x.patch.frame_color, 'lime-leaf');
-    assert.ok('frame_color' in sent[1].x.patch && sent[1].x.patch.frame_color === undefined, 'none is undefined, as desktop sends');
-    assert.deepStrictEqual(Object.keys(sent[1].x.patch), ['frame_color']);
+    assert.ok(!/data-frame=/.test(w.html) && !/Add a coloured outline around this block\./.test(w.html));
+    assert.ok(/<div class="t">Frame, radius &amp; width<\/div>/.test(w.html), 'the section keeps its name: corners and width are in it');
+    assert.strictEqual(sent.length, 0);
+    assert.ok(!/frame_color/.test(CM.slice(CM.indexOf('function renderChrome('), CM.indexOf('/* ── §325 M2'))));
+    // …and the desktop's Frame is a colour control, which the Design sheet streams.
+    assert.ok(/sel\(b\.frame_color \|\| '',\s*\[\{ value: '', label: T\('— none —', '— 无 —'\) \}, \.\.\.BRAND_COLOR_OPTIONS\]/.test(CD));
+    assert.ok(/if \(options\.length > 1 && options\.every\(isColorOpt\) && options\.some\(o => dcResolveHex\(o\.value\)\)\) \{\s*return colorSelect\(value, options, onChange\);/.test(CD));
   });
   it('Corner radius: subtle when unset, each chip writes corner_radius', () => {
     const { ctx, sent } = mkC({ extra: {} });
@@ -261,7 +259,7 @@ section('2 · every block: Show on, Frame, Corner radius, Full width');
   it('in Chinese, the inspector\'s Chinese', () => {
     const { ctx } = mkC({ lang: 'cn', extra: { showOn: 'both' } });
     const w = chrome(ctx, { id: 'b1', frame_color: 'lime-leaf' });
-    for (const s of ['显示位置', '小程序 + 网页版', '边框、圆角与宽度', '为本模块添加彩色边框。', 'title="青柠"', '>微圆角<', '拉伸至全宽（贴合屏幕两侧）']) {
+    for (const s of ['显示位置', '小程序 + 网页版', '边框、圆角与宽度', '>微圆角<', '拉伸至全宽（贴合屏幕两侧）']) {
       assert.ok(w.html.includes(s), s);
     }
   });
@@ -369,10 +367,10 @@ section('4 · the bridge carries the facts, and pickCoupon is the desktop select
   it('the desktop select does the same two things', () => {
     assert.ok(/if \(!val\) \{ updateBlock\(b\.id, \{ voucher_id: null \}\); return; \}\s*const v = vouchers\.find\(x => String\(x\.id\) === String\(val\)\);\s*if \(v\) updateBlock\(b\.id, couponDisplayFromVoucher\(v\)\);/.test(CD));
   });
-  it('ready carries the inspector\'s own Frame and Corner radius lists', () => {
-    assert.ok(/frameColors: BRAND_COLOR_OPTIONS\.map\(o => \(\{ value: o\.value, label: o\.label, hex: dcResolveHex\(o\.value\) \|\| null \}\)\),/.test(CD));
+  it('ready carries the inspector\'s own Corner radius list (and no Frame list: §325 M4)', () => {
+    assert.ok(!/frameColors/.test(CD) && !/frameColors/.test(CM));
     assert.ok(/corners: CORNER_RADIUS_OPTIONS\.map\(o => \(\{ value: o\.value, label: o\.label \}\)\),/.test(CD));
-    assert.ok(/M\.frameColors = d\.frameColors \|\| \[\];\s*M\.corners = d\.corners \|\| \[\];/.test(CM));
+    assert.ok(/M\.corners = d\.corners \|\| \[\];/.test(CM));
     assert.ok(/M\.extra = d\.extra \|\| null;/.test(CM));
   });
 }

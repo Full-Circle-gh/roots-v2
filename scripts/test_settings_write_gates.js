@@ -198,6 +198,20 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['features.feedback', list(route('inbox')), 'phone Inbox "Enable"'],
       ['features.socialProof', list(route('social')), 'phone Social proof switch'],
       ['features.faq', list(tab('faq')), 'desktop FAQ switch'],
+      // §325 M4 — the phone's content cards (m.html cfgCard), each on its screen's key.
+      ['legal.terms.body_en', list(route('legal')), 'phone Legal (card legal)'],
+      ['legal.privacy.updated_at', list(route('legal')), 'phone Legal (card legal)'],
+      ['faq.questions', list(route('faq')), 'phone FAQ (card faq)'],
+      ['faq.categories', list(route('faq')), 'phone FAQ (card faq)'],
+      ['about.content', list(route('about')), 'phone About (card about)'],
+      ['copy.cart.title', list(route('snippets')), 'phone Mini-app copy (card copy.snippets)'],
+      // §325 M8 — the phone's Social proof and Share cards screens, the desktop tabs' cards.
+      ['social_proof', list(route('social')), 'phone Social proof (card social_proof)'],
+      ['checkout.upsell', list(route('social')), 'phone Social proof → upsell (card checkout.upsell)'],
+      ['sharing.home', list(route('sharecards')), 'phone Share cards (card share.home)'],
+      ['sharing.homeTitle', list(route('sharecards')), 'phone Share cards (card share.home)'],
+      ['sharing.product', list(route('sharecards')), 'phone Share cards (card share.product)'],
+      ['sharing.votingTitle', list(route('sharecards')), 'phone Share cards (card share.voting)'],
       // §325 O4 — the phone's Delivery screen writes the Delivery panel's cards.
       ['delivery.holidayMessage', list(route('delivery')), 'phone Delivery — Holiday mode on, and its message'],
       ['delivery.sameDayCutoffMinutes', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
@@ -386,7 +400,10 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const SITE = /apiWrite\(('\/config[^']*'[^,]*|cfgPath),/g;
       const sites = [];
       for (let mm; (mm = SITE.exec(M));) sites.push(mm.index);
-      ok(!/apiWrite\((?!'\/config|cfgPath)[^,]*config/.test(M), 'the phone writes /config through no other path');
+      /* §325 M7 — the voting and leaderboard settings are not /config keys:
+         each has a route of its own (gated voting:edit / leaderboard:edit in
+         section 1), and the phone writes them there, as the desktop does. */
+      ok(!/apiWrite\((?!'\/config|cfgPath|'\/(voting|leaderboard)\/config')[^,]*config/.test(M), 'the phone writes /config through no other path');
       is(who(/retail-admin\/config['"`?]/), [
         'public/cms-mobile.html', 'public/cms.html', 'public/product-editor.html', 'public/retail-admin.html',
         'public/retail-admin/01-core.js', 'public/retail-admin/05-marketing.js', 'public/retail-admin/06-delivery.js',
@@ -421,7 +438,24 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         const own = FAMS.filter((f) => M.slice(i, i + 200).includes("'" + f));
         return own.length ? own : FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f));
       };
-      is(famSites.map((i) => famAt(i).join('|')).sort(),
+      // §325 M4 — the phone's content cards (m.html cfgCard: legal, faq, about,
+      // copy.snippets) share ONE write site, PUT /config?history=<card>; each
+      // card's family is a row in section 2. Every other site is one family.
+      const CARD_SITE = M.indexOf("apiWrite('/config?history='+encodeURIComponent(c.card)");
+      ok(CARD_SITE !== -1 && sites.includes(CARD_SITE), 'the content cards write through the one cfgCard site');
+      const cards = (M.match(/cfgCard\('([a-z._]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z._]+)'/)[1]).sort();
+      is(cards, ['about', 'checkout.upsell', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'social_proof', 'voting'],
+        'the phone\'s cards: about, copy, faq, legal, social proof and the upsell on /config; leaderboard and voting on their own routes');
+      // §325 M8 — the share cards are one card per page, 'share.<key>': three on
+      // /config (sharing.<key>), the invite card on PATCH /affiliate/settings.
+      ok(M.includes("return cfgCard('share.'+key,pg.aff?{"), 'the share cards are cfgCard(\'share.\'+key)');
+      ok(/const SC_PAGES=\[\s*\{key:'home'[\s\S]*?\{key:'product'[\s\S]*?\{key:'voting'[\s\S]*?\{key:'invite'[^}]*aff:true/.test(M), '…for home, product, voting, and the invite card through Affiliate');
+      for (const [card, url] of [['voting', '/voting/config'], ['leaderboard', '/leaderboard/config']]) {
+        const at = M.indexOf("cfgCard('" + card + "',{");
+        const own = M.slice(at, M.indexOf('\n});', at));
+        ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
+      }
+      is(famSites.filter((i) => i !== CARD_SITE).map((i) => famAt(i).join('|')).sort(),
         SITE_FAMS, 'the phone writes twelve families at eleven write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
@@ -443,10 +477,18 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         'the phone\'s Delivery settings write these twenty-two keys (§325 O4, O9)');
       for (const k of dlvKeys) ok(list(route('delivery')).every((c) => has(configKeyCap(k), c)), 'phone Delivery may write ' + k);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
-      is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
+      is(who(/retail-admin\/(voting|leaderboard)\/config|apiWrite\('\/(voting|leaderboard)\/config/), ['public/m.html', 'public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs and the phone\'s two screens (§325 M7)');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
-      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs write, the others read');
-      ok(!/apiWrite\('\/affiliate\/(settings|referrals)/.test(M), '…the phone only reads them');
+      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs write, cms.html reads, the phone writes only the invite share card (§325 M8)');
+      /* §325 M8 — one phone write to /affiliate/settings: the invite share card,
+         sending shareImage and shareTitle only (scBody), on the key the server
+         gives that write for exactly this card (sharing:edit, section 1). The
+         referrals stay read-only on the phone. */
+      is((M.match(/apiWrite\('\/affiliate\/settings/g) || []).length, 1, 'the phone writes the affiliate settings from one place');
+      ok(M.includes("put:(b,note)=>apiWrite('/affiliate/settings'+cfgHistQ('share.invite',note),b,'PATCH')"), '…the invite share card');
+      ok(M.includes("if(pg.aff) return {shareImage:img, shareTitle:title};"), '…sending its picture and title and nothing else');
+      ok(has(R('PATCH', '/affiliate/settings'), route('sharecards')), '…which the Share cards key may write');
+      ok(!/apiWrite\('\/affiliate\/referrals/.test(M), 'the phone only reads the referrals');
       is(who(/retail-admin\/cms\//), ['public/cms-mobile.html', 'public/cms.html', 'public/retail-admin/01-core.js',
         'public/retail-admin/05-marketing.js', 'public/retail-admin/10-extras.js'], '/cms/*: the two editors, and the desktop picture uploads');
       is(who(/flash-sale['`/]/), ['public/retail-admin/07-content-billing.js'], 'the flash sale: the desktop Flash sales tab');
@@ -457,10 +499,15 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(tab('voting'), 'voting:edit', 'desktop Voting');
     is(route('voting'), 'voting:edit', 'phone Voting');
     is(tab('leaderboard'), 'leaderboard:edit', 'desktop Leaderboard');
+    is(route('leaderboard'), 'leaderboard:edit', 'phone Leaderboard');
+    is(route('polledit'), 'voting:edit', 'phone poll editor');
     is(tab('topup'), 'topup:edit', 'desktop Top-up');
     is(route('wallet'), 'topup:edit', 'phone Wallet');
     is(tab('affiliate'), 'affiliate:view', 'desktop Affiliate');
     is(tab('sharing'), 'sharing:edit', 'desktop Share cards');
+    is(route('sharecards'), 'sharing:edit', 'phone Share cards');
+    is(route('sharecard'), 'sharing:edit', 'phone Share cards → one page');
+    is(route('social'), 'social:edit', 'phone Social proof');
     is(tab('flash'), 'flash:view', 'desktop Flash sales');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms.html')), 'cms.html opens on content:edit');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms-mobile.html')), 'cms-mobile.html likewise');
