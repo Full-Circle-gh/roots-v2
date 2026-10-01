@@ -5845,6 +5845,13 @@ async function pdSaveCore() {
     if (id) {
       const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
       if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
+      // §377 — the server copied Shipping to the other sizes. Mirror it here, or
+      // opening one of them would load its old value and the next autosave
+      // would copy that stale value back over the whole family.
+      if (Array.isArray(j.ship_modes_family) && j.data) {
+        const fam = new Set(j.ship_modes_family);
+        PA_PRODUCTS.forEach(p => { if (fam.has(p.id)) p.ship_modes = j.data.ship_modes; });
+      }
       // A DERIVED cost is the server's answer, not the operator's, so it is the
       // one field a no-reload save must still write back into the form — the
       // caret is never in it (it is read-only) and leaving it stale would show

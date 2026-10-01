@@ -446,6 +446,7 @@ const tax = require('../lib/tax');
 const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
 // §294 — the family on/off switch that remembers which sizes were on.
 const familyPublish = require('../lib/family-publish');
+const { syncFamilyShipModes } = require('../lib/family-ship-modes');
 // ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
 // Thirty-five day-boundary calculations in this file were the literal string
 // '+8 hours', so today's takings, the dashboard, the finance window and "new
@@ -24242,6 +24243,7 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
   const insertVersion = (json) => db.prepare(
     'INSERT INTO retail_product_versions (product_id, snapshot_json, is_baseline, edited_by) VALUES (?, ?, 0, ?)'
   ).run(id, json, operator || null);
+  let shipModesFamily = [];
   const tx = db.transaction(() => {
     // Keep the pre-restore state as an explicit (non-collapsing) undo point.
     const preJson = JSON.stringify(productContentSnapshot(db, id) || {});
@@ -24258,6 +24260,13 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
     // the transaction's own handle rather than through the async saver.
     //
     restoreProductOptionsFromSnapshot(db, id, snap);
+    // §377 — restoring a size's shipping restores the product's: the restored
+    // value goes to every other size, or one restore would split the family.
+    if (cols.includes('ship_modes')) {
+      const saved = db.prepare('SELECT ship_modes FROM store_products WHERE id = ?').get(id);
+      shipModesFamily = syncFamilyShipModes(db, id, saved.ship_modes,
+        sid => ensureProductBaselineVersion(db, sid, operator));
+    }
     // Record the restored state as the newest version so newest === live.
     const postJson = JSON.stringify(productContentSnapshot(db, id) || {});
     if (postJson !== preJson) insertVersion(postJson);
@@ -24269,7 +24278,12 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
   });
   tx();
   logActivity(req.user.id, req.user.username, 'restore_version', 'product_retail', id, { version_id: versionId }, req.ip);
-  res.json({ success: true });
+  for (const sid of shipModesFamily) {
+    recordProductVersion(db, sid, operator);
+    logActivity(req.user.id, req.user.username, 'update', 'product_retail', sid,
+      { fields: ['ship_modes'], ship_modes_from: id }, req.ip);
+  }
+  res.json({ success: true, ship_modes_family: shipModesFamily });
 });
 
 // §294 — SWITCH WHOLE VARIANT FAMILIES ON OR OFF THE ONLINE STORE. The one
@@ -24609,6 +24623,23 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // save that simply did not carry them is not a decision to delete them.
   if (hasOptions) await saveProductOptions(id, body.options, { allowClear: body.options_clear === true });
 
+  // §377 — Shipping is one setting for the whole product, not per size: the
+  // value just saved goes to every other size in the family, each with its own
+  // version checkpoint and activity entry, as family-publish does for §294.
+  // `shipModesFamily` lists the sizes written so the editor can refresh them.
+  let shipModesFamily = [];
+  if ('ship_modes' in body) {
+    const who = req.user && req.user.username;
+    const saved = tdb().prepare('SELECT ship_modes FROM store_products WHERE id = ?').get(id);
+    shipModesFamily = syncFamilyShipModes(tdb(), id, saved.ship_modes,
+      sid => ensureProductBaselineVersion(tdb(), sid, who));
+    for (const sid of shipModesFamily) {
+      recordProductVersion(tdb(), sid, who);
+      logActivity(req.user.id, req.user.username, 'update', 'product_retail', sid,
+        { fields: ['ship_modes'], ship_modes_from: id }, req.ip);
+    }
+  }
+
   // Checkpoint the saved state into version history (best-effort, post-save).
   recordProductVersion(tdb(), id, req.user && req.user.username);
 
@@ -24655,7 +24686,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     row.nutrition = null;
   }
   if (row) row.options = loadProductOptions(id);
-  res.json({ success: true, data: stripProductCosts(req, row) });
+  res.json({ success: true, data: stripProductCosts(req, row), ship_modes_family: shipModesFamily });
 });
 
 // ═══ Which recipe a product's cost comes from ══════════════════════════════
