@@ -216,7 +216,7 @@ it('nothing left: the desktop\'s question, then POST /setup {storeOpened:true}',
   assert.strictEqual(String(a.body), 'Your web store goes live and can take orders. You can keep editing anything afterwards.');
   assert.strictEqual(String(a.confirmLabel), 'Open the doors'); assert.strictEqual(String(a.cancelLabel), 'Not yet');
   for (const w of ["cuT('Open your store now?', '现在开店？')", "cuT('Your web store goes live and can take orders. You can keep editing anything afterwards.', '你的网页商店将上线并可接单。之后仍可继续编辑任何内容。')",
-    "cuT('Not yet', '还没')", "cuT('Open the doors', '正式开店')", "cuT('Your store is open', '你的店开张了')"]) assert.ok(DESK.includes(w), w);
+    "cuT('Not yet', '还没')", "cuT('Open the doors', '正式开店')", "cuT('Your store is open', '店铺已开业')"]) assert.ok(DESK.includes(w), w);
   assert.strictEqual(h.calls.writes.length, 0, 'nothing before the confirm');
   a.run();
   const w = h.calls.writes[0];
