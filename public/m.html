@@ -1097,6 +1097,11 @@ const state = {
   /* §325 X8b — the channel the verdicts are read for ('' = each item's worst),
      and what is typed in the search. */
   csCh:'', csQ:'',
+  /* §325 X8c — the one product being matched on one channel: which, its
+     reads (the product list, the stores, the names read from the channel),
+     the search over those names, which write is in flight and each
+     section's refusal. `seq` drops an answer that lands after a reopen. */
+  chm:{ch:null, pid:null, seq:0, tried:false, prod:null, stores:null, names:null, cat:{}, err:null, busy:null, note:{}, q:''},
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
      flight (one at a time, per screen, exactly as the desktop page does it), and
      csNote is { pid, text } so a refusal lands on the card that caused it rather
@@ -1999,6 +2004,7 @@ reg('rqSearch', v=>{
  ['mNlgQ','mNlgClr','nlgQ'],
  ['mElmCatQ','mElmCatClr','elmCatQ'],
  ['mCsQ','mCsClr','csQ'],
+ ['mChmQ','mChmClr','chmQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
  ['mOnwProdQ','mOnwProdClr','onwProdQ'],
  ['mOnwCityQ','mOnwCityClr','onwCityQ'],
@@ -26589,7 +26595,12 @@ function csListHtml(){
             const sw=csSwitch(x.ch.key,c2,p.id);
             return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
               <span class="num" style="min-width:0">${escAttr(line.join(' · '))}</span>${btn||sw?`<span style="display:flex;align-items:center;gap:8px;flex:none">${btn}${sw}</span>`:''}</div>`;}).join('')}
-          ${deskBad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+deskBad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+deskBad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}
+          ${/* §325 X8c — where the phone can match, it opens the channel on this
+                product, the desktop's "Open Meituan" (csFix); where it cannot,
+                the sentence still says where the fix is. */''}
+          ${deskBad.length?(canRoute('chmatch')
+            ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${deskBad.map(x=>`<button class="rowact" onclick="event.stopPropagation();APP.cmd('chmOpen','${x.ch.key}',${p.id})">${T('Open '+csChName(x.ch.key),'前往'+csChName(x.ch.key))}</button>`).join('')}</div>`
+            : `<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+deskBad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+deskBad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`):''}
           ${(state.csNote&&state.csNote.pid===p.id)?`<div style="color:var(--brick-ink)">${escAttr(state.csNote.text)}</div>`:''}
         </div>`:''}
       </div>`;}).join('')}</div>`
@@ -30028,6 +30039,299 @@ function x8GyCard(){
     ${x8Note('gy')}${x8Err('gy')}</div>`;
 }
 /* §325 X8a ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X8c — MATCHING AND CLAIMS: ONE PRODUCT ON ONE CHANNEL
+   --------------------------------------------------------------------------
+   The channel tabs' product panel, for the one product a Channel sync card
+   opened it on — the desktop's "Open Meituan / Open Eleme / Open GZ Grocery"
+   (29-channel-sync.js csFix), which lands on that tab with the product
+   selected. Each write is the panel's own:
+
+   • Meituan (11-meituan.js mtPanelStore): the delivery store's listing name,
+     picked from the names read from Meituan and never typed free (the
+     server's gate, lib/meituan-map-write.js, refuses anything else), with
+     Remove asking first — POST /meituan/products/:id/map {storeId, storeCode,
+     meituanName, syncEnabled, source}; on a listing several products share,
+     which options this product is and how many units each sells — POST
+     …/claim {storeId, storeCode, specSkuId, specLabel, units, on}. The 闪购
+     store links itself by 货号 and is read-only, as there.
+   • Eleme (14-eleme.js elPanelStore): every linked store's listing name from
+     its catalogue, Remove (which deletes the mapping), and the options —
+     POST /eleme/products/:id/map {storeId, storeCode, elemeName, syncEnabled}
+     or {storeId, storeCode, remove:true}; POST …/claim {storeId, storeCode,
+     elemeName, specId, specName, units, on}.
+   • GZ Grocery (12-guanyi.js gyBind / gyUnbind): bind to the listing the SKU
+     suggests, or unbind — POST /guanyi/products/:id/map {skuId, syncEnabled}
+     or {skuId:''}.
+
+   Naming a listing never moves the sync switch (mtKeepSync / Eleme's
+   sync_enabled passed through): naming and arming are two acts. Each control
+   is drawn for the key the server asks of its path (lib/cap-routes.js):
+   {channel}:map for the name and binding, {channel}:sync for the claims.
+   Every write re-reads the product, because a claim taken here releases it
+   from whichever product held it before.
+   ══════════════════════════════════════════════════════════════════════════ */
+const chm=()=>state.chm;
+const CHM_PENDING={
+  noneRead:['no listings read from this store yet, so nothing can be checked here','尚未从该门店读取商品名称,无法在此核对'],
+  pickIt:['This name matches no listing on this store. Pick one from the list.','该名称与本门店的任何商品都不符,请从列表中选择。'],
+};
+function chmLoad(){
+  const s=chm(); if(s.tried) return; s.tried=true; s.err=null;
+  const ch=s.ch, seq=++s.seq;
+  const done=(k,v)=>{ if(seq!==s.seq) return; s[k]=v; render(); };
+  const fail=e=>{ if(seq!==s.seq||String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); };
+  if(ch==='meituan'){
+    apiRaw('/meituan/products?includeInactive=1').then(j=>done('prod',j||{})).catch(fail);
+    api('/meituan/stores').then(r=>done('stores',Array.isArray(r)?r:[])).catch(fail);
+    apiRaw('/meituan/listings').then(j=>done('names',(j&&j.listings)||{})).catch(fail);
+  } else if(ch==='eleme'){
+    apiRaw('/eleme/products').then(j=>done('prod',j||{})).catch(fail);
+    api('/eleme/stores').then(r=>{
+      const list=Array.isArray(r)?r:[]; done('stores',list);
+      list.forEach(st=>apiRaw('/eleme/catalogue?storeCode='+encodeURIComponent(st.code)).then(j=>{
+        if(seq!==s.seq) return; s.cat[st.code]=(j&&j.data)||[]; render();
+      }).catch(()=>{ if(seq!==s.seq) return; s.cat[st.code]=[]; render(); }));
+    }).catch(fail);
+  } else {
+    apiRaw('/guanyi/products').then(j=>done('prod',j||{})).catch(fail);
+  }
+}
+/* Every write re-reads the product, not the names — the names do not move. */
+function chmReread(){
+  const s=chm(), seq=s.seq;
+  const path=s.ch==='meituan'?'/meituan/products?includeInactive=1':s.ch==='eleme'?'/eleme/products':'/guanyi/products';
+  return apiRaw(path).then(j=>{ if(seq===s.seq){ s.prod=j||{}; render(); } }).catch(()=>{});
+}
+reg('chmRetry', ()=>{ const s=chm(); s.tried=false; s.prod=null; s.stores=null; s.names=null; s.cat={}; render(); });
+reg('chmOpen', (ch,pid)=>{
+  ch=String(ch||''); pid=Number(pid);
+  if(!['meituan','eleme','guanyi'].includes(ch)||!canRoute('chmatch')) return;
+  const s=chm(); s.ch=ch; s.pid=pid; s.seq++;
+  s.tried=false; s.prod=null; s.stores=null; s.names=null; s.cat={}; s.err=null; s.busy=null; s.note={}; s.q='';
+  push('chmatch');
+});
+const chmProduct=()=>{ const s=chm(), rows=(s.prod&&s.prod.data)||[]; return rows.find(p=>p.id===s.pid)||null; };
+const chmOwners=code=>((chm().prod&&chm().prod.optionOwners)||{})[code]||{};
+/* The desktop's own guess at which store is the delivery one (11-meituan.js
+   mtLoadStores): by code or name, else the first. The other links by 货号. */
+function chmMtStores(){
+  const st=chm().stores||[];
+  const a=st.find(s=>s.code==='tianhe'||String(s.name||'').includes('天河'))||st[0]||null;
+  const b=st.find(s=>s.code==='yuexiu'||String(s.name||'').includes('越秀'))||st[1]||null;
+  return {a, b:b&&a&&b.id===a.id?null:b};
+}
+const chmStoreName=st=>LANG==='en'?((st&&(st.nameEn||st.name))||(st&&st.code)||''):((st&&(st.name||st.nameEn))||(st&&st.code)||'');
+function chmListNames(code){
+  const s=chm();
+  if(s.ch==='meituan') return ((s.names||{})[code]||[]).map(String);
+  return ((s.cat||{})[code]||[]).map(r=>String(r.name||''));
+}
+const chmKnown=(code,name)=>{ const k=String(name||'').trim(); return !!k&&chmListNames(code).some(n=>n.trim()===k); };
+const chmNote=k=>{ const n=chm().note[k]; return n?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5">${escAttr(String(n))}</div>`:''; };
+const chmSub=t=>`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${t}</div>`;
+const chmBlock=(title,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+  <span style="font-size:15px;font-weight:500">${title}</span>${inner}</div>`;
+/* The picker: what is typed filters the names read from the channel; only a
+   name tapped from the list is ever sent. Up to 40 shown; the count says
+   when there are more. */
+function chmPicker(code,storeId){
+  return `<div id="mChmHits-${escAttr(code)}" data-store="${Number(storeId)}">${chmHits(code,storeId)}</div>`;
+}
+function chmHits(code,storeId){
+  const s=chm(), q=String(s.q||'').trim().toLowerCase();
+  if(!q) return '';
+  const hits=chmListNames(code).filter(n=>n.toLowerCase().includes(q));
+  if(!hits.length) return chmSub(T('No matches','无匹配'));
+  return `<div class="list">${hits.slice(0,40).map((n,i)=>`${i?'<div class="sep"></div>':''}<button class="row" style="min-height:44px;padding:10px 14px;text-align:left" ${s.busy?'disabled':''}
+      onclick="APP.cmd('chmPick','${escAttr(code)}',${Number(storeId)},${i})"><span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${escAttr(n)}</span></button>`).join('')}</div>
+    ${hits.length>40?chmSub(T(hits.length+' matches','共 '+hits.length+' 个匹配')):''}`;
+}
+/* One search for the screen; each store's list of names repaints under it. */
+reg('chmQ', v=>{ const s=chm(); s.q=String(v||''); searchClearShow('mChmClr',!!s.q);
+  (s.stores||[]).forEach(st=>{ const el=(typeof document!=='undefined')?document.getElementById('mChmHits-'+st.code):null;
+    if(el) el.innerHTML=chmHits(st.code,st.id); }); });
+/* What each channel's name write sends. */
+function chmNameWrite(code,storeId,name,remove){
+  const s=chm(), p=chmProduct(), cur=p&&(p.stores||{})[code];
+  if(s.ch==='meituan'){
+    const keep=cur?(cur.sync_enabled===0?0:1):0;
+    return apiWrite('/meituan/products/'+s.pid+'/map',{storeId:Number(storeId),storeCode:code,meituanName:name,syncEnabled:keep,source:name?'manual':'remove'},'POST');
+  }
+  if(remove) return apiWrite('/eleme/products/'+s.pid+'/map',{storeId:Number(storeId),storeCode:code,remove:true},'POST');
+  return apiWrite('/eleme/products/'+s.pid+'/map',{storeId:Number(storeId),storeCode:code,elemeName:name||null,syncEnabled:cur?Number(cur.sync_enabled):0},'POST');
+}
+function chmWrite(key,send,ok){
+  const s=chm(); s.busy=key; s.note[key]=null; render();
+  return send().then(()=>{ s.busy=null; if(ok) showToast(ok); return chmReread(); })
+    .catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+      s.note[key]=e&&e.refused?E(...e.words):E('Save failed: '+tmOneLang((e&&e.message)||''),'保存失败:'+tmOneLang((e&&e.message)||''));
+      render(); return chmReread(); });
+}
+reg('chmPick', (code,storeId,i)=>{
+  const s=chm(); if(s.busy||!mCan(s.ch+':map')) return;
+  const q=String(s.q||'').trim().toLowerCase();
+  const name=chmListNames(code).filter(n=>n.toLowerCase().includes(q))[Number(i)];
+  if(!name||!chmKnown(code,name)) return;
+  const p=chmProduct(), cur=p&&(p.stores||{})[code];
+  if(cur&&String((s.ch==='meituan'?cur.meituan_name:cur.eleme_name)||'')===name) return;
+  s.q='';
+  chmWrite('name:'+code,()=>chmNameWrite(code,storeId,name,false),T('Saved','已保存'));
+});
+reg('chmRemove', (code,storeId)=>{
+  const s=chm(); if(s.busy||!mCan(s.ch+':map')) return;
+  const p=chmProduct(), cur=p&&(p.stores||{})[code]; if(!cur) return;
+  const stored=String((s.ch==='meituan'?cur.meituan_name:cur.eleme_name)||'').trim();
+  if(s.ch==='meituan'&&!stored) return;
+  state.askErr=null;
+  state.ask={title:T('Remove','移除'),
+    body:s.ch==='meituan'?stored
+      :(stored||T('This mapping carries no listing name.','该匹配没有商品名。'))+' — '+T('The mapping is deleted and this product goes back to Not on Eleme. Nothing is pushed. To stop syncing but keep the name and the options, switch sync off instead.',
+        '将删除该匹配，商品回到「未上架饿了么」。不会推送任何库存。若只想停止同步并保留商品名与规格，请改为关闭同步开关。'),
+    confirmLabel:T('Remove','移除'), danger:true,
+    run:()=>chmWrite('name:'+code,()=>chmNameWrite(code,storeId,'',true),s.ch==='eleme'?T('Mapping removed','已删除匹配'):null)};
+  render();
+});
+/* One option claimed or released, or its units changed. */
+reg('chmClaim', (code,storeId,idx,on,units)=>{
+  const s=chm(); if(s.busy||!mCan(s.ch+':sync')) return;
+  const p=chmProduct(), cur=p&&(p.stores||{})[code]; if(!cur) return;
+  const opts=chmOptions(code,cur); const o=opts[Number(idx)]; if(!o) return;
+  const owner=chmOwners(code)[o.id]; if(owner&&Number(owner.product_id)!==s.pid) return;
+  const n=Math.max(1,parseInt(units,10)||1);
+  const body=s.ch==='meituan'
+    ? {storeId:Number(storeId),storeCode:code,specSkuId:o.id,specLabel:o.label,units:on?n:1,on:!!on}
+    : {storeId:Number(storeId),storeCode:code,elemeName:cur.eleme_name||null,specId:o.id,specName:o.name,units:on?n:1,on:!!on};
+  chmWrite('opt:'+code,()=>apiWrite('/'+s.ch+'/products/'+s.pid+'/claim',body,'POST'),s.ch==='eleme'?T('Saved','已保存'):null);
+});
+/* The options behind the stored listing: Meituan's on the map entry, Eleme's
+   from the store's catalogue. `shared` = separate products sharing one
+   listing (a 货号 per option); otherwise they are add-ons of this one. */
+function chmOptions(code,m){
+  const s=chm();
+  if(s.ch==='meituan'){
+    const sp=Array.isArray(m&&m.specs)?m.specs:[];
+    return sp.map(o=>({id:String(o.skuId||''),label:o.spec,name:o.spec,sku:o.sku}));
+  }
+  const key=String((m&&m.eleme_name)||'').trim(); if(!key) return [];
+  const hit=((s.cat||{})[code]||[]).find(r=>String(r.name||'').trim()===key);
+  const sp=(hit&&Array.isArray(hit.specs))?hit.specs:[];
+  return sp.map((o,i)=>{ const base=(o.name||'').trim()||(o.price!=null?(CUR||'¥')+o.price:'')||T('Size '+(i+1),'规格 '+(i+1));
+    return {id:String(o.specGlobalId),label:o.stock!=null?base+' · '+o.stock:base,name:o.name||base}; });
+}
+function chmClaims(m){
+  if(!m) return [];
+  if(Array.isArray(m.claims)) return m.claims.filter(c=>c&&c.spec_key);
+  const id=m.specSkuId||m.spec_id;
+  return id?[{spec_key:String(id),units_per_pack:1}]:[];
+}
+function chmOptionList(code,storeId,m){
+  const s=chm(), opts=chmOptions(code,m), claims=chmClaims(m), owners=chmOwners(code), can=mCan(s.ch+':sync');
+  if(opts.length<2) return '';
+  if(s.ch==='meituan'&&!opts.every(o=>o.sku)){
+    return chmSub(escAttr(T(opts.length+' options: ',opts.length+' 个选项：')+opts.map(o=>o.label).join(' · '))+'<br>'+
+      escAttr(T('The count goes to ','库存数发到「'))+'<b>'+escAttr(opts[0].label)+'</b>'+escAttr(T('. The add-ons open and close with it.','」。加料选项随之开关。')));
+  }
+  const rows=opts.map((o,i)=>{
+    const mine=claims.find(c=>String(c.spec_key)===o.id);
+    const owner=owners[o.id], other=owner&&Number(owner.product_id)!==s.pid;
+    const u=mine?Number(mine.units_per_pack)||1:1;
+    const right=other?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('claimed by another product','已被其他商品占用')}</span>`
+      :can?`<span style="display:flex;align-items:center;gap:8px">${mine?`<input type="number" min="1" step="1" inputmode="numeric" value="${u}" style="width:64px" aria-label="${escAttr(T('units','份'))}" onchange="APP.cmd('chmClaim','${escAttr(code)}',${Number(storeId)},${i},true,this.value)"><span style="font-size:13px;color:var(--text-secondary)">${T('units','份')}</span>`:''}${toggle(!!mine,`APP.cmd('chmClaim','${escAttr(code)}',${Number(storeId)},${i},${mine?'false':'true'},${u})`)}</span>`
+      :`<span style="font-size:13px;color:var(--text-secondary)">${mine?escAttr(u+' '+T('units','份')):''}</span>`;
+    return tmRow({label:escAttr(o.label),dim:other,right});
+  });
+  return `<div style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Which options is this product?','这是该商品的哪些规格？')}</div>
+    ${tmList(rows)}
+    ${claims.length?'':chmSub(T('Tick every option this product is sold as. "Units" is how many of it one sale takes — a 3-bottle option is 3.','勾选该商品在售的所有规格。「份」是每卖出一份消耗的数量 — 三瓶装填 3。'))}
+    ${chmNote('opt:'+code)}`;
+}
+/* One editable store: the stored name, the checks the panel makes, Remove,
+   the picker, the options. */
+function chmEditable(st,m,label){
+  const s=chm(), code=st.code, name=String((s.ch==='meituan'?(m&&m.meituan_name):(m&&m.eleme_name))||'');
+  const read=chmListNames(code).length>0, can=mCan(s.ch+':map');
+  const hasRow=s.ch==='meituan'?!!name:!!m;
+  let inner=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${label}</span>
+      ${hasRow&&can?`<button class="btn2" style="width:auto;min-height:32px;padding:0 12px;font-size:13px;color:var(--brick-ink)" ${s.busy?'disabled':''} onclick="APP.cmd('chmRemove','${escAttr(code)}',${Number(st.id)})">${T('Remove','移除')}</button>`:''}</div>
+    <div style="font-size:15px;overflow-wrap:anywhere">${name?escAttr(name):`<span style="color:var(--text-secondary)">—</span>`}</div>`;
+  if(name&&!read) inner+=chmSub(escAttr(s.ch==='meituan'?T(...CHM_PENDING.noneRead):T('no catalogue read yet, so nothing can be matched here','尚未读取商品目录，无法匹配')));
+  else if(name&&!chmKnown(code,name)) inner+=`<div style="font-size:12.5px;color:var(--amber-ink);line-height:1.5">${escAttr(T(...CHM_PENDING.pickIt))}</div>`;
+  if(!name&&s.ch==='eleme') inner+=chmSub(escAttr(read
+    ? T('Eleme listings have no article number, so the name is the match — pick one of the '+chmListNames(code).length+' read from this store.',
+        '饿了么商品没有货号,只能按商品名精确匹配 — 请从该门店已读取的 '+chmListNames(code).length+' 个商品中选择。')
+    : T('No catalogue has been read from this store yet, so there is nothing to pick from.','尚未读取该门店的商品目录,暂无可选项。')));
+  if(can&&read) inner+=chmPicker(code,st.id);
+  inner+=chmNote('name:'+code);
+  if(m&&name) inner+=chmOptionList(code,st.id,m);
+  return chmBlock(escAttr(chmStoreName(st)),inner);
+}
+function chmMeituan(p){
+  const {a,b}=chmMtStores(); const stores=(p.stores||{});
+  let html='';
+  if(a) html+=chmEditable(a,stores[a.code]||null,T('Meituan delivery name','美团外卖商品名'));
+  if(b){
+    const m=stores[b.code]||{}, sk=String(p.sku||'').trim();
+    html+=chmBlock(escAttr(chmStoreName(b)), m.meituan_name?`<div style="font-size:15px;overflow-wrap:anywhere">${escAttr(m.meituan_name)}</div>`
+      :chmSub(sk?escAttr(T('No listing carries SKU ','暂无商品使用货号 '))+'<b>'+escAttr(sk)+'</b>'+escAttr(T(' yet — add it on 闪购 and this links itself',' — 在闪购填写后会自动关联'))
+                :escAttr(T('This product has no SKU, so it cannot be matched here','该商品没有货号,无法在此匹配'))));
+  }
+  return html;
+}
+function chmEleme(p){
+  const s=chm(), stores=s.stores||[];
+  return stores.map(st=>{
+    const m=(p.stores||{})[st.code]||null;
+    if(!(st.shop_id&&String(st.shop_id).trim())){
+      return chmBlock(escAttr(chmStoreName(st)),chmSub(escAttr(T('Nothing can be matched here until this store has an Eleme shop linked — the store line above the tabs takes the shop id.','关联饿了么店铺后才能在此匹配 — 请在上方门店行填写店铺ID。')))+
+        (m&&mCan('eleme:map')?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:13px">${T('This product still holds a mapping here','该商品在此仍有匹配记录')}</span>
+          <button class="btn2" style="width:auto;min-height:32px;padding:0 12px;font-size:13px;color:var(--brick-ink)" ${s.busy?'disabled':''} onclick="APP.cmd('chmRemove','${escAttr(st.code)}',${Number(st.id)})">${T('Remove','移除')}</button></div>${chmNote('name:'+st.code)}`:''));
+    }
+    if(!(st.code in s.cat)) return chmBlock(escAttr(chmStoreName(st)),chmSub(T('Loading…','加载中…')));
+    return chmEditable(st,m,T('Eleme listing name','饿了么商品名'));
+  }).join('');
+}
+reg('chmGyBind', ()=>{
+  const s=chm(); if(s.busy||!mCan('guanyi:map')) return;
+  const p=chmProduct(); if(!p||p.map||!p.suggestion) return;
+  chmWrite('gy',()=>apiWrite('/guanyi/products/'+s.pid+'/map',{skuId:String(p.suggestion.sku_id),syncEnabled:true},'POST'),T('Bound','已绑定'));
+});
+reg('chmGyUnbind', ()=>{
+  const s=chm(); if(s.busy||!mCan('guanyi:map')) return;
+  const p=chmProduct(); if(!p||!p.map) return;
+  chmWrite('gy',()=>apiWrite('/guanyi/products/'+s.pid+'/map',{skuId:''},'POST'),T('Unbound','已解绑'));
+});
+function chmGuanyi(p){
+  const s=chm(), can=mCan('guanyi:map'), m=p.map, sg=p.suggestion;
+  const btn=(cmd,label)=>can?`<button class="btn2" style="width:auto;min-height:36px;padding:0 14px" ${s.busy?'disabled':''} onclick="APP.cmd('${cmd}')">${label}</button>`:'';
+  const inner=m
+    ? `<div style="font-size:15px;overflow-wrap:anywhere">${escAttr(m.guanyi_name||'—')}</div>${m.guanyi_code?chmSub(escAttr(m.guanyi_code)):''}<span>${btn('chmGyUnbind',T('Unbind','解绑'))}</span>`
+    : sg
+      ? `<div style="font-size:15px;overflow-wrap:anywhere">${escAttr(sg.guanyi_name||'')}</div>${chmSub(T('Products are matched by the SKU embedded in the Guanyi name (e.g. "GVF 1-180").','通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。'))}<span>${btn('chmGyBind',T('Bind','绑定'))}</span>`
+      : chmSub(T('No Guanyi listing carries this product\'s SKU. Refresh the list on the gzgrocery screen, then look again.','没有管易商品使用该商品的货号。请在 gzgrocery 页面刷新列表后再查看。'));
+  return chmBlock('GZ Grocery',inner+chmNote('gy'));
+}
+function screenChMatch(){
+  const s=chm(); chmLoad();
+  if(s.err&&!s.prod) return x1Err(escAttr(String(s.err)),'chmRetry');
+  const ready=s.prod&&(s.ch==='guanyi'||(s.stores&&(s.ch==='eleme'||s.names)));
+  if(!ready) return x1Loading();
+  const p=chmProduct();
+  if(!p) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing here.','暂无商品。')}</div>`;
+  const nm=T(p.name_en||p.name_cn||('#'+p.id),p.name_cn||p.name_en||('#'+p.id))+(p.variant_label?' · '+p.variant_label:'');
+  const sku=p.sku||p.product_sku||'';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:3px;padding:0 4px">
+      <span style="font-size:16px;font-weight:500">${escAttr(nm)}</span>
+      ${sku?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">SKU ${escAttr(sku)}</span>`:''}</div>
+    ${s.ch!=='guanyi'&&mCan(s.ch+':map')?searchBox(`<input id="mChmQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chmQ',this.value)">`,'mChmClr',!!s.q):''}
+    ${s.ch==='meituan'?chmMeituan(p):s.ch==='eleme'?chmEleme(p):chmGuanyi(p)}</div>`;
+}
+SUBS.chmatch={title:['Channel sync','渠道同步'],
+  titleOf:()=>{ const c=chm().ch; return c==='meituan'?T('Meituan','美团'):c==='eleme'?T('Eleme','饿了么'):'GZ Grocery'; },
+  render:()=>screenChMatch()};
+/* §325 X8c ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -38898,6 +39202,10 @@ const ROUTE_CAP={
   pushcfg:['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'],
   kd100cfg:['delivery:view','delivery:edit','shipping:config'], jdcfg:['delivery:view','delivery:edit','shipping:config'],
   qycfg:['delivery:view','delivery:edit'],
+  /* §325 X8c. One product's matching on one channel: any of the keys its
+     controls are drawn for — {channel}:map for the name and the binding,
+     {channel}:sync for the option claims (lib/cap-routes.js). */
+  chmatch:['meituan:map','meituan:sync','eleme:map','eleme:sync','guanyi:map'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
