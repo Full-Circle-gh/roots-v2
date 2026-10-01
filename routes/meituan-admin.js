@@ -1024,12 +1024,35 @@ router.post('/api/retail-admin/store-status/master', requireRetailAdmin, express
         setFulfilment.run(s.code, open ? 1 : 0);
       }
     })();
+    /* §412.4 — "Open everything" keeps its rule: it reopens the online store,
+       Meituan and every shop's fulfilment, and does NOT touch a channel's own
+       cell, so a channel closed at one shop with that shop's own switch stays
+       closed. It now says which, so the screens can name them rather than
+       leave the operator to find them on the grid. Read after the write, with
+       the grid's own reading (csCellOpen), from the channels each shop serves
+       (csChannelsAt) — Meituan excepted, because this write has just queued it
+       open everywhere. Closing returns an empty list: nothing is left open. */
+    const stayedClosed = open ? masterStayedClosed(db) : [];
     res.json({ success: true, online: val, meituanQueued: stores.map((s) => s.code),
-      target: open ? 'open' : 'closed', cleared });
+      target: open ? 'open' : 'closed', cleared, stayedClosed });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
+// §412.4 — each active shop with the channels still closed there after an
+// "Open everything": [{storeCode, name, nameEn, nameCn, channels:[…]}], shops
+// in the grid's order, channels in GRID_CHANNELS order. Shops with nothing
+// closed are left out, so an empty list means everything opened.
+function masterStayedClosed(db) {
+  const stores = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
+  const out = [];
+  for (const s of stores) {
+    const channels = csChannelsAt(s.code).filter((ch) => ch !== 'meituan' && !csCellOpen(db, ch, s.code));
+    if (channels.length) out.push({ storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name, channels });
+  }
+  return out;
+}
 
 // Close/open a WHOLE store: its Meituan POI (置休, daemon-applied within ~1 min)
 // AND its online fulfillment (fulfillment_open, effective immediately — reroutes
