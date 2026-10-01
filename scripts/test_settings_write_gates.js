@@ -205,6 +205,13 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['faq.categories', list(route('faq')), 'phone FAQ (card faq)'],
       ['about.content', list(route('about')), 'phone About (card about)'],
       ['copy.cart.title', list(route('snippets')), 'phone Mini-app copy (card copy.snippets)'],
+      // §325 M8 — the phone's Social proof and Share cards screens, the desktop tabs' cards.
+      ['social_proof', list(route('social')), 'phone Social proof (card social_proof)'],
+      ['checkout.upsell', list(route('social')), 'phone Social proof → upsell (card checkout.upsell)'],
+      ['sharing.home', list(route('sharecards')), 'phone Share cards (card share.home)'],
+      ['sharing.homeTitle', list(route('sharecards')), 'phone Share cards (card share.home)'],
+      ['sharing.product', list(route('sharecards')), 'phone Share cards (card share.product)'],
+      ['sharing.votingTitle', list(route('sharecards')), 'phone Share cards (card share.voting)'],
       // §325 O4 — the phone's Delivery screen writes the Delivery panel's cards.
       ['delivery.holidayMessage', list(route('delivery')), 'phone Delivery — Holiday mode on, and its message'],
       ['delivery.sameDayCutoffMinutes', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
@@ -416,8 +423,13 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // card's family is a row in section 2. Every other site is one family.
       const CARD_SITE = M.indexOf("apiWrite('/config?history='+encodeURIComponent(c.card)");
       ok(CARD_SITE !== -1 && sites.includes(CARD_SITE), 'the content cards write through the one cfgCard site');
-      const cards = (M.match(/cfgCard\('([a-z.]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z.]+)'/)[1]).sort();
-      is(cards, ['about', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'voting'], 'the phone\'s cards: about, copy, faq, legal on /config; leaderboard and voting on their own routes');
+      const cards = (M.match(/cfgCard\('([a-z._]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z._]+)'/)[1]).sort();
+      is(cards, ['about', 'checkout.upsell', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'social_proof', 'voting'],
+        'the phone\'s cards: about, copy, faq, legal, social proof and the upsell on /config; leaderboard and voting on their own routes');
+      // §325 M8 — the share cards are one card per page, 'share.<key>': three on
+      // /config (sharing.<key>), the invite card on PATCH /affiliate/settings.
+      ok(M.includes("return cfgCard('share.'+key,pg.aff?{"), 'the share cards are cfgCard(\'share.\'+key)');
+      ok(/const SC_PAGES=\[\s*\{key:'home'[\s\S]*?\{key:'product'[\s\S]*?\{key:'voting'[\s\S]*?\{key:'invite'[^}]*aff:true/.test(M), '…for home, product, voting, and the invite card through Affiliate');
       for (const [card, url] of [['voting', '/voting/config'], ['leaderboard', '/leaderboard/config']]) {
         const at = M.indexOf("cfgCard('" + card + "',{");
         const own = M.slice(at, M.indexOf('\n});', at));
@@ -442,8 +454,16 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config|apiWrite\('\/(voting|leaderboard)\/config/), ['public/m.html', 'public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs and the phone\'s two screens (§325 M7)');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
-      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs write, the others read');
-      ok(!/apiWrite\('\/affiliate\/(settings|referrals)/.test(M), '…the phone only reads them');
+      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs write, cms.html reads, the phone writes only the invite share card (§325 M8)');
+      /* §325 M8 — one phone write to /affiliate/settings: the invite share card,
+         sending shareImage and shareTitle only (scBody), on the key the server
+         gives that write for exactly this card (sharing:edit, section 1). The
+         referrals stay read-only on the phone. */
+      is((M.match(/apiWrite\('\/affiliate\/settings/g) || []).length, 1, 'the phone writes the affiliate settings from one place');
+      ok(M.includes("put:(b,note)=>apiWrite('/affiliate/settings'+cfgHistQ('share.invite',note),b,'PATCH')"), '…the invite share card');
+      ok(M.includes("if(pg.aff) return {shareImage:img, shareTitle:title};"), '…sending its picture and title and nothing else');
+      ok(has(R('PATCH', '/affiliate/settings'), route('sharecards')), '…which the Share cards key may write');
+      ok(!/apiWrite\('\/affiliate\/referrals/.test(M), 'the phone only reads the referrals');
       is(who(/retail-admin\/cms\//), ['public/cms-mobile.html', 'public/cms.html', 'public/retail-admin/01-core.js',
         'public/retail-admin/05-marketing.js', 'public/retail-admin/10-extras.js'], '/cms/*: the two editors, and the desktop picture uploads');
       is(who(/flash-sale['`/]/), ['public/retail-admin/07-content-billing.js'], 'the flash sale: the desktop Flash sales tab');
@@ -460,6 +480,9 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(route('wallet'), 'topup:edit', 'phone Wallet');
     is(tab('affiliate'), 'affiliate:view', 'desktop Affiliate');
     is(tab('sharing'), 'sharing:edit', 'desktop Share cards');
+    is(route('sharecards'), 'sharing:edit', 'phone Share cards');
+    is(route('sharecard'), 'sharing:edit', 'phone Share cards → one page');
+    is(route('social'), 'social:edit', 'phone Social proof');
     is(tab('flash'), 'flash:view', 'desktop Flash sales');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms.html')), 'cms.html opens on content:edit');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms-mobile.html')), 'cms-mobile.html likewise');

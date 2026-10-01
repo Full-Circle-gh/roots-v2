@@ -1097,7 +1097,7 @@ const state = {
      the PRODUCT, because the card is the product and that is where it is drawn. */
   csBusy:null, csNote:null,
   mtStatus:null, mtStatusTried:false, mtOffline:false,
-  scAff:null, scTried:false,
+  scAff:null, scAffErr:null, scTried:false, scSel:null,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -15568,24 +15568,14 @@ const SUBS={
   bcnew:{title:['New broadcast','新建广播'],render:()=>screenBcNew()},
   bcauto:{title:['Automatic updates','自动通知'],status:()=>statusNotifCats(),render:()=>screenNotifCats()},
   sharecards:{title:['Share cards','分享卡片'],render:()=>screenShareCards()},
+  /* §325 M8 — one page's share card, as the desktop's stage. */
+  sharecard:{title:['Share cards','分享卡片'],
+    titleOf:()=>{ const pg=scPage(state.scSel); return pg?T(...pg.name):T('Share cards','分享卡片'); },
+    backLabel:()=>T('Share cards','分享卡片'),
+    render:()=>screenShareCard()},
   popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),render:()=>screenPopups()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
-  social:{title:['Social proof','社交证明'],render:()=>{
-    // The switch is real (features.socialProof) and reachable from Settings, so
-    // this screen states what it is currently doing rather than saying nothing
-    // can be read from here — which stopped being true.
-    const on=featOn('socialProof'), busy=state.featBusy==='socialProof';
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-      <div class="card" style="padding:16px;display:flex;align-items:center;gap:14px">
-        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
-          <span style="font-size:15px;font-weight:500">${busy?T('Saving…','保存中…'):(on?T('Showing recent buyers','正在展示最近购买'):T('Switched off','已关闭'))}</span>
-          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on
-            ? T('Shoppers see bought-counts, a recent-buyers ticker and the SOLD badge.','顾客会看到购买人数、最近购买动态与“已售”标签。')
-            : T('None of the bought-counts, the recent-buyers ticker or the SOLD badge are shown.','购买人数、最近购买动态与“已售”标签均不显示。')}</span></span>
-        ${toggle(on,"APP.cmd('toggleFeature','socialProof')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
-      ${noteBar(T('What counts as recent, and which products show it, are set on desktop.','“最近”的范围与展示哪些商品在电脑端设置。'))}</div>`;
-  }},
+  social:{title:['Social proof','社交证明'],render:()=>screenSocial()},
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
   wallet:{title:['Top-up','充值'],status:()=>statusTopups(),render:()=>screenTopups()},
@@ -25524,6 +25514,15 @@ function screenChannelSync(){
    are different jobs, and the second is a phone job: four pages, each either
    carrying a picture you set or falling back to the page's own look. "Did the
    invite card ever get set" is a question with a picture for an answer.
+
+   §325 M8 — and now the first job too: each page's picture and title, as the
+   desktop's SC_CARDS — one §279 card per page. Home, Product and Voting are
+   'share.<key>' on PUT /config (sharing.<key>, sharing.<key>Title); the
+   invite card is 'share.invite' on PATCH /affiliate/settings (shareImage,
+   shareTitle — the same keys as Affiliate, sent nothing else). Each card
+   starts only once its own source has arrived; one whose source failed stays
+   inert, because its empty box is not the truth. A new picture is POST
+   /media/upload, the desktop's, so it is drawn for media:upload as well.
    ========================================================================== */
 const SC_PAGES=[
   {key:'home',    name:['Home page','首页'],    titled:true,
@@ -25535,28 +25534,73 @@ const SC_PAGES=[
   {key:'invite',  name:['Invite card','邀请卡片'], titled:true, aff:true,
    blurb:['A customer sharing their referral code.','顾客分享推荐码时显示。']},
 ];
+const SC_D={};      // key → {img, title:{en,cn}}
+let SC_IMG={busy:null, err:''};
+const scPage=k=>SC_PAGES.find(p=>p.key===k);
+function scSeed(key,img,title){ SC_D[key]={img:String(img||''), title:{en:String((title&&title.en)||''), cn:String((title&&title.cn)||'')}}; }
+// The desktop's scCardBody.
+function scBody(key){
+  const pg=scPage(key), d=SC_D[key]||{};
+  const img=String(d.img||'').trim();
+  const title=pg.titled?{en:String((d.title&&d.title.en)||'').trim(), cn:String((d.title&&d.title.cn)||'').trim()}:{en:'',cn:''};
+  if(pg.aff) return {shareImage:img, shareTitle:title};
+  const body={}; body['sharing.'+key]=img;
+  if(pg.titled) body['sharing.'+key+'Title']=title;
+  return body;
+}
+function scCard(key){
+  const pg=scPage(key);
+  return cfgCard('share.'+key,pg.aff?{
+    read:()=>scBody(key),
+    apply:b=>{ scSeed(key,b&&b.shareImage,b&&b.shareTitle); },
+    fromSnapshot:s=>({shareImage:s['affiliate.shareImage']||'', shareTitle:s['affiliate.shareTitle']||{en:'',cn:''}}),
+    put:(b,note)=>apiWrite('/affiliate/settings'+cfgHistQ('share.invite',note),b,'PATCH'),
+    words:{'affiliate.shareImage':['Picture','图片'],'affiliate.shareTitle':['Card title','卡片标题']},
+  }:{
+    read:()=>scBody(key),
+    apply:b=>{ scSeed(key,b&&b['sharing.'+key],b&&b['sharing.'+key+'Title']); },
+    words:Object.assign({['sharing.'+key]:['Picture','图片']}, pg.titled?{['sharing.'+key+'Title']:['Card title','卡片标题']}:{}),
+  });
+}
+const scCan=()=>mCan('sharing:edit');
+const scLive=k=>{ const c=CFG_CARD['share.'+k]; return scCan()&&SC_D[k]&&c&&c.auto?c:null; };
 function loadShareCards(){
   if(state.scTried) return; state.scTried=true;
-  api('/affiliate/settings').then(d=>{ state.scAff=d||{}; render(); }).catch(()=>{ state.scAff={}; render(); });
+  api('/affiliate/settings').then(d=>{ state.scAff=d||{}; state.scAffErr=null; render(); }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.scAff=null; state.scAffErr=E('Couldn’t load invite card','邀请卡片加载失败'); render(); });
+}
+// The three page cards hold what /config holds, so they may start once it is here.
+function scEnsurePages(){
+  // The invite card, once Affiliate has answered.
+  if(state.scAff&&!SC_D.invite){
+    scSeed('invite',state.scAff.shareImage,state.scAff.shareTitle);
+    if(scCan()) cfgCardStart(scCard('invite'));
+  }
+  if(SC_D.home||!state.cfg) return;
+  const sharing=cfgGet('sharing',null)||{};
+  scSeed('home',sharing.home,sharing.homeTitle);
+  scSeed('product',sharing.product,null);
+  scSeed('voting',sharing.voting,sharing.votingTitle);
+  if(scCan()) ['home','product','voting'].forEach(k=>cfgCardStart(scCard(k)));
 }
 function screenShareCards(){
   if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  loadShareCards();
-  const sharing=cfgGet('sharing',null)||{};
-  const aff=state.scAff;
+  loadShareCards(); scEnsurePages();
+  const can=scCan();
   const rows=SC_PAGES.map(pg=>{
-    const img = pg.aff ? (aff&&aff.shareImage) : sharing[pg.key];
-    const tObj = pg.aff ? (aff&&aff.shareTitle) : sharing[pg.key+'Title'];
+    const d=SC_D[pg.key];
+    const tObj=d&&d.title;
     const title = pg.titled&&tObj ? (LANG==='en'?(tObj.en||tObj.cn||''):(tObj.cn||tObj.en||'')) : '';
-    return Object.assign({},pg,{img:img||'', title:String(title||'').trim(),
-      pending: pg.aff && !aff});
+    return Object.assign({},pg,{img:(d&&d.img)||'', title:String(title||'').trim(),
+      pending: pg.aff && !d && !state.scAffErr, failed: pg.aff && !!state.scAffErr});
   });
   const set=rows.filter(r=>r.img).length;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     <div style="font-size:13px;color:var(--text-secondary)">${T(
       set+' of '+rows.length+' pages have a picture you set. The rest use the page’s own look.',
       rows.length+' 个页面中有 '+set+' 个使用了自定义图片，其余使用页面自带样式。')}</div>
-    ${rows.map(r=>`<div class="card" style="padding:14px;display:flex;gap:13px;align-items:flex-start">
+    ${rows.map(r=>{ const open=can&&!r.pending&&!r.failed;
+      return `<div class="card" style="padding:14px;display:flex;gap:13px;align-items:flex-start">
       ${r.img
         ? `<a href="${escAttr(r.img)}" target="_blank" rel="noopener" style="width:70px;height:56px;flex:none;border-radius:9px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(r.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`
         : `<span style="width:70px;height:56px;flex:none;border-radius:9px;border:1px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('image',20)}</span>`}
@@ -25564,12 +25608,292 @@ function screenShareCards(){
         <span style="display:flex;align-items:center;justify-content:space-between;gap:8px">
           <span style="font-size:15px;font-weight:500;min-width:0">${T(...r.name)}</span>
           ${r.pending?`<span style="font-size:12px;color:var(--text-secondary);flex:none">${T('Loading…','加载中…')}</span>`
+            :r.failed?`<span style="font-size:12px;color:var(--brick-ink);flex:none">${state.scAffErr}</span>`
             :`<span class="pill" style="background:${r.img?PILL.success[0]:PILL.muted[0]};color:${r.img?PILL.success[1]:PILL.muted[1]};flex:none">${r.img?T('Set','已设置'):T('Default','默认')}</span>`}</span>
-        ${r.titled?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${r.title
+        ${r.titled&&!r.failed?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${r.title
             ? '“'+escAttr(r.title)+'”'
             : T('No title set — the page titles itself.','未设置标题 — 由页面自动生成。')}</span>`:''}
-        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;opacity:.9">${T(...r.blurb)}</span></span></div>`).join('')}
-    ${noteBar(T('Pictures and titles are set on desktop — about 500 × 400 works best.','图片与标题在电脑端设置 — 建议尺寸约 500 × 400。'))}</div>`;
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;opacity:.9">${T(...r.blurb)}</span>
+        ${open?`<button class="btn2" style="align-self:flex-start;min-height:36px;padding:0 14px;font-size:13px;margin-top:4px" onclick="APP.cmd('scOpen','${r.key}')">${T('Edit','编辑')}</button>`:''}</span></div>`; }).join('')}
+  </div>`;
+}
+/* One page's card (desktop: scRenderStage): the title in both languages, 60
+   at most, typed in place (no repaint — the keyboard stays); the picture,
+   replaced or removed; the card's own foot. */
+reg('scOpen', k=>{ if(!scPage(k)||!scLive(k)) return; state.scSel=k; SC_IMG={busy:null,err:''}; CMD.push('sharecard'); });
+reg('scTitle', (lang,v)=>{
+  const k=state.scSel, c=scLive(k); if(!c||!scPage(k).titled||(lang!=='en'&&lang!=='cn')) return;
+  SC_D[k].title[lang]=String(v==null?'':v);
+  const el=document.getElementById('mScCount-'+lang); if(el) el.textContent=SC_D[k].title[lang].length+' / 60';
+  c.auto.touch();
+});
+reg('scClear', ()=>{
+  const k=state.scSel, c=scLive(k); if(!c||SC_IMG.busy) return;
+  SC_D[k].img=''; c.auto.touch();
+  showToast(T('Picture removed','已移除图片')); render();
+});
+reg('scPick', ()=>{
+  const k=state.scSel; if(!scLive(k)||SC_IMG.busy||!mCan('media:upload')) return;
+  const el=document.createElement('input'); el.type='file'; el.accept='image/png,image/jpeg';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) scUpload(k,f); };
+  el.click();
+});
+async function scUpload(k,file){
+  if(!scLive(k)||!mCan('media:upload')) return;
+  SC_IMG={busy:k, err:''}; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'share.jpg');
+    const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401){ location.href='/backend/login'; return; }
+    if(r.status===403){ SC_IMG.err=(await apiRefusal(r)).message; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data||!j.data.url){
+      const reason=MEDIA_ERR[j&&j.error];
+      SC_IMG.err=T('Upload failed','上传失败')+(reason?' '+T(...reason):''); return;
+    }
+    SC_D[k].img=j.data.url;
+    const c=scLive(k); if(c) c.auto.touch();
+    showToast(T('Uploaded','已上传'));
+  }catch(e){ SC_IMG.err=T('Upload failed','上传失败'); }
+  finally{ SC_IMG.busy=null; render(); }
+}
+function screenShareCard(){
+  const k=state.scSel, pg=scPage(k), c=scLive(k);
+  if(!pg||!c) return screenShareCards();
+  const d=SC_D[k], busy=SC_IMG.busy===k;
+  const lab=t=>`<span style="display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
+  const titleField=(lang,label,ph)=>`<label style="display:block">${lab(`<span>${label}</span><span class="num" id="mScCount-${lang}">${d.title[lang].length} / 60</span>`)}
+      <input maxlength="60" value="${escAttr(d.title[lang])}" placeholder="${escAttr(ph)}" style="width:100%" oninput="APP.cmd('scTitle','${lang}',this.value)"></label>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T(...pg.blurb)}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+      ${pg.titled?titleField('en',T('Card title','卡片标题')+' · English',T('e.g. Fresh this week','例如:本周上新'))
+        +titleField('cn','卡片标题 · 中文','例如:本周上新')
+        :`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('Products share their own name and photo. This picture only fills in when a product has none.','商品使用自己的名称和图片,此图仅在商品没有图片时兜底。')}</div>`}
+      ${pg.aff?`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('Leave the titles empty to keep the automatic one (with the reward and code).','标题留空则使用自动文案(含奖励金额与邀请码)。')}</div>`:''}
+      <div>
+        ${lab(`<span>${T('Picture','图片')} · ${T('about 500 × 400','约 500 × 400')}</span>`)}
+        ${d.img?`<span style="display:block;width:100%;aspect-ratio:5/4;border-radius:10px;border:1px solid var(--border-default);background-image:url('${String(d.img).replace(/'/g,'%27')}');background-size:cover;background-position:center"></span>`
+          :`<div style="font-size:13px;color:var(--text-secondary)">${T('Leave empty to use the page’s own look.','留空则使用该页面自带样式。')}</div>`}
+        ${SC_IMG.err?`<div style="margin-top:10px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(SC_IMG.err)}</div>`:''}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          ${mCan('media:upload')?`<button class="btn2" style="flex:1" ${SC_IMG.busy?'disabled':''} onclick="APP.cmd('scPick')">${busy?T('Uploading…','上传中…'):d.img?T('Replace the picture','更换图片'):T('Choose image…','选择图片…')}</button>`:''}
+          ${d.img?`<button class="btn2" style="flex:1;color:var(--brick-ink)" ${SC_IMG.busy?'disabled':''} onclick="APP.cmd('scClear')">${T('Remove picture','移除图片')}</button>`:''}</div>
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('PNG or JPG · shown at 5:4','PNG 或 JPG · 按 5:4 显示')}</div></div>
+      ${cardFoot(c)}</div></div>`;
+}
+
+/* ==========================================================================
+   §325 M8 — SOCIAL PROOF, SET ON THE PHONE (desktop: 05-marketing.js
+   paintSocialProof / buildSocialProof / SOCIAL_CARD / UPSELL_CARD)
+   --------------------------------------------------------------------------
+   The phone had the one switch (features.socialProof) and a note saying what
+   counts as recent was set on desktop. The desktop's Social proof tab is two
+   §279 cards on PUT /config: 'social_proof' (the five widgets, the manual
+   buyers among them, as ONE nested blob) and 'checkout.upsell' (the pop-up
+   before paying). These are those cards: the draft holds what the desktop's
+   form holds (paintSocialProof's defaults, legacy single boosts spread over
+   both ends of the range), and the save is buildSocialProof's clamps, swaps
+   and empty-row drop, field for field. All on social:edit, the key the
+   server gives both families and the screen opens on.
+   ========================================================================== */
+let SP_D=null, UP_D=null;
+const SP_KEYS=['social:edit'];
+function spFrom(sp){
+  const s=sp||{}, bc=s.bought_count||{}, rb=s.recent_buyers||{}, vn=s.viewing_now||{}, lo=s.last_ordered||{}, sb=s.sold_badge||{};
+  const v=(x,d)=>String(x!=null?x:d);
+  const bcL=Number(bc.boost)||0, vnL=Number(vn.boost)||0, sbL=Number(sb.boost)||0, loL=Number(lo.fallback_minutes)||0;
+  return {
+    bc:{enabled:bc.enabled!==false, min_today:v(bc.min_today,2), min_week:v(bc.min_week,2), min_month:v(bc.min_month,1), min_all:v(bc.min_all,2),
+      boost_min:v(bc.boost_min,bcL), boost_max:v(bc.boost_max,bcL)},
+    rb:{enabled:rb.enabled!==false, window_days:v(rb.window_days,7), visible_secs:v(rb.visible_secs,4.5), gap_secs:v(rb.gap_secs,5),
+      manual:Array.isArray(rb.manual)?rb.manual.map(m=>({name:String((m&&m.name)||''), product_en:String((m&&m.product_en)||''),
+        product_cn:String((m&&m.product_cn)||''), minutes_ago:Number(m&&m.minutes_ago)||0})):[]},
+    vn:{enabled:vn.enabled!==false, show_in_app:vn.show_in_app!==false, ttl_sec:v(vn.ttl_sec,45), boost_min:v(vn.boost_min,vnL), boost_max:v(vn.boost_max,vnL)},
+    lo:{enabled:lo.enabled!==false, max_hours:v(lo.max_hours,24), fallback_min_minutes:v(lo.fallback_min_minutes,loL), fallback_max_minutes:v(lo.fallback_max_minutes,loL)},
+    sb:{enabled:sb.enabled!==false, min_units:v(sb.min_units,3), boost_min:v(sb.boost_min,sbL), boost_max:v(sb.boost_max,sbL)},
+  };
+}
+// The desktop's buildSocialProof, on the draft.
+function spBuild(){
+  const d=SP_D;
+  const range=(a,b,lo,hi)=>{ lo=lo||0; hi=hi==null?Number.MAX_SAFE_INTEGER:hi;
+    let mn=Math.max(lo,Math.min(hi,Number(a)||0)), mx=Math.max(lo,Math.min(hi,Number(b)||0));
+    if(mx<mn){ const t=mn; mn=mx; mx=t; } return {min:mn,max:mx}; };
+  const bcR=range(d.bc.boost_min,d.bc.boost_max), vnR=range(d.vn.boost_min,d.vn.boost_max), sbR=range(d.sb.boost_min,d.sb.boost_max);
+  const loR=range(d.lo.fallback_min_minutes,d.lo.fallback_max_minutes,0,1440);
+  return {
+    bought_count:{enabled:!!d.bc.enabled,
+      min_today:Math.max(1,Number(d.bc.min_today)||2), min_week:Math.max(1,Number(d.bc.min_week)||2),
+      min_month:Math.max(1,Number(d.bc.min_month)||1), min_all:Math.max(1,Number(d.bc.min_all)||2),
+      boost_min:bcR.min, boost_max:bcR.max},
+    recent_buyers:{enabled:!!d.rb.enabled,
+      window_days:Math.max(1,Math.min(60,Number(d.rb.window_days)||7)),
+      visible_secs:Math.max(0.5,Math.min(60,Number(d.rb.visible_secs)||4.5)),
+      gap_secs:Math.max(0.5,Math.min(60,Number(d.rb.gap_secs)||5)),
+      manual:d.rb.manual.map(m=>({name:String(m.name||'').trim().slice(0,40), product_en:String(m.product_en||'').trim().slice(0,80),
+        product_cn:String(m.product_cn||'').trim().slice(0,80), minutes_ago:Math.max(0,Math.min(60*24*60,Number(m.minutes_ago)||0))}))
+        .filter(m=>m.name&&(m.product_en||m.product_cn))},
+    viewing_now:{enabled:!!d.vn.enabled, show_in_app:!!d.vn.show_in_app,
+      ttl_sec:Math.max(5,Math.min(600,Number(d.vn.ttl_sec)||45)), boost_min:vnR.min, boost_max:vnR.max},
+    last_ordered:{enabled:!!d.lo.enabled, max_hours:Math.max(1,Math.min(720,Number(d.lo.max_hours)||24)),
+      fallback_min_minutes:loR.min, fallback_max_minutes:loR.max},
+    sold_badge:{enabled:!!d.sb.enabled, min_units:Math.max(1,Number(d.sb.min_units)||3), boost_min:sbR.min, boost_max:sbR.max},
+  };
+}
+const spCard=()=>cfgCard('social_proof',{
+  read:()=>({'social_proof':spBuild()}),
+  apply:b=>{ SP_D=spFrom(b&&b['social_proof']); },
+  words:{'social_proof':['Social proof','社交证明']},
+});
+function upFrom(u){ const x=u||{}; return {enabled:x.enabled!==false, bundles:x.bundles!==false, extras:x.extras!==false, flash:x.flash!==false, max:String(x.max!=null?x.max:4)}; }
+const upCard=()=>cfgCard('checkout.upsell',{
+  read:()=>({'checkout.upsell':{enabled:!!UP_D.enabled, bundles:!!UP_D.bundles, extras:!!UP_D.extras, flash:!!UP_D.flash,
+    max:Math.max(1,Math.min(6,Number(UP_D.max)||4))}}),
+  apply:b=>{ UP_D=upFrom(b&&b['checkout.upsell']); },
+  words:{'checkout.upsell':['Checkout upsell pop-up','结账推荐弹窗']},
+});
+function spEnsure(){
+  if(SP_D||!state.cfg) return;
+  SP_D=spFrom(cfgGet('social_proof',null));
+  UP_D=upFrom(cfgGet('checkout.upsell',null));
+  if(mCan(SP_KEYS)){ cfgCardStart(spCard()); cfgCardStart(upCard()); }
+}
+const spLive=()=>SP_D&&mCan(SP_KEYS)&&CFG_CARD.social_proof&&CFG_CARD.social_proof.auto?CFG_CARD.social_proof:null;
+const upLive=()=>UP_D&&mCan(SP_KEYS)&&CFG_CARD['checkout.upsell']&&CFG_CARD['checkout.upsell'].auto?CFG_CARD['checkout.upsell']:null;
+/* The five widgets, in the desktop's order and words: [key, title, line,
+   switch label, fields [id, label]]. The labels are the desktop's own
+   accessible names for each box, which say the unit. */
+const SP_W=[
+  ['bc',['"N people bought this" — product page','"X 人买了这个" — 商品页'],
+    ['Distinct buyers across widening windows (today → week → month → all-time). Shows the narrowest window that clears its minimum. Empty data → line hides (we never fake counts).','显示满足阈值的最短时间窗口的真实买家人数;数据不足时自动隐藏。'],
+    ['Show this widget','显示此组件'],
+    [['min_today',['Min today','今日最低']],['min_week',['Min this week','本周最低']],['min_month',['Min this month','本月最低']],['min_all',['Min all-time','全部最低']],
+     ['boost_min',['Extra buyers per day, lowest','每日额外买家下限']],['boost_max',['Extra buyers per day, highest','每日额外买家上限']]]],
+  ['rb',['Recent-buyers ticker — home','最近购买滚动条 — 首页'],
+    ['Cycles real recent purchases as a dismissible toast ("W** bought X, 5 min ago"). Names are masked server-side; only paid orders count.','在首页循环显示真实的近期购买记录(姓名已脱敏)。'],
+    ['Show the ticker','显示滚动条'],
+    [['window_days',['Look-back window in days','回溯天数']],['visible_secs',['Seconds on screen','显示秒数']],['gap_secs',['Seconds between','间隔秒数']]]],
+  ['vn',['"N viewing now" — product page','"X 人正在查看" — 商品页'],
+    ['Real concurrent-viewer count. In-memory; resets when the app restarts. Mini-app shows the badge only at 2+ viewers.','实时查看人数(内存中保存,重启后重置);客户端在 2 人以上才显示。'],
+    ['Track viewer counts (powers the dashboard LIVE pane)','追踪在线人数(用于后台实时面板)'],
+    [['ttl_sec',['Viewer freshness in seconds','在线时长(秒)']],['boost_min',['Fake viewers at peak, lowest','高峰虚拟在线下限']],['boost_max',['Fake viewers at peak, highest','高峰虚拟在线上限']]]],
+  ['lo',['"Last ordered X ago" — product page','"上次订购于 X 前" — 商品页'],
+    ['A freshness nudge from the most recent order. It shows the real time when there\'s been a recent sale; otherwise it fills in believable activity that ages on its own (the "X ago" climbs over time and resets, never stuck on one number) and only appears on some products at a time — popular ones often, quiet ones now and then — so it\'s never on every product at once. Hidden when the bought-count line is already showing "today/this week" (so the two don\'t repeat).',
+     '基于最近一次订单的新鲜度提示。有真实近期订单时显示真实时间;否则填充会自动变旧的可信活动(“X 前”随时间增长并适时重置,不再固定),且只在部分商品上出现——热销品常见、冷门品偶尔——不会同时出现在每个商品上。'],
+    ['Show "last ordered"','显示"上次订购"'],
+    [['max_hours',['Hide if older than this many hours','超过多少小时则隐藏']],
+     ['fallback_min_minutes',['Freshness for active products, lowest minutes','活跃商品新鲜度下限(分钟)']],['fallback_max_minutes',['Freshness for active products, highest minutes','活跃商品新鲜度上限(分钟)']]]],
+  ['sb',['"X SOLD" badge — shop & home cards','"已售 X 件"标签'],
+    ['All-time paid units per product, shown as a corner cap on shop cards and home blocks. Low-sellers stay neutral (no badge) so we don\'t advertise a weak number.','显示在商品卡片上的全期销量标签;低于阈值则不显示。'],
+    ['Show "X SOLD" badges','显示已售标签'],
+    [['min_units',['Minimum units to show','最低显示销量']],['boost_min',['Starting sold baseline, lowest','起始已售基数下限']],['boost_max',['Starting sold baseline, highest','起始已售基数上限']]]],
+];
+const spW=k=>SP_W.find(w=>w[0]===k);
+reg('spToggle', (k,f)=>{
+  const c=spLive(); if(!c||!SP_D[k]) return;
+  if(f!=='enabled'&&!(k==='vn'&&f==='show_in_app')) return;
+  SP_D[k][f]=!SP_D[k][f]; c.auto.touch(); render();
+});
+reg('spEdit', k=>{
+  const c=spLive(), w=spW(k); if(!c||!w) return;
+  cfgSheet(c, T(...w[1]), escAttr(T(...w[2])),
+    w[4].map(([id,lab])=>({id, label:T(...lab), type:'number', commit:true})),
+    f=>SP_D[k][f], (f,v)=>{ SP_D[k][f]=v; });
+});
+/* The manual entries — rows mixed into the real ticker. A row is edited in
+   its own sheet with Remove, as the About page's rows are; an empty one is
+   kept in the draft and left out of the save (the desktop drops it too). */
+function spManSheet(i){
+  const c=spLive(); if(!c) return;
+  const row=SP_D.rb.manual[i]; if(!row) return;
+  cfgSheet(c, T('Manual fake entries','手动虚拟条目')+' · '+(i+1),
+    escAttr(T('Mixed into the real feed and sorted by time. Names should be pre-masked (type "W**" or "M***"). The minutes you set is the average age — each entry\'s "X ago" drifts up and resets around it over time (and entries don\'t tick together), so it reads like a live order instead of a fixed label.',
+      '与真实订单合并并按时间排序;姓名请预先脱敏。所填分钟数为平均时间,实际“X 前”会围绕它自然增减并适时重置(各条不同步),读起来像真实下单而非固定文字。')),
+    [{id:'name',label:T('Masked name, e.g. W**','已脱敏姓名,如 李**'),max:40},
+     {id:'product_en',label:T('Product (English)','产品名(英文)'),max:80},
+     {id:'product_cn',label:T('Product (Chinese)','产品名(中文)'),max:80},
+     {id:'minutes_ago',label:T('min ago','分钟前'),type:'number',commit:true}],
+    f=>{ const r=SP_D.rb.manual[i]; return r?r[f]:''; },
+    (f,v)=>{ const r=SP_D.rb.manual[i]; if(r) r[f]=f==='minutes_ago'?(Number(v)||0):v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>{ SP_D.rb.manual.splice(i,1); c.auto.touch(); state.ask=null; render(); }}]);
+}
+reg('spMan', i=>spManSheet(Number(i)));
+reg('spManAdd', ()=>{
+  const c=spLive(); if(!c) return;
+  SP_D.rb.manual.push({name:'',product_en:'',product_cn:'',minutes_ago:5});
+  c.auto.touch(); spManSheet(SP_D.rb.manual.length-1);
+});
+reg('upToggle', f=>{
+  const c=upLive(); if(!c||['enabled','bundles','extras','flash'].indexOf(f)<0) return;
+  UP_D[f]=!UP_D[f]; c.auto.touch(); render();
+});
+reg('upMax', ()=>{
+  const c=upLive(); if(!c) return;
+  cfgSheet(c, T('Checkout upsell pop-up','结账推荐弹窗'), null,
+    [{id:'max',label:T('Max items shown','最多展示数量'),type:'number',commit:true}], f=>UP_D[f], (f,v)=>{ UP_D[f]=v; });
+});
+function spSwitchRow(label, on, cmd, sub){
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${label}</span>
+      ${sub?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${sub}</span>`:''}</span>
+    ${toggle(on,cmd)}</div>`;
+}
+function spSettings(){
+  if(!state.cfg) return `<div style="padding:16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  spEnsure();
+  const c=spLive(), u=upLive();
+  if(!c||!u) return '';
+  const fieldsLine=(k)=>{ const w=spW(k); return w[4].map(([id,lab])=>escAttr(T(...lab))+': '+escAttr(SP_D[k][id])).join(' · '); };
+  const widget=(w)=>{ const k=w[0], d=SP_D[k];
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${escAttr(T(...w[1]))}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${escAttr(T(...w[2]))}</div>
+      ${spSwitchRow(escAttr(T(...w[3])),!!d.enabled,`APP.cmd('spToggle','${k}','enabled')`)}
+      ${k==='vn'?spSwitchRow(escAttr(T('Also show the "N viewing now" badge to customers','同时向客户显示"N 人正在查看"标签')),!!d.show_in_app,"APP.cmd('spToggle','vn','show_in_app')",
+        T('Leave the second box off to count viewers for yourself only — the backend LIVE pane fills in, but customers never see the badge.','仅勾选第一项即可只在后台统计,客户端不显示。')):''}
+      <div class="num" style="font-size:13px;color:var(--text-secondary);line-height:1.6">${fieldsLine(k)}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('spEdit','${k}')">${T('Edit','编辑')}</button>
+      ${k==='rb'?spManual():''}</div>`; };
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${T('Checkout upsell pop-up','结账推荐弹窗')}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${escAttr(T('The "before you pay" pop-up that suggests add-ons. Turn it off entirely, or choose which content it may offer. Shows only when a chosen tier has something relevant; hides itself otherwise. Applies instantly to web + mini-app.','结账付款前推荐加购商品的弹窗。可整体关闭,或选择允许展示的内容类型。仅在所选类型有相关内容时显示。即时生效,无需重新发布。'))}</div>
+      ${spSwitchRow(T('Show the checkout upsell pop-up','显示结账推荐弹窗'),!!UP_D.enabled,"APP.cmd('upToggle','enabled')")}
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Content it may offer','可展示的内容')}</span>
+      ${spSwitchRow(escAttr(T('Bundles ("buy together")','套餐(搭配购买)')),!!UP_D.bundles,"APP.cmd('upToggle','bundles')")}
+      ${spSwitchRow(T('Linked extras','关联加购'),!!UP_D.extras,"APP.cmd('upToggle','extras')")}
+      ${spSwitchRow(T('Flash sales (active deals)','限时秒杀(进行中)'),!!UP_D.flash,"APP.cmd('upToggle','flash')")}
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T('Max items shown','最多展示数量')}: ${escAttr(UP_D.max)}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('upMax')">${T('Edit','编辑')}</button>
+      ${cardFoot(u)}</div>
+    ${SP_W.map(widget).join('')}
+    ${cardFoot(c)}`;
+}
+function spManual(){
+  const rows=SP_D.rb.manual;
+  return `<div class="sep"></div>
+    <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Manual fake entries','手动虚拟条目')}</span>
+    ${rows.length?`<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:48px;padding:10px 14px" onclick="APP.cmd('spMan',${i})">
+        <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([r.name,LANG==='en'?(r.product_en||r.product_cn):(r.product_cn||r.product_en)].filter(Boolean).join(' · '))||'—'}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${Number(r.minutes_ago)||0} ${T('min ago','分钟前')}</span></button>`).join('')}</div>`
+      :`<div style="font-size:12.5px;color:var(--text-secondary)">${T('No fake entries yet.','暂无虚拟条目。')}</div>`}
+    <button class="btn2" style="width:100%" onclick="APP.cmd('spManAdd')">${T('+ Add fake entry','添加虚拟条目')}</button>`;
+}
+function screenSocial(){
+  // The switch is real (features.socialProof) and reachable from Settings, so
+  // this screen states what it is currently doing.
+  const on=featOn('socialProof'), busy=state.featBusy==='socialProof';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div class="card" style="padding:16px;display:flex;align-items:center;gap:14px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;font-weight:500">${busy?T('Saving…','保存中…'):(on?T('Showing recent buyers','正在展示最近购买'):T('Switched off','已关闭'))}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on
+          ? T('Shoppers see bought-counts, a recent-buyers ticker and the SOLD badge.','顾客会看到购买人数、最近购买动态与“已售”标签。')
+          : T('None of the bought-counts, the recent-buyers ticker or the SOLD badge are shown.','购买人数、最近购买动态与“已售”标签均不显示。')}</span></span>
+      ${toggle(on,"APP.cmd('toggleFeature','socialProof')")}</div>
+    ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
+    ${spSettings()}</div>`;
 }
 
 /* Meituan's health, which the phone did not show at all.
@@ -36087,7 +36411,7 @@ const ROUTE_CAP={
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
   coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
-  sharecards:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
+  sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
      so the screen can never be walked into by an operator whose send would
