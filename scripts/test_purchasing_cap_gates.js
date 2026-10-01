@@ -161,6 +161,12 @@ async function main() {
     'the status path still lets either key past the choke point — the body decides the rest');
   is(purchaseStatusCap('Delivered'), ['purchasing:edit', 'purchasing:receive'], 'Delivered: either key');
   for (const s of ['Ordered', 'Requested', 'Cancelled']) is(purchaseStatusCap(s), 'purchasing:edit', `${s}: the buyer's key`);
+  // §325 — with the order's current status, Delivered is either key only from Ordered.
+  is(purchaseStatusCap('Delivered', 'Ordered'), ['purchasing:edit', 'purchasing:receive'], 'Delivered from Ordered: either key');
+  for (const cur of ['Requested', 'Cancelled', 'Delivered']) {
+    is(purchaseStatusCap('Delivered', cur), 'purchasing:edit', `Delivered from ${cur}: the buyer's key`);
+  }
+  is(purchaseStatusCap('Cancelled', 'Ordered'), 'purchasing:edit', 'any other target stays the buyer\'s whatever the order is at');
   is(requiredCapFor('PUT', '/api/retail-admin/purchases/7/receive'), 'purchasing:receive', 'per-line receive is unchanged');
   is(requiredCapFor('PUT', '/api/retail-admin/purchases/7'), 'purchasing:edit', 'editing an order is unchanged');
 
@@ -206,6 +212,40 @@ async function main() {
     is(r.body && r.body.error, 'forbidden_capability', '…in the choke point\'s own words');
     is(r.body && r.body.need, 'purchasing:edit', '…naming the key it needs');
     is(poStatus(id), from, '…and the order is exactly as it was');
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  section('2b · §325: "everything arrived" only for an order already placed');
+  for (const from of ['Requested', 'Cancelled', 'Delivered']) {
+    const id = seedPO(from);
+    const r = await setStatus(id, 'Delivered', RECEIVER);
+    is(r.status, 403, `a receive-only account marking a ${from} order Delivered is refused`);
+    is(r.body && r.body.error, 'forbidden_capability', '…in the choke point\'s own words');
+    is(r.body && r.body.need, 'purchasing:edit', '…naming the buyer\'s key');
+    is(poStatus(id), from, '…and the order is exactly as it was');
+  }
+  {
+    const id = seedPO('Requested');
+    const r = await setStatus(id, 'Delivered', BUYER);
+    is(r.status, 200, 'the buyer may still mark a draft Delivered, as before');
+    is(poStatus(id), 'Delivered', '…and it lands');
+  }
+  {
+    const id = seedPO('Requested');
+    is((await setStatus(id, 'Delivered', { caps: ['purchasing:receive'], role: 'owner' })).status, 200, 'the owner is never refused');
+    const id2 = seedPO('Requested');
+    is((await setStatus(id2, 'Delivered', { caps: ['purchasing:receive'], enforce: false })).status, 200, 'nor anybody with enforcement off');
+    is((await setStatus(999999, 'Delivered', RECEIVER)).status, 404, 'an order that does not exist is still a 404');
+  }
+  {
+    // The two screens that send it draw it only on Ordered, so nothing a
+    // receiver can press today is taken away.
+    const PU = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '16-purchasing.js'), 'utf8');
+    ok(/\$\{p\.status === 'Ordered' \? `<button class="pu2-btn" data-cap="purchasing:receive" onclick="puAllArrived\(\)">/.test(PU),
+      'the desktop draws "All arrived as ordered" only on Ordered');
+    const MH = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
+    ok(/d\.status==='Ordered'&&canRcv\s*\n?\s*\? \{label:T\('Everything arrived','全部到货'\),status:'Delivered'\}/.test(MH),
+      'the phone draws "Everything arrived" only on Ordered');
   }
 
   // ───────────────────────────────────────────────────────────────────────

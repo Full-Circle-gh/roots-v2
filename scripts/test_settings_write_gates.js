@@ -344,20 +344,33 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       walk('public');
       const src = Object.fromEntries(files.map((f) => [f, read(f)]));
       const who = (re) => files.filter((f) => re.test(src[f])).sort();
+      // Every phone write to /config: a literal path starting '/config' (with or
+      // without ?history / ?expect), or the pop-up switch's cfgPath.
+      const SITE = /apiWrite\(('\/config[^']*'[^,]*|cfgPath),/g;
+      const sites = [];
+      for (let mm; (mm = SITE.exec(M));) sites.push(mm.index);
+      ok(!/apiWrite\((?!'\/config|cfgPath)[^,]*config/.test(M), 'the phone writes /config through no other path');
       is(who(/retail-admin\/config['"`?]/), [
         'public/cms-mobile.html', 'public/cms.html', 'public/product-editor.html', 'public/retail-admin.html',
         'public/retail-admin/01-core.js', 'public/retail-admin/05-marketing.js', 'public/retail-admin/06-delivery.js',
         'public/retail-admin/07-content-billing.js', 'public/retail-admin/09-products.js', 'public/retail-admin/10-extras.js',
         'public/retail-admin/17-setup-guide.js', 'public/retail-admin/31-product-page.js',
       ], 'PUT /config: the desktop files, the two editors and the product editor');
-      // Inline bodies (apiWrite('/config',{...})) plus the history-filed form
-      // (§333: Resume delivery builds `body` and writes /config?history=…).
-      const inlineFam = (M.match(/apiWrite\('\/config',\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\('\/config',\{\[?'?/, '').split(/['\]]/)[0]);
-      const historyFam = (M.match(/const body=\{'([a-zA-Z.]+)'[^}]*\};[\s\S]{0,300}?apiWrite\('\/config\?history=/g) || []).map((s) => s.match(/const body=\{'([a-zA-Z.]+)'/)[1]);
-      is([...inlineFam, ...historyFam].sort(),
-        ['delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
-          'notifications.categories.', 'popups.list', 'product_page.sections', 'support.hidden'],
-        'the phone writes eight families, each asserted in section 2 (support.hidden as the open one)');
+      // §325 X2/X3: the phone's Operations screen adds four families —
+      // inventory.lowStockThreshold, inventory.lowStockDigest, support.hidden
+      // (the open one) and product_page.sections — each its own write site.
+      const FAMS = ['delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
+        'notifications.categories.', 'popups.list', 'product_page.sections', 'support.hidden'];
+      // A site whose body is written inline names its family in the call itself;
+      // only one that builds its body first (Resume delivery, the pop-up switch)
+      // is read in the 900 characters before it. Several sites now sit within
+      // 900 characters of each other (§325 X2), so the call is asked first.
+      const famAt = (i) => {
+        const own = FAMS.filter((f) => M.slice(i, i + 200).includes("'" + f));
+        return own.length ? own : FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f));
+      };
+      is(sites.map((i) => famAt(i).join('|')).sort(),
+        FAMS, 'the phone writes eight families, one per write site, each asserted in section 2 (support.hidden as the open one)');
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
