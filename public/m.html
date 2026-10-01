@@ -34309,9 +34309,10 @@ function peDiff(b,base){
   return out;
 }
 /* skuTakenMsg (01-core.js), word for word. */
-function peSkuTaken(sku,c){
+function peSkuTaken(sku,c,sizeLabel){
   const s=String(sku||'').trim();
-  const skuTxt=s?T('SKU “','货号“')+s+'”':T('That SKU','该货号');
+  // §325 PD9 — another size's SKU names that size, as the desktop's does.
+  const skuTxt=(s?T('SKU “','货号“')+s+'”':T('That SKU','该货号'))+(sizeLabel?T(' (size “','(规格“')+sizeLabel+'”)':'');
   if(c){
     const nm=T(c.name_en||c.name_cn||('#'+c.id), c.name_cn||c.name_en||('#'+c.id));
     const vl=c.variant_label?' · '+c.variant_label:'';
@@ -34322,9 +34323,9 @@ function peSkuTaken(sku,c){
   }
   return skuTxt+T(' is already in use',' 已被占用');
 }
-function peErrText(e,body){
+function peErrText(e,body,sizeLabel){
   if(e&&e.refused) return T(...e.words);
-  if(e&&e.code==='sku_taken') return peSkuTaken(body&&body.sku, e.body&&e.body.conflict);
+  if(e&&e.code==='sku_taken') return peSkuTaken(body&&body.sku, e.body&&e.body.conflict, sizeLabel);
   if(e&&e.code==='sku_required') return T('A SKU is required','需要填写货号');
   if(e&&e.code==='catalog_locked') return T('This catalog is managed by the upstream system','该商品目录由上游系统管理');
   return T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -34373,9 +34374,10 @@ function peAutoStart(){
    read is not "no build list". */
 function loadPe(pid){
   const e={pid,row:null,err:null,draft:null,base:null,factsTouched:false,costLoaded:false,costOwned:true,tried:true,
-    gallery:null,galInherited:false,galDirty:false,galErr:null,photoBusy:false,photoErr:null,lib:null};
+    gallery:null,galInherited:false,galDirty:false,galErr:null,photoBusy:false,photoErr:null,lib:null,va:null};
   state.pe=e;
   loadPeImages(e);
+  loadPeSizes(e);   // §325 PD9
   const wantCost=pcMoney();
   Promise.all([api('/products/'+pid),
     wantCost?api('/products/'+pid+'/build-lines').then(d=>({ok:true,lines:(d&&Array.isArray(d.lines))?d.lines:[]})).catch(()=>({ok:false})):Promise.resolve({ok:false})])
@@ -34441,6 +34443,7 @@ function screenProductEdit(){
       ${inp('weight',T('Size / weight','规格'))}`)}
     ${card(T('Price','价格'),`${inp('sell_price',T('Price','价格'),'inputmode="decimal"')}${inp('compare_at_price',T('Was price','划线价'),'inputmode="decimal"')}
       ${costOn?`${inp('unit_cost',T('Cost','成本'),'inputmode="decimal"')}${tick(d.cost_incomplete,"APP.cmd('peFlag','cost_incomplete')",T('This cost is not complete','成本不完整'))}`:''}`)}
+    ${peSizesCard()}
     ${card(T('Stock','库存'),inp('low_stock_threshold',T('Low-stock alert at','低库存提醒阈值'),'inputmode="numeric" placeholder="'+escAttr(T('Default','默认')+' '+prodLowThreshold({}))+'"'))}
     ${card(T('Product details','产品详情'),PE_FACTS.map(([dom,col,label,phEn,phCn])=>`<div style="display:flex;flex-direction:column;gap:6px">${lab(T(...label))}
       <input value="${escAttr(d.facts[col+'_en'])}" placeholder="${escAttr(phEn)}" oninput="APP.cmd('peFact','${col}_en',this.value)">
@@ -34558,6 +34561,269 @@ reg('peUndo', ()=>{ if(!peAuto) return; peAuto.undo(b=>{ const e=state.pe; if(!e
   render(); }); });
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden'&&peAuto) peAuto.flush();
+});
+/* ==========================================================================
+   §325 PD9 — A PRODUCT'S SIZES, ON THE DETAILS SCREEN
+   (desktop: 09-products.js vaLoad / vaRender / vaSelfField / vaField /
+    vaPhotoUpload / vaRemove / vaAddSize / vaPersist / vaPersistSiblings)
+   --------------------------------------------------------------------------
+   Each size is its own product; the family is the products that share
+   variant_group_id. The card lists them in the order shoppers see, read from
+   GET /products/:id/variants, with what the desktop's Variants table shows:
+   the photo, the label in both languages stacked, SKU and size, price and
+   was-price, stock (read only — it is per store, set where stock is set) and
+   the per-size Show switch.
+
+   ONE WRITE PER ACTION, THE DESKTOP'S REQUEST EACH TIME. The desktop folds
+   labels, order and its siblings' fields into the editor's Save; a phone has
+   no Save button to fold them into, so each goes when the action is taken:
+     • labels, order and the picker's noun: PUT /products/:id/variants
+       {members:[{id,label,label_cn}…], noun_en, noun_cn} — the FULL family in
+       shop order, which is what the server reconciles against (vaPersist);
+     • another size's SKU / size / price / was-price: PATCH /products/:sid with
+       the desktop's keys (vaPersistSiblings) — only the ones that moved, an
+       empty price never, an empty was-price as 0 (no strike-through);
+     • the size open on this screen: those four go into the fields above and
+       save with them (vaSelfField) — one field per fact, never a second write;
+     • Show: PATCH /products/:sid {is_published} for that one size;
+     • another size's own photo: PATCH /products/:sid {images:[photo]}, shrunk
+       first with the product preset (vaPhotoUpload); the open size's photo is
+       the Photos card above;
+     • Add variant: POST /products/:id/duplicate {as_variant:true,label:''}
+       (products:create), then its edit sheet opens, as the desktop focuses the
+       new row's label;
+     • Delete: DELETE /products/:sid after the desktop's own confirm
+       (products:delete). The open size is not deleted from here.
+   §294: A HIDDEN SIZE STAYS HIDDEN. Show here is the per-size tick box — it
+   writes that one size and never the family switch — and a new size arrives
+   hidden, as on the desktop, wearing the Hidden pill until someone turns it on.
+   Every write reloads the family and the catalogue, so the product sheet's
+   size chips follow. A refusal stays on the card until the next action. */
+function vaMemberFrom(m,pid){
+  const n=v=>(v==null||v==='')?null:v;
+  return {id:Number(m.id), label:String(m.variant_label||''), label_cn:String(m.variant_label_cn||''),
+    name:[m.name_en||m.name_cn||('#'+m.id), m.name_cn||m.name_en||('#'+m.id)],
+    sku:String(m.sku||''), size:String((m.size!=null?m.size:m.weight)||''),
+    price:n(m.price!==undefined?m.price:m.sell_price),
+    compare:n(m.compare!==undefined?m.compare:m.compare_at_price),
+    stock:n(m.stock!==undefined?m.stock:(m.effective_stock!=null?m.effective_stock:m.stock_qty)),
+    published:Number(m.is_published)===1?1:0,
+    img:String(m.image_data||m.image_url||''),
+    ownImg:m.own_image!==undefined?!!m.own_image:!!(m.image_data||m.image_url),
+    self:Number(m.id)===Number(pid)};
+}
+function vaPutBody(members,nounEn,nounCn){
+  return {members:members.map(m=>({id:m.id,label:m.label||'',label_cn:m.label_cn||''})),
+    noun_en:nounEn||'',noun_cn:nounCn||''};
+}
+function loadPeSizes(e){
+  if(!e) return;
+  const va=e.va||(e.va={members:null,noun_en:'',noun_cn:'',hadGroup:false,loadErr:null,err:null,busy:null,busyText:'',seq:0});
+  const seq=++va.seq; va.loadErr=null;
+  api('/products/'+e.pid+'/variants').then(d=>{
+    if(state.pe!==e||va.seq!==seq) return;
+    const rows=(d&&Array.isArray(d.members))?d.members:[];
+    const members=rows.map(m=>vaMemberFrom(m,e.pid));
+    if(members.length&&!members.some(m=>m.self)) members.unshift(vaMemberFrom(Object.assign({},e.row||{},{id:e.pid}),e.pid));
+    va.members=members; va.hadGroup=!!(d&&d.group_id);
+    va.noun_en=String((d&&d.noun_en)||''); va.noun_cn=String((d&&d.noun_cn)||'');
+    render();
+  }).catch(err=>{
+    if(state.pe!==e||va.seq!==seq||String(err&&err.message)==='auth') return;
+    const msg=err&&err.refused?T(...err.words):T('Load failed','加载失败');
+    // A family already on screen stays there; only a first read that failed is an empty card.
+    if(va.members) va.err=msg; else va.loadErr=msg;
+    render();
+  });
+}
+/* One write at a time: the card's controls disable and say what is running;
+   a failure is written on the card and stays; a toast only confirms. */
+function vaWrite(key,text,job,fmt){
+  const e=state.pe, va=e&&e.va;
+  if(!va||!va.members||va.busy||!prodCanEdit()) return Promise.resolve(false);
+  va.busy=key; va.busyText=text; va.err=null; render();
+  return Promise.resolve().then(job).then(()=>{
+    if(state.pe!==e) return false;
+    va.busy=null; va.busyText='';
+    loadPeSizes(e); try{ loadCatalogue(true); }catch(x){}
+    render(); return true;
+  }).catch(err=>{
+    if(state.pe!==e) return false;
+    va.busy=null; va.busyText='';
+    if(String(err&&err.message)!=='auth') va.err=fmt?fmt(err):peErrText(err);
+    render(); return false;
+  });
+}
+const vaFail=prefix=>x=>(x&&x.refused)?T(...x.words):prefix+String((x&&x.message)||'');
+function vaFind(id){
+  const va=state.pe&&state.pe.va;
+  return (va&&va.members||[]).find(x=>x.id===Number(id))||null;
+}
+function peSizesCard(){
+  const e=state.pe, va=e&&e.va; if(!va) return '';
+  const wrap=inner=>`<div class="card" id="mPeSizes" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div class="eyebrow">${T('Variants','规格')}</div>${inner}</div>`;
+  if(va.loadErr) return wrap(`<span style="font-size:14px;color:var(--brick-ink)">${escAttr(va.loadErr)}</span>
+    <button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" onclick="APP.cmd('vaRetry')">${T('Try again','重试')}</button>`);
+  if(!va.members) return wrap(`<span style="font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`);
+  const edit=prodCanEdit(), busy=!!va.busy, ms=va.members, d=e.draft;
+  const canAdd=edit&&mCan('products:create')&&state.catalogMode!=='upstream';
+  const canDel=edit&&mCan('products:delete');
+  const status=busy?`<span style="font-size:13px;color:var(--text-secondary)">${escAttr(va.busyText||T('Saving…','保存中…'))}</span>`:'';
+  const errLine=va.err?`<span style="font-size:13.5px;color:var(--brick-ink)">${escAttr(va.err)}</span>`:'';
+  const add=canAdd?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" ${busy?'disabled':''} onclick="APP.cmd('vaAdd')">${va.busy==='add'?T('Adding…','添加中…'):T('+ Add variant','+ 新增规格')}</button>`:'';
+  // A family of one is just a product: everything about it is on this screen already.
+  if(ms.length<2) return wrap(`<span style="font-size:13.5px;color:var(--text-secondary)">${canAdd?T('Single option · tap to add','单一规格 · 点击添加'):T('Single option','单一规格')}</span>${errLine}${status}${add}`);
+  const noun=va.noun_en||va.noun_cn
+    ? `<span style="font-size:15px">${escAttr(va.noun_en||'—')}</span><span style="font-size:13.5px;color:var(--text-secondary)">${escAttr(va.noun_cn||'—')}</span>`
+    : `<span style="font-size:13.5px;color:var(--text-secondary)">${T('Picker heading — blank = “size / 规格”.','选择器标题 — 留空为「size / 规格」。')}</span>`;
+  const nounRow=`<button class="row" style="padding:6px 0;background:none" ${busy||!edit?'disabled':''} onclick="APP.cmd('vaNounAsk')">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left"><span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('What are these variants?','这些规格是什么?')}</span>${noun}</span>
+      ${edit?`<span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>`:''}</button>`;
+  const rows=ms.map((m,i)=>{
+    const self=m.self&&!!d;
+    const sku=self?d.sku:m.sku, size=self?d.weight:m.size;
+    const pRaw=self?d.sell_price:(m.price==null?'':String(m.price));
+    const wRaw=self?d.compare_at_price:(m.compare==null?'':String(m.compare));
+    const price=String(pRaw).trim()!==''?money(CUR,Number(pRaw)||0):'—';
+    const was=Number(wRaw)>0?money(CUR,Number(wRaw)):'';
+    const shared=!!m.img&&!m.ownImg&&!m.self;
+    const bg=m.img?`center/cover no-repeat url('${String(m.img).replace(/'/g,'%27').replace(/"/g,'%22')}')`:'';
+    const box=`flex:none;width:52px;height:52px;border-radius:10px;border:1px solid var(--border-default);background:var(--surface-raised) ${bg};display:flex;align-items:center;justify-content:center;color:var(--text-secondary);${shared?'opacity:.55;':''}`;
+    const photoTip=shared?T('Shared from another variant — click to give this one its own photo','与其他规格共用 — 点击为本规格设置专属图片')
+      :(m.img?T('Change this variant’s photo','更换此规格的图片'):T('Add a photo for this variant','为此规格添加图片'));
+    const thumb=(!m.self&&edit)
+      ? `<label style="${box}cursor:pointer;${busy?'pointer-events:none;':''}" aria-label="${escAttr(photoTip)}" title="${escAttr(photoTip)}">${va.busy==='photo'+m.id?'…':(m.img?'':ic('plus',18,2))}<input type="file" accept="image/*" style="display:none" ${busy?'disabled':''} onchange="APP.cmd('vaPhotoFile',${m.id},this)"></label>`
+      : `<span style="${box}">${m.img?'':ic('image',18)}</span>`;
+    const meta=[sku,size].map(x=>String(x||'').trim()).filter(Boolean).map(escAttr).join(' · ');
+    const hidden=m.published?'':` <span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Hidden','已隐藏')}</span>`;
+    const body=`<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+        <span style="font-size:15px;font-weight:500;overflow-wrap:anywhere">${escAttr(m.label||'—')}</span>
+        <span style="font-size:13.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(m.label_cn||'—')}</span>
+        ${meta?`<span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${meta}</span>`:''}
+        <span style="font-size:13px">${price}${was?` <s style="color:var(--text-secondary)">${was}</s>`:''} · ${T('Stock','库存')} ${escAttr(m.stock==null?'—':String(m.stock))}${hidden}</span></span>`;
+    const tap=edit?`<button onclick="APP.cmd('vaEditAsk',${m.id})" ${busy?'disabled':''} aria-label="${T('Edit this variant','编辑此规格')}" style="flex:1;min-width:0;display:flex;background:none;border:none;padding:0;font-family:inherit;color:inherit;cursor:pointer">${body}</button>`:body;
+    const show=edit?`<span style="flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11.5px;color:var(--text-secondary)" title="${T('Show this variant in the shop','在店面显示此规格')}">${toggle(!!m.published,`APP.cmd('vaShow',${m.id})`)}${T('Show','上架')}</span>`:'';
+    const acts=edit?`<div style="display:flex;justify-content:flex-end;gap:4px">
+        <button class="iconbtn" style="width:34px;height:34px" ${busy||i===0?'disabled':''} aria-label="${T('Move up','上移')}" onclick="APP.cmd('vaMove',${i},-1)">${ic('chevron-up',17,2)}</button>
+        <button class="iconbtn" style="width:34px;height:34px" ${busy||i===ms.length-1?'disabled':''} aria-label="${T('Move down','下移')}" onclick="APP.cmd('vaMove',${i},1)">${ic('chevron-down',17,2)}</button>
+        ${canDel&&!m.self?`<button class="iconbtn" style="width:34px;height:34px;color:var(--brick-ink)" ${busy?'disabled':''} aria-label="${T('Delete this variant','删除此规格')}" onclick="APP.cmd('vaDelAsk',${m.id})">${va.busy==='del'+m.id?'…':ic('x',17,2)}</button>`:''}</div>`:'';
+    // The size open on this screen is marked by a rule, not a word: its fields are the ones above.
+    return `${i?'<div class="sep"></div>':''}<div style="display:flex;flex-direction:column;gap:6px;padding:10px 0${m.self?';border-left:3px solid var(--text-primary);padding-left:10px':''}">
+      <div style="display:flex;align-items:center;gap:12px">${thumb}${tap}${show}</div>${acts}</div>`;
+  }).join('');
+  return wrap(`${nounRow}<div>${rows}</div>${errLine}${status}${add}`);
+}
+reg('vaRetry', ()=>{ const e=state.pe; if(e&&e.va){ e.va.loadErr=null; e.va.err=null; render(); loadPeSizes(e); } });
+/* Order: the whole family, in its new order, in one PUT (variant_sort = index). */
+reg('vaMove', (i,dir)=>{
+  const e=state.pe, va=e&&e.va; if(!va||!va.members||va.busy) return;
+  i=Number(i); dir=Number(dir); const j=i+dir, n=va.members.length;
+  if(!(n>=2&&i>=0&&i<n&&j>=0&&j<n)) return;
+  const next=va.members.slice(); const [mv]=next.splice(i,1); next.splice(j,0,mv);
+  vaWrite('move',T('Saving…','保存中…'),()=>apiWrite('/products/'+e.pid+'/variants',vaPutBody(next,va.noun_en,va.noun_cn),'PUT').then(()=>{ va.members=next; }));
+});
+/* The per-size tick box (§294): this size, and nothing else. */
+reg('vaShow', id=>{
+  const va=state.pe&&state.pe.va, m=vaFind(id); if(!m||!va||va.busy) return;
+  const next=m.published?0:1;
+  vaWrite('show'+m.id,T('Saving…','保存中…'),()=>apiWrite('/products/'+m.id,{is_published:next},'PATCH').then(()=>{ m.published=next; }));
+});
+reg('vaEditAsk', id=>{
+  const e=state.pe, va=e&&e.va, m=vaFind(id); if(!m||!va||va.busy||!prodCanEdit()) return;
+  const d=m.self?e.draft:null;
+  const val=(k,own)=>d?String(d[k]==null?'':d[k]):String(own==null?'':own);
+  state.ask={title:T('Edit this variant','编辑此规格'), body:escAttr(T(...m.name)),
+    fields:[{id:'label',label:T('English · e.g. Big 200g','英文 · 如 Big 200g'),value:m.label},
+            {id:'label_cn',label:T('中文 · 如 大 200克','中文 · 如 大 200克'),value:m.label_cn},
+            {id:'sku',label:T('SKU','货号'),value:val('sku',m.sku)},
+            {id:'weight',label:T('Size / weight','规格'),value:val('weight',m.size)},
+            {id:'price',label:T('Price','价格'),numeric:true,value:val('sell_price',m.price)},
+            {id:'was',label:T('Was price','划线价'),numeric:true,value:val('compare_at_price',m.compare)}],
+    confirmLabel:T('Save','保存'),
+    validate:v=>(v.price!==''&&!(Number(v.price)>=0))?T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'):null,
+    run:v=>vaEditRun(m.id,v)};
+  render();
+});
+function vaEditRun(id,v){
+  const e=state.pe, va=e&&e.va, m=vaFind(id); if(!m||!va) return;
+  const t=s=>String(s==null?'':s).trim();
+  const label=t(v.label), labelCn=t(v.label_cn);
+  const labelMoved=label!==t(m.label)||labelCn!==t(m.label_cn);
+  const patch={};
+  if(m.self){
+    // vaSelfField: the open size's fields ARE the boxes above; they save with them.
+    const dr=e.draft;
+    [['sku','sku'],['weight','weight'],['price','sell_price'],['was','compare_at_price']].forEach(([f,k])=>{ if(dr&&t(v[f])!==t(dr[k])) CMD.peField(k,t(v[f])); });
+    render();
+  }else{
+    if(t(v.price)!==''&&t(v.price)!==t(m.price)) patch.sell_price=Math.max(0,parseFloat(t(v.price))||0);
+    if(t(v.sku)!==t(m.sku)) patch.sku=t(v.sku);
+    if(t(v.weight)!==t(m.size)) patch.weight=t(v.weight);
+    const wasNow=Math.max(0,parseFloat(t(v.was))||0), wasThen=Math.max(0,Number(m.compare)||0);
+    if(wasNow!==wasThen) patch.compare_at_price=wasNow;
+  }
+  if(!labelMoved&&!Object.keys(patch).length) return;
+  const next=va.members.map(x=>x.id===m.id?Object.assign({},x,{label,label_cn:labelCn}):x);
+  const where=label||T(...m.name);
+  return vaWrite('edit'+m.id,T('Saving…','保存中…'),()=>
+    (labelMoved?apiWrite('/products/'+e.pid+'/variants',vaPutBody(next,va.noun_en,va.noun_cn),'PUT').then(()=>{ m.label=label; m.label_cn=labelCn; }):Promise.resolve())
+      .then(()=>Object.keys(patch).length?apiWrite('/products/'+m.id,patch,'PATCH').then(()=>{
+        if('sell_price' in patch) m.price=patch.sell_price;
+        if('sku' in patch) m.sku=patch.sku;
+        if('weight' in patch) m.size=patch.weight;
+        if('compare_at_price' in patch) m.compare=patch.compare_at_price||null;
+      }):null),
+    x=>peErrText(x,patch,where));
+}
+/* The picker's heading noun — the family's, so it rides the same PUT. */
+reg('vaNounAsk', ()=>{
+  const e=state.pe, va=e&&e.va; if(!va||!va.members||va.members.length<2||va.busy||!prodCanEdit()) return;
+  state.ask={title:T('What are these variants?','这些规格是什么?'),
+    body:escAttr(T('Picker heading — blank = “size / 规格”.','选择器标题 — 留空为「size / 规格」。')),
+    fields:[{id:'noun_en',label:T('English · e.g. size, color, flavor','英文 · 如 size, color'),value:va.noun_en},
+            {id:'noun_cn',label:T('中文 · 如 规格、颜色、口味','中文 · 如 颜色'),value:va.noun_cn}],
+    confirmLabel:T('Save','保存'),
+    run:v=>{
+      const en=String(v.noun_en||'').trim().slice(0,40), cn=String(v.noun_cn||'').trim().slice(0,40);
+      if(en===va.noun_en&&cn===va.noun_cn) return;
+      vaWrite('noun',T('Saving…','保存中…'),()=>apiWrite('/products/'+e.pid+'/variants',vaPutBody(va.members,en,cn),'PUT').then(()=>{ va.noun_en=en; va.noun_cn=cn; }));
+    }};
+  render();
+});
+/* + Add variant: the copy joins the family hidden (§294), then its sheet opens. */
+reg('vaAdd', ()=>{
+  const e=state.pe, va=e&&e.va;
+  if(!va||!va.members||va.busy||!mCan('products:create')||state.catalogMode==='upstream') return;
+  let newId=null;
+  vaWrite('add',T('Adding…','添加中…'),()=>apiWrite('/products/'+e.pid+'/duplicate',{as_variant:true,label:''},'POST').then(j=>{
+    const row=j&&j.data; if(!row||row.id==null) throw new Error('add_failed');
+    const base=va.members.length?va.members:[vaMemberFrom(Object.assign({},e.row||{},{id:e.pid}),e.pid)];
+    va.members=base.concat([vaMemberFrom(row,e.pid)]); newId=Number(row.id);
+    showToast(T('Variant added','已添加规格'));
+  }),vaFail(T('Could not add variant: ','无法添加规格:'))).then(ok=>{ if(ok&&newId!=null&&state.pe===e) CMD.vaEditAsk(newId); });
+});
+reg('vaDelAsk', id=>{
+  const va=state.pe&&state.pe.va, m=vaFind(id);
+  if(!m||m.self||!va||va.busy||!prodCanEdit()||!mCan('products:delete')) return;
+  const nm=(m.label&&m.label.trim())||T(...m.name);
+  state.ask={title:escAttr(T('Delete the variant “','删除规格“')+nm+T('”?','”?')),
+    body:T('This removes that product for good.','将永久删除该产品。'),
+    confirmLabel:T('Delete','删除'), danger:true,
+    run:()=>vaWrite('del'+m.id,T('Deleting…','删除中…'),()=>apiWrite('/products/'+m.id,{},'DELETE').then(()=>{
+      va.members=va.members.filter(x=>x.id!==m.id);
+      showToast(T('Size deleted','规格已删除'));
+    }),vaFail(T('Delete failed: ','删除失败:')))};
+  render();
+});
+reg('vaPhotoFile', (id,el)=>{
+  const va=state.pe&&state.pe.va, m=vaFind(id);
+  const f=el&&el.files&&el.files[0]; if(el) el.value='';
+  if(!m||m.self||!f||!va||va.busy||!prodCanEdit()) return;
+  if(f.size>PE_IMG.hardCapMB*1024*1024){ va.err=T('Image too huge (max '+PE_IMG.hardCapMB+'MB)','图片过大,上限 '+PE_IMG.hardCapMB+'MB'); render(); return; }
+  vaWrite('photo'+m.id,T('Uploading…','上传中…'),()=>peShrinkPhoto(f).then(r=>apiWrite('/products/'+m.id,{images:[r.dataURL]},'PATCH').then(()=>{
+    m.img=r.dataURL; m.ownImg=true;
+    showToast(T('Variant photo updated','规格图片已更新'));
+  })),vaFail(T('Photo update failed: ','图片更新失败:')));
 });
 /* ==========================================================================
    §325 PD6 — A PRODUCT'S PHOTOS, ON THE DETAILS SCREEN

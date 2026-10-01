@@ -154,6 +154,8 @@ function mk(opts = {}) {
     reg: (n, f) => { CMD[n] = f; },
     push: (route) => { ctx.state.stack.push({ route }); },
     loadCategories: () => {},
+    // The sizes card (§325 PD9) has its own suite, test_mobile_product_sizes.js.
+    loadPeSizes: () => {}, peSizesCard: () => '',
     recapNoMoney: () => ['warehouse', 'dispatch', 'customer_service'].includes(ctx.state.pos),
     featOn: () => true,
     navTabs: () => [],
