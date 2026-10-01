@@ -27353,3 +27353,292 @@ with the same bodies and confirms.
 reads it" beside `PATCH /affiliate/settings`. The phone now writes it, from
 the Share cards invite card (M8) and from the offer (M9). The gates
 themselves are unchanged and correct.
+
+## §406 — REVIEWS ARE RUN FROM THE PHONE, AS THE DESKTOP'S REVIEWS TAB
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Inbox showed the newest thirty reviews and could answer or hide
+one. The desktop's Reviews tab (`07-content-billing.js`) is more than that,
+and the phone now has it as its own screen, opened from the top of the
+Inbox's Reviews. The Inbox itself is unchanged.
+
+1. **The queue first.** The screen opens on Needs reply, with the desktop's
+   status line and the waiting count. "Mark all N as handled" publishes
+   nothing; it asks first, names how many are rated 3 or less, and is red only
+   when some are. It sends the count it showed (`POST
+   /reviews/dismiss-waiting {expect}`), so if the queue changed meanwhile it is
+   refused and says so.
+2. **The list.** Needs reply / Everything / Low rated / Hidden with their
+   counts, search, the rating filter and pages of 50. Everything puts the
+   waiting reviews under their own heading first. Each row offers:
+   - Reply / Edit reply: the desktop's "Public reply" sheet; leaving it blank
+     removes the reply.
+   - Hide (asks, as the Inbox already does) / Restore.
+   - Put back, for a review handled without a reply.
+   - Remove, for a seeded review only, which asks first and deletes with
+     `?source=synthetic`.
+3. **Set up**, as the desktop has it:
+   - **Reward reviewers**: the switch saves at once; the points and per-order
+     cap are a sheet held to the desktop's ranges.
+   - **Auto top-up**: turning it on asks first, because it publishes seeded
+     reviews, and names the line; turning it off does not ask. The minimum and
+     per-run cap are a sheet. Run now does one sweep.
+   - **Review tags**: a §279 card (`reviews.tags`) with the desktop's holds
+     (no id, duplicate id, no label). Removing a tag whose id may already be
+     on reviews asks first.
+4. **Keys, as the server has them.** Every `/reviews` write needs
+   `reviews:moderate`. The reward, top-up and tag settings are the `reviews`
+   config family, so `reviews:view` or `reviews:moderate` may change them,
+   exactly as on the desktop. The screen opens on either key.
+5. **Not ported:** the page-size buttons (50 / 100 / 200). A phone pages by 50.
+
+## §407 — THE LOYALTY PROGRAMME'S MONEY IS SET ON THE PHONE, EACH WITH ITS OWN SAVE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Membership said thresholds, multipliers and perks were "edited on desktop",
+and Top-up said packages were "created and priced on desktop". All of it
+decides what a customer is given, so under §279 rule 2 none of it saves
+itself. Each is a draft with an explicit Save that sends the desktop's body
+(`07-content-billing.js`), and leaving with unsaved changes asks first (Back,
+the edge swipe and the reload guard).
+
+1. **How points work** (route `pointsrules`): the desktop's four rules and the
+   shipping switch, with its worked example and its short-expiry warning.
+   Save points rules sends the same seven keys as `savePointsSettings`
+   (`PUT /config`), with the same clamps. That includes the legacy
+   `points.earnRate`, rounded up so the old readers never under-charge.
+2. **The tiers** (route `tiersedit`): the whole ladder is staged. Each tier is
+   edited in a sheet; Remove tier asks; + Add tier starts ¥1000 above the top
+   tier. Save tiers applies the desktop's rules:
+   - a new tier gets its key from its English name once, and an existing key
+     is kept, because customers are stamped with it;
+   - no two tiers may have the same key;
+   - there must be at least one tier, and the lowest must start at 0;
+   - the multiplier is held to 0.1–10.
+
+   It then sends the ladder sorted by spend as `PUT /config` `roots_club.tiers`.
+3. **Top-up packages** (route `topuppkgs`), opened from Top-up:
+   - add a package (amount required; `POST`);
+   - edit one in a sheet, which sends only the fields that changed (`PATCH`);
+   - switch one on or off (`PATCH {is_active}`);
+   - delete one, which asks first (`DELETE`).
+
+   The desktop's table saves each field the moment it is edited; the phone
+   collects a package's changes and sends them when Save is pressed.
+4. **Keys.** The points rules and the tiers need the loyalty keys
+   (`loyalty:view` or `loyalty:edit`); packages need `topup:edit`. These are
+   the keys the server gates each write on. All of them stay locked while
+   the account's keys are still unknown, because each one is money.
+5. **Not ported:** the desktop's live shopper preview beside the rules.
+6. **A slow-shard check changed with the behaviour.**
+   `scripts/test_mobile_club.js` asserted the ladder said "edited on desktop".
+   It now asserts the note is gone, and, in a new case where the account holds
+   the loyalty key, that Edit tier is offered. The suite was not run here (it
+   needs a browser).
+
+## §408 — POP-UPS ARE WRITTEN ON THE PHONE, AND NEVER OVER SOMEBODY ELSE'S LIST
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*), after
+§337's version check landed (S2c).
+The phone could switch a pop-up on or off and said the rest was "written,
+scheduled and previewed on desktop". It now carries the desktop's pop-up
+editor (`05-marketing.js` openPopupEditor, PU_CARD, savePopup, deletePopup,
+duplicatePopup), field for field:
+- the internal name and the picture (`POST /cms/media`);
+- the headline, message and button in both languages, and what the button
+  opens (the desktop's fixed destinations, a product found by name or SKU, or
+  a category from the desktop's own list);
+- the pages, when it appears and how often, the dates, live and closable.
+
+1. **Every write sends the version of the list it was built from.** The
+   pop-ups are ONE stored list written whole. Every write here goes through
+   one helper, `puPut`, which sends `?expect=popups.list:<v>` as §337
+   provides. A refused write puts the server's current list and version in
+   place on the phone.
+2. **An existing pop-up saves itself** (§279), as the desktop's PU_CARD does:
+   card `popup.<id>`, with Undo and Version history; a restore takes only this
+   pop-up from the stored list. No page picked holds the save, in the desktop's
+   words. The card works on its own editor's copy, so the save sent while
+   leaving still has its data.
+   **When the list was stale:**
+   - If nobody changed THIS pop-up, the save is sent again at once on the
+     current list. Only this pop-up is swapped in, so nothing of anyone else's
+     is overwritten.
+   - If somebody did change it, nothing is sent again. The editor takes their
+     copy and shows §337's sentence.
+3. **A new pop-up keeps its Save** (it creates the record), and so do
+   Duplicate and Delete. Duplicate makes a copy that is OFF, with "(copy)" on
+   its name, and opens it. Delete asks first. If the list was stale, nothing
+   is written and the sentence says so; the next press saves on the current
+   list.
+4. **Leaving.** Leaving a new pop-up with changes asks first. Leaving an
+   existing one sends what is pending. The reload guard knows a new pop-up
+   that has not been saved.
+5. **Keys.** The pop-ups config family's keys (`popups:view` or
+   `popups:edit`), as on the desktop.
+6. **Not ported:** the desktop's live phone-shaped preview, and its list
+   filters (Live / Scheduled / Off). The phone list already shows each
+   pop-up's state.
+
+## §409 — ONE COUPON ON THE PHONE: CHANGE IT, GIVE IT OUT, TAKE IT BACK
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's coupon list could only pause a coupon. Tapping a coupon card now
+opens the desktop's coupon drawer (`05-marketing.js` vchDrawerRender) as a
+screen of its own, and "Give to a customer" opens the desktop's grant dialog
+(openGrantModal) as a second one. Same endpoints, same bodies:
+
+- `PATCH /vouchers/:id` — per customer, end date, the three "how customers get
+  it" switches, the label, on and off.
+- `GET /vouchers/:id/grants` (`?limit=8` for the head of the holder list).
+- `POST /vouchers/:id/grant` — `{customer_ids:[id], note}` or `{to_all:true, note}`.
+- `DELETE /voucher-grants/:id` — take one back / revoke.
+
+1. **Each control writes when it is changed, as on the desktop drawer.** A
+   switch, the per-customer choice, the end date and on/off are each one
+   deliberate tap or pick, sent at once with Saving… on that control and the
+   error kept on the screen. Nothing typed saves itself: the label, the only
+   typed field, keeps its own **Save label** button (§279.2). Leaving with a
+   typed, unsaved label asks first, and the reload guard knows it.
+2. **The desktop's guards came with the writes.**
+   - Moving the per-customer limit off "once" when customers already used the
+     coupon asks first ("Give it back to customers who already used it?").
+     No leaves the choice where it was.
+   - Turning on a coupon past its end date is refused, with the reason. This
+     now also applies to the list's pause switch, which used to switch an
+     ended coupon on and leave it dead.
+   - Take it back and Revoke ask first (danger).
+   - Grant to all asks first.
+3. **One deliberate difference from the desktop drawer.** Its holder list
+   offers "Take it back" on every row, and the server refuses a one-shot
+   hand-out that was already used (`already_used_or_missing`, it is the
+   receipt for an order). The phone draws the line its grant dialog already
+   draws: no button on a used one-shot hand-out.
+4. **Keys.**
+   - `coupons:view` opens both screens; with only that key everything reads
+     and nothing can be changed.
+   - `coupons:edit` gates every PATCH control.
+   - `coupons:grant` gates giving, taking back and revoking.
+   - Both are `money: 'moves'`, so on the phone they fail closed while the
+     keys are not yet known.
+   - Tapping a holder opens the customer (`customers:view`).
+5. **Not ported:**
+   - the openid fragment beside each search result (the phone shows the
+     phone number and #id);
+   - the "Matching customers — click to grant." hint.
+   Creating a coupon is the next step (M14).
+
+## §410 — A COUPON IS MADE ON THE PHONE, THROUGH THE DESKTOP'S WIZARD
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Coupons were "written on desktop". The Coupons screen now has a **New coupon**
+button that opens the desktop's guided wizard (`05-marketing.js` vwOpen …
+vwSave) as a phone screen, step for step:
+
+- **The deal**, with the five starting points beside it: Welcome gift, Store
+  sale, Anyone can use, Free shipping, Start fresh. A starting point replaces
+  the answers, as on the desktop.
+- **Who gets it**: only for Start fresh, or after "Change".
+- **The small print**: minimum, end date, per customer, total limit.
+- **Turn it on**: a recap, plus a generated code and label, both editable.
+
+The live ticket and the heads-up show on every step. The heads-up reads the
+live coupons:
+- best one wins against another automatic deal;
+- which deal gives more on a typical order;
+- other welcome gifts;
+- a code a live coupon holds;
+- a code a dead coupon held, which will be reused.
+
+1. **One write, the desktop's body.**
+   - `POST /vouchers` with code, type, value, min_subtotal, max_uses,
+     per_customer_limit, expires_at, the three flags, both labels and
+     is_active.
+   - **Save as draft** sends is_active:false; **Turn it on** sends true.
+   - It is an explicit Save (§279.2): the wizard holds everything until one of
+     those two is pressed.
+2. **The desktop's checks, kept on the screen.** The desktop shows each of
+   these as a toast; the phone shows the same words in a red bar on the
+   wizard.
+   - How much is required, and a percent is at most 100.
+   - A past end date is refused.
+   - A code is required.
+   - A label is required unless the coupon is applied automatically.
+   - No live coupon may hold the code.
+   - The server's code_active and code_exists answers are shown in the
+     desktop's words.
+3. **For chosen customers**, the save goes straight on to the new coupon's
+   grant screen (M13), as the desktop hands off to its grant dialog.
+4. **Leaving.** Leaving a changed wizard asks first, and the reload guard knows
+   it. An untouched one just goes.
+5. **Keys.** `coupons:create` opens the door and saves. It is
+   `money: 'moves'`, so the door and the save fail closed until the keys are
+   known.
+6. **The list's pause switch now fails closed too.** It is coupons:edit
+   (`money: 'moves'`), and it showed while the keys were loading. It now waits
+   for them, like the M13 controls. The coordinator directed this on M13's
+   review. `scripts/test_mobile_controls_gated.js` now asserts the stricter
+   behaviour: the render line uses the fail-closed check, and with keys
+   unknown nothing is sent.
+7. **The Coupons list** no longer says coupons are written on desktop, and no
+   longer carries "Best edited on desktop". Its empty state uses the desktop
+   page's own line: "Money off for your customers — …".
+8. **Not ported:** the desktop's fade between steps and its line icons.
+
+## §411 — FLASH SALES ARE RUN FROM THE PHONE, AS THE DESKTOP'S TAB
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone listed flash sales and said they were "built on desktop". It now
+carries the desktop's Flash sales tab (`07-content-billing.js`
+fsRenderTimeline, fsEndNow, and the fsc* composer).
+
+**The list:**
+- It is grouped as the desktop's timeline: Live now (or "No sale is live this
+  moment…"), then Scheduled & recent.
+- A live sale has **End early** and **Edit**; a scheduled one has **Edit**; an
+  ended one has **Run again**.
+- With nothing at all, it shows the desktop's empty state.
+
+**The composer** (route `flashedit`) holds:
+- the product, found by name or SKU;
+- the price and the cap, with the "% off" help;
+- the window: end chips, a typed end, and "schedule it" with Tomorrow 09:00
+  or a picked time;
+- **Keep coupons off this price**, on by default as on the desktop, with the
+  warning when a live coupon would stack;
+- the shopper's-view preview.
+
+Its buttons are **Start** / **Schedule**, plus **Cancel this sale** when
+editing.
+
+1. **Same endpoints, same bodies.**
+   - `PUT /products/:id/flash-sale` with flash_price, flash_ends_at,
+     flash_starts_at, flash_stock_limit and no_coupon_on_flash.
+   - `DELETE /products/:id/flash-sale` for End early and Cancel this sale.
+   - Each asks first, with the desktop's words.
+   - The PUT is an explicit Save (§279.2): nothing is sent until Start or
+     Schedule.
+2. **The desktop's checks**, kept on the screen:
+   - a product;
+   - a price, lower than the regular price;
+   - an end time, not in the past;
+   - a start before the end.
+   The server's refusal codes are shown in the desktop's words.
+3. **Edit keeps the window; Run again starts a fresh clock ending tonight**,
+   as on the desktop. Edit does not change the product (the desktop's Edit
+   fills the same product).
+4. **Keys:**
+   - The PUT is `flash:edit` or `products:edit`; the DELETE is `flash:delete`
+     or `products:delete` (lib/cap-routes.js).
+   - flash:edit and products:edit are `money: 'moves'`, so the door, Edit,
+     Run again and Start fail closed until the keys are known.
+   - End early and Cancel this sale are held to the same rule. The phone had
+     no such control before, so nobody's access is narrowed.
+   - lib/cap-routes.js's caller note names the phone now (a comment only).
+5. **Product search** uses `GET /products?published=1&limit=20&q=`: the
+   desktop's endpoint and filter, searched on the server rather than loading
+   every product into the phone.
+6. **Leaving** a changed composer asks first, and the reload guard knows it.
+7. **Not ported:** the live hh:mm:ss clocks and the per-second "starts in"
+   ticker. The phone card shows the window instead. The server's clock offset
+   is kept on every re-read, as the desktop keeps it.
