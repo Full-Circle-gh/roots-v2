@@ -288,6 +288,14 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 .mx-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
 .mx-prod{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line-soft);margin-bottom:6px;font:400 13.5px var(--f-sans);}
 .mx-prod span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* §325 M3 — the Onboarding page's settings */
+.onb-strip{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;padding:9px 16px;border:0;border-bottom:1px solid var(--line-soft);
+  background:var(--accent-soft);color:var(--text-1);font:500 12.5px var(--f-sans);text-align:left;cursor:pointer;}
+.onb-strip .v{font-family:var(--f-mono);color:var(--text-3);}
+.onb-strip .go{margin-left:auto;color:var(--text-3);}
+.onb-confirm{padding:12px;border-radius:var(--r-lg);background:var(--brass-soft);border:1px solid var(--brass);margin:0 0 14px;}
+.onb-confirm b{display:block;font:600 13.5px var(--f-sans);margin-bottom:6px;}
+.onb-confirm p{margin:0 0 10px;font:400 12.5px var(--f-sans);color:var(--text-2);line-height:1.45;}
 .edit-foot{display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line-soft);flex:0 0 auto;}
 .edit-foot button{flex:1;height:44px;border-radius:var(--r-lg);font:600 14px var(--f-sans);cursor:pointer;}
@@ -391,6 +399,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span class="i18n-en">Outline</span><span class="i18n-cn">大纲</span></button>
       </div>
     </div>
+
+    <!-- §325 M3 — the Onboarding page's settings (who sees it, its button) -->
+    <button class="onb-strip" id="onb-strip" hidden onclick="openOnb()"></button>
 
     <!-- STAGE -->
     <div class="stage" id="stage">
@@ -571,6 +582,16 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       </div>
     </div>
 
+    <!-- §325 M3 — ONBOARDING SETTINGS (opened from the strip on that page) -->
+    <div class="sheet" id="sheet-onb">
+      <div class="grab"><i></i></div>
+      <div class="sheet-head">
+        <div><h3><span class="i18n-en">Onboarding</span><span class="i18n-cn">引导页</span></h3></div>
+        <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="sheet-body" id="onb-body"></div>
+    </div>
+
     <div class="toast" id="toast"></div>
   </div>
 
@@ -655,6 +676,7 @@ window.addEventListener('message', (e) => {
     M.dirty = !!d.dirty;
     applyLang();
     updatePageName();
+    onbStrip();   // §325 M3
     updateDirty();
     renderOutline();
     updateActbar();
@@ -1425,6 +1447,106 @@ function mxProduct(n, set) {
   return d;
 }
 
+/* ── §325 M3 · ONBOARDING SETTINGS ─────────────────────────────────────
+   On the Onboarding page the desktop editor shows, in place of the "is this
+   page linked from Home" banner, who sees the page, its version, Re-show to
+   all, and the Get Started button's words (cms.html renderOnboardingSettings).
+   Here: a strip under the view switch on that page, opening a sheet with the
+   same controls on the same endpoints. Re-show to all asks first, in the
+   desktop's words, because it puts the page back in front of every returning
+   customer. A refusal stays in the sheet; the toast only confirms. */
+const ONB_MODES = [['new', 'New users only', '仅新用户'], ['version', 'Everyone until I re-show', '所有用户(到下次重置)'],
+  ['always', 'Everyone, every launch', '每个用户每次启动'], ['off', 'Off', '关闭']];
+const ONB = { data: null, loading: false, err: '', busy: '', saveErr: '', confirm: false };
+async function onbApi(path, opts) {
+  const o = Object.assign({ credentials: 'same-origin' }, opts || {});
+  if (o.body !== undefined) { o.headers = { 'Content-Type': 'application/json' }; o.body = JSON.stringify(o.body); }
+  const r = await fetch('/api/retail-admin/cms/onboarding-settings' + (path || ''), o);
+  if (r.status === 401) { location.href = '/backend/login'; throw new Error('auth'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j || !j.success) throw new Error((j && j.error) || ('HTTP ' + r.status));
+  return j.data;
+}
+function onbModeLabel(v) { const m = ONB_MODES.find(x => x[0] === v); return m ? cuT(m[1], m[2]) : String(v || ''); }
+function onbLoad() {
+  ONB.loading = true; ONB.err = '';
+  return onbApi('').then(d => { ONB.data = d; }).catch(e => { if (e.message !== 'auth') ONB.err = cuT('Could not load', '加载失败'); })
+    .then(() => { ONB.loading = false; onbStrip(); if (M.sheet === 'onb') renderOnb(); });
+}
+function onbStrip() {
+  const el = $('#onb-strip'); if (!el) return;
+  if (M.page !== 'onboarding') { el.hidden = true; return; }
+  el.hidden = false;
+  if (!ONB.data && !ONB.loading && !ONB.err) onbLoad();
+  const d = ONB.data;
+  el.innerHTML = '<b>' + esc(cuT('Onboarding', '引导页')) + '</b> · ' + esc(cuT('show to', '显示给')) + ' ' +
+    (d ? '<span>' + esc(onbModeLabel(d.show_to)) + '</span> <span class="v">v' + esc(d.version) + '</span>'
+       : '<span>' + esc(ONB.err || cuT('Loading…', '加载中…')) + '</span>') +
+    '<span class="go">›</span>';
+}
+function openOnb() {
+  ONB.confirm = false; ONB.saveErr = '';
+  if (!ONB.data) onbLoad();
+  renderOnb(); openSheet('onb');
+}
+function renderOnb() {
+  const body = $('#onb-body'); if (!body) return;
+  const d = ONB.data;
+  if (!d) {
+    body.innerHTML = ONB.err ? '<div class="pc-err">' + esc(ONB.err) + '</div><button class="pc-btn" data-a="retry">' + esc(cuT('Try again', '重试')) + '</button>'
+      : '<div class="pc-hint">' + esc(cuT('Loading…', '加载中…')) + '</div>';
+    const r = body.querySelector('[data-a=retry]'); if (r) r.onclick = () => { ONB.err = ''; onbLoad(); renderOnb(); };
+    return;
+  }
+  const busy = ONB.busy;
+  const nl = d.next_label || {};
+  body.innerHTML =
+    (ONB.saveErr ? '<div class="pc-err">' + esc(ONB.saveErr) + '</div>' : '') +
+    '<div class="fld"><label>' + esc(cuT('show to', '显示给')) + '</label><select data-a="mode"' + (busy ? ' disabled' : '') + '>' +
+      ONB_MODES.map(([v, en, cn]) => '<option value="' + v + '"' + (v === d.show_to ? ' selected' : '') + '>' + esc(cuT(en, cn)) + '</option>').join('') + '</select></div>' +
+    (ONB.confirm
+      ? '<div class="onb-confirm"><b>' + esc(cuT('Re-show onboarding to ALL returning users on their next launch?', '在所有已访问过的用户下次启动时再次显示引导页?')) + '</b>' +
+        '<p>' + esc(cuT('New users see it anyway. Has no effect when mode is "Off".', '新用户本来就会看到。模式为「关闭」时不生效。')) + '</p>' +
+        '<div class="pc-two"><button class="pc-btn" data-a="no"' + (busy ? ' disabled' : '') + '>' + esc(cuT('Cancel', '取消')) + '</button>' +
+        '<button class="pc-btn" data-a="yes"' + (busy ? ' disabled' : '') + '>' + esc(busy === 'bump' ? cuT('Saving…', '保存中…') : cuT('Re-show to all', '向所有人重新显示')) + '</button></div></div>'
+      : '<div class="fld"><button class="pc-btn" data-a="bump"' + (busy ? ' disabled' : '') + '>' + esc(cuT('Re-show to all', '向所有人重新显示')) + '</button> <span class="v" style="font:500 12px var(--f-mono);color:var(--text-3)">v' + esc(d.version) + '</span>' +
+        '<div class="pc-hint" style="margin:6px 0 0">' + esc(cuT('Increment the onboarding version so every returning user sees the page again on their next launch.', '将引导版本号 +1,所有已访问过的用户下次启动时会再次看到引导页。')) + '</div></div>') +
+    '<div class="fld"><label>' + esc(cuT('Button label', '按钮文字')) + '</label>' +
+      '<div class="mx-pair"><span class="mx-tag">EN</span><input type="text" maxlength="40" data-a="en" placeholder="GET STARTED" value="' + esc(nl.en || '') + '"></div>' +
+      '<div class="mx-pair"><span class="mx-tag">中</span><input type="text" maxlength="40" data-a="cn" placeholder="开始" value="' + esc(nl.cn || '') + '"></div></div>';
+  body.querySelector('[data-a=mode]').onchange = (e) => onbSave({ show_to: e.target.value });
+  const en = body.querySelector('[data-a=en]'), cn = body.querySelector('[data-a=cn]');
+  // Saved when a box is left (as desktop saves on blur), both sides together.
+  const saveLabel = () => onbSave({ next_label: { en: (en.value || '').trim(), cn: (cn.value || '').trim() } });
+  en.onchange = saveLabel; cn.onchange = saveLabel;
+  if (ONB.confirm) {
+    body.querySelector('[data-a=no]').onclick = () => { ONB.confirm = false; renderOnb(); };
+    body.querySelector('[data-a=yes]').onclick = () => onbBump();
+  } else {
+    body.querySelector('[data-a=bump]').onclick = () => { ONB.confirm = true; renderOnb(); };
+  }
+}
+async function onbSave(patch) {
+  ONB.busy = 'save'; ONB.saveErr = ''; renderOnb();
+  try {
+    ONB.data = await onbApi('', { method: 'PUT', body: patch });
+    toast(cuT('Updated', '已更新'));
+  } catch (e) {
+    if (e.message !== 'auth') ONB.saveErr = cuT('Could not save', '保存失败') + ': ' + e.message;
+  } finally { ONB.busy = ''; renderOnb(); onbStrip(); }
+}
+async function onbBump() {
+  ONB.busy = 'bump'; ONB.saveErr = ''; renderOnb();
+  try {
+    const r = await onbApi('/bump', { method: 'POST' });
+    ONB.data = Object.assign({}, ONB.data, { version: r.version, show_to: r.show_to });
+    ONB.confirm = false;
+    toast(cuT('Will re-show — now at v' + r.version, '将重新显示 — 当前 v' + r.version));
+  } catch (e) {
+    if (e.message !== 'auth') ONB.saveErr = cuT('Could not save', '保存失败') + ': ' + e.message;
+  } finally { ONB.busy = ''; renderOnb(); onbStrip(); }
+}
+
 /* ── §299 · PROMO CARDS, ON THE PHONE ─────────────────────────────────
    The quick-edit sheet above handles flat text fields, and sends pictures to
    desktop. A promo card IS a picture (§296), so this block gets its own small
@@ -1954,13 +2076,13 @@ function doRevert() { send('revert'); }                     // iframe shows the 
 
 /* ── sheets ───────────────────────────────────────────────────────── */
 function openSheet(id) {
-  ['add', 'edit', 'design', 'theme'].forEach(s => $('#sheet-' + s).classList.remove('on'));
+  ['add', 'edit', 'design', 'theme', 'onb'].forEach(s => $('#sheet-' + s).classList.remove('on'));
   $('#backdrop').classList.add('on');
   $('#sheet-' + id).classList.add('on');
   M.sheet = id;
 }
 function closeSheet() {
-  ['add', 'edit', 'design', 'theme'].forEach(s => $('#sheet-' + s).classList.remove('on'));
+  ['add', 'edit', 'design', 'theme', 'onb'].forEach(s => $('#sheet-' + s).classList.remove('on'));
   $('#backdrop').classList.remove('on');
   M.editId = null;
   M.sheet = null;
