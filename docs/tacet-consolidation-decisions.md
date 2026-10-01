@@ -26380,3 +26380,60 @@ guards. Each write is the desktop's own (`paBulkApply`, `paBulkDelete`,
    `products:edit`. Delete, in bulk or single, needs `products:delete` and is
    not offered where the catalogue is kept upstream, because the server
    refuses it there. *Select* appears only for someone holding either key.
+
+## §387 — SKU CODE RULES FOR MATERIALS ARE SET FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Settings gained **SKU codes**, the desktop's *Settings → SKU
+codes* tab (`23-sku.js`). This is where the shop says how its material codes
+are shaped for each kind and category, and whether a material saved without a
+code is given one automatically. The screen is read in one call
+(`GET /sku/material`) and written the desktop's way:
+
+| Action | Request |
+|---|---|
+| The switch | `PUT /sku/material/settings {enabled}` |
+| Save a rule | `POST /sku/material/rules`, saved per kind and category |
+| Remove a rule | `DELETE /sku/material/rules/:id` |
+
+1. **The same three cards as the desktop.**
+   - *Automatic SKUs for materials*, with its switch and, when off, the
+     sentence saying what off means.
+   - *Your rules*. Each rule shows what it covers, its code, its scope note,
+     the next code it will issue, a plain-words reading ("DF + the year +
+     3-digit number", or *Custom format*), and how many materials sit under
+     it.
+   - *Fallback*. It can be edited but never removed.
+2. **A rule is edited in a sheet with the desktop's four plain controls:**
+   *Codes start with*, *Followed by* (digits), *Separator* and *Include the
+   year*, plus *Kind* and *Category* (the categories actually in use).
+   - It saves the four controls as fields, and the server composes the code
+     format from them.
+   - *Write the format myself* opens the Advanced field and the server's
+     list of pieces. This is the only place a raw format appears. A piece
+     goes in where the cursor is.
+   - A rule the four controls cannot describe opens in Advanced and is
+     never flattened. Going back to the simple form is refused, in the
+     desktop's words, when the format cannot be shown there.
+   - *Codes will look like* shows three sample codes live, or the problems
+     with the format (empty, an unknown piece, a space) and the warning when
+     there is no number.
+   - The previews use copies of the engine's code-building functions, kept
+     in the browser for display only. A test checks them against
+     `lib/sku-format.js`, the code that actually issues SKUs.
+3. **Removing a rule asks the desktop's danger question**, which says what
+   removing it means: materials already coded keep their SKUs, and new ones
+   are numbered by the rule above it instead.
+4. **The three states.** While a write is out, the control in use disables
+   and shows "…" or *Saving…*, and the other buttons wait. The desktop shows
+   failures as toasts that disappear; here a failure stays where it
+   happened. A refused or failed save stays on the rule's sheet, which stays
+   open, in the desktop's words (the server's detail, or its sentence for
+   the error code). A failed switch or removal stays above the rules. A
+   toast only confirms: *Rule saved* (or the server's warning when it saved
+   with one), *Rule removed*, or *Automatic SKUs are on/off*.
+5. **Gates are the desktop's and the server's.** The Settings row and the
+   screen need `materials:view`, which is the desktop tab's key. Every write
+   needs `materials:edit`, as `lib/cap-routes.js` gates `/sku/`. Someone with
+   view only sees everything and no controls; the switch is shown as On or
+   Off in words.
