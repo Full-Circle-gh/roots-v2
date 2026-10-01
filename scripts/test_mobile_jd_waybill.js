@@ -121,8 +121,9 @@ async function main() {
 
   console.log('\n2 · the question, the desktop\'s way');
   {
-    is(mk().ctx.__x.jdPlan({ shipTo: {} }, SP({ mode: 'air' })).services, [], 'an air parcel asks nothing');
-    is(mk().ctx.__x.jdPlan({ shipTo: {} }, SP({ mode: 'air' })).preset, 'LL-SD-M', '…and ships fresh express');
+    is(mk().ctx.__x.jdPlan({ shipTo: {} }, SP({ mode: 'air' })).services.map((s) => s.code), ['LL-SD-M', 'LL-HD-M', 'ed-m-0001'],
+      'an air parcel: air first, then both ground services (§381)');
+    is(mk().ctx.__x.jdPlan({ shipTo: {} }, SP({ mode: 'air' })).preset, 'LL-SD-M', '…and starts on fresh express');
     const fj = mk().ctx.__x.jdPlan({ shipTo: { province: '福建省' } }, SP({ mode: 'air' }));
     is([fj.preset, fj.services.map((s) => s.code)], ['LL-HD-M', ['LL-HD-M', 'LL-SD-M']], 'into Fujian: the two fresh services, ground first');
     is(mk().ctx.__x.jdPlan({ shipTo: { province: '广西壮族自治区' } }, SP({ mode: 'air' })).landDefault, true, 'Guangxi by prefix');
@@ -144,6 +145,33 @@ async function main() {
     const air = mk({ sp: { mode: 'air' }, province: '福建省' }); open(air); air.CMD.jdSvc('LL-SD-M');
     is([air.ctx.state.ask, air.ctx.state.jd.svc], [null, 'LL-SD-M'], 'on an air parcel\'s own list air is the plan: no question');
     air.CMD.jdSvc('nope'); is(air.ctx.state.jd.svc, 'LL-SD-M', 'a service not offered is ignored');
+    const fjg = mk({ sp: { mode: 'air' }, province: '福建省' }); open(fjg); fjg.CMD.jdSvc('LL-SD-M'); fjg.ctx.state.ask = null; fjg.CMD.jdSvc('LL-HD-M');
+    is([fjg.ctx.state.ask, fjg.ctx.state.jd.svc], [null, 'LL-HD-M'], 'into Fujian ground is the default: going back to it asks nothing');
+  }
+
+  console.log('\n2b · §381 — ground on an air parcel asks, on the pick');
+  {
+    const g = mk({ sp: { mode: 'air', jdNames: [['Dates', '椰枣'], ['Chips', '果干']], jdNoAir: [['Dates', '椰枣']] } }); open(g);
+    has(g.ctx.sheetJd(), 'Ambient · Ground', 'an air parcel\'s sheet lists the ground services');
+    has(g.ctx.sheetJd(), 'Land shipping only — airline rejected: Dates', 'and marks its air row where the airline refuses an item');
+    g.CMD.jdSvc('LL-HD-M');
+    is([g.ctx.state.ask.title, g.ctx.state.ask.confirmLabel, g.ctx.state.ask.cancelLabel], ['Air parcel', 'Create ground waybill anyway', 'Not yet'],
+      'picking ground on an air parcel asks');
+    has(g.ctx.state.ask.body, '<b>Dates, Chips</b> — planned for air. Ground is slower.', 'naming what is in the box');
+    is(g.ctx.state.jd.svc, 'LL-SD-M', 'nothing changes before the answer');
+    g.CMD.askRun(''); is(g.ctx.state.jd.svc, 'LL-HD-M', 'yes: fresh ground');
+    g.ctx.state.ask = null; g.CMD.jdSvc('ed-m-0001');
+    is([g.ctx.state.ask, g.ctx.state.jd.svc], [null, 'ed-m-0001'], 'moving between the ground rows asks nothing more');
+    g.CMD.jdSvc('LL-SD-M'); is([g.ctx.state.ask, g.ctx.state.jd.svc], [null, 'LL-SD-M'], 'back to air asks nothing');
+    const d = mk({ sp: { mode: 'air' } }); open(d); d.CMD.jdSvc('ed-m-0001'); d.ctx.state.ask = null;
+    is(d.ctx.state.jd.svc, 'LL-SD-M', 'declined: air stays');
+    const e = mk({ sp: { mode: 'air' } }); open(e); e.CMD.jdSvc('LL-HD-M');
+    has(e.ctx.state.ask.body, 'This parcel is planned for air.', 'no names loaded: says "this parcel"');
+    const z = mk({ lang: 'zh', sp: { mode: 'air', jdNames: [['Dates', '椰枣']] } }); open(z); z.CMD.jdSvc('LL-HD-M');
+    is([z.ctx.state.ask.title, z.ctx.state.ask.confirmLabel, z.ctx.state.ask.cancelLabel], ['空运包裹', '仍要生成陆运运单', '暂不'], 'in Chinese');
+    has(z.ctx.state.ask.body, '<b>椰枣</b> 计划空运,陆运较慢。仍要生成陆运运单吗?', 'the desktop\'s Chinese sentence');
+    const y = mk({ sp: { mode: 'air' } }); open(y); y.CMD.jdSvc('LL-HD-M'); y.CMD.askRun(''); y.CMD.jdGo(); await tick();
+    is(y.calls.writes.map((w) => w.body.product), ['LL-HD-M'], 'Create & ship books the ground service chosen');
   }
 
   console.log('\n3 · create');
@@ -226,7 +254,9 @@ async function main() {
     for (const s of ["titleEn: 'SF Express only', titleCn: '仅顺丰速运'", "confirmEn: 'Create air waybill anyway', confirmCn: '仍要生成空运运单'",
       "'Cancel the JD pickup / recall this parcel with JD? · 向京东取消揽收 / 拦截此包裹?'", "'JD parcel intercepted (was already collected) · 已拦截在途包裹'",
       "'JD pickup cancelled · 已取消揽收'", "errLabelEn: 'JD label failed', errLabelCn: '生成运单失败'", "errLabelEn: 'JD cancel failed', errLabelCn: '取消揽收失败'",
-      "{ code: 'LL-SD-M',   en: 'Fresh · Air',     cn: '生鲜 · 空运', sub: '生鲜特快 · LL-SD-M' }"]) has(D, s, 'the desktop\'s own words: ' + s.slice(0, 44));
+      "{ code: 'LL-SD-M',   en: 'Fresh · Air',     cn: '生鲜 · 空运', sub: '生鲜特快 · LL-SD-M' }",
+      "titleEn: 'Air parcel', titleCn: '空运包裹'", "confirmEn: 'Create ground waybill anyway', confirmCn: '仍要生成陆运运单'",
+      "'This parcel is planned for air. Ground is slower. Create the ground waybill anyway?'", "'计划空运,陆运较慢。仍要生成陆运运单吗?'"]) has(D, s, 'the desktop\'s own words: ' + s.slice(0, 44));
     has(CORE, "jd_not_configured:      ['JD Logistics is not set up yet — finish it in Settings → Delivery.', '京东物流尚未配置,请在设置 → 配送中完成。']", 'jd_not_configured\'s sentence');
   }
 
