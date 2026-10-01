@@ -176,9 +176,11 @@ section('1 · which fields, in the inspector\'s words');
     }
   });
   it('countdown and kitchen status have the button text their link needs', () => {
-    for (const t of ['countdown_timer', 'kitchen_status']) {
-      const line = CM.split('\n').find((l) => new RegExp('^\\s*' + t + ':\\s*\\[\\[').test(l));
-      assert.ok(line && /'cta_label_en', 'Button label', '按钮文字'/.test(line) && /'cta_label_cn'/.test(line), t);
+    // Since §325 M3 the sheet's text fields are the inspector's, mirrored: both
+    // forms carry the button text, so the phone does.
+    for (const [a, b] of [['function buildCountdownForm(', 'function productPicker('], ['function buildKitchenStatusForm(', 'function buildRecipeStoryForm(']]) {
+      const form = CD.slice(CD.indexOf(a), CD.indexOf(b));
+      assert.ok(/txtPair\(b\.cta_label_en, b\.cta_label_cn/.test(form), a);
     }
   });
   it('in Chinese, the inspector\'s Chinese', () => {
@@ -451,11 +453,11 @@ section('7 · the sheet is not redrawn under a box being typed in');
   });
   it('opening a block asks for fresh lists and clears the last block\'s upload state', () => {
     assert.ok(/_med = \{ busy: null, err: \{\}, manual: \{\}, lib: null \};[^\n]*\n\s*send\('getSelected', \{ id \}\);[^\n]*\n\s*send\('getTargets'\);/.test(CM));
-    assert.ok(/if \(blk && type !== 'promo_cards'\) renderMedia\(body, blk, type\);/.test(CM));
+    assert.ok(/if \(form\) placed = renderMirror\(body, blk, type, form\);[\s\S]{0,200}if \(!placed\) renderMedia\(body, blk, type\);/.test(CM));
   });
-  it('the note at the foot no longer sends pictures or colours to desktop', () => {
+  it('the note at the foot no longer sends pictures or colours to desktop (since §325 M3, nothing)', () => {
     assert.ok(!/Images, colours &amp; advanced options/.test(CM));
-    assert.ok(/cuT\('<b>Advanced options<\/b> for this block are tuned on desktop\. ', '此模块的<b>高级选项<\/b>请在电脑上调整。'\)/.test(CM));
+    assert.ok(!/for this block are tuned on desktop/.test(CM));
   });
 }
 
