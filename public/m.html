@@ -1131,6 +1131,10 @@ const state = {
      with, what is left for a person, the names it read or was pasted, and
      which write is in flight. Built by mtmBlank(), which Open also uses. */
   mtm:mtmBlank(),
+  /* §325 X8d — Meituan bundles: the list, the stores and the names read from
+     Meituan, the products a component can be, the bundle being edited, the
+     two searches, which write is in flight, and each refusal. */
+  mtb:{list:null, tried:false, err:null, stores:null, names:null, prod:null, draft:null, q:'', pq:'', busy:null, note:null, saveErr:null, suggest:null, hint:null},
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
      flight (one at a time, per screen, exactly as the desktop page does it), and
      csNote is { pid, text } so a refusal lands on the card that caused it rather
@@ -2051,6 +2055,8 @@ reg('rqSearch', v=>{
  ['mElmCatQ','mElmCatClr','elmCatQ'],
  ['mCsQ','mCsClr','csQ'],
  ['mChmQ','mChmClr','chmQ'],
+ ['mMtbQ','mMtbClr','mtbQ'],
+ ['mMtbPQ','mMtbPClr','mtbPQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
  ['mOnwProdQ','mOnwProdClr','onwProdQ'],
  ['mOnwCityQ','mOnwCityClr','onwCityQ'],
@@ -31161,6 +31167,7 @@ function x8MtCard(){
       ${sync?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('Reads the current listing names. Changes nothing and matches nothing.','读取当前商品名称,不改动也不匹配任何内容。')}</span>`:''}</div>
     ${x8Err('mtcat')}
     ${canRoute('mtmatch')?`<button class="cta" style="width:100%" onclick="APP.cmd('mtmOpen')">${T('Match names','匹配名称')}</button>`:''}
+    ${canRoute('mtbundles')?`<button class="btn2" style="width:100%" onclick="APP.cmd('mtbOpen')">${T('Bundles','套餐')}</button>`:''}
     ${sync?`<span style="display:flex;gap:8px;flex-wrap:wrap">
       ${x8Btn('x8MtCat',s.catReading?T('Reading…','读取中…'):T('Refresh catalogue','刷新商品名称'),'mtcat',T('Reading…','读取中…'))}
       ${x8Btn('x8MtPush',T('Sync now','立即同步'),'mtpush',T('Queuing…','排队中…'))}</span>
@@ -31773,6 +31780,204 @@ reg('mtmRetry', ()=>{ const s=mtm(); s.tried=false; s.err=null; render(); });
 reg('mtmOpen', ()=>{ if(!canRoute('mtmatch')) return; const seq=(mtm().seq||0)+1; state.mtm=Object.assign(mtmBlank(),{seq}); push('mtmatch'); });
 SUBS.mtmatch={title:['Match names with Meituan','与美团匹配商品名'],render:()=>screenMtMatch()};
 /* §325 X8c-2 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X8d — MEITUAN BUNDLES
+   --------------------------------------------------------------------------
+   The desktop Meituan page's Bundles tab (11-meituan.js mtLoadBundles,
+   mtEditBundle, mtSaveBundle, mtDeleteBundle, mtSuggestBundles): combos sold
+   on Meituan that use up our products, whose stock syncs as the most their
+   components can still make.
+
+   • The list, as the desktop draws it: title, store, components, available
+     now, the cap, whether sync is off, the last push.
+   • Add / Edit — POST /meituan/bundles {id, storeId, storeCode, meituanName,
+     maxQty, syncEnabled, components:[{productId, qty}]}. The title is picked
+     from the names read from Meituan for that store (the desktop's datalist
+     and mtBundleNameCommit), or is the title the bundle already holds; the
+     server refuses anything else (mapWrite.verifyName) and its refusal is
+     said under the field. The switch is carried through unchanged, as the
+     desktop now does, so fixing a component never switches a paused bundle
+     back on. Components are any product, paused ones included.
+   • Delete, after the desktop's question — DELETE /meituan/bundles/:id.
+   • Suggest bundles: combo-looking titles (套餐, Combo, + or &) read from
+     Meituan that are not a bundle yet, each opening Add with its title.
+
+   Every write here is meituan:sync on the server (lib/cap-routes.js), so the
+   buttons are drawn for it; the list reads for the Meituan screen's own keys.
+   ══════════════════════════════════════════════════════════════════════════ */
+const mtb=()=>state.mtb;
+const MTB_PENDING={
+  bPick:['Pick the title from the list. Typing it risks a difference you cannot see.','请从列表中选择套餐名。手动输入可能产生看不出的差异。'],
+  bMatches:['Matches a listing on this store.','与本门店的一个商品相符。'],
+  bStoredBad:['This stored title matches no listing on this store. It can be left alone, or replaced with one from the list.','该已保存的套餐名与本门店的任何商品都不符。可以保持不变,或从列表中换一个。'],
+  refusedOne:['Refused — that name is not in the catalogue. Refresh it and try again.','已拒绝 — 该名称不在商品名称中。请刷新后重试。'],
+};
+function mtbLoad(force){
+  const s=mtb(); if(s.tried&&!force) return; s.tried=true; s.err=null;
+  apiRaw('/meituan/bundles').then(j=>{ s.list=(j&&j.data)||[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+  if(!s.stores) api('/meituan/stores').then(r=>{ s.stores=Array.isArray(r)?r:[]; render(); }).catch(()=>{ s.stores=[]; render(); });
+  if(!s.names) apiRaw('/meituan/listings').then(j=>{ s.names=(j&&j.listings)||{}; render(); }).catch(()=>{ s.names={}; render(); });
+}
+const mtbStoreName=code=>{ const st=(mtb().stores||[]).find(x=>x.code===code)||{}; return (LANG==='en'?(st.nameEn||st.name):(st.name||st.nameEn))||code; };
+const mtbProdLabel=p=>[p.name_cn,p.name_en].filter(Boolean).join(' ')+(p.variant_label?' ('+p.variant_label+')':'');
+const mtbNames=code=>((mtb().names||{})[code]||[]).map(String);
+const mtbKnown=(code,n)=>{ const k=String(n||'').trim(); return !!k&&mtbNames(code).some(x=>x.trim()===k); };
+reg('mtbRetry', ()=>{ mtb().tried=false; render(); });
+function screenMtBundles(){
+  const s=mtb(); mtbLoad();
+  if(s.err&&!s.list) return x1Err(escAttr(String(s.err)),'mtbRetry');
+  if(!s.list) return x1Loading();
+  const can=mCan('meituan:sync');
+  const rows=s.list.map(b=>{
+    const comps=(b.components||[]).map(c=>[c.name_cn,c.name_en].filter(Boolean).join(' ')+(c.variant_label?' ('+c.variant_label+')':'')+(c.qty>1?' ×'+c.qty:'')).join(', ');
+    const facts=[T('Available now ','当前可做 ')+b.available];
+    if(b.max_qty!=null) facts.push(T('cap '+b.max_qty,'上限 '+b.max_qty));
+    if(!b.sync_enabled) facts.push(T('sync off','同步已关'));
+    if(b.last_pushed_at) facts.push(T('pushed '+b.last_pushed_qty+' '+elmAgo(b.last_pushed_at),'推送 '+b.last_pushed_qty+' '+elmAgo(b.last_pushed_at)));
+    return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:6px">
+      <span style="font-size:15px;font-weight:500;overflow-wrap:anywhere">${escAttr(b.meituan_name)}</span>
+      <span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${escAttr(mtbStoreName(b.store_code))} · ${escAttr(comps||T('no components yet','尚未添加组成商品'))}</span>
+      <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(facts.join(' · '))}</span>
+      ${can?`<span style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13.5px" onclick="APP.cmd('mtbEdit',${Number(b.id)})">${T('Edit','编辑')}</button>
+        <button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13.5px;color:var(--brick-ink)" ${s.busy?'disabled':''} onclick="APP.cmd('mtbDelete',${Number(b.id)})">${T('Delete','删除')}</button></span>`:''}
+    </div>`;
+  });
+  const sug=s.suggest;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.55;padding:0 4px">${T('Combos sold on Meituan that use up your products. Stock syncs as the most the components can still make.','美团套餐:库存按组成商品可做的最大份数自动同步。')}</div>
+    ${can?`<span style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="cta" style="flex:1" onclick="APP.cmd('mtbEdit',0)">${T('Add bundle','新增套餐')}</button>
+      <button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('mtbSuggest')">${T('Suggest bundles','套餐建议')}</button></span>`:''}
+    ${sug?(sug.length?`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:13.5px;font-weight:500">${escAttr(T(sug.length+' possible bundle(s) — Create sets the components',sug.length+' 个可能的套餐 — 创建后再设置组成商品'))}</span>
+        ${tmList(sug.map((g,i)=>tmRow({label:escAttr(g.name),note:escAttr(mtbStoreName(g.storeCode)),
+          right:`<button class="btn2" style="width:auto;min-height:32px;padding:0 12px;font-size:13px" onclick="APP.cmd('mtbCreateFrom',${i})">${T('Create','创建')}</button>`})))}</div>`
+      :`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('No combo-looking titles found. Run Match names first (this session), then try again.','未发现疑似套餐的名称。请先运行「匹配名称」(本次会话内),再试一次。')}</div>`):''}
+    ${s.note?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.note))}</div>`:''}
+    ${rows.length?rows.join(''):`<div style="padding:24px 8px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No bundles yet.','暂无套餐。')}</div>`}
+  </div>`;
+}
+SUBS.mtbundles={title:['Bundles','套餐'],render:()=>screenMtBundles()};
+reg('mtbOpen', ()=>{ if(!canRoute('mtbundles')) return; const s=mtb(); s.tried=false; s.list=null; s.suggest=null; s.note=null; s.names=null; push('mtbundles'); });
+/* mtComboCandidates: 套餐 / Combo, or a + / & joiner, and not a bundle yet. */
+reg('mtbSuggest', ()=>{
+  const s=mtb(); if(!mCan('meituan:sync')) return;
+  const out=[];
+  (s.stores||[]).forEach(st=>{
+    const have=new Set((s.list||[]).filter(b=>b.store_code===st.code).map(b=>b.meituan_name));
+    mtbNames(st.code).filter(t=>!have.has(t)&&(/套餐|combo/i.test(t)||/[+＋&]/.test(t))).forEach(t=>out.push({storeCode:st.code,name:t}));
+  });
+  s.suggest=out; render();
+});
+reg('mtbCreateFrom', i=>{ const g=(mtb().suggest||[])[Number(i)]; if(g) mtbBegin(null,g); });
+reg('mtbEdit', id=>{ id=Number(id); mtbBegin(id?(mtb().list||[]).find(b=>b.id===id)||null:null,null); });
+function mtbBegin(existing,prefill){
+  if(!mCan('meituan:sync')||!canRoute('mtbundle')) return;
+  const s=mtb(), first=(s.stores||[])[0]||{};
+  s.draft=existing
+    ? {id:existing.id, storeCode:existing.store_code, meituanName:existing.meituan_name, stored:existing.meituan_name,
+       maxQty:existing.max_qty==null?'':String(existing.max_qty), syncEnabled:Number(existing.sync_enabled)===0?0:1,
+       components:(existing.components||[]).map(c=>({productId:c.product_id, qty:c.qty}))}
+    : {id:null, storeCode:(prefill&&prefill.storeCode)||first.code||'', meituanName:(prefill&&prefill.name)||'', stored:'',
+       maxQty:'', syncEnabled:1, components:[]};
+  s.q=''; s.pq=''; s.hint=null; s.saveErr=null; s.busy=null;
+  if(!s.prod) apiRaw('/meituan/products?includeInactive=1').then(j=>{ s.prod=(j&&j.data)||[]; render(); }).catch(()=>{ s.prod=[]; render(); });
+  push('mtbundle');
+}
+/* mtBundleNameState: what the title field holds, in words, changing nothing. */
+function mtbNameState(){
+  const s=mtb(), d=s.draft, v=String(d.meituanName||'').trim(), code=d.storeCode;
+  if(!v) return {t:T(...MTB_PENDING.bPick),bad:false};
+  if(!mtbNames(code).length) return {t:T('no listings read from this store yet, so nothing can be checked here','尚未从该门店读取商品名称,无法在此核对'),bad:false};
+  if(mtbKnown(code,v)) return {t:T(...MTB_PENDING.bMatches),bad:false};
+  return v===String(d.stored||'').trim()?{t:T(...MTB_PENDING.bStoredBad),bad:true}
+    :{t:T('This name matches no listing on this store. Pick one from the list.','该名称与本门店的任何商品都不符,请从列表中选择。'),bad:true};
+}
+reg('mtbStore', v=>{ const s=mtb(); if(!s.draft||!(s.stores||[]).some(x=>x.code===v)) return; s.draft.storeCode=v; s.q=''; render(); });
+reg('mtbQ', v=>{ const s=mtb(); s.q=String(v||''); searchClearShow('mMtbClr',!!s.q); x1Paint('mMtbHits',mtbHits); });
+function mtbHits(){
+  const s=mtb(), q=String(s.q||'').trim().toLowerCase(); if(!q) return '';
+  const hits=mtbNames(s.draft.storeCode).filter(n=>n.toLowerCase().includes(q));
+  if(!hits.length) return `<div style="font-size:12.5px;color:var(--text-secondary)">${T('No matches','无匹配')}</div>`;
+  return `<div class="list">${hits.slice(0,40).map((n,i)=>`${i?'<div class="sep"></div>':''}<button class="row" style="min-height:44px;padding:10px 14px;text-align:left" onclick="APP.cmd('mtbPick',${i})"><span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${escAttr(n)}</span></button>`).join('')}</div>`;
+}
+reg('mtbPick', i=>{ const s=mtb(); if(!s.draft) return; const q=String(s.q||'').trim().toLowerCase();
+  const n=mtbNames(s.draft.storeCode).filter(x=>x.toLowerCase().includes(q))[Number(i)];
+  if(!n||!mtbKnown(s.draft.storeCode,n)) return;
+  s.draft.meituanName=n.trim(); s.q=''; s.saveErr=null; render(); });
+reg('mtbCap', v=>{ const d=mtb().draft; if(d) d.maxQty=String(v==null?'':v); });
+reg('mtbPQ', v=>{ const s=mtb(); s.pq=String(v||''); searchClearShow('mMtbPClr',!!s.pq); x1Paint('mMtbPHits',mtbProdHits); });
+function mtbProdHits(){
+  const s=mtb(), q=String(s.pq||'').trim().toLowerCase(); if(!q||!s.prod) return '';
+  const have=new Set(s.draft.components.map(c=>Number(c.productId)));
+  const hits=s.prod.filter(p=>!have.has(p.id)&&(mtbProdLabel(p)+' '+(p.sku||'')).toLowerCase().includes(q)).slice(0,30);
+  if(!hits.length) return `<div style="font-size:12.5px;color:var(--text-secondary)">${T('No matches','无匹配')}</div>`;
+  return `<div class="list">${hits.map((p,i)=>`${i?'<div class="sep"></div>':''}<button class="row" style="min-height:44px;padding:10px 14px;text-align:left" onclick="APP.cmd('mtbAddComp',${Number(p.id)})">
+    <span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${escAttr(mtbProdLabel(p)+(p.is_active?'':T(' · inactive',' · 已下架')))}</span><span style="display:flex;color:var(--text-secondary)">${ic('plus',16)}</span></button>`).join('')}</div>`;
+}
+reg('mtbAddComp', pid=>{ const s=mtb(), d=s.draft; pid=Number(pid); if(!d||!(s.prod||[]).some(p=>p.id===pid)) return;
+  if(d.components.some(c=>Number(c.productId)===pid)) return;
+  d.components.push({productId:pid, qty:1}); s.pq=''; render(); });
+reg('mtbCompQty', (i,v)=>{ const c=mtb().draft&&mtb().draft.components[Number(i)]; if(c) c.qty=Math.max(1,parseInt(v,10)||1); });
+reg('mtbRmComp', i=>{ const d=mtb().draft; if(d){ d.components.splice(Number(i),1); render(); } });
+reg('mtbSave', ()=>{
+  const s=mtb(), d=s.draft; if(!d||s.busy||!mCan('meituan:sync')) return;
+  const store=(s.stores||[]).find(x=>x.code===d.storeCode);
+  const name=String(d.meituanName||'').trim();
+  if(!store){ s.saveErr=E('Pick a store.','请选择门店。'); render(); return; }
+  if(!name){ s.saveErr=E('Enter the Meituan bundle title.','请选择美团套餐名。'); render(); return; }
+  s.busy='save'; s.saveErr=null; render();
+  apiWrite('/meituan/bundles',{id:d.id, storeId:store.id, storeCode:d.storeCode, meituanName:name,
+    maxQty:d.maxQty===''?null:d.maxQty, syncEnabled:d.syncEnabled===0?0:1, components:d.components.map(c=>({productId:c.productId,qty:c.qty}))},'POST').then(()=>{
+    s.busy=null; showToast(T('Bundle saved.','套餐已保存。'));
+    if(state.stack.length&&state.stack[state.stack.length-1].route==='mtbundle') pop();
+    mtbLoad(true);
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+    s.saveErr=e&&e.refused?E(...e.words)
+      :(e&&(e.code==='name_not_in_catalogue'||e.code==='catalogue_not_read'))?E(T(...MTB_PENDING.refusedOne)+' '+tmOneLang(e.message||''),T(...MTB_PENDING.refusedOne))
+      :E('Save failed: '+tmOneLang((e&&e.message)||''),'保存失败:'+tmOneLang((e&&e.message)||''));
+    render(); });
+});
+reg('mtbDelete', id=>{
+  const s=mtb(); id=Number(id); if(s.busy||!mCan('meituan:sync')||!(s.list||[]).some(b=>b.id===id)) return;
+  state.askErr=null;
+  state.ask={title:T('Delete this bundle?','删除这个套餐?'), body:T('This only stops auto-stock — it does not touch the Meituan listing.','这只会停止自动同步库存 — 不会改动美团上的商品。'),
+    confirmLabel:T('Delete bundle','删除套餐'), danger:true,
+    run:()=>{ s.busy='del'; s.note=null; render();
+      apiWrite('/meituan/bundles/'+id,null,'DELETE').then(()=>{ s.busy=null; showToast(T('Deleted.','已删除。')); mtbLoad(true); })
+        .catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+          s.note=e&&e.refused?E(...e.words):E('Delete failed: '+tmOneLang((e&&e.message)||''),'删除失败:'+tmOneLang((e&&e.message)||'')); render(); }); }};
+  render();
+});
+function screenMtBundle(){
+  const s=mtb(), d=s.draft;
+  if(!d) return x1Loading();
+  const st=mtbNameState(), lbl=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>`;
+  const comps=d.components.map((c,i)=>{ const p=(s.prod||[]).find(x=>x.id===Number(c.productId));
+    return tmRow({label:escAttr(p?mtbProdLabel(p):'#'+c.productId),right:`<span style="display:flex;align-items:center;gap:8px">
+      <input type="number" min="1" inputmode="numeric" value="${Number(c.qty)||1}" aria-label="${escAttr(T('qty','数量'))}" style="width:64px" onchange="APP.cmd('mtbCompQty',${i},this.value)">
+      <button class="btn2" style="width:auto;min-height:32px;padding:0 10px;font-size:13px" aria-label="${escAttr(T('Remove','移除'))}" onclick="APP.cmd('mtbRmComp',${i})">${ic('x',15)}</button></span>`}); });
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <label style="display:block">${lbl(T('Store','门店'))}<select style="width:100%" onchange="APP.cmd('mtbStore',this.value)">${(s.stores||[]).map(x=>`<option value="${escAttr(x.code)}"${x.code===d.storeCode?' selected':''}>${escAttr(mtbStoreName(x.code))}</option>`).join('')}</select></label>
+    <div>${lbl(T('Meituan bundle title — pick it from the list','美团套餐名 — 从列表中选择'))}
+      <div style="font-size:15px;overflow-wrap:anywhere;margin-bottom:6px">${d.meituanName?escAttr(d.meituanName):'<span style="color:var(--text-secondary)">—</span>'}</div>
+      <div style="font-size:12.5px;line-height:1.5;color:${st.bad?'var(--amber-ink)':'var(--text-secondary)'};margin-bottom:8px">${escAttr(st.t)}</div>
+      ${mtbNames(d.storeCode).length?`${searchBox(`<input id="mMtbQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('mtbQ',this.value)">`,'mMtbClr',!!s.q)}
+      <div id="mMtbHits" style="margin-top:8px">${mtbHits()}</div>`:''}</div>
+    <label style="display:block">${lbl(T('Maximum stock cap (optional)','库存上限（可选）'))}<input type="number" min="0" inputmode="numeric" value="${escAttr(d.maxQty)}" placeholder="${escAttr(T('none','无'))}" style="width:100%" oninput="APP.cmd('mtbCap',this.value)"></label>
+    <div>${lbl(T('Components — the products this bundle uses up','组成商品 — 该套餐消耗的商品'))}
+      ${comps.length?tmList(comps):`<div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:8px">${T('No components yet — add at least one.','尚未添加组成商品，至少添加一个。')}</div>`}
+      <div style="margin-top:8px">${searchBox(`<input id="mMtbPQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.pq)}" placeholder="${T('Search products…','搜索商品…')}" oninput="APP.cmd('mtbPQ',this.value)">`,'mMtbPClr',!!s.pq)}</div>
+      <div id="mMtbPHits" style="margin-top:8px">${mtbProdHits()}</div></div>
+    ${s.saveErr?`<div style="font-size:13.5px;color:var(--brick-ink);line-height:1.5">${escAttr(String(s.saveErr))}</div>`:''}
+    <button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('mtbSave')">${s.busy==='save'?T('Saving…','保存中…'):T('Save','保存')}</button>
+  </div>`;
+}
+SUBS.mtbundle={title:['Bundle','套餐'],titleOf:()=>{ const d=mtb().draft; return d&&d.id?T('Edit bundle','编辑套餐'):T('Add bundle','新增套餐'); },
+  render:()=>screenMtBundle()};
+/* §325 X8d ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -42650,6 +42855,9 @@ const ROUTE_CAP={
   /* §325 X8c-2. Match names writes names, meituan:map; its Start matching also
      reads the listings again (meituan:sync) and is drawn only with both. */
   mtmatch:'meituan:map',
+  /* §325 X8d. Bundles read for the Meituan screen's own key; every bundle
+     write is meituan:sync on the server, and the editor is nothing but writes. */
+  mtbundles:['meituan:view','meituan:sync'], mtbundle:'meituan:sync',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
