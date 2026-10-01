@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.260 · 2026-09-30 · §362 CUSTOMER-FACING ORDER WRITES ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Customer-facing order writes on the phone (§362)*.
+
+**v1.259 · 2026-09-30 · §361 PARCELS AND STATUS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Parcels and status on the phone (§361)*.
+
+**v1.258 · 2026-09-30 · §360 DELIVERY ZONES ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Delivery zones on the phone (§360)*.
+
 **v1.257 · 2026-09-30 · §359 PRINTERS, COURIER KEYS, QINGYUN AND PUSH NOTIFICATIONS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP, SOME TRIMMED OR SPLIT.** See *Printers, courier keys, Qingyun and Push notifications on the phone (§359)*.
 
 **v1.256 · 2026-09-30 · §357 STORES, STOCK STAFF AND TEAM DEVICES ON THE PHONE — 2 STRINGS COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP OR THE PHONE.** See *Stores, their stock staff, and team devices on the phone (§357)*.
@@ -11280,3 +11286,123 @@ URL`, `Enter an 11-digit mainland mobile`, `Fill in all four fields first`,
 `Bad phone number`, `Only qyapi.weixin.qq.com URLs`, `Paste a webhook
 first`). `Save settings · 保存设置` and `Settings saved · 设置已保存`. The
 masked-secret line `… — leave blank to keep · … — 留空保持不变`.
+
+## Delivery zones on the phone (§360)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the Delivery
+zones list and the zone sheet (`public/m.html`). Copied whole from the desktop
+(`public/retail-admin.html`, `06-delivery.js`):
+
+- list: `Delivery zones · 配送区`, `Search zone · 搜索配送区…`, `Free over · 满额免运`,
+  `default · 默认`, `Same-day · 同日`, `Day-only · 仅按日`, `Time-slot · 按时段`,
+  `City · 城市`, `Province · 全省`, `City-wide · 全市`, `No matches. · 无匹配结果`,
+  `No zones yet — click + Add zone above. · 暂无配送区,请点上方「+ 添加配送区」`;
+- sheet: `Add zone · 添加配送区`, `Edit zone · 编辑配送区`, `Duplicate of X · 复制 X` and its
+  sentence, the add sentence, `Guangzhou district · 广州区/县`, `Other city · 其他城市`,
+  `Districts · 区/县`, `(pick one or more) · (可多选)`, `Cities · 城市`, `N selected · 已选 N`,
+  `Display · 中`, `Display · EN · 英文`, `Pricing · 定价`, `Base fee · 基础运费`,
+  `MAX flat · 任意距离封顶`, `Packing / item · 每件包装费`, `Packing cap · 包装费上限`,
+  `By weight (optional) · 按重量计费(可选)`, `Scheduling · 时间`,
+  `Earliest lead (days) · 提前天数`, `Furthest day · 最远天数`, `Kitchen hours · 开放时间`,
+  `Slot length (min) · 时段长度`, `Allow same-day · 允许同日送达`,
+  `Day-only (no time slots) · 仅按日`, `Active · 启用`, `Duplicate · 复制配送区`;
+- copy panel: `Copy settings to other zones · 复制设置到其他配送区` and its sentence,
+  `Which fields · 复制哪些字段`, the three bundles and their lines,
+  `Which zones · 复制到哪些配送区`, `All GZ · 所有广州区`, `All cities · 所有外地`,
+  `All · 全选`, `Clear · 清空`, `N zone(s) selected · 已选 N 个配送区`,
+  `No other zones to copy to. Add some first. · 没有其他配送区可复制。请先添加。`,
+  `Apply · 应用`, `Apply settings · 应用`;
+- outcomes and refusals: `Zone saved · 配送区已保存`, `Zone added / N zones added · 已添加 N 个配送区`,
+  `Added N, M failed · 已添加 N,失败 M`, `Zone deleted · 配送区已删除`,
+  `Delete delivery zone "X"? · 删除配送区 "X"？`, `Delete zone · 删除`, `Delete failed · 删除失败`,
+  `Applied to N zone(s) · 已应用到 N 个配送区`, `N ok, M failed · N 成功, M 失败`,
+  `Pick at least one district · 请至少选一个区`, `Add at least one city · 请至少添加一个城市`,
+  `Pick at least one zone · 请选择配送区`, `Pick at least one field bundle · 请选择字段`,
+  `X already has a zone · X 已存在`, `Enter a whole number, 0 or more · 请输入 0 或以上的整数`.
+
+The phone's own, already live: `Delivery zones · 配送范围` on the Delivery summary
+card (kept; the new list and row use the desktop's 配送区 — two words for one thing,
+flagged for Ash), `Enter a price — a number, 0 or more. · 请输入价格 — 0 或以上的数字。`,
+`Save failed: · 保存失败:`, `On · 开`, `Off · 关`, `Save · 保存`, `Saving… · 保存中…`,
+`Cancel · 取消`, `Close · 关闭`, `Delete · 删除`, `Working… · 处理中…`, `Loading… · 加载中…`,
+`Could not load this. · 无法加载。`, `Try again · 重试`, and the save-refusal sentence.
+Placeholders are figures or the catalogue's own `深圳 · Shenzhen`, never an
+English-only phrase.
+
+## Parcels and status on the phone (§361)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the order
+sheet's More sheet, parcel cards and the split-suggestion card
+(`public/m.html`). Copied whole from the desktop (`public/retail-admin/04-orders.js`):
+
+- `Hold for restock · 等待补货`;
+- recovery: `This parcel was already out when the order was cancelled · 订单取消时此包裹已发货`,
+  `Say what became of it. Only "it came back" puts the stock on the shelf. · 请确认其去向。仅“已收回”会把库存退回货架。`,
+  `It came back · 已收回`, `It did not come back · 未收回`,
+  `Put this parcel back on the shelf? · 把此包裹退回货架?` and its body,
+  `Record this parcel as not recovered? · 登记此包裹未收回?` and its body,
+  `Recovered · 已收回`, `Not recovered · 未收回`, `Parcel recovered · 包裹已收回`, `Recorded · 已登记`;
+- supplier: the "Ships directly from the supplier…" instruction,
+  `Mark this parcel delivered · 标记此包裹已送达`, `Mark parcel delivered? · 标记包裹已送达?` and its
+  body, `Mark delivered · 标记已送达`, `Parcel delivered · 包裹已送达`;
+- method: `Dispatch method · 配送方式`, `Rider · 骑手配送`, `JD logistics · 京东物流`,
+  `Switched to rider · 已改为骑手配送`, `Switched to JD logistics · 已改为京东物流`;
+- `Air delay re-opened · 空运延误已恢复`, `Undo · 撤销`;
+- split: `Ship part later · 分批发货`, the tick instruction,
+  `Move to follow-up parcel · 移入后补包裹`, `Moved to follow-up parcel · 已移入后补包裹`,
+  `Tick at least one item to ship later · 请至少勾选一项`;
+- suggestion: `Suggested: split into 2 packages · 拆分为 2 个包裹`, `save ¥N · 节省 ¥N`,
+  `Current freight ¥A → split freight ¥B · 当前 ¥A → 拆后 ¥B`, `Air package · 空运包裹`,
+  `Land package · 陆运包裹`, `Apply · 拆分`, `Dismiss · 忽略`, `Split applied · 拆分完成`.
+
+| String | Status |
+|---|---|
+| `N products · N 款` on a suggested package | **the phone's own live pair** (countLabel), in place of the desktop's English-only `N items` on the same line. |
+
+The phone's own, already live: `Working… · 处理中…`, `Cancel · 取消`, `Air delay handled · 空运延误已处理`,
+and the refusal sentences.
+
+## Customer-facing order writes on the phone (§362)
+
+**Nothing composed, 2026-10-01.** These are operator strings only (Rule 1):
+the told card, the Ship to and Payment cards, the ship-to sheet and the
+store picker in `public/m.html`.
+
+**Copied whole from the desktop (`public/retail-admin/04-orders.js`):**
+
+- **Tell them again:** `Try telling them again · 重新通知顾客`, `Sending… · 发送中…`,
+  `Trying again — the result appears below in a moment. · 正在重试,稍后在下方显示结果。`
+- **Edit ship-to:**
+  - `Edit ship-to · 修改收货地址`, `This changes the address on this order only. · 仅修改此订单的收货地址。`
+  - the field labels `Recipient name · 收货人`, `Phone · 电话`, `Province · 省 / 市`, `City · 市`,
+    `District · 区 / 县`, `Street / building · 街道 / 楼栋`, `Unit / floor (optional) · 单元 / 楼层(可选)`
+  - `Also update the customer’s saved address · 同时更新顾客保存的地址`
+  - `Recipient name is required · 收货人不能为空`, `Street / building is required · 街道 / 楼栋不能为空`
+  - `Address updated · 地址已更新`, `Order updated · 订单已更新 · ` with `couldn’t match the saved address · 未找到对应的保存地址`,
+    `no customer on file · 无顾客记录`, `saved address not updated · 保存地址未更新`
+- **Make address Chinese:**
+  - `Make address Chinese · 转为中文地址`,
+    `Check the Chinese address, edit if needed, then save. · 请核对中文地址,如需可修改,然后保存。`
+  - `Translating address… · 正在翻译地址…`, `As entered · 原始地址`, `Chinese address · 中文地址`
+  - the four map levels `matched the building · 匹配到楼栋门牌`, `matched the street · 匹配到道路`,
+    `only matched the district centre · 仅匹配到区域中心`, `no map match · 地图无匹配`
+  - `different city! · 城市不符!`, `Map reads this as · 地图识别为`
+  - `Update this order (prints on the waybill) · 更新此订单(用于运单打印)`,
+    `Also fix the customer’s saved address · 同时更新顾客保存的地址`, `Pick at least one place to save · 请至少选择一处保存`
+  - `Translation service is off · 翻译服务未启用`, `Couldn’t translate the address · 地址翻译失败`,
+    `Pickup order — no shipping address · 自提订单 — 无收货地址`
+- **Read the screenshot again:**
+  - `Try reading again · 重新识别`, `Reading … · 识别中 …`
+  - `Verified ✓ · 核对通过 ✓`, `Read it — does not match · 已识别 · 不一致`,
+    `Still could not read — try again or verify manually · 仍无法识别 · 请重试或人工核对`
+  - `Re-run failed (code) · 重新识别失败 (code)`
+- **Reprint:** `Print at which store? · 在哪个门店打印？`, and from `01-core.js`
+  `No printer is set up for that location. · 该门店未配置打印机。`
+
+**Phone pairs already live:** `Try again · 重试`, `Cancel · 取消`, `Save · 保存`,
+`Saving… · 保存中…`, `Close · 关闭`, `Sent to the printer · 已发送到打印机`, and the
+refusal and "did not go through" sentences.
+
+| String | Note |
+|---|---|
+| `Edit ship-to` | The desktop has two Chinese renderings: 修改收货地址 on the order drawer's Ship to card, 修改收货信息 on the three quick panels (missed delivery date, place the point). The phone uses the drawer's, because its button sits on the same card. **For Ash:** pick one for both. |
