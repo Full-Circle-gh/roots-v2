@@ -335,7 +335,11 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         'public/retail-admin/07-content-billing.js', 'public/retail-admin/09-products.js', 'public/retail-admin/10-extras.js',
         'public/retail-admin/17-setup-guide.js', 'public/retail-admin/31-product-page.js',
       ], 'PUT /config: the desktop files, the two editors and the product editor');
-      is((M.match(/apiWrite\('\/config',\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\('\/config',\{\[?'?/, '').split(/['\]]/)[0]).sort(),
+      // Inline bodies (apiWrite('/config',{...})) plus the history-filed form
+      // (§333: Resume delivery builds `body` and writes /config?history=…).
+      const inlineFam = (M.match(/apiWrite\('\/config',\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\('\/config',\{\[?'?/, '').split(/['\]]/)[0]);
+      const historyFam = (M.match(/const body=\{'([a-zA-Z.]+)'[^}]*\};[\s\S]{0,300}?apiWrite\('\/config\?history=/g) || []).map((s) => s.match(/const body=\{'([a-zA-Z.]+)'/)[1]);
+      is([...inlineFam, ...historyFam].sort(),
         ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'], 'the phone writes four families, each asserted in section 2');
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
