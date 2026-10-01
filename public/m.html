@@ -1403,6 +1403,13 @@ const state = {
   /* §325 O1 — the refund panel's History, unfolded on demand for ONE order
      (id), read from GET /orders/:id/refund/events. */
   rfHist:{open:false, id:null, busy:false, err:false, rows:null},
+  /* §325 O2 — the Orders list scoped to one customer ({id, name}) from the
+     record's "View all N orders"; null = every customer. */
+  ordCust:null,
+  /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
+     the read failed, [] = none saved. busy names the write in flight; err is
+     a refusal, kept on the sheet until the next write. */
+  ordViews:{open:false, rows:undefined, loading:false, busy:null, err:null},
   liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
@@ -2108,12 +2115,141 @@ reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
 reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
 reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
-reg('ordersGo', f=>{ forgetPushed(); state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; markOrdersSeen(); loadOrdersPage(); });
+reg('ordersGo', f=>{ forgetPushed(); state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; state.ordCust=null; markOrdersSeen(); loadOrdersPage(); });
 reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; forgetPushed(); state.tab='orders'; state.stack=[]; loadOrdersPage(); });
 reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
 reg('ordersRetry', ()=>{ state.ordersLoadErr=null; loadOrdersPage(); });
 reg('custRetry', ()=>{ state.custLoadErr=null; loadCustomers(); });
-reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
+reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; state.ordCust=null; loadOrdersPage(); });
+/* ── §325 O2 — ONE CUSTOMER'S ORDERS ─────────────────────────────────────
+   The desktop's ordViewCustomerOrders: the customer record's "View all N
+   orders" opens the Orders list scoped to that customer (customer_id, an
+   exact match, never the free-text search). "All N" promises the whole
+   history, so every other filter is put back to All on the way in — a status
+   left lit from before would show fewer than N and contradict the promise. The
+   record, and an order it was opened over, close: the list is where the
+   operator asked to go. The scope shows as a clearable chip and is dropped by
+   Clear filters and by any Home row that opens a worklist. */
+reg('ordViewCust', ()=>{
+  const d=state.custDetail, c=d&&d.customer;
+  if(!c||c.id==null) return;
+  const id=Number(c.id); if(!Number.isFinite(id)) return;
+  state.ordCust={id, name:(c.nickname&&String(c.nickname).trim())||('#'+id)};
+  state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ='';
+  state.custId=null; state.custDetail=null; state.caddr=null;
+  state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=false;
+  forgetPushed(); state.stack=[]; state.tab='orders';
+  loadOrdersPage();
+});
+reg('ordClearCust', ()=>{ state.ordCust=null; loadOrdersPage(); });
+/* ── §325 O2 — THE CSV ─────────────────────────────────────────────────────
+   The desktop's ordExportCsv: every order the list is showing, not the page on
+   screen, at exactly the list's filters (ordersFilterParams, the list's own
+   builder, customer scope included). The server streams it with a
+   Content-Disposition, so a plain navigation is the whole of it, as
+   custExport's is. Drawn for orders:export (screenOrders). */
+reg('ordExport', ()=>{
+  if(!mCan('orders:export')) return;
+  const s=ordersFilterParams().toString();
+  location.href=API+'/orders/export.csv'+(s?'?'+s:'');
+});
+/* ── §325 O2 — SAVED VIEWS (the desktop's 25-views.js, screen 'orders') ─────
+   A view is a name and the list's filter keys, the server's keys, so one saved
+   on the desktop applies here and the other way round. Private when saved,
+   shared on purpose. Nothing is restored on open and there is no default view:
+   a view applies when somebody picks it. The customer scope is left out of
+   both halves, as on the desktop — it is one journey into one record, not a
+   view of the shop's work. No capability: the routes gate nothing and every
+   view belongs to the person who saved it; Share and Delete are drawn only on
+   one's own, because the server refuses anyone else's. */
+function ordViewRead(){
+  const q={};
+  for(const [k,v] of ordersFilterParams().entries()){ if(k!=='customer_id') q[k]=v; }
+  return q;
+}
+function ordViewsLoad(){
+  const v=state.ordViews; v.loading=true;
+  return api('/views?screen=orders').then(rows=>{
+    v.rows=Array.isArray(rows)?rows:[]; v.loading=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    v.rows=null; v.loading=false; render();
+  });
+}
+reg('ordViewsOpen', ()=>{ const v=state.ordViews; v.open=true; v.err=null; render(); ordViewsLoad(); });
+reg('ordViewsClose', ()=>{ const v=state.ordViews; v.open=false; v.err=null; render(); });
+reg('ordViewsRetry', ()=>{ state.ordViews.rows=undefined; render(); ordViewsLoad(); });
+/* Start from All, so a view that does not mention the store leaves no store
+   filter behind. A key this phone has no chip for, or a store that no longer
+   exists, falls to All — showing MORE than the view promised is the safe
+   direction, the desktop's own rule for a deleted shop. */
+reg('ordViewApply', id=>{
+  const v=state.ordViews;
+  const row=(Array.isArray(v.rows)?v.rows:[]).find(x=>x&&x.id===id);
+  if(!row) return;
+  const q=row.query||{};
+  const back=(map,val)=>{ if(!val) return 'all'; const k=Object.keys(map).find(k=>k!=='all'&&map[k]===val); return k||'all'; };
+  state.statusF=back(STATUS_PARAM,q.status);
+  state.channelF=back(CHANNEL_PARAM,q.channel);
+  state.storeF=(q.store_id&&(state.stores||[]).some(s=>String(s.id)===String(q.store_id)))?String(q.store_id):'all';
+  state.orderQ=q.q?String(q.q):'';
+  state.ordCust=null;
+  v.open=false; v.err=null;
+  loadOrdersPage();
+});
+reg('ordViewSave', ()=>{
+  const v=state.ordViews;
+  const query=ordViewRead();
+  if(!Object.keys(query).length||v.busy) return;
+  state.ask={title:T('Name this view','为视图命名'),
+    body:T('It appears on this screen, for you. Share it with the team from the menu afterwards.','视图将出现在此页面，仅您可见。保存后可在菜单中共享给团队。'),
+    fields:[{id:'name',label:T('Name','名称'),placeholder:T('Unpaid at Tianhe','天河店未付款')}],
+    confirmLabel:T('Save','保存'),
+    validate:vals=>vals.name?null:T('Name is required','名称必填'),
+    run:vals=>{
+      const name=String(vals.name||'').trim().slice(0,60);
+      v.busy='save'; v.err=null; render();
+      apiWrite('/views',{screen:'orders',name,query}).then(()=>{
+        v.busy=null; showToast(T('View saved','视图已保存')); ordViewsLoad();
+      }).catch(e=>{
+        v.busy=null; if(String(e.message)==='auth') return;
+        v.err=E('Could not save the view','保存视图失败'); render();
+      });
+    }};
+  render();
+});
+reg('ordViewShare', (id,on)=>{
+  const v=state.ordViews; if(v.busy) return;
+  const shared=!!Number(on);
+  v.busy='share'+id; v.err=null; render();
+  apiWrite('/views/'+id,{shared},'PATCH').then(()=>{
+    v.busy=null; showToast(shared?T('Shared with the team','已共享给团队'):T('Yours alone again','已改为仅自己可见')); ordViewsLoad();
+  }).catch(e=>{
+    v.busy=null; if(String(e.message)==='auth') return;
+    v.err=E('Could not change sharing','修改共享设置失败'); render();
+  });
+});
+/* Confirmed, as the desktop confirms it: the filters that made it go with it,
+   and a shared one goes for everybody. */
+reg('ordViewDel', id=>{
+  const v=state.ordViews; if(v.busy) return;
+  const row=(Array.isArray(v.rows)?v.rows:[]).find(x=>x&&x.id===id);
+  if(!row) return;
+  const nm=escAttr(row.name);
+  state.ask={title:T('Delete this view?','删除此视图?'),
+    body:row.shared?T('"'+nm+'" is shared — it will go for everyone on the team.','“'+nm+'” 已共享 — 删除后团队所有人都将失去它。')
+                   :T('"'+nm+'" will be removed. The filters themselves are not affected.','将删除“'+nm+'”。当前筛选条件不受影响。'),
+    danger:true, confirmLabel:T('Delete','删除'),
+    run:()=>{
+      v.busy='del'+id; v.err=null; render();
+      apiWrite('/views/'+id,{},'DELETE').then(()=>{ v.busy=null; ordViewsLoad(); }).catch(e=>{
+        v.busy=null; if(String(e.message)==='auth') return;
+        v.err=E('Could not delete the view','删除视图失败'); render();
+      });
+    }};
+  render();
+});
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
@@ -5076,23 +5212,46 @@ function screenHome(){
    order rather than failing. That is what "Delivery needs a call" did from §98
    until 2026-09-14: the card navigated with 'delayed', this map had never heard
    of it, and the tap landed on the unfiltered Orders list with no chip lit.
-   It is not a chip in `sc` below (see ordersHeader) — it is a pseudo-status the
-   server resolves, and nothing but that card ever sets it. */
+   It is a pseudo-status the server resolves. Since §325 O2 it is also a chip
+   in `sc` below, as on the desktop; the clearable name chip over the rows stays,
+   because the chip row scrolls sideways and the lit chip can be off screen. */
+/* §325 O2 — THE DESKTOP'S WHOLE CHIP STRIP (retail-admin.html
+   #orders-status-chips). Six were missing: Rider coming, Needs a call,
+   Cancelled, To recover (§189), Refunded and the fapiao requests — so a
+   cancelled or refunded order could only be found by searching for it, and a
+   desktop saved view on any of them had nothing to land on here. Drafts are
+   not a status (they live in their own table) and are a later step. */
 const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
   delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',pending:'pending_payment',
-  delayed:'delayed'};
+  delayed:'delayed',rider:'rider_pickup',cancelled:'cancelled',recover:'recover_parcel',
+  refunded:'refunded',invoice:'needs_invoice'};
 const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual',shop:'shop'};
 const ORDERS_PAGE=25;
-function ordersQuery(offset){
+/* THE FILTER, IN ONE PLACE (§325 O2) — the desktop's ordFilterQuery. Three
+   readers need the same answer: the list, the CSV export and a saved view. The
+   filter half only; paging belongs to whoever is paging, and a file has no
+   pages. The keys are the SERVER's (buildOrderFilter), which are also the
+   desktop's saved-view keys, so a view saved on either surface reads the same
+   on the other. */
+function ordersFilterParams(){
   const qs=new URLSearchParams();
   const st=STATUS_PARAM[state.statusF]||''; if(st) qs.set('status',st);
   const ch=CHANNEL_PARAM[state.channelF]||''; if(ch) qs.set('channel',ch);
   if(state.orderQ) qs.set('q',state.orderQ);
   if(state.storeF&&state.storeF!=='all') qs.set('store_id',state.storeF);
+  if(state.ordCust&&state.ordCust.id!=null) qs.set('customer_id',state.ordCust.id);
+  return qs;
+}
+function ordersQuery(offset){
+  const qs=ordersFilterParams();
   qs.set('limit',ORDERS_PAGE); qs.set('offset',offset||0);
   return qs.toString();
 }
 async function loadOrdersPage(more){
+  /* The Views count rides on the first list read, once per session, so the
+     button says whether there is anything behind it (the desktop's first paint
+     does the same). */
+  if(state.ordViews.rows===undefined&&!state.ordViews.loading) ordViewsLoad();
   const offset=more?((state.ordersView||[]).length):0;
   state.ordersLoading=true; state.ordersLoadErr=null; if(!more){ state.ordersView=null; } render();
   try{
@@ -5177,11 +5336,30 @@ function ordersHeader(){
   const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},
     {key:'pending',en:'Pending',zh:'待付款',count:sCount('pending_payment')},
     {key:'paid',en:'Paid',zh:'已付',count:sCount('paid')},
-    {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing')},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched')},
+    {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing')},
+    // The desktop's chip and its Chinese (10-extras.js EN_ONLY_MAP); its badge is
+    // the same counts endpoint's rider_pickup.
+    {key:'rider',en:'Rider coming',zh:'骑手前往取货',count:sCount('rider_pickup')},
+    {key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched')},
     // The counts endpoint has never carried `delivered`, so this badge has
     // nothing behind it and is not drawn — rather than drawn as 15.
     {key:'delivered',en:'Delivered',zh:'送达',count:undefined},
-    {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock')},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open')}];
+    /* Needs a call, where the desktop puts it. No badge: the counts endpoint
+       has never carried this pseudo-status. The phone's own live pair names it,
+       the one the Home card and the clearable chip above already use. */
+    {key:'delayed',en:'Delivery needs a call',zh:'配送需要跟进',count:undefined},
+    {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock')},
+    // Closed orders, and the parcels that went out on some of them (§189). No
+    // badges: terminal states grow for ever, and the counts endpoint carries
+    // neither — the desktop draws none either.
+    {key:'cancelled',en:'Cancelled',zh:'已取消',count:undefined},
+    {key:'recover',en:'To recover',zh:'待收回',count:undefined},
+    {key:'refunded',en:'Refunded',zh:'已退款',count:undefined},
+    {key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open')},
+    /* The fapiao requests. The badge is the ones still to issue, as the
+       desktop's is; the label is the phone's own live Fapiao · 发票, the order
+       sheet's heading for the same request. */
+    {key:'invoice',en:'Fapiao',zh:'发票',count:sCount('needs_invoice')}];
   const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat')},{key:'web',en:'Web',zh:'网页',count:cCount('web')},
     {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan')},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery')},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual')},
     // A sale that originated at a physical shop — till or QR menu (§14, §44).
@@ -5194,12 +5372,22 @@ function ordersHeader(){
   /* 14px of top padding: the first chip row used to sit exactly ON the head's
      hairline. Nothing else on the screen touches that line and this should
      not either. */
+  /* §325 O2 — the list's two tools, the desktop's Views and Export CSV, on
+     their own quiet line over the chips (the customers screen's Export is the
+     pattern). The Views count appears once the list has been read. */
+  const vw=state.ordViews, vn=Array.isArray(vw.rows)?vw.rows.length:0;
+  const tool='display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)';
   return `<div style="padding:14px 0 16px">
+    <div style="padding:0 16px 10px;display:flex;align-items:center;justify-content:flex-end;gap:18px">
+      <button onclick="APP.cmd('ordViewsOpen')" style="${tool}">${ic('bookmark',14,2)} ${T('Views','视图')}${vn?' · '+vn:''}</button>
+      ${mCan('orders:export')?`<button onclick="APP.cmd('ordExport')" style="${tool}">${ic('download',14,2)} ${T('Export','导出')}</button>`:''}</div>
+    ${state.ordCust?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('ordClearCust')" class="chip on" style="max-width:100%" aria-label="${escAttr(T('Clear customer filter','清除顾客筛选'))}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Showing orders for','仅显示以下顾客的订单')} ${escAttr(state.ordCust.name)}</span>${ic('x',14,2)}</button></div>`:''}
     ${state.orderQ?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('clearOrderSearch')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Search','搜索')}: ${state.orderQ}</span>${ic('x',14,2)}</button></div>`:''}
     ${/* THE DELIVERY FILTER SAYS ITS OWN NAME, like the search chip above it and
-          for the same reason: `delayed` is a pseudo-status with no chip in the
-          row below, so without this the screen showed a narrowed list with
-          nothing lit and no way back but the Orders tab. Same live pair the card
+          for the same reason: `delayed` had no chip in the row below, so the
+          screen showed a narrowed list with nothing lit and no way back but the
+          Orders tab. It has one now (§325 O2), at the far end of a row that
+          scrolls sideways, so this stays where it is seen. Same live pair the card
           that sets it carries — this names one thing and must not name it twice.
           Clears to All, which is the only status this can have come from. */''}
     ${state.statusF==='delayed'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Delivery needs a call','配送需要跟进')}</span>${ic('x',14,2)}</button></div>`:''}
@@ -5217,7 +5405,54 @@ function ordersStatusLine(){
   if(!n) return '';
   return T(n+' awaiting fulfilment', n+' 单待履约');
 }
-function ordersFiltered0(){ return state.statusF==='all'&&state.channelF==='all'&&(state.storeF||'all')==='all'&&!state.orderQ; }
+function ordersFiltered0(){ return state.statusF==='all'&&state.channelF==='all'&&(state.storeF||'all')==='all'&&!state.orderQ&&!state.ordCust; }
+/* ── §325 O2 — the saved-views sheet: the desktop's menu (25-views.js
+   _viewsMenuHtml), row for row. One's own views first, each with Share /
+   Shared and Delete; the team's shared ones under their own heading with who
+   shared them; Save this view at the foot, offered only while something is
+   narrowing the list — saving the unfiltered list is naming the screen. A
+   list that could not be read says so rather than looking like "none saved". */
+function sheetOrdViews(){
+  const v=state.ordViews;
+  const list=v.rows;
+  const btn='background:none;border:none;cursor:pointer;font-family:inherit';
+  const row=r=>{
+    const busy=v.busy==='share'+r.id||v.busy==='del'+r.id;
+    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 12px 4px 0;border-top:1px solid var(--hairline)">
+      <button class="row" style="flex:1;min-width:0;min-height:52px;padding:10px 20px;border:none" onclick="APP.cmd('ordViewApply',${Number(r.id)})">
+        <span style="flex:1;min-width:0;text-align:left">
+          <span style="display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.name)}</span>
+          ${(r.shared&&!r.mine&&r.owner_name)?`<span style="display:block;font-size:12.5px;color:var(--text-secondary)">${T('shared by','共享者')} ${escAttr(r.owner_name)}</span>`:''}</span></button>
+      ${r.mine?`<button class="rowact" ${busy||v.busy?'disabled':''} aria-pressed="${r.shared?'true':'false'}" style="min-height:40px${r.shared?';color:var(--sage-ink)':''}" onclick="APP.cmd('ordViewShare',${Number(r.id)},${r.shared?0:1})">${
+        v.busy==='share'+r.id?'…':(r.shared?T('Shared','已共享'):T('Share','共享'))}</button>
+      <button class="iconbtn" ${busy||v.busy?'disabled':''} style="width:40px;height:40px;flex:none" aria-label="${escAttr(T('Delete','删除')+' '+r.name)}" onclick="APP.cmd('ordViewDel',${Number(r.id)})">${v.busy==='del'+r.id?'…':ic('x',18,2)}</button>`:''}
+    </div>`;
+  };
+  let body;
+  if(list===undefined) body=`<div style="padding:16px 20px;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else if(list===null) body=`<div style="padding:16px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:15px;color:var(--brick-ink)">${T('Could not load your views.','无法加载视图。')}</span>
+      <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('ordViewsRetry')">${T('Try again','重试')}</button></div>`;
+  else {
+    const mine=list.filter(r=>r&&r.mine), theirs=list.filter(r=>r&&!r.mine);
+    body=(mine.length?mine.map(row).join('')
+          :(theirs.length?'':`<div style="padding:16px 20px;font-size:14.5px;color:var(--text-secondary);line-height:1.55">${T('No saved views yet. Filter the list, then save it.','暂无保存的视图。先筛选列表，再保存。')}</div>`))
+      +(theirs.length?`<div class="eyebrow" style="padding:14px 20px 6px">${T('Shared with the team','团队共享')}</div>${theirs.map(row).join('')}`:'');
+  }
+  const can=Object.keys(ordViewRead()).length>0;
+  return `<div class="scrim" style="z-index:43" onclick="APP.scrimClose('ordViewsClose')"></div>
+   <div class="sheet" style="z-index:44;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">
+     <div class="grabber" style="margin-bottom:10px"></div>
+     <div style="display:flex;align-items:center;gap:8px;padding:0 12px 8px 20px">
+       <span style="flex:1;font-size:18px;font-weight:500">${T('Views','视图')}</span>
+       <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('ordViewsClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+     <div style="max-height:56vh;overflow:auto">${body}</div>
+     ${v.err?`<div style="margin:12px 20px 0;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${v.err}</div>`:''}
+     <div style="padding:14px 20px 0">
+       <button class="btn2" style="width:100%" ${can&&!v.busy?'':'disabled'} onclick="APP.cmd('ordViewSave')">${
+         v.busy==='save'?T('Saving…','保存中…'):can?T('Save this view…','保存当前视图…'):T('Filter the list first','请先筛选列表')}</button></div>
+   </div>`;
+}
 function ordSkeleton(){
   const bar=(w,h)=>`<span style="display:block;width:${w};height:${h}px;border-radius:999px;background:var(--surface-raised)"></span>`;
   return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
@@ -5279,7 +5514,7 @@ function screenOrders(){
           <span style="flex:none;display:flex;margin-top:1px">${ic('clock',15)}</span>
           <span style="min-width:0;overflow-wrap:anywhere"><span style="font-weight:500">${T('Waiting on stock','等待补货')}</span> · ${escAttr(o.waitingList.map(p=>T(p[0],p[1])).join(T(', ','、')))}</span></div>`:''}
         ${(o.notes||o.partRefund!=null)?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.partRefund!=null?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${PILL.muted[0]};color:${PILL.muted[1]}">${ic('undo',12)}${T('Partial refund','部分退款')}${o.partRefund>0?` <span class="num">${money(CUR,o.partRefund)}</span>`:''}</span>`:''}${(o.notes||[]).map(nt=>
-          `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${nt.sev==='muted'?PILL.muted[0]:'var(--'+nt.sev+'-tint)'};color:${nt.sev==='muted'?PILL.muted[1]:'var(--'+nt.sev+')'}">${ic(nt.icon,12)}${nt.label}</span>`).join('')}</div>`:''}
+          `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${nt.sev==='muted'?PILL.muted[0]:'var(--'+nt.sev+'-tint)'};color:${nt.sev==='muted'?PILL.muted[1]:'var(--'+nt.sev+')'}">${ic(nt.icon,12)}${ordNoteLabel(nt)}</span>`).join('')}</div>`:''}
         ${o.parcels?`<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap">
           ${ic('package',14)}<span>${T(o.parcels.total+(o.parcels.total===1?' parcel':' parcels'),o.parcels.total+' 个包裹')}</span>
           ${o.parcels.delivered?`<span style="color:var(--sage-ink)">· ${T(o.parcels.delivered+' delivered',o.parcels.delivered+' 已签收')}</span>`:''}
@@ -24959,7 +25194,7 @@ function sheetOrderDetail(){
          <div style="font-size:13.5px;margin-top:9px;padding-top:10px;border-top:1px solid var(--border-default)">${T(...o.trk.event)}</div></div>`:''}
        <div style="background:var(--surface-raised);border-radius:14px;padding:16px">
          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span><span class="num" style="font-size:26px;font-weight:500;letter-spacing:-.02em">${o.total}</span></div>
-         ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T(l,l)}</span><span class="num">${v}</span></div>`).join('')}
+         ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${Array.isArray(l)?T(l[0],l[1]):escAttr(l)}</span><span class="num">${v}</span></div>`).join('')}
            ${o.tax?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${o.tax.mode==='inclusive'?T('incl. tax','含税'):T('Tax','税费')}</span><span class="num">${money(CUR,o.tax.amount)}</span></div>`:''}
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
          </div>`:''}</div>
@@ -28920,6 +29155,13 @@ const custRowAct=(l,r,act)=>`<div style="display:flex;align-items:center;justify
 function custRecentOrders(d){
   const rows=(d.recent_orders||[]).slice(0,5);
   if(!rows.length) return '';
+  /* §325 O2 — "View all N orders", the desktop record's link, when there are
+     more than the rows shown here. N is the customer's whole order count, and
+     the link opens Orders scoped to them — only for someone who may open
+     Orders at all. */
+  const total=Number((d.stats&&d.stats.orders&&d.stats.orders.orders_count)||0);
+  const viewAll=(total>rows.length&&canRoute('orders'))
+    ?`<button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('ordViewCust')">${T('View all '+total+' orders','查看全部 '+total+' 笔订单')} →</button>`:'';
   return custSection(T('Recent orders','最近订单'), `<div class="list">${rows.map((r,i)=>{
     const sk=ORDER_STATUS[r.status]||null;
     const sub=[fmtDay(r.created_at||r.placed_at), sk?T(sk[1],sk[2]):''].filter(Boolean).join(' · ');
@@ -28935,7 +29177,7 @@ function custRecentOrders(d){
     return `${i?'<div class="sep"></div>':''}
       ${go?`<button class="row" style="gap:12px" onclick="APP.cmd('openCustOrder',${i})">${inner}</button>`
           :`<div class="row" style="gap:12px;cursor:default">${inner}</div>`}`;
-  }).join('')}</div>`);
+  }).join('')}</div>${viewAll}`);
 }
 /* What this person actually buys — the desktop's Top items. */
 function custTopItems(d){
@@ -30755,6 +30997,7 @@ function render(){
   if(state.installSheet) html += layer('install', sheetInstall());
   if(state.overflow) html += layer('overflow', sheetOverflow());
   if(state.ask) html += layer('ask:'+state.ask.title, sheetAsk());
+  if(state.ordViews.open) html += layer('ordviews', sheetOrdViews());
   if(state.custId) html += layer('cust:'+state.custId, sheetCustomer());
   if(state.caddr) html += layer('caddr', sheetCustAddr());
   if(state.detailId) html += layer('detail:'+state.detailId, sheetOrderDetail());
@@ -32325,25 +32568,34 @@ function listWaitingOn(r){
     return [(l.name_en||l.name_cn)+sz+q, (l.name_cn||l.name_en)+sz+q];
   });
 }
+/* §325 O2 — THE NOTES ARE CARRIED AS PAIRS, NOT AS WORDS. This used to T()
+   each label here, inside mapOrderRow — which runs once, when the list is
+   fetched — so a language switch left every chip on the list in the language
+   it was fetched in (the ship-by cell's bug, delivCell, again). Each label is
+   now an [en, zh] pair and ordNoteLabel says it on the paint the toggle
+   triggers. The pairs are the ones this function already used, unchanged. */
 function orderNotes(r){
   const out=[];
-  if(Number(r.addon_count)) out.push({sev:'amber',icon:'plus',label:T('Items added after paying','下单后加购')});
+  if(Number(r.addon_count)) out.push({sev:'amber',icon:'plus',label:['Items added after paying','下单后加购']});
   let shortPids=[];
   try{ shortPids=JSON.parse(r.fulfillment_short_pids||'[]')||[]; }catch(e){}
   if(shortPids.length) out.push({sev:'amber',icon:'triangle-alert',
-    label:T(shortPids.length===1?'Shipping store is short 1 item':'Shipping store is short '+shortPids.length+' items',
-            '出货门店缺 '+shortPids.length+' 件')});
-  if(r.stock_pending) out.push({sev:'amber',icon:'box',label:T('Stock not deducted yet','库存待扣')});
+    label:[shortPids.length===1?'Shipping store is short 1 item':'Shipping store is short '+shortPids.length+' items',
+            '出货门店缺 '+shortPids.length+' 件']});
+  if(r.stock_pending) out.push({sev:'amber',icon:'box',label:['Stock not deducted yet','库存待扣']});
   if(Number(r.needs_invoice)){
     const issued=r.invoice_status==='issued';
-    out.push({sev:issued?'muted':'amber',icon:'receipt',label:issued?T('Invoice issued','已开票'):T('Invoice to issue','待开票')});
+    out.push({sev:issued?'muted':'amber',icon:'receipt',label:issued?['Invoice issued','已开票']:['Invoice to issue','待开票']});
   }
-  if(r.air_delivery_delayed) out.push({sev:'brick',icon:'truck',label:T('Delivery delayed · call the customer','配送延误 · 请联系顾客')});
-  if(r.no_contact_open) out.push({sev:'brick',icon:'phone',label:T("Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客')});
+  if(r.air_delivery_delayed) out.push({sev:'brick',icon:'truck',label:['Delivery delayed · call the customer','配送延误 · 请联系顾客']});
+  if(r.no_contact_open) out.push({sev:'brick',icon:'phone',label:["Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客']});
   if(Number(r.running_late_days)>0){ const d=Number(r.running_late_days);
-    out.push({sev:'brick',icon:'truck',label:T('Running late · '+d+' day'+(d===1?'':'s')+' · call the customer','配送逾期 '+d+' 天 · 请联系顾客')}); }
+    out.push({sev:'brick',icon:'truck',label:['Running late · '+d+' day'+(d===1?'':'s')+' · call the customer','配送逾期 '+d+' 天 · 请联系顾客']}); }
   return out.length?out:null;
 }
+/* A note's label in the language on screen now. A plain string still passes
+   through — a hand-seeded fixture carries one. */
+function ordNoteLabel(nt){ const l=nt&&nt.label; return Array.isArray(l)?T(l[0],l[1]):String(l==null?'':l); }
 /* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is
    nothing to roll up and the row says nothing. */
 function parcelRollup(r){
@@ -32543,7 +32795,11 @@ function mapOrderRow(r){
     fulfil:[r.store_name_en||r.store_code||'—', r.store_name_cn||r.store_name_en||'—'],
     route:routingNotePair(r.routing_reason),
     trk: r.tracking_number?{carrier:[r.tracking_carrier||'Courier','快递'],no:r.tracking_number,event:[r.tracking_status||'In transit','运输中'],live:!!r.jd_live}:null,
-    items:[], breakdown:[['Subtotal',money(CUR,r.subtotal!=null?r.subtotal:r.total)]].concat(r.shipping_fee?[['Delivery',money(CUR,r.shipping_fee)]]:[]),
+    /* §325 O2 — each label an [en, zh] pair, said at render. It was a bare
+       English word handed to T(l,l), so a Chinese screen read "Subtotal" and
+       "Delivery". The pairs are live ones: Subtotal · 小计 and Shipping · 运费,
+       the desktop's own word for this fee (orderTotalSubline). */
+    items:[], breakdown:[[['Subtotal','小计'],money(CUR,r.subtotal!=null?r.subtotal:r.total)]].concat(r.shipping_fee?[[['Shipping','运费'],money(CUR,r.shipping_fee)]]:[]),
   };
 }
 /* The choices the CUSTOMER made on this line — "Heat up?: Yes", a size, a
@@ -32853,7 +33109,7 @@ function mapDetail(o){
   base.shipFrom=o.qingyun_ship_from||null;
   base.storeCode=o.store_code||null;
   if(o.subtotal!=null||o.shipping_fee!=null){
-    base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
+    base.breakdown=[[['Subtotal','小计'],money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[[['Shipping','运费'],money(CUR,o.shipping_fee)]]:[]);
   }
   /* Tax (audit I-03). Carried as a PAIR of facts, not a rendered string: the
      amount, and which kind it is — an exclusive tax was added to the figures
