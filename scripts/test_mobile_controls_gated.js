@@ -56,6 +56,7 @@ const SRC = [
   slice('const ORDER_NEXT={', '/* A write helper that keeps'),
   slice('function orderErrorText(e){', '/* printer.* is private config'),
   slice("reg('advance', to=>{", 'function currentOrder(){'),
+  slice('const PRINT_NO_RECEIPT=', 'function printOrderAt('),   // §325 O7: orderHeadPrint's guard
   fn('orderActionRow'), fn('sheetActions'), fn('shopNoteCard'),
   fn('trackingCard'), fn('etaPretty'), fn('localEtaCard'), fn('noContactCard'), fn('deliveryPhotoCard'), fn('mDcActs'),
   slice("reg('toggleShop', ids=>{", '/* The status buckets are derived'),
