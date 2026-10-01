@@ -212,6 +212,16 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['pickup.window', list(route('delivery')), 'phone Delivery — Store pickup'],
       ['pickup.leadMinutes', list(route('delivery')), 'phone Delivery — Store pickup'],
       ['notice.preorder', list(route('delivery')), 'phone Delivery — Pre-orders'],
+      // §325 O9 — Fresh batches (the desktop's saveBatchSchedule body) and the
+      // delivery set-up wizard (dlvWizFinish's body), both on the Delivery screen.
+      ['batch.schedule', list(route('delivery')), 'phone Delivery — Fresh batches'],
+      ['fresh.rescheduleCutoffHour', list(route('delivery')), 'phone Delivery — Fresh batches'],
+      ['fresh.morningRequestHour', list(route('delivery')), 'phone Delivery — Fresh batches'],
+      ['delivery.enabled', list(route('delivery')), 'phone Delivery — Set up delivery'],
+      ['delivery.coverage', list(route('delivery')), 'phone Delivery — Set up delivery'],
+      ['delivery.pricingMode', list(route('delivery')), 'phone Delivery — Set up delivery'],
+      ['delivery.speed', list(route('delivery')), 'phone Delivery — Set up delivery'],
+      ['delivery.sameDayCutoff', list(route('delivery')), 'phone Delivery — Set up delivery'],
     ];
     // §325 X2 / X3 — the phone's Operations screen writes the same three
     // families as the desktop's Settings → Operations, drawn for the phone
@@ -412,10 +422,15 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const dlvKeys = new Set();
       for (const m of dlvBlock.matchAll(/keys:\[([^\]]*)\]/g)) for (const k of m[1].match(/'([^']+)'/g) || []) dlvKeys.add(k.slice(1, -1));
       for (const m of dlvBlock.matchAll(/\bkey:'([a-zA-Z.]+)'/g)) dlvKeys.add(m[1]);
-      for (const m of dlvBlock.matchAll(/const body=\{('[^]*?)\};/g)) for (const k of m[1].match(/'((?:delivery|fees|pickup|notice)\.[a-zA-Z]+)'/g) || []) dlvKeys.add(k.slice(1, -1));
-      is([...dlvKeys].sort(), ['delivery.boxLabel', 'delivery.bulkTracking', 'delivery.defaultZone', 'delivery.holidayMessage', 'delivery.holidayMode',
-        'delivery.kitchenAddress', 'delivery.sameDayCutoffMessage', 'delivery.sameDayCutoffMinutes', 'fees.freeShippingThreshold', 'fees.minOrder',
-        'fees.pickupPackingFee', 'notice.preorder', 'pickup.leadMinutes', 'pickup.window'], 'the phone\'s Delivery settings write these fourteen keys (§325 O4)');
+      // §325 O9 adds the batch.* and fresh.* families (Fresh batches) and a body
+      // that is added to after it is built (the wizard's body['…']=…).
+      for (const m of dlvBlock.matchAll(/const body=\{('[^]*?)\};/g)) for (const k of m[1].match(/'((?:delivery|fees|pickup|notice|batch|fresh)\.[a-zA-Z]+)'/g) || []) dlvKeys.add(k.slice(1, -1));
+      for (const m of dlvBlock.matchAll(/\bbody\['((?:delivery|fees|pickup|notice|batch|fresh)\.[a-zA-Z]+)'\]=/g)) dlvKeys.add(m[1]);
+      is([...dlvKeys].sort(), ['batch.schedule', 'delivery.boxLabel', 'delivery.bulkTracking', 'delivery.coverage', 'delivery.defaultZone', 'delivery.enabled',
+        'delivery.holidayMessage', 'delivery.holidayMode', 'delivery.kitchenAddress', 'delivery.pricingMode', 'delivery.sameDayCutoff',
+        'delivery.sameDayCutoffMessage', 'delivery.sameDayCutoffMinutes', 'delivery.speed', 'fees.freeShippingThreshold', 'fees.minOrder',
+        'fees.pickupPackingFee', 'fresh.morningRequestHour', 'fresh.rescheduleCutoffHour', 'notice.preorder', 'pickup.leadMinutes', 'pickup.window'],
+        'the phone\'s Delivery settings write these twenty-two keys (§325 O4, O9)');
       for (const k of dlvKeys) ok(list(route('delivery')).every((c) => has(configKeyCap(k), c)), 'phone Delivery may write ' + k);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
