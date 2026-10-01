@@ -33903,14 +33903,16 @@ function noContactCard(sp){
 /* ── §325 O12 — A JD WAYBILL, CREATED AND CANCELLED FROM THE PHONE ─────────
    The desktop's createJdLabel / submitJdLabel / cancelJdPickup (04-orders.js):
      · CREATE: the one question the order cannot answer — which JD service —
-       asked the desktop's way (an air parcel ships fresh express and asks
-       nothing, except into Fujian / Guangxi where ground is pre-selected; a
-       ground parcel picks fresh or ambient, with air on the list, marked), a
+       asked the desktop's way (an air parcel starts on fresh express with the
+       two ground services below it, §381, except into Fujian / Guangxi where
+       ground is pre-selected; a ground parcel picks fresh or ambient, with air
+       on the list, marked), a
        pieces count for one waybill split across boxes, then
        POST /orders/:id/jd-waybill {shipment_id, product, package_count}. The
        server attaches the waybill and marks the parcel dispatched.
-       Picking air on a land parcel asks on the pick; an SF-only city asks at
-       submit — the desktop's two questions, each where it puts it.
+       Picking air on a land parcel asks on the pick, and so does picking
+       ground on an air parcel (§381); an SF-only city asks at submit — the
+       desktop's questions, each where it puts it.
      · CANCEL: POST …/jd-waybill/cancel {shipment_id}, asked first. JD cancels
        the pickup, or intercepts a parcel already collected, and says which.
    NO PRINTING. The label goes to a print component running on the desktop
@@ -33932,7 +33934,7 @@ function jdPlan(o,sp){
   const isAir=sp.mode==='air';
   const landDefault=isAir&&jdLandDefault(o.shipTo&&o.shipTo.province);
   const preset=landDefault?'LL-HD-M':isAir?'LL-SD-M':(sp.jdFresh?'LL-HD-M':'ed-m-0001');
-  const codes=landDefault?['LL-HD-M','LL-SD-M']:isAir?[]:['LL-HD-M','ed-m-0001','LL-SD-M'];
+  const codes=landDefault?['LL-HD-M','LL-SD-M']:isAir?['LL-SD-M','LL-HD-M','ed-m-0001']:['LL-HD-M','ed-m-0001','LL-SD-M'];
   return {isAir, landDefault, preset, services:codes.map(c=>JD_SERVICES.find(s=>s.code===c))};
 }
 const jdCan=(o)=>!!o&&!o.viewOnly&&o._id!=null&&mCan('orders:edit');
@@ -33953,14 +33955,26 @@ reg('jdClose', ()=>{ if(state.jd&&state.jd.busy) return; state.jd=null; render()
 reg('jdPieces', v=>{ if(state.jd) state.jd.pieces=String(v==null?'':v); });
 /* Air on a parcel the plan made land asks HERE, on the pick; declining puts
    the row back where it was. On an air parcel's own list air is the plan, so
-   picking it asks nothing. */
+   picking it asks nothing.
+   §381 — the mirror: GROUND on a parcel the plan made air asks too, with the
+   desktop's words, unless the parcel goes to Fujian / Guangxi (ground is the
+   default there) or a ground row is already chosen (moving between the two
+   ground rows is the same decision, already answered). */
 reg('jdSvc', code=>{
   const j=state.jd; if(!j||j.busy) return;
   const o=currentOrder(), sp=o&&(o.shipments||[]).find(x=>x&&x.id===j.sid); if(!sp) return;
   const p=jdPlan(o,sp); if(!p.services.some(s=>s.code===code)) return;
-  if(code!=='LL-SD-M'||p.isAir){ j.svc=code; j.last=code; render(); return; }
   const names=(sp.jdNames||[]).map(n=>T(n[0],n[1])).filter(Boolean);
   const label=names.length?names.slice(0,3).join(', ')+(names.length>3?' +'+(names.length-3):''):'';
+  if(p.isAir&&!p.landDefault&&code!=='LL-SD-M'&&j.svc==='LL-SD-M'){
+    state.ask={title:T('Air parcel','空运包裹'),
+      body:label?T('<b>'+escAttr(label)+'</b> — planned for air. Ground is slower. Create the ground waybill anyway?','<b>'+escAttr(label)+'</b> 计划空运,陆运较慢。仍要生成陆运运单吗?')
+                :T('This parcel is planned for air. Ground is slower. Create the ground waybill anyway?','此包裹计划空运,陆运较慢。仍要生成陆运运单吗?'),
+      confirmLabel:T('Create ground waybill anyway','仍要生成陆运运单'), cancelLabel:T('Not yet','暂不'), danger:true,
+      run:()=>{ if(state.jd===j){ j.svc=code; j.last=code; render(); } }};
+    render(); return;
+  }
+  if(code!=='LL-SD-M'||p.isAir){ j.svc=code; j.last=code; render(); return; }
   state.ask={title:T('Land only','仅陆运'),
     body:label?T('<b>'+escAttr(label)+'</b> — land shipping only. Create the air waybill anyway?','<b>'+escAttr(label)+'</b> 仅陆运。仍要生成空运运单吗?')
               :T('This parcel is land shipping only. Create the air waybill anyway?','此包裹仅陆运。仍要生成空运运单吗?'),
@@ -33993,9 +34007,10 @@ const JD_ERR={jd_not_configured:['JD Logistics is not set up yet — finish it i
   parcel_awaiting_restock:['That parcel is waiting on a restock.','该包裹正在等待补货。'],
   invalid_shipment_id:['That parcel is not part of this order.','该包裹不属于此订单。'],
   already_has_waybill:['A waybill is already attached.','已关联运单号。']};
-/* The SF-only question is asked at submit, as the desktop asks it: on an air
-   parcel there is no list to pick from, so submit is the one moment that covers
-   both an air parcel and a land one moved onto air. */
+/* The SF-only question is asked at submit, as the desktop asks it: an air
+   parcel starts on air, so an operator who leaves it there never picks
+   anything, and submit is the one moment that covers both an air parcel and a
+   land one moved onto air. */
 reg('jdGo', ()=>{
   if(!mCan('orders:edit')) return;
   const j=state.jd, o=currentOrder(); if(!j||j.busy||!jdCan(o)||o.id!==j.oid) return;
