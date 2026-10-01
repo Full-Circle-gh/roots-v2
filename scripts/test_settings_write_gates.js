@@ -206,6 +206,12 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     rows.push(['inventory.lowStockThreshold', phoneSettings, 'phone Operations — low-stock default (§325 X2)']);
     rows.push(['inventory.lowStockDigest', phoneSettings, 'phone Operations — daily low-stock list (§325 X2)']);
     rows.push(['product_page.sections', phoneSettings, 'phone Operations — product page sections (§325 X3)']);
+    // §325 X5 — the phone's Shop tab and Customer service screens (autosave
+    // cards, the desktop's SHOP_CARD and CS_CARD bodies), on the same keys.
+    rows.push(['shop.layout', phoneSettings, 'phone Settings → Shop tab (§325 X5)']);
+    rows.push(['shop.showSort', phoneSettings, 'phone Settings → Shop tab (§325 X5)']);
+    rows.push(['customer_service.mode', phoneSettings, 'phone Settings → Customer service (§325 X5)']);
+    rows.push(['customer_service.fab_bottom', phoneSettings, 'phone Settings → Customer service (§325 X5)']);
     for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq', 'production', 'waste', 'lowStockHints']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
     }
@@ -274,6 +280,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(r.status, 200, 'and saves the phone Operations screen\'s low-stock and product-page settings (§325 X2/X3)');
     r = await call('orders', 'PUT', '/api/retail-admin/config', { 'inventory.lowStockThreshold': 4 });
     is(r.status, 403, '…which an orders account may not');
+    r = await call('settings', 'PUT', '/api/retail-admin/config?history=customer_service', { 'customer_service.mode': 'qr', 'customer_service.fab_bottom': 220 });
+    is(r.status, 200, 'and the phone\'s Customer service card, filed on its history (§325 X5)');
     r = await call('delivery', 'PUT', '/api/retail-admin/config', { 'delivery.holidayMode': false });
     is(r.status, 200, 'the phone\'s Resume delivery still works for a delivery:view account');
     r = await call('broadcast', 'PUT', '/api/retail-admin/config', { 'notifications.categories.order': true });
@@ -359,8 +367,10 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // §325 X2/X3: the phone's Operations screen adds four families —
       // inventory.lowStockThreshold, inventory.lowStockDigest, support.hidden
       // (the open one) and product_page.sections — each its own write site.
-      const FAMS = ['delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
-        'notifications.categories.', 'popups.list', 'product_page.sections', 'support.hidden'];
+      // §325 X5 adds the two autosave cards, each filed on its own history
+      // card: 'shop.display' (the shop.* family) and 'customer_service'.
+      const FAMS = ['customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
+        'notifications.categories.', 'popups.list', 'product_page.sections', 'shop.', 'support.hidden'];
       // A site whose body is written inline names its family in the call itself;
       // only one that builds its body first (Resume delivery, the pop-up switch)
       // is read in the 900 characters before it. Several sites now sit within
@@ -370,7 +380,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         return own.length ? own : FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f));
       };
       is(sites.map((i) => famAt(i).join('|')).sort(),
-        FAMS, 'the phone writes eight families, one per write site, each asserted in section 2 (support.hidden as the open one)');
+        FAMS, 'the phone writes ten families, one per write site, each asserted in section 2 (support.hidden as the open one)');
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');

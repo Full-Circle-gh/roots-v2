@@ -1453,6 +1453,9 @@ const state = {
      refusal, the locate-everything run, and the recently-deleted list. */
   /* §325 X3 — the count sheet's print view: false, true, or 'failed'. */
   countPrint:false,
+  /* §325 X5 — the Shop tab and Customer service cards: whether each has been
+     read this visit, its load error, its draft, and the QR upload. */
+  cfgc:{tried:{shop:false, cs:false}, err:{shop:null, cs:null}, shop:null, cs:null, qrBusy:false, qrErr:null},
   /* §325 X4 — the Brand screen (the logo and name, a draft of the name being
      typed, which save is in flight and each half's refusal) and the brand
      studio (its form, the job being polled, the result and its Apply). */
@@ -1593,6 +1596,9 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      the last visit does not greet the next one. */
   /* §325 X4 — Brand re-reads what is stored on every entry; a half-typed name
      from the last visit is not carried into this one. */
+  /* §325 X5 — each card is read fresh on entry: the desktop may have saved it. */
+  if(route==='shopdisplay'||route==='custservice'){ const c=state.cfgc, k=route==='shopdisplay'?'shop':'cs';
+    c.tried[k]=false; c[k]=null; c.err[k]=null; if(k==='cs'){ c.qrErr=null; c.qrBusy=false; } }
   if(route==='brand'){ const b=state.brand; b.tried=false; b.nameTouched=false; b.nameErr=null; b.logoErr=null; b.readErr=null; }
   if(route==='operations'){ const x=state.opsx; x.binTried=false; x.binErr=null; x.binRowErr={}; x.err=null; x.geoErr=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
@@ -1625,6 +1631,7 @@ function pop(){
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
+  if(top==='shopdisplay'||top==='custservice') cfgFlushAll();   // §325 X5 — a pending edit goes on the way out
   forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
@@ -24854,6 +24861,298 @@ function screenBrandStudio(){
 }
 SUBS.brandstudio={title:['AI Brand Studio','AI 品牌工作室'],render:()=>screenBrandStudio()};
 /* §325 X4 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X5 — THE SHOP TAB AND THE CUSTOMER-SERVICE BUTTON
+   --------------------------------------------------------------------------
+   Two desktop Settings panels the phone did not have: Shop tab (how the
+   mini app's Shop arranges itself — layout, default sort, the filter bar) and
+   Customer service (the chat button: how customers reach you, its label and
+   hours, where it shows and how it looks). Both are §279 autosave cards on the
+   desktop (05-marketing.js SHOP_CARD, CS_CARD), and both are here too, through
+   the same engine (public/tacet-autosave.js): each edit is sent after a short
+   pause as the desktop's whole card body, PUT /config?history=<card>, filed on
+   the same history the desktop's Version history reads
+   (GET /config/history?card=<card>). Undo, Version history and the save state
+   sit at the foot, as they do there.
+
+   Opened from Settings with the Settings screen's own keys; the server gates
+   both families (shop.*, customer_service.*) on the desktop Settings set,
+   which contains them (configKeyCap). The QR code is uploaded the desktop's
+   way, POST /cms/media, which admits the same keys.
+
+   The values seeded from the stored config are the desktop's loadConfig
+   readings, default for default, so a card opened on the phone and on the
+   desktop starts from the same body and neither sends a change nobody made.
+   ══════════════════════════════════════════════════════════════════════════ */
+const cfgAuto={shop:null, cs:null};
+/* A stored dotted key, written back into the cached config so other screens
+   reading state.cfg see what was saved. */
+function cfgMerge(body){
+  state.cfg=state.cfg||{};
+  Object.keys(body||{}).forEach(k=>{
+    const parts=k.split('.'); let o=state.cfg;
+    for(let i=0;i<parts.length-1;i++){ if(!o[parts[i]]||typeof o[parts[i]]!=='object') o[parts[i]]={}; o=o[parts[i]]; }
+    o[parts[parts.length-1]]=body[k];
+  });
+}
+const cfgSendErr=e=>new Error(e&&e.refused?T(...e.words):tmOneLang((e&&e.message)||''));
+function cfgFootHtml(which){
+  const a=cfgAuto[which]; if(!a) return '';
+  const st=a.state;
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message)
+    :st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||'')):T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<span style="flex:1;min-width:0;font-size:12.5px;color:${tone}">${line}</span>
+    ${a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('cfgUndo','${which}')">${T('Undo','撤销')}</button>`:''}
+    <button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('cfgHistory','${which}')">${T('Version history','历史版本')}</button>`;
+}
+const cfgFootPaint=which=>()=>{ const f=(typeof document!=='undefined')?document.getElementById('mCfgFoot-'+which):null; if(f) f.innerHTML=cfgFootHtml(which); };
+function cfgFlushAll(){ ['shop','cs'].forEach(k=>{ if(cfgAuto[k]) cfgAuto[k].flush(); }); }
+/* The two cards' own state, re-read from the server on every entry. */
+function cfgCardLoad(which){
+  const s=state.cfgc; if(s.tried[which]) return Promise.resolve();
+  s.tried[which]=true; s.err[which]=null;
+  return api('/config').then(c=>{
+    state.cfg=c||{};
+    if(which==='shop') shopdStart(); else csStart();
+    render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    s.err[which]=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render();
+  });
+}
+reg('cfgRetry', which=>{ state.cfgc.tried[which]=false; render(); cfgCardLoad(which); });
+reg('cfgUndo', which=>{
+  const a=cfgAuto[which]; if(!a) return;
+  a.undo(b=>{ (which==='shop'?shopdApply:csApply)(b); render(); });
+});
+/* What each key is called in a version's "changed" line. */
+const CFG_KEY_WORDS={
+  'shop.layout':['Layout','布局'], 'shop.defaultSort':['Default sort','默认排序'],
+  'shop.showSort':['Show sort dropdown','显示排序下拉'], 'shop.showDietary':['Show dietary chips','显示饮食标签'],
+  'shop.showStockFilter':['Show "In stock" toggle','显示「有货」开关'], 'shop.showBadgeFilter':['Show NEW / POP / SALE filter','显示 NEW / POP / SALE 筛选'],
+  'shop.showPriceFilter':['Show price ¥min – ¥max','显示价格 ¥min – ¥max 筛选'], 'shop.hideOutOfStock':['Hide out-of-stock products entirely','完全隐藏缺货产品'],
+  'shop.lockLayout':['Lock layout (hide customer\'s view-switcher)','锁定布局(隐藏顾客的视图切换)'],
+  'customer_service.mode':['How customers reach you','顾客联系方式'],
+};
+reg('cfgHistory', which=>{
+  const a=cfgAuto[which]; if(!a) return;
+  const card=which==='shop'?'shop.display':'customer_service';
+  Promise.resolve(a.flush()).then(()=>api('/config/history?card='+encodeURIComponent(card))).then(j=>{
+    const list=Array.isArray(j&&j.versions)?j.versions:[];
+    if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+    liveHistorySheet(list, v=>(v.changed||[]).map(k=>CFG_KEY_WORDS[k]?T(...CFG_KEY_WORDS[k]):k.replace(/^[a-z_]+\./,'').replace(/_/g,' ')).join(' · '),
+      v=>{ (which==='shop'?shopdApply:csApply)(v.snapshot||{}); render();
+        return Promise.resolve(a.flush('restore')).then(()=>{ if(a.state==='error') throw new Error(a.message||''); }); });
+  }).catch(e=>{ if(String(e&&e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+});
+
+/* ── Shop tab ─────────────────────────────────────────────────────────────── */
+const SHOPD_BOOLS=['showSort','showDietary','showStockFilter','showBadgeFilter','showPriceFilter','hideOutOfStock','lockLayout'];
+const SHOPD_LAYOUTS=[['list','List with sidebar','列表 + 侧栏'],['list-compact','List compact','紧凑列表'],
+  ['grid-2col','Grid — 2 col','网格 — 2 列'],['grid-3col','Grid — 3 col','网格 — 3 列'],['gallery','Gallery','画廊']];
+const SHOPD_SORTS=[['','Featured (curated order)','精选(手动排序)'],['newest','Newest','最新'],['price_asc','Price ↑ (low to high)','价格升序'],
+  ['price_desc','Price ↓ (high to low)','价格降序'],['popular','Popular (most ordered)','最热销']];
+/* loadConfig's readings: a legacy 'grid' is the 2-column grid; dietary chips
+   default ON; every other switch defaults off. */
+function shopdSeed(){
+  const sh=(state.cfg&&state.cfg.shop)||{};
+  const d={layout:sh.layout==='grid'?'grid-2col':(sh.layout||'list'), defaultSort:sh.defaultSort||''};
+  SHOPD_BOOLS.forEach(k=>{ d[k]=k==='showDietary'?sh.showDietary!==false:!!sh[k]; });
+  return d;
+}
+/* SHOP_CARD.read, key for key and in its order. */
+function shopdBody(){
+  const d=state.cfgc.shop, b={};
+  b['shop.layout']=d.layout; b['shop.defaultSort']=d.defaultSort;
+  SHOPD_BOOLS.forEach(k=>{ b['shop.'+k]=!!d[k]; });
+  return b;
+}
+function shopdApply(b){ const d=state.cfgc.shop; if(!d) return;
+  ['layout','defaultSort'].concat(SHOPD_BOOLS).forEach(k=>{ if(('shop.'+k) in b) d[k]=b['shop.'+k]; }); }
+function shopdStart(){
+  if(cfgAuto.shop){ cfgAuto.shop.flush(); cfgAuto.shop=null; }
+  state.cfgc.shop=shopdSeed();
+  if(!canRoute('shopdisplay')||typeof TacetAutosave==='undefined') return;
+  cfgAuto.shop=TacetAutosave.create({
+    read:()=>shopdBody(),
+    send:(b,note)=>apiWrite('/config?history='+encodeURIComponent('shop.display')+(note?'&note='+note:''),b,'PUT')
+      .then(()=>cfgMerge(b)).catch(e=>{ throw cfgSendErr(e); }),
+    onChange:cfgFootPaint('shop'),
+  });
+  cfgAuto.shop.start();
+}
+reg('shopdSet', (k,v)=>{
+  const d=state.cfgc.shop; if(!d||!cfgAuto.shop) return;
+  if(k==='layout'){ if(!SHOPD_LAYOUTS.some(x=>x[0]===v)) return; d.layout=v; }
+  else if(k==='defaultSort'){ if(!SHOPD_SORTS.some(x=>x[0]===v)) return; d.defaultSort=v; }
+  else if(SHOPD_BOOLS.includes(k)) d[k]=!d[k];
+  else return;
+  cfgAuto.shop.touch(); render();
+});
+const cfgSel=(cmd,key,cur,opts)=>`<select style="width:100%" onchange="APP.cmd('${cmd}','${key}',this.value)">${opts.map(([v,en,zh])=>
+  `<option value="${escAttr(v)}"${String(v)===String(cur)?' selected':''}>${escAttr(T(en,zh))}</option>`).join('')}</select>`;
+const cfgHead=(t,d)=>`<div style="display:flex;flex-direction:column;gap:4px;padding:0 4px 8px"><span style="font-size:15px;font-weight:500">${t}</span>${d?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${d}</span>`:''}</div>`;
+const cfgToggleRows=(cmd,list,d)=>`<div class="list">${list.map(([k,en,zh],i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+  <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;min-height:52px"><span style="flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere">${T(en,zh)}</span>${toggle(!!d[k],`APP.cmd('${cmd}','${k}')`)}</div>`).join('')}</div>`;
+const cfgFoot=which=>`<div id="mCfgFoot-${which}" class="card" style="display:flex;align-items:center;gap:8px;padding:10px 12px">${cfgFootHtml(which)}</div>`;
+function screenShopDisplay(){
+  const s=state.cfgc; cfgCardLoad('shop');
+  if(s.err.shop&&!s.shop) return x1Err(String(s.err.shop),'cfgRetry');
+  if(!s.shop||!s.tried.shop) return x1Loading();
+  const d=s.shop;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:18px">
+    <div>${cfgHead(T('Layout','布局'),T('The default arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top.',
+      '顾客打开商城时的默认排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。'))}
+      ${cfgSel('shopdSet','layout',d.layout,SHOPD_LAYOUTS)}</div>
+    <div>${cfgHead(T('Default sort','默认排序'),T('The order products appear in when a customer opens the Shop. "Featured" follows the manual order you set on the Products page (drag-and-drop).','顾客打开商城时的默认排序;"精选"沿用产品页手动排序(拖拽)。'))}
+      ${cfgSel('shopdSet','defaultSort',d.defaultSort,SHOPD_SORTS)}</div>
+    <div>${cfgHead(T('Filter & controls bar','筛选与操作条'),T('Toggle which filter widgets appear above the product list. Each adds a row to the top of the Shop.','控制产品列表上方显示哪些筛选控件;每项会在商城顶部加一行。'))}
+      ${cfgToggleRows('shopdSet',[['showSort','Show sort dropdown','显示排序下拉'],['showDietary','Show dietary chips','显示饮食标签'],
+        ['showStockFilter','Show "In stock" toggle','显示「有货」开关'],['showBadgeFilter','Show NEW / POP / SALE filter','显示 NEW / POP / SALE 筛选'],
+        ['showPriceFilter','Show price ¥min – ¥max','显示价格 ¥min – ¥max 筛选'],['hideOutOfStock','Hide out-of-stock products entirely','完全隐藏缺货产品'],
+        ['lockLayout','Lock layout (hide customer\'s view-switcher)','锁定布局(隐藏顾客的视图切换)']],d)}</div>
+    ${cfgFoot('shop')}</div>`;
+}
+SUBS.shopdisplay={title:['Shop tab','商城页'],render:()=>screenShopDisplay()};
+
+/* ── Customer service ─────────────────────────────────────────────────────── */
+const CS_TEXT_M=['corp_id','url','label_en','label_cn','hours_en','hours_cn','phone','fab_icon_emoji'];
+const CS_SHOW_M=['show_me','show_home','show_product','show_checkout','show_order'];
+const CS_MODES=[['off','Off — hide the button entirely','关闭 — 完全隐藏按钮'],['wecom','WeCom — recommended','企业微信 — 推荐'],
+  ['kf','WeChat customer service — public account','微信客服 — 公众号客服'],['qr','QR code — show a scannable image','二维码 — 显示可扫描图片']];
+const CS_SIZES=[['sm','Small','小'],['md','Medium','中'],['lg','Large','大']];
+const CS_SHAPES=[['circle','Circle','圆形'],['rounded','Rounded square','圆角方形'],['pill','Pill + label','胶囊带文字']];
+const CS_ICONS=[['dots','Dots •••','圆点'],['bubble','Chat bubble 💬','对话气泡'],['question','Question ?','问号'],['headset','Headset 🎧','耳麦'],['custom','Custom emoji','自定义表情']];
+const CS_SIDES=[['right','Right','右'],['left','Left','左']];
+const CS_SWATCHES=[['#365329','Forest green'],['#E8DCCB','Oat'],['#C2674A','Terracotta']];
+/* loadConfig's readings, default for default. */
+function csSeed(){
+  const c=(state.cfg&&state.cfg.customer_service)||{};
+  const d={mode:c.mode||'off', qr_image_url:c.qr_image_url||''};
+  CS_TEXT_M.forEach(k=>{ d[k]=c[k]||''; });
+  CS_SHOW_M.forEach(k=>{ d[k]=k==='show_home'?!!c.show_home:c[k]!==false; });
+  d.fab_size=c.fab_size||'md'; d.fab_shape=c.fab_shape||'circle'; d.fab_color=c.fab_color||'#365329';
+  d.fab_icon=c.fab_icon||'dots'; d.fab_side=c.fab_side||'right';
+  d.fab_bottom=c.fab_bottom!=null?String(c.fab_bottom):'220';
+  return d;
+}
+/* CS_CARD.read, key for key and in its order: texts trimmed, the height a
+   whole number with the desktop's 220 when it is not one. */
+function csBody(){
+  const d=state.cfgc.cs, t=k=>String(d[k]||'').trim(), b={};
+  b['customer_service.mode']=d.mode;
+  b['customer_service.corp_id']=t('corp_id'); b['customer_service.url']=t('url');
+  b['customer_service.qr_image_url']=d.qr_image_url||'';
+  ['label_en','label_cn','hours_en','hours_cn','phone'].forEach(k=>{ b['customer_service.'+k]=t(k); });
+  CS_SHOW_M.forEach(k=>{ b['customer_service.'+k]=!!d[k]; });
+  ['fab_size','fab_shape','fab_color','fab_icon'].forEach(k=>{ b['customer_service.'+k]=d[k]; });
+  b['customer_service.fab_icon_emoji']=t('fab_icon_emoji');
+  b['customer_service.fab_side']=d.fab_side;
+  b['customer_service.fab_bottom']=parseInt(d.fab_bottom,10)||220;
+  return b;
+}
+function csApply(b){ const d=state.cfgc.cs; if(!d) return;
+  const g=k=>b['customer_service.'+k];
+  CS_TEXT_M.concat(['mode','fab_size','fab_shape','fab_color','fab_icon','fab_side']).forEach(k=>{ if(('customer_service.'+k) in b) d[k]=g(k)==null?'':g(k); });
+  CS_SHOW_M.forEach(k=>{ if(('customer_service.'+k) in b) d[k]=g(k)!==false; });
+  if('customer_service.qr_image_url' in b) d.qr_image_url=g('qr_image_url')||'';
+  if('customer_service.fab_bottom' in b) d.fab_bottom=String(g('fab_bottom')!=null?g('fab_bottom'):220);
+}
+function csStart(){
+  if(cfgAuto.cs){ cfgAuto.cs.flush(); cfgAuto.cs=null; }
+  state.cfgc.cs=csSeed();
+  if(!canRoute('custservice')||typeof TacetAutosave==='undefined') return;
+  cfgAuto.cs=TacetAutosave.create({
+    read:()=>csBody(),
+    send:(b,note)=>apiWrite('/config?history='+encodeURIComponent('customer_service')+(note?'&note='+note:''),b,'PUT')
+      .then(()=>cfgMerge(b)).catch(e=>{ throw cfgSendErr(e); }),
+    onChange:cfgFootPaint('cs'),
+  });
+  cfgAuto.cs.start();
+}
+const CS_PICKS={mode:CS_MODES, fab_size:CS_SIZES, fab_shape:CS_SHAPES, fab_icon:CS_ICONS, fab_side:CS_SIDES};
+/* A typed field nudges the engine and repaints nothing — the operator is
+   typing. A pick or a switch repaints, because it changes what is shown. */
+reg('csText', (k,v)=>{
+  const d=state.cfgc.cs; if(!d||!cfgAuto.cs) return;
+  if(CS_TEXT_M.includes(k)||k==='fab_bottom'||k==='fab_color'){ d[k]=String(v==null?'':v); cfgAuto.cs.touch(); }
+});
+reg('csSet', (k,v)=>{
+  const d=state.cfgc.cs; if(!d||!cfgAuto.cs) return;
+  if(CS_PICKS[k]){ if(!CS_PICKS[k].some(x=>x[0]===v)) return; d[k]=v; }
+  else if(CS_SHOW_M.includes(k)) d[k]=!d[k];
+  else if(k==='fab_color'){ if(!/^#[0-9a-f]{6}$/i.test(String(v||''))) return; d.fab_color=v; }
+  else return;
+  cfgAuto.cs.touch(); render();
+});
+/* The QR code goes up the desktop's way (uploadCsQr): POST /cms/media, the
+   file as `file`, and the URL it answers with is what the card stores. */
+reg('csQr', input=>{
+  const f=input&&input.files&&input.files[0]; if(!f) return;
+  input.value='';
+  const s=state.cfgc; if(s.qrBusy||!cfgAuto.cs) return;
+  s.qrBusy=true; s.qrErr=null; render();
+  const fd=new FormData(); fd.append('file',f);
+  fetch(API+'/cms/media',{method:'POST',credentials:'same-origin',body:fd}).then(async r=>{
+    if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+    if(r.status===403) throw await apiRefusal(r);
+    const j=await r.json().catch(()=>({}));
+    if(!j||!j.success||!j.data||!j.data.url) throw new Error((j&&j.error)||'');
+    s.qrBusy=false; s.cs.qr_image_url=j.data.url; cfgAuto.cs.touch(); render();
+    showToast(T('QR uploaded','二维码已上传'));
+  }).catch(e=>{
+    s.qrBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    s.qrErr=e&&e.refused?E(...e.words):E('Upload failed'+(e&&e.message?': '+e.message:''),'上传失败'+(e&&e.message?': '+e.message:'')); render();
+  });
+});
+reg('csQrClear', ()=>{ const s=state.cfgc; if(!s.cs||!cfgAuto.cs) return; s.cs.qr_image_url=''; cfgAuto.cs.touch(); render(); });
+const csField=(k,label,ph,attrs)=>`<label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${label}</span>
+  <input type="text" value="${escAttr(state.cfgc.cs[k])}" placeholder="${escAttr(ph)}" ${attrs||''} style="width:100%" oninput="APP.cmd('csText','${k}',this.value)"></label>`;
+function screenCustService(){
+  const s=state.cfgc; cfgCardLoad('cs');
+  if(s.err.cs&&!s.cs) return x1Err(String(s.err.cs),'cfgRetry');
+  if(!s.cs||!s.tried.cs) return x1Loading();
+  const d=s.cs, lbl=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>`;
+  const card=inner=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">${inner}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:18px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px">${T('Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team. WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.','在"我的"页、结算页和订单页显示一个聊天气泡按钮,点击即可与你的团队对话。推荐使用企业微信(WeCom)模式 —— 顾客可与客服人员实时交流。')}</div>
+    <div>${cfgHead(T('How customers reach you','顾客联系方式'),T('Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet.','三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。'))}
+      ${cfgSel('csSet','mode',d.mode,CS_MODES)}</div>
+    ${d.mode==='wecom'?`<div>${cfgHead(T('WeCom credentials','企业微信凭证'),'')}${card(
+      csField('corp_id',T('Corp ID','企业ID'),'ww1234abcd567890ef','autocapitalize="off" spellcheck="false"')+
+      csField('url',T('Service URL','客服链接'),'https://work.weixin.qq.com/kfid/kfc...','autocapitalize="off" spellcheck="false"'))}</div>`:''}
+    ${d.mode==='qr'?`<div>${cfgHead(T('QR code image','二维码图片'),T('Upload the scannable code. PNG/JPG, ideally square ≥600×600.','上传可扫码图片,PNG/JPG,建议方形 ≥600×600。'))}${card(
+      (d.qr_image_url?`<img src="${escAttr(d.qr_image_url)}" alt="QR" style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid var(--border-default)">`
+        :`<span style="font-size:13px;color:var(--text-secondary)">${T('No QR uploaded yet.','尚未上传二维码。')}</span>`)+
+      `<span style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="btn2" style="width:auto;padding:0 14px;${s.qrBusy?'opacity:.55;pointer-events:none':''}">${s.qrBusy?T('Uploading QR…','上传二维码中…'):T('Upload a QR code image','上传二维码图片')}
+          <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('csQr',this)"></label>
+        ${d.qr_image_url?`<button class="btn2" style="width:auto;padding:0 14px" onclick="APP.cmd('csQrClear')">${T('Remove','移除')}</button>`:''}</span>`+
+      (s.qrErr?`<span style="font-size:13.5px;color:var(--brick-ink)">${String(s.qrErr)}</span>`:''))}</div>`:''}
+    <div>${cfgHead(T('Button label & hours','按钮文案与营业时间'),T('Both languages — customers see one. Hours shown beneath the button on the Me tab; leave blank to hide.','两种语言都填,顾客看到其中一种;营业时间显示在"我的"页按钮下方,留空则隐藏。'))}${card(
+      csField('label_en',T('EN label','英文标签'),'Help')+csField('label_cn',T('Chinese label','中文标签'),'联系客服')+
+      csField('hours_en',T('EN hours line','英文营业时间'),'Mon–Sat · 9am–6pm')+csField('hours_cn',T('Chinese hours line','中文营业时间'),'周一至周六 · 9:00–18:00')+
+      csField('phone',T('Phone number (optional)','电话(可选)'),'+86 20 1234 5678','inputmode="tel"')+
+      `<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('Shown as the Call button on the FAQ help screen. Leave blank to hide.','显示为常见问题帮助页上的拨打按钮;留空则隐藏。')}</span>`)}</div>
+    <div>${cfgHead(T('Where to show','显示位置'),T('Pick which pages show the floating chat bubble. The look below applies to every page you tick.','选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。'))}
+      ${cfgToggleRows('csSet',[['show_me','Me tab','我的页'],['show_home','Home tab','首页'],['show_product','Product detail','商品详情'],
+        ['show_checkout','Checkout','结算页'],['show_order','Order detail','订单详情']],d)}</div>
+    <div>${cfgHead(T('Floating bubble look','悬浮按钮样式'),T('Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above.','自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。'))}${card(
+      `<label>${lbl(T('Size','大小'))}${cfgSel('csSet','fab_size',d.fab_size,CS_SIZES)}</label>`+
+      `<label>${lbl(T('Shape','形状'))}${cfgSel('csSet','fab_shape',d.fab_shape,CS_SHAPES)}</label>`+
+      `<label>${lbl(T('Icon','图标'))}${cfgSel('csSet','fab_icon',d.fab_icon,CS_ICONS)}</label>`+
+      (d.fab_icon==='custom'?csField('fab_icon_emoji',T('Custom emoji','自定义'),'🌱','maxlength="4" style="width:100%;text-align:center;font-size:18px"'):'')+
+      `<div>${lbl(T('Colour','颜色'))}<span style="display:flex;align-items:center;gap:10px">
+        <input type="color" value="${escAttr(d.fab_color)}" aria-label="${T('Button colour','按钮颜色')}" style="width:48px;height:38px;padding:0" onchange="APP.cmd('csSet','fab_color',this.value)">
+        ${CS_SWATCHES.map(([c,n])=>`<button aria-label="${escAttr(n)}" onclick="APP.cmd('csSet','fab_color','${c}')" style="width:28px;height:28px;border-radius:7px;background:${c};border:${d.fab_color.toLowerCase()===c.toLowerCase()?'2px solid var(--text-primary)':'1px solid var(--border-default)'};cursor:pointer"></button>`).join('')}</span></div>`+
+      `<label>${lbl(T('Side','位置'))}${cfgSel('csSet','fab_side',d.fab_side,CS_SIDES)}</label>`+
+      `<label>${lbl(T('Height off bottom (rpx)','距底高度'))}<input type="number" inputmode="numeric" min="0" max="800" placeholder="220" value="${escAttr(d.fab_bottom)}" style="width:100%" oninput="APP.cmd('csText','fab_bottom',this.value)"></label>`)}</div>
+    ${cfgFoot('cs')}</div>`;
+}
+SUBS.custservice={title:['Customer service','客户服务'],render:()=>screenCustService()};
+/* §325 X5 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -24874,7 +25173,10 @@ function screenSettings(){
       ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
       ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[]),
       /* §325 X4 — the desktop's Brand page, from the same nav it sits in there. */
-      ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[])]},
+      ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[]),
+      /* §325 X5 — the desktop's Shop tab and Customer service panels. */
+      ...(canRoute('shopdisplay')?[{label:T('Shop tab','商城页'),cmd:"APP.cmd('push','shopdisplay')",chev:true}]:[]),
+      ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[])]},
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -32514,6 +32816,11 @@ const ROUTE_CAP={
      callerHas check (PUT /api/backend/brand). The studio: the server's own gate
      on all three of its calls (lib/cap-routes.js, ai:generate). */
   brand:'settings:shop', brandstudio:'ai:generate',
+  /* §325 X5. Two Settings panels, reached from Settings; the server gates
+     shop.* and customer_service.* on the desktop Settings set, which holds
+     this one (configKeyCap). */
+  shopdisplay:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  custservice:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -33797,7 +34104,7 @@ function layers(){
   /* A recipe being edited puts its work on the wire on the way out (§300 R2) —
      the edge swipe cannot wait for an answer, the desktop's browser Back. */
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
-    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false);
+    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll();   // §325 X5: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
     if(t&&t.route==='productcost'&&!pcMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone); });
