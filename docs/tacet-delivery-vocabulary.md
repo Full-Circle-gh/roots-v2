@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.280 · 2026-09-30 · §390 ORDER-STOPPING SWITCHES ON THE PHONE — 18 STRINGS COMPOSED BY CLAUDE, 2 RESTRUCTURED, 1 LIFTED, THE REST COPIED WHOLE.** See *The switches that stop orders everywhere, on the phone (§390)*.
+
 **v1.279 · 2026-09-30 · §387 SKU CODES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SKU CODES TAB.** See *SKU code rules for materials, on the phone (§387)*.
 
 **v1.278 · 2026-09-30 · §386 BULK EDITS AND DELETE ON THE PHONE — NOTHING COMPOSED; TWO GLUED DESKTOP PAIRS LIFTED AS HALVES, THE REST COPIED WHOLE.** See *Bulk edits, bulk delete and single delete on the phone (§386)*.
@@ -12212,3 +12214,68 @@ The token palette's names and hints come from the server
 without `materials:edit` (the desktop shows a greyed checkbox there instead);
 `Settings · 设置`, `Loading… · 加载中…`, `Try again · 重试`, `Cancel · 取消`,
 and `Saving… · 保存中…`.
+
+## The switches that stop orders everywhere, on the phone (§390)
+
+**Operator register (Rule 1), 2026-10-01.** The Sales screen, its channel sheet
+and the Meituan and Eleme screens (`public/m.html`). The labels are copied from
+the desktop's open/close panel (`public/retail-admin/02-settings-ops.js`, its
+heading in `retail-admin.html`), the Sales card toggle (`01-core.js`
+csChannelToggle) and the channel switches (`11-meituan.js`, `14-eleme.js`).
+
+The desktop asks no question before most of these. Where it does, it gives a
+title and nothing else. So the confirm bodies are composed. Each one says what
+the server does, read from the handlers, and is built from the phone's live
+per-store and per-shop confirms next to it.
+
+| String | Status |
+|---|---|
+| `Close the online store? · 关闭线上商城？` / `Open the online store? · 开启线上商城？` | **composed by Claude.** The live `关闭` / `开启` and the desktop's `线上商城`. |
+| `The mini app and web store stop taking new orders, and shoppers there see that the store is closed. Every other channel and the counter till keep selling, and orders already placed are not affected. · 小程序与网店将停止接新订单，顾客会看到商城已关闭。其他渠道与门店收银照常营业，已下单的订单不受影响。` | **composed by Claude.** `小程序` and `网店` are the channel names in CHAN_META. `门店收银` comes from the shop confirm's `门店收银台`. `已下单的订单不受影响` is copied from the per-store confirm. |
+| `The mini app and web store take new orders again, wherever their own channel is open. · 小程序与网店将在各自渠道开启的门店恢复接新订单。` | **composed by Claude.** It says the switch does not override a channel closed on its own card. |
+| `Close everything? · 全部关闭？` / `Open everything? · 全部营业？` | **restructured.** The desktop's live button pairs, with a question mark added. `全部关闭` is copied whole from the desktop's master button. v1.137 rejected it for the SHOP switch, where it named the wrong unit. Here it names exactly the desktop's unit. |
+| `The online store closes, every shop stops taking orders on every channel and at the counter till, and every Meituan shop closes within about a minute. Orders already placed are not affected. · 线上商城将关闭，所有门店的所有渠道及门店收银停止接单，美团各门店约一分钟内关闭。已下单的订单不受影响。` | **composed by Claude.** Built from the shop confirm (`该门店的所有销售渠道将关闭，门店收银台停止销售`), its `美团约一分钟内跟随`, and the desktop toast's `约一分钟内`. |
+| `The online store opens, every shop takes orders and counter sales again, and every Meituan shop opens within about a minute. Any other channel closed at a shop — on its own or with the shop's switch — stays closed; open those below. · 线上商城将开启，所有门店恢复接单与门店收银，美团各门店约一分钟内开启。在门店单独关闭（或随门店开关关闭）的其他渠道保持关闭，请在下方开启。` | **composed by Claude.** `恢复接单、自提与门店收银` comes from the shop reopen confirm. The last sentence states the server's behaviour: the master does not write channel cells. |
+| `Open this channel at every store? · 开启所有门店的该渠道？` | **composed by Claude.** The desktop's live close question, with `关闭` changed to `开启`. |
+| `No new orders arrive on this channel at any store. Orders already placed are not affected. · 所有门店在此渠道将不再接到新订单。已下单的订单不受影响。` | **composed by Claude.** The live per-store confirm, with `该门店` changed to `所有门店`. |
+| `New orders can arrive on this channel again. A shop that is closed stays closed. · 该渠道可以重新接单。已关闭的门店保持关闭。` | **composed by Claude.** The live `这家门店可以重新接单。`, with the channel as the subject. The second sentence is §253's rule. `已关闭` is the live pill. |
+| `Meituan follows within about a minute. · 美团约一分钟内跟随。` | **lifted** whole from the last sentence of the phone's live shop reopen confirm. |
+| `Open channel · 开启渠道` | **English composed by Claude; Chinese copied** from the live `Enable channel · 开启渠道`. The English `Enable` was rejected because on the Meituan and Eleme screens `enable` is the stock-sync switch, a different act. |
+| `Turn the Meituan channel off? · 停用美团渠道？`, `Turn the Meituan channel on? · 开启美团渠道？`, `Turn the Eleme channel off? · 停用饿了么渠道？`, `Turn the Eleme channel on? · 开启饿了么渠道？` | **composed by Claude.** Built from the live button pairs `Turn off · 停用` and `Turn on · 开启` and the desktop's `美团渠道`. `关闭` was rejected for the off direction: on these screens it is the word for closing a channel at a store, which stops orders. This switch stops the sync, and the two must not read alike. |
+| `Stock stops being pushed to Meituan, at every shop and on 闪购 too. Changes wait in the queue and go out when it is back on. Meituan orders keep coming in and your shops stay open on Meituan — to stop orders, close Meituan at your stores instead. · 将停止向美团推送库存（所有门店，含闪购）。变更会在队列中等待，重新开启后发送。美团订单照常进来，门店在美团上保持营业 — 如需停止接单，请改为在门店关闭美团。` | **composed by Claude.** Built from the desktop toast's `将不再推送` and the live `待推送库存`. What stops and what does not is read from `processStockQueue` in the 外卖 and 闪购 daemons. |
+| `Stock pushes to Meituan start again, beginning with the changes that waited while it was off. · 恢复向美团推送库存，先发送停用期间排队的变更。` | **composed by Claude.** |
+| `Eleme stops syncing altogether: no stock is pushed, no Eleme orders are brought in — not even ones already placed — and the listing catalogue stops refreshing, until it is turned back on. Your shops stay open on Eleme itself, so customers can still order there. · 饿了么将完全停止同步：不再推送库存，也不再导入饿了么订单（包括已下单的订单），商品目录也停止刷新，直到重新开启。门店在饿了么平台上仍然营业，顾客仍可下单。` | **composed by Claude.** Built from the live `订单未导入，库存也未推送。`. The order-import clause is the reason this confirm exists: the Eleme daemon's whole loop stops, so orders already placed on Eleme are not imported either. |
+| `Eleme starts syncing again: stock is pushed, Eleme orders are brought in and the listing catalogue is read. · 饿了么恢复同步：推送库存、导入饿了么订单并读取商品目录。` | **composed by Claude.** |
+
+Copied whole:
+
+- from the desktop open/close panel: `Open for business · 营业状态` (the panel heading),
+  `Everything is open · 全部营业中`, `Everything is closed · 全部已关闭`,
+  `Some channels are closed · 部分渠道已关闭`, `Close everything · 全部关闭`,
+  `Open everything · 全部营业`, `Online store · 线上商城`,
+  `Could not read the shop status · 无法读取营业状态`, and the four toasts
+  `Opening every channel · 正在开启全部渠道`,
+  `Closing every channel — marketplaces follow within about a minute · 正在关闭全部渠道 — 外卖平台约一分钟内跟随`,
+  `Online store is open · 线上商城已开启`, `Online store is closed · 线上商城已关闭`;
+- from the desktop Sales card: `Close this channel at every store? · 关闭所有门店的该渠道？`,
+  `Close channel · 关闭渠道`, `Saved · 已保存`, `Shop closed · 门店已关闭`;
+- from the desktop channel switches: `Channel on · 渠道开启`, `Channel off · 渠道已关闭`,
+  `Meituan channel on · 美团渠道已开启`, `Meituan channel off — nothing will be pushed · 美团渠道已关闭 — 将不再推送`.
+
+The phone's own, already live: `Open · 营业中`, `Closed · 已关闭`, `Open · 开启`,
+`Close · 关闭`, `Turn on · 开启`, `Turn off · 停用`, `Saving… · 保存中…`,
+`Loading… · 加载中…`, `Try again · 重试`,
+`Orders are not being imported and stock is not being pushed. · 订单未导入，库存也未推送。`,
+`That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`.
+
+**Rejected:**
+- A composed `Close at every store · 全部门店关闭` for the sheet's button. The
+  desktop's live `Close channel · 关闭渠道` fits, and the confirm title already
+  names every store.
+- A composed heading `Open / closed · 营业状态`. The desktop panel's own heading
+  fits.
+
+**Retired:** `Closing a channel everywhere at once is on desktop. ·
+一次性关闭整个渠道请在电脑端操作。` (the channel sheet) and `Closing a whole
+channel everywhere is on desktop · 一次性关闭整个渠道在电脑端` (the Sales footer,
+v1.137). Both were made untrue by this step.
