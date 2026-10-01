@@ -329,8 +329,8 @@
     rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Stock, and how much of it each channel may sell · 库存,以及各渠道可售数量', '库存,以及各渠道可售数量')}</b><br>
       <span class="muted" style="font-size:12px">${cuT('New stores start un-counted; set stock when ready · 新门店初始未盘点,可随时录入库存', '新门店初始未盘点,可随时录入库存')}</span></div>
       <button class="btn btn-sm" onclick="goTab('products')">${cuT('Open products · 打开产品', '打开产品')}</button></div>`);
-    rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Delivery zones · 配送区域', '配送区域')}</b><br>
-      <span class="muted" style="font-size:12px">${cuT('Zones are city-wide and already cover the new store · 配送区域按城市划分,已覆盖新门店', '配送区域按城市划分,已覆盖新门店')}</span></div>
+    rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Delivery zones · 配送区', '配送区')}</b><br>
+      <span class="muted" style="font-size:12px">${cuT('Zones are city-wide and already cover the new store · 配送区按城市划分,已覆盖新门店', '配送区按城市划分,已覆盖新门店')}</span></div>
       <button class="btn btn-sm" onclick="dlvOpen()">${cuT('Review zones · 查看区域', '查看区域')}</button></div>`);
     box.innerHTML = `<div class="ig-wiz">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">

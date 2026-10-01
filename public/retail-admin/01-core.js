@@ -258,7 +258,7 @@ const TD_ERR = {
   undo_blocked:           ['That cannot be undone from here.', '无法在此撤销。'],
   slot_unavailable:       ['That delivery window is no longer available.', '该配送时段已不可选。'],
   address_not_found:      ['That address could not be found on the map.', '地图上找不到该地址。'],
-  no_zone_match:          ['That address is not inside any of your delivery areas.', '该地址不在任何配送区域内。'],
+  no_zone_match:          ['That address is not inside any of your delivery areas.', '该地址不在任何配送区内。'],
   pickup_order:           ['That is a collection order, so it is not delivered.', '该订单为自提,不涉及配送。'],
   no_printer_for_store:   ['No printer is set up for that location.', '该门店未配置打印机。'],
 

@@ -6125,7 +6125,7 @@ reg('resumeDelivery', ()=>{
   if(state.dlvBusy) return;
   state.ask={title:T('Resume delivery?','恢复配送？'),
     body:T('Holiday mode goes off and orders can be delivered again. The message shoppers were seeing is taken down.',
-           '假日模式将关闭，恢复接单配送，顾客看到的歇业提示会撤下。'),
+           '假期模式将关闭，恢复接单配送，顾客看到的歇业提示会撤下。'),
     confirmLabel:T('Resume','恢复'),
     run:()=>{
       state.dlvBusy=true; state.dlvErr=null; render();
@@ -6146,7 +6146,7 @@ reg('resumeDelivery', ()=>{
       }).catch(e=>{
         state.dlvBusy=false;
         if(String(e.message)==='auth') return;
-        state.dlvErr=e.refused?E(...e.words):E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
+        state.dlvErr=e.refused?E(...e.words):E('That did not save. Holiday mode is still on.','没有保存成功。假期模式仍然开启。'); render();
       });
     }};
   render();
@@ -6242,7 +6242,7 @@ const DLV_LIVE={
 /* What a version changed, in the card's own field words. */
 const DLV_VER_WORDS={'delivery.sameDayCutoffMinutes':['Cutoff','截单时间'],'delivery.sameDayCutoffMessage':['Message (English)','英文消息'],
   'pickup.window':['Opens','开始'],'pickup.leadMinutes':['Earliest pickup','最早可取'],'notice.preorder':['Checkout notice','结账提示'],
-  'delivery.kitchenAddress':['Address','地址'],'delivery.holidayMode':['Holiday mode','假日模式'],'delivery.holidayMessage':['Message (English)','英文消息'],
+  'delivery.kitchenAddress':['Address','地址'],'delivery.holidayMode':['Holiday mode','假期模式'],'delivery.holidayMessage':['Message (English)','英文消息'],
   'delivery.bulkTracking':['Bulk attach tracking','批量绑定运单号'],'delivery.boxLabel':['Box label','箱贴打印']};
 function dlvCfgPut(card,body,note){
   return apiWrite('/config'+(card?'?history='+encodeURIComponent(card)+(note?'&note='+encodeURIComponent(note):''):''),body,'PUT')
@@ -6362,7 +6362,7 @@ reg('dlvDefaultZone', ()=>{
 reg('dlvHoliday', ()=>{
   if(!dlvCanWrite()||state.dlvBusy) return;
   const on=!!cfgGet('delivery.holidayMode',false), m=cfgGet('delivery.holidayMessage',{})||{};
-  state.ask={title:T('Holiday mode','假日模式'),
+  state.ask={title:T('Holiday mode','假期模式'),
     body:T('Turn ON when the kitchen is closed for a holiday. Customers can still place orders — same-day delivery is hidden, the calendar still works, and your message appears on checkout.',
            '厨房放假时开启。顾客仍可下单 — 当日达被隐藏,日历仍可选,结账页显示您的提示。'),
     fields:[{id:'en',label:T('Message (English)','英文消息'),multiline:true,value:m.en||'',placeholder:"We're closed for a short holiday — your order will ship as soon as we're back."},
@@ -6374,13 +6374,13 @@ reg('dlvHoliday', ()=>{
       const send=()=>{
         state.dlvBusy='holiday'; state.dlvSetErr=null; render();
         dlvCfgPut('delivery.holiday',body).then(()=>{ state.dlvBusy=false; render();
-          showToast(on?T('Saved','已保存'):T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')); })
+          showToast(on?T('Saved','已保存'):T('Holiday mode is on — delivery is paused','假期模式已开启 — 配送已暂停')); })
           .catch(e=>{ state.dlvBusy=false; if(String(e.message)==='auth') return;
             state.dlvSetErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
       };
       if(on){ send(); return; }
       const said=LANG==='en'?v.en:v.cn;
-      state.ask={title:T('Holiday mode','假日模式'),
+      state.ask={title:T('Holiday mode','假期模式'),
         body:T('Turn ON when the kitchen is closed for a holiday. Customers can still place orders — same-day delivery is hidden, the calendar still works, and your message appears on checkout.',
                '厨房放假时开启。顾客仍可下单 — 当日达被隐藏,日历仍可选,结账页显示您的提示。')
           +`<div style="margin-top:10px;font-size:14px;color:var(--text-primary)">${T('Shoppers are told','顾客看到')}: “${escAttr(said)}”</div>`,
@@ -11301,7 +11301,7 @@ function dlvSettingsCard(holiday,cutoff){
       <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>${sep}`:'';
   return `<div class="list">
     ${zonesRow}
-    ${row(T('Holiday mode','假日模式'), holiday?T('On','开'):T('Off','关'),'dlvHoliday')}${sep}
+    ${row(T('Holiday mode','假期模式'), holiday?T('On','开'):T('Off','关'),'dlvHoliday')}${sep}
     ${row(T('Same-day cutoff','当日截单'), T((cutoff!=null?cutoff:10)+' min before close',(cutoff!=null?cutoff:10)+' 分钟(打烊前)'),'dlvLive','cutoff')}${sep}
     ${row(T('Fees & minimum','费用与起送'), T('Free over','满额免运')+' '+m(f.freeShippingThreshold)+' · '+m(f.minOrder),'dlvFees')}${sep}
     ${row(T('Store pickup','到店自提'), (w.open||'10:00')+'–'+(w.close||'20:00'),'dlvLive','pickup')}${sep}
@@ -11333,7 +11333,7 @@ function screenDelivery(){
     ${holiday?`<div style="display:flex;flex-direction:column;gap:6px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Holiday mode is on — delivery is paused','假期模式已开启 — 配送已暂停')}</span></div>
       ${hText?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}
       ${/* Resume is the one-tap way back. Turning it ON, and changing the
             message, is the Holiday mode row below (§325 O4, under §326.2, which
@@ -11345,7 +11345,7 @@ function screenDelivery(){
         state.dlvBusy?T('Resuming…','恢复中…'):T('Resume delivery','恢复配送')}</button>
       ${state.dlvErr?`<div style="font-size:13px;color:var(--brick-ink)">${state.dlvErr}</div>`:''}</div>`:''}
     ${settingsGroupCard([
-      {label:T('Delivery zones','配送范围'), value: z ? T(z.live+' live','启用 '+z.live) : T('Loading…','加载中…')},
+      {label:T('Delivery zones','配送区'), value: z ? T(z.live+' live','启用 '+z.live) : T('Loading…','加载中…')},
       {label:T('Provinces covered','覆盖省份'), value: z ? String(z.provs) : T('Loading…','加载中…')},
       {label:T('Same-day districts','当日达区域'), value: z ? String(z.sameday) : T('Loading…','加载中…')},
       {label:T('Stores located','门店已定位'), value:located},
@@ -11354,7 +11354,7 @@ function screenDelivery(){
     ${dlvSettingsCard(holiday,cutoff)}
     ${z&&z.off?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
       <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
-      <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送范围已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
+      <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送区已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
     ${missing?`<div style="display:flex;align-items:flex-start;gap:11px;background:var(--brick-tint);border-radius:12px;padding:12px 14px">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
       <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
@@ -11507,7 +11507,7 @@ reg('suOpen', ()=>{
   state.ask={title:T('Open your store now?','现在开店？'),
     body:T('Your web store goes live and can take orders. You can keep editing anything afterwards.','你的网页商店将上线并可接单。之后仍可继续编辑任何内容。'),
     cancelLabel:T('Not yet','还没'), confirmLabel:T('Open the doors','正式开店'),
-    run:()=>suFlag('open',{storeOpened:true},T('Your store is open','你的店开张了'))};
+    run:()=>suFlag('open',{storeOpened:true},T('Your store is open','店铺已开业'))};
   render();
 });
 function screenSetup(){
@@ -31868,7 +31868,7 @@ function opsxBinCard(){
   }).join('');
   return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recently deleted','最近删除')}</div>
     <div class="list">${body}</div>
-    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. A restored purchase order keeps its own date, so it still lands in the month it was placed.','最近 60 天内删除的优惠券、配送区域、账目行与采购单草稿可以恢复。恢复的采购单保留原有日期，仍计入原来的月份。')}</div></div>`;
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. A restored purchase order keeps its own date, so it still lands in the month it was placed.','最近 60 天内删除的优惠券、配送区、账目行与采购单草稿可以恢复。恢复的采购单保留原有日期，仍计入原来的月份。')}</div></div>`;
 }
 /* §325 X2 ends */
 /* ══════════════════════════════════════════════════════════════════════════
@@ -38289,7 +38289,7 @@ function shipFromCard(o){
       +(sf.push_error?`<div class="num" style="font-size:12px;line-height:1.5;color:var(--text-secondary);margin-top:4px;overflow-wrap:anywhere">${escAttr(sf.push_error)}</div>`:'')
       +(held?sub(T('Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.','地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')):'')
       +((booked&&qyCompareShown(o))?sub(T('The address is checked. Compare couriers below when you want a rider — nothing is charged until you dispatch.','地址已核对。需要骑手时点击下方“查看运力比价” — 发起配送前不产生费用。')):'')
-      +((refused&&can)?sub(T('Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.','修正收货地址(修改收货信息或转为中文地址)后会自动重试,也可点击重新发单。'))
+      +((refused&&can)?sub(T('Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.','修正收货地址(修改收货地址或转为中文地址)后会自动重试,也可点击重新发单。'))
           +btns([qyBtn(state.orderBusy==='qyretry'?T('Queuing…','排队中…'):T('Retry push','重新发单'),"APP.cmd('qyRetryPush')")]):'')
       +qyCourierOps(o),
       refused||held);

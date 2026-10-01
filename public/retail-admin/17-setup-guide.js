@@ -898,7 +898,7 @@ function suDoneScreen() {
   suModal(`
     <div class="su-done-hero">
       <div class="su-done-big">${SU_ICON.check}</div>
-      <h3>${cuT('Your store is open', '你的店开张了')}</h3>
+      <h3>${cuT('Your store is open', '店铺已开业')}</h3>
       <p>${cuT('Customers can browse, order and pay right now.', '顾客现在就能浏览、下单、付款。')}</p>
     </div>
     ${pendHtml}
