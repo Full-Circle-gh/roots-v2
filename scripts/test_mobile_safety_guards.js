@@ -484,7 +484,11 @@ section('9 · Notes that were no longer true');
     assert.ok(!M.includes("noteBar(T('Issue fapiao on desktop'"));
     assert.ok(!M.includes('Marking it paid is a desktop action'));
     assert.ok(!M.includes("'Store details, staff, printers and payment keys are set on desktop.'"));
-    has(M, "noteBar(T('Store details, printers and payment keys are set on desktop.','门店资料、打印机与支付密钥在电脑端设置。'))");
+    // §325 X6 — store details are edited on the phone now, so they left the line too.
+    assert.ok(!M.includes("'Store details, printers and payment keys are set on desktop.'"));
+    // §325 X7 — and printers: they have their own screen now.
+    assert.ok(!M.includes("'Printers and payment keys are set on desktop.'"));
+    has(M, "noteBar(T('Payment keys are set on desktop.','支付密钥在电脑端设置。'))");
     has(M, "why:['The screenshot was read and matches.',\n         '付款截图已核对一致。']};");
   });
 }

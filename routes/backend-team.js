@@ -25,6 +25,8 @@ const features = require('../lib/features');
 const roles = require('../lib/roles');
 const editHistory = require('../lib/edit-history');
 const { requireBackend, requireCap, roleAboveCaps, loadCaller } = require('../lib/require-cap');
+// §325 (S2g) — who may add, remove or reset a store's stock-staff sign-ins.
+const requireStoreStaffWrite = requireCap(require('../lib/cap-routes').storeStaffCap());
 const router = express.Router();
 
 // Tenant feature entitlements (the plan ceiling) for a tenant id. A capability
@@ -931,6 +933,16 @@ router.delete('/api/backend/roles/:key', requireCap('team:permissions'), express
 // (req.session.tenantId) and the :storeId in the path.
 // ══════════════════════════════════════════════════════════════════════════
 
+/* §325 (S2g) — THE THREE WRITES ARE GATED, THE LIST STAYS OPEN.
+   Add, remove and reset password take requireStoreStaffWrite: any of the keys
+   that open a screen making them today (lib/cap-routes.js storeStaffCap) —
+   the Settings tab's, whose Operations → Stores list draws "Stock staff" with
+   no gate of its own, and stores:edit or team:manage, the phone's. Through
+   requireCap, like every other write in this file, so it holds whether or not
+   the shop has switched enforcement on — the Team page's writes do the same.
+   The list is a read and stays open, as GET /api/backend/team (the whole
+   roster) is: what a screen SHOWS is the client's job. */
+
 // List the stock clerks for one store.
 router.get('/api/backend/stores/:storeId/staff', requireBackend, (req, res) => {
   const storeId = parseInt(req.params.storeId, 10);
@@ -943,7 +955,7 @@ router.get('/api/backend/stores/:storeId/staff', requireBackend, (req, res) => {
 
 // Add a stock clerk to one store. Role + store are fixed by the endpoint — the
 // caller only supplies a name, login and password.
-router.post('/api/backend/stores/:storeId/staff', requireBackend, express.json(), (req, res) => {
+router.post('/api/backend/stores/:storeId/staff', requireStoreStaffWrite, express.json(), (req, res) => {
   try {
     const storeId = parseInt(req.params.storeId, 10);
     if (!storeId) return res.status(400).json({ error: 'Bad store · 门店无效' });
@@ -979,7 +991,7 @@ function storeStaffMember(req) {
 }
 
 // Remove a stock clerk (deactivate — keeps their stock-ledger history intact).
-router.delete('/api/backend/stores/:storeId/staff/:userId', requireBackend, (req, res) => {
+router.delete('/api/backend/stores/:storeId/staff/:userId', requireStoreStaffWrite, (req, res) => {
   const u = storeStaffMember(req);
   if (!u) return res.status(404).json({ error: 'Member not found · 未找到成员' });
   db.prepare('UPDATE tenant_users SET is_active = 0 WHERE id = ?').run(u.id);
@@ -987,7 +999,7 @@ router.delete('/api/backend/stores/:storeId/staff/:userId', requireBackend, (req
 });
 
 // Reset a stock clerk's password.
-router.post('/api/backend/stores/:storeId/staff/:userId/password', requireBackend, express.json(), (req, res) => {
+router.post('/api/backend/stores/:storeId/staff/:userId/password', requireStoreStaffWrite, express.json(), (req, res) => {
   const u = storeStaffMember(req);
   if (!u) return res.status(404).json({ error: 'Member not found · 未找到成员' });
   const np = (req.body && req.body.new_password) || '';

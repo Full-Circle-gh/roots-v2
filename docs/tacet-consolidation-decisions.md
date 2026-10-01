@@ -24684,3 +24684,225 @@ Settings panels the phone did not have are on the phone now: **Shop tab** and
      redrawn as you click. They are illustrations of the setting, not the setting.
    - The desktop's per-mode setup instructions for WeCom, which point at another
      company's admin site to be followed at a desk.
+
+## §357 — STORES ARE ADDED AND EDITED ON THE PHONE, WITH THEIR STOCK STAFF; THE TEAM'S DEVICES CAN BE SEEN AND SIGNED OUT THERE (§326.5)
+
+**Built 2026-10-01 under §325.** This is step X6 of the Settings / Channels /
+Dashboard / Billing lane. Before it, the phone only listed stores on
+Operations and had no team devices view. The desktop's own panels are the
+spec: `02-settings-ops.js` `_opsStoreForm`, `_opsStoreStaff` and the Team
+devices card.
+
+1. **A store is edited on the phone, and saves itself (§279).** On
+   Operations, each store row has **Edit**.
+   - **What can be changed:** both names, phone, city, district, street
+     address, opening and closing times, when channel sync starts, sort
+     priority, the store's low-stock line, and store pickup.
+   - **How it saves:** each pause sends the desktop's whole body (key for key
+     and in its order) to `PATCH /stores/:id?history=store.<id>`. It runs on
+     the same engine the desktop uses (`public/tacet-autosave.js`). Undo and
+     Version history read the desktop's history (`GET /stores/:id/history`).
+   - **Address fields wait until you leave them.** City, district and street
+     address are sent when the field is left, not on every key, because a
+     change there makes the server re-locate the store. The desktop marks
+     these same fields `data-as-commit`.
+   - **The located line catches up.** The store list is read again shortly
+     after each save, as the desktop does, so the located line shows the new
+     position.
+   - **The code cannot be changed** once the store exists.
+   - **The manual GPS pin keeps its own Save.** It sends `PATCH {lat,lng}`
+     alone, after the desktop's range check.
+2. **A store is added on the phone.** **+ Add store** sits under the list.
+   - **New stores keep Save**, because saving one creates it. It sends
+     `POST /stores` with the same body plus `code`, which is required.
+   - **Coordinates go only when both are typed and in range.** Never
+     `lat:null`: that would clear them and stop the address locating the
+     store.
+   - **Who can do it:** `stores:edit` for both editing and adding. That is
+     the key `lib/cap-routes.js` asks of every `/stores` write.
+3. **A store's stock staff are managed on the phone.** Stock staff are the
+   people who can only open Quick Stock, and only for that store. From the
+   store row or the store screen you can:
+   - list them;
+   - add one, as `POST {display_name, username, password}`, after the
+     desktop's checks (a login is required; the password needs at least 10
+     characters);
+   - remove one, after the desktop's confirm, as `DELETE`;
+   - set a new password, as `POST …/password {new_password}`, with the same
+     10-character check.
+4. **DECISION FOR ASH — who manages stock staff.** The server asks only for a
+   signed-in session on these four endpoints (`routes/backend-team.js`,
+   `requireBackend`). The desktop draws the button for anyone who reaches
+   Operations.
+   - **What the phone does:** it offers them to `stores:edit` **or**
+     `team:manage`, the key that edits the store or the key that manages
+     people.
+   - **Why:** these endpoints create sign-ins, so offering them to everybody
+     felt wrong to build.
+   - **What it does not change:** the server and the desktop are untouched,
+     so nobody loses access they had.
+   - **Your call:** narrowing it to one key, or closing the server gap. That
+     is a SERVER-lane change; the gap is reported separately.
+5. **Team devices (§326.5).** It is reached from Team → People, under the
+   list, where the desktop's card sits.
+   - **What it shows:** every device the team is signed in on, whose it is
+     ("(You)" on your own), this device, when it was last seen, the kind, and
+     where.
+   - **The filter:** the desktop's All / Desktop / Mobile, where Mobile
+     means phones and tablets.
+   - **Signing a device out** sends `POST /sessions/revoke {sid}`.
+   - **Signing out the device in hand** asks first, with the desktop's
+     words. When the server says it was this session, the app goes to the
+     sign-in page.
+   - **Who can do it:** `team:manage`, the key `GET /sessions/team` checks
+     and the desktop card is shown on.
+6. **The Operations line changed.** It read "Store details, printers and
+   payment keys are set on desktop." Store details came out, because they
+   are edited above it now.
+7. **Not done, on purpose.**
+   - **No store search box.** The desktop shows one from six stores up; the
+     phone list is short enough to scroll. Add it if a tenant reaches that
+     size.
+   - **No delete or deactivate for a store.** The desktop panel has none
+     either.
+   - **No phone for the setup wizard's map-pin confirmation.** That belongs
+     to X11 / setup.
+
+## §358 — A STORE'S STOCK-STAFF SIGN-INS NEED A PERMISSION
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Found by the settings lane. The endpoints under `/api/backend/stores/:storeId/staff`
+(`routes/backend-team.js`) required only a signed-in session. So anyone signed in
+to the back office could create a stock-clerk sign-in, remove one, or reset its
+password, for any store in their shop. These routes are not under
+`/api/retail-admin`, so the permission check that gates `/api/retail-admin` writes
+(the "choke point", `requireRetailAdmin`) never saw them.
+
+1. **The three writes are gated** (§325.3): add (`POST`), remove (`DELETE /:userId`)
+   and reset password (`POST /:userId/password`). Each now needs any one of the
+   permissions that open a screen making them today (`storeStaffCap()` in
+   `lib/cap-routes.js`):
+   - **The desktop's Settings → Operations → Stores list.** Its "Stock staff"
+     button has no gate of its own, so these are the Settings tab's permissions:
+     `settings:shop`, `settings:push`, `settings:payments`, `stores:view`,
+     `shipping:config` and `delivery:view`.
+   - **The phone's store screen**, which draws the control for `stores:edit` or
+     `team:manage`. Both are admitted. At this merge the phone's call was not yet
+     in main. The suite accepts the phone as a caller, and checks its gate once it
+     arrives.
+2. **The check holds whether or not the shop has turned enforcement on.**
+   - It goes through `requireCap`, like every other write in this file (adding a
+     team member, resetting a password, editing roles). These sign-ins are the
+     same kind of power as those, and the Team page's writes have always been
+     checked this way.
+   - Nobody who can open a screen making these writes loses them. The screens are
+     drawn from the same permissions with enforcement on or off.
+   - The owner's permissions include all of these, so the owner is never refused.
+   - A refusal comes back as 403 with this file's own wording, as the Team writes'
+     refusals do.
+3. **The list (`GET`) stays open to anyone signed in**, as the whole roster
+   (`GET /api/backend/team`) is. Reads stay open across this product's permission
+   checks: what a screen shows is decided by the client, and refusing a read can
+   break a screen the operator is allowed to use. The list carries names, sign-in
+   names and the last sign-in time. It carries no password and no money.
+4. **Deliberately not done: holding a store-scoped operator to their own store.**
+   - The desktop's store list is not filtered by store scope, so a store-scoped
+     operator who can open Settings sees every store. That operator can manage
+     another store's clerks today.
+   - Refusing that would take something away from them. Whether those writes
+     should follow the scope rule that `/stores/:id` writes follow under
+     enforcement is Ash's decision.
+5. **Who is refused now:** only an account that can open neither screen. For
+   example, an orders-only, stock-count-only or no-permission account can no
+   longer create, remove or reset a stock clerk's sign-in.
+6. **Tests.** `scripts/test_store_staff_gates.js` (fast shard, 62 checks) runs the
+   real `routes/backend-team.js` over a scratch database with real sessions. It
+   checks:
+   - **The rule:** which permissions are let through, and that the list stays a
+     plain signed-in read.
+   - **Refused:** an orders account and an account holding nothing, for all three
+     writes. Each refusal leaves nothing made, the password unchanged and the
+     clerk still active.
+   - **Let through:** `settings:shop`, `stores:view`, `stores:edit`, `team:manage`
+     and the owner, for all three writes, with the effect checked.
+   - **The list:** still open to the orders account; still 401 when nobody is
+     signed in.
+   - **The callers:** the desktop Operations → Stores panel and its ungated
+     button, plus the phone when it calls these.
+7. **Nothing composed.** No operator strings were added.
+
+## §359 — PRINTERS, COURIER KEYS, QINGYUN AND THE SHOP'S PUSH NOTIFICATIONS ARE SET FROM THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X7 of the Settings / Channels /
+Dashboard / Billing lane. Five desktop panels are on the phone now, each on
+the desktop's own endpoints and bodies.
+
+1. **Receipt printing.** Opened from Operations, under the auto-print switch.
+   The desktop source is `02-settings-ops.js`.
+   - **What it holds:**
+     - each printer brand's account (Feie, Shangpeng);
+     - the three auto-print switches and the receipt header;
+     - each store's printer: SN, brand, template, copies, its print preview,
+       and **Save & test this store**;
+     - the kitchen printer, the stock-request slip, and which store prints
+       out-of-Guangzhou orders.
+   - **How Save all works:** as on the desktop. Every brand the server lists
+     has its account sent first (`PUT /integrations {feie}` / `{spyun}`),
+     then the printer settings (`PUT /printer`, the desktop's eleven keys in
+     order). A refused account is shown on the screen, and the printer
+     settings still go, as the desktop does.
+   - **How Save & test works:** saves everything first, then sends
+     `POST /printer/test {store_id}`. A failure names the brand and SN that
+     were tried. When the cloud does not know the SN, it asks whether the
+     brand is right, in the desktop's words.
+2. **Package tracking (Kuaidi100) and JD Logistics.** Each has Save and
+   Save & test, with the desktop's bodies.
+   - **A secret left blank is kept.** It is never sent, and only its mask is
+     shown back.
+   - **A test is only sent after a save that worked.**
+3. **Qingyun riders.** Shows each store's status, with **Request setup** for
+   a store that is not connected (`POST {store_code}`, once per visit).
+   - **Auto-send** is offered once a store is connected
+     (`POST {enabled}`). The switch moves only when the server says it did.
+   - The rider-point picker stays held (§97). It is not built here.
+4. **Push notifications** (the desktop Settings → Push panel). It holds:
+   - the WeCom app, with Save and Send a test. The test sends the group-bot
+     address typed below, as the desktop does, so it can be tried before
+     saving;
+   - SMS when delivered, with Save and Send a test SMS. The phone number is
+     checked first, then the keys are saved, then a real SMS is sent;
+   - the order-status template, the group-bot webhook, and System Alerts with
+     its test.
+   - **Save settings** sends the desktop `saveConfig`'s four keys, and only
+     those. The desktop's Save bar also saves the manual-Alipay card; that is
+     a money setting and gets its own screen in X10.
+5. **Who can open each screen.** Each is gated on exactly the keys the
+   server asks of its writes:
+   - Receipt printing and Push notifications: the desktop Settings set
+     (`SETTINGS_SCREEN`).
+   - Kuaidi100 and JD: `delivery:view` / `delivery:edit` / `shipping:config`.
+   - Qingyun: `delivery:view` / `delivery:edit`.
+6. **Where the doors are.**
+   - Receipt printing: Operations.
+   - Push notifications: Settings → Store.
+   - The three delivery cards: a new **Delivery** group in Settings, and the
+     phone's Delivery settings screen. That screen is the Orders lane's; it
+     gains one line (`x7DeliveryDoors()`) so `delivery:view` holders reach the
+     cards there, as they reach them in the desktop Delivery hub.
+7. **The Operations line now reads "Payment keys are set on desktop."**
+   Printers left the line.
+8. **Not built.** These stay held by §97: the JD label printer (a per-machine
+   switch), the box-label printer, and the Qingyun point picker.
+
+**Open for Ash.**
+- **The Kuaidi100 callback address.** When nothing is stored, the field opens
+  on `https://rootskitchenchina.com/...`. That is the desktop input's built-in
+  value, copied so both send the same body. On another tenant that address is
+  wrong. The server comment says the address is built per tenant, so the
+  field may not be needed at all. Desktop and phone should change together.
+- **The six test endpoints have no permission gate on the server**
+  (`/printer/test`, `/integrations/kd100/test`, `/integrations/jd/test`,
+  `/integrations/aliyun_sms/test`, `/wecom/test`, `/system-alerts/test`).
+  They send real prints, real SMS and real WeCom messages. The phone draws
+  each test only for its screen's keys. Closing this on the server is a
+  SERVER-lane change.

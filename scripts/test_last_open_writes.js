@@ -182,7 +182,8 @@ operator('owner', [], 'owner');
     is(who(/retail-admin\/alipay-manual|'\/alipay-manual'/), ['public/m.html', 'public/retail-admin/02-settings-ops.js', 'public/retail-admin/17-setup-guide.js'],
       '/alipay-manual: Settings and the setup guide write, the phone reads');
     is(who(/fapiao-settings/), [], '/fapiao-settings: no screen');
-    is(who(/qingyun\/(autopush|request)/), ['public/retail-admin/02-settings-ops.js'], 'Qingyun: the Delivery panel');
+    is(who(/qingyun\/(autopush|request)/), ['public/m.html', 'public/retail-admin/02-settings-ops.js'], 'Qingyun: the Delivery panel, and the phone\'s Qingyun riders screen (§325 X7)');
+    ok(/qycfg:\['delivery:view','delivery:edit'\]/.test(M), 'the phone\'s Qingyun screen opens on exactly the keys the route asks');
     is(who(/page-templates/), ['public/product-editor.html'], 'page templates: the product editor');
     is(who(/retail-admin\/setup['"`]/), ['public/retail-admin/17-setup-guide.js'], '/setup: the desktop guide (the phone only reads it)');
   } finally {

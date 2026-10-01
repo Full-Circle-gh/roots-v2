@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.257 · 2026-09-30 · §359 PRINTERS, COURIER KEYS, QINGYUN AND PUSH NOTIFICATIONS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP, SOME TRIMMED OR SPLIT.** See *Printers, courier keys, Qingyun and Push notifications on the phone (§359)*.
+
+**v1.256 · 2026-09-30 · §357 STORES, STOCK STAFF AND TEAM DEVICES ON THE PHONE — 2 STRINGS COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP OR THE PHONE.** See *Stores, their stock staff, and team devices on the phone (§357)*.
+
 **v1.255 · 2026-09-30 · §356 THE SHOP TAB AND CUSTOMER SERVICE ON THE PHONE — 4 STRINGS COMPOSED BY CLAUDE (TWO OF THEM UNGLUING A DESKTOP OPTION), THE REST COPIED WHOLE.** See *The Shop tab and the customer-service button on the phone (§356)*.
 
 **v1.254 · 2026-09-30 · §355 BRAND AND THE BRAND STUDIO ON THE PHONE — THE BRAND PAGE COPIED WHOLE; THE STUDIO, ENGLISH-ONLY ON THE DESKTOP, COMPOSED IN CHINESE BY CLAUDE (55 STRINGS).** See *The brand and the brand studio on the phone (§355)*.
@@ -11184,3 +11188,95 @@ The autosave foot is the phone's own, already live: `Saving… · 保存中…`,
 `All changes saved · 已自动保存`, `Save failed: · 保存失败:`, `Undo · 撤销`,
 `Version history · 历史版本`, `No versions yet — they’re saved automatically as you
 edit. · 暂无历史版本 — 编辑时会自动保存。`, `Could not load the history · 无法加载历史版本`.
+
+## Stores, their stock staff, and team devices on the phone (§357)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's store editor, a
+store's stock staff, and Team devices (`public/m.html`, the §325 X6 block).
+Copied from the desktop's Operations → Stores panel and Team → Team devices
+card (`public/retail-admin/02-settings-ops.js`, `public/retail-admin.html`),
+except the rows below.
+
+| String | Status |
+|---|---|
+| `That code is already used by another store. · 该编号已被其他门店使用。` | **composed by Claude (X6).** The server answers a taken code with the bare `code_taken`, and the desktop prints `Failed · 操作失败: code_taken`. Modelled on the live `That AppID is already used by another account here. · 该 AppID 已被其他账户使用。` (15-integrations.js). Rejected: the desktop's bare code (not words); `That username is already taken · 该用户名已被占用` (wrong thing). |
+| `Lower = preferred · 数字越小越优先` | **Chinese composed by Claude (X6).** The English is the desktop's `(lower = preferred)`, which has no Chinese half. No live Chinese candidate was found. |
+| `Username may use letters, numbers, . _ - only · 用户名仅限字母、数字和 . _ -` | **another live pair, used in place of the desktop's English-only hint** `— letters/numbers . _ -` under the login field. It is the server's own rule sentence (routes/backend-team.js) and the phone's Add someone check. |
+| `GPS coordinates · 经纬度` hint: `Optional manual override. Leave blank to auto-locate from the address on save. Only fill these to pin an exact spot. · 留空则保存时按地址自动定位;仅在需要精确指定时填写。` | **trimmed.** The desktop's English also links to a coordinate picker site; that clause is cut. The Chinese is the desktop's own, whole. |
+| `Latitude · 纬度`, `Longitude · 经度` | **split, not composed**, from the desktop placeholders `Latitude 纬度 23.1519` and `Longitude 经度 113.4061`. Each half is shown in its own language, with the example number kept. |
+| `GPS located · 已定位` | **trimmed.** The desktop's `📍 GPS located · 已定位` without the emoji. |
+| `Sets the store GPS, auto-geocoded on save · 决定门店 GPS,保存时自动定位`, `At least 10 characters · 至少 10 位` | **copied, capitalised.** These are hints that follow a dash on the desktop and start a line on the phone. |
+| `Printers and payment keys are set on desktop. · 打印机与支付密钥在电脑端设置。` | **trimmed from a live phone pair.** It was `Store details, printers and payment keys are set on desktop. · 门店资料、打印机与支付密钥在电脑端设置。`. Store details are edited on the phone now, so that item is cut from both halves. This is the same cut §325 made earlier when "staff" came out. |
+
+Copied whole:
+
+- **Store editor (desktop):**
+  - the actions: `+ Add store · 添加门店`, `Edit · 编辑`, `Edit store · 编辑门店`, `New store · 新建门店`;
+  - the fields: `Code · 短标识`, `Phone · 电话`, `City · 城市`, `District · 区`, `Street address · 详细地址`, `Opens · 开门`, `Closes · 关门`;
+  - `Channel sync starts · 渠道同步开始` and its sentence;
+  - `Sort priority · 排序`;
+  - `Low-stock alert at · 低库存提醒` and its sentence, and `Store default · 全店默认`;
+  - `Offer store pickup · 到店自提`;
+  - `no GPS — set a street address · 未定位,请填写详细地址`;
+  - `No stores yet. Add one below. · 暂无门店,请在下方添加。`;
+  - `Invalid coordinates · 坐标无效`, `Code required · 请填写编号`, `Saved · 已保存`, `Failed · 操作失败`.
+- **Store editor (phone):** `Name (English) · 名称(英文)` and `Name (中文) · 名称(中文)` (the recipe details' pair; the desktop labels are one language each); `Store · 门店`; `Operations · 运营`; `Could not load this. · 无法加载。`; the autosave foot (`Saving… · 保存中…`, `All changes saved · 已自动保存`, `Save failed: · 保存失败:`, `Undo · 撤销`, `Version history · 历史版本`, and the no-versions toast); `Could not load the history · 无法加载历史版本`.
+- **Stock staff (desktop):**
+  - the screen: `Stock staff · 库存员`, the line *These people can only open the Quick Stock app, and only for … — never another store. · 这些成员仅可使用快捷库存,且只能操作…,无法操作其他门店。*, `No stock staff yet for this store. · 该门店暂无库存员。`;
+  - the form: `Name · 姓名`, `Login · 登录名`, `Password · 密码`, `+ Add stock staff · 添加库存员`;
+  - the row actions: `Reset password · 重置密码`, `Remove · 移除`;
+  - the remove confirm: `Remove this stock staff member? They will lose access immediately. · 移除该库存员?其访问权限将立即失效。`;
+  - the reset prompt: `New password (at least 10 characters) · 新密码(至少 10 位)`;
+  - the checks: `Login required · 请填写登录名`, `Password must be at least 10 characters · 密码至少需要 10 位`;
+  - the toasts: `Added · 已添加`, `Removed · 已移除`, `Password reset · 密码已重置`;
+  - `Failed to load staff · 加载失败`.
+- **Team devices (desktop):**
+  - the card: `Team devices · 团队设备` and its line;
+  - the filter: `All · 全部`, `Desktop · 桌面`, `Mobile · 移动`;
+  - the rows: `Phone · 手机`, `Tablet · 平板`, `Active now · 当前活动`, the "… ago" forms, `since … · …以来`, `(You) · (你)`, `This device · 当前设备`;
+  - the actions: `Sign out · 登出`, `Sign out of this device · 登出此设备`, `Signing out… · 正在登出…`;
+  - the count: `device(s) signed in · 台设备已登录`;
+  - the empty states: `No devices match this filter. · 没有符合筛选条件的设备。`, `No devices signed in. · 没有已登录的设备。`;
+  - the errors: `Couldn’t load devices. · 无法加载设备。`, `Couldn’t sign out device · 无法登出设备`;
+  - the confirm: `Sign out of this device? · 登出此设备？`, `You’ll be returned to the login page. · 您将返回登录页面。`.
+
+Server sentences that arrive as `English · 中文` (for example `That username is
+already taken · 该用户名已被占用`) are shown one half per language. They are not
+new strings.
+
+## Printers, courier keys, Qingyun and Push notifications on the phone (§359)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Receipt printing,
+Package tracking, JD Logistics, Qingyun riders and Push notifications screens
+(`public/m.html`, the §325 X7 block). Copied from the desktop's printer card
+(`public/retail-admin.html`, `02-settings-ops.js`), Delivery hub views, and
+Settings → Push panel (`05-marketing.js`). The exceptions are below.
+
+| String | Status |
+|---|---|
+| `API environment · API 环境` | **Chinese composed by Claude (X7).** The desktop label is English-only. No live Chinese candidate was found. `production` and `sandbox` are JD's own words and stay as they are in both languages. |
+| `Kuaidi100 reachable · auth OK · 快递100 连接正常` | **split from a glued live string.** The desktop's toast is `✅ 快递100 reachable · auth OK · 连接正常`, whose English half carries Chinese. The English uses the card's own brand name (`Kuaidi100`). The Chinese is `快递100` plus the live `连接正常`. |
+| `JD reachable · auth OK · 连接正常` | **split from a live string**, `✅ JD reachable · auth OK · 连接正常`: everything before the last ` · ` is the English. |
+| `Receipt printing · 云打印出单` | **trimmed** from the card title `Receipt printing — cloud printers · 云打印出单`. |
+| `Feie · 飞鹅`, `Shangpeng · 商鹏` | **split** from `飞鹅 Feie` and `商鹏 Shangpeng`. |
+| `Account (USER) · 账号 (USER)`, `USERKEY (UKEY) · 用户密钥 (UKEY)`, `APPID · 开发者ID`, `APPSECRET · 开发者密钥`, `customer_code · 商家编码`, `Company ID (CorpID) · 企业 ID`, `App ID (AgentId) · 应用 AgentId`, `App Secret · 应用 Secret`, `AccessKey ID · 访问密钥 ID`, `AccessKey Secret · 访问密钥`, `Signature (签名) · 短信签名`, `Delivered template code (模板CODE) · 送达模板编号`, `Login OTP template code (模板CODE) · 网页登录验证码模板编号` | **split, not composed.** These are the desktop field labels, one half per language. |
+| the brands' warning `For both brands the credentials come from the vendor's developer console — …` and `Leave blank if you own no Shangpeng printers. · 没有商鹏打印机则留空。` | **trimmed.** The desktop's last sentence (one account holds every printer) and its vendor links are cut from both halves. |
+| `The kitchen prints its own request slip when a job lands in the production queue. Leave the SN blank if the kitchen has no printer. · 制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。` | **trimmed** (an aside cut from the English). |
+| `A stock request prints at the shop that has to fill it … — the one set above — … · …使用该门店上方设置的打印机…` | **one word changed in each half.** The desktop says "below" / `下方`; on the phone the store printers sit above this line. |
+| `Direct integration with JD Logistics. Once configured, Orders gains a "Push to JD" bulk action — … · 京东物流直连,一键推单、运单号自动回传。` | **trimmed.** The desktop's English names `京东物流开放平台 (lop.jd.com)`; on the phone it is the card's own English name. |
+| the JD field hints (`On your app's page at lop.jd.com, under 应用管理.` …) | **lifted** from the desktop's "Where to find these" block. Each line is under its own field, without the leading key name. |
+| `Shows the live courier on a map … via Qingyun. …` | **one word changed.** The desktop's English says `via 青云聚信`, Chinese inside the English half. |
+| `Text the customer the moment an out-of-town courier order is marked delivered — … are skipped. · …广州同城配送与到店自提不发送。` | **trimmed.** The parenthesis and the "uses your Aliyun package" sentence are cut from both halves. |
+| `Printer settings saved · 已保存` | **trimmed** (the emoji). |
+| `Payment keys are set on desktop. · 支付密钥在电脑端设置。` | **trimmed from a live phone pair** (`Printers and payment keys … · 打印机与支付密钥…`). Printers are on the phone now. |
+| `LIVE · 已启用`, `NOT CONFIGURED · 未配置`, `NOT SET · 未配置`, `PENDING JD ACCOUNT · 待开通京东账号` | **copied**, without the ✓ ✗ ⏳ marks; the phone's pill colour carries them. |
+
+Copied whole: the printer card's switches, its fields and placeholders, and the
+template, brand, "When it prints" and out-of-city lists. The preview, test and
+result lines. The Kuaidi100, JD and Qingyun cards and their results. The Push
+panel's card titles, introductions, "clear all … to turn off" lines, test
+results and refusals (`Set up the app above, or paste a qyapi.weixin.qq.com
+URL`, `Enter an 11-digit mainland mobile`, `Fill in all four fields first`,
+`Bad phone number`, `Only qyapi.weixin.qq.com URLs`, `Paste a webhook
+first`). `Save settings · 保存设置` and `Settings saved · 设置已保存`. The
+masked-secret line `… — leave blank to keep · … — 留空保持不变`.
