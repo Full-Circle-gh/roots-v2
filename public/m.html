@@ -1490,7 +1490,7 @@ const state = {
   rf:null,
   /* §325 O6 — "Ship part later": the parcel being split and the lines ticked;
      and the orders whose split suggestion was dismissed this session. */
-  splitPick:null, splitDismissed:[], shipTo:null, qy:null,
+  splitPick:null, splitDismissed:[], shipTo:null, qy:null, jd:null,
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
@@ -2611,7 +2611,7 @@ reg('ordViewDel', id=>{
 /* reg('openOrder') is registered ONCE, with the live orders (§325 T1). A
    one-line copy here from the mock-data days was overwritten by that later
    registration before anybody could tap, so it never ran and is gone. */
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null;
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
   state.ordNoteOpen=null;
@@ -34868,6 +34868,170 @@ function noContactCard(sp){
     ${canEdit?`<button class="cta" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',1)">${busy?T('Saving…','保存中…'):T('I called the customer','已联系客户')}</button>`:''}
   </div>`;
 }
+/* ── §325 O12 — A JD WAYBILL, CREATED AND CANCELLED FROM THE PHONE ─────────
+   The desktop's createJdLabel / submitJdLabel / cancelJdPickup (04-orders.js):
+     · CREATE: the one question the order cannot answer — which JD service —
+       asked the desktop's way (an air parcel ships fresh express and asks
+       nothing, except into Fujian / Guangxi where ground is pre-selected; a
+       ground parcel picks fresh or ambient, with air on the list, marked), a
+       pieces count for one waybill split across boxes, then
+       POST /orders/:id/jd-waybill {shipment_id, product, package_count}. The
+       server attaches the waybill and marks the parcel dispatched.
+       Picking air on a land parcel asks on the pick; an SF-only city asks at
+       submit — the desktop's two questions, each where it puts it.
+     · CANCEL: POST …/jd-waybill/cancel {shipment_id}, asked first. JD cancels
+       the pickup, or intercepts a parcel already collected, and says which.
+   NO PRINTING. The label goes to a print component running on the desktop
+   PC (jdSendToComponent); a phone has no such component, so the label is
+   printed there. Both writes are orders:edit (lib/cap-routes.js). */
+const JD_SERVICES=[{code:'LL-SD-M',en:'Fresh · Air',cn:'生鲜 · 空运',sub:'生鲜特快 · LL-SD-M'},
+  {code:'LL-HD-M',en:'Fresh · Ground',cn:'生鲜 · 陆运',sub:'生鲜标快 · LL-HD-M'},
+  {code:'ed-m-0001',en:'Ambient · Ground',cn:'普通 · 陆运',sub:'京东标快 · ed-m-0001'}];
+/* lib/jd.js isLandDefaultProvince is the authority and re-applies this on the
+   server; this copy only pre-selects the right row (the desktop's own note). */
+const JD_LAND_DEFAULT_PROVINCES=['福建','广西'];
+function jdLandDefault(province){
+  const p=String(province||'').trim(); if(!p) return false;
+  if(JD_LAND_DEFAULT_PROVINCES.some(x=>p.startsWith(x))) return true;
+  const l=p.toLowerCase(); return l==='fujian'||l==='guangxi';
+}
+/* What the sheet offers for this parcel, and what it starts on. */
+function jdPlan(o,sp){
+  const isAir=sp.mode==='air';
+  const landDefault=isAir&&jdLandDefault(o.shipTo&&o.shipTo.province);
+  const preset=landDefault?'LL-HD-M':isAir?'LL-SD-M':(sp.jdFresh?'LL-HD-M':'ed-m-0001');
+  const codes=landDefault?['LL-HD-M','LL-SD-M']:isAir?[]:['LL-HD-M','ed-m-0001','LL-SD-M'];
+  return {isAir, landDefault, preset, services:codes.map(c=>JD_SERVICES.find(s=>s.code===c))};
+}
+const jdCan=(o)=>!!o&&!o.viewOnly&&o._id!=null&&mCan('orders:edit');
+function jdCreateBtn(o,sp){
+  if(!jdCan(o)||sp.mode==='supplier') return '';
+  return `<button class="btn2" style="width:100%;gap:8px" ${state.orderBusy?'disabled':''} onclick="APP.cmd('jdOpen',${sp.id})">${ic('package',17)}${T('Create JD label','生成京东运单')}</button>
+    <div style="font-size:12px;color:var(--text-secondary);text-align:center">${T('Free live tracking — JD bills the parcel.','免费物流追踪，京东承担费用。')}</div>`;
+}
+reg('jdOpen', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: POST …/jd-waybill is orders:edit on the server
+  const o=currentOrder(); if(!jdCan(o)) return;
+  const sp=(o.shipments||[]).find(x=>x&&x.id===Number(sid)); if(!sp||sp.mode==='supplier') return;
+  const p=jdPlan(o,sp);
+  state.jd={oid:o.id, sid:sp.id, svc:p.preset, last:p.preset, pieces:'1', busy:false, err:null};
+  render();
+});
+reg('jdClose', ()=>{ if(state.jd&&state.jd.busy) return; state.jd=null; render(); });
+reg('jdPieces', v=>{ if(state.jd) state.jd.pieces=String(v==null?'':v); });
+/* Air on a parcel the plan made land asks HERE, on the pick; declining puts
+   the row back where it was. On an air parcel's own list air is the plan, so
+   picking it asks nothing. */
+reg('jdSvc', code=>{
+  const j=state.jd; if(!j||j.busy) return;
+  const o=currentOrder(), sp=o&&(o.shipments||[]).find(x=>x&&x.id===j.sid); if(!sp) return;
+  const p=jdPlan(o,sp); if(!p.services.some(s=>s.code===code)) return;
+  if(code!=='LL-SD-M'||p.isAir){ j.svc=code; j.last=code; render(); return; }
+  const names=(sp.jdNames||[]).map(n=>T(n[0],n[1])).filter(Boolean);
+  const label=names.length?names.slice(0,3).join(', ')+(names.length>3?' +'+(names.length-3):''):'';
+  state.ask={title:T('Land only','仅陆运'),
+    body:label?T('<b>'+escAttr(label)+'</b> — land shipping only. Create the air waybill anyway?','<b>'+escAttr(label)+'</b> 仅陆运。仍要生成空运运单吗?')
+              :T('This parcel is land shipping only. Create the air waybill anyway?','此包裹仅陆运。仍要生成空运运单吗?'),
+    confirmLabel:T('Create air waybill anyway','仍要生成空运运单'), cancelLabel:T('Not yet','暂不'), danger:true,
+    run:()=>{ if(state.jd===j){ j.svc='LL-SD-M'; j.last='LL-SD-M'; render(); } }};
+  render();
+});
+function jdSend(o,j){
+  if(!mCan('orders:edit')) return;
+  const pieces=Math.max(1,Math.min(30,parseInt(j.pieces,10)||1));
+  j.busy=true; j.err=null; render();
+  apiWrite('/orders/'+o._id+'/jd-waybill?shipment_id='+j.sid,{shipment_id:j.sid, product:j.svc, package_count:pieces}).then(r=>{
+    if(state.jd===j) state.jd=null;
+    showToast(T('JD waybill created','京东运单已生成')+': '+escAttr((r&&r.data&&r.data.waybill)||'')+(pieces>1?' · '+pieces+T(' boxes',' 箱'):''));
+    return rereadOrder(o);
+  }).catch(e=>{
+    if(String(e.message)==='auth'||state.jd!==j) return;
+    j.busy=false;
+    j.err=e.refused?T(...e.words)
+      :e.code==='store_sender_phone_missing'?T('Set the store’s sender phone first (Settings → Stores)','请先在门店设置寄件电话')
+      :JD_ERR[e.code]?T(...JD_ERR[e.code])
+      :T('JD label failed','生成运单失败')+(e.code?': '+escAttr(e.code):'');
+    render();
+  });
+}
+/* The desktop catalogue's own sentences (01-core.js TD_ERR) for the codes
+   this route answers with. */
+const JD_ERR={jd_not_configured:['JD Logistics is not set up yet — finish it in Settings → Delivery.','京东物流尚未配置,请在设置 → 配送中完成。'],
+  not_shippable:['That order is not ready to ship.','该订单尚不可发货。'],
+  parcel_awaiting_restock:['That parcel is waiting on a restock.','该包裹正在等待补货。'],
+  invalid_shipment_id:['That parcel is not part of this order.','该包裹不属于此订单。'],
+  already_has_waybill:['A waybill is already attached.','已关联运单号。']};
+/* The SF-only question is asked at submit, as the desktop asks it: on an air
+   parcel there is no list to pick from, so submit is the one moment that covers
+   both an air parcel and a land one moved onto air. */
+reg('jdGo', ()=>{
+  if(!mCan('orders:edit')) return;
+  const j=state.jd, o=currentOrder(); if(!j||j.busy||!jdCan(o)||o.id!==j.oid) return;
+  if(o.sfOnlyAir&&j.svc==='LL-SD-M'){
+    state.ask={title:T('SF Express only','仅顺丰速运'),
+      body:T('Chengdu air can only ship with SF Express. Create a JD air waybill anyway?','成都空运仅限顺丰速运。仍要生成空运运单吗?'),
+      confirmLabel:T('Create air waybill anyway','仍要生成空运运单'), cancelLabel:T('Not yet','暂不'), danger:true,
+      run:()=>{ if(state.jd===j) jdSend(o,j); }};
+    render(); return;
+  }
+  jdSend(o,j);
+});
+function sheetJd(){
+  const j=state.jd; if(!j) return '';
+  const o=currentOrder(), sp=o&&(o.shipments||[]).find(x=>x&&x.id===j.sid);
+  if(!o||!sp||o.id!==j.oid) return '';
+  const p=jdPlan(o,sp), dis=j.busy?' disabled':'';
+  const preset=JD_SERVICES.find(s=>s.code===p.preset);
+  const sub=p.landDefault&&preset?T(preset.en,preset.cn)+' · '+preset.sub
+    :p.isAir?T('Air parcel — fresh express (生鲜特快)','空运包裹 — 生鲜特快')
+    :T('Ground parcel — is it fresh (ice pack) or ambient?','陆运包裹 — 生鲜(冰袋)还是普通?');
+  const noAir=(sp.jdNoAir||[]).map(n=>T(n[0],n[1])).filter(Boolean);
+  const rows=p.services.map(s=>{ const on=j.svc===s.code, blocked=s.code==='LL-SD-M'&&noAir.length>0;
+    return `<button role="radio" aria-checked="${on?'true':'false'}"${dis} onclick="APP.cmd('jdSvc','${s.code}')" style="display:flex;gap:12px;align-items:flex-start;width:100%;padding:12px 14px;border-radius:14px;border:1.5px solid ${on?'var(--text-primary)':'var(--border-default)'};background:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+      <span style="flex:none;width:20px;height:20px;margin-top:1px;border-radius:50%;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};display:flex;align-items:center;justify-content:center">${on?'<span style="width:10px;height:10px;border-radius:50%;background:var(--text-primary)"></span>':''}</span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(s.en,s.cn)}${blocked?` <span class="pill" style="background:var(--amber-tint);color:var(--amber-ink)">${T('Land only','仅陆运')}</span>`:''}</span>
+        <span style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${s.sub}</span>
+        ${blocked?`<span style="display:block;font-size:12.5px;margin-top:3px;color:var(--brick-ink)">${T('Land shipping only — airline rejected','仅陆运 — 航空拒运')}: ${escAttr(noAir.join(', '))}</span>`:''}</span></button>`; }).join('');
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('jdClose')"></div>
+   <div class="sheet" style="z-index:48;padding:0;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <span style="flex:1;font-size:18px;font-weight:500">${T('Create JD label','生成京东运单')}</span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('jdClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+       <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;line-height:1.5;padding-right:8px">${sub}</div></div>
+     <div style="max-height:56vh;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+       ${rows}
+       <label style="display:block;margin-top:4px"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Pieces (boxes)','箱数')}</span>
+         <input id="mJdPieces" inputmode="numeric" value="${escAttr(j.pieces)}" style="width:90px"${dis} oninput="APP.cmd('jdPieces',this.value)">
+         <span style="display:block;font-size:12.5px;color:var(--text-secondary);line-height:1.5;margin-top:6px">${T('More than 1 only if this parcel is too big for one box — JD keeps ONE tracking number split across that many boxes.','仅当包裹过大需要分箱时填大于1 — 京东运单号不变,拆分为该数量的箱子。')}</span></label></div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${j.err?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${j.err}</div>`:''}
+       <div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1"${dis} onclick="APP.cmd('jdClose')">${T('Cancel','取消')}</button>
+         <button class="cta" style="flex:1"${dis} onclick="APP.cmd('jdGo')">${j.busy?T('Working…','处理中…'):T('Create & ship','生成并发货')}</button></div></div>
+   </div>`;
+}
+/* Cancel calls the courier off with JD, which Clear does not — the desktop's
+   note says so beside the two, and so does this. */
+reg('jdCancel', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: POST …/jd-waybill/cancel is orders:edit on the server
+  const o=currentOrder(); if(!jdCan(o)) return;
+  const sp=(o.shipments||[]).find(x=>x&&x.id===Number(sid)); if(!sp) return;
+  state.ask={title:T('Cancel the JD pickup / recall this parcel with JD?','向京东取消揽收 / 拦截此包裹?'), danger:true,
+    confirmLabel:T('Cancel JD pickup','取消揽收'),
+    run:()=>orderWrite('trk', async()=>{
+      let r;
+      try{ r=await apiWrite('/orders/'+o._id+'/jd-waybill/cancel?shipment_id='+sp.id,{shipment_id:sp.id}); }
+      catch(e){
+        if(e&&!e.refused&&String(e.message)!=='auth'){
+          const w=JD_ERR[e.code]; const x=new Error(w?T(...w):T('JD cancel failed','取消揽收失败')+(e.code?': '+e.code:'')); x.code='__plain'; throw x; }
+        throw e;
+      }
+      await rereadOrder(o);
+      return r&&r.data&&r.data.method==='intercept'?T('JD parcel intercepted (was already collected)','已拦截在途包裹'):T('JD pickup cancelled','已取消揽收');
+    })};
+  render();
+});
 function trackingCard(o,sp,label){
   const t=sp.trk;
   const has=!!(t&&t.number);
@@ -34923,8 +35087,10 @@ function trackingCard(o,sp,label){
               waybill whose live subscription actually failed. On a healthy one
               it is a button that re-does something already working. */''}
         ${canEdit&&sp.lastError?`<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('resubWaybill',${sp.id})">${T('Retry sync','重试同步')}</button>`:''}
+        ${canEdit&&jdCan(o)&&((t&&t.carrier_code)||sp.carrierCode)==='jd'?`<button class="btn2" style="width:auto;padding:8px 14px;flex:none;color:var(--brick-ink)" ${trkBusy?'disabled':''} onclick="APP.cmd('jdCancel',${sp.id})">${T('Cancel JD pickup','取消揽收')}</button>`:''}
         ${canEdit?`<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('clearWaybill',${sp.id})">${T('Clear','清除')}</button>`:''}
       </div>
+      ${canEdit&&jdCan(o)&&((t&&t.carrier_code)||sp.carrierCode)==='jd'?`<div style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('"Cancel JD pickup" calls off the courier with JD. "Clear" only removes the number locally (courier still comes).','"取消揽收"会向京东取消上门;"清除"仅在本地移除运单号(快递仍会上门)。')}</div>`:''}
       ${evs.length?`<div style="padding-top:10px;border-top:1px solid var(--border-default);display:flex;flex-direction:column;gap:7px">
         <span class="eyebrow">${T('Recent events','最近事件')}</span>
         ${evRow(evs[0])}
@@ -34938,6 +35104,8 @@ function trackingCard(o,sp,label){
             The brick "No waybill yet" warning is not lost with the sentence:
             the LIST row carries it, which is where an order needing one is
             spotted. The drawer is where it gets done. */''}
+      ${/* §325 O12 — the desktop's Create JD label first, then the manual way. */''}
+      ${jdCan(o)&&sp.mode!=='supplier'?`${jdCreateBtn(o,sp)}<div style="font-size:12px;color:var(--text-secondary);text-align:center">${T('— or attach an existing waybill manually —','— 或手动填写已有运单 —')}</div>`:''}
       ${canEdit?`<button class="btn2" style="width:100%" ${trkBusy?'disabled':''} onclick="APP.cmd('addWaybill',${sp.id})">${trkBusy?T('Saving…','保存中…'):T('Save tracking','保存运单号')}</button>`
         :`<div style="font-size:13px;color:var(--text-secondary)">${T('No waybill yet','缺运单号')}</div>`}`}
   </div>`;
@@ -35455,6 +35623,10 @@ function parcelExtras(o,sp){
       <div style="display:flex;gap:8px">${seg('local','Rider','骑手配送','bike')}${seg('land','JD logistics','京东物流','truck')}</div>
       ${busy==='meth'+sp.id?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('Working…','处理中…')}</div>`:''}</div>`);
   }
+  /* §325 O12 — where the desktop draws a tracking card on a parcel not yet
+     gone: a Guangzhou outer-district parcel switched to JD, on an order still
+     being made. Its Create JD label comes here. */
+  if(can&&o.gzMethodToggle&&sp.mode==='land'&&sp.state==='pending'&&['paid','preparing'].includes(o.raw)) out.push(`<div style="display:flex;flex-direction:column;gap:6px">${jdCreateBtn(o,sp)}</div>`);
   const lines=(sp.items||[]).filter(t=>t&&t[6]!=null);
   if(can&&sp.state==='pending'&&lines.length>=2&&!sp.recoveryNeeded){
     const pk=state.splitPick&&state.splitPick.sid===sp.id?state.splitPick:null;
@@ -41850,6 +42022,7 @@ function render(){
   if(state.detailActions) html += layer('actions', sheetActions());
   if(state.rf&&state.detailId) html += layer('rf:'+state.rf.kind, sheetRefundForm());
   if(state.shipTo&&state.detailId===state.shipTo.oid) html += layer('shipto:'+state.shipTo.mode, sheetShipTo());
+  if(state.jd&&state.detailId===state.jd.oid) html += layer('jd:'+state.jd.sid, sheetJd());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
   // §325 PD4 — a shop menu's row sheet and its Add product picker.
   if(state.shm.edit) html += layer('shmedit:'+state.shm.edit.id, sheetShmEdit());
@@ -43873,7 +44046,16 @@ function mapDetail(o){
        normally. */
     recoveryNeeded:sp.recovery_needed_at||null, recoveryOutcome:sp.recovery_outcome||null,
     recoveryClosedAt:sp.recovery_closed_at||null, recoveryClosedBy:sp.recovery_closed_by||null,
+    /* §325 O12 — what the JD sheet asks from: is anything in the box iced
+       (fresh), what the box holds by name, and which of it the airline refuses
+       (land-only in ship_modes_arr, the order read's own array). */
+    jdFresh:(sp.items||[]).some(it=>it&&it.needs_ice_pack),
+    jdNames:(sp.items||[]).map(it=>[it.name_en||it.name_cn||'',it.name_cn||it.name_en||'']).filter((n,i,a)=>n[0]&&a.findIndex(x=>x[0]===n[0])===i),
+    jdNoAir:(sp.items||[]).filter(it=>{ const m=Array.isArray(it&&it.ship_modes_arr)?it.ship_modes_arr:['air','land']; return m.includes('land')&&!m.includes('air'); })
+      .map(it=>[it.name_en||it.name_cn||'',it.name_cn||it.name_en||'']),
   }));
+  /* §325 O12 — the server's answer to "does this order's air lane belong to SF". */
+  base.sfOnlyAir=!!o.sf_only_air;
   /* §325 O6 — the rider / JD switch on a Guangzhou outer-district order, and
      the server's split suggestion (buildShipmentSuggestion). */
   base.gzMethodToggle=!!o.gz_method_toggle;
