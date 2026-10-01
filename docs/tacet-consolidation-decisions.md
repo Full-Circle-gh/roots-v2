@@ -26238,3 +26238,92 @@ desktop's `optBody` shape, and Undo puts them back.
    catalogue the phone already holds, covers every product except this one,
    and shows each product's size and SKU so that two jars of the same paste
    can be told apart. Up and down buttons replace the desktop's drag-to-reorder.
+
+## §384 — A NEW PRODUCT IS MADE FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The Products tab gained **Add product** on its catalogue view. It is the
+desktop's *Add product ▾ → Add manually*: the Details screen opens empty, with
+the same fields and the same autosave. The first save that has a name creates
+the product with `POST /products`. If no SKU was typed, the server makes up a
+DRAFT-… code, and the box shows it. From then on the screen belongs to that
+product exactly as if it had been opened from the list. Every later edit is a
+`PATCH`, and the sizes, bundles and customer-choices cards open.
+
+1. **Before the first save, the screen says what starts it.** The foot reads
+   *Add a name & SKU to start autosaving*. A SKU on its own is held until there
+   is a name. The cards that need a product (sizes, the two bundles and
+   customer choices) show the desktop's own line saying so. Photos work at
+   once and are sent with the create.
+2. **No field is lost in the create.** `POST /products` stores only part of
+   the screen: names, SKU, size, sections, badge, price and was-price,
+   shipping, descriptions, photos, Free of, notes, facts, and two flags. The
+   desktop gets the rest (cost, the low-stock line, made in batches) onto the
+   product with its next whole-form save. The phone sends only what changed,
+   so it sends those straight after the create, in one `PATCH` of the new
+   product. It does this only for fields that differ from the new row's empty
+   defaults. A test reads the server's create handler, so the phone's list of
+   what the create stores cannot drift from what it really stores.
+3. **A new product is hidden until someone turns it on**, as on the desktop.
+   It needs `products:create` to be made, and `products:edit` for every save
+   after the first. It is not offered where the catalogue is kept upstream.
+4. **After the create, the product is read again before the choices card
+   offers any control.** If that read fails, the card says it could not
+   load. It never says "none" (the PD11 rule). Undo is not offered for a
+   product made in this visit, because its starting point is a blank form.
+   Back leads to the new product's sheet. If a name was typed but not yet
+   saved, the create goes out as the screen closes, and the list still picks
+   up the new product.
+5. **Two fixes to the Details screen's saving came with this step**, because
+   the new-product path exposed them:
+   - The autosave now reads from the screen visit it belongs to. Before, a
+     save that finished after Back read from a screen that had already been
+     let go, and threw an error.
+   - After a save, what the phone believes the server holds is merged with
+     the payload, not replaced by it. Before, the customer choices read while
+     a save was in flight could be dropped from that record, and the next
+     edit would send them again for no reason.
+
+## §385 — A SHOP MENU'S STRUCTURE IS CHANGED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's shop menus can now be set up, named, switched on and off, and
+moved to another location. Each change is the desktop's own request
+(`28-shops.js`), and each needs `stores:edit`, as the server already
+requires for every shops write.
+
+| Action | Request |
+|---|---|
+| **Set up**, on a location the list says is *Not set up* | `POST /shops {location_id}` |
+| **English name (optional)** or **Chinese name** | `PATCH /shops/:id {display_name_en}` or `{display_name_cn}` |
+| **On / Off** | `PATCH /shops/:id {is_active}` |
+| **Move products** | `POST /shops/:id/move {to_location_id}` |
+
+1. **Set up opens the new shop.** The desktop paints the new shop in place;
+   the phone opens it the same way.
+2. **The names save when their box is left,** as the desktop's do. Each name
+   is its own save, and leaving a box unchanged sends nothing. Both names are
+   optional: the location's name shows through as the hint. The shop's code
+   and location are never written.
+3. **The switch waits.** It is not optimistic. While the save is out it
+   shows "…". If the save is refused, the switch stays where it was and the
+   reason is shown on the shop's card.
+4. **Move products asks twice, in the desktop's order (§177).**
+   - First it asks *where*. The places offered are every other location
+     whose menu is empty (`moveTargets`). On the phone this is a list of
+     places to tap, where the desktop has a dropdown and a Move button.
+   - Then it asks *what it costs*, as a danger confirm, naming the count and
+     the place: this menu is emptied, this shop switches off, the QR already
+     printed here stops working, and a new QR must be printed at the
+     destination.
+   - Nothing is sent before the second answer.
+   - Afterwards the screen lands on the destination's menu, read fresh, as
+     the desktop does. Its switch, code and QR answer "is it live there?".
+   - The move's three refusals (the destination already has a menu, there is
+     nothing to move, or it is already there) use the desktop's words.
+5. **A refusal is shown where the operator is looking, and stays.** For Set
+   up that is above the list; for everything else it is the shop's card. A
+   toast only confirms. After any of these changes the list and the shop are
+   both read again, so counts, the Inactive pill and *Not set up* show what
+   the server now holds. Without `stores:edit` the shop screen is unchanged
+   (PD2 and PD4).
