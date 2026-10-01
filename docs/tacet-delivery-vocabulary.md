@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.279 · 2026-09-30 · §387 SKU CODES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SKU CODES TAB.** See *SKU code rules for materials, on the phone (§387)*.
+
+**v1.278 · 2026-09-30 · §386 BULK EDITS AND DELETE ON THE PHONE — NOTHING COMPOSED; TWO GLUED DESKTOP PAIRS LIFTED AS HALVES, THE REST COPIED WHOLE.** See *Bulk edits, bulk delete and single delete on the phone (§386)*.
+
 **v1.277 · 2026-09-30 · §385 SHOP MENU STRUCTURE ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SHOP MENU.** See *A shop menu's structure, changed on the phone (§385)*.
 
 **v1.276 · 2026-09-30 · §384 NEW PRODUCT ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP.** See *A new product, made on the phone (§384)*.
@@ -12099,3 +12103,112 @@ the two Move asks (`public/m.html`).
 
 **Phone live pairs reused:** `Saving… · 保存中…`, `Not set up · 未开通`,
 `Inactive · 已停用`, and the shop-menu refusal sentence from PD4.
+
+## Bulk edits, bulk delete and single delete on the phone (§386)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear in the phone catalogue's bulk bar, its menus and confirms, and
+on the Details screen's Delete (`public/m.html`).
+
+**Copied whole from the desktop** (`public/retail-admin/09-products.js`,
+`paRenderBulkBar` / `paBulkApply` / `paBulkDelete`):
+
+- **The bar:** `N selected · 已选 N 件`, `Select all N · 全选 N`,
+  `Clear page · 清空本页`, `Clear · 清除`.
+- **The five menus:** `Shop · 上架`, `Badge · 标签`, `Shipping · 配送`,
+  `More · 更多`, `Delete · 删除`.
+- **Every menu item:** `Turn on · 上架`, `Turn off · 下架`, `None · 无`,
+  `Auto · 自动`, `NEW`, `POP`, `SALE`, `HOT`, `Air + Land · 空运+陆运`,
+  `Air only · 仅空运`, `Land only · 仅陆运`, `Show in markets · 在市集显示`,
+  `Hide from markets · 从市集隐藏`, `Mark fresh batch · 标记现做`,
+  `Not fresh batch · 取消现做`.
+- **The confirm's "what":** all fifteen labels, e.g. `Set badge to NEW ·
+  设置标签为 NEW · 新品` and `Hide from the shop · 从店面下架`.
+- **The confirms and results:**
+  - `… — N product(s)? · … — N 件商品?`
+  - `Apply · 应用`
+  - `Working… · 处理中…`
+  - `Updated N ✓ · 已更新 N 件 ✓`
+  - `N done, M failed · N 成功,M 失败`
+  - `Delete N product(s)? · 删除 N 件商品?`
+  - the cannot-be-undone sentence, whole
+  - `Deleted N ✓ · 已删除 N 件 ✓`
+  - `N deleted, M failed · N 已删除,M 失败`
+
+**Lifted, 2026-10-01, by Claude.** On the desktop, `pdDelete` writes its
+strings with both languages glued into one. Each half is used here on its
+own, in its own language; no words were changed.
+
+| shipped | lifted from |
+|---|---|
+| `Delete this product? · 删除此产品?` | `'Delete this product? · 删除此产品?'` |
+| `It will be hidden from the shop. · 将从店面隐藏。` | `'It will be hidden from the shop. · 将从店面隐藏。'` |
+
+**Phone and desktop live pairs reused:**
+- `Select · 选择` and `Done · 完成`, from the phone's Media screen.
+- `Deleted · 已删除`, a phone pair already in use.
+- `Deleting… · 删除中…`, declared in PD9.
+- `Delete failed: · 删除失败:`, the desktop's `vaRemove`.
+
+The " — " that joins a count to the server's refusal is punctuation, not a
+string.
+
+## SKU code rules for materials, on the phone (§387)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the phone's Settings → SKU codes screen and on its rule
+sheet (`public/m.html`).
+
+**Copied whole from the desktop** (`public/retail-admin/23-sku.js`):
+
+- **The page and its cards:**
+  - `SKU codes · 编码规则`
+  - `Automatic SKUs for materials · 物料自动编码` and its sentence
+  - `Generate a SKU when a material is saved without one · 保存未填写编码的物料时自动生成`
+  - the off note
+  - `Your rules · 您的规则` and its sentence
+  - the empty line
+  - `+ Add a rule · + 新增规则`
+  - `Fallback · 兜底规则` and its sentence
+- **A rule row:**
+  - `Everything else · 其余全部`, `All of · 全部`
+  - the three scope notes
+  - `next · 下一个`
+  - `Custom format · 自定义格式`
+  - `the year · 年份`
+  - `N-digit number · N 位数字`, `a number · 数字`
+  - `materials · 个物料`
+  - `Edit · 编辑`, `Remove · 删除`
+  - the five kind names, `Food · 食品` … `Other · 其他`
+- **The sheet:**
+  - `New rule · 新增规则`, `Edit rule · 编辑规则`
+  - the fallback note
+  - `Kind · 类别`, `Category · 分类`, `— all of this kind — · — 此类别全部 —` and its hint
+  - `Codes start with · 编码开头` and its hint
+  - `Followed by · 后接`, `N digits · N 位` and the hint
+  - `Separator · 分隔符` with `None · 无`, `Dash · 连字符`, `Dot · 点`, `Slash · 斜杠`
+  - `Include the year · 包含年份`
+  - `Format · 格式` and its hint
+  - `Codes will look like · 编码效果`
+  - the three problems and the no-number warning
+  - `Save rule · 保存规则`
+  - `Write the format myself · 自定义格式`
+  - `← Back to the simple form · ← 返回简易设置`
+  - the cannot-go-back sentence
+- **Results:**
+  - `Automatic SKUs are on/off · 已开启/已关闭自动编码`
+  - `Could not change the setting · 设置未能保存`
+  - `Rule saved · 规则已保存`
+  - `Could not save the rule · 规则保存失败` and its three code sentences
+  - the remove question and sentence
+  - `Rule removed · 规则已删除`
+  - `Could not remove the rule · 删除失败`
+  - `Could not load the SKU rules · 无法加载编码规则`
+
+The token palette's names and hints come from the server
+(`lib/sku-format.js` `tokenCatalogue`), as they do on the desktop.
+
+**Phone live pairs reused:** `On · 开` and `Off · 关`, for the switch read
+without `materials:edit` (the desktop shows a greyed checkbox there instead);
+`Settings · 设置`, `Loading… · 加载中…`, `Try again · 重试`, `Cancel · 取消`,
+and `Saving… · 保存中…`.

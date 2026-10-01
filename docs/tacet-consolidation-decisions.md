@@ -26327,3 +26327,113 @@ requires for every shops write.
    both read again, so counts, the Inactive pill and *Not set up* show what
    the server now holds. Without `stores:edit` the shop screen is unchanged
    (PD2 and PD4).
+
+## §386 — BULK EDITS, BULK DELETE AND SINGLE DELETE ON THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's product catalogue gained the desktop's bulk bar, and a product's
+Details screen gained Delete. Every desktop confirm comes with the write it
+guards. Each write is the desktop's own (`paBulkApply`, `paBulkDelete`,
+`pdDelete`).
+
+1. **Ticking.** *Select* in the catalogue toolbar turns ticking on; *Done*
+   turns it off. These are the Media screen's own words and work the same
+   way. While ticking is on, tapping a card ticks it instead of opening it. A
+   family of sizes ticks as one block, every size, and a half-ticked family
+   flips fully on, as with `paToggleSelect`. The bar shows how many are ticked
+   and offers *Select all N* or *Clear page* over what the filters show, plus
+   *Clear*. When ticking is off, cards are unchanged.
+2. **The desktop's five menus, item for item, each behind its confirm**
+   ("<what> — N product(s)?", *Apply*):
+
+   | Menu | Choices | Request |
+   |---|---|---|
+   | Shop | Turn on, Turn off | one `POST /products/family-publish {ids, on}` |
+   | Badge | None, Auto, NEW, POP, SALE, HOT | `PATCH {tags}` |
+   | Shipping | Air + Land, Air only, Land only | `PATCH {ship_modes}` |
+   | More | markets on/off; fresh batch on/off | `PATCH {is_market}` or `PATCH {is_batch_made}` |
+
+   The shop switch never sends a `PATCH` per size, so a size kept off on
+   purpose stays off (§294). Every other change is one `PATCH` per product,
+   sent one at a time in the order ticked, as the desktop's loop does.
+3. **Bulk Delete** asks the desktop's danger question: how many, that their
+   SKUs are freed, and that it cannot be undone. It then sends
+   `DELETE /products/:id` for each. The deleted products leave the list at
+   once, and the ticks clear.
+4. **The three states.** While the bar works it says *Working…* and every
+   control waits. If everything succeeds, a toast says so (*Updated N ✓* or
+   *Deleted N ✓*). If anything fails, the desktop's count (*N done, M failed*
+   or *N deleted, M failed*) is written on the bar and stays, followed by the
+   refusal's own words when the server refused. The ticks stay after an edit,
+   so a second change can follow, as on the desktop. The catalogue is read
+   again after every run.
+5. **One product is deleted from its Details screen**, behind `pdDelete`'s
+   question ("Delete this product?" / "It will be hidden from the shop.").
+   The request is `DELETE /products/:id`. Any edit still waiting to save is
+   dropped rather than sent to a product being deleted. On success the screen
+   closes onto a catalogue that no longer holds the product. If the delete is
+   refused, the reason is shown on the screen, which stays open, and autosave
+   picks up again. Delete is not offered for a product that has not been
+   saved yet. This is also the deletion PD9 left out of the sizes card for
+   the product open on the screen.
+6. **Gates are what the server checks.** The four menus need
+   `products:edit`. Delete, in bulk or single, needs `products:delete` and is
+   not offered where the catalogue is kept upstream, because the server
+   refuses it there. *Select* appears only for someone holding either key.
+
+## §387 — SKU CODE RULES FOR MATERIALS ARE SET FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Settings gained **SKU codes**, the desktop's *Settings → SKU
+codes* tab (`23-sku.js`). This is where the shop says how its material codes
+are shaped for each kind and category, and whether a material saved without a
+code is given one automatically. The screen is read in one call
+(`GET /sku/material`) and written the desktop's way:
+
+| Action | Request |
+|---|---|
+| The switch | `PUT /sku/material/settings {enabled}` |
+| Save a rule | `POST /sku/material/rules`, saved per kind and category |
+| Remove a rule | `DELETE /sku/material/rules/:id` |
+
+1. **The same three cards as the desktop.**
+   - *Automatic SKUs for materials*, with its switch and, when off, the
+     sentence saying what off means.
+   - *Your rules*. Each rule shows what it covers, its code, its scope note,
+     the next code it will issue, a plain-words reading ("DF + the year +
+     3-digit number", or *Custom format*), and how many materials sit under
+     it.
+   - *Fallback*. It can be edited but never removed.
+2. **A rule is edited in a sheet with the desktop's four plain controls:**
+   *Codes start with*, *Followed by* (digits), *Separator* and *Include the
+   year*, plus *Kind* and *Category* (the categories actually in use).
+   - It saves the four controls as fields, and the server composes the code
+     format from them.
+   - *Write the format myself* opens the Advanced field and the server's
+     list of pieces. This is the only place a raw format appears. A piece
+     goes in where the cursor is.
+   - A rule the four controls cannot describe opens in Advanced and is
+     never flattened. Going back to the simple form is refused, in the
+     desktop's words, when the format cannot be shown there.
+   - *Codes will look like* shows three sample codes live, or the problems
+     with the format (empty, an unknown piece, a space) and the warning when
+     there is no number.
+   - The previews use copies of the engine's code-building functions, kept
+     in the browser for display only. A test checks them against
+     `lib/sku-format.js`, the code that actually issues SKUs.
+3. **Removing a rule asks the desktop's danger question**, which says what
+   removing it means: materials already coded keep their SKUs, and new ones
+   are numbered by the rule above it instead.
+4. **The three states.** While a write is out, the control in use disables
+   and shows "…" or *Saving…*, and the other buttons wait. The desktop shows
+   failures as toasts that disappear; here a failure stays where it
+   happened. A refused or failed save stays on the rule's sheet, which stays
+   open, in the desktop's words (the server's detail, or its sentence for
+   the error code). A failed switch or removal stays above the rules. A
+   toast only confirms: *Rule saved* (or the server's warning when it saved
+   with one), *Rule removed*, or *Automatic SKUs are on/off*.
+5. **Gates are the desktop's and the server's.** The Settings row and the
+   screen need `materials:view`, which is the desktop tab's key. Every write
+   needs `materials:edit`, as `lib/cap-routes.js` gates `/sku/`. Someone with
+   view only sees everything and no controls; the switch is shown as On or
+   Off in words.
