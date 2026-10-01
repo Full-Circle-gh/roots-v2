@@ -1073,6 +1073,10 @@ const state = {
   // act-from / act-to / act-search). `actQ` is what the box holds; Enter reads it.
   actFrom:null, actTo:null, actQ:'',
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
+  /* §325 PD8 — the shelf's view (Mini app / QR menu), the QR menu's own order
+     (§288, catQr's shape), a refused arrange / tree write's sentence, a tree
+     save in flight, and the open shelf's products. */
+  catMode:'miniapp', catQr:null, catQrTried:false, catErr:null, catBusy:false, catProd:null,
   catsVersion:null,   // §325 the tree's version as loaded; a save sends it back
   catBannerBusy:false, catBannerErr:null, catShelf:null,   // §298 the open category's banner editor
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
@@ -4020,7 +4024,7 @@ reg('togglePopup', id=>{
 });
 reg('affSeg', v=>{ state.affSeg=v; state.affRows=null; state.affiliateTried=false; render(); loadAffiliate(true); });
 reg('cmsPage', v=>{ state.cmsPage=v; state.cmsErr=null; render(); loadCms(v); });
-reg('catTop', v=>{ state.catTop=v||null; state.catBannerErr=null; render(); });
+reg('catTop', v=>{ state.catTop=v||null; state.catBannerErr=null; state.catErr=null; state.catProd=null; render(); });
 /* §325 PD1 — a preset moves the window at once; Custom asks for its two days
    first, in the ask-sheet, exactly as Finance's and Trend's do, and a pick
    that IS a preset lights the preset. */
@@ -8427,45 +8431,433 @@ function statusCategories(){
   let nSubs=0; for(const t of tree) nSubs+=(t.subs||[]).length;
   return tree.length+' '+T('top categories','主分类')+' · '+nSubs+' '+T('subcategories','子分类');
 }
+/* ==========================================================================
+   §325 PD8 — CATEGORIES, ARRANGED FROM THE PHONE (desktop: 01-core.js, the
+   Products → Categories shelf: catSave, catAddTop / catRemoveTop / catAddSub /
+   catRemoveSub, the rename card, catDrop / catQrDrop, catQrToggleHide,
+   catQrReset, catProdSaveOrder, catMoveProduct)
+   --------------------------------------------------------------------------
+   Everything the desktop shelf does, as taps instead of drags:
+     • the two views, Mini app and QR menu (§288): in the QR menu's, the order
+       moves and the eye hide only the QR menu (PUT /category-tree/qr-order,
+       the whole small value, as the desktop sends it), and Reset puts it back
+       to the mini app's;
+     • the products on a shelf, in the order of the view they are seen in:
+       Move up / Move down inside their heading (the mini app's: POST
+       /products/reorder {ids}; the QR menu's: its own product order in the
+       same qr-order value), and Move to another shelf (PATCH /products/:id
+       {top_category, subcategory});
+     • the tree itself — add, rename, remove, reorder tops and subcategories —
+       saved as the whole tree, PUT /category-tree {tree, version}: S2c's
+       version check, so a phone that loaded the tree before somebody else's
+       edit is refused (stale_tree) and reloads instead of undoing it. A
+       rename re-tags the products under it, server-side, and says how many.
+   Every tree and QR-order write needs categories:edit, every product write
+   products:edit — what lib/cap-routes.js gates each on. A reader sees the
+   shelf exactly as before, and no control.
+
+   ONE WRITE AT A TIME, AND IT SAVES AT ONCE. The desktop autosaves a working
+   copy 1.2s after the last drag. A phone has no working copy to come back to:
+   each committed change is one save, the controls wait while it is out, and
+   a refusal stays above the shelf. The tree on screen is only ever the one
+   the server last answered with. */
+const catCanEdit=()=>mCan('categories:edit');
+const catCanArrange=()=>mCan('products:edit');
+function catQrNormalise(v){
+  const o=v&&typeof v==='object'?v:{};
+  const subs={}, products={};
+  if(o.subs&&typeof o.subs==='object') Object.keys(o.subs).forEach(k=>{ if(Array.isArray(o.subs[k])) subs[k]=o.subs[k].slice(); });
+  if(o.products&&typeof o.products==='object') Object.keys(o.products).forEach(k=>{ if(Array.isArray(o.products[k])) products[k]=o.products[k].slice(); });
+  return {tops:Array.isArray(o.tops)&&o.tops.length?o.tops.slice():null, subs, hidden:Array.isArray(o.hidden)?o.hidden.slice():[], products};
+}
+function loadCatQr(force){
+  if(state.catQrTried&&!force) return;
+  state.catQrTried=true;
+  api('/category-tree/qr-order').then(d=>{ state.catQr=catQrNormalise(d); render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; state.catQr=catQrNormalise(null); render(); });
+}
+/* catQrOrdered: ids the order names first, in its order; the rest after, as they come. */
+function catQrOrdered(items,ids,nodeOf){
+  if(!ids||!ids.length) return items;
+  const pos=new Map(ids.map((id,i)=>[id,i]));
+  const has=x=>{ const n=nodeOf(x); return !!(n&&n.id&&pos.has(n.id)); };
+  return items.filter(has).sort((a,b)=>pos.get(nodeOf(a).id)-pos.get(nodeOf(b).id)).concat(items.filter(x=>!has(x)));
+}
+const catQrView=()=>state.catMode==='qr'&&!!state.catQr;
+function catTopsShown(){ const all=state.cats||[]; return catQrView()?catQrOrdered(all,state.catQr.tops,x=>x):all; }
+function catSubsShown(t){ const all=(t&&t.subs)||[]; return catQrView()&&t&&t.id?catQrOrdered(all,state.catQr.subs[t.id],x=>x):all; }
+const catQrHidden=t=>!!(t&&t.id&&state.catQr&&state.catQr.hidden.indexOf(t.id)>=0);
+function catQrIsCustom(){
+  const q=state.catQr; if(!q) return false;
+  return !!q.tops||Object.keys(q.subs).some(k=>(q.subs[k]||[]).length)||Object.keys(q.products).some(k=>(q.products[k]||[]).length);
+}
+/* The QR order's save: the whole value, one in flight, the latest kept. */
+let _catQrSaving=false, _catQrAgain=false;
+function catQrSave(){
+  if(!catCanEdit()||!state.catQr) return;
+  if(_catQrSaving){ _catQrAgain=true; return; }
+  _catQrSaving=true; state.catErr=null;
+  const sent=JSON.parse(JSON.stringify(state.catQr));
+  apiWrite('/category-tree/qr-order',sent,'PUT').then(()=>{ showToast(T('Saved','已保存')); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; state.catErr=catSaveErr(e); })
+    .then(()=>{ _catQrSaving=false; if(_catQrAgain){ _catQrAgain=false; catQrSave(); } render(); });
+}
+function catSaveErr(e){
+  if(e&&e.refused) return T(...e.words);
+  const m=e&&e.message?String(e.message):'';
+  return m?T('Save failed: '+m,'保存失败: '+m):T('Save failed','保存失败');
+}
+/* THE TREE'S SAVE — a copy changed by `mutate`, PUT whole with the version it
+   was read at. The answer is the tree from then on; a stale one reloads. */
+function catTreeWrite(mutate,after){
+  if(!catCanEdit()||state.catBusy||!state.cats) return;
+  const copy=JSON.parse(JSON.stringify(state.cats));
+  if(mutate(copy)===false) return;
+  state.catBusy=true; state.catErr=null; render();
+  const body={tree:copy}; if(state.catsVersion) body.version=state.catsVersion;
+  apiWrite('/category-tree',body,'PUT').then(j=>{
+    state.catBusy=false;
+    if(j&&Array.isArray(j.data)) state.cats=j.data;
+    if(j&&j.version) state.catsVersion=j.version;
+    const moved=Number(j&&j.migrated)||0;
+    showToast(moved?T('Saved · '+moved+' product'+(moved===1?'':'s')+' re-tagged','已保存 · 迁移 '+moved+' 个产品'):T('Saved','已保存'));
+    catRefreshCounts();
+    if(after) after(state.cats);
+    state.catProd=null; render();
+  }).catch(e=>{
+    state.catBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    if(e&&e.code==='stale_tree'){ state.catErr=String(staleSaveText()); state.catsTried=false; state.cats=null; state.catsVersion=null; loadCategories(); }
+    else state.catErr=catSaveErr(e);
+    render();
+  });
+}
+function catRefreshCounts(){
+  apiRaw('/category-counts').then(cn=>{ state.catCounts=(cn&&cn.counts)||{}; render(); }).catch(()=>{});
+}
+/* ── The products on the open shelf ───────────────────────────────────────
+   Read by the shelf's SAVED name (what products carry), and grouped as the
+   view's own menu draws them (catProdBuildGroups): the mini app's headings in
+   the tree's order, any heading the tree no longer names, then the products
+   with no heading last; the QR menu's headings in its order, only products on
+   a QR menu, the no-heading group first with stray headings folded into it. */
+function loadCatProducts(top){
+  const qr=catQrView();
+  const cp={top:top.id, name:top.name, qr, rows:null, listed:null, err:null, busy:false, seq:((state.catProd&&state.catProd.seq)||0)+1};
+  state.catProd=cp;
+  Promise.all([api('/category-products?'+new URLSearchParams({top:top.name})),
+    qr?api('/shop-listings/product-ids'):Promise.resolve(null)]).then(([rows,listed])=>{
+    if(state.catProd!==cp) return;
+    cp.rows=Array.isArray(rows)?rows:[]; cp.listed=Array.isArray(listed)?listed.map(Number):null; render();
+  }).catch(e=>{
+    if(state.catProd!==cp||String(e&&e.message)==='auth') return;
+    cp.err=e&&e.refused?T(...e.words):T('Could not load the products on this shelf.','加载该分类的产品失败。'); render();
+  });
+}
+function catProdUnits(rows){
+  const units=[], byGid=new Map();
+  for(const p of rows){ const g=p.variant_group_id;
+    if(g&&byGid.has(g)){ byGid.get(g).push(p); continue; }
+    const u=[p]; if(g) byGid.set(g,u); units.push(u); }
+  return units;
+}
+function catQrOrderUnits(units,ids){
+  if(!ids||!ids.length) return units;
+  const pos=new Map(ids.map((id,i)=>[Number(id),i]));
+  const rank=u=>u.reduce((r,p)=>(pos.has(Number(p.id))?Math.min(r,pos.get(Number(p.id))):r),Infinity);
+  return units.filter(u=>rank(u)<Infinity).sort((a,b)=>rank(a)-rank(b)).concat(units.filter(u=>rank(u)===Infinity));
+}
+function catProdGroups(top){
+  const cp=state.catProd; if(!cp||!cp.rows) return [];
+  const qr=cp.qr&&!!state.catQr;
+  const live=catSubsShown(top).filter(s=>s&&s.name).map(s=>({key:s.name,node:s}));
+  const known=new Set(live.map(x=>x.key));
+  const rows=qr&&cp.listed?cp.rows.filter(p=>cp.listed.indexOf(Number(p.id))>=0):cp.rows;
+  const bySub=new Map();
+  for(const p of rows){ let k=p.subcategory||''; if(qr&&!known.has(k)) k='';
+    if(!bySub.has(k)) bySub.set(k,[]); bySub.get(k).push(p); }
+  const order=live.filter(x=>bySub.has(x.key)).map(x=>({sub:x.key,node:x.node}));
+  if(!qr) for(const k of bySub.keys()) if(k&&!known.has(k)) order.push({sub:k,node:null});
+  if(bySub.has('')){ const none={sub:'',node:top}; if(qr) order.unshift(none); else order.push(none); }
+  return order.map(({sub,node})=>{
+    const nodeId=(node&&node.id)||'';
+    let units=catProdUnits(bySub.get(sub));
+    if(qr) units=catQrOrderUnits(units,nodeId?state.catQr.products[nodeId]:null);
+    return {sub,label:sub&&node?T(node.name,node.name_cn||node.name):sub,nodeId,units};
+  });
+}
+function catProdHtml(top){
+  const cp=state.catProd;
+  if(!cp||cp.top!==top.id||cp.qr!==catQrView()) loadCatProducts(top);
+  const c=state.catProd;
+  const head=`<div class="eyebrow" style="margin-top:8px">${T('Products on this shelf','货架上的产品')}</div>`;
+  if(c.err) return head+`<div style="font-size:14px;color:var(--brick-ink)">${escAttr(c.err)}</div>`;
+  if(!c.rows) return head+`<div style="font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const groups=catProdGroups(top);
+  if(!groups.length) return head+`<div style="font-size:14px;color:var(--text-secondary)">${T('Nothing stands on this shelf yet.','该分类下暂无产品。')}</div>`;
+  const qr=catQrView();
+  const canOrder=qr?catCanEdit():catCanArrange();
+  const heads=groups.length>1||(groups[0]&&groups[0].sub);
+  const busy=state.catBusy||c.busy;
+  return head+groups.map((g,gi)=>`${heads?`<div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);margin-top:6px">${escAttr(g.sub?g.label:T('no heading','无区块'))}</div>`:''}
+    <div class="list">${g.units.map((u,ui)=>{
+      const p=u[0];
+      const name=escAttr(T(p.name_en||p.name_cn||('#'+p.id),p.name_cn||p.name_en||('#'+p.id)));
+      const sizes=u.map(x=>x.variant_label?T(x.variant_label,x.variant_label_cn||x.variant_label):'').filter(Boolean);
+      const draft=u.every(x=>!x.is_published);
+      const ord=canOrder&&(!qr||g.nodeId)&&g.units.length>1;
+      return `${ui?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;gap:8px;padding:10px 8px 10px 14px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
+          ${sizes.length||draft?`<span style="font-size:12px;color:var(--text-secondary)">${escAttr(sizes.join(' · '))}${draft?(sizes.length?' · ':'')+T('draft','未上架'):''}</span>`:''}</span>
+        ${ord?`<button class="iconbtn" style="width:34px;height:34px" ${busy||ui===0?'disabled':''} aria-label="${T('Move up','上移')}" onclick="APP.cmd('catProdMove',${gi},${ui},-1)">${ic('chevron-up',17,2)}</button>
+          <button class="iconbtn" style="width:34px;height:34px" ${busy||ui===g.units.length-1?'disabled':''} aria-label="${T('Move down','下移')}" onclick="APP.cmd('catProdMove',${gi},${ui},1)">${ic('chevron-down',17,2)}</button>`:''}
+        ${catCanArrange()&&!qr?`<button class="iconbtn" style="width:34px;height:34px" ${busy?'disabled':''} aria-label="${T('Move to another shelf','移动到其他分类')}" title="${T('Move to another shelf','移动到其他分类')}" onclick="APP.cmd('catProdShelf',${Number(p.id)})">${ic('folder-input',17,2)}</button>`:''}</div>`;
+    }).join('')}</div>`).join('');
+}
+/* A row with its arrange controls beside it: Move up / Move down in the view
+   on screen, and in the QR menu's view the eye. */
+function catArrangeRow(rowHtml,kind,idx,len,node){
+  const qr=catQrView(), edit=catCanEdit(), busy=state.catBusy;
+  if(!edit) return rowHtml;
+  const eye=qr&&kind==='top'&&node.id?`<button class="iconbtn" style="width:34px;height:34px" ${busy?'disabled':''} aria-pressed="${catQrHidden(node)}"
+      aria-label="${catQrHidden(node)?T('Hidden on the QR menu — click to show','二维码菜单已隐藏,点击显示'):T('Shows on the QR menu — click to hide','在二维码菜单显示,点击隐藏')}"
+      onclick="APP.cmd('catQrHide','${escAttr(node.id)}')">${ic(catQrHidden(node)?'eye-off':'eye',17,2)}</button>`:'';
+  return `<div style="display:flex;align-items:center;gap:2px;padding-right:6px"><div style="flex:1;min-width:0">${rowHtml}</div>
+    ${eye}<button class="iconbtn" style="width:34px;height:34px" ${busy||idx===0?'disabled':''} aria-label="${T('Move up','上移')}" onclick="APP.cmd('catMove','${kind}',${idx},-1)">${ic('chevron-up',17,2)}</button>
+    <button class="iconbtn" style="width:34px;height:34px" ${busy||idx===len-1?'disabled':''} aria-label="${T('Move down','下移')}" onclick="APP.cmd('catMove','${kind}',${idx},1)">${ic('chevron-down',17,2)}</button></div>`;
+}
+function catModeSwitch(){
+  return `<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">${[['miniapp',T('Mini app','小程序')],['qr',T('QR menu','二维码菜单')]].map(([k,label])=>{
+    const on=(state.catMode||'miniapp')===k;
+    return `<button onclick="APP.cmd('catMode','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+      background:${on?'var(--surface-card)':'transparent'};color:${on?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${on?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}</button>`; }).join('')}</div>`;
+}
+function catQrStatus(){
+  if(!state.catQr) return `<span style="color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`;
+  const nHidden=(state.cats||[]).filter(catQrHidden).length;
+  return (catQrIsCustom()
+      ? `<span style="color:var(--text-secondary)">${T('Own order for the QR menu','二维码菜单独立顺序')}</span>${catCanEdit()?` · <button onclick="APP.cmd('catQrReset')" ${state.catBusy?'disabled':''} style="background:none;border:none;padding:0;font:inherit;color:var(--text-primary);text-decoration:underline;cursor:pointer">${T('Reset to mini app order','重置为小程序顺序')}</button>`:''}`
+      : `<span style="color:var(--text-secondary)">${T('Same order as the mini app','与小程序顺序相同')}</span>`)
+    +(nHidden?` · <span style="color:var(--amber-ink)">${nHidden} ${T('hidden on the QR menu','二维码菜单已隐藏')}</span>`:'');
+}
+const catErrBar=()=>state.catErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${escAttr(state.catErr)}</span></div>`:'';
+/* The rename / add sheet: the desktop's card, English and Chinese together. */
+function catNameAsk(kind,node,run){
+  const sub=kind==='sub';
+  const c=node&&catCount(node);
+  state.ask={title:node?T('Rename','重命名'):(sub?T('Add subcategory','新增子分类'):T('Add top category','新增主分类')),
+    body:c&&c.n?escAttr(T(c.n+' products re-tag themselves when you save','保存后 '+c.n+' 件产品自动跟随')):'',
+    fields:[{id:'name',label:sub?T('Subcategory name — English','子分类名称 — 英文'):T('Category name — English','主分类名称 — 英文'),value:node?node.name||'':''},
+            {id:'name_cn',label:sub?T('Subcategory name — Chinese','子分类名称 — 中文'):T('Category name — Chinese','主分类名称 — 中文'),value:node?node.name_cn||'':''}],
+    confirmLabel:node?T('Save name','保存名称'):T('Save','保存'),
+    validate:v=>String(v.name||'').trim()?null:T('Give it an English name first','请先填写英文名'),
+    run};
+  render();
+}
 function screenCategories(){
-  loadCategories();
+  loadCategories(); loadCatQr();
   if(state.catsErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.catsErr}</span></div></div>`;
-  if(!state.cats) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  const tree=state.cats;
+  if(!state.cats) return `<div style="padding:16px 16px 0">${catErrBar()}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const tree=state.cats, edit=catCanEdit(), qr=catQrView(), busy=state.catBusy;
   // One top open at a time — the shop's own left rail, drilled into.
   const top=state.catTop!=null?tree.find(t=>t.id===state.catTop):null;
   if(top){
-    const subs=top.subs||[];
+    const ti=tree.indexOf(top);
+    const subs=top.subs||[], shownSubs=catSubsShown(top);
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
       <button class="row" onclick="APP.cmd('catTop','')" style="background:none;border:none;padding:0;display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-family:inherit;font-size:13.5px;cursor:pointer">
         <span style="display:flex;transform:rotate(180deg)">${ic('chevron-right',16)}</span>${T('All categories','全部分类')}</button>
+      ${catModeSwitch()}
+      ${catErrBar()}
       <div class="list">${catRow(top,null,subs.length)}</div>
       ${catBannerCard(top)}
-      ${subs.length?`<div class="list">${subs.map((sb,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}${catRow(sb,null)}`).join('')}</div>`
-        :`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No subcategories on this shelf.','该分类下没有子分类。')}</div>`}
-      ${noteBar(T('Rename, reorder, add and remove on desktop — every product on a shelf follows a rename.','重命名、排序、新增与删除请在电脑端进行 — 重命名后商品会自动迁移。'))}</div>`;
+      ${qr&&catQrHidden(top)?`<div>${pill('off',T('Hidden on the QR menu','二维码菜单已隐藏'))}</div>`:''}
+      ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn2" style="width:auto;padding:0 16px" ${busy?'disabled':''} onclick="APP.cmd('catRename',${ti},-1)">${T('Rename','重命名')}</button>
+        <button class="btn2" style="width:auto;padding:0 16px;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('catRemoveTop',${ti})">${T('Remove category','删除主分类')}</button></div>`:''}
+      <div class="eyebrow">${T('Subcategories — the section headings','子分类 — 区块标题')}</div>
+      ${shownSubs.length?`<div class="list">${shownSubs.map((sb,i)=>{ const si=subs.indexOf(sb);
+          return `${i?'<div class="sep" style="margin-left:60px"></div>':''}${catArrangeRow(catRow(sb,edit&&!busy?`APP.cmd('catSubMenu',${ti},${si})`:null),'sub',i,shownSubs.length,sb)}`; }).join('')}</div>`
+        :`<div style="padding:12px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No subcategories on this shelf.','该分类下没有子分类。')}</div>`}
+      ${edit?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px;gap:6px" ${busy?'disabled':''} onclick="APP.cmd('catAddSub',${ti})">${ic('plus',16)}${T('Add subcategory','新增子分类')}</button>`:''}
+      ${catProdHtml(top)}</div>`;
   }
-  if(!tree.length) return nothingYet(T('No categories yet','暂无分类'),
-    T('Shelves are arranged on desktop. Once there are some, they show here with what is on them.','分类在电脑端设置。设置后会连同商品数量显示在这里。'));
+  if(!tree.length) return `<div style="padding:14px 16px 0">${catErrBar()}</div>`+nothingYet(T('No categories yet','暂无分类'),
+    edit?T('Add a top category to start arranging the shop.','新增一个主分类，开始整理店面。'):'')
+    +(edit?`<div style="display:flex;justify-content:center"><button class="btn2" style="width:auto;padding:0 18px;gap:6px" ${busy?'disabled':''} onclick="APP.cmd('catAddTop')">${ic('plus',16)}${T('Add top category','新增主分类')}</button></div>`:'');
   // The status line the desktop leads with: how many shelves, and the one that
-  // costs money — the ones the shop is hiding.
+  // costs money — the ones the shop is hiding. In the QR menu's view, the
+  // QR menu's own facts (catRenderStatus's 'qr' branch).
   let nSubs=0; const hidden=[];
   for(const t of tree){ nSubs+=(t.subs||[]).length;
     const tc=catCount(t); if(tc&&tc.n&&!tc.published) hidden.push(catName(t));
     for(const sb of (t.subs||[])){ const sc=catCount(sb); if(sc&&sc.n&&!sc.published) hidden.push(catName(sb)); } }
-  const shelf = !hidden.length
+  const shelf = qr ? catQrStatus() : !hidden.length
     ? `<span style="color:var(--text-secondary)">${T('every shelf is visible in the shop','所有分类都显示在店面')}</span>`
     : hidden.length===1
       ? `<span style="color:var(--amber-ink)">${T('“'+hidden[0]+'” is hidden — nothing published on it','“'+hidden[0]+'” 已隐藏 — 无上架商品')}</span>`
       : `<span style="color:var(--amber-ink)">${T(hidden.length+' shelves hidden — nothing published on them',hidden.length+' 个分类已隐藏 — 无上架商品')}</span>`;
+  const shown=catTopsShown();
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${catModeSwitch()}
     <div style="font-size:13px;line-height:1.6">${shelf}</div>
-    <div class="list">${tree.map((t,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}${catRow(t,`APP.cmd('catTop','${escAttr(t.id)}')`,(t.subs||[]).length)}`).join('')}</div>
-    ${noteBar(T('Rename, reorder, add and remove on desktop — every product on a shelf follows a rename.','重命名、排序、新增与删除请在电脑端进行 — 重命名后商品会自动迁移。'))}</div>`;
+    ${catErrBar()}
+    <div class="list">${shown.map((t,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}${catArrangeRow(catRow(t,`APP.cmd('catTop','${escAttr(t.id)}')`,(t.subs||[]).length),'top',i,shown.length,t)}`).join('')}</div>
+    ${edit?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px;gap:6px" ${busy?'disabled':''} onclick="APP.cmd('catAddTop')">${ic('plus',16)}${T('Add top category','新增主分类')}</button>`:''}</div>`;
 }
+/* ── §325 PD8 — the commands ─────────────────────────────────────────── */
+reg('catMode', k=>{ if(k!=='miniapp'&&k!=='qr') return; state.catMode=k; state.catProd=null; render(); });
+/* Move up / Move down, in the view on screen. In the mini app's, the tree's
+   own order (a whole-tree save); in the QR menu's, the QR menu's order only. */
+reg('catMove', (kind,idx,d)=>{
+  if(!catCanEdit()||state.catBusy||!state.cats) return;
+  const i=Number(idx), j=i+Number(d);
+  const top=kind==='sub'?state.cats.find(t=>t.id===state.catTop):null;
+  if(kind==='sub'&&!top) return;
+  const list=kind==='top'?catTopsShown():catSubsShown(top);
+  if(!(i>=0&&i<list.length&&j>=0&&j<list.length)) return;
+  if(catQrView()){
+    const ids=list.map(x=>x.id); const [m]=ids.splice(i,1); ids.splice(j,0,m);
+    if(kind==='top') state.catQr.tops=ids.filter(Boolean); else state.catQr.subs[top.id]=ids.filter(Boolean);
+    state.catProd=null; render(); catQrSave(); return;
+  }
+  const a=list[i].id, b=list[j].id;
+  catTreeWrite(copy=>{
+    const arr=kind==='top'?copy:((copy.find(t=>t.id===top.id)||{}).subs||null);
+    if(!arr) return false;
+    const ia=arr.findIndex(x=>x.id===a), ib=arr.findIndex(x=>x.id===b);
+    if(ia<0||ib<0) return false;
+    const [m]=arr.splice(ia,1); arr.splice(ib,0,m);
+  });
+});
+/* The eye: hide or show a top category on the QR menu only. */
+reg('catQrHide', id=>{
+  if(!catCanEdit()||!state.catQr) return;
+  const t=(state.cats||[]).find(x=>x.id===id); if(!t||!t.id) return;
+  const h=state.catQr.hidden, k=h.indexOf(t.id);
+  if(k>=0) h.splice(k,1); else h.push(t.id);
+  render(); catQrSave();
+});
+reg('catQrReset', ()=>{
+  if(!catCanEdit()||!state.catQr) return;
+  state.catQr.tops=null; state.catQr.subs={}; state.catQr.products={};
+  state.catProd=null; render(); catQrSave();
+});
+reg('catRename', (ti,si)=>{
+  if(!catCanEdit()||state.catBusy) return;
+  const t=(state.cats||[])[Number(ti)]; if(!t) return;
+  const sub=Number(si)>=0, node=sub?(t.subs||[])[Number(si)]:t; if(!node) return;
+  const topId=t.id, nodeId=node.id;
+  catNameAsk(sub?'sub':'top',node,v=>catTreeWrite(copy=>{
+    const ct=copy.find(x=>x.id===topId); if(!ct) return false;
+    const cn=sub?(ct.subs||[]).find(x=>x.id===nodeId):ct; if(!cn) return false;
+    cn.name=String(v.name).trim(); cn.name_cn=String(v.name_cn||'').trim();
+  }));
+});
+reg('catAddTop', ()=>{
+  if(!catCanEdit()||state.catBusy) return;
+  catNameAsk('top',null,v=>{
+    const name=String(v.name).trim();
+    catTreeWrite(copy=>{ copy.push({id:'',name,name_cn:String(v.name_cn||'').trim(),subs:[]}); },
+      tree=>{ const n=tree.find(x=>x.name===name); if(n) state.catTop=n.id; });
+  });
+});
+reg('catAddSub', ti=>{
+  if(!catCanEdit()||state.catBusy) return;
+  const t=(state.cats||[])[Number(ti)]; if(!t) return;
+  const topId=t.id;
+  catNameAsk('sub',null,v=>catTreeWrite(copy=>{
+    const ct=copy.find(x=>x.id===topId); if(!ct) return false;
+    ct.subs=ct.subs||[]; ct.subs.push({id:'',name:String(v.name).trim(),name_cn:String(v.name_cn||'').trim()});
+  }));
+});
+/* catRemoveTop: never the last one (the server refuses an empty tree), and
+   always asked first, naming the subcategories that go with it. */
+reg('catRemoveTop', ti=>{
+  if(!catCanEdit()||state.catBusy) return;
+  const tree=state.cats||[], t=tree[Number(ti)]; if(!t) return;
+  if(tree.length===1){ state.catErr=T('The shop needs at least one category','店面至少需要一个主分类'); render(); return; }
+  const n=(t.subs||[]).length, name=t.name||T('this category','该主分类');
+  const msg=n?T('Remove “'+name+'” and its '+n+' subcategor'+(n===1?'y':'ies')+'?\n\nProducts keep their tag until you re-assign them.',
+                '删除“'+name+'”及其 '+n+' 个子分类？\n\n产品标签保留，直到重新分配。')
+             :T('Remove “'+name+'”?','删除“'+name+'”？');
+  const [title,body]=msg.split('\n\n');
+  const topId=t.id;
+  state.ask={title:escAttr(title),body:body?escAttr(body):'',confirmLabel:T('Remove category','删除主分类'),danger:true,
+    run:()=>catTreeWrite(copy=>{ const k=copy.findIndex(x=>x.id===topId); if(k<0) return false; copy.splice(k,1); },
+      ()=>{ if(state.catTop===topId) state.catTop=null; })};
+  render();
+});
+/* catRemoveSub: asked only when products stand under it (the desktop's rule). */
+reg('catRemoveSub', (ti,si)=>{
+  if(!catCanEdit()||state.catBusy) return;
+  const t=(state.cats||[])[Number(ti)], sb=t&&(t.subs||[])[Number(si)]; if(!sb) return;
+  const topId=t.id, subId=sb.id;
+  const go=()=>catTreeWrite(copy=>{ const ct=copy.find(x=>x.id===topId); if(!ct) return false;
+    const k=(ct.subs||[]).findIndex(x=>x.id===subId); if(k<0) return false; ct.subs.splice(k,1); });
+  const c=catCount(sb);
+  if(!(c&&c.n)){ go(); return; }
+  state.ask={title:escAttr(T('Remove “'+sb.name+'”? Its '+c.n+' product'+(c.n===1?'':'s')+' stay in '+t.name+', without a heading.',
+      '删除“'+sb.name+'”？其 '+c.n+' 件产品仍留在“'+t.name+'”，但不再归入任何区块。')),
+    confirmLabel:T('Remove subcategory','删除子分类'),danger:true,run:go};
+  render();
+});
+reg('catSubMenu', (ti,si)=>{
+  if(!catCanEdit()||state.catBusy) return;
+  const t=(state.cats||[])[Number(ti)], sb=t&&(t.subs||[])[Number(si)]; if(!sb) return;
+  state.ask={title:escAttr(catName(sb)),options:[{key:'rename',label:T('Rename','重命名')},{key:'remove',label:T('Remove subcategory','删除子分类')}],
+    run:k=>{ if(k==='rename') CMD.catRename(ti,si); else if(k==='remove') CMD.catRemoveSub(ti,si); }};
+  render();
+});
+/* A product's place inside its heading, in the view on screen. The mini
+   app's order is the product's sort_order (POST /products/reorder with the
+   group's ids in their new order); the QR menu's is its own list under the
+   heading's node, saved with the rest of the QR order. */
+reg('catProdMove', (gi,ui,d)=>{
+  const cp=state.catProd, top=(state.cats||[]).find(t=>t.id===state.catTop);
+  if(!cp||!cp.rows||!top||cp.busy||state.catBusy) return;
+  const qr=catQrView();
+  if(qr?!catCanEdit():!catCanArrange()) return;
+  const g=catProdGroups(top)[Number(gi)]; if(!g) return;
+  const i=Number(ui), j=i+Number(d), units=g.units.slice();
+  if(!(i>=0&&i<units.length&&j>=0&&j<units.length)) return;
+  const [m]=units.splice(i,1); units.splice(j,0,m);
+  const ids=[].concat(...units).map(p=>Number(p.id));
+  if(qr){ if(!g.nodeId) return; state.catQr.products[g.nodeId]=ids; render(); catQrSave(); return; }
+  if(ids.length<2) return;
+  cp.busy=true; state.catErr=null; render();
+  apiWrite('/products/reorder',{ids},'POST').then(()=>{ cp.busy=false; loadCatProducts(top); render(); })
+    .catch(e=>{ cp.busy=false; if(String(e&&e.message)==='auth') return;
+      state.catErr=T('Reorder failed: ','排序失败:')+(e&&e.refused?T(...e.words):String((e&&e.message)||'')); loadCatProducts(top); render(); });
+});
+/* Move to another shelf: every top, and every heading under it, as the
+   desktop's dropdown lists them (by the saved names products carry). */
+reg('catProdShelf', id=>{
+  if(!catCanArrange()||state.catBusy) return;
+  const cp=state.catProd, p=cp&&(cp.rows||[]).find(x=>Number(x.id)===Number(id)); if(!p) return;
+  const targets=[];
+  for(const t of (state.cats||[])){ targets.push({top:t.name,sub:''}); for(const sb of (t.subs||[])) targets.push({top:t.name,sub:sb.name}); }
+  state.ask={title:T('Move to another shelf','移动到其他分类'),
+    options:targets.map((tg,i)=>({key:String(i),label:escAttr(tg.sub?tg.top+' › '+tg.sub:tg.top+' — '+T('no heading','无区块'))
+      +((tg.top===(p.top_category||'')&&tg.sub===(p.subcategory||''))?' ✓':'')})),
+    run:k=>{
+      const tg=targets[Number(k)]; if(!tg) return;
+      if(tg.top===(p.top_category||'')&&tg.sub===(p.subcategory||'')) return;
+      cp.busy=true; state.catErr=null; render();
+      apiWrite('/products/'+Number(p.id),{top_category:tg.top,subcategory:tg.sub||null},'PATCH').then(()=>{
+        cp.busy=false; showToast(T('Moved','已移动')); catRefreshCounts();
+        const top=(state.cats||[]).find(t=>t.id===state.catTop); if(top) loadCatProducts(top); render();
+      }).catch(e=>{ cp.busy=false; if(String(e&&e.message)==='auth') return;
+        state.catErr=e&&e.refused?T(...e.words):T('Could not move it','移动失败'); render(); });
+    }};
+  render();
+});
 
 /* ==========================================================================
    Stock activity — the ledger of every movement (desktop: 13-activity.js)
