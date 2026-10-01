@@ -121,7 +121,7 @@ function liftReg(name) {
 
 const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'nothingYet', 'E', 'pill', 'toggle', 'mCan', 'canRoute',
   'loadProdSales', 'psWhen', 'psContext', 'psTitle', 'salesCard', 'versionsRow', 'loadProdVersions', 'pvWhen',
-  'sheetVersions',
+  'sheetVersions', 'pvCanRestore', 'prodCanEdit',
   'shmName', 'shmLocName', 'loadShopMenus', 'loadShopMenu', 'shmErrBox', 'screenShopMenus', 'shmProdName',
   'shmShown', 'shmListHtml', 'screenShopMenu'];
 const CONSTS = ['PILL', 'KIND2PILL', 'MCAN_MONEY_ONLY', 'ROUTE_CAP', 'money', 'money0', 'shopDayAdd', 'PS_RANGES',
@@ -287,7 +287,9 @@ it('newest first, Current on the newest, Original on the baseline, and who saved
   assert.strictEqual((t.match(/Current/g) || []).length, 1);
   assert.ok(t.includes('by Mei') && t.includes('by Ash'));
   assert.ok(t.includes('Today '), 'today is said as Today');
-  assert.ok(!/Restore/.test(t) && !html.includes('restore'), 'read-only in this step: no Restore');
+  // Restore is §325 PD7's, for products:edit (test_mobile_product_restore_duplicate.js);
+  // this suite's reader holds products:view alone, so the list stays read-only.
+  assert.ok(!/Restore/.test(t) && !html.includes('restore'), 'a reader gets no Restore');
 });
 it('nothing yet says the desktop’s sentence', async () => {
   const h = mk(); h.CMD.pvOpen('7'); await h.answer(0, { success: true, versions: [] });
