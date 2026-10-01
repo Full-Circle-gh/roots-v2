@@ -1116,7 +1116,7 @@ const state = {
        next one. Two writes must not race each other for the same receipt. */
   recvReceiptId:null, recvSavedAt:0, recvAgain:false,
   poReceipts:null, poReceiptsFor:null,
-  toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
+  toast:null, drag:0, dragging:false, faqOpen:null, legalOpen:null, reviewsSeen:new Set(),
   /* Declared here rather than sprung into existence by whichever loader gets
      there first. There is one state object and well over a hundred keys on it,
      and two screens picking the same short name is not a hypothetical: `pos`
@@ -1434,6 +1434,13 @@ const state = {
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
+  /* §325 X1 — Change history (chl), What was sent (nlg), Eleme (elm), and
+     Home's "browsing now" count. One key per screen, so none can collide with
+     a name another screen takes later. */
+  chl:{rows:null, total:0, people:[], kinds:[], who:'', what:'', from:'', to:'', q:'', err:null, tried:false, more:false, seq:0, open:null},
+  nlg:{rows:null, total:0, failed:0, channels:[], kinds:[], channel:'', kind:'', from:'', to:'', q:'', onlyFailed:false, err:null, tried:false, more:false, seq:0, open:null},
+  elm:{cfg:null, st:null, err:null, tried:false, seq:0, cat:{}, catStore:null, catQ:''},
+  presence:null,
   /* The Account screen's own reads and writes (screenAccount): the recovery
      contacts and two-step switches, the signed-in devices, the per-person
      alert switches, and which write is in flight. One key, so the screen's
@@ -1557,6 +1564,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      carried over from the last time the app was opened may already have been
      worked by somebody else. */
   if(route==='approvals') aprFresh();
+  /* §325 X1 — the two records screens and Eleme are re-read on every entry:
+     what was changed, what was sent and what a channel is doing are facts about
+     now, and `rows`/`st` back to null draws Loading rather than the last visit. */
+  if(route==='changes'||route==='sent'){ const c=route==='sent'?state.nlg:state.chl; c.tried=false; c.rows=null; c.err=null; c.open=null; }
+  if(route==='mirror_eleme'){ const e=state.elm; e.tried=false; e.st=null; e.cfg=null; e.err=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
@@ -1866,6 +1878,9 @@ reg('rqSearch', v=>{
  ['mPsupQ','mPsupClr','psupQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
+ ['mChlQ','mChlClr','chlQ'],
+ ['mNlgQ','mNlgClr','nlgQ'],
+ ['mElmCatQ','mElmCatClr','elmCatQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
  ['mOnwProdQ','mOnwProdClr','onwProdQ'],
  ['mOnwCityQ','mOnwCityClr','onwCityQ'],
@@ -2313,6 +2328,7 @@ reg('copyWaybill', v=>{ copyText(String(v||''), T('Waybill copied','运单号已
 /* Clearing the air-delay alert also drops the order from the dashboard's
    "needs a call" fire and the list badge, so it is a real write, not a dismiss. */
 reg('clearAirDelay', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null||state.parcelBusy) return;
   state.parcelBusy='air'+sid; state.orderErr=null; render();
@@ -2334,6 +2350,7 @@ reg('clearAirDelay', sid=>{
 /* §284 — "I called the customer" (1) and its undo (0). Order-level on the
    server: one customer, one call, however many parcels. */
 reg('ackNoContact', on=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null||state.parcelBusy) return;
   state.parcelBusy='nc'; state.orderErr=null; render();
@@ -2352,6 +2369,7 @@ reg('ackNoContact', on=>{
    phone cannot grow its own idea of what the steps are; the server validates
    each one and lib/delay-case.js owns the rule about what may close. */
 function dcStep(sid,step,payload,busyKey){
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null||state.parcelBusy) return;
   state.parcelBusy=busyKey||('dc'+sid); state.orderErr=null; render();
@@ -2372,6 +2390,7 @@ function dcStep(sid,step,payload,busyKey){
    and JPEG 0.7 is what that path settled on, and a photograph of a spoiled box
    needs no more. */
 reg('dcPhoto', (sid,input)=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const f=input&&input.files&&input.files[0];
   if(!f) return;
   input.value='';                                   // so the same file can be re-picked
@@ -2420,6 +2439,7 @@ reg('dcViewEv', (sid,fid)=>{
   }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
 });
 reg('dcDelEv', (sid,fid)=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null||state.parcelBusy) return;
   state.ask={title:T('Remove this photo?','删除这张照片?'),
@@ -2452,6 +2472,7 @@ function dphFail(e){
   state.orderErr=E(orderErrorText(e),orderErrorText(e)); render();
 }
 reg('dphAdd', input=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const f=input&&input.files&&input.files[0];
   if(!f) return;
   input.value='';                                   // so the same file can be re-picked
@@ -2489,6 +2510,7 @@ reg('dphView', key=>{
   }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
 });
 reg('dphDel', key=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=dphOrder();
   if(!o||o._id==null||state.parcelBusy) return;
   state.ask={title:T('Remove this photo?','删除这张照片?'),
@@ -2512,6 +2534,7 @@ reg('dcMore', (sid,i)=>{
    building — so unlike every other one it asks first. The sheet is the phone's
    confirm; the desktop's is a browser confirm() for the same reason. */
 reg('dcReplacement', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const od=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   /* WHICH GOODS, AND HOW MANY OF EACH (§98 addendum 8). It sent the whole
      parcel until now, so two spoiled salads in a six-product box put six
@@ -2574,6 +2597,7 @@ reg('dcReplacement', sid=>{
   render();
 });
 reg('dcClaim', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   /* The carrier is the one that carried THIS parcel, read off the shipment.
      Nothing here names a company — the banner this replaced hard-coded 京东,
      and other tenants ship with other carriers. */
@@ -2587,6 +2611,7 @@ reg('dcClaim', sid=>{
   render();
 });
 reg('dcNoClaim', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   state.ask={title:T('Not claiming','不申请赔偿'),
     fields:[{id:'note',label:T('Reason','原因'),placeholder:T('Required','必填'),multiline:true}],
     validate:v=>(v.note||'').trim()?null:T('Give a reason first.','请先填写原因。'),
@@ -2599,6 +2624,7 @@ reg('dcNoClaim', sid=>{
    server refuses `none` without it, with the same `reason_required` the claim
    track uses, so the refusal is worded in one place. */
 reg('dcNoRemedy', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   state.ask={title:T('Nothing needed','无需补发退款'),
     fields:[{id:'note',label:T('Reason','原因'),placeholder:T('Required','必填'),multiline:true}],
     validate:v=>(v.note||'').trim()?null:T('Give a reason first.','请先填写原因。'),
@@ -2607,6 +2633,7 @@ reg('dcNoRemedy', sid=>{
   render();
 });
 reg('dcSettle', (sid,outcome)=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   if(outcome!=='paid'){ dcStep(sid,'settled',{outcome}); return; }
   state.ask={title:T('Carrier paid','已赔偿'),
     fields:[{id:'received',label:T('Amount received','收到金额'),placeholder:T('Required','必填')}],
@@ -2618,6 +2645,7 @@ reg('dcSettle', (sid,outcome)=>{
 /* One parcel of a multi-parcel order goes on its own. This is how an order can
    read "Dispatched" and still sit in the Paid tab: the other box has not left. */
 reg('dispatchParcel', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null||state.parcelBusy) return;
   state.parcelBusy=sid; state.orderErr=null; render();
@@ -2632,7 +2660,7 @@ reg('dispatchParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -2640,6 +2668,7 @@ reg('dispatchParcel', sid=>{
    same scoped commit a parcel dispatch makes. The order's own status is not
    moved and no customer is told anything: packing a box is warehouse news. */
 reg('prepareParcel', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null||state.parcelBusy) return;
   state.parcelBusy=sid; state.orderErr=null; render();
@@ -2653,7 +2682,7 @@ reg('prepareParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -2662,6 +2691,7 @@ reg('prepareParcel', sid=>{
    should be told what it does. No stock moves (a packed box is already off the
    shelf) and the order's own status stays where it is. */
 reg('undoParcelDispatch', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||o._id==null||state.parcelBusy) return;
   state.ask={title:T('Undo dispatch?','撤销发货?'),
@@ -2679,7 +2709,7 @@ reg('undoParcelDispatch', sid=>{
       }).catch(e=>{
         state.parcelBusy=null;
         if(String(e.message)==='auth') return;
-        state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+        state.orderErr=e.refused?E(...e.words):E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -2692,6 +2722,7 @@ reg('undoParcelDispatch', sid=>{
    offered once a waybill exists (parcelMergeBlock), and the route refuses it
    anyway if this screen is stale. */
 reg('combineParcels', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder();
   if(!o||o._id==null){ render(); return; }
   state.ask={title:T('Combine all parcels into one shipment? The customer will track a single parcel.',
@@ -2710,6 +2741,7 @@ reg('combineParcels', ()=>{
    lines this screen never asked to move. apiWrite posts `{}` when given no
    body, which is the shape the undo branch reads. */
 reg('splitParcels', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder();
   if(!o||o._id==null){ render(); return; }
   state.ask={title:T('Split back into separate Air / Land parcels?','拆分回独立的空运 / 陆运包裹?'),
@@ -2724,6 +2756,7 @@ reg('splitParcels', ()=>{
    from the drawer's primary button, and from the More sheet for the one step
    that skips a rung (paid → dispatched). */
 reg('advance', to=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); state.detailActions=false;
   if(!o||o._id==null){ render(); return; }
   const go=()=>orderWrite('advance', async()=>{
@@ -2759,6 +2792,7 @@ function earlyShipAsk(o){
 /* Both undos ask first, as the desktop does. They are silent writes — the
    customer is not told — which is exactly why the person doing it should be. */
 reg('undoDispatch', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); state.detailActions=false;
   if(!o||o._id==null){ render(); return; }
   const wasDelivered=o.raw==='delivered';
@@ -2774,6 +2808,7 @@ reg('undoDispatch', ()=>{
   render();
 });
 reg('undoPreparing', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); state.detailActions=false;
   if(!o||o._id==null){ render(); return; }
   state.ask={title:T('Undo preparing?','撤销备货?'),
@@ -2791,6 +2826,7 @@ reg('undoPreparing', ()=>{
    reasons already sitting in the data. Optional, exactly as there — an answer
    nobody can skip is an answer nobody means. */
 reg('cancelOrder', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); state.detailActions=false;
   if(!o||o._id==null){ render(); return; }
   state.ask={title:T('Cancel order','取消订单'),
@@ -2876,6 +2912,7 @@ function askRefundAmount(o){
 const PAY_METHODS=[['cash','Cash','现金'],['bank_transfer','Bank transfer','银行转账'],
   ['wechat_offline','WeChat (off app)','微信（线下）'],['alipay_offline','Alipay (off app)','支付宝（线下）'],['other','Other','其他']];
 reg('markPaid', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
   state.ask={title:T('How was this paid?','这笔款是怎么收的？'),
     body:T('Recording the tender keeps the day\u2019s takings split correctly.','记录收款方式，账目才分得清。'),
@@ -2945,7 +2982,28 @@ const RF_PAYOUT_METHODS=[['wechat','WeChat Pay','微信'],['alipay','Alipay','�
    direct refund by items, and the payout. Opened on the order in hand; it keeps
    its own draft, its own busy state and its own refusal, which stays on the
    sheet until the next try. */
+/* THE FORM OPENS ON THE ORDER'S OWN FIGURES OR NOT AT ALL. The drawer paints
+   from the list row first, and a list row has no lines, no refund amounts and
+   no tenders — an approve opened on it would default to Full over a customer
+   who asked for one item. So until the detail read is in hand the sheet says
+   it is loading, reads it, and only then opens on what was asked for (§325
+   S1d's "figures not read" case, which the one-tap approve had to word around). */
 function rfOpen(kind,o){
+  if(Array.isArray(o.rfItems)) return rfInit(kind,o);
+  const id=o._id, no=o.id;
+  state.rf={kind, id, loading:true, busy:false, err:null}; render();
+  api('/orders/'+id).then(d=>{
+    if(!state.rf||state.rf.id!==id||!state.rf.loading) return;
+    const m=mapDetail(d);
+    if(state.detailId===no||state.detailId===m.id){ state.liveDetail=m; state.detailId=m.id; }
+    rfInit(kind,m);
+  }).catch(e=>{
+    if(!state.rf||state.rf.id!==id) return;
+    if(String(e.message)==='auth') return;
+    state.rf.loading=false; state.rf.err=E('Could not load this.','无法加载。'); render();
+  });
+}
+function rfInit(kind,o){
   const r=o.refund||{};
   const items=(o.rfItems||[]);
   const total=Number(o.totalNum)||0;
@@ -2971,19 +3029,24 @@ function rfOpen(kind,o){
 }
 /* The amount the lines come to, and whether what is about to be approved is
    FULL — decided the server's way (amount + ¥0.005 ≥ the gross tenders not
-   yet approved), never off the chosen mode alone, because an operator who picks
-   "Partial — amount" and types the whole total gets a full refund. */
+   yet approved, routes/retail.js /refund/approve), never off the chosen mode,
+   in either direction: an operator who picks "Partial — amount" and types the
+   whole total gets a full refund, and "Full" sends the cash total, which on an
+   order paid partly with points or wallet is short of the gross and so is a
+   PARTIAL on the server (§325 S1c's gross rule). The desktop's own line keys
+   "Full" on the radio and says full there; the phone says what will happen. */
 function rfLinesSum(o,f){
   return +((o.rfItems||[]).reduce((t,it)=>t+(f.chk[it.id]?(it.unit*(Number(f.qty[it.id])||0)):0),0)).toFixed(2);
 }
 function rfIsFull(o,f){
-  if(f.mode==='full') return true;
-  const amt=f.mode==='lines'?rfLinesSum(o,f):(Number(f.amount)||0);
-  const prior=Math.max(0,Number(o.refund&&o.refund.approved)||0);
-  const remaining=Math.max(0,Math.round(((Number(o.tenderGross)||Number(o.totalNum)||0)-prior)*100)/100);
-  return (amt+0.005)>=remaining;
+  const r=o.refund||{};
+  const amt=f.mode==='lines'?rfLinesSum(o,f):f.mode==='full'?(Number(o.totalNum)||0):(Number(f.amount)||0);
+  const prior=Math.max(0,Number(r.approved)||0);
+  const gross=Number(r.gross)>0?Number(r.gross):(Number(o.totalNum)||0);
+  const remaining=Math.max(0,Math.round((gross-prior)*100)/100);
+  return (Math.min(amt,remaining)+0.005)>=remaining;
 }
-const RF_RIDER_STAGES=['awaiting_dispatch','heading_to_pickup','in_transit'];
+const REFUND_RIDER_ON_IT=['awaiting_dispatch','heading_to_pickup','in_transit'];
 function rfConsequence(o,f){
   const full=rfIsFull(o,f);
   const lines=[full
@@ -2992,8 +3055,8 @@ function rfConsequence(o,f){
     :T('Partial refund: the order keeps its status and its delivery. Stock reverses for the selected items only. The customer is told.',
        '部分退款:订单状态与配送均不变,仅退回所选商品的库存。系统会通知顾客。')];
   // §222 — the fact most easily missed, said only when it is true.
-  if(full&&o.courier&&RF_RIDER_STAGES.includes(o.courier.stage))
-    lines.push(`<b>${T('A rider is on this order right now — approving cancels that delivery.','当前已有骑手接单 — 批准后该配送会被取消。')}</b>`);
+  if(full&&o.courier&&REFUND_RIDER_ON_IT.includes(o.courier.stage))
+    lines.push(`<b style="color:var(--brick-ink)">${T('A rider is on this order right now — approving cancels that delivery.','当前已有骑手接单 — 批准后该配送会被取消。')}</b>`);
   lines.push(`<span style="color:var(--text-secondary)">${T('Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead.',
     '退款不会更改配送日期。如顾客只是想改天收货,请拒绝此申请并改期。')}</span>`);
   return {full, html:lines.map(l=>`<div style="margin-top:4px">${l}</div>`).join('')};
@@ -3022,7 +3085,7 @@ reg('rfType', (k,v)=>{ const f=state.rf; if(!f) return;
   if(k==='amount'&&f.kind==='approve'){ const o=currentOrder(); const el=document.getElementById('mRfCons');
     if(o&&el){ const c=rfConsequence(o,Object.assign({},f,{amount:Number(f.amount)||0})); el.innerHTML=c.html; el.style.borderLeftColor=c.full?'var(--brick-ink)':'var(--border-default)'; } } });
 reg('rfSubmit', ()=>{
-  const f=state.rf; if(!f||f.busy) return;
+  const f=state.rf; if(!f||f.busy||f.loading||(!f.mode&&!f.method)) return;
   if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const o=currentOrder(); if(!o||o._id==null||o._id!==f.id){ state.rf=null; render(); return; }
   const pickLines=()=>(o.rfItems||[]).filter(it=>f.chk[it.id]&&Number(f.qty[it.id])>0)
@@ -3074,6 +3137,11 @@ reg('rfSubmit', ()=>{
 function sheetRefundForm(){
   const f=state.rf; const o=currentOrder();
   if(!f||!o||o._id!==f.id) return '';
+  if(f.loading||!f.mode&&!f.method) return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('rfClose')"></div>
+   <div class="sheet" style="z-index:48;padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 24px)"><div class="grabber" style="margin-bottom:12px"></div>
+     ${f.err?`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:15px;color:var(--brick-ink)">${f.err}
+        <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('rfClose')">${T('Close','关闭')}</button></div>`
+       :`<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`}</div>`;
   const lab=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
   const hint=t=>`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.5">${t}</div>`;
   const dis=f.busy?' disabled':'';
@@ -3179,6 +3247,7 @@ reg('ordNoteTyped', v=>{
    the empty case, which until now put a labelled box and a placeholder on
    every single drawer whether or not anyone would ever type in it. */
 reg('ordNoteOpen', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); state.detailActions=false;
   if(!o||o._id==null){ render(); return; }
   state.ordNoteOpen=o._id;
@@ -3204,6 +3273,7 @@ reg('ordNoteReset', ()=>{
   const save=document.getElementById('mOrdNoteSave'); if(save) save.hidden=true;
 });
 reg('ordNoteSave', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
   /* THE BOX ON SCREEN, read here as well as on every keystroke. A value put
      there by the browser itself — an autofill, a paste the field answered with
@@ -3253,6 +3323,7 @@ async function ensureCarriers(){
 }
 const WAYBILL_OK=/^[A-Za-z0-9-]+$/;      // the server's own test, verbatim
 reg('addWaybill', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
   /* A LIST ALREADY IN HAND OPENS THE SHEET IN THIS TASK. Going through the
      promise either way put the sheet a microtask late on every tap after the
@@ -3275,6 +3346,7 @@ function askWaybillCarrier(o,sid,list){
   render();
 }
 function askWaybillNumber(o,sid,carrier){
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   state.ask={title:T('Save tracking','保存运单号'),
     fields:[{id:'no',label:T('Tracking / waybill number','快递单号 / 运单号'),numeric:true}],
     confirmLabel:T('Save tracking','保存运单号'),
@@ -3298,6 +3370,7 @@ function askWaybillNumber(o,sid,carrier){
   render();
 }
 reg('clearWaybill', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
   state.ask={title:T('Remove the tracking number from this shipment?','移除此运单号?'),
     danger:true,
@@ -3309,6 +3382,7 @@ reg('clearWaybill', sid=>{
   render();
 });
 reg('resubWaybill', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
   orderWrite('trk', async()=>{
     await apiWrite('/orders/'+o._id+'/tracking/resubscribe?shipment_id='+encodeURIComponent(sid),{});
@@ -3328,6 +3402,7 @@ reg('resubWaybill', sid=>{
    mode 'local'. */
 const ETA_OK=/^([01]\d|2[0-3]):[0-5]\d$/;      // the route's own test, verbatim
 reg('setEta', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
   const sp=(o.shipments||[]).find(x=>x&&x.id===sid);
   state.ask={title:T('Set arrival time','设置送达时间'),
@@ -3343,6 +3418,7 @@ reg('setEta', sid=>{
   render();
 });
 reg('clearEta', sid=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=currentOrder(); if(!o||o._id==null) return;
   state.ask={title:T('Remove the arrival time?','移除送达时间?'), danger:true,
     run:()=>orderWrite('eta', async()=>{
@@ -3368,6 +3444,7 @@ async function rereadOrder(o){
 /* The printer can succeed as a request and fail as a print — the endpoint says
    so with ok:false, and so does this. */
 reg('printOrder', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   state.detailActions=false;
   if(!o||o._id==null) return;
@@ -3644,6 +3721,7 @@ reg('prodSearch', v=>{
    only those, so a size kept off the online store on purpose stays off. The
    server's answer is final, and the switch goes back if it refuses. */
 reg('toggleShop', ids=>{
+  if(!prodCanEdit()) return;   // §325: POST /products/family-publish is products:edit
   const list=String(ids).split(',').map(Number).filter(Boolean);
   if(!list.length||state.prodBusy) return;
   const rows=list.map(id=>(DB.products||[]).find(p=>p._id===id)).filter(Boolean);
@@ -3663,7 +3741,7 @@ reg('toggleShop', ids=>{
       rows.forEach(p=>{ p.pub=before.get(p._id); reKindProduct(p); });   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3678,6 +3756,7 @@ reg('toggleShop', ids=>{
    it behind the sheet's Save would make two switches that look identical behave
    differently on the same screen. */
 reg('togglePaused', id=>{
+  if(!prodCanEdit()) return;   // §325: PATCH /products/:id is products:edit
   const p=(DB.products||[]).find(x=>x._id===Number(id));
   if(!p||!p.supplier||state.prodBusy) return;
   const next=!p.paused;
@@ -3690,7 +3769,7 @@ reg('togglePaused', id=>{
       p.paused=!next; reKindProduct(p);   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words):E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3712,9 +3791,10 @@ function oosLabel(v){
   const row=OOS_POLICIES.find(o=>o[0]===String(v||'strict'));
   return (row||OOS_POLICIES[0])[1];
 }
-reg('openOos', sku=>{ state.oosSku=String(sku||'')||null; render(); });
+reg('openOos', sku=>{ if(!prodCanEdit()) return; state.oosSku=String(sku||'')||null; render(); });   // §325
 reg('closeOos', ()=>{ state.oosSku=null; render(); });
 reg('pickOos', v=>{
+  if(!prodCanEdit()){ state.oosSku=null; render(); return; }   // §325: products:edit
   const p=DB.products.find(x=>x.sku===state.oosSku);
   /* A product that has gone (a refresh underneath) closes the picker; a write
      already in flight does NOT. Closing on busy looks identical to the pick
@@ -3723,18 +3803,31 @@ reg('pickOos', v=>{
   if(!p){ state.oosSku=null; render(); return; }
   if(state.prodBusy) return;
   const next=String(v);
-  if(next===String(p.oos||'strict')){ state.oosSku=null; render(); return; }
-  const was=p.oos;
+  /* §325 — THE WHOLE FAMILY, as the desktop does it. Its Save sends the policy
+     to every other size as well (09-products.js vaPersistSiblings(oosPolicy)),
+     because what shoppers see at zero is a decision about the product, not one
+     size of it; this picker changed the size on screen and left its siblings
+     saying something else. The size on screen goes first, then the rest in
+     size order. A size that already says `next` is not written, so picking
+     again after a partial failure finishes the job rather than redoing it. */
+  const fam=prodFamily(p);
+  const todo=[p].concat(fam.filter(m=>m!==p)).filter(m=>String(m.oos||'strict')!==next);
+  if(!todo.length){ state.oosSku=null; render(); return; }
+  const was=new Map(todo.map(m=>[m,m.oos]));
   state.prodBusy='oos'+p._id; state.prodErr=null;
-  p.oos=next; state.oosSku=null;   // optimistic
+  todo.forEach(m=>{ m.oos=next; });   // optimistic
+  state.oosSku=null;
   render();
-  apiWrite('/products/'+p._id,{oos_policy:next},'PATCH')
+  let landed=0;
+  todo.reduce((chain,m)=>chain.then(()=>apiWrite('/products/'+m._id,{oos_policy:next},'PATCH').then(()=>{ landed++; })),Promise.resolve())
     .then(()=>{ state.prodBusy=null; render(); showToast(T('Saved','已保存')); })
     .catch(e=>{
-      p.oos=was;   // the row must never lie
+      todo.slice(landed).forEach(m=>{ m.oos=was.get(m); });   // the rows must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=e.refused?E(...e.words)
+        :landed?E('Some sizes did not save. Pick it again to finish.','部分规格未保存。请重新选择以完成。')
+        :E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -3791,7 +3884,7 @@ reg('pollStatus', (id,st)=>{
   }).catch(e=>{
     state.pollBusy=null;
     if(String(e.message)==='auth') return;
-    state.pollsErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.pollsErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -3810,7 +3903,7 @@ reg('finalizeTopup', id=>{
       }).catch(e=>{
         state.tupBusy=null;
         if(String(e.message)==='auth') return;
-        state.tupErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+        state.tupErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -3838,7 +3931,7 @@ reg('gzPickup', (id,how)=>{
     }).catch(e=>{
       state.gzBusy=null;
       if(String(e.message)==='auth') return;
-      state.gzErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+      state.gzErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -3867,7 +3960,7 @@ reg('togglePopup', id=>{
   }).catch(e=>{
     state.puBusy=null;
     if(String(e.message)==='auth') return;
-    state.puErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.puErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -4226,6 +4319,7 @@ reg('recvGroupAll', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) r
    that has drifted from the rule, so each says what to do rather than echoing
    a code the operator cannot act on. */
 function recvErrText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(c==='reason_required')       return T('A short line needs a reason. Pick one and try again.','短少的项需要选择原因，请选择后重试。');
   if(c==='reason_not_applicable') return T('A reason belongs only on a line that came up short.','只有短少的项才需要填写原因。');
@@ -4412,7 +4506,7 @@ reg('poStatus', st=>{
     }).catch(e=>{
       state.poBusy=false;
       if(String(e.message)==='auth') return;
-      state.poErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+      state.poErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -4460,9 +4554,15 @@ function loadThread(id){
   });
 }
 const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKey(x)===k);
+/* §325 — THE INBOX'S WRITES, ON THE SERVER'S KEYS (lib/cap-routes.js): every
+   /reviews write (hide, restore, reply) is reviews:moderate; every /feedback
+   write (reply, handled, put back) is feedback:moderate. Reading either is not
+   gated, so the rows and the thread stay; the controls go. */
+function revCanWrite(r){ return mCan(r&&r.stream==='feedback'?'feedback:moderate':'reviews:moderate'); }
 reg('sendReplyText', t=>{
   const text=String(t||'').trim();
   const r=findReview(state.reply);
+  if(state.thread?!mCan('feedback:moderate'):!revCanWrite(r)) return;   // §325
   if(!text){ state.replyErr=E('Write something first.','请先输入内容。'); render(); return; }
   if(!r||r.id==null){ state.replyErr=E('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
   if(state.replyBusy) return;
@@ -4484,7 +4584,7 @@ reg('sendReplyText', t=>{
   }).catch(e=>{
     state.replyBusy=false;
     if(String(e.message)==='auth') return;
-    state.replyErr=e.code==='message_required'?T('Write something first.','请先输入内容。')
+    state.replyErr=e.refused?E(...e.words):e.code==='message_required'?T('Write something first.','请先输入内容。')
       :T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
@@ -4493,6 +4593,7 @@ reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(revK
 /* Hiding takes the review off the product page, so it asks first. Restoring
    puts back what was already public, so it does not. */
 reg('toggleReviewVisible', key=>{
+  if(!mCan('reviews:moderate')) return;   // §325
   const r=DB.reviews.find(x=>revKey(x)===key); if(!r||r.id==null) return;
   const hidden=r.visible===false;
   if(hidden){ revWrite(r,true); return; }
@@ -4502,7 +4603,7 @@ reg('toggleReviewVisible', key=>{
   render();
 });
 function revWrite(r,visible){
-  if(state.revBusy) return;
+  if(state.revBusy||!mCan('reviews:moderate')) return;   // §325
   state.revBusy=revKey(r); state.revErr=null; render();
   apiWrite('/reviews/'+r.id,{is_visible:visible,source:r.source||'real'},'PATCH').then(()=>{
     r.visible=visible; state.revBusy=null; render();
@@ -4510,7 +4611,7 @@ function revWrite(r,visible){
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 }
@@ -4525,6 +4626,7 @@ function revWrite(r,visible){
    still naming work that was just finished is the complaint this whole control
    was built to answer. */
 reg('toggleFeedbackHandled', key=>{
+  if(!mCan('feedback:moderate')) return;   // §325
   const r=DB.feedback.find(x=>revKey(x)===key);
   if(!r||r.id==null||state.revBusy) return;
   const on=!r.handled;
@@ -4541,7 +4643,7 @@ reg('toggleFeedbackHandled', key=>{
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -4604,7 +4706,9 @@ reg('chanCell', (channel, storeCode, next)=>{
                : T('No new orders arrive at this store on this channel. Orders already placed are not affected.',
                    '该门店在此渠道将不再接到新订单。已下单的订单不受影响。'),
     confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
-    run:()=>{
+    run:()=>{ if(open) chanReopenCheck(channel,storeCode,write); else write(); }};
+  render();
+  function write(){
       state.chanBusy=channel+'|'+storeCode; state.chanErr=null; render();
       // RE-READ, never patch. Writing `cell.open=open` locally made the row
       // agree with the tap whatever the server had actually stored — and for a
@@ -4623,12 +4727,51 @@ reg('chanCell', (channel, storeCode, next)=>{
       }).catch(e=>{
         state.chanBusy=null;
         if(String(e.message)==='auth') return;
-        state.chanErr = E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.chanErr = e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
-    }};
-  render();
+  }
 });
+/* §325 — THE DESKTOP'S STOCK-PUBLISH CHECK, BEFORE A CHANNEL REOPENS AT A SHOP
+   (01-core.js csCell). A channel that pushes a full stock snapshot the moment it
+   comes back on (Meituan today) is about to publish numbers nobody has
+   necessarily just counted, so the desktop reads GET
+   /channel-status/reopen-preview first and, when anything would go out, asks
+   with the oldest figures listed. The phone went straight to the write.
+   Same read, same question, same words. A courtesy, not a gate, as there: a
+   3-second leash, and a preview that fails or is slow falls through to the
+   plain reopen rather than reading as a broken switch. Nothing to publish →
+   no question. */
+function chanAgeText(iso){
+  if(!iso) return T('never touched','从未更新');
+  const t=new Date(String(iso).replace(' ','T')+'Z').getTime();
+  if(!t||isNaN(t)) return T('never touched','从未更新');
+  const days=Math.floor((Date.now()-t)/86400000);
+  if(days<=0) return T('today','今天');
+  if(days===1) return T('1 day ago','1 天前');
+  if(days<30) return T(days+' days ago',days+' 天前');
+  const months=Math.round(days/30);
+  return T(months+(months===1?' month ago':' months ago'),months+' 个月前');
+}
+function chanReopenCheck(channel,storeCode,go){
+  state.chanBusy=channel+'|'+storeCode; render();
+  const leash=new Promise(res=>setTimeout(()=>res(null),3000));
+  Promise.race([apiRaw('/channel-status/reopen-preview?channel='+encodeURIComponent(channel)+'&storeCode='+encodeURIComponent(storeCode)),leash])
+    .catch(()=>null)
+    .then(prev=>{
+      state.chanBusy=null;
+      if(!(prev&&prev.count>0)){ go(); return; }
+      const items=Array.isArray(prev.items)?prev.items:[];
+      const rows=items.map(it=>`<div>${escAttr(it.name)} — ${escAttr(chanAgeText(it.updatedAt))}</div>`).join('');
+      const more=prev.count>items.length?`<div>${escAttr(T(`and ${prev.count-items.length} more`,`另有 ${prev.count-items.length} 项`))}</div>`:'';
+      state.ask={title:T('Publish current stock to this channel?','将当前库存发布到该渠道？'),
+        body:escAttr(T(`Reopening will publish current quantities for ${prev.count} product(s). Oldest first:`,
+                       `重新开启将发布 ${prev.count} 项商品的当前库存。最久未更新优先：`))
+             +`<div style="margin-top:8px;font-size:13px">${rows}${more}</div>`,
+        confirmLabel:T('Publish','发布'), cancelLabel:T('Not yet','暂不'), run:go};
+      render();
+    });
+}
 /* THE SHOP SWITCH — the desktop Sales page's location master, on the phone.
    Both directions, as asked, and it is the bluntest control in the app: it
    writes every channel at that shop AND the shop-wide fulfilment flag, which
@@ -4663,7 +4806,7 @@ reg('shopOpen', (storeCode, next)=>{
       }).catch(e=>{
         state.shopBusy=null;
         if(String(e.message)==='auth') return;
-        state.shopErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.shopErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -4681,19 +4824,33 @@ reg('resumeDelivery', ()=>{
     confirmLabel:T('Resume','恢复'),
     run:()=>{
       state.dlvBusy=true; state.dlvErr=null; render();
-      apiWrite('/config',{'delivery.holidayMode':false},'PUT').then(()=>{
+      /* §325 — VERSION HISTORY, as the desktop's Holiday card writes it
+         (06-delivery.js, card 'delivery.holiday', §279): `?history=` names the
+         card so this change is a version Undo and Version history can see, and
+         the body carries the card's same two keys — the server records exactly
+         the keys it is sent, and a version with only one of them would not
+         compare with the rest. The message goes back as stored, unchanged; it
+         is left out only if the phone never read it, rather than sent blank. */
+      const hm=cfgGet('delivery.holidayMessage',null);
+      const body={'delivery.holidayMode':false};
+      if(hm&&typeof hm==='object') body['delivery.holidayMessage']={en:String(hm.en||''),cn:String(hm.cn||'')};
+      apiWrite('/config?history='+encodeURIComponent('delivery.holiday'),body,'PUT').then(()=>{
         state.cfg=state.cfg||{};
         state.cfg.delivery=Object.assign({},state.cfg.delivery||{},{holidayMode:false});
         state.dlvBusy=false; render(); showToast(T('Delivery resumed','配送已恢复'));
       }).catch(e=>{
         state.dlvBusy=false;
         if(String(e.message)==='auth') return;
-        state.dlvErr=E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
+        state.dlvErr=e.refused?E(...e.words):E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
       });
     }};
   render();
 });
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
+/* §325 — Legal's own open row. It used faqToggle and state.faqOpen, so opening
+   the second FAQ answer and then visiting Legal found the Privacy policy
+   already open (both lists number from 0), and closing one closed the other. */
+reg('legalToggle', i=>{ state.legalOpen=state.legalOpen===i?null:i; render(); });
 reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
 reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
 reg('stepDec', k=>{ sheetStep[k]=Math.max(0,(sheetStep[k]||0)-1); render(); });
@@ -4742,7 +4899,7 @@ function noteBar(text){ return `<div style="display:flex;align-items:flex-start;
 function nothingYet(title,msg){
   return `<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
     <div style="font-size:18px;font-weight:500">${title}</div>
-    <div style="font-size:15px;color:var(--text-secondary);max-width:270px;line-height:1.55">${msg}</div></div>`;
+    ${msg?`<div style="font-size:15px;color:var(--text-secondary);max-width:270px;line-height:1.55">${msg}</div>`:''}</div>`;
 }
 /* storefront_config comes back as one nested object; these screens read their
    own corner of it rather than shipping sample content. */
@@ -5203,7 +5360,7 @@ function vitalsBlock(){
       ${cell(T('Refunded','已退款'), String(v.refunded),
         v.refunded?T((v.refundRate||0).toFixed(1)+'% of orders','占订单 '+(v.refundRate||0).toFixed(1)+'%')
                   :T('nothing sent back','无退款'))}
-    </div></div>`;
+    </div>${presenceLine()}</div>`;
 }
 /* ONE HEADING OVER BOTH CARDS, and it belongs to the section rather than to
    either card. The second card used to carry its own — "Also today ·
@@ -5722,6 +5879,9 @@ function ordersHeader(){
           that sets it carries — this names one thing and must not name it twice.
           Clears to All, which is the only status this can have come from. */''}
     ${state.statusF==='delayed'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Delivery needs a call','配送需要跟进')}</span>${ic('x',14,2)}</button></div>`:''}
+    ${/* §325 X1 — the same chip for Home's "Parcels to recover" row, whose
+          pseudo-status (recover_parcel) is the one the desktop's row opens. */''}
+    ${state.statusF==='recover'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Parcels to recover','待收回包裹')}</span>${ic('x',14,2)}</button></div>`:''}
     ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}
     ${stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,'storeF')}`:''}</div>`;
 }
@@ -5921,7 +6081,7 @@ function screenInbox(){
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px">
         <span style="font-size:12px;color:var(--text-secondary)">${T(...r.time)}${r.opened?' · '+T('opened '+T(...r.opened),'发起于 '+T(...r.opened)):''}</span>
         <span style="display:flex;align-items:center;gap:8px;flex:none">
-          ${r.stream==='review'&&r.id!=null?smallBtn(busy?T('Saving…','保存中…'):(hidden?T('Restore','恢复'):T('Hide','隐藏')),`APP.cmd('toggleReviewVisible','${k}')`,busy):''}
+          ${r.stream==='review'&&r.id!=null&&mCan('reviews:moderate')?smallBtn(busy?T('Saving…','保存中…'):(hidden?T('Restore','恢复'):T('Hide','隐藏')),`APP.cmd('toggleReviewVisible','${k}')`,busy):''}
           ${/* Nothing goes to the customer either way, which is the whole point:
                 the only other way to clear this thread off the front door was to
                 write to someone who is owed nothing. Sits to the LEFT of Reply
@@ -5929,11 +6089,15 @@ function screenInbox(){
                 way to finish. Absent on a thread that is neither waiting nor
                 handled: it has already been answered and there is nothing here
                 to say about it. */''}
-          ${r.stream==='feedback'&&r.id!=null&&(r.needsReply||r.handled)
+          ${r.stream==='feedback'&&r.id!=null&&(r.needsReply||r.handled)&&mCan('feedback:moderate')
             ? smallBtn(busy?T('Saving…','保存中…'):(r.handled?T('Put back','放回待处理'):T('Mark as handled','标记为已处理')),
                        `APP.cmd('toggleFeedbackHandled','${k}')`,busy)
             : ''}
-          ${smallBtn(r.reply?T('Edit reply','编辑回复'):T('Reply','回复'),`APP.cmd('openReply','${k}')`,false)}
+          ${/* §325 — Reply only for who may send one. A feedback thread is still
+                worth reading without that key, so it opens as View (the
+                evidence chip's live pair); a review has nothing more to read. */''}
+          ${revCanWrite(r)?smallBtn(r.reply?T('Edit reply','编辑回复'):T('Reply','回复'),`APP.cmd('openReply','${k}')`,false)
+            :(r.stream==='feedback'&&r.id!=null)?smallBtn(T('View','查看'),`APP.cmd('openReply','${k}')`,false):''}
         </span></div></div>`;
   };
   const unseenCount=DB.reviews.filter(r=>!state.reviewsSeen.has(revKey(r))).length;
@@ -5970,7 +6134,7 @@ const CHAN_META={
   mini_app:{icon:'smartphone',en:'Mini app',zh:'小程序',key:'wechat'},
   web:{icon:'globe',en:'Web store',zh:'网店',key:'web'},
   meituan:{icon:'bike',en:'Meituan',zh:'美团',key:'meituan',mirror:'meituan'},
-  eleme:{icon:'utensils-crossed',en:'Eleme',zh:'饿了么',key:'eleme'},
+  eleme:{icon:'utensils-crossed',en:'Eleme',zh:'饿了么',key:'eleme',mirror:'eleme'},
   gzgrocery:{icon:'warehouse',en:'gzgrocery ERP',zh:'gzgrocery',key:'gzgrocery',mirror:'gzgrocery'},
   pos:{icon:'store',en:'In store',zh:'门店',key:'pos'},
 };
@@ -6033,8 +6197,9 @@ function sheetChannel(){
                busy?T('Saving…','保存中…'):shopShut?T('Shop closed','门店已关闭'):(cell.open?T('Open','营业中'):T('Closed','已关闭'))}</span>
              <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
        }).join('')}</div>
-       ${m.mirror?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
-         m.mirror==='meituan'?T('View orders from Meituan','查看美团订单'):T('View pickups','查看提货记录')}</button>`:''}
+       ${m.mirror&&canRoute('mirror_'+m.mirror)?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
+         m.mirror==='meituan'?T('View orders from Meituan','查看美团订单')
+         :m.mirror==='eleme'?T('View Eleme sync','查看饿了么同步'):T('View pickups','查看提货记录')}</button>`:''}
        ${noteBar(T('Closing a channel everywhere at once is on desktop.','一次性关闭整个渠道请在电脑端操作。'))}
      </div></div>`;
 }
@@ -6145,7 +6310,7 @@ function screenSales(){
       // inside that sheet. A channel with no integration has nothing to show
       // and stays flat.
       const go=(!notIntegrated&&cells.length)?`APP.cmd('openChannel','${c.channel}')`
-              : m.mirror?`APP.cmd('mirror','${m.mirror}')`:'';
+              : (m.mirror&&canRoute('mirror_'+m.mirror))?`APP.cmd('mirror','${m.mirror}')`:'';
       const Tag=go?'button':'div';
       return `<${Tag} class="card" ${go?`onclick="${go}"`:''} style="display:flex;flex-direction:column;gap:12px;text-align:left;${go?'cursor:pointer;':''}padding:16px;color:var(--text-primary);width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -6641,7 +6806,7 @@ function toggleNotifCat(k){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 reg('toggleNotifCat', k=>toggleNotifCat(k));
@@ -6937,7 +7102,10 @@ function screenOperations(){
       ])}</div>
     ${stores&&stores.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>
       <div class="list">${stores.map(opsStoreRow).join('')}</div></div>`:''}
-    ${noteBar(T('Store details, staff, printers and payment keys are set on desktop.','门店资料、员工、打印机与支付密钥在电脑端设置。'))}</div>`;
+    ${/* §325 — "staff" came out: the phone's Team screen invites, edits and
+          sets permissions (§300), so that clause was no longer true. The rest
+          still is. The live pair with one item dropped, in both halves. */''}
+    ${noteBar(T('Store details, printers and payment keys are set on desktop.','门店资料、打印机与支付密钥在电脑端设置。'))}</div>`;
 }
 
 /* ==========================================================================
@@ -7722,13 +7890,24 @@ function loadCatBannerShelf(top){
     .then(j=>{ if(state.catShelf&&state.catShelf.top===top.name){ state.catShelf.rows=(j&&j.data)||[]; render(); } })
     .catch(()=>{});
 }
+/* §325 S1d — WHO MAY CHANGE A BANNER, on the server's map (lib/cap-routes.js):
+   every change saves the whole tree, PUT /category-tree, which is
+   categories:edit; a new picture is also POST /media/upload, media:upload. So
+   the card offers Add / Replace picture to an account holding both, the link,
+   dates and Remove to categories:edit, and to everyone else shows what is set
+   and nothing to press. With no banner and nothing to press there is nothing to
+   show, and the card is not drawn. */
+function catBannerCanEdit(){ return mCan('categories:edit'); }
+function catBannerCanUpload(){ return mCan('categories:edit')&&mCan('media:upload'); }
 function catBannerCard(top){
   const b=top.banner;
+  const canEdit=catBannerCanEdit(), canUp=catBannerCanUpload();
   const head=`<div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary);padding:0 2px">${T('Banner (optional)','横幅(可选)')}</div>`;
   const hint=`<div style="font-size:12.5px;line-height:1.5;color:var(--text-secondary);padding:0 2px">${T('A wide picture, 5 : 2, shown at the top of this category on the mini app\'s Shop tab. Hidden while a customer is searching.','宽幅图片,比例 5 : 2,显示在小程序「商品」页该分类的顶部。顾客搜索时隐藏。')}</div>`;
   const busy=state.catBannerBusy;
   const err=state.catBannerErr?`<div style="font-size:13px;color:var(--brick-ink)">${state.catBannerErr}</div>`:'';
   if(!b||!b.image_url){
+    if(!canUp) return '';
     return `<div style="display:flex;flex-direction:column;gap:8px">${head}${hint}${err}
       <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')" style="align-self:flex-start;width:auto;gap:8px">${ic('plus',16)}${busy?T('Uploading…','上传中…'):T('Add banner','添加横幅')}</button></div>`;
   }
@@ -7742,6 +7921,22 @@ function catBannerCard(top){
     +`<optgroup label="${escAttr(T('Pages','页面'))}">${CAT_BANNER_PAGES.map(p=>opt(p[0],T(p[1],p[2]))).join('')}</optgroup>`
     +(rows.length?`<optgroup label="${escAttr(T('Products on this shelf','货架上的产品'))}">${rows.map(p=>opt('product:'+p.id,(LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||('#'+p.id))).join('')}</optgroup>`:'');
   const lbl=t=>`<span style="font-size:12.5px;color:var(--text-secondary)">${t}</span>`;
+  if(!canEdit){
+    /* Read only: the same facts, as text — the link's own label from the list
+       above, the dates as stored. */
+    const page=CAT_BANNER_PAGES.find(p=>p[0]===cur), prod=rows.find(p=>'product:'+p.id===cur);
+    const link=!cur?T('Picture only','仅图片'):page?T(page[1],page[2])
+      :prod?((LANG==='en'?(prod.name_en||prod.name_cn):(prod.name_cn||prod.name_en))||('#'+prod.id)):cur;
+    return `<div style="display:flex;flex-direction:column;gap:10px">${head}
+    <div style="position:relative;width:100%;aspect-ratio:5/2;border-radius:12px;overflow:hidden;background:var(--surface-raised)">
+      <img src="${escAttr(b.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+    <div><span style="font-size:12px;padding:3px 10px;border-radius:999px;background:${st.bg};color:${st.fg}">${st.text}</span></div>
+    <div style="display:flex;flex-direction:column;gap:5px">${lbl(T('Tap link','点击跳转'))}<span style="font-size:15px">${escAttr(link)}</span></div>
+    ${(b.start_at||b.end_at)?`<div style="display:flex;gap:10px">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${lbl(T('Start','开始'))}<span class="num" style="font-size:15px">${escAttr(b.start_at||'—')}</span></div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${lbl(T('End','结束'))}<span class="num" style="font-size:15px">${escAttr(b.end_at||'—')}</span></div></div>`:''}
+    </div>`;
+  }
   return `<div style="display:flex;flex-direction:column;gap:10px">${head}
     <div style="position:relative;width:100%;aspect-ratio:5/2;border-radius:12px;overflow:hidden;background:var(--surface-raised)">
       <img src="${escAttr(b.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
@@ -7756,7 +7951,7 @@ function catBannerCard(top){
     <div style="font-size:12.5px;color:var(--text-secondary)">${T('Leave both empty to show it always. Outside its dates it hides by itself.','两者留空则一直显示。不在日期内时会自动隐藏。')}</div>
     ${err}
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')">${busy?T('Uploading…','上传中…'):T('Replace picture','更换图片')}</button>
+      ${canUp?`<button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerPick')">${busy?T('Uploading…','上传中…'):T('Replace picture','更换图片')}</button>`:''}
       <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('catBannerRemove')" style="color:var(--brick-ink)">${T('Remove banner','删除横幅')}</button></div>
     </div>`;
 }
@@ -7776,16 +7971,18 @@ async function catSaveTree(){
 }
 function catBannerTop(){ return (state.cats||[]).find(t=>t.id===state.catTop)||null; }
 reg('catBannerSet',(key,value)=>{
+  if(!catBannerCanEdit()) return;   // §325 S1d: PUT /category-tree is categories:edit
   const t=catBannerTop(); if(!t||!t.banner) return;
   t.banner=Object.assign({},t.banner,{[key]:value||''});
   render(); catSaveTree();
 });
 reg('catBannerRemove',()=>{
+  if(!catBannerCanEdit()) return;   // §325 S1d
   const t=catBannerTop(); if(!t||!t.banner) return;
   delete t.banner; render(); catSaveTree();
 });
 reg('catBannerPick',()=>{
-  if(state.catBannerBusy) return;
+  if(state.catBannerBusy||!catBannerCanUpload()) return;   // §325 S1d: media:upload, then the tree save
   const el=document.createElement('input');
   el.type='file'; el.accept='image/*';
   el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) catBannerUpload(f); };
@@ -7806,12 +8003,15 @@ async function catBannerShrink(file){
   }catch(e){ return file; }
 }
 async function catBannerUpload(file){
+  if(!catBannerCanUpload()) return;   // §325 S1d
   const topId=state.catTop;   // the category the picture was picked for
   state.catBannerBusy=true; state.catBannerErr=null; render();
   try{
     const fd=new FormData(); fd.append('file',await catBannerShrink(file),'banner.jpg');
     const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
-    if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+    if(r.status===401){ location.href='/backend/login'; return; }
+    // §325 — a refusal is said on the card, not answered with the login page.
+    if(r.status===403){ state.catBannerErr=(await apiRefusal(r)).message; return; }
     const j=await r.json().catch(()=>({}));
     if(!r.ok||!j||!j.success||!j.data||!j.data.url){
       const reason=MEDIA_ERR[j&&j.error];
@@ -9340,7 +9540,15 @@ reg('onwCreate', ()=>{
        not: a code has a sentence written for it here, and e.message for a coded
        failure is the raw field name. */
     const pid=e.body&&e.body.product_id!=null?Number(e.body.product_id):null;
-    state.onw.err={where:ONW_WHERE[e.code]||(pid!=null?'what':'who'),msg:onwErrText(e.code,e.code?null:e.message,pid)};
+    /* §325 — onwErrText's forbidden_capability sentence is about the customer
+       ("cannot create customers"), which is the handler's refusal
+       (need: customers:edit) and was unreachable while apiWrite sent every 403
+       to the login page. Any other refusal — no orders:edit, a store outside
+       this account's scope — is the general sentence; blaming the customer box
+       for it would send the operator to untick a box that changes nothing. */
+    const custRefused=e.code==='forbidden_capability'&&e.body&&e.body.need==='customers:edit';
+    state.onw.err={where:ONW_WHERE[e.code]||(pid!=null?'what':'who'),
+      msg:(e.refused&&!custRefused)?E(...e.words):onwErrText(e.code,e.code?null:e.message,pid)};
     render();
   });
 });
@@ -9901,7 +10109,7 @@ reg('poLcSave', ()=>{
   }).catch(e=>{
     lc.busy=false;
     if(String(e.message)==='auth') return;
-    lc.err=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+    lc.err=e.refused?E(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
   });
 });
 /* WHAT THE ORDER PUT IN THE BOOKS, the desktop's Finance panel: the expense
@@ -10648,6 +10856,7 @@ function pwBody(){
 const PW_ERR={date_required:['Choose a date first.','请先选择日期。'],store_required:['Choose a location first.','请先选择门店。'],
   name_required:['Give it a name first.','请先填写名称。']};
 function pwErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(PW_ERR[c]) return T(...PW_ERR[c]);
   if(c==='not_draft'||c==='already_receiving'||c==='not_found') return T('This order has already moved on. Close and open it again to see where it is now.','这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
@@ -10841,6 +11050,7 @@ reg('pkField', (f,v)=>{ const k=state.pk; if(!k) return;
   if(f==='store'){ k.store=Number(v)||null; render(); }
   else if(f==='supplier') k.supplier=String(v==null?'':v); });
 function pkErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code, b=(e&&e.body)||{};
   if(c==='already_sourced'&&Array.isArray(b.lines)&&b.lines.length)
     return T('Already ordered: ','已下单:')+b.lines.map(d=>`${d.name_en||''} → ${d.po_number||''}`).join(', ');
@@ -11122,7 +11332,7 @@ function pinvAct(req,ok){
   v.busy=true; v.actErr=null; pinvPatch();
   apiWrite(req[0],req[1],req[2]).then(r=>{ v.busy=false; showToast(typeof ok==='function'?ok(r):ok); pinvLoad(true); })
     .catch(e=>{ v.busy=false; if(String(e.message)==='auth') return;
-      v.actErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
+      v.actErr=e.refused?E(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); pinvPatch(); });
 }
 reg('pinvMarkPo', (poId,flag)=>{ flag=!!Number(flag);
   pinvAct(['/purchasing/po/'+Number(poId)+'/no-invoice',{no_invoice_expected:flag},'PUT'], r=>{
@@ -11295,6 +11505,7 @@ reg('pinvMatch', ()=>{
   render();
 });
 function pinvErrFor(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   const c=e&&e.code;
   if(c==='amount_required') return T('Enter an amount first.','请先填写金额。');
   if(c==='date_required') return T('Choose a date first.','请先选择日期。');
@@ -11639,7 +11850,7 @@ function psupBody(d){
     payment_method:t('payment_method')||null,channel_type:d.channel_type||null,channel_link:t('channel_link')||null,
     rating:parseInt(d.rating,10)||0,notes:t('notes')||null};
 }
-const psupErrMsg=e=>e&&e.code==='name_taken'?T('Name already exists','名称已存在'):e&&e.code==='name_required'?T('Name is required','名称必填')
+const psupErrMsg=e=>e&&e.refused?T(...e.words):e&&e.code==='name_taken'?T('Name already exists','名称已存在'):e&&e.code==='name_required'?T('Name is required','名称必填')
   :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
 function psupAutoStart(id){
   if(psupAuto){ psupAuto.flush(); psupAuto.stop&&psupAuto.stop(); psupAuto=null; }
@@ -12013,7 +12224,7 @@ function supOwedWrite(path, body, done){
   }).catch(e=>{
     state.supAcctBusy=false;
     if(String(e.message)==='auth') return;
-    state.supAcctErr=e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
+    state.supAcctErr=e.refused?E(...e.words):e.code==='amount_must_be_positive'?E('Enter an amount above zero.','请输入大于零的金额。')
       :e.code==='invalid_amount'?E('Enter an amount first.','请先填写金额。')
       :E('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
     render();
@@ -13327,19 +13538,23 @@ const SUBS={
        of how to turn it on. What is left is the half that is still true and is
        the only half an operator can act on — and it is the live pair's own tail
        with its first clause dropped, so nothing was composed. */
-    const note = noteBar(T('Issue fapiao on desktop','请在电脑端开具'));
+    /* §325 — THAT LINE WAS NO LONGER TRUE. It read "Issue fapiao on desktop",
+       and since §314 the phone's order sheet issues one (upload, number, Mark
+       issued, un-issue) — but nothing here led to it. Each row now opens its
+       order's sheet, which is where the fapiao is issued, and the line is gone
+       rather than reworded: a chevron on a row says "tap for more" in every
+       language this app speaks. */
     if(state.invLoaded&&!(DB.invoices||[]).length) return nothingYet(T('No fapiao requested','没有发票申请'),
       T('When a customer asks for a fapiao with their order, the request shows here.','顾客下单时申请发票，申请会显示在这里。'));
     return `<div><div style="padding:12px 0 4px">${chipRow(chips,seg,'invSeg')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
-      ${note}
       ${!rows.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${seg==='issued'?T('None issued yet','尚无已开发票'):T('Nothing waiting','没有待开发票')}</div>`:''}
       ${rows.map(v=>`<div class="card" style="display:flex;flex-direction:column;gap:9px;padding:14px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <${v._id!=null?`button type="button" onclick="APP.cmd('openInvoiceOrder',${(DB.invoices||[]).indexOf(v)})"`:'div'} style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;width:100%;padding:0;margin:0;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:${v._id!=null?'pointer':'default'}">
           <span style="display:flex;flex-direction:column;min-width:0">
             <span style="font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(v.title||T('No title given','未填抬头'))}</span>
             <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(v.id)}${v.no?' · '+escAttr(v.no):''}</span></span>
-          <span class="num" style="font-size:16px;font-weight:500;flex:none">${v.amount}</span></div>
+          <span style="display:flex;align-items:center;gap:4px;flex:none"><span class="num" style="font-size:16px;font-weight:500">${v.amount}</span>${v._id!=null?`<span style="display:flex;color:var(--text-secondary)">${ic('chevron-right',18)}</span>`:''}</span></${v._id!=null?'button':'div'}>
         ${(v.taxId||v.email)?`<div class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([v.taxId,v.email].filter(Boolean).join(' · '))}</div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;row-gap:8px">
           <span style="display:flex;align-items:center;gap:9px;min-width:0;flex-wrap:wrap;row-gap:6px">${pill(v.kind,T(...v.status))}
@@ -13387,7 +13602,9 @@ const SUBS={
             <span class="num" style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.code)}</span>
             ${!c.on?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};flex:none">${c.ended?T('Ended','已到期'):T('Off','已停用')}</span>`:''}</span>
           ${c.title?`<span style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span>`:''}</span>
-        ${c.id==null?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
+        ${/* §325 — PATCH /vouchers/:id is coupons:edit (lib/cap-routes.js); without it
+              the card says where the coupon stands, as a sample row does. */''}
+        ${(c.id==null||!mCan('coupons:edit'))?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
           :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
           :`<span style="flex:none">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
       </div>
@@ -13473,7 +13690,7 @@ const SUBS={
         ${ic('link',14)}<span class="num" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(b.deeplink)}</span></div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--border-default)">
         <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.meta)}</span>
-        ${b.st==='scheduled'&&b.id!=null?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}</div>
+        ${b.st==='scheduled'&&b.id!=null&&mCan('broadcasts:send')?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}</div>
     </div>`).join('')}</div>`;
     // No desktopNote: this screen writes and sends now (§63), so "best edited
     // on desktop" would be sending an operator away from the tool they are in.
@@ -13528,7 +13745,9 @@ const SUBS={
       ${desktopNote()}</div>`;
   }},
   media:{title:['Media','媒体库'],
-    cta:()=>{ const b=state.mediaBusy;
+    /* §325 — POST /media/upload is media:upload (lib/cap-routes.js). The
+       library is for reading by anyone who can open it; Add photos is not. */
+    cta:()=>{ if(!mCan('media:upload')) return ''; const b=state.mediaBusy;
       return `<button class="cta inhead" ${b?'disabled':''} onclick="APP.cmd('pickMedia')">${
         b?T('Uploading '+b.done+'/'+b.total+'…','上传中 '+b.done+'/'+b.total+'…'):T('Add photos','添加图片')}</button>`; },
     render:()=>{
@@ -13537,8 +13756,12 @@ const SUBS={
       <span style="font-size:14px;color:var(--brick-ink)">${state.mediaErr}</span></div>`:'';
     if(!state.media){ if(!state.mediaTried) loadMedia();
       return `<div style="padding:0 16px">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
+    /* §325 S1d — the invitation names the Add photos button in the header, so
+       it is made only to somebody that button is drawn for (media:upload). To
+       anyone else the empty library says it is empty and stops: no sentence
+       pointing at a control they do not have. */
     if(!state.media.rows.length) return `<div style="padding:0 16px">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
-      T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'));
+      mCan('media:upload')?T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'):'');
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
       ${err}
       <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+(state.media.total===1?' image':' images'),'共 '+state.media.total+' 张')}</div>
@@ -13564,14 +13787,14 @@ const SUBS={
       T('Your terms and privacy policy are written on desktop. Once published they show here and in the mini app.','服务条款与隐私政策在电脑端撰写，发布后会显示在这里和小程序中。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     <div class="list">${docs.map((d,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
+      <button onclick="APP.cmd('legalToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
         <span style="display:flex;align-items:center;gap:10px;width:100%">
           <span style="flex:1;min-width:0">
             <span style="display:block;font-size:15px;color:var(--text-primary)">${T(...d.name)}</span>
             <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d.updated?T('Updated '+fmtDay(d.updated),'更新于 '+fmtDay(d.updated)):T('Not published','未发布')}</span>
           </span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.faqOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>
+        ${state.legalOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>
         ${String(d.body).length>1200?`<span style="font-size:12.5px;color:var(--text-secondary);opacity:.85">${T('Clipped here — the rest is on desktop.','此处已截断 — 完整内容见电脑端。')}</span>`:''}`:''}</button>`).join('')}</div>
     ${desktopNote()}</div>`;
   }},
@@ -14581,7 +14804,7 @@ function kqReprint(){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     k.printing=false;
-    k.err=(e.code==='no_kitchen_printer'||e.code==='not_configured')
+    k.err=e.refused?E(...e.words):(e.code==='no_kitchen_printer'||e.code==='not_configured')
       ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
       : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
     render();
@@ -15004,7 +15227,7 @@ function pikWriteLine(L,per){
     .catch(e=>{
       if(String(e.message)==='auth') return;
       k.busy=false;
-      k.err=e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
+      k.err=e.refused?E(...e.words):e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
                               :T('That line did not save. Nothing has changed — try again.','该项未保存,数据未变 — 请重试。');
       render();
     });
@@ -15285,7 +15508,7 @@ function xfrSaveCount(itemId,qty){
     // The number they typed is never thrown away by a failed write. Losing a
     // delivery's counts at the door is the one failure nobody forgives.
     x.held={item_id:itemId,qty:qty};
-    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+    x.err=e.refused?E(...e.words):e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
                              : T('That count did not save. It is still on screen — try again.','数量未保存,仍显示在屏幕上 — 请重试。');
     render();
   });
@@ -15353,7 +15576,7 @@ function xfrAllArrived(){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     x.busy=false;
-    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+    x.err=e.refused?E(...e.words):e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
                              : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
     render();
   });
@@ -15734,7 +15957,51 @@ function qsBumpCount(id,d){
    different ledger entry from a batch, and the whole of §46's second ruling.
    `reason: 'adjust'` is what the old app sent and what the server records for a
    clerk; in add mode the server writes the reason itself. */
-function qsSetCommit(id){
+/* §325 — THE TWO RECOUNT REFUSALS ARE QUESTIONS, AND THE PHONE NOW ASKS THEM.
+   PATCH /stores/:id/stock/:pid answers two 400s that are not errors: each is
+   answered by sending the same count again with one word in `recount_reason`
+   (routes/retail-inventory.js):
+     recount_clears_debt      §84 — the shelf is below zero, the only record of
+                              units sold that were never made; a count typed over
+                              it wipes that claim. The word is `clears_debt`.
+     recount_reason_required  §46 — a kitchen-mode count went DOWN, which may only
+                              mean it was counted wrong. The word is `miscount`.
+   The phone's product sheet and Add stock showed the server's English sentence
+   in the row and stopped, so a shelf at −18 could not be corrected from the
+   phone by any number. The questions are the desktop's own
+   (09-products.js _paAskRecountReason), word for word; the §46 one was the
+   phone's before it was the desktop's. `resend(word)` writes the same count
+   again with the answer; `keep()` is backing out. Returns false for any other
+   code, so the caller reports it as before. */
+const RECOUNT_QUESTIONS=['recount_clears_debt','recount_reason_required'];
+function recountAsk(code,body,shelf,typed,resend,keep){
+  if(code==='recount_clears_debt'){
+    const owed=Math.abs(Number(body&&body.owed))||Math.abs(Number(shelf)||0);
+    state.ask={title:T(`Customer orders waiting — ${owed}`,`有客户订单等待 — ${owed}`),
+      body:T(`This shelf is at ${shelf} because ${owed} were sold that were never made. `
+             +'That number is what the kitchen cooks against, and saving a count here sets it '
+             +'to zero. To add stock, record a batch instead.',
+             `在架 ${shelf},因为有 ${owed} 件已售出但从未制作。`
+             +'这个数字是厨房的待制作依据,在此保存数量会将其清零。若要增加库存,请改用“加库存”。'),
+      options:[{key:'clears_debt',label:T('Clear it and save','清零并保存')},{key:'keep',label:T('Keep it','保留')}],
+      run:k=>{ if(k==='clears_debt') resend('clears_debt'); else if(keep) keep(); }};
+    render(); return true;
+  }
+  if(code==='recount_reason_required'){
+    state.ask={title:T('The count has gone down','数量变少了'),
+      body:T('Shelf says '+shelf+', you counted '+typed+'.', '在架 '+shelf+'，你数的是 '+typed+'。'),
+      options:[{key:'miscount', label:T('I counted wrong — save '+typed, '数错了——保存 '+typed)},
+               {key:'gone',     label:T('Something is missing or spoiled','少了或坏了')}],
+      run:k=>{
+        if(k==='miscount') return resend('miscount');
+        if(keep) keep();
+        showToast(T('The count stays as it is. Tell whoever records waste.', '数量保持不变。请告诉负责记录损耗的人。'));
+      }};
+    render(); return true;
+  }
+  return false;
+}
+function qsSetCommit(id,reason){
   clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
   const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
   if(!p) return;
@@ -15743,10 +16010,19 @@ function qsSetCommit(id){
   if(was!=null&&n===was){ delete state.qs.setBase[id]; return; }   // back where it started
   state.qs.fixing[id]=n;
   render();
-  apiWrite('/stores/'+state.qs.storeId+'/stock/'+id,
-           {physical_qty:n, reason:'adjust', note:'quick-stock'}, 'PATCH')
+  const body={physical_qty:n, reason:'adjust', note:'quick-stock'};
+  if(reason) body.recount_reason=reason;   // §325: only on the resend that answers a refusal
+  apiWrite('/stores/'+state.qs.storeId+'/stock/'+id, body, 'PATCH')
     .then(()=>qsSetLanded(id))
-    .catch(e=>{ if(String(e.message)==='auth') return; qsSetFailed(id,was,e.message); });
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      /* §325 — a question, asked once: the shelf goes back to what it said, and
+         the answer resends this count with its word. */
+      if(!reason&&RECOUNT_QUESTIONS.includes(e.code)){
+        qsSetFailed(id,was,null); delete state.qs.rowErr[id];
+        recountAsk(e.code,e.body,was,n,w=>{ p.physical_qty=n; state.qs.setBase[id]=was; qsSetCommit(id,w); });
+        return;
+      }
+      qsSetFailed(id,was,e.message); });
 }
 /* The two ways a recount ends, named — the same call the add path makes one
    screen up, and for the same reason: they are what the operator is left
@@ -15958,6 +16234,9 @@ function qsCorrect(id,n,reason){
       // operator has to know before they try again.
       if(p&&was!=null) p.physical_qty=was;
       delete state.qs.fixing[id];
+      /* §325 — a raise across a negative shelf (§84), or a drop the shelf moved
+         under (§46), is asked rather than reported, and answered by resending. */
+      if(!reason&&recountAsk(e.code,e.body,was,n,w=>qsCorrect(id,n,w))){ render(); return; }
       state.qs.rowErr[id]=e.message||E('Didn\u2019t save','未保存');
       render(); });
 }
@@ -20212,7 +20491,7 @@ reg('pcSave', ()=>{
   }).catch(e=>{
     c.busy=false;
     if(String(e.message)==='auth') return;
-    c.saveErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
+    c.saveErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render();
   });
 });
 
@@ -22382,6 +22661,7 @@ SUBS.receive={title:['Receive','收货'],
    single field on a single record, and it is what an operator reaches for when
    a code is being abused. Creating one is authoring, and stays on the desktop. */
 function toggleCoupon(code){
+  if(!mCan('coupons:edit')) return;   // §325
   const c=(DB.coupons||[]).find(x=>x.code===code);
   if(!c||c.id==null||state.couponBusy) return;
   // The switch controls is_active. LIVE is is_active AND unexpired, so turning
@@ -22395,12 +22675,13 @@ function toggleCoupon(code){
   }).catch(e=>{
     state.couponBusy=null;
     if(String(e.message)==='auth') return;
-    state.couponErr=E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
+    state.couponErr=e.refused?E(...e.words):E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
   });
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
    the judge — it refuses anything already on its way out. */
 function recallBroadcast(id){
+  if(!mCan('broadcasts:send')) return;   // §325: every /broadcasts write is broadcasts:send
   const b=(DB.broadcasts||[]).find(x=>x.id===id);
   if(!b||state.bcBusy) return;
   state.bcBusy=id; state.bcErr=null; render();
@@ -22412,7 +22693,7 @@ function recallBroadcast(id){
   }).catch(e=>{
     state.bcBusy=null;
     if(String(e.message)==='auth') return;
-    state.bcErr=E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
+    state.bcErr=e.refused?E(...e.words):E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
   });
 }
 
@@ -22571,6 +22852,9 @@ reg('bcfLink', v=>{ state.bcf.deeplink=String(v||'').trim(); bcfRepaintFoot(); }
 reg('bcfSend', ()=>bcfSend());
 
 async function loadMirror(which){
+  // Eleme reads for itself (elmLoad, §325 X1): its screen is not a list of
+  // records and shares nothing below.
+  if(which==='eleme') return;
   if(state.mirrorLoading===which) return;
   state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
   try{
@@ -22657,6 +22941,7 @@ function csNeedsDesktop(c){ return !!c && c.k==='att' && CS_DESKTOP_REASONS.inde
    sentence for these two codes, the second is orderErrorText's default on this
    file. Nothing here is composed. */
 function csErrText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   if(e.code==='not_mapped'||e.code==='not_syncing')
     return T('Somebody else changed this while you had it open — reload and try again.','该记录已被他人修改,请刷新后重试。');
   return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
@@ -22897,10 +23182,11 @@ function screenChannelSync(){
                class for exactly that and carries the 44px target and the disabled
                state; the label is the desktop button's own pair, and Sending… is
                this screen's own word for a push in flight (csCellWord).
-               GATED CLIENT-SIDE, which the desktop does not need to be: this
-               file's apiWrite sends a 403 to /backend/login exactly as it sends a
-               401, so an ungated button would answer a missing permission by
-               throwing the operator out of the app. mCan's null-caps case means
+               GATED CLIENT-SIDE, as every phone control is (§325): a button
+               drawn for somebody the server will refuse is a dead end. (This
+               file's apiWrite used to send a 403 to /backend/login exactly as it
+               sent a 401, which made the gate matter more; since §325 a refusal
+               is said on the row, csErrText.) mCan's null-caps case means
                allowed, so the server stays the gate. */
             const busy=state.csBusy===x.ch.key+':'+p.id;
             const btn=(csCanPush(c2)&&mCan(x.ch.key+':sync'))
@@ -23152,6 +23438,634 @@ function PUSH_NOTE(){
        : state.push==='unsupported' ? T('This browser cannot deliver them.','此浏览器无法接收推送。')
        : null;
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X1 — WHAT THE SHOP DID, WHAT IT SENT, WHO IS LOOKING, AND ELEME
+   --------------------------------------------------------------------------
+   Five reads the desktop has had and the phone had not (the Settings,
+   Dashboard and Channels rows of docs/tacet-phone-parity-rest-of-app.md).
+   Nothing here writes. Every request is the desktop's own, path and query:
+
+     Change history   GET /activity-log, /activity-log/export.csv
+                      (02-settings-ops.js, ch*)
+     What was sent    GET /notification-log            (02-settings-ops.js, nl*)
+     Browsing now     GET /dashboard/presence          (03-dashboard.js)
+     Two Home rows    /dashboard/ops needs_point and parcel_recovery, which Home
+                      already fetches                  (03-dashboard.js)
+     Eleme            GET /eleme/config, /eleme/status, /eleme/catalogue
+                      (14-eleme.js)
+
+   WHO OPENS WHAT. Change history and What was sent are not gated on the
+   desktop beyond reaching Settings ("an operator who can reach Settings can see
+   what was done to the shop they work in" — retail-admin.html's own note), so
+   here they carry exactly the Settings screen's key set and live inside it.
+   Eleme is the desktop tab's `eleme:view`. The two Home rows open orders, so
+   they need the Orders tab — the desktop gates its order worklists the same
+   way (DASH_CARD_CAP.orders).
+
+   Every string is the desktop's live pair unless docs/tacet-delivery-
+   vocabulary.md says otherwise under this step.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* One opener for an order a Home row points at, by its numeric id. The shape
+   of openDeliveryAlert's, deliberately: the sheet holds the screen until the
+   order arrives, and a failed read says so where the operator is looking. */
+function x1OpenOrder(id,no){
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const row=list.find(o=>o._id===id); if(row) row.isNew=false; }
+  });
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  return api('/orders/'+id).then(o=>{
+    if(state.detailId!==no) return;
+    const d=mapDetail(o);
+    state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=T('This order could not be opened. Close and try again.',
+                     '无法打开该订单，请关闭后重试。');
+    render();
+  });
+}
+/* The row's item, found again in the snapshot rather than carried through an
+   attribute — an order number is data and does not belong inside an onclick. */
+reg('openOpsOrder', (key,id)=>{
+  const k=String(key||''), n=Number(id);
+  const it=((((state.ops||{})[k])||{}).items||[])
+    .find(x=>x&&Number(k==='parcel_recovery'?x.order_id:x.id)===n);
+  if(!it) return;
+  x1OpenOrder(n, it.order_no||('#'+n));
+});
+
+/* ── Two rows for Home's Needs you ───────────────────────────────────────────
+   ORDERS WAITING FOR A DELIVERY POINT. A same-city push that could only place
+   the address to an area parks and waits for somebody to point at the door;
+   nothing retries it (docs/tacet-delivery-point-confirmation-spec.md §7). The
+   desktop gives it a block of its own that is absent at zero; here it is a
+   Needs-you row, which is absent at zero by construction. Brick, like the
+   other delivery row: it is a delivery nobody is coming for.
+
+   PARCELS TO RECOVER (§189). Boxes already out when their order was cancelled.
+   Amber, as on the desktop — the money is back with the customer and the count
+   is honest; what waits is a decision.
+
+   ONE OPENS THE ORDER ITSELF (Ash's rule for "Delivery needs a call"); more
+   open the list — the parked list for the first, the Orders filter the desktop
+   uses for the second (status=recover_parcel). Order numbers are the line, as
+   on the desktop's parcel row: they are what identifies an order. */
+function x1OrderNos(items,total){
+  const nos=(items||[]).map(x=>x&&x.order_no).filter(Boolean).slice(0,2);
+  const rest=Math.max(0,Number(total||0)-nos.length);
+  return nos.length?nos.join(T(', ','，'))+(rest>0?' +'+rest+' '+T('more','更多'):''):'';
+}
+function recoverFires(o){
+  const out=[];
+  if(!o||!canRoute('orders')) return out;
+  const np=o.needs_point||{}, pr=o.parcel_recovery||{};
+  const npN=Number(np.count)||0, prN=Number(pr.count)||0;
+  if(npN){
+    const it=np.items||[];
+    const ages=it.map(x=>({waiting_since:x&&x.parked_since}));
+    const nos=x1OrderNos(it,npN);
+    out.push({sev:'brick',icon:'map-pin',label:T('Orders waiting for a delivery point','待确认配送点'),n:npN,
+      meta:nos||oldestOf(ages),age:!nos,mins:oldestMins(ages),
+      go:(npN===1&&it.length===1&&it[0]&&it[0].id!=null)
+        ?`APP.cmd('openOpsOrder','needs_point',${Number(it[0].id)})`:"APP.cmd('push','needspoint')"});
+  }
+  if(prN){
+    const it=pr.items||[];
+    const nos=x1OrderNos(it,prN);
+    out.push({sev:'amber',icon:'box',label:T('Parcels to recover','待收回包裹'),n:prN,
+      meta:nos||oldestOf(it),age:!nos,mins:oldestMins(it),
+      go:(prN===1&&it.length===1&&it[0]&&it[0].order_id!=null)
+        ?`APP.cmd('openOpsOrder','parcel_recovery',${Number(it[0].order_id)})`:"APP.cmd('ordersGo','recover')"});
+  }
+  return out;
+}
+/* The parked orders, one row each, opening the order. The desktop lists five
+   and counts the rest; this lists what the snapshot carries (eight) and counts
+   the rest the same way. The point itself is picked on a map, which is one of
+   §97's three desktop-shaped exceptions — so the screen says where. */
+function x1ParkedFor(since){
+  const d=_date(since); if(!d) return T('Parked','已挂起');
+  const mins=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  if(mins<60) return T('parked '+mins+'m','已挂起 '+mins+' 分钟');
+  const hrs=Math.floor(mins/60);
+  if(hrs<24) return T('parked '+hrs+'h','已挂起 '+hrs+' 小时');
+  return T('parked '+Math.floor(hrs/24)+'d','已挂起 '+Math.floor(hrs/24)+' 天');
+}
+function screenNeedsPoint(){
+  const np=state.ops&&state.ops.needs_point;
+  if(!np) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const it=np.items||[], n=Number(np.count)||0;
+  const rest=Math.max(0,n-it.length);
+  const row=(x,i)=>{
+    const who=x.buyer||T('No name on the order','订单未留姓名');
+    const where=T(x.store_en||x.store_cn||'',x.store_cn||x.store_en||'')||x.store_code||T('Store not recorded','未记录门店');
+    const tomorrow=x.date_posture==='tomorrow';
+    const day=x.promised_day?tdWhen(x.promised_day,'date',_tdL()):'';
+    const when=x.promised_day?(tomorrow?T('Tomorrow · '+day,'明天 · '+day):day):x1ParkedFor(x.parked_since);
+    return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:60px;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('openOpsOrder','needs_point',${Number(x.id)})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+        <span class="num" style="font-size:15px;font-weight:500">${escAttr(x.order_no||'')}</span>
+        <span style="font-size:13px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(who)} · ${escAttr(where)}</span></span>
+      <span class="num" style="flex:none;font-size:13px;color:${tomorrow?'var(--amber-ink)':'var(--text-secondary)'}">${escAttr(when)}</span></button>`;
+  };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${it.length?`<div class="list">${it.map(row).join('')}</div>`
+      :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing yet','暂无记录')}</div>`}
+    ${rest>0?`<div style="font-size:13px;color:var(--text-secondary);padding:0 4px">${T('and '+rest+' more waiting for a delivery point','另有 '+rest+' 单待确认配送点')}</div>`:''}
+    ${noteBar(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。'))}</div>`;
+}
+SUBS.needspoint={title:['Orders waiting for a delivery point','待确认配送点'],render:()=>screenNeedsPoint()};
+
+/* ── Browsing now ─────────────────────────────────────────────────────────────
+   The desktop's quiet line in the foot of its Customers card: a Sage dot, the
+   count, and a label; at zero the label carries the whole sentence. It rides the
+   phone's twin of that card (vitalsBlock) and its gates. The desktop polls every
+   15s; this rides Home's own 60s tick, the one clock the phone keeps for Home,
+   rather than starting a second timer for one number. */
+function loadPresence(){
+  if(!canRoute('home')) return Promise.resolve();
+  return api('/dashboard/presence').then(d=>{ state.presence=d||null; }).catch(e=>{
+    /* A missed poll keeps the last count on screen and the next tick asks again —
+       the desktop's own rule for this number (dashHeroLoadPresence: "silent —
+       next tick retries"). Nothing else reads it. */
+    if(String(e&&e.message)==='auth') return;
+  });
+}
+function presenceLine(){
+  const p=state.presence; if(!p) return '';
+  const v=Number(p.viewing||0);
+  return `<div style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--text-secondary)">
+    <span style="width:8px;height:8px;border-radius:50%;background:var(--sage);opacity:${v?1:.45};flex:none"></span>
+    ${v?`<span class="num" style="font-weight:500;color:var(--text-primary)">${v}</span><span>${T('browsing now','人正在浏览')}</span>`
+       :`<span>${T('no one browsing right now','暂无人浏览')}</span>`}</div>`;
+}
+
+/* ── Shared by the two records screens ─────────────────────────────────────── */
+/* Patch the body only, so a search box keeps its keyboard (the Suppliers
+   screen's rule); anywhere else, an ordinary render. */
+function x1Paint(bodyId,build){
+  const b=(typeof document!=='undefined')?document.getElementById(bodyId):null;
+  if(b) b.innerHTML=build(); else render();
+}
+function x1Select(cmd,cur,first,vals,label){
+  const opts=(vals||[]).slice();
+  // A filtered read returns only the values that survive the filter, so the
+  // active choice can vanish from its own list. Put it back — the desktop does.
+  if(cur&&opts.indexOf(cur)<0) opts.push(cur);
+  return `<select onchange="APP.cmd('${cmd}',this.value)" style="flex:1;min-width:0;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0">
+    <option value="">${first}</option>${opts.map(v=>`<option value="${escAttr(v)}"${v===cur?' selected':''}>${escAttr(label(v))}</option>`).join('')}</select>`;
+}
+function x1WhenLabel(from,to){ return (from||to)?escAttr((from||'…')+' – '+(to||'…')):T('When','时间'); }
+function x1Err(msg,retry){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:34px 16px;text-align:center">
+    <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',24)}</span>
+    <span style="font-size:14.5px;color:var(--text-primary)">${msg}</span>
+    <button class="btn2" onclick="APP.cmd('${retry}')">${T('Try again','重试')}</button></div>`;
+}
+const x1Loading=()=>`<div style="padding:40px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+/* Two empty states, never one (§1.12): "your filters matched nothing" and
+   "nothing has happened yet" are different facts with different next moves. */
+function x1Empty(filtered,clearCmd,titleEn,titleZh,msgEn,msgZh){
+  return filtered
+    ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px 16px;text-align:center">
+        <span style="font-size:14px;color:var(--text-secondary)">${T('Nothing matches those filters.','没有符合条件的记录。')}</span>
+        <button class="btn2" style="width:auto;padding:0 18px" onclick="APP.cmd('${clearCmd}')">${T('Clear them','清除筛选')}</button></div>`
+    : nothingYet(T(titleEn,titleZh),T(msgEn,msgZh));
+}
+function x1Foot(n,total,moreCmd,busy){
+  if(!n) return '';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 4px">
+    <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Showing '+n+' of '+total,'显示 '+n+' / '+total)}</span>
+    ${n<total?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" ${busy?'disabled':''} onclick="APP.cmd('${moreCmd}')">${busy?T('Loading…','加载中…'):T('Show more','显示更多')}</button>`:''}</div>`;
+}
+/* ── Change history ───────────────────────────────────────────────────────────
+   Who changed what: `activity_log`, which every significant write has filled
+   for as long as the admin has existed. READ-ONLY on both surfaces — a history
+   somebody can tidy is not a history. Not the Stock activity screen: that one
+   answers "how did this number get here". */
+const CHL_ACTIONS={
+  create:['Created','新建'], update:['Edited','修改'], delete:['Deleted','删除'],
+  login:['Signed in','登录'], logout:['Signed out','退出'],
+  publish:['Published','上架'], unpublish:['Unpublished','下架'],
+  refund:['Refunded','退款'], cancel:['Cancelled','取消'],
+  approve:['Approved','批准'], reject:['Rejected','拒绝'],
+  receive:['Received','收货'], adjust:['Adjusted','调整'],
+  block:['Blocked','封禁'], unblock:['Unblocked','解封'],
+  import:['Imported','导入'], export:['Exported','导出'],
+};
+/* The desktop's chActionText, rule for rule: a known key reads as a word, a
+   key that starts or ends with one reads as the word and the rest, and anything
+   else reads as its own words rather than as a code. */
+function chlAction(action){
+  const key=String(action||'').toLowerCase();
+  if(CHL_ACTIONS[key]) return T(...CHL_ACTIONS[key]);
+  for(const k of Object.keys(CHL_ACTIONS)){
+    if(key.startsWith(k+'_')||key.endsWith('_'+k)){
+      const noun=key.replace(new RegExp('_?'+k+'_?'),'').replace(/_/g,' ');
+      return (T(...CHL_ACTIONS[k])+(noun?' '+noun:'')).trim();
+    }
+  }
+  return key.replace(/_/g,' ');
+}
+/* The details column is a JSON blob with no schema; "field: value" pairs, or
+   the raw text when it is not an object — chDetailsText's rule. */
+function chlDetails(details){
+  if(!details) return '';
+  let o=null;
+  try{ o=JSON.parse(details); }catch(e){ return String(details); }
+  if(o==null||typeof o!=='object') return String(details);
+  return Object.entries(o).map(([k,v])=>k.replace(/_/g,' ')+': '+(v==null?'—':(typeof v==='object'?JSON.stringify(v):v))).join(' · ');
+}
+function chlQs(){
+  const c=state.chl, qs=new URLSearchParams();
+  if(c.who) qs.set('who',c.who);
+  if(c.what) qs.set('entity_type',c.what);
+  if(c.from) qs.set('from',c.from);
+  if(c.to) qs.set('to',c.to);
+  if(String(c.q||'').trim()) qs.set('q',String(c.q).trim());
+  return qs;
+}
+const chlFiltered=()=>[...chlQs().keys()].length>0;
+function chlLoad(append){
+  const c=state.chl, seq=++c.seq;
+  c.tried=true; if(append) c.more=true;
+  const qs=chlQs(); qs.set('limit','100'); qs.set('offset',String(append?(c.rows||[]).length:0));
+  return apiRaw('/activity-log?'+qs.toString()).then(j=>{
+    if(seq!==c.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=append?(c.rows||[]).concat(j.data||[]):(j.data||[]);
+    c.total=Number(j.total)||0; c.people=j.people||[]; c.kinds=j.kinds||[];
+    c.err=null; c.more=false; chlPaint();
+  }).catch(e=>{
+    if(seq!==c.seq||String(e&&e.message)==='auth') return;
+    c.more=false;
+    if(!append) c.rows=null;
+    c.err=(e&&e.name==='TypeError')
+      ? E('Could not load the change history. Check your connection and try again.','无法加载修改记录,请检查网络后重试。')
+      : E('Could not load the change history.','无法加载修改记录。');
+    chlPaint();
+  });
+}
+function chlPaint(){ x1Paint('mChlBody',chlBody); }
+function chlRow(r,i){
+  const c=state.chl, open=c.open===Number(r.id);
+  const det=chlDetails(r.details);
+  const rec=[r.entity_type?String(r.entity_type).replace(/_/g,' '):'', r.entity_id?'#'+r.entity_id:''].filter(Boolean).join(' ');
+  const when=tdWhen(r.created_at,'dateTime',_tdL())||r.at_local||'';
+  return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('chlOpen',${Number(r.id)})">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+      <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(r.username||T('(unknown)','(未知)'))} · ${escAttr(chlAction(r.action))}</span>
+      ${rec?`<span class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(rec)}</span>`:''}
+      ${det?`<span style="font-size:12.5px;color:var(--text-secondary);${open?'white-space:pre-wrap;overflow-wrap:anywhere':'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}">${escAttr(det)}</span>`:''}</span>
+    <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(when)}</span></button>`;
+}
+function chlBody(){
+  const c=state.chl, filtered=chlFiltered();
+  const bar=`<div style="display:flex;gap:8px">
+      ${x1Select('chlWho',c.who,T('Everyone','全部人员'),c.people,v=>v)}
+      ${x1Select('chlWhat',c.what,T('Everything','全部类型'),c.kinds,v=>String(v).replace(/_/g,' '))}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1;min-width:0;gap:6px" onclick="APP.cmd('chlWhen')">${ic('calendar',16)}<span>${x1WhenLabel(c.from,c.to)}</span></button>
+      <button class="btn2" style="width:auto;flex:none;padding:0 14px;gap:6px" onclick="APP.cmd('chlExport')">${ic('download',16)}${T('Export CSV','导出')}</button></div>
+    ${filtered?`<div><button class="chip on" onclick="APP.cmd('chlClear')"><span>${T('Clear filters','清除筛选')}</span>${ic('x',14,2)}</button></div>`:''}`;
+  if(c.err) return bar+x1Err(String(c.err),'chlRetry');
+  if(!c.rows) return bar+x1Loading();
+  if(!c.rows.length) return bar+x1Empty(filtered,'chlClear','Nothing has been changed yet.','暂无修改记录。',
+    'Every edit your team makes will appear here.','团队的每次修改都会显示在这里。');
+  return bar+`<div class="list">${c.rows.map(chlRow).join('')}</div>`+x1Foot(c.rows.length,c.total,'chlMore',c.more);
+}
+function screenChanges(){
+  const c=state.chl; if(!c.tried) chlLoad(false);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mChlQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chlQ',this.value)">`,'mChlClr',!!c.q)}
+    <div id="mChlBody" style="display:flex;flex-direction:column;gap:12px">${chlBody()}</div></div>`;
+}
+SUBS.changes={title:['Change history','修改记录'],render:()=>screenChanges()};
+let chlT=null;
+/* A new filter blanks the list to Loading, as the desktop's table does, so a
+   list never sits under a filter it was not read with. */
+function chlRefilter(){ const c=state.chl; c.rows=null; c.err=null; c.open=null; chlPaint(); chlLoad(false); }
+reg('chlQ', v=>{ state.chl.q=String(v||''); searchClearShow('mChlClr',!!state.chl.q);
+  clearTimeout(chlT); chlT=setTimeout(chlRefilter,250); });
+reg('chlWho', v=>{ state.chl.who=String(v||''); chlRefilter(); });
+reg('chlWhat', v=>{ state.chl.what=String(v||''); chlRefilter(); });
+reg('chlWhen', ()=>{
+  const c=state.chl;
+  state.ask={title:T('When','时间'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:c.from},{id:'to',label:T('To','至'),type:'date',value:c.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(v.from&&v.to&&v.from>v.to)?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{ c.from=v.from||''; c.to=v.to||''; chlRefilter(); }};
+  render();
+});
+reg('chlClear', ()=>{ const c=state.chl; c.who=''; c.what=''; c.from=''; c.to=''; c.q='';
+  const el=(typeof document!=='undefined')?document.getElementById('mChlQ'):null; if(el) el.value='';
+  searchClearShow('mChlClr',false); chlRefilter(); });
+/* The same file the desktop downloads, with the same filters on it. */
+reg('chlExport', ()=>{ const qs=chlQs().toString(); location.href=API+'/activity-log/export.csv'+(qs?'?'+qs:''); });
+reg('chlMore', ()=>{ if(state.chl.more) return; chlLoad(true); chlPaint(); });
+reg('chlOpen', id=>{ const c=state.chl; c.open=c.open===Number(id)?null:Number(id); chlPaint(); });
+reg('chlRetry', ()=>chlRefilter());
+
+/* ── What was sent ────────────────────────────────────────────────────────────
+   Every message the system tried to deliver — a push to the team, a sign-in
+   code, a text to a customer — and whether it landed. Read-only, for the
+   change history's reason: a delivery record somebody can edit is not one. */
+const NLG_CHANNELS={
+  push:['Phone alert','手机推送'], email:['Email','邮件'], sms:['Text message','短信'],
+  wechat:['WeChat message','微信消息'], wecom:['Work chat','企业微信'], webhook:['Chat app','聊天应用'],
+};
+const NLG_KINDS={
+  order_paid:['A customer paid','顾客已付款'], ship_reminder:['Time to ship an order','订单该发货了'],
+  pickup_reminder:['A collection is due','自提订单临近'], low_stock_digest:['Daily low-stock list','每日低库存清单'],
+  signin_code:['Sign-in code','登录验证码'], restock_request:['A stock request','补货申请'],
+  new_order:['A new order','新订单'],
+};
+function nlgChannel(c){ const e=NLG_CHANNELS[c]; return e?T(...e):String(c||'').replace(/_/g,' '); }
+function nlgWords(k){ const w=String(k||'').replace(/_/g,' ').trim(); return w?w.charAt(0).toUpperCase()+w.slice(1):''; }
+function nlgKind(k){ const e=NLG_KINDS[k]; return e?T(...e):nlgWords(k); }
+/* A broadcast says how many phones it reached; a send to one says whether it
+   arrived; a failure says why. The desktop runs the stored reason through its
+   error dictionary (tdErrorText), which this app does not carry, so the reason
+   reads as that function's last resort does: the code, in words. */
+function nlgResult(r){
+  if(r.ok){
+    const d=r.detail||{};
+    if(typeof d.sent==='number'&&typeof d.total==='number'&&d.total>1){
+      const extra=[];
+      if(d.muted) extra.push(T(d.muted+' muted',d.muted+' 已静音'));
+      if(d.pruned) extra.push(T(d.pruned+' device gone',d.pruned+' 设备失效'));
+      return {ok:true,label:T('Sent','已发送'),line:[T(d.sent+' of '+d.total+' reached',d.total+' 台中 '+d.sent+' 台已送达')].concat(extra).join(' · ')};
+    }
+    return {ok:true,label:T('Sent','已发送'),line:''};
+  }
+  return {ok:false,label:T('Did not arrive','未送达'),line:nlgWords(r.error)};
+}
+function nlgQs(){
+  const c=state.nlg, qs=new URLSearchParams();
+  if(c.channel) qs.set('channel',c.channel);
+  if(c.kind) qs.set('kind',c.kind);
+  if(c.from) qs.set('from',c.from);
+  if(c.to) qs.set('to',c.to);
+  if(String(c.q||'').trim()) qs.set('q',String(c.q).trim());
+  if(c.onlyFailed) qs.set('failed','1');
+  return qs;
+}
+const nlgFiltered=()=>[...nlgQs().keys()].length>0;
+function nlgLoad(append){
+  const c=state.nlg, seq=++c.seq;
+  c.tried=true; if(append) c.more=true;
+  const qs=nlgQs(); qs.set('limit','100'); qs.set('offset',String(append?(c.rows||[]).length:0));
+  return apiRaw('/notification-log?'+qs.toString()).then(j=>{
+    if(seq!==c.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=append?(c.rows||[]).concat(j.data||[]):(j.data||[]);
+    c.total=Number(j.total)||0; c.failed=Number(j.failed)||0;
+    c.channels=j.channels||[]; c.kinds=j.kinds||[];
+    c.err=null; c.more=false; nlgPaint();
+  }).catch(e=>{
+    if(seq!==c.seq||String(e&&e.message)==='auth') return;
+    c.more=false;
+    if(!append) c.rows=null;
+    c.err=(e&&e.name==='TypeError')
+      ? E('Could not load the send record. Check your connection and try again.','无法加载发送记录,请检查网络后重试。')
+      : E('Could not load the send record.','无法加载发送记录。');
+    nlgPaint();
+  });
+}
+function nlgPaint(){ x1Paint('mNlgBody',nlgBody); }
+function nlgRow(r,i){
+  const c=state.nlg, open=c.open===Number(r.id), res=nlgResult(r);
+  const [bg,fg]=res.ok?PILL.success:PILL.danger;
+  const to=r.recipient?escAttr(r.recipient):T('your team','团队');
+  return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('nlgOpen',${Number(r.id)})">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+      <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(nlgKind(r.kind))}</span>
+      ${r.subject?`<span style="font-size:13px;color:var(--text-secondary);${open?'overflow-wrap:anywhere':'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}">${escAttr(r.subject)}</span>`:''}
+      <span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(nlgChannel(r.channel))} · ${to} · <span class="num">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></span>
+      ${res.line?`<span style="font-size:12.5px;color:${res.ok?'var(--text-secondary)':'var(--brick-ink)'};overflow-wrap:anywhere">${escAttr(res.line)}</span>`:''}</span>
+    <span class="pill" style="flex:none;background:${bg};color:${fg}">${res.label}</span></button>`;
+}
+function nlgBody(){
+  const c=state.nlg, filtered=nlgFiltered();
+  const failN=c.failed;
+  const bar=`<div style="display:flex;gap:8px">
+      ${x1Select('nlgChannel',c.channel,T('Every way','全部方式'),c.channels,nlgChannel)}
+      ${x1Select('nlgKind',c.kind,T('Everything','全部内容'),c.kinds,nlgKind)}</div>
+    <button class="btn2" style="gap:6px" onclick="APP.cmd('nlgWhen')">${ic('calendar',16)}<span>${x1WhenLabel(c.from,c.to)}</span></button>
+    ${(failN||c.onlyFailed||filtered)?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${(failN||c.onlyFailed)?`<button class="chip ${c.onlyFailed?'on':''}" onclick="APP.cmd('nlgFailed')"><span>${failN?T('Did not arrive ('+failN+')','未送达('+failN+')'):T('Did not arrive','未送达')}</span></button>`:''}
+      ${filtered?`<button class="chip on" onclick="APP.cmd('nlgClear')"><span>${T('Clear filters','清除筛选')}</span>${ic('x',14,2)}</button>`:''}</div>`:''}`;
+  if(c.err) return bar+x1Err(String(c.err),'nlgRetry');
+  if(!c.rows) return bar+x1Loading();
+  if(!c.rows.length) return bar+x1Empty(filtered,'nlgClear','Nothing has been sent yet.','暂无发送记录。',
+    'Every push, email and text will appear here.','每条推送、邮件与短信都会显示在这里。');
+  return bar+`<div class="list">${c.rows.map(nlgRow).join('')}</div>`+x1Foot(c.rows.length,c.total,'nlgMore',c.more);
+}
+function screenSent(){
+  const c=state.nlg; if(!c.tried) nlgLoad(false);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mNlgQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('nlgQ',this.value)">`,'mNlgClr',!!c.q)}
+    <div id="mNlgBody" style="display:flex;flex-direction:column;gap:12px">${nlgBody()}</div></div>`;
+}
+SUBS.sent={title:['What was sent','发送记录'],render:()=>screenSent()};
+let nlgT=null;
+function nlgRefilter(){ const c=state.nlg; c.rows=null; c.err=null; c.open=null; nlgPaint(); nlgLoad(false); }
+reg('nlgQ', v=>{ state.nlg.q=String(v||''); searchClearShow('mNlgClr',!!state.nlg.q);
+  clearTimeout(nlgT); nlgT=setTimeout(nlgRefilter,250); });
+reg('nlgChannel', v=>{ state.nlg.channel=String(v||''); nlgRefilter(); });
+reg('nlgKind', v=>{ state.nlg.kind=String(v||''); nlgRefilter(); });
+reg('nlgFailed', ()=>{ state.nlg.onlyFailed=!state.nlg.onlyFailed; nlgRefilter(); });
+reg('nlgWhen', ()=>{
+  const c=state.nlg;
+  state.ask={title:T('When','时间'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:c.from},{id:'to',label:T('To','至'),type:'date',value:c.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(v.from&&v.to&&v.from>v.to)?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{ c.from=v.from||''; c.to=v.to||''; nlgRefilter(); }};
+  render();
+});
+reg('nlgClear', ()=>{ const c=state.nlg; c.channel=''; c.kind=''; c.from=''; c.to=''; c.q=''; c.onlyFailed=false;
+  const el=(typeof document!=='undefined')?document.getElementById('mNlgQ'):null; if(el) el.value='';
+  searchClearShow('mNlgClr',false); nlgRefilter(); });
+reg('nlgMore', ()=>{ if(state.nlg.more) return; nlgLoad(true); nlgPaint(); });
+reg('nlgOpen', id=>{ const c=state.nlg; c.open=c.open===Number(id)?null:Number(id); nlgPaint(); });
+reg('nlgRetry', ()=>nlgRefilter());
+
+/* ── Eleme ────────────────────────────────────────────────────────────────────
+   The phone's third channel screen, beside the Meituan and gzgrocery ones:
+   what the desktop's Eleme tab says about the channel, read-only. The switch's
+   state, the stock waiting to go, one line per store (why it cannot push, or how
+   much is waiting, and how fresh its catalogue is), each store's catalogue as
+   last read, and the two logs of the tab's Activity view.
+
+   NOT HERE, deliberately, because they are later steps of §325 and each is a
+   write: the channel switch, linking a shop, Sign in, Sync from, Push all
+   stock, and matching. The desktop's Synced and Need-attention tiles are not
+   here either — they are counted by the matching classifier (elGroup), which
+   arrives with matching; a count shown without the list it counts is a number
+   nobody can act on. */
+function elmStoreName(st){ return LANG==='en'?((st&&(st.nameEn||st.name))||(st&&st.code)||'')
+                                             :((st&&(st.name||st.nameEn))||(st&&st.code)||''); }
+function elmAgo(iso){
+  const d=_date(iso); if(!d) return '';
+  const m=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  if(m<1) return T('just now','刚刚');
+  if(m<60) return T(m+' min ago',m+' 分钟前');
+  const h=Math.floor(m/60);
+  if(h<24) return T(h+' h ago',h+' 小时前');
+  return T(Math.floor(h/24)+' d ago',Math.floor(h/24)+' 天前');
+}
+/* The desktop's store line, word for word: why it cannot push, or what is
+   waiting, then how fresh the catalogue its pickers read is. */
+const ELM_BLOCK={no_shop:['has no Eleme shop linked yet','尚未关联饿了么店铺'], needs_login:['is signed out','已退出登录']};
+function elmStoreLine(st){
+  const cat=Number(st.catalogueCount)
+    ? T(st.catalogueCount+' listings read','已读取 '+st.catalogueCount+' 个商品')+(st.catalogueAt?' · '+elmAgo(st.catalogueAt):'')
+    : T('no catalogue read yet, so nothing can be matched here','尚未读取商品目录，无法匹配');
+  if(st.blocked){ const w=ELM_BLOCK[st.blockedBy]||['is not syncing','同步已停']; return {bad:true,text:T(...w)+' · '+cat}; }
+  const n=Number(st.pending||0)+Number(st.processing||0);
+  return {bad:false,text:(n?T(n+' stock updates waiting',n+' 条库存待推送'):T('Up to date','已是最新'))+' · '+cat};
+}
+function elmLoad(){
+  const e=state.elm, seq=++e.seq;
+  e.tried=true;
+  /* Two reads. The switch's state failing must not blank the health below it,
+     so it is asked on its own and simply not drawn when it does not answer. */
+  apiRaw('/eleme/config').then(j=>{ if(seq===e.seq){ e.cfg=j||null; render(); } }).catch(err=>{
+    /* The pill is left off and the rest of the screen still answers — the
+       desktop's own handling (elLoadConfig: "surfaced by api()"). */
+    if(String(err&&err.message)==='auth') return;
+  });
+  return apiRaw('/eleme/status').then(j=>{
+    if(seq!==e.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    e.st=j; e.err=null; render();
+  }).catch(err=>{
+    if(seq!==e.seq||String(err&&err.message)==='auth') return;
+    e.err=E('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。');
+    render();
+  });
+}
+function elmStockRow(r,stores){
+  let d={}; try{ d=JSON.parse(r.detail||'{}')||{}; }catch(e){ d={}; /* an unreadable detail prints the row without a name, as the desktop does */ }
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(d.product_id));
+  const name=p?T(...p.name):(d.sku||('#'+(d.product_id!=null?d.product_id:'?')));
+  const st=stores.find(s=>s.code===r.store_code);
+  const bad=r.status==='error';
+  return `<div style="display:flex;flex-direction:column;gap:3px;padding:11px 14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+      <span style="font-size:14.5px;min-width:0;overflow-wrap:anywhere">${escAttr(name)}${d.qty!=null?`<span class="num" style="color:var(--text-secondary)"> → ${escAttr(d.qty)}</span>`:''}</span>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></div>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(st?elmStoreName(st):(r.store_code||'-'))}</span>
+    ${bad?`<span style="font-size:12.5px;color:var(--brick-ink);overflow-wrap:anywhere">${escAttr(r.error_msg||'')}</span>`:''}</div>`;
+}
+function elmSysRow(r,stores){
+  const st=stores.find(s=>s.code===r.store_code);
+  return `<div style="display:flex;flex-direction:column;gap:3px;padding:11px 14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+      <span style="font-size:14.5px;min-width:0;overflow-wrap:anywhere;color:${r.status==='error'?'var(--brick-ink)':'var(--text-primary)'}">${escAttr(r.event_type)}: ${escAttr(r.error_msg||r.event_type)}</span>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></div>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(st?elmStoreName(st):(r.store_code||'-'))}</span></div>`;
+}
+function elmLog(title,rows,one,stores){
+  return `<div><div class="eyebrow" style="padding:2px 4px 10px">${title}</div>
+    <div class="list">${rows.length?rows.map((r,i)=>(i?'<div class="sep"></div>':'')+one(r,stores)).join('')
+      :`<div style="padding:16px 14px;font-size:14px;color:var(--text-secondary)">${T('Nothing yet','暂无记录')}</div>`}</div></div>`;
+}
+function screenEleme(){
+  const e=state.elm; if(!e.tried) elmLoad();
+  if(!e.st&&e.err) return x1Err(String(e.err),'elmRetry');
+  if(!e.st) return x1Loading();
+  const stores=e.st.stores||[];
+  const wait=r=>Number(r.pending||0)+Number(r.processing||0);
+  const waiting=stores.reduce((a,r)=>a+wait(r),0);
+  const on=e.cfg&&e.cfg.success!==false?!!e.cfg.enabled:null;
+  const [pbg,pfg]=on?PILL.success:PILL.muted;
+  const head=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('Stock updates waiting','待推送库存')}</span>
+      ${on==null?'':`<span class="pill" style="background:${pbg};color:${pfg}">${on?T('Channel on','渠道开启'):T('Channel off','渠道已关闭')}</span>`}</div>
+    <span class="num" style="font-size:26px;font-weight:500;line-height:1.3">${waiting}</span>
+    ${stores.length?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(stores.map(r=>wait(r)+' '+elmStoreName(r)).join(' · '))}</span>`:''}</div>`;
+  const storeRows=stores.map((st,i)=>{
+    const l=elmStoreLine(st), go=Number(st.catalogueCount)>0;
+    const Tag=go?'button':'div';
+    return `${i?'<div class="sep"></div>':''}<${Tag} class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" ${go?`onclick="APP.cmd('elmCat',${Number(st.id)})"`:''}>
+      <span style="width:8px;height:8px;border-radius:50%;flex:none;margin-top:7px;background:${l.bad?'var(--brick-ink)':'var(--sage)'}"></span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+        <span style="font-size:15px">${escAttr(elmStoreName(st))}</span>
+        <span style="font-size:13px;color:${l.bad?'var(--brick-ink)':'var(--text-secondary)'};overflow-wrap:anywhere">${escAttr(l.text)}</span></span>
+      ${go?`<span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span>`:''}</${Tag}>`;
+  }).join('');
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${e.err?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${String(e.err)}</span></div>`:''}
+    ${head}
+    ${stores.length?`<div><div class="eyebrow" style="padding:2px 4px 10px">${T('Stores','门店')}</div><div class="list">${storeRows}</div></div>`:''}
+    ${elmLog(T('Stock pushes','库存推送'),e.st.recentStock||[],elmStockRow,stores)}
+    ${elmLog(T('Sync events','系统事件'),e.st.recentSystem||[],elmSysRow,stores)}</div>`;
+}
+SUBS.mirror_eleme={title:['Eleme','饿了么'],render:()=>screenEleme()};
+reg('elmRetry', ()=>{ state.elm.err=null; state.elm.st=null; render(); elmLoad(); });
+
+/* ONE STORE'S CATALOGUE, as the daemon last read it — the listings Eleme holds
+   for that shop and the stock each shows. It is the cache the desktop's name
+   and size pickers read (routes/eleme-admin.js /eleme/catalogue), so what is
+   here is exactly what matching will be able to pick from. The search filters
+   what was read; it asks the server nothing. */
+function elmCatStore(){ const e=state.elm; return ((e.st&&e.st.stores)||[]).find(s=>s.code===e.catStore)||null; }
+function elmCatLoad(code){
+  const e=state.elm, c={rows:null,at:null,err:null};
+  e.cat[code]=c;
+  return apiRaw('/eleme/catalogue?storeCode='+encodeURIComponent(code)).then(j=>{
+    if(e.cat[code]!==c) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=j.data||[]; c.at=j.refreshedAt||null; render();
+  }).catch(err=>{
+    if(e.cat[code]!==c||String(err&&err.message)==='auth') return;
+    c.err=E('Could not load this.','无法加载。'); render();
+  });
+}
+function elmCatBody(){
+  const e=state.elm, c=e.cat[e.catStore];
+  if(!c) return x1Loading();
+  if(c.err) return x1Err(String(c.err),'elmCatRetry');
+  if(!c.rows) return x1Loading();
+  if(!c.rows.length) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('no catalogue read yet, so nothing can be matched here','尚未读取商品目录，无法匹配')}</div>`;
+  const q=String(e.catQ||'').toLowerCase().trim();
+  const rows=q?c.rows.filter(r=>String(r.name||'').toLowerCase().indexOf(q)>=0):c.rows;
+  const headLine=T(c.rows.length+' listings read','已读取 '+c.rows.length+' 个商品')+(c.at?' · '+elmAgo(c.at):'');
+  return `<div class="num" style="font-size:12.5px;color:var(--text-secondary);padding:0 4px">${escAttr(headLine)}</div>
+    ${rows.length?`<div class="list">${rows.map((r,i)=>`${i?'<div class="sep"></div>':''}<div class="row" style="min-height:48px;padding:10px 14px">
+      <span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${escAttr(r.name||'')}</span>
+      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${T('Stock','库存')} ${escAttr(r.stock==null?'—':r.stock)}</span></div>`).join('')}</div>`
+      :`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No matches','无匹配')}</div>`}`;
+}
+function screenElemeCat(){
+  const e=state.elm;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mElmCatQ" inputmode="search" enterkeyhint="search" value="${escAttr(e.catQ)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('elmCatQ',this.value)">`,'mElmCatClr',!!e.catQ)}
+    <div id="mElmCatBody" style="display:flex;flex-direction:column;gap:12px">${elmCatBody()}</div></div>`;
+}
+SUBS.elemecat={title:['Eleme','饿了么'],
+  titleOf:()=>{ const s=elmCatStore(); return s?escAttr(elmStoreName(s)):T('Eleme','饿了么'); },
+  render:()=>screenElemeCat()};
+reg('elmCat', id=>{
+  const e=state.elm, st=((e.st&&e.st.stores)||[]).find(s=>Number(s.id)===Number(id));
+  if(!st) return;
+  e.catStore=st.code; e.catQ='';
+  push('elemecat'); elmCatLoad(st.code);
+});
+reg('elmCatQ', v=>{ state.elm.catQ=String(v||''); searchClearShow('mElmCatClr',!!state.elm.catQ); x1Paint('mElmCatBody',elmCatBody); });
+reg('elmCatRetry', ()=>{ const code=state.elm.catStore; if(!code) return; elmCatLoad(code); render(); });
+/* §325 X1 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -23167,7 +24081,10 @@ function NOTIFICATION_ROWS(){
 }
 function screenSettings(){
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true}]},
+    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
+      /* §325 X1 — the desktop's two read-only records, beside the team whose work they record. */
+      ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
+      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[])]},
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -23728,10 +24645,12 @@ function orderActs(o){
       if(inFlight||!canRefund) continue;
       acts.push(['receipt',T('Refund','退款'),"APP.cmd('refundOrder')"]);
     }else if(to==='cancelled'){
+      if(!canEdit) continue;
       // The desktop's own two labels, and the difference is the whole warning:
       // cancelling an unpaid order moves no money, cancelling a paid one does.
       acts.push(['ban', st==='pending_payment'?T('Cancel','取消'):T('Cancel + refund','取消并退款'),"APP.cmd('cancelOrder')"]);
     }else if(to==='dispatched'){
+      if(!canEdit) continue;
       // paid → dispatched, skipping preparing. Relabelled for a pickup exactly
       // as the primary button is, or the phone tells a counter to dispatch
       // something nobody is shipping.
@@ -23744,13 +24663,13 @@ function orderActs(o){
      and this sheet was offering it "Undo delivery" on every walk-in. The
      desktop's rule (ordShipsNothing), which the phone did not have. */
   const ships=!(o.pickup||o.counter);
-  if(ships&&['dispatched','delivered'].includes(st)&&!orderHasWaybill(o))
+  if(canEdit&&ships&&['dispatched','delivered'].includes(st)&&!orderHasWaybill(o))
     acts.push(['rotate-ccw', st==='delivered'?T('Undo delivery · back to preparing','撤销送达 · 退回备货')
                                              :T('Undo dispatch · back to preparing','撤销发货 · 退回备货'),"APP.cmd('undoDispatch')"]);
   // One step earlier than that one: a too-early "Start preparing" had no way
   // back on this surface at all, which on a forward-only machine left a refund
   // as the only exit from a mis-tap.
-  if(st==='preparing'&&!orderHasWaybill(o))
+  if(canEdit&&st==='preparing'&&!orderHasWaybill(o))
     acts.push(['rotate-ccw',T('Undo preparing','撤销备货'),"APP.cmd('undoPreparing')"]);
   /* LAST, AND ONLY WHEN THE EDITOR IS NOT ALREADY SHOWING. Appended rather than
      placed among the rows above so no existing row moves — this sheet holds
@@ -23762,7 +24681,7 @@ function orderActs(o){
      does not yet know whether this order HAS a note, and a row that opens an
      empty box over a note that exists is the exact wrong answer the card's own
      comment was written about. Half a second later the row is there. */
-  if(shopNoteReady(o)&&!shopNoteShown(o)) acts.push(['pencil',T('Shop note','店铺备注'),"APP.cmd('ordNoteOpen')"]);
+  if(canEdit&&shopNoteReady(o)&&!shopNoteShown(o)) acts.push(['pencil',T('Shop note','店铺备注'),"APP.cmd('ordNoteOpen')"]);
   return acts;
 }
 function orderNext(o){
@@ -23775,16 +24694,20 @@ function orderNext(o){
 }
 
 /* A write helper that keeps the server's own words. api() throws away the body,
-   and the body is where the reason lives. */
+   and the body is where the reason lives. §325: only a 401 leaves for the login
+   page; a 403 throws the refusal (apiRefusal) into the caller's own error path —
+   the same path a 500 takes, so its busy flag resets and its slot says why. */
 async function apiWrite(path, body, method){
   const r=await fetch(apiURL(path),{method:method||'POST',credentials:'same-origin',
     headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body||{})});
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);
   let j=null; try{ j=await r.json(); }catch(e){}
   if(!r.ok){ const e=new Error((j&&(j.message||j.error))||('HTTP '+r.status)); e.code=j&&j.error; e.body=j; throw e; }
   return j;
 }
 function orderErrorText(e){
+  if(e&&e.refused) return T(...e.words);   // §325: a refusal says why, not "try again"
   if(e.code==='__plain') return e.message;
   // invalid_status is /refund/direct's word for the same thing invalid_transition
   // is the status route's: the order is no longer where the screen thinks it is.
@@ -23859,9 +24782,21 @@ async function loadProductStock(pid){
   if(state.prodStockPid!==pid) return;
   state.prodStockReady=true; render();
 }
-async function saveProductEdits(){
+/* §325 — WHO MAY CHANGE WHAT ON THE PRODUCT SHEET, on the server's own map
+   (lib/cap-routes.js): every /products write — price, the on-shop switch,
+   supplier pause, the out-of-stock policy — is products:edit; a shelf count
+   (PATCH /stores/:id/stock/…) is any of quickstock:recount, quickstock:add or
+   products:edit, because Quick Stock and the desktop's stock modal share it. */
+function prodCanEdit(){ return mCan('products:edit'); }
+function prodCanStock(){ return mCan(['quickstock:recount','quickstock:add','products:edit']); }
+async function saveProductEdits(answers){
+  /* `answers` — §325: the recount words the operator has given this Save,
+     keyed store:product, so a resend after a question carries its word and
+     nothing else does. Absent on a plain tap of Save. */
   const p=DB.products.find(x=>x.sku===state.productSku);
   if(!p||p._id==null||state.prodBusy) return;
+  const canPrice=prodCanEdit(), canStock=prodCanStock();
+  if(!canPrice&&!canStock) return;   // §325: nothing this account may write
   /* The box on screen, read once here as well as on every keystroke: a value
      put there by the browser itself — an autofill, a paste the field answered
      with no input event — never reached sheetPrice, and saving must not read
@@ -23877,7 +24812,7 @@ async function saveProductEdits(){
   const jobs=[];
   for(const m of (members.length?members:[p])){
     let price=null;
-    if(sheetPrice[m._id]!=null){
+    if(canPrice&&sheetPrice[m._id]!=null){
       /* AN UNREADABLE PRICE IS NOT ZERO. This was
          `parseFloat(stripped)||0`, so clearing the box — or leaving anything the
          strip could not parse — saved the product at nothing and put it on sale at
@@ -23902,7 +24837,7 @@ async function saveProductEdits(){
     // sent for them either, whatever is left in sheetStep from a previous
     // product's sheet.
     const stock=[];
-    for(const st of (m.supplier||m.bundle?[]:prodStoreRows(m._id))){
+    for(const st of (m.supplier||m.bundle||!canStock?[]:prodStoreRows(m._id))){
       const now=Number(sheetStep[stockKey(m._id,st.id)]);
       if(!isNaN(now)&&now!==st.qty) stock.push([st,now]);
     }
@@ -23914,13 +24849,16 @@ async function saveProductEdits(){
      the operator who is told that will type it all again over figures that are
      already in. Re-pressing Save re-sends only what is still pending, and a
      figure written twice writes the same figure. */
-  let landed=0;
+  let landed=0, cur=null;
   try{
     for(const job of jobs){
       if(job.price!=null){ await apiWrite('/products/'+job.m._id,{sell_price:job.price},'PATCH'); landed++; }
       for(const [st,now] of job.stock){
-        await apiWrite('/stores/'+st.id+'/stock/'+job.m._id,{physical_qty:now},'PATCH');
-        st.qty=now; landed++;
+        const k=st.id+':'+job.m._id; cur={st,m:job.m,now,k};
+        const body={physical_qty:now};
+        if(answers&&answers[k]) body.recount_reason=answers[k];
+        await apiWrite('/stores/'+st.id+'/stock/'+job.m._id,body,'PATCH');
+        st.qty=now; landed++; cur=null;
       }
     }
     state.prodBusy=false; state.productSku=null; render();
@@ -23935,7 +24873,19 @@ async function saveProductEdits(){
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
-    state.prodErr=landed
+    /* §325 — a recount question, asked once per count. What already landed is
+       in (st.qty moved with it), so the resend re-sends only what is pending.
+       Backing out puts that store's stepper back on the shelf's own number,
+       as the desktop grid puts its box back. */
+    if(cur&&!(answers&&answers[cur.k])&&RECOUNT_QUESTIONS.includes(e.code)){
+      const c=cur;
+      render();
+      recountAsk(e.code,e.body,c.st.qty,c.now,
+        w=>saveProductEdits(Object.assign({},answers||{},{[c.k]:w})),
+        ()=>{ sheetStep[stockKey(c.m._id,c.st.id)]=c.st.qty; render(); });
+      return;
+    }
+    state.prodErr=e.refused?E(...e.words):landed
       ? E('Some of that did not save. What did is already in — press Save again for the rest.',
            '部分内容没有保存成功。已保存的不会重复写入 — 请再按一次「保存」。')
       : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -23958,7 +24908,8 @@ function custWrite(kind, run, okMsg){
   }).catch(e=>{
     state.custBusy=null;
     if(String(e.message)==='auth') return;
-    state.custErr=e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
+    state.custErr=e.refused?T(...e.words)   // §325
+      :e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
       :e.code==='phone_taken'?T('Another customer already has that phone number.','该手机号已被其他顾客使用。')
       :e.code==='message_required'?T('Write something first.','请先输入内容。')
       :e.code==='reason_required'?T('A reason is required.','需要填写原因。')
@@ -24146,12 +25097,18 @@ reg('adjustPoints', ()=>{
     fields:[{id:'delta',label:T('Change by','变动'),placeholder:'100',numeric:true},
             {id:'reason',label:T('Reason','原因'),placeholder:T('Goodwill after a late delivery','配送延误补偿')}],
     confirmLabel:T('Save','保存'),
-    validate:v=>{ const n=parseInt(v.delta,10);
+    /* §325 — READ WHOLE, NEVER ROUNDED. This was parseInt, so "1.5" saved 1
+       and "12abc" saved 12, and the ledger row disagreed with what the operator
+       typed. The desktop (08-customers.js cuSaveAdjust) reads Number() and
+       refuses a fraction in its own words; so does this, and sends the number
+       it read. */
+    validate:v=>{ const n=Number(String(v.delta==null?'':v.delta).trim()||NaN);
       if(!Number.isFinite(n)||n===0) return T('Enter a number other than zero.','请输入非零数字。');
+      if(!Number.isInteger(n)) return T('Points must be a whole number.','积分必须是整数。');
       if(!v.reason) return T('Say why — it goes on the customer\u2019s ledger.','请填写原因，会记入顾客账目。');
       return ''; },
     run:v=>custWrite('points', ()=>apiWrite('/customers/'+state.custId+'/points-adjust',
-      {delta:parseInt(v.delta,10), reason:v.reason}), T('Points updated','积分已更新'))};
+      {delta:Number(String(v.delta).trim()), reason:v.reason}), T('Points updated','积分已更新'))};
   render();
 });
 reg('adjustWallet', ()=>{
@@ -24321,7 +25278,7 @@ reg('caddrSave', ()=>{
     const t=state.caddr; if(!t) return;
     if(String(e.message)==='auth') return;
     t.busy=false;
-    t.err=e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
+    t.err=e.refused?E(...e.words):e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
       :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
       :e.code==='not_found'?T('This address is no longer on the record.','该地址已不存在。')
       :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -24365,12 +25322,19 @@ function toggleFeature(key){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
+/* §325 — THE STORE LOCK RIDES ALONG, as the desktop's does (03-dashboard.js
+   tdOpsLoad → dashStoreQS, which is RA_STORE_LOCK first). A store-scoped
+   operator's Needs you counted every store's refunds, deliveries and low
+   shelves while their Trend was pinned to their own (§300 F5). The phone has
+   no store picker on Home, so the lock is the only store it can send; with no
+   lock nothing is added and the read is all stores, exactly as before. */
+function opsStoreQS(){ return state.storeLock?'?store_id='+encodeURIComponent(state.storeLock):''; }
 async function loadOps(){
   if(state.opsLoading) return; state.opsLoading=true;
-  try{ state.ops=await api('/dashboard/ops'); }catch(e){}
+  try{ state.ops=await api('/dashboard/ops'+opsStoreQS()); }catch(e){}
   state.opsLoading=false; render();
 }
 function ageShort(v){
@@ -24606,6 +25570,8 @@ function opsFires(){
       mins:pk.oldest_at?oldestMins([{waiting_since:pk.oldest_at}]):null,
       go:"APP.cmd('push','pick')"});
   }
+  /* §325 X1 — orders parked for a delivery point, and parcels to recover. */
+  recoverFires(o).forEach(x=>f.push(x));
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){
     // The pill counts what is actually OUT; the line names the rest. One number
@@ -24707,7 +25673,7 @@ function opsFires(){
    and the files go to the same multipart endpoint the desktop's dropzone uses.
    No preview step: the library below IS the preview, and it refreshes. */
 reg('pickMedia', ()=>{
-  if(state.mediaBusy) return;
+  if(state.mediaBusy||!mCan('media:upload')) return;   // §325
   const el=document.createElement('input');
   el.type='file'; el.accept='image/*'; el.multiple=true;
   el.onchange=()=>uploadMedia(Array.prototype.slice.call(el.files||[]));
@@ -24722,12 +25688,15 @@ async function uploadMedia(files){
   files=(files||[]).filter(f=>/^image\//.test(f.type||''));
   if(!files.length) return;
   state.mediaBusy={done:0,total:files.length}; state.mediaErr=null; render();
-  let ok=0, fail=0, why=null;
+  let ok=0, fail=0, why=null, refused=null;
   for(const f of files){
     const fd=new FormData(); fd.append('file',f);
     try{
       const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
-      if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+      if(r.status===401){ location.href='/backend/login'; return; }
+      /* §325 — a 403 is a refusal, not a lost session, and the next photo would
+         be refused the same way: stop, and count the rest as not uploaded. */
+      if(r.status===403){ refused=await apiRefusal(r); fail+=files.length-ok-fail; break; }
       const j=await r.json().catch(()=>({}));
       if(r.ok&&j&&j.success) ok++; else { fail++; why=why||(j&&j.error); }
     }catch(e){ fail++; }
@@ -24737,7 +25706,7 @@ async function uploadMedia(files){
   // A refusal names the reason the server gave when it gave one, and says how
   // many DID land — "3 of 4" is the difference between a retry and a re-do.
   if(fail){
-    const reason=MEDIA_ERR[why];
+    const reason=refused?refused.words:MEDIA_ERR[why];
     const head=ok?T(ok+' of '+(ok+fail)+' uploaded.', '已上传 '+ok+'/'+(ok+fail)+' 张。')
                  :T('That did not upload.','上传失败。');
     state.mediaErr=head+' '+(reason?T(...reason):T('Try again.','请重试。'));
@@ -24858,7 +25827,7 @@ function invSnooze(id){
        list in hand is stale, so say what is true and refetch rather than
        leaving a chip that lies about a row that no longer waits. */
     if(e.code==='not_pending'){ state.invLoaded=false; loadLiveInvoices(); }
-    showToast(T('That did not save.','没有保存成功。'));
+    showToast(e.refused?T(...e.words):T('That did not save.','没有保存成功。'));
   });
 }
 reg('invSnooze', id=>invSnooze(id));
@@ -24877,7 +25846,7 @@ function togglePrint(){
   }).catch(e=>{
     state.printerBusy=false;
     if(String(e.message)==='auth') return;
-    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.printerErr=e.refused?E(...e.words):E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadInbox(){
@@ -25867,6 +26836,7 @@ function mDcBtn(cmd,arg,text,kind){
 /* The controls of one step, laid out. The FIRST action is the primary and only
    where the step is the next one; everywhere else everything is quiet. */
 function mDcActs(step,isNext){
+  if(!mCan('orders:edit')) return '';   // §325 — every step is a /orders/…/delay-case write
   const acts=(step.acts||[]).map((a,i)=>mDcBtn(a.cmd,a.arg,a.text,isNext&&i===0?'cta':'btn'));
   if(step.link) acts.push(mDcBtn(step.link.cmd,step.link.arg,step.link.text,'link'));
   if(!acts.length) return '';
@@ -25951,14 +26921,15 @@ function delayCaseCard(o,sp){
      why it is a line here and not the full-width button it had become, which
      made the one optional step the largest control on the sheet. */
   const files=(dc&&dc.files)||[];
+  const canEditDc=mCan('orders:edit');   // §325
   const ev=`<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--hairline)">
     <span style="flex:none;width:14px;text-align:center;color:var(--text-secondary)">${files.length?'▣':'▢'}</span>
     <span style="font-size:13px;color:var(--text-secondary)">${T('Evidence','凭证')}</span>
     ${files.map(f=>`<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-default);border-radius:8px;padding:3px 8px;font-size:12px">
        <a href="#" onclick="APP.cmd('dcViewEv',${sid},${Number(f.id)});return false" style="color:inherit;text-decoration:none">${escAttr(f.label||T('View','查看'))}</a>
-       <a href="#" onclick="APP.cmd('dcDelEv',${sid},${Number(f.id)});return false" style="color:var(--text-secondary);text-decoration:none">×</a></span>`).join('')}
-    <label class="rowact" style="margin-left:auto">${files.length?T('Add','添加'):T('Add photo','添加照片')}
-      <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dcPhoto',${sid},this)"></label></div>`;
+       ${canEditDc?`<a href="#" onclick="APP.cmd('dcDelEv',${sid},${Number(f.id)});return false" style="color:var(--text-secondary);text-decoration:none">×</a>`:''}</span>`).join('')}
+    ${canEditDc?`<label class="rowact" style="margin-left:auto">${files.length?T('Add','添加'):T('Add photo','添加照片')}
+      <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dcPhoto',${sid},this)"></label>`:''}</div>`;
 
   /* ✓ 2/4. A tick and two numerals need no word in either language, which is
      also why they cost the vocabulary nothing. A case that will not claim has
@@ -25990,7 +26961,7 @@ function delayCaseCard(o,sp){
   const canClose=!!(dc&&dc.can_close);
   const blk=((dc&&dc.blockers)||[]).map(k=>M_DC_BLOCKER[k]).filter(Boolean);
   const busy=state.parcelBusy===('air'+sid);
-  const foot=canClose
+  const foot=(canClose&&canEditDc)
     ? `<button class="cta" ${busy?'disabled':''} onclick="APP.cmd('clearAirDelay',${sid})">${busy?T('Saving…','处理中…'):T('Mark handled','标记已处理')}</button>`
     : blk.length
       ? `<span style="font-size:12.5px;color:var(--text-secondary)">${T('to do','待办')}: <span class="num">${blk.join(' · ')}</span></span>`
@@ -26016,19 +26987,21 @@ function noContactCard(sp){
   const nc=sp&&sp.noContact;
   if(!nc) return '';
   const busy=state.parcelBusy==='nc';
+  const canEdit=mCan('orders:edit');   // §325 — POST …/no-contact/ack is orders:edit
   if(!nc.open) return `<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}<span style="flex:1">${T('Customer contacted','已联系客户')}${nc.cleared_by?' · '+escAttr(nc.cleared_by):''}</span>
-    <button class="btn2" style="width:auto;padding:4px 10px;flex:none" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',0)">${T('Undo','撤销')}</button></div>`;
+    ${canEdit?`<button class="btn2" style="width:auto;padding:4px 10px;flex:none" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',0)">${T('Undo','撤销')}</button>`:''}</div>`;
   const line=LANG==='en'?(nc.text_en||nc.text_cn||''):(nc.text_cn||nc.text_en||'');
   return `<div style="padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);display:flex;flex-direction:column;gap:8px">
     <div style="font-size:13.5px;font-weight:600">${T("Courier can't reach the customer",'快递员联系不上顾客')}</div>
     ${line?`<div style="font-size:12.5px;line-height:1.5;color:var(--text-secondary)"><span class="num">${escAttr(evTime(nc.event_time))}</span> · ${escAttr(line)}</div>`:''}
-    <button class="cta" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',1)">${busy?T('Saving…','保存中…'):T('I called the customer','已联系客户')}</button>
+    ${canEdit?`<button class="cta" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',1)">${busy?T('Saving…','保存中…'):T('I called the customer','已联系客户')}</button>`:''}
   </div>`;
 }
 function trackingCard(o,sp,label){
   const t=sp.trk;
   const has=!!(t&&t.number);
   const trkBusy=state.orderBusy==='trk';
+  const canEdit=mCan('orders:edit');   // §325 — every waybill write is orders:edit
   const st=t&&(LANG==='en'?(t.status_label_en||t.status_label_cn):(t.status_label_cn||t.status_label_en));
   const tone=(t&&TRK_STATE_TONE[t.status_code])||'plain';
   const badge = !has ? ''
@@ -26076,8 +27049,8 @@ function trackingCard(o,sp,label){
         ${/* Retry sync is offered only where the desktop offers it — on a
               waybill whose live subscription actually failed. On a healthy one
               it is a button that re-does something already working. */''}
-        ${sp.lastError?`<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('resubWaybill',${sp.id})">${T('Retry sync','重试同步')}</button>`:''}
-        <button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('clearWaybill',${sp.id})">${T('Clear','清除')}</button>
+        ${canEdit&&sp.lastError?`<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('resubWaybill',${sp.id})">${T('Retry sync','重试同步')}</button>`:''}
+        ${canEdit?`<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('clearWaybill',${sp.id})">${T('Clear','清除')}</button>`:''}
       </div>
       ${evs.length?`<div style="padding-top:10px;border-top:1px solid var(--border-default);display:flex;flex-direction:column;gap:7px">
         <span class="eyebrow">${T('Recent events','最近事件')}</span>
@@ -26092,7 +27065,8 @@ function trackingCard(o,sp,label){
             The brick "No waybill yet" warning is not lost with the sentence:
             the LIST row carries it, which is where an order needing one is
             spotted. The drawer is where it gets done. */''}
-      <button class="btn2" style="width:100%" ${trkBusy?'disabled':''} onclick="APP.cmd('addWaybill',${sp.id})">${trkBusy?T('Saving…','保存中…'):T('Save tracking','保存运单号')}</button>`}
+      ${canEdit?`<button class="btn2" style="width:100%" ${trkBusy?'disabled':''} onclick="APP.cmd('addWaybill',${sp.id})">${trkBusy?T('Saving…','保存中…'):T('Save tracking','保存运单号')}</button>`
+        :`<div style="font-size:13px;color:var(--text-secondary)">${T('No waybill yet','缺运单号')}</div>`}`}
   </div>`;
 }
 /* A same-city parcel has no waybill; what the operator watches is the arrival
@@ -26113,6 +27087,7 @@ function etaPretty(hhmm){
 }
 function localEtaCard(o,sp,label){
   const etaBusy=state.orderBusy==='eta';
+  const canEdit=mCan('orders:edit');   // §325 — PUT/DELETE …/eta is orders:edit
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${label?label:T('Same-city delivery','同城配送')}</span>
@@ -26131,7 +27106,7 @@ function localEtaCard(o,sp,label){
           this uses its summary label, word for word. */''}
     ${etaBusy?'':''}
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      ${!sp.localEta
+      ${!canEdit?'':!sp.localEta
         ? `<button class="btn2" style="width:100%" ${etaBusy?'disabled':''} onclick="APP.cmd('setEta',${sp.id})">${etaBusy?T('Saving…','保存中…'):T('Set arrival time','设置送达时间')}</button>`
         : sp.etaSource==='auto'
           ? `<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${etaBusy?'disabled':''} onclick="APP.cmd('setEta',${sp.id})">${T('Set a time manually','手动设置时间')}</button>`
@@ -26243,6 +27218,8 @@ function deliveryPhotoCard(o){
   const p=o.dphoto;
   if(!p||o.viewOnly) return '';
   const busy=state.parcelBusy==='dph';
+  const canEdit=mCan('orders:edit');   // §325 — add / replace / remove are orders:edit; viewing is not
+  if(!canEdit&&!(Array.isArray(p.photos)?p.photos.length:p.has)) return '';   // nothing to look at, nothing to press
   /* One chip per photo: its name opens it, × takes it off. Numbered in the
      order shown, the staff photo first and then the rider's from Qingyun
      (§261 addendum): "Photo 1", "Photo 2". "Rider 1 / Rider 2" read as two
@@ -26253,15 +27230,15 @@ function deliveryPhotoCard(o){
     const name=T('Photo','照片')+(photos.length>1?' '+(i+1):'');
     return `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-default);border-radius:8px;padding:3px 8px;font-size:13px">
       <a href="#" onclick="APP.cmd('dphView','${key}');return false" style="color:inherit;text-decoration:none">${name}</a>
-      <a href="#" onclick="APP.cmd('dphDel','${key}');return false" style="color:var(--text-secondary);text-decoration:none;padding:0 2px">×</a></span>`;
+      ${canEdit?`<a href="#" onclick="APP.cmd('dphDel','${key}');return false" style="color:var(--text-secondary);text-decoration:none;padding:0 2px">×</a>`:''}</span>`;
   }).join('');
   return `<div class="card" style="padding:8px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span style="flex:none;color:var(--text-secondary);display:flex">${ic('camera',18)}</span>
     <span style="font-size:14.5px;font-weight:500">${T('Delivery photo','送达照片')}</span>
     ${chips}
     ${photos.length&&p.customer_sees?`<span style="font-size:12px;color:var(--text-secondary)">${T('Customers see this','顾客可见')}</span>`:''}
-    <label class="rowact" style="margin-left:auto${busy?';opacity:.55;pointer-events:none':''}">${p.has?T('Replace','更换'):T('Add photo','添加照片')}
-      <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dphAdd',this)"></label>
+    ${canEdit?`<label class="rowact" style="margin-left:auto${busy?';opacity:.55;pointer-events:none':''}">${p.has?T('Replace','更换'):T('Add photo','添加照片')}
+      <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dphAdd',this)"></label>`:''}
   </div>`;
 }
 function riderCard(o){
@@ -26534,7 +27511,7 @@ function parcelCard(o,sp,i,n,ships){
   // desktop and the route ask, without needing the pid list it has never carried.
   const canDispatch = sp.state==='pending' && sp.mode!=='supplier' && n>1
     && ['paid','preparing','dispatched','awaiting_restock'].includes(o.rawStatus)
-    && !(sp.held_lines>0) && !o.viewOnly && o._id!=null;
+    && !(sp.held_lines>0) && !o.viewOnly && o._id!=null && mCan('orders:edit');   // §325
   // §180 — the step that did not exist. Once the first parcel of a split order
   // leaves, the order is 'dispatched' and the header's "Start preparing" is gone
   // for good, so the parked box had no way forward and its stock stayed on the
@@ -26547,7 +27524,7 @@ function parcelCard(o,sp,i,n,ships){
      More sheet's whole-order undo owns that case). A parked order takes no
      status from its parcels, so it needs no sibling. */
   const canUndoParcel = sp.state==='dispatched' && (sp.mode==='air'||sp.mode==='land') && n>1
-    && !(sp.trk&&sp.trk.number) && !o.viewOnly && o._id!=null
+    && !(sp.trk&&sp.trk.number) && !o.viewOnly && o._id!=null && mCan('orders:edit')   // §325
     && (o.rawStatus==='awaiting_restock'
         || (o.rawStatus==='dispatched' && (ships||[]).some(x=>x&&x.id!==sp.id&&x.state!=='pending')));
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
@@ -26596,7 +27573,7 @@ function countLabel(lines,units){
    it will refuse, and a second opinion here that disagreed with it would be a
    button that vanishes for a reason the server never gave. */
 function parcelMergeBlock(o,ships){
-  if(!o||o._id==null||o.viewOnly||!o.outsideGz) return '';
+  if(!o||o._id==null||o.viewOnly||!o.outsideGz||!mCan('orders:edit')) return '';   // §325
   const hasWaybill=ships.some(s=>s&&((s.trk&&s.trk.number)||s.carrierCode));
   const combined=ships.length===1&&String(ships[0].label||'').includes('合并');
   /* orderBusy, not parcelBusy: this acts on the ORDER's whole arrangement of
@@ -26706,6 +27683,12 @@ function shopNoteCard(o){
      on it at all, so an empty editor could be opened and never closed. With
      nothing stored, Cancel is always offered and puts the card away. */
   const canDismiss=!saved;
+  /* §325 — PATCH …/note is orders:edit. Without it the stored note is read,
+     not edited: no box to type into, no Save that the server would refuse. */
+  if(!mCan('orders:edit')) return saved?`<div class="card" style="padding:14px">
+    <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('pencil',16)}
+      <span class="eyebrow">${T('Shop note','店铺备注')}</span></div>
+    <div style="margin-top:10px;font-size:14.5px;line-height:1.5;white-space:pre-wrap">${escAttr(saved)}</div></div>`:'';
   return `<div class="card" style="padding:14px">
     <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('pencil',16)}
       <span class="eyebrow">${T('Shop note','店铺备注')}</span></div>
@@ -26729,16 +27712,21 @@ function orderActionRow(o,isPO){
   // sheetPO, which asks first and PUTs.
   if(isPO) return '';
   if(o._id==null) return '';   // sample data in the static preview: no live order to act on
-  const next=orderNext(o);
+  /* §325 — Mark paid, the forward step and Reprint are all orders:edit on the
+     server (PATCH …/status, POST …/print). Not drawn without it; the "…" button
+     still appears whenever orderActs has a row this operator may press. */
+  const canEdit=mCan('orders:edit');
+  const next=canEdit?orderNext(o):null;
   const busy=state.orderBusy;
-  const canPay=o.raw==='pending_payment'&&!o.viewOnly;
+  const canPay=canEdit&&o.raw==='pending_payment'&&!o.viewOnly;
   const btns=[];
   if(canPay) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('markPaid')">${busy==='advance'?T('Marking…','处理中…'):T('Mark paid','标记已付款')}</button>`);
   else if(next) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('advance','${next.to}')">${busy==='advance'?T(next.busyEn,next.busyZh):T(next.en,next.zh)}</button>`);
-  btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
+  if(canEdit) btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
   // ONE LIST DECIDES BOTH. This condition and the sheet's rows used to be
   // written out separately and had drifted apart; now the button asks the sheet.
   if(orderActs(o).length) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
+  if(!btns.length) return '';
   return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">${btns.join('')}</div>`;
 }
 /* A LIVE SHEET (decisions §279) is an ask whose fields save themselves: each
@@ -26804,7 +27792,7 @@ function sheetAsk(){
      : a.options
        ? `<div style="max-height:62vh;overflow:auto">${a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')}</div>`
        : `<div style="display:flex;gap:8px;padding:16px 20px 0">
-            <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>
+            <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${a.cancelLabel||T('Cancel','取消')}</button>
             <button class="btn2" style="flex:1;${a.danger?'color:var(--brick-ink);border-color:var(--brick-ink)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
           </div>`}
    </div>`;
@@ -26829,7 +27817,7 @@ function sheetActions(){
   const o=currentOrder();
   // Reprint is the drawer's own toolbar button and rides at the top of the
   // sheet as well; everything else is orderActs, which the "…" button gates on.
-  const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]].concat(orderActs(o));
+  const acts=(mCan('orders:edit')?[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]]:[]).concat(orderActs(o));   // §325
   return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeActions')"></div>
    <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber" style="margin-bottom:10px"></div>
    ${acts.map(([i,l,c])=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${c}"><span style="display:flex;flex:none;color:var(--text-secondary)">${ic(i)}</span><span style="flex:1;font-size:15px">${l}</span></button>`).join('')}</div>`;
@@ -26874,7 +27862,8 @@ function stockCard(p){
       <span style="flex:1;min-width:0;font-size:15px">${T('Supplier out — pause selling','供应商缺货,暂停销售')}</span>
       ${state.prodBusy==='pause'+p._id
         ? `<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center;flex:none">…</span>`
-        : toggle(!!p.paused,`APP.cmd('togglePaused','${p._id}')`)}
+        : prodCanEdit()?toggle(!!p.paused,`APP.cmd('togglePaused','${p._id}')`)
+        : `<span style="font-size:13px;color:var(--text-secondary);flex:none">${p.paused?T('Paused','已暂停'):T('Available','有货')}</span>`}
     </div></div>`;
   if(p.bundle) return `<div class="card" style="padding:16px">
     <div class="eyebrow">${T('Stock','库存')}</div>
@@ -26901,6 +27890,10 @@ function stockCard(p){
          from cache stepping up from zero. */
       const key=stockKey(p._id,st.id);
       if(sheetStep[key]==null) sheetStep[key]=st.qty;
+      /* §325 — the count is read by everyone who can open the sheet; the
+         steppers are drawn only for somebody the stock route will take it from. */
+      if(!prodCanStock()) return `<div style="${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'};display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="font-size:15px">${name}</div><span class="num" style="font-size:22px;font-weight:500">${st.qty}</span></div>`;
       return `<div style="${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'}">
         <div style="font-size:15px">${name}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
@@ -26941,6 +27934,10 @@ function sheetVariants(p){
 function oosCard(p){
   if(p.supplier) return '';
   const busy=state.prodBusy==='oos'+p._id;
+  /* §325 — the policy is read by everyone; the picker is products:edit's. */
+  if(!prodCanEdit()) return `<div class="card" style="padding:12px 16px">
+      <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('When it runs out','缺货时的处理方式')}</span>
+      <span style="display:block;font-size:15px;margin-top:2px">${T(...oosLabel(p.oos))}</span></div>`;
   return `<div class="card" style="padding:0">
     <button class="row" ${busy?'disabled':''} onclick="APP.cmd('openOos','${escAttr(p.sku)}')" style="opacity:${busy?'.55':'1'}">
       <span style="flex:1;min-width:0">
@@ -26983,18 +27980,19 @@ function sheetProduct(){
          <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
        <div class="card" style="padding:16px">
          <div class="eyebrow">${T('Price','价格')}</div>
-         <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+         ${/* §325 — the price is products:edit's to change; everyone else reads it. */''}
+         ${!prodCanEdit()?`<div class="num" style="font-size:18px;font-weight:500;margin-top:12px">${escAttr(p.price)}</div>`:`<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
            <span class="num" style="font-size:18px;color:var(--text-secondary)">${CUR}</span>
            <input id="mPrice" class="num" inputmode="decimal" oninput="APP.cmd('priceTyped',this.value)"
                   value="${escAttr(sheetPrice[p._id]!=null?sheetPrice[p._id]:(p.priceNum!=null?p.priceNum:(parseFloat(String(p.price).replace(/[^0-9.]/g,''))||'')))}" style="font-size:18px;font-weight:500">
-         </div>
+         </div>`}
        </div>
        ${stockCard(p)}
        ${oosCard(p)}
        ${pcEntryRow(p)}
      </div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
-       <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
+     ${(prodCanEdit()||prodCanStock())?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
+       <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div>`:''}</div>`;
 }
 function fbBubble(m){
   const mine=m.author==='admin';
@@ -27031,6 +28029,7 @@ function sheetReply(){
   const th=state.thread;
   const r=findReview(state.reply)
     || {cust:(th&&th.name)?[th.name,th.name]:[T('Conversation','对话'),T('Conversation','对话')], text:['','']};
+  const canW = th ? mCan('feedback:moderate') : revCanWrite(r);   // §325
   const foot = th
     ? T('The customer gets this in their mini-app inbox.','顾客会在小程序消息中收到。')
     : T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。');
@@ -27041,15 +28040,15 @@ function sheetReply(){
        <span style="flex:1;font-size:17px;font-weight:500">${T(...r.cust)}</span><span style="width:36px;flex:none"></span></div></div>
      <div id="mThread" style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        ${th?threadBody():`<div style="background:var(--surface-raised);border-radius:12px;padding:14px;font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>`}
-       ${th?'':`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>`}
+       ${th||!canW?'':`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>`}
        ${state.replyErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick-ink)">${state.replyErr}</span></div>`:''}
-       ${th?'':`<div style="font-size:13px;color:var(--text-secondary)">${foot}</div>`}</div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
+       ${th||!canW?'':`<div style="font-size:13px;color:var(--text-secondary)">${foot}</div>`}</div>
+     ${canW?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
        ${th?`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:52px;max-height:120px;resize:none"></textarea>`:''}
        <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button>
-       ${th?`<div style="font-size:12px;color:var(--text-secondary);text-align:center">${foot}</div>`:''}</div></div>`;
+       ${th?`<div style="font-size:12px;color:var(--text-secondary);text-align:center">${foot}</div>`:''}</div>`:''}</div>`;
 }
 /* ==========================================================================
    Trend (desktop: 03-dashboard.js, the Reports tab's Trend chapter)
@@ -29477,8 +30476,8 @@ function screenCustomers(){
   /* THE HEADER'S ONE BUTTON, and it is the desktop's own — the roster's "+ Add"
      for a walk-in or a telephone order. Gated on `customers:edit`, which is what
      lib/cap-routes.js gates POST /customers on: absent, never disabled, for an
-     operator whose save would 403. §112's rule, and the reason it matters here
-     is that apiWrite sends a 403 to the login page. */
+     operator whose save would 403. §112's rule. (It mattered more while apiWrite
+     sent a 403 to the login page; since §325 a refusal is said, not a logout.) */
   /* 38px, not the class's 44. The band standardises its controls at 38 — every
      iconbtn in this row overrides the 44px class inline to say so — and the Add
      slab arrived at 44, which is the whole of what "tight" was. Six pixels:
@@ -29964,9 +30963,10 @@ function sheetCustomer(){
             customers:edit for the other two (lib/cap-routes.js). All four were
             offered to every role, and a customer-service or warehouse account
             holding customers:view alone got the whole row. That is worse here
-            than a dead button: apiWrite treats a 403 as a lost session and sends
+            than a dead button: apiWrite treated a 403 as a lost session and sent
             the operator to the login page, so tapping Points on a record you may
-            read but not adjust logged you out of the app. Absent, never
+            read but not adjust logged you out of the app (§325 stopped that; a
+            refusal is now said in words, but a dead button is still one). Absent, never
             disabled — §112's rule, and the four buttons re-flow to fill the row
             at whatever number survives. */''}
       ${d?(()=>{
@@ -30460,9 +31460,13 @@ function productCard(u){
           ${u.group?'':`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>`}
         </span></span></button>
     <span style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;padding-top:2px">
-      ${busy?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">${T('…','…')}</span>`
+      ${/* §325 — the switch is products:edit's (POST /products/family-publish);
+            without it the column says where the product stands, in the
+            switch's own toast words. */''}
+      ${!prodCanEdit()?`<span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${on?T('On the shop','已上架'):T('Off the shop','已下架')}</span></span>`
+      :`${busy?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">${T('…','…')}</span>`
             :toggle(on,`APP.cmd('toggleShop','${ids}')`)}
-      <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${T('In shop','上架')}</span></span>
+      <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${T('In shop','上架')}</span></span>`}
   </div>`;
 }
 /* One order for a family, shared by the card and the sheet, so a size cannot be
@@ -30709,6 +31713,13 @@ const ROUTE_CAP={
   settings:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   setup:['settings:shop','stores:view'],
   team:'team:view', categories:'categories:view', activity:'activity:view',
+  /* §325 X1. Change history and What was sent are read-only and live inside
+     Settings; the desktop gates neither beyond reaching Settings, so each takes
+     exactly the Settings screen's own set. Eleme and its catalogue are the
+     desktop tab's key. The parked-orders list opens orders. */
+  changes:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  sent:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  mirror_eleme:'eleme:view', elemecat:'eleme:view', needspoint:'orders:view',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -31889,6 +32900,7 @@ function mLiveTick(){
   const jobs=[
     mSettled(loadToday()),
     mSettled(loadOps()),
+    mSettled(loadPresence()),
     mSettled(api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
       state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{})),
   ];
@@ -32393,7 +33405,7 @@ reg('pushTest', ()=>{
 /* ==========================================================================
    Live data — binds the core monitoring screens to the store backend's
    /api/retail-admin/* endpoints (same API the desktop admin uses). The page
-   self-auths: a 401/403 bounces to the store root. Every map is defensive and
+   self-auths: a 401 bounces to the login page (a 403 is a refusal, §325). Every map is defensive and
    falls back to the mock content above, so a shape change can never white-screen
    the app — the long-tail marketing/loyalty screens stay on sample data for now.
    ========================================================================== */
@@ -32403,11 +33415,51 @@ const API='/api/retail-admin';
    backend's own login and session routes — so a path that already starts at
    /api/ is taken as given rather than prefixed into /api/retail-admin/api/... */
 const apiURL = p => String(p).indexOf('/api/')===0 ? p : API+p;
+/* §325 — A REFUSAL IS NOT A LOST SESSION. Every read and write here used to send
+   a 403 to the login page exactly as it sent a 401, so with permissions switched
+   on, one refused tap threw a shift worker out of the app. Only a 401 means the
+   session is gone (requireRetailAdmin answers every "who are you?" with 401, on
+   purpose, and so does lib/require-cap.js). A 403 is the server saying "you, no"
+   — `forbidden_capability` from the choke point or a handler, `forbidden_store`
+   from the store-scope check, or a sentence of its own — and the operator is
+   told so where they are looking, through the caller's own error slot.
+   THE WORDS ARE THE DESKTOP'S (01-core.js TD_ERR), the same refusal answered
+   with the same sentence on both surfaces. A 403 that brings a bilingual
+   sentence of its own ("… · …", the backend routes' shape) keeps it; one that
+   brings nothing the phone can read gets lib/require-cap.js's own pair. */
+const REFUSAL_WORDS={
+  forbidden_capability:['Your role does not include this action. An owner can grant it on the Team page.','你的角色不包含此操作。可由负责人在团队页授权。'],
+  forbidden_store:['You can only do that in a location you are assigned to.','只能在你被分配的门店执行该操作。'],
+  store_not_assigned:['You are not assigned to that location.','你未被分配到该门店。'],
+};
+const REFUSAL_ANY=['You don’t have permission for this','你没有此操作的权限'];
+function refusalWords(j){
+  const code=j&&j.error;
+  if(REFUSAL_WORDS[code]) return REFUSAL_WORDS[code];
+  const s=typeof code==='string'?code:'', i=s.indexOf(' · ');
+  if(i>0) return [s.slice(0,i),s.slice(i+3)];
+  return REFUSAL_ANY;
+}
+/* The thrown error: its message is the sentence (so a caller that shows
+   e.message shows it), `code`/`body` are the server's as apiWrite always kept
+   them, and `refused` + `words` let a caller whose fallback is "try again"
+   say the true thing instead — `e.refused?E(...e.words):<its own words>`,
+   E() so a stored error re-reads in the language on screen when it paints.
+   Trying again will not help a refusal; saying why is the whole point. */
+async function apiRefusal(r){
+  let j=null; try{ j=await r.json(); }catch(e){}
+  const words=refusalWords(j);
+  const e=new Error(T(words[0],words[1]));
+  e.code=j&&j.error; e.body=j; e.status=403; e.refused=true; e.words=words;
+  return e;
+}
 async function api(path){
   const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
   // Match the desktop backend's auth-fail target. Redirecting to '/' would loop
   // once the store root serves this app to phones (root → 401 → root → …).
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  // §325: a 401 only — a 403 is a refusal, not a lost session.
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);
   if(!r.ok) throw new Error('HTTP '+r.status);
   const j=await r.json();
   return (j && j.data!==undefined) ? j.data : j;
@@ -32505,7 +33557,8 @@ function fmtDateOnly(v){
 }
 async function apiRaw(path){
   const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
-  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===401){ location.href='/backend/login'; throw new Error('auth'); }
+  if(r.status===403) throw await apiRefusal(r);   // §325, as api()
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
@@ -32721,8 +33774,11 @@ function payNoteOf(r){
   if(!r.has_alipay_proof) return null;
   if(v==='match') return {sev:'amber',icon:'circle-check',
     label:['Payment verified · confirm','付款已核对 · 待确认'],
-    why:['The screenshot was read and matches. Marking it paid is a desktop action — it records which tender it was.',
-         '付款截图已核对一致。标记已付款需在电脑端完成 — 需要记录收款方式。']};
+    /* §325 — the second sentence said Mark paid was a desktop action because it
+       records the tender. The phone's Mark paid asks for the tender (markPaid),
+       so it was no longer true; the first sentence stands alone. */
+    why:['The screenshot was read and matches.',
+         '付款截图已核对一致。']};
   return {sev:'amber',icon:'triangle-alert',
     label:['Payment not checked yet','付款待核对'],
     why: v==='error'
@@ -33594,9 +34650,8 @@ function mapDetail(o){
   /* §325 O3 — WHAT THE REFUND SHEETS NEED. Each line with its own id, the units
      still refundable (qty less refunded_qty, the server's normalizeRefundLines
      cap) and its unit price as the server computes it (line_total ÷ qty, after
-     option deltas, else unit_price). And the GROSS tenders — points + wallet +
-     the cash total — which is what the server compares an approval against to
-     decide full or partial; o.total is only the cash slice. */
+     option deltas, else unit_price). The gross tenders the full/partial rule
+     needs are refund.gross (§325 S1c). */
   base.rfItems=(o.items||[]).filter(it=>it&&it.id!=null).map(it=>{
     const qty=Number(it.qty||it.quantity)||0, done=Math.min(qty,Math.max(0,Number(it.refunded_qty)||0));
     return {id:it.id, name:[it.name_en||it.name_cn||('#'+it.id), it.name_cn||it.name_en||('#'+it.id)],
@@ -33606,7 +34661,6 @@ function mapDetail(o){
   // The lines the customer picked, by item id — what the approve sheet opens on.
   base.refundLineIds=(()=>{ let L=[]; try{ L=o.refund_lines_json?JSON.parse(o.refund_lines_json):[]; }catch(e){ L=[]; }
     return Array.isArray(L)?L.filter(l=>l&&l.item_id!=null).map(l=>({item_id:l.item_id, qty:Number(l.qty)||0})):[]; })();
-  base.tenderGross=Math.round(((Number(o.points_amount)||0)+(Number(o.balance_used)||0)+(Number(o.total)||0))*100)/100;
   // The refund panel. The phone had the ACTIONS — approve, reject, pay out —
   // with none of the figures behind them, so an operator was approving an amount
   // the screen had never shown them, and the customer's own reason for asking
@@ -33618,6 +34672,10 @@ function mapDetail(o){
     staffNote:(o.refund_review_note||'').trim()||null,
     requested:o.refund_amount_requested!=null?Number(o.refund_amount_requested):null,
     approved:o.refund_amount_approved!=null?Number(o.refund_amount_approved):null,
+    /* §325 — GROSS tenders (points + wallet + cash), the figure the server's
+       /refund/approve compares against to decide a FULL refund — not o.total,
+       which is the cash slice alone (§222; the desktop computes the same). */
+    gross:Math.round(((Number(o.points_amount)||0)+(Number(o.balance_used)||0)+(Number(o.total)||0))*100)/100,
     paid:o.refund_amount_paid!=null?Number(o.refund_amount_paid):null,
     cash:o.refund_cash_amount!=null?Number(o.refund_cash_amount):null,
     method:o.refund_payout_method||null, ref:o.refund_payout_ref||null,
@@ -33806,7 +34864,7 @@ function mapInvoice(r){
   // block shows and the phone showed nowhere: you could not tell whose invoice
   // was waiting without opening a laptop.
   const company = r.invoice_type ? r.invoice_type==='company' : !!r.invoice_tax_id;
-  return {id:r.order_no||('#'+r.id), no:r.invoice_number||null,
+  return {id:r.order_no||('#'+r.id), _id:r.id!=null?Number(r.id):null, no:r.invoice_number||null,
     title:r.invoice_title||null, company, taxId:r.invoice_tax_id||null, email:r.invoice_email||null,
     // 'off' is the muted pill — the same grey the app gives anything switched
     // out of play. A dead request must not wear Pending's clear pill: that is
@@ -34121,6 +35179,36 @@ reg('openDeliveryAlert', ()=>{
   });
 });
 
+/* §325 — A FAPIAO REQUEST OPENS ITS ORDER, where §314 issues it. The same
+   shape as openDeliveryAlert above: the order is often not in whatever page of
+   the Orders list is loaded, so the sheet is built from its own read, with
+   detailFetch holding the screen meanwhile. The argument is the row's index in
+   DB.invoices, not its order number, for openCustOrder's reason (a number would
+   have to survive a JS string inside an HTML attribute). */
+reg('openInvoiceOrder', i=>{
+  const v=(DB.invoices||[])[Number(i)];
+  if(!v||v._id==null) return;
+  const no=v.id;
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const row=list.find(o=>o._id===v._id); if(row) row.isNew=false; }
+  });
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  api('/orders/'+v._id).then(o=>{
+    if(state.detailId!==no) return;
+    const d=mapDetail(o);
+    state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=T('This order could not be opened. Close and try again.',
+                     '无法打开该订单，请关闭后重试。');
+    render();
+  });
+});
+
 /* The operator's role, the same read the desktop bootstraps RA_POS from. It
    decides whether the Recap says the money out loud: a warehouse, dispatch or
    customer-service account sees its own queue without the revenue. Defaults to
@@ -34406,6 +35494,7 @@ async function loadLive(){
      opened rather than after a tap. */
   refreshPushState();
   loadOps();
+  loadPresence().then(()=>render());
   /* From here the board keeps itself current — the live stream plus the 60s
      backstop. Wired here rather than at the bottom of the file because this is
      the first point at which the caps are known AND the flatNav gate above has

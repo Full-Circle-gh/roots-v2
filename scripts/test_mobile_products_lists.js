@@ -127,7 +127,7 @@ function liftReg(name) {
 const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'searchClearRun', 'noteBar', 'nothingYet', 'E',
   'pill', 'toggle', 'prodLowThreshold', 'mapProduct', 'prodCategories', 'prodCatName', 'prodSubcats', 'prodSubName',
   'prodStoreOn', 'prodStoreQty', 'prodAtStore', 'prodRows', 'loadProdGrid', 'loadProdHi', 'productCard',
-  'prodUnits', 'prodFiltered', 'prodBodyHtml', 'screenProductCatalogue', 'mCan',
+  'prodUnits', 'prodFiltered', 'prodBodyHtml', 'screenProductCatalogue', 'mCan', 'prodCanEdit',
   'actPreset', 'actWindow', 'loadActivity', 'actClock', 'actRangeLine', 'actDelta', 'actRow', 'actDigestCard',
   'screenActivity', 'actReload',
   'wstPreset', 'wstWindow', 'loadWasteReasons', 'wstReasonName', 'loadWaste', 'wstStoreName', 'wstProductName',

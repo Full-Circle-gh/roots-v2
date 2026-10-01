@@ -108,6 +108,11 @@ const SRC = [
      call in opsFires sits behind a count and short-circuits on an empty
      payload; this one does not, so the real function comes along. */
   sliceBlock(M_HTML, 'function waitingToPick()'),
+  /* §325 X1 — opsFires hands the two order rows (parked for a delivery point,
+     parcels to recover) to recoverFires, which reads the same payload, so the
+     real helper and its one formatter come along like waitingToPick does. */
+  sliceBlock(M_HTML, 'function x1OrderNos(items,total)'),
+  sliceBlock(M_HTML, 'function recoverFires(o)'),
   sliceBlock(M_HTML, 'function opsFires()'),
 ].join(';\n');
 
