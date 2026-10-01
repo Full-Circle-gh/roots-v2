@@ -24830,3 +24830,79 @@ password, for any store in their shop. These routes are not under
    - **The callers:** the desktop Operations → Stores panel and its ungated
      button, plus the phone when it calls these.
 7. **Nothing composed.** No operator strings were added.
+
+## §359 — PRINTERS, COURIER KEYS, QINGYUN AND THE SHOP'S PUSH NOTIFICATIONS ARE SET FROM THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X7 of the Settings / Channels /
+Dashboard / Billing lane. Five desktop panels are on the phone now, each on
+the desktop's own endpoints and bodies.
+
+1. **Receipt printing.** Opened from Operations, under the auto-print switch.
+   The desktop source is `02-settings-ops.js`.
+   - **What it holds:**
+     - each printer brand's account (Feie, Shangpeng);
+     - the three auto-print switches and the receipt header;
+     - each store's printer: SN, brand, template, copies, its print preview,
+       and **Save & test this store**;
+     - the kitchen printer, the stock-request slip, and which store prints
+       out-of-Guangzhou orders.
+   - **How Save all works:** as on the desktop. Every brand the server lists
+     has its account sent first (`PUT /integrations {feie}` / `{spyun}`),
+     then the printer settings (`PUT /printer`, the desktop's eleven keys in
+     order). A refused account is shown on the screen, and the printer
+     settings still go, as the desktop does.
+   - **How Save & test works:** saves everything first, then sends
+     `POST /printer/test {store_id}`. A failure names the brand and SN that
+     were tried. When the cloud does not know the SN, it asks whether the
+     brand is right, in the desktop's words.
+2. **Package tracking (Kuaidi100) and JD Logistics.** Each has Save and
+   Save & test, with the desktop's bodies.
+   - **A secret left blank is kept.** It is never sent, and only its mask is
+     shown back.
+   - **A test is only sent after a save that worked.**
+3. **Qingyun riders.** Shows each store's status, with **Request setup** for
+   a store that is not connected (`POST {store_code}`, once per visit).
+   - **Auto-send** is offered once a store is connected
+     (`POST {enabled}`). The switch moves only when the server says it did.
+   - The rider-point picker stays held (§97). It is not built here.
+4. **Push notifications** (the desktop Settings → Push panel). It holds:
+   - the WeCom app, with Save and Send a test. The test sends the group-bot
+     address typed below, as the desktop does, so it can be tried before
+     saving;
+   - SMS when delivered, with Save and Send a test SMS. The phone number is
+     checked first, then the keys are saved, then a real SMS is sent;
+   - the order-status template, the group-bot webhook, and System Alerts with
+     its test.
+   - **Save settings** sends the desktop `saveConfig`'s four keys, and only
+     those. The desktop's Save bar also saves the manual-Alipay card; that is
+     a money setting and gets its own screen in X10.
+5. **Who can open each screen.** Each is gated on exactly the keys the
+   server asks of its writes:
+   - Receipt printing and Push notifications: the desktop Settings set
+     (`SETTINGS_SCREEN`).
+   - Kuaidi100 and JD: `delivery:view` / `delivery:edit` / `shipping:config`.
+   - Qingyun: `delivery:view` / `delivery:edit`.
+6. **Where the doors are.**
+   - Receipt printing: Operations.
+   - Push notifications: Settings → Store.
+   - The three delivery cards: a new **Delivery** group in Settings, and the
+     phone's Delivery settings screen. That screen is the Orders lane's; it
+     gains one line (`x7DeliveryDoors()`) so `delivery:view` holders reach the
+     cards there, as they reach them in the desktop Delivery hub.
+7. **The Operations line now reads "Payment keys are set on desktop."**
+   Printers left the line.
+8. **Not built.** These stay held by §97: the JD label printer (a per-machine
+   switch), the box-label printer, and the Qingyun point picker.
+
+**Open for Ash.**
+- **The Kuaidi100 callback address.** When nothing is stored, the field opens
+  on `https://rootskitchenchina.com/...`. That is the desktop input's built-in
+  value, copied so both send the same body. On another tenant that address is
+  wrong. The server comment says the address is built per tenant, so the
+  field may not be needed at all. Desktop and phone should change together.
+- **The six test endpoints have no permission gate on the server**
+  (`/printer/test`, `/integrations/kd100/test`, `/integrations/jd/test`,
+  `/integrations/aliyun_sms/test`, `/wecom/test`, `/system-alerts/test`).
+  They send real prints, real SMS and real WeCom messages. The phone draws
+  each test only for its screen's keys. Closing this on the server is a
+  SERVER-lane change.
