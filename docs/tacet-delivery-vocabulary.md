@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.249 · 2026-09-30 · §350 A PRODUCT'S PHOTOS ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's photos on the phone (§350)*.
+
 **v1.248 · 2026-09-30 · §349 A PRODUCT'S DETAILS ON THE PHONE — ONE STRING COMPOSED BY CLAUDE (THE COST TAG'S CHINESE), THE REST COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's details on the phone (§349)*.
 
 **v1.247 · 2026-09-30 · §348 A SHOP MENU'S DAILY EDITS ON THE PHONE — TWO STRINGS COMPOSED BY CLAUDE (THE REMOVE CONFIRM THE DESKTOP NEVER ASKED, AND ITS PROGRESS WORD), THE REST COPIED WHOLE.** See *A shop menu's daily edits on the phone (§348)*.
@@ -10905,3 +10907,26 @@ try again. · 没有保存成功。数据没有变化 — 请重试。`, `Could 
 **Live candidates rejected:** `显示成本不完整` (from the recipe-unit warning; it
 says "the displayed cost is incomplete", a reading, not the operator's
 statement).
+
+## A product's photos on the phone (§350)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the Photos
+card and the library sheet on the phone's Details screen (`public/m.html`).
+
+Copied whole from the desktop product editor (`public/retail-admin.html`,
+`public/retail-admin/09-products.js`): `Photos · 图片`, `Main · 主图`, `Add ·
+添加`, `From library · 从图库选择`, `Up to 8 · 最多 8 张`, `No photos yet ·
+暂无图片`, `Up to 8 photos · 最多 8 张图片`, `Shared from another variant — add
+a photo here to give this variant its own. · 与其他规格共用图片 —
+在此添加图片可为本规格单独设置。`, `Image too huge (max 25MB) · 图片过大,上限 25MB`,
+`Failed to process image · 图片处理失败`, `Optimized · 已优化`, `Remove · 移除`,
+and the library picker's `Choose from library · 从图库选择`, `Search photos… ·
+搜索图片…`, `Load more · 加载更多`, `Add selected · 添加所选`, `N selected ·
+已选 N 张`, `Adding… · 添加中…`, `Added N · 已添加 N 张`, `No photos match your
+search · 没有匹配的图片`, `Your media library is empty — upload photos in
+Content → Media · 图库为空 — 请在「内容 → 媒体」中上传图片`, `Load failed ·
+加载失败`.
+
+The reorder buttons reuse the live `Move up · 上移` / `Move down · 下移` (the
+promo-card editor's). `Close · 关闭`, `Try again · 重试` and `Loading… · 加载中…`
+are the phone's own.
