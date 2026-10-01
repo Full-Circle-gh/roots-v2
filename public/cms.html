@@ -15925,8 +15925,20 @@ document.addEventListener('keydown', (e) => {
       x.coupons = (state.vouchers || []).map(v => ({ id: v.id, code: v.code || '', title_en: v.title_en || '' }));
       x.couponLive = liveCouponDisplay(b);
     }
+    // §325 M2 — a hero's buttons as the inspector reads them (getCtas folds
+    // the old single cta_label / cta_target into the list), so the phone
+    // edits the same list the inspector does.
+    if (b.type === 'hero_banner') x.ctas = getCtas(b);
     return x;
   };
+  // §325 M2 — the link picker's lists: the inspector's own pages, and the
+  // products and categories it loaded, cut to what a choice needs.
+  const postTargets = () => POST({
+    evt: 'targets',
+    pages: TARGET_PAGES.map(p => ({ v: p.v, en: p.en, cn: p.cn })),
+    products: (state.products || []).map(p => ({ id: p.id, name_en: p.name_en || '', name_cn: p.name_cn || '', sku: p.sku || '', is_published: !!p.is_published })),
+    categories: (state.categories || []).map(c => ({ id: c.id, name: c.name || '', name_cn: c.name_cn || '' })),
+  });
   const postSelected = () => { const b = selectedBlock(); POST({ evt: 'selected', block: b, extra: selectedExtra(b) }); };
   // Per-block colour controls for the mobile Design sheet. state.designFields is
   // rebuilt by renderInspector() on every render (preview embed only); we strip
@@ -15988,6 +16000,19 @@ document.addEventListener('keydown', (e) => {
         case 'patch':      updateBlockSilent(d.id, d.patch || {}); break;
         // §325 — the coupon block's picker, exactly as the inspector's select:
         // none unlinks, a coupon fills the block from that coupon.
+        // §325 M2 — a picture chosen on the phone, committed the way the
+        // inspector's picture field commits it: a field that records the
+        // picture's shape (image_aspect) gets it measured here, and clearing
+        // sets it to null. Video, links and buttons ride 'patch'.
+        case 'setImage': {
+          if (typeof d.key !== 'string' || !d.key) break;
+          const url = typeof d.url === 'string' ? d.url.trim() : '';
+          const patch = { [d.key]: url };
+          if (typeof d.aspectKey === 'string' && d.aspectKey) patch[d.aspectKey] = url ? await probeImage(url) : null;
+          updateBlock(d.id, patch);
+          break;
+        }
+        case 'getTargets': postTargets(); break;
         case 'pickCoupon': {
           if (!d.voucherId) { updateBlock(d.id, { voucher_id: null }); break; }
           const v = (state.vouchers || []).find(x => String(x.id) === String(d.voucherId));
