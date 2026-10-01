@@ -2024,6 +2024,7 @@ reg('rqSearch', v=>{
  ['mShmQ','mShmClr','shmQ'],
  ['mShmPickQ','mShmPickClr','shmPickQ'],
  ['mPeLibQ','mPeLibClr','peLibQ'],
+ ['mPePickQ','mPePickClr','pePickQ'],
  ['mChlQ','mChlClr','chlQ'],
  ['mNlgQ','mNlgClr','nlgQ'],
  ['mElmCatQ','mElmCatClr','elmCatQ'],
@@ -36401,7 +36402,9 @@ function peDraftFrom(p){
     is_market:Number(p.is_market)===1?1:0, is_restock_only:Number(p.is_restock_only)===1?1:0, is_batch_made:Number(p.is_batch_made)===1?1:0,
     air:!local&&modes.indexOf('air')>=0, land:!local&&modes.indexOf('land')>=0, local,
     desc_en:rich?peRichForEdit(p.description_en):pePlainToHtml(p.description_en),
-    desc_cn:rich?peRichForEdit(p.description_cn):pePlainToHtml(p.description_cn)};
+    desc_cn:rich?peRichForEdit(p.description_cn):pePlainToHtml(p.description_cn),
+    // §325 PD10 — the two bundles (buLoad / bpLoad).
+    ...peBundleDraft(p)};
 }
 function peBody(d,e){
   const t=v=>String(v==null?'':v).trim();
@@ -36426,6 +36429,8 @@ function peBody(d,e){
     {is_market:d.is_market,is_restock_only:d.is_restock_only,is_batch_made:d.is_batch_made,
      ship_modes:modes.join(',')||'air,land',
      description_en:peRteClean(d.desc_en),description_cn:peRteClean(d.desc_cn),description_format:'rich'},
+    // §325 PD10 — buBody / bpBody / bpModeBody, the desktop's three keys.
+    d.bu?{bundle:peBuBody(d.bu),bundle_items:peBpBody(d),bundle_mode:peBpModeBody(d)}:{},
     Array.isArray(e.images)?{images:e.images.slice()}:{});
 }
 /* What one save sends: the keys whose value moved since the last save that
@@ -36437,6 +36442,8 @@ function peDiff(b,base){
   if('description_en' in out||'description_cn' in out){ out.description_en=b.description_en; out.description_cn=b.description_cn; out.description_format='rich'; }
   else delete out.description_format;
   if('unit_cost' in out||'cost_incomplete' in out){ out.unit_cost=b.unit_cost; out.cost_incomplete=b.cost_incomplete; }
+  // §325 PD10 — a bundle's parts and how it is stocked travel together, as the desktop sends them.
+  if('bundle_items' in out||'bundle_mode' in out){ out.bundle_items=b.bundle_items; out.bundle_mode=b.bundle_mode; }
   return out;
 }
 /* skuTakenMsg (01-core.js), word for word. */
@@ -36473,9 +36480,15 @@ function peApplyToCatalogue(pid,row){
   p.cat=String(row.top_category||row.category||'').trim(); p.sub=String(row.subcategory||'').trim();
   if(row.size!=null) p.size=String(row.size||'').trim();
   if('image_data' in row||'image_url' in row) p.img=row.image_data||row.image_url||'';
+  // §325 PD10 — what the list's bundle stock reads (mapProduct's three keys).
+  if('bundle_items' in row){
+    const bi=Array.isArray(row.bundle_items)?row.bundle_items:[];
+    p.bItems=bi.map(c=>({id:Number(c&&c.id),qty:Math.max(1,Number(c&&c.qty)||1)}));
+    p.parts=!!row.is_bundle; p.bundle=!!(row.is_bundle||row.bundle_mode==='prepacked');
+  }
   p.hay=[row.name_en||'',row.name_cn||'',row.sku||''].join(' ').toLowerCase();
 }
-function peCostOn(e){ return !!(e&&e.costLoaded&&pcMoney()&&!e.costOwned); }
+function peCostOn(e){ return !!(e&&e.costLoaded&&pcMoney()&&!e.costOwned&&!peBundleOwnsCost(e.draft)); }
 function peAutoStart(){
   if(peAuto){ peAuto.flush(); if(peAuto.stop) peAuto.stop(); peAuto=null; }
   const e=state.pe; if(!e||!e.draft||!prodCanEdit()||typeof TacetAutosave==='undefined') return;
@@ -36505,7 +36518,7 @@ function peAutoStart(){
    read is not "no build list". */
 function loadPe(pid){
   const e={pid,row:null,err:null,draft:null,base:null,factsTouched:false,costLoaded:false,costOwned:true,tried:true,
-    gallery:null,galInherited:false,galDirty:false,galErr:null,photoBusy:false,photoErr:null,lib:null,va:null};
+    gallery:null,galInherited:false,galDirty:false,galErr:null,photoBusy:false,photoErr:null,lib:null,va:null,pick:null};
   state.pe=e;
   loadPeImages(e);
   loadPeSizes(e);   // §325 PD9
@@ -36575,6 +36588,8 @@ function screenProductEdit(){
     ${card(T('Price','价格'),`${inp('sell_price',T('Price','价格'),'inputmode="decimal"')}${inp('compare_at_price',T('Was price','划线价'),'inputmode="decimal"')}
       ${costOn?`${inp('unit_cost',T('Cost','成本'),'inputmode="decimal"')}${tick(d.cost_incomplete,"APP.cmd('peFlag','cost_incomplete')",T('This cost is not complete','成本不完整'))}`:''}`)}
     ${peSizesCard()}
+    ${peBuCard()}
+    ${peBpCard()}
     ${card(T('Stock','库存'),inp('low_stock_threshold',T('Low-stock alert at','低库存提醒阈值'),'inputmode="numeric" placeholder="'+escAttr(T('Default','默认')+' '+prodLowThreshold({}))+'"'))}
     ${card(T('Product details','产品详情'),PE_FACTS.map(([dom,col,label,phEn,phCn])=>`<div style="display:flex;flex-direction:column;gap:6px">${lab(T(...label))}
       <input value="${escAttr(d.facts[col+'_en'])}" placeholder="${escAttr(phEn)}" oninput="APP.cmd('peFact','${col}_en',this.value)">
@@ -36689,10 +36704,189 @@ reg('peUndo', ()=>{ if(!peAuto) return; peAuto.undo(b=>{ const e=state.pe; if(!e
   d.desc_en=b.description_en; d.desc_cn=b.description_cn;
   // §325 PD6 — a gallery changed this visit goes back to the one loaded.
   if(e.galDirty&&e.galOrig) e.gallery=e.galOrig.slice();
+  // §325 PD10 — both bundles, as they were when the screen opened.
+  if('bundle' in b) Object.assign(d,peBundleDraft({bundle:b.bundle,bundle_items:b.bundle_items,bundle_mode:b.bundle_mode}));
   render(); }); });
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden'&&peAuto) peAuto.flush();
 });
+/* ==========================================================================
+   §325 PD10 — A PRODUCT'S TWO BUNDLES, ON THE DETAILS SCREEN
+   (desktop: 09-products.js buLoad / buRender / buBody — "Suggested add-ons";
+    bpLoad / bpRender / bpSetMode / bpBody / bpModeBody — "Bundle — sold as one")
+   --------------------------------------------------------------------------
+   Two different things that share a word, kept apart as the desktop keeps them:
+     • SUGGESTED ADD-ONS (`bundle`): other products shown on this one's page
+       with one "add these too" tap, an optional set price and voucher. Every
+       item keeps its own price and stock; nothing new is sold.
+     • SOLD AS ONE (`bundle_items` + `bundle_mode`): this product IS a set.
+       Assembled — made of other products, its stock follows theirs and each
+       sale takes from them; or pre-packed — finished sets on a shelf, counted
+       like any product.
+   Both are fields of THIS product, so they ride the Details screen's own
+   autosave (PATCH /products/:id), in the desktop's shapes: `bundle` is
+   {title_en,title_cn,ids,price,voucher} or null when nothing is listed;
+   `bundle_items` is [{id,qty}] only for an assembled set with parts, else
+   null; `bundle_mode` is 'assembled' | 'prepacked' | null, and the last two
+   always travel together. Tapping the chosen way again clears it (bpRadioClick),
+   and the parts of an assembled set are kept on screen while it is switched
+   to pre-packed — they are just not sent.
+   The pickers read the catalogue the phone already holds, with the desktop's
+   filters: add-ons hide what is listed; parts also hide this product and any
+   other set (no sets inside sets). An assembled set with parts owns its cost,
+   so the Cost box goes the moment the first part is added (bpHasComponents). */
+function peBundleDraft(p){
+  const b=(p&&p.bundle&&typeof p.bundle==='object'&&!Array.isArray(p.bundle))?p.bundle:null;
+  const bu={title_en:b&&b.title_en?String(b.title_en):'',title_cn:b&&b.title_cn?String(b.title_cn):'',
+    ids:b&&Array.isArray(b.ids)?b.ids.map(Number).filter(n=>Number.isFinite(n)&&n>0):[],
+    price:b&&Number(b.price)>0?String(b.price):'', voucher:b&&b.voucher?String(b.voucher):''};
+  const items=(p&&Array.isArray(p.bundle_items))?p.bundle_items:[];
+  const bp=items.map(c=>({id:Number(c&&c.id),qty:Math.max(1,parseInt(c&&c.qty,10)||1)})).filter(c=>Number.isFinite(c.id)&&c.id>0);
+  // A saved set with no stated way is an assembled one (bpLoad's back-compat).
+  const bpMode=(p&&(p.bundle_mode==='assembled'||p.bundle_mode==='prepacked'))?p.bundle_mode:(bp.length?'assembled':null);
+  return {bu,bp,bpMode};
+}
+function peBuBody(bu){
+  if(!bu||!bu.ids.length) return null;
+  const t=v=>String(v==null?'':v).trim();
+  return {title_en:t(bu.title_en),title_cn:t(bu.title_cn),ids:bu.ids.slice(),
+    price:t(bu.price)===''?0:Math.max(0,parseFloat(t(bu.price))||0),voucher:t(bu.voucher)};
+}
+function peBpBody(d){
+  if(!d||d.bpMode!=='assembled'||!d.bp||!d.bp.length) return null;
+  return d.bp.map(c=>({id:c.id,qty:Math.max(1,parseInt(c.qty,10)||1)}));
+}
+function peBpModeBody(d){ return d&&(d.bpMode==='assembled'||d.bpMode==='prepacked')?d.bpMode:null; }
+function peBundleOwnsCost(d){ return !!(d&&d.bpMode==='assembled'&&d.bp&&d.bp.length); }
+/* A product's name for a chip: the catalogue's, else the one the server sent
+   with the set's parts, else its number. A size says which (_vaPickName). */
+function peProdName(id){
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(id));
+  if(p) return T(...p.name)+(p.vLabel?' · '+p.vLabel:'');
+  const r=state.pe&&state.pe.row, c=r&&Array.isArray(r.bundle_items)?r.bundle_items.find(x=>Number(x&&x.id)===Number(id)):null;
+  if(c&&(c.name_en||c.name_cn)) return T(c.name_en||c.name_cn,c.name_cn||c.name_en);
+  return '#'+id;
+}
+function peBuCard(){
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu) return '';
+  const bu=d.bu, edit=prodCanEdit();
+  const lab=t=>`<span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</span>`;
+  const inp=(k,label,ph,extra)=>`<label style="display:flex;flex-direction:column;gap:6px">${lab(label)}<input value="${escAttr(bu[k])}" placeholder="${escAttr(ph)}" ${extra||''} ${edit?'':'disabled'} oninput="APP.cmd('peBu','${k}',this.value)"></label>`;
+  const chips=bu.ids.length
+    ? `<div>${bu.ids.map((id,i)=>`${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:center;gap:8px;padding:6px 0">
+        <span style="flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere">${escAttr(peProdName(id))}</span>
+        ${edit?`<button class="iconbtn" style="width:34px;height:34px" aria-label="${T('Remove','移除')}" onclick="APP.cmd('peBuRemove',${Number(id)})">${ic('x',17,2)}</button>`:''}</div>`).join('')}</div>`
+    : `<span style="font-size:13.5px;color:var(--text-secondary)">${T('No products yet — add some below.','尚未添加商品 — 在下方添加。')}</span>`;
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">${T('Suggested add-ons','推荐搭配')}</div>
+    <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Suggest other products on this product’s page — a one-tap “add these too”. Each item keeps its own price & stock; nothing here is a separate product.','在本产品页面推荐其他商品 — 一键“一起加购”。每件商品保留各自价格与库存,此处不产生新的商品。')}</span>
+    ${inp('title_en',T('Title EN','标题(英文)'),'Goes well with')}${inp('title_cn',T('Title CN','标题(中文)'),'推荐搭配')}
+    ${chips}
+    ${edit?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" onclick="APP.cmd('pePickOpen','bu')">${T('+ Add product','+ 添加商品')}</button>`:''}
+    ${inp('price',T('Set price '+CUR+' (optional)','搭配价 '+CUR+'(可选)'),T('blank = item total','留空 = 各项合计'),'inputmode="decimal"')}
+    ${inp('voucher',T('Auto voucher (optional)','自动优惠券(可选)'),T('code','券码'),'autocapitalize="characters"')}</div>`;
+}
+function peBpCard(){
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu) return '';
+  const edit=prodCanEdit(), mode=d.bpMode;
+  const opt=(m,title,desc)=>{ const on=mode===m;
+    return `<button onclick="APP.cmd('peBpMode','${m}')" ${edit?'':'disabled'} aria-pressed="${on}" style="display:flex;align-items:flex-start;gap:12px;background:none;border:1.5px solid ${on?'var(--text-primary)':'var(--border-default)'};border-radius:12px;padding:12px;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+      <span style="flex:none;width:20px;height:20px;margin-top:1px;border-radius:50%;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};display:flex;align-items:center;justify-content:center">${on?'<span style="width:10px;height:10px;border-radius:50%;background:var(--text-primary)"></span>':''}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:500">${title}</span><span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${desc}</span></span></button>`; };
+  let parts='';
+  if(mode==='assembled'){
+    parts=(d.bp.length
+      ? `<div>${d.bp.map((c,i)=>`${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:center;gap:8px;padding:6px 0">
+          <span style="flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere">${escAttr(peProdName(c.id))}</span>
+          <label style="flex:none;display:flex;align-items:center;gap:4px;font-size:14px;color:var(--text-secondary)" title="${T('Quantity in the bundle','套装内数量')}">×<input value="${Number(c.qty)}" inputmode="numeric" aria-label="${T('Quantity in the bundle','套装内数量')}" style="width:56px;text-align:center" ${edit?'':'disabled'} oninput="APP.cmd('peBpQty',${Number(c.id)},this.value)" onchange="APP.cmd('peBpQtyDone')"></label>
+          ${edit?`<button class="iconbtn" style="width:34px;height:34px" aria-label="${T('Remove','移除')}" onclick="APP.cmd('peBpRemove',${Number(c.id)})">${ic('x',17,2)}</button>`:''}</div>`).join('')}</div>`
+      : `<span style="font-size:13.5px;color:var(--text-secondary)">${T('Add the products this bundle contains.','添加本套装包含的商品。')}</span>`)
+      +(edit?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" onclick="APP.cmd('pePickOpen','bp')">${T('+ Add product','+ 添加商品')}</button>`:'');
+  }
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">${T('Bundle — sold as one','套装产品')}</div>
+    <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Customers see ONE product at the price you set above. Choose how you stock it.','顾客看到的是上方价格的单个产品。请选择其库存管理方式。')}</span>
+    ${opt('assembled',T('Assembled from other products','由其他产品组成'),T('Stock follows the parts — no count to keep. Sells while every item is in stock; each sale deducts the parts.','库存取决于组成商品 — 无需单独盘点。所有商品有货时可售,每次售出扣减各组成商品。'))}
+    ${opt('prepacked',T('Pre-packed on a shelf','预先包装成套'),T('You stock finished sets and count them yourself — set its stock like any product above.','你自行备货并盘点成套商品 — 像普通产品一样在上方设置库存。'))}
+    ${parts}</div>`;
+}
+/* The picker: the catalogue in hand, the desktop's filters, forty at a time. */
+function pePickRows(){
+  const e=state.pe, P=e&&e.pick, d=e&&e.draft; if(!P||!d) return [];
+  const q=String(P.q||'').toLowerCase().trim();
+  const have=new Set(P.kind==='bp'?d.bp.map(c=>c.id):d.bu.ids);
+  return (DB.products||[]).filter(p=>!have.has(Number(p._id))&&(P.kind!=='bp'||(Number(p._id)!==Number(e.pid)&&!p.parts)))
+    .filter(p=>!q||String(p.hay||'').indexOf(q)>=0).slice(0,40);
+}
+function pePickListHtml(){
+  const rows=pePickRows();
+  if(!(DB.products||[]).length&&state.catalogueLoading) return `<div style="padding:20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!(DB.products||[]).length&&state.catalogueTried&&!state.liveProductsLoaded) return `<div style="padding:20px 16px;display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+    <span style="font-size:14px;color:var(--brick-ink)">${T('Load failed','加载失败')}</span>
+    <button class="btn2" style="width:auto;padding:0 16px" onclick="APP.cmd('pePickRetry')">${T('Try again','重试')}</button></div>`;
+  if(!rows.length) return `<div style="padding:24px 20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No matches','无匹配')}</div>`;
+  return rows.map(p=>{ const tag=String(p.vLabel||p.size||p.rawSku||'').trim();
+    return `<button class="row" style="min-height:52px;padding:10px 16px" onclick="APP.cmd('pePickAdd',${Number(p._id)})">
+      <span style="flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere">${escAttr(T(...p.name))}${tag?` <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(tag)}</span>`:''}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('plus',18,2)}</span></button>`; }).join('');
+}
+function sheetPePick(){
+  const P=state.pe&&state.pe.pick; if(!P) return '';
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('pePickClose')"></div>
+   <div class="sheet" style="top:80px;z-index:48;overflow:hidden">
+     <div style="flex:none;padding:8px 16px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:10px">
+         <div style="flex:1;min-width:0">${searchBox(`<input id="mPePickQ" inputmode="search" enterkeyhint="search" value="${escAttr(P.q)}"
+           placeholder="${T('Search a product to add…','搜索商品以添加…')}" style="width:100%" oninput="APP.cmd('pePickQ',this.value)"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mPePickClr',!!P.q)}</div>
+         <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('pePickClose')">${T('Close','关闭')}</button></div></div>
+     <div id="mPePickList" style="flex:1;min-height:0;overflow-y:auto;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">${pePickListHtml()}</div></div>`;
+}
+function pePickRepaint(){ const host=document.getElementById('mPePickList'); if(host) host.innerHTML=pePickListHtml(); else render(); }
+reg('peBu', (k,v)=>{
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||!prodCanEdit()||['title_en','title_cn','price','voucher'].indexOf(k)<0) return;
+  d.bu[k]=String(v==null?'':v);
+  if(peAuto) peAuto.touch();
+});
+reg('peBuRemove', id=>{
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||!prodCanEdit()) return;
+  d.bu.ids=d.bu.ids.filter(x=>x!==Number(id)); render(); if(peAuto) peAuto.touch();
+});
+/* bpSetMode with bpRadioClick: the chosen way tapped again means "not a set". */
+reg('peBpMode', m=>{
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||!prodCanEdit()||(m!=='assembled'&&m!=='prepacked')) return;
+  d.bpMode=d.bpMode===m?null:m;
+  if(d.bpMode!=='assembled'&&e.pick&&e.pick.kind==='bp') e.pick=null;
+  render(); if(peAuto) peAuto.touch();
+});
+/* bpQty: a whole number, at least 1. The box keeps the caret; leaving it shows the number kept. */
+reg('peBpQty', (id,v)=>{
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bp||!prodCanEdit()) return;
+  const c=d.bp.find(x=>x.id===Number(id)); if(!c) return;
+  c.qty=Math.max(1,parseInt(v,10)||1); if(peAuto) peAuto.touch();
+});
+reg('peBpQtyDone', ()=>{ render(); });
+reg('peBpRemove', id=>{
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bp||!prodCanEdit()) return;
+  d.bp=d.bp.filter(x=>x.id!==Number(id)); render(); if(peAuto) peAuto.touch();
+});
+reg('pePickOpen', kind=>{
+  const e=state.pe, d=e&&e.draft; if(!d||!d.bu||!prodCanEdit()||(kind!=='bu'&&kind!=='bp')) return;
+  if(kind==='bp'&&d.bpMode!=='assembled') return;
+  e.pick={kind,q:''}; render(); loadCatalogue();
+});
+reg('pePickQ', v=>{
+  const P=state.pe&&state.pe.pick; if(!P) return;
+  P.q=String(v||''); searchClearShow('mPePickClr',!!P.q); pePickRepaint();
+});
+/* bpPick / buPick: added at the end, the search emptied, the picker left open for the next. */
+reg('pePickAdd', id=>{
+  const e=state.pe, d=e&&e.draft, P=e&&e.pick; if(!d||!P||!prodCanEdit()) return;
+  const n=Number(id); if(!pePickRows().some(p=>Number(p._id)===n)) return;
+  if(P.kind==='bp'){ if(!d.bp.some(c=>c.id===n)) d.bp.push({id:n,qty:1}); }
+  else if(d.bu.ids.indexOf(n)<0) d.bu.ids.push(n);
+  P.q=''; render(); if(peAuto) peAuto.touch();
+});
+reg('pePickClose', ()=>{ const e=state.pe; if(e&&e.pick){ e.pick=null; render(); } });
+reg('pePickRetry', ()=>{ loadCatalogue(true); pePickRepaint(); });
 /* ==========================================================================
    §325 PD9 — A PRODUCT'S SIZES, ON THE DETAILS SCREEN
    (desktop: 09-products.js vaLoad / vaRender / vaSelfField / vaField /
@@ -42030,6 +42224,7 @@ function render(){
   // §325 PD2 — over the product it lists, and only while that product is open.
   if(state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
   if(state.pe&&state.pe.lib) html += layer('pelib', sheetPeLib());   // §325 PD6
+  if(state.pe&&state.pe.pick) html += layer('pepick:'+state.pe.pick.kind, sheetPePick());   // §325 PD10
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
@@ -42499,6 +42694,7 @@ function layers(){
   // After the product, so Back closes the version list first (§325 PD2).
   if(state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
   if(state.pe&&state.pe.lib) L.push(()=>{ if(!state.pe.lib.busy){ clearTimeout(_peLibTimer); state.pe.lib=null; } });   // §325 PD6
+  if(state.pe&&state.pe.pick) L.push(()=>{ state.pe.pick=null; });   // §325 PD10
   /* "When it runs out" sits OVER the product sheet it was opened from (z-index
      48 over 46), so it is listed after it and Back closes it first. It was
      listed before, so Back took the product away from under an open picker
