@@ -1119,6 +1119,9 @@ const state = {
      its error, its in-flight flag, whether it has been asked for, and which
      row is expanded. */
   cs:null, csErr:'', csFilter:'', csLoading:false, csTried:false, csOpen:null,
+  /* §325 X8b — the channel the verdicts are read for ('' = each item's worst),
+     and what is typed in the search. */
+  csCh:'', csQ:'',
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
      flight (one at a time, per screen, exactly as the desktop page does it), and
      csNote is { pid, text } so a refusal lands on the card that caused it rather
@@ -1681,6 +1684,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   if(route==='changes'||route==='sent'){ const c=route==='sent'?state.nlg:state.chl; c.tried=false; c.rows=null; c.err=null; c.open=null; }
   if(route==='mirror_eleme'){ const e=state.elm; e.tried=false; e.st=null; e.cfg=null; e.err=null; }
   /* §325 X8a — the upkeep cards are read again with their channel screen. */
+  /* §325 X8b — a search typed last time is a list that opens looking empty. */
+  if(route==='channelsync'){ state.csQ=''; state.csNote=null; }
   if(route==='mirror_meituan'||route==='mirror_eleme'||route==='mirror_gzgrocery'){ const x=state.x8;
     x.mtTried=false; x.mtStores=null; x.mtErr=null; x.elTried=false; x.elStores=null; x.elErr=null;
     x.mtCatTried=false; x.gyTried=false; x.err={}; x.ok={}; }
@@ -2035,6 +2040,7 @@ reg('rqSearch', v=>{
  ['mChlQ','mChlClr','chlQ'],
  ['mNlgQ','mNlgClr','nlgQ'],
  ['mElmCatQ','mElmCatClr','elmCatQ'],
+ ['mCsQ','mCsClr','csQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
  ['mOnwProdQ','mOnwProdClr','onwProdQ'],
  ['mOnwCityQ','mOnwCityClr','onwCityQ'],
@@ -27447,12 +27453,15 @@ reg('csOpen', id=>{ state.csOpen=state.csOpen===Number(id)?null:Number(id); stat
    idempotent (a pending row is refreshed, never duplicated — lib/channel-sync-
    write.js). Turning sync OFF is a lasting change afterwards visible only as a
    grey chip somebody goes looking for, which is the wrong shape for one hand on a
-   small screen. It stays on the desktop. */
+   small screen. It stays on the desktop.
+   §325 X8b — NO LONGER: §326.3 brings the switch to the phone by name, and the
+   argument above is answered by asking first. Turning sync off now confirms,
+   saying it is a lasting change (csSync, below). */
 
 /* The desktop's own condition for drawing Sync now (29-channel-sync.js `actions`),
    written once here so the two screens cannot drift into offering the verb on
    different rows: nothing is mapped on `none`, and nothing would be sent on `off`
-   — where the fix is the switch this screen deliberately does not carry. */
+   — where the fix is the switch (§325 X8b, csSwitch). */
 function csCanPush(c){ return !!c && c.k!=='none' && c.k!=='off'; }
 /* The three reasons a push cannot touch: naming a listing and claiming a 规格 need
    the channel's own catalogue picker, which is where the three channels genuinely
@@ -27635,53 +27644,97 @@ function csAgo(stamp){
   const h=Math.round(m/60); if(h<48) return T(h+'h ago',h+' 小时前');
   return T(Math.round(h/24)+'d ago',Math.round(h/24)+' 天前');
 }
-function screenChannelSync(){
-  if(!state.cs&&!state.csTried&&!state.csLoading) loadChannelSync();
-  const d=state.cs;
-  if(!d){
-    if(state.csLoading||!state.csTried) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    return nothingYet(T('Could not read the channels','无法读取渠道'),T('The channels did not answer. Try again in a moment.','渠道没有响应，请稍后重试。'));
-  }
-  const filter=state.csFilter||(d.counts.att?'att':'all');
-  const items=(d.items||[]).filter(p=>filter==='all'||p.worst===filter);
-  /* §106 — a channel is shown as stopped when its queue has stalled OR when
-     its daemon log carries a live blocking cause. The second is the commoner
-     of the two and was never on this screen. */
-  const down=(d.channels||[]).filter(ch=>ch.stale||ch.blocked);
-  const pill=(ch,c)=>{
+/* ══ §325 X8b — THE CHANNEL PICKER, THE SEARCH, AND THE SWITCH (§326.3) ══════
+   The desktop page's tools (29-channel-sync.js `tools`): which channel the
+   verdicts are read for, a search over name, SKU and size, and each item's
+   Sync on / off switch beside its Sync now.
+
+   THE SWITCH COMES TO THE PHONE (§326.3 overturns §124 by name). Its write is
+   the desktop's, POST /channel-sync/:channel/products/:id/sync {on}, which
+   lib/cap-routes.js gates as {channel}:map — so the switch is drawn for that
+   key, as Sync now is drawn for {channel}:sync. TURNING IT OFF ASKS FIRST and
+   says it is a lasting change: the channel keeps whatever number it shows now
+   until somebody turns sync back on, and nothing reminds anybody that it is
+   off. Turning it on asks nothing, as on the desktop.
+   ══════════════════════════════════════════════════════════════════════════ */
+function csStateOf(p){ return state.csCh?((p.channels[state.csCh]||{}).k||'none'):p.worst; }
+function csCounts(d){
+  const out={ok:0,att:0,off:0,unk:0,none:0,all:0};
+  ((d&&d.items)||[]).forEach(p=>{ const k=csStateOf(p); if(k in out) out[k]++; out.all++; });
+  return out;
+}
+function csFilterNow(d){ return state.csFilter||(csCounts(d).att?'att':'all'); }
+function csVisible(d,filter){
+  const q=String(state.csQ||'').trim().toLowerCase();
+  return ((d&&d.items)||[]).filter(p=>{
+    if(filter!=='all'&&csStateOf(p)!==filter) return false;
+    if(!q) return true;
+    return [p.name_cn,p.name_en,p.sku,p.variant_label].filter(Boolean).join(' ').toLowerCase().includes(q);
+  });
+}
+function csTools(d){
+  const chs=(d&&d.channels)||[];
+  return `<div style="display:flex;flex-direction:column;gap:8px;margin:0 16px">
+    ${chs.length>1?`<select aria-label="${escAttr(T('Channel','渠道'))}" style="width:100%" onchange="APP.cmd('csCh',this.value)">
+      <option value=""${state.csCh?'':' selected'}>${T('All channels','全部渠道')}</option>
+      ${chs.map(ch=>`<option value="${escAttr(ch.key)}"${state.csCh===ch.key?' selected':''}>${escAttr(csChName(ch.key))}</option>`).join('')}</select>`:''}
+    ${searchBox(`<input id="mCsQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.csQ)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('csQ',this.value)">`,'mCsClr',!!state.csQ)}</div>`;
+}
+reg('csCh', v=>{ const d=state.cs; v=String(v||'');
+  if(v&&!((d&&d.channels)||[]).some(ch=>ch.key===v)) return;
+  state.csCh=v; state.csOpen=null; state.csNote=null; render(); });
+reg('csQ', v=>{ state.csQ=String(v||''); searchClearShow('mCsClr',!!state.csQ); x1Paint('mCsBody',csListHtml); });
+function csSwitch(ch,c,pid){
+  if(!c||c.k==='none'||!mCan(ch+':map')) return '';
+  const busy=state.csBusy===ch+':'+pid;
+  return busy?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+    :`<span title="${escAttr(T('Sync on / off','同步开关'))}" style="display:flex" onclick="event.stopPropagation()">${toggle(c.k!=='off',`APP.cmd('csSync','${ch}',${Number(pid)})`)}</span>`;
+}
+async function csSyncWrite(ch,pid,on){
+  const key=ch+':'+pid;
+  if(state.csBusy) return;
+  state.csBusy=key; state.csNote=null; render();
+  try{
+    await apiWrite('/channel-sync/'+encodeURIComponent(ch)+'/products/'+Number(pid)+'/sync',{on:!!on},'POST');
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    state.csNote={pid:Number(pid),text:csErrText(e)};
+  }finally{ state.csBusy=null; }
+  await loadChannelSync();
+}
+reg('csSync', (ch,pid)=>{
+  pid=Number(pid); ch=String(ch||'');
+  const d=state.cs; if(!d||state.csBusy||!mCan(ch+':map')) return;
+  const p=(d.items||[]).find(x=>x.id===pid); const c=p&&p.channels[ch];
+  if(!c||c.k==='none') return;
+  const on=c.k==='off';
+  if(on){ csSyncWrite(ch,pid,true); return; }
+  const nm=csChName(ch);
+  const name=T(p.name_en||p.name_cn||('#'+p.id),p.name_cn||p.name_en||('#'+p.id));
+  state.askErr=null;
+  state.ask={title:T('Stop syncing '+name+' to '+nm+'?','停止将「'+name+'」同步到'+nm+'?'),
+    body:T(nm+' keeps the number it shows now and stops following your shelf. This is a lasting change: it stays off until somebody turns it back on, and nothing reminds you.',
+           nm+'将保持当前显示的数量,不再跟随货架库存。这是一项持久的更改:在有人重新开启之前会一直保持关闭,且不会有任何提醒。'),
+    confirmLabel:T('Turn sync off','关闭同步'), danger:true,
+    run:()=>csSyncWrite(ch,pid,false)};
+  render();
+});
+function csPill(ch,c){
     const tone=c.k==='att'?'amber':c.k==='ok'?'sage':'plain';
     const bg=tone==='amber'?'var(--amber-tint)':tone==='sage'?'var(--sage-tint)':'var(--surface-raised)';
     const fg=tone==='amber'?'var(--amber-ink)':tone==='sage'?'var(--sage-ink)':'var(--text-secondary)';
     const dot=c.k==='att'?'var(--amber)':c.k==='ok'?'var(--sage)':'var(--border-strong)';
     const extra=(c.k==='att'&&(c.reason==='wrong_number'||c.reason==='push_failed')&&c.last_pushed_qty!=null)?' · '+c.last_pushed_qty:'';
     return `<span class="num" style="display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px 3px 8px;font-size:12px;font-weight:500;background:${bg};color:${fg}"><i style="width:7px;height:7px;border-radius:50%;background:${dot};${c.k==='none'||c.k==='unk'?'background:transparent;box-shadow:inset 0 0 0 1px '+dot:''}"></i>${escAttr(csChName(ch.key)+(c.k==='att'?' · '+csCellWord(ch.key,c):''))}${extra}</span>`;
-  };
-  const c=d.counts||{};
-  /* chipRow() is the house horizontal chip scroller: .hscroll (which hides the
-     bar — a visible scrollbar under the chips was the first half of what Ash
-     reported) plus its own 16px side padding, so it runs FULL BLEED and the
-     first and last chip get a real gutter instead of being shaved by the
-     screen edge. It only works that way outside a padded wrapper, which is why
-     the blocks below carry their own margin and the wrapper carries none. */
-  const chips=chipRow([
-    {key:'att',  en:'Needs attention', zh:'待处理',   count:c.att||0},
-    {key:'ok',   en:'Synced',          zh:'已同步',   count:c.ok||0},
-    {key:'none', en:'Not listed',      zh:'未上架',   count:c.none||0},
-    ...(c.off?[{key:'off', en:'Sync off', zh:'已关闭', count:c.off}]:[]),
-    {key:'all',  en:'All items',       zh:'全部商品', count:c.all||0},
-  ], filter, 'csFilter');
-  return `<div style="padding:12px 0 24px;display:flex;flex-direction:column;gap:12px">
-    ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${csHeadline(ch)}</span></div>
-      ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>${csSignInBtn(ch.key,ch.blocked)}`:''}
-      ${ch.stale?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${csStaleLine(ch)}</div>`:''}</div>`).join('')}
-    ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
-      <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--sage-ink)"><i style="width:8px;height:8px;border-radius:50%;background:var(--sage)"></i>${T('Every channel is in step','各渠道均已同步')}</div>
-      <div class="num" style="font-size:13px;color:var(--sage-ink)">${T((c.all||0)+' items. Nothing needs you.',(c.all||0)+' 件商品。无需处理。')}</div></div>`:''}
-    ${chips}
-    ${items.length?`<div style="display:flex;flex-direction:column;gap:8px;margin:0 16px">${items.map(p=>{
+  }
+/* §325 X8b — the list, on its own so the search can repaint it without
+   taking the keyboard away (x1Paint). */
+function csListHtml(){
+  const d=state.cs; if(!d) return '';
+  const filter=csFilterNow(d);
+  const items=csVisible(d,filter);
+  const pill=csPill;
+  return items.length?`<div style="display:flex;flex-direction:column;gap:8px;margin:0 16px">${items.map(p=>{
       const open=state.csOpen===p.id;
       const name=T(p.name_en||p.name_cn||('#'+p.id),p.name_cn||p.name_en||('#'+p.id))+(p.variant_label?' ('+p.variant_label+')':'');
       const shelf=Object.values(p.shelf||{}).reduce((a,b)=>a+Number(b||0),0);
@@ -27722,13 +27775,61 @@ function screenChannelSync(){
             const btn=(csCanPush(c2)&&mCan(x.ch.key+':sync'))
               ? `<button class="rowact"${busy?' disabled':''} onclick="event.stopPropagation();APP.cmd('csPush','${x.ch.key}',${p.id})">${busy?T('Sending…','发送中…'):T('Sync now','立即同步')}</button>`
               : '';
+            /* §325 X8b (§326.3) — the switch, beside the push on the same line;
+               turning it off asks first (csSync). */
+            const sw=csSwitch(x.ch.key,c2,p.id);
             return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-              <span class="num" style="min-width:0">${escAttr(line.join(' · '))}</span>${btn}</div>`;}).join('')}
+              <span class="num" style="min-width:0">${escAttr(line.join(' · '))}</span>${btn||sw?`<span style="display:flex;align-items:center;gap:8px;flex:none">${btn}${sw}</span>`:''}</div>`;}).join('')}
           ${deskBad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+deskBad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+deskBad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}
           ${(state.csNote&&state.csNote.pid===p.id)?`<div style="color:var(--brick-ink)">${escAttr(state.csNote.text)}</div>`:''}
         </div>`:''}
       </div>`;}).join('')}</div>`
-    : `<div style="padding:24px 24px;text-align:center;font-size:14px;color:var(--text-secondary)">${filter==='att'?T('Nothing needs you.','无需处理。'):T('Nothing here.','暂无商品。')}</div>`}
+    : `<div style="padding:24px 24px;text-align:center;font-size:14px;color:var(--text-secondary)">${filter==='att'?T('Nothing needs you.','无需处理。'):T('Nothing here.','暂无商品。')}</div>`;
+}
+function screenChannelSync(){
+  if(!state.cs&&!state.csTried&&!state.csLoading) loadChannelSync();
+  const d=state.cs;
+  if(!d){
+    if(state.csLoading||!state.csTried) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    return nothingYet(T('Could not read the channels','无法读取渠道'),T('The channels did not answer. Try again in a moment.','渠道没有响应，请稍后重试。'));
+  }
+  const filter=csFilterNow(d);
+  /* §106 — a channel is shown as stopped when its queue has stalled OR when
+     its daemon log carries a live blocking cause. The second is the commoner
+     of the two and was never on this screen. */
+  const down=(d.channels||[]).filter(ch=>ch.stale||ch.blocked);
+  /* §325 X8b — counted on THIS screen, per the channel picked, the
+     desktop's countsFor: with a channel, an item is counted by that channel's
+     own state rather than by its worst. Without one the numbers are the same
+     as the server's. */
+  const c=csCounts(d);
+  /* chipRow() is the house horizontal chip scroller: .hscroll (which hides the
+     bar — a visible scrollbar under the chips was the first half of what Ash
+     reported) plus its own 16px side padding, so it runs FULL BLEED and the
+     first and last chip get a real gutter instead of being shaved by the
+     screen edge. It only works that way outside a padded wrapper, which is why
+     the blocks below carry their own margin and the wrapper carries none. */
+  const chips=chipRow([
+    {key:'att',  en:'Needs attention', zh:'待处理',   count:c.att||0},
+    {key:'ok',   en:'Synced',          zh:'已同步',   count:c.ok||0},
+    {key:'none', en:'Not listed',      zh:'未上架',   count:c.none||0},
+    ...(c.off?[{key:'off', en:'Sync off', zh:'已关闭', count:c.off}]:[]),
+    ...(c.unk?[{key:'unk', en:'Name not checked', zh:'尚未读取商品', count:c.unk}]:[]),
+    {key:'all',  en:'All items',       zh:'全部商品', count:c.all||0},
+  ], filter, 'csFilter');
+  return `<div style="padding:12px 0 24px;display:flex;flex-direction:column;gap:12px">
+    ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${csHeadline(ch)}</span></div>
+      ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>${csSignInBtn(ch.key,ch.blocked)}`:''}
+      ${ch.stale?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${csStaleLine(ch)}</div>`:''}</div>`).join('')}
+    ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
+      <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--sage-ink)"><i style="width:8px;height:8px;border-radius:50%;background:var(--sage)"></i>${T('Every channel is in step','各渠道均已同步')}</div>
+      <div class="num" style="font-size:13px;color:var(--sage-ink)">${T((c.all||0)+' items. Nothing needs you.',(c.all||0)+' 件商品。无需处理。')}</div></div>`:''}
+    ${chips}
+    ${csTools(d)}
+    <div id="mCsBody">${csListHtml()}</div>
   </div>`;
 }
 /* ==========================================================================
