@@ -22828,3 +22828,132 @@ put to him after the §325 survey). Each overturns or settles a named hold.
 9. **A receive-only account may NOT mark a draft purchase order Delivered**
    (§302 item 7): only an order already placed (Ordered) can be marked
    Delivered by `purchasing:receive` alone.
+
+## §327 — THE PHONE APP OPENS THE PAGE EDITOR, AND THE PHONE EDITOR GAINS WHAT EVERY DESKTOP BLOCK HAS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone app's Editor screen listed a page's live blocks and said that
+placing, editing and publishing were done on desktop. They were not: `/cms`
+answers a phone with the phone editor (`cms-mobile.html`), which already
+places, edits and publishes — but nothing in the phone app led there. The
+Editor screen now has the door, and the phone editor gains the four controls
+at the foot of every desktop inspector and the coupon block's picker. Pictures,
+video, button links and the block pickers are the next two steps, not this one.
+
+1. **The door is the Editor screen's header button, *Open page editor*.** It
+   leaves the app for `/cms?from=m` (the app's existing `leave` command, same
+   host only). It is drawn for `content:edit`, the key the editor's own gate
+   admits; the server lane's rule for `/cms/*` is the wider any-of
+   `content:edit` / `editor:edit`, but a button that opens onto "no permission"
+   is worse than none, so the door follows the page it opens. Widening that
+   gate to `editor:edit` is a separate question, not taken here.
+2. **The editor has a way back.** Opened with `?from=m`, the logo's place in
+   its top bar becomes Back: to the very screen when the browser still holds
+   it, else to `/m`. An app added to the home screen has no browser Back, so
+   without it the door led into a room with no way out. Opened any other way,
+   nothing changes.
+3. **The screen stops saying the work is desktop-only.** The dirty card keeps
+   its first sentence and drops "Publishing is on desktop"; the foot note
+   "Blocks are placed, edited and published on desktop" is gone.
+4. **The page names are the editor's own** (`cms.html` `PAGES`, in its order):
+   *Shop landing · 商品* (was *Categories · 分类*, the name §296 retired),
+   *Promotions · 优惠* (was 促销), *Onboarding · 欢迎* (was 引导). A list that
+   names a page differently from the editor it opens sends an operator looking
+   for a page that is not there.
+5. **Show on (§272), Frame, Corner radius and Full width are on every block's
+   edit sheet**, promo cards included, in the inspector's words and order. Each
+   sends exactly the field desktop writes, with desktop's "none" (the key left
+   undefined, never an empty string). The effective *Show on* and its type's
+   default come from the desktop editor underneath (`showOnFor` /
+   `SHOW_ON_DEFAULTS`), so a block just added reads the same on both, and the
+   phone keeps no second copy of that table. The Frame and Corner lists are
+   the inspector's own, sent once when the editor is ready.
+6. **The coupon block hands out a real coupon.** The sheet used to take a
+   typed title, subtitle and code, which let a block advertise an offer no
+   coupon backs. It now has the desktop's picker (active coupons, *— Select a
+   coupon —* to unlink) and shows the headline, subtitle, discount and code
+   read-only from the linked coupon. Picking sends `pickCoupon`, and the
+   desktop editor underneath runs its own select's handler
+   (`couponDisplayFromVoucher`), so what is copied onto the block is decided
+   in one place. The small heading and the button text stay typed, as on
+   desktop.
+7. **No new server route.** Everything rides the phone editor's existing
+   bridge into `cms.html` (three additive fields and one command, active only
+   in `?embed=preview`).
+8. **Not done here**: pictures, video and button links (M2); product,
+   category, coupon, poll, store and review pickers, sizes and behaviour,
+   onboarding settings (M3). The "Images, colours & advanced options are tuned
+   on desktop" note stays until those land.
+
+## §328 — THE PHONE'S ORDER SHEET SHOWS WHAT THE DESKTOP DRAWER KNOWS: PAY LINK, MOVED ADDRESS, WHO WAS TOLD, REFUND HISTORY, SETTLEMENT, STUCK HOLDS, WHERE THE RIDER COLLECTS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O1 of the Orders lane. The desktop order drawer (`04-orders.js`) carries
+nine facts the phone's order sheet never drew, every one of them already in
+the `GET /orders/:id` (or list) payload the phone fetches. They are on the
+phone now, read-only. The writes that sit beside several of them on the
+desktop — try telling the customer again, Retry push, Change where it ships
+from, Remove the old job, pick a place, reschedule — are later steps of this
+lane (O7, O8), not this one, and no sentence on the phone points at a button
+it does not draw.
+
+1. **The guest pay link.** An unpaid order with something to pay shows
+   *Payment link* inside its Payment card: Copy (the whole
+   `origin/pay/<token>` URL), *Open pay page*, and the desktop's instruction.
+   Same two conditions as the desktop and the server: `pending_payment`, and a
+   total above zero.
+2. **The customer moved the ship-to.** Before dispatch, an amber band under
+   the address with the desktop's instruction to check the label; after, a
+   quiet line with the date. Delivery orders only, as on the desktop.
+3. **Pre-order and rerouted.** The Fulfilled-by card lists the lines the
+   order was sold as a pre-order on (*Pre-order*), and names the shop it would
+   have gone to had it not been closed (*Rerouted, shop was closed · BY*).
+4. **Was the customer told.** A card with the latest attempt per kind of
+   message: what it was about, by which channel, when, and — when it did not
+   arrive — why, in the desktop's words. No card when nothing was attempted,
+   because that is a different fact from "tried and failed". Try again is O7.
+5. **Refund history.** The refund panel has *History*, which unfolds the
+   refund's steps inside the panel from `GET /orders/:id/refund/events`: the
+   step (in the panel's own words, so the heading and the history never name a
+   state two ways), amount, when, by whom, the note, the lines, the reason and
+   the payout method and reference. Loading, empty and failed states; a
+   second tap folds it; a slow answer is never painted into another order.
+   Other meta keys (`is_full`, `split`, `direct`…) are not printed: the desktop
+   dumps them as raw `key: value` text, which on a phone is noise, and the
+   figures they carry are already in the panel.
+6. **A Meituan or Eleme order's settlement** (`renderChannelMoneyPanel`, its
+   arithmetic ported line for line). The rows the customer paid are drawn for
+   everyone who can open the order, as on the desktop. **The commission and the
+   estimated income — the shop's takings — are withheld on the three boards
+   that never see the shop's money** (`recapNoMoney`: warehouse, dispatch,
+   customer service), with the "not published yet" note that is about them.
+   The reconcile warning ("… unaccounted for. Check the channel before
+   refunding") stays on every board: customer service is who refunds.
+7. **Stock holds that went wrong.** The reservation table appears only when a
+   hold is expired, released, or pending past its expiry, then lists every
+   hold on the order with the server's status word and its three times. The
+   expiry is read through the phone's zone-correct parser; the desktop's
+   `new Date()` reads that zoneless UTC stamp as local time (noted, not fixed —
+   outside this lane).
+8. **A partial refund on the list row.** *Partial refund ¥X* on any row whose
+   refund is paid while the order is not Refunded — the cumulative amount paid
+   back, falling back to approved, then requested, as the desktop's
+   `refundBadge` does. Worded at render time.
+9. **Where a same-city rider collects, in words.** For orders we created in
+   Qingyun: *Ships from* the store, the note when that is not the order's own
+   store, and the warning when an old copy was left at another store. Before a
+   copy exists: refused (with the server's reason), held on a map outage (since
+   when), booked and waiting on staff, or queued (for how long). Parked for a
+   point: *Confirm delivery point*, why, the grade in words, and the deadline
+   when it is tomorrow — and, since §97 keeps the point picker on the desktop,
+   the one composed line *The point is placed on the desktop map.* Parked on a
+   choice: the candidate places listed with address and distance, not yet
+   pickable (O8). A passed date is its own state.
+10. **Capabilities.** Everything here is a read. No new control writes; the
+    one new request is the refund-events GET, which no capability gates and
+    which the desktop offers to everyone who can open the order.
+11. **Tests.** `scripts/test_mobile_orders_facts.js` (fast shard, no browser)
+    runs the sliced code: each fact present and absent, the pay-link copy,
+    the history request path, loading / empty / failed / fold / slow-answer,
+    the settlement on a no-money board, both languages, and every copied
+    string checked live in `04-orders.js`.
