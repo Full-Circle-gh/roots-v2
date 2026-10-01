@@ -66,9 +66,13 @@ router.get('/api/retail-admin/channel-sync', requireRetailAdmin, (req, res) => {
 // server errors — they are the page being out of date, which happens when two
 // people work the same list — so they come back 409 with a code the page turns
 // into a sentence, rather than 500 with a stack trace's worth of nothing.
+//
+// `no_listing_name` (§325 S2j) is the same kind of answer: the mapping is not
+// ready to be switched on, and the operator can fix it — name the listing on
+// the Eleme tab. It names the stores whose mapping has no name.
 function fail(res, r) {
   const status = (r.code === 'unknown_channel' || r.code === 'bad_product') ? 400 : 409;
-  return res.status(status).json({ success: false, error: r.code });
+  return res.status(status).json({ success: false, error: r.code, ...(r.stores ? { stores: r.stores } : {}) });
 }
 
 router.post('/api/retail-admin/channel-sync/:channel/products/:id/push',
