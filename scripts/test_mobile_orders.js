@@ -61,7 +61,9 @@ const CASES = [
   ['paying a refund out records how it went',
    ONE_ORDER + `DB.orders[0]._id=77; DB.orders[0].raw='paid'; DB.orders[0].refundStatus='approved';
     state.liveOrders=DB.orders; APP.cmd('openOrder',DB.orders[0].id);` + STUB
-    + `APP.cmd('payRefund'); APP.cmd('askRun','wallet');`, [
+    /* §325 O3: Pay the refund opens the desktop's Record payout form — the
+       method is chosen on it and the button posts it. */
+    + `APP.cmd('payRefund'); APP.cmd('rfMethod','wallet'); APP.cmd('rfSubmit');`, [
     ['it posts the payout', `${sent('/orders/77/refund/payout')}`],
     ['with the method',     `${body('"method":"wallet"')}`],
   ]],

@@ -1423,6 +1423,9 @@ const state = {
   /* §325 O2 — the Orders list scoped to one customer ({id, name}) from the
      record's "View all N orders"; null = every customer. */
   ordCust:null,
+  /* §325 O3 — the refund form open over the order sheet (approve, a direct
+     refund by items, or the payout): its draft, busy flag and refusal. */
+  rf:null,
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
@@ -2268,7 +2271,7 @@ reg('ordViewDel', id=>{
   render();
 });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
   state.ordNoteOpen=null;
@@ -2807,13 +2810,19 @@ reg('cancelOrder', ()=>{
    against the order total here as well as at the server, so a thumb learns it
    from the sheet rather than from a 400. */
 reg('refundOrder', ()=>{
+  if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const o=currentOrder(); state.detailActions=false;
   if(!o||o._id==null){ render(); return; }
   state.ask={title:T('Refund order','退款订单'),
     body:T('Money goes back the way it was paid. Full also reverses points + flips the order to Refunded; partial does not.',
            '原路退回。全额退款会同时退还积分并将订单标记为已退款;部分退款不会。'),
-    options:[{key:'full',label:T('Full','全额')+' '+o.total},{key:'amount',label:T('Part — by amount','部分 — 按金额')}],
-    run:k=>{ if(k==='full') askRefundFull(o); else if(k==='amount') askRefundAmount(o); }};
+    /* §325 — Full travels through PATCH status (orders:edit AND orders:refund);
+       the two parts through /refund/direct (orders:refund alone). §325 O3 adds
+       the desktop's third way, by items (openDirectRefundDialog). */
+    options:[mCan('orders:edit')?{key:'full',label:T('Full','全额')+' '+o.total}:null,
+      {key:'amount',label:T('Part — by amount','部分 — 按金额')},
+      {key:'lines',label:T('Part — by items','部分 — 按商品')}].filter(Boolean),
+    run:k=>{ if(k==='full') askRefundFull(o); else if(k==='amount') askRefundAmount(o); else if(k==='lines') rfOpen('direct',o); }};
   render();
 });
 /* FULL keeps the status shortcut the desktop keeps it on — PATCH status
@@ -2821,6 +2830,9 @@ reg('refundOrder', ()=>{
    /refund/direct with no amount would settle the money and leave the order
    sitting at Delivered. */
 function askRefundFull(o){
+  /* §325 — BOTH KEYS. PATCH status is orders:edit at the choke point, and the
+     handler refuses `refunded` without orders:refund (audit K-01). */
+  if(!(mCan('orders:edit')&&mCan('orders:refund'))) return;
   state.ask={title:T('Refund order','退款订单'),
     body:T('Full','全额')+' '+o.total,
     fields:[{id:'note',label:T('Reason / note','原因 / 备注'),placeholder:T('Optional','可选'),multiline:true}],
@@ -2832,6 +2844,7 @@ function askRefundFull(o){
   render();
 }
 function askRefundAmount(o){
+  if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const max=Number(o.totalNum)||0;
   const num=v=>Number(String(v==null?'':v).replace(/[^0-9.]/g,''));
   state.ask={title:T('Refund order','退款订单'),
@@ -2872,33 +2885,273 @@ reg('markPaid', ()=>{
       return T('Marked paid','已标记付款'); }); }};
   render();
 });
-reg('approveRefund', ()=>{
+/* ── §325 O3 — THE REFUND WORKFLOW, FINISHED ───────────────────────────────
+   The desktop's refund panel (04-orders.js renderRefundPanel and its dialogs):
+   Start review with a note, Approve with an amount or the lines and the points
+   choice and a note, Reject with a reason, Record payout with a method, a
+   reference, an amount and a note — and, from the Refund row, a direct refund
+   by items. The phone had each as a bare confirm: approve accepted whatever the
+   customer asked for, reject said nothing to the customer, payout recorded no
+   reference, no amount and no store credit.
+   EVERY ONE IS orders:refund on the server (lib/cap-routes.js
+   /refund(\/|-|$)), and each command refuses without it, so a sheet left open
+   cannot write past the gate; orderActs draws none of them for anyone else. */
+reg('reviewRefund', ()=>{
+  if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
-  state.ask={title:T('Approve this refund?','通过这笔退款？'),
-    body:T('Approving accepts what the customer asked for. The money does not move until you pay it out.','通过即接受顾客申请的金额。款项在你发起打款前不会退出。'),
-    confirmLabel:T('Approve','通过'),
-    run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/approve',{}); return T('Refund approved','退款已通过'); })};
+  state.ask={title:T('Start review','开始处理'),
+    body:T("Tell the customer you're looking into it. Optional — leave blank for a generic update.",'告知顾客正在处理,可留空(留空则发送通用更新)。'),
+    fields:[{id:'note',label:T('Note for customer','给顾客的备注'),placeholder:T("We're looking into it…",'我们正在处理…'),multiline:true}],
+    confirmLabel:T('Mark reviewing','开始处理'),
+    run:v=>orderWrite('refund', async()=>{
+      await apiWrite('/orders/'+o._id+'/refund/review',{note:v.note||''});
+      state.rfHist.open=false;
+      return T('Marked as reviewing','已开始处理'); })};
   render();
 });
-reg('rejectRefund', ()=>{
+reg('approveRefund', ()=>{
+  if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
-  state.ask={title:T('Reject this refund?','拒绝这笔退款？'),
-    body:T('The customer is told it was declined. You can still refund the order later.','顾客会收到未通过的通知。之后仍可退款。'),
+  rfOpen('approve',o);
+});
+reg('rejectRefund', ()=>{
+  if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
+  const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Reject refund','拒绝退款'),
+    body:T('The customer sees this reason. Leave blank to reject without a note.','顾客会看到此原因,留空则不附原因。'),
+    fields:[{id:'note',label:T('Reason (shown to customer)','原因(顾客可见)'),placeholder:T('Optional','可选'),multiline:true}],
     confirmLabel:T('Reject','拒绝'), danger:true,
-    run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/reject',{}); return T('Refund rejected','已拒绝'); })};
+    run:v=>orderWrite('refund', async()=>{
+      await apiWrite('/orders/'+o._id+'/refund/reject',{note:v.note||''});
+      state.rfHist.open=false;
+      return T('Refund rejected','退款已拒绝'); })};
   render();
 });
 reg('payRefund', ()=>{
+  if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
   const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
-  state.ask={title:T('Send the money back how?','以什么方式退款？'),
-    body:T('This moves money. Pick the way it actually goes back to the customer.','这会真实退款。请选择实际退回的方式。'),
-    options:[['wechat','WeChat','微信'],['alipay','Alipay','支付宝'],['bank','Bank transfer','银行转账'],
-      ['cash','Cash','现金'],['wallet','Store wallet','店铺钱包'],['other','Other','其他']].map(([k,en,zh])=>({key:k,label:T(en,zh)})),
-    run:(method)=>{ if(!method) return; orderWrite('refund', async()=>{
-      await apiWrite('/orders/'+o._id+'/refund/payout',{method});
-      return T('Refund paid','退款已打出'); }); }};
-  render();
+  rfOpen('payout',o);
 });
+/* The tender the customer paid with, as a payout method — the desktop's
+   _payoutDefaultMethod. Only an online WeChat order can be refunded
+   automatically; every other tender is a record of money already sent by hand,
+   so defaulting a cash order to WeChat only ever produced "Payout failed". */
+function rfPayoutDefault(k){
+  return ({wechat:'wechat',alipay:'alipay',alipay_offline:'alipay',bank_transfer:'bank',wallet:'wallet',cash:'cash'})[String(k||'').toLowerCase()]||'other';
+}
+const RF_PAYOUT_METHODS=[['wechat','WeChat Pay','微信'],['alipay','Alipay','支付宝'],['bank','Bank transfer','银行转账'],
+  ['wallet','Wallet credit','钱包'],['store_credit','Store credit','店铺余额'],['cash','Cash','现金'],['other','Other','其他']];
+/* One sheet for the three forms that need more than a sentence: approve, a
+   direct refund by items, and the payout. Opened on the order in hand; it keeps
+   its own draft, its own busy state and its own refusal, which stays on the
+   sheet until the next try. */
+function rfOpen(kind,o){
+  const r=o.refund||{};
+  const items=(o.rfItems||[]);
+  const total=Number(o.totalNum)||0;
+  const f={kind, id:o._id, busy:false, err:null, note:'', chk:{}, qty:{}};
+  if(kind==='approve'){
+    // Open on what the customer actually asked for (the desktop's initialMode):
+    // their lines → by items; a part amount → amount; otherwise full.
+    const pre=(o.refundLineIds||[]);
+    f.mode=pre.length?'lines':(r.requested!=null&&r.requested<total-0.005)?'amount':'full';
+    f.amount=(f.mode==='amount'?r.requested:total);
+    items.forEach(it=>{ const p=pre.find(x=>x.item_id===it.id);
+      f.chk[it.id]=!!p; f.qty[it.id]=p?Math.min(Number(p.qty)||0,it.qty):it.qty; });
+    f.points=f.mode==='full';
+  }else if(kind==='direct'){
+    f.mode='lines';
+    items.forEach(it=>{ f.chk[it.id]=false; f.qty[it.id]=it.left; });
+  }else{
+    f.method=rfPayoutDefault(o.payKey);
+    f.ref=''; f.amount=r.approved!=null?r.approved:0;
+  }
+  f.amount=f.amount!=null?(+Number(f.amount).toFixed(2)):0;
+  state.rf=f; render();
+}
+/* The amount the lines come to, and whether what is about to be approved is
+   FULL — decided the server's way (amount + ¥0.005 ≥ the gross tenders not
+   yet approved), never off the chosen mode alone, because an operator who picks
+   "Partial — amount" and types the whole total gets a full refund. */
+function rfLinesSum(o,f){
+  return +((o.rfItems||[]).reduce((t,it)=>t+(f.chk[it.id]?(it.unit*(Number(f.qty[it.id])||0)):0),0)).toFixed(2);
+}
+function rfIsFull(o,f){
+  if(f.mode==='full') return true;
+  const amt=f.mode==='lines'?rfLinesSum(o,f):(Number(f.amount)||0);
+  const prior=Math.max(0,Number(o.refund&&o.refund.approved)||0);
+  const remaining=Math.max(0,Math.round(((Number(o.tenderGross)||Number(o.totalNum)||0)-prior)*100)/100);
+  return (amt+0.005)>=remaining;
+}
+const RF_RIDER_STAGES=['awaiting_dispatch','heading_to_pickup','in_transit'];
+function rfConsequence(o,f){
+  const full=rfIsFull(o,f);
+  const lines=[full
+    ?T('Full refund: the order is marked refunded, its same-city delivery is cancelled, and stock, points and referral credit are reversed. The customer is told.',
+       '全额退款:订单将标记为已退款,同城配送将被取消,库存、积分与推荐奖励一并退回。系统会通知顾客。')
+    :T('Partial refund: the order keeps its status and its delivery. Stock reverses for the selected items only. The customer is told.',
+       '部分退款:订单状态与配送均不变,仅退回所选商品的库存。系统会通知顾客。')];
+  // §222 — the fact most easily missed, said only when it is true.
+  if(full&&o.courier&&RF_RIDER_STAGES.includes(o.courier.stage))
+    lines.push(`<b>${T('A rider is on this order right now — approving cancels that delivery.','当前已有骑手接单 — 批准后该配送会被取消。')}</b>`);
+  lines.push(`<span style="color:var(--text-secondary)">${T('Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead.',
+    '退款不会更改配送日期。如顾客只是想改天收货,请拒绝此申请并改期。')}</span>`);
+  return {full, html:lines.map(l=>`<div style="margin-top:4px">${l}</div>`).join('')};
+}
+reg('rfClose', ()=>{ state.rf=null; render(); });
+reg('rfMode', m=>{ const f=state.rf; if(!f||f.busy) return;
+  const o=currentOrder(); if(!o) return;
+  f.mode=m;
+  if(m==='full') f.amount=+(Number(o.totalNum)||0).toFixed(2);
+  if(m==='amount'){ const r=o.refund||{}; f.amount=+(Number(r.requested!=null?r.requested:o.totalNum)||0).toFixed(2); }
+  f.points=(m==='full');
+  render(); });
+reg('rfChk', id=>{ const f=state.rf; if(!f||f.busy) return; f.chk[id]=!f.chk[id]; render(); });
+reg('rfQty', (id,d)=>{ const f=state.rf; if(!f||f.busy) return;
+  const o=currentOrder(); const it=o&&(o.rfItems||[]).find(x=>x.id===id); if(!it) return;
+  const max=f.kind==='direct'?it.left:it.qty;
+  f.qty[id]=Math.max(0,Math.min(max,(Number(f.qty[id])||0)+Number(d)));
+  if(f.qty[id]>0) f.chk[id]=true;
+  render(); });
+reg('rfPts', ()=>{ const f=state.rf; if(!f||f.busy) return; f.points=!f.points; render(); });
+reg('rfMethod', v=>{ const f=state.rf; if(!f||f.busy) return; f.method=String(v||''); render(); });
+/* Typing never repaints (the keyboard would go). The amount also moves the
+   consequence line, so that one node is patched in place. */
+reg('rfType', (k,v)=>{ const f=state.rf; if(!f) return;
+  f[k]=String(v==null?'':v);
+  if(k==='amount'&&f.kind==='approve'){ const o=currentOrder(); const el=document.getElementById('mRfCons');
+    if(o&&el){ const c=rfConsequence(o,Object.assign({},f,{amount:Number(f.amount)||0})); el.innerHTML=c.html; el.style.borderLeftColor=c.full?'var(--brick-ink)':'var(--border-default)'; } } });
+reg('rfSubmit', ()=>{
+  const f=state.rf; if(!f||f.busy) return;
+  if(!mCan('orders:refund')) return;   // §325: lib/cap-routes.js, /refund(\/|-|$) → orders:refund
+  const o=currentOrder(); if(!o||o._id==null||o._id!==f.id){ state.rf=null; render(); return; }
+  const pickLines=()=>(o.rfItems||[]).filter(it=>f.chk[it.id]&&Number(f.qty[it.id])>0)
+    .map(it=>({item_id:Number(it.id), qty:Number(f.qty[it.id])}));
+  let path, body, done;
+  const amt=Number(String(f.amount==null?'':f.amount).replace(/[^0-9.]/g,''));
+  if(f.kind==='approve'){
+    path='/orders/'+o._id+'/refund/approve'; body={note:f.note||''};
+    if(f.mode==='lines'){
+      const sel=pickLines();
+      if(!sel.length){ f.err=T('Select at least one line','至少选一项'); render(); return; }
+      body.lines=sel; body.reverse_points=!!f.points;
+    }else{
+      if(!(amt>0)){ f.err=T('Enter an amount above 0','请输入大于 0 的金额'); render(); return; }
+      body.amount=+amt.toFixed(2); body.reverse_points=f.mode==='full'?true:!!f.points;
+    }
+    done=j=>T('Approved','已批准')+' '+money(CUR,(j&&j.amount!=null)?j.amount:(body.amount||rfLinesSum(o,f)));
+  }else if(f.kind==='direct'){
+    const sel=pickLines();
+    if(!sel.length){ f.err=T('Select at least one item','至少选一项'); render(); return; }
+    path='/orders/'+o._id+'/refund/direct'; body={note:f.note||'', lines:sel};
+    done=j=>{ const paid=money(CUR,(j&&j.amount!=null)?j.amount:rfLinesSum(o,f));
+      return (j&&j.method==='manual')
+        ? T('Recorded '+paid+' — pay the customer back by hand (paid off-app)','已记录 '+paid+' — 该订单为线下支付,请手动退款给顾客')
+        : T('Refunded','已退款')+' '+paid; };
+  }else{
+    if(!RF_PAYOUT_METHODS.some(m=>m[0]===f.method)){ f.err=T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'); render(); return; }
+    if(!Number.isFinite(amt)||String(f.amount).trim()===''){ f.err=T('Enter an amount first.','请先填写金额。'); render(); return; }
+    path='/orders/'+o._id+'/refund/payout';
+    body={method:f.method, reference:String(f.ref||''), amount:+amt.toFixed(2), note:f.note||''};
+    done=j=>T('Payout recorded','退款已记录')+' '+money(CUR,(j&&j.amount!=null)?j.amount:body.amount);
+  }
+  f.busy=true; f.err=null; render();
+  apiWrite(path,body).then(j=>{
+    state.rf=null; state.rfHist.open=false; render();
+    showToast(done(j));
+    refreshOrders();
+  }).catch(e=>{
+    if(state.rf!==f) return;
+    f.busy=false;
+    if(String(e.message)==='auth') return;
+    f.err=orderErrorText(e); render();
+  });
+});
+/* The refund form's sheet. Same anatomy as every sheet here (.scrim/.sheet/
+   .grabber), over the order sheet and under the ask sheet. The primary button
+   sits outside the scrolling body, as the desktop's foot does (§282), so a long
+   item list never carries it off the screen. */
+function sheetRefundForm(){
+  const f=state.rf; const o=currentOrder();
+  if(!f||!o||o._id!==f.id) return '';
+  const lab=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
+  const hint=t=>`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.5">${t}</div>`;
+  const dis=f.busy?' disabled':'';
+  const items=(o.rfItems||[]);
+  const lineRow=it=>{
+    const on=!!f.chk[it.id], q=Number(f.qty[it.id])||0, max=f.kind==='direct'?it.left:it.qty;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--hairline)">
+      <button class="iconbtn" role="checkbox" aria-checked="${on?'true':'false'}"${dis} onclick="APP.cmd('rfChk',${Number(it.id)})"
+        style="width:28px;height:28px;flex:none;border-radius:8px;border:1.5px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-card)">${on?ic('check',16,2.5):''}</button>
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(it.name[0],it.name[1]))}${it.size?' · '+escAttr(it.size):''}</span>
+        <span class="num" style="display:block;font-size:12px;color:var(--text-secondary)">× ${money(CUR,it.unit)} = ${money(CUR,on?it.unit*q:0)}${(f.kind==='direct'&&it.refunded>0)?` · ${it.refunded} ${T('already refunded','已退')}`:''}</span></span>
+      <span style="display:flex;align-items:center;gap:6px;flex:none">
+        <button class="stepbtn"${dis||(q<=0?' disabled':'')} onclick="APP.cmd('rfQty',${Number(it.id)},-1)" aria-label="−">${ic('minus',16,2.25)}</button>
+        <span class="num" style="min-width:22px;text-align:center;font-size:15px">${q}</span>
+        <button class="stepbtn"${dis||(q>=max?' disabled':'')} onclick="APP.cmd('rfQty',${Number(it.id)},1)" aria-label="+">${ic('plus',16,2.25)}</button></span></div>`;
+  };
+  const noteField=(label,ph)=>`<label style="display:block">${lab(label)}<textarea id="mRfNote"${dis} placeholder="${escAttr(ph||'')}" style="min-height:72px;resize:none" oninput="APP.cmd('rfType','note',this.value)">${escAttr(f.note||'')}</textarea></label>`;
+  let title, sub, body, cta;
+  if(f.kind==='approve'){
+    const r=o.refund||{};
+    title=T('Approve refund','批准退款');
+    sub=T('Lock in the amount. What each mode does is spelled out above the button.','确认退款金额。各模式的具体影响见按钮上方说明。');
+    const modes=[['full','Full','全额'],['amount','Partial — amount','部分金额'],['lines','Partial — by items','按商品']];
+    const c=rfConsequence(o,Object.assign({},f,{amount:Number(f.amount)||0}));
+    body=`<div>${lab(T('Mode','模式'))}<div style="display:flex;gap:8px;flex-wrap:wrap">${modes.map(([k,en,zh])=>
+        `<button class="chip ${f.mode===k?'on':''}"${dis} onclick="APP.cmd('rfMode','${k}')"><span>${T(en,zh)}</span></button>`).join('')}</div></div>
+      ${f.mode!=='lines'?`<div>${lab(T('Amount','金额')+' ('+CUR+')')}${f.mode==='amount'
+          ?`<input id="mRfAmt" inputmode="decimal"${dis} value="${escAttr(f.amount)}" oninput="APP.cmd('rfType','amount',this.value)">`
+          :`<div class="num" style="font-size:20px;font-weight:500">${money(CUR,Number(o.totalNum)||0)}</div>`}
+        ${hint(T('Order total','订单总额')+' '+money(CUR,Number(o.totalNum)||0)+(r.requested!=null?' · '+T('customer asked for','顾客申请')+' '+money(CUR,r.requested):''))}</div>`
+      :`<div>${lab(T('Lines','商品'))}${items.length?items.map(lineRow).join(''):hint(T('No items','无商品'))}
+        <div class="num" style="text-align:right;font-size:13.5px;margin-top:8px">${T('Lines total','商品合计')}: <b>${money(CUR,rfLinesSum(o,f))}</b></div></div>`}
+      ${noteField(T('Staff note (shown to customer)','客服备注(顾客可见)'),T('Optional','可选'))}
+      ${f.mode!=='full'?`<div><button class="row" style="padding:6px 0;gap:10px;border:none;background:none"${dis} role="checkbox" aria-checked="${f.points?'true':'false'}" onclick="APP.cmd('rfPts')">
+          <span style="width:24px;height:24px;flex:none;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1.5px solid ${f.points?'var(--text-primary)':'var(--border-strong)'};background:${f.points?'var(--text-primary)':'transparent'};color:var(--surface-card)">${f.points?ic('check',14,2.5):''}</span>
+          <span style="flex:1;font-size:14.5px;text-align:left">${T('Also reverse earned + redeemed points','同时退还积分')}</span></button>
+        ${hint(T('Auto-on for full refunds. Off by default for partials.','全额退款默认开启;部分退款默认关闭。'))}</div>`:''}
+      <div id="mRfCons" style="padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.6;background:var(--surface-raised);border-left:3px solid ${c.full?'var(--brick-ink)':'var(--border-default)'}">${c.html}</div>`;
+    cta=T('Approve','批准');
+  }else if(f.kind==='direct'){
+    title=T('Refund order','退款订单');
+    sub=T('Money goes back the way it was paid. Full also reverses points + flips the order to Refunded; partial does not.','原路退回。全额退款会同时退还积分并将订单标记为已退款;部分退款不会。');
+    const left=items.filter(it=>it.left>0);
+    body=`<div>${lab(T('Items to refund','退款商品'))}${left.length?left.map(lineRow).join(''):hint(T('Everything has already been refunded','已全部退款'))}
+        <div class="num" style="text-align:right;font-size:13.5px;margin-top:8px">${T('Items total','商品合计')}: <b>${money(CUR,rfLinesSum(o,f))}</b></div></div>
+      ${noteField(T('Reason / note','原因 / 备注'),T('Optional','可选'))}`;
+    cta=T('Refund','退款');
+  }else{
+    const r=o.refund||{};
+    const apv=r.approved!=null?r.approved:0;
+    title=T('Record payout','记录退款');
+    sub=T("WeChat sends the money back to the customer automatically. Other methods just record a payout you've already made manually.",'选择"微信"将自动原路退款给顾客;其他方式仅记录你已手动完成的退款。');
+    const warn=f.method==='wechat'&&o.payKey!=='wechat';
+    body=`<label style="display:block">${lab(T('Method','退款方式'))}<select id="mRfMethod"${dis} style="width:100%" onchange="APP.cmd('rfMethod',this.value)">${RF_PAYOUT_METHODS.map(([k,en,zh])=>
+        `<option value="${k}"${f.method===k?' selected':''}>${T(en,zh)}</option>`).join('')}</select>
+        ${warn?`<div style="font-size:12.5px;line-height:1.5;margin-top:6px;color:var(--brick-ink)">${T("This order wasn't paid via online WeChat — there's no WeChat transaction to auto-refund. Pick the method you actually returned the money with.",'此订单非微信在线支付,没有可原路退款的微信交易。请选择你实际退款使用的方式。')}</div>`:''}</label>
+      <label style="display:block">${lab(T('Reference / txn id','凭证号'))}<input id="mRfRef"${dis} value="${escAttr(f.ref||'')}" placeholder="${escAttr(T('Provider txn id, bank ref, etc.','第三方交易号、银行参考号等'))}" oninput="APP.cmd('rfType','ref',this.value)"></label>
+      <label style="display:block">${lab(T('Amount','金额')+' ('+CUR+')')}<input id="mRfAmt" inputmode="decimal"${dis} value="${escAttr(f.amount)}" oninput="APP.cmd('rfType','amount',this.value)">
+        ${hint(T('Approved '+money(CUR,apv)+' — usually paid in full','已批准金额,通常一次性退还'))}</label>
+      ${noteField(T('Note (optional)','备注(可选)'),'')}`;
+    cta=T('Mark paid','确认已退款');
+  }
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('rfClose')"></div>
+   <div class="sheet" style="z-index:48;top:46px;overflow:hidden;padding:0">
+     <div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <span style="flex:1;font-size:18px;font-weight:500">${title}</span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('rfClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+       <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;line-height:1.5;padding-right:8px">${sub}</div></div>
+     <div id="mRfBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px">${body}</div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${f.err?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${f.err}</div>`:''}
+       <div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1"${dis} onclick="APP.cmd('rfClose')">${T('Cancel','取消')}</button>
+         <button class="btn2" style="flex:1;font-weight:500${f.kind!=='payout'?';color:var(--brick-ink);border-color:var(--brick-ink)':''}"${dis} onclick="APP.cmd('rfSubmit')">${f.busy?T('Working…','处理中…'):cta}</button></div></div>
+   </div>`;
+}
 function currentOrder(){
   return (state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
 }
@@ -23458,14 +23711,21 @@ function orderActs(o){
   // so the panel that owns it is the only one offered.
   const reqOpen=['pending','reviewing'].includes(o.refundStatus);
   const inFlight=['pending','reviewing','approved','paying'].includes(o.refundStatus);
-  if(reqOpen){
+  /* §325 — EACH ROW ONLY FOR WHO THE SERVER WILL LET PRESS IT (lib/cap-routes.js):
+     every /refund… path is orders:refund, everything else under /orders is
+     orders:edit. The desktop's refund panel carries data-cap="orders:refund"
+     on the same three; its Refund / Cancel menu filters on DANGER_CAP. */
+  const canEdit=mCan('orders:edit'), canRefund=mCan('orders:refund');
+  if(reqOpen&&canRefund){
+    // §325 O3 — the desktop's Start review, offered while the request is new.
+    if(o.refundStatus==='pending') acts.push(['eye',T('Start review','开始处理'),"APP.cmd('reviewRefund')"]);
     acts.push(['check',T('Approve refund','通过退款'),"APP.cmd('approveRefund')"]);
     acts.push(['x',T('Reject refund','拒绝退款'),"APP.cmd('rejectRefund')"]);
   }
-  if(o.refundStatus==='approved') acts.push(['banknote',T('Pay the refund','打出退款'),"APP.cmd('payRefund')"]);
+  if(o.refundStatus==='approved'&&canRefund) acts.push(['banknote',T('Pay the refund','打出退款'),"APP.cmd('payRefund')"]);
   for(const to of (ORDER_ALSO[st]||[])){
     if(to==='refunded'){
-      if(inFlight) continue;
+      if(inFlight||!canRefund) continue;
       acts.push(['receipt',T('Refund','退款'),"APP.cmd('refundOrder')"]);
     }else if(to==='cancelled'){
       // The desktop's own two labels, and the difference is the whole warning:
@@ -31290,6 +31550,7 @@ function render(){
   if(state.caddr) html += layer('caddr', sheetCustAddr());
   if(state.detailId) html += layer('detail:'+state.detailId, sheetOrderDetail());
   if(state.detailActions) html += layer('actions', sheetActions());
+  if(state.rf&&state.detailId) html += layer('rf:'+state.rf.kind, sheetRefundForm());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
@@ -33330,6 +33591,22 @@ function mapDetail(o){
       ((o.address&&(o.address.store_name_cn||o.address.store_name_en))||o.store_name_cn||o.store_name_en||o.store_code||'')]
     :null;
   base.stockPending=!!o.stock_pending;
+  /* §325 O3 — WHAT THE REFUND SHEETS NEED. Each line with its own id, the units
+     still refundable (qty less refunded_qty, the server's normalizeRefundLines
+     cap) and its unit price as the server computes it (line_total ÷ qty, after
+     option deltas, else unit_price). And the GROSS tenders — points + wallet +
+     the cash total — which is what the server compares an approval against to
+     decide full or partial; o.total is only the cash slice. */
+  base.rfItems=(o.items||[]).filter(it=>it&&it.id!=null).map(it=>{
+    const qty=Number(it.qty||it.quantity)||0, done=Math.min(qty,Math.max(0,Number(it.refunded_qty)||0));
+    return {id:it.id, name:[it.name_en||it.name_cn||('#'+it.id), it.name_cn||it.name_en||('#'+it.id)],
+      size:it.size||'', qty, refunded:done, left:Math.max(0,+(qty-done).toFixed(3)),
+      unit:qty>0?(Number(it.line_total)||0)/qty:(Number(it.unit_price)||0)};
+  });
+  // The lines the customer picked, by item id — what the approve sheet opens on.
+  base.refundLineIds=(()=>{ let L=[]; try{ L=o.refund_lines_json?JSON.parse(o.refund_lines_json):[]; }catch(e){ L=[]; }
+    return Array.isArray(L)?L.filter(l=>l&&l.item_id!=null).map(l=>({item_id:l.item_id, qty:Number(l.qty)||0})):[]; })();
+  base.tenderGross=Math.round(((Number(o.points_amount)||0)+(Number(o.balance_used)||0)+(Number(o.total)||0))*100)/100;
   // The refund panel. The phone had the ACTIONS — approve, reject, pay out —
   // with none of the figures behind them, so an operator was approving an amount
   // the screen had never shown them, and the customer's own reason for asking
