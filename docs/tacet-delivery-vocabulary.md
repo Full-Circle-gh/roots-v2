@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.303 · 2026-09-30 · §416 CHOOSING A PLAN WHILE PAID UP — 1 STRING COMPOSED BY CLAUDE.** See *Choosing a plan while paid up, on the phone (§416)*.
+
 **v1.302 · 2026-09-30 · §414 ONE CHINESE WORD PER THING (§412.7) — FIVE WORDS SETTLED, NOTHING COMPOSED; EARLIER ENTRIES THAT RECORDED THE OLD WORDS ARE AMENDED.** See *One Chinese word per thing (§414)*.
 
 **v1.301 · 2026-09-30 · §413 "OPEN EVERYTHING" SAYS WHAT STAYED CLOSED — ONE STRING COMPOSED BY CLAUDE, ON THE DESKTOP AND THE PHONE ALIKE.** See *What "Open everything" left closed (§413)*.
@@ -13098,3 +13100,16 @@ means they keep theirs.
   `Your store is open · 你的店开张了` (two places). Now `店铺已开业`.
 - *Desk work on the phone (§378)*: the `Drafts · 草稿` row says the desktop
   chip is English-only in Chinese mode. It now says 草稿.
+
+## Choosing a plan while paid up, on the phone (§416)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Billing confirm
+(`public/m.html` billChoose).
+
+| String | Status |
+|---|---|
+| `Your current plan stays active until DATE, when its paid period ends; the new plan is owed from then. · 当前套餐在已付周期结束前（DATE）保持有效；新套餐自该日起计费。` | **composed by Claude.** Built from the live `当前套餐` (`Current plan · 当前套餐`), `周期` (`Period · 周期`) and `已付` (`Paid · 已付`). It follows the live `An invoice will be created for you to pay. · 系统将生成一张待支付发票。` Rejected: `到期` from the live alert, because it reads as the plan lapsing, and nothing lapses here. |
+
+The other wording, `Until it is paid, billing shows the account as past due. ·
+付款前，账单将显示为逾期。` (X13), stays live for every shop that is not paid
+up.
