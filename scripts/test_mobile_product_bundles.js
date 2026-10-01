@@ -111,7 +111,7 @@ function liftReg(name) {
 }
 
 const FNS = ['E', 'pill', 'mCan', 'canRoute', 'prodCanEdit', 'pcMoney', 'prodLowThreshold', 'nothingYet', 'footBar',
-  'peBadgeOf', 'peRteClean', 'peBundleDraft', 'peBuBody', 'peBpBody', 'peBpModeBody', 'peBundleOwnsCost', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
+  'peBadgeOf', 'peRteClean', 'peBundleDraft', 'peBuBody', 'peBpBody', 'peBpModeBody', 'peBundleOwnsCost', 'peOptsDraft', 'peOptBody', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
   'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'peEntryRow', 'pePopped',
   'prodRecordsDrop', 'loadPeImages', 'pePhotosCard', 'searchBox', 'searchClearShow',
   'peProdName', 'peBuCard', 'peBpCard', 'pePickRows', 'pePickListHtml', 'sheetPePick', 'pePickRepaint'];
@@ -151,6 +151,8 @@ function mk(opts = {}) {
     loadCategories: () => {},
     // The sizes card (§325 PD9) has its own suite, test_mobile_product_sizes.js.
     loadPeSizes: () => {}, peSizesCard: () => '',
+    // The customer-choices card (§325 PD11): test_mobile_product_options.js.
+    peOptCard: () => '',
     recapNoMoney: () => ['warehouse', 'dispatch', 'customer_service'].includes(ctx.state.pos),
     featOn: () => true,
     navTabs: () => [],

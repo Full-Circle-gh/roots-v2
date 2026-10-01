@@ -123,7 +123,9 @@ const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'nothingYet', 'E', 'pill
   'loadProdSales', 'psWhen', 'psContext', 'psTitle', 'salesCard', 'versionsRow', 'loadProdVersions', 'pvWhen',
   'sheetVersions', 'pvCanRestore', 'prodCanEdit',
   'shmName', 'shmLocName', 'loadShopMenus', 'loadShopMenu', 'shmErrBox', 'screenShopMenus', 'shmProdName',
-  'shmShown', 'shmListHtml', 'screenShopMenu'];
+  'shmShown', 'shmListHtml', 'screenShopMenu',
+  // §325 PD13 — the shop's card, drawn only for stores:edit (test_mobile_shop_menu_structure.js).
+  'shmDetailsCard', 'shmHere', 'shmMoveTargets'];
 const CONSTS = ['PILL', 'KIND2PILL', 'MCAN_MONEY_ONLY', 'ROUTE_CAP', 'money', 'money0', 'shopDayAdd', 'PS_RANGES',
   'shmLoading', 'shmCanEdit'];
 const REGS = ['psDays', 'pvOpen', 'pvClose', 'shmRetry', 'shmOneRetry', 'shmOpen', 'shmQ'];

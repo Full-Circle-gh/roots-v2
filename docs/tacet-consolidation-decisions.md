@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.461
+# Tacet shared-core consolidation — decisions record, v4.462
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-01 · v4.462 — **§381 AMENDED · THE PHONE ASKS THE SAME QUESTION — ON ASH'S WORD** (*"do the phone"*). The phone's JD label sheet now offers ground on an air parcel and asks first, with the desktop's words. See §381 point 9.
 
 2026-10-01 · v4.461 — **§381 · AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST — DECIDED BY ASH:** *"there should always be an option to select land transport if user want and it comes with a warning"*. The mirror of the 2026-09-16 land→air warning: an air parcel's JD label dialog now lists both ground services after air, and picking one asks on the click. The parcel's mode is never written.
 
@@ -26118,9 +26120,13 @@ with a warning I thought we have that"*.
 8. **Held by** `scripts/test_jd_label_air_option.js` section 6.
    `scripts/test_jd_waybill_land_default.js` and
    `scripts/test_chengdu_air_sf_only.js` are unchanged and still pass.
-9. **Not on the phone yet.** §380's phone JD label, merged the same day, copies
-   the old desktop rule: a plain air parcel gets no list (`isAir?[]` in
-   `public/m.html`). That is a follow-up, kept out of this change.
+9. **The phone, amended the same day on Ash's word** (*"do the phone"*). §380's
+   phone JD label had copied the old rule (`isAir?[]` in `jdPlan`,
+   `public/m.html`). It now lists the same three rows on an air parcel and asks
+   the same question on the pick (`jdSvc`), with the desktop's words copied
+   whole. Same exceptions: no question into Fujian / Guangxi, and none between
+   the two ground rows. Held by `scripts/test_mobile_jd_waybill.js`, section
+   2b. That suite also checks that each phone string is the desktop's own.
 
 ## §382 — A PRODUCT'S TWO BUNDLES ARE EDITED FROM THE PHONE
 
@@ -26176,3 +26182,148 @@ keeps them apart, as the desktop does.
 5. **After a save, the catalogue row is brought up to date.** It records the
    set's parts and that it is a set, so the list's stock for the set follows
    at once.
+
+## §383 — WHAT THE CUSTOMER CHOOSES IS EDITED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Details screen for a product gained the desktop editor's
+**Options (customer chooses)** section. These are the questions a shopper
+answers when adding the product. There are two kinds:
+
+- a free **Pick one**, such as a dressing or a spice level, which never
+  touches stock;
+- a **Pick any** group of paid extras. Each extra has a charge and can be
+  linked to a product. A linked extra draws on that product's stock and sells
+  out with it.
+
+On the phone an operator can do everything the desktop section does:
+- add a free pick or paid extras (with the desktop's seed text);
+- edit the questions and choices in both languages;
+- switch a question between Pick one and Pick any;
+- set Required, the fewest and most a shopper may pick, and the defaults;
+- set charges, and link or unlink a stock product;
+- reorder questions and choices, and remove them.
+
+The questions save with the Details screen's autosave as `options`, in the
+desktop's `optBody` shape, and Undo puts them back.
+
+1. **Questions that were never read are never sent.** The server's options
+   save replaces the whole list, and an empty list sent before the questions
+   loaded is what deleted questions from 39 products. On the phone the
+   questions arrive in the same read as the rest of the product. If that read
+   does not carry them, the card says *Could not load. Close and try again.*,
+   offers no control, and no save mentions options. Editing any other field
+   never resends the questions.
+2. **An empty list removes questions only when it says so** (`options_clear`).
+   It is sent only when the server last held questions and the operator then
+   removed them all. The desktop counts "last held" from the moment the
+   product was opened. The phone counts it from the last save that went
+   through. So a question added, saved and then removed in the same visit is
+   cleared as well; on the desktop it would be left standing.
+3. **Only what changed is sent, and the whole list goes when anything in it
+   changed.** A question or choice with no words is not part of the list until
+   it has some, so adding a blank question sends nothing. A question that a
+   shopper types an answer to ("text") cannot be chosen on either storefront.
+   One already saved keeps its type, shown as unsupported, and no other
+   question can be switched to it.
+4. **The desktop's rules travel with the controls:**
+   - switching to Pick one drops every charge, link and limit;
+   - setting a minimum of 1 or more makes the question Required;
+   - un-ticking Required drops the minimum;
+   - a Pick one has exactly one default;
+   - linking a stock product fills in a blank label from the product's name,
+     and a zero charge from its price. A missing Chinese name is left blank
+     rather than filled with the English one.
+5. **The stock picker is the same picker the bundles use.** It searches the
+   catalogue the phone already holds, covers every product except this one,
+   and shows each product's size and SKU so that two jars of the same paste
+   can be told apart. Up and down buttons replace the desktop's drag-to-reorder.
+
+## §384 — A NEW PRODUCT IS MADE FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The Products tab gained **Add product** on its catalogue view. It is the
+desktop's *Add product ▾ → Add manually*: the Details screen opens empty, with
+the same fields and the same autosave. The first save that has a name creates
+the product with `POST /products`. If no SKU was typed, the server makes up a
+DRAFT-… code, and the box shows it. From then on the screen belongs to that
+product exactly as if it had been opened from the list. Every later edit is a
+`PATCH`, and the sizes, bundles and customer-choices cards open.
+
+1. **Before the first save, the screen says what starts it.** The foot reads
+   *Add a name & SKU to start autosaving*. A SKU on its own is held until there
+   is a name. The cards that need a product (sizes, the two bundles and
+   customer choices) show the desktop's own line saying so. Photos work at
+   once and are sent with the create.
+2. **No field is lost in the create.** `POST /products` stores only part of
+   the screen: names, SKU, size, sections, badge, price and was-price,
+   shipping, descriptions, photos, Free of, notes, facts, and two flags. The
+   desktop gets the rest (cost, the low-stock line, made in batches) onto the
+   product with its next whole-form save. The phone sends only what changed,
+   so it sends those straight after the create, in one `PATCH` of the new
+   product. It does this only for fields that differ from the new row's empty
+   defaults. A test reads the server's create handler, so the phone's list of
+   what the create stores cannot drift from what it really stores.
+3. **A new product is hidden until someone turns it on**, as on the desktop.
+   It needs `products:create` to be made, and `products:edit` for every save
+   after the first. It is not offered where the catalogue is kept upstream.
+4. **After the create, the product is read again before the choices card
+   offers any control.** If that read fails, the card says it could not
+   load. It never says "none" (the PD11 rule). Undo is not offered for a
+   product made in this visit, because its starting point is a blank form.
+   Back leads to the new product's sheet. If a name was typed but not yet
+   saved, the create goes out as the screen closes, and the list still picks
+   up the new product.
+5. **Two fixes to the Details screen's saving came with this step**, because
+   the new-product path exposed them:
+   - The autosave now reads from the screen visit it belongs to. Before, a
+     save that finished after Back read from a screen that had already been
+     let go, and threw an error.
+   - After a save, what the phone believes the server holds is merged with
+     the payload, not replaced by it. Before, the customer choices read while
+     a save was in flight could be dropped from that record, and the next
+     edit would send them again for no reason.
+
+## §385 — A SHOP MENU'S STRUCTURE IS CHANGED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's shop menus can now be set up, named, switched on and off, and
+moved to another location. Each change is the desktop's own request
+(`28-shops.js`), and each needs `stores:edit`, as the server already
+requires for every shops write.
+
+| Action | Request |
+|---|---|
+| **Set up**, on a location the list says is *Not set up* | `POST /shops {location_id}` |
+| **English name (optional)** or **Chinese name** | `PATCH /shops/:id {display_name_en}` or `{display_name_cn}` |
+| **On / Off** | `PATCH /shops/:id {is_active}` |
+| **Move products** | `POST /shops/:id/move {to_location_id}` |
+
+1. **Set up opens the new shop.** The desktop paints the new shop in place;
+   the phone opens it the same way.
+2. **The names save when their box is left,** as the desktop's do. Each name
+   is its own save, and leaving a box unchanged sends nothing. Both names are
+   optional: the location's name shows through as the hint. The shop's code
+   and location are never written.
+3. **The switch waits.** It is not optimistic. While the save is out it
+   shows "…". If the save is refused, the switch stays where it was and the
+   reason is shown on the shop's card.
+4. **Move products asks twice, in the desktop's order (§177).**
+   - First it asks *where*. The places offered are every other location
+     whose menu is empty (`moveTargets`). On the phone this is a list of
+     places to tap, where the desktop has a dropdown and a Move button.
+   - Then it asks *what it costs*, as a danger confirm, naming the count and
+     the place: this menu is emptied, this shop switches off, the QR already
+     printed here stops working, and a new QR must be printed at the
+     destination.
+   - Nothing is sent before the second answer.
+   - Afterwards the screen lands on the destination's menu, read fresh, as
+     the desktop does. Its switch, code and QR answer "is it live there?".
+   - The move's three refusals (the destination already has a menu, there is
+     nothing to move, or it is already there) use the desktop's words.
+5. **A refusal is shown where the operator is looking, and stays.** For Set
+   up that is above the list; for everything else it is the shop's card. A
+   toast only confirms. After any of these changes the list and the shop are
+   both read again, so counts, the Inactive pill and *Not set up* show what
+   the server now holds. Without `stores:edit` the shop screen is unchanged
+   (PD2 and PD4).

@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.277 · 2026-09-30 · §385 SHOP MENU STRUCTURE ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SHOP MENU.** See *A shop menu's structure, changed on the phone (§385)*.
+
+**v1.276 · 2026-09-30 · §384 NEW PRODUCT ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP.** See *A new product, made on the phone (§384)*.
+
+**v1.275 · 2026-09-30 · §383 CUSTOMER CHOICES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *What the customer chooses, edited on the phone (§383)*.
+
 **v1.274 · 2026-09-30 · §382 BUNDLES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's two bundles, edited on the phone (§382)*.
 
 **v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
@@ -11939,6 +11945,12 @@ them.
 **English "ground", Chinese 陆运.** The rows say `Fresh · Ground · 生鲜 · 陆运`.
 The question uses the same pair as the row being picked, so the two read alike.
 
+**On the phone (2026-10-01, nothing composed).** The phone's JD label sheet (`jdSvc`, `public/m.html`)
+asks the same question with every string copied whole from the desktop:
+`空运包裹`, both bodies, `仍要生成陆运运单` and `暂不`. Nothing new was composed.
+`scripts/test_mobile_jd_waybill.js` fails if the phone's words drift from the
+desktop's.
+
 ## A product's two bundles, edited on the phone (§382)
 
 **Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
@@ -11979,3 +11991,111 @@ buRender / bpRender / bpPickerList):
 **Live candidate rejected:** `套装产品(作为一个产品出售)`. It is the desktop's
 longer header, shown only before a new product has saved. The section header
 the operator sees uses `套装产品`.
+
+## What the customer chooses, edited on the phone (§383)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+labels appear on the Options card of the phone's product Details screen and
+in its stock picker (`public/m.html`).
+
+**Copied whole from the desktop editor** (`public/retail-admin/09-products.js`
+optRender / _optChoiceRow / optPickerList):
+
+- **The card:**
+  - `Options (customer chooses) · 选项(顾客选择)`
+  - its sentence
+  - `None · tap to add a choice · 无 · 点击添加选项`
+  - `Could not load. Close and try again. · 加载失败，请关闭后重试。`
+  - `+ Add a pick (free) · + 添加选择(免费)`
+  - `+ Add paid extras · + 添加付费加项`
+- **A question:**
+  - `Question EN (e.g. Choose your dressing) · 问题(英文,如:选择酱料)`
+  - `Question 中文 · 问题(中文)`
+  - `How the customer answers · 顾客如何选择`
+  - `Pick one · 单选`
+  - `Pick any · 多选`
+  - `Type an answer (unsupported) · 填写(暂不支持)`
+  - `Required · 必选` and its title
+  - `Remove this option · 移除此选项`
+  - the pick-any sentence
+  - `+ Add choice · + 添加选项`
+  - `Add at least one choice. · 请至少添加一个选项。`
+- **Limits:**
+  - `Pick · 选` and the trailing `项`
+  - `0 in a box means no limit · 填 0 表示不限`
+  - both box titles
+- **A choice:**
+  - `Choice EN · 选项(英文)`
+  - `Choice 中文 · 选项(中文)`
+  - `Default pick · 默认选项`
+  - `Pre-selected · 默认勾选`
+  - `Extra charge for this choice (0 = free) · 此选项加价(0 = 免费)`
+- **Linked stock:**
+  - `+ Stock product · + 关联库存商品` and its title
+  - `Draws from this product’s stock · 占用该商品库存`
+  - `in stock · 库存`
+  - `Unlink · 取消关联`
+  - `Search a product to use for stock… · 搜索作为库存来源的商品…`
+
+The paid-extras seed `Add extras? · 加点配料?` is shop content the desktop
+writes as it stands, and is copied as it stands.
+
+**Phone live pairs reused:** `Move up · 上移`, `Move down · 下移`, `Remove · 移除`,
+`No matches · 无匹配`, `Close · 关闭`.
+
+## A new product, made on the phone (§384)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the Products tab header and on the Details screen before a
+new product's first save (`public/m.html`).
+
+**Copied whole from the desktop:**
+
+- From `public/retail-admin.html`:
+  - `Add product · 新增产品`, the Products toolbar button.
+- From `public/retail-admin/09-products.js`:
+  - `New product · 新增产品`, the editor's title for an unsaved product.
+  - `Add a name & SKU to start autosaving · 填写名称和货号后自动保存`, the
+    editor's opening hint.
+  - The four "Add a name & SKU above — it saves automatically, then …" lines,
+    one each for variants, suggested add-ons, the bundle and options, with
+    their pairs.
+
+**Phone live pairs reused:** `Add a name to start autosaving ·
+填写名称后自动保存`, `All changes saved · 已自动保存`, `Saving… · 保存中…`,
+`Save failed: · 保存失败:`, and the card titles from PD9–PD11.
+
+**Live candidate rejected:** the desktop's longer bundle header,
+`套装产品(作为一个产品出售)`, which its unsaved state uses. The phone keeps the
+`套装产品` header the card wears after the first save, so the card's name does
+not change under the operator.
+
+## A shop menu's structure, changed on the phone (§385)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the phone admin's Shop menu list, on a shop's card, and in
+the two Move asks (`public/m.html`).
+
+**Copied whole from the desktop shop menu** (`public/retail-admin/28-shops.js`):
+
+- **Setting up and saving:** `Set up · 设置`, `Saved · 已保存`.
+- **The shop's card:**
+  - `English name (optional) · 英文名(可选)`
+  - `Chinese name · 中文名`
+  - `On · 已开启`
+  - `Off · 已停用`
+- **Moving:**
+  - `Move products · 移动商品`
+  - `Move products to another location? · 移动商品到其他门店？`
+  - `Move N product(s) to X? · 移动 N 个商品到X？`
+  - the warning sentence, whole, in both languages
+  - `Move · 移动`
+  - `Moved · 已移动`
+
+**From the desktop's error words** (`public/retail-admin/01-core.js` TD_ERR):
+- `That location already has a menu of its own. · 该门店已有商品,请选择其他门店。`
+- `There is nothing on this menu to move. · 没有可移动的商品。`
+- `The menu is already at that location. · 商品已在该门店。`
+
+**Phone live pairs reused:** `Saving… · 保存中…`, `Not set up · 未开通`,
+`Inactive · 已停用`, and the shop-menu refusal sentence from PD4.
