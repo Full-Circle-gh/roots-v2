@@ -2844,6 +2844,14 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   }
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  // §325 — ASKED AGAIN NOW THE ORDER IS READ: a receive-only account may mark
+  // Delivered only an order already placed (Ordered). A draft, a cancelled
+  // order and one already Delivered are the buyer's. Same shape as above, and
+  // still before anything is written.
+  const needNow = capRoutes.purchaseStatusCap(status, po.status);
+  if (capRoutes.capDenied(req, needNow)) {
+    return res.status(403).json({ success: false, error: 'forbidden_capability', need: needNow });
+  }
   // LEAVING A POSTABLE STATE GIVES THE GOODS BACK, OR IT DOES NOT HAPPEN.
   // Back to draft (Requested) and Cancel used to fall through to the expense
   // DELETE below and leave the stock booked — stock saying the goods arrived,
