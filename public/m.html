@@ -946,6 +946,8 @@ const state = {
      a row switch or refusal, and the zone sheet's draft (edit / add / copy, and
      its copy-to-others panel). */
   zn:{q:'', loading:false, loadErr:null, regions:null, regionsBusy:false, busy:null, err:null, edit:null},
+  /* §325 O9 — the Fresh batches sheet's draft, and the delivery set-up wizard. */
+  fb:null, dwiz:null,
   /* THREE KEYS THAT WORKED WITHOUT BEING DECLARED, WHICH IS THE PROBLEM. §181
      added the Sales board's retry and the shop switch and wrote straight to
      `state`, where an assignment creates a key silently; the app has behaved
@@ -1841,7 +1843,13 @@ function kbEnterDown(e){
    with Enter) closes nothing, which is the safe direction: this rule only ever
    takes a keyboard away. */
 let kbWas=null;
-function kbMark(){ kbWas=kbField(document.activeElement); }
+/* NAMED kbTouchDown, NOT kbMark (§325 K1). It was kbMark, and so was the
+   html.kb-up toggle further down, from another lane the same day; two function
+   declarations with one name keep only the later, so pointerdown ran the
+   toggle, kbWas was never set, and kbTapAway always returned early — a tap
+   away from a field never closed the keyboard. The guard in
+   scripts/test_phone_scripts_compile.js now refuses a second declaration. */
+function kbTouchDown(){ kbWas=kbField(document.activeElement); }
 function kbTapAway(e){
   const was=kbWas; kbWas=null;
   const on=kbField(document.activeElement);
@@ -1858,8 +1866,8 @@ document.addEventListener('keydown', kbEnterDown);
    touch-down seen — and both spellings, because pointerdown is absent on older
    webviews and mousedown follows a tap on every one of them. Both fire BEFORE
    the browser moves focus, so what they read is the state before the tap. */
-document.addEventListener('pointerdown', kbMark, true);
-document.addEventListener('mousedown', kbMark, true);
+document.addEventListener('pointerdown', kbTouchDown, true);
+document.addEventListener('mousedown', kbTouchDown, true);
 document.addEventListener('click', kbTapAway);
 
 /* ── THE KEYBOARD THAT OPENS BY ITSELF ─────────────────────────────────────
@@ -5831,6 +5839,391 @@ reg('dlvHoliday', ()=>{
     }};
   render();
 });
+/* ── §325 O9 — FRESH BATCHES ON THE PHONE ──────────────────────────────────
+   The desktop's Fresh batches page (06-delivery.js saveBatchSchedule, fbSync,
+   fbRenderPreview; retail-admin.html #dlv-fresh): the switch, the schedule,
+   the pre-order window, the skip dates, the evening-before lock, the morning
+   request hour, and the two checkout popups with their preview. ONE Save, the
+   desktop's body: `batch.schedule` WHOLE (the server replaces it, so a field
+   left out is a field deleted) plus the two `fresh.*` hours. Every refusal the
+   desktop makes before saving is made here too, in its words, and nothing is
+   sent past one.
+   The sheet opens on a FRESH read of /config, like the live cards, so a sheet
+   over a failed read cannot save empty boxes over a real schedule. Drawn for
+   the Delivery panel's any-of (DLV_WRITE), the key family PUT /config checks. */
+const FB_CH=[['meituan','Meituan','美团'],['eleme','Eleme','饿了么'],['gzgrocery','gzgrocery','管易']];
+/* The popup fields: [draft key, saved key, label en, label zh, placeholder (the
+   built-in wording the server uses when blank), multiline]. */
+const FB_COPY={
+  out:[['kick_en','kicker_en','Popup eyebrow','弹窗小标题','Next fresh batch'],['kick_cn','kicker_cn','Popup eyebrow','弹窗小标题','下一批现做'],
+    ['title_en','title_en','Popup title','弹窗标题','Made fresh for you'],['title_cn','title_cn','Popup title','弹窗标题','为您新鲜现做'],
+    ['msg_en','message_en','Checkout notice','结账提示','Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}.',1],
+    ['msg_cn','message_cn','Checkout notice','结账提示','您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。',1],
+    ['tip_en','tip_en','Freshness tip','新鲜提示','We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness.',1],
+    ['tip_cn','tip_cn','Freshness tip','新鲜提示','我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。',1]],
+  gz:[['lkick_en','local_kicker_en','Popup eyebrow','弹窗小标题','Next fresh batch'],['lkick_cn','local_kicker_cn','Popup eyebrow','弹窗小标题','下一批现做'],
+    ['ltitle_en','local_title_en','Popup title','弹窗标题','Made fresh for you'],['ltitle_cn','local_title_cn','Popup title','弹窗标题','为您新鲜现做'],
+    ['lmsg_en','local_message_en','Checkout notice','结账提示',"Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on {make_date} — we'll deliver your order as soon as it's ready.",1],
+    ['lmsg_cn','local_message_cn','Checkout notice','结账提示','您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 {make_date} 制作下一批 — 制作完成后会尽快为您配送。',1]],
+};
+/* Config → the sheet's fields, the desktop's loadDeliverySettings rules: an
+   unset ready / lock hour stays blank (blank is meaningful), an unset
+   pre-order start or quantity stays blank (0 is the default), and a morning
+   hour never written reads 6 — the server's default — while an explicit
+   blank stays blank (off). */
+function fbDraft(c){
+  const b=((c&&c.batch)||{}).schedule||{}, fr=(c&&c.fresh)||{};
+  const d={on:!!b.enabled, anchor:b.anchor_date||'', interval:String(b.interval_days||2),
+    cutoff:String(b.cutoff_hour!=null?b.cutoff_hour:20), ready:b.ready_hour!=null?String(b.ready_hour):'',
+    preOpen:b.preorder_open_hour?String(b.preorder_open_hour):'', lock:b.lock_hour!=null?String(b.lock_hour):'',
+    qty:b.preorder_qty?String(b.preorder_qty):'',
+    ch:FB_CH.map(x=>x[0]).filter(k=>Array.isArray(b.preorder_channels)&&b.preorder_channels.includes(k)),
+    skip:(Array.isArray(b.skip_dates)?b.skip_dates:[]).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s))),
+    resched:String(fr.rescheduleCutoffHour!=null?fr.rescheduleCutoffHour:20),
+    morning:fr.morningRequestHour===undefined?'6':(fr.morningRequestHour==null?'':String(fr.morningRequestHour))};
+  FB_COPY.out.concat(FB_COPY.gz).forEach(([k,key])=>{ d[k]=typeof b[key]==='string'?b[key]:''; });
+  return d;
+}
+const FB_HOUR=['Order-by hour must be 0–23','当日截单请输入 0–23 的小时'];
+const fbHourOk=t=>{ const n=parseInt(t,10); return Number.isFinite(n)&&n>=0&&n<=23; };
+/* The desktop's saveBatchSchedule, check for check and field for field. Returns
+   {err:[en,zh]} for the first refusal, or {body}. */
+function fbBody(d){
+  const t=x=>String(x==null?'':x).trim();
+  const enabled=!!d.on, anchor=t(d.anchor);
+  if(enabled&&!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return {err:['Pick a batch day first','请先选择一个制作日']};
+  const interval=Math.max(1,parseInt(t(d.interval),10)||2);
+  const rawCut=parseInt(t(d.cutoff),10);
+  if(enabled&&!fbHourOk(t(d.cutoff))) return {err:FB_HOUR};
+  const cutoffHour=Number.isFinite(rawCut)?rawCut:20;
+  const rawReady=t(d.ready);
+  if(enabled&&rawReady!==''&&!fbHourOk(rawReady)) return {err:FB_HOUR};
+  const readyHour=rawReady===''?null:parseInt(rawReady,10);
+  const rawPreOpen=t(d.preOpen);
+  if(enabled&&rawPreOpen!==''&&!fbHourOk(rawPreOpen)) return {err:['Pre-order start must be 0–23','预订开始请输入 0–23 的小时']};
+  const preorderOpenHour=rawPreOpen===''?0:parseInt(rawPreOpen,10);
+  const rawLock=t(d.lock);
+  if(enabled&&rawLock!==''&&!fbHourOk(rawLock)) return {err:FB_HOUR};
+  const lockHour=rawLock===''?null:parseInt(rawLock,10);
+  // A start at or after the cut-off is a window that can never open.
+  const effectiveLock=lockHour!=null?lockHour:readyHour;
+  if(enabled&&effectiveLock!=null&&preorderOpenHour>=effectiveLock) return {err:['Pre-orders must open before the cut-off','预订开始必须早于预订截单']};
+  const rawQty=t(d.qty);
+  if(enabled&&rawQty!==''){ const q=parseInt(rawQty,10); if(!Number.isFinite(q)||q<0) return {err:['Enter a whole number, 0 or more','请输入 0 或以上的整数']}; }
+  const preorderQty=rawQty===''?0:parseInt(rawQty,10);
+  const rawResched=parseInt(t(d.resched),10);
+  if(!fbHourOk(t(d.resched))) return {err:['Enter an hour 0–23','请输入 0–23 的小时']};
+  const rawMorning=t(d.morning);
+  if(rawMorning!==''&&!fbHourOk(rawMorning)) return {err:['Enter an hour 0–23','请输入 0–23 的小时']};
+  const sched={enabled, anchor_date:anchor, interval_days:interval, skip_dates:[...new Set(d.skip)].sort(),
+    cutoff_hour:cutoffHour, ready_hour:readyHour, lock_hour:lockHour,
+    preorder_open_hour:preorderOpenHour, preorder_qty:preorderQty,
+    preorder_channels:FB_CH.map(x=>x[0]).filter(k=>d.ch.includes(k))};
+  FB_COPY.out.concat(FB_COPY.gz).forEach(([k,key])=>{ sched[key]=t(d[k]); });
+  const body={'fresh.rescheduleCutoffHour':rawResched,'fresh.morningRequestHour':rawMorning===''?'':parseInt(rawMorning,10),'batch.schedule':sched};
+  return {body};
+}
+/* The desktop's fbNextBatchDate — a HINT that mirrors nextBatchShipDate on the
+   server, which is the authority; every caller labels it as the schedule's
+   answer, never as the promise. Local dates, as there. */
+function fbNextBatch(d,now){
+  const anchorStr=String(d.anchor||'').trim(); if(!/^\d{4}-\d{2}-\d{2}$/.test(anchorStr)) return null;
+  const p=anchorStr.split('-').map(Number), anchor=new Date(p[0],p[1]-1,p[2],12,0,0,0);
+  if(isNaN(anchor.getTime())) return null;
+  const interval=Math.max(1,parseInt(d.interval,10)||2), skip=new Set(d.skip), DAY=86400000;
+  const n=now||new Date();
+  const cut=parseInt(d.cutoff,10);
+  const fromD=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  if(Number.isFinite(cut)&&n.getHours()>=cut) fromD.setDate(fromD.getDate()+1);
+  const from=new Date(fromD.getFullYear(),fromD.getMonth(),fromD.getDate(),12,0,0,0);
+  const diff=Math.round((from.getTime()-anchor.getTime())/DAY);
+  const rem=((diff%interval)+interval)%interval;
+  let cand=new Date(anchor.getTime()+(rem===0?diff:diff+(interval-rem))*DAY);
+  const ymd=x=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+  let guard=0;
+  while(skip.has(ymd(cand))&&guard<365){ cand=new Date(cand.getTime()+interval*DAY); guard++; }
+  return ymd(cand);
+}
+/* The Delivery list's line for this row: the hub's own status chip. */
+function fbStatus(c){
+  const b=((c&&c.batch)||{}).schedule||{};
+  if(!b.enabled) return T('Off','关');
+  const iv=Number(b.interval_days)||2, cut=b.cutoff_hour!=null?Number(b.cutoff_hour):20;
+  return T('Every '+iv+' day'+(iv===1?'':'s')+', order by '+cut+':00','每 '+iv+' 天制作一批,'+cut+':00 截单');
+}
+reg('fbOpen', ()=>{
+  if(!dlvCanWrite()||state.fb) return;
+  state.fb={loading:true, err:null, d:null, tab:'out', busy:false, saveErr:null}; render();
+  const f=state.fb;
+  api('/config').then(cfg=>{
+    if(state.fb!==f) return;
+    if(cfg&&typeof cfg==='object') state.cfg=cfg;
+    f.loading=false; f.d=fbDraft(state.cfg||{}); render();
+  }).catch(e=>{
+    if(state.fb!==f||String(e.message)==='auth') return;
+    f.loading=false; f.err=e.refused?E(...e.words):E('Could not load this.','无法加载。'); render();
+  });
+});
+reg('fbClose', ()=>{ if(state.fb&&state.fb.busy) return; state.fb=null; render(); });
+/* Typing never repaints (the caret stays); the preview and the hint are
+   repainted in place. The switch, ticks, tabs and dates do repaint. */
+reg('fbSet', (k,v)=>{
+  const f=state.fb; if(!f||!f.d||!(k in f.d)||Array.isArray(f.d[k])||typeof f.d[k]==='boolean') return;
+  f.d[k]=String(v==null?'':v); f.saveErr=null;
+  const pv=document.getElementById('mFbPreview'); if(pv) pv.innerHTML=fbPreview(f);
+  const hn=document.getElementById('mFbHint'); if(hn) hn.innerHTML=fbHint(f.d);
+});
+reg('fbToggle', ()=>{ const f=state.fb; if(!f||!f.d||f.busy) return; f.d.on=!f.d.on; f.saveErr=null; render(); });
+reg('fbCh', k=>{ const f=state.fb; if(!f||!f.d||f.busy||!FB_CH.some(x=>x[0]===k)) return;
+  f.d.ch=f.d.ch.includes(k)?f.d.ch.filter(x=>x!==k):f.d.ch.concat([k]); render(); });
+reg('fbSkipAdd', v=>{ const f=state.fb; const s=String(v||'').trim(); if(!f||!f.d||f.busy||!/^\d{4}-\d{2}-\d{2}$/.test(s)) return;
+  f.d.skip=[...new Set(f.d.skip.concat([s]))].sort(); render(); });
+reg('fbSkipDel', v=>{ const f=state.fb; if(!f||!f.d||f.busy) return; f.d.skip=f.d.skip.filter(x=>x!==v); render(); });
+reg('fbTab', t=>{ const f=state.fb; if(!f) return; f.tab=t==='gz'?'gz':'out'; render(); });
+reg('fbSave', ()=>{
+  if(!dlvCanWrite()) return;
+  const f=state.fb; if(!f||!f.d||f.busy) return;
+  const r=fbBody(f.d);
+  if(r.err){ f.saveErr=T(r.err[0],r.err[1]); render(); return; }
+  f.busy=true; f.saveErr=null; render();
+  dlvCfgPut(null,r.body).then(()=>{ state.fb=null; render(); showToast(T('Saved','已保存')); })
+    .catch(e=>{ f.busy=false; if(String(e.message)==='auth') return;
+      f.saveErr=e.refused?T(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
+});
+function fbHint(d){
+  const nx=d.on?fbNextBatch(d):null;
+  return nx?T('On this schedule the next batch is '+nx+'.','按此排期,下一批为 '+nx+'。'):'';
+}
+/* The checkout popup as the customer would see it, from what is typed, each
+   blank line falling back to the built-in wording (the placeholders ARE that
+   wording). {ship_date}/{make_date} take the schedule's next batch day;
+   {delivery_date} stays a token — it is resolved at checkout. */
+function fbPreview(f){
+  const d=f.d, gz=f.tab==='gz', rows=FB_COPY[gz?'gz':'out'];
+  const by=k=>rows.find(r=>r[0]===k);
+  const pick=k=>{ const r=by(k); if(!r) return {text:'',fell:false}; const v=String(d[k]||'').trim(); return {text:v||r[4], fell:!v}; };
+  const pre=gz?'l':'';
+  const k=pick(pre+'kick_en'), kc=pick(pre+'kick_cn'), t=pick(pre+'title_en'), tc=pick(pre+'title_cn'),
+        b=pick(pre+'msg_en'), bc=pick(pre+'msg_cn'), tip=gz?{text:'',fell:false}:pick('tip_en'), tipc=gz?{text:'',fell:false}:pick('tip_cn');
+  const ship=fbNextBatch(d);
+  const tok=s=>`<span class="num" style="color:var(--text-secondary)">${s}</span>`;
+  const fill=s=>escAttr(s).replace(/\{ship_date\}|\{make_date\}/g, ship?`<b class="num">${ship}</b>`:tok('{'+(gz?'make_date':'ship_date')+'}'))
+    .replace(/\{delivery_date\}/g, tok('{delivery_date}'));
+  const fell=[k,t,b].concat(gz?[]:[tip]).filter(x=>x.fell).length;
+  const tipTxt=T(tip.text,tipc.text);
+  return `<div style="padding:14px;border-radius:14px;background:var(--surface-raised);display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">${fill(T(k.text,kc.text))}</span>
+      <span style="font-size:16px;font-weight:500">${fill(T(t.text,tc.text))}</span>
+      <span style="font-size:13.5px;line-height:1.55">${fill(T(b.text,bc.text))}</span>
+      ${tipTxt?`<span style="font-size:12.5px;line-height:1.5;color:var(--text-secondary)">${fill(tipTxt)}</span>`:''}</div>
+    ${fell?`<div style="font-size:12.5px;color:var(--text-secondary)">${T(fell+' of these lines use the built-in wording.','其中 '+fell+' 行使用默认文案。')}</div>`:''}
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${ship
+      ?T('Dates follow the schedule above. A customer can be given a later batch when the shelf is already empty.','日期按上面的排期计算。若库存已售罄,顾客可能被安排到更后的一批。')
+      :T('Pick a batch day above to see the dates.','请先在上面选择一个制作日以显示日期。')}</div>`;
+}
+function sheetBatch(){
+  const f=state.fb; if(!f) return '';
+  const head=`<div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="flex:1;font-size:18px;font-weight:500">${T('Fresh batches','新鲜现做')}</span>
+        <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('fbClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div></div>`;
+  if(!f.d) return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('fbClose')"></div>
+    <div class="sheet" style="z-index:46;padding:0;overflow:hidden">${head}
+      <div style="padding:16px 20px calc(env(safe-area-inset-bottom,0px) + 24px);font-size:15px;color:${f.err?'var(--brick-ink)':'var(--text-secondary)'}">${f.err||T('Loading…','加载中…')}</div></div>`;
+  const d=f.d, dis=f.busy?' disabled':'';
+  const lab=(t,desc)=>`<span style="display:block;font-size:14px;font-weight:500">${t}</span>${desc?`<span style="display:block;font-size:12.5px;color:var(--text-secondary);line-height:1.45;margin-top:2px">${desc}</span>`:''}`;
+  const num=(k,ph,unit)=>`<span style="display:flex;align-items:center;gap:6px;flex:none"><input id="mFb_${k}" inputmode="numeric" value="${escAttr(d[k])}"${ph!=null?` placeholder="${escAttr(ph)}"`:''} style="width:72px;text-align:right"${dis} oninput="APP.cmd('fbSet','${k}',this.value)">${unit?`<span class="num" style="font-size:13px;color:var(--text-secondary)">${unit}</span>`:''}</span>`;
+  const row=(label,desc,ctl)=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--hairline)"><span style="flex:1;min-width:0">${lab(label,desc)}</span>${ctl}</div>`;
+  const tick=(on,cmd,label)=>`<button role="checkbox" aria-checked="${on?'true':'false'}"${dis} onclick="${cmd}" style="display:inline-flex;align-items:center;gap:8px;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;color:var(--text-primary)">
+      <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${on?ic('check',15,2.5):''}</span>
+      <span style="font-size:14px">${label}</span></button>`;
+  const n=Math.max(1,parseInt(d.interval,10)||2), rc=parseInt(d.cutoff,10), cut=(Number.isFinite(rc)&&rc>=0&&rc<=23)?rc:20;
+  const say=d.on?T('On. A batch is made every '+n+' day'+(n===1?'':'s')+', and orders close at '+cut+':00.','开启。每 '+n+' 天制作一批,'+cut+':00 截单。')
+                 :T('Off. Nothing waits for a batch.','关闭。没有订单需要等待制作。');
+  const copy=FB_COPY[f.tab].map(([k,,en,zh,ph,ml])=>{
+    const which=/_cn$/.test(k)?'中文':'English';
+    return `<label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${T(en,zh)} · ${which}</span>
+      ${ml?`<textarea id="mFb_${k}" placeholder="${escAttr(ph)}" style="min-height:84px;resize:none"${dis} oninput="APP.cmd('fbSet','${k}',this.value)">${escAttr(d[k])}</textarea>`
+        :`<input id="mFb_${k}" value="${escAttr(d[k])}" placeholder="${escAttr(ph)}" maxlength="${/title/.test(k)?60:40}"${dis} oninput="APP.cmd('fbSet','${k}',this.value)">`}</label>`;
+  }).join('');
+  const body=`<div class="card" style="padding:14px;display:flex;align-items:center;gap:14px">
+      <span style="flex:1;min-width:0;font-size:14px;line-height:1.5">${say}</span>${toggle(d.on,"APP.cmd('fbToggle')")}</div>
+    <div class="card" style="padding:4px 14px">
+      <div style="padding:12px 0 10px"><span class="eyebrow">${T('Batch schedule','制作排期')}</span>
+        <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;margin-top:6px">${T('Inside Guangzhou it applies only when a fresh item is sold out — then the order waits for the next batch, delivered on our own run the day it is made.','广州市内订单仅在现做商品售罄时受影响 — 等下一批,由我们自己配送,制作当天即送达。')}</div></div>
+      ${row(T('Make every','每隔'),T('How often the kitchen makes a batch.','厨房每隔多久制作一批。'),num('interval',null,T('days','天')))}
+      ${row(T('A batch day','某个制作日'),T('Any past batch day. Every batch since is counted from it.','任意一个过去的制作日,之后每一批都由它计算。'),
+        `<input id="mFb_anchor" type="date" value="${escAttr(d.anchor)}" style="width:auto;flex:none"${dis} onchange="APP.cmd('fbSet','anchor',this.value)">`)}
+      ${row(T('Order-by hour','当日截单'),T('Past this hour, an order waits for the batch after next.','过了这个时间下单,就要等再下一批。'),num('cutoff',null,':00'))}
+      ${row(T('Ready from the kitchen','厨房已完成'),T('Blank offers a sold-out fresh item for the next batch day. Set an hour and it is offered for today, until then.','留空:售罄的现做商品按下一个制作日发售。填写后:当天此时间之前仍按今天发售。'),num('ready','—',':00'))}
+      ${row(T('Pre-order opens','预订开始'),T("From this hour a platform may start taking orders for today's batch. Blank or 0 means from midnight.",'从此时间起,平台可以开始为今天这一批接单。留空或填 0 表示从午夜开始。'),num('preOpen','0',':00'))}
+      ${row(T('Pre-order cut-off','预订截单'),T('Until this hour a platform can take orders for a batch that is still being made. Blank uses the kitchen-ready hour above.','在此时间之前,平台可以为尚未完成的这一批接单。留空则用上面的厨房已完成时间。'),num('lock','—',':00'))}
+      ${row(T('How many to offer','预订可售数量'),T('Per fresh item, on top of what is on the shelf. Each pre-order uses one up. Blank or 0 switches pre-orders off.','每款现做商品,在货架数量之外可再接的数量。每接一单减一。留空或填 0 即关闭预订。'),num('qty','—',''))}
+      <div style="padding:12px 0;border-top:1px solid var(--hairline)">${lab(T('Channels','渠道'),T('Which platforms may take pre-orders. None ticked keeps every platform on the shelf count.','哪些平台可以接预订。都不勾选则各平台仍按货架数量显示。'))}
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">${FB_CH.map(([k,en,zh])=>tick(d.ch.includes(k),`APP.cmd('fbCh','${k}')`,T(en,zh))).join('')}</div></div>
+      <div style="padding:12px 0;border-top:1px solid var(--hairline)">${lab(T('Skip these dates (vacations)','跳过这些日期(假期)'),T('Holidays. The rhythm steps over them and lands on the next batch day.','假期。排期会跳过这些日期,改在下一个制作日。'))}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${d.skip.length?d.skip.map(s=>`<span class="chip on" style="gap:6px"><span class="num">${escAttr(s)}</span><button${dis} onclick="APP.cmd('fbSkipDel','${escAttr(s)}')" aria-label="${escAttr(T('Remove '+s,'移除 '+s))}" style="background:none;border:none;padding:0 2px;cursor:pointer;font-family:inherit;color:inherit">×</button></span>`).join('')
+          :`<span style="font-size:13px;color:var(--text-secondary)">${T('None','无')}</span>`}</div>
+        <input type="date" aria-label="${T('Add a date to skip','添加要跳过的日期')}" style="width:auto;margin-top:8px"${dis} onchange="APP.cmd('fbSkipAdd',this.value)"></div>
+      ${row(T('Lock at hour, evening before','前一晚锁定时间'),T('Only affects orders containing a batch-made product. A same-day slot can never be chosen for a fresh order.','仅影响含「分批现做」商品的订单。新鲜订单不可改为当日时段。'),num('resched',null,':00'))}
+      ${row(T('Morning request hour','厨房制作请求时间'),T('One request a day for what customers have already ordered and the shelf does not have. It pushes and prints like any kitchen request. Leave blank to turn it off.','每天一张厨房制作请求,数量取自有客户订单等待的商品,与其他制作请求一样推送并打印。留空则关闭。'),num('morning','6',':00'))}
+      <div id="mFbHint" style="padding:0 0 12px;font-size:13px;color:var(--text-secondary)">${fbHint(d)}</div>
+    </div>
+    <div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+      <span class="eyebrow">${T('Checkout popup','结账弹窗')}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Leave any field blank to use the default wording.','任意字段留空则使用默认文案。')}</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="chip ${f.tab==='out'?'on':''}" onclick="APP.cmd('fbTab','out')"><span>${T('Outside Guangzhou','广州以外')}</span></button>
+        <button class="chip ${f.tab==='gz'?'on':''}" onclick="APP.cmd('fbTab','gz')"><span>${T('Inside Guangzhou','广州市内')}</span></button></div>
+      ${f.tab==='gz'?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('A Guangzhou order goes out on our own run the day the batch is made, so it names one date that is both. The only placeholder is {make_date}.','广州订单由我们自己配送,制作当天即送达,因此只显示一个日期。留空则使用默认文案。')}</span>`:''}
+      ${copy}
+      <span class="eyebrow" style="margin-top:4px">${T('At checkout','结账时')}</span>
+      <div id="mFbPreview" style="display:flex;flex-direction:column;gap:8px">${fbPreview(f)}</div>
+    </div>`;
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('fbClose')"></div>
+   <div class="sheet" style="z-index:46;top:46px;overflow:hidden;padding:0">${head}
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">${body}</div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${f.saveErr?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${f.saveErr}</div>`:''}
+       <div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1"${dis} onclick="APP.cmd('fbClose')">${T('Cancel','取消')}</button>
+         <button class="cta" style="flex:1"${dis} onclick="APP.cmd('fbSave')">${f.busy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>
+   </div>`;
+}
+/* ── §325 O9 — THE DELIVERY SET-UP WIZARD ──────────────────────────────────
+   The desktop's dlvWiz* (06-delivery.js) and its three questions: where, what
+   it costs, when it arrives. Offered where the desktop offers it — only while
+   delivery is not set up at all (no zone switched on, no national default on,
+   and the wizard never finished: dlvIsConfigured). The body is the desktop's
+   dlvWizFinish body, with one difference that is a refusal, not a change: a
+   price typed as anything but a number is refused (money fails closed), where
+   the desktop's parseFloat would quietly fall back to its own default.
+   The desktop's step 1 has a "Your city" box that its finish never reads or
+   sends; the phone does not draw a box whose answer goes nowhere. */
+function dlvUnconfigured(){
+  if(!Array.isArray(state.zones)||!state.cfg) return false;   // not known yet: say nothing
+  if(state.zones.some(z=>z&&z.is_active)) return false;
+  const dz=cfgGet('delivery.defaultZone',null);
+  if(dz&&dz.enabled) return false;
+  return cfgGet('delivery.enabled',false)!==true;
+}
+function dlvSetupCard(){
+  if(!dlvUnconfigured()) return '';
+  const can=dlvCanWrite();
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
+    <span style="font-size:15px;font-weight:500">${T('Delivery to their door','送货上门')}</span>
+    <span style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary)"><span style="width:7px;height:7px;border-radius:50%;background:var(--text-secondary);flex:none"></span>${T('Off — not set up yet','未开启,尚未设置')}</span>
+    ${can?`<span style="font-size:13px;line-height:1.5;color:var(--text-secondary)">${T("You send orders to the customer's address. Answer 3 quick questions and it's on — you can change any answer later.",'把订单送到顾客地址。回答 3 个小问题即可开启,之后随时可改。')}</span>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+        <button class="cta" style="width:auto;padding:0 16px" onclick="APP.cmd('dwizOpen')">${T('Set up delivery','设置配送')}</button>
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('about 1 minute','约 1 分钟')}</span></div>`:''}
+  </div>`;
+}
+const DWIZ_STEPS=[
+  {k:'where', q:['Where do you deliver?','你们送到哪里?'], sub:['Pick one. Customers outside this area only see pickup.','选择一项。范围之外的顾客只会看到自提。'],
+   opts:[['city','Just my city','只送本市','The city your store is in.','门店所在的城市。'],
+     ['areas','A few areas I choose','我指定的几个地区','Add cities or districts one by one, after this.','之后逐个添加城市或区。'],
+     ['country','Anywhere in the country','全国配送','You ship by courier to any address.','通过快递寄送到任何地址。']]},
+  {k:'price', q:['What does delivery cost the customer?','顾客要付多少运费?'], sub:['Most stores start with one flat price. You can fine-tune later.','大多数商家先用统一运费,之后可再细调。'],
+   opts:[['flat','One flat price','统一运费','',''],
+     ['weight','By weight','按重量计费','Courier-style: a price for the first kg, then per extra kg.','快递式:首重一个价,续重每公斤加价。'],
+     ['free','Always free','全部免运费','You cover the delivery cost.','运费由你承担。'],
+     ['zones','A different price per area','不同地区不同价',"Each area gets its own price — flat or by weight, like a courier rate table. You'll fill in the table after setup.",'每个地区单独定价 —— 固定价或按重量,如同快递运费模板。完成后填写价格表。']]},
+  {k:'when', q:['When does the order arrive?','订单什么时候送到?'], sub:['This is what customers are promised at checkout.','这是顾客在结账时看到的承诺。'],
+   opts:[['sameday','Same day','当日达','',''],
+     ['nextday','Next day','次日达','Order today, arrives tomorrow.','今天下单,明天送到。'],
+     ['courier','A few days — by courier','几天内,快递寄送','Customers see "ships within 24h" and get a tracking number.','顾客看到「24 小时内发货」并获得快递单号。'],
+     ['slots','Customer picks a time','顾客自选时间','They choose a date and a time window at checkout.','顾客在结账时选择日期和时间段。']]},
+];
+reg('dwizOpen', ()=>{
+  if(!dlvCanWrite()||!dlvUnconfigured()) return;
+  // Step 1 forces a pick; the other two start on the desktop's defaults.
+  state.dwiz={step:1, where:null, price:'flat', when:'nextday',
+    v:{flat:'8', free:'99', w1:'10', wx:'3', cutoff:'16:00'}, busy:false, err:null};
+  render();
+});
+reg('dwizClose', ()=>{ if(state.dwiz&&state.dwiz.busy) return; state.dwiz=null; render(); });
+reg('dwizPick', (k,v)=>{ const w=state.dwiz; if(!w||w.busy) return;
+  const st=DWIZ_STEPS.find(s=>s.k===k); if(!st||!st.opts.some(o=>o[0]===v)) return;
+  w[k]=v; w.err=null; render(); });
+reg('dwizSet', (k,v)=>{ const w=state.dwiz; if(!w||!(k in w.v)) return; w.v[k]=String(v==null?'':v); w.err=null; });
+reg('dwizBack', ()=>{ const w=state.dwiz; if(!w||w.busy||w.step<=1) return; w.step--; w.err=null; render(); });
+/* The finish body, the desktop's dlvWizFinish rule for rule. Returns {err} or {body, where, price}. */
+function dwizBody(w){
+  const money=k=>{ const t=String(w.v[k]==null?'':w.v[k]).trim(); return (t!==''&&Number.isFinite(Number(t))&&Number(t)>=0)?Number(t):null; };
+  const where=w.where, price=w.price, when=w.when;
+  const need=price==='flat'?['flat','free']:price==='weight'?['w1','wx']:price==='zones'?['flat']:[];
+  if(need.some(k=>money(k)===null)) return {err:['Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。']};
+  const dz={enabled:true, day_only:1};
+  if(price==='flat'){ dz.base_fee=money('flat'); dz.free_threshold=money('free')||null; }
+  else if(price==='free'){ dz.base_fee=0; dz.free_threshold=null; }
+  else if(price==='weight'){ dz.base_fee=money('w1'); dz.free_threshold=null; dz.weight={first_kg_fee:money('w1'), extra_kg_fee:money('wx')}; }
+  else { dz.base_fee=money('flat'); dz.free_threshold=null; }
+  dz.min_lead_days=(when==='sameday')?0:(when==='nextday')?1:(when==='courier')?1:0;
+  dz.same_day_allowed=(when==='sameday')?1:0;
+  dz.day_only=(when==='slots')?0:1;
+  const body={'delivery.enabled':true,'delivery.coverage':where,'delivery.pricingMode':price,'delivery.speed':when};
+  if(where!=='areas'&&price!=='zones') body['delivery.defaultZone']=dz;
+  if(when==='sameday') body['delivery.sameDayCutoff']=String(w.v.cutoff||'').trim()||'16:00';
+  return {body, where, price};
+}
+reg('dwizNext', ()=>{
+  const w=state.dwiz; if(!w||w.busy) return;
+  const key=DWIZ_STEPS[w.step-1].k;
+  if(!w[key]) return;                                  // step 1 forces a pick
+  if(w.step<3){ w.step++; w.err=null; render(); return; }
+  if(!dlvCanWrite()) return;
+  const r=dwizBody(w);
+  if(r.err){ w.err=T(r.err[0],r.err[1]); render(); return; }
+  w.busy=true; w.err=null; render();
+  dlvCfgPut(null,r.body).then(()=>{
+    state.dwiz=null; showToast(T('Delivery is on','配送已开启'));
+    // Re-read the zones (the server materialises the default zone into one),
+    // then go where the answer leads: per-area coverage or pricing means the
+    // zone table is the next screen.
+    api('/delivery-zones').then(z=>{ if(Array.isArray(z)) state.zones=z; render(); }).catch(()=>render());
+    if((r.where==='areas'||r.price==='zones')&&canRoute('zones')) APP.cmd('push','zones'); else render();
+  }).catch(e=>{ w.busy=false; if(String(e.message)==='auth') return;
+    w.err=e.refused?T(...e.words):T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
+});
+function sheetDlvWiz(){
+  const w=state.dwiz; if(!w) return '';
+  const st=DWIZ_STEPS[w.step-1], dis=w.busy?' disabled':'';
+  const inp=(k,label,type)=>`<input id="mDwiz_${k}" ${type==='time'?'type="time"':'inputmode="decimal"'} aria-label="${escAttr(label)}" value="${escAttr(w.v[k])}" style="width:${type==='time'?'110px':'72px'};display:inline-block"${dis} onclick="event.stopPropagation()" oninput="APP.cmd('dwizSet','${k}',this.value)">`;
+  const inline=v=>{
+    if(st.k==='price'&&v==='flat') return `<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:13px">${T('Charge','每单收')} ${CUR}${inp('flat',T('Flat charge per order','每单统一运费'))} · ${T('free over','满')} ${CUR}${inp('free',T('Free over this amount','满此金额包邮'))}</span>`;
+    if(st.k==='price'&&v==='weight') return `<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:13px">${T('First kg','首重')} ${CUR}${inp('w1',T('Price for the first kilogram','首重价格'))} · ${T('each extra kg','续重每公斤')} ${CUR}${inp('wx',T('Price per extra kilogram','续重每公斤价格'))}</span>`;
+    if(st.k==='when'&&v==='sameday') return `<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:13px">${T('if they order before','需在此时间前下单')} ${inp('cutoff',T('Order-by time for same day','当日达截单时间'),'time')}</span>`;
+    return '';
+  };
+  const opts=st.opts.map(([v,en,zh,sen,szh])=>{
+    const on=w[st.k]===v;
+    return `<div role="radio" aria-checked="${on?'true':'false'}" onclick="APP.cmd('dwizPick','${st.k}','${v}')" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:14px;border:1.5px solid ${on?'var(--text-primary)':'var(--border-default)'};cursor:pointer">
+      <span style="flex:none;width:20px;height:20px;margin-top:1px;border-radius:50%;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};display:flex;align-items:center;justify-content:center">${on?'<span style="width:10px;height:10px;border-radius:50%;background:var(--text-primary)"></span>':''}</span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(en,zh)}</span>
+        ${sen?`<span style="display:block;font-size:12.5px;color:var(--text-secondary);line-height:1.45;margin-top:2px">${T(sen,szh)}</span>`:''}
+        ${inline(v)}</span></div>`;
+  }).join('');
+  const can=!!w[st.k];
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('dwizClose')"></div>
+   <div class="sheet" style="z-index:46;top:46px;overflow:hidden;padding:0">
+     <div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <span style="flex:1;font-size:18px;font-weight:500">${T('Set up delivery','设置配送')}</span>
+         <span style="display:flex;gap:5px" aria-label="${w.step} / 3">${[1,2,3].map(i=>`<i style="width:18px;height:4px;border-radius:2px;background:${i<=w.step?'var(--text-primary)':'var(--border-default)'}"></i>`).join('')}</span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('dwizClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+       <div style="font-size:17px;font-weight:500">${T(st.q[0],st.q[1])}</div>
+       <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-bottom:4px">${T(st.sub[0],st.sub[1])}</div>
+       ${opts}</div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${w.err?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${w.err}</div>`:''}
+       <div style="display:flex;gap:8px">
+         ${w.step>1?`<button class="btn2" style="flex:1"${dis} onclick="APP.cmd('dwizBack')">${T('Back','上一步')}</button>`
+           :`<button class="btn2" style="flex:1"${dis} onclick="APP.cmd('dwizClose')">${T('Cancel','取消')}</button>`}
+         <button class="cta" style="flex:1"${can&&!w.busy?'':' disabled'} onclick="APP.cmd('dwizNext')">${w.busy?T('Saving…','保存中…'):w.step===3?T('Turn delivery on','开启配送'):T('Continue','继续')}</button></div></div>
+   </div>`;
+}
 /* ── §325 O5 — DELIVERY ZONES ON THE PHONE ─────────────────────────────────
    The desktop's zones table and its drawer (06-delivery.js renderZoneTable,
    openZoneDrawer, saveZoneDrawer, duplicateZone, the apply panel, updateZone,
@@ -9287,6 +9680,7 @@ function dlvSettingsCard(holiday,cutoff){
     ${row(T('Store pickup','到店自提'), (w.open||'10:00')+'–'+(w.close||'20:00'),'dlvLive','pickup')}${sep}
     ${row(T('Everywhere else — default delivery','其他地区 — 默认配送'), dz.enabled?m(dz.base_fee!=null?dz.base_fee:25):T('Off','关'),'dlvDefaultZone')}${sep}
     ${row(T('Pre-orders','预订'), win,'dlvLive','preorder')}${sep}
+    ${row(T('Fresh batches','新鲜现做'), fbStatus(state.cfg),'fbOpen')}${sep}
     ${row(T('Kitchen address (customer-facing)','厨房地址(顾客可见)'), kit?escAttr(kit):'—','dlvLive','kitchen')}${sep}
     ${sw(T('Bulk attach tracking','批量绑定运单号'),T('When on, a button appears in the Orders toolbar. When off, the button is hidden — the tool stays available but out of the way.','开启后订单页工具栏会显示该按钮;关闭后按钮隐藏,不占据界面。'),'bulk','delivery.bulkTracking')}${sep}
     ${sw(T('Box label','箱贴打印'),T("When on, the order page shows the Box-label controls. When off, they're hidden — the tool stays available but out of the way.",'开启后订单页显示箱贴按钮;关闭后隐藏,不占据界面。'),'box','delivery.boxLabel')}
@@ -9329,13 +9723,21 @@ function screenDelivery(){
       {label:T('Same-day districts','当日达区域'), value: z ? String(z.sameday) : T('Loading…','加载中…')},
       {label:T('Stores located','门店已定位'), value:located},
     ])}
+    ${dlvSetupCard()}
     ${dlvSettingsCard(holiday,cutoff)}
     ${z&&z.off?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
       <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
       <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送范围已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
     ${missing?`<div style="display:flex;align-items:flex-start;gap:11px;background:var(--brick-tint);border-radius:12px;padding:12px 14px">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
-      <span style="font-size:13.5px;color:var(--brick-ink);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:13.5px;color:var(--brick-ink);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one.':missing+' stores have no coordinates, so they can never be the nearest one.', missing+' 家门店没有坐标，无法参与就近派单。')}</span>
+      ${/* §325 O9 — this said "Fix it on desktop". Since X6 a store's address and
+            GPS pin are edited on the phone (Operations → the store), so the line
+            leads there instead, for the key that edits a store (stores:edit). The
+            sentence is the live one with its last clause dropped; the button is
+            the live Operations pair. */''}
+      ${canRoute('storeone')?`<button class="btn2" style="align-self:flex-start;width:auto;min-height:36px;padding:0 12px;gap:6px;font-size:13.5px" onclick="APP.cmd('push','operations')">${T('Operations','运营')} ${ic('chevron-right',15)}</button>`:''}</span></div>`:''}
     ${noKey?noteBar(T('No maps key is configured, so nothing can be located','未配置地图密钥，无法进行定位')):''}
     ${x7DeliveryDoors()/* §325 X7 — tracking, JD and Qingyun, as the desktop Delivery hub's cards */}
     ${desktopNote()}</div>`;
@@ -39898,6 +40300,8 @@ function render(){
   if(state.ask) html += layer('ask:'+state.ask.title, sheetAsk());
   if(state.ordViews.open) html += layer('ordviews', sheetOrdViews());
   if(state.zn.edit) html += layer('zn:'+(state.zn.edit.id||state.zn.edit.mode), sheetZone());
+  if(state.fb) html += layer('fb', sheetBatch());
+  if(state.dwiz) html += layer('dwiz:'+state.dwiz.step, sheetDlvWiz());
   if(state.custId) html += layer('cust:'+state.custId, sheetCustomer());
   if(state.caddr) html += layer('caddr', sheetCustAddr());
   if(state.detailId) html += layer('detail:'+state.detailId, sheetOrderDetail());
