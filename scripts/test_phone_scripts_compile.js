@@ -41,17 +41,12 @@ let pass = 0, fail = 0;
 const ok = (c, m, extra) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ ' + m + (extra ? '\n      ' + extra : '')); } };
 const section = (t) => console.log('\n' + t);
 
-/* PINNED, each investigated (docs: §325 T1).
-   m.html · function kbMark — TWO DIFFERENT FUNCTIONS under one name, from two
-   lanes on 2026-09-27. The first (touch-down: remember which field had the
-   keyboard) is registered on pointerdown/mousedown for kbTapAway; the second
-   (toggle html.kb-up) wins, being later, so kbWas is never set and the
-   tap-away keyboard close never fires. Not fixed here: renaming either
-   switches a dead phone behaviour back on, which is a phone change, not a
-   test step's. Reported to the coordinator. */
-const ALLOWED = new Set([
-  'm.html|function|kbMark',
-]);
+/* PINNED, each investigated (docs: §325 T1). Empty: function kbMark was the
+   one entry — two different functions under one name, the first (touch-down,
+   for kbTapAway) shadowed by the second (the html.kb-up toggle), so the
+   tap-away keyboard close never fired. §325 K1 renamed the first to
+   kbTouchDown. The list may only shrink. */
+const ALLOWED = new Set([]);
 
 const PHONE = ['m.html', 'cms-mobile.html', 'cms.html'];
 const pages = fs.readdirSync(PUB).filter((f) => f.endsWith('.html')).sort((a, b) =>
