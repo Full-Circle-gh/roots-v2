@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.241 · 2026-09-30 · §342 THE PAGE EDITOR'S FIELDS AND ONBOARDING ON THE PHONE — NOTHING COMPOSED; THE FIELDS ARE THE DESKTOP INSPECTOR'S OWN WORDS.** See *The page editor's fields on the phone (§342)*.
+
 **v1.240 · 2026-09-30 · §341 PICTURES, VIDEO AND BUTTON LINKS IN THE PHONE PAGE EDITOR — 7 STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Pictures, video and links in the phone page editor (§341)*.
 
 **v1.239 · 2026-09-30 · §337 A SAVE REFUSED AS STALE ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, FROM THE DESKTOP'S OWN REFUSAL.** See *A save someone else got to first, on the phone (§337)*.
@@ -10627,3 +10629,32 @@ only, and it names the act rather than the field, unlike §299's `Picture`);
 `Add photos · 添加图片` (the phone's Media screen: plural, and wrong for a
 clip); `No retail permission · 没有零售权限` (names a permission that no
 longer exists).
+
+## The page editor's fields on the phone (§342)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1).
+
+- **Every field's label, hint, section title, option and button text in the
+  phone editor's sheet is the desktop inspector's own** (`public/cms.html`),
+  read off the inspector in the editor's language and drawn as it is. The
+  phone adds no word for them, so there is no second copy to correct: a wrong
+  word is corrected once, in the inspector. The sheet's own labels for text
+  fields (`Kicker · 小标题`, `Kicker (中文) · 小标题(中文)`, `Banner text ·
+  横幅文字`, `Empty text · 无订单文字` and the rest of the retired list) are
+  retired with it.
+- **The phone's few words of its own**, all copied: the single product list's
+  `— none — · — 无 —` and the multiple one's `— pick one — · — 选择一个 —`
+  (both the inspector's), `Remove · 删除` (the sheet's), `DRAFT` (the
+  inspector's, one word in both languages).
+- **Onboarding** (`public/cms-mobile.html`), copied whole from the desktop's
+  `renderOnboardingSettings`: `Onboarding · 引导页`, `show to · 显示给`,
+  `New users only · 仅新用户`, `Everyone until I re-show · 所有用户(到下次重置)`,
+  `Everyone, every launch · 每个用户每次启动`, `Off · 关闭`,
+  `Re-show to all · 向所有人重新显示` and its hint, the confirm's question and
+  body, `Button label · 按钮文字`, `Updated · 已更新`,
+  `Will re-show — now at vN · 将重新显示 — 当前 vN`. From the phone editor:
+  `Loading… · 加载中…`, `Could not load · 加载失败`, `Could not save · 保存失败`,
+  `Saving… · 保存中…`, `Cancel · 取消`; from the phone app: `Try again · 重试`.
+- **The desktop editor's no-permission screen** now uses the pair the phone
+  editor's uses (declared with §325 M2): `You do not have permission to do
+  that. · 你没有执行该操作的权限。` and the `content:edit` capability's label.
