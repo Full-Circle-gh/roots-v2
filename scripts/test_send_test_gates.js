@@ -54,6 +54,7 @@ operator('push', ['settings:push']);
 operator('shop', ['settings:shop']);
 operator('delivery', ['delivery:view']);
 operator('shipping', ['shipping:config']);
+operator('invoices', ['invoices:manage']);
 operator('owner', [], 'owner');
 
 const SETTINGS = ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config', 'delivery:view'];
@@ -66,6 +67,7 @@ const CASES = [
   ['/system-alerts/test', SETTINGS, { webhook: '' }, 'push', 'orders', 'system alerts, Settings → Push'],
   ['/integrations/kd100/test', DELIVERY, null, 'delivery', 'push', 'kd100, the Delivery panel'],
   ['/integrations/jd/test', DELIVERY, null, 'shipping', 'push', 'JD, the Delivery panel'],
+  ['/integrations/nuonuo/test', 'invoices:manage', null, 'invoices', 'push', 'nuonuo, pressed by no screen: its credentials\' key'],
 ];
 
 (async () => {
@@ -129,11 +131,35 @@ const CASES = [
     const who = (re) => files.filter((f) => re.test(read(f))).sort();
     is(who(/printer\/test|kd100\/test|jd\/test|aliyun_sms\/test|wecom\/test|system-alerts\/test/).filter((f) => f !== 'public/m.html'),
       ['public/retail-admin/02-settings-ops.js', 'public/retail-admin/05-marketing.js'], 'the desktop callers are the two settings modules');
+    is(who(/nuonuo\/test/), [], 'no screen presses the nuonuo test');
+
+    section('4 · the phone (X7): each test command is behind a route whose keys the server gate admits');
     const M = read('public/m.html');
-    if (/printer\/test/.test(M)) {
-      ok(/ROUTE_CAP=\{[\s\S]*settings:\['settings:shop','settings:push','settings:payments','stores:view','shipping:config'\]/.test(M),
-        'the phone\'s test print sits behind Settings, whose keys are all admitted');
+    const rc = M.slice(M.indexOf('const ROUTE_CAP='), M.indexOf('\n};', M.indexOf('const ROUTE_CAP=')));
+    const routeKeys = (k) => {
+      const m = rc.match(new RegExp('(?:^|[\\s,{])' + k + ":\\s*('([^']+)'|\\[([^\\]]+)\\])", 'm'));
+      return !m ? null : m[2] != null ? [m[2]] : m[3].split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
+    };
+    for (const [cmd, route, p, what] of [
+      ['x7PrnTest', 'printers', '/printer/test', 'test print'],
+      ['x7WecomTest', 'pushcfg', '/wecom/test', 'WeCom test'],
+      ['x7SmsTest', 'pushcfg', '/integrations/aliyun_sms/test', 'SMS test'],
+      ['x7AlertTest', 'pushcfg', '/system-alerts/test', 'system-alert test'],
+      ['x7SvcTest', 'kd100cfg', '/integrations/kd100/test', 'kd100 test'],
+      ['x7SvcTest', 'jdcfg', '/integrations/jd/test', 'JD test'],
+    ]) {
+      const at = M.indexOf("reg('" + cmd + "'");
+      const body = M.slice(at, M.indexOf('\nreg(', at + 5));
+      ok(at > 0 && body.includes("canRoute('" + route + "')") || (cmd === 'x7SvcTest' && /canRoute\(svc==='kd100'\?'kd100cfg':'jdcfg'\)/.test(body)),
+        `the phone's ${what} (${cmd}) runs only behind canRoute('${route}')`);
+      const keys = routeKeys(route);
+      const need = requiredCapFor('POST', '/api/retail-admin' + p);
+      ok(Array.isArray(keys) && keys.every((k) => (Array.isArray(need) ? need : [need]).includes(k)),
+        `…and every key that opens '${route}' (${(keys || []).join(' | ')}) is admitted by the server`);
     }
+    ok(/apiWrite\('\/printer\/test'/.test(M) && /apiWrite\('\/wecom\/test'/.test(M) && /apiWrite\('\/integrations\/aliyun_sms\/test'/.test(M)
+      && /apiWrite\('\/system-alerts\/test'/.test(M) && /apiWrite\('\/integrations\/'\+svc\+'\/test'/.test(M),
+      'the phone sends all six (kd100 and JD through one command)');
   } finally {
     server.close();
   }

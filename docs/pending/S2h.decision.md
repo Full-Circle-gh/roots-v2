@@ -1,7 +1,7 @@
 ## §NEW — THE TEST BUTTONS THAT SEND SOMETHING REAL NEED A PERMISSION
 
 **Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
-Six test endpoints matched no rule in `lib/cap-routes.js`, so anyone signed in
+Seven test endpoints matched no rule (six with buttons, and nuonuo's) in `lib/cap-routes.js`, so anyone signed in
 could make them. S2f recorded them as left open because "they store nothing".
 That reason does not hold: each one sends something real, whether a printed
 ticket, an SMS, a WeCom message or a call to a courier's API. Each is now gated
@@ -25,26 +25,33 @@ permissions cannot be resolved.
    credentials (S2f). Their buttons are in the Delivery panel's tracking and JD
    views, which open on `delivery:view`.
 4. **Callers.**
-   - On the desktop, all six buttons are in `02-settings-ops.js` and
+   - **Desktop:** all six buttons are in `02-settings-ops.js` and
      `05-marketing.js`, on the panels above.
-   - The phone presses none of them in the code merged so far (main at
-     `4c5844f4`); the X7 phone work had not landed.
-   - When it lands, a phone test print on Operations will sit behind Settings.
-     Every permission the phone's Settings opens on is admitted here, and the
-     suite checks that once the phone calls it.
+   - **Phone (X7, #966).** It presses all six:
+     - the test print (`x7PrnTest`) runs only behind `canRoute('printers')`;
+     - the WeCom, SMS and system-alert tests run only behind
+       `canRoute('pushcfg')`;
+     - the kd100 and JD tests (`x7SvcTest`) run only behind
+       `canRoute('kd100cfg' / 'jdcfg')`.
+   - Each of those phone routes opens on exactly the permissions this step gates
+     on: the Settings tab's six for `printers` and `pushcfg`, and
+     `delivery:view|edit` or `shipping:config` for the two courier routes.
+   - So no phone operator who can press a test loses it. The suite reads both the
+     phone's routes and the server's rules, and fails if they ever drift apart.
 5. **Who is refused now:** only an account that can open neither panel. An
    orders-only account can no longer print, text or message through these
    buttons. An account holding only Settings → Push permissions can no longer
    ping the couriers, whose buttons are on the Delivery panel.
-6. **Still open, not asked for here:** `POST /integrations/nuonuo/test`. No screen
-   presses it. It is listed so the decision can be taken with the others; the
-   natural gate would be `invoices:manage`, as for the nuonuo credentials.
-7. **Tests.** `scripts/test_send_test_gates.js` (fast shard, 41 checks) runs the
+6. **The nuonuo test** (`POST /integrations/nuonuo/test`) needs `invoices:manage`,
+   the same as its credentials (S2f). No screen presses it, so nobody loses it.
+7. **Tests.** `scripts/test_send_test_gates.js` (fast shard, 60 checks) runs the
    real router over a scratch database with enforcement on. It checks:
    - each rule;
    - each endpoint refused to an account outside its panel, and let through for
      the panel's permission and for the owner;
    - enforcement off;
    - that each button sits on the panel its rule names, and who calls the
-     endpoints.
+     endpoints;
+   - that each phone test command runs behind a route whose permissions the
+     server admits.
 8. **Nothing composed.** No operator strings were added.
