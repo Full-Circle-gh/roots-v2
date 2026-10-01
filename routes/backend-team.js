@@ -26,7 +26,23 @@ const roles = require('../lib/roles');
 const editHistory = require('../lib/edit-history');
 const { requireBackend, requireCap, roleAboveCaps, loadCaller } = require('../lib/require-cap');
 // §325 (S2g) — who may add, remove or reset a store's stock-staff sign-ins.
-const requireStoreStaffWrite = requireCap(require('../lib/cap-routes').storeStaffCap());
+const requireStoreStaffKey = requireCap(require('../lib/cap-routes').storeStaffCap());
+/* §412.5 — A STORE-SCOPED OPERATOR MANAGES STOCK STAFF ONLY AT THEIR OWN
+   STORES. After the key (above), the :storeId must be one of the caller's
+   scoped stores (lib/operator-caps.js resolveOperator scopeStores). An
+   unscoped operator (scopeStores null) and the owner are unchanged. A scoped
+   operator with no store at all manages none. */
+function requireOwnStore(req, res, next) {
+  const caller = loadCaller(req);
+  if (!caller) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  if (caller.user.role === 'owner' || !Array.isArray(caller.scopeStores)) return next();
+  const storeId = parseInt(req.params.storeId, 10);
+  if (caller.scopeStores.map(Number).includes(storeId)) return next();
+  // The sentence is the error, in this file's own "English · 中文" form, so both
+  // clients say it as they say this router's other refusals; the code rides beside it.
+  return res.status(403).json({ error: 'You can manage stock staff only at your own stores · 你只能管理自己门店的库存员', code: 'store_out_of_scope' });
+}
+const requireStoreStaffWrite = [requireStoreStaffKey, requireOwnStore];
 const router = express.Router();
 
 // Tenant feature entitlements (the plan ceiling) for a tenant id. A capability

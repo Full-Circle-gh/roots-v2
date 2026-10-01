@@ -99,6 +99,7 @@ function mk(opts = {}) {
       caps: opts.caps === undefined ? ['stores:edit', 'team:manage'] : opts.caps,
       stores: opts.stores === undefined ? [Object.assign({}, STORE)] : opts.stores,
       stack: [{ route: 'operations' }], ask: null, askErr: null,
+      scopeStores: opts.scope === undefined ? null : opts.scope, me: { role: opts.role || 'custom' },
       sto: { id: null, rec: null, d: null, err: null, busy: false, pinLat: '', pinLng: '', pinBusy: false, pinErr: null,
         listTried: false, listErr: null,
         staffFor: null, staffRec: null, staff: null, staffTried: false, staffErr: null, staffBusy: null, staffActErr: null,
@@ -598,6 +599,29 @@ section('8 · in Chinese');
     const d = mk({ lang: 'zh' }); d.ctx.SUBS.teamdevices.render(); d.calls.api[0].res({ sessions: [] }); await tick();
     const dt = d.text(d.ctx.SUBS.teamdevices.render());
     assert.ok(dt.includes('团队所有已登录的设备。如发现异常，请将其登出。') && dt.includes('没有已登录的设备。') && dt.includes('移动'));
+  });
+}
+
+section('§412.5 · a store-scoped operator manages stock staff only at their own stores');
+{
+  it('the door and every staff write, per store', async () => {
+    const OTHER = Object.assign({}, STORE, { id: 8, code: 'zz8', name_en: 'Other', name_cn: '其他' });
+    const two = [Object.assign({}, STORE), OTHER];
+    const door = (h, st) => fn(h, 'stoRow')(st, 0).includes(`APP.cmd('stfOpen',${st.id})`);
+    const scoped = mk({ stores: two, scope: [7] });
+    assert.ok(door(scoped, two[0]), 'their own store: Stock staff');
+    assert.ok(!door(scoped, OTHER), 'another store: no Stock staff');
+    scoped.CMD.stfOpen(8);
+    assert.notStrictEqual(scoped.ctx.state.stack[scoped.ctx.state.stack.length - 1].route, 'storestaff', 'and it cannot be opened there');
+    scoped.ctx.state.sto.staffFor = 8; scoped.ctx.state.sto.add = { name: 'C', user: 'c.stock', pw: 'long-enough-pw' };
+    scoped.CMD.stfAdd(); scoped.CMD.stfRemove(1); scoped.CMD.stfReset(1);
+    assert.strictEqual(scoped.calls.writes.length, 0, 'no write is sent for another store');
+    for (const o of [{ scope: null }, { scope: [7], role: 'owner' }]) {
+      const h = mk(Object.assign({ stores: two }, o));
+      assert.ok(door(h, OTHER), (o.role || 'unscoped') + ': unchanged, any store');
+    }
+    const loading = mk({ stores: two, caps: null });
+    assert.ok(!door(loading, two[0]), 'while the keys are loading: nothing');
   });
 }
 
