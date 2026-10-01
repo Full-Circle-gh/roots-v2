@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.290 · 2026-09-30 · §401 THE WECHAT MINI PROGRAM'S PAGES ON THE PHONE — NOTHING COMPOSED; EVERY PAIR COPIED FROM THE DESKTOP'S MINI APP PAGES.** See *The WeChat mini program on the phone (§401)*.
+
+**v1.289 · 2026-09-30 · §400 THE CHANNEL HUB ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP'S CHANNEL HUB.** See *The channel hub on the phone (§400)*.
+
 **v1.288 · 2026-09-30 · §399 GZGROCERY BILLING ON THE PHONE — 14 STRINGS OR HALVES COMPOSED BY CLAUDE (THE DESKTOP BILLING PANEL IS ALMOST ALL ENGLISH-ONLY), THE REST COPIED.** See *gzgrocery billing on the phone (§399)*.
 
 **v1.287 · 2026-09-30 · §398 MEITUAN BUNDLES ON THE PHONE — 12 CHINESE HALVES COMPOSED BY CLAUDE (THE DESKTOP BUNDLE STRINGS WERE ENGLISH-ONLY), THE REST COPIED.** See *Meituan bundles on the phone (§398)*.
@@ -12540,3 +12544,54 @@ Copied whole:
 
 The CSV file itself is the desktop's, English headers included, because it is
 the same document.
+
+## The channel hub on the phone (§400)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's channel hub, box and
+Eleme screens (`public/m.html`, the §325 X9a block). Every pair was searched
+for across `public/` first.
+
+| String | Status |
+|---|---|
+| `Set up on desktop for now · 暂请在电脑端设置` | **Chinese composed by Claude (X9a).** On the WeChat mini program and web store cards until X9b / X9c bring their wizards to the phone. Rejected: the live `Fix this on the desktop` pair (it says something is broken, which these are not) and `Set up · 开始设置` alone (it would promise a screen the phone does not have yet). |
+
+Copied whole from the desktop's channel hub (`15-integrations.js`):
+- The seven states: `Connected · 已连接`, `Ready to set up · 待设置`,
+  `In setup · 设置中`, `Connecting… · 连接中…`, `Needs attention · 需处理`,
+  `Paused · 已暂停`, `Not set up · 未配置`.
+- `Set up · 开始设置`, `Manage · 管理`, `Fix · 修复`, `Dismiss · 忽略`,
+  `Get help · 获取帮助`, `Configure · 配置`, `No channels available. · 暂无可用渠道。`.
+- `New location … — link it here · 新门店 … — 请在此关联`.
+- The help prompt, `Note · 备注`, `Send request · 发送求助`,
+  `Help request sent — we’ll be in touch. · 求助已发送 — 我们会尽快联系您。`.
+- The box copy: `Request the box · 申请盒子`, `Box requested · 已申请盒子`,
+  `Box shipped — on its way · 盒子已寄出 — 在路上`, `Box delivered · 盒子已送达`,
+  `Tracking · 快递`, the three explanations, `I already have it — continue`,
+  `Box is plugged in — continue`, `Box requested — we’ll contact you`,
+  `Request failed — try again · 申请失败,请重试`.
+- Eleme's wizard: `Set up Eleme · 设置饿了么`, `Link shops · 关联门店`,
+  `Verify & enable · 验证并开启`, `Eleme shop id · 店铺ID`, the shop-id
+  explanation, the all-linked and needs-login lines, `Enable channel · 开启渠道`,
+  `Eleme enabled · 已开启`, `Map products · 商品映射`.
+- The phone's `Could not load this. · 无法加载。`.
+
+## The WeChat mini program on the phone (§401)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's mini program wizard,
+finish page and configuration page (`public/m.html`, the §325 X9b block).
+
+No string was composed. All 80 pairs are copied whole from
+`15-integrations.js` (`igMiniappSetup`, `igMwVerifyLogin`, `igMwSaveMch`,
+`igMwVerifyPay`, `igMwFinish`, `igMiniappConfigFull`, `igSaveMiniappCreds`):
+the step names, the "where do I find this" walkthroughs, the console links, the
+field labels and placeholders, every check and every answer from WeChat, the
+ready marks, the finish page and its to-dos, `Save & verify · 保存并验证`,
+`Saved · 已保存`, `Replace · 更换`, `Keep saved value · 保留已保存的值`,
+`Do it later · 稍后再做` and `Finish anyway · 仍然完成`. The load failure is
+the phone's own `Could not load this. · 无法加载。`.
+
+The desktop's footer has both "Skip this step" and "Do it later", and the two
+do the same thing. The phone carries one, `Do it later · 稍后再做`.
+
+X9a's composed `Set up on desktop for now · 暂请在电脑端设置` now shows only on
+the web store's card, until X9c.
