@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.266 · 2026-09-30 · §369 SAME-CITY RIDER OPERATIONS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Same-city rider operations on the phone (§369)*.
+
 **v1.265 · 2026-09-30 · §368 SOCIAL PROOF AND SHARE CARDS ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Social proof and share cards on the phone (§368)*.
 
 **v1.264 · 2026-09-30 · §367 POLLS, VOTING SETTINGS AND LEADERBOARD SETTINGS ON THE PHONE — NOTHING COMPOSED; SIX LABELS LIFTED FROM DESKTOP PAIRS.** See *Polls, voting settings and leaderboard settings on the phone (§367)*.
@@ -11582,3 +11584,55 @@ statuses `Recalled · 已撤回`, `Cancelled · 已取消`, `Expired · 已过�
   `Upload failed · 上传失败`, `Couldn’t load invite card · 邀请卡片加载失败`.
   `Choose image… · 选择图片…`, `Uploading… · 上传中…` and `Edit · 编辑` are the
   phone's own.
+
+## Same-city rider operations on the phone (§369)
+
+**Nothing composed, 2026-10-01.** These are operator strings only (Rule 1):
+the *Same-city courier* card in `public/m.html`.
+
+**Copied whole from the desktop (`public/retail-admin/04-orders.js`,
+renderQyShipFrom / renderQyDispatch / the parked surfaces and their handlers):**
+
+- **Retry push:**
+  - `Retry push · 重新发单`, `Queuing… · 排队中…`
+  - `Queued — sending it to the channel, about a minute · 已排队 — 约一分钟内发单`
+  - `Already on the courier platform · 已在配送平台`, `Could not queue it · 排队失败`
+  - the refused-push instruction (Fix the delivery address … or press Retry)
+- **Remove the old job:**
+  - `Remove it · 删除原单`, `Removing… · 删除中…`, `Old job removed · 原配送单已删除`
+  - `Could not remove it — do it in the Qingyun app · 删除失败 — 请在青云 App 中删除`
+- **Pick a place:**
+  - `Picked X — sending it to the channel, about a minute · 已选择 X — 约一分钟内发单`
+  - `That option is gone — reopen the order · 该选项已失效，请重新打开订单`
+  - `It moved on while you were looking — reopen the order · 状态已变更，请重新打开订单`
+  - `This order is closed · 该订单已关闭`, `Could not pick it · 选择失败`
+- **Ship from:**
+  - `Change · 更改`, `This order has no Qingyun job to move. · 该订单在青云没有可转移的配送单。`
+  - `No other location is set up for same-city delivery. · 暂无其他门店开通同城配送。`
+  - `not connected to Qingyun · 未连接青云`, `Ship from here · 改为此门店取货`, `Pick a location · 请选择门店`
+  - the confirm `Collect this order at X instead? · 改由 X 取货?` with its body, `Move it · 确认更改`, `Moving… · 更改中…`
+  - `Now collected at X · 已改为 X 取货` and its old-job-left variant
+  - the three refusals (courier already called, not connected, not wired up), `Could not move it · 更改失败`
+  - the blocked sentence (A courier is already on this one. To collect it somewhere else …), `Load failed · 加载失败`
+- **The day:**
+  - `Reschedule delivery · 改期配送`, `Change delivery day · 更改配送日期`, `today · 今天`, `tomorrow · 明天`
+  - the pick note, the confirm (Move this delivery from X to Y? …)
+  - `Move the delivery · 确认改期`, `Keep the current date · 保持原日期`, `Moving… · 处理中…`
+  - the four outcome sentences, `Could not move it · 改期失败`
+- **Couriers:**
+  - `Compare couriers · 查看运力比价`, `Call another courier · 再叫一家运力`, `Refresh prices · 刷新比价`
+  - the booked sentence (… nothing is charged until you dispatch)
+  - `Could not load couriers — is the store connected to Qingyun? · 无法获取运力 — 门店是否已连接青云?`
+  - the not-in-Qingyun sentence, `No couriers available right now. · 当前暂无可用运力。`
+  - `cheapest · 最便宜`, `Dispatch courier · 发起配送`, `Dispatching… · 发单中…`, `Pick at least one courier · 请至少选择一个运力`
+  - the two dispatch confirms, `Dispatch · 发起配送`
+  - `Courier dispatched · 已发起配送`, `Dispatched · 已发单`, `first to accept wins · 谁先接单谁配送`
+  - `Qingyun balance too low — top up first · 青云余额不足,请先充值`
+  - `A courier is already on this order · 该订单已呼叫运力`, `Dispatch failed · 发起配送失败` (with Qingyun's own reason appended, as the desktop appends it)
+
+**Phone pairs already live:** `Same-city courier · 同城配送`, `Edit ship-to · 修改收货地址`,
+`Close · 关闭`, `Loading… · 加载中…`, `Working… · 处理中…`.
+
+| String | Note |
+|---|---|
+| `Edit ship-to` on the parked and expired surfaces | The desktop's quick panels say 修改收货信息. The phone keeps the 修改收货地址 it already uses on the Ship to card (O7), so one English button never carries two Chinese renderings on the phone. The O7 note asks Ash to pick one for both screens. |
