@@ -1055,7 +1055,7 @@ const state = {
      sheet with its own refusal. */
   sku:{data:null,err:null,tried:false,seq:0,busy:null,actErr:null,draft:null,saveErr:null},
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
-  couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
+  couponBusy:null, couponErr:null, flashBusy:null, flashErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
   /* One per list that has no other way to tell "nothing yet" from "not
      asked yet". Without them, emptying the sample data turned every one
@@ -1726,6 +1726,7 @@ function pop(){
   if(top==='coupon'&&!vdMayLeave()) return;         // §325 M13 — and a coupon label typed, not saved
   if(top==='coupongrant') VG=null;
   if(top==='couponnew'&&!cwMayLeave()) return;      // §325 M14 — a coupon half made asks first
+  if(top==='flashedit'&&!fscMayLeave()) return;     // §325 M15 — and a flash sale half set
   if(top==='affeligible') loadAffElig();   // the count on the offer is re-read, as the desktop's dialog does on close
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
@@ -18671,41 +18672,14 @@ const SUBS={
   coupongrant:{title:['Grant coupon','发放优惠券'],titleOf:()=>{ const c=VG&&(DB.coupons||[]).find(x=>x.id===VG.id);
       return T('Grant coupon','发放优惠券')+(c?' '+escAttr(c.code):''); },
     backLabel:()=>{ const r=vdRaw(); return r?escAttr(r.code):T('Coupons','优惠券'); },render:()=>screenCouponGrant()},
-  flash:{title:['Flash sales','秒杀'],render:()=>{
-    const list=DB.flash||[];
-    if(!state.flashLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    if(!list.length) return nothingYet(T('No flash sales','没有秒杀'),
-      T('Flash sales are built on desktop. Running and upcoming ones show here.','秒杀在电脑端创建。进行中与即将开始的会显示在这里。'));
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${list.map(f=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;gap:12px;align-items:flex-start">
-        <span style="width:52px;height:52px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${f.img?`;background-image:url('${String(f.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${f.img?'':ic('zap',20)}</span>
-        <span style="flex:1;min-width:0">
-          ${/* The name gets the whole line. It was sharing it with the status
-               pill and losing — "Lemongrass Kombucha" clipped to make room for
-               the word "Live" — and letting the row wrap only moved the
-               threshold rather than removing it. The pill joins the price row
-               below, which already wraps and has room. */''}
-          <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...f.title)}</span>
-          <span style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
-            ${pill(f.kind,T(...f.status))}
-            ${f.price?`<span class="num" style="font-size:18px;font-weight:500">${f.price}</span>`:''}
-            ${f.price&&f.was?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${f.was}</span>`:''}
-            ${f.off?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T(f.off+'% off',f.off+'% 折扣')}</span>`:''}</span>
-          ${f.sku?`<span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px">${escAttr(f.sku)}</span>`:''}
-        </span></div>
-      ${f.win?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${f.win}</div>`:''}
-      ${f.limit!=null?`<div>
-        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px">
-          <span class="num" style="color:var(--text-secondary)">${T(f.sold+' of '+f.limit+' sold',f.limit+' 件中已售 '+f.sold)}</span>
-          <span class="num" style="color:${f.left===0?'var(--brick-ink)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
-        <span style="display:block;margin-top:6px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${f.pct||0}%;border-radius:999px;background:${f.left===0?'var(--brick)':'var(--text-primary)'}"></span></span></div>`:''}
-      ${(f.hidden||f.noCoupon)?`<div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Product is not on the shop','商品未上架')}</span>`:''}
-        ${f.noCoupon?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No coupons on top','不可叠加优惠券')}</span>`:''}</div>`:''}
-    </div>`).join('')}
-    ${desktopNote()}</div>`;
-  }},
+  /* §325 M15 — the desktop's Flash sales tab: the timeline, its row actions,
+     and the composer (route flashedit). */
+  flash:{title:['Flash sales','秒杀'],
+    cta:()=>fsCanPut()?`<button class="cta inhead" onclick="APP.cmd('fsNew')">${T('New flash sale','新建秒杀')}</button>`:'',
+    render:()=>screenFlash()},
+  flashedit:{title:['New flash sale','新建秒杀'],
+    titleOf:()=>FSC&&FSC.product?escAttr(fsName(FSC.product)):T('New flash sale','新建秒杀'),
+    backLabel:()=>T('Flash sales','秒杀'),render:()=>screenFlashEdit()},
   /* §63 — writing one is no longer a desktop-only act, so the CTA is a Write
      button rather than a note saying where to go. It carries broadcasts:send
      on its own, exactly as Waste carries waste:record: the SCREEN is
@@ -28912,6 +28886,398 @@ function screenCouponNew(){
       : `<div style="display:flex;gap:8px">
           ${i>0?`<button class="btn2" style="flex:1" onclick="APP.cmd('cwBack')">${T('Back','返回')}</button>`:''}
           <button class="btn2" style="flex:1" onclick="APP.cmd('cwNext')">${T('Next','下一步')}</button></div>`}
+  </div>`;
+}
+/* ── §325 M15 — FLASH SALES ARE RUN FROM THE PHONE ────────────────────────
+   The desktop's Flash sales tab (07-content-billing.js fsRenderTimeline,
+   fsEndNow, and the composer fsc*): the timeline grouped Live now, then
+   Scheduled & recent; End early on a live sale, Edit on a live or scheduled
+   one, Run again on an ended one; and the composer — product, price & cap,
+   window, keep coupons off — with Start / Schedule and Cancel this sale.
+   Same endpoints, same bodies:
+     PUT    /products/:id/flash-sale  {flash_price, flash_ends_at, flash_starts_at,
+                                       flash_stock_limit, no_coupon_on_flash}
+     DELETE /products/:id/flash-sale
+   Keys (lib/cap-routes.js): the PUT is flash:edit OR products:edit, the DELETE
+   flash:delete OR products:delete. flash:edit and products:edit are
+   money:'moves', so every control here fails closed until the keys are known
+   (vdCan, M13); the DELETE keys are held to the same rule — there was no
+   phone control before this, so nobody's working access is narrowed. */
+let FSC=null;        // the composer — the desktop's _fsc, plus busy/err/dirty
+let FS_SKEW=0;       // server_time_ms − Date.now() at the last read, as the desktop keeps it
+let fscPQT=null;
+const FS_PUT=['flash:edit','products:edit'], FS_DEL=['flash:delete','products:delete'];
+const fsCanPut=()=>vdCan(FS_PUT), fsCanDel=()=>vdCan(FS_DEL);
+const fsNow=()=>Date.now()+FS_SKEW;
+const fsPad=n=>String(n).padStart(2,'0');
+function fsToMs(s){
+  if(!s) return null;
+  if(typeof s==='string'&&/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) s=s.replace(' ','T')+'Z';
+  const t=new Date(s).getTime();
+  return Number.isFinite(t)?t:null;
+}
+function fsLocalInput(ms){
+  if(ms==null) return '';
+  const d=new Date(ms);
+  return d.getFullYear()+'-'+fsPad(d.getMonth()+1)+'-'+fsPad(d.getDate())+'T'+fsPad(d.getHours())+':'+fsPad(d.getMinutes());
+}
+const fsName=p=>(LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||('#'+p.id);
+/* The list again, with the server's clock — the desktop's fsLoadList. */
+function flashReload(){
+  return apiRaw('/flash-sales').then(j=>{
+    const rows=(j&&j.data)||[];
+    if(j&&j.meta&&j.meta.server_time_ms) FS_SKEW=j.meta.server_time_ms-Date.now();
+    DB.flash=rows.map(mapFlash); state.flashLoaded=true; render();
+  }).catch(()=>{ /* the write itself landed; the list re-reads on its next load */ });
+}
+const fsRow=id=>{ const f=(DB.flash||[]).find(x=>String(x._id)===String(id)); return f&&f.raw; };
+/* End early — the desktop's confirm, then the DELETE. The card says Saving…
+   and a failure stays above the list. */
+reg('fsEndNow', id=>{
+  const r=fsRow(id); if(!r||state.flashBusy||!fsCanDel()) return;
+  const name=fsName(r);
+  state.ask={title:T('End the flash sale on "'+name+'" now?','立即结束 "'+name+'" 的秒杀？'),
+    body:T('The regular price comes back immediately.','将马上恢复原价。'),
+    confirmLabel:T('End sale','结束秒杀'), danger:true, run:()=>{
+      state.flashBusy=r.id; state.flashErr=null; render();
+      apiWrite('/products/'+r.id+'/flash-sale',{},'DELETE').then(()=>{
+        state.flashBusy=null; showToast(T('Flash sale ended','秒杀已结束')); flashReload();
+      }).catch(e=>{ state.flashBusy=null; if(String(e.message)==='auth') return;
+        state.flashErr=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(e.message||''); render(); });
+    }};
+  render();
+});
+function fscBlank(){
+  return {mode:'new', editId:null, product:null, pickerOpen:false, psearch:'', picks:null, picksErr:'', pickSeq:0,
+    price:'', cap:'', endChip:'tonight', endsCustom:'', endEdit:false, winTouched:false,
+    startLater:false, startChip:'now', startsCustom:'',
+    noCoupon:true,   // the desktop defaults "keep coupons off" ON (protects margin)
+    busy:null, err:'', dirty:false};
+}
+reg('fsNew', ()=>{ if(!fsCanPut()) return; FSC=fscBlank(); CMD.push('flashedit'); });
+/* Edit keeps the window; Run again starts a fresh clock now (fscFillFromRow). */
+function fscFill(id, mode){
+  const row=fsRow(id); if(!row||!fsCanPut()) return;
+  const w=fscBlank();
+  w.mode=mode; w.editId=row.id;
+  w.product={id:row.id, name_en:row.name_en, name_cn:row.name_cn, sku:row.sku, size:row.size,
+    sell_price:row.sell_price, image_url:row.image_url, image_data:row.image_data};
+  w.price=row.flash_price!=null?String(row.flash_price):'';
+  w.cap=row.flash_stock_limit!=null?String(row.flash_stock_limit):'';
+  w.noCoupon=!!Number(row.no_coupon_on_flash);
+  w.winTouched=true;
+  if(mode==='edit'){
+    w.endChip='custom'; w.endsCustom=fsLocalInput(fsToMs(row.flash_ends_at)); w.endEdit=false;
+    if(row.flash_starts_at&&row.flash_state==='upcoming'){ w.startLater=true; w.startChip='custom'; w.startsCustom=fsLocalInput(fsToMs(row.flash_starts_at)); }
+  } else { w.editId=null; w.mode='again'; w.endChip='tonight'; }
+  FSC=w; CMD.push('flashedit');
+}
+reg('fsEdit', id=>fscFill(id,'edit'));
+reg('fsAgain', id=>fscFill(id,'again'));
+const fscTouch=()=>{ if(FSC){ FSC.dirty=true; FSC.err=''; } };
+
+/* ── the derived values (fscRegular … fscEndLabel) ── */
+const fscRegular=w=>Number(w.product&&w.product.sell_price)||0;
+const fscPriceNum=w=>Number(w.price)||0;
+const fscCapNum=w=>{ const n=parseInt(w.cap,10); return Number.isFinite(n)&&n>0?n:null; };
+const fscOffPct=w=>{ const r=fscRegular(w), f=fscPriceNum(w); return (r>0&&f>0&&f<r)?Math.round(((r-f)/r)*100):0; };
+function fscTonight(){ const d=new Date(fsNow()); d.setHours(22,0,0,0); if(d.getTime()<=fsNow()) d.setDate(d.getDate()+1); return d; }
+function fscStartsDate(w){
+  if(!w.startLater||w.startChip==='now') return null;
+  if(w.startChip==='tomorrow9'){ const d=new Date(fsNow()); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return d; }
+  return w.startsCustom?new Date(w.startsCustom):null;
+}
+function fscEndsDate(w){
+  if(w.endChip==='custom') return w.endsCustom?new Date(w.endsCustom):null;
+  if(w.endChip==='tonight') return fscTonight();
+  const m=String(w.endChip).match(/^\+(\d+)([hd])$/);
+  if(!m) return null;
+  const base=fscStartsDate(w)||new Date(fsNow());
+  return new Date(base.getTime()+(m[2]==='h'?+m[1]*3600:+m[1]*86400)*1000);
+}
+function fscDayWord(ms){
+  const d=new Date(ms), n=new Date(fsNow()), tm=new Date(fsNow()); tm.setDate(tm.getDate()+1);
+  const same=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+  if(same(d,n)) return T('today','今天');
+  if(same(d,tm)) return T('tomorrow','明天');
+  return d.getFullYear()+'-'+fsPad(d.getMonth()+1)+'-'+fsPad(d.getDate());
+}
+const fscClock=d=>fscDayWord(d.getTime())+' '+fsPad(d.getHours())+':'+fsPad(d.getMinutes());
+function fscEndLabel(w){
+  const ed=fscEndsDate(w);
+  if(!ed||isNaN(ed.getTime())) return T('Pick an end time','选择结束时间');
+  return T('Ends ','结束 ')+fscClock(ed);
+}
+
+/* ── the composer's commands ── */
+reg('fscOpenPicker', ()=>{ const w=FSC; if(!w) return; w.pickerOpen=true; w.psearch=''; render(); fscSearch(); });
+function fscSearch(){
+  const w=FSC; if(!w) return;
+  const seq=++w.pickSeq; w.picks=null; w.picksErr=''; fscPicksRepaint();
+  api('/products?published=1&limit=20'+(w.psearch?'&q='+encodeURIComponent(w.psearch):'')).then(r=>{
+    if(FSC!==w||seq!==w.pickSeq) return;
+    w.picks=(Array.isArray(r)?r:[]).filter(p=>p.is_published==null||Number(p.is_published)); fscPicksRepaint();
+  }).catch(e=>{ if(FSC!==w||seq!==w.pickSeq||String(e.message)==='auth') return;
+    w.picks=[]; w.picksErr=T('Failed to load','加载失败')+': '+(e.message||''); fscPicksRepaint(); });
+}
+reg('fscPQ', v=>{ if(!FSC) return; FSC.psearch=String(v||'').trim(); searchClearShow('mFscClr',!!v);
+  clearTimeout(fscPQT); fscPQT=setTimeout(fscSearch,250); });
+reg('mFscClr', ()=>searchClearRun('mFscPQ','mFscClr','fscPQ'));
+reg('fscPick', id=>{ const w=FSC; if(!w) return;
+  const p=(w.picks||[]).find(x=>String(x.id)===String(id)); if(!p) return;
+  w.product=p; w.pickerOpen=false;
+  const f=fscPriceNum(w), r=fscRegular(w);
+  if(!(f>0&&(r<=0||f<r))) w.price='';
+  fscTouch(); render(); });
+reg('fscPrice', v=>{ if(!FSC) return; FSC.price=String(v==null?'':v); fscTouch(); fscLiveRepaint(); });
+reg('fscCap', v=>{ if(!FSC) return; FSC.cap=String(v==null?'':v); fscTouch(); fscLiveRepaint(); });
+reg('fscEndChip', k=>{ const w=FSC; if(!w||['+1h','+6h','tonight','+3d','+7d'].indexOf(k)<0) return;
+  w.endChip=k; w.endEdit=false; w.winTouched=true; fscTouch(); render(); });
+reg('fscOpenEnd', ()=>{ const w=FSC; if(!w) return;
+  w.endChip='custom'; w.endEdit=true; w.winTouched=true;
+  if(!w.endsCustom){ const ed=fscEndsDate(w)||fscTonight(); w.endsCustom=fsLocalInput(ed.getTime()); }
+  fscTouch(); render(); });
+reg('fscSetEnd', v=>{ const w=FSC; if(!w) return; w.endsCustom=String(v||''); w.endChip='custom'; w.winTouched=true; fscTouch(); render(); });
+reg('fscStartLater', ()=>{ const w=FSC; if(!w) return;
+  w.startLater=!w.startLater;
+  if(w.startLater&&w.startChip==='now') w.startChip='tomorrow9';
+  if(!w.startLater) w.startChip='now';
+  fscTouch(); render(); });
+reg('fscStartChip', k=>{ const w=FSC; if(!w||['tomorrow9','custom'].indexOf(k)<0) return;
+  w.startChip=k;
+  if(k==='custom'&&!w.startsCustom){ const d=new Date(fsNow()); d.setHours(d.getHours()+1,0,0,0); w.startsCustom=fsLocalInput(d.getTime()); }
+  fscTouch(); render(); });
+reg('fscSetStart', v=>{ if(!FSC) return; FSC.startsCustom=String(v||''); fscTouch(); render(); });
+reg('fscCoupon', ()=>{ if(!FSC) return; FSC.noCoupon=!FSC.noCoupon; fscTouch(); render(); });
+
+/* ── the save (fscValidate, fscStart) and Cancel this sale ── */
+function fscCheck(w){
+  if(!w.product) return T('Pick a product first','请先选择产品');
+  if(!(fscPriceNum(w)>0)) return T('Enter a flash price','请输入秒杀价');
+  if(fscRegular(w)>0&&fscPriceNum(w)>=fscRegular(w)) return T('Flash price must be lower than regular','秒杀价必须低于原价');
+  const ed=fscEndsDate(w);
+  if(!ed||isNaN(ed.getTime())) return T('Set an end time','请设置结束时间');
+  const sd=fscStartsDate(w);
+  if(sd&&sd.getTime()>=ed.getTime()) return T('Start must be before end','开始须早于结束');
+  if(ed.getTime()<=fsNow()&&!sd) return T('End time is in the past','结束时间已过');
+  return '';
+}
+const FSC_ERR={flash_price_invalid:['Flash price must be greater than 0','秒杀价必须大于 0'],
+  flash_ends_at_required:['End time required','请填写结束时间'], flash_ends_at_invalid:['End time invalid','结束时间无效'],
+  flash_starts_at_invalid:['Start time invalid','开始时间无效'], flash_starts_after_ends:['Start must be before end','开始须早于结束'],
+  flash_stock_limit_invalid:['Stock cap must be a positive number','库存上限必须为正数']};
+function fscDone(w, msg){
+  showToast(msg);
+  if(FSC===w){ FSC=null; const top=state.stack[state.stack.length-1]; if(top&&top.route==='flashedit'){ forgetScroll(); state.stack.pop(); } }
+  render(); flashReload();
+}
+const fscFail=w=>e=>{ w.busy=null; if(String(e.message)==='auth') return;
+  w.err=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(FSC_ERR[e.code]?T(...FSC_ERR[e.code]):(e.message||''));
+  render(); };
+reg('fscStart', ()=>{
+  const w=FSC; if(!w||w.busy||!fsCanPut()) return;
+  const bad=fscCheck(w); if(bad){ w.err=bad; render(); return; }
+  const ends=fscEndsDate(w), starts=fscStartsDate(w);
+  const body={flash_price:fscPriceNum(w), flash_ends_at:ends.toISOString(),
+    flash_starts_at:starts?starts.toISOString():null, flash_stock_limit:fscCapNum(w),
+    no_coupon_on_flash:w.noCoupon?1:0};
+  w.busy='start'; w.err=''; render();
+  apiWrite('/products/'+w.product.id+'/flash-sale', body, 'PUT')
+    .then(()=>fscDone(w, starts?T('Flash sale scheduled','秒杀已排期'):T('Flash sale started','秒杀已开启')))
+    .catch(fscFail(w));
+});
+reg('fscCancelSale', ()=>{
+  const w=FSC; if(!w||!w.editId||w.busy||!fsCanDel()) return;
+  const name=fsName(w.product);
+  state.ask={title:T('Cancel the flash sale on "'+name+'"?','取消 "'+name+'" 的秒杀？'),
+    body:T("The product returns to its regular price and the sale leaves the list. This can't be undone.",'商品将恢复原价,此活动会从列表中移除,且无法撤销。'),
+    confirmLabel:T('Cancel sale','取消秒杀'), danger:true, run:()=>{
+      w.busy='cancel'; w.err=''; render();
+      apiWrite('/products/'+w.editId+'/flash-sale', {}, 'DELETE')
+        .then(()=>fscDone(w, T('Flash sale cancelled','秒杀已取消'))).catch(fscFail(w));
+    }};
+  render();
+});
+function fscMayLeave(){
+  if(!FSC) return true;
+  if(FSC.busy) return false;   // a write on the wire finishes first
+  if(FSC.dirty){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ FSC=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  FSC=null; return true;
+}
+
+/* ── the composer's screen ── */
+const fsThumb=(p,size)=>{ const src=p&&(p.image_url||p.image_data)||'';
+  return `<span style="width:${size}px;height:${size}px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${src?`;background-image:url('${String(src).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${src?'':ic('package',18)}</span>`; };
+function fscPicksHtml(){
+  const w=FSC; if(!w) return '';
+  if(w.picks===null) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Loading products…','正在加载产品…')}</div>`;
+  if(w.picksErr) return `<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink)">${escAttr(w.picksErr)}</div>`;
+  if(!w.picks.length) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('No products match — try another search.','无匹配产品 — 换个关键词。')}</div>`;
+  return w.picks.map((p,i)=>{ const sub=[p.sku,p.size].filter(Boolean).join(' · ');
+    return `${i?'<div class="sep" style="margin-left:16px"></div>':''}<button class="row" style="min-height:56px;padding:10px 16px;gap:12px" onclick="APP.cmd('fscPick',${Number(p.id)})">
+      ${fsThumb(p,40)}<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(fsName(p))}</span>
+        ${sub?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(sub)}</span>`:''}</span>
+      ${p.sell_price?`<span class="num" style="font-size:13px;color:var(--text-secondary);flex:none">${money(CUR,p.sell_price)} ${T('regular','原价')}</span>`:''}</button>`; }).join('');
+}
+function fscPicksRepaint(){ const el=typeof document!=='undefined'&&document.getElementById&&document.getElementById('mFscPicks'); if(el) el.innerHTML=fscPicksHtml(); else render(); }
+function fscPriceHelp(w){
+  const reg=fscRegular(w), f=fscPriceNum(w);
+  if(reg>0&&f>0){
+    if(f>=reg) return `<span style="color:var(--brick-ink)">${T('Must be lower than regular','必须低于原价')}</span>`;
+    return LANG==='en'?`<b>${fscOffPct(w)}% off</b> ${money(CUR,reg)}`:`省 <b>${fscOffPct(w)}%</b> · 原价 ${money(CUR,reg)}`;
+  }
+  if(reg>0) return T('Regular','原价')+' '+money(CUR,reg);
+  return T('flash price','秒杀价');
+}
+/* The customer's view, as the desktop's right-hand pane draws it. */
+function fscPreviewHtml(w){
+  const p=w.product, f=fscPriceNum(w), reg=fscRegular(w);
+  const head=`<div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);padding:0 4px 8px">${T('What customers see','顾客看到')}</div>`;
+  if(!p||!(f>0)) return head+`<div class="card" style="padding:16px;font-size:13px;color:var(--text-secondary)">${T('Pick a product and set a price to preview the shopper’s view.','选择产品并填写价格,预览顾客看到的样子。')}</div>`;
+  const off=fscOffPct(w), cap=fscCapNum(w), ends=fscEndsDate(w);
+  const endTxt=(ends&&!isNaN(ends.getTime()))?fscClock(ends):'';
+  return head+`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:12px;align-items:flex-start">${fsThumb(p,52)}
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+        <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="pill" style="background:var(--brick-tint);color:var(--brick-ink);flex:none">${T('Flash','秒杀')}</span>
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(fsName(p))}</span></span>
+        <span style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <span class="num" style="font-size:18px;font-weight:500">${money(CUR,f)}</span>
+          ${reg>0?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${money(CUR,reg)}</span>`:''}
+          ${off?`<span style="font-size:13px;color:var(--brick-ink)">${T('save','省')} ${off}%</span>`:''}</span>
+        ${endTxt?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Ends ','结束 ')}${escAttr(endTxt)}</span>`:''}
+        ${cap!=null?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${LANG==='en'?'Limited to '+cap:'限 '+cap+' 份'}</span>`:''}</span></div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${reg>0
+      ?T('Reverts to '+money(CUR,reg)+' on its own when the clock runs out.','倒计时结束后自动恢复 '+money(CUR,reg)+'。')
+      :T('Reverts to the regular price when the clock runs out.','倒计时结束后自动恢复原价。')}</div></div>`;
+}
+/* Typing the price or the cap repaints the help line and the preview only,
+   so the field keeps its caret. */
+function fscLiveRepaint(){
+  const w=FSC; if(!w||typeof document==='undefined'||!document.getElementById) return;
+  const h=document.getElementById('mFscHelp'); if(h) h.innerHTML=fscPriceHelp(w);
+  const v=document.getElementById('mFscPv'); if(v) v.innerHTML=fscPreviewHtml(w);
+}
+function fscCouponNote(w){
+  // The desktop reads the live coupons for this; the phone already holds them.
+  const live=(DB.coupons||[]).some(c=>c&&c.raw&&c.raw.is_active&&(c.raw.auto_apply||c.raw.is_public));
+  return live&&!w.noCoupon?`<div style="padding:12px 14px;border-radius:12px;background:var(--amber-tint);font-size:13px;line-height:1.5;color:var(--amber-ink)">${
+    T('A sitewide coupon is live — it will stack on this price. Keep coupons off to protect your margin.','有全场优惠券进行中 — 会叠加在此价格上。禁止叠加可保住利润。')}</div>`:'';
+}
+function screenFlashEdit(){
+  const w=FSC;
+  if(!w) return nothingYet(T("Nothing's on the clock",'暂无秒杀'),'');
+  const p=w.product, reg=fscRegular(w), can=fsCanPut(), dis=w.busy?'disabled':'';
+  const step=(n,title,body)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px"><span class="num" style="width:22px;height:22px;border-radius:50%;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none">${n}</span>
+      <span style="font-size:15px;font-weight:500;min-width:0">${title}</span></div>${body}</div>`;
+  const chip=(on,cmd,label)=>`<button class="chip ${on?'on':''}" onclick="${cmd}"><span>${label}</span></button>`;
+  const picker=w.pickerOpen
+    ? `${searchBox(`<input id="mFscPQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.psearch)}" placeholder="${escAttr(T('Search by name or SKU…','按名称或货号搜索…'))}" style="width:100%" oninput="APP.cmd('fscPQ',this.value)">`,'mFscClr',!!w.psearch,'display:block')}
+       <div class="list" id="mFscPicks" style="max-height:320px;overflow:auto">${fscPicksHtml()}</div>`
+    : `<button class="row" style="min-height:56px;padding:10px 12px;gap:12px;border:1px solid var(--border-default);border-radius:12px" ${w.mode==='edit'?'disabled':''} onclick="APP.cmd('fscOpenPicker')">
+        ${fsThumb(p,40)}<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+          <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap${p?'':';color:var(--text-secondary)'}">${p?escAttr(fsName(p)):T('Choose a product','选择产品')}</span>
+          ${p&&reg>0?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Regular','原价')} ${money(CUR,reg)}</span>`:''}</span>
+        ${w.mode==='edit'?'':`<span style="color:var(--text-secondary);display:flex">${ic('chevron-down')}</span>`}</button>`;
+  const ends=[['+1h',T('+1h','+1小时')],['+6h',T('+6h','+6小时')],['tonight',T('Tonight','今晚')],['+3d',T('+3d','+3天')],['+7d',T('+7d','+7天')]];
+  const startNote=w.startLater
+    ? `${T('scheduled — ','排期 — ')}<button style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-primary);text-decoration:underline" onclick="APP.cmd('fscStartLater')">${T('start now instead','改为现在开始')}</button>`
+    : `${T('starts now','现在开始')} — <button style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-primary);text-decoration:underline" onclick="APP.cmd('fscStartLater')">${T('schedule it','排期')}</button>`;
+  const future=!!fscStartsDate(w);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${w.mode!=='new'?`<div style="padding:0 4px">${pill('draft',w.mode==='edit'?T('Editing','编辑中'):T('Run again','再来一次'))}</div>`:''}
+    ${step(1,T('Product','产品'),picker)}
+    ${step(2,T('Price & cap','价格与限量'),`<div style="display:flex;gap:10px">
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+        <input id="mFscPrice" class="num" inputmode="decimal" autocomplete="off" value="${escAttr(String(w.price||''))}" placeholder="${escAttr(T(CUR+' price',CUR+' 价格'))}" oninput="APP.cmd('fscPrice',this.value)">
+        <span id="mFscHelp" style="font-size:12.5px;color:var(--text-secondary)">${fscPriceHelp(w)}</span></label>
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+        <input id="mFscCap" class="num" inputmode="numeric" autocomplete="off" value="${escAttr(String(w.cap||''))}" placeholder="${escAttr(T('No cap','不限量'))}" oninput="APP.cmd('fscCap',this.value)">
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('stock cap','库存上限')}</span></label></div>`)}
+    ${step(3,T('Window','时间'),`<div style="font-size:13px;color:var(--text-secondary)">${startNote}</div>
+      <button class="row num" style="min-height:44px;padding:10px 12px;border:1px solid var(--border-default);border-radius:12px;font-size:15px" onclick="APP.cmd('fscOpenEnd')"><span style="flex:1;text-align:left">${escAttr(fscEndLabel(w))}</span></button>
+      ${w.endEdit?`<input id="mFscEnd" type="datetime-local" value="${escAttr(w.endsCustom)}" onchange="APP.cmd('fscSetEnd',this.value)">`:''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${ends.map(e=>chip(w.endChip===e[0],`APP.cmd('fscEndChip','${e[0]}')`,e[1])).join('')}</div>
+      ${w.startLater?`<div style="display:flex;gap:8px;flex-wrap:wrap">${chip(w.startChip==='tomorrow9',"APP.cmd('fscStartChip','tomorrow9')",T('Tomorrow 09:00','明天 09:00'))}${chip(w.startChip==='custom',"APP.cmd('fscStartChip','custom')",T('Pick a time','自定义'))}</div>
+        ${w.startChip==='custom'?`<input id="mFscStart" type="datetime-local" value="${escAttr(w.startsCustom)}" onchange="APP.cmd('fscSetStart',this.value)">`:''}`:''}`)}
+    <div class="card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Keep coupons off this price','秒杀价不叠加优惠券')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${T('Sitewide coupons skip this product while the sale runs.','活动期间,全场优惠券会跳过此商品。')}</span></span>
+      ${toggle(!!w.noCoupon,"APP.cmd('fscCoupon')")}</div>
+    ${fscCouponNote(w)}
+    <div id="mFscPv">${fscPreviewHtml(w)}</div>
+    ${w.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(w.err)}</div>`:''}
+    ${can?`<button class="cta" style="width:100%" ${dis} onclick="APP.cmd('fscStart')">${w.busy==='start'?T('Saving…','保存中…'):future?T('Schedule','排期'):T('Start','开启')}</button>`:''}
+    ${w.mode==='edit'&&w.editId&&fsCanDel()?`<button class="btn2" style="width:100%;color:var(--brick-ink)" ${dis} onclick="APP.cmd('fscCancelSale')">${w.busy==='cancel'?T('Saving…','保存中…'):T('Cancel this sale','取消此活动')}</button>`:''}
+  </div>`;
+}
+
+/* ── the list: the desktop's timeline, Live now, then Scheduled & recent ── */
+function flashCardHtml(f){
+  const r=f.raw||{}, st=String(r.flash_state||'');
+  const busy=state.flashBusy===f._id;
+  const acts=[];
+  if(f._id!=null&&r.flash_state){
+    if(st==='active'||st==='live'){
+      if(fsCanDel()) acts.push(`<button class="btn2" style="flex:1;color:var(--brick-ink)" ${state.flashBusy?'disabled':''} onclick="APP.cmd('fsEndNow',${Number(f._id)})">${busy?T('Saving…','保存中…'):T('End early','提前结束')}</button>`);
+      if(fsCanPut()) acts.push(`<button class="btn2" style="flex:1" onclick="APP.cmd('fsEdit',${Number(f._id)})">${T('Edit','编辑')}</button>`);
+    } else if(st==='upcoming'||st==='scheduled'){
+      if(fsCanPut()) acts.push(`<button class="btn2" style="flex:1" onclick="APP.cmd('fsEdit',${Number(f._id)})">${T('Edit','编辑')}</button>`);
+    } else if(st==='ended'){
+      if(fsCanPut()) acts.push(`<button class="btn2" style="flex:1" onclick="APP.cmd('fsAgain',${Number(f._id)})">${T('Run again','再来一次')}</button>`);
+    }
+  }
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px${st==='ended'?';opacity:.75':''}">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <span style="width:52px;height:52px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${f.img?`;background-image:url('${String(f.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${f.img?'':ic('zap',20)}</span>
+        <span style="flex:1;min-width:0">
+          ${/* The name gets the whole line. It was sharing it with the status
+               pill and losing — "Lemongrass Kombucha" clipped to make room for
+               the word "Live" — and letting the row wrap only moved the
+               threshold rather than removing it. The pill joins the price row
+               below, which already wraps and has room. */''}
+          <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...f.title)}</span>
+          <span style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
+            ${pill(f.kind,T(...f.status))}
+            ${f.price?`<span class="num" style="font-size:18px;font-weight:500">${f.price}</span>`:''}
+            ${f.price&&f.was?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${f.was}</span>`:''}
+            ${f.off?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T(f.off+'% off',f.off+'% 折扣')}</span>`:''}</span>
+          ${f.sku?`<span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px">${escAttr(f.sku)}</span>`:''}
+        </span></div>
+      ${f.win?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${f.win}</div>`:''}
+      ${f.limit!=null?`<div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px">
+          <span class="num" style="color:var(--text-secondary)">${T(f.sold+' of '+f.limit+' sold',f.limit+' 件中已售 '+f.sold)}</span>
+          <span class="num" style="color:${f.left===0?'var(--brick-ink)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
+        <span style="display:block;margin-top:6px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${f.pct||0}%;border-radius:999px;background:${f.left===0?'var(--brick)':'var(--text-primary)'}"></span></span></div>`:''}
+      ${(f.hidden||f.noCoupon)?`<div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Product is not on the shop','商品未上架')}</span>`:''}
+        ${f.noCoupon?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No coupons on top','不可叠加优惠券')}</span>`:''}</div>`:''}
+      ${acts.length?`<div style="display:flex;gap:8px">${acts.join('')}</div>`:''}
+    </div>`;
+}
+function screenFlash(){
+  const list=DB.flash||[];
+  if(!state.flashLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!list.length) return nothingYet(T("Nothing's on the clock",'暂无秒杀'),
+    T('Put a product on a timer and it sells at the sale price until the window closes.','给产品加上倒计时,它会以秒杀价出售,直到时间结束。'));
+  const stOf=f=>String((f.raw&&f.raw.flash_state)||'');
+  const live=list.filter(f=>['active','live'].indexOf(stOf(f))>=0);
+  const rest=list.filter(f=>['active','live'].indexOf(stOf(f))<0);
+  const upcoming=rest.filter(f=>['upcoming','scheduled'].indexOf(stOf(f))>=0);
+  const head=t=>`<div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${state.flashErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(state.flashErr)}</div>`:''}
+    ${head(T('Live now','进行中')+(live.length?' · '+live.length+' '+T('running','进行中'):''))}
+    ${live.length?live.map(flashCardHtml).join('')
+      :`<div style="padding:4px 4px 8px;font-size:14px;color:var(--text-secondary)">${T('No sale is live this moment. Scheduled ones start on their own.','当前没有进行中的秒杀,已排期的会自动开始。')}</div>`}
+    ${rest.length?head(T('Scheduled & recent','已排期与最近')+' · '+upcoming.length+' '+T('scheduled','已排期'))+upcoming.concat(rest.filter(f=>upcoming.indexOf(f)<0)).map(flashCardHtml).join(''):''}
   </div>`;
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
@@ -43460,7 +43826,7 @@ const ROUTE_CAP={
      advances than that it advances into a dead end. */
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
-  coupons:'coupons:view', coupon:'coupons:view', coupongrant:'coupons:view', couponnew:'coupons:create', flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
+  coupons:'coupons:view', coupon:'coupons:view', coupongrant:'coupons:view', couponnew:'coupons:create', flashedit:['flash:edit','products:edit'], flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
   sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
@@ -44809,7 +45175,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return; if(t&&t.route==='coupon'&&!vdMayLeave()) return; if(t&&t.route==='coupongrant') VG=null; if(t&&t.route==='couponnew'&&!cwMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return; if(t&&t.route==='coupon'&&!vdMayLeave()) return; if(t&&t.route==='coupongrant') VG=null; if(t&&t.route==='couponnew'&&!cwMayLeave()) return; if(t&&t.route==='flashedit'&&!fscMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -45033,6 +45399,8 @@ function mUnsavedWork(){
     if(VD&&VD.lblDirty&&(state.stack||[]).some(f=>f&&f.route==='coupon')) return true;
     /* A coupon half made in the wizard (§325 M14). */
     if(CW&&CW.dirty&&(state.stack||[]).some(f=>f&&f.route==='couponnew')) return true;
+    /* A flash sale half set in the composer (§325 M15). */
+    if(FSC&&FSC.dirty&&(state.stack||[]).some(f=>f&&f.route==='flashedit')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
@@ -46849,7 +47217,9 @@ function mapFlash(r){
     // A flash price on an UNPUBLISHED product is a sale no customer can see.
     hidden:r.is_published!=null&&!Number(r.is_published),
     noCoupon:!!Number(r.no_coupon_on_flash),
-    status:label, kind:FLASH_KIND[state]||'draft'};
+    status:label, kind:FLASH_KIND[state]||'draft',
+    // §325 M15 — the row as read, for Edit / Run again / End early.
+    raw:r};
 }
 const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft',recalled:'off',cancelled:'off',expired:'off',ended:'off'};
 /* §325 M6 — every status the desktop names (05-marketing.js bxFeedRow). A

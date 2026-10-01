@@ -529,7 +529,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       is(route('affeligible'), 'affiliate:edit', 'phone: who earns the ongoing share opens on the eligibility key');
       is(who(/retail-admin\/cms\//), ['public/cms-mobile.html', 'public/cms.html', 'public/retail-admin/01-core.js',
         'public/retail-admin/05-marketing.js', 'public/retail-admin/10-extras.js'], '/cms/*: the two editors, and the desktop picture uploads');
-      is(who(/flash-sale['`/]/), ['public/retail-admin/07-content-billing.js'], 'the flash sale: the desktop Flash sales tab');
+      is(who(/flash-sale['`/]/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'the flash sale: the desktop Flash sales tab, and the phone\'s (§325 M15)');
+      is(route('flashedit'), ['flash:edit', 'products:edit'], 'phone: the flash-sale composer opens on the PUT\'s keys');
     }
     section('6 · the screens open on the keys the gates name');
     is(tab('popups'), 'popups:view', 'desktop Pop-ups');
