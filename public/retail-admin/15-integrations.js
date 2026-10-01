@@ -570,6 +570,13 @@
   // remembers in localStorage so the wizard doesn't nag on every open).
   const MW_SKIP_KEY = 'fc_miniapp_pay_skip';
   let _mwCfg = null;   // last-loaded credential picture, shared by the wizard steps
+  /* §412.2 — the two halves of this page take different keys: the mini
+     program's login pair integrations:manage, the WeChat Pay merchant details
+     settings:payments (lib/cap-routes.js wechatCredsFieldCap). Each half is
+     editable, and its fields sent, only for its own key; the wizard's pay
+     steps are offered only with the payments key. */
+  const mwCanLogin = () => typeof can !== 'function' || can('integrations:manage');
+  const mwCanPay = () => typeof can !== 'function' || can('settings:payments');
   function mwPaySkipped() { try { return localStorage.getItem(MW_SKIP_KEY) === '1'; } catch (_) { return false; } }
   function mwResumeStep() {
     const st = (_mwCfg && _mwCfg.status) || {};
@@ -586,12 +593,17 @@
     _mwCfg = cfg;
     const st = cfg.status || {};
     if (cfg.source === 'env' || (st.wechatLoginReady && (st.payReady || mwPaySkipped()))) return igMiniappConfigFull(cfg);
-    igMiniappSetup(mwResumeStep());
+    // §412.2 — a step this account may not save is not offered as a wizard.
+    const at = mwResumeStep();
+    if ((at === 1 && !mwCanLogin()) || (at > 1 && !mwCanPay())) return igMiniappConfigFull(cfg);
+    igMiniappSetup(at);
   };
   // Re-enter the wizard from the summary page ("Setup guide" button).
   window.igMiniappSetupStart = function () {
     try { localStorage.removeItem(MW_SKIP_KEY); } catch (_) {}
-    igMiniappSetup(mwResumeStep());
+    const at = mwResumeStep();
+    if ((at === 1 && !mwCanLogin()) || (at > 1 && !mwCanPay())) return igMiniappConfigFull();   // §412.2
+    igMiniappSetup(at);
   };
 
   window.igMiniappConfigFull = async function (preloaded) {
@@ -606,10 +618,11 @@
     const st = cfg.status || {};
     const pay = cfg.pay || {};
     const env = cfg.source === 'env';   // env-managed account (Roots): read-only view
+    const roLogin = env || !mwCanLogin(), roPay = env || !mwCanPay();   // §412.2
 
     const chip = (ok, en, cn) => `<span class="mc-chip${ok ? ' on' : ''}">${ok ? MC_SVG.check : MC_SVG.circle}<span>${cuT(en, cn)}</span></span>`;
-    const txt = (id, label, val) => `<div class="mc-f"><label class="field-label">${label}</label>
-      <input type="text" id="${id}" value="${esc(val || '')}" spellcheck="false" autocapitalize="off" style="font-family:var(--f-mono,monospace)"${env ? ' readonly' : ''}></div>`;
+    const txt = (id, label, val, ro) => `<div class="mc-f"><label class="field-label">${label}</label>
+      <input type="text" id="${id}" value="${esc(val || '')}" spellcheck="false" autocapitalize="off" style="font-family:var(--f-mono,monospace)"${ro ? ' readonly' : ''}></div>`;
     // Secret field: saved secrets show a locked "Saved" row; Replace reveals an
     // empty input (blank on save = keep the stored value, matching the API).
     const sec = (id, label, isSet, o) => {
@@ -619,10 +632,10 @@
       const field = o.pem
         ? `<textarea id="${id}" rows="3" placeholder="${o.ph || ''}" spellcheck="false" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea>`
         : `<input type="password" id="${id}" autocomplete="new-password" placeholder="${o.ph || ''}">`;
-      if (!isSet) return `<div class="${cls}"><label class="field-label">${label}${optTag}</label>${field}</div>`;
+      if (!isSet) return o.ro ? '' : `<div class="${cls}"><label class="field-label">${label}${optTag}</label>${field}</div>`;
       return `<div class="${cls}" id="${id}_f"><label class="field-label">${label}${optTag}</label>
         <div class="mc-saved">${MC_SVG.lock}<span class="tx"><span class="dots">••••••••</span><span>${cuT('Saved', '已保存')}</span></span>
-          ${env ? '' : `<button type="button" class="btn btn-sm" onclick="igMcReplace('${id}_f')">${cuT('Replace', '更换')}</button>`}</div>
+          ${o.ro ? '' : `<button type="button" class="btn btn-sm" onclick="igMcReplace('${id}_f')">${cuT('Replace', '更换')}</button>`}</div>
         <div class="mc-edit">${field}<div class="mc-keep-row"><button type="button" class="mc-keep" onclick="igMcKeep('${id}_f')">${cuT('Keep saved value', '保留已保存的值')}</button></div></div>
         </div>`;
     };
@@ -631,7 +644,7 @@
       <div class="mc-head">
         <strong class="mc-title">${cuT('WeChat configuration', '小程序配置')}</strong>
         <div style="display:flex;gap:8px;align-items:center">
-          ${env ? '' : `<button class="btn btn-sm" onclick="igMiniappSetupStart()">${cuT('Setup guide', '设置向导')}</button>`}
+          ${env || !mwCanLogin() ? '' : `<button class="btn btn-sm" onclick="igMiniappSetupStart()">${cuT('Setup guide', '设置向导')}</button>`}
           <button class="btn btn-sm btn-icon" onclick="igLocClose()" aria-label="${cuT('Close', '关闭')}">${MC_SVG.x}</button>
         </div>
       </div>
@@ -644,22 +657,22 @@
       <div class="mc-sec">
         <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.phone}</span><b>${cuT('WeChat Mini Program', '微信小程序')}</b></div>
         <div class="ig-wiz-grid">
-          ${txt('mc_appid', 'AppID', cfg.appId)}
-          ${sec('mc_secret', 'AppSecret', cfg.appSecretSet, { ph: cuT('Paste the AppSecret', '粘贴 AppSecret') })}
+          ${txt('mc_appid', 'AppID', cfg.appId, roLogin)}
+          ${sec('mc_secret', 'AppSecret', cfg.appSecretSet, { ph: cuT('Paste the AppSecret', '粘贴 AppSecret'), ro: roLogin })}
         </div>
       </div>
 
       <div class="mc-sec">
         <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('WeChat Pay', '微信支付')}</b></div>
         <div class="ig-wiz-grid">
-          ${txt('mc_mchid', cuT('Merchant ID', '商户号'), pay.mchId)}
-          ${txt('mc_serial', cuT('Certificate serial', '证书序列号'), pay.serialNo)}
-          ${sec('mc_v3', cuT('API v3 key', 'APIv3 密钥'), pay.apiV3KeySet, { ph: cuT('Paste the API v3 key', '粘贴 APIv3 密钥') })}
+          ${txt('mc_mchid', cuT('Merchant ID', '商户号'), pay.mchId, roPay)}
+          ${txt('mc_serial', cuT('Certificate serial', '证书序列号'), pay.serialNo, roPay)}
+          ${sec('mc_v3', cuT('API v3 key', 'APIv3 密钥'), pay.apiV3KeySet, { ph: cuT('Paste the API v3 key', '粘贴 APIv3 密钥'), ro: roPay })}
           <div></div>
           ${sec('mc_pkey', cuT('Merchant private key', '商户私钥'), pay.privateKeySet,
-            { pem: true, wide: true, ph: cuT('Paste the full PEM, including the BEGIN and END lines', '粘贴完整 PEM，包含 BEGIN 与 END 行') })}
+            { pem: true, wide: true, ph: cuT('Paste the full PEM, including the BEGIN and END lines', '粘贴完整 PEM，包含 BEGIN 与 END 行'), ro: roPay })}
           ${sec('mc_pubkey', cuT('WeChat platform public key', '微信平台公钥'), pay.platformPubKeySet,
-            { pem: true, wide: true, optional: true, ph: cuT('Paste PEM contents', '粘贴 PEM 内容') })}
+            { pem: true, wide: true, optional: true, ph: cuT('Paste PEM contents', '粘贴 PEM 内容'), ro: roPay })}
         </div>
       </div>
 
@@ -669,7 +682,7 @@
         <span class="ig-spacer"></span>
         <span id="mc_result" style="font-size:12.5px"></span>
         <button class="btn" onclick="igLocClose()">${cuT('Close', '关闭')}</button>
-        <button class="btn btn-primary" id="mc_save" onclick="igSaveMiniappCreds()">${mcSaveBtnHtml()}</button>
+        ${roLogin && roPay ? '' : `<button class="btn btn-primary" id="mc_save" onclick="igSaveMiniappCreds()">${mcSaveBtnHtml()}</button>`}
       </div>
     </div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -692,11 +705,11 @@
 
   window.igSaveMiniappCreds = async function () {
     const v = id => { const el = document.getElementById(id); return el && el.value ? el.value.trim() : ''; };
-    const body = {
-      appId: v('mc_appid'), appSecret: v('mc_secret'),
-      mchId: v('mc_mchid'), apiV3Key: v('mc_v3'), serialNo: v('mc_serial'),
-      privateKey: v('mc_pkey'), platformPubKey: v('mc_pubkey'),
-    };
+    // §412.2 — each half is sent only for its own key.
+    const body = {};
+    if (mwCanLogin()) Object.assign(body, { appId: v('mc_appid'), appSecret: v('mc_secret') });
+    if (mwCanPay()) Object.assign(body, { mchId: v('mc_mchid'), apiV3Key: v('mc_v3'), serialNo: v('mc_serial'),
+      privateKey: v('mc_pkey'), platformPubKey: v('mc_pubkey') });
     const out = document.getElementById('mc_result'), btn = document.getElementById('mc_save');
     if (btn) {
       if (btn.disabled) return;
@@ -886,6 +899,9 @@
         _mwCfg.appId = appId;
         if (secret) _mwCfg.appSecretSet = true;
         if (r.creds) _mwCfg.status = r.creds;
+        // §412.2 — the pay steps are the payments key's; without it the
+        // wizard ends here on the configuration page.
+        if (!mwCanPay()) { igMiniappConfigFull(); return; }
         igMiniappSetup(2);
         return;
       }

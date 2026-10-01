@@ -155,9 +155,11 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // [key, screen keys that write it today, who wrote it]
       ['shop.layout', settings, 'desktop Settings → Shop tab'],
       ['customer_service.mode', settings, 'desktop Settings → Customer service'],
-      ['currency', settings, 'desktop Settings, and the setup guide'],
-      ['currency', list(route('setup')), 'the setup pair'],
-      ['tax.rateMicro', settings, 'desktop Settings → tax'],
+      // §412.2 — currency and tax are the payments permission alone; the desktop
+      // cards carry data-cap="settings:payments" and the setup guide's payment
+      // step is drawn only for it.
+      ['currency', ['settings:payments'], 'desktop Settings currency card, and the setup guide\'s payment step'],
+      ['tax.rateMicro', ['settings:payments'], 'desktop Settings → tax card'],
       ['system_alerts.enabled', settings, 'desktop Settings → Notifications save'],
       ['notifications.wecom_order_webhook', settings, 'desktop Settings → Notifications save'],
       ['inventory.lowStockThreshold', settings, 'desktop Settings → Operations'],
@@ -298,6 +300,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     operator('orders', ['orders:view', 'orders:edit']);
     operator('settings', ['settings:shop']);
     operator('delivery', ['delivery:view']);
+    operator('payments', ['settings:payments']);   // §412.2
     operator('broadcast', ['broadcasts:send']);
     operator('voting', ['voting:edit']);
     operator('leader', ['leaderboard:edit']);
@@ -326,8 +329,15 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(r.status, 403, 'an account holding nothing may not touch the pop-ups');
     r = await call('orders', 'PUT', '/api/retail-admin/config', { 'fees.minOrder': 0 });
     is(r.status, 403, 'an orders account may not change the minimum order');
-    r = await call('settings', 'PUT', '/api/retail-admin/config', { 'shop.layout': 'grid', currency: { code: 'CNY' } });
-    is(r.status, 200, 'a settings:shop account saves the Shop tab and the currency');
+    r = await call('settings', 'PUT', '/api/retail-admin/config', { 'shop.layout': 'grid' });
+    is(r.status, 200, 'a settings:shop account saves the Shop tab');
+    // §412.2 — …but no longer the currency or tax, which are settings:payments alone.
+    r = await call('settings', 'PUT', '/api/retail-admin/config', { currency: { code: 'CNY' } });
+    is(r.status, 403, 'a settings:shop account may not change the currency (§412.2)');
+    r = await call('delivery', 'PUT', '/api/retail-admin/config', { 'tax.enabled': false });
+    is(r.status, 403, '…nor a delivery account the tax');
+    r = await call('payments', 'PUT', '/api/retail-admin/config', { currency: { code: 'CNY' }, 'tax.enabled': false });
+    is(r.status, 200, 'settings:payments saves both');
     r = await call('settings', 'PUT', '/api/retail-admin/config', { 'features.membership': true });
     is(r.status, 200, 'and flips a feature from the phone\'s Settings');
     r = await call('settings', 'PUT', '/api/retail-admin/config', {

@@ -72,7 +72,9 @@ const SRC = [
   slice(M, '/* ══════════════════════════════════════════════════════════════════════════\n   §325 X9a — THE CHANNEL HUB', '/* §325 X9b ends */'),
 ].join('\n');
 
-const MANAGE = ['dashboard:view', 'integrations:view', 'integrations:manage'];
+// Both halves' keys (§412.2): the login pair's integrations:manage and the
+// WeChat Pay details' settings:payments. Section 1 takes each away in turn.
+const MANAGE = ['dashboard:view', 'integrations:view', 'integrations:manage', 'settings:payments'];
 const REFUSED = () => { const e = new Error('refused'); e.refused = true; e.words = ['You don’t have permission for this', '你没有此操作的权限']; return e; };
 const CODE = (c) => { const e = new Error(c); e.code = c; return e; };
 const APPID = 'wx1234567890abcdef';
@@ -149,9 +151,50 @@ function deskKeys(fnAnchor, bodyAnchor) {
 section('1 · keys');
 {
   it('each write is the server\'s key; the read is open, as the hub\'s is', () => {
-    assert.strictEqual(cap.requiredCapFor('POST', '/api/retail-admin' + CREDS), 'integrations:manage');
-    assert.strictEqual(cap.requiredCapFor('POST', '/api/retail-admin' + PAY), 'integrations:manage');
+    // §412.2 — the save carries either half, so the choke point admits either
+    // key and the handler asks per field; the payment keys' check is payments.
+    assert.deepStrictEqual(cap.requiredCapFor('POST', '/api/retail-admin' + CREDS), ['integrations:manage', 'settings:payments']);
+    assert.strictEqual(cap.requiredCapFor('POST', '/api/retail-admin' + PAY), 'settings:payments');
     assert.strictEqual(cap.requiredCapFor('GET', '/api/retail-admin' + CFG), null);
+    for (const f of ['appId', 'appSecret']) assert.strictEqual(cap.wechatCredsFieldCap(f), 'integrations:manage', f);
+    for (const f of ['mchId', 'apiV3Key', 'privateKey', 'serialNo', 'platformPubKey']) assert.strictEqual(cap.wechatCredsFieldCap(f), 'settings:payments', f);
+  });
+  it('§412.2 — integrations:manage alone: the login pair, never the WeChat Pay half', async () => {
+    const caps = ['dashboard:view', 'integrations:view', 'integrations:manage'];
+    const h = await open(NEW(), { caps });
+    assert.strictEqual(h.s().mode, 'wizard'); assert.strictEqual(h.s().step, 1, 'step 1 is theirs');
+    type(h, 'appId', APPID); type(h, 'appSecret', 'sec'); h.CMD.wxmLogin();
+    W(h, 0).res({ success: true, verified: true, creds: { wechatLoginReady: true } }); await tick();
+    assert.notStrictEqual(h.s().mode, 'wizard', 'no merchant-account step: the wizard ends on the page');
+    const c2 = NEW(); c2.status.wechatLoginReady = true;
+    assert.strictEqual((await open(c2, { caps })).s().mode, 'full', 'a wizard that would open at a pay step opens the page');
+    const d = await open(DONE(), { caps });
+    const html = d.html();
+    assert.ok(/value="1230000109"[^>]*readonly/.test(html), 'the merchant ID is read-only');
+    assert.ok(!/value="wx[0-9a-zA-Z]{16}"[^>]*readonly/.test(html), 'the AppID is not');
+    assert.ok(!html.includes("wxmReplace','apiV3Key'") && !html.includes("wxmReplace','privateKey'"), 'no Replace on a pay secret');
+    d.CMD.wxmSave();
+    assert.deepStrictEqual(Object.keys(W(d, 0).body).sort(), ['appId', 'appSecret'], 'Save sends the login pair alone');
+    for (const c of ['wxmMch', 'wxmPay']) d.CMD[c]();
+    d.CMD.wxmStep(2); d.CMD.wxmStep(3);
+    assert.strictEqual(d.calls.writes.length, 1, 'no pay step and no pay write');
+  });
+  it('§412.2 — settings:payments alone: the WeChat Pay half, never the login pair', async () => {
+    const caps = ['dashboard:view', 'integrations:view', 'settings:payments'];
+    const n = await open(NEW(), { caps });
+    assert.strictEqual(n.s().mode, 'full', 'step 1 is not theirs, so the page');
+    const c2 = NEW(); c2.status.wechatLoginReady = true;
+    const w = await open(c2, { caps });
+    assert.strictEqual(w.s().mode, 'wizard'); assert.strictEqual(w.s().step, 2, 'the pay steps are theirs');
+    const d = await open(DONE(), { caps });
+    assert.ok(d.t().includes('Save & verify'));
+    d.CMD.wxmSave();
+    assert.deepStrictEqual(Object.keys(W(d, 0).body).sort(), ['apiV3Key', 'mchId', 'platformPubKey', 'privateKey', 'serialNo'], 'Save sends the pay half alone');
+    d.CMD.wxmStep(1); assert.strictEqual(d.s().mode, 'full', 'step 1 is not offered to them');
+  });
+  it('§412.2 — the payments key waits to be known: while loading, no pay half', async () => {
+    const h = await open(DONE(), { caps: null });
+    assert.ok(!h.html().includes("wxmReplace','apiV3Key'") && !h.html().includes("wxmReplace','privateKey'"), 'no Replace on a pay secret');
   });
   it('without integrations:manage: the page, read-only — no wizard, no Save, no Replace, nothing sent', async () => {
     const h = await open(NEW(), { caps: ['dashboard:view', 'integrations:view'] });
@@ -241,7 +284,13 @@ section('4 · the configuration page: Save & verify');
     const w = W(h, 0);
     assert.strictEqual(w.p, CREDS); assert.strictEqual(w.method, 'POST');
     assert.deepStrictEqual(w.body, { appId: APPID, appSecret: '', mchId: '1230000109', apiV3Key: V3, serialNo: 'SER-77', privateKey: '', platformPubKey: '' });
-    assert.deepStrictEqual(Object.keys(w.body).sort(), deskKeys('window.igSaveMiniappCreds = async function', 'const body =').sort());
+    // §412.2 — the desktop builds its body from two halves, each for its own key.
+    const f = block(IG, 'window.igSaveMiniappCreds = async function');
+    const desk = [];
+    for (let i = f.indexOf('Object.assign(body, {'); i !== -1; i = f.indexOf('Object.assign(body, {', i + 1)) {
+      desk.push(...[...block(f.slice(i + 'Object.assign(body, '.length), '{').matchAll(/([a-zA-Z0-9]+)\s*:/g)].map((m) => m[1]));
+    }
+    assert.deepStrictEqual(Object.keys(w.body).sort(), desk.sort());
     assert.ok(h.t().includes('Verifying…'));
     w.res({ success: true, verified: true }); await tick();
     assert.deepStrictEqual(h.calls.toasts, ['Saved — WeChat accepted the credentials.']);

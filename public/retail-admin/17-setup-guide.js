@@ -122,8 +122,13 @@ function suRenderGuide() {
     const st = isDone
       ? `<div class="su-st">${SU_ICON.check}</div>`
       : `<div class="su-st">${SU_ICON[s.key] || ''}</div>`;
+    // §412.2 — the payment step writes the currency and the manual-Alipay
+    // record, which are settings:payments alone; without it the step shows
+    // its time and no button rather than a chooser whose saves are refused.
+    const noKey = s.key === 'payment' && typeof can === 'function' && !can('settings:payments');
     const right = isDone
       ? `<span class="su-donechip">${SU_ICON.check}${cuT('Done', '已完成')}</span>`
+      : noKey ? `<span class="su-time">${s.time}</span>`
       : `<span class="su-time">${s.time}</span>
          <button class="btn btn-sm${isNext ? ' btn-primary' : ''}" type="button" onclick="suRun('${s.key}')">${isNext ? cuT('Set up', '去设置') : cuT('Open', '打开')}</button>`;
     return `<div class="su-task ${cls}">
@@ -620,6 +625,7 @@ function suGoProducts() {
   setTimeout(() => { if (typeof pwOpen === 'function') try { pwOpen(); } catch (_) {} }, 300);
 }
 function suGoPayment() {
+  if (typeof can === 'function' && !can('settings:payments')) return;   // §412.2
   // A brand-new operator lands on the manual-Alipay card buried in Settings and
   // has to know what to fill in. Instead run a tiny chooser: Alipay QR works the
   // same day; WeChat Pay needs a merchant account and approval, so it routes to

@@ -26,6 +26,7 @@ const { getTenantCreds, credsStatus, setTenantSecret, invalidate: invalidateCred
 const relay = require('../lib/integrations/session-relay');
 const onboarding = require('../lib/onboarding-steps');
 const mainDb = require('../database');
+const capRoutes = require('../lib/cap-routes');   // §412.2 — the Mini App save asks per field
 
 // Resolve the current tenant id from the auth context (Roots → 1).
 function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
@@ -504,8 +505,28 @@ router.post('/api/retail-admin/channel-hub/miniapp/wechat-creds', requireRetailA
   try {
     const id = tenantId(req);
     const b = req.body || {};
-    const isEnv = getTenantCreds(id).source === 'env';
+    const cur = getTenantCreds(id);
+    const isEnv = cur.source === 'env';
     const str = (k) => String(b[k] == null ? '' : b[k]).trim();
+
+    /* §412.2 — each field takes its own key: the login pair integrations:manage,
+       the WeChat Pay details settings:payments. Only a field this save would
+       actually CHANGE is asked about — a secret that was typed, or a plain
+       value (AppID, merchant ID, certificate serial) that differs from the one
+       stored — because the configuration page sends all seven fields, the
+       unchanged plain values pre-filled. Checked before anything is written,
+       so a refused save writes nothing. The env-managed account writes nothing
+       here at all, so it is never refused. */
+    if (!isEnv) {
+      const stored = { appId: cur.wechat.appId || '', mchId: cur.pay.mchId || '', serialNo: cur.pay.serialNo || '' };
+      for (const f of [...capRoutes.WECHAT_LOGIN_FIELDS, ...capRoutes.WECHAT_PAY_FIELDS]) {
+        const v = str(f);
+        if (!v) continue;
+        if (Object.prototype.hasOwnProperty.call(stored, f) && v === stored[f]) continue;
+        const need = capRoutes.wechatCredsFieldCap(f);
+        if (capRoutes.capDenied(req, need)) return res.status(403).json({ success: false, error: 'forbidden_capability', need, field: f });
+      }
+    }
 
     if (!isEnv) {
       const appId = str('appId');
