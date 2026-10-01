@@ -70,7 +70,11 @@ it('eight groups, each with a heading in both languages', () => {
   }
 });
 
-/* TWENTY-EIGHT SINCE 2026-09-30 (later the same day), for the same one
+/* TWENTY-NINE SINCE 2026-10-01, for the same one reason: `shopmenus` (§325
+   PD2, the desktop's shop menu on the phone, read-only first) joins Money and
+   numbers beside Sales, whose desktop board is the shop menu's door there. A
+   row ADDED, gated on that board's own any-of.
+   Twenty-eight from 2026-09-30 (later the same day), for the same one
    reason: `materials` (§300 R5, the desktop's Materials screen on the phone)
    joins Making things beside Recipes, behind the same production switch. A row
    ADDED, gated on `materials:view`.
@@ -94,11 +98,11 @@ it('eight groups, each with a heading in both languages', () => {
    or not at all. */
 it('the same rows came out as went in — a regroup is a move, not an edit', () => {
   const keys = groups().flatMap((g) => g.keys);
-  assert.strictEqual(keys.length, 28, `expected 28 Operations rows, found ${keys.length}`);
-  assert.strictEqual(new Set(keys).size, 28, 'a row key appears in two groups');
+  assert.strictEqual(keys.length, 29, `expected 29 Operations rows, found ${keys.length}`);
+  assert.strictEqual(new Set(keys).size, 29, 'a row key appears in two groups');
   /* Named in full rather than counted, so a row SWAPPED for another still
      fails. A count alone would pass a rename of the set. */
-  const expected = ['neworder', 'till', 'sales', 'trend', 'finance', 'invoices', 'pick', 'delivery',
+  const expected = ['neworder', 'till', 'sales', 'shopmenus', 'trend', 'finance', 'invoices', 'pick', 'delivery',
     'purchasing', 'supowed', 'receiving', 'receivexfer', 'stockapp', 'kitchenqueue', 'logbatch',
     'askkitchen', 'askstock', 'askstocksent', 'askbuy', 'kitchenready', 'askbuysent',
     'waste', 'expense',
