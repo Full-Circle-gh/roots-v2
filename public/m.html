@@ -1463,7 +1463,7 @@ const state = {
   rf:null,
   /* §325 O6 — "Ship part later": the parcel being split and the lines ticked;
      and the orders whose split suggestion was dismissed this session. */
-  splitPick:null, splitDismissed:[], shipTo:null,
+  splitPick:null, splitDismissed:[], shipTo:null, qy:null,
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
@@ -2329,7 +2329,7 @@ reg('ordViewDel', id=>{
   render();
 });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null;
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
   state.ordNoteOpen=null;
@@ -3539,6 +3539,316 @@ async function rereadOrder(o){
   loadOrdersPage();
 }
 
+/* ── §325 O8 — SAME-CITY RIDER OPERATIONS ──────────────────────────────────
+   The desktop's renderQyDispatch and renderQyShipFrom controls, on the phone:
+   Retry push, Remove the old job, Change where it ships from, pick a place,
+   move the delivery day, and compare couriers and dispatch one. Each sends the
+   desktop's request. The keys are the routes' (lib/cap-routes.js): every
+   /orders/:id/qingyun write is orders:edit except dispatch, which is
+   orders:dispatch_courier — and dispatch charges the shop's Qingyun balance,
+   so it is drawn only once this account's keys are KNOWN to include it (money
+   fails closed). The two reads (carriers, ship-from) are open on the server
+   and are offered only beside the write they lead to.
+   NOT HERE: placing a point on a map, and the switch from a place list to that
+   map — §97's Qingyun point picker, held by §325.4. */
+const qyCanEdit=o=>!!o&&!o.viewOnly&&o._id!=null&&mCan('orders:edit');
+const qyCanDispatch=o=>!!o&&!o.viewOnly&&o._id!=null&&Array.isArray(state.caps)&&mCan('orders:dispatch_courier');
+function qyBtn(label,cmd,kind){
+  return `<button class="${kind==='cta'?'cta':'btn2'}" style="width:auto;padding:7px 12px;font-size:13px;flex:none" ${state.orderBusy?'disabled':''} onclick="${cmd}">${label}</button>`;
+}
+const qyOf=o=>(state.qy&&o&&state.qy.oid===o.id)?state.qy:null;
+const qyPanelOpen=(o,p)=>{ const q=qyOf(o); return !!q&&q.panel===p; };
+/* Where the desktop draws its courier block (renderLocalEtaCard): the FIRST
+   same-city parcel, not yet gone, on an order still being made — or, once a
+   rider is on it, hoisted with the live card (courierCardHoisted). */
+function qySlot(o){
+  if(!o||o.viewOnly) return false;
+  const s=(o.shipments||[]).find(x=>(x.mode||'local')==='local');
+  if(!s||['dispatched','delivered'].includes(s.state||'pending')) return false;
+  const stage=o.courier&&o.courier.stage;
+  return ['paid','preparing'].includes(o.raw)||['awaiting_dispatch','heading_to_pickup','in_transit'].includes(stage);
+}
+function qyStale(o){
+  const c=o.courier; if(!c) return false;
+  const delivered=o.raw==='delivered'||c.stage==='delivered';
+  return !delivered&&c.stage!=='cancelled'&&M_COURIER_MOVING.includes(c.stage)&&courierAgeMs(c.updated_at)>M_COURIER_STALE_MS;
+}
+/* Kept while there is no rider yet, or the run has stalled or been cancelled;
+   hidden while a rider is genuinely on the way. */
+function qyCompareShown(o){
+  if(!qySlot(o)||!qyCanDispatch(o)) return false;
+  const c=o.courier;
+  return !c||c.stage==='scheduled'||c.stage==='awaiting_dispatch'||c.stage==='cancelled'||qyStale(o);
+}
+/* Moving the day, offered only while nobody is carrying the order (a stale run
+   is nobody) and never on an expired one, whose own surface carries it. */
+function qyMoveDayShown(o){
+  const sf=o.shipFrom; if(!qySlot(o)||!sf||!qyCanEdit(o)) return false;
+  if(sf.date_posture==='passed') return false;
+  const c=o.courier;
+  const delivered=!!(c&&(o.raw==='delivered'||c.stage==='delivered'));
+  const heldByRider=!qyStale(o)&&!!(c&&['heading_to_pickup','in_transit'].includes(c.stage));
+  return !(heldByRider||delivered||['delivered','cancelled','refunded'].includes(o.raw));
+}
+function qyCourierOps(o){
+  const q=qyOf(o);
+  const cmp=qyCompareShown(o), day=qyMoveDayShown(o);
+  const c=o.courier, relabel=!!c&&(c.stage==='awaiting_dispatch'||c.stage==='cancelled'||qyStale(o));
+  const parts=[];
+  if(cmp||day) parts.push(`<div style="display:flex;gap:8px;flex-wrap:wrap">${
+    cmp?qyBtn(q&&q.panel==='carriers'&&q.carriers?T('Refresh prices','刷新比价'):relabel?T('Call another courier','再叫一家运力'):T('Compare couriers','查看运力比价'),"APP.cmd('qyCarriers')"):''}${
+    day?qyBtn(T('Change delivery day','更改配送日期'),"APP.cmd('qyDayOpen')"):''}</div>`);
+  if(q&&q.panel==='carriers') parts.push(qyCarrierPanel(o));
+  if(q&&q.panel==='day'&&day) parts.push(qyDayPanel(o));
+  if(q&&q.panel==='done') parts.push(`<div style="font-size:13px;color:var(--sage-ink)">${ic('check',14)} ${T('Dispatched','已发单')}: ${q.done}</div>`);
+  if(!parts.length) return '';
+  return `<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--hairline)">${parts.join('')}</div>`;
+}
+/* With no ship-from line (nothing created in Qingyun by us), the courier
+   controls still have the desktop's home: a card of their own. */
+function qyCourierCard(o){
+  if(!o||o.shipFrom) return '';
+  const ops=qyCourierOps(o); if(!ops) return '';
+  return `<div class="card" style="padding:14px"><span class="eyebrow">${T('Same-city courier','同城配送')}</span>${ops}</div>`;
+}
+const qyNote=(t,tone)=>`<div style="font-size:13px;line-height:1.5;color:var(--${tone||'text-secondary'})">${t}</div>`;
+function qyCarrierPanel(o){
+  const q=qyOf(o);
+  if(q.loading) return qyNote(T('Loading…','加载中…'));
+  if(q.err) return qyNote(q.err,'brick-ink');
+  const d=q.carriers||{};
+  if(!d.available) return qyNote(T("Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order.",'订单尚未进入青云。请开启自动发送,或此单非同城配送。'));
+  const list=(d.carriers||[]).filter(x=>x&&x.enabled);
+  if(!list.length) return qyNote(T('No couriers available right now.','当前暂无可用运力。'));
+  const dis=state.orderBusy?' disabled':'';
+  return `<div style="display:flex;flex-direction:column">${list.map(x=>{
+      const k=x.carrierId+'|'+x.serviceCode, on=!!q.pick[k];
+      return `<button role="checkbox" aria-checked="${on?'true':'false'}"${dis} onclick="APP.cmd('qyCarrierT','${escAttr(k)}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border:none;border-top:1px solid var(--hairline);background:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+        <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${on?ic('check',15,2.5):''}</span>
+        <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500">${escAttr(x.serviceName||x.carrierName||'')}${x.cheapest?` <span class="pill" style="background:var(--sage-tint);color:var(--sage-ink)">${T('cheapest','最便宜')}</span>`:''}</span>
+          <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(x.carrierName||'')}${x.distanceM?' · '+(x.distanceM/1000).toFixed(1)+'km':''}</span></span>
+        <span class="num" style="flex:none;font-size:14px">${money(CUR,x.feeYuan)}</span></button>`;
+    }).join('')}</div>
+    <button class="cta" style="width:100%"${dis} onclick="APP.cmd('qyDispatch')">${state.orderBusy==='qydispatch'?T('Dispatching…','发单中…'):T('Dispatch courier','发起配送')}</button>`;
+}
+function qyShipPanel(o){
+  const q=qyOf(o);
+  const wrap=h=>`<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">${h}</div>`;
+  if(q.loading) return wrap(qyNote(T('Loading…','加载中…')));
+  if(q.err) return wrap(qyNote(q.err,'brick-ink'));
+  const d=q.ship||{};
+  if(!d.available) return wrap(qyNote(T('This order has no Qingyun job to move.','该订单在青云没有可转移的配送单。')));
+  const stores=(d.stores||[]).filter(s=>s&&s.code!==d.current);
+  if(!stores.length) return wrap(qyNote(T('No other location is set up for same-city delivery.','暂无其他门店开通同城配送。')));
+  const dis=state.orderBusy?' disabled':'';
+  return wrap(`<div style="display:flex;flex-direction:column">${stores.map(s=>{
+      const on=q.storePick===s.code;
+      return `<button role="radio" aria-checked="${on?'true':'false'}"${s.connected?dis:' disabled'} onclick="APP.cmd('qyShipPick','${escAttr(s.code)}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border:none;border-top:1px solid var(--hairline);background:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)${s.connected?'':';opacity:.55'}">
+        <span style="flex:none;width:20px;height:20px;border-radius:50%;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};display:flex;align-items:center;justify-content:center">${on?'<span style="width:10px;height:10px;border-radius:50%;background:var(--text-primary)"></span>':''}</span>
+        <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500">${escAttr(T(s.name_en||s.code,s.name_cn||s.code))}</span>
+          ${s.connected?'':`<span style="display:block;font-size:12.5px;color:var(--text-secondary)">${T('not connected to Qingyun','未连接青云')}</span>`}</span></button>`;
+    }).join('')}</div>
+    <button class="cta" style="width:100%"${dis} onclick="APP.cmd('qyShipGo')">${state.orderBusy==='qyship'?T('Moving…','更改中…'):T('Ship from here','改为此门店取货')}</button>`);
+}
+/* Seven Beijing days from today (the desktop's QP_DAYS_AHEAD and qpDayOptions):
+   built by adding whole days to the shifted instant, so a run crossing
+   midnight UTC cannot list one date twice. */
+function qyDays(now){
+  const base=(now==null?Date.now():now)+8*3600000, out=[];
+  for(let i=0;i<7;i++) out.push({iso:new Date(base+i*86400000).toISOString().slice(0,10),
+    rel:i===0?T('today','今天'):i===1?T('tomorrow','明天'):''});
+  return out;
+}
+function qyDayPanel(o){
+  const q=qyOf(o), from=escAttr((o.shipFrom&&o.shipFrom.promised_date)||'');
+  const dis=state.orderBusy?' disabled':'';
+  const pick=q&&q.day;
+  return `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px">${qyDays().map(d=>
+      `<button class="chip ${pick===d.iso?'on':''}"${dis} onclick="APP.cmd('qyDayPick','${d.iso}')"><span class="num">${d.iso}</span>${d.rel?` <span style="color:var(--text-secondary)">${d.rel}</span>`:''}</button>`).join('')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.6">${T('The rider is called on the morning of the day you pick. Nothing is dispatched before then.','所选日期当天才会呼叫骑手,在此之前不会发单。')}</div>
+    ${pick?`<div style="padding:10px 12px;border-radius:12px;background:var(--surface-raised);font-size:13.5px;line-height:1.55">${T(
+        'Move this delivery from '+from+' to '+pick+'? The customer is told the new day.',
+        '将配送日期由 '+from+' 改为 '+pick+'？系统会告知顾客新的日期。')}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="cta" style="flex:1"${dis} onclick="APP.cmd('qyDayGo')">${state.orderBusy==='qyday'?T('Moving…','处理中…'):T('Move the delivery','确认改期')}</button>
+        <button class="btn2" style="flex:1"${dis} onclick="APP.cmd('qyClose')">${T('Keep the current date','保持原日期')}</button></div></div>`:''}
+  </div>`;
+}
+/* One shape for every write here: orderWrite's busy and error handling, the
+   desktop's words for each refusal it names, and the order read again. A
+   success:false answered with 200 (the platform said no) is a failure too. */
+function qyWrite(o,kind,path,body,words,ok){
+  const plain=w=>{ const x=new Error(T(w[0],w[1])); x.code='__plain'; return x; };
+  return orderWrite(kind, async()=>{
+    let j;
+    try{ j=await apiWrite(path,body); }
+    catch(e){
+      if(e&&words.$reread&&words.$reread.includes(e.code)) rereadOrder(o);
+      if(e&&!e.refused&&String(e.message)!=='auth'){ const w=words[e.code]||(words.$fn&&words.$fn(e.body||{}))||words._; if(w) throw plain(w); }
+      throw e;
+    }
+    if(j&&j.success===false) throw plain(words[j.error]||(words.$fn&&words.$fn(j))||words._);
+    const msg=ok(j||{});
+    if(state.qy&&state.qy.oid===o.id&&state.qy.panel!=='done') state.qy=null;
+    await rereadOrder(o);
+    return msg;
+  });
+}
+const QY_ALREADY=['Already on the courier platform','已在配送平台'];
+const QY_MOVED_ON=['It moved on while you were looking — reopen the order','状态已变更，请重新打开订单'];
+const QY_CLOSED=['This order is closed','该订单已关闭'];
+reg('qyRetryPush', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!qyCanEdit(o)) return;
+  qyWrite(o,'qyretry','/orders/'+o._id+'/qingyun/retry-push',{},{_:['Could not queue it','排队失败']},
+    j=>j.already_created?T(...QY_ALREADY):T('Queued — sending it to the channel, about a minute','已排队 — 约一分钟内发单'));
+});
+reg('qyRemoveStale', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!qyCanEdit(o)) return;
+  qyWrite(o,'qystale','/orders/'+o._id+'/qingyun/remove-stale',{},{_:['Could not remove it — do it in the Qingyun app','删除失败 — 请在青云 App 中删除']},
+    ()=>T('Old job removed','原配送单已删除'));
+});
+reg('qyPickPlace', idx=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!qyCanEdit(o)) return;
+  const i=Number(idx); if(!Number.isInteger(i)||i<0) return;
+  const c=((o.shipFrom&&o.shipFrom.candidates)||[]).find(x=>x&&x.idx===i);
+  qyWrite(o,'qyplace','/orders/'+o._id+'/qingyun/confirm-place',{idx:i},
+    {order_closed:QY_CLOSED, choice_gone:['That option is gone — reopen the order','该选项已失效，请重新打开订单'], row_moved:QY_MOVED_ON, _:['Could not pick it','选择失败']},
+    j=>{ if(j.already_created) return T(...QY_ALREADY);
+      const nm=j.name||(c&&c.name)||'';
+      return T('Picked '+nm+' — sending it to the channel, about a minute','已选择 '+nm+' — 约一分钟内发单'); });
+});
+reg('qyClose', ()=>{ state.qy=null; render(); });
+reg('qyDayOpen', ()=>{
+  if(!mCan('orders:edit')) return;
+  const o=currentOrder(); if(!qyCanEdit(o)||!o.shipFrom) return;
+  state.qy={oid:o.id, panel:'day', day:null}; render();
+});
+reg('qyDayPick', iso=>{
+  const o=currentOrder(), q=qyOf(o); if(!q||q.panel!=='day') return;
+  if(!qyDays().some(d=>d.iso===iso)) return;
+  q.day=iso; render();
+});
+reg('qyDayGo', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(), q=qyOf(o); if(!qyCanEdit(o)||!q||q.panel!=='day'||!q.day) return;
+  const iso=q.day;
+  // Beijing day, the server's gzDateStr — the two must agree about "today".
+  const today=iso===qyDays()[0].iso;
+  const when=today?'today':iso, whenCn=today?'今天':' '+iso;
+  qyWrite(o,'qyday','/orders/'+o._id+'/qingyun/reschedule',{date:iso},{_:['Could not move it','改期失败']},
+    j=>j.already_created?T('A courier is already on this one — cancel it in the Qingyun app first','已呼叫运力。请先在青云 App 取消该单。')
+      :j.requeued?(today?T('Moved to today — it goes back in the queue now','已改期至今天 — 已重新排队')
+        :T('Moved to '+iso+' — the rider is called that morning','已改期至 '+iso+' — 当天呼叫骑手'))
+      :j.stale_copy?T('Moved to '+when+'. The old courier order may still be live — cancel it in the Qingyun app, then call another courier.',
+        '已改期至'+whenCn+'。运单可能仍在,请先在青云 App 取消该单,再叫一家运力。')
+      :T('Moved to '+when+', but it was not re-queued — check the courier','已改期至'+whenCn+',但未重新排队 — 请核实运力。'));
+});
+/* The two reads open a panel in place; a second press of Change closes it. */
+reg('qyShipOpen', ()=>{
+  if(!mCan('orders:edit')) return;
+  const o=currentOrder(); if(!qyCanEdit(o)||!o.shipFrom||o.shipFrom.blocked_by) return;
+  if(qyPanelOpen(o,'ship')){ state.qy=null; render(); return; }
+  const q=state.qy={oid:o.id, panel:'ship', loading:true, err:null, ship:null, storePick:null}; render();
+  api('/orders/'+o._id+'/qingyun/ship-from').then(d=>{
+    if(state.qy!==q) return;
+    q.loading=false; q.ship=d||{}; render();
+  }).catch(e=>{
+    if(state.qy!==q||String(e.message)==='auth') return;
+    q.loading=false; q.err=e.refused?T(...e.words):T('Load failed','加载失败'); render();
+  });
+});
+reg('qyShipPick', code=>{
+  const o=currentOrder(), q=qyOf(o); if(!q||q.panel!=='ship'||!q.ship) return;
+  const s=(q.ship.stores||[]).find(x=>x&&x.code===code&&x.code!==q.ship.current);
+  if(!s||!s.connected) return;
+  q.storePick=code; render();
+});
+reg('qyShipGo', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(), q=qyOf(o); if(!qyCanEdit(o)||!q||q.panel!=='ship'||!q.ship) return;
+  if(!q.storePick){ state.orderErr=T('Pick a location','请选择门店'); render(); return; }
+  const s=(q.ship.stores||[]).find(x=>x&&x.code===q.storePick)||{code:q.storePick};
+  const sf=o.shipFrom||{};
+  const to=[s.name_en||s.code,s.name_cn||s.code], from=[sf.name_en||sf.store_code||'',sf.name_cn||sf.store_code||''];
+  const toE=escAttr(to[0]), toZ=escAttr(to[1]), frE=escAttr(from[0]), frZ=escAttr(from[1]);
+  state.ask={title:T('Collect this order at '+toE+' instead?','改由 '+toZ+' 取货?'),
+    body:T('A new delivery job is created at '+toE+', and the one at '+frE+' is deleted. Nobody has been sent for it yet, so nothing is charged.',
+           '将在 '+toZ+' 新建配送单,并删除 '+frZ+' 的原配送单。尚未呼叫运力,不产生费用。'),
+    confirmLabel:T('Move it','确认更改'),
+    run:()=>qyWrite(o,'qyship','/orders/'+o._id+'/qingyun/ship-from',{store_code:s.code},
+      {courier_already_called:['A courier is already on it — cancel it in the Qingyun app first','已呼叫运力 — 请先在青云 App 取消'],
+       store_not_connected:["That location isn't connected to Qingyun",'该门店未连接青云'],
+       store_not_reachable:["That location's Qingyun account isn't wired up yet — ask ops to set it up",'该门店的青云账号尚未接通 — 请联系运维配置'],
+       _:['Could not move it','更改失败']},
+      j=>j.old_removed===false
+        ?T('Now collected at '+to[0]+" — but the old job couldn't be deleted, remove it below",'已改为 '+to[1]+' 取货 — 但原配送单未能删除,请在下方删除')
+        :T('Now collected at '+to[0],'已改为 '+to[1]+' 取货'))};
+  render();
+});
+reg('qyCarriers', ()=>{
+  const o=currentOrder(); if(!qyCompareShown(o)) return;
+  const prev=qyOf(o);
+  const q=state.qy={oid:o.id, panel:'carriers', loading:true, err:null, carriers:null, pick:{}};
+  if(prev&&prev.panel==='carriers'&&prev.carriers) q.carriers=prev.carriers;   // the old prices stay readable while new ones load
+  render();
+  api('/orders/'+o._id+'/qingyun/carriers').then(d=>{
+    if(state.qy!==q) return;
+    q.loading=false;
+    if(d&&d.success===false){ q.err=T('Could not load couriers — is the store connected to Qingyun?','无法获取运力 — 门店是否已连接青云?'); render(); return; }
+    q.carriers=d||{};
+    // The desktop's cheapest-first pre-tick.
+    q.pick={}; (q.carriers.carriers||[]).forEach(x=>{ if(x&&x.enabled&&x.cheapest) q.pick[x.carrierId+'|'+x.serviceCode]=true; });
+    render();
+  }).catch(e=>{
+    if(state.qy!==q||String(e.message)==='auth') return;
+    q.loading=false; q.err=e.refused?T(...e.words):T('Load failed','加载失败'); render();
+  });
+});
+reg('qyCarrierT', k=>{
+  const o=currentOrder(), q=qyOf(o); if(!q||q.panel!=='carriers'||!q.carriers||state.orderBusy) return;
+  if(!(q.carriers.carriers||[]).some(x=>x&&x.enabled&&(x.carrierId+'|'+x.serviceCode)===k)) return;
+  if(q.pick[k]) delete q.pick[k]; else q.pick[k]=true;
+  render();
+});
+reg('qyDispatch', ()=>{
+  const o=currentOrder(), q=qyOf(o);
+  if(!qyCanDispatch(o)) return;   // §325: POST …/qingyun/dispatch is orders:dispatch_courier, and money fails closed
+  if(!q||q.panel!=='carriers'||!q.carriers) return;
+  const chosen=(q.carriers.carriers||[]).filter(x=>x&&x.enabled&&q.pick[x.carrierId+'|'+x.serviceCode]);
+  if(!chosen.length){ state.orderErr=T('Pick at least one courier','请至少选择一个运力'); render(); return; }
+  const carriers=chosen.map(x=>({carrierId:Number(x.carrierId), serviceCode:x.serviceCode}));
+  const n=carriers.length, nm=escAttr(chosen[0].serviceName||chosen[0].carrierName||'');
+  state.ask={title:n>1
+      ?T('Call '+n+' couriers at once? The first rider to accept takes the order — only that courier is charged to your Qingyun balance.',
+         '同时呼叫 '+n+' 家运力?谁先接单谁配送,仅对接单的那家从青云余额扣费。')
+      :T('Dispatch '+nm+'? A rider is called and your Qingyun balance is charged.','确认发起配送 '+nm+'?将呼叫骑手并从青云余额扣费。'),
+    confirmLabel:T('Dispatch','发起配送'),
+    run:()=>{
+      if(!qyCanDispatch(o)) return;
+      const already=['A courier is already on this order','该订单已呼叫运力'];
+      qyWrite(o,'qydispatch','/orders/'+o._id+'/qingyun/dispatch',{carriers},
+        {courier_already_called:already,
+         // Qingyun's own words after the desktop's, as adminWrite does it.
+         $fn:j=>j.insufficient_balance?['Qingyun balance too low — top up first','青云余额不足,请先充值']
+           :(j.error&&j.error!=='dispatch_failed')?['Dispatch failed: '+j.error,'发起配送失败: '+j.error]:null,
+         // The dispatch that "failed" had in fact already gone through: read
+         // the order again so the live card replaces the pick list.
+         $reread:['courier_already_called'],
+         _:['Dispatch failed','发起配送失败']},
+        j=>{
+          const done=(j.carriers&&j.carriers.length)?j.carriers:(j.carrier?[j.carrier]:[]);
+          const names=done.length>1?escAttr(done.map(c=>c.name||'').join(', '))+' — '+T('first to accept wins','谁先接单谁配送')
+            :escAttr((done[0]&&done[0].name)||'')+(done[0]&&done[0].fee_yuan!=null?' '+money(CUR,done[0].fee_yuan):'');
+          state.qy={oid:o.id, panel:'done', done:names};
+          return T('Courier dispatched','已发起配送');
+        });
+    }};
+  render();
+});
 /* The printer can succeed as a request and fail as a print — the endpoint says
    so with ok:false, and so does this.
 
@@ -27624,11 +27934,11 @@ function resvCard(o){
    only for orders we created in Qingyun (the server sends qingyun_ship_from for
    nothing else). No map: §97's exceptions keep the point picker on the desktop,
    and this card says so rather than showing a surface it cannot finish.
-   What is NOT here yet, on purpose: every button the desktop puts beside these
-   words — Retry push, Change, Remove it, Reschedule, pick a place, compare
-   couriers — and the desktop sentences that point at them. They are writes and
-   arrive with the rider-operations step; a sentence telling the operator to
-   press a button the phone does not draw would be worse than no sentence. */
+   §325 O8 added the buttons the desktop puts beside these words — Retry push,
+   Change, Remove it, Reschedule, pick a place, compare couriers — and the
+   desktop sentences that point at them, each only where its button is drawn:
+   a sentence telling the operator to press a button the phone does not draw
+   would be worse than no sentence. */
 function shipFromCard(o){
   const sf=o.shipFrom; if(!sf) return '';
   const card=(inner,warn)=>`<div class="card" style="padding:14px${warn?';border-color:var(--amber-ink)':''}">
@@ -27636,12 +27946,18 @@ function shipFromCard(o){
   const head=(txt,tone)=>`<div style="font-size:14.5px;font-weight:500;margin-top:7px${tone?';color:var(--'+tone+')':''}">${txt}</div>`;
   const sub=txt=>`<div style="font-size:13px;line-height:1.5;color:var(--text-secondary);margin-top:4px">${txt}</div>`;
   const pd=escAttr(sf.promised_date||'');
+  /* §325 O8 — the desktop's buttons beside these words, each drawn for the key
+     its route needs (lib/cap-routes.js): orders:edit for everything here. */
+  const can=qyCanEdit(o);
+  const btns=list=>{ const b=list.filter(Boolean); return b.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${b.join('')}</div>`:''; };
+  const editShipTo=(can&&o.shipTo)?qyBtn(T('Edit ship-to','修改收货地址'),"APP.cmd('shipToOpen','edit')"):'';
   if(!sf.qingyun_order_id){
     const choice=!sf.awaiting_point&&sf.awaiting_choice&&Array.isArray(sf.candidates)&&sf.candidates.length;
     if(sf.awaiting_point||choice){
       if(sf.date_posture==='passed') return card(head(T('Delivery date passed','配送日期已过'),'brick-ink')+sub(T(
         'Nobody was sent for this order and '+(pd||'the day it was promised for')+' has gone. A same-day rider can no longer take it — pick a new day to put it back in the queue.',
-        '此订单无人接单，'+(pd||'承诺配送日')+' 已过。同城骑手已无法配送，请选择新的配送日期重新排队。')),true);
+        '此订单无人接单，'+(pd||'承诺配送日')+' 已过。同城骑手已无法配送，请选择新的配送日期重新排队。'))
+        +(qyPanelOpen(o,'day')?qyDayPanel(o):btns([can?qyBtn(T('Reschedule delivery','改期配送'),"APP.cmd('qyDayOpen')",'cta'):'',editShipTo])),true);
       const urgent=sf.date_posture==='tomorrow'?`<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);font-size:12.5px;line-height:1.5">
         <span style="flex:none;display:flex;margin-top:1px">${ic('clock',15)}</span>
         <span><b style="font-weight:600">${T('Promised tomorrow, '+pd+'.','明天('+pd+')送达。')}</b> ${choice
@@ -27649,20 +27965,30 @@ function shipFromCard(o){
           :T('Confirm the point today — after tonight this order can no longer go to a same-day rider.','请今天确认配送点 — 过了今晚将无法安排同城骑手。')}</span></div>`:'';
       if(!choice){
         const g=sf.guess_grade||{};
+        /* The point itself is still placed on the desktop map: §97 keeps the
+           Qingyun point picker open until a phone design exists (§325.4). */
         return card(head(T('Confirm delivery point','确认配送点'),'amber-ink')
           +sub(T('We could not place this address precisely. Check the point and confirm.','无法精确定位该地址，请核对后确认配送点。'))
           +((g.en||g.cn)?sub(escAttr(T(g.en||g.cn,g.cn||g.en))):'')
           +urgent
-          +sub(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。')),true);
+          +sub(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。'))
+          +btns([editShipTo]),true);
       }
+      /* Each place is its own button and choosing IS the confirm — nothing is
+         pre-selected (the desktop's qpPickPlace). Only the index travels. */
+      const busy=state.orderBusy==='qyplace';
       return card(head(T('Pick the delivery point','选择配送点'),'amber-ink')
         +sub(T('This address matches more than one place. Pick the right one.','该地址匹配到多个地点，请选择正确的一个。'))
-        +`<div style="margin-top:8px">${sf.candidates.map(c=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--hairline)">
-            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500;overflow-wrap:anywhere">${escAttr(c.name||'')}</span>
+        +`<div style="margin-top:8px">${sf.candidates.map(c=>{
+            const inner=`<span style="flex:1;min-width:0;text-align:left"><span style="display:block;font-size:14px;font-weight:500;overflow-wrap:anywhere;color:var(--text-primary)">${escAttr(c.name||'')}</span>
               <span style="display:block;font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(c.address||'')}</span></span>
-            ${c.drop_km!=null?`<span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(String(c.drop_km))}km</span>`:''}</div>`).join('')}</div>`
-        +sub(T('Distances are from the store the rider collects from.','距离为骑手取货门店到该地点的距离。'))
-        +urgent,true);
+            ${c.drop_km!=null?`<span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(String(c.drop_km))}km</span>`:''}`;
+            return can&&Number.isInteger(c.idx)
+              ?`<button ${busy||state.orderBusy?'disabled':''} onclick="APP.cmd('qyPickPlace',${c.idx})" style="display:flex;gap:10px;align-items:flex-start;width:100%;padding:10px 0;border:none;border-top:1px solid var(--hairline);background:none;cursor:pointer;font-family:inherit">${inner}</button>`
+              :`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--hairline)">${inner}</div>`;
+          }).join('')}</div>`
+        +sub(busy?T('Working…','处理中…'):T('Distances are from the store the rider collects from.','距离为骑手取货门店到该地点的距离。'))
+        +urgent+btns([editShipTo]),true);
     }
     const refused=!!sf.needs_attention, held=!refused&&!!sf.push_held,
           booked=!refused&&!held&&!!sf.awaiting_dispatch;
@@ -27672,20 +27998,29 @@ function shipFromCard(o){
       :head(T('Queued for push…','排队发单中…')+(sf.push_since&&courierAgo(sf.push_since)?' · '+courierAgo(sf.push_since):''));
     return card(line
       +(sf.push_error?`<div class="num" style="font-size:12px;line-height:1.5;color:var(--text-secondary);margin-top:4px;overflow-wrap:anywhere">${escAttr(sf.push_error)}</div>`:'')
-      +(held?sub(T('Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.','地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')):''),
+      +(held?sub(T('Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.','地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')):'')
+      +((booked&&qyCompareShown(o))?sub(T('The address is checked. Compare couriers below when you want a rider — nothing is charged until you dispatch.','地址已核对。需要骑手时点击下方“查看运力比价” — 发起配送前不产生费用。')):'')
+      +((refused&&can)?sub(T('Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.','修正收货地址(修改收货信息或转为中文地址)后会自动重试,也可点击重新发单。'))
+          +btns([qyBtn(state.orderBusy==='qyretry'?T('Queuing…','排队中…'):T('Retry push','重新发单'),"APP.cmd('qyRetryPush')")]):'')
+      +qyCourierOps(o),
       refused||held);
   }
   const moved=!!(o.storeCode&&sf.store_code!==o.storeCode);
   const fe=(o.fulfil&&o.fulfil[0])||o.storeCode||'', fz=(o.fulfil&&o.fulfil[1])||o.storeCode||'';
-  return card(`<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:7px">
+  return card(`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px">
       <span style="font-size:13px;color:var(--text-secondary)">${T('Ships from','取货门店')}</span>
-      <span style="font-size:14.5px;font-weight:500">${escAttr(T(sf.name_en||sf.store_code,sf.name_cn||sf.store_code))}</span></div>`
+      <span style="flex:1;min-width:0;font-size:14.5px;font-weight:500">${escAttr(T(sf.name_en||sf.store_code,sf.name_cn||sf.store_code))}</span>
+      ${(can&&!sf.blocked_by)?qyBtn(qyPanelOpen(o,'ship')?T('Close','关闭'):T('Change','更改'),"APP.cmd('qyShipOpen')"):''}</div>`
     +(moved?sub(T('Collected here, but the order still counts against '+escAttr(fe)+' for stock and reports.',
                   '在此取货,但库存与报表仍算在 '+escAttr(fz)+'。')):'')
+    +((sf.blocked_by&&sf.blocked_by!=='delivered')?sub(T('A courier is already on this one. To collect it somewhere else, cancel it in the Qingyun app first.','已呼叫运力。如需改到其他门店取货,请先在青云 App 取消该单。')):'')
+    +(qyPanelOpen(o,'ship')?qyShipPanel(o):'')
     +(sf.stale?`<div style="display:flex;gap:7px;align-items:flex-start;margin-top:8px;font-size:12.5px;line-height:1.5;font-weight:500;color:var(--amber-ink)">
         <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',14)}</span>
         <span>${T('The old job at '+escAttr(sf.stale.name_en||sf.stale.store_code)+' is still in Qingyun — someone there could send a rider for it.',
-                  escAttr(sf.stale.name_cn||sf.stale.store_code)+' 的原配送单仍在青云中 — 那边有人可能会再叫一位骑手。')}</span></div>`:''),
+                  escAttr(sf.stale.name_cn||sf.stale.store_code)+' 的原配送单仍在青云中 — 那边有人可能会再叫一位骑手。')}</span></div>`
+        +(can?btns([qyBtn(state.orderBusy==='qystale'?T('Removing…','删除中…'):T('Remove it','删除原单'),"APP.cmd('qyRemoveStale')")]):''):'')
+    +qyCourierOps(o),
     !!sf.stale);
 }
 /* ── §325 O1 — THE GUEST PAY LINK ──────────────────────────────────────────
@@ -28078,6 +28413,7 @@ function sheetOrderDetail(){
        ${toldCard(o)}
        ${riderCard(o)}
        ${shipFromCard(o)}
+       ${qyCourierCard(o)}
        ${deliveryPhotoCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!o.viewOnly&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
