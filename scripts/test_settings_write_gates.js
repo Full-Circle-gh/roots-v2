@@ -212,6 +212,13 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['sharing.homeTitle', list(route('sharecards')), 'phone Share cards (card share.home)'],
       ['sharing.product', list(route('sharecards')), 'phone Share cards (card share.product)'],
       ['sharing.votingTitle', list(route('sharecards')), 'phone Share cards (card share.voting)'],
+      // §325 M10 — the phone's Reviews screen: Set up's two saves and the tags card.
+      ['reviews.reward', list(route('reviews')), 'phone Reviews — Reward reviewers'],
+      ['reviews.topup', list(route('reviews')), 'phone Reviews — Auto top-up'],
+      ['reviews.tags', list(route('reviews')), 'phone Reviews — review tags (card reviews.tags)'],
+      // §325 M11 — the phone's loyalty money, each with its own Save.
+      ['points.earnRate', list(route('pointsrules')), 'phone How points work — Save points rules'],
+      ['roots_club.tiers', list(route('tiersedit')), 'phone Membership — Save tiers'],
       // §325 O4 — the phone's Delivery screen writes the Delivery panel's cards.
       ['delivery.holidayMessage', list(route('delivery')), 'phone Delivery — Holiday mode on, and its message'],
       ['delivery.sameDayCutoffMinutes', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
@@ -254,6 +261,12 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     // Notifications panel's four keys under one Save, as saveConfig does.
     for (const k of ['notifications.order_status_template_id', 'notifications.wecom_order_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook']) {
       rows.push([k, list(route('pushcfg')), 'phone Settings → Push notifications (§325 X7)']);
+    }
+    // §325 X10 — the phone's Payments screen writes the display currency and
+    // the desktop tax card's seven keys, drawn for the keys these families ask.
+    rows.push(['currency', list(route('paycfg')), 'phone Payments — currency (§325 X10)']);
+    for (const k of ['tax.enabled', 'tax.mode', 'tax.rateMicro', 'tax.label', 'tax.number', 'tax.shippingTaxable']) {
+      rows.push([k, list(route('paycfg')), 'phone Payments — tax (§325 X10)']);
     }
     for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq', 'production', 'waste', 'lowStockHints']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
@@ -417,7 +430,18 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const dlvSite = M.indexOf("function dlvCfgPut(");
       const dlvSites = sites.filter((i) => i > dlvSite && i < M.indexOf('\n}\n', dlvSite));
       is(dlvSites.length, 1, 'the Delivery settings helper is one write site');
-      const famSites = sites.filter((i) => !dlvSites.includes(i));
+      /* §325 M11 — the points rules save through prBody, whose seven keys are
+         named where the body is built (the desktop's savePointsSettings), so
+         that site is set apart like the Delivery helper and its keys pinned. */
+      const prSite = M.indexOf("apiWrite('/config',prBody(PR.d),'PUT')");
+      ok(prSite !== -1 && sites.includes(prSite), 'the points rules write through one site');
+      const prBlock = M.slice(M.indexOf('function prBody(d){'), M.indexOf('\n}\n', M.indexOf('function prBody(d){')));
+      is((prBlock.match(/'(points\.[a-zA-Z]+)'/g) || []).map((k) => k.slice(1, -1)).sort(),
+        ['points.coverShipping', 'points.earnBase', 'points.earnPoints', 'points.earnRate', 'points.earnSpend', 'points.expiryMonths', 'points.redeemRate'],
+        'the phone\'s points rules write the desktop\'s seven keys (§325 M11)');
+      ok(list(route('pointsrules')).every((k) => has(configKeyCap('points.earnRate'), k)), 'phone How points work may write points.*');
+      ok(list(route('tiersedit')).every((k) => has(configKeyCap('roots_club.tiers'), k)), 'phone tiers editor may write roots_club.tiers');
+      const famSites = sites.filter((i) => !dlvSites.includes(i) && i !== prSite);
       // §325 X2/X3: the phone's Operations screen adds four families —
       // inventory.lowStockThreshold, inventory.lowStockDigest, support.hidden
       // (the open one) and product_page.sections — each its own write site.
@@ -425,11 +449,26 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // card: 'shop.display' (the shop.* family) and 'customer_service'.
       // §325 X7 adds the Push notifications Save: ONE site, two families
       // (notifications.* and system_alerts.*), as the desktop's saveConfig.
-      const FAMS = ['customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
-        'notifications.categories.', 'notifications.order_status_template_id', 'popups.list', 'product_page.sections', 'shop.', 'support.hidden',
-        'system_alerts.'];
+      // §325 X10 adds Payments: the currency and the tax.* keys, each its own
+      // write site, as the desktop's renderCurrencyControl and saveTaxSettings.
+      const FAMS = ['currency', 'customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
+        'notifications.categories.', 'notifications.order_status_template_id', 'popups.list', 'product_page.sections', 'reviews.reward', 'reviews.topup',
+        'roots_club.tiers', 'shop.', 'support.hidden', 'system_alerts.', 'tax.'];
+      // §325 M10 adds the Reviews screen's two Set up saves — the reward and
+      // auto top-up — each its own site, as the desktop's saveReviewReward /
+      // saveReviewTopup; the review tags are a cfgCard below.
       const SITE_FAMS = FAMS.filter((f) => f !== 'notifications.order_status_template_id' && f !== 'system_alerts.')
-        .concat(['notifications.order_status_template_id|system_alerts.']).sort();
+        .concat(['notifications.order_status_template_id|system_alerts.'])
+        // §325 M12 — popups.list has TWO phone sites: the list's switch and the
+        // pop-up editor's puPut. Both send the list's version (§337), pinned below.
+        .concat(['popups.list']).sort();
+      {
+        const puAt = M.indexOf('function puPut(list, card, note){');
+        const puSrc = M.slice(puAt, M.indexOf('\n}\n', puAt));
+        ok(puAt !== -1 && /apiWrite\(cfgPath,\{'popups\.list':list\},'PUT'\)/.test(puSrc), 'the pop-up editor writes the list through one helper');
+        ok(puSrc.includes("'expect='+encodeURIComponent('popups.list:'+ver)"), '…which sends the version it was built from (§337)');
+        ok(list(route('popupedit')).every((k) => has(configKeyCap('popups.list'), k)), 'phone pop-up editor may write popups.list');
+      }
       // A site whose body is written inline names its family in the call itself;
       // only one that builds its body first (Resume delivery, the pop-up switch)
       // is read in the 900 characters before it. Several sites now sit within
@@ -444,8 +483,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const CARD_SITE = M.indexOf("apiWrite('/config?history='+encodeURIComponent(c.card)");
       ok(CARD_SITE !== -1 && sites.includes(CARD_SITE), 'the content cards write through the one cfgCard site');
       const cards = (M.match(/cfgCard\('([a-z._]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z._]+)'/)[1]).sort();
-      is(cards, ['about', 'checkout.upsell', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'social_proof', 'voting'],
-        'the phone\'s cards: about, copy, faq, legal, social proof and the upsell on /config; leaderboard and voting on their own routes');
+      is(cards, ['about', 'checkout.upsell', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'reviews.tags', 'social_proof', 'voting'],
+        'the phone\'s cards: about, copy, faq, legal, review tags, social proof and the upsell on /config; leaderboard and voting on their own routes');
       // §325 M8 — the share cards are one card per page, 'share.<key>': three on
       // /config (sharing.<key>), the invite card on PATCH /affiliate/settings.
       ok(M.includes("return cfgCard('share.'+key,pg.aff?{"), 'the share cards are cfgCard(\'share.\'+key)');
@@ -456,7 +495,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
       }
       is(famSites.filter((i) => i !== CARD_SITE).map((i) => famAt(i).join('|')).sort(),
-        SITE_FAMS, 'the phone writes twelve families at eleven write sites, each asserted in section 2 (support.hidden as the open one)');
+        SITE_FAMS, 'the phone writes seventeen families at seventeen write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'
@@ -479,19 +518,27 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config|apiWrite\('\/(voting|leaderboard)\/config/), ['public/m.html', 'public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs and the phone\'s two screens (§325 M7)');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
-      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs write, cms.html reads, the phone writes only the invite share card (§325 M8)');
+      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs and the phone write (§325 M8, M9), cms.html reads');
       /* §325 M8 — one phone write to /affiliate/settings: the invite share card,
          sending shareImage and shareTitle only (scBody), on the key the server
-         gives that write for exactly this card (sharing:edit, section 1). The
-         referrals stay read-only on the phone. */
-      is((M.match(/apiWrite\('\/affiliate\/settings/g) || []).length, 1, 'the phone writes the affiliate settings from one place');
+         gives that write for exactly this card (sharing:edit, section 1).
+         */
+      /* §325 M9 — and the phone's Affiliate screen: the offer's Save changes
+         (the desktop's afxSave body) and the ledger's Void / Restore, each on
+         the affiliate keys the server gives them, which open those screens. */
+      is((M.match(/apiWrite\('\/affiliate\/settings/g) || []).length, 2, 'the phone writes the affiliate settings from two places: the invite card and the offer');
+      ok(M.includes("apiWrite('/affiliate/settings',Object.assign({},AF.cfg),'PATCH')"), '…the offer, whole, as the desktop sends it');
+      for (const r of ['affsettings', 'affiliate']) ok(list(route(r)).every((k) => has(R('PATCH', '/affiliate/settings'), k)), 'phone ' + r + ' may save the offer');
       ok(M.includes("put:(b,note)=>apiWrite('/affiliate/settings'+cfgHistQ('share.invite',note),b,'PATCH')"), '…the invite share card');
       ok(M.includes("if(pg.aff) return {shareImage:img, shareTitle:title};"), '…sending its picture and title and nothing else');
       ok(has(R('PATCH', '/affiliate/settings'), route('sharecards')), '…which the Share cards key may write');
-      ok(!/apiWrite\('\/affiliate\/referrals/.test(M), 'the phone only reads the referrals');
+      is((M.match(/apiWrite\('\/affiliate\/referrals\//g) || []).length, 1, 'the phone writes a referral row from one place (Void / Restore)');
+      ok(list(route('affiliate')).every((k) => has(R('PATCH', '/affiliate/referrals/4'), k)), '…which the phone Affiliate key may write');
+      is(route('affeligible'), 'affiliate:edit', 'phone: who earns the ongoing share opens on the eligibility key');
       is(who(/retail-admin\/cms\//), ['public/cms-mobile.html', 'public/cms.html', 'public/retail-admin/01-core.js',
         'public/retail-admin/05-marketing.js', 'public/retail-admin/10-extras.js'], '/cms/*: the two editors, and the desktop picture uploads');
-      is(who(/flash-sale['`/]/), ['public/retail-admin/07-content-billing.js'], 'the flash sale: the desktop Flash sales tab');
+      is(who(/flash-sale['`/]/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'the flash sale: the desktop Flash sales tab, and the phone\'s (§325 M15)');
+      is(route('flashedit'), ['flash:edit', 'products:edit'], 'phone: the flash-sale composer opens on the PUT\'s keys');
     }
     section('6 · the screens open on the keys the gates name');
     is(tab('popups'), 'popups:view', 'desktop Pop-ups');
@@ -508,6 +555,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(route('sharecards'), 'sharing:edit', 'phone Share cards');
     is(route('sharecard'), 'sharing:edit', 'phone Share cards → one page');
     is(route('social'), 'social:edit', 'phone Social proof');
+    is(route('topuppkgs'), 'topup:edit', 'phone Top-up packages — the key every /topup-packages write needs');
+    is(list(route('reviews')).sort().join('|'), 'reviews:moderate|reviews:view', 'phone Reviews — the reviews family\'s own any-of');
     is(tab('flash'), 'flash:view', 'desktop Flash sales');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms.html')), 'cms.html opens on content:edit');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms-mobile.html')), 'cms-mobile.html likewise');

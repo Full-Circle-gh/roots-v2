@@ -200,7 +200,7 @@ section('2 · the store list on Operations');
     assert.strictEqual(fn(n, 'stoSection')(), '');
   });
   it('the line under the list no longer sends store details to the desktop', () => {
-    assert.ok(M.includes("noteBar(T('Payment keys are set on desktop.','支付密钥在电脑端设置。'))"), 'X7 took printers out too');
+    assert.ok(!M.includes("'Payment keys are set on desktop.'"), 'X7 took printers out, and X10 payment keys');
     assert.ok(!M.includes("'Store details, printers and payment keys are set on desktop.'"));
   });
 }

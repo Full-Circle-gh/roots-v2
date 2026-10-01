@@ -138,9 +138,16 @@ check('that path resolves to {channel}:sync for all three channels', () => {
     eq(requiredCapFor('POST', p), ch + ':sync', ch);
   });
 });
-check('the switch’s path is NOT built by the phone — §124 keeps it on the desktop', () => {
-  ok(PHONE.indexOf("/products/'+Number(pid)+'/sync'") === -1, 'the phone builds a /sync path');
-  ok(PHONE.indexOf('csSetSync') === -1, 'the phone carries the desktop’s switch handler');
+// §326.3 overturned §124's "the switch stays on the desktop" by name; §325 X8b
+// built it. What is pinned now is that the phone's switch posts to the gated
+// path, is drawn for the key that path asks, and asks before turning off.
+// scripts/test_mobile_channel_sync_switch.js asserts the requests themselves.
+check('the switch posts to the desktop’s own path, which lib/cap-routes.js gates as {channel}:map (§326.3)', () => {
+  ok(PHONE.indexOf("'/channel-sync/'+encodeURIComponent(ch)+'/products/'+Number(pid)+'/sync'") !== -1, 'the phone does not build the /sync path');
+  ['meituan', 'eleme', 'guanyi'].forEach((ch) => {
+    eq(requiredCapFor('POST', '/api/retail-admin/channel-sync/' + ch + '/products/7/sync'), ch + ':map', ch);
+  });
+  ok(/mCan\(ch\+':map'\)/.test(fnBlock(PHONE, 'csSwitch', 'm.html')), 'the switch is not drawn through mCan({channel}:map)');
 });
 
 // ── 3 · The button carries its own capability: a refused tap is a dead end ──
