@@ -1,5 +1,13 @@
 # Tacet delivery vocabulary — locked
 
+**v1.243 · 2026-09-30 · §344 THE REFUND WORKFLOW ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *The refund workflow on the phone (§344)*.
+
+**v1.242 · 2026-09-30 · §343 THE ORDERS LIST ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *The Orders list's chips, customer scope, export and saved views on the phone (§343)*.
+
+**v1.241 · 2026-09-30 · §342 THE PAGE EDITOR'S FIELDS AND ONBOARDING ON THE PHONE — NOTHING COMPOSED; THE FIELDS ARE THE DESKTOP INSPECTOR'S OWN WORDS.** See *The page editor's fields on the phone (§342)*.
+
+**v1.240 · 2026-09-30 · §341 PICTURES, VIDEO AND BUTTON LINKS IN THE PHONE PAGE EDITOR — 7 STRINGS COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Pictures, video and links in the phone page editor (§341)*.
+
 **v1.239 · 2026-09-30 · §337 A SAVE REFUSED AS STALE ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, FROM THE DESKTOP'S OWN REFUSAL.** See *A save someone else got to first, on the phone (§337)*.
 
 **v1.238 · 2026-09-30 · §334 PHONE SAFETY FOLLOW-UPS — NOTHING COMPOSED; §222'S BLOCK COPIED WHOLE.** See *The safety follow-ups (§334)*.
@@ -10572,3 +10580,154 @@ that, and no live pair does.
 
 **Copied whole, unchanged:** `Save failed · 保存失败`, `Saved · 已保存`, `Pop-up is on · 弹窗已启用`,
 `Pop-up is off · 弹窗已停用`.
+
+## Pictures, video and links in the phone page editor (§341)
+
+Operator register only (Rule 1): the phone page editor's edit sheet
+(`public/cms-mobile.html`).
+
+**Copied whole.** Every field label and hint is the desktop inspector's own
+pair (`public/cms.html`): `Picture · 图片` and its two hints,
+`Desktop picture (optional) · 电脑端图片(可选)`, `Video (optional) · 视频(可选)`,
+`Video clip · 视频短片`, `Poster (optional) · 封面图(可选)`, `Image · 图片`,
+`QR code image · 二维码图片`, `Link (optional) · 链接(可选)`,
+`Tap link (optional) · 点击跳转(可选)`, `SEE ALL link · 「查看全部」跳转`,
+`Button link · 按钮链接`, `Tap target · 点击跳转`,
+`Tap link (whole block) · 整块点击链接`, each with its hint; the link picker's
+`No link chosen — uses this block’s default. · 未选择链接 — 使用此模块的默认跳转。`,
+`Pages · 页面`, `Products · 商品`, `Categories · 分类`, `SUGGESTED · 推荐`,
+`Product # · 商品 #`, `Category # · 分类 #`, `Custom · 自定义`, the page names,
+`Type a target manually · 手动输入跳转目标`, `DRAFT` (one word in both
+languages, as on desktop); the hero's `Buttons (n) · 按钮(n)`,
+`No buttons. The banner shows the image alone. · 暂无按钮。横幅仅显示图片。`,
+`Add button · 添加按钮`, `Style · 样式`. From the phone sheet itself:
+`Button label · 按钮文字`, `Button label (中文) · 按钮文字(中文)`,
+`Replace picture · 更换图片`, `Remove · 删除`, `Uploading… · 上传中…`,
+`Upload failed · 上传失败`, `Could not load · 加载失败`. From the phone app
+(`public/m.html`): `Cancel · 取消`, `Nothing in the library · 媒体库是空的`, and
+the picture refusals (`MEDIA_ERR`: too large, not an image, nothing picked).
+The no-permission screen: `You do not have permission to do that. ·
+你没有执行该操作的权限。` (`public/retail-admin/01-core.js`), the old message's
+own frame `Ask an admin to grant you the … permission. · 请管理员授予你 … 权限。`,
+and the `content:edit` capability's label `Edit content (about/legal/FAQ/copy)
+· 编辑内容(关于/条款/常见问题/文案)` (`lib/capabilities.js`).
+
+**Trimmed from a live pair, not composed**: `Video · 视频` (from
+`Video (optional) · 视频(可选)`); the foot note `Advanced options for this
+block are tuned on desktop. · 此模块的高级选项请在电脑上调整。` (from the
+sheet's `Images, colours & advanced options …`, which it replaces).
+
+**Composed by Claude, 2026-10-01:**
+
+| String | Built from |
+|---|---|
+| `Primary · 主按钮` | EN the inspector's style option (English only there); 主按钮 from `Primary button colour · 主按钮颜色` |
+| `Secondary · 次按钮` | EN the inspector's; 次按钮 by analogy with 主按钮 |
+| `Link only · 仅链接` | EN the inspector's; 仅 as in `仅小程序` / `仅图片`, 链接 as in `按钮链接` |
+| `Media library · 媒体库` | EN the desktop library's title (English only there); 媒体库 from the phone app's `Media · 媒体库` row |
+| `Replace video · 更换视频` | `Replace picture · 更换图片`, with the clip's word |
+| `Video too large (20MB max) · 视频太大(最大 20MB)` and `That file isn't an MP4 video · 该文件不是 MP4 视频` | EN the desktop's refusals (English only there); CN after `图片太大` / `该文件不是可用的图片格式` in `MEDIA_ERR` |
+
+**Live candidates rejected**: `Upload` (the desktop picker's button, English
+only, and it names the act rather than the field, unlike §299's `Picture`);
+`Add photos · 添加图片` (the phone's Media screen: plural, and wrong for a
+clip); `No retail permission · 没有零售权限` (names a permission that no
+longer exists).
+
+## The page editor's fields on the phone (§342)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1).
+
+- **Every field's label, hint, section title, option and button text in the
+  phone editor's sheet is the desktop inspector's own** (`public/cms.html`),
+  read off the inspector in the editor's language and drawn as it is. The
+  phone adds no word for them, so there is no second copy to correct: a wrong
+  word is corrected once, in the inspector. The sheet's own labels for text
+  fields (`Kicker · 小标题`, `Kicker (中文) · 小标题(中文)`, `Banner text ·
+  横幅文字`, `Empty text · 无订单文字` and the rest of the retired list) are
+  retired with it.
+- **The phone's few words of its own**, all copied: the single product list's
+  `— none — · — 无 —` and the multiple one's `— pick one — · — 选择一个 —`
+  (both the inspector's), `Remove · 删除` (the sheet's), `DRAFT` (the
+  inspector's, one word in both languages).
+- **Onboarding** (`public/cms-mobile.html`), copied whole from the desktop's
+  `renderOnboardingSettings`: `Onboarding · 引导页`, `show to · 显示给`,
+  `New users only · 仅新用户`, `Everyone until I re-show · 所有用户(到下次重置)`,
+  `Everyone, every launch · 每个用户每次启动`, `Off · 关闭`,
+  `Re-show to all · 向所有人重新显示` and its hint, the confirm's question and
+  body, `Button label · 按钮文字`, `Updated · 已更新`,
+  `Will re-show — now at vN · 将重新显示 — 当前 vN`. From the phone editor:
+  `Loading… · 加载中…`, `Could not load · 加载失败`, `Could not save · 保存失败`,
+  `Saving… · 保存中…`, `Cancel · 取消`; from the phone app: `Try again · 重试`.
+- **The desktop editor's no-permission screen** now uses the pair the phone
+  editor's uses (declared with §325 M2): `You do not have permission to do
+  that. · 你没有执行该操作的权限。` and the `content:edit` capability's label.
+
+## The Orders list's chips, customer scope, export and saved views on the phone (§343)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone's
+Orders list, the customer record's recent orders and the Views sheet
+(`public/m.html`).
+
+Copied whole from the desktop:
+
+- status chips, from the desktop strip and its dictionary (`10-extras.js`
+  `EN_ONLY_MAP`): `Rider coming · 骑手前往取货`, `Cancelled · 已取消`,
+  `To recover · 待收回`, `Refunded · 已退款`;
+- customer scope (`04-orders.js`, `08-customers.js`): `View all N orders · 查看全部 N 笔订单`,
+  `Showing orders for · 仅显示以下顾客的订单`, `Clear customer filter · 清除顾客筛选`;
+- saved views (`25-views.js`): `Views · 视图`, `Could not load your views. · 无法加载视图。`,
+  `Shared with the team · 团队共享`, `shared by · 共享者`, `Shared · 已共享`, `Share · 共享`,
+  `Save this view… · 保存当前视图…`, `Filter the list first · 请先筛选列表`,
+  `No saved views yet. Filter the list, then save it. · 暂无保存的视图。先筛选列表，再保存。`,
+  `Name this view · 为视图命名` and its sentence, `Unpaid at Tianhe · 天河店未付款`,
+  `View saved · 视图已保存`, `Shared with the team · 已共享给团队`,
+  `Yours alone again · 已改为仅自己可见`, `Could not save the view · 保存视图失败`,
+  `Could not change sharing · 修改共享设置失败`, `Could not delete the view · 删除视图失败`,
+  `Delete this view? · 删除此视图?` and its two bodies;
+- `Name is required · 名称必填` (`16-purchasing.js`), `Shipping · 运费` (the desktop's
+  `shipping · 运费`, capitalised), `Subtotal · 小计`.
+
+| String | Status |
+|---|---|
+| `Fapiao · 发票` on the `needs_invoice` chip | **an existing phone pair, reused.** The desktop chip reads *Invoice* in English only (no dictionary entry). The phone's order sheet already heads the same request *Fapiao · 发票*. Rejected: *Invoice to issue · 待开票*, because the chip lists issued requests too. |
+| `Delivery needs a call · 配送需要跟进` on the `delayed` chip | **an existing phone pair, reused** — the Home card's and the clearable chip's. The desktop chip's *Needs a call* has no Chinese. |
+| `Shipping · 运费` under the order total | **replaces** *Delivery*, which was never translated, so that the live pair fits. |
+
+The phone's own, already live: `Export · 导出`, `Name · 名称`, `Save · 保存`, `Saving… · 保存中…`,
+`Delete · 删除`, `Close · 关闭`, `Loading… · 加载中…`, `Try again · 重试`, and the
+note-chip pairs `orderNotes` already carried.
+
+## The refund workflow on the phone (§344)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the order
+sheet's refund rows, the review and reject asks, and the approve, payout and
+refund-by-items sheet (`public/m.html`). Copied whole from the desktop
+(`public/retail-admin/04-orders.js`):
+
+- Start review: `Start review · 开始处理`, its sentence,
+  `Note for customer · 给顾客的备注`, `We're looking into it… · 我们正在处理…`,
+  `Mark reviewing · 开始处理`, `Marked as reviewing · 已开始处理`;
+- Reject: `Reject refund · 拒绝退款`, its sentence, `Reason (shown to customer) · 原因(顾客可见)`,
+  `Reject · 拒绝`, `Refund rejected · 退款已拒绝`;
+- Approve: `Approve refund · 批准退款`, its sentence, `Mode · 模式`, `Full · 全额`,
+  `Partial — amount · 部分金额`, `Partial — by items · 按商品`, `Lines · 商品`,
+  `Lines total · 商品合计`, `No items · 无商品`, `customer asked for · 顾客申请`,
+  `Staff note (shown to customer) · 客服备注(顾客可见)`,
+  `Also reverse earned + redeemed points · 同时退还积分` and its note, the full and
+  partial consequence sentences, `A rider is on this order right now — approving cancels that delivery. · 当前已有骑手接单 — 批准后该配送会被取消。`,
+  the delivery-day sentence, `Approve · 批准`, `Approved · 已批准`,
+  `Select at least one line · 至少选一项`;
+- Payout: `Record payout · 记录退款`, its sentence, `Method · 退款方式`, the seven
+  methods (`WeChat Pay · 微信` … `Store credit · 店铺余额` … `Other · 其他`), the
+  WeChat warning, `Reference / txn id · 凭证号`, `Provider txn id, bank ref, etc. · 第三方交易号、银行参考号等`,
+  `Approved ¥N — usually paid in full · 已批准金额,通常一次性退还`, `Note (optional) · 备注(可选)`,
+  `Mark paid · 确认已退款`, `Payout recorded · 退款已记录`;
+- By items: `Part — by items · 部分 — 按商品`, `Items to refund · 退款商品`,
+  `Items total · 商品合计`, `already refunded · 已退`,
+  `Everything has already been refunded · 已全部退款`, `Select at least one item · 至少选一项`.
+
+The phone's own, already live: `Working… · 处理中…`, `Cancel · 取消`, `Close · 关闭`,
+`Amount · 金额`, `Optional · 可选`, `Reason / note · 原因 / 备注`, `Refund order · 退款订单`,
+`Refund · 退款`, `Enter an amount above 0 · 请输入大于 0 的金额`,
+`Enter an amount first. · 请先填写金额。`, and the by-amount path's two toasts.
