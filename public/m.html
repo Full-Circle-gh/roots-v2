@@ -33133,9 +33133,9 @@ const x7Help=t=>`<span style="font-size:12.5px;color:var(--text-secondary);line-
 function x7Begin(card){ const s=x7(); s.err[card]=null; s.ok[card]=null; }
 
 /* ── The saved keys (GET /integrations), re-read on every entry ─────────── */
-/* The kd100 callback field opens on this address when nothing is stored —
-   the desktop input's own value, carried so both send the same body. */
-const X7_KD100_CB='https://rootskitchenchina.com/api/retail/tracking/kd100/callback';
+/* §412.6 — the kd100 callback field opens on the address the server says is
+   in effect (built per tenant, or Roots' own), never a default of the phone's
+   — the Roots address it used to carry is gone from both surfaces. */
 const X7_SECRETS={feie:['ukey'], spyun:['appsecret'], kd100:['key','secret'], jd:['app_secret','access_token'],
   wecom_app:['secret'], aliyun_sms:['ak_secret']};
 function x7Seed(i,svc){
@@ -33143,7 +33143,7 @@ function x7Seed(i,svc){
   const one=s=>!svc||svc===s;
   if(one('feie')){ d['feie.user']=g('feie','user'); d['feie.ukey']=''; }
   if(one('spyun')){ d['spyun.appid']=g('spyun','appid'); d['spyun.appsecret']=''; }
-  if(one('kd100')){ d['kd100.customer']=g('kd100','customer'); d['kd100.key']=''; d['kd100.callback']=g('kd100','callback')||X7_KD100_CB; d['kd100.secret']=''; }
+  if(one('kd100')){ d['kd100.customer']=g('kd100','customer'); d['kd100.key']=''; d['kd100.callback']=g('kd100','callback'); d['kd100.secret']=''; }
   if(one('jd')){ d['jd.app_key']=g('jd','app_key'); d['jd.app_secret']=''; d['jd.access_token']=''; d['jd.customer_code']=g('jd','customer_code'); d['jd.env']=g('jd','env')||'production'; }
   if(one('wecom_app')){ d['wecom.corp_id']=g('wecom_app','corp_id'); d['wecom.agent_id']=g('wecom_app','agent_id'); d['wecom.secret']=''; }
   if(one('aliyun_sms')){ d['sms.ak_id']=g('aliyun_sms','ak_id'); d['sms.ak_secret']=''; d['sms.sign_name']=g('aliyun_sms','sign_name');
@@ -33381,7 +33381,7 @@ function screenKd100(){
     ${x7Card(x7Head(T('Kuaidi100 tracking push','快递100轨迹订阅'),x7Pill(k.enabled?'live':'off')),
       x7In('kd100.customer',T('Customer ID','客户编号'),{mono:true,ph:'e.g. ABCD1234'})+
       x7In('kd100.key',T('Authorization key','授权 Key'),{type:'password',ph:k.key_masked?T(k.key_masked+' — leave blank to keep',k.key_masked+' — 留空保持不变'):T('paste authorization key','粘贴授权 Key')})+
-      x7In('kd100.callback',T('Callback URL','回调地址'),{mono:true,hint:T('Whitelist this in your kd100 dashboard. Webhook fires on every event update.','在快递100后台将其加入白名单;每次轨迹更新都会触发回调。')})+
+      x7In('kd100.callback',T('Callback URL','回调地址'),{mono:true,attrs:k.callback_built?'readonly':'',hint:T('Whitelist this in your kd100 dashboard. Webhook fires on every event update.','在快递100后台将其加入白名单;每次轨迹更新都会触发回调。')})+
       x7In('kd100.secret',T('Callback secret','回调密钥'),{type:'password',ph:k.secret_masked?T(k.secret_masked+' — leave blank to keep',k.secret_masked+' — 留空保持不变'):T('random string — do not rotate','随机字符串,请勿更换'),
         hint:T('Verifies pushes came from a request we made. Set once and leave alone.','用于验证回调确实来自我们发起的请求;设置一次后请勿改动。')})+
       x7Note('kd100')+

@@ -30519,6 +30519,14 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   // kd100 callback URL is system-built per tenant (⑨), so a tenant is "enabled"
   // on customer+key alone — kd100Creds() injects the path-scoped callback.
   out.kd100.enabled = tracking.kd100Enabled(kd100Creds());
+  // §412.6 — the address the screens show is the one in effect: for Roots its
+  // own configured callback, for any other tenant the one built for it
+  // (callback_built: shown, not edited — kd100Creds() never reads a stored
+  // value for them). No screen carries a default of its own any more.
+  if (currentTenantId() !== ROOTS_TENANT_ID) {
+    out.kd100.callback = kd100Creds().callback || '';
+    out.kd100.callback_built = true;
+  }
   out.jd.enabled    = jd.jdEnabled(ci.jd);
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
   out.spyun.enabled = _printers.resolve('spyun').enabled(ci.spyun);
@@ -32441,14 +32449,13 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
       vendor: _printers.resolve(cfg.vendor).id,
     };
   });
-  // Suggest the Tianhe store as the out-of-city default when nothing is saved
-  // yet, so the warehouse that ships out-of-town parcels is pre-selected.
-  let oocStore = prefs.out_of_city_store_id;
-  if (oocStore == null) {
-    const tianhe = stores.find(s =>
-      /天河|tianhe/i.test(`${s.name_cn || ''} ${s.name_en || ''} ${s.code || ''}`));
-    if (tianhe) oocStore = tianhe.id;
-  }
+  // §412.6 — NO "TIANHE" DEFAULT. This used to pre-select any store whose name
+  // read 天河/Tianhe when nothing was saved — Roots' warehouse, offered to every
+  // tenant that happened to have a store of that name, and saved as theirs the
+  // first time they pressed Save. Unset now stays unset until the shop picks
+  // one; the screens show "use each order's own store", which is what
+  // printerForOrder() does while it is unset.
+  const oocStore = prefs.out_of_city_store_id == null ? null : prefs.out_of_city_store_id;
   res.json({ success: true, data: {
     auto_print: prefs.auto_print,
     auto_print_addon: prefs.auto_print_addon,
