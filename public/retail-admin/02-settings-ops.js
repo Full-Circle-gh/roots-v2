@@ -634,7 +634,7 @@ function _opsPaintStores() {
           <div style="font-size:12px;margin-top:3px">${gps}</div>
         </div>
         <div style="display:flex;gap:8px;flex:none">
-          <button class="btn" onclick="_opsStoreStaff(${s.id})">Stock staff · 库存员</button>
+          ${_opsStaffHere(s.id) ? `<button class="btn" onclick="_opsStoreStaff(${s.id})">Stock staff · 库存员</button>` : ''}
           <button class="btn" onclick="_opsStoreEdit(${s.id})">Edit · 编辑</button>
         </div>
       </div>`;
@@ -832,7 +832,14 @@ async function _opsStoreSave(id) {
 // A stock clerk added here can ONLY use the Quick Stock app, locked to THIS
 // store — they can never see or change another store's stock. Managed via the
 // tenant-scoped /api/backend/stores/:id/staff endpoints.
+/* §412.5 — may this operator manage stock staff at this store? The owner and
+   an unscoped operator anywhere; a store-scoped operator only at their own. */
+function _opsStaffHere(storeId) {
+  if (window.RA_IS_OWNER || !Array.isArray(window.RA_SCOPE_STORES)) return true;
+  return window.RA_SCOPE_STORES.includes(Number(storeId));
+}
 async function _opsStoreStaff(storeId) {
+  if (!_opsStaffHere(storeId)) return;
   const store = _opsStores.find(x => x.id === storeId);
   const box = document.getElementById('ops-store-staff');
   if (!box || !store) return;
@@ -2314,6 +2321,11 @@ let ENTITLEMENTS = {};
     if (Array.isArray(u.scopeStores) && u.scopeStores.length) {
       window.RA_STORE_LOCK = u.scopeStores[0];
     }
+    // §412.5 — the whole scope, and whether this is the owner: a store-scoped
+    // operator manages stock staff only at their own stores (the server's
+    // requireOwnStore), so Operations → Stores draws "Stock staff" only there.
+    window.RA_SCOPE_STORES = Array.isArray(u.scopeStores) ? u.scopeStores.map(Number) : null;
+    window.RA_IS_OWNER = u.role === 'owner';
     // Google-style profile circle + dropdown (avatar · account · team · sign out).
     initAcctMenu(u);
     // The dashboard greeting reads this same user — repaint it now in case the

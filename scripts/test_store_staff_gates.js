@@ -157,9 +157,58 @@ const row = (id) => db.prepare('SELECT is_active, password FROM tenant_users WHE
          §325 X6), and every write command re-checks it. */
       ok(/storestaff:\['stores:edit','team:manage'\]/.test(M), 'the phone draws it for stores:edit or team:manage, both admitted');
       const writes = M.split(/\n/).filter((l) => /apiWrite\('\/api\/backend\/stores\/'/.test(l) && /\/staff/.test(l)).length;
-      const guarded = (M.match(/staffBusy\|\|!canRoute\('storestaff'\)/g) || []).length;
+      // §412.5 — the guard is stfHere(id): the route key AND the operator's store scope.
+      const guarded = (M.match(/staffBusy\|\|id==null\|\|!stfHere\(id\)/g) || []).length;
       ok(writes === 3 && guarded === 3, 'each of the phone\'s three staff writes refuses without that key', `writes ${writes}, guarded ${guarded}`);
+      const here = M.slice(M.indexOf('function stfHere(id){'), M.indexOf('function stoRow(st,i){'));
+      ok(here.includes("canRoute('storestaff')") && here.includes('Array.isArray(state.caps)') && here.includes('state.scopeStores.includes(Number(id))'),
+        '…stfHere is the route key, fails closed while loading, and asks the scope');
+      ok(M.includes('const edit=canRoute(\'storeone\'), staff=stfHere(st.id);') && M.includes('!isNew&&stfHere(s.id)?tmList'), 'both phone doors ask it');
     }
+
+    section('6 · §412.5 — a store-scoped operator, only at their own stores');
+    const OPS2 = read('public/retail-admin/02-settings-ops.js');
+    ok(OPS2.includes('${_opsStaffHere(s.id) ? `<button class="btn" onclick="_opsStoreStaff(${s.id})">Stock staff · 库存员</button>` : \'\'}')
+      && OPS2.includes('if (!_opsStaffHere(storeId)) return;'), 'the desktop draws Stock staff only where the operator may manage it');
+    ok(OPS2.includes('window.RA_SCOPE_STORES = Array.isArray(u.scopeStores) ? u.scopeStores.map(Number) : null;'), '…from the operator\'s whole scope');
+    const OTHER = 2;
+    db.prepare(`INSERT OR REPLACE INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order) VALUES (?, 'yuexiu', 'Yuexiu', '越秀', 1, 2)`).run(OTHER);
+    const scoped = 97990;
+    db.prepare(`INSERT INTO tenant_users (id, tenant_id, username, password, role, is_active, scope_all) VALUES (?, ?, '__s2g_scoped', 'x', 'custom', 1, 0)`).run(scoped, TENANT);
+    db.prepare(`INSERT INTO tenant_user_caps (tenant_id, tenant_user_id, capability_key, mode) VALUES (?, ?, 'stores:edit', 'grant')`).run(TENANT, scoped);
+    db.prepare('INSERT INTO tenant_user_stores (tenant_user_id, store_id) VALUES (?, ?)').run(scoped, STORE);
+    ops.scoped = scoped;
+    const scopedOwner = 97991;
+    db.prepare(`INSERT INTO tenant_users (id, tenant_id, username, password, role, is_active, scope_all) VALUES (?, ?, '__s2g_sowner', 'x', 'owner', 1, 0)`).run(scopedOwner, TENANT);
+    db.prepare('INSERT INTO tenant_user_stores (tenant_user_id, store_id) VALUES (?, ?)').run(scopedOwner, STORE);
+    ops.scopedOwner = scopedOwner;
+    const atStore = (store) => (who, method, p, body) => fetch(base + '/api/backend/stores/' + store + '/staff' + p, {
+      method, headers: { 'Content-Type': 'application/json', 'x-op': String(ops[who]) }, body: body ? JSON.stringify(body) : undefined,
+    }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+    const clerkAt = (store) => Number(db.prepare(`INSERT INTO tenant_users (tenant_id, username, password, role, retail_store_id, is_active)
+      VALUES (?, ?, 'old-hash', 'store_stock', ?, 1)`).run(TENANT, '__s2g_clerkat' + (++clerkSeq), store).lastInsertRowid);
+    let r6 = await atStore(STORE)('scoped', 'POST', '', { display_name: 'C', username: '__s2g_own1', password: 'long-enough-pw' });
+    is(r6.status, 200, 'at their own store: adds a clerk');
+    r6 = await atStore(OTHER)('scoped', 'POST', '', { display_name: 'C', username: '__s2g_oth1', password: 'long-enough-pw' });
+    is(r6.status, 403, 'at another store: refused');
+    ok(String(r6.body && r6.body.error).startsWith('You can manage stock staff only at your own stores'), '…saying why', JSON.stringify(r6.body));
+    is(db.prepare("SELECT COUNT(*) AS c FROM tenant_users WHERE username = '__s2g_oth1'").get().c, 0, '…and no sign-in was made');
+    const o = clerkAt(OTHER);
+    r6 = await atStore(OTHER)('scoped', 'POST', '/' + o + '/password', { new_password: 'another-long-pw' });
+    is(r6.status, 403, 'another store\'s clerk: no password reset');
+    is(row(o).password, 'old-hash', '…unchanged');
+    r6 = await atStore(OTHER)('scoped', 'DELETE', '/' + o);
+    is(r6.status, 403, '…and no removal');
+    is(row(o).is_active, 1, '…still active');
+    const mine = clerkAt(STORE);
+    r6 = await atStore(STORE)('scoped', 'DELETE', '/' + mine);
+    is(r6.status, 200, 'their own store\'s clerk: removed');
+    r6 = await atStore(OTHER)('storesEdit', 'POST', '/' + o + '/password', { new_password: 'another-long-pw' });
+    is(r6.status, 200, 'an unscoped operator with the same key: unchanged, any store');
+    r6 = await atStore(OTHER)('scopedOwner', 'DELETE', '/' + o);
+    is(r6.status, 200, 'the owner, even pinned to one store: unchanged');
+    r6 = await atStore(OTHER)('scoped', 'GET', '');
+    is(r6.status, 200, 'the list stays a read');
   } finally {
     server.close();
   }
