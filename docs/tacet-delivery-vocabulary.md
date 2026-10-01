@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.292 · 2026-09-30 · §403 PAYMENTS ON THE PHONE — NOTHING COMPOSED; TWO DESKTOP PAIRS SPLIT INTO THEIR HALVES; THE REST COPIED WHOLE.** See *Payments on the phone (§403)*.
+
 **v1.291 · 2026-09-30 · §402 THE WEB STORE'S PAGE ON THE PHONE — NOTHING COMPOSED; EVERY PAIR COPIED FROM THE DESKTOP'S WEB STORE CONFIGURATION. X9a'S ONE COMPOSED STRING IS RETIRED.** See *The web store on the phone (§402)*.
 
 **v1.290 · 2026-09-30 · §401 THE WECHAT MINI PROGRAM'S PAGES ON THE PHONE — NOTHING COMPOSED; EVERY PAIR COPIED FROM THE DESKTOP'S MINI APP PAGES.** See *The WeChat mini program on the phone (§401)*.
@@ -12628,3 +12630,39 @@ vocabulary.
 (filed under §400) stood on the mini program and web store cards only until those
 got their own phone pages (X9b, X9c). It is no longer anywhere in the code; read
 the §400 row as history, not as a live string.
+
+## Payments on the phone (§403)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Payments screen
+(`public/m.html`, the §325 X10 block).
+
+Nothing composed. Two desktop strings that show both languages at once are
+shown one half at a time:
+
+| Phone pair | From the desktop's | Why split |
+|---|---|---|
+| `Chinese Yuan (¥) · 人民币 (¥)` | preset label `Chinese Yuan · 人民币 (¥)` (`CURRENCY_PRESETS`) | The phone shows one language; the symbol goes with each half. The other nine presets are English on the desktop in both languages and stay so. |
+| `✓ LIVE · ✓ 已启用`, `✗ OFF · ✗ 未启用` | the Alipay card's chip `✓ LIVE · 已启用` / `✗ OFF · 未启用` | The same; the mark goes with each half. |
+
+Copied whole:
+- **From `retail-admin.html` and `05-marketing.js`:**
+  - Currency: `Currency · 货币`, `Display currency · 显示货币`, the card's
+    explanation, `Currency saved · 货币已保存`.
+  - Tax: `Tax · 税费`, its explanation, `Charge tax on orders · 订单收取税费`,
+    `How prices are shown · 价格含税方式`, and its two options.
+  - Tax fields: `Rate % · 税率 %`, `What to call it · 税费名称`,
+    `Registration number · 税号`, `optional · 选填`,
+    `Tax the delivery fee too · 运费同样计税`.
+  - Tax messages: the three preview sentences, the two checks,
+    `Pick how prices are shown. · 请选择价格含税方式。`,
+    `Save tax settings · 保存税费设置`, `Tax settings saved · 税费设置已保存`,
+    `Off · 关闭`.
+- **From `retail-admin.html` and `02-settings-ops.js`:** every label, help
+  line and warning on the Alipay card, the three key placeholders, and the
+  four refusal messages (`qr_required`, `image_too_big`, `ocr_key_required`,
+  `bad_image`).
+- **Elsewhere on the desktop:** `Payments · 收款` (`15-integrations.js`),
+  `Set up · 设置` (the web store's Alipay row), `Not saved yet · 尚未保存`
+  (`09-products.js`; it marks a picked QR that is not saved yet), `On · 开` /
+  `Off · 关` (the feature switches), `Save · 保存`, `Remove · 移除`.
+- **The phone's own:** `Could not load this. · 无法加载。`.
