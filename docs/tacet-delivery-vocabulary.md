@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.236 · 2026-09-30 · §332 PHONE CONTROLS GATED — NOTHING COMPOSED; FIVE LIVE PHONE PAIRS REUSED WHERE A CONTROL GAVE WAY TO A READING.** See *Controls drawn only for who may press them, on the phone (§332)*.
+
 **v1.235 · 2026-09-30 · §331 A REFUSAL ON THE PHONE — NOTHING COMPOSED, EVERY PAIR COPIED WHOLE.** See *A refusal on the phone, said in words (§331)*.
 
 **v1.234 · 2026-09-30 · §330 CHANGE HISTORY, WHAT WAS SENT, BROWSING NOW, TWO HOME ROWS AND ELEME ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, 1 SHARED WITH O1, THE REST COPIED WHOLE.** See *Records, presence, parked orders and Eleme on the phone (§330)*.
@@ -10472,3 +10474,24 @@ A 403 that carries its own bilingual sentence (the backend team and role routes)
 is shown as the server wrote it, one half per language. The new-order form's
 `forbidden_capability` sentence (*Your account cannot create customers…*) is
 unchanged and now shown only for the refusal it names (`need: customers:edit`).
+
+## Controls drawn only for who may press them, on the phone (§332)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): `public/m.html`.
+Taking a control away for an account that may not use it sometimes leaves a gap
+where the control said what state a thing was in. Each gap is filled with a pair
+the phone already uses for that same state, copied whole:
+
+- the catalogue's *In shop* switch → `On the shop · 已上架` / `Off the shop · 已下架`
+  (the switch's own toasts);
+- a supplier item's pause switch → `Paused · 已暂停` / `Available · 有货`
+  (the card's own heading words);
+- the coupon switch → `On · 已启用` / `Off · 已关闭` (the card's sample-row words);
+- a parcel with no waybill and no Save tracking → `No waybill yet · 缺运单号`
+  (the order list's own warning);
+- a feedback thread opened only to read → `View · 查看` (the delay case's
+  evidence chip).
+
+Rejected: `Read only · 只读` / `View only · 只读` as a label on every card — a
+read-only card needs no badge, and "View only" already means a marketplace
+mirror on the order sheet (§53); reusing it for a permission would blur the two.
