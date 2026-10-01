@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.233 · 2026-09-30 · §329 THE PHONE'S PRODUCTS, STOCK ACTIVITY AND WASTE LISTS — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *The stock lists' filters and exports on the phone (§329)*.
+
 **v1.232 · 2026-09-30 · §328 ORDER FACTS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *The order sheet's facts on the phone (§328)*.
 
 **v1.231 · 2026-09-30 · §327 THE PAGE EDITOR'S DOOR AND ITS BLOCK CHROME ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *The page editor from the phone (§327)*.
@@ -10369,3 +10371,29 @@ Copied whole from the desktop:
 
 The phone's own, already live: `Copy · 复制`, `Could not load this. · 无法加载。`,
 `Try again · 重试`, `Loading… · 加载中…`.
+
+## The stock lists' filters and exports on the phone (§329)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's Products catalogue, Stock activity and Waste screens
+(`public/m.html`). Every new label is copied whole from the desktop screen
+that does the same thing, or is a pair the phone already uses for the same
+control.
+
+From the desktop Products screen (`public/retail-admin.html`,
+`public/retail-admin/09-products.js`): `All subcategories · 全部子分类`,
+`All stores · 全部门店`, `Going nowhere · 无人问津`, `On promotion · 促销中`,
+`Export CSV · 导出`.
+
+From the desktop Stock activity toolbar (`public/retail-admin.html`): the
+search placeholder `SKU / name / order · 货号 / 名称 / 订单` and
+`Export CSV · 导出`.
+
+The phone's own live pairs, from Finance's and Trend's Custom sheet: `Custom ·
+自定义`, `From · 从`, `To · 至`, `Apply · 应用`, `Pick a date · 选日期`,
+`From is after to · 起始日期晚于结束日期`. The Custom window's two days are
+printed as dates (`fmtDateOnly`), with no label.
+
+Store names, category and subcategory names are the shop's own data, shown in
+the language they were entered in, with the tree's Chinese name where it has
+one.
