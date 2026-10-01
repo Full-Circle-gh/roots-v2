@@ -154,13 +154,40 @@ CASES.push(['holiday mode', `state.cfg=Object.assign({},state.cfg,{delivery:{hol
   ['the cut-off is stated',      `txt('content').includes('20 min before close')`],
 ]]);
 
+const WSTUB = `window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:{}})}}); };`;
+const wsent = (frag) => `window.__sent.some(function(r){return r.u.indexOf(${JSON.stringify(frag)})>=0})`;
+const wbody = (frag) => `window.__sent.some(function(r){return (r.body||'').indexOf(${JSON.stringify(frag)})>=0})`;
+
 CASES.push(['holiday mode off', ZONES + `APP.cmd('push','delivery');`, [
   ['says so quietly, as a fact',  `txt('content').includes('Holiday mode')`],
   ['with no alarm',               `!txt('content').includes('delivery is paused')`],
-  // ON stays on the desktop: switching it on needs the shopper-facing message,
-  // in both languages, and a phone that could flip it without writing one would
-  // put a stale message — or none — in front of every customer.
-  ['and no way to switch it ON',  `!${btnTexts}.some(function(t){return /holiday|pause/i.test(t)})`],
+  // §326.2 brought ON to the phone (§325 O4). It is a row that opens a sheet,
+  // never a switch that flips: the message in both languages comes first.
+  ['ON is a row to a sheet, not a switch', `${btnTexts}.some(function(t){return /^Holiday mode/.test(t)})`],
+]]);
+// The sheet asks for the message, refuses a missing half, and then asks again,
+// saying what stops and what does not, before anything is sent.
+CASES.push(['turning holiday mode on asks twice', WSTUB + ZONES + `APP.cmd('push','delivery'); APP.cmd('dlvHoliday');
+  document.getElementById('ask-en').value='Closed for Mid-Autumn'; APP.cmd('askRun');`, [
+  ['the message comes first',      `!!document.getElementById('ask-cn')`],
+  ['a missing Chinese half is refused', `sheetText().includes('in English and in Chinese')`],
+  ['nothing sent',                 `!${wsent('/config')}`],
+]]);
+CASES.push(['…and says what stops and what does not', WSTUB + ZONES + `APP.cmd('push','delivery'); APP.cmd('dlvHoliday');
+  document.getElementById('ask-en').value='Closed for Mid-Autumn'; document.getElementById('ask-cn').value='中秋休息';
+  APP.cmd('askRun');`, [
+  ['same-day stops, orders and the calendar do not', `sheetText().includes('same-day delivery is hidden, the calendar still works')`],
+  ['with the message shoppers will read', `sheetText().includes('Closed for Mid-Autumn')`],
+  ['still nothing sent',           `!${wsent('/config')}`],
+]]);
+CASES.push(['confirming turns it on, as a version of the desktop card', WSTUB + ZONES + `APP.cmd('push','delivery'); APP.cmd('dlvHoliday');
+  document.getElementById('ask-en').value='Closed for Mid-Autumn'; document.getElementById('ask-cn').value='中秋休息';
+  APP.cmd('askRun'); APP.cmd('askRun');`, [
+  ['filed under the holiday card', wsent('/config?history=delivery.holiday')],
+  ['on',                           wbody('"delivery.holidayMode":true')],
+  ['with both halves',             wbody('"delivery.holidayMessage":{"en":"Closed for Mid-Autumn","cn":"中秋休息"}')],
 ]]);
 
 // ── Coming back ───────────────────────────────────────────────────────────
@@ -171,11 +198,6 @@ const HOLIDAY_ON = `state.cfg=Object.assign({},state.cfg,{delivery:{holidayMode:
     holidayMessage:{en:'Closed for Mid-Autumn, back Thursday.'}}});
   state.zones=[]; state.geoTried=true; state.geo={stores:{total:1,geocoded:1,missing:0}};
   state.printerTried=true; state.printer={auto_print:false}; APP.cmd('push','delivery');`;
-const WSTUB = `window.__sent=[];
-  window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
-    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:{}})}}); };`;
-const wsent = (frag) => `window.__sent.some(function(r){return r.u.indexOf(${JSON.stringify(frag)})>=0})`;
-const wbody = (frag) => `window.__sent.some(function(r){return (r.body||'').indexOf(${JSON.stringify(frag)})>=0})`;
 
 CASES.push(['resuming asks first', WSTUB + HOLIDAY_ON + `APP.cmd('resumeDelivery');`, [
   ['it asks',                   `sheetText().includes('Resume delivery?')`],

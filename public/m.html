@@ -938,6 +938,10 @@ const state = {
   dcMore:null,
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null, dlvBusy:false, dlvErr:null,
+  /* §325 O4 — which delivery card's sheet is reading /config before it opens. */
+  dlvOpening:null,
+  /* …and a refusal from one of those settings writes, kept under the rows. */
+  dlvSetErr:null,
   /* THREE KEYS THAT WORKED WITHOUT BEING DECLARED, WHICH IS THE PROBLEM. §181
      added the Sales board's retry and the shop switch and wrote straight to
      `state`, where an assignment creates a key silently; the app has behaved
@@ -4930,6 +4934,249 @@ reg('resumeDelivery', ()=>{
     }};
   render();
 });
+/* ── §325 O4 — DELIVERY SETTINGS, WRITTEN FROM THE PHONE ───────────────────
+   The desktop's Delivery panel (06-delivery.js, the Store pickup card in
+   05-marketing.js), card for card, with the same keys in the same bodies:
+
+     · the cards that SAVE THEMSELVES there (§279) save themselves here, as a
+       live sheet — Undo, Version history and `?history=<card>` on every
+       write, the desktop's own card names, so a version made on either surface
+       is a version on both: Same-day cutoff, Store pickup hours, Pre-orders,
+       Kitchen address, and the two switches (Bulk attach tracking, Box label);
+     · the two that keep a SAVE BUTTON there keep one here and write plain
+       PUT /config, exactly the desktop's bodies: Fees & minimum (all three fee
+       keys, always together, as saveDeliveryFees sends them) and Everywhere
+       else — default delivery (delivery.defaultZone, whole);
+     · Holiday mode, which §326.2 brings to the phone with its two-language
+       message and a strong confirm.
+
+   WHO MAY. Every key here is the Delivery panel's family on the server
+   (lib/cap-routes.js configKeyCap: delivery / fees / pickup / notice →
+   delivery:view, delivery:edit, settings:shop, stores:view). The phone's
+   Delivery screen opens on delivery:view, so each control is drawn for that
+   same any-of, and each command refuses without it. */
+const DLV_WRITE=['delivery:view','delivery:edit','settings:shop','stores:view'];
+const dlvCanWrite=()=>mCan(DLV_WRITE);
+/* Put what was written into the config the screen reads, key by dotted key. */
+function cfgMerge(body){
+  state.cfg=state.cfg||{};
+  Object.keys(body||{}).forEach(k=>{
+    const parts=k.split('.'); let o=state.cfg;
+    parts.slice(0,-1).forEach(pp=>{ if(!o[pp]||typeof o[pp]!=='object') o[pp]={}; o=o[pp]; });
+    o[parts[parts.length-1]]=body[k];
+  });
+}
+const dlvTxt=v=>String(v==null?'':v).trim();
+/* Whole days 0–365, blank is null (no window) — the desktop's preorderBody. */
+function dlvDay(raw){
+  const t=dlvTxt(raw); if(t==='') return null;
+  let n=Math.round(Number(t)); if(!Number.isFinite(n)) return null;
+  return Math.max(0,Math.min(365,n));
+}
+/* The live cards. `draft` reads a fresh /config into the sheet's fields;
+   `body` turns them back into exactly the desktop card's body. */
+const DLV_LIVE={
+  cutoff:{card:'delivery.cutoff', keys:['delivery.sameDayCutoffMinutes','delivery.sameDayCutoffMessage'],
+    title:['Same-day cutoff','当日截单'],
+    body:['Within this many minutes of a store\'s close, "Right away" / same-day is withdrawn and the customer is moved to tomorrow\'s slots — the kitchen can\'t prep and dispatch an order placed a minute before closing. Applies to every Guangzhou same-city zone (Tianhe, Yuexiu, …). 0 = accept same-day right up to the closing minute.',
+          '关门前这段时间内,「立即配送」/ 当日达会被撤下,顾客将改选明天的时段 —— 关门前一分钟下的单厨房来不及备餐发货。适用于所有广州同城配送区(天河、越秀等)。0 = 关门前一分钟仍可接单。'],
+    fields:()=>[{id:'mins',label:T('Cutoff','截单时间')+' — '+T('min before close','分钟(关门前)'),numeric:true,commit:true,placeholder:'10'},
+      {id:'en',label:T('Message (English)','英文消息')+' '+T('— optional, leave blank for the default','— 可留空,使用默认文案'),multiline:true},
+      {id:'cn',label:T('Message (Chinese)','消息(中文)')+' '+T('— optional, leave blank for the default','— 可留空,使用默认文案'),multiline:true}],
+    draft:c=>{ const d=(c&&c.delivery)||{}, m=d.sameDayCutoffMessage||{};
+      return {mins:String(d.sameDayCutoffMinutes!=null?d.sameDayCutoffMinutes:10), en:m.en||'', cn:m.cn||''}; },
+    body:d=>{ let mins=Math.round(Number(dlvTxt(d.mins))); if(!Number.isFinite(mins)||mins<0) mins=0; if(mins>180) mins=180;
+      return {'delivery.sameDayCutoffMinutes':mins,'delivery.sameDayCutoffMessage':{en:dlvTxt(d.en),cn:dlvTxt(d.cn)}}; }},
+  pickup:{card:'pickup', keys:['pickup.window','pickup.leadMinutes'],
+    title:['Store pickup','到店自提'],
+    body:['"Earliest pickup" is how many minutes after ordering the first slot opens, so staff have time to pack. 0 = customers can collect right away.',
+          '"最早可取"是下单后多少分钟才可取货,方便备货。填 0 表示可立即自取。'],
+    fields:()=>[{id:'open',label:T('Opens','开始'),type:'time',commit:true},{id:'close',label:T('Closes','结束'),type:'time',commit:true},
+      {id:'lead',label:T('Earliest pickup','最早可取'),numeric:true,commit:true,placeholder:'0'}],
+    draft:c=>{ const p=(c&&c.pickup)||{}, w=p.window||{};
+      return {open:w.open||'10:00', close:w.close||'20:00', lead:String(p.leadMinutes!=null?p.leadMinutes:0)}; },
+    body:d=>({'pickup.window':{open:dlvTxt(d.open)||'10:00',close:dlvTxt(d.close)||'20:00'},
+      'pickup.leadMinutes':Math.max(0,Number(dlvTxt(d.lead))||0)})},
+  preorder:{card:'delivery.preorder', keys:['notice.preorder'],
+    title:['Pre-orders','预订'],
+    body:['Leave any field blank to use the default wording. The only placeholder is {window}, which fills in with the days above.',
+          '任意字段留空则使用默认文案。只有一个占位符 {window},会自动填入上方的天数。'],
+    fields:()=>[{id:'min',label:T('Restock window','预计补货时间')+' · '+T('From','最快(天)'),numeric:true,commit:true,placeholder:'2'},
+      {id:'max',label:T('Restock window','预计补货时间')+' · '+T('To','最慢(天)'),numeric:true,commit:true,placeholder:'4'},
+      {id:'kick_en',label:T('Popup eyebrow','弹窗小标题')+' · English',placeholder:'Pre-order'},
+      {id:'kick_cn',label:T('Popup eyebrow','弹窗小标题')+' · 中文',placeholder:'预订'},
+      {id:'title_en',label:T('Popup title','弹窗标题')+' · English',placeholder:'Ships soon'},
+      {id:'title_cn',label:T('Popup title','弹窗标题')+' · 中文',placeholder:'现订现发'},
+      {id:'msg_en',label:T('Checkout notice','结账提示')+' · English',multiline:true},
+      {id:'msg_cn',label:T('Checkout notice','结账提示')+' · 中文',multiline:true}],
+    draft:c=>{ const p=((c&&c.notice)||{}).preorder||{};
+      return {min:p.min_days!=null?String(p.min_days):'', max:p.max_days!=null?String(p.max_days):'',
+        kick_en:p.kicker_en||'', kick_cn:p.kicker_cn||'', title_en:p.title_en||'', title_cn:p.title_cn||'',
+        msg_en:p.message_en||'', msg_cn:p.message_cn||''}; },
+    /* WHOLESALE, blank as blank (the server reads blank as "the built-in
+       wording", so clearing a box must be able to undo an override), and the
+       day pair normalised the server's way: one alone is a one-day window, a
+       reversed pair is swapped. */
+    body:d=>{ let lo=dlvDay(d.min), hi=dlvDay(d.max);
+      if(lo==null) lo=hi; if(hi==null) hi=lo; if(lo!=null&&hi!=null&&lo>hi){ const t=lo; lo=hi; hi=t; }
+      return {'notice.preorder':{kicker_en:dlvTxt(d.kick_en),kicker_cn:dlvTxt(d.kick_cn),title_en:dlvTxt(d.title_en),title_cn:dlvTxt(d.title_cn),
+        message_en:dlvTxt(d.msg_en),message_cn:dlvTxt(d.msg_cn),min_days:lo,max_days:hi}}; }},
+  kitchen:{card:'delivery.kitchen', keys:['delivery.kitchenAddress'],
+    title:['Kitchen address (customer-facing)','厨房地址(顾客可见)'], body:null,
+    fields:()=>[{id:'addr',label:T('Address','地址'),commit:true,placeholder:'广州市天河区 (Roots Kitchen)'}],
+    draft:c=>({addr:((c&&c.delivery)||{}).kitchenAddress||''}),
+    body:d=>({'delivery.kitchenAddress':dlvTxt(d.addr)})},
+};
+/* What a version changed, in the card's own field words. */
+const DLV_VER_WORDS={'delivery.sameDayCutoffMinutes':['Cutoff','截单时间'],'delivery.sameDayCutoffMessage':['Message (English)','英文消息'],
+  'pickup.window':['Opens','开始'],'pickup.leadMinutes':['Earliest pickup','最早可取'],'notice.preorder':['Checkout notice','结账提示'],
+  'delivery.kitchenAddress':['Address','地址'],'delivery.holidayMode':['Holiday mode','假日模式'],'delivery.holidayMessage':['Message (English)','英文消息'],
+  'delivery.bulkTracking':['Bulk attach tracking','批量绑定运单号'],'delivery.boxLabel':['Box label','箱贴打印']};
+function dlvCfgPut(card,body,note){
+  return apiWrite('/config'+(card?'?history='+encodeURIComponent(card)+(note?'&note='+encodeURIComponent(note):''):''),body,'PUT')
+    .then(j=>{ cfgMerge(body); return j; });
+}
+/* A live sheet opens on a FRESH read of /config: nothing is sent before the
+   draft is filled from the server, so a sheet over a failed read cannot save
+   empty boxes over real settings (§279's start() rule). */
+reg('dlvLive', k=>{
+  const def=DLV_LIVE[k]; if(!def||!dlvCanWrite()||typeof TacetAutosave==='undefined') return;
+  state.dlvSetErr=null; state.dlvOpening=k; render();
+  api('/config').then(cfg=>{
+    state.dlvOpening=null;
+    if(cfg&&typeof cfg==='object') state.cfg=cfg;
+    const d=def.draft(state.cfg||{});
+    const auto=TacetAutosave.create({
+      read:()=>def.body(d),
+      send:(b,note)=>dlvCfgPut(def.card,b,note),
+      onChange:()=>askLiveRepaint(),
+    });
+    auto.start();
+    const live={auto, get:id=>d[id], set:(id,v)=>{ d[id]=v; },
+      apply:b=>{ Object.assign(d,def.draft(Object.assign({},state.cfg,dlvUnflat(b)))); },
+      history:()=>{
+        Promise.resolve(auto.flush()).then(()=>api('/config/history?card='+encodeURIComponent(def.card))).then(j=>{
+          const list=Array.isArray(j&&j.versions)?j.versions:(Array.isArray(j)?j:[]);
+          if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+          liveHistorySheet(list,
+            v=>(v.changed||[]).map(key=>{ const w=DLV_VER_WORDS[key]; return w?T(w[0],w[1]):key; }).join(' · '),
+            v=>dlvCfgPut(def.card,v.snapshot||{},'restore'));
+        }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+      },
+      close:()=>{ Promise.resolve(auto.flush()).then(()=>render()); }};
+    state.ask={title:T(def.title[0],def.title[1]), body:def.body?T(def.body[0],def.body[1]):'', fields:def.fields(), live};
+    render();
+  }).catch(e=>{
+    state.dlvOpening=null;
+    if(String(e.message)==='auth') return;
+    state.dlvSetErr=E('Could not load this.','无法加载。'); render();
+  });
+});
+/* {"a.b":1} → {a:{b:1}}, so a restored body can be read by `draft`. */
+function dlvUnflat(b){
+  const out={}; Object.keys(b||{}).forEach(k=>{ const parts=k.split('.'); let o=out;
+    parts.slice(0,-1).forEach(pp=>{ if(!o[pp]||typeof o[pp]!=='object') o[pp]={}; o=o[pp]; }); o[parts[parts.length-1]]=b[k]; });
+  return out;
+}
+/* The two switches: one key each, written the moment they are flipped, filed
+   as a version of the desktop card that owns them. */
+const DLV_SWITCH={bulk:{card:'delivery.bulktracking',key:'delivery.bulkTracking'},box:{card:'delivery.boxlabel',key:'delivery.boxLabel'}};
+reg('dlvSwitch', k=>{
+  const sw=DLV_SWITCH[k]; if(!sw||!dlvCanWrite()||state.dlvBusy) return;
+  const next=!cfgGet(sw.key,false);
+  state.dlvBusy='sw:'+k; state.dlvSetErr=null; render();
+  dlvCfgPut(sw.card,{[sw.key]:next}).then(()=>{ state.dlvBusy=false; render(); showToast(T('Saved','已保存')); })
+    .catch(e=>{ state.dlvBusy=false; if(String(e.message)==='auth') return;
+      state.dlvSetErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
+});
+/* FEES — the desktop's saveDeliveryFees: all three keys, every time. A typo is
+   refused rather than saved as 0 (the desktop's Number()||0 would turn "1o0"
+   into free shipping for everyone). */
+function dlvMoneyOk(v){ const t=dlvTxt(v); return t!==''&&Number.isFinite(Number(t))&&Number(t)>=0; }
+reg('dlvFees', ()=>{
+  if(!dlvCanWrite()) return;
+  const f=(state.cfg&&state.cfg.fees)||{};
+  state.ask={title:T('Fees & minimum','费用与起送'),
+    body:T('The ¥ customers pay at checkout. A zone\'s own Base fee / Free-over (set on each zone) overrides these global values for that area.',
+           '顾客结账支付的费用。各配送区自设的基础运费 / 免运门槛会覆盖此处的全局值。'),
+    fields:[{id:'free',label:T('Free-shipping threshold','包邮门槛')+' ('+CUR+')',numeric:true,value:String(f.freeShippingThreshold!=null?f.freeShippingThreshold:0)},
+      {id:'min',label:T('Minimum order','起送金额')+' ('+CUR+')',numeric:true,value:String(f.minOrder!=null?f.minOrder:0)},
+      {id:'pack',label:T('Store pickup','到店自提')+' · '+T('Packing fee','包装费')+' ('+CUR+')',numeric:true,value:String(f.pickupPackingFee!=null?f.pickupPackingFee:0)}],
+    confirmLabel:T('Save','保存'),
+    validate:v=>(dlvMoneyOk(v.free)&&dlvMoneyOk(v.min)&&dlvMoneyOk(v.pack))?null:T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'),
+    run:v=>{
+      const body={'fees.freeShippingThreshold':Number(v.free),'fees.pickupPackingFee':Number(v.pack),'fees.minOrder':Number(v.min)};
+      state.dlvBusy='fees'; state.dlvSetErr=null; render();
+      dlvCfgPut(null,body).then(()=>{ state.dlvBusy=false; render(); showToast(T('Saved','已保存')); })
+        .catch(e=>{ state.dlvBusy=false; if(String(e.message)==='auth') return;
+          state.dlvSetErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
+    }};
+  render();
+});
+/* EVERYWHERE ELSE — the desktop's saveDefaultZone, delivery.defaultZone whole.
+   Blank Free-over and Packing cap are null ("none"), as there. */
+reg('dlvDefaultZone', ()=>{
+  if(!dlvCanWrite()) return;
+  const z=cfgGet('delivery.defaultZone',{})||{};
+  state.ask={title:T('Everywhere else — default delivery','其他地区 — 默认配送'),
+    body:T('A zone above always wins over this default. Guangzhou same-day and Hong Kong are unaffected.','上方任何区域都优先于此默认值。广州当日达与香港不受影响。'),
+    fields:[{id:'on',label:T('Status','状态'),choices:[['1',T('On','开')],['0',T('Off','关')]],value:z.enabled?'1':'0'},
+      {id:'fee',label:T('Flat fee','统一运费')+' ('+CUR+')',numeric:true,value:String(z.base_fee!=null?z.base_fee:25)},
+      {id:'free',label:T('Free over','满额免运')+' ('+CUR+')',numeric:true,placeholder:'329',value:z.free_threshold!=null?String(z.free_threshold):''},
+      {id:'pack',label:T('Packing / item','每件包装费')+' ('+CUR+')',numeric:true,value:String(z.packing_fee_per_item!=null?z.packing_fee_per_item:0)},
+      {id:'cap',label:T('Packing cap','包装费上限')+' ('+CUR+')',numeric:true,placeholder:'—',value:z.packing_fee_cap!=null?String(z.packing_fee_cap):''},
+      {id:'lead',label:T('Lead time','备货天数')+' ('+T('days','天')+')',numeric:true,value:String(z.min_lead_days!=null?z.min_lead_days:3)}],
+    confirmLabel:T('Save','保存'),
+    validate:v=>(dlvMoneyOk(v.fee)&&dlvMoneyOk(v.pack)&&(dlvTxt(v.free)===''||dlvMoneyOk(v.free))&&(dlvTxt(v.cap)===''||dlvMoneyOk(v.cap)))
+      ?null:T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'),
+    run:v=>{
+      const orNull=x=>dlvTxt(x)===''?null:Number(x);
+      const body={'delivery.defaultZone':{enabled:v.on==='1', base_fee:Number(v.fee), free_threshold:orNull(v.free),
+        packing_fee_per_item:Number(v.pack), packing_fee_cap:orNull(v.cap),
+        min_lead_days:Math.max(0,parseInt(dlvTxt(v.lead),10)||0), day_only:1}};
+      state.dlvBusy='zone'; state.dlvSetErr=null; render();
+      dlvCfgPut(null,body).then(()=>{ state.dlvBusy=false; render(); showToast(T('Saved','已保存')); })
+        .catch(e=>{ state.dlvBusy=false; if(String(e.message)==='auth') return;
+          state.dlvSetErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
+    }};
+  render();
+});
+/* HOLIDAY MODE, BOTH WAYS (§326.2). Off is Resume, above. On — and editing the
+   message while on — goes through this sheet: the message in both languages,
+   because a shopper reads one or the other and a blank half is a blank banner;
+   then, to turn it ON, a second sheet that says what stops and what does not,
+   in the desktop's own sentence, with the message the shoppers will read. The
+   body is the desktop card's two keys, filed under its card. */
+reg('dlvHoliday', ()=>{
+  if(!dlvCanWrite()||state.dlvBusy) return;
+  const on=!!cfgGet('delivery.holidayMode',false), m=cfgGet('delivery.holidayMessage',{})||{};
+  state.ask={title:T('Holiday mode','假日模式'),
+    body:T('Turn ON when the kitchen is closed for a holiday. Customers can still place orders — same-day delivery is hidden, the calendar still works, and your message appears on checkout.',
+           '厨房放假时开启。顾客仍可下单 — 当日达被隐藏,日历仍可选,结账页显示您的提示。'),
+    fields:[{id:'en',label:T('Message (English)','英文消息'),multiline:true,value:m.en||'',placeholder:"We're closed for a short holiday — your order will ship as soon as we're back."},
+      {id:'cn',label:T('Message (Chinese)','消息(中文)'),multiline:true,value:m.cn||'',placeholder:'我们短暂休假中 — 订单将在我们回来后第一时间发货。'}],
+    confirmLabel:on?T('Save','保存'):T('Turn on','开启'),
+    validate:v=>(v.en&&v.cn)?null:T('Write the message in English and in Chinese first — shoppers read one or the other.','请先填写中英文两种提示 — 顾客会看到其中一种。'),
+    run:v=>{
+      const body={'delivery.holidayMode':true,'delivery.holidayMessage':{en:v.en,cn:v.cn}};
+      const send=()=>{
+        state.dlvBusy='holiday'; state.dlvSetErr=null; render();
+        dlvCfgPut('delivery.holiday',body).then(()=>{ state.dlvBusy=false; render();
+          showToast(on?T('Saved','已保存'):T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')); })
+          .catch(e=>{ state.dlvBusy=false; if(String(e.message)==='auth') return;
+            state.dlvSetErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。'); render(); });
+      };
+      if(on){ send(); return; }
+      const said=LANG==='en'?v.en:v.cn;
+      state.ask={title:T('Holiday mode','假日模式'),
+        body:T('Turn ON when the kitchen is closed for a holiday. Customers can still place orders — same-day delivery is hidden, the calendar still works, and your message appears on checkout.',
+               '厨房放假时开启。顾客仍可下单 — 当日达被隐藏,日历仍可选,结账页显示您的提示。')
+          +`<div style="margin-top:10px;font-size:14px;color:var(--text-primary)">${T('Shoppers are told','顾客看到')}: “${escAttr(said)}”</div>`,
+        confirmLabel:T('Turn on','开启'), danger:true, run:send};
+      render();
+    }};
+  render();
+});
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
 /* §325 — Legal's own open row. It used faqToggle and state.faqOpen, so opening
    the second FAQ answer and then visiting Legal found the Privacy policy
@@ -7451,6 +7698,48 @@ function dlvZoneFacts(){
   const sameday=live.filter(z=>z.zone_type==='gz_district'&&(z.same_day_allowed||Number(z.same_day_surcharge)>0)).length;
   return {total:rows.length, live:live.length, off:rows.length-live.length, provs:provs.size, sameday};
 }
+/* §325 O4 — the Delivery panel's settings, one row each, in the desktop hub's
+   order. A row a writer may change opens its sheet; for anybody else the same
+   rows are read-only lines. Each row says the value it holds now. */
+function dlvSettingsCard(holiday,cutoff){
+  const can=dlvCanWrite();
+  const f=(state.cfg&&state.cfg.fees)||{}, p=(state.cfg&&state.cfg.pickup)||{}, w=p.window||{};
+  const dz=cfgGet('delivery.defaultZone',null)||{};
+  const po=cfgGet('notice.preorder',null)||{};
+  const kit=dlvTxt(cfgGet('delivery.kitchenAddress',''));
+  const m=v=>money(CUR,Number(v)||0);
+  const busy=state.dlvBusy, opening=state.dlvOpening;
+  const row=(label,value,cmd,arg)=>{
+    const inner=`<span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>
+      <span class="num" style="flex:none;max-width:48%;font-size:14px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${opening===arg?T('Loading…','加载中…'):value}</span>`;
+    return can
+      ? `<button class="row" style="gap:12px;min-height:56px;padding:12px 16px"${busy?' disabled':''} onclick="APP.cmd('${cmd}'${arg?",'"+arg+"'":''})">${inner}<span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`
+      : `<div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:12px 16px">${inner}</div>`;
+  };
+  const sw=(label,desc,k,key)=>{
+    const on=!!cfgGet(key,false);
+    return `<div style="display:flex;align-items:center;gap:14px;padding:12px 16px;min-height:56px">
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px">${label}</span>
+        <span style="display:block;font-size:12.5px;color:var(--text-secondary);line-height:1.45;margin-top:2px">${desc}</span></span>
+      ${!can?`<span style="font-size:14px;color:var(--text-secondary)">${on?T('On','开'):T('Off','关')}</span>`
+        :busy==='sw:'+k?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+        :toggle(on,`APP.cmd('dlvSwitch','${k}')`)}</div>`;
+  };
+  const win=(po.min_days!=null)?(po.min_days===po.max_days?String(po.min_days):po.min_days+'–'+po.max_days)+' '+T('days','天'):'—';
+  const sep='<div class="sep" style="margin-left:16px"></div>';
+  return `<div class="list">
+    ${row(T('Holiday mode','假日模式'), holiday?T('On','开'):T('Off','关'),'dlvHoliday')}${sep}
+    ${row(T('Same-day cutoff','当日截单'), T((cutoff!=null?cutoff:10)+' min before close',(cutoff!=null?cutoff:10)+' 分钟(打烊前)'),'dlvLive','cutoff')}${sep}
+    ${row(T('Fees & minimum','费用与起送'), T('Free over','满额免运')+' '+m(f.freeShippingThreshold)+' · '+m(f.minOrder),'dlvFees')}${sep}
+    ${row(T('Store pickup','到店自提'), (w.open||'10:00')+'–'+(w.close||'20:00'),'dlvLive','pickup')}${sep}
+    ${row(T('Everywhere else — default delivery','其他地区 — 默认配送'), dz.enabled?m(dz.base_fee!=null?dz.base_fee:25):T('Off','关'),'dlvDefaultZone')}${sep}
+    ${row(T('Pre-orders','预订'), win,'dlvLive','preorder')}${sep}
+    ${row(T('Kitchen address (customer-facing)','厨房地址(顾客可见)'), kit?escAttr(kit):'—','dlvLive','kitchen')}${sep}
+    ${sw(T('Bulk attach tracking','批量绑定运单号'),T('When on, a button appears in the Orders toolbar. When off, the button is hidden — the tool stays available but out of the way.','开启后订单页工具栏会显示该按钮;关闭后按钮隐藏,不占据界面。'),'bulk','delivery.bulkTracking')}${sep}
+    ${sw(T('Box label','箱贴打印'),T("When on, the order page shows the Box-label controls. When off, they're hidden — the tool stays available but out of the way.",'开启后订单页显示箱贴按钮;关闭后隐藏,不占据界面。'),'box','delivery.boxLabel')}
+    ${state.dlvSetErr?`<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${state.dlvSetErr}</div>`:''}
+  </div>`;
+}
 function screenDelivery(){
   if(!state.printer&&!state.printerTried) loadPrinter();
   loadGeo();
@@ -7472,12 +7761,11 @@ function screenDelivery(){
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
         <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
       ${hText?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}
-      ${/* OFF only, never on. Turning holiday mode ON needs the shopper-facing
-            message, in both languages, and writing that is authoring — a phone
-            that could switch it on without writing one would put a stale
-            message, or none, in front of every customer. Coming BACK is the
-            asymmetric half: you are home, delivery should run, and there is
-            nothing to write. That is the one that belongs on a phone. */''}
+      ${/* Resume is the one-tap way back. Turning it ON, and changing the
+            message, is the Holiday mode row below (§325 O4, under §326.2, which
+            retired the "on stays on the desktop" hold this comment used to
+            argue): it asks for the message in both languages and says what
+            stops and what does not before anything is sent. */''}
       <button class="btn2" style="align-self:flex-start;margin-top:6px;min-height:40px;padding:0 14px;font-size:13.5px"
         ${state.dlvBusy?'disabled':''} onclick="APP.cmd('resumeDelivery')">${
         state.dlvBusy?T('Resuming…','恢复中…'):T('Resume delivery','恢复配送')}</button>
@@ -7487,8 +7775,8 @@ function screenDelivery(){
       {label:T('Provinces covered','覆盖省份'), value: z ? String(z.provs) : T('Loading…','加载中…')},
       {label:T('Same-day districts','当日达区域'), value: z ? String(z.sameday) : T('Loading…','加载中…')},
       {label:T('Stores located','门店已定位'), value:located},
-    ].concat(cutoff!=null?[{label:T('Same-day cut-off','当日达截单'),value:T(cutoff+' min before close',cutoff+' 分钟(打烊前)')}]:[])
-     .concat(holiday?[]:[{label:T('Holiday mode','假日模式'),value:T('Off','已关闭')}]))}
+    ])}
+    ${dlvSettingsCard(holiday,cutoff)}
     ${z&&z.off?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
       <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
       <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送范围已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
