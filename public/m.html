@@ -930,7 +930,11 @@ const state = {
        /* §325 PD4 — listing ids with a write in flight, a refused row write's
           sentence (above the list), the row sheet (price / kind / remove) and
           the Add product picker. */
-       busy:{},writeErr:null,edit:null,pick:null},
+       busy:{},writeErr:null,edit:null,pick:null,
+       /* §325 PD13 — the location being set up, a refused Set up (above the
+          list), the shop write in flight ('display_name_en' | 'display_name_cn'
+          | 'active' | 'move') and its refusal (on the shop's card). */
+       setup:null,listErr:null,shopBusy:null,shopErr:null},
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   /* Which later step of a delay case has its controls out, as `<shipment>:<index>`,
      or null. STATE RATHER THAN A DOM TOGGLE because this sheet repaints on the
@@ -17553,7 +17557,11 @@ function screenShopMenus(){
   if(s.err) return shmErrBox(s.err,'shmRetry');
   if(!s.list) return shmLoading();
   if(!s.list.length) return nothingYet(T('No stores','没有门店'),'');
-  return `<div style="padding:14px 16px 24px"><div class="list">${s.list.map((x,i)=>{
+  // §325 PD13 — a refused Set up stays above the list.
+  const err=s.listErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;margin-bottom:10px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(s.listErr)}</span></div>`:'';
+  return `<div style="padding:14px 16px 24px">${err}<div class="list">${s.list.map((x,i)=>{
     const l=x.location||{}, sh=x.shop;
     const n=sh?Number(sh.listing_count||0):0;
     const sub=!sh ? T('Not set up','未开通') : n+' '+T(n===1?'product':'products','件商品');
@@ -17565,7 +17573,7 @@ function screenShopMenus(){
       ${pillHtml}`;
     return `${i?'<div class="sep"></div>':''}${sh
       ? `<button class="row" onclick="APP.cmd('shmOpen',${Number(sh.id)})">${inner}<span style="color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span></button>`
-      : `<div class="row" style="cursor:default">${inner}</div>`}`;
+      : `<div class="row" style="cursor:default">${inner}${shmCanEdit()?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" ${s.setup!=null?'disabled':''} onclick="APP.cmd('shmSetup',${Number(l.id)})">${s.setup===Number(l.id)?T('Saving…','保存中…'):T('Set up','设置')}</button>`:''}</div>`}`;
   }).join('')}</div></div>`;
 }
 /* A listing's name and, for one size of a family, that size — prodName's rule
@@ -17614,7 +17622,7 @@ function shmListHtml(){
    opens (or the reason there is none), Download, then the listings under the
    desktop's filter. */
 function screenShopMenu(){
-  loadShopMenu();
+  loadShopMenu(); loadShopMenus();   // §325 PD13 — the list says where a menu may move
   const s=state.shm;
   if(s.oneErr) return shmErrBox(s.oneErr,'shmOneRetry');
   if(!s.shop) return shmLoading();
@@ -17637,6 +17645,7 @@ function screenShopMenu(){
         <span style="font-size:17px;font-weight:500">${escAttr(shmLocName(loc)||shmName(sh.display_name_en,sh.display_name_cn))}</span>
         ${sh.is_active?'':`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Inactive','已停用')}</span>`}</div>
       <code class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(sh.public_code||'')}</code></div>
+    ${shmDetailsCard()}
     ${qr}
     <div>${filter}<div id="mShmBody">${shmListHtml()}</div></div>
   </div>`;
@@ -17645,7 +17654,7 @@ SUBS.shopmenus={title:['Shop menu','门店商品'],render:()=>screenShopMenus()}
 SUBS.shopmenu={title:['Shop menu','门店商品'],backLabel:()=>T('Shop menu','门店商品'),render:()=>screenShopMenu()};
 reg('shmRetry', ()=>{ loadShopMenus(true); render(); });
 reg('shmOneRetry', ()=>{ loadShopMenu(true); render(); });
-reg('shmOpen', id=>{ const s=state.shm; s.id=Number(id); s.q=''; s.oneFor=null;
+reg('shmOpen', id=>{ const s=state.shm; s.id=Number(id); s.q=''; s.oneFor=null; s.shopErr=null; s.shopBusy=null;
   s.busy={}; s.writeErr=null; s.edit=null; s.pick=null; push('shopmenu'); });
 /* The filter repaints the list alone, so the keyboard stays (prodSearch's rule). */
 reg('shmQ', v=>{
@@ -35365,6 +35374,158 @@ reg('prodDuplicate', id=>{
     if(String(e&&e.message)==='auth') return;
     state.prodErr=T('Duplicate failed: ','复制失败:')+(e&&e.refused?T(...e.words):String((e&&e.message)||''));
     render();
+  });
+});
+/* ==========================================================================
+   §325 PD13 — A SHOP MENU'S STRUCTURE, FROM THE PHONE
+   (desktop: 28-shops.js shpCreate / details() / shpSaveName / shpToggleActive /
+    shpMove with moveTargets)
+   --------------------------------------------------------------------------
+   Behind stores:edit, as every shops write is on the server (requireStoresEdit):
+     Set up          POST /shops {location_id} — on a location the list says is
+                     Not set up; the new shop opens, as the desktop paints it.
+     Names           PATCH /shops/:id {display_name_en} / {display_name_cn} —
+                     one per field, when the box is left (the desktop's
+                     onchange); both optional, the location's name shows
+                     through as the hint.
+     On / Off        PATCH /shops/:id {is_active: 1|0} — not optimistic: the
+                     switch waits and says so, and stays as it was if refused.
+     Move products   POST /shops/:id/move {to_location_id} — §177, two asks in
+                     the desktop's order: WHERE (every other location whose menu
+                     is empty), then WHAT IT COSTS (this menu is emptied, this
+                     shop switches off, the QR printed here stops working, the
+                     destination needs its own QR printed), a danger confirm.
+                     It lands on the destination's menu, as the desktop does.
+   A refusal is written where the operator is looking — above the list for Set
+   up, on the shop's card for the rest — and stays; a toast only confirms. The
+   move's three refusals use the desktop's words (01-core.js TD_ERR). */
+function shmStructErr(e){
+  const W={destination_has_menu:['That location already has a menu of its own.','该门店已有商品,请选择其他门店。'],
+    nothing_to_move:['There is nothing on this menu to move.','没有可移动的商品。'],
+    same_location:['The menu is already at that location.','商品已在该门店。']};
+  if(e&&!e.refused&&W[e.code]) return T(...W[e.code]);
+  return shmWriteErr(e);
+}
+/* The location this shop stands on, from the list the screen came through. */
+function shmHere(){ const s=state.shm; return (s.list||[]).find(x=>x.shop&&Number(x.shop.id)===Number(s.id))||null; }
+/* moveTargets: every other location, unless its shop already lists something. */
+function shmMoveTargets(){
+  const s=state.shm, here=shmHere(); if(!here||!s.list) return [];
+  return s.list.filter(x=>x.location&&x.location.id!==here.location.id&&!(x.shop&&Number(x.shop.listing_count)>0));
+}
+/* The name in one language — ' · ' collapsed, as the desktop's danger dialog does. */
+const shmLocIn=(l,cn)=>String((cn?(l.name_cn||l.name_en):(l.name_en||l.name_cn))||l.code||'').replace(/ · /g,' - ');
+function shmDetailsCard(){
+  const s=state.shm, sh=s.shop; if(!sh||!shmCanEdit()) return '';
+  const loc=(shmHere()||{}).location||{};
+  const b=s.shopBusy, dis=b?'disabled':'';
+  const lab=t=>`<span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</span>`;
+  const targets=(s.rows||[]).length?shmMoveTargets():[];
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+    <label style="display:flex;flex-direction:column;gap:6px">${lab(T('English name (optional)','英文名(可选)'))}
+      <input value="${escAttr(sh.display_name_en||'')}" placeholder="${escAttr(loc.name_en||'')}" ${dis} onchange="APP.cmd('shmDisplayName','display_name_en',this.value)"></label>
+    <label style="display:flex;flex-direction:column;gap:6px">${lab(T('Chinese name','中文名'))}
+      <input value="${escAttr(sh.display_name_cn||'')}" placeholder="${escAttr(loc.name_cn||'')}" ${dis} onchange="APP.cmd('shmDisplayName','display_name_cn',this.value)"></label>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="font-size:15px">${sh.is_active?T('On','已开启'):T('Off','已停用')}</span>
+      ${b==='active'?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">…</span>`:toggle(!!Number(sh.is_active),`APP.cmd('shmActive')`)}</div>
+    ${b&&b!=='move'?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`:''}
+    ${s.shopErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(s.shopErr)}</span></div>`:''}
+    ${targets.length?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" ${dis} onclick="APP.cmd('shmMoveAsk')">${b==='move'?T('Saving…','保存中…'):T('Move products','移动商品')}</button>`:''}
+  </div>`;
+}
+/* After a structural write: the record and the list both read again, so the
+   list's count, pill and Not set up all say what the server now holds. */
+function shmStructDone(shop){
+  const s=state.shm;
+  s.shopBusy=null;
+  if(shop) s.shop=shop;
+  loadShopMenus(true); loadShopMenu(true); render();
+}
+reg('shmSetup', locId=>{
+  const s=state.shm; if(!shmCanEdit()||s.setup!=null) return;
+  const x=(s.list||[]).find(r=>r.location&&Number(r.location.id)===Number(locId));
+  if(!x||x.shop) return;
+  s.setup=Number(locId); s.listErr=null; render();
+  apiWrite('/shops',{location_id:Number(locId)},'POST').then(j=>{
+    s.setup=null;
+    const shop=j&&j.data&&j.data.shop;
+    showToast(T('Saved','已保存'));
+    loadShopMenus(true);
+    if(shop&&shop.id!=null) CMD.shmOpen(shop.id); else render();
+  }).catch(e=>{
+    s.setup=null;
+    if(String(e&&e.message)==='auth') return;
+    s.listErr=shmWriteErr(e); render();
+  });
+});
+reg('shmDisplayName', (k,v)=>{
+  const s=state.shm, sh=s.shop;
+  if(!sh||!shmCanEdit()||s.shopBusy||(k!=='display_name_en'&&k!=='display_name_cn')) return;
+  const val=String(v==null?'':v);
+  if(val===String(sh[k]||'')) return;
+  s.shopBusy=k; s.shopErr=null; render();
+  apiWrite('/shops/'+sh.id,{[k]:val},'PATCH').then(j=>{
+    shmStructDone(j&&j.data&&j.data.shop);
+  }).catch(e=>{
+    s.shopBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    s.shopErr=shmWriteErr(e); render();
+  });
+});
+reg('shmActive', ()=>{
+  const s=state.shm, sh=s.shop; if(!sh||!shmCanEdit()||s.shopBusy) return;
+  const want=Number(sh.is_active)?0:1;
+  s.shopBusy='active'; s.shopErr=null; render();
+  apiWrite('/shops/'+sh.id,{is_active:want},'PATCH').then(j=>{
+    shmStructDone(j&&j.data&&j.data.shop);
+  }).catch(e=>{
+    s.shopBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    s.shopErr=shmWriteErr(e); render();
+  });
+});
+/* §177's first ask: where. */
+reg('shmMoveAsk', ()=>{
+  const s=state.shm; if(!s.shop||!shmCanEdit()||s.shopBusy||!(s.rows||[]).length) return;
+  const targets=shmMoveTargets(); if(!targets.length) return;
+  const cn=LANG!=='en';
+  state.ask={title:T('Move products to another location?','移动商品到其他门店？'),
+    options:targets.map(x=>({key:String(x.location.id),label:escAttr(shmLocIn(x.location,cn))})),
+    run:key=>CMD.shmMoveConfirm(key)};
+  render();
+});
+/* §177's second ask: what it costs, named before anything is sent. */
+reg('shmMoveConfirm', locId=>{
+  const s=state.shm; if(!s.shop||!shmCanEdit()||s.shopBusy) return;
+  const target=shmMoveTargets().find(x=>String(x.location.id)===String(locId)); if(!target) return;
+  const n=(s.rows||[]).length;
+  const toEn=escAttr(shmLocIn(target.location,false)), toCn=escAttr(shmLocIn(target.location,true));
+  state.ask={title:T(`Move ${n} product${n===1?'':'s'} to ${toEn}?`,`移动 ${n} 个商品到${toCn}？`),
+    body:T(`This menu is emptied and this shop switches off, so the QR already printed here stops working. ${toEn} has its own code, so a new QR has to be printed there.`,
+           `此门店的商品将被清空,门店将停用,已打印的二维码将失效。${toCn} 有自己的编码,需要重新打印二维码。`),
+    confirmLabel:T('Move','移动'), danger:true,
+    run:()=>CMD.shmMove(target.location.id)};
+  render();
+});
+reg('shmMove', locId=>{
+  const s=state.shm, sh=s.shop; if(!sh||!shmCanEdit()||s.shopBusy) return;
+  s.shopBusy='move'; s.shopErr=null; render();
+  apiWrite('/shops/'+sh.id+'/move',{to_location_id:Number(locId)},'POST').then(j=>{
+    s.shopBusy=null;
+    showToast(T('Moved','已移动'));
+    const to=j&&j.data&&j.data.to;
+    loadShopMenus(true);
+    // It lands on the destination: its switch, its code and its QR answer "is it live there?".
+    if(to&&to.id!=null){ s.id=Number(to.id); s.q=''; s.oneFor=null; s.busy={}; s.writeErr=null; s.edit=null; s.pick=null; s.shop=null; s.rows=null; s.qr=null; loadShopMenu(); }
+    else loadShopMenu(true);
+    render();
+  }).catch(e=>{
+    s.shopBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    s.shopErr=shmStructErr(e); render();
   });
 });
 /* ==========================================================================

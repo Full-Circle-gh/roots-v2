@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.277 · 2026-09-30 · §385 SHOP MENU STRUCTURE ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SHOP MENU.** See *A shop menu's structure, changed on the phone (§385)*.
+
 **v1.276 · 2026-09-30 · §384 NEW PRODUCT ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP.** See *A new product, made on the phone (§384)*.
 
 **v1.275 · 2026-09-30 · §383 CUSTOMER CHOICES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *What the customer chooses, edited on the phone (§383)*.
@@ -12067,3 +12069,33 @@ new product's first save (`public/m.html`).
 `套装产品(作为一个产品出售)`, which its unsaved state uses. The phone keeps the
 `套装产品` header the card wears after the first save, so the card's name does
 not change under the operator.
+
+## A shop menu's structure, changed on the phone (§385)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the phone admin's Shop menu list, on a shop's card, and in
+the two Move asks (`public/m.html`).
+
+**Copied whole from the desktop shop menu** (`public/retail-admin/28-shops.js`):
+
+- **Setting up and saving:** `Set up · 设置`, `Saved · 已保存`.
+- **The shop's card:**
+  - `English name (optional) · 英文名(可选)`
+  - `Chinese name · 中文名`
+  - `On · 已开启`
+  - `Off · 已停用`
+- **Moving:**
+  - `Move products · 移动商品`
+  - `Move products to another location? · 移动商品到其他门店？`
+  - `Move N product(s) to X? · 移动 N 个商品到X？`
+  - the warning sentence, whole, in both languages
+  - `Move · 移动`
+  - `Moved · 已移动`
+
+**From the desktop's error words** (`public/retail-admin/01-core.js` TD_ERR):
+- `That location already has a menu of its own. · 该门店已有商品,请选择其他门店。`
+- `There is nothing on this menu to move. · 没有可移动的商品。`
+- `The menu is already at that location. · 商品已在该门店。`
+
+**Phone live pairs reused:** `Saving… · 保存中…`, `Not set up · 未开通`,
+`Inactive · 已停用`, and the shop-menu refusal sentence from PD4.
