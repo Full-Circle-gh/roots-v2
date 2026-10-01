@@ -26789,3 +26789,46 @@ now says what is true. No behaviour changed.
    the shop on Eleme. That would mean adding a shop-status write to the
    browser-automation daemon. Until it exists, closing Eleme at a store pauses
    the stock and nothing else.
+
+## §394 — THE SETUP GUIDE DOES ITS STEPS ON THE PHONE, AND OPENS THE DOORS
+
+**Built 2026-10-01 under §325.** The phone's setup guide used to report only:
+"Nothing here is actionable on purpose… none of that is phone work." Since then
+X6 (stores), O10 (the delivery wizard) and X4 (Brand) have moved most of that
+work to the phone. Each step the phone can now do leads where the desktop's
+step leads (`17-setup-guide.js` suRun), using the desktop's own buttons:
+**Set up** on the next step and **Open** on the others.
+
+1. **Where each step leads:**
+   - **Your store:** Operations, where stores are edited and added (X6). It is
+     offered to the store screen's key, `stores:edit`.
+   - **Your first product:** the product editor's Add (`peCanCreate`).
+   - **Delivery or pickup:** the desktop's chooser (suFulfillChooser), in its
+     own words.
+     - *Set up delivery* opens the O10 wizard, on O10's own conditions.
+     - *Pickup only for now* sends `POST /setup {pickupConfirmed:true}` and shows
+       the desktop's toast.
+     - Not built: the chooser's "Earliest pickup" minutes field. The Delivery
+       screen's Store pickup row already sets those.
+   - **Open the doors:** the desktop's suOpenDoors, word for word.
+     - With steps left, it shows *Almost there* and names them, with only an OK
+       button. Nothing is sent.
+     - With none left, it asks *Open your store now?* (*Not yet* / *Open the
+       doors*), then sends `POST /setup {storeOpened:true}` and shows the
+       desktop's *Your store is open*.
+     - As on the desktop, the blocker check is on the screen. The server
+       accepts the flag regardless.
+   - **Your brand** (optional): the Brand screen (X4).
+2. **The real server key.** Both `/setup` writes take `setupFlagCap`
+   (`settings:shop` or `stores:view`, the `SETUP_SCREEN` pair). That is also the
+   pair that opens this screen. A test compares the phone's list with the
+   server's. Both writes wait for the operator's keys to load (`mCanKnown`), so
+   nothing is drawn while `/me` is still loading.
+3. **Three states.** While a write runs, its button reads *Saving…* and the
+   others are disabled. A refusal stays on the screen in a red bar. A toast
+   appears only on success. The server's answer replaces the guide's status.
+4. **The stale foot note is replaced.** It said every step was a wizard on the
+   desktop; it now names what still is: *Payment methods and WeChat sign-in are
+   set up on desktop.* The payment step means the Alipay QR upload and WeChat
+   Pay merchant keys. WeChat sign-in means the mini-app credentials wizard.
+   Neither step draws a button.
