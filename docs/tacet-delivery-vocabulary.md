@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.286 · 2026-09-30 · §397 MATCH NAMES ON THE PHONE — 6 STRINGS COMPOSED BY CLAUDE (THE DESKTOP'S ENGLISH-ONLY, ROOTS-NAMED CLEAR-ALL DIALOG AND TWO HALVES), THE REST COPIED.** See *Meituan's Match names on the phone (§397)*.
+
 **v1.285 · 2026-09-30 · §396 MATCHING AND CLAIMS ON THE PHONE — 6 STRINGS COMPOSED BY CLAUDE, THE REST COPIED FROM THE MEITUAN, ELEME AND CHANNEL SYNC PANELS.** See *Matching and claims on the phone (§396)*.
 
 **v1.284 · 2026-09-30 · §395 CHANNEL SYNC PICKER, SEARCH AND SWITCH ON THE PHONE — 3 STRINGS COMPOSED BY CLAUDE (THE LASTING-CHANGE CONFIRM §326.3 ASKED FOR), THE REST COPIED.** See *The channel sync switch's confirm, and the picker (§395)*.
@@ -12447,3 +12449,28 @@ Copied whole:
 
 Server refusals (`name_not_in_catalogue`, `catalogue_not_read`) arrive in the
 server's English and are shown as they come.
+
+## Meituan's Match names on the phone (§397)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Match names screen
+(`public/m.html`, the §325 X8c-2 block), copied from `11-meituan.js` except
+the rows below. Each composed string was searched for across `public/`
+first, and no live Chinese was found.
+
+| String | Status |
+|---|---|
+| `N were refused — those names are not in the catalogue read from this store. Refresh the catalogue on the Meituan page, then run this again. · N 个被拒绝 — 这些名称不在从本门店读取的商品名称中。请在美团页面刷新商品名称后再运行一次。` | **Chinese composed by Claude (X8c-2).** The desktop sends the English to both languages (`refusedTxt`). |
+| `Clear all N Meituan names on {store}? · 清除 {store} 的全部 N 个美团名称?` | **composed by Claude (X8c-2), both halves.** The desktop's title is English-only and names Roots' stores (`Clear ALL N 天河 外卖 Meituan name mapping(s)?`). |
+| `The store that links itself by 货号 is left untouched. This deletes the names on {store} — you can fill them again afterwards. · 按货号自动关联的门店不受影响。将删除 {store} 的名称 — 之后可以重新填写。` | **composed by Claude (X8c-2), both halves**, for the same reason (`越秀 闪购 (auto by 货号) is left untouched…`). |
+| `Clear mappings · 清除映射` | **Chinese composed by Claude (X8c-2).** The desktop button is English-only. |
+| `Nothing to clear — no names are set on {store}. · 无可清除 — {store} 尚未设置任何名称。` | **composed by Claude (X8c-2), both halves.** The desktop's is English-only and names 天河 外卖. |
+| `Pick a store first. · 请先选择门店。` | **Chinese composed by Claude (X8c-2).** The desktop's is English-only. |
+| `Reads the product names from your Meituan {store} store … · 从美团{store}读取商品名称…` | **the store's own name put in place of** the desktop's fixed `Tianhe` / `天河店`; otherwise the live pair. |
+
+Copied whole from `11-meituan.js`:
+- **The button and the first screen:** `Match names · 匹配名称`; `Match names with Meituan · 与美团匹配商品名`; `Start matching · 开始匹配`; `Cannot connect? Paste the names yourself · 无法连接？自己粘贴名称`.
+- **While it reads:** `Reading your Meituan listings… · 正在读取美团商品…`; `matching against N products · 对比 N 个商品` and its "N listings read ·" form; `Matching… x/y · 匹配中… x/y`.
+- **The results:** `N matched automatically`; `N failed to save — try again in a minute.`; `N need your pick — choose the right Meituan listing`; `N are not on Meituan — their stock stays frozen until they are listed there`; `Use · 使用`; `no suggestion · 无建议`; `Use suggested names for all`; `Everything is matched.`; `Start over — clear every matched name`.
+- **When it fails:** `Match failed: · 匹配失败:`; `could not read the listings — is the sync service logged in?`; `No stores detected.`.
+- **Paste:** `Paste Meituan names`; `Store · 门店`; the paste field's label and hint; `Cancel · 取消`; `Match and fill · 匹配并填写`; `Paste at least one title.`.
+- **After Start over:** `Cleared N mapping(s), M failed.`.
