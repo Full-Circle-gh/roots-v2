@@ -972,6 +972,16 @@ const state = {
                     which is why it is not chanErr wearing a second hat */
   chanSheet:null, chanBusy:null, chanErr:null, chanLoadErr:null,
   shopBusy:null, shopErr:null,
+  /* §325 X12 — the switches that stop orders everywhere at once.
+       oc           GET /store-status: the online store, every shop, the master
+       ocTried / ocLoadErr   its read, and the read failing (a different state
+                    from a write failing, as chanLoadErr is from chanErr)
+       ocBusy / ocErr        a /store-status/* write in flight, and its refusal
+       mtCfg / mtCfgTried    GET /meituan/config, the Meituan channel switch
+       chSwBusy / chSwErr    a Meituan or Eleme channel switch write, keyed by
+                    channel, and its refusal ({ch, msg}) */
+  oc:null, ocTried:false, ocLoadErr:null, ocBusy:null, ocErr:null,
+  mtCfg:null, mtCfgTried:false, chSwBusy:null, chSwErr:null,
   team:null, teamTried:false, teamErr:null, teamEnforce:false, teamBusy:null, teamActErr:null,
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
@@ -5757,6 +5767,256 @@ reg('shopOpen', (storeCode, next)=>{
     }};
   render();
 });
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X12 — THE SWITCHES THAT STOP ORDERS EVERYWHERE AT ONCE (§326.2)
+   ══════════════════════════════════════════════════════════════════════════
+   Four writes the phone held back on purpose and §326.2 brought over, each
+   behind a confirm that names what stops and what does not:
+
+     Online store        POST /store-status/online  {open}   (02-settings-ops.js ocSetOnline)
+     Everything          POST /store-status/master  {open}   (ocMaster)
+     A channel at every  POST /channel-status/channel {channel, open}
+       store                                                  (01-core.js csChannelToggle)
+     Meituan / Eleme     POST /meituan/enable, /eleme/enable {enabled}
+       channel switch                                          (11-meituan.js mtToggleChannel,
+                                                                14-eleme.js elToggleEnabled)
+
+   Same paths, same bodies as the desktop. The per-shop /store-status/store/:code
+   is NOT here: the Sales screen's own shop switch (shopOpen above, the Sales
+   page's /channel-status/location) already does that job on the phone, and two
+   switches for one shop that write different tables is how a shop reads open in
+   one place and closed in the other.
+
+   WHO SEES THEM. Each is drawn only for the keys lib/cap-routes.js asks of that
+   write, and only once those keys are known (mCanKnown):
+     /store-status/*         OPEN_CLOSE — the Sales screen's keys plus Settings'
+     /channel-status/channel SALES_SCREEN
+     /meituan/enable         meituan:sync      /eleme/enable  eleme:sync
+   The desktop draws the first two for `settings:edit`, a key that does not
+   exist; the last two have no button on the desktop at all today (the functions
+   are there, the markup is not). The phone asks for the keys the server asks
+   for, so nothing is drawn that would be refused. */
+const X12_SALES_KEYS=['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'];
+const X12_OC_KEYS=X12_SALES_KEYS.concat(['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view']);
+function ocLoad(force){
+  if(state.ocTried&&!force) return;
+  state.ocTried=true;
+  return apiRaw('/store-status').then(j=>{
+    if(!j||j.success===false) throw new Error('refused');
+    state.oc=j; state.ocLoadErr=null; render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    // The desktop's words (loadOpenClose): a shop that cannot read its own
+    // open/closed state must not draw a control that looks live.
+    state.ocLoadErr=E('Could not read the shop status','无法读取营业状态'); render();
+  });
+}
+reg('ocRetry', ()=>{ state.ocLoadErr=null; state.oc=null; render(); ocLoad(true); });
+/* The card. Above the Shops card, because it outranks it: the master closes
+   every shop, and the online store is the one channel no shop card holds. */
+function ocCard(){
+  if(!mCanKnown(X12_OC_KEYS)) return '';
+  ocLoad();
+  const st=state.oc;
+  const head=`<div style="padding:12px 16px 8px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Open for business','营业状态')}</div>`;
+  if(!st&&state.ocLoadErr) return `<div class="card" style="padding:4px 0 12px;display:flex;flex-direction:column">${head}
+    <div style="padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="font-size:14px;color:var(--brick-ink)">${state.ocLoadErr}</span>
+      <button class="btn2" onclick="APP.cmd('ocRetry')">${T('Try again','重试')}</button></div></div>`;
+  if(!st) return `<div class="card" style="padding:4px 0 12px;display:flex;flex-direction:column">${head}
+    <div style="padding:0 16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
+  const master=st.master;   // 'open' | 'closed' | 'mixed'
+  const mLabel=master==='open'?T('Everything is open','全部营业中'):master==='closed'?T('Everything is closed','全部已关闭'):T('Some channels are closed','部分渠道已关闭');
+  const mPill=master==='open'?PILL.success:master==='closed'?PILL.danger:PILL.warning;
+  const on=!!(st.online&&st.online.online_open);
+  const busy=state.ocBusy;
+  return `<div class="card" style="padding:4px 0;display:flex;flex-direction:column">${head}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 16px 12px">
+      <span class="pill" style="background:${mPill[0]};color:${mPill[1]}">${mLabel}</span>
+      <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('ocMaster',${master==='closed'?'1':'0'})">${
+        busy==='master'?T('Saving…','保存中…'):master==='closed'?T('Open everything','全部营业'):T('Close everything','全部关闭')}</button></div>
+    <div class="sep" style="margin-left:16px"></div>
+    <button ${busy?'disabled':''} onclick="APP.cmd('ocOnline',${on?'0':'1'})"
+      style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;${busy&&busy!=='online'?'opacity:.5':''}">
+      <span style="font-size:15px;color:var(--text-primary)">${T('Online store','线上商城')}</span>
+      <span style="display:flex;align-items:center;gap:9px;flex:none">
+        <span class="pill" style="background:${on?PILL.success[0]:PILL.danger[0]};color:${on?PILL.success[1]:PILL.danger[1]}">${
+          busy==='online'?T('Saving…','保存中…'):(on?T('Open','营业中'):T('Closed','已关闭'))}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>
+    ${state.ocErr?`<div style="padding:0 16px 12px;font-size:13px;color:var(--brick-ink)">${state.ocErr}</div>`:''}
+  </div>`;
+}
+/* One write path for both, as the desktop's _ocWrite: the card disables while
+   it runs (two taps on "close everything" is how a shop gets reopened by the
+   person shutting it), and both boards re-read afterwards — the master moves
+   every shop's cells, so the grid below is stale the moment it lands. */
+function ocWrite(which,path,body,okText){
+  if(state.ocBusy) return;
+  state.ocBusy=which; state.ocErr=null; render();
+  apiWrite(path,body,'POST').then(()=>{
+    state.ocBusy=null; showToast(okText);
+    ocLoad(true); loadChannels(true);
+  }).catch(e=>{
+    state.ocBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    state.ocErr=e&&e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
+reg('ocOnline', next=>{
+  if(state.ocBusy||!mCanKnown(X12_OC_KEYS)) return;
+  const open=String(next)==='1';
+  state.ask={
+    title: open?T('Open the online store?','开启线上商城？'):T('Close the online store?','关闭线上商城？'),
+    // The online store is the storefront the shop owns — the mini app and the
+    // web store share it (routes/retail.js loadStoreStatus) — and nothing else.
+    body: open?T('The mini app and web store take new orders again, wherever their own channel is open.',
+                 '小程序与网店将在各自渠道开启的门店恢复接新订单。')
+              :T('The mini app and web store stop taking new orders, and shoppers there see that the store is closed. Every other channel and the counter till keep selling, and orders already placed are not affected.',
+                 '小程序与网店将停止接新订单，顾客会看到商城已关闭。其他渠道与门店收银照常营业，已下单的订单不受影响。'),
+    confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
+    run:()=>ocWrite('online','/store-status/online',{open},
+      open?T('Online store is open','线上商城已开启'):T('Online store is closed','线上商城已关闭'))};
+  render();
+});
+reg('ocMaster', next=>{
+  if(state.ocBusy||!mCanKnown(X12_OC_KEYS)) return;
+  const open=String(next)==='1';
+  state.ask={
+    title: open?T('Open everything?','全部营业？'):T('Close everything?','全部关闭？'),
+    /* What the server's master does (routes/meituan-admin.js
+       /store-status/master): the online-store flag, every Meituan shop through
+       the sync daemon, and every shop's fulfilment flag — which is what the
+       routing, pickup and the counter till all obey. It does NOT touch a
+       channel's own cell, so on the way back up a channel closed at a shop on
+       its own, or by that shop's switch, stays closed. Said, because "Open
+       everything" reads as if it would. */
+    body: open?T('The online store opens, every shop takes orders and counter sales again, and every Meituan shop opens within about a minute. Any other channel closed at a shop — on its own or with the shop’s switch — stays closed; open those below.',
+                 '线上商城将开启，所有门店恢复接单与门店收银，美团各门店约一分钟内开启。在门店单独关闭（或随门店开关关闭）的其他渠道保持关闭，请在下方开启。')
+              :T('The online store closes, every shop stops taking orders on every channel and at the counter till, and every Meituan shop closes within about a minute. Orders already placed are not affected.',
+                 '线上商城将关闭，所有门店的所有渠道及门店收银停止接单，美团各门店约一分钟内关闭。已下单的订单不受影响。'),
+    confirmLabel: open?T('Open everything','全部营业'):T('Close everything','全部关闭'), danger:!open,
+    run:()=>ocWrite('master','/store-status/master',{open},
+      open?T('Opening every channel','正在开启全部渠道')
+          :T('Closing every channel — marketplaces follow within about a minute','正在关闭全部渠道 — 外卖平台约一分钟内跟随'))};
+  render();
+});
+/* ONE CHANNEL, EVERY STORE — the desktop Sales card's master toggle
+   (csChannelToggle). The desktop asks only before closing; here both ways ask,
+   as every switch on this screen does. Opening never reopens a shop that is
+   closed (§253) — the server skips it and names it, and the toast says which,
+   in the desktop's own words. */
+reg('chanAll', (channel, next)=>{
+  if(state.chanBusy||!mCanKnown(X12_SALES_KEYS)) return;
+  const d=state.chan, c=((d&&d.channels)||[]).find(x=>x.channel===channel); if(!c) return;
+  const open=String(next)==='1';
+  const mt=channel==='meituan';
+  state.ask={
+    title: open?T('Open this channel at every store?','开启所有门店的该渠道？'):T('Close this channel at every store?','关闭所有门店的该渠道？'),
+    body: (open?T('New orders can arrive on this channel again. A shop that is closed stays closed.','该渠道可以重新接单。已关闭的门店保持关闭。')
+               :T('No new orders arrive on this channel at any store. Orders already placed are not affected.','所有门店在此渠道将不再接到新订单。已下单的订单不受影响。'))
+          +(mt?' '+T('Meituan follows within about a minute.','美团约一分钟内跟随。'):''),
+    confirmLabel: open?T('Open channel','开启渠道'):T('Close channel','关闭渠道'), danger:!open,
+    run:()=>{
+      state.chanBusy=channel+'|*'; state.chanErr=null; render();
+      apiWrite('/channel-status/channel',{channel,open},'POST').then(r=>{
+        state.chanBusy=null;
+        const locs=(state.chan&&state.chan.locations)||[];
+        const skipped=((r&&r.skipped)||[]).map(code=>locs.find(l=>l.storeCode===code)||{storeCode:code});
+        showToast(skipped.length
+          ? T('Saved','已保存')+' · '+skipped.map(chanStoreName).join(T(', ','、'))+T(': ','：')+T('Shop closed','门店已关闭')
+          : T('Saved','已保存'));
+        loadChannels(true); if(state.oc) ocLoad(true);
+      }).catch(e=>{
+        state.chanBusy=null;
+        if(String(e&&e.message)==='auth') return;
+        state.chanErr=e&&e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        render();
+      });
+    }};
+  render();
+});
+/* THE MEITUAN AND ELEME CHANNEL SWITCHES. Not the same act as closing, and the
+   confirm has to say so, because the two are easy to confuse and do opposite
+   things to orders:
+     Meituan off  the 外卖 and 闪购 daemons stop pushing stock; queued rows wait
+                  and go out when it is back on. Orders keep coming in and the
+                  shops stay open on Meituan (scripts/meituan-daemon.js,
+                  shangou-daemon.js processStockQueue).
+     Eleme off    the Eleme daemon stops entirely — stock pushes, the order
+                  import and the catalogue read (scripts/eleme-daemon.js main
+                  loop). The shops stay open on Eleme itself. */
+const X12_CH_KEY={meituan:'meituan:sync', eleme:'eleme:sync'};
+function mtCfgLoad(){
+  if(state.mtCfgTried) return;
+  state.mtCfgTried=true;
+  apiRaw('/meituan/config').then(j=>{ state.mtCfg=j||null; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; state.mtCfg=null; render(); });
+}
+function chSwitchOn(ch){
+  const cfg=ch==='meituan'?state.mtCfg:(state.elm&&state.elm.cfg);
+  return cfg&&cfg.success!==false&&typeof cfg.enabled==='boolean'?cfg.enabled:null;
+}
+function chSwitchCard(ch){
+  if(!mCanKnown(X12_CH_KEY[ch])) return '';
+  if(ch==='meituan') mtCfgLoad();
+  const on=chSwitchOn(ch);
+  // A switch whose state did not read is not drawn as if it had: the desktop
+  // reverts to whatever the server says, and with no answer there is nothing
+  // honest to show.
+  if(on==null) return '';
+  const busy=state.chSwBusy===ch;
+  const err=state.chSwErr&&state.chSwErr.ch===ch?state.chSwErr.msg:null;
+  // Off says what is not happening, in the desktop's and this app's own words;
+  // on needs no sentence — the pill says it.
+  const what=on?'':ch==='meituan'
+    ? T('Meituan channel off — nothing will be pushed','美团渠道已关闭 — 将不再推送')
+    : T('Orders are not being imported and stock is not being pushed.','订单未导入，库存也未推送。');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span class="pill" style="background:${on?PILL.success[0]:PILL.muted[0]};color:${on?PILL.success[1]:PILL.muted[1]}">${on?T('Channel on','渠道开启'):T('Channel off','渠道已关闭')}</span>
+      <button class="btn2" ${busy||state.chSwBusy?'disabled':''} onclick="APP.cmd('chSwitch','${ch}',${on?'0':'1'})">${
+        busy?T('Saving…','保存中…'):on?T('Turn off','停用'):T('Turn on','开启')}</button></div>
+    ${what?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${what}</span>`:''}
+    ${err?`<span style="font-size:13px;color:var(--brick-ink)">${err}</span>`:''}</div>`;
+}
+reg('chSwitch', (ch, next)=>{
+  if(state.chSwBusy||!X12_CH_KEY[ch]||!mCanKnown(X12_CH_KEY[ch])) return;
+  const enabled=String(next)==='1';
+  const mt=ch==='meituan';
+  state.ask={
+    title: mt?(enabled?T('Turn the Meituan channel on?','开启美团渠道？'):T('Turn the Meituan channel off?','停用美团渠道？'))
+             :(enabled?T('Turn the Eleme channel on?','开启饿了么渠道？'):T('Turn the Eleme channel off?','停用饿了么渠道？')),
+    body: mt
+      ? (enabled?T('Stock pushes to Meituan start again, beginning with the changes that waited while it was off.',
+                   '恢复向美团推送库存，先发送停用期间排队的变更。')
+                :T('Stock stops being pushed to Meituan, at every shop and on 闪购 too. Changes wait in the queue and go out when it is back on. Meituan orders keep coming in and your shops stay open on Meituan — to stop orders, close Meituan at your stores instead.',
+                   '将停止向美团推送库存（所有门店，含闪购）。变更会在队列中等待，重新开启后发送。美团订单照常进来，门店在美团上保持营业 — 如需停止接单，请改为在门店关闭美团。'))
+      : (enabled?T('Eleme starts syncing again: stock is pushed, Eleme orders are brought in and the listing catalogue is read.',
+                   '饿了么恢复同步：推送库存、导入饿了么订单并读取商品目录。')
+                :T('Eleme stops syncing altogether: no stock is pushed, no Eleme orders are brought in — not even ones already placed — and the listing catalogue stops refreshing, until it is turned back on. Your shops stay open on Eleme itself, so customers can still order there.',
+                   '饿了么将完全停止同步：不再推送库存，也不再导入饿了么订单（包括已下单的订单），商品目录也停止刷新，直到重新开启。门店在饿了么平台上仍然营业，顾客仍可下单。')),
+    confirmLabel: enabled?T('Turn on','开启'):T('Turn off','停用'), danger:!enabled,
+    run:()=>{
+      state.chSwBusy=ch; state.chSwErr=null; render();
+      apiWrite('/'+ch+'/enable',{enabled},'POST').then(()=>{
+        state.chSwBusy=null;
+        if(mt){ state.mtCfg=Object.assign({},state.mtCfg||{},{success:true,enabled}); x8MtStatus(); }
+        else { state.elm.cfg=Object.assign({},state.elm.cfg||{},{success:true,enabled}); state.elm.tried=false; }
+        showToast(mt?(enabled?T('Meituan channel on','美团渠道已开启'):T('Meituan channel off — nothing will be pushed','美团渠道已关闭 — 将不再推送'))
+                    :(enabled?T('Channel on','渠道开启'):T('Channel off','渠道已关闭')));
+        render();
+      }).catch(e=>{
+        state.chSwBusy=null;
+        if(String(e&&e.message)==='auth') return;
+        // Back to whatever the server still says, as the desktop does.
+        if(mt){ state.mtCfgTried=false; } else { state.elm.tried=false; }
+        state.chSwErr={ch, msg:e&&e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。')};
+        render();
+      });
+    }};
+  render();
+});
 /* The Sales board's own retry, for the read that failed. */
 reg('reloadChannels', ()=>{ state.chanTried=false; state.chanLoadErr=null; render(); loadChannels(true); });
 /* Holiday mode, one direction. See the comment on the button in screenDelivery
@@ -8107,10 +8367,10 @@ const CHAN_META={
    the switch did not. It is the most phone-shaped write in the app: you are
    standing in a slammed kitchen and you want Meituan off at Tianhe.
 
-   PER STORE, never the whole channel. The endpoint has both — /channel-status/cell
-   and /channel-status/channel — and only the first is here, because the second
-   stops orders arriving everywhere on one tap and a thumb on a phone is not
-   the place for that. Closing a channel outright stays on the desktop.
+   Per store first, and the whole channel last. The rows write
+   /channel-status/cell; the button under them writes /channel-status/channel,
+   which stops orders arriving everywhere on one tap — held back from the phone
+   until §326.2 brought it over behind its own confirm (§325 X12, chanAll).
 
    The confirm names what stops and what does not, because "closed" is easy to
    read as "cancelled": orders already placed are untouched either way. */
@@ -8122,6 +8382,13 @@ function sheetChannel(){
   const m=CHAN_META[key]; if(!c||!m) return '';
   const cells=c.cells||[];
   const open=cells.filter(x=>x.open).length;
+  /* §325 X12 — the whole channel, every store: the desktop card's own toggle.
+     Close while any store is open, open once none is, as the desktop decides. */
+  const allBusy=state.chanBusy===key+'|*';
+  const allBtn=cells.length&&mCanKnown(X12_SALES_KEYS)
+    ? `<button class="btn2" style="width:100%;${open?'color:var(--brick-ink)':''}" ${state.chanBusy?'disabled':''} onclick="APP.cmd('chanAll','${escAttr(key)}',${open?'0':'1'})">${
+        allBusy?T('Saving…','保存中…'):open?T('Close channel','关闭渠道'):T('Open channel','开启渠道')}</button>`
+    : '';
   return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('closeChannel')"></div>
    <div class="sheet" style="top:140px;z-index:46;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
@@ -8164,7 +8431,7 @@ function sheetChannel(){
        ${m.mirror&&canRoute('mirror_'+m.mirror)?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
          m.mirror==='meituan'?T('View orders from Meituan','查看美团订单')
          :m.mirror==='eleme'?T('View Eleme sync','查看饿了么同步'):T('View pickups','查看提货记录')}</button>`:''}
-       ${noteBar(T('Closing a channel everywhere at once is on desktop.','一次性关闭整个渠道请在电脑端操作。'))}
+       ${allBtn}
      </div></div>`;
 }
 function statusSales(){
@@ -8211,6 +8478,7 @@ function screenSales(){
     <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
       <span style="width:8px;height:8px;border-radius:50%;background:var(--${head.sev==='sage'?'sage':'amber'});flex:none"></span>
       <span style="font-size:14px;font-weight:500;min-width:0">${head.text}</span></div>
+    ${ocCard()/* §325 X12 — the online store and everything at once */}
     ${/* THE SHOP SWITCH, which this screen did not have at all. The channel
          cards below it are per-channel-per-shop, and a shop-wide close beats
          every one of them — so the phone could show six channels closed at a
@@ -8290,13 +8558,11 @@ function screenSales(){
             (!notIntegrated&&cells.length)?T('Open or close','开关门店'):T('View','查看')
             }<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>`:''}</div>`:''}
       </${Tag}>`;}).join('')}
-    ${/* This used to read "Opening and closing a channel is on desktop", which
-         had stopped being true: the card above it opens a sheet whose rows do
-         exactly that, per shop. A footer that denies the control directly
-         above it teaches an operator to stop trying. What IS still desktop-only
-         is the whole-channel flip — every shop at once — and the sheet's own
-         note already says so, where it applies. */''}
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Closing a whole channel everywhere is on desktop','一次性关闭整个渠道在电脑端')}</div>
+    ${/* This used to read "Opening and closing a channel is on desktop", and
+         then "Closing a whole channel everywhere is on desktop". Neither is true
+         now: the rows open and close per shop, and since §325 X12 the sheet's
+         own button flips the whole channel. A footer that denies the control
+         directly above it teaches an operator to stop trying, so it is gone. */''}
   </div>`;
 }
 
@@ -27815,7 +28081,7 @@ function gzFlaggedBlock(){
 function mirrorScreen(which,note){
   const rows=(state.mirror&&state.mirror[which])||null;
   if(!rows&&state.mirrorLoading!==which&&!state.mirrorTried){ /* first paint kicks the load */ }
-  const mt = which==='meituan' ? mtHealthCard()+x8MtCard() : '';   // §325 X8a — and its upkeep
+  const mt = which==='meituan' ? chSwitchCard('meituan')+mtHealthCard()+x8MtCard() : '';   // §325 X8a — and its upkeep; X12 — its channel switch
   const gz = which==='gzgrocery'
     ? `${state.gzErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -28484,6 +28750,7 @@ function screenEleme(){
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${String(e.err)}</span></div>`:''}
     ${head}
+    ${chSwitchCard('eleme')/* §325 X12 — the channel switch */}
     ${x8ElCard()/* §325 X8a — Push all stock, and each store's Sync from */}
     ${stores.length?`<div><div class="eyebrow" style="padding:2px 4px 10px">${T('Stores','门店')}</div><div class="list">${storeRows}</div></div>`:''}
     ${elmLog(T('Stock pushes','库存推送'),e.st.recentStock||[],elmStockRow,stores)}
@@ -41416,6 +41683,12 @@ function mCan(v){
   const has=k=>state.caps ? state.caps.indexOf(k)!==-1 : !MCAN_MONEY_ONLY.has(k);
   return Array.isArray(v) ? v.some(has) : has(v);
 }
+/* §325 X12 — FAIL CLOSED WHILE THE KEYS ARE LOADING. mCan treats unknown caps
+   as allowed for everything but money (§301), which is right for a screen and
+   wrong for a switch that stops orders everywhere: drawn before /me answers, it
+   is a button the server may refuse a second later. These controls ask this
+   instead, so they appear only once the operator's keys are known to hold. */
+function mCanKnown(v){ return Array.isArray(state.caps) && mCan(v); }
 function canRoute(k){
   /* THE TILL NEEDS BOTH CAPS, and it is the only route that does. Receiving's
      note in ROUTE_CAP makes the argument: a screen whose entire purpose is the

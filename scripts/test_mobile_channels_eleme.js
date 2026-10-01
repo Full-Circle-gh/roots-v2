@@ -87,6 +87,7 @@ function mk(opts = {}) {
     push: (r) => { calls.pushed.push(r); },
     recapNoMoney: () => false, featOn: () => true,
     x8ElCard: () => '',   // §325 X8a's upkeep card has its own suite (test_mobile_channels_upkeep.js)
+    chSwitchCard: () => '',   // §325 X12's channel switch has its own suite (test_mobile_order_stopping.js)
     tdWhen, _tdL: () => ({ lang: ctx.LANG === 'en' ? 'en' : 'cn' }),
     api: (p) => new Promise((res, rej) => { calls.api.push({ p, res, rej }); }),
     apiRaw: (p) => new Promise((res, rej) => { calls.api.push({ p, res, rej }); }),
