@@ -1517,6 +1517,9 @@ cuApplyThemeIcon();
     'To recover': '待收回',
     'Refunded': '已退款',
     'Refund queue': '退款队列',
+    // §412.7 — the Drafts chip (#ord-chip-drafts) gains its Chinese, the
+    // drafts view's own word (草稿未能加载).
+    'Drafts': '草稿',
     'Refresh': '刷新',
     'Bulk attach tracking': '批量绑定运单号',
     'Include blocked': '包括已封禁',

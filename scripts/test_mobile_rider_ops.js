@@ -373,7 +373,7 @@ async function main() {
       ['cheapest', '最便宜'], ['Dispatch courier', '发起配送'], ['Pick at least one courier', '请至少选择一个运力'], ['Dispatch', '发起配送'], ['Dispatching…', '发单中…'],
       ['Courier dispatched', '已发起配送'], ['first to accept wins', '谁先接单谁配送'], ['Dispatched', '已发单'], ['Qingyun balance too low — top up first', '青云余额不足,请先充值'],
       ['A courier is already on this order', '该订单已呼叫运力'], ['Dispatch failed', '发起配送失败'],
-      ['Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.', '修正收货地址(修改收货信息或转为中文地址)后会自动重试,也可点击重新发单。'],
+      ['Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.', '修正收货地址(修改收货地址或转为中文地址)后会自动重试,也可点击重新发单。'],
       ['The address is checked. Compare couriers below when you want a rider — nothing is charged until you dispatch.', '地址已核对。需要骑手时点击下方“查看运力比价” — 发起配送前不产生费用。'],
       ['A courier is already on this one. To collect it somewhere else, cancel it in the Qingyun app first.', '已呼叫运力。如需改到其他门店取货,请先在青云 App 取消该单。']]) {
       const found = [`cuT('${en}', '${zh}')`, `cuT("${en}", '${zh}')`, `'${en}', '${zh}'`, `"${en}", '${zh}'`].some((x) => DESKN.includes(x));

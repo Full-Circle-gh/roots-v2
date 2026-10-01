@@ -81,7 +81,7 @@ section('1 · the copy taken before a record goes');
   is(rows.length, 1, 'and it appears in what was recently deleted');
   is(rows[0].label, '天河区', 'named the way a person would recognise it');
   is(rows[0].kindEn, 'Delivery zone', 'and said to be what it is, in both languages');
-  is(rows[0].kindCn, '配送区域', '…in Chinese too');
+  is(rows[0].kindCn, '配送区', '…in Chinese too');
   is(rows[0].deleted_by, 'mei', 'with who removed it');
 }
 

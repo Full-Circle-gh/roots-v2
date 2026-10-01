@@ -298,7 +298,7 @@ section('6 · locating every store and address');
 section('7 · recently deleted');
 {
   const BIN = [
-    { id: 7, kind: 'delivery_zone', record_id: 3, label: '天河区', kindEn: 'Delivery zone', kindCn: '配送区域', deleted_at: '2026-09-29 10:00:00', deleted_by: 'mia' },
+    { id: 7, kind: 'delivery_zone', record_id: 3, label: '天河区', kindEn: 'Delivery zone', kindCn: '配送区', deleted_at: '2026-09-29 10:00:00', deleted_by: 'mia' },
     { id: 8, kind: 'finance_out', record_id: 44, label: '2026-09-28 · Rent', kindEn: 'Money out', kindCn: '支出', deleted_at: '2026-09-28 10:00:00', deleted_by: null },
     { id: 9, kind: 'voucher', record_id: 5, label: 'WELCOME10', kindEn: 'Coupon', kindCn: '优惠券', deleted_at: '2026-09-27 10:00:00', deleted_by: 'ash' },
   ];

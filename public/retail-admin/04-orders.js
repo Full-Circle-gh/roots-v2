@@ -4996,7 +4996,7 @@ function renderQyPointSurface(o, sf) {
         <div id="qp-resched-${o.id}"></div>
         <div class="qp-actions" id="qp-actions-${o.id}">
           <button class="btn btn-primary" type="button" onclick="qpOpenReschedule(${o.id}, this)">${cuT('Reschedule delivery', '改期配送')}</button>
-          <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货信息')}</button>
+          <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货地址')}</button>
         </div>
       </div>`;
   }
@@ -5046,7 +5046,7 @@ function renderQyPointSurface(o, sf) {
       <div class="qp-actions">
         <button class="btn btn-primary" type="button" id="qp-go-${o.id}" disabled
                 onclick="qpConfirmPoint(${o.id}, this)">${cuT('Place the point', '请标记配送点')}</button>
-        <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货信息')}</button>
+        <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货地址')}</button>
         <span class="qp-hint" id="qp-hint-${o.id}">${cuT('Tap the map where the door is.', '在地图上点选收货位置。')}</span>
       </div>
     </div>`;
@@ -5131,7 +5131,7 @@ function renderQyCandidateSurface(o, sf) {
       </div>` : ''}
 
       <div class="qp-actions">
-        <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货信息')}</button>
+        <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货地址')}</button>
       </div>
     </div>`;
 }
@@ -5720,7 +5720,7 @@ function renderQyShipFrom(o) {
           ${refused
             ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
                 'Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.',
-                '修正收货地址(修改收货信息或转为中文地址)后会自动重试,也可点击重新发单。')}</div>`
+                '修正收货地址(修改收货地址或转为中文地址)后会自动重试,也可点击重新发单。')}</div>`
             : ''}
         </div>
       </div>`;

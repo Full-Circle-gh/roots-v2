@@ -151,7 +151,7 @@ async function main() {
     for (const c of ["APP.cmd('dlvHoliday')", "APP.cmd('dlvLive','cutoff')", "APP.cmd('dlvFees')", "APP.cmd('dlvLive','pickup')",
       "APP.cmd('dlvDefaultZone')", "APP.cmd('dlvLive','preorder')", "APP.cmd('dlvLive','kitchen')"]) has(h, c, 'a row opens ' + c);
     const z = mk({ lang: 'zh' }).ctx.dlvSettingsCard(true, 20);
-    for (const w of ['假日模式', '当日截单', '费用与起送', '到店自提', '其他地区 — 默认配送', '预订', '厨房地址(顾客可见)', '批量绑定运单号', '箱贴打印']) has(z, w, 'Chinese: ' + w);
+    for (const w of ['假期模式', '当日截单', '费用与起送', '到店自提', '其他地区 — 默认配送', '预订', '厨房地址(顾客可见)', '批量绑定运单号', '箱贴打印']) has(z, w, 'Chinese: ' + w);
   }
 
   console.log('\n3 · Holiday mode ON: the message in both languages, then a strong confirm');
