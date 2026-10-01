@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.461
+# Tacet shared-core consolidation — decisions record, v4.462
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-01 · v4.462 — **§381 AMENDED · THE PHONE ASKS THE SAME QUESTION — ON ASH'S WORD** (*"do the phone"*). The phone's JD label sheet now offers ground on an air parcel and asks first, with the desktop's words. See §381 point 9.
 
 2026-10-01 · v4.461 — **§381 · AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST — DECIDED BY ASH:** *"there should always be an option to select land transport if user want and it comes with a warning"*. The mirror of the 2026-09-16 land→air warning: an air parcel's JD label dialog now lists both ground services after air, and picking one asks on the click. The parcel's mode is never written.
 
@@ -26118,9 +26120,13 @@ with a warning I thought we have that"*.
 8. **Held by** `scripts/test_jd_label_air_option.js` section 6.
    `scripts/test_jd_waybill_land_default.js` and
    `scripts/test_chengdu_air_sf_only.js` are unchanged and still pass.
-9. **Not on the phone yet.** §380's phone JD label, merged the same day, copies
-   the old desktop rule: a plain air parcel gets no list (`isAir?[]` in
-   `public/m.html`). That is a follow-up, kept out of this change.
+9. **The phone, amended the same day on Ash's word** (*"do the phone"*). §380's
+   phone JD label had copied the old rule (`isAir?[]` in `jdPlan`,
+   `public/m.html`). It now lists the same three rows on an air parcel and asks
+   the same question on the pick (`jdSvc`), with the desktop's words copied
+   whole. Same exceptions: no question into Fujian / Guangxi, and none between
+   the two ground rows. Held by `scripts/test_mobile_jd_waybill.js`, section
+   2b. That suite also checks that each phone string is the desktop's own.
 
 ## §382 — A PRODUCT'S TWO BUNDLES ARE EDITED FROM THE PHONE
 

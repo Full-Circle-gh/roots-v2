@@ -11941,6 +11941,12 @@ them.
 **English "ground", Chinese 陆运.** The rows say `Fresh · Ground · 生鲜 · 陆运`.
 The question uses the same pair as the row being picked, so the two read alike.
 
+**On the phone (2026-10-01, nothing composed).** The phone's JD label sheet (`jdSvc`, `public/m.html`)
+asks the same question with every string copied whole from the desktop:
+`空运包裹`, both bodies, `仍要生成陆运运单` and `暂不`. Nothing new was composed.
+`scripts/test_mobile_jd_waybill.js` fails if the phone's words drift from the
+desktop's.
+
 ## A product's two bundles, edited on the phone (§382)
 
 **Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
