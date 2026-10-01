@@ -1047,6 +1047,9 @@ const state = {
      have to survive the trip there and back. prodStockReady speaks for the size
      currently on screen. */
   prodStock:{}, prodStockPid:null, prodStockReady:false, prodBusy:false, prodErr:null,
+  /* §325 PD14 — the catalogue's ticks (null = not selecting; else member ids)
+     and the bulk write in flight / its shortfall, which stays on the bar. */
+  prodSel:null, prodBulk:{busy:null,err:null},
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
@@ -17059,6 +17062,8 @@ function screenProductCatalogue(){
        view (paExportCsv's own rule: a download next to a search box must not
        quietly hand over part of a list). Its own capability, products:export —
        the file carries prices, and cost where the server allows it. */
+    /* §325 PD14 — Select / Done, the Media screen's pair, arms the bulk bar. */
+    const sel=prodBulkAny()?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('prodSelect')">${Array.isArray(state.prodSel)?T('Done','完成'):T('Select','选择')}</button>`:'';
     const exp=mCan('products:export')
       ? `<button class="btn2" style="width:auto;flex:none;padding:0 14px;gap:6px" onclick="APP.cmd('prodExport')">${ic('download',16)}${T('Export CSV','导出')}</button>` : '';
     return `<div>
@@ -17066,7 +17071,7 @@ function screenProductCatalogue(){
         <div style="flex:1;min-width:0">${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
           oninput="APP.cmd('prodSearch',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${exp}${countButton()}</div>
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${sel}${exp}${countButton()}</div>
       <div id="mProdBody">${prodBodyHtml()}</div>
     </div>`;
 }
@@ -17151,6 +17156,7 @@ function prodBodyHtml(){
         ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
         <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
+        ${prodBulkBar()}
       ${state.catalogueLoading&&!rows.length?`<div style="padding:32px 0;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
         ${partialBar}
         ${!state.catalogueLoading&&!rows.length&&narrowed?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 24px;text-align:center">
@@ -37002,6 +37008,7 @@ function screenProductEdit(){
     ${card(T('Free of','不含'),PE_FREE_OF.map(([id,en,zh])=>tick(d.free.indexOf(id)>=0,`APP.cmd('peFree','${escAttr(id)}')`,T(en,zh))).join('')
       +(d.freeExtra.length?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(d.freeExtra.join(', '))}</span>`:''))}
     ${card(T('Internal notes','内部备注'),`<textarea rows="3" style="resize:none" oninput="APP.cmd('peField','notes',this.value)">${escAttr(d.notes)}</textarea>`)}
+    ${peDeleteRow()}
   </div>${footBar(`<div id="mPeFoot" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;justify-content:flex-end">${peFootHtml()}</div>`,'mPeBar')}`;
 }
 /* The sheet's door. The desktop hides the whole editor from an upstream-
@@ -37573,6 +37580,189 @@ reg('peNew', ()=>{
   const t=state.stack[state.stack.length-1];
   if(t&&t.route==='productedit') t.pid=null;
   render();
+});
+/* ==========================================================================
+   §325 PD14 — BULK EDITS, BULK DELETE, AND DELETING ONE PRODUCT
+   (desktop: 09-products.js paRenderBulkBar / paToggleSelect /
+    paSelectAllVisible / paBulkApply / paBulkDelete, and pdDelete)
+   --------------------------------------------------------------------------
+   Select on the catalogue arms ticking (the Media screen's Select / Done): a
+   card's tap then ticks it, and a family ticks as a block — every size, as the
+   desktop's row does. The bar says how many, selects or clears what the
+   filters show, and offers the desktop's five menus, each change behind the
+   desktop's own confirm ("<what> — N product(s)?", Apply):
+     Shop       Turn on / Turn off — ONE POST /products/family-publish
+                {ids, on}, never a PATCH per size (§294: a size kept off on
+                purpose stays off);
+     Badge      None / Auto / NEW / POP / SALE / HOT — PATCH {tags};
+     Shipping   Air + Land / Air only / Land only — PATCH {ship_modes};
+     More       markets on/off — PATCH {is_market}; fresh batch on/off —
+                PATCH {is_batch_made};
+     Delete     the desktop's danger confirm (removes them and frees their
+                SKUs; cannot be undone), then DELETE /products/:id each.
+   One PATCH per product, one at a time, in the order ticked — the desktop's
+   loop. The bar says Working… and every control waits; all done is a toast,
+   anything short of that is written on the bar and stays, with the refusal's
+   own words when the server refused. The ticks stay for a second change and
+   go after a delete. products:edit for the four menus, products:delete for
+   Delete (not offered where the catalogue is kept upstream, which the server
+   refuses).
+
+   ONE PRODUCT is deleted from its Details screen, behind pdDelete's confirm
+   ("Delete this product? · It will be hidden from the shop."), with
+   DELETE /products/:id; the screen closes onto the catalogue it is gone from. */
+function prodBulkCanEdit(){ return prodCanEdit(); }
+function prodBulkCanDelete(){ return mCan('products:delete')&&state.catalogMode!=='upstream'; }
+function prodBulkAny(){ return prodBulkCanEdit()||prodBulkCanDelete(); }
+/* Every member id of what the filters show — the desktop's PA_VISIBLE_MEMBER_IDS. */
+function prodVisibleIds(){ const out=[]; prodUnits(prodFiltered()).forEach(u=>(u.group?u.members:[u.p]).forEach(m=>out.push(Number(m._id)))); return out; }
+const PROD_BULK={
+  'shop-on':[{is_published:1},'Publish to the shop','上架到店面'],
+  'shop-off':[{is_published:0},'Hide from the shop','从店面下架'],
+  'badge-none':[{tags:''},'Clear the shop-card badge','清除店面标签'],
+  'badge-auto':[{tags:'auto'},'Set badge to Auto (by sales)','设置标签为自动(按销量)'],
+  'badge-new':[{tags:'new'},'Set badge to NEW','设置标签为 NEW · 新品'],
+  'badge-pop':[{tags:'pop'},'Set badge to POP','设置标签为 POP · 热门'],
+  'badge-sale':[{tags:'sale'},'Set badge to SALE','设置标签为 SALE · 特价'],
+  'badge-hot':[{tags:'hot'},'Set badge to HOT','设置标签为 HOT · 推荐'],
+  'ship-both':[{ship_modes:'air,land'},'Set shipping to Air + Land','设置配送为空运+陆运'],
+  'ship-air':[{ship_modes:'air'},'Set shipping to Air only','设置配送为仅空运'],
+  'ship-land':[{ship_modes:'land'},'Set shipping to Land only','设置配送为仅陆运'],
+  'mkt-on':[{is_market:1},'Mark as sold at markets','标记为市集销售'],
+  'mkt-off':[{is_market:0},'Unmark sold at markets','取消市集销售'],
+  'batch-on':[{is_batch_made:1},'Mark as made fresh in batches','标记为分批现做'],
+  'batch-off':[{is_batch_made:0},'Unmark made fresh in batches','取消分批现做'],
+};
+/* The desktop's menus, item for item. */
+const PROD_BULK_MENUS={
+  shop:[['Shop','上架'],[['shop-on','Turn on','上架'],['shop-off','Turn off','下架']]],
+  badge:[['Badge','标签'],[['badge-none','None','无'],['badge-auto','Auto','自动'],['badge-new','NEW','NEW'],['badge-pop','POP','POP'],['badge-sale','SALE','SALE'],['badge-hot','HOT','HOT']]],
+  ship:[['Shipping','配送'],[['ship-both','Air + Land','空运+陆运'],['ship-air','Air only','仅空运'],['ship-land','Land only','仅陆运']]],
+  more:[['More','更多'],[['mkt-on','Show in markets','在市集显示'],['mkt-off','Hide from markets','从市集隐藏'],['batch-on','Mark fresh batch','标记现做'],['batch-off','Not fresh batch','取消现做']]],
+};
+function prodBulkBar(){
+  const sel=state.prodSel; if(!Array.isArray(sel)) return '';
+  const b=state.prodBulk, busy=!!b.busy, n=sel.length, dis=busy?'disabled':'';
+  const vis=prodVisibleIds(), allVis=vis.length&&vis.every(id=>sel.indexOf(id)>=0);
+  const btn=(cmd,label,extra)=>`<button class="btn2" style="width:auto;flex:none;padding:0 12px;min-height:36px;font-size:13.5px;${extra||''}" ${dis} onclick="${cmd}">${label}</button>`;
+  const menus=prodBulkCanEdit()&&n?Object.keys(PROD_BULK_MENUS).map(k=>btn(`APP.cmd('prodBulkMenu','${k}')`,T(...PROD_BULK_MENUS[k][0]))).join(''):'';
+  const del=prodBulkCanDelete()&&n?btn(`APP.cmd('prodBulkDeleteAsk')`,T('Delete','删除'),'color:var(--brick-ink);border-color:var(--brick-ink)'):'';
+  return `<div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <span class="num" style="font-size:13px;flex:1;min-width:80px">${T(n+' selected','已选 '+n+' 件')}</span>
+      ${vis.length?btn(`APP.cmd('prodSelAll',${allVis?0:1})`,allVis?T('Clear page','清空本页'):T('Select all '+vis.length,'全选 '+vis.length)):''}
+      ${n?btn(`APP.cmd('prodSelClear')`,T('Clear','清除')):''}</div>
+    ${menus||del?`<div class="hscroll" style="display:flex;gap:8px">${menus}${del}</div>`:''}
+    ${busy?`<span style="font-size:13px;color:var(--text-secondary)">${T('Working…','处理中…')}</span>`:''}
+    ${b.err?`<span style="font-size:13.5px;color:var(--brick-ink)">${escAttr(b.err)}</span>`:''}</div>`;
+}
+reg('prodSelect', ()=>{
+  if(!prodBulkAny()||state.prodBulk.busy) return;
+  state.prodSel=Array.isArray(state.prodSel)?null:[]; state.prodBulk.err=null; render();
+});
+/* paToggleSelect: all in → all out; otherwise all in, so a half-ticked family flips on. */
+reg('prodSelToggle', ids=>{
+  const sel=state.prodSel; if(!Array.isArray(sel)||state.prodBulk.busy) return;
+  const list=String(ids).split(',').map(Number).filter(Boolean);
+  const allIn=list.length&&list.every(id=>sel.indexOf(id)>=0);
+  state.prodSel=allIn?sel.filter(id=>list.indexOf(id)<0):sel.concat(list.filter(id=>sel.indexOf(id)<0));
+  render();
+});
+reg('prodSelAll', on=>{
+  const sel=state.prodSel; if(!Array.isArray(sel)||state.prodBulk.busy) return;
+  const vis=prodVisibleIds();
+  state.prodSel=Number(on)?sel.concat(vis.filter(id=>sel.indexOf(id)<0)):sel.filter(id=>vis.indexOf(id)<0);
+  render();
+});
+reg('prodSelClear', ()=>{ if(!Array.isArray(state.prodSel)||state.prodBulk.busy) return; state.prodSel=[]; state.prodBulk.err=null; render(); });
+reg('prodBulkMenu', k=>{
+  const m=PROD_BULK_MENUS[k]; if(!m||!prodBulkCanEdit()||state.prodBulk.busy||!(state.prodSel||[]).length) return;
+  state.ask={title:T(...m[0]),options:m[1].map(([key,en,zh])=>({key,label:T(en,zh)})),run:key=>CMD.prodBulkAsk(key)};
+  render();
+});
+/* paBulkApply's confirm: what, and how many. */
+reg('prodBulkAsk', kind=>{
+  const d=PROD_BULK[kind], ids=(state.prodSel||[]).slice();
+  if(!d||!ids.length||!prodBulkCanEdit()||state.prodBulk.busy) return;
+  const what=T(d[1],d[2]);
+  state.ask={title:T(what+' — '+ids.length+' product(s)?',what+' — '+ids.length+' 件商品?'),confirmLabel:T('Apply','应用'),
+    run:()=>prodBulkRun(kind,ids)};
+  render();
+});
+reg('prodBulkDeleteAsk', ()=>{
+  const ids=(state.prodSel||[]).slice(); if(!ids.length||!prodBulkCanDelete()||state.prodBulk.busy) return;
+  state.ask={title:T('Delete '+ids.length+' product(s)?','删除 '+ids.length+' 件商品?'),
+    body:T('This removes them from the catalogue and frees their SKUs. This cannot be undone.','将从商品库移除并释放其 SKU。此操作无法撤销。'),
+    confirmLabel:T('Delete','删除'), danger:true, run:()=>prodBulkRun('delete',ids)};
+  render();
+});
+/* The writes, one at a time, counted as the desktop counts them. */
+async function prodBulkRun(kind,ids){
+  const b=state.prodBulk; if(b.busy) return;
+  const del=kind==='delete', d=PROD_BULK[kind];
+  if(!del&&!d) return;
+  b.busy=kind; b.err=null; render();
+  let done=0, fail=0, why=null, out=false;
+  const miss=e=>{ fail++; if(String(e&&e.message)==='auth') out=true; else if(!why&&e&&e.refused) why=T(...e.words); };
+  if(kind==='shop-on'||kind==='shop-off'){
+    try{ await apiWrite('/products/family-publish',{ids,on:kind==='shop-on'},'POST'); done=ids.length; }
+    catch(e){ miss(e); fail=ids.length; }
+  }else{
+    for(const id of ids){
+      if(out) break;
+      try{ await apiWrite('/products/'+id,del?{}:d[0],del?'DELETE':'PATCH'); done++; }
+      catch(e){ miss(e); }
+    }
+  }
+  b.busy=null;
+  if(out) return;
+  if(fail){
+    b.err=(del?T(done+' deleted, '+fail+' failed',done+' 已删除,'+fail+' 失败'):T(done+' done, '+fail+' failed',done+' 成功,'+fail+' 失败'))+(why?' — '+why:'');
+  }else showToast(del?T('Deleted '+done+' ✓','已删除 '+done+' 件 ✓'):T('Updated '+done+' ✓','已更新 '+done+' 件 ✓'));
+  if(del){
+    // What went is gone from the shelf at once; the catalogue read confirms it.
+    if(done) DB.products=(DB.products||[]).filter(x=>{ const i=ids.indexOf(Number(x._id)); return i<0; });
+    if(!fail) state.prodSel=[];
+  }
+  try{ loadCatalogue(true); }catch(x){}
+  render();
+}
+/* pdDelete: one product, from its Details screen. */
+function peDeleteRow(){
+  const e=state.pe; if(!e||e.pid==null||!prodBulkCanDelete()) return '';
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
+    ${e.delErr?`<span style="font-size:13.5px;color:var(--brick-ink)">${escAttr(e.delErr)}</span>`:''}
+    <button class="btn2" style="color:var(--brick-ink);border-color:var(--brick-ink)" ${e.delBusy?'disabled':''} onclick="APP.cmd('peDeleteAsk')">${e.delBusy?T('Deleting…','删除中…'):T('Delete','删除')}</button></div>`;
+}
+reg('peDeleteAsk', ()=>{
+  const e=state.pe; if(!e||e.pid==null||e.delBusy||!prodBulkCanDelete()) return;
+  state.ask={title:T('Delete this product?','删除此产品?'),body:T('It will be hidden from the shop.','将从店面隐藏。'),
+    confirmLabel:T('Delete','删除'),danger:true,run:()=>CMD.peDelete()};
+  render();
+});
+reg('peDelete', ()=>{
+  const e=state.pe; if(!e||e.pid==null||e.delBusy||!prodBulkCanDelete()) return;
+  const pid=e.pid;
+  // Nothing typed may land on a product after it is gone: the pending edit is dropped, not sent.
+  if(peAuto){ if(peAuto.stop) peAuto.stop(); }
+  e.delBusy=true; e.delErr=null; render();
+  apiWrite('/products/'+pid,{},'DELETE').then(()=>{
+    e.delBusy=false;
+    DB.products=(DB.products||[]).filter(x=>Number(x._id)!==Number(pid));
+    showToast(T('Deleted','已删除'));
+    if(state.pe===e){
+      peAuto=null; state.pe=null;
+      const f=state.stack[state.stack.length-1]; if(f&&f.route==='productedit') f.pid=null;
+      pop();
+    }
+    try{ loadCatalogue(true); }catch(x){}
+  }).catch(err=>{
+    e.delBusy=false;
+    if(String(err&&err.message)==='auth') return;
+    e.delErr=T('Delete failed: ','删除失败:')+(err&&err.refused?T(...err.words):peErrText(err));
+    if(peAuto&&peAuto.touch) peAuto.touch();
+    render();
+  });
 });
 /* ==========================================================================
    §325 PD9 — A PRODUCT'S SIZES, ON THE DETAILS SCREEN
@@ -41733,8 +41923,12 @@ function productCard(u){
   if(u.group) marks.push({t:T(members.length+(members.length===1?' size':' sizes'),members.length+' 规格'),sev:'muted'});
   if(p.bundle) marks.push({t:T('Bundle','套装'),sev:'muted'});
   if(anyOut&&u.group) marks.push({t:T(anyOut+' out of stock',anyOut+' 项缺货'),sev:'amber'});
-  return `<div class="card" style="display:flex;gap:12px;padding:12px;align-items:flex-start">
-    <button onclick="APP.cmd('openProduct','${escAttr(p.sku)}')" style="display:flex;gap:12px;flex:1;min-width:0;text-align:left;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;color:var(--text-primary)">
+  /* §325 PD14 — while selecting, the card ticks (the whole family) instead of opening. */
+  const selecting=Array.isArray(state.prodSel);
+  const ticked=selecting&&members.every(m=>state.prodSel.indexOf(Number(m._id))>=0);
+  const tap=selecting?`APP.cmd('prodSelToggle','${ids}')`:`APP.cmd('openProduct','${escAttr(p.sku)}')`;
+  return `<div class="card" style="display:flex;gap:12px;padding:12px;align-items:flex-start${ticked?';box-shadow:inset 0 0 0 2px var(--text-primary)':''}">
+    <button onclick="${tap}" ${selecting?`aria-pressed="${ticked}"`:''} style="display:flex;gap:12px;flex:1;min-width:0;text-align:left;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;color:var(--text-primary)">
       <span style="width:56px;height:56px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('shopping-bag',22)}</span>
       <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
         <span style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -41747,14 +41941,14 @@ function productCard(u){
           ${marks.map(m=>`<span class="pill" style="background:${m.sev==='amber'?'var(--amber-tint)':PILL.muted[0]};color:${m.sev==='amber'?'var(--amber-ink)':PILL.muted[1]}">${m.t}</span>`).join('')}
           ${u.group?'':`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>`}
         </span></span></button>
-    <span style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;padding-top:2px">
+    ${selecting?`<span style="display:flex;flex:none;padding-top:2px"><span style="width:24px;height:24px;border-radius:7px;border:1.75px solid ${ticked?'var(--text-primary)':'var(--border-strong)'};background:${ticked?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${ticked?ic('check',15,2.5):''}</span></span>`:`<span style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;padding-top:2px">
       ${/* §325 — the switch is products:edit's (POST /products/family-publish);
             without it the column says where the product stands, in the
             switch's own toast words. */''}
       ${!prodCanEdit()?`<span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${on?T('On the shop','已上架'):T('Off the shop','已下架')}</span></span>`
       :`${busy?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">${T('…','…')}</span>`
             :toggle(on,`APP.cmd('toggleShop','${ids}')`)}
-      <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${T('In shop','上架')}</span></span>`}
+      <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${T('In shop','上架')}</span></span>`}`}
   </div>`;
 }
 /* One order for a family, shared by the card and the sheet, so a size cannot be

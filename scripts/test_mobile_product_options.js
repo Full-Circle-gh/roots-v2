@@ -156,6 +156,8 @@ function mk(opts = {}) {
     loadCategories: () => {},
     // The sizes card (§325 PD9) has its own suite, test_mobile_product_sizes.js.
     loadPeSizes: () => {}, peSizesCard: () => '',
+    // The Delete row (§325 PD14): test_mobile_products_bulk.js.
+    peDeleteRow: () => '',
     recapNoMoney: () => ['warehouse', 'dispatch', 'customer_service'].includes(ctx.state.pos),
     featOn: () => true,
     navTabs: () => [],
