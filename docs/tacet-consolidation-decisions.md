@@ -25017,3 +25017,415 @@ desktop's request:
    `scripts/test_mobile_controls_gated.js`: a paid order's More sheet now has
    the hold row first; the case pins it and pins that an account without
    orders:edit does not get it.
+
+## §362 — THE ORDER WRITES THE CUSTOMER FEELS, FROM THE PHONE: TELL THEM AGAIN, EDIT THE SHIP-TO, MAKE THE ADDRESS CHINESE, READ THE SCREENSHOT AGAIN, REPRINT AT A CHOSEN STORE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O7 of the Orders lane. Five writes from the desktop's order drawer
+(`04-orders.js`) that reach the customer or their parcel, each sending the
+desktop's request. All are under `/orders`, so all are `orders:edit`
+(lib/cap-routes.js): each control is drawn for it, and each command refuses
+without it.
+
+1. **Tell the customer again** (ordRenotify). On *Was the customer told*, when
+   a message did not arrive, the button *Try telling them again* sends
+   `POST /orders/:id/renotify`. The sends run on their own and record their
+   own result. So, like the desktop, the phone says it is trying and reads
+   the order again 2.5 seconds later. It never claims the message arrived.
+   Not offered on a mirrored channel's order.
+2. **Edit ship-to** (openEditShipTo). On the *Ship to* card of a delivery
+   order (not pickup, not counter), a sheet with the desktop's fields:
+   recipient, phone, province, city, district, street, unit. It also has
+   *Also update the customer's saved address*, unticked.
+   - It prefills from the order's own address. On an old order that has only
+     the one address line, it splits that line on spaces, as the desktop does.
+   - Blank recipient or blank street is refused before sending.
+   - Sends `POST …/address/apply-chinese` with the recipient, phone and
+     address, plus `save_order:true` and `save_customer`.
+   - When the saved address could not be matched, the toast says so in the
+     desktop's words.
+3. **Make address Chinese** (openAddressToChinese). Shown only while the line
+   still has a Latin letter.
+   - `POST …/address/to-chinese` returns a proposal without writing anything.
+     While it loads the sheet says so; if it fails the sheet says why and
+     offers *Try again*.
+   - The sheet shows the address as entered, the Chinese fields to check, how
+     well the map matched it (building or street in green; district centre,
+     no match, or wrong city in amber) and the place it matched.
+   - Two boxes, both ticked as on the desktop: *Update this order* and *Also
+     fix the customer's saved address*. Unticking both is refused.
+   - Then `POST …/address/apply-chinese` without the recipient, so the
+     recipient stays untouched.
+4. **Read the screenshot again** (rerunAlipayOcr). Under the customer's
+   payment screenshot, only when the read did not match or could not
+   complete: `POST …/alipay-ocr/rerun`.
+   - The new verdict comes back in the desktop's words and the order is read
+     again.
+   - If reading is switched off (`ocr_unavailable`), the phone shows the
+     desktop's own sentence, not "try again".
+   - The server decides whether a match marks the order paid. It never flips
+     an order that is no longer pending.
+5. **Reprint at a chosen store** (reprintOrder, pickReprintStore). Reprint
+   first reads the printers (`GET /printer`, a read open to anyone signed
+   in).
+   - When two or more stores have a printer, it asks *Print at which store?*
+     and sends `POST /orders/:id/print {store_id}`.
+   - With none or one, or if that read fails, it prints the default way
+     (`{}`), and the server picks the order's own store.
+   - A store without a printer gets the desktop's sentence.
+   - **The desktop's guard comes with it** (orderHeadPrint): no receipt for an
+     unpaid, cancelled or refunded order. Reprint no longer appears for those
+     orders in the footer or the More sheet, and the command refuses them.
+6. **Tests.**
+   - `scripts/test_mobile_customer_writes.js` (fast shard, 179 assertions):
+     the server gates; every request's method, path and body; the empty,
+     loading, failed, refused and capability-denied cases; both languages.
+     It also checks that every copied pair exists word for word on the
+     desktop.
+   - `test_mobile_controls_gated.js`: its harness now loads the receipt
+     guard.
+   - `test_mobile_orders_facts.js`: still pins that a reader's told card has
+     no control.
+
+## §363 — THE TEST BUTTONS THAT SEND SOMETHING REAL NEED A PERMISSION
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Seven test endpoints matched no rule (six with buttons, and nuonuo's) in `lib/cap-routes.js`, so anyone signed in
+could make them. S2f recorded them as left open because "they store nothing".
+That reason does not hold: each one sends something real, whether a printed
+ticket, an SMS, a WeCom message or a call to a courier's API. Each is now gated
+by §325.3: the permissions that open the panel its button sits on, which are the
+same permissions as the Save next to it. As with every rule in that file, nothing
+changes for the owner, for a shop with enforcement off, or while an operator's
+permissions cannot be resolved.
+
+1. **Print a test ticket** (`POST /printer/test`) needs one of the Settings tab's
+   permissions: `settings:shop`, `settings:push`, `settings:payments`,
+   `stores:view`, `shipping:config` or `delivery:view`. Its button is drawn into
+   the printer card in Settings → Operations, which has no gate of its own. These
+   are the same permissions as `PUT /printer` (S2f).
+2. **Send a test SMS** (`/integrations/aliyun_sms/test`), **test the WeCom
+   webhook** (`/wecom/test`) and **send a test system alert**
+   (`/system-alerts/test`) need the Settings tab's permissions. All three buttons
+   are in Settings → Push, which has no gate of its own.
+3. **Test the kd100 and JD couriers** (`/integrations/kd100/test`,
+   `/integrations/jd/test`) need `delivery:view`, `delivery:edit` or
+   `shipping:config`. That is what `integrationServiceCap` gives their
+   credentials (S2f). Their buttons are in the Delivery panel's tracking and JD
+   views, which open on `delivery:view`.
+4. **Callers.**
+   - **Desktop:** all six buttons are in `02-settings-ops.js` and
+     `05-marketing.js`, on the panels above.
+   - **Phone (X7, #966).** It presses all six:
+     - the test print (`x7PrnTest`) runs only behind `canRoute('printers')`;
+     - the WeCom, SMS and system-alert tests run only behind
+       `canRoute('pushcfg')`;
+     - the kd100 and JD tests (`x7SvcTest`) run only behind
+       `canRoute('kd100cfg' / 'jdcfg')`.
+   - Each of those phone routes opens on exactly the permissions this step gates
+     on: the Settings tab's six for `printers` and `pushcfg`, and
+     `delivery:view|edit` or `shipping:config` for the two courier routes.
+   - So no phone operator who can press a test loses it. The suite reads both the
+     phone's routes and the server's rules, and fails if they ever drift apart.
+5. **Who is refused now:** only an account that can open neither panel. An
+   orders-only account can no longer print, text or message through these
+   buttons. An account holding only Settings → Push permissions can no longer
+   ping the couriers, whose buttons are on the Delivery panel.
+6. **The nuonuo test** (`POST /integrations/nuonuo/test`) needs `invoices:manage`,
+   the same as its credentials (S2f). No screen presses it, so nobody loses it.
+7. **Tests.** `scripts/test_send_test_gates.js` (fast shard, 60 checks) runs the
+   real router over a scratch database with enforcement on. It checks:
+   - each rule;
+   - each endpoint refused to an account outside its panel, and let through for
+     the panel's permission and for the owner;
+   - enforcement off;
+   - that each button sits on the panel its rule names, and who calls the
+     endpoints;
+   - that each phone test command runs behind a route whose permissions the
+     server admits.
+8. **Nothing composed.** No operator strings were added.
+
+## §364 — LEGAL, FAQ, ABOUT AND THE MINI-APP COPY ARE WRITTEN ON THE PHONE, AND SAVE THEMSELVES
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone showed the Legal pages, the FAQ and the About page read-only, each
+saying it was "written on desktop", and had no screen at all for the mini
+app's short wording (the desktop's Snippets tab). All four are now edited on
+the phone as §279 cards: the desktop's own card names and payloads, on the one
+engine both surfaces load (`public/tacet-autosave.js`), so a version saved on
+either is a version on both and either can put it back.
+
+1. **One phone card for all four** (`cfgCard`, `public/m.html`): the page's
+   whole payload is read from the phone's own draft, held for the desktop's
+   reasons, sent after the pause as `PUT /config?history=<card>`, Undo goes back
+   to where the visit started (`note=undo`), and Version history lists the
+   card's versions and puts one back (`note=restore`). A refusal is said in the
+   card's foot and is never a toast. Leaving the app sends what is pending; the
+   reload guard waits for it. Card names: `legal`, `faq`, `about`,
+   `copy.snippets` — the desktop's.
+2. **Legal**: each document, in both languages, in a live sheet; every save
+   stamps today (the shop's day) on both pages' "updated" line, as the desktop
+   card does. The whole text now shows on the phone; the "clipped — the rest
+   is on desktop" line and note are retired.
+3. **FAQ**: the questions in the order customers see them, numbered; each
+   opens a live sheet (category, question and answer in both languages, id),
+   with Move up / Move down and Remove, which asks first when the question has
+   words. Categories (id, two labels, colour) are added, edited and removed;
+   removing one questions still use asks first and says how many. The
+   desktop's defaults, its ids made from the question (and kept, so later edits
+   do not mint another), and its holds, word for word. An account without the
+   content keys keeps the read-only grouped view.
+4. **About**: the desktop's sections — the top picture, manifesto, stat strip
+   (four at most), founder and photo, IN / OUT lists, sign-off — each section
+   in a live sheet, each list row in its own with Remove. The payload is the
+   desktop's: the loaded content first, so a key no control asks about
+   survives, then every field. The two pictures go to the editor's own upload
+   (`/cms/media`, as the desktop's About does), shrunk on the phone first; a
+   refusal is said on the screen.
+5. **Mini-app copy** gets a phone screen (More → Content → Mini-app copy, on
+   `content:view`, the desktop tab's key): the desktop's catalogue of
+   seventeen words in six groups, copied whole and held equal to the desktop's
+   by a test; each opens a sheet with its English and Chinese; the save sends
+   every word in the catalogue's order.
+6. **Who sees the controls**: the content keys (`content:view` or
+   `content:edit`), which is what opens these screens and what the server's
+   rule for the `legal`, `faq`, `about` and `copy` key families admits.
+   The server's write-gate suite now lists these four phone writes.
+7. **One control per field in the page editor**: the phone editor's Frame
+   swatches (§325 M1) are removed; the frame's colour is the Design sheet's.
+
+## §365 — THE MEDIA LIBRARY ON THE PHONE IS THE DESKTOP'S LIBRARY
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Media screen listed the newest thirty pictures and said "Folders,
+tags and alt text are on desktop". It now does what the desktop's Media tab
+does (`07-content-billing.js`), on the same endpoints, with the same words.
+
+1. **Finding a picture**: search by file name or alt text (sent when the
+   search is done, so the keyboard stays while typing), the folder filter (All
+   media, Unsorted, each folder, with counts) and the tag filter (with
+   counts), and pages of sixty with Load more — the desktop's page size.
+2. **"Used in"**: every tile carries the desktop's count from the same scan
+   (`/media/usage`), "× n" or "unused".
+3. **A picture's details** — file name, alt text, folder, tags — save
+   themselves on the desktop's own card (`PATCH /media/<id>?history=media.<id>`),
+   with Undo and Version history (restore filed as a restore). Tags are typed
+   comma-separated and made lower-case with hyphens, as the desktop makes them.
+   The sheet also shows the picture's size, where it is used and its address,
+   with Copy.
+4. **A selection**: Select turns taps into picking (a phone has no ctrl-click);
+   the picked pictures are moved to a folder (`bulk-move`), tagged — add and
+   remove in one go (`bulk-tag`) — or deleted (`bulk-delete`).
+5. **Deleting asks first and says where the pictures are used**, in the
+   desktop's words: a used picture "is referenced in n places", a selection
+   "n references will be broken".
+6. **Folders** are made, renamed and deleted (a deleted folder's pictures go to
+   Unsorted, which the confirm says).
+7. **Keys** are the server's: every `/media` write is `media:upload` except a
+   delete (a picture or a folder), which is `media:delete`; each control is
+   drawn only for its key. Without `media:upload` a picture's details are read
+   only; without either, there is no Select.
+8. A refused or failed write is said on the screen and stays; the toast only
+   confirms. The reload guard and the background flush know the open
+   picture's pending details.
+
+## §366 — A BROADCAST IS SENT AGAIN AND RECALLED FROM THE PHONE, AND EVERY REGION IS OFFERED
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone wrote broadcasts (§63) and cancelled scheduled ones, but did not do
+what the desktop's feed does with a past one (`05-marketing.js` bxFeedRow,
+bxSendAgain, recallBroadcast), offered only the first twelve regions, and
+called a recalled, cancelled or expired broadcast "Draft".
+
+1. **Send again** on every broadcast that is not waiting to go: its words in
+   both languages, its link and its audience become a new broadcast, opened at
+   the last look ("Ready to send?") with the audience counted again. Like the
+   desktop it always starts "now" with no end date — an old schedule, or an
+   end date from a window that has run out, would only have to be corrected.
+   The words keep their columns: the operator's language goes in the first
+   field, the other in the second, so nothing written in Chinese is re-filed
+   as English. A city in the old audience that no saved address is in any more
+   is dropped, as the desktop's composer drops it (it has no box to tick).
+2. **Recall** on a sent broadcast still showing: it removes the message from
+   every customer's inbox, so it asks first in the desktop's words, then calls
+   the same `…/recall`. A sent broadcast whose end date has passed says
+   "Ended" and offers no Recall, as on the desktop.
+3. **Every status in the desktop's words**: Sent, Scheduled, Draft, Recalled,
+   Cancelled, Expired, Ended. A scheduled send that went out between the list
+   being read and Cancel send being tapped is recalled by the same call, and
+   the row and the toast now say Recalled rather than Sent.
+4. **Every region** a customer has saved an address in is offered in the
+   composer's Regions step; it stopped at twelve.
+5. All on `broadcasts:send`, the key every `/broadcasts` write needs.
+
+## §367 — POLLS ARE WRITTEN ON THE PHONE, AND THE VOTING AND LEADERBOARD SETTINGS SAVE THEMSELVES THERE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Voting screen could open and close a poll, without asking, and
+nothing else: the question, the options, the rules and the page's own two
+settings were "written on desktop". The Leaderboard screen showed the board
+and said its metric, period, rewards and hidden members were "set on desktop".
+Both are now the desktop's (`10-extras.js`), on the same endpoints with the
+same bodies.
+
+1. **The poll editor is a screen of its own** (`polledit`), as the desktop's
+   is a page of its own (§1.7a): the question, the small label and the line
+   under it in the language picked at the top; up to eight options with their
+   colours, an option with votes never removed on its own; points, closing
+   date, featured, order, the winner once closed; the display floor with the
+   desktop's real → shown line. Save draft / Publish / Save changes send
+   `POST /polls` or `PUT /polls/:id` with every field `votCollect` sends;
+   Delete sends `DELETE /polls/:id`. It is NOT a §279 autosave card: a poll is
+   an authored object with a lifecycle (§154), and the desktop saves it only
+   on a button. So leaving with changes asks, in the desktop's words, through
+   the app's Back, the edge swipe and the reload guard alike.
+2. **Every confirm the desktop asks, the phone asks**: publish, reopen and
+   close (`votSetStatus`), clear every vote, delete. The list's status button
+   keeps its words (Open / Close / Reopen) but now confirms first; the confirm
+   then runs the same `PUT /polls/:id {status}`.
+3. **The holds are the desktop's**: a question in either language (a
+   Chinese-only question is sent as the English one too, because the server
+   keys polls off it), and at least two named options.
+4. **The voting page settings** — the line under "Your say" in both languages,
+   and whether customers see the counts — are a §279 card (`voting`) on
+   `PUT /voting/config?history=voting`, history from
+   `snapshot['voting.config']`. Like the desktop, it starts only once the
+   stored settings have arrived, so a failed read can never write blanks over
+   the real wording.
+5. **The leaderboard settings** are a §279 card (`leaderboard`) on
+   `PUT /leaderboard/config?history=leaderboard`, a full replace with every
+   field `lbReadForm` sends (top_n a number, hide_names a list), history from
+   `snapshot['leaderboard.config']`, the board underneath read again after each
+   save. The visibility switch saves like any other field, as on the desktop.
+   The placeholder generator is the desktop's: its name pools, its curve, 3–50
+   members, a top of at least ¥50; generating switches the placeholders on.
+6. **Route-owned cards.** The phone's config card (§325 M4) gains a `put` for
+   settings whose route is not `/config`, and a `fromSnapshot` for history
+   stored under one key. The four `/config` cards are unchanged and still
+   write through their one site.
+7. All on `voting:edit` and `leaderboard:edit`, the keys the server gates
+   these writes on and the two screens open on. The poll editor route opens on
+   `voting:edit`.
+
+## §368 — SOCIAL PROOF AND SHARE CARDS ARE SET ON THE PHONE, AND SAVE THEMSELVES
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Social proof screen had the one on/off switch and said what counts
+as recent was "set on desktop"; Share cards showed which pages had a picture
+and said pictures and titles were "set on desktop". Both now carry the
+desktop's §279 cards, on the same endpoints with the same bodies.
+
+1. **Social proof** is the desktop tab's two cards on `PUT /config`:
+   `social_proof` (the five widgets — bought count, recent-buyers ticker with
+   its manual entries, viewing now, last ordered, the SOLD badge — as one
+   nested blob) and `checkout.upsell` (the pop-up before paying). The draft
+   holds what the desktop form holds (paintSocialProof's defaults; an old
+   single boost spread over both ends of its range) and the save is
+   buildSocialProof's: the same clamps, a range typed backwards swapped, a
+   manual entry with no name or no product left out. Each widget's switch
+   saves at once; its numbers are a sheet; a manual entry is a row with its
+   own sheet and Remove. The `features.socialProof` switch stays where it was.
+   All on `social:edit`, which the server gives both families.
+2. **Share cards** are the desktop's four cards (SC_CARDS), one per page:
+   `share.home`, `share.product`, `share.voting` on `PUT /config`
+   (`sharing.<key>`, `sharing.<key>Title`), and `share.invite` on
+   `PATCH /affiliate/settings`, sending `shareImage` and `shareTitle` only —
+   the same keys Affiliate shows. Each page opens on its own screen with both
+   titles (60 at most; the product card has none), the picture (replace,
+   remove) and the card's foot. A card starts only once its own source has
+   arrived: if Affiliate does not answer, the invite card says so and is
+   never started, because its empty box is not the truth.
+3. **The phone now writes `/affiliate/settings`, from the invite card only.**
+   The server already gives that write to `sharing:edit` for exactly this
+   card (cap-routes.js); the settings-write suite, which recorded "the phone
+   only reads them", now pins that one site and its two fields. The referrals
+   stay read-only on the phone.
+4. **A new picture is `POST /media/upload`**, the desktop's, which the server
+   gates `media:upload`. So Choose / Replace is drawn only for an account
+   holding it as well as `sharing:edit`; Remove needs only `sharing:edit`.
+   The same gap exists on the desktop (a Share-cards-only operator is refused
+   the upload there) — see *Open* below.
+5. **Not ported:** the desktop's live WeChat-forward preview of a card. The
+   phone shows the picture at its 5:4 shape and the title as typed.
+
+**Open (Ash's call):** should `sharing:edit` be allowed to upload a share-card
+picture without `media:upload`? Today neither surface lets it.
+
+## §369 — SAME-CITY RIDER OPERATIONS FROM THE PHONE: RETRY, REMOVE THE OLD JOB, MOVE WHERE IT SHIPS FROM, PICK A PLACE, MOVE THE DAY, COMPARE AND DISPATCH
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O8 of the Orders lane. The phone's *Same-city courier* card (§328 item 9)
+told staff where the rider collects and what is holding the order. It had none
+of the buttons the desktop puts beside those words (`04-orders.js`
+renderQyShipFrom, renderQyDispatch and the two parked surfaces). It has them
+now. Each button sends the desktop's request, and each appears under the
+desktop's conditions.
+
+1. **Retry push** on a refused push: `POST …/qingyun/retry-push`. The desktop's
+   instruction now appears beside it, because both remedies it names are on
+   the phone now (O7). *Already on the courier platform* when the push
+   completed meanwhile.
+2. **Remove it** under the warning about an old job left at the previous
+   store: `POST …/qingyun/remove-stale`. No confirm, as on the desktop. If
+   Qingyun says no, the phone shows the desktop's instruction to remove the
+   job in the Qingyun app.
+3. **Pick a place.** Each matched place is its own button. Nothing is
+   pre-selected, and choosing is the confirm. Only the index is sent
+   (`POST …/qingyun/confirm-place {idx}`). The desktop's three named
+   refusals have their own sentences: option gone, moved on, order closed.
+4. **Change where it ships from.** *Change* reads the stores
+   (`GET …/qingyun/ship-from`), lists the others, and greys out any not
+   connected to Qingyun, with the reason. *Ship from here* asks the desktop's
+   question (a new job there, the old one deleted, nothing charged), then
+   sends `POST …/qingyun/ship-from {store_code}`.
+   - Not offered once a courier has the order; the desktop's sentence says
+     why instead.
+   - If the old job could not be deleted, the toast says so, and *Remove it*
+     appears.
+5. **Move the delivery day.** Offered in two places:
+   - *Reschedule delivery* on an expired order;
+   - *Change delivery day* beside the courier while nobody is carrying the
+     order. A frozen run counts as nobody, as in the TC000823 case.
+
+   Seven Beijing days to choose from. The confirm names both days and says
+   the customer is told. Then `POST …/qingyun/reschedule {date}`. The four
+   outcomes are worded as the desktop words them: moved and queued (today, or
+   that morning), a live rider (nothing moved), a frozen copy (finish it in
+   the app), and moved but not queued.
+6. **Compare couriers and dispatch.** Shown where the desktop shows it: the
+   first same-city parcel, not yet gone, on an order still being made. It
+   reads as *Call another courier* when the order is still finding a rider,
+   the rider cancelled, or the run is stale. It is hidden while a rider is
+   genuinely on the way.
+   - `GET …/qingyun/carriers` lists the enabled couriers with price and
+     distance, the cheapest pre-ticked as on the desktop.
+   - *Dispatch courier* asks the desktop's question: one courier charges the
+     balance; several means the first rider to accept wins and only that one
+     is charged. Then `POST …/qingyun/dispatch {carriers}`.
+   - Low balance, already called (the order is read again) and Qingyun's own
+     reason are each said.
+   - With no ship-from line, these controls get a card of their own, as the
+     desktop's block stands alone.
+7. **Who may.** Items 1–5 are `orders:edit` (lib/cap-routes.js). Dispatch
+   is `orders:dispatch_courier`, and it charges the shop's Qingyun balance.
+   So it is drawn, and runs, only once this account's keys are **known** to
+   include it (money fails closed), and it is checked again when the confirm
+   is answered.
+   - The two reads are open on the server. They are offered only beside the
+     write they lead to.
+   - A reader sees every state and no button.
+   - A sentence that points at a button (*press Retry*, *Compare couriers
+     below*) appears only when that button does.
+8. **Not built: placing a point on a map**, the *Place the point on a map*
+   switch from a list of places, and the street search, which exists only to
+   move that map. They are §97's Qingyun point picker, still held by §325.4
+   until a phone design exists. The phone keeps *The point is placed on the
+   desktop map.* and adds the desktop's *Edit ship-to* beside it.
+9. **Tests.**
+   - `scripts/test_mobile_rider_ops.js` (fast shard, 210 assertions): the
+     server gates; every request's method, path and body; each confirm;
+     empty, loading, failed, refused, platform-said-no and capability-denied
+     cases; keys not yet known; both languages. It also checks that every
+     copied pair exists on the desktop.
+   - `test_mobile_orders_facts.js` loads the new helpers. A reader's card
+     still has no control, and the O1 slice still adds no write.
