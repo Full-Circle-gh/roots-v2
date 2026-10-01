@@ -39,7 +39,7 @@
  *      when called directly. That is the shape of this defect: every function
  *      test around it passed, because no click bubbles in a function test.
  *      What the rule closes is a keyboard that was ALREADY OPEN, so it reads
- *      the focus as of touch-down (kbMark) and compares.
+ *      the focus as of touch-down (kbTouchDown) and compares.
  *
  * No browser and no network: the real functions are SLICED OUT OF THE SHIPPED
  * public/m.html and driven against a hand-built DOM, the technique
@@ -133,18 +133,18 @@ function sliceLet(name) {
   return m[0];
 }
 vm.runInContext(sliceLet('kbWas'), sandbox, { filename: 'm.html#kbWas' });
-for (const fn of ['kbField', 'kbHints', 'kbEnterDown', 'kbMark', 'kbTapAway']) {
+for (const fn of ['kbField', 'kbHints', 'kbEnterDown', 'kbTouchDown', 'kbTapAway']) {
   vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });
 }
-const { kbField, kbHints, kbEnterDown, kbMark, kbTapAway } = sandbox;
+const { kbField, kbHints, kbEnterDown, kbTouchDown, kbTapAway } = sandbox;
 
 const input = (attrs) => new El('input', attrs);
 /* FOCUS AS OF TOUCH-DOWN, which is what a real tap gives the rule: the browser
- * fires pointerdown before the control's own handler runs, so kbMark() has been
+ * fires pointerdown before the control's own handler runs, so kbTouchDown() has been
  * and gone by the time anything is clicked. A case that wants the other
- * situation — a tap that moved focus itself — calls kbMark() first and moves
+ * situation — a tap that moved focus itself — calls kbTouchDown() first and moves
  * focus after, which is the order a real one happens in. */
-const focus = (el) => { doc.activeElement = el; kbMark(); return el; };
+const focus = (el) => { doc.activeElement = el; kbTouchDown(); return el; };
 
 console.log('\n══ 1 · what a soft keyboard belongs to ══');
 ok(kbField(input({})) !== null, 'a bare <input> is a typed field');
@@ -240,7 +240,7 @@ console.log('\n══ 4b · a field the tap itself opened is NOT closed by that 
    written. The old rule saw a focused field and a target that was neither the
    field nor a field, and blurred — mbTypeCommit then shut the field on the way
    out, so the tap did nothing visible and no quantity could be typed. */
-doc.activeElement = body; kbMark();                // finger down on a row at rest
+doc.activeElement = body; kbTouchDown();           // finger down on a row at rest
 const gone = new El('button'); gone.isConnected = false;   // repainted away by its own handler
 const opened = input({ id: 'mbnum-54' }); doc.activeElement = opened;
 kbTapAway({ target: gone });
@@ -280,10 +280,10 @@ ok(/document\.addEventListener\('click',\s*kbTapAway\)/.test(SRC),
    "the tap rule listens on 'click' — resolved at touch-UP, after the control's own handler");
 ok(!/document\.addEventListener\('(pointerdown|touchstart)',\s*kbTapAway/.test(SRC),
    '...and NOT at touch-down, which is the defect the scrim rule above it records');
-ok(/document\.addEventListener\('pointerdown',\s*kbMark,\s*true\)/.test(SRC)
-   && /document\.addEventListener\('mousedown',\s*kbMark,\s*true\)/.test(SRC),
+ok(/document\.addEventListener\('pointerdown',\s*kbTouchDown,\s*true\)/.test(SRC)
+   && /document\.addEventListener\('mousedown',\s*kbTouchDown,\s*true\)/.test(SRC),
    'touch-down only RECORDS which field the keyboard was on, in both spellings, in capture');
-ok(/function kbMark\(\)\{\s*kbWas=kbField\(document\.activeElement\);\s*\}/.test(SRC),
+ok(/function kbTouchDown\(\)\{\s*kbWas=kbField\(document\.activeElement\);\s*\}/.test(SRC),
    '...and records it by reading focus, so a tap that moves focus can be told apart');
 
 console.log('\n══ 6 · the two screens the complaint came from ══');
@@ -310,7 +310,11 @@ const settle = () => { while (timers.length) timers.shift()(); };
 const kbVar = (n) => vm.runInContext(n, sandbox);
 vm.runInContext(SRC.match(/^const KB_OPEN_PX=.*$/m)[0], sandbox, { filename: 'm.html#KB_OPEN_PX' });
 vm.runInContext(sliceLet('kbBase'), sandbox, { filename: 'm.html#kbBase' });
-for (const fn of ['kbFocusIn', 'kbFocusOut', 'kbViewport']) {
+/* kbMark is the html.kb-up toggle these call (§325 K1: the one function of
+   that name now). The page element is given a classList to toggle. */
+const kbUpClass = new Set();
+doc.documentElement = { classList: { toggle: (c, on) => { if (on) kbUpClass.add(c); else kbUpClass.delete(c); } } };
+for (const fn of ['kbMark', 'kbFocusIn', 'kbFocusOut', 'kbViewport']) {
   vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });
 }
 const { kbFocusIn, kbFocusOut, kbViewport } = sandbox;
@@ -382,6 +386,52 @@ ok(/visualViewport\.addEventListener\('resize',\s*\(\)=>kbViewport\(/.test(SRC),
 const rsrc = sliceFn('render');
 ok(/kbPainting=true;\s*app\.innerHTML = html;[^]*?kbPainting=false;/.test(rsrc),
    "render() flags its own teardown, so the field it rebuilds keeps its caret");
+
+console.log('\n══ 10 · §325 K1 · the touch-down the SHIPPED listeners call is the one that records ══');
+/* THE DEFECT THIS SECTION EXISTS FOR. The touch-down was called kbMark, and so
+   was the html.kb-up toggle sixty lines below it; two function declarations
+   with one name keep only the LATER, so pointerdown ran the toggle, kbWas was
+   never set, and a tap away from a field never closed the keyboard. Every case
+   above passed the whole time, because sliceFn takes the FIRST declaration of
+   a name and drove the dead copy. So here the name is read from the listeners
+   themselves and resolved the way the browser resolves it — the LAST
+   declaration of that name in the file — and the tap is run through that. */
+{
+  // Every capture-phase pointerdown listener in the file, each resolved to the
+  // declaration the browser would call (the LAST of its name) — the touch-down
+  // is the one whose resolved body records kbWas. Under the defect, none did.
+  const lastFn = (name) => {
+    const at = SRC.lastIndexOf(`function ${name}(`);
+    if (at < 0) return '';
+    let depth = 0;
+    for (let j = SRC.indexOf('{', at); j < SRC.length; j++) {
+      if (SRC[j] === '{') depth++;
+      else if (SRC[j] === '}') { depth--; if (depth === 0) return SRC.slice(at, j + 1); }
+    }
+    return '';
+  };
+  const listeners = [...SRC.matchAll(/document\.addEventListener\('pointerdown',\s*([A-Za-z_$][\w$]*),\s*true\)/g)].map((m) => m[1]);
+  const recording = listeners.filter((n) => /kbWas\s*=/.test(lastFn(n)));
+  eq(recording.length, 1, 'exactly one pointerdown listener, as the browser resolves it, records which field had the keyboard');
+  const handler = recording[0];
+  ok(!!handler && SRC.includes(`document.addEventListener('mousedown', ${handler}, true)`), `…and mousedown calls the same one (${handler})`);
+  eq(SRC.split(`function ${handler}(`).length - 1, 1, `"${handler}" is declared exactly once, so nothing can shadow it`);
+  const body = lastFn(handler);
+  const box = { document: doc, String, Object };
+  vm.createContext(box);
+  vm.runInContext(sliceConst('KB_NOT_TYPED'), box);
+  vm.runInContext(sliceLet('kbWas'), box);
+  for (const fn of ['kbField', 'kbTapAway']) vm.runInContext(sliceFn(fn), box);
+  vm.runInContext(body, box);
+  const out = input({ id: 'mExpNote' });
+  doc.activeElement = out; box[handler]();               // finger down, keyboard open
+  box.kbTapAway({ target: new El('div') });             // lifted on the page
+  eq(out.blurs, 1, 'a tap OUTSIDE a focused field, through the shipped listener, closes the keyboard');
+  const inside = input({ id: 'mExpNote' });
+  doc.activeElement = inside; box[handler]();
+  box.kbTapAway({ target: inside });
+  eq(inside.blurs, 0, 'a tap INSIDE it does not');
+}
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
