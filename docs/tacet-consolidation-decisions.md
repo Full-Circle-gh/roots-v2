@@ -27642,3 +27642,44 @@ editing.
 7. **Not ported:** the live hh:mm:ss clocks and the per-second "starts in"
    ticker. The phone card shows the window instead. The server's clock offset
    is kept on every re-read, as the desktop keeps it.
+
+## §412 — ASH'S ANSWERS ON THE EIGHT QUESTIONS THE PHONE-PARITY RUN RAISED
+
+**Decided 2026-10-01 by Ash** (*"as you recommend fix all"*), on the
+recommendations given at the end of the §325 run (§335–§411). Each item below
+is built as its own PR, with its own decision entry, citing this one.
+
+1. **Closing Eleme at a store closes the shop on Eleme.** §393 found the close
+   only pauses stock; orders keep arriving against frozen numbers. Build the
+   real close (the Eleme daemon sets the shop's business status, as Meituan's
+   置休 does), reopen symmetrical, and keep §393's honest wording until it is
+   live and verified. Survey the daemon first; if Eleme's back office offers
+   no reliable switch, stop and report rather than fake it.
+2. **Where money goes is changed only with the payments permission.** WeChat
+   Pay merchant details (`/channel-hub/miniapp/wechat-*` pay fields, §401), tax
+   and currency (`PUT /config` `tax.*`, `currency`, §403) and the manual-Alipay
+   record (`/alipay-manual`, §403) need `settings:payments`; the owner always
+   passes. This deliberately takes these writes away from the other Settings
+   keys (`delivery:view`, `stores:view`, …) and from `integrations:manage` —
+   Ash's call, made here, overriding §325.3 for these writes only. Screens hide
+   the controls from anyone the server would now refuse.
+3. **Choosing a billing plan does not make a paid shop past due.** The current
+   subscription stays active until its paid period ends; the new plan's invoice
+   is owed from then. (§391's confirm warning is reworded to match.)
+4. **"Open everything" keeps its rule** — a channel closed at one shop with that
+   shop's own switch stays closed — **and now says which stayed closed**, on
+   desktop and phone.
+5. **A store-scoped operator manages stock staff only at their own stores**
+   (§358 left this open). Unscoped operators and the owner are unchanged.
+6. **No tenant inherits Roots' values.** The Kuaidi100 callback address is built
+   per tenant on both surfaces (no `rootskitchenchina.com` default), and the
+   out-of-Guangzhou printing store has no "Tianhe" default — it is unset until
+   the shop picks one, with the screen saying so.
+7. **One Chinese word per thing.** Holiday mode is 假期模式 (the desktop's);
+   zones are 配送区 (the desktop's); Edit ship-to is 修改收货地址 (the order
+   drawer's — the desktop's three quick panels change to match); "Your store is
+   open" is 店铺已开业 (the setup guide's); the desktop's Drafts chip gains 草稿.
+   Each change is recorded in `docs/tacet-delivery-vocabulary.md`.
+8. **Billing's two keyless doors stay open** (a suspended shop, and the
+   provisioning hold for non-Roots tenants until `TENANT_DATA_ISOLATION=1`), as
+   §392 left them. Nothing to build.
