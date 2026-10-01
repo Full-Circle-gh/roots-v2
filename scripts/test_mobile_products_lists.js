@@ -128,6 +128,8 @@ const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'searchClearRun', 'noteB
   'pill', 'toggle', 'prodLowThreshold', 'mapProduct', 'prodCategories', 'prodCatName', 'prodSubcats', 'prodSubName',
   'prodStoreOn', 'prodStoreQty', 'prodAtStore', 'prodRows', 'loadProdGrid', 'loadProdHi', 'productCard',
   'prodUnits', 'prodFiltered', 'prodBodyHtml', 'screenProductCatalogue', 'mCan', 'prodCanEdit',
+  // §325 X3 — the Count sheet button rides the catalogue's top row beside Export.
+  'countOffered', 'countButton',
   'actPreset', 'actWindow', 'loadActivity', 'actClock', 'actRangeLine', 'actDelta', 'actRow', 'actDigestCard',
   'screenActivity', 'actReload',
   'wstPreset', 'wstWindow', 'loadWasteReasons', 'wstReasonName', 'loadWaste', 'wstStoreName', 'wstProductName',

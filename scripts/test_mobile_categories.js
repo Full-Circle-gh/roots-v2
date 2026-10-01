@@ -73,9 +73,13 @@ const CASES = [
   ['a shelf with no subs', SEEDED + `APP.cmd('catTop','drinks');`, [
     ['says so rather than showing an empty list', `txt('content').includes('No subcategories on this shelf')`],
   ]],
-  ['what does not move here', SEEDED, [
-    ['editing is named as a desktop job', `txt('content').includes('Rename, reorder, add and remove on desktop')`],
-    ['and the consequence of a rename is stated', `txt('content').includes('follows a rename')`],
+  /* §325 PD8 retired "Rename, reorder, add and remove on desktop": the phone
+     arranges the shelves now (test_mobile_categories_arrange.js holds every
+     write). What is pinned here is that the doors are on the screen. */
+  ['arranging is on the phone now', SEEDED, [
+    ['a top category can be added', `txt('content').includes('Add top category')`],
+    ['the two views are offered',   `txt('content').includes('Mini app') && txt('content').includes('QR menu')`],
+    ['the retired desktop-only note is gone', `!txt('content').includes('Rename, reorder, add and remove on desktop')`],
   ]],
   ['no shelves at all', `state.catsTried=true; state.cats=[]; state.catCounts={}; APP.cmd('push','categories');`, [
     ['says there are none', `txt('content').includes('No categories yet')`],
