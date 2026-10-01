@@ -1414,6 +1414,9 @@ const state = {
   nlg:{rows:null, total:0, failed:0, channels:[], kinds:[], channel:'', kind:'', from:'', to:'', q:'', onlyFailed:false, err:null, tried:false, more:false, seq:0, open:null},
   elm:{cfg:null, st:null, err:null, tried:false, seq:0, cat:{}, catStore:null, catQ:''},
   presence:null,
+  /* §325 X2 — the Operations screen's writes: which save is in flight and its
+     refusal, the locate-everything run, and the recently-deleted list. */
+  opsx:{busy:null, err:null, geoBusy:false, geoErr:null, bin:null, binDays:60, binTried:false, binErr:null, binBusy:null, binRowErr:{}},
   /* The Account screen's own reads and writes (screenAccount): the recovery
      contacts and two-step switches, the signed-in devices, the per-person
      alert switches, and which write is in flight. One key, so the screen's
@@ -1542,6 +1545,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      now, and `rows`/`st` back to null draws Loading rather than the last visit. */
   if(route==='changes'||route==='sent'){ const c=route==='sent'?state.nlg:state.chl; c.tried=false; c.rows=null; c.err=null; c.open=null; }
   if(route==='mirror_eleme'){ const e=state.elm; e.tried=false; e.st=null; e.cfg=null; e.err=null; }
+  /* §325 X2 — Operations re-reads what was deleted on every entry (something
+     may have been deleted on another screen a minute ago), and a refusal from
+     the last visit does not greet the next one. */
+  if(route==='operations'){ const x=state.opsx; x.binTried=false; x.binErr=null; x.binRowErr={}; x.err=null; x.geoErr=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
@@ -6387,9 +6394,12 @@ function screenOperations(){
         {label:T('Maps provider','地图服务'),value: !g?T('Loading…','加载中…'):(noKey?T('no key','未配置密钥'):provider)},
         {label:T('Stores located','门店已定位'),value: st?(st.geocoded+'/'+st.total):T('Loading…','加载中…')},
         {label:T('Customer addresses located','顾客地址已定位'),value: addr?(addr.geocoded+'/'+addr.total):T('Loading…','加载中…')},
-      ])}</div>
+      ])}${opsxGeoAction()}</div>
+    ${opsxLowCard()}
+    ${opsxSupportCard()}
     ${stores&&stores.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>
       <div class="list">${stores.map(opsStoreRow).join('')}</div></div>`:''}
+    ${opsxBinCard()}
     ${noteBar(T('Store details, staff, printers and payment keys are set on desktop.','门店资料、员工、打印机与支付密钥在电脑端设置。'))}</div>`;
 }
 
@@ -22522,6 +22532,18 @@ const FEATURE_CATALOG=[
    offEn:'Off: no bought-counts, recent buyers or SOLD badge.', offZh:'关闭后：不显示购买人数、最近购买与“已售”标签。'},
   {key:'faq',         en:'Help / FAQ',          zh:'帮助 / 常见问题',
    offEn:'Off: the help screen is hidden in the mini app.', offZh:'关闭后：小程序内隐藏帮助页面。'},
+  /* §325 X2 — the three the desktop hosts on Settings → Operations
+     (05-marketing.js FEATURE_HOMES), with its own off-state sentences. The
+     server gates all three on the Settings screen's keys (configKeyCap). */
+  {key:'production',  en:'Production',          zh:'生产',
+   offEn:'Off. The Materials and Recipes tabs are hidden. Nothing is deleted — everything is still there when you turn it back on.',
+   offZh:'已关闭:“物料”与“食谱”标签均已隐藏。数据不会删除,重新开启后仍在。'},
+  {key:'waste',       en:'Waste',               zh:'损耗',
+   offEn:'Off. The Waste tab is hidden. Nothing already recorded is deleted, and stock already moved stays moved.',
+   offZh:'已关闭:“损耗”标签已隐藏。已登记的记录不会删除,已变动的库存也不会恢复。'},
+  {key:'lowStockHints', en:'Running low here',  zh:'此门店库存偏低',
+   offEn:'Off. Purchase orders suggest nothing — search for what you want to buy. Nothing else on the order changes.',
+   offZh:'已关闭:采购单不再推荐商品,自行搜索添加即可。采购单的其余部分不受影响。'},
 ];
 /* Entitled, or not on the list. A missing key means entitled — that is the
    server's own rule (lib/features.js entitlements()). */
@@ -23171,6 +23193,243 @@ reg('elmCat', id=>{
 reg('elmCatQ', v=>{ state.elm.catQ=String(v||''); searchClearShow('mElmCatClr',!!state.elm.catQ); x1Paint('mElmCatBody',elmCatBody); });
 reg('elmCatRetry', ()=>{ const code=state.elm.catStore; if(!code) return; elmCatLoad(code); render(); });
 /* §325 X1 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X2 — WHAT THE DESKTOP'S SETTINGS → OPERATIONS TURNS ON AND OFF
+   --------------------------------------------------------------------------
+   The writes on the desktop's Operations panel that the phone did not have,
+   drawn on the phone's Operations screen (the three feature switches join the
+   Features group in Settings, beside the six already there). Every write is the
+   desktop's request, byte for byte:
+
+     Low-stock default    PUT /config {'inventory.lowStockThreshold': n}
+                          (09-products.js paSaveLowStockDefault)
+     Daily low-stock list PUT /config {'inventory.lowStockDigest': {enabled,hour}}
+                          (09-products.js saveLowStockDigest)
+     Support button       PUT /config {'support.hidden': bool} (05-marketing.js)
+     Locate everything    POST /inventory/geocode-backfill, behind the desktop's
+                          own confirm (02-settings-ops.js _geocodeBackfill)
+     Put it back          POST /deleted/:id/restore, unconfirmed as on the
+                          desktop — it is the reversible direction (recycleRestore)
+
+   WHO. Everything here lives inside Settings, so the controls are drawn for
+   exactly the Settings screen's own keys (ROUTE_CAP.settings) — the set the
+   server's per-key PUT /config gate (§325, configKeyCap) already admits for
+   `inventory` and leaves open for `support.hidden`.
+
+   PUT IT BACK IS THE EXCEPTION, and it is a decision rather than a copy. The
+   desktop draws that button for `settings:edit`, a key lib/capabilities.js does
+   not define, so for every account whose permissions resolve it is drawn for
+   nobody. The phone draws it for whoever may make the deletion it undoes: a
+   delivery zone for delivery:edit, a ledger row for finance:record (money,
+   fails closed), a coupon for coupons:edit or coupons:delete, a draft purchase
+   order for purchasing:edit. Nobody loses a button they had — nobody had one.
+
+   Three states for every write: the control says what it is doing, a refusal
+   stays where it was caused, a toast only confirms.
+   ══════════════════════════════════════════════════════════════════════════ */
+const opsxCan=()=>canRoute('settings');
+function opsxCfgSet(key,body,apply,okMsg){
+  const x=state.opsx; if(x.busy||!opsxCan()) return Promise.resolve();
+  x.busy=key; x.err=null; render();
+  return apiWrite('/config',body,'PUT').then(()=>{
+    state.cfg=state.cfg||{}; apply(state.cfg);
+    x.busy=null; render(); showToast(okMsg);
+  }).catch(e=>{
+    x.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    x.err={key, msg:E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。')}; render();
+  });
+}
+const opsxInv=(c,patch)=>{ c.inventory=Object.assign({},c.inventory||{},patch); };
+/* The tenant default, read the way the desktop hydrates it (05-marketing.js):
+   a whole number of 0 or more, else 5. */
+function opsxLowThreshold(){
+  const n=parseInt(cfgGet('inventory.lowStockThreshold',''),10);
+  return Number.isFinite(n)&&n>=0?n:5;
+}
+/* The digest is ON unless the account turned it off, at 09:00 unless it chose
+   an hour — paSyncLowStockDigestUi's reading, so the switch shows what the
+   sweeper will actually do. */
+function opsxDigest(){
+  const d=cfgGet('inventory.lowStockDigest',null);
+  return {enabled:(d&&d.enabled!==undefined)?!!d.enabled:true,
+          hour:(d&&Number.isInteger(d.hour)&&d.hour>=0&&d.hour<=23)?d.hour:9};
+}
+reg('lowStockSet', v=>{
+  const n=Math.max(0,parseInt(v,10)||0);
+  opsxCfgSet('low',{'inventory.lowStockThreshold':n},c=>opsxInv(c,{lowStockThreshold:n}),T('Saved','已保存'));
+});
+reg('lowDigestToggle', ()=>{
+  const d=opsxDigest(), v={enabled:!d.enabled,hour:d.hour};
+  opsxCfgSet('digest',{'inventory.lowStockDigest':v},c=>opsxInv(c,{lowStockDigest:v}),v.enabled?T('Turned on','已开启'):T('Turned off','已关闭'));
+});
+/* Only the hour is kept — a once-a-day message, so a minute would be a promise
+   the sweeper does not keep. Midnight is an hour like any other: 0 is a real
+   answer here, not a missing one. */
+reg('lowDigestHour', h=>{
+  const n=parseInt(h,10); if(!Number.isInteger(n)||n<0||n>23) return;
+  const v={enabled:opsxDigest().enabled,hour:n};
+  opsxCfgSet('digest',{'inventory.lowStockDigest':v},c=>opsxInv(c,{lowStockDigest:v}),T('Saved','已保存'));
+});
+const opsxSupportShown=()=>!cfgGet('support.hidden',false);
+reg('supportToggle', ()=>{
+  const hidden=opsxSupportShown();
+  opsxCfgSet('support',{'support.hidden':hidden},c=>{ c.support=Object.assign({},c.support||{},{hidden}); },
+    hidden?T('Turned off','已关闭'):T('Turned on','已开启'));
+});
+
+/* Locate every store and customer address that has no coordinates yet. It
+   spends the maps quota, so the desktop asks first and so does this. Two of its
+   outcomes come back as a success and are not one — the quota ran out part way,
+   or not one address could be placed — so they are said where the button is,
+   and stay, rather than toasted. */
+reg('geoBackfill', ()=>{
+  if(!opsxCan()||state.opsx.geoBusy) return;
+  state.ask={title:T('Geocode all stores + customer addresses now? Uses your maps quota.','现在为所有门店与客户地址重新定位?将消耗地图配额。'),
+    confirmLabel:T('Geocode now','立即定位'), run:()=>opsxGeoRun()};
+  render();
+});
+function opsxGeoRun(){
+  const x=state.opsx; x.geoBusy=true; x.geoErr=null; render();
+  return apiWrite('/inventory/geocode-backfill',{},'POST').then(j=>{
+    x.geoBusy=false;
+    const d=(j&&j.data)||{};
+    if(d.aborted_on_quota||(d.last_error&&d.last_error.quota)){
+      x.geoErr=E('Daily map quota exhausted — geocoding stopped. Fix the key (see panel), quota resets next day.','地图配额已用尽,已停止。请修复 key,次日重置。');
+    } else if(d.addresses_total>0&&d.addresses_geocoded===0&&d.last_error){
+      const why=String(d.last_error.message||d.last_error.code||'');
+      x.geoErr=E('Could not geocode addresses: '+why,'地址定位失败: '+why);
+    } else {
+      showToast(T('Geocoded '+d.stores_geocoded+'/'+d.stores_total+' stores · '+d.addresses_geocoded+'/'+d.addresses_total+' addresses','已定位 门店与地址'));
+    }
+    state.geoTried=false; loadGeo(); render();
+  }).catch(e=>{
+    x.geoBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    const c=e&&e.code;
+    x.geoErr=(c==='tencent_maps_key_missing'||c==='maps_key_missing')
+      ? E('Set AMAP_MAPS_KEY or TENCENT_MAPS_KEY in /root/roots-v2/.env first','请先在 /root/roots-v2/.env 配置地图 key')
+      : E('Failed: '+String((e&&e.message)||''),'操作失败: '+String((e&&e.message)||''));
+    render();
+  });
+}
+
+/* ── Recently deleted ──────────────────────────────────────────────────────── */
+const BIN_CAP={delivery_zone:'delivery:edit', finance_in:'finance:record', finance_out:'finance:record',
+  voucher:['coupons:edit','coupons:delete'], purchase_order:'purchasing:edit'};
+const opsxCanRestore=r=>!!r&&opsxCan()&&BIN_CAP[r.kind]!==undefined&&mCan(BIN_CAP[r.kind]);
+function opsxBinLoad(){
+  const x=state.opsx; if(x.binTried) return Promise.resolve();
+  x.binTried=true; x.binErr=null;
+  return apiRaw('/deleted').then(j=>{
+    if(!j||!j.success) throw new Error('refused');
+    x.bin=j.data||[]; x.binDays=Number(j.days)||60; render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    x.bin=null; x.binErr=E('Could not read what was deleted','无法读取删除记录'); render();
+  });
+}
+reg('binRetry', ()=>{ const x=state.opsx; x.binTried=false; x.binErr=null; render(); opsxBinLoad(); });
+reg('binRestore', id=>{
+  const x=state.opsx, r=(x.bin||[]).find(b=>Number(b.id)===Number(id));
+  if(!opsxCanRestore(r)||x.binBusy!=null) return;
+  x.binBusy=r.id; x.binRowErr={}; render();
+  apiWrite('/deleted/'+r.id+'/restore',{},'POST').then(()=>{
+    x.binBusy=null; showToast(T('Put back','已恢复'));
+    /* The record belongs to another screen still holding the list it read
+       before this. Refresh the one it went back to — a screen silently stale
+       after a success is how a restore gets tried twice. */
+    if(r.kind==='delivery_zone') api('/delivery-zones').then(z=>{ if(Array.isArray(z)){ state.zones=z; render(); } }).catch(e=>{ /* the zone list re-reads on its own next load; the restore itself has landed */ });
+    if(r.kind==='voucher') api('/vouchers').then(v=>{ if(Array.isArray(v)){ DB.coupons=v.map(mapVoucher);
+      DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); render(); } }).catch(e=>{ /* the coupon list re-reads on its own next load; the restore itself has landed */ });
+    x.binTried=false; opsxBinLoad(); render();
+  }).catch(e=>{
+    x.binBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    const c=e&&e.code, m=String((e&&e.message)||'');
+    x.binRowErr={[r.id]: c==='taken'
+      ? E('Something else now uses that record’s place. It cannot be put back.','该记录的位置已被其他内容占用，无法恢复。')
+      : c==='gone'
+        ? E('The record itself is no longer here, so there is nothing to switch back on.','该记录已不存在，无法恢复。')
+        : E('Could not put it back: '+m,'恢复失败: '+m)};
+    render();
+  });
+});
+
+/* ── The four cards on the Operations screen ───────────────────────────────── */
+function opsxErrLine(key){
+  const e=state.opsx.err; if(!e||e.key!==key) return '';
+  return `<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${String(e.msg)}</div>`;
+}
+const opsxRow=(label,ctl,note)=>`<div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px">
+  <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;overflow-wrap:anywhere">${label}</span>${note?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;line-height:1.5">${note}</span>`:''}</span>${ctl}</div>`;
+const opsxSaving=()=>`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`;
+function opsxLowCard(){
+  if(!opsxCan()) return '';
+  const x=state.opsx, d=opsxDigest();
+  const num=x.busy==='low'?opsxSaving()
+    :`<span style="display:flex;align-items:center;gap:6px;flex:none"><span style="color:var(--text-secondary)">≤</span>
+      <input type="number" inputmode="numeric" min="0" step="1" value="${opsxLowThreshold()}" aria-label="${T('Flag a product low at this many units','低库存提醒数量')}"
+        style="width:78px;text-align:right" ${x.busy?'disabled':''} onchange="APP.cmd('lowStockSet',this.value)">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('units','件')}</span></span>`;
+  const hours=Array.from({length:24},(_,h)=>h);
+  const hourSel=x.busy==='digest'?opsxSaving()
+    :`<select style="width:auto;flex:none;height:40px;padding-top:0;padding-bottom:0" ${x.busy?'disabled':''} onchange="APP.cmd('lowDigestHour',this.value)">${
+      hours.map(h=>`<option value="${h}"${h===d.hour?' selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select>`;
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Low-stock alert at','低库存提醒')}</div>
+    <div class="list">
+      ${opsxRow(T('Flag any product low when it drops to this many units.','商品降到此数量时提醒。'),num)}
+      ${opsxErrLine('low')}
+      <div class="sep" style="margin-left:14px"></div>
+      ${opsxRow(T('Send me a daily list of what is running low','每天发送库存偏低清单'),
+        x.busy==='digest'?opsxSaving():toggle(d.enabled,"APP.cmd('lowDigestToggle')"))}
+      <div class="sep" style="margin-left:14px"></div>
+      ${opsxRow(T('at','时间'),hourSel)}
+      ${opsxErrLine('digest')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. It goes to everyone on your team who can edit products or raise a restock request.','每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。发送给团队中可编辑商品或发起补货的成员。')}</div></div>`;
+}
+function opsxSupportCard(){
+  if(!opsxCan()) return '';
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Support button','客服按钮')}</div>
+    <div class="list">${opsxRow(T('Show the Support button','显示客服按钮'),
+      state.opsx.busy==='support'?opsxSaving():toggle(opsxSupportShown(),"APP.cmd('supportToggle')"),
+      T('The floating Support button in the bottom-right corner opens a chat with platform support. Turn it off to hide it.','右下角悬浮的客服按钮用于联系平台客服。关闭即可隐藏。'))}
+    ${opsxErrLine('support')}</div></div>`;
+}
+function opsxGeoAction(){
+  if(!opsxCan()) return '';
+  const x=state.opsx;
+  return `<button class="btn2" style="width:100%;margin-top:10px" ${x.geoBusy?'disabled':''} onclick="APP.cmd('geoBackfill')">${
+      x.geoBusy?T('Geocoding…','定位中…'):T('Geocode all stores & addresses now','立即定位所有门店与地址')}</button>
+    ${x.geoErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);margin-top:10px">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink);overflow-wrap:anywhere">${String(x.geoErr)}</span></div>`:''}`;
+}
+function opsxBinCard(){
+  if(!opsxCan()) return '';
+  opsxBinLoad();
+  const x=state.opsx;
+  let body;
+  if(x.binErr) body=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px">
+      <span style="font-size:14px;color:var(--brick-ink)">${String(x.binErr)}</span>
+      <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('binRetry')">${T('Try again','重试')}</button></div>`;
+  else if(!x.bin) body=`<div style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  else if(!x.bin.length) body=`<div style="padding:16px;font-size:14px;color:var(--text-secondary)">${
+      T('Nothing has been deleted in the last '+x.binDays+' days.','最近 '+x.binDays+' 天内没有删除记录。')}</div>`;
+  else body=x.bin.map((r,i)=>{
+    const busy=x.binBusy===r.id, err=x.binRowErr[r.id];
+    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(r.label||('#'+r.record_id))}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(T(r.kindEn||r.kind||'',r.kindCn||r.kindEn||r.kind||''))} · <span class="num">${escAttr(r.deleted_at||'')}</span>${r.deleted_by?' · '+escAttr(r.deleted_by):''}</span>
+        ${err?`<span style="font-size:13px;color:var(--brick-ink)">${String(err)}</span>`:''}</span>
+      ${opsxCanRestore(r)?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" ${x.binBusy!=null?'disabled':''} onclick="APP.cmd('binRestore',${Number(r.id)})">${busy?T('Saving…','保存中…'):T('Put it back','恢复')}</button>`:''}</div>`;
+  }).join('');
+  return `<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recently deleted','最近删除')}</div>
+    <div class="list">${body}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;padding:8px 4px 0">${T('Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. A restored purchase order keeps its own date, so it still lands in the month it was placed.','最近 60 天内删除的优惠券、配送区域、账目行与采购单草稿可以恢复。恢复的采购单保留原有日期，仍计入原来的月份。')}</div></div>`;
+}
+/* §325 X2 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
