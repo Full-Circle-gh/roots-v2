@@ -57,6 +57,7 @@ operator('dash', ['dashboard:view']);
 operator('meituan', ['meituan:view']);
 operator('push', ['settings:push']);
 operator('shop', ['settings:shop']);
+operator('payments', ['settings:payments']);   // §412.2
 operator('delivery', ['delivery:view']);
 operator('products', ['products:view']);
 operator('content', ['content:edit']);
@@ -107,8 +108,11 @@ operator('owner', [], 'owner');
 
     section('2 · Settings: manual Alipay, the printer, the fapiao settings');
     await refused('orders', 'PUT', '/alipay-manual', {}, 'an orders account cannot change where Alipay takings land');
-    await through('push', 'PUT', '/alipay-manual', {}, 'Settings → Push can');
-    await through('shop', 'PUT', '/alipay-manual', {}, '…and the setup guide\'s settings:shop');
+    // §412.2 — where money goes is the payments permission alone; the other
+    // Settings keys lose this write on purpose.
+    await refused('push', 'PUT', '/alipay-manual', {}, 'Settings → Push no longer can (§412.2)');
+    await refused('shop', 'PUT', '/alipay-manual', {}, '…nor the setup guide\'s settings:shop');
+    await through('payments', 'PUT', '/alipay-manual', {}, 'settings:payments can');
     await refused('orders', 'PUT', '/printer', { auto_print: true }, 'an orders account cannot change the printer');
     await through('shop', 'PUT', '/printer', { auto_print: true }, 'Settings (desktop card, phone Operations) can');
     await refused('push', 'PUT', '/fapiao-settings', {}, 'nobody writes the fapiao settings from a screen, so they close to…');

@@ -145,7 +145,11 @@ section('1 · who may, and failing closed');
     assert.strictEqual(mk({ caps: null }).ctx.canRoute('paycfg'), false, 'unknown keys open nothing');
     assert.strictEqual(mk({ caps: ['orders:view'] }).ctx.canRoute('paycfg'), false);
     assert.strictEqual(mk({ noMoney: true }).ctx.canRoute('paycfg'), false);
-    assert.strictEqual(mk({ caps: ['delivery:view'] }).ctx.canRoute('paycfg'), true);
+    // §412.2 — the payments permission alone: the other Settings keys no longer open it.
+    for (const k of ['delivery:view', 'settings:shop', 'stores:view', 'settings:push', 'shipping:config']) {
+      assert.strictEqual(mk({ caps: [k] }).ctx.canRoute('paycfg'), false, k + ' does not open Payments');
+    }
+    assert.strictEqual(mk({ caps: ['settings:payments'] }).ctx.canRoute('paycfg'), true);
   });
   it('without the keys nothing is drawn to press and nothing is sent', async () => {
     const h = await open(null, null, { caps: ['orders:view'] });

@@ -158,6 +158,21 @@ it('a read that fails after a good one shuts the save again', async () => {
   assert.strictEqual(h.calls.puts.length, 0);
 });
 
+section('2b · §412.2 — the payments permission');
+it('without settings:payments the shared Save bar never sends the (hidden) card, even after a good read', async () => {
+  const h = mk([{ body: GOOD }]);
+  h.ctx.can = (k) => k !== 'settings:payments';
+  await h.ctx.loadAlipayManual(); await tick();
+  await h.ctx.saveConfig(); await tick();
+  assert.strictEqual(h.calls.puts.length, 0, 'no PUT /alipay-manual');
+  assert.strictEqual(h.calls.apiPuts.length, 1, 'the other cards still save');
+  const g = mk([{ body: GOOD }]);
+  g.ctx.can = () => true;
+  await g.ctx.loadAlipayManual(); await tick();
+  await g.ctx.saveConfig(); await tick();
+  assert.strictEqual(g.calls.puts.length, 1, 'with it, the card saves');
+});
+
 section('3 · the words');
 it('the retry is the live pair; the warning is declared Chinese', () => {
   assert.ok(OPS.includes("cuT('Could not load this card, so Save leaves it unchanged.', '此卡片加载失败,保存时不会改动它。')"));
