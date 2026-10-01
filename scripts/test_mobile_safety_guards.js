@@ -149,51 +149,74 @@ const has = (src, s) => assert.ok(src.includes(s), 'missing in source: ' + s);
 /* ─────────────────────────────────────────────────────────────────────── */
 section('1 · Approve refund names the rider (§222)');
 {
+  /* §325 O3 moved Approve from a one-tap confirm to the desktop's approve form
+     (sheetRefundForm). Every case below is the S1c case, asked of the form: the
+     sentence must be ON THE FORM, above its button, before anything is sent. */
   const RIDER = 'A rider is on this order right now — approving cancels that delivery.';
-  const base = { refundStatus: 'pending', courier: { stage: 'in_transit' } };
+  const base = { refundStatus: 'pending', courier: { stage: 'in_transit' }, rfItems: [], refundLineIds: [] };
+  const form = (h) => h.ctx.sheetRefundForm();
   it('the pair is the desktop\'s own, and so is the stage list', () => {
     has(ORD, "cuT('A rider is on this order right now — approving cancels that delivery.',\n                           '当前已有骑手接单 — 批准后该配送会被取消。')");
     has(M, "T('A rider is on this order right now — approving cancels that delivery.','当前已有骑手接单 — 批准后该配送会被取消。')");
     has(ORD, "const RIDER_ON_IT = ['awaiting_dispatch', 'heading_to_pickup', 'in_transit'];");
     has(M, "const REFUND_RIDER_ON_IT=['awaiting_dispatch','heading_to_pickup','in_transit'];");
   });
-  it('a full approve with a rider on the road says so, in the sheet, before anything is sent', () => {
+  it('a full approve with a rider on the road says so, on the form, before anything is sent', () => {
     const h = mk({ order: Object.assign({}, base, { refund: { gross: 120, approved: 0, requested: null, lines: null } }) });
     h.CMD.approveRefund();
-    assert.ok(h.ctx.state.ask.body.includes(RIDER));
+    assert.strictEqual(h.ctx.state.rf.kind, 'approve');
+    assert.ok(form(h).includes(RIDER));
+    assert.ok(form(h).indexOf(RIDER) < form(h).indexOf("APP.cmd('rfSubmit')"), 'above the button');
     assert.deepStrictEqual(h.calls.writes, []);
   });
   it('points and wallet count towards "full", as on the server (gross, not cash)', () => {
     // 120 cash + 30 points = 150 gross; the customer asked for 120 → partial → no warning.
     const h = mk({ order: Object.assign({}, base, { refund: { gross: 150, approved: 0, requested: 120, lines: null } }) });
     h.CMD.approveRefund();
-    assert.ok(!h.ctx.state.ask.body.includes(RIDER));
+    assert.ok(!form(h).includes(RIDER));
     // …and a prior partial lowers the bar: 150 − 30 already approved, 120 asked → full.
     const f = mk({ order: Object.assign({}, base, { refund: { gross: 150, approved: 30, requested: 120, lines: null } }) });
     f.CMD.approveRefund();
-    assert.ok(f.ctx.state.ask.body.includes(RIDER));
+    assert.ok(form(f).includes(RIDER));
   });
   it('picked lines are the amount when there are any', () => {
-    const h = mk({ order: Object.assign({}, base, { refund: { gross: 120, approved: 0, requested: 120, lines: [{ amount: 40 }] } }) });
+    const h = mk({ order: Object.assign({}, base, { refund: { gross: 120, approved: 0, requested: 120 },
+      rfItems: [{ id: 1, name: ['Milk', '奶'], qty: 1, left: 1, refunded: 0, unit: 40 }, { id: 2, name: ['Rice', '米'], qty: 2, left: 2, refunded: 0, unit: 40 }],
+      refundLineIds: [{ item_id: 1, qty: 1 }] }) });
     h.CMD.approveRefund();
-    assert.ok(!h.ctx.state.ask.body.includes(RIDER));
+    assert.strictEqual(h.ctx.state.rf.mode, 'lines');
+    assert.ok(!form(h).includes(RIDER));
+    // …and ticking the rest of the order makes it full, so the warning comes on.
+    h.CMD.rfChk(2);
+    assert.ok(form(h).includes(RIDER));
   });
   it('no rider in flight — none found yet is not "on it", nor a cancelled one — no sentence', () => {
     for (const stage of [null, 'delivered', 'cancelled']) {
-      const h = mk({ order: { refundStatus: 'pending', courier: stage ? { stage } : null, refund: { gross: 120, approved: 0 } } });
+      const h = mk({ order: { refundStatus: 'pending', courier: stage ? { stage } : null, refund: { gross: 120, approved: 0 }, rfItems: [] } });
       h.CMD.approveRefund();
-      assert.ok(!h.ctx.state.ask.body.includes('rider'), String(stage));
+      assert.ok(!form(h).includes('rider'), String(stage));
     }
   });
-  it('figures not read yet: the warning is shown rather than risked', () => {
-    const h = mk({ order: Object.assign({}, base, { refund: null }) });
+  it('figures not read yet: the form reads them first, and claims nothing until it has them', async () => {
+    const h = mk({ order: Object.assign({}, base, { refund: null, rfItems: undefined }),
+      readReply: () => ({ order_no: 'R-9', id: 9 }) });
+    h.ctx.mapDetail = () => ({ id: 'R-9', _id: 9, totalNum: 120, courier: { stage: 'in_transit' }, rfItems: [], refundLineIds: [],
+      refund: { gross: 120, approved: 0, requested: null } });
     h.CMD.approveRefund();
-    assert.ok(h.ctx.state.ask.body.includes(RIDER));
+    assert.ok(h.ctx.state.rf.loading);
+    assert.deepStrictEqual(plain(h.calls.reads), ['/orders/9']);
+    assert.ok(form(h).includes('Loading…') && !form(h).includes('rfSubmit'), 'no button before the figures');
+    h.CMD.rfSubmit();
+    assert.deepStrictEqual(h.calls.writes, [], 'and nothing can be sent');
+    await tick();
+    assert.strictEqual(h.ctx.state.rf.mode, 'full');
+    h.ctx.currentOrder = () => h.ctx.state.liveDetail;
+    assert.ok(form(h).includes(RIDER), 'then the warning, on the real figures');
   });
-  it('confirming sends the same request as before', async () => {
+  it('confirming sends the desktop\'s approve body', async () => {
     const h = mk({ order: Object.assign({}, base, { refund: { gross: 120, approved: 0 } }) });
-    h.CMD.approveRefund(); h.ask(); await tick();
-    assert.deepStrictEqual(plain(h.calls.writes), [{ p: '/orders/9/refund/approve', body: {}, method: 'POST' }]);
+    h.CMD.approveRefund(); h.CMD.rfSubmit(); await tick();
+    assert.deepStrictEqual(plain(h.calls.writes), [{ p: '/orders/9/refund/approve', body: { note: '', amount: 120, reverse_points: true }, method: 'POST' }]);
   });
   it('the detail map carries the gross tender figure', () => {
     has(M, "gross:Math.round(((Number(o.points_amount)||0)+(Number(o.balance_used)||0)+(Number(o.total)||0))*100)/100,");

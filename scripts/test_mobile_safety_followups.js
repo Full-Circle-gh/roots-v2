@@ -128,19 +128,29 @@ section('2 · the empty media library');
 
 section('3 · Approve refund carries all of §222\'s block');
 {
+  /* §325 O3: Approve is the desktop's approve FORM now (sheetRefundForm), and
+     §222's block sits where the desktop puts it — above the form's button,
+     recomputed as the amount, the lines or the mode change. Every S1d case is
+     asked of the form. */
   const FULL = 'Full refund: the order is marked refunded, its same-city delivery is cancelled, and stock, points and referral credit are reversed. The customer is told.';
   const PART = 'Partial refund: the order keeps its status and its delivery. Stock reverses for the selected items only. The customer is told.';
   const DAY = 'Refunding never changes the delivery day. If the customer only wants it another day, reject this and change the date instead.';
   const RIDER = 'A rider is on this order right now — approving cancels that delivery.';
   const SRC = [cut(M, 'const MCAN_MONEY_ONLY=', 'function canRoute('), cut(M, "reg('advance', to=>{", 'function currentOrder(){')].join('\n');
-  function mk(order) {
+  function mk(order, lang, read) {
     const CMD = {};
-    const ctx = { LANG: 'en', CUR: '¥', state: { caps: null, ask: null, detailActions: false }, render: () => {},
-      reg: (n, f) => { CMD[n] = f; }, currentOrder: () => Object.assign({ _id: 9, totalNum: 120 }, order),
+    const ctx = { LANG: lang || 'en', CUR: '¥', state: { caps: null, ask: null, detailActions: false, rf: null, detailId: 'R-9', liveDetail: null },
+      render: () => {}, reg: (n, f) => { CMD[n] = f; },
+      currentOrder: () => ctx.state.liveDetail || Object.assign({ id: 'R-9', _id: 9, totalNum: 120, rfItems: [], refundLineIds: [] }, order),
+      escAttr: (v) => String(v == null ? '' : v), ic: () => '', money: (c, n) => c + Number(n).toFixed(2),
+      api: () => Promise.resolve({}), mapDetail: () => Object.assign({ id: 'R-9', _id: 9, totalNum: 120, rfItems: [], refundLineIds: [] }, read || {}),
+      E: (en, zh) => ({ toString() { return ctx.T(en, zh); } }), document: { getElementById: () => null },
       Object, Promise, Math, Number, String, Array, JSON };
     ctx.T = (en, zh) => (ctx.LANG === 'en' ? en : zh);
     vm.createContext(ctx); vm.runInContext(SRC, ctx);
     CMD.approveRefund();
+    ctx.form = () => ctx.sheetRefundForm();
+    ctx.CMD = CMD;
     return ctx;
   }
   it('every sentence is the desktop\'s pair, copied whole', () => {
@@ -152,29 +162,38 @@ section('3 · Approve refund carries all of §222\'s block');
     }
   });
   it('a full approve: the full line, a brick edge, and the day line', () => {
-    const b = mk({ refund: { gross: 120, approved: 0, requested: null } }).state.ask.body;
+    const b = mk({ refund: { gross: 120, approved: 0, requested: null } }).form();
     assert.ok(b.includes(FULL) && !b.includes(PART) && b.includes(DAY));
     assert.ok(b.includes('border-left:3px solid var(--brick-ink)'));
   });
   it('a partial one (points make the gross larger): the partial line, a quiet edge, no rider', () => {
-    const b = mk({ refund: { gross: 150, approved: 0, requested: 120 }, courier: { stage: 'in_transit' } }).state.ask.body;
+    const b = mk({ refund: { gross: 150, approved: 0, requested: 120 }, courier: { stage: 'in_transit' } }).form();
     assert.ok(b.includes(PART) && !b.includes(FULL) && !b.includes(RIDER) && b.includes(DAY));
     assert.ok(b.includes('border-left:3px solid var(--border-default)'));
   });
-  it('full with a rider on the road: all three, in the desktop\'s order', () => {
-    const b = mk({ refund: { gross: 120, approved: 0 }, courier: { stage: 'heading_to_pickup' } }).state.ask.body;
+  it('full with a rider on the road: all three, in the desktop\'s order, above the button', () => {
+    const b = mk({ refund: { gross: 120, approved: 0 }, courier: { stage: 'heading_to_pickup' } }).form();
     assert.ok(b.indexOf(FULL) < b.indexOf(RIDER) && b.indexOf(RIDER) < b.indexOf(DAY));
+    assert.ok(b.indexOf(DAY) < b.indexOf("APP.cmd('rfSubmit')"));
   });
-  it('figures not read: no full/partial claim, but the rider and the day line stand', () => {
-    const b = mk({ refund: null, courier: { stage: 'in_transit' } }).state.ask.body;
-    assert.ok(!b.includes(FULL) && !b.includes(PART) && b.includes(RIDER) && b.includes(DAY));
+  it('the block follows the form: switching a full approve to a smaller amount turns it partial', () => {
+    const c = mk({ refund: { gross: 120, approved: 0, requested: null }, courier: { stage: 'in_transit' } });
+    assert.ok(c.form().includes(FULL) && c.form().includes(RIDER));
+    c.CMD.rfMode('amount'); c.CMD.rfType('amount', '20');
+    const b = c.form();
+    assert.ok(b.includes(PART) && !b.includes(FULL) && !b.includes(RIDER) && b.includes(DAY));
+  });
+  it('figures not read: no full/partial claim — nor any button — until they are, then the real block', async () => {
+    const c = mk({ refund: null, rfItems: undefined, courier: { stage: 'in_transit' } }, 'en',
+      { refund: { gross: 120, approved: 0 }, courier: { stage: 'in_transit' } });
+    let b = c.form();
+    assert.ok(!b.includes(FULL) && !b.includes(PART) && !b.includes('rfSubmit') && b.includes('Loading…'));
+    await new Promise((r) => setImmediate(r)); await new Promise((r) => setImmediate(r));
+    b = c.form();
+    assert.ok(b.includes(FULL) && b.includes(RIDER) && b.includes(DAY));
   });
   it('in Chinese, the Chinese halves', () => {
-    // The sheet is built at open time, so it is opened in Chinese.
-    const zh = (() => { const CMD = {}; const c = { LANG: 'zh', CUR: '¥', state: { caps: null, ask: null }, render: () => {},
-      reg: (n, f) => { CMD[n] = f; }, currentOrder: () => ({ _id: 9, totalNum: 120, refund: { gross: 120, approved: 0 } }),
-      Object, Promise, Math, Number, String, Array, JSON };
-    c.T = (en, z) => z; vm.createContext(c); vm.runInContext(SRC, c); CMD.approveRefund(); return c.state.ask.body; })();
+    const zh = mk({ refund: { gross: 120, approved: 0 } }, 'zh').form();
     assert.ok(zh.includes('全额退款:') && zh.includes('退款不会更改配送日期。'));
   });
 }
