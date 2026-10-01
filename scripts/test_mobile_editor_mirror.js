@@ -399,7 +399,7 @@ function pel(tag) {
 function mkPhone(opts = {}) {
   const sent = [], media = [];
   const ctx = {
-    M: { lang: opts.lang || 'en', editId: 'b1', extra: null, frameColors: [], corners: [], targets: null },
+    M: { lang: opts.lang || 'en', editId: 'b1', extra: null, corners: [], targets: null },
     cuT: (en, cn) => (opts.lang === 'cn' ? cn : en),
     esc: (s) => (s == null ? '' : String(s)).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])),
     send: (cmd, x) => sent.push({ cmd, x }),
