@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.460
+# Tacet shared-core consolidation — decisions record, v4.461
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-01 · v4.461 — **§381 · AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST — DECIDED BY ASH:** *"there should always be an option to select land transport if user want and it comes with a warning"*. The mirror of the 2026-09-16 land→air warning: an air parcel's JD label dialog now lists both ground services after air, and picking one asks on the click. The parcel's mode is never written.
 
 2026-09-29 · v4.460 — **§290 · THE SIZE ON A TILL TILE IS NEVER CUT OFF — FOUND BY CLAUDE WHILE BUILDING §289, FIXED ON ASH'S WORD** (*"fix this and after merge"*). §183 put a product's size (*Large*, *Regular*) on its own line under the name so two sizes of one drink could be told apart, but wrote it INSIDE the name's element, and the name is clamped to two lines. The clamp counted the size as a third line and cut it, so on an iPad column (140px) *Organic Matcha Latte* wrapped to two lines and *Large* vanished: the one word §183 exists to show. It was there before §289; the screenshots taken for §289 are where it showed. **THE FIX**: the name and the size share a wrapper (`.hd`) and only the name is clamped. Two name lines, the size and the price row were then 6px taller than a 100px row, so the tile's top and bottom padding went 12px → 10px and the size line was tightened, rather than making every row of every till taller. Checked in Chromium at 1280, 1024 and 390 wide, with and without photos: every size visible, no tile overflowing. `scripts/test_till_options.js` gains a check that the name closes before the size on both kinds of tile; it goes red on the old markup. No new string, no server change, no change to `.gitignore` or CI.
 
@@ -26072,3 +26074,50 @@ order.
    - `test_mobile_controls_gated.js`: now also checks Create JD label + Save
      tracking on a bare parcel, and Cancel JD pickup on a JD waybill. Both
      commands are on its guard list.
+
+## §381 — AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST
+
+**Decided by Ash, 2026-10-01**, from a combined parcel (Jackfruit Chips + Misfit
+Medjool Dates, merged into one Air parcel) whose JD label dialog showed only a
+pieces box: *"这个订单合并后默认是空运。没有选择。它没有陆运的选择。"* and *"there
+should always be an option to select land transport if user want and it comes
+with a warning I thought we have that"*.
+
+1. **What was there.** The warning Ash remembered is the 2026-09-16 rule: a
+   LAND parcel lists air, and picking it asks (`createJdLabel`,
+   `public/retail-admin/04-orders.js`; vocabulary doc, *Air on a land parcel's
+   label*). It only ran one way. A plain AIR parcel's list was empty
+   (`isAir ? []`) and 生鲜特快 / `LL-SD-M` was the only thing it could book.
+   Fujian / Guangxi air parcels were the one exception: they got the two
+   fresh services, with ground pre-selected.
+2. **What it is now.** Every air parcel outside Fujian / Guangxi lists all
+   three services: air first and pre-selected, then 生鲜标快 `LL-HD-M`, then
+   京东标快 `ed-m-0001`.
+3. **The warning — on the click, like its mirror.** Picking either ground row
+   asks *Air parcel · 空运包裹 — <items> planned for air. Ground is slower.
+   Create the ground waybill anyway?* Saying no puts air back. Moving between
+   the two ground rows after a yes does not ask again; it is the same
+   decision. Going back to air never asks. No second question at
+   Create & ship.
+4. **Fujian / Guangxi do not ask.** Ground is the default there, so asking about
+   it would be noise.
+5. **The parcel's mode is never written** — the same rule as the Fujian /
+   Guangxi default and the land→air override. The drawer still says Air; only
+   the product on the waybill changes. The server has always accepted an
+   explicit product on any parcel, so nothing server-side changed.
+6. **A side effect worth knowing.** The air row's existing "Land only — airline
+   rejected: <items>" badge now shows on air parcels too, because they now
+   have rows. On the screenshot's parcel it names Misfit Medjool Dates. That is
+   the one place the operator can see the plan put a land-only item in an air
+   parcel.
+7. **What this does not fix.** Why combining produced an AIR parcel holding a
+   land-only item is a planning question (`planShipments` / the combine route).
+   §377, merged the same day, fixes the cause seen on this order: a product's
+   shipping setting now applies to every size of it. This section is the
+   escape hatch, not the cure.
+8. **Held by** `scripts/test_jd_label_air_option.js` section 6.
+   `scripts/test_jd_waybill_land_default.js` and
+   `scripts/test_chengdu_air_sf_only.js` are unchanged and still pass.
+9. **Not on the phone yet.** §380's phone JD label, merged the same day, copies
+   the old desktop rule: a plain air parcel gets no list (`isAir?[]` in
+   `public/m.html`). That is a follow-up, kept out of this change.
