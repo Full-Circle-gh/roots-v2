@@ -336,23 +336,28 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       walk('public');
       const src = Object.fromEntries(files.map((f) => [f, read(f)]));
       const who = (re) => files.filter((f) => re.test(src[f])).sort();
+      // Every phone write to /config: a literal path starting '/config' (with or
+      // without ?history / ?expect), or the pop-up switch's cfgPath.
+      const SITE = /apiWrite\(('\/config[^']*'[^,]*|cfgPath),/g;
+      const sites = [];
+      for (let mm; (mm = SITE.exec(M));) sites.push(mm.index);
+      ok(!/apiWrite\((?!'\/config|cfgPath)[^,]*config/.test(M), 'the phone writes /config through no other path');
       is(who(/retail-admin\/config['"`?]/), [
         'public/cms-mobile.html', 'public/cms.html', 'public/product-editor.html', 'public/retail-admin.html',
         'public/retail-admin/01-core.js', 'public/retail-admin/05-marketing.js', 'public/retail-admin/06-delivery.js',
         'public/retail-admin/07-content-billing.js', 'public/retail-admin/09-products.js', 'public/retail-admin/10-extras.js',
         'public/retail-admin/17-setup-guide.js', 'public/retail-admin/31-product-page.js',
       ], 'PUT /config: the desktop files, the two editors and the product editor');
-      // Inline bodies (apiWrite('/config',{...})) plus the history-filed form
-      // (§333: Resume delivery builds `body` and writes /config?history=…).
-      const inlineFam = (M.match(/apiWrite\('\/config',\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\('\/config',\{\[?'?/, '').split(/['\]]/)[0]);
-      const historyFam = (M.match(/const body=\{'([a-zA-Z.]+)'[^}]*\};[\s\S]{0,300}?apiWrite\('\/config\?history=/g) || []).map((s) => s.match(/const body=\{'([a-zA-Z.]+)'/)[1]);
-      is([...inlineFam, ...historyFam].sort(),
-        ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'], 'the phone writes four families, each asserted in section 2');
-      // §325 M4 — and its content cards, which write PUT /config?history=<card>
-      // from cfgCard: each card's family is asserted in section 2.
+      const FAMS = ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'];
+      // §325 M4 — the phone's content cards (m.html cfgCard: legal, faq, about,
+      // copy.snippets) share ONE write site, PUT /config?history=<card>; each
+      // card's family is a row in section 2. Every other site is one family.
+      const CARD_SITE = M.indexOf("apiWrite('/config?history='+encodeURIComponent(c.card)");
+      ok(CARD_SITE !== -1 && sites.includes(CARD_SITE), 'the content cards write through the one cfgCard site');
       const cards = (M.match(/cfgCard\('([a-z.]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z.]+)'/)[1]).sort();
       is(cards, ['about', 'copy.snippets', 'faq', 'legal'], 'the phone\'s content cards: about, copy, faq, legal');
-      ok(/apiWrite\('\/config\?history='\+encodeURIComponent\(c\.card\)/.test(M), '…all through the one cfgCard write');
+      is(sites.filter((i) => i !== CARD_SITE).map((i) => FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f)).join('|')).sort(),
+        FAMS, 'the phone writes four families, one per write site, each asserted in section 2');
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
