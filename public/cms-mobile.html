@@ -276,6 +276,18 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 .lib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .lib-tile{aspect-ratio:1;padding:0;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--bg-elev-2);cursor:pointer;}
 .lib-tile img{width:100%;height:100%;object-fit:cover;display:block;}
+/* §325 M3 — the inspector, mirrored */
+.mx-sec{margin:4px 0 6px;}
+.mx-sec-t{font:600 11px var(--f-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin:6px 0 10px;padding-top:10px;border-top:1px solid var(--line-soft);}
+.mx-pair{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;}
+.mx-pair input,.mx-pair textarea{flex:1;min-width:0;}
+.mx-tag{flex:0 0 26px;padding-top:12px;font:600 11px var(--f-mono);color:var(--text-3);text-align:center;}
+.mx-ctl{margin-bottom:8px;}
+.mx-text{font:400 12.5px var(--f-sans);color:var(--text-2);line-height:1.45;margin:0 0 8px;white-space:pre-line;}
+.mx-btn{margin:0 8px 8px 0;}
+.mx-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+.mx-prod{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line-soft);margin-bottom:6px;font:400 13.5px var(--f-sans);}
+.mx-prod span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .edit-foot{display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line-soft);flex:0 0 auto;}
 .edit-foot button{flex:1;height:44px;border-radius:var(--r-lg);font:600 14px var(--f-sans);cursor:pointer;}
@@ -597,6 +609,7 @@ const M = {
   frameColors: [],        // §325 — the inspector's Frame choices [{value,label,hex}]
   corners: [],            // §325 — the inspector's Corner radius choices [{value,label}]
   targets: null,          // §325 M2 — the link picker's lists {pages,products,categories}, from the bridge
+  form: null,             // §325 M3 — the inspector's controls for the selected block {blockId, nodes}
 };
 
 /* ── i18n chrome ──────────────────────────────────────────────────── */
@@ -658,6 +671,9 @@ window.addEventListener('message', (e) => {
     if (M.editId != null && !typingInSheet()) {
       if (M.selectedBlock && M.selectedBlock.id === M.editId) renderEdit();
     }
+  } else if (d.evt === 'form') {
+    M.form = { blockId: d.blockId, nodes: d.nodes || [] };
+    if (M.editId != null && M.editId === d.blockId && !typingInSheet()) renderEdit();
   } else if (d.evt === 'targets') {
     M.targets = { pages: d.pages || [], products: d.products || [], categories: d.categories || [] };
     if (M.editId != null && !typingInSheet()) renderEdit();
@@ -851,37 +867,11 @@ function openAdd(at) {
   openSheet('add');
 }
 
-/* ── curated quick-edit fields per block type ─────────────────────── */
-const F = {
-  announcement_bar: [['text_en', 'Banner text', '横幅文字', 1], ['text_cn', 'Banner text (中文)', '横幅文字(中文)', 1]],
-  hero_banner:      [['headline_en', 'Headline', '标题'], ['headline_cn', 'Headline (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题', 1], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)', 1]],
-  category_tabs:    [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
-  product_grid:     [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
-  featured_item:    [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
-  greeting:         [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  countdown_timer:  [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['ends_at', 'Ends at', '结束时间', 0, 'datetime-local'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  kitchen_status:   [['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],   // §325 M2 — the button its link needs
-  flash_sale_strip: [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  // §325 — the headline, subtitle, discount and code FOLLOW the linked coupon
-  // (desktop shows them read-only), so they are not typed here: the picker
-  // above the fields sets them. The small heading and the button are the
-  // operator's own words, as on desktop.
-  coupon_block:     [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  points_widget:    [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  top_up:           [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
-  voting_block:     [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  affiliate_block:  [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  recipe_story:     [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['body_en', 'Body', '正文', 1], ['body_cn', 'Body (中文)', '正文(中文)', 1]],
-  bundle:           [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  wecom_contact:    [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  favorites_block:  [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)']],
-  leaderboard:      [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)']],
-  store_info:       [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
-  review_card:      [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
-  video_banner:     [['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  order_tracker:    [['empty_text_en', 'Empty text', '无订单文字'], ['empty_text_cn', 'Empty text (中文)', '无订单文字(中文)']],
-  notification_bar: [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
-};
+/* §325 M3 — the sheet's fields are the desktop inspector's own, mirrored
+   (cms.html fcFormSnapshot; renderMirror below). The curated list of text
+   fields that stood here — a subset of each block's words, under labels of
+   its own — is retired: the phone now shows every field the inspector shows,
+   by the inspector's names, and writes each one the way the inspector does. */
 
 /* ── EDIT sheet ───────────────────────────────────────────────────── */
 function openEdit(id) {
@@ -900,33 +890,23 @@ function renderEdit() {
   const m = blockMeta(type);
   $('#edit-title').textContent = M.lang === 'cn' ? m.name_cn : m.name;
   const body = $('#edit-body'); body.innerHTML = '';
-  const fields = F[type];
   // §325 M2 — the media library, open for one picture field, takes the sheet.
   if (blk && _med.lib) { renderLibrary(body, blk); return; }
   if (!blk) {
     body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);padding:8px 0">' + cuT('Loading…', '加载中…') + '</div>';
   } else if (type === 'promo_cards') {
     renderPromoEdit(body, blk);   // §299 — pictures, links and dates, on the phone
-  } else if (fields && fields.length) {
-    if (type === 'coupon_block') renderCouponPick(body, blk);   // §325 — a real coupon, never a typed one
-    fields.forEach(f => {
-      const k = f[0], label = M.lang === 'cn' ? f[2] : f[1], ml = f[3], inputType = f[4] || 'text';
-      const wrap = document.createElement('div'); wrap.className = 'fld';
-      const val = blk[k] == null ? '' : String(blk[k]);
-      const ctrl = ml
-        ? '<textarea rows="2" data-k="' + esc(k) + '">' + esc(val) + '</textarea>'
-        : '<input type="' + esc(inputType) + '" data-k="' + esc(k) + '" value="' + esc(val) + '">';
-      wrap.innerHTML = '<label>' + esc(label) + '</label>' + ctrl;
-      const input = wrap.querySelector('[data-k]');
-      input.addEventListener('input', () => { send('patch', { id, patch: { [k]: input.value } }); });
-      body.appendChild(wrap);
-    });
   } else {
-    body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);line-height:1.5;margin-bottom:6px">' +
-      cuT('This block has no quick text fields — arrange it here, then fine-tune its details on desktop.', '此模块没有快速文字字段 — 在此排版,详情请在电脑上微调。') + '</div>';
+    if (type === 'coupon_block') renderCouponPick(body, blk);   // §325 — a real coupon, never a typed one
+    // §325 M3 — every field the desktop inspector shows for this block, in its
+    // order; the sheet's own picture, video and link fields (§325 M2) take the
+    // place of the inspector's.
+    const form = (M.form && M.form.blockId === id) ? M.form.nodes : null;
+    let placed = false;
+    if (form) placed = renderMirror(body, blk, type, form);
+    else body.insertAdjacentHTML('beforeend', '<div class="pc-hint">' + esc(cuT('Loading…', '加载中…')) + '</div>');
+    if (!placed) renderMedia(body, blk, type);
   }
-  // §325 M2 — pictures, video, a hero's buttons and every button link.
-  if (blk && type !== 'promo_cards') renderMedia(body, blk, type);
   // Per-block behaviour note (conditional/dynamic blocks) — rides along on the
   // palette payload from cms.html (BLOCK_META.editorNote). Pinned at the top via
   // afterbegin so it survives the !blk "Loading…" / no-fields branches above and
@@ -935,15 +915,9 @@ function renderEdit() {
   if (note) body.insertAdjacentHTML('afterbegin', '<div class="edit-note">' + esc(note) + '</div>');
   // §325 — where it shows, its frame, corners and width: every block has them.
   if (blk) renderChrome(body, blk);
-  // Promo cards ARE pictures, edited right here — the "images are tuned on
-  // desktop" note would tell the operator the opposite of what the sheet does.
-  if (type === 'promo_cards') return;
-  body.insertAdjacentHTML('beforeend',
-    '<div class="desk-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' +
-    // §325 M2 — pictures are set here now, and colours in Design: what is
-    // left on desktop is the rest (M3 brings those too).
-    '<div>' + cuT('<b>Advanced options</b> for this block are tuned on desktop. ', '此模块的<b>高级选项</b>请在电脑上调整。') +
-    '<a href="/cms?desktop=1">' + cuT('Open on a computer ↗', '在电脑上打开 ↗') + '</a></div></div>');
+  // §325 M3 — no "tuned on desktop" note any more: the sheet now carries
+  // every field the inspector has; colours and layout are in Design, and
+  // Delete is on the action bar.
 }
 
 /* ── §325 · THE COUPON BLOCK'S PICKER, AND EVERY BLOCK'S CHROME ─────────
@@ -1143,7 +1117,7 @@ function linkOptions(cur, suggest) {
 function linkField(label, hint, cur, suggest, mkey, onSet) {
   const d = document.createElement('div'); d.className = 'fld';
   const manual = !!_med.manual[mkey];
-  d.innerHTML = '<label>' + esc(label) + '</label><select data-a="link">' + linkOptions(cur, suggest) + '</select>' +
+  d.innerHTML = (label ? '<label>' + esc(label) + '</label>' : '') + '<select data-a="link">' + linkOptions(cur, suggest) + '</select>' +
     (hint ? '<div class="pc-hint" style="margin:6px 0 0">' + esc(hint) + '</div>' : '') +
     (manual
       ? '<input type="text" data-a="manual" style="margin-top:8px" placeholder="shop · product:12 · category:5" value="' + esc(cur || '') + '">'
@@ -1156,11 +1130,12 @@ function linkField(label, hint, cur, suggest, mkey, onSet) {
 
 function mediaHint(spec, blk) { const h = typeof spec.hint === 'function' ? spec.hint(blk) : spec.hint; return h ? cuT(h[0], h[1]) : ''; }
 function mediaField(blk, spec) {
-  const cur = blk[spec.key] ? String(blk[spec.key]) : '';
+  // A mirrored picker (§325 M3) carries its own value and setter (`drive`).
+  const cur = spec.drive ? String(spec.value || '') : (blk[spec.key] ? String(blk[spec.key]) : '');
   const busy = _med.busy === spec.key, err = _med.err[spec.key];
   const video = spec.kind === 'video';
   const d = document.createElement('div'); d.className = 'fld';
-  d.innerHTML = '<label>' + esc(cuT(spec.en, spec.cn)) + '</label>' +
+  d.innerHTML = (spec.en ? '<label>' + esc(cuT(spec.en, spec.cn)) + '</label>' : '') +
     '<div class="pc-pic"><div class="md-thumb">' + (cur
       ? (video ? '<video src="' + esc(cur) + '" muted loop playsinline autoplay></video>' : '<img src="' + esc(cur) + '" alt="">') : '') + '</div>' +
     '<div style="display:flex;flex-direction:column;gap:8px;min-width:0">' +
@@ -1184,6 +1159,7 @@ function mediaField(blk, spec) {
   return d;
 }
 function setMedia(blk, spec, url) {
+  if (spec.drive) { spec.drive(url); return; }
   if (spec.kind === 'image') send('setImage', { id: blk.id, key: spec.key, url, aspectKey: spec.aspect || null });
   else send('patch', { id: blk.id, patch: { [spec.key]: url } });
 }
@@ -1318,6 +1294,135 @@ function renderMedia(body, blk, type) {
     body.appendChild(linkField(cuT(en, cn), hint ? cuT(hint[0], hint[1]) : '', blk[key], sug, key,
       (v) => send('patch', { id: blk.id, patch: { [key]: v } })));
   });
+}
+
+/* ── §325 M3 · THE DESKTOP INSPECTOR, ON THE PHONE ──────────────────────
+   The editor underneath reads its own inspector for the selected block
+   (cms.html fcFormSnapshot) and sends it as a tree: sections, fields with
+   their label and hint, and controls — text boxes (a two-language pair
+   arrives as two boxes tagged EN and 中), lists, numbers, ticks, buttons,
+   chips, short notes, and the product, picture, video and link pickers. This
+   draws that tree, and every tap goes back as 'ctl' (or 'pickSet' for a
+   picker) to the very control it copies, which then does exactly what it
+   does on desktop. So the size and behaviour settings, a review list, a
+   store list, a bundle's variants, a poll pinned, a category chosen are all
+   here, by the inspector's names, with nothing written per block.
+
+   The sheet's own controls keep their place: the coupon picker (M1); the
+   picture, video and link fields and a hero's buttons (M2), drawn where the
+   inspector's first such field stands. Labels and hints are the inspector's
+   own words in the editor's language (it follows this sheet's language), so
+   this file adds none for them. */
+function mxOwned(type, k) {
+  if (k === 'image' || k === 'video') return !!MEDIA[type];
+  if (k === 'link') return !!(LINKS[type] || type === 'hero_banner');
+  return false;
+}
+function mxHasOwned(type, n) { return mxOwned(type, n.k) || (n.items || []).some(x => mxHasOwned(type, x)); }
+function mxProductName(p) {
+  return (pickLang(p.name_en, p.name_cn) || ('#' + p.id)) + (p.sku ? ' · ' + p.sku : '') + (p.is_published ? '' : ' · DRAFT');
+}
+function renderMirror(body, blk, type, nodes) {
+  let placed = false;
+  const ctl = (n, value) => send('ctl', { i: n.i, k: n.k, value });
+  const pick = (n, value) => send('pickSet', { i: n.i, k: n.k, value });
+  function draw(n, host) {
+    if (mxHasOwned(type, n) && (n.k === 'field' || mxOwned(type, n.k))) {
+      // The inspector's own picture / video / link field: the sheet's (M2) goes here, once.
+      if (!placed) { placed = true; renderMedia(host, blk, type); }
+      return;
+    }
+    if (n.k === 'sec') {
+      const d = document.createElement('div'); d.className = 'mx-sec';
+      d.innerHTML = '<div class="mx-sec-t">' + esc(n.title) + '</div>';
+      (n.items || []).forEach(x => draw(x, d));
+      host.appendChild(d); return;
+    }
+    if (n.k === 'field') {
+      const d = document.createElement('div'); d.className = 'fld';
+      d.innerHTML = (n.label ? '<label>' + esc(n.label) + '</label>' : '') +
+        (n.help ? '<div class="pc-hint" style="margin:-2px 0 8px">' + esc(n.help) + '</div>' : '');
+      (n.items || []).forEach(x => draw(x, d));
+      host.appendChild(d); return;
+    }
+    if (n.k === 'text') {
+      const d = document.createElement('div'); d.className = n.helper ? 'pc-hint mx-text' : 'mx-text';
+      d.textContent = n.text; host.appendChild(d); return;
+    }
+    if (n.k === 'input') {
+      const d = document.createElement('div'); d.className = 'mx-pair';
+      const area = n.type === 'textarea';
+      const attrs = ' data-a="v"' + (n.placeholder ? ' placeholder="' + esc(n.placeholder) + '"' : '') +
+        (n.min !== '' && n.min != null ? ' min="' + esc(n.min) + '"' : '') + (n.max !== '' && n.max != null ? ' max="' + esc(n.max) + '"' : '') +
+        (n.step ? ' step="' + esc(n.step) + '"' : '') + (n.maxlength ? ' maxlength="' + esc(n.maxlength) + '"' : '');
+      d.innerHTML = (n.tag ? '<span class="mx-tag">' + esc(n.tag) + '</span>' : '') +
+        (area ? '<textarea rows="' + esc(n.rows || 3) + '"' + attrs + '>' + esc(n.value) + '</textarea>'
+              : '<input type="' + esc(n.type || 'text') + '"' + attrs + ' value="' + esc(n.value) + '">');
+      d.querySelector('[data-a=v]').oninput = (e) => ctl(n, e.target.value);
+      host.appendChild(d); return;
+    }
+    if (n.k === 'select') {
+      const d = document.createElement('div'); d.className = 'mx-ctl';
+      d.innerHTML = '<select data-a="v">' + (n.options || []).map(o => '<option value="' + esc(o.value) + '"' + (String(o.value) === String(n.value) ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('') + '</select>';
+      d.querySelector('[data-a=v]').onchange = (e) => ctl(n, e.target.value);
+      host.appendChild(d); return;
+    }
+    if (n.k === 'check' || n.k === 'radio') {
+      const d = document.createElement('label'); d.className = 'chk';
+      d.innerHTML = '<input type="' + (n.k === 'radio' ? 'radio' : 'checkbox') + '" data-a="v"' + (n.checked ? ' checked' : '') + '><span>' + esc(n.label) + '</span>';
+      d.querySelector('[data-a=v]').onchange = (e) => ctl(n, !!e.target.checked);
+      host.appendChild(d); return;
+    }
+    if (n.k === 'button') {
+      const d = document.createElement('button'); d.className = 'pc-btn mx-btn' + (n.danger ? ' danger' : '');
+      d.textContent = n.text; if (n.disabled) d.disabled = true;
+      d.onclick = () => ctl(n, null);
+      host.appendChild(d); return;
+    }
+    if (n.k === 'chip') {
+      let row = host.lastChild;
+      if (!row || row.className !== 'mx-chips') { row = document.createElement('div'); row.className = 'mx-chips'; host.appendChild(row); }
+      const c = document.createElement('button'); c.className = 'vchip' + (n.on ? ' on' : '');
+      c.textContent = n.text; c.onclick = () => ctl(n, null);
+      row.appendChild(c); return;
+    }
+    if (n.k === 'product') { host.appendChild(mxProduct(n, (v) => pick(n, v))); return; }
+    if (n.k === 'image' || n.k === 'video') {
+      host.appendChild(mediaField(blk, { kind: n.k, key: 'mx' + n.i, value: n.value, drive: (url) => pick(n, url) }));
+      return;
+    }
+    if (n.k === 'link') { host.appendChild(linkField('', '', n.value, n.suggest, 'mx' + n.i, (v) => pick(n, v))); return; }
+  }
+  nodes.forEach(n => draw(n, body));
+  return placed;
+}
+/* The product picker: one product (or none), or a list of them. Ids go back
+   as the inspector's own values, never as the text of a list. */
+function mxProduct(n, set) {
+  const d = document.createElement('div'); d.className = 'mx-ctl';
+  if (n.empty) { d.innerHTML = '<div class="pc-hint" style="margin:0">' + esc(n.empty) + '</div>'; return d; }
+  const opts = n.options || [];
+  const byKey = new Map(opts.map(p => [String(p.id), p.id]));
+  if (!n.multi) {
+    const cur = n.value == null ? '' : String(n.value);
+    d.innerHTML = '<select data-a="v"><option value=""' + (cur === '' ? ' selected' : '') + '>' + esc(cuT('— none —', '— 无 —')) + '</option>' +
+      opts.map(p => '<option value="' + esc(p.id) + '"' + (String(p.id) === cur ? ' selected' : '') + '>' + esc(mxProductName(p)) + '</option>').join('') + '</select>';
+    d.querySelector('[data-a=v]').onchange = (e) => set(e.target.value === '' ? null : (byKey.has(e.target.value) ? byKey.get(e.target.value) : null));
+    return d;
+  }
+  const chosen = Array.isArray(n.value) ? n.value.slice() : [];
+  const chosenKeys = new Set(chosen.map(String));
+  d.innerHTML = chosen.map((id, idx) => {
+    const p = opts.find(x => String(x.id) === String(id));
+    return '<div class="mx-prod"><span>' + esc(p ? mxProductName(p) : ('#' + id)) + '</span><button class="pc-btn danger" data-a="rm' + idx + '">' + esc(cuT('Remove', '删除')) + '</button></div>';
+  }).join('') +
+    '<select data-a="add"><option value="" selected>' + esc(cuT('— pick one —', '— 选择一个 —')) + '</option>' +
+    opts.filter(p => !chosenKeys.has(String(p.id))).map(p => '<option value="' + esc(p.id) + '">' + esc(mxProductName(p)) + '</option>').join('') + '</select>';
+  chosen.forEach((id, idx) => {
+    d.querySelector('[data-a=rm' + idx + ']').onclick = () => set(chosen.filter((_, j) => j !== idx));
+  });
+  d.querySelector('[data-a=add]').onchange = (e) => { if (e.target.value !== '' && byKey.has(e.target.value)) set(chosen.concat([byKey.get(e.target.value)])); };
+  return d;
 }
 
 /* ── §299 · PROMO CARDS, ON THE PHONE ─────────────────────────────────
