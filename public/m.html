@@ -5681,6 +5681,31 @@ reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('trendSection', k=>{ state.trendOpen[k]=!state.trendOpen[k]; render(); });
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
 reg('closeChannel', ()=>{ state.chanSheet=null; state.chanErr=null; render(); });
+/* §325 S2m — WHAT CLOSING ELEME ACTUALLY DOES. Closing Eleme at a store writes
+   its channel_status cell and drops that store's queued Eleme stock pushes
+   (lib/store-close.js setChannelOpen); the Eleme daemon then skips the store's
+   pushes (scripts/eleme-daemon.js processStockQueue, channelClosedStores). That
+   is all. Nothing tells Eleme the shop is shut — there is no Eleme shop-status
+   write anywhere — and the order poll is gated on opening hours only, so Eleme
+   customers can still order and those orders are still brought in. The
+   per-store sentence ("No new orders arrive…") promised the opposite, so Eleme
+   gets its own, and every close that sweeps Eleme along (the shop switch,
+   Close everything) says it is the exception. */
+const ELEME_CLOSE_WORDS={
+  one:['Stock stops being sent to Eleme for this store: updates already waiting are dropped, and new ones wait until it reopens. Eleme is not told the store is closed — customers can still order there, and those orders still come in.',
+       '将停止向饿了么推送该门店的库存：已排队的更新会被清除，新的更新等到重新开启后再发送。饿了么不会收到门店关闭的通知 — 顾客仍可下单，订单照常导入。'],
+  all:['Stock stops being sent to Eleme for every store: updates already waiting are dropped, and new ones wait until it reopens. Eleme is not told the stores are closed — customers can still order there, and those orders still come in.',
+       '将停止向饿了么推送所有门店的库存：已排队的更新会被清除，新的更新等到重新开启后再发送。饿了么不会收到门店关闭的通知 — 顾客仍可下单，订单照常导入。'],
+  openOne:['Stock is sent to Eleme for this store again.','恢复向饿了么推送该门店的库存。'],
+  openAll:['Stock is sent to Eleme again. A shop that is closed stays closed.','恢复向饿了么推送库存。已关闭的门店保持关闭。'],
+  except:['Eleme is the exception: it is not told, so Eleme orders can still come in.','饿了么除外：它不会收到通知，饿了么订单仍可能进来。'],
+};
+/* Is Eleme a live channel here — at this store, or at any store? Only then does
+   a shop-wide close need to name the exception. */
+function elemeLiveAt(storeCode){
+  const c=((state.chan&&state.chan.channels)||[]).find(x=>x.channel==='eleme');
+  return !!(c&&c.integrated!==false&&(c.cells||[]).some(x=>!storeCode||x.storeCode===storeCode));
+}
 /* One store on one channel. `next` arrives as '1' or '0' from the template —
    APP.cmd is variadic now, but every argument still crosses as a string. */
 reg('chanCell', (channel, storeCode, next)=>{
@@ -5696,7 +5721,8 @@ reg('chanCell', (channel, storeCode, next)=>{
     // What stops, and what does not. "Closed" reads as "cancelled" if you do
     // not say so, and it is the orders already in the kitchen you would worry
     // about first.
-    body: open ? T('New orders can arrive at this store again.','这家门店可以重新接单。')
+    body: channel==='eleme' ? T(...ELEME_CLOSE_WORDS[open?'openOne':'one'])   // §325 S2m
+        : open ? T('New orders can arrive at this store again.','这家门店可以重新接单。')
                : T('No new orders arrive at this store on this channel. Orders already placed are not affected.',
                    '该门店在此渠道将不再接到新订单。已下单的订单不受影响。'),
     confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
@@ -5789,7 +5815,8 @@ reg('shopOpen', (storeCode, next)=>{
                        : T('Every sales channel at this shop opens, and it takes orders, pickups and counter sales again. Meituan follows within about a minute.',
                            '该门店的所有销售渠道将开启，恢复接单、自提与门店收银。美团约一分钟内跟随。'))
                : T('Every sales channel at this shop closes, the counter till stops selling, and orders route to the other shop. Orders already placed are not affected.',
-                   '该门店的所有销售渠道将关闭，门店收银台停止销售，订单将转由其他门店处理。已下单的订单不受影响。'),
+                   '该门店的所有销售渠道将关闭，门店收银台停止销售，订单将转由其他门店处理。已下单的订单不受影响。')
+                 +(elemeLiveAt(storeCode)?' '+T(...ELEME_CLOSE_WORDS.except):''),   // §325 S2m
     confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
     run:()=>{
       state.shopBusy=storeCode; state.shopErr=null; render();
@@ -5933,7 +5960,8 @@ reg('ocMaster', next=>{
     body: open?T('The online store opens, every shop takes orders and counter sales again, and every Meituan shop opens within about a minute. Any other channel closed at a shop — on its own or with the shop’s switch — stays closed; open those below.',
                  '线上商城将开启，所有门店恢复接单与门店收银，美团各门店约一分钟内开启。在门店单独关闭（或随门店开关关闭）的其他渠道保持关闭，请在下方开启。')
               :T('The online store closes, every shop stops taking orders on every channel and at the counter till, and every Meituan shop closes within about a minute. Orders already placed are not affected.',
-                 '线上商城将关闭，所有门店的所有渠道及门店收银停止接单，美团各门店约一分钟内关闭。已下单的订单不受影响。'),
+                 '线上商城将关闭，所有门店的所有渠道及门店收银停止接单，美团各门店约一分钟内关闭。已下单的订单不受影响。')
+               +(elemeLiveAt()?' '+T(...ELEME_CLOSE_WORDS.except):''),   // §325 S2m
     confirmLabel: open?T('Open everything','全部营业'):T('Close everything','全部关闭'), danger:!open,
     run:()=>ocWrite('master','/store-status/master',{open},
       open?T('Opening every channel','正在开启全部渠道')
@@ -5952,7 +5980,8 @@ reg('chanAll', (channel, next)=>{
   const mt=channel==='meituan';
   state.ask={
     title: open?T('Open this channel at every store?','开启所有门店的该渠道？'):T('Close this channel at every store?','关闭所有门店的该渠道？'),
-    body: (open?T('New orders can arrive on this channel again. A shop that is closed stays closed.','该渠道可以重新接单。已关闭的门店保持关闭。')
+    body: channel==='eleme' ? T(...ELEME_CLOSE_WORDS[open?'openAll':'all'])   // §325 S2m
+        : (open?T('New orders can arrive on this channel again. A shop that is closed stays closed.','该渠道可以重新接单。已关闭的门店保持关闭。')
                :T('No new orders arrive on this channel at any store. Orders already placed are not affected.','所有门店在此渠道将不再接到新订单。已下单的订单不受影响。'))
           +(mt?' '+T('Meituan follows within about a minute.','美团约一分钟内跟随。'):''),
     confirmLabel: open?T('Open channel','开启渠道'):T('Close channel','关闭渠道'), danger:!open,

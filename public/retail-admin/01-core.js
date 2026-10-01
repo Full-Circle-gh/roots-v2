@@ -1863,7 +1863,11 @@ window.csCell = async function (ch, storeCode, open) {
     const chan = csName(ch);
     if (!(await askConfirm({
       title: cuT('Open ' + chan + ' at ' + store + '?', '在 ' + store + ' 开启 ' + chan + '？'),
-      body: cuT('New orders can arrive at this store again.', '这家门店可以重新接单。'),
+      // §325 S2m — Eleme is never told a store is shut, so its orders never
+      // stopped; what this brings back for Eleme is the stock pushes. The
+      // phone's live pair for the same act (m.html ELEME_CLOSE_WORDS.openOne).
+      body: ch === 'eleme' ? cuT('Stock is sent to Eleme for this store again.', '恢复向饿了么推送该门店的库存。')
+                           : cuT('New orders can arrive at this store again.', '这家门店可以重新接单。'),
       confirmLabel: cuT('Open', '开启'),
     }))) return;
   }
