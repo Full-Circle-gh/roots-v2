@@ -110,7 +110,7 @@ function mk(opts = {}) {
   vm.createContext(ctx);
   vm.runInContext(CARD_SRC + VOTING_SRC +
     '\nthis.pe=()=>PE; this.votD=()=>VOT_D; this.votErr=()=>VOT_ERR; this.card=(k)=>CFG_CARD[k]; this.pollMayLeave=pollMayLeave;' +
-    ' this.screenPollEdit=screenPollEdit; this.screenVoting=screenVoting; this.cfgFootHtml=cfgFootHtml; this.pollBoostLine=pollBoostLine;', ctx);
+    ' this.screenPollEdit=screenPollEdit; this.screenVoting=screenVoting; this.cardFootHtml=cardFootHtml; this.pollBoostLine=pollBoostLine;', ctx);
   return { ctx, CMD, writes, reads, toasts, hist: () => histSheet, renders: () => renders };
 }
 const yes = (ctx) => { const a = ctx.state.ask; assert.ok(a && a.run, 'a confirm is open'); ctx.state.ask = null; a.run(); };
@@ -357,7 +357,7 @@ section('3 · the page settings: a card on /voting/config');
     const html = ctx.screenVoting();
     assert.ok(html.includes('Page settings') && html.includes('Polls close Sundays. {pts} pts.') && html.includes('Show vote counts to customers'));
     assert.ok(html.includes('On. Customers see the tallies and percentages.') && html.includes('cmd="APP.cmd(\'votCounts\')"'));
-    assert.ok(/APP\.cmd\('cfgHistory','voting'\)/.test(html));
+    assert.ok(/APP\.cmd\('cardHistory','voting'\)/.test(html));
   });
   it('the line\'s sheet: English and 中文, 240 at most; a change sends the desktop\'s three fields, trimmed', async () => {
     const { ctx, CMD, writes } = mk();
@@ -382,7 +382,7 @@ section('3 · the page settings: a card on /voting/config');
     const versions = [{ id: 2, at: 'x', changed: ['voting.config'], snapshot: { 'voting.config': { intro_en: 'Old', intro_cn: '旧', show_counts: false } } }];
     const { ctx, CMD, writes, reads, hist } = mk({ history: { success: true, versions } });
     ctx.screenVoting(); await tick();
-    CMD.cfgHistory('voting'); await tick();
+    CMD.cardHistory('voting'); await tick();
     assert.ok(reads.includes('/config/history?card=voting'));
     assert.strictEqual(hist().sub(versions[0]), 'Page settings');
     await hist().restore(versions[0]);
@@ -393,7 +393,7 @@ section('3 · the page settings: a card on /voting/config');
     ctx.screenVoting(); await tick();
     CMD.votCounts();
     await ctx.card('voting').auto.flush();
-    assert.ok(/Save failed: /.test(ctx.cfgFootHtml(ctx.card('voting'))));
+    assert.ok(/Save failed: /.test(ctx.cardFootHtml(ctx.card('voting'))));
   });
   it('if the stored settings do not arrive, the card never starts and says so', async () => {
     const { ctx, CMD, writes } = mk({ cfgFails: true });
@@ -415,7 +415,7 @@ section('4 · without voting:edit nothing writes');
     assert.ok(!/pollEdit|pollAsk/.test(html));
     assert.ok(!ctx.card('voting'), 'the settings card is not started');
     const html2 = ctx.screenVoting();
-    assert.ok(!/votIntroEdit|votCounts|cfgHistory/.test(html2));
+    assert.ok(!/votIntroEdit|votCounts|cardHistory/.test(html2));
     CMD.pollEdit(); CMD.pollEdit(1); CMD.pollAsk(1, 'closed'); CMD.pollStatus(1, 'closed'); CMD.votCounts(); CMD.votIntroEdit();
     assert.strictEqual(ctx.pe(), null);
     assert.strictEqual(ctx.state.ask, null);

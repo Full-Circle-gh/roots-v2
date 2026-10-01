@@ -7072,11 +7072,15 @@ function cfgCardStart(c){
       // The rest of the app reads state.cfg; the screen reads its draft.
       if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
     })).then(()=>{ if(c.after) c.after(body); }),
-    onChange:()=>{ askLiveRepaint(); cfgFootRepaint(c); },
+    onChange:()=>{ askLiveRepaint(); cardFootRepaint(c); },
   });
   c.auto.start();
 }
-function cfgFootHtml(c){
+/* Named card*, not cfg*: Settings' own autosave cards (§325 X5) brought a
+   cfgFoot / cfgFootHtml / cfgUndo / cfgHistory of their own, for 'shop' and
+   'cs'. Two of each in one script is a SyntaxError for the const and a silent
+   last-one-wins for the rest, so these took the other name. */
+function cardFootHtml(c){
   const A=c.auto, st=A?A.state:'saved';
   const line=st==='saving'||st==='pending'?T('Saving…','保存中…')
     : st==='hold'?escAttr(A.message)
@@ -7085,16 +7089,16 @@ function cfgFootHtml(c){
   const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
   return `<div style="font-size:12.5px;color:${tone};text-align:center">${line}</div>
     <div style="display:flex;gap:8px;margin-top:10px">
-      ${A&&A.canUndo()?`<button class="btn2" style="flex:1" onclick="APP.cmd('cfgUndo','${c.card}')">${T('Undo','撤销')}</button>`:''}
-      <button class="btn2" style="flex:1" onclick="APP.cmd('cfgHistory','${c.card}')">${T('Version history','历史版本')}</button></div>`;
+      ${A&&A.canUndo()?`<button class="btn2" style="flex:1" onclick="APP.cmd('cardUndo','${c.card}')">${T('Undo','撤销')}</button>`:''}
+      <button class="btn2" style="flex:1" onclick="APP.cmd('cardHistory','${c.card}')">${T('Version history','历史版本')}</button></div>`;
 }
-function cfgFoot(c){ return `<div id="mCfgFoot-${c.card.replace(/[^a-z0-9]/gi,'_')}">${cfgFootHtml(c)}</div>`; }
-function cfgFootRepaint(c){ const el=document.getElementById('mCfgFoot-'+c.card.replace(/[^a-z0-9]/gi,'_')); if(el) el.innerHTML=cfgFootHtml(c); }
+function cardFoot(c){ return `<div id="mCardFoot-${c.card.replace(/[^a-z0-9]/gi,'_')}">${cardFootHtml(c)}</div>`; }
+function cardFootRepaint(c){ const el=document.getElementById('mCardFoot-'+c.card.replace(/[^a-z0-9]/gi,'_')); if(el) el.innerHTML=cardFootHtml(c); }
 /* The history query a route-owned card adds to its own path (§279). */
 const cfgHistQ=(card,note)=>'?history='+encodeURIComponent(card)+(note?'&note='+note:'');
 function cfgBusy(){ return Object.keys(CFG_CARD).some(k=>{ const a=CFG_CARD[k].auto; return !!(a&&a.busy()); }); }
-reg('cfgUndo', card=>{ const c=CFG_CARD[card]; if(!c||!c.auto) return; c.auto.undo(p=>{ c.apply(p); render(); }); });
-reg('cfgHistory', card=>{ const c=CFG_CARD[card]; if(c) cfgHistory(c); });
+reg('cardUndo', card=>{ const c=CFG_CARD[card]; if(!c||!c.auto) return; c.auto.undo(p=>{ c.apply(p); render(); }); });
+reg('cardHistory', card=>{ const c=CFG_CARD[card]; if(c) cfgHistory(c); });
 /* The card's versions, newest first; a restore puts the snapshot into the
    draft and sends it as a restore — what the desktop's history does. */
 function cfgHistory(c){
@@ -7417,7 +7421,7 @@ function screenAboutEdit(){
       ${rows('out_items',r=>LANG==='en'?(r.en||r.cn):(r.cn||r.en))}
       <button class="btn2" style="width:100%" onclick="APP.cmd('aboutAddRow','out_items')">${T('+ Add OUT item','添加「否」项')}</button></div>
     ${sec('signoff',[pick('outro_en','outro_cn'),pick('cta_en','cta_cn')].filter(Boolean).join(' · '))}
-    ${c&&c.auto?cfgFoot(c):''}
+    ${c&&c.auto?cardFoot(c):''}
   </div>`;
 }
 
@@ -7488,7 +7492,7 @@ function screenSnippets(){
             <span style="font-size:13px;color:var(--text-secondary)">${escAttr(snipSide(s.label))}</span>
             <span style="font-size:15px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(now)||'—'}</span></span>
           ${canEdit?`<span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span>`:''}</button>`; }).join('')}</div></div>`).join('')}
-    ${canEdit&&c&&c.auto?cfgFoot(c):''}
+    ${canEdit&&c&&c.auto?cardFoot(c):''}
   </div>`;
 }
 
@@ -7567,7 +7571,7 @@ function screenFaqEdit(){
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Categories','分类')}</div>
       ${FAQ_D.cats.length?`<div class="list">${FAQ_D.cats.map(cRow).join('')}</div>`:''}
       <button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('faqAddCat')">${T('+ Add category','添加分类')}</button></div>
-    ${c&&c.auto?cfgFoot(c):''}
+    ${c&&c.auto?cardFoot(c):''}
   </div>`;
 }
 
@@ -8612,7 +8616,7 @@ function votSettingsCard(){
         <span style="font-size:15px">${T('Show vote counts to customers','向顾客显示票数')}</span>
         <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on?T('On. Customers see the tallies and percentages.','开启。顾客能看到票数和百分比。'):T('Off. Customers see which option leads, never the numbers.','关闭。顾客只看到哪个选项领先,看不到数字。')}</span></span>
       ${can?toggle(on,"APP.cmd('votCounts')"):''}</div>
-    ${can?cfgFoot(c):''}</div></div>`;
+    ${can?cardFoot(c):''}</div></div>`;
 }
 function screenVoting(){
   loadPolls(); loadVotCfg();
@@ -9224,7 +9228,7 @@ function lbSettings(){
       <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Hide these real members','隐藏指定真实会员')}</span>
       <div style="font-size:14.5px">${hidden.length?escAttr(hidden.join(', ')):'—'}</div>
       <button class="btn2" style="width:100%" onclick="APP.cmd('lbEdit','hide')">${T('Edit','编辑')}</button></div>
-    ${cfgFoot(c)}`;
+    ${cardFoot(c)}`;
 }
 function screenLeaderboard(){
   loadLeaderboard(); loadLbCfg();
@@ -15657,7 +15661,7 @@ const SUBS={
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
         ${state.legalOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).replace(/</g,'&lt;')}</span>`:''}</button>
       ${canEdit?`<div style="padding:0 14px 14px"><button class="btn2" style="width:100%" onclick="APP.cmd('legalEdit','${d.key}')">${T('Edit','编辑')}</button></div>`:''}`).join('')}</div>
-    ${canEdit&&CFG_CARD.legal&&CFG_CARD.legal.auto?cfgFoot(CFG_CARD.legal):''}</div>`;
+    ${canEdit&&CFG_CARD.legal&&CFG_CARD.legal.auto?cardFoot(CFG_CARD.legal):''}</div>`;
   }},
   faq:{title:['FAQ & help','常见问题'],render:()=>screenFaq()},
   /* §325 M4 — the desktop's Mini-app copy (Snippets) tab. */

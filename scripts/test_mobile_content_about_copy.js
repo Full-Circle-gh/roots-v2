@@ -107,7 +107,7 @@ section('1 · Mini-app copy');
     assert.ok(/<div class="eyebrow"[^>]*>Cart<\/div>/.test(html));
     assert.ok(/APP\.cmd\('snipEdit','copy\.cart\.title'\)[\s\S]*?Headline<\/span>[\s\S]*?Nearly there\./.test(html), 'the stored value');
     assert.ok(/APP\.cmd\('snipEdit','copy\.cart\.kicker'\)[\s\S]*?YOUR BASKET/.test(html), 'the default where none is stored');
-    assert.ok(/cfgHistory','copy\.snippets'/.test(html));
+    assert.ok(/cardHistory','copy\.snippets'/.test(html));
     const zh = mk({ lang: 'zh' }).ctx.screenSnippets();
     assert.ok(/>购物车<\/div>/.test(zh) && /快好了。/.test(zh) && /大标题/.test(zh));
   });
@@ -131,7 +131,7 @@ section('1 · Mini-app copy');
   it('without the content keys: read only, no sheet', () => {
     const { ctx, CMD } = mk({ caps: ['orders:view'] });
     const html = ctx.screenSnippets();
-    assert.ok(!/snipEdit/.test(html) && !/cfgHistory/.test(html) && /disabled/.test(html));
+    assert.ok(!/snipEdit/.test(html) && !/cardHistory/.test(html) && /disabled/.test(html));
     CMD.snipEdit('copy.cart.title');
     assert.strictEqual(ctx.state.ask, null);
   });
@@ -153,7 +153,7 @@ section('2 · About');
     assert.ok(/APP\.cmd\('aboutRow','stats',0\)[\s\S]*?7 · years/.test(html));
     assert.ok(/APP\.cmd\('aboutRow','in_items',0\)[\s\S]*?Beans/.test(html));
     assert.ok(/No image — the page starts at the text\./.test(html) && /<img src="\/api\/retail\/media\/3"/.test(html));
-    assert.ok(/cfgHistory','about'/.test(html) && !/<desk>/.test(html));
+    assert.ok(/cardHistory','about'/.test(html) && !/<desk>/.test(html));
   });
   it('a section\'s sheet: the desktop\'s words; an edit sends about.content whole, keeping a key no control asks about', async () => {
     const { ctx, CMD, writes } = mk();
@@ -217,7 +217,7 @@ section('2 · About');
   it('without the content keys: the read-only page, no edit command works', () => {
     const { ctx, CMD } = mk({ caps: ['orders:view'] });
     const html = ctx.SUBABOUT.render();
-    assert.ok(!/aboutEdit|cfgHistory/.test(html));
+    assert.ok(!/aboutEdit|cardHistory/.test(html));
     CMD.aboutEdit('manifesto'); CMD.aboutAddRow('stats');
     assert.strictEqual(ctx.state.ask, null);
   });

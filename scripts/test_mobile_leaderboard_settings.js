@@ -97,7 +97,7 @@ function mk(opts = {}) {
   };
   ctx.mCan = (v) => { if (v === undefined) return true; const has = (k) => (ctx.state.caps ? ctx.state.caps.indexOf(k) !== -1 : true); return Array.isArray(v) ? v.some(has) : has(v); };
   vm.createContext(ctx);
-  vm.runInContext(CARD_SRC + LB_SRC + '\nthis.lbD=()=>LB_D; this.lbErr=()=>LB_ERR; this.card=(k)=>CFG_CARD[k]; this.cfgFootHtml=cfgFootHtml; this.lbSeedEntries=lbSeedEntries;' +
+  vm.runInContext(CARD_SRC + LB_SRC + '\nthis.lbD=()=>LB_D; this.lbErr=()=>LB_ERR; this.card=(k)=>CFG_CARD[k]; this.cardFootHtml=cardFootHtml; this.lbSeedEntries=lbSeedEntries;' +
     ' this.WEST=LB_SEED_NAMES_WEST; this.CN=LB_SEED_NAMES_CN; this.screenLeaderboard=screenLeaderboard;', ctx);
   return { ctx, CMD, writes, reads, toasts, hist: () => histSheet };
 }
@@ -121,7 +121,7 @@ section('1 · the card and the screen');
       'Placeholder board (temporary)', 'Show placeholder members', 'No placeholder members yet.', 'Generate placeholder members', 'Hide these real members', 'mimi, asher',
       'Top 1 reward: ¥500 credit', 'Lifetime spend (¥) · All time · Show top 20 · First character + asterisks (recommended)']) assert.ok(html.includes(w), w);
     assert.ok(html.includes('cmd="APP.cmd(\'lbToggle\',\'enabled\')"') && html.includes('cmd="APP.cmd(\'lbToggle\',\'seed_enabled\')"'));
-    assert.ok(/APP\.cmd\('cfgHistory','leaderboard'\)/.test(html));
+    assert.ok(/APP\.cmd\('cardHistory','leaderboard'\)/.test(html));
     assert.ok(!/on desktop|电脑端/.test(html));
   });
   it('the board still reads the server\'s preview; an empty one says so', async () => {
@@ -228,7 +228,7 @@ section('4 · history, refusals, the failed read, the key');
   it('Version history reads card=leaderboard and restores snapshot[\'leaderboard.config\'] as a restore', async () => {
     const versions = [{ id: 3, at: 'x', changed: ['leaderboard.config'], snapshot: { 'leaderboard.config': Object.assign(plain(STORED), { enabled: false, hide_names: ['old'] }) } }];
     const { CMD, writes, reads, hist } = await started({ history: { success: true, versions } });
-    CMD.cfgHistory('leaderboard'); await tick();
+    CMD.cardHistory('leaderboard'); await tick();
     assert.ok(reads.includes('/config/history?card=leaderboard'));
     assert.strictEqual(hist().sub(versions[0]), 'Leaderboard');
     await hist().restore(versions[0]);
@@ -240,7 +240,7 @@ section('4 · history, refusals, the failed read, the key');
     const { ctx, CMD, writes } = await started();
     CMD.lbToggle('enabled');
     await ctx.card('leaderboard').auto.flush();
-    CMD.cfgUndo('leaderboard'); await tick();
+    CMD.cardUndo('leaderboard'); await tick();
     assert.strictEqual(writes[1].p, '/leaderboard/config?history=leaderboard&note=undo');
     assert.strictEqual(writes[1].body.enabled, true);
   });
@@ -248,7 +248,7 @@ section('4 · history, refusals, the failed read, the key');
     const { ctx, CMD, toasts } = await started({ writeFails: true });
     CMD.lbToggle('enabled');
     await ctx.card('leaderboard').auto.flush();
-    assert.ok(/Save failed: Your role cannot change the leaderboard\./.test(ctx.cfgFootHtml(ctx.card('leaderboard'))));
+    assert.ok(/Save failed: Your role cannot change the leaderboard\./.test(ctx.cardFootHtml(ctx.card('leaderboard'))));
     assert.deepStrictEqual(toasts, []);
   });
   it('if the stored board does not arrive: the desktop\'s words, no card, nothing writes', async () => {
@@ -264,7 +264,7 @@ section('4 · history, refusals, the failed read, the key');
     const { ctx, CMD, writes } = await started({ caps: ['orders:view'] });
     const html = ctx.screenLeaderboard();
     assert.ok(html.includes('C***'));
-    assert.ok(!/lbToggle|lbEdit|lbSeedAsk|cfgHistory/.test(html));
+    assert.ok(!/lbToggle|lbEdit|lbSeedAsk|cardHistory/.test(html));
     CMD.lbToggle('enabled'); CMD.lbEdit('copy'); CMD.lbSeedAsk();
     assert.strictEqual(ctx.state.ask, null);
     assert.strictEqual(writes.length, 0);

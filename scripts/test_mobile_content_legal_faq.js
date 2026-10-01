@@ -110,13 +110,13 @@ section('1 · Legal: a card that saves itself');
     assert.ok(html.includes(long), 'not clipped');
     assert.ok(!/on desktop|电脑端/.test(html));
     assert.ok(/onclick="APP\.cmd\('legalEdit','terms'\)">Edit<\/button>/.test(html) && /APP\.cmd\('legalEdit','privacy'\)/.test(html));
-    assert.ok(/APP\.cmd\('cfgHistory','legal'\)">Version history/.test(html));
+    assert.ok(/APP\.cmd\('cardHistory','legal'\)">Version history/.test(html));
     assert.ok(/All changes saved/.test(html));
   });
   it('without the content keys: no Edit, no foot, and nothing can be opened', () => {
     const { ctx, CMD } = mk({ caps: ['orders:view'] });
     const html = ctx.SUBLEGAL.render();
-    assert.ok(!/legalEdit/.test(html) && !/cfgHistory/.test(html));
+    assert.ok(!/legalEdit/.test(html) && !/cardHistory/.test(html));
     CMD.legalEdit('terms');
     assert.strictEqual(ctx.state.ask, null);
   });
@@ -147,7 +147,7 @@ section('1 · Legal: a card that saves itself');
     CMD.legalEdit('privacy');
     type(ctx, CMD, 'cn', '改了');
     await live(ctx).auto.flush();
-    CMD.cfgUndo('legal');
+    CMD.cardUndo('legal');
     await tick();
     assert.strictEqual(writes[1].p, '/config?history=legal&note=undo');
     assert.strictEqual(writes[1].body['legal.privacy.body_cn'], '我们保存手机号。');
@@ -158,7 +158,7 @@ section('1 · Legal: a card that saves itself');
       { id: 1, at: 'y', isBaseline: true, changed: [], snapshot: { 'legal.terms.body_en': 'Old terms', 'legal.terms.body_cn': '旧条款', 'legal.privacy.body_en': 'P', 'legal.privacy.body_cn': null } }];
     const { ctx, CMD, writes, reads, hist } = mk({ history: { success: true, versions } });
     ctx.SUBLEGAL.render();
-    CMD.cfgHistory('legal'); await tick();
+    CMD.cardHistory('legal'); await tick();
     assert.deepStrictEqual(reads, ['/config/history?card=legal']);
     assert.strictEqual(hist().sub(versions[0]), 'Terms of service');
     await hist().restore(versions[1]);
@@ -173,8 +173,19 @@ section('1 · Legal: a card that saves itself');
     type(ctx, CMD, 'en', 'x');
     await live(ctx).auto.flush();
     assert.strictEqual(ctx.card('legal').auto.state, 'error');
-    assert.ok(/Save failed: Your role cannot change this\./.test(ctx.cfgFootHtml(ctx.card('legal'))));
+    assert.ok(/Save failed: Your role cannot change this\./.test(ctx.cardFootHtml(ctx.card('legal'))));
     assert.deepStrictEqual(toasts, []);
+  });
+  it('the whole phone script still parses, and the card helpers are declared once', () => {
+    // A merge once brought a second cfgFoot (Settings' own, §325 X5) beside
+    // this one: a const after a function of the same name is a SyntaxError
+    // that kills the whole app, and every sliced suite still passed.
+    const js = (MH.match(/<script>([\s\S]*?)<\/script>/g) || []).map((s) => s.slice(8, -9)).sort((a, b) => b.length - a.length)[0];
+    assert.doesNotThrow(() => new vm.Script(js, { filename: 'm.html' }));
+    for (const n of ['cardFootHtml', 'cardFoot', 'cardFootRepaint', 'cfgCard', 'cfgCardStart', 'cfgSheet']) {
+      assert.strictEqual((js.match(new RegExp('(?:function|const|let) ' + n + '\\b', 'g')) || []).length, 1, n);
+    }
+    for (const n of ['cardUndo', 'cardHistory', 'askLiveAct']) assert.strictEqual((js.match(new RegExp("reg\\('" + n + "'", 'g')) || []).length, 1, n);
   });
   it('the reload guard and the background flush know these cards', () => {
     assert.ok(/if\(cfgBusy\(\)\) return true;/.test(MH));
@@ -190,7 +201,7 @@ section('2 · FAQ');
     assert.ok(/APP\.cmd\('faqEditQ',0\)[\s\S]*>01<[\s\S]*When\?[\s\S]*Orders[\s\S]*APP\.cmd\('faqEditQ',1\)/.test(html));
     assert.ok(/APP\.cmd\('faqAddQ'\)">\+ Add question/.test(html) && /APP\.cmd\('faqAddCat'\)">\+ Add category/.test(html));
     assert.ok(/APP\.cmd\('faqEditCat',1\)[\s\S]*Wallet[\s\S]*wallet · sky/.test(html));
-    assert.ok(/cfgHistory','faq'/.test(html));
+    assert.ok(/cardHistory','faq'/.test(html));
   });
   it('an empty shop starts from the desktop\'s six categories', () => {
     const { ctx } = mk({ cfg: { faq: {} } });
@@ -200,7 +211,7 @@ section('2 · FAQ');
   it('without the keys: the old read-only view, no edit command works', () => {
     const { ctx, CMD } = mk({ caps: ['orders:view'] });
     const html = ctx.screenFaq();
-    assert.ok(/faqToggle/.test(html) && !/faqEditQ|faqAddQ|cfgHistory/.test(html));
+    assert.ok(/faqToggle/.test(html) && !/faqEditQ|faqAddQ|cardHistory/.test(html));
     CMD.faqAddQ(); CMD.faqEditQ(0); CMD.faqEditCat(0);
     assert.strictEqual(ctx.state.ask, null);
   });
