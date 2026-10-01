@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.294 · 2026-09-30 · §405 THE AFFILIATE PROGRAM ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *The affiliate program on the phone (§405)*.
+
 **v1.293 · 2026-09-30 · §404 THE MANUAL-ALIPAY CARD'S FAILED READ — 1 STRING COMPOSED BY CLAUDE, 1 COPIED.** See *The manual-Alipay card that did not load (§404)*.
 
 **v1.292 · 2026-09-30 · §403 PAYMENTS ON THE PHONE — NOTHING COMPOSED; TWO DESKTOP PAIRS SPLIT INTO THEIR HALVES; THE REST COPIED WHOLE.** See *Payments on the phone (§403)*.
@@ -12679,3 +12681,42 @@ manual-Alipay card (`public/retail-admin/02-settings-ops.js`).
 | `Could not load this card, so Save leaves it unchanged. · 此卡片加载失败,保存时不会改动它。` | **composed by Claude.** `加载失败` is copied from the live `财务数据加载失败。` and `分类加载失败。`. `保存` is the Save bar's own word (`保存设置`). The second half says what the Save bar will do, because pressing that button is what destroyed data before. Rejected: the phone's live `Could not load this. · 无法加载。`, because it does not say what Save will do, and that is the point of the message. |
 
 Copied: `Try again · 重试` (live throughout the desktop).
+
+## The affiliate program on the phone (§405)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1):
+`public/m.html`, the Affiliate screen and its two new screens.
+
+- **The offer** (desktop afxRenderOffer, afxRenderSettings, afxSaveMessage,
+  afxRenderSaveBar, afxRestate, afxLifeNote): `The offer · 奖励方案`, the
+  offer sentence with its tail and its selected-customers clause, `Change the
+  offer · 修改方案`, `When a friend places their first paid order: ·
+  当好友完成首笔付费订单时:`, `the friend gets · 好友获得`, `the referrer gets ·
+  推荐人获得`, `in store credit · 店铺余额`, the restate line, the automatic-payout
+  note, `Keep rewarding repeat orders · 持续奖励复购` and its line, the arming
+  confirm `This pays referrers a share of every future order their friends
+  place.` with `Confirm · 确认`, the share sentence and both month notes,
+  `Who earns it · 谁可获得`, `Everyone · 所有人`, `Selected customers · 指定客户`,
+  `Choose who earns it · 选择可获得的客户`, the chosen counts, both mode notes,
+  `Invite codes · 邀请码` with its sentence and note, `Share picture · 分享图片`,
+  `No picture yet`, `Add a picture`, `Replace picture`, `Remove picture`, its
+  note, `Upload failed. · 上传失败。`; the save bar's `You’ve changed … ·
+  您修改了…。` with its five parts, the money note, `Discard · 放弃更改`,
+  `Save changes · 保存更改`, `Saved. · 已保存。`; the field names (`Reward for
+  the friend`, `Share of repeat orders`, `Months the share lasts`, `Code
+  prefix`); every afxWhy sentence; `Couldn’t load these settings.` and its
+  line.
+- **Who earns the share** (afxOpenEligible): its title and line, `Find a
+  customer by name, phone or code`, `Add · 添加`, `Remove · 移除`, `No name ·
+  未填姓名`, both empty lines and the truncation line.
+- **The ledger** (afxFilters, afxStatusCell, afxActionCell, afxRowConfirm,
+  afxLedgerBody, afxRenderLedger): `Referrals · 推荐记录`, `Rewarded · 已奖励`,
+  `Can’t be rewarded · 无法发放` and its line, `Void · 作废`, `Close it · 关闭`,
+  `Restore · 恢复`, `Voiding… · 作废中…`, `Restoring… · 恢复中…`, both void
+  questions, the restore question, `Why (kept on the record) · 原因(将记录在案)`,
+  `Name, phone or code · 姓名、电话或邀请码`, `Nothing matches.`, `Try a different
+  filter, or clear the search.`, `Showing · 显示`, `of · / 共`, `Previous page ·
+  上一页`, `Next page · 下一页`.
+- **Leaving with unsaved changes** uses the desktop voting editor's `Leave
+  without saving? The changes on this page are lost. · 不保存就离开?此页面的改动会丢失。`
+  and `Leave · 离开`.
