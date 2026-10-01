@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.275 · 2026-09-30 · §383 CUSTOMER CHOICES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *What the customer chooses, edited on the phone (§383)*.
+
+**v1.274 · 2026-09-30 · §382 BUNDLES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's two bundles, edited on the phone (§382)*.
+
 **v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
 
 **v1.272 · 2026-09-30 · §380 JD WAYBILL ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *JD waybill create and cancel on the phone (§380)*.
@@ -11936,3 +11940,95 @@ them.
 
 **English "ground", Chinese 陆运.** The rows say `Fresh · Ground · 生鲜 · 陆运`.
 The question uses the same pair as the row being picked, so the two read alike.
+
+## A product's two bundles, edited on the phone (§382)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the Suggested add-ons and Bundle — sold as one cards of the
+phone's product Details screen, and in their picker (`public/m.html`).
+
+**Copied whole from the desktop editor** (`public/retail-admin/09-products.js`
+buRender / bpRender / bpPickerList):
+
+- **Suggested add-ons:**
+  - `Suggested add-ons · 推荐搭配`
+  - its explanatory sentence, whole
+  - `Title EN · 标题(英文)`
+  - `Title CN · 标题(中文)`
+  - the placeholders `Goes well with` and `推荐搭配`, as literal as on the desktop
+  - `No products yet — add some below. · 尚未添加商品 — 在下方添加。`
+  - `Set price ¥ (optional) · 搭配价 ¥(可选)`
+  - `blank = item total · 留空 = 各项合计`
+  - `Auto voucher (optional) · 自动优惠券(可选)`
+  - `code · 券码`
+- **Bundle — sold as one:**
+  - `Bundle — sold as one · 套装产品`: the shorter Chinese, which is the one the desktop's section header uses
+  - `Customers see ONE product at the price you set above. Choose how you stock it.`, with its pair
+  - `Assembled from other products · 由其他产品组成`, with its sentence
+  - `Pre-packed on a shelf · 预先包装成套`, with its sentence
+  - `Quantity in the bundle · 套装内数量`
+  - `Add the products this bundle contains. · 添加本套装包含的商品。`
+- **Both:**
+  - `+ Add product · + 添加商品`
+  - `Remove · 移除`
+  - `Search a product to add… · 搜索商品以添加…`
+  - `No matches · 无匹配`
+  - `Close · 关闭`
+
+**Phone live pairs reused:** `Loading… · 加载中…`, `Load failed · 加载失败`,
+`Try again · 重试`.
+
+**Live candidate rejected:** `套装产品(作为一个产品出售)`. It is the desktop's
+longer header, shown only before a new product has saved. The section header
+the operator sees uses `套装产品`.
+
+## What the customer chooses, edited on the phone (§383)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+labels appear on the Options card of the phone's product Details screen and
+in its stock picker (`public/m.html`).
+
+**Copied whole from the desktop editor** (`public/retail-admin/09-products.js`
+optRender / _optChoiceRow / optPickerList):
+
+- **The card:**
+  - `Options (customer chooses) · 选项(顾客选择)`
+  - its sentence
+  - `None · tap to add a choice · 无 · 点击添加选项`
+  - `Could not load. Close and try again. · 加载失败，请关闭后重试。`
+  - `+ Add a pick (free) · + 添加选择(免费)`
+  - `+ Add paid extras · + 添加付费加项`
+- **A question:**
+  - `Question EN (e.g. Choose your dressing) · 问题(英文,如:选择酱料)`
+  - `Question 中文 · 问题(中文)`
+  - `How the customer answers · 顾客如何选择`
+  - `Pick one · 单选`
+  - `Pick any · 多选`
+  - `Type an answer (unsupported) · 填写(暂不支持)`
+  - `Required · 必选` and its title
+  - `Remove this option · 移除此选项`
+  - the pick-any sentence
+  - `+ Add choice · + 添加选项`
+  - `Add at least one choice. · 请至少添加一个选项。`
+- **Limits:**
+  - `Pick · 选` and the trailing `项`
+  - `0 in a box means no limit · 填 0 表示不限`
+  - both box titles
+- **A choice:**
+  - `Choice EN · 选项(英文)`
+  - `Choice 中文 · 选项(中文)`
+  - `Default pick · 默认选项`
+  - `Pre-selected · 默认勾选`
+  - `Extra charge for this choice (0 = free) · 此选项加价(0 = 免费)`
+- **Linked stock:**
+  - `+ Stock product · + 关联库存商品` and its title
+  - `Draws from this product’s stock · 占用该商品库存`
+  - `in stock · 库存`
+  - `Unlink · 取消关联`
+  - `Search a product to use for stock… · 搜索作为库存来源的商品…`
+
+The paid-extras seed `Add extras? · 加点配料?` is shop content the desktop
+writes as it stands, and is copied as it stands.
+
+**Phone live pairs reused:** `Move up · 上移`, `Move down · 下移`, `Remove · 移除`,
+`No matches · 无匹配`, `Close · 关闭`.

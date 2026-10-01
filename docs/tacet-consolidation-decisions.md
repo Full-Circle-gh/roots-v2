@@ -26121,3 +26121,114 @@ with a warning I thought we have that"*.
 9. **Not on the phone yet.** §380's phone JD label, merged the same day, copies
    the old desktop rule: a plain air parcel gets no list (`isAir?[]` in
    `public/m.html`). That is a follow-up, kept out of this change.
+
+## §382 — A PRODUCT'S TWO BUNDLES ARE EDITED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Details screen for a product gained the desktop editor's two
+bundle sections. They share a word but are different things, and the phone
+keeps them apart, as the desktop does.
+
+- **Suggested add-ons** (`bundle`): other products shown on this product's
+  page, which a shopper can add with one tap. It has a title in each
+  language, an optional set price and an optional automatic voucher. Each
+  item keeps its own price and stock.
+- **Bundle — sold as one** (`bundle_items` + `bundle_mode`): this product
+  *is* a set, stocked in one of two ways:
+  - **Assembled from other products:** its stock follows its parts, and each
+    sale takes from them.
+  - **Pre-packed on a shelf:** finished sets, counted like any product.
+
+1. **Both are fields of this product, so they save with the rest of the
+   Details screen.** They use the same autosave and the same
+   `PATCH /products/:id`, and Undo puts them back. The shapes are the
+   desktop's:
+   - `bundle` is `{title_en, title_cn, ids, price, voucher}`, or `null` once
+     nothing is listed. An empty set price is sent as 0, which means the
+     items' own total.
+   - `bundle_items` is `[{id, qty}]` only for an assembled set that has
+     parts; otherwise it is `null`.
+   - `bundle_mode` is `'assembled'`, `'prepacked'` or `null`.
+   - `bundle_items` and `bundle_mode` are always sent together, as the
+     desktop sends them.
+   - Like every other field on the screen, these keys are sent only when
+     they changed.
+2. **Choosing how a set is stocked works as the desktop's radio does.**
+   Tapping the chosen way a second time means "not a set". Switching an
+   assembled set to pre-packed keeps its parts on screen, but they are not
+   sent. A part's count is a whole number, at least 1.
+3. **The pickers search the catalogue the phone already holds, with the
+   desktop's filters.**
+   - Add-ons hide what is already listed.
+   - Parts also hide this product and any other set, because sets cannot
+     contain sets.
+   - Each pick adds the product, empties the search and leaves the picker
+     open for the next one.
+   - The picker says Loading… while the catalogue loads. If loading failed,
+     it offers Try again.
+   - Back closes the picker before it closes the screen.
+4. **An assembled set with parts owns its cost.** The Cost box goes away the
+   moment the first part is added, and a cost typed before that is not sent.
+   The server drops it anyway. The box does not come back within the same
+   visit when the last part is removed; it returns when the screen is
+   reopened. Showing the set's cost back as if someone had typed it would be
+   the worse mistake.
+5. **After a save, the catalogue row is brought up to date.** It records the
+   set's parts and that it is a set, so the list's stock for the set follows
+   at once.
+
+## §383 — WHAT THE CUSTOMER CHOOSES IS EDITED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Details screen for a product gained the desktop editor's
+**Options (customer chooses)** section. These are the questions a shopper
+answers when adding the product. There are two kinds:
+
+- a free **Pick one**, such as a dressing or a spice level, which never
+  touches stock;
+- a **Pick any** group of paid extras. Each extra has a charge and can be
+  linked to a product. A linked extra draws on that product's stock and sells
+  out with it.
+
+On the phone an operator can do everything the desktop section does:
+- add a free pick or paid extras (with the desktop's seed text);
+- edit the questions and choices in both languages;
+- switch a question between Pick one and Pick any;
+- set Required, the fewest and most a shopper may pick, and the defaults;
+- set charges, and link or unlink a stock product;
+- reorder questions and choices, and remove them.
+
+The questions save with the Details screen's autosave as `options`, in the
+desktop's `optBody` shape, and Undo puts them back.
+
+1. **Questions that were never read are never sent.** The server's options
+   save replaces the whole list, and an empty list sent before the questions
+   loaded is what deleted questions from 39 products. On the phone the
+   questions arrive in the same read as the rest of the product. If that read
+   does not carry them, the card says *Could not load. Close and try again.*,
+   offers no control, and no save mentions options. Editing any other field
+   never resends the questions.
+2. **An empty list removes questions only when it says so** (`options_clear`).
+   It is sent only when the server last held questions and the operator then
+   removed them all. The desktop counts "last held" from the moment the
+   product was opened. The phone counts it from the last save that went
+   through. So a question added, saved and then removed in the same visit is
+   cleared as well; on the desktop it would be left standing.
+3. **Only what changed is sent, and the whole list goes when anything in it
+   changed.** A question or choice with no words is not part of the list until
+   it has some, so adding a blank question sends nothing. A question that a
+   shopper types an answer to ("text") cannot be chosen on either storefront.
+   One already saved keeps its type, shown as unsupported, and no other
+   question can be switched to it.
+4. **The desktop's rules travel with the controls:**
+   - switching to Pick one drops every charge, link and limit;
+   - setting a minimum of 1 or more makes the question Required;
+   - un-ticking Required drops the minimum;
+   - a Pick one has exactly one default;
+   - linking a stock product fills in a blank label from the product's name,
+     and a zero charge from its price. A missing Chinese name is left blank
+     rather than filled with the English one.
+5. **The stock picker is the same picker the bundles use.** It searches the
+   catalogue the phone already holds, covers every product except this one,
+   and shows each product's size and SKU so that two jars of the same paste
+   can be told apart. Up and down buttons replace the desktop's drag-to-reorder.
