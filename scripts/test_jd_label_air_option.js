@@ -377,9 +377,11 @@ async function main() {
   });
 
   console.log('\n  5. the cases that must NOT have changed');
-  await it('a plain AIR parcel asks nothing and books 生鲜特快', async () => {
+  await it('a plain AIR parcel left on air asks nothing and books 生鲜特快', async () => {
+    // Its list is no longer empty (§377, section 6 below), but air is still
+    // pre-selected, and an operator who leaves it alone is never questioned.
     const d = openDialog({ mode: 'air', items: [AIRONLY], province: '北京市' });
-    assert.deepStrictEqual(offered(d), [], 'an air parcel now asks a question it never asked');
+    assert.strictEqual(preselected(d), 'LL-SD-M', 'an air parcel no longer pre-selects air');
     await createAndShip(d);
     assert.strictEqual(ASKED.length, 0, 'a plain air parcel was questioned');
     assert.strictEqual(BOOKED[0].product, 'LL-SD-M', `booked ${BOOKED[0].product}`);
@@ -401,6 +403,109 @@ async function main() {
     CONFIRM_ANSWER = true;
     await createAndShip(d);
     assert.strictEqual(BOOKED[0].pieces, 3, `booked ${BOOKED[0].pieces} pieces`);
+  });
+
+  // §377 — the mirror. Ash (2026-10-01), on a combined parcel the plan made
+  // air: "there should always be an option to select land transport if user
+  // want and it comes with a warning". Before this, an air parcel's dialog
+  // had no list at all and 生鲜特快 was the only thing it could book.
+  console.log('\n  6. §377 — ground is on an AIR parcel\'s list, and picking it asks');
+  await it('an AIR parcel offers all three services, air first and pre-selected', () => {
+    const d = openDialog({ mode: 'air', items: [ANY, NO_AIR], province: '北京市' });
+    assert.deepStrictEqual(offered(d), ['LL-SD-M', 'LL-HD-M', 'ed-m-0001'],
+      'an air parcel cannot reach ground — the list must be [air, fresh-ground, ambient-ground]');
+    assert.strictEqual(preselected(d), 'LL-SD-M', 'air is not pre-selected on an air parcel');
+  });
+
+  await it('picking fresh ground on an air parcel asks, and names the contents', async () => {
+    const d = openDialog({ mode: 'air', items: [ANY, NO_AIR], province: '北京市' });
+    await clickRow(d, 'LL-HD-M');
+    assert.strictEqual(ASKED.length, 1, 'an air parcel moved to ground with no question');
+    const q = ASKED[0];
+    assert.ok(q.bodyEn.includes('Olive Oil') && q.bodyEn.includes('Misfit Medjool Dates'),
+      `the question does not name what is in the parcel: ${q.bodyEn}`);
+    assert.ok(/planned for air/.test(q.bodyEn) && /ground waybill anyway\?/.test(q.bodyEn),
+      `the English does not say what is being overridden: ${q.bodyEn}`);
+    assert.ok(q.bodyCn.includes('计划空运') && q.bodyCn.includes('仍要生成陆运运单吗?'),
+      `the 中文 does not say it: ${q.bodyCn}`);
+    assert.strictEqual(q.titleCn, '空运包裹', 'the title is not the dialog\'s own live 空运包裹');
+    assert.strictEqual(q.confirmCn, '仍要生成陆运运单', 'the confirm button is not the body question without 吗?');
+    assert.strictEqual(q.cancelCn, '暂不', 'the decline is not the live 暂不');
+    assert.strictEqual(q.danger, true, 'the question is not marked as the exception it is');
+  });
+
+  await it('picking ambient ground on an air parcel asks too', async () => {
+    const d = openDialog({ mode: 'air', items: [ANY], province: '北京市' });
+    await clickRow(d, 'ed-m-0001');
+    assert.strictEqual(ASKED.length, 1, 'ambient ground was let through in silence');
+  });
+
+  await it('an air parcel whose items are unknown still asks, without a blank name', async () => {
+    MOUNTED = null; ASKED.length = 0; BOOKED.length = 0; LANG = 'en';
+    vm.runInContext('_OPEN_ORDER = null;', sandbox);
+    sandbox.createJdLabel(738, 91, 'air', 0, null);
+    await clickRow(MOUNTED, 'LL-HD-M');
+    assert.strictEqual(ASKED.length, 1, 'no question was put when the order was not loaded');
+    assert.ok(/^This parcel is planned for air/.test(ASKED[0].bodyEn), ASKED[0].bodyEn);
+    assert.ok(ASKED[0].bodyCn.startsWith('此包裹计划空运'), ASKED[0].bodyCn);
+  });
+
+  await it('YES keeps ground, books it, and asks no second question', async () => {
+    const d = openDialog({ mode: 'air', items: [ANY], province: '北京市' });
+    CONFIRM_ANSWER = true;
+    await clickRow(d, 'LL-HD-M');
+    assert.strictEqual(checkedNow(d), 'LL-HD-M', 'ground did not stay selected after the operator insisted');
+    await createAndShip(d);
+    assert.strictEqual(ASKED.length, 1, 'the operator was asked twice for one decision');
+    assert.strictEqual(BOOKED[0].product, 'LL-HD-M', `booked ${BOOKED[0].product}, not fresh ground`);
+  });
+
+  await it('switching between the two ground rows after YES does not ask again', async () => {
+    const d = openDialog({ mode: 'air', items: [ANY], province: '北京市' });
+    await clickRow(d, 'LL-HD-M');
+    await clickRow(d, 'ed-m-0001');
+    assert.strictEqual(ASKED.length, 1, 'a second question for the same decision');
+    await createAndShip(d);
+    assert.strictEqual(BOOKED[0].product, 'ed-m-0001');
+  });
+
+  await it('NO puts air back, and Create & ship then books air', async () => {
+    const d = openDialog({ mode: 'air', items: [ANY], province: '北京市' });
+    CONFIRM_ANSWER = false;
+    await clickRow(d, 'LL-HD-M');
+    assert.strictEqual(checkedNow(d), 'LL-SD-M',
+      `the row stayed on ${checkedNow(d)} after the operator backed out`);
+    assert.strictEqual(BOOKED.length, 0, 'a waybill was booked from the click itself');
+    CONFIRM_ANSWER = true;
+    await createAndShip(d);
+    assert.strictEqual(BOOKED[0].product, 'LL-SD-M', `booked ${BOOKED[0].product} after a declined question`);
+  });
+
+  await it('going back to air after YES asks nothing — air is what the plan asked for', async () => {
+    const d = openDialog({ mode: 'air', items: [ANY], province: '北京市' });
+    await clickRow(d, 'LL-HD-M');
+    await clickRow(d, 'LL-SD-M');
+    assert.strictEqual(ASKED.length, 1, 'returning to the planned mode asked a question');
+  });
+
+  await it('Fujian / Guangxi air parcels: ground is the default there, so ground asks nothing', async () => {
+    const d = openDialog({ mode: 'air', items: [ANY], province: '福建省' });
+    await clickRow(d, 'LL-SD-M');
+    await clickRow(d, 'LL-HD-M');
+    assert.strictEqual(ASKED.length, 0, 'the land-default provinces now question their own default');
+  });
+
+  await it('a combined AIR parcel holding a land-only item still asks nothing when left on air', async () => {
+    // The screenshot's case. Leaving air is the plan's call and is not this
+    // dialog's to second-guess; the question is for moving OFF the plan.
+    const d = openDialog({ mode: 'air', items: [ANY, NO_AIR], province: '上海市' });
+    // But the air row now carries the airline-rejected badge, naming the item,
+    // which is the one place the operator can see the plan is wrong.
+    assert.ok(/pack-badge land/.test(d.innerHTML), 'the air row on an air parcel carries no Land only badge');
+    assert.ok(d.innerHTML.includes('Misfit Medjool Dates'), 'the rejected item is not named on the row');
+    await createAndShip(d);
+    assert.strictEqual(ASKED.length, 0);
+    assert.strictEqual(BOOKED[0].product, 'LL-SD-M');
   });
 
   console.log(`\n  ${pass} passed, ${fail} failed\n`);

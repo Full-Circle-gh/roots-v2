@@ -9116,6 +9116,17 @@ async function submitJdLabel(orderId, shipmentId, product, btn, pieces) {
 // The badged "airline rejected" line on the row is a separate thing and stays:
 // it says the airline REFUSES these goods, which is more than "the plan said
 // land", and it is drawn from the same ship_modes_arr renderPackBadges reads.
+//
+// §377 — GROUND IS ON AN AIR PARCEL'S LIST TOO, AND PICKING IT ASKS. The mirror
+// of the rule above. A plain air parcel used to get no list at all — 生鲜特快
+// was simply what got sent — so a parcel the plan made AIR (a combined parcel
+// included) could not be booked on the ground at all. Ash (2026-10-01): "there
+// should always be an option to select land transport if user want and it
+// comes with a warning". Air stays pre-selected and first; the two ground
+// services follow. Picking one asks on the click, exactly as air does on a land
+// parcel, and declining puts the selection back. Fujian / Guangxi air parcels
+// are untouched: ground is their default there, so it asks nothing. As above,
+// the parcel's own mode is never written — only the waybill's product changes.
 function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   const isAir = mode === 'air';
   // Province comes off the open order (the GET parses address_json into
@@ -9164,10 +9175,12 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   // — it is the exception, and the pre-selected row stays at the top where the
   // operator's eye already is. Nothing is pre-selected that was not before.
   const JD_GROUND_ORDER = ['LL-HD-M', 'ed-m-0001', 'LL-SD-M'];
+  // Air list order (§377): air first, pre-selected, then the two ground
+  // services — the mirror of the ground list, the exception last.
+  const JD_AIR_ORDER = ['LL-SD-M', 'LL-HD-M', 'ed-m-0001'];
   const services = landDefault
     ? JD_SERVICES.filter(s => s.code === 'LL-HD-M' || s.code === 'LL-SD-M')      // fresh: ground (default) or air
-    : isAir ? []                                                                 // plain air parcel: nothing to ask
-    : JD_GROUND_ORDER.map(c => JD_SERVICES.find(s => s.code === c)).filter(Boolean);
+    : (isAir ? JD_AIR_ORDER : JD_GROUND_ORDER).map(c => JD_SERVICES.find(s => s.code === c)).filter(Boolean);
   // Built from the service table's own live labels — no new wording is minted
   // for this case; the row the operator is about to send names itself.
   const presetSvc = JD_SERVICES.find(s => s.code === preset) || null;
@@ -9225,8 +9238,8 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   // restores whatever was selected before, so backing out of a mis-click costs
   // nothing and the pieces count the operator may already have typed survives.
   //
-  // `!isAir` is the whole condition. On an air parcel's own list (the Fujian /
-  // Guangxi case) air is what the plan asked for, so picking it asks nothing.
+  // `!isAir` is the whole condition. On an air parcel's own list air is what
+  // the plan asked for, so picking it asks nothing.
   if (!isAir) {
     let lastSvc = preset;                 // never LL-SD-M here — see `preset` above
     bg.querySelectorAll('input[name="jd-svc"]').forEach((radio) => {
@@ -9252,6 +9265,38 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
       });
     });
   }
+  // §377 — the mirror: picking GROUND on a parcel the plan made AIR asks, on
+  // the click, and declining puts air back. Not on the Fujian / Guangxi list,
+  // where ground is the default and asking about it would be noise.
+  if (isAir && !landDefault) {
+    let lastSvc = preset;                 // always LL-SD-M here — see `preset` above
+    bg.querySelectorAll('input[name="jd-svc"]').forEach((radio) => {
+      radio.addEventListener('change', async () => {
+        if (radio.value === 'LL-SD-M') { lastSvc = radio.value; return; }
+        // Already on a ground row (asked and answered): moving between the two
+        // ground services is not a new decision, so it asks nothing.
+        if (lastSvc !== 'LL-SD-M') { lastSvc = radio.value; return; }
+        const ok = await askConfirm({
+          titleEn: 'Air parcel', titleCn: '空运包裹',
+          bodyEn: namesLabel
+            ? `<b>${escapeHtml(namesLabel)}</b> — planned for air. Ground is slower. Create the ground waybill anyway?`
+            : 'This parcel is planned for air. Ground is slower. Create the ground waybill anyway?',
+          // The names are bolded on their own and joined to a plain sentence:
+          // askConfirm shows bodyEn OR bodyCn, never both, so this is not a
+          // walker pair — and kept as one plain literal, the Chinese is not
+          // read as page text by scripts/check-glued-language.js.
+          bodyCn: (namesLabel ? '<b>' + escapeHtml(namesLabel) + '</b> ' : '此包裹')
+            + '计划空运,陆运较慢。仍要生成陆运运单吗?',
+          confirmEn: 'Create ground waybill anyway', confirmCn: '仍要生成陆运运单',
+          cancelEn: 'Not yet', cancelCn: '暂不',
+          danger: true,
+        });
+        if (ok) { lastSvc = radio.value; return; }
+        const back = bg.querySelector(`input[name="jd-svc"][value="${lastSvc}"]`);
+        if (back) back.checked = true;
+      });
+    });
+  }
   bg.querySelector('#jd-svc-submit').addEventListener('click', async (e) => {
     // Captured BEFORE any await: currentTarget is nulled once the handler
     // yields, and submitJdLabel uses it to put the button in its busy state.
@@ -9263,10 +9308,10 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
     // §218 — the JD air product, on a parcel whose air lane belongs to SF.
     //
     // ASKED AT SUBMIT, not on the radio like the land-only question above, and
-    // that is forced rather than chosen: on an air parcel `services` is empty
-    // — there is nothing to pick, LL-SD-M is simply what gets sent — so no
-    // change event ever fires and a listener would never run. Submit is the one
-    // moment that covers both an air parcel and a land parcel pushed onto air.
+    // that is forced rather than chosen: on an air parcel LL-SD-M is already
+    // the selected row (§377), so an operator who leaves it alone never fires
+    // a change event and a listener would never run. Submit is the one moment
+    // that covers both an air parcel and a land parcel pushed onto air.
     //
     // BOTH QUESTIONS CAN FIRE ON ONE CLICK: airline-refused goods, into
     // Chengdu, on a land parcel the operator is moving to air. They are two
