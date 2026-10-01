@@ -57,6 +57,10 @@ function sliceBetween(from, to) {
 const CODE = [
   sliceBetween('/* ── §325 O4 — DELIVERY SETTINGS, WRITTEN FROM THE PHONE', "reg('faqToggle',"),
   sliceFn('dlvSettingsCard'),
+  // §325 T1: cfgMerge has ONE definition now, beside the Settings cards;
+  // the copy that sat inside the delivery section above was never the one
+  // that ran (the later declaration always won).
+  sliceFn('cfgMerge'),
   sliceBetween("reg('askRun', key=>{", "reg('copyWaybill'"),
   sliceBetween("reg('askLive', (id,v)=>{", "reg('askRun', key=>{"),
   sliceFn('liveHistorySheet'),
