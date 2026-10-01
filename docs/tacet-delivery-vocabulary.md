@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.246 · 2026-09-30 · §347 VOIDING WASTE ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE FROM THE DESKTOP WASTE SCREEN.** See *Voiding a waste entry on the phone (§347)*.
+
 **v1.245 · 2026-09-30 · §346 A PRODUCT'S SALES AND VERSIONS, AND THE SHOP MENUS, ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's sales, its versions, and the shop menus on the phone (§346)*.
 
 **v1.244 · 2026-09-30 · §345 DELIVERY SETTINGS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Delivery settings on the phone (§345)*.
@@ -10807,3 +10809,19 @@ Categories screen's); `No stores · 没有门店`; `Try again · 重试`; `Loadi
 The public shop code stays unlabelled, as on the desktop: there is still no
 live Chinese source for "shop code", and restructuring around it was
 preferred over composing one.
+
+## Voiding a waste entry on the phone (§347)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's Waste ledger (`public/m.html`). Every string is the desktop Waste
+screen's own (`public/retail-admin/20-waste.js`): `Void · 作废`, `Voiding… ·
+作废中…`, `Voided · 已作废`, the confirm's title `Void this waste entry? ·
+作废这条损耗记录?` and its sentence `N × product goes back into stock. The
+entry stays in the list, marked voided. · product × N 将退回库存。该记录仍保留在
+列表中,标记为已作废。` (no measure word in either language, as the desktop
+decided). The confirm's Cancel is the phone sheet's own `Cancel · 取消`. A
+failed void reuses the phone's live `That did not go through. Nothing has
+changed — try again. · 没有成功。数据没有变化 — 请重试。`, and a refusal uses
+§325's refusal words. The server's two 409 sentences ("This entry has
+already been voided.", "This row is itself a reversal.") are shown as the
+server sends them, in English only, as the desktop shows them.
