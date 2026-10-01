@@ -329,15 +329,16 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       walk('public');
       const src = Object.fromEntries(files.map((f) => [f, read(f)]));
       const who = (re) => files.filter((f) => re.test(src[f])).sort();
+      ok(!/apiWrite\((?!'\/config'|cfgPath)[^,]*config/.test(M), 'the phone writes /config through no other path');
       is(who(/retail-admin\/config['"`?]/), [
         'public/cms-mobile.html', 'public/cms.html', 'public/product-editor.html', 'public/retail-admin.html',
         'public/retail-admin/01-core.js', 'public/retail-admin/05-marketing.js', 'public/retail-admin/06-delivery.js',
         'public/retail-admin/07-content-billing.js', 'public/retail-admin/09-products.js', 'public/retail-admin/10-extras.js',
         'public/retail-admin/17-setup-guide.js', 'public/retail-admin/31-product-page.js',
       ], 'PUT /config: the desktop files, the two editors and the product editor');
-      // Inline bodies (apiWrite('/config',{...})) plus the history-filed form
-      // (§333: Resume delivery builds `body` and writes /config?history=…).
-      const inlineFam = (M.match(/apiWrite\('\/config',\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\('\/config',\{\[?'?/, '').split(/['\]]/)[0]);
+      // Inline bodies (apiWrite('/config'|cfgPath,{...})) plus the history-filed
+      // form (§333: Resume delivery builds `body` and writes /config?history=…).
+      const inlineFam = (M.match(/apiWrite\((?:'\/config'|cfgPath),\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\((?:'\/config'|cfgPath),\{\[?'?/, '').split(/['\]]/)[0]);
       const historyFam = (M.match(/const body=\{'([a-zA-Z.]+)'[^}]*\};[\s\S]{0,300}?apiWrite\('\/config\?history=/g) || []).map((s) => s.match(/const body=\{'([a-zA-Z.]+)'/)[1]);
       is([...inlineFam, ...historyFam].sort(),
         ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'], 'the phone writes four families, each asserted in section 2');
