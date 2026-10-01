@@ -38,12 +38,10 @@ const ok = (c, m, extra) => { if (c) { pass++; console.log('  ✓ ' + m); } else
 const is = (a, e, m) => ok(JSON.stringify(a) === JSON.stringify(e), m, `expected ${JSON.stringify(e)}, got ${JSON.stringify(a)}`);
 const section = (t) => console.log('\n' + t);
 
-/* PINNED, and each must disappear.
-   `loadErr` — not a helper: it is the Delivery zones screen's error FIELD
-   (state.zn.loadErr, s.loadErr, t.loadErr), and the helper pass reads any bare
-   `load` + Capital as a loader. The orders lane is renaming the field in O11;
-   once it lands this pin fails ("no longer reported") and must be removed. */
-const PINNED_HELPERS = ['loadErr'];
+/* PINNED, and each must disappear. Empty since O11 (and the coordinator's
+   follow-up on the sizes card) renamed the `loadErr` fields to `readErr`;
+   add a name here only with a comment saying which step removes it. */
+const PINNED_HELPERS = [];
 
 // The page as test_mobile_screens.js reads it: the icon CDN and fonts out, the
 // one local dependency inlined (with an attribute, so the app's own <script>
