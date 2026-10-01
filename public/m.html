@@ -918,6 +918,10 @@ const state = {
      the size it was read for. */
   prodSales:{pid:null,days:'30',data:null,err:null,seq:0},
   prodVer:{pid:null,open:false,rows:null,err:null,seq:0},
+  /* §325 PD5 — the Details screen: the product's row as read, the draft the
+     screen shows, the payload last saved (`base`), whether a Product details
+     box has been touched, and whether the cost is loaded and the operator's. */
+  pe:null,
   /* §325 PD2 — shop menus, read-only: every location's shop (`list`), and the
      one open (`id`) with its listings, its QR answer and the menu filter. */
   shm:{list:null,err:null,tried:false,seq:0,id:null,oneFor:null,shop:null,rows:null,oneErr:null,oneSeq:0,qr:null,q:'',
@@ -1626,7 +1630,9 @@ function pop(){
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
-  forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone); render(); }
+  forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone);
+  if(top==='productedit') pePopped(gone);   // §325 PD5 — its edits go, and the sheet comes back
+  render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
 /* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
@@ -28912,6 +28918,367 @@ reg('psDays', k=>{
 });
 reg('pvOpen', id=>{ state.prodVer.open=true; loadProdVersions(Number(id)); render(); });
 reg('pvClose', ()=>{ const v=state.prodVer; v.open=false; v.seq++; render(); });
+/* ==========================================================================
+   §325 PD5 — A PRODUCT'S CORE FIELDS AND ITS DESCRIPTION, EDITED ON THE PHONE
+   (desktop: 09-products.js pdOpen / pdCollectBody / pdSaveCore / pdAutoSaveNow)
+   --------------------------------------------------------------------------
+   One screen, Details, reached from the product sheet for products:edit — the
+   desktop editor's Basics, Where it shows, price, low-stock line, Product
+   details, Description, Shipping, Flags, Free of and Internal notes, saving
+   itself as the desktop does: the shared engine (public/tacet-autosave.js),
+   800ms after the last edit, one write in flight, PATCH /products/:id.
+
+   IT SENDS ONLY WHAT CHANGED, with the desktop's keys and the desktop's
+   meanings. The desktop sends its whole form; the server writes only the keys
+   it is given (an absent key is "not touched", the contract every guard below
+   leans on), so a smaller body is the same write with fewer chances to put a
+   stale value back over another screen's. The autosave rules travel with it:
+     • a NAME is required before anything is sent (pdAutoSaveNow's hold);
+     • an EMPTY PRICE is never sent — it would make the product free;
+     • UNIT_COST is sent only when it was LOADED and is the operator's to type:
+       products:costs on a board that may read money, the server sent the key,
+       and no recipe, bundle or build list owns the figure (pdApplyCostSource).
+       Anything else and the box is not drawn and the key never leaves; the tag
+       "this cost is not complete" travels with it, never apart;
+     • PRODUCT FACTS are sent only once a box has been touched (§156) — an
+       untouched card must not write its empties over what the page editor
+       filled in;
+     • the two DESCRIPTIONS travel together with description_format 'rich';
+     • sku_taken says which product holds the code, in the desktop's words.
+   Status, the shop switch, the out-of-stock rule and the supplier switches
+   stay where they already are on the phone; nothing here sends them. */
+const PE_FACTS=[['origin','origin',['Origin','产地'],'e.g. Guangzhou, China','例如:中国广州'],
+  ['ingredients','ingredients',['Ingredients','配料'],'Comma-separated','用逗号分隔'],
+  ['storage','storage',['Storage','储存方式'],'e.g. Keep refrigerated','例如:冷藏保存'],
+  ['shelflife','shelf_life',['Shelf life','保质期'],'e.g. Best within 7 days','例如:7 天内最佳'],
+  ['serving','serving',['Serving suggestion','食用建议'],'How to enjoy it','如何享用']];
+const PE_FREE_OF=[['nuts','Nuts','无坚果'],['soy','Soy','无大豆'],['gluten','Gluten','无麸质'],['5 spice','5 Spice','无五香']];
+const PE_FREE_ALIAS={'5spice':'5 spice','5-spice':'5 spice'};
+const PE_BADGES=[['','None','无'],['auto','Auto','自动'],['new','NEW','新品'],['pop','POP','热门'],['sale','SALE','特价'],['hot','HOT','推荐']];
+let peAuto=null;
+function peBadgeOf(tags){
+  const t=String(tags||'').trim().toLowerCase();
+  if(t==='auto') return 'auto';
+  if(/\bnew\b/.test(t)) return 'new';
+  if(/\bpop|popular\b/.test(t)) return 'pop';
+  if(/\bsale\b/.test(t)) return 'sale';
+  if(/\bhot\b/.test(t)) return 'hot';
+  return '';
+}
+/* pdPlainToHtml / pdRichForEdit: a legacy plain description becomes HTML, a
+   rich one loses the non-breaking spaces that stop it wrapping. */
+const pePlainToHtml=t=>String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\n/g,'<br>');
+const peRichForEdit=h=>String(h||'').replace(/&nbsp;| /g,' ');
+/* pdRteClean: a box with no visible text and no embedded media saves as ''. */
+function peRteClean(html){
+  const h=String(html||'');
+  const text=h.replace(/<[^>]*>/g,'').replace(/&nbsp;| /g,' ').trim();
+  const media=/<(img|table|hr|video|iframe|audio|svg)\b/i.test(h);
+  return (text||media)?h.trim():'';
+}
+/* The draft is what the screen shows, in strings and flags; peBody turns it
+   into the payload in the desktop's key order. */
+function peDraftFrom(p){
+  const fo=String(p.free_of||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const known=PE_FREE_OF.map(x=>x[0]);
+  const free=[], extra=[];
+  fo.forEach(t=>{ const k=t.toLowerCase(), id=PE_FREE_ALIAS[k]||k; if(known.indexOf(id)>=0){ if(free.indexOf(id)<0) free.push(id); } else extra.push(t); });
+  const modes=String(p.ship_modes||'air,land').toLowerCase();
+  const local=/(^|,)\s*local\s*(,|$)/.test(modes);
+  const f=(p.product_facts&&typeof p.product_facts==='object')?p.product_facts:{};
+  const facts={};
+  PE_FACTS.forEach(([,col])=>{ facts[col+'_en']=f[col+'_en']==null?'':String(f[col+'_en']); facts[col+'_cn']=f[col+'_cn']==null?'':String(f[col+'_cn']); });
+  const rich=p.description_format==='rich';
+  const s=v=>v==null?'':String(v);
+  return {name_en:s(p.name_en),name_cn:s(p.name_cn),sku:s(p.sku),weight:s(p.size!=null?p.size:p.weight),
+    top_category:s(p.top_category||p.category),subcategory:s(p.subcategory),tags:peBadgeOf(p.tags),
+    sell_price:p.sell_price==null?'':s(p.sell_price),compare_at_price:p.compare_at_price==null?'':s(p.compare_at_price),
+    unit_cost:p.unit_cost==null?'':s(p.unit_cost),cost_incomplete:Number(p.cost_incomplete)===1?1:0,
+    low_stock_threshold:p.low_stock_threshold==null?'':s(p.low_stock_threshold),
+    free, freeExtra:extra, notes:s(p.notes), facts,
+    is_market:Number(p.is_market)===1?1:0, is_restock_only:Number(p.is_restock_only)===1?1:0, is_batch_made:Number(p.is_batch_made)===1?1:0,
+    air:!local&&modes.indexOf('air')>=0, land:!local&&modes.indexOf('land')>=0, local,
+    desc_en:rich?peRichForEdit(p.description_en):pePlainToHtml(p.description_en),
+    desc_cn:rich?peRichForEdit(p.description_cn):pePlainToHtml(p.description_cn)};
+}
+function peBody(d,e){
+  const t=v=>String(v==null?'':v).trim();
+  const modes=d.local?['local']:[d.air?'air':'',d.land?'land':''].filter(Boolean);
+  /* The five boxes, over whatever ELSE the bag holds. The bag is generic (a
+     page editor or another product type can file keys these boxes do not
+     show), and a phone that only knows five of them must not drop the rest
+     when it writes the bag back. */
+  const facts={}, known=[];
+  PE_FACTS.forEach(([,col])=>{ known.push(col+'_en',col+'_cn'); });
+  const orig=(e.factsOrig&&typeof e.factsOrig==='object')?e.factsOrig:{};
+  Object.keys(orig).forEach(k=>{ if(known.indexOf(k)<0&&orig[k]!=null&&String(orig[k]).trim()) facts[k]=String(orig[k]).trim(); });
+  PE_FACTS.forEach(([,col])=>{ const en=t(d.facts[col+'_en']), cn=t(d.facts[col+'_cn']); if(en) facts[col+'_en']=en; if(cn) facts[col+'_cn']=cn; });
+  return Object.assign({name_en:t(d.name_en),name_cn:t(d.name_cn),sku:t(d.sku),weight:t(d.weight),
+    top_category:t(d.top_category),subcategory:t(d.subcategory),tags:d.tags||''},
+    t(d.sell_price)!==''?{sell_price:parseFloat(t(d.sell_price))||0}:{},
+    {compare_at_price:parseFloat(t(d.compare_at_price))||0},
+    e.costOn?{unit_cost:t(d.unit_cost),cost_incomplete:d.cost_incomplete?1:0}:{},
+    {low_stock_threshold:t(d.low_stock_threshold),
+     free_of:d.free.concat(d.freeExtra).join(', '), notes:t(d.notes)},
+    e.factsTouched?{product_facts:facts}:{},
+    {is_market:d.is_market,is_restock_only:d.is_restock_only,is_batch_made:d.is_batch_made,
+     ship_modes:modes.join(',')||'air,land',
+     description_en:peRteClean(d.desc_en),description_cn:peRteClean(d.desc_cn),description_format:'rich'});
+}
+/* What one save sends: the keys whose value moved since the last save that
+   landed, the two descriptions together with their format, and the cost with
+   its tag. */
+function peDiff(b,base){
+  const out={}, moved=k=>JSON.stringify(b[k])!==JSON.stringify(base?base[k]:undefined);
+  Object.keys(b).forEach(k=>{ if(moved(k)) out[k]=b[k]; });
+  if('description_en' in out||'description_cn' in out){ out.description_en=b.description_en; out.description_cn=b.description_cn; out.description_format='rich'; }
+  else delete out.description_format;
+  if('unit_cost' in out||'cost_incomplete' in out){ out.unit_cost=b.unit_cost; out.cost_incomplete=b.cost_incomplete; }
+  return out;
+}
+/* skuTakenMsg (01-core.js), word for word. */
+function peSkuTaken(sku,c){
+  const s=String(sku||'').trim();
+  const skuTxt=s?T('SKU “','货号“')+s+'”':T('That SKU','该货号');
+  if(c){
+    const nm=T(c.name_en||c.name_cn||('#'+c.id), c.name_cn||c.name_en||('#'+c.id));
+    const vl=c.variant_label?' · '+c.variant_label:'';
+    const hidden=Number(c.is_active)===0
+      ? T(' — that product is archived/deleted, so it won’t show in the list. Restore it or change its SKU to free this code.',' — 该商品已归档/删除,因此不会显示在列表中。请恢复它或修改其货号以释放该编号。')
+      : (Number(c.is_published)===0?T(' (hidden product — use the “Hidden” filter to find it)','(已隐藏的商品 — 用“隐藏”筛选查看)'):'');
+    return skuTxt+T(' is already used by ',' 已被 ')+'“'+nm+vl+'”'+hidden;
+  }
+  return skuTxt+T(' is already in use',' 已被占用');
+}
+function peErrText(e,body){
+  if(e&&e.refused) return T(...e.words);
+  if(e&&e.code==='sku_taken') return peSkuTaken(body&&body.sku, e.body&&e.body.conflict);
+  if(e&&e.code==='sku_required') return T('A SKU is required','需要填写货号');
+  if(e&&e.code==='catalog_locked') return T('This catalog is managed by the upstream system','该商品目录由上游系统管理');
+  return T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+}
+/* The catalogue row the rest of the phone reads, brought up to what was just
+   saved — the fields this screen writes and nothing else, so the list's
+   per-store stock and every other mapped fact stay exactly as they were. */
+function peApplyToCatalogue(pid,row){
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(pid)); if(!p||!row) return;
+  const ne=row.name_en||row.name_cn||'—', nc=row.name_cn||row.name_en||'—';
+  p.name=[ne,nc];
+  if(row.sku){ p.sku='SKU '+row.sku; p.rawSku=String(row.sku); }
+  if(row.sell_price!=null){ p.priceNum=Number(row.sell_price)||0; p.price=money(CUR,p.priceNum); }
+  p.cat=String(row.top_category||row.category||'').trim(); p.sub=String(row.subcategory||'').trim();
+  if(row.size!=null) p.size=String(row.size||'').trim();
+  p.hay=[row.name_en||'',row.name_cn||'',row.sku||''].join(' ').toLowerCase();
+}
+function peCostOn(e){ return !!(e&&e.costLoaded&&pcMoney()&&!e.costOwned); }
+function peAutoStart(){
+  if(peAuto){ peAuto.flush(); if(peAuto.stop) peAuto.stop(); peAuto=null; }
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()||typeof TacetAutosave==='undefined') return;
+  const pid=e.pid;
+  const auto=TacetAutosave.create({
+    read:()=>peBody(state.pe.draft,{costOn:peCostOn(state.pe),factsTouched:state.pe.factsTouched,factsOrig:state.pe.row&&state.pe.row.product_facts}),
+    hold:b=>(!b.name_en&&!b.name_cn)?T('Add a name to start autosaving','填写名称后自动保存')
+      :(state.pe.draft.sell_price.trim()!==''&&!(Number(state.pe.draft.sell_price)>=0))?T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。')
+      :'',
+    send:b=>{
+      const cur=state.pe; if(!cur||cur.pid!==pid) return Promise.resolve();
+      const body=peDiff(b,cur.base);
+      if(!Object.keys(body).length){ cur.base=b; return Promise.resolve(); }
+      return apiWrite('/products/'+pid,body,'PATCH').then(j=>{
+        if(state.pe===cur) cur.base=b;
+        peApplyToCatalogue(pid,j&&j.data);
+      }).catch(err=>{ throw new Error(peErrText(err,body)); });
+    },
+    onChange:()=>{ const f=document.getElementById('mPeFoot'); if(f) f.innerHTML=peFootHtml(); },
+  });
+  peAuto=auto; auto.start();
+}
+/* The row, the build list and the money question, then the engine. The cost
+   box is offered only once all three are answered — an unanswered build-list
+   read is not "no build list". */
+function loadPe(pid){
+  const e={pid,row:null,err:null,draft:null,base:null,factsTouched:false,costLoaded:false,costOwned:true,tried:true};
+  state.pe=e;
+  const wantCost=pcMoney();
+  Promise.all([api('/products/'+pid),
+    wantCost?api('/products/'+pid+'/build-lines').then(d=>({ok:true,lines:(d&&Array.isArray(d.lines))?d.lines:[]})).catch(()=>({ok:false})):Promise.resolve({ok:false})])
+  .then(([row,bl])=>{
+    if(state.pe!==e) return;
+    e.row=row||{};
+    e.costLoaded=wantCost&&Object.prototype.hasOwnProperty.call(e.row,'unit_cost')&&bl.ok;
+    e.costOwned=!!(e.row.recipe_id||e.row.is_bundle||(bl.lines&&bl.lines.length));
+    e.draft=peDraftFrom(e.row);
+    e.base=peBody(e.draft,{costOn:peCostOn(e),factsTouched:false,factsOrig:e.row.product_facts});
+    peAutoStart(); render();
+  }).catch(err=>{
+    if(state.pe!==e||String(err&&err.message)==='auth') return;
+    e.err=err&&err.refused?T(...err.words):String(E('Could not load this.','无法加载。')); render();
+  });
+}
+function peFootHtml(){
+  const a=peAuto; if(!a) return '';
+  const st=a.state;
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message):st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||'')):T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<span style="flex:1;min-width:0;font-size:12.5px;color:${tone}">${line}</span>
+    ${a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('peUndo')">${T('Undo','撤销')}</button>`:''}
+    <button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('pvOpen',${Number(state.pe&&state.pe.pid)})">${T('Version history','历史版本')}</button>`;
+}
+function peSubcats(top){
+  const node=(state.cats||[]).find(t=>t&&t.name===top);
+  return node?(node.subs||[]).filter(x=>x&&x.name):[];
+}
+function screenProductEdit(){
+  const e=state.pe;
+  if(!e) return nothingYet(T('Products','产品'),'');
+  if(e.err) return `<div style="padding:24px 16px;font-size:14px;color:var(--brick-ink)">${escAttr(e.err)}</div>`;
+  if(!e.draft) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  loadCategories();
+  const d=e.draft;
+  const lab=t=>`<span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</span>`;
+  const inp=(k,label,extra)=>`<label style="display:flex;flex-direction:column;gap:6px">${lab(label)}<input value="${escAttr(d[k])}" ${extra||''} oninput="APP.cmd('peField','${k}',this.value)"></label>`;
+  const card=(title,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">${title}</div>${inner}</div>`;
+  const tick=(on,cmd,label)=>`<button onclick="${cmd}" style="display:flex;align-items:center;gap:12px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+      <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${on?ic('check',15,2.5):''}</span>
+      <span style="font-size:15px">${label}</span></button>`;
+  const tops=(state.cats||[]).filter(t=>t&&t.name);
+  const sel=(k,opts)=>`<select style="width:100%" onchange="APP.cmd('peField','${k}',this.value)">${opts.map(([v,label])=>`<option value="${escAttr(v)}"${String(d[k])===String(v)?' selected':''}>${escAttr(label)}</option>`).join('')}</select>`;
+  const none=['',T('None','无')];
+  // A value the tree does not name (a rename's leftover) stays selectable as itself.
+  const topOpts=[none].concat(tops.map(t=>[t.name,T(t.name,t.name_cn||t.name)]));
+  if(d.top_category&&!tops.some(t=>t.name===d.top_category)) topOpts.push([d.top_category,d.top_category]);
+  const subs=peSubcats(d.top_category);
+  const subOpts=[none].concat(subs.map(x=>[x.name,T(x.name,x.name_cn||x.name)]));
+  if(d.subcategory&&!subs.some(x=>x.name===d.subcategory)) subOpts.push([d.subcategory,d.subcategory]);
+  const rteBtn=(cmd,icon,label)=>`<button class="iconbtn" style="width:36px;height:36px" aria-label="${label}" title="${label}" onmousedown="event.preventDefault()" onclick="APP.cmd('peRte','${cmd}')">${ic(icon,17,2)}</button>`;
+  const rte=(k,langLabel)=>`<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;color:var(--text-secondary)">${langLabel}</span>
+      <div id="mPeRte_${k}" contenteditable="true" data-k="${k}" oninput="APP.cmd('peDesc','${k}',this.innerHTML)"
+        style="min-height:110px;padding:10px 12px;border:1px solid var(--border-default);border-radius:12px;background:var(--surface-card);font-size:15px;line-height:1.55;outline:none;overflow-wrap:anywhere">${d[k]}</div></div>`;
+  const costOn=peCostOn(e);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${card(T('Basics','基础'),`${inp('name_en',T('Name','名称'))}${inp('name_cn',T('Name (second language)','名称(第二语言)'))}${inp('sku',T('SKU','货号'),'autocapitalize="characters"')}`)}
+    ${card(T('Where it shows','分类与陈列'),`<label style="display:flex;flex-direction:column;gap:6px">${lab(T('Shop section','商店分区'))}${sel('top_category',topOpts)}</label>
+      <label style="display:flex;flex-direction:column;gap:6px">${lab(T('Subcategory','子分类'))}${sel('subcategory',subOpts)}</label>
+      <label style="display:flex;flex-direction:column;gap:6px">${lab(T('Badge','标签'))}${sel('tags',PE_BADGES.map(([v,en,zh])=>[v,T(en,zh)]))}</label>
+      ${inp('weight',T('Size / weight','规格'))}`)}
+    ${card(T('Price','价格'),`${inp('sell_price',T('Price','价格'),'inputmode="decimal"')}${inp('compare_at_price',T('Was price','划线价'),'inputmode="decimal"')}
+      ${costOn?`${inp('unit_cost',T('Cost','成本'),'inputmode="decimal"')}${tick(d.cost_incomplete,"APP.cmd('peFlag','cost_incomplete')",T('This cost is not complete','成本不完整'))}`:''}`)}
+    ${card(T('Stock','库存'),inp('low_stock_threshold',T('Low-stock alert at','低库存提醒阈值'),'inputmode="numeric" placeholder="'+escAttr(T('Default','默认')+' '+prodLowThreshold({}))+'"'))}
+    ${card(T('Product details','产品详情'),PE_FACTS.map(([dom,col,label,phEn,phCn])=>`<div style="display:flex;flex-direction:column;gap:6px">${lab(T(...label))}
+      <input value="${escAttr(d.facts[col+'_en'])}" placeholder="${escAttr(phEn)}" oninput="APP.cmd('peFact','${col}_en',this.value)">
+      <input value="${escAttr(d.facts[col+'_cn'])}" placeholder="${escAttr(phCn)}" oninput="APP.cmd('peFact','${col}_cn',this.value)"></div>`).join(''))}
+    ${card(T('Description','描述'),`<div class="hscroll" style="display:flex;gap:4px">
+        ${rteBtn('bold','bold',T('Bold','加粗'))}${rteBtn('italic','italic',T('Italic','斜体'))}${rteBtn('underline','underline',T('Underline','下划线'))}
+        ${rteBtn('insertUnorderedList','list',T('Bulleted list','项目符号'))}${rteBtn('insertOrderedList','list-ordered',T('Numbered list','编号'))}${rteBtn('removeFormat','remove-formatting',T('Clear formatting','清除格式'))}</div>
+      ${rte('desc_en','English')}${rte('desc_cn','中文')}`)}
+    ${card(T('Shipping','配送方式'),`${tick(d.air,"APP.cmd('peShip','air')",T('Air','空运'))}${tick(d.land,"APP.cmd('peShip','land')",T('Land','陆运'))}${tick(d.local,"APP.cmd('peShip','local')",T('Local only','仅广州'))}`)}
+    ${card(T('Flags','标记'),`${tick(d.is_market,"APP.cmd('peFlag','is_market')",T('Sold at markets','市集销售'))}${tick(d.is_batch_made,"APP.cmd('peFlag','is_batch_made')",T('Made fresh in batches','分批现做'))}${tick(d.is_restock_only,"APP.cmd('peFlag','is_restock_only')",T('Restock-only, internal','仅内部补货'))}`)}
+    ${card(T('Free of','不含'),PE_FREE_OF.map(([id,en,zh])=>tick(d.free.indexOf(id)>=0,`APP.cmd('peFree','${escAttr(id)}')`,T(en,zh))).join('')
+      +(d.freeExtra.length?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(d.freeExtra.join(', '))}</span>`:''))}
+    ${card(T('Internal notes','内部备注'),`<textarea rows="3" style="resize:none" oninput="APP.cmd('peField','notes',this.value)">${escAttr(d.notes)}</textarea>`)}
+  </div>${footBar(`<div id="mPeFoot" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;justify-content:flex-end">${peFootHtml()}</div>`,'mPeBar')}`;
+}
+/* The sheet's door. The desktop hides the whole editor from an upstream-
+   catalogue tenant, whose core fields the server refuses (catalog_locked). */
+function peEntryRow(p){
+  if(!p||p._id==null||!prodCanEdit()||state.catalogMode==='upstream'||!canRoute('productedit')) return '';
+  return `<div class="card" style="padding:0">
+    <button class="row" ${state.prodBusy?'disabled':''} onclick="APP.cmd('peOpen',${Number(p._id)})">
+      <span style="flex:1;min-width:0;font-size:15px">${T('Details','详情')}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',20)}</span></button></div>`;
+}
+SUBS.productedit={title:['Details','详情'],
+  titleOf:()=>{ const e=state.pe, d=e&&e.draft; return d?escAttr(T(d.name_en||d.name_cn,d.name_cn||d.name_en)||T('Details','详情')):T('Details','详情'); },
+  backLabel:()=>T('Products','产品'),
+  render:()=>screenProductEdit()};
+/* Opening closes the sheet and stacks the screen, as Cost & Pricing does;
+   Back hands the operator back to the sheet of the same product. */
+reg('peOpen', id=>{
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(id));
+  if(!p||state.prodBusy||!prodCanEdit()||state.catalogMode==='upstream'||!canRoute('productedit')) return;
+  state.productSku=null; state.oosSku=null; prodRecordsDrop();
+  loadPe(p._id);
+  push('productedit');
+  const t=state.stack[state.stack.length-1];
+  if(t&&t.route==='productedit') t.pid=p._id;
+  render();
+});
+function pePopped(f){
+  // What the fields still hold goes on the wire first (the write starts in this
+  // task), then the screen's state is let go so a late read cannot restart it.
+  if(peAuto){ peAuto.flush(); if(peAuto.stop) peAuto.stop(); peAuto=null; }
+  state.pe=null; state.prodVer.open=false;
+  if(!f||f.route!=='productedit') return;
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(f.pid));
+  if(p) state.productSku=p.sku;
+}
+reg('peField', (k,v)=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()) return;
+  if(['name_en','name_cn','sku','weight','top_category','subcategory','tags','sell_price','compare_at_price','unit_cost','low_stock_threshold','notes'].indexOf(k)<0) return;
+  if(k==='unit_cost'&&!peCostOn(e)) return;
+  e.draft[k]=String(v==null?'':v);
+  // A new shop section resets the subcategory (pdOnTopCatChange), and repaints its list.
+  if(k==='top_category'){ e.draft.subcategory=''; render(); }
+  if(peAuto) peAuto.touch();
+});
+reg('peFact', (k,v)=>{
+  const e=state.pe; if(!e||!e.draft||!(k in e.draft.facts)||!prodCanEdit()) return;
+  e.draft.facts[k]=String(v==null?'':v); e.factsTouched=true;
+  if(peAuto) peAuto.touch();
+});
+reg('peFlag', k=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()) return;
+  if(['is_market','is_batch_made','is_restock_only','cost_incomplete'].indexOf(k)<0) return;
+  if(k==='cost_incomplete'&&!peCostOn(e)) return;
+  e.draft[k]=e.draft[k]?0:1; render(); if(peAuto) peAuto.touch();
+});
+/* pdShipModeChanged: Local only is exclusive — it clears Air and Land, and
+   ticking either of them clears it. */
+reg('peShip', k=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()||['air','land','local'].indexOf(k)<0) return;
+  const d=e.draft; d[k]=!d[k];
+  if(k==='local'&&d.local){ d.air=false; d.land=false; }
+  if((k==='air'||k==='land')&&d[k]) d.local=false;
+  render(); if(peAuto) peAuto.touch();
+});
+reg('peFree', id=>{
+  const e=state.pe; if(!e||!e.draft||!prodCanEdit()||!PE_FREE_OF.some(x=>x[0]===id)) return;
+  const f=e.draft.free, i=f.indexOf(id);
+  if(i>=0) f.splice(i,1); else f.push(id);
+  render(); if(peAuto) peAuto.touch();
+});
+/* Typing in a description repaints nothing — the box is the live copy. */
+reg('peDesc', (k,html)=>{
+  const e=state.pe; if(!e||!e.draft||(k!=='desc_en'&&k!=='desc_cn')||!prodCanEdit()) return;
+  e.draft[k]=String(html==null?'':html);
+  if(peAuto) peAuto.touch();
+});
+/* The toolbar acts on whichever box holds the caret (the buttons keep it
+   there by refusing focus), then reads that box back into the draft. */
+reg('peRte', cmd=>{
+  if(['bold','italic','underline','insertUnorderedList','insertOrderedList','removeFormat'].indexOf(cmd)<0) return;
+  const el=document.activeElement;
+  if(!el||!el.getAttribute||el.getAttribute('contenteditable')!=='true') return;
+  try{ document.execCommand(cmd,false,null); }catch(err){}
+  CMD.peDesc(el.getAttribute('data-k'), el.innerHTML);
+});
+reg('peUndo', ()=>{ if(!peAuto) return; peAuto.undo(b=>{ const e=state.pe; if(!e) return;
+  /* Back to the visit's start: every field the payload carries, as loaded. */
+  const d=e.draft;
+  ['name_en','name_cn','sku','weight','top_category','subcategory','tags','low_stock_threshold','notes'].forEach(k=>{ d[k]=String(b[k]==null?'':b[k]); });
+  d.sell_price='sell_price' in b?String(b.sell_price):d.sell_price;
+  d.compare_at_price=b.compare_at_price?String(b.compare_at_price):'';
+  if('unit_cost' in b){ d.unit_cost=String(b.unit_cost); d.cost_incomplete=b.cost_incomplete?1:0; }
+  d.is_market=b.is_market; d.is_restock_only=b.is_restock_only; d.is_batch_made=b.is_batch_made;
+  const m=String(b.ship_modes||''); d.local=/(^|,)local(,|$)/.test(m); d.air=!d.local&&m.indexOf('air')>=0; d.land=!d.local&&m.indexOf('land')>=0;
+  const fo=String(b.free_of||'').split(',').map(s=>s.trim()).filter(Boolean);
+  d.free=fo.filter(x=>PE_FREE_OF.some(y=>y[0]===x)); d.freeExtra=fo.filter(x=>!PE_FREE_OF.some(y=>y[0]===x));
+  if(b.product_facts){ PE_FACTS.forEach(([,col])=>{ d.facts[col+'_en']=b.product_facts[col+'_en']||''; d.facts[col+'_cn']=b.product_facts[col+'_cn']||''; }); }
+  d.desc_en=b.description_en; d.desc_cn=b.description_cn;
+  render(); }); });
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden'&&peAuto) peAuto.flush();
+});
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
   const noAnim=state.prodMounted?'animation:none;':'';
@@ -28940,6 +29307,7 @@ function sheetProduct(){
        ${stockCard(p)}
        ${oosCard(p)}
        ${pcEntryRow(p)}
+       ${peEntryRow(p)}
        ${salesCard(p)}
        ${versionsRow(p)}
      </div>
@@ -32574,6 +32942,8 @@ const ROUTE_CAP={
      tab gate; every write inside carries `materials:edit`, and every price
      `materials:costs` (failing closed). */
   materials:'materials:view', materialone:'materials:view',
+  // §325 PD5 — the product's Details screen: every write on it is products:edit.
+  productedit:'products:edit',
   /* A product's Cost & Pricing (§300 R6) opens with the catalogue; its link
      picker is a write, and a named branch in canRoute() below. */
   productcost:'products:view', productrecipe:'products:edit',
@@ -33523,7 +33893,7 @@ function render(){
   if(state.shm.edit) html += layer('shmedit:'+state.shm.edit.id, sheetShmEdit());
   if(state.shm.pick) html += layer('shmpick', sheetShmPick());
   // §325 PD2 — over the product it lists, and only while that product is open.
-  if(state.productSku&&state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
+  if(state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
@@ -33966,7 +34336,8 @@ function layers(){
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false);
     if(t&&t.route==='materialone') matLeaveNow(false);
     if(t&&t.route==='productcost'&&!pcMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays
-    forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone); });
+    forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
+    if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
   // record is what opened the ORDER — a Recent orders row — the pair is stacked
@@ -33989,7 +34360,7 @@ function layers(){
   if(state.shm.edit) L.push(()=>{ if(!state.shm.edit.busy) state.shm.edit=null; });
   if(state.shm.pick) L.push(()=>{ if(!state.shm.pick.busy){ clearTimeout(_shmPickTimer); state.shm.pick=null; } });
   // After the product, so Back closes the version list first (§325 PD2).
-  if(state.productSku&&state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
+  if(state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
   /* "When it runs out" sits OVER the product sheet it was opened from (z-index
      48 over 46), so it is listed after it and Back closes it first. It was
      listed before, so Back took the product away from under an open picker
