@@ -4,6 +4,8 @@
 //     try to get the freshest shell. Fall back to cache only when offline.
 //     This is what was missing in earlier versions — a stale cached
 //     shell could outlive a route fix and silently break PWA install.
+//     The installed shells (SHELL) wait at most SHELL_WAIT_MS for it before
+//     opening the saved copy — see shellResponse().
 //   • Web manifests + icons + JS/CSS/etc.: stale-while-revalidate
 //     (instant from cache, refresh in background).
 //   • API requests: network-only, never cached.
@@ -177,6 +179,62 @@ self.addEventListener('notificationclick', (e) => {
   })());
 });
 
+// ─── An installed shell does not wait on a slow network ──────────
+// Network-first with no time limit meant the installed phone app sat on the
+// OS splash for as long as a slow connection took to answer. A weak signal or
+// a VPN does not FAIL a request, it just takes its time, so the offline copy
+// was never reached. Reported 2026-10-01 as "stuck on the splash, a lot".
+//
+// So a shell gets SHELL_WAIT_MS to answer. After that the saved copy opens and
+// the download carries on in the background, refreshing the saved copy for
+// next time. With no saved copy it waits as before; there is nothing better to
+// show. A 5xx (the server mid-restart during a deploy) counts as no answer
+// when there is a saved copy to show instead.
+//
+// What the saved copy can be: this deploy's shell (precached on install,
+// replaced on every good load), or, for the one open right after a deploy and
+// before the new worker takes over, the previous build's. m.html already moves
+// itself onto a new build the next time it is backgrounded (sw-updated), so it
+// is at worst one build behind for one open.
+//
+// The lookup falls back to ignoring the query: the installed app opens
+// '/m?from=app' (its shortcuts '/m?from=app&to=orders'), the install precaches
+// plain '/m', and the server sends the same file for all of them. Only SHELL
+// paths get this, because elsewhere the query can pick the file
+// (/cms?desktop=1).
+const SHELL_WAIT_MS = 3000;
+
+async function savedShell(request) {
+  return (await caches.match(request)) || (await caches.match(request, { ignoreSearch: true }));
+}
+
+function shellResponse(e) {
+  let storing = null;
+  const network = fetch(e.request).then((fresh) => {
+    if (fresh && fresh.ok) {
+      const copy = fresh.clone();
+      storing = caches.open(CACHE).then(c => c.put(e.request, copy));
+    }
+    return fresh;
+  });
+  // Kept alive past respondWith: when the saved copy has already answered, the
+  // download is still finishing and its copy still has to land.
+  e.waitUntil(network.then(() => storing).catch(() => {}));
+
+  return (async () => {
+    const cached = await savedShell(e.request);
+    if (!cached) {
+      try { return await network; }
+      catch { return new Response('Offline', { status: 503, statusText: 'Offline' }); }
+    }
+    let timer;
+    const tooSlow = new Promise((resolve) => { timer = setTimeout(resolve, SHELL_WAIT_MS, null); });
+    const fresh = await Promise.race([network.catch(() => null), tooSlow]);
+    clearTimeout(timer);
+    return (fresh && fresh.status < 500) ? fresh : cached;
+  })();
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // API: always network, never cached.
@@ -193,6 +251,11 @@ self.addEventListener('fetch', (e) => {
 
   // HTML — network-first. The cache is just a backup for offline.
   if (isHTMLRequest(e.request)) {
+    // An installed shell ('/m', '/login') does not wait on a slow network.
+    if (SHELL.includes(url.pathname)) {
+      e.respondWith(shellResponse(e));
+      return;
+    }
     e.respondWith((async () => {
       try {
         const fresh = await fetch(e.request);
