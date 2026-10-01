@@ -69,6 +69,8 @@ const CODE = [
   sliceFn('mapOrderRow'),
   sliceFn('mapDetail'),
   sliceBetween("reg('copyPayLink',", "reg('copyTxn',"),
+  // §325 O8's helpers, which shipFromCard now calls; a reader (no caps here) gets no control.
+  sliceBetween('/* ── §325 O8 — SAME-CITY RIDER OPERATIONS', '/* The printer can succeed'),
   'globalThis.__x={ITEM_TUPLE};',
 ].join('\n');
 
