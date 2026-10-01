@@ -24218,3 +24218,177 @@ desktop confirm.
 7. **Prices on the menu are shown as the desktop shows them**: to anyone who
    reaches the page. They are catalogue-level prices, already shown on the
    phone's Products list.
+
+## §347 — A WASTE ENTRY CAN BE VOIDED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Waste ledger gained the desktop's Void. On a live loss, an account
+holding `waste:void` sees Void on the row. It asks the desktop's question,
+which says what goes back into stock, then sends the desktop's request,
+`POST /waste/:id/void` with an empty body. The server writes the reversal and
+returns the stock; nothing about that changed. The rule this file's Waste
+comment recorded, "No void" (it was an owner's key, rarely held in the aisle),
+is retired: the key still decides, and the button is drawn only for whoever
+holds it. A Back-order defect found in PD2 is fixed here too.
+
+1. **Void is offered where the desktop offers it**: on a live loss only, never
+   on a reversal and never on a row already voided, and only for `waste:void`
+   (the desktop's `data-cap`). The server's own 409s back both rules.
+2. **The confirm is the desktop's, word for word**: "Void this waste entry?",
+   "N × product goes back into stock. The entry stays in the list, marked
+   voided.", with no measure word in either language, because a waste entry
+   is not always pieces. Nothing is sent before it is confirmed.
+3. **While it is in flight the row says Voiding… and every Void waits.**
+   Success is confirmed by a toast and the list is read again.
+4. **A void that does not go through says so above the list and stays there**
+   until the next void or filter, never in a toast. A permission refusal says
+   why (§325's refusal words). A row already voided elsewhere shows the
+   server's own sentence, as the desktop does, and the list is read again,
+   because the screen was out of date. Anything else shows the phone's
+   "Nothing has changed — try again".
+5. **Back closes the "When it runs out" picker before the product sheet under
+   it.** The Back stack listed the picker before the product, so Back took the
+   product away and left the picker standing over nothing. It now follows the
+   z-order, as the version list added in PD2 already did.
+
+## §348 — A SHOP MENU'S DAILY EDITS COME TO THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The read-only Shop menu screens from PD2 gained the desktop's daily writes,
+each behind `stores:edit` as on the desktop. A row's switch makes the
+listing available or not. Tapping a row opens a sheet for its price and kind
+(Stocked / Made here) and for Remove. **+ Add product** opens a picker that
+searches the shop's candidates and adds one at a time, with the desktop's
+**Add all N Online store products**. Each write is the desktop's request:
+`PATCH /shops/:id/listings/:lid` (`{is_available}`, `{price}`,
+`{fulfilment_mode}`), `DELETE /shops/:id/listings/:lid`,
+`GET /shops/:id/candidates?q=`, `POST /shops/:id/listings
+{store_product_id}`, `POST /shops/:id/listings/add-published`. Creating a
+shop, renaming it, switching it on and off, and moving its products stay for
+PD13.
+
+1. **Without `stores:edit` the menu is exactly PD2's read-only screen**: no
+   switch, no row sheet, no + Add product, and each command refuses. The
+   server's `requireStoresEdit` is unchanged.
+2. **Available is the row's switch, as on the desktop**: it flips at once,
+   sends `{is_available: 1|0}`, takes the server's row, and if refused flips
+   back and says why above the list (the refusal stays; a toast never reports
+   a failure).
+3. **Price and kind share one sheet, and Save sends one PATCH per field that
+   changed**: the desktop's body, `{price}` or `{fulfilment_mode}`, with
+   `price` sent as typed, as the desktop's input sends it. Nothing changed
+   sends nothing. A price that is not a number of 0 or more is refused in the
+   sheet before anything is sent, using the phone's existing price sentence;
+   the server's `bad_price` gives the same sentence.
+4. **Remove asks first, though the desktop does not** (the §325 survey's
+   defect 14). The desktop's reasoning was that a listing is only a join and
+   adding the product back restores it. But the price and kind set on that
+   listing do not come back, so a stray tap on a phone costs something. The
+   confirm names the product. The desktop's own Remove is unchanged.
+5. **The picker is the desktop's panel as a sheet**: the search waits for a
+   220 ms pause, the last search asked wins, and only the list under the box
+   repaints, so the keyboard stays. A product added leaves the picker and
+   joins the menu, and the picker stays open for the next one. **Add all**
+   shows while the unfiltered answer counts Online store products this menu
+   lacks, keeps its count while a search narrows the list, asks the desktop's
+   question (count first, the §47 caveat in the body), and afterwards
+   re-reads the count from the server rather than working it out on the
+   phone.
+6. **Back closes the row sheet and the picker before the menu, but not while
+   a write from them is in flight.**
+
+## §349 — A PRODUCT'S CORE FIELDS AND DESCRIPTION ARE EDITED ON THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The product sheet gained a **Details** row, for `products:edit`, which opens
+a screen holding the desktop editor's core fields: Basics (both names, SKU),
+Where it shows (shop section, subcategory, badge, size), price and was-price,
+the hand-typed cost where it is the operator's, the low-stock line, Product
+details (the five facts in both languages), the two-language rich
+Description, Shipping, Flags, Free of and Internal notes. It saves itself as
+the desktop does: through the shared autosave engine (`tacet-autosave.js`),
+800 ms after the last edit, one write in flight, `PATCH /products/:id`, with
+Undo and Version history on its foot. Photos (PD6), sizes (PD9), bundles
+(PD10), customer choices (PD11) and the page designer (§326.7) are not on it.
+
+1. **It sends only the fields that changed, under the desktop's keys and
+   meanings.** The desktop sends its whole form. The server writes only the
+   keys it is given (an absent key means "not touched", the contract the
+   cost and facts guards already depend on). So a smaller body is the same
+   write, with fewer ways to put a stale value back over another screen's.
+   The two descriptions always travel together with `description_format:
+   'rich'`, and the cost always travels with its "not complete" tag.
+2. **The desktop's autosave rules, each one asserted:**
+   - nothing is sent until there is a name (the desktop's hold, in its words);
+   - an emptied price is never sent, because it would make the product free;
+   - a price that is not a number of 0 or more is held, with the phone's
+     existing price sentence;
+   - **`unit_cost` is sent only when it was loaded and is the operator's to
+     type**: `products:costs` on a board that may read money, the server sent
+     the key, the build-list read came back, and no recipe, bundle or build
+     list owns the figure (`pdApplyCostSource`'s order). In every other case
+     the box is not drawn and the key never leaves the phone. A build list
+     that could not be read counts as "do not know", never as "none";
+   - **Product facts are sent only once a box has been touched** (§156);
+   - **`sku_taken`** names the product holding the code, in `skuTakenMsg`'s
+     words, on the screen's foot. A refusal says why there too.
+3. **Product facts keep keys the phone does not show.** The bag is generic, so
+   a page editor or another product type can file keys beyond the five boxes.
+   When the phone writes the bag, it carries those keys back rather than
+   dropping them. The desktop's `pdFactsGet` drops them; that is recorded
+   here as a desktop gap, not fixed.
+4. **Rich text on a phone is the formatting a thumb can reach**: bold,
+   italic, underline, bulleted and numbered lists, and clear formatting, with
+   the desktop's own names. Everything else the desktop toolbar does (colour,
+   highlight, alignment, indent, links, inline images, tables, rules,
+   fullscreen) is not offered, but markup already in a description is kept
+   as it is. A legacy plain description opens as HTML and saves as rich, as
+   on the desktop.
+5. **What it does not send.** Status is left alone (the desktop's dead field
+   heals itself on its own saves). The shop switch, the out-of-stock rule and
+   the supplier switches stay on the product sheet, where §325's safety step
+   gated them. AI "Auto-fill from text" for the facts is not on the phone in
+   this step.
+6. **An upstream-catalogue tenant gets no Details door**, as its desktop shows
+   no editor (the server refuses those core fields with `catalog_locked`).
+7. **Leaving sends what is pending and hands back the product's sheet**, as
+   Cost & Pricing does. After each save, the catalogue row the rest of the
+   phone reads takes the saved name, code, price and section, and keeps its
+   per-store stock.
+
+## §350 — A PRODUCT'S PHOTOS ARE MANAGED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The Details screen PD5 added now has the desktop editor's Photos card. It
+shows the ordered gallery (up to eight, the first marked Main), with Add,
+which shrinks each picture on the phone first, and From library, which picks
+from the Media library. Each photo can be removed, moved up or moved down, or
+tapped to see it large. The gallery is written the desktop's way: the whole
+ordered list as `images` in the same `PATCH /products/:id` the screen
+autosaves with. The server replaces the gallery with that list and keeps the
+main photo on its first entry.
+
+1. **`images` is sent only after the gallery was loaded and then changed
+   here** (`_pdGalleryDirty`). The server replaces the whole gallery with
+   what it is given, so a list sent from a phone that never saw the real one
+   would wipe it. A gallery that did not load is said on the card with Try
+   again, is not drawn as empty, offers no control, and is never sent.
+   Another edit on the screen does not carry an untouched gallery with it.
+2. **Add shrinks with the desktop's product preset**: a 1440 px long edge,
+   JPEG at quality 0.88 (a transparent PNG flattens to white), a small JPEG
+   under 200 KB passed through, anything over 25 MB refused. A picture that
+   is too big or cannot be read is said on the card, and the others still go
+   in. A shrink is confirmed in a toast, as on the desktop.
+3. **From library** lists the Media library's pictures sixty at a time
+   (`GET /media/list?mime=image`), with a search that waits for a pause and
+   Load more. It allows only as many picks as the gallery has room for, and
+   says so in the sheet rather than in a toast. Each pick is fetched and
+   shrunk like an upload, so it lands self-contained, exactly as the
+   desktop's does.
+4. **Reorder is Move up / Move down instead of the desktop's drag.** It is the
+   same reorder, done with a thumb. Moving a photo to the top makes it the
+   main photo.
+5. **A size showing a sibling's photos says so** in the desktop's sentence.
+   Any change makes them this size's own, as on the desktop.
+6. **Undo puts back the gallery as it was loaded and sends that list.** The
+   catalogue card's picture follows the saved main photo.
