@@ -143,6 +143,8 @@ function mk(opts = {}) {
     reg: (n, f) => { CMD[n] = f; },
     // The sizes card (§325 PD9) has its own suite, test_mobile_product_sizes.js.
     loadPeSizes: () => {}, peSizesCard: () => '',
+    // The Delete row (§325 PD14): test_mobile_products_bulk.js.
+    peDeleteRow: () => '',
     // The customer-choices card (§325 PD11): test_mobile_product_options.js.
     peOptCard: () => '',
     // The two bundle cards (§325 PD10): test_mobile_product_bundles.js.
