@@ -487,16 +487,23 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config|apiWrite\('\/(voting|leaderboard)\/config/), ['public/m.html', 'public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs and the phone\'s two screens (§325 M7)');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
-      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs write, cms.html reads, the phone writes only the invite share card (§325 M8)');
+      is(who(/affiliate\/(settings|referrals)/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'affiliate settings and referrals: the desktop tabs and the phone write (§325 M8, M9), cms.html reads');
       /* §325 M8 — one phone write to /affiliate/settings: the invite share card,
          sending shareImage and shareTitle only (scBody), on the key the server
-         gives that write for exactly this card (sharing:edit, section 1). The
-         referrals stay read-only on the phone. */
-      is((M.match(/apiWrite\('\/affiliate\/settings/g) || []).length, 1, 'the phone writes the affiliate settings from one place');
+         gives that write for exactly this card (sharing:edit, section 1).
+         */
+      /* §325 M9 — and the phone's Affiliate screen: the offer's Save changes
+         (the desktop's afxSave body) and the ledger's Void / Restore, each on
+         the affiliate keys the server gives them, which open those screens. */
+      is((M.match(/apiWrite\('\/affiliate\/settings/g) || []).length, 2, 'the phone writes the affiliate settings from two places: the invite card and the offer');
+      ok(M.includes("apiWrite('/affiliate/settings',Object.assign({},AF.cfg),'PATCH')"), '…the offer, whole, as the desktop sends it');
+      for (const r of ['affsettings', 'affiliate']) ok(list(route(r)).every((k) => has(R('PATCH', '/affiliate/settings'), k)), 'phone ' + r + ' may save the offer');
       ok(M.includes("put:(b,note)=>apiWrite('/affiliate/settings'+cfgHistQ('share.invite',note),b,'PATCH')"), '…the invite share card');
       ok(M.includes("if(pg.aff) return {shareImage:img, shareTitle:title};"), '…sending its picture and title and nothing else');
       ok(has(R('PATCH', '/affiliate/settings'), route('sharecards')), '…which the Share cards key may write');
-      ok(!/apiWrite\('\/affiliate\/referrals/.test(M), 'the phone only reads the referrals');
+      is((M.match(/apiWrite\('\/affiliate\/referrals\//g) || []).length, 1, 'the phone writes a referral row from one place (Void / Restore)');
+      ok(list(route('affiliate')).every((k) => has(R('PATCH', '/affiliate/referrals/4'), k)), '…which the phone Affiliate key may write');
+      is(route('affeligible'), 'affiliate:edit', 'phone: who earns the ongoing share opens on the eligibility key');
       is(who(/retail-admin\/cms\//), ['public/cms-mobile.html', 'public/cms.html', 'public/retail-admin/01-core.js',
         'public/retail-admin/05-marketing.js', 'public/retail-admin/10-extras.js'], '/cms/*: the two editors, and the desktop picture uploads');
       is(who(/flash-sale['`/]/), ['public/retail-admin/07-content-billing.js'], 'the flash sale: the desktop Flash sales tab');

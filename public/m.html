@@ -1773,6 +1773,8 @@ function pop(){
   if(top==='materialone'&&!matMayLeave()) return;
   if(top==='productcost'&&!pcMayLeave()) return;
   if(top==='polledit'&&!pollMayLeave()) return;   // §325 M7 — an unsaved poll asks first
+  if(top==='affsettings'&&!affMayLeave()) return;   // §325 M9 — so does an unsaved offer
+  if(top==='affeligible') loadAffElig();   // the count on the offer is re-read, as the desktop's dialog does on close
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
@@ -4922,7 +4924,7 @@ reg('togglePopup', id=>{
     render();
   });
 });
-reg('affSeg', v=>{ state.affSeg=v; state.affRows=null; state.affiliateTried=false; render(); loadAffiliate(true); });
+reg('affSeg', v=>{ state.affSeg=v; AF.page=1; state.affRows=null; state.affiliateTried=false; render(); loadAffiliate(true); });
 reg('cmsPage', v=>{ state.cmsPage=v; state.cmsErr=null; render(); loadCms(v); });
 reg('catTop', v=>{ state.catTop=v||null; state.catBannerErr=null; state.catErr=null; state.catProd=null; render(); });
 /* §325 PD1 — a preset moves the window at once; Custom asks for its two days
@@ -9941,20 +9943,320 @@ function screenOperations(){
    operator would actually go looking for, the friend who has joined and not
    yet ordered. The rows ride the same envelope as the summary; there was never
    a call to be saved.
+
+   §325 M9 — and everything that changes the program was "on desktop". It is
+   here now, on the desktop's endpoints with its bodies and its confirms:
+     · the offer (afxRenderSettings / afxSave): both rewards, the repeat-order
+       share and who earns it, the code prefix and the share picture, held as a
+       draft and sent by Save changes as PATCH /affiliate/settings — the
+       desktop keeps a save bar here, not autosave, because these are money;
+       arming the repeat-order share asks first, and leaving with unsaved
+       changes asks too;
+     · who earns the share (afxOpenEligible): the picked list, each pick
+       written at once (POST /affiliate/eligible), as the desktop does;
+     · the ledger (afxLoadReferrals / afxVoid / afxRestore): the desktop's
+       filters with their counts, search, pages of 20, and Void (with a
+       reason) and Restore, each asking first. A row shows what it EARNED —
+       only a rewarded row ever moved money.
+   The offer and the ledger's actions are on the affiliate keys the server
+   gives them; the picked list on affiliate:edit. All three fail CLOSED while
+   the account's keys are still loading: they decide what a customer is paid.
    ========================================================================== */
+const AF_PAGE=20, AF_LIFE_START=5;
+const AF_SAVE_KEYS=['rewardPerOrder','rewardReferee','lifetimeRatePercent','lifetimeMonths','lifetimeMode','codePrefix','shareImage'];
+const AF_MONEY_KEYS=['rewardPerOrder','rewardReferee','lifetimeRatePercent','lifetimeMonths'];
+const AF={cfg:null, saved:null, setErr:'', setTried:false, saving:false, saveErr:'', saved1:false, pic:{busy:false, err:''},
+  page:1, q:'', total:0, rowBusy:null, rowErr:'', elig:{count:null, mode:'chosen', rows:null, note:'', q:'', busy:null}};
+// Fails closed while the keys are unknown: these move a customer's money.
+const affKeysKnown=()=>!!state.caps;
+function affCan(){ return affKeysKnown()&&mCan(['affiliate:view','affiliate:edit']); }
+function affEligCan(){ return affKeysKnown()&&mCan('affiliate:edit'); }
+const affLifeOn=c=>Number((c||{}).lifetimeRatePercent)>0;
+const affNum=v=>{ const n=parseFloat(String(v).replace(/[^0-9.]/g,'')); return Number.isFinite(n)?n:0; };
+// The desktop's afxWhy: a server code, said as a sentence.
+function affWhy(e){
+  const code=(e&&(e.code||e.message))||'';
+  if(e&&e.refused) return T(...e.words);
+  const map={
+    bad_reward:()=>T('A reward has to be between '+money(CUR,0)+' and '+money(CUR,10000)+'.','奖励金额需在 '+money(CUR,0)+' 到 '+money(CUR,10000)+' 之间。'),
+    bad_lifetime_rate:()=>T('The repeat-order share has to be between 0% and 50%.','复购分成比例需在 0% 到 50% 之间。'),
+    bad_lifetime_months:()=>T('The share can last up to 120 months. Use 0 for no end date.','分成最长 120 个月。设为 0 表示不设期限。'),
+    bad_lifetime_mode:()=>T('Who earns the repeat-order share could not be saved. Reload the page and set it again.','复购分成的可获得范围保存失败。请刷新页面后重新设置。'),
+    bad_prefix:()=>T('A code prefix can only use letters, numbers and dashes.','邀请码前缀只能使用字母、数字和短横线。'),
+    bad_share_image:()=>T('That picture couldn’t be used. Upload it again.','该图片无法使用,请重新上传。'),
+    already_paid:()=>T('This one has already been rewarded, so it can’t be changed here.','该记录已发放奖励,无法在此修改。'),
+    not_found:()=>T('That referral is no longer there. Refresh the list.','该推荐记录已不存在,请刷新列表。'),
+    timeout:()=>T('The server didn’t answer in time. Try again.','服务器响应超时,请重试。'),
+  };
+  return map[code]?map[code]():T('Something went wrong.','出现错误。');
+}
+/* ── The settings (afxLoadSettings) ─────────────────────────────────────── */
+function affCfgFrom(d){
+  d=d||{};
+  return {rewardPerOrder:Number(d.rewardPerOrder)||0, rewardReferee:Number(d.rewardReferee)||0,
+    lifetimeRatePercent:Number(d.lifetimeRatePercent)||0,
+    // 0 is a real value here (no end date) — never fall through to 12.
+    lifetimeMonths:d.lifetimeMonths===0?0:(Number(d.lifetimeMonths)||12),
+    lifetimeMode:d.lifetimeMode==='selected'?'selected':'everyone',
+    codePrefix:String(d.codePrefix||'ROOTS-').toUpperCase(), shareImage:String(d.shareImage||'')};
+}
+function loadAffSettings(force){
+  if(AF.setTried&&!force) return; AF.setTried=true; AF.setErr='';
+  api('/affiliate/settings').then(d=>{
+    AF.cfg=affCfgFrom(d); AF.saved=Object.assign({},AF.cfg); AF.setErr='';
+    if(AF.cfg.lifetimeMode==='selected'&&affLifeOn(AF.cfg)) loadAffElig();
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return; AF.setErr=affWhy(e); render(); });
+}
+reg('affSetRetry', ()=>loadAffSettings(true));
+const affChanged=keys=>!!(AF.cfg&&AF.saved)&&keys.some(k=>String(AF.cfg[k])!==String(AF.saved[k]));
+const affDirty=()=>affChanged(AF_SAVE_KEYS);
+// The offer, as one sentence (afxRenderOffer).
+function affOfferLine(c){
+  const life=affLifeOn(c);
+  const tailEn=life?', plus '+c.lifetimeRatePercent+'% of what the friend spends'+(Number(c.lifetimeMonths)===0?' for as long as they keep buying':' for '+c.lifetimeMonths+' months'):'';
+  const tailCn=life?',另加好友消费额的 '+c.lifetimeRatePercent+'%'+(Number(c.lifetimeMonths)===0?',不设期限':',持续 '+c.lifetimeMonths+' 个月'):'';
+  const sel=life&&c.lifetimeMode==='selected';
+  return T('Give '+money(CUR,c.rewardReferee)+', get '+money(CUR,c.rewardPerOrder)+tailEn+(sel?' — the ongoing share for chosen customers only':'')+'.',
+           '给出 '+money(CUR,c.rewardReferee)+',获得 '+money(CUR,c.rewardPerOrder)+tailCn+(sel?'，复购分成仅限指定客户':'')+'。');
+}
+function affRestate(c){ return T('Give '+money(CUR,c.rewardReferee)+', get '+money(CUR,c.rewardPerOrder)+'.','给出 '+money(CUR,c.rewardReferee)+',获得 '+money(CUR,c.rewardPerOrder)+'。'); }
+function affLifeNote(c){
+  return Number(c.lifetimeMonths)===0
+    ? T('Set to 0 months, the share has no end date — the referrer keeps earning from that friend for good.','设为 0 个月即不设期限 — 推荐人将一直从该好友的订单中获得分成。')
+    : T('Counted from the day the friend joined. Set 0 months for no end date. Nothing is clawed back when the window closes.','自好友加入当天起算。设为 0 即不设期限。周期结束后不会追回已发放的分成。');
+}
+function affSaveMsg(){
+  const bits=[];
+  if(affChanged(['rewardPerOrder','rewardReferee'])) bits.push(T('the offer','奖励方案'));
+  if(affChanged(['lifetimeRatePercent','lifetimeMonths'])) bits.push(T('the repeat-order share','复购分成'));
+  if(affChanged(['lifetimeMode'])) bits.push(T('who earns the repeat-order share','复购分成的可获得范围'));
+  if(affChanged(['codePrefix'])) bits.push(T('invite codes','邀请码'));
+  if(affChanged(['shareImage'])) bits.push(T('the share picture','分享图片'));
+  const joined=bits.length<=1?(bits[0]||T('these settings','这些设置')):bits.slice(0,-1).join(T(', ','、'))+T(' and ','和')+bits[bits.length-1];
+  return T('You’ve changed '+joined+'.','您修改了'+joined+'。');
+}
+function affBarHtml(){
+  if(!affDirty()) return AF.saved1?`<div style="font-size:13.5px;color:var(--text-secondary);text-align:center">${T('Saved.','已保存。')}</div>`:'';
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    ${AF.saveErr?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(AF.saveErr)}</div>`
+      :affChanged(AF_MONEY_KEYS)?`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('New amounts apply to referrals rewarded from now on — nothing already earned changes.','新金额只对此后发放的奖励生效 — 已获得的奖励不受影响。')}</div>`:''}
+    <div style="font-size:14px;font-weight:500">${affSaveMsg()}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1" ${AF.saving?'disabled':''} onclick="APP.cmd('affDiscard')">${T('Discard','放弃更改')}</button>
+      <button class="cta" style="flex:1;${AF.saving?'opacity:.55':''}" ${AF.saving?'disabled':''} onclick="APP.cmd('affSave')">${AF.saving?T('Saving…','保存中…'):T('Save changes','保存更改')}</button></div></div>`;
+}
+function affBarPaint(){
+  const b=document.getElementById('mAffBar'); if(b) b.innerHTML=affBarHtml();
+  const r=document.getElementById('mAffRestate'); if(r&&AF.cfg) r.textContent=affRestate(AF.cfg);
+  const n=document.getElementById('mAffLifeNote'); if(n&&AF.cfg) n.textContent=affLifeNote(AF.cfg);
+}
+reg('affSetField', (k,v)=>{
+  if(!AF.cfg||!affCan()||['rewardPerOrder','rewardReferee','lifetimeRatePercent','lifetimeMonths','codePrefix'].indexOf(k)<0) return;
+  // Typing repaints only the lines it changes — never the field itself.
+  AF.cfg[k]=k==='codePrefix'?String(v||'').toUpperCase():affNum(v);
+  AF.saved1=false; affBarPaint();
+});
+/* Arming the repeat-order share is a money decision, so it asks first;
+   turning it off is instant (the desktop's 'life'). */
+reg('affLife', ()=>{
+  if(!AF.cfg||!affCan()) return;
+  if(affLifeOn(AF.cfg)){ AF.cfg.lifetimeRatePercent=0; render(); return; }
+  state.ask={title:T('Keep rewarding repeat orders','持续奖励复购'),
+    body:T('This pays referrers a share of every future order their friends place.','这会让推荐人从好友之后的每一笔订单中持续获得分成。'),
+    confirmLabel:T('Confirm','确认'),
+    run:()=>{ if(!AF.cfg) return; AF.cfg.lifetimeRatePercent=Number(AF.saved.lifetimeRatePercent)>0?Number(AF.saved.lifetimeRatePercent):AF_LIFE_START; render(); }};
+  render();
+});
+reg('affMode', m=>{
+  if(!AF.cfg||!affCan()||(m!=='everyone'&&m!=='selected')||AF.cfg.lifetimeMode===m) return;
+  AF.cfg.lifetimeMode=m;
+  if(m==='selected'&&AF.elig.count===null) loadAffElig();
+  render();
+});
+reg('affDiscard', ()=>{ if(!AF.saved) return; AF.cfg=Object.assign({},AF.saved); AF.saveErr=''; render(); });
+reg('affSave', ()=>{
+  if(!AF.cfg||AF.saving||!affDirty()||!affCan()) return;
+  AF.saving=true; AF.saveErr=''; render();
+  const before=affLifeOn(AF.saved), modeBefore=AF.saved.lifetimeMode;
+  apiWrite('/affiliate/settings',Object.assign({},AF.cfg),'PATCH').then(j=>{
+    const d=(j&&j.data)||{};
+    AF.cfg.codePrefix=String(d.codePrefix||AF.cfg.codePrefix).toUpperCase();
+    AF.saved=Object.assign({},AF.cfg); AF.saving=false; AF.saved1=true;
+    // The ledger's "still earning" figures are computed against the saved
+    // share and who earns it, so a change there makes them stale.
+    if(affLifeOn(AF.cfg)!==before||AF.cfg.lifetimeMode!==modeBefore){
+      if(!affLifeOn(AF.cfg)&&state.affSeg==='still') state.affSeg='';
+      AF.page=1; loadAffiliate(true);
+    }
+    if(AF.cfg.lifetimeMode==='selected'&&affLifeOn(AF.cfg)) loadAffElig();
+    render();
+  }).catch(e=>{ AF.saving=false; if(String(e.message)==='auth') return; AF.saveErr=affWhy(e); render(); });
+});
+// The share picture, the desktop's afxUploadPicture: it rides the same save.
+reg('affPicPick', ()=>{
+  if(!AF.cfg||!affCan()||!mCan('media:upload')||AF.pic.busy) return;
+  const el=document.createElement('input'); el.type='file'; el.accept='image/*';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) affPicUpload(f); };
+  el.click();
+});
+async function affPicUpload(file){
+  if(!AF.cfg||!affCan()||!mCan('media:upload')) return;
+  AF.pic={busy:true, err:''}; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'share.jpg');
+    const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401){ location.href='/backend/login'; return; }
+    if(r.status===403){ AF.pic.err=(await apiRefusal(r)).message; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data||!j.data.url){
+      const reason=MEDIA_ERR[j&&j.error];
+      AF.pic.err=T('Upload failed. ','上传失败。')+(reason?T(...reason):''); return;
+    }
+    AF.cfg.shareImage=j.data.url; AF.saved1=false;
+  }catch(e){ AF.pic.err=T('Upload failed. ','上传失败。'); }
+  finally{ AF.pic.busy=false; render(); }
+}
+reg('affPicRemove', ()=>{ if(!AF.cfg||!affCan()) return; AF.cfg.shareImage=''; AF.saved1=false; render(); });
+/* Back asks only when something was changed and not saved. */
+function affMayLeave(){
+  if(!affDirty()) return true;
+  state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+    confirmLabel:T('Leave','离开'), danger:true,
+    run:()=>{ AF.cfg=Object.assign({},AF.saved); AF.saveErr=''; forgetScroll(); state.stack.pop(); render(); }};
+  render();
+  return false;
+}
+function screenAffSettings(){
+  loadAffSettings();
+  if(AF.setErr) return `<div style="padding:14px 16px 24px"><div style="padding:16px;border-radius:14px;background:var(--brick-tint);display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:15px;font-weight:500;color:var(--brick-ink)">${T('Couldn’t load these settings.','加载设置失败。')}</span>
+    <span style="font-size:13.5px;color:var(--brick-ink)">${escAttr(AF.setErr)} ${T('Nothing was changed. Past referrals below still load.','设置未被修改。下方的推荐记录仍会加载。')}</span>
+    <button class="btn2" style="align-self:flex-start" onclick="APP.cmd('affSetRetry')">${T('Try again','重试')}</button></div></div>`;
+  if(!AF.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const c=AF.cfg, can=affCan(), life=affLifeOn(c), sel=c.lifetimeMode==='selected';
+  const amt=(k,label,pre,suf,wide)=>`<span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">${pre?`<span class="num">${pre}</span>`:''}<input ${can?'':'disabled'} value="${escAttr(String(c[k]))}" inputmode="${wide?'text':'decimal'}" aria-label="${escAttr(label)}"
+      style="width:${wide?'120px':'80px'}" oninput="APP.cmd('affSetField','${k}',this.value)">${suf?`<span class="num">${suf}</span>`:''}</span>`;
+  const card=(label,body)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">${label?`<div class="eyebrow">${label}</div>`:''}${body}</div>`;
+  const note=(t,id)=>`<div ${id?`id="${id}"`:''} style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${t}</div>`;
+  const sentence='font-size:15px;line-height:2.1';
+  const sym=CUR||'¥';
+  const offer=card(T('The offer','奖励方案'),`
+    <div style="font-size:14px;color:var(--text-secondary)">${T('When a friend places their first paid order:','当好友完成首笔付费订单时:')}</div>
+    <div style="${sentence}">${T('the friend gets','好友获得')} ${amt('rewardReferee',T('Reward for the friend','好友奖励'),sym)} ${T('in store credit','店铺余额')}</div>
+    <div style="${sentence}">${T('the referrer gets','推荐人获得')} ${amt('rewardPerOrder',T('Reward for the referrer','推荐人奖励'),sym)} ${T('in store credit','店铺余额')}</div>
+    <div id="mAffRestate" style="font-size:14px;font-weight:500">${affRestate(c)}</div>
+    ${note(T('Paid out automatically. Rewards land in the referrer’s wallet the moment a friend’s first order is marked paid — you only step in to void.','自动发放。好友首单标记为已付款时,奖励即刻进入推荐人钱包 — 您只需在必要时作废。'))}`);
+  const repeat=card('',`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px;font-weight:500">${T('Keep rewarding repeat orders','持续奖励复购')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${T('Reward the referrer on their friend’s later orders, not just the first.','不止首单 — 好友之后的订单也让推荐人获得分成。')}</span></span>
+      ${can?toggle(life,"APP.cmd('affLife')"):''}</div>
+    ${life?`<div style="${sentence}">${T('The referrer also earns','推荐人还可获得好友消费额的')} ${amt('lifetimeRatePercent',T('Share of repeat orders','复购分成比例'),'','%')} ${T('of everything their friend spends, for','作为分成,持续')} ${amt('lifetimeMonths',T('Months the share lasts','分成持续月数'))} ${T('months after joining.','个月(自好友加入起算)。')}</div>
+      ${note(affLifeNote(c),'mAffLifeNote')}
+      <div class="sep"></div>
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Who earns it','谁可获得')}</span>
+      <div style="display:flex;gap:8px">${[['everyone',T('Everyone','所有人')],['selected',T('Selected customers','指定客户')]].map(([k,l])=>
+        `<button class="chip ${c.lifetimeMode===k?'on':''}" ${can?`onclick="APP.cmd('affMode','${k}')"`:'disabled'}><span>${l}</span></button>`).join('')}</div>
+      ${sel?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          ${affEligCan()?`<button class="btn2" onclick="APP.cmd('affEligOpen')">${T('Choose who earns it','选择可获得的客户')}</button>`:''}
+          <span class="num" style="font-size:13px;color:var(--text-secondary)">${AF.elig.count===null?T('Counting…','统计中…'):AF.elig.count===1?T('1 customer chosen','已选 1 位客户'):T(AF.elig.count+' customers chosen','已选 '+AF.elig.count+' 位客户')}</span></div>
+        ${note(T('Everyone else still earns the one-time referral reward. Choosing someone starts them earning from that moment — it never pays them for orders placed before you chose them.','其他客户仍可获得一次性推荐奖励。选定某位客户后，从选定当刻起开始计算分成，此前的订单不会补发。'))}`
+        :note(T('Any customer who refers a friend earns the ongoing share.','任何推荐好友的客户都可获得复购分成。'))}`:''}`);
+  const codes=card(T('Invite codes','邀请码'),`
+    <div style="${sentence}">${T('Every customer’s code starts with','每位顾客的邀请码都以')} ${amt('codePrefix',T('Code prefix','邀请码前缀'),'','',true)} ${T('','开头')}</div>
+    ${note(T('Letters, numbers and dashes, up to 12 characters. Codes already given out keep the prefix they were issued with.','可用字母、数字和短横线,最多 12 个字符。已发出的邀请码保留原有前缀。'))}`);
+  const url=c.shareImage;
+  const share=card(T('Share picture','分享图片'),`
+    ${url?`<span style="display:block;width:100%;aspect-ratio:5/4;border-radius:10px;border:1px solid var(--border-default);background-image:url('${String(url).replace(/'/g,'%27')}');background-size:cover;background-position:center"></span>`
+      :`<div style="font-size:13.5px;color:var(--text-secondary)">${T('No picture yet','尚未设置图片')}</div>`}
+    ${can?`<div style="display:flex;gap:8px">
+      ${mCan('media:upload')?`<button class="btn2" style="flex:1" ${AF.pic.busy?'disabled':''} onclick="APP.cmd('affPicPick')">${AF.pic.busy?T('Uploading…','上传中…'):url?T('Replace picture','更换图片'):T('Add a picture','添加图片')}</button>`:''}
+      ${url?`<button class="btn2" style="flex:1" onclick="APP.cmd('affPicRemove')">${T('Remove picture','移除图片')}</button>`:''}</div>`:''}
+    ${note(T('The picture a customer sees when forwarding their invite. Wide shape (5:4). The amount and the code are added as text — leave them out of the picture. With none set, the built-in one is used.','顾客转发邀请时看到的图片。建议 5:4 宽幅。金额与邀请码会自动叠加为文字,请勿放进图片。未设置时使用内置图片。'))}
+    ${AF.pic.err?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(AF.pic.err)}</div>`:''}`);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${offer}${repeat}${codes}${share}
+    <div id="mAffBar">${affBarHtml()}</div></div>`;
+}
+/* ── Who earns the ongoing share (afxOpenEligible) ──────────────────────────
+   A roster, not a setting: each pick is written at once and is live when it
+   lands — never held behind Save changes, so a Discard aimed at the rate
+   cannot take a half-built list with it. */
+function loadAffElig(){
+  return api('/affiliate/eligible').then(d=>{
+    const x=d||{};
+    AF.elig.count=Number(x.count)||0;
+    if(AF.elig.mode==='chosen'){ AF.elig.rows=x.rows||[];
+      AF.elig.note=x.truncated?T('Showing the '+AF.elig.rows.length+' most recently chosen of '+AF.elig.count+'.','共 '+AF.elig.count+' 位，显示最近选定的 '+AF.elig.rows.length+' 位。'):''; }
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    // A count that could not be read must not read as "0 chosen".
+    AF.elig.count=null; if(AF.elig.mode==='chosen'){ AF.elig.rows=[]; AF.elig.note=affWhy(e); } render(); });
+}
+reg('affEligOpen', ()=>{
+  if(!affEligCan()) return;
+  AF.elig.mode='chosen'; AF.elig.q=''; AF.elig.rows=null; AF.elig.note='';
+  CMD.push('affeligible'); loadAffElig();
+});
+let affEligT=null;
+reg('affEligQ', v=>{
+  AF.elig.q=String(v||''); searchClearShow('mAffElClr',!!AF.elig.q);
+  clearTimeout(affEligT);
+  affEligT=setTimeout(()=>{ const q=AF.elig.q.trim();
+    if(q.length>=2){ AF.elig.mode='search'; AF.elig.note='';
+      api('/affiliate/eligible/search?q='+encodeURIComponent(q)).then(r=>{ AF.elig.rows=Array.isArray(r)?r:[]; affEligPaint(); })
+        .catch(e=>{ if(String(e.message)==='auth') return; AF.elig.rows=[]; AF.elig.note=affWhy(e); affEligPaint(); });
+    } else { AF.elig.mode='chosen'; AF.elig.rows=null; affEligPaint(); loadAffElig(); } },250);
+});
+reg('mAffElClr', ()=>searchClearRun('mAffElQ','mAffElClr','affEligQ'));
+reg('affEligSet', (id,on)=>{
+  id=Number(id); if(!affEligCan()||AF.elig.busy) return;
+  AF.elig.busy=id; affEligPaint();
+  apiWrite('/affiliate/eligible',{customerId:id, eligible:!!on},'POST').then(j=>{
+    AF.elig.busy=null; AF.elig.count=Number(((j&&j.data)||{}).count)||0;
+    // Added or removed, the row leaves the list it was in: offering it again is a control that can only be wrong.
+    AF.elig.rows=(AF.elig.rows||[]).filter(r=>r.id!==id);
+    affEligPaint();
+  }).catch(e=>{ AF.elig.busy=null; if(String(e.message)==='auth') return; AF.elig.note=affWhy(e); affEligPaint(); });
+});
+function affEligListHtml(){
+  const E2=AF.elig, rows=E2.rows;
+  if(!rows) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const add=E2.mode==='search';
+  const list=rows.length?`<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.nickname||T('No name','未填姓名'))}</span>
+          ${[r.phone,r.referral_code].filter(Boolean).length?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr([r.phone,r.referral_code].filter(Boolean).join(' · '))}</span>`:''}</span>
+        <button class="btn2" style="flex:none;min-height:36px;padding:0 14px;font-size:13px" ${E2.busy?'disabled':''} onclick="APP.cmd('affEligSet',${Number(r.id)},${add?1:0})">${add?T('Add','添加'):T('Remove','移除')}</button></div>`).join('')}</div>`
+    : `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${add
+        ? T('Nobody found. Try a different name, phone or code.','未找到客户。请尝试其他姓名、手机号或推荐码。')
+        : T('Nobody is chosen yet. Search above to add someone.','尚未选择任何客户。请在上方搜索添加。')}</div>`;
+  return list+(E2.note?`<div style="font-size:13px;color:var(--text-secondary);padding:10px 4px">${escAttr(E2.note)}</div>`:'');
+}
+function affEligPaint(){ const b=document.getElementById('mAffElList'); if(b) b.innerHTML=affEligListHtml(); else render(); }
+function screenAffEligible(){
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T('Only these customers earn a share of their friends’ later orders. Everyone else still earns the one-time referral reward. Each change takes effect straight away.','仅以下客户可从好友之后的订单中获得分成。其他客户仍可获得一次性推荐奖励。每项更改立即生效。')}</div>
+    ${searchBox(`<input id="mAffElQ" inputmode="search" enterkeyhint="search" value="${escAttr(AF.elig.q)}" placeholder="${escAttr(T('Find a customer by name, phone or code','按姓名、手机号或推荐码查找客户'))}" style="width:100%" oninput="APP.cmd('affEligQ',this.value)">`,'mAffElClr',!!AF.elig.q)}
+    <div id="mAffElList">${affEligListHtml()}</div></div>`;
+}
+/* ── The ledger ─────────────────────────────────────────────────────────── */
 function affStatus(r){
   if(r.status==='ordered') return r.lifetime_active
     ? {label:T('Still earning','持续分成'), tone:'dusk'}
     : {label:T('Rewarded','已奖励'), tone:'success'};
   if(r.status==='void') return {label:T('Voided','已作废'), tone:'muted'};
-  // 'Waiting', the same word as the chip that filters to it. The long form
-  // ran nearly the width of the card and made the row's own two names the
-  // second thing the eye found.
+  // A 'joined' row whose friend had already bought before can never convert.
+  if(r.blocked) return {label:T('Can’t be rewarded','无法发放'), tone:'danger'};
+  // 'Waiting', the same word as the chip that filters to it.
   return {label:T('Waiting','待首单'), tone:'warning'};
 }
 function affPill(r){
   const st=affStatus(r);
   if(st.tone==='dusk') return `<span class="pill" style="background:var(--dusk-tint,rgba(110,103,175,.14));color:var(--dusk-ink,#524C8F)">${st.label}</span>`;
+  if(st.tone==='danger') return `<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${st.label}</span>`;
   const [bg,fg]=PILL[st.tone];
   return `<span class="pill" style="background:${bg};color:${fg}">${st.label}</span>`;
 }
@@ -9992,28 +10294,122 @@ function affWho(id,name){
      height without moving the line it sits on. */
   return `<button onclick="APP.cmd('openCustomer',${Number(id)})" style="${clip};background:none;border:0;padding:6px 0;margin:-6px 0;font-family:inherit;font-size:14.5px;font-weight:inherit;line-height:inherit;color:var(--text-primary);text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:var(--border-default);text-underline-offset:3px">${txt}</button>`;
 }
+/* What the row EARNED: only a rewarded ('ordered') row ever moved money.
+   reward_amount is what a row holds in reserve from the moment it is made,
+   so printing it on a waiting or voided row claimed a payment that never
+   happened (the desktop's afxRow learned this first). */
+const affEarned=r=>r.status==='ordered'?(Number(r.reward_amount)||0):0;
 function affRow(r){
   const ref=r.referrer_nickname||('#'+r.referrer_id);
   const inv=r.invitee_nickname||('#'+r.invitee_id);
   const sub=[r.invitee_phone||r.referrer_phone||'',affNote(r)].filter(Boolean).join(' · ');
-  const amt=Number(r.reward_amount||0);
+  const amt=affEarned(r);
+  const busy=AF.rowBusy!=null;
+  const act=!affCan()?'':r.status==='joined'
+    ? `<button class="btn2" style="min-height:32px;padding:0 12px;font-size:12.5px" ${busy?'disabled':''} onclick="APP.cmd('affVoidAsk',${Number(r.id)})">${AF.rowBusy===r.id?T('Voiding…','作废中…'):r.blocked?T('Close it','关闭'):T('Void','作废')}</button>`
+    : r.status==='void'
+    ? `<button class="btn2" style="min-height:32px;padding:0 12px;font-size:12.5px" ${busy?'disabled':''} onclick="APP.cmd('affRestoreAsk',${Number(r.id)})">${AF.rowBusy===r.id?T('Restoring…','恢复中…'):T('Restore','恢复')}</button>`
+    : '';
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0">
       <span style="display:flex;align-items:center;gap:6px;min-width:0;font-size:14.5px">${affWho(r.referrer_id,ref)}<span style="flex:none;color:var(--text-secondary)">→</span>${affWho(r.invitee_id,inv)}</span>
       <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(sub)}</span>
       ${r.code_used?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(r.code_used)}${r.joined_at?' · '+fmtDay(r.joined_at):''}</span>`:''}
+      ${r.blocked&&r.status==='joined'?`<span style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${T('This friend had already bought from you before the code was used, so it was not a first order. Nothing will change on its own.','该好友在使用邀请码之前已经下过单,因此不算首单。此状态不会自行改变。')}</span>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
       <span class="num" style="font-size:14.5px;font-weight:500;color:${amt>0?'var(--text-primary)':'var(--text-secondary)'}">${money(CUR,amt)}</span>
-      ${affPill(r)}</span></div>`;
+      ${affPill(r)}${act}</span></div>`;
+}
+/* Void and Restore, each asking first in the desktop's words. A void keeps a
+   reason on the record ('admin' when none is given, as the desktop sends). */
+function affRowWrite(id, body){
+  AF.rowBusy=id; AF.rowErr=''; render();
+  apiWrite('/affiliate/referrals/'+id, body, 'PATCH').then(()=>{
+    AF.rowBusy=null; loadAffiliate(true);
+  }).catch(e=>{ AF.rowBusy=null; if(String(e.message)==='auth') return; AF.rowErr=affWhy(e); render(); });
+}
+reg('affVoidAsk', id=>{
+  id=Number(id); const r=(state.affRows||[]).find(x=>x.id===id);
+  if(!r||r.status!=='joined'||AF.rowBusy!=null||!affCan()) return;
+  state.ask={title:r.blocked?T('Close it','关闭'):T('Void','作废'),
+    body:r.blocked
+      ? T('Close this referral? It can’t be rewarded either way — this only takes it off the list.','关闭这条推荐记录?它本来就无法发放奖励,此操作只是把它从列表中移除。')
+      : T('Void this referral? The referrer won’t be rewarded when this friend places their first order.','作废这条推荐记录?该好友首单时,推荐人将不会获得奖励。'),
+    fields:[{id:'reason', label:T('Why (kept on the record)','原因(将记录在案)'), placeholder:''}],
+    confirmLabel:T('Void','作废'), danger:true,
+    run:vals=>affRowWrite(id,{status:'void', voided_reason:String((vals&&vals.reason)||'').trim()||'admin'})};
+  state.askErr=null; render();
+});
+reg('affRestoreAsk', id=>{
+  id=Number(id); const r=(state.affRows||[]).find(x=>x.id===id);
+  if(!r||r.status!=='void'||AF.rowBusy!=null||!affCan()) return;
+  state.ask={title:T('Restore','恢复'),
+    body:T('Restore this referral? It goes back to waiting for a first order.','恢复这条推荐记录?它将回到“待首单”状态。'),
+    confirmLabel:T('Restore','恢复'),
+    run:()=>affRowWrite(id,{status:'joined'})};
+  render();
+});
+/* The desktop's ledger read: status, search, pages of 20. The summary rides
+   the same envelope and is unfiltered, so the chips can carry their counts. */
+async function loadAffiliate(force, inPlace){
+  if(state.affiliateTried&&!force) return; state.affiliateTried=true;
+  const qs=new URLSearchParams({page:String(AF.page), pageSize:String(AF_PAGE)});
+  if(state.affSeg) qs.set('status',state.affSeg);
+  if(AF.q) qs.set('q',AF.q);
+  try{ const j=await apiRaw('/affiliate/referrals?'+qs);
+    state.affiliate=(j&&j.summary)||null;
+    state.affRows=(j&&j.data)||[];
+    AF.total=Number((j&&j.total)||0);
+    state.affErr=null;
+    // An emptied-out page is not an empty result: step back to the last one.
+    const last=Math.max(1,Math.ceil(AF.total/AF_PAGE));
+    if(!state.affRows.length&&AF.total>0&&AF.page>last){ AF.page=last; state.affiliateTried=false; return loadAffiliate(true, inPlace); }
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    state.affErr=E('Could not load referrals.','加载推荐记录失败。');
+  }
+  // A search repaints the ledger and nothing else — the field keeps its caret.
+  const host=inPlace&&typeof document!=='undefined'?document.getElementById('mAffLedger'):null;
+  if(host) host.innerHTML=affLedgerHtml(); else render();
+}
+let affQT=null;
+reg('affQ', v=>{
+  AF.q=String(v||'').trim(); searchClearShow('mAffClr',!!v);
+  clearTimeout(affQT); affQT=setTimeout(()=>{ AF.page=1; loadAffiliate(true, true); },250);
+});
+reg('mAffClr', ()=>searchClearRun('mAffQ','mAffClr','affQ'));
+reg('affPage', d=>{ const p=AF.page+Number(d), last=Math.max(1,Math.ceil(AF.total/AF_PAGE)); if(p<1||p>last) return; AF.page=p; loadAffiliate(true); });
+reg('affOffer', ()=>{ if(!affCan()) return; AF.saveErr=''; AF.saved1=false; CMD.push('affsettings'); });
+
+function affLedgerHtml(){
+  const rows=state.affRows, seg=state.affSeg;
+  if(state.affErr) return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${state.affErr}</span></div>`;
+  if(!rows) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+        (seg||AF.q) ? T('Nothing matches.','没有匹配项。')+' '+T('Try a different filter, or clear the search.','换个筛选条件,或清空搜索。')
+            : T('No referrals yet. When a customer shares their code and a friend joins, they show up here.','暂无推荐记录。顾客分享邀请码、好友加入后会显示在这里。')}</div>`;
+  const pages=Math.max(1,Math.ceil(AF.total/AF_PAGE)), from=(AF.page-1)*AF_PAGE+1, to=Math.min(AF.total,from+rows.length-1);
+  return `${AF.rowErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink);margin-bottom:10px">${escAttr(AF.rowErr)}</div>`:''}
+    <div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${affRow(r)}`).join('')}</div>
+    ${AF.total>AF_PAGE?`<div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <span class="num" style="flex:1;font-size:12.5px;color:var(--text-secondary)">${T('Showing','显示')} ${from}–${to} ${T('of','/ 共')} ${AF.total}</span>
+      <button class="iconbtn" ${AF.page<=1?'disabled':''} aria-label="${T('Previous page','上一页')}" onclick="APP.cmd('affPage',-1)">${ic('chevron-left')}</button>
+      <button class="iconbtn" ${AF.page>=pages?'disabled':''} aria-label="${T('Next page','下一页')}" onclick="APP.cmd('affPage',1)">${ic('chevron-right')}</button></div>`:''}`;
 }
 function screenAffiliate(){
   if(!featOn('affiliate')) return `<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`;
-  loadAffiliate();
-  const a=state.affiliate, rows=state.affRows, busy=state.featBusy==='affiliate';
-  const seg=state.affSeg;
-  const chips=[{key:'',en:'All',zh:'全部'},{key:'joined',en:'Waiting',zh:'待首单'},
-    {key:'ordered',en:'Ordered',zh:'已首单'},{key:'void',en:'Voided',zh:'已作废'}];
+  loadAffiliate(); loadAffSettings();
+  const a=state.affiliate, busy=state.featBusy==='affiliate';
+  const seg=state.affSeg, s=a||{};
+  // The desktop's filters, with the unfiltered counts. "Still earning" exists
+  // only while the repeat-order share is on — a filter that can only return
+  // nothing is not a filter.
+  const chips=[{key:'',en:'All',zh:'全部',count:a?Number(s.total||0):null},{key:'joined',en:'Waiting',zh:'待首单',count:a?Number(s.joined||0):null},
+    {key:'ordered',en:'Rewarded',zh:'已奖励',count:a?Number(s.converted||0):null},{key:'void',en:'Voided',zh:'已作废',count:a?Number(s.voided||0):null}];
+  if(affLifeOn(AF.saved)) chips.push({key:'still',en:'Still earning',zh:'持续分成',count:a?Number(s.still_earning||0):null});
   /* The desktop's four tiles, and the two comparisons that make them mean
      something: this month against last, and rewards including lifetime share. */
   const tiles=()=>{
@@ -10037,24 +10433,24 @@ function screenAffiliate(){
       ${tile(T('Rewards paid','已发奖励'),money0(CUR,paid),paidSub)}
       ${tile(T('Still earning','持续分成'),Number(a.still_earning||0),T('within lifetime window','在分成周期内'))}</div>`;
   };
-  const ledger = state.affErr
-    ? `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick-ink)">${state.affErr}</span></div>`
-    : !rows ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
-    : !rows.length ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
-        seg ? T('None match.','没有匹配项。')
-            : T('No referrals yet. When a customer shares their code and a friend joins, they show up here.','暂无推荐记录。顾客分享邀请码、好友加入后会显示在这里。')}</div>`
-    : `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${affRow(r)}`).join('')}</div>`;
+  // The offer, as one line you can open (afxRenderOffer).
+  const offer = AF.saved ? `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div class="eyebrow">${T('The offer','奖励方案')}</div>
+      <div style="font-size:15px;font-weight:500;line-height:1.45">${affOfferLine(AF.saved)}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Paid into the referrer’s wallet the moment a friend’s first order is marked paid.','好友首单标记为已付款时,奖励即刻进入推荐人钱包。')}</div>
+      ${affCan()?`<button class="btn2" style="width:100%;margin-top:2px" onclick="APP.cmd('affOffer')">${T('Change the offer','修改方案')}</button>`:''}</div>`
+    : AF.setErr ? `<div style="font-size:13.5px;color:var(--brick-ink)">${T('Couldn’t load these settings.','加载设置失败。')} ${escAttr(AF.setErr)}</div>` : '';
   return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:14px">
     <div style="padding:0 16px">${tiles()}</div>
+    <div style="padding:0 16px">${offer}</div>
+    <div class="eyebrow" style="padding:0 20px">${T('Referrals','推荐记录')}</div>
     ${chipRow(chips,seg,'affSeg')}
-    <div style="padding:0 16px">${ledger}</div>
+    <div style="padding:0 16px">${searchBox(`<input id="mAffQ" inputmode="search" enterkeyhint="search" value="${escAttr(AF.q)}" placeholder="${escAttr(T('Name, phone or code','姓名、电话或邀请码'))}" style="width:100%" oninput="APP.cmd('affQ',this.value)">`,'mAffClr',!!AF.q)}</div>
+    <div id="mAffLedger" style="padding:0 16px">${affLedgerHtml()}</div>
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
         <span style="flex:1;font-size:15px">${busy?T('Saving…','保存中…'):T('Referrals on','推荐已开启')}</span>${toggle(featOn('affiliate'),"APP.cmd('toggleFeature','affiliate')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
-      ${noteBar(T('Reward amounts, the lifetime share, and voiding a referral are on desktop.','奖励金额、长期分成与作废推荐在电脑端处理。'))}</div></div>`;
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}</div></div>`;
 }
 
 /* ==========================================================================
@@ -17846,6 +18242,9 @@ const SUBS={
     render:()=>screenShareCard()},
   popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),render:()=>screenPopups()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
+  /* §325 M9 — the offer, and who earns the repeat-order share. */
+  affsettings:{title:['The offer','奖励方案'],backLabel:()=>T('Affiliate','分销'),render:()=>screenAffSettings()},
+  affeligible:{title:['Who earns the ongoing share','谁可获得复购分成'],backLabel:()=>T('The offer','奖励方案'),render:()=>screenAffEligible()},
   social:{title:['Social proof','社交证明'],render:()=>screenSocial()},
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
@@ -35086,27 +35485,8 @@ async function uploadMedia(files){
   if(ok){ state.mediaTried=false; state.media=null; loadMedia(); showToast(ok===1?T('Photo added','已添加图片'):T(ok+' photos added',ok+' 张图片已添加')); }
   else render();
 }
-/* The Affiliate screen used to state "42 affiliates · ¥8,120 referred" — a
-   sentence from the mockup, on a screen an operator would believe. The real
-   summary rides the referrals endpoint, past api()'s .data unwrap. */
-/* pageSize=1 fetched the summary and threw the ledger away, so the phone had
-   three numbers and no way to see a single referral. The summary rides the same
-   envelope as the rows; there was never a reason to ask for one without the
-   other. */
-async function loadAffiliate(force){
-  if(state.affiliateTried&&!force) return; state.affiliateTried=true;
-  const qs=new URLSearchParams({pageSize:'50'});
-  if(state.affSeg) qs.set('status',state.affSeg);
-  try{ const j=await apiRaw('/affiliate/referrals?'+qs);
-    state.affiliate=(j&&j.summary)||null;
-    state.affRows=(j&&j.data)||[];
-    state.affErr=null;
-  }catch(e){
-    if(String(e.message)==='auth') return;
-    state.affErr=E('Could not load referrals.','加载推荐记录失败。');
-  }
-  render();
-}
+/* The Affiliate screen used to state a mockup's numbers; its loader, which
+   reads the real ones, now lives with the screen (§325 M9). */
 /* "Routing · Nearest store" was a setting-shaped row for something that is not
    a setting: routing IS nearest-store, always. What an operator can actually
    act on is whether the addresses it routes by are located at all — a store
@@ -44029,7 +44409,7 @@ const ROUTE_CAP={
      advances than that it advances into a dead end. */
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
-  coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
+  coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
   sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
@@ -45420,7 +45800,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -45634,6 +46014,8 @@ function mUnsavedWork(){
     if(ML.auto&&ML.auto.busy()) return true;
     /* A poll typed and not yet saved (§325 M7) — held in memory only. */
     if(PE&&PE.dirty&&(state.stack||[]).some(f=>f&&f.route==='polledit')) return true;
+    /* The affiliate offer, changed and not yet saved (§325 M9). */
+    if(affDirty()&&(state.stack||[]).some(f=>f&&f.route==='affsettings')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
