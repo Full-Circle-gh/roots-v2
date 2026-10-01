@@ -15175,10 +15175,12 @@ function topupCashReceived(db, from, to, opts) {
 // top-up time by topupCashReceived; re-counting it here would double count).
 // Bucketed on the same paid-date basis as revenue so "credit used" lines up
 // with the day the order settled. Returns a rounded ¥ total.
-function storeCreditRedeemed(db, from, to) {
+function storeCreditRedeemed(db, from, to, storeIn) {
   try {
     const TZ = shopSqlShift();
-    const PAID = financeWindow.PAID;
+    // §325: `storeIn` narrows it to the dashboard's chosen stores (a SQL
+    // predicate built from integers there); absent, every store, as before.
+    const PAID = storeIn ? `(${financeWindow.PAID}) AND ${storeIn}` : financeWindow.PAID;
     const row = db.prepare(`
       SELECT COALESCE(SUM(balance_used), 0) AS redeemed
         FROM retail_orders
@@ -15375,6 +15377,22 @@ function dashMemoBust(tenantId) {
   for (const k of _dashMemo.keys()) if (k.startsWith(pre)) _dashMemo.delete(k);
 }
 
+/* §325 — THE STORES A DASHBOARD ANSWER COVERS. null = every store, the answer
+   this route has always given. A store-scoped operator (req.scopeStores, set by
+   requireRetailAdmin; null = unscoped) is held to their scope: the store they
+   asked for if it is one of theirs, else all of theirs — never another's, and
+   never the whole shop. Anyone else gets the store they asked for, or every
+   store. Only positive integers survive, so the list is safe to inline. */
+function dashStoreScope(req) {
+  const raw = Number.parseInt(req.query && req.query.store_id, 10);
+  const asked = Number.isInteger(raw) && raw > 0 ? raw : null;
+  if (Array.isArray(req.scopeStores)) {
+    const mine = [...new Set(req.scopeStores.map(Number).filter(n => Number.isInteger(n) && n > 0))].sort((a, b) => a - b);
+    return asked && mine.includes(asked) ? [asked] : mine;
+  }
+  return asked ? [asked] : null;
+}
+
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = shopSqlShift();
   // ── gzgrocery COMES FROM THE ORDER RECORD HERE, AS OF §184 ────────────────
@@ -15401,6 +15419,34 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // one; see §184 on why they were left alone.
   const NOTGZ  = "COALESCE(channel,'') != 'gzgrocery'";
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
+  /* §325 — A STORE, WHEN ONE IS ASKED FOR OR IMPOSED. This route read
+     `store_id` into its cache key and nowhere else, so the desktop's store
+     picker and lock and the phone Trend's store select (§317) all showed every
+     store's figures while naming one. `dashStoreScope` resolves which stores
+     the answer covers: null for every store (no store asked for, and nobody
+     scoping the operator — that answer is byte-for-byte what it was), else
+     the list. A store-scoped operator is always held to their scope, asked or
+     not, the way the restock counts are (routes/restock.js pick-count).
+
+     WHAT CAN BE SCOPED IS WHAT CARRIES A STORE: every figure read from
+     retail_orders. The rest has no store to scope by, and is handled one of
+     two ways, both said in `store_scope` on the answer:
+       • money with no store — wallet top-up cash and the legacy gzgrocery
+         drift pickups — is LEFT OUT of a store's revenue, because neither
+         belongs to one store and folding the shop's into it would overstate
+         every store by the same amount;
+       • counts with no store — mini-app visits and sessions, new customers,
+         the tier snapshot, launch scenes, checkout abandonment, article
+         views — stay shop-wide and are NAMED as shop-wide, and conversion,
+         which would divide one store's orders by the whole shop's sessions,
+         is null. */
+  const dashStores = dashStoreScope(req);
+  const SCOPED = dashStores !== null;
+  const STORE_IN  = SCOPED ? (dashStores.length ? `store_id IN (${dashStores.join(',')})` : '0') : '1';
+  const STORE_INO = SCOPED ? (dashStores.length ? `o.store_id IN (${dashStores.join(',')})` : '0') : '1';
+  const STORE_AND = SCOPED ? ` AND ${STORE_IN}` : '';
+  const scopedP  = (w) => (SCOPED ? `(${w}) AND ${STORE_IN}` : w);
+  const scopedPO = (w) => (SCOPED ? `(${w}) AND ${STORE_INO}` : w);
   // ── THE MINI APP IS THE ONLY CHANNEL THAT HAS SESSIONS ──────────────────
   // retail_visits is written by exactly one caller — miniapp/utils/track.js, via
   // POST /api/retail/track — so `sessions` below counts mini-app opens and
@@ -15417,9 +15463,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // channel while belonging to the POS.
   const MINI  = `COALESCE(NULLIF(channel,''),'wechat')='wechat' AND COALESCE(fulfillment_type,'') <> 'counter'`;
   const MINIO = `COALESCE(NULLIF(o.channel,''),'wechat')='wechat' AND COALESCE(o.fulfillment_type,'') <> 'counter'`;
-  const PAID_ALL = financeWindow.PAID;
+  const PAID_ALL = scopedP(financeWindow.PAID);
   const PAID  = `${PAID_ALL} AND ${NOTGZ}`;
-  const PAIDO = `${financeWindow.PAID_O} AND ${NOTGZO}`;
+  const PAIDO = scopedPO(`${financeWindow.PAID_O} AND ${NOTGZO}`);
+  // §325: the same two, every store — for the questions that are a fact about
+  // the PERSON rather than the store ("when did they first buy anywhere?"),
+  // and for the shop-wide checkout block. Identical to the two above when no
+  // store is chosen.
+  const PAID_ANY  = `${financeWindow.PAID} AND ${NOTGZ}`;
+  const PAIDO_ANY = `${financeWindow.PAID_O} AND ${NOTGZO}`;
   // §185: the same allow-list WITHOUT the gzgrocery exclusion, for the line-level
   // reads where Ash has decided wholesale counts. It is a SECOND constant rather
   // than a widening of `PAIDO`, because `PAIDO` also carries the customer reads
@@ -15427,7 +15479,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // a different question: a gzgrocery mirror has no `customer_id` at all, so
   // folding it in there would either change nothing or, where it did, count a
   // wholesale pickup as a person.
-  const PAIDO_ALL = financeWindow.PAID_O;
+  const PAIDO_ALL = scopedPO(financeWindow.PAID_O);
   // Revenue date = day payment landed (see header note). PDATE for bare-table
   // queries, PDATEO when the orders table is aliased `o`, PHOUR for the hourly
   // bucket of a single-day view.
@@ -15444,10 +15496,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const spanDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
   const hourly = from === to;  // single-day view → hour-of-day curve
 
-  // Serve the memo when fresh (see note above the route). store_id is part of
-  // the key defensively — the handler doesn't scope by store yet, but a future
-  // store filter must never be answered from another store's cached copy.
-  const memoKey = `${currentTenantId() || ROOTS_TENANT_ID}|${from}|${to}|${req.query.store_id || ''}`;
+  // Serve the memo when fresh (see note above the route). The key carries the
+  // stores the answer COVERS (§325), not the raw query: two store-scoped
+  // operators asking differently for the same store share one copy, and a
+  // store's answer is never served from another's. Every store keys as ''.
+  const memoKey = `${currentTenantId() || ROOTS_TENANT_ID}|${from}|${to}|${SCOPED ? dashStores.join(',') || 'none' : ''}`;
   const memoHit = _dashMemo.get(memoKey);
   if (memoHit && Date.now() - memoHit.at < DASH_MEMO_TTL) return res.json(memoHit.body);
 
@@ -15493,8 +15546,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // database knows about them and dropping them with the ledger fold would
   // have deleted real history from the curve. Everything the order read has
   // seen since arrives through `kpiSql` above, on the order record.
-  const gySales     = guanyiLegacyPickupSales(tdb(), from, to, { hourly });
-  const gySalesPrev = guanyiLegacyPickupSales(tdb(), prevFrom, prevTo, { hourly: false });
+  // §325: no store owns a legacy drift pickup, so a store's answer leaves it out.
+  const NO_GY = { revenue: 0, byBucket: {} };
+  const gySales     = SCOPED ? NO_GY : guanyiLegacyPickupSales(tdb(), from, to, { hourly });
+  const gySalesPrev = SCOPED ? NO_GY : guanyiLegacyPickupSales(tdb(), prevFrom, prevTo, { hourly: false });
   kpi.revenue     = +(Number(kpi.revenue || 0) + gySales.revenue).toFixed(2);
   kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + gySalesPrev.revenue).toFixed(2);
 
@@ -15504,14 +15559,16 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // only — never the order count, AOV, or customer metrics (a top-up isn't a
   // storefront order). Store credit later spent on an order is NOT re-counted
   // (order.total already excludes balance_used). See topupCashReceived.
-  const tuSales     = topupCashReceived(tdb(), from, to, { hourly });
-  const tuSalesPrev = topupCashReceived(tdb(), prevFrom, prevTo, { hourly: false });
+  // §325: nor a wallet top-up — it is paid to the shop, not to a store.
+  const NO_TU = { received: 0, byBucket: {} };
+  const tuSales     = SCOPED ? NO_TU : topupCashReceived(tdb(), from, to, { hourly });
+  const tuSalesPrev = SCOPED ? NO_TU : topupCashReceived(tdb(), prevFrom, prevTo, { hourly: false });
   kpi.revenue     = +(Number(kpi.revenue || 0) + tuSales.received).toFixed(2);
   kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + tuSalesPrev.received).toFixed(2);
   // Store credit redeemed against orders in the window — a memo figure the
   // dashboard surfaces alongside revenue so "top-up used" is visible; never
   // added to revenue.
-  const creditRedeemed = storeCreditRedeemed(tdb(), from, to);
+  const creditRedeemed = storeCreditRedeemed(tdb(), from, to, SCOPED ? STORE_IN : null);
 
   // ⚠ `visitors` IS KNOWN-WRONG AND NOTHING READS IT. It double-counts anyone
   // who signs in mid-session: miniapp/utils/track.js only ever sends session_id,
@@ -15623,8 +15680,8 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       // carries gzgrocery's mirrored orders on both sides of the comparison, so
       // folding the ledger here as well would have counted the channel twice in
       // the baseline and flattered every delta against it.
-      const gy = guanyiLegacyPickupSales(tdb(), d, d, { hourly: clip });
-      const tu = topupCashReceived(tdb(), d, d, { hourly: clip });
+      const gy = SCOPED ? NO_GY : guanyiLegacyPickupSales(tdb(), d, d, { hourly: clip });
+      const tu = SCOPED ? NO_TU : topupCashReceived(tdb(), d, d, { hourly: clip });
       const rev = Number(k.revenue || 0)
                 + (clip ? revUpToNow(gy.byBucket) : gy.revenue)
                 + (clip ? revUpToNow(tu.byBucket) : tu.received);
@@ -15672,7 +15729,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const funnel = tdb().prepare(`
     SELECT status, COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE date(placed_at, '${TZ}') BETWEEN ? AND ? AND ${NOTGZ}
+     WHERE date(placed_at, '${TZ}') BETWEEN ? AND ? AND ${NOTGZ}${STORE_AND}
      GROUP BY status`).all(from, to);
   const byStatus = {};
   for (const r of funnel) byStatus[r.status] = { n: r.n, revenue: r.revenue };
@@ -15924,7 +15981,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(DISTINCT CASE WHEN fo.first_day BETWEEN ? AND ? THEN o.customer_id END) AS new_buyers
       FROM retail_orders o
       JOIN (SELECT customer_id, MIN(${PDATE}) AS first_day
-              FROM retail_orders WHERE ${PAID} GROUP BY customer_id) fo
+              FROM retail_orders WHERE ${PAID_ANY} GROUP BY customer_id) fo
         ON fo.customer_id = o.customer_id
      WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?`).get(from, to, from, to);
 
@@ -16076,7 +16133,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       SELECT COUNT(DISTINCT q.customer_id) AS started,
              COUNT(DISTINCT CASE WHEN EXISTS (
                      SELECT 1 FROM retail_orders o
-                      WHERE o.customer_id = q.customer_id AND ${PAIDO}
+                      WHERE o.customer_id = q.customer_id AND ${PAIDO_ANY}
                         AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
                    ) THEN q.customer_id END) AS converted
         FROM retail_checkout_quotes q
@@ -16097,7 +16154,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
          AND date(q.created_at, '${TZ}') BETWEEN ? AND ?
          AND NOT EXISTS (
                SELECT 1 FROM retail_orders o
-                WHERE o.customer_id = q.customer_id AND ${PAIDO}
+                WHERE o.customer_id = q.customer_id AND ${PAIDO_ANY}
                   AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?)
        GROUP BY product_id
        ORDER BY customers DESC, qty DESC LIMIT 10`).all(from, to, from, to);
@@ -16182,7 +16239,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // measured over different days would be worse than one narrow one.
   const miniRefunded = tdb().prepare(`
     SELECT COUNT(*) AS n FROM retail_orders
-     WHERE status = 'refunded' AND ${MINI}
+     WHERE status = 'refunded' AND ${MINI}${STORE_AND}
        AND date(placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to).n || 0;
   // RETURNING IS A FACT ABOUT THE PERSON, NOT ABOUT THE CHANNEL, so the inner
   // "when did they first buy" subquery stays ALL-CHANNEL (`PAID`) while only the
@@ -16198,9 +16255,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(DISTINCT CASE WHEN fo.first_day BETWEEN ? AND ? THEN o.customer_id END) AS new_buyers
       FROM retail_orders o
       JOIN (SELECT customer_id, MIN(${PDATE}) AS first_day
-              FROM retail_orders WHERE ${PAID} GROUP BY customer_id) fo
+              FROM retail_orders WHERE ${PAID_ANY} GROUP BY customer_id) fo
         ON fo.customer_id = o.customer_id
-     WHERE ${financeWindow.PAID_O} AND ${MINIO} AND ${PDATEO} BETWEEN ? AND ?`)
+     WHERE ${PAIDO_ALL} AND ${MINIO} AND ${PDATEO} BETWEEN ? AND ?`)
     .get(from, to, from, to);
   const miniOrders = Number(miniKpi.orders || 0);
   // CONVERSION IS THE MINI APP'S, ON BOTH SIDES OF THE DIVISION, AND THERE IS NO
@@ -16218,7 +16275,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // arithmetic mistake to stop repeating. `mini_app_orders` rides alongside so
   // every screen quoting "N orders ÷ M sessions" can name the numerator it
   // actually divided by.
-  const conversion = vis.sessions > 0 ? (miniOrders / vis.sessions) * 100 : null;
+  // §325: null for a store — its orders over the whole shop's sessions would
+  // divide one population by another, the fault the paragraph above ends.
+  const conversion = !SCOPED && vis.sessions > 0 ? (miniOrders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
   const dashBody = {
@@ -16334,6 +16393,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       topups: { received: tuSales.received, redeemed: creditRedeemed },
       checkout,
       articleViews,
+      // §325 — present only when the answer covers some stores rather than
+      // all, so the every-store payload is exactly what it was. `store_ids` is
+      // what was covered (a store-scoped operator's own, whatever was asked);
+      // the two lists say which figures could not be narrowed and why.
+      ...(SCOPED ? { store_scope: {
+        store_ids: dashStores,
+        shop_wide: ['visits', 'sessions', 'visitors', 'new_customers', 'tiers', 'traffic', 'checkout', 'articleViews'],
+        left_out: ['topups_received', 'gzgrocery_legacy_pickups'],
+      } } : {}),
     },
   };
   _dashMemo.set(memoKey, { at: Date.now(), body: dashBody });
@@ -23247,6 +23315,20 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
   const body = req.body || {};
   const entries = Object.entries(body);
   if (!entries.length) return res.status(400).json({ success: false, error: 'no_updates' });
+
+  /* §325 — EVERY KEY PASSES ITS OWN FAMILY'S GATE, before anything is read or
+     written. The choke point cannot see the body, so it lets this route
+     through (lib/cap-routes.js, requiredCapFor) and the decision is made here,
+     the way the purchase-order status and the full-refund gates are made in
+     their handlers. configKeyCap() says who may write each family: the keys
+     that open every screen writing it today. One refused key refuses the
+     whole body, in the choke point's own shape plus the key. */
+  for (const [k] of entries) {
+    const need = capRoutes.configKeyCap(k);
+    if (capRoutes.capDenied(req, need)) {
+      return res.status(403).json({ error: 'forbidden_capability', need, key: k });
+    }
+  }
 
   /* ── Tax settings are validated, and nothing else here is (audit I-03) ────
      This endpoint takes any dotted key and stores any JSON, which is right for

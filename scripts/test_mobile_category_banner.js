@@ -51,6 +51,9 @@ function mk(opts = {}) {
     escAttr: (s) => String(s == null ? '' : s).replace(/"/g, '&quot;'),
     ic: () => '<i></i>',
     state: { cats: opts.cats, catTop: opts.catTop || null, catShelf: opts.catShelf || null },
+    // §325 S1d — the card and its commands ask mCan; null caps = still loading,
+    // which these keys read as held (MCAN_MONEY_ONLY does not name them).
+    mCan: (k) => (opts.caps ? [].concat(k).some((x) => opts.caps.includes(x)) : true),
     render: () => { calls.renders++; },
     reg: (n, f) => { CMD[n] = f; },
     showToast: (m) => calls.toasts.push(m),

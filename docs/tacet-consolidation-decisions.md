@@ -23260,3 +23260,255 @@ desktop's own, read from its module and carried across with its words.
     pins that the line is gone and rows open the order. `scripts/test_mobile_settings.js` (slow
     shard, not run here) opened a legal document through `state.faqOpen`; it now uses
     `state.legalOpen` and gains a case that an open FAQ answer does not open a document.
+
+## §334 — FOUR FOLLOW-UPS TO THE PHONE SAFETY STEPS: THE BANNER EDITOR'S KEYS, AN HONEST EMPTY LIBRARY, ALL OF §222 ON APPROVE, AND THE DESKTOP'S CUSTOMER SENTENCE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Four things the S1a–S1c reports named as outside their scope, now done. Phone (`public/m.html`)
+and one desktop handler (`public/retail-admin/04-orders.js`); no server change.
+
+1. **The category banner editor (§298) is drawn for the keys its writes need.** Every change
+   saves the whole tree, `PUT /category-tree` → `categories:edit`; a new picture is also
+   `POST /media/upload` → `media:upload`. So Add banner and Replace picture need both; the link,
+   the dates and Remove need `categories:edit`; anyone else reads the banner (picture, status, the
+   link's own label, the dates as text) and presses nothing. With no banner and nothing to press,
+   the card is not drawn. The four commands refuse on the same keys. The rest of the Categories
+   screen is unchanged; the whole-tree version check is S2's defect 11.
+2. **The empty media library invites only when it can be taken up.** *Add photos from this phone,
+   or upload them on desktop…* points at the header's Add photos button, which S1b drew only for
+   `media:upload`. Without it the empty library says *Nothing in the library* and stops.
+   `nothingYet()` now draws no empty line when it is given no message. Nothing composed.
+3. **Approve refund carries all of §222's block, as the desktop draws it** (`04-orders.js`
+   openRefundApproveDialog): the full or partial consequence line, the rider (S1c), and *Refunding
+   never changes the delivery day…* — the line the block was written for (TC000823). A brick edge
+   on a full approve, as there. "Full" is S1c's test (the server's gross-tender comparison). When
+   the figures have not been read, neither consequence line is shown — the phone cannot say which —
+   but the rider and the day line still are. Every sentence copied whole.
+4. **The desktop's new-order form says "cannot create customers" only for that refusal.** That
+   sentence is the handler's (`need: 'customers:edit'`, the save-as-customer step). A
+   `forbidden_capability` from the choke point (no `orders:edit`), or naming no key, now gets the
+   general TD_ERR sentence every other desktop screen gives, in the same top-of-form slot. This is
+   the phone's S1a rule, on the desktop.
+5. **Also in this step, test-only:** §329's `test_mobile_products_lists.js` (merged to main after
+   S1b was cut) slices the catalogue row, which since S1b asks `prodCanEdit()`; the suite now lifts
+   that function too (its own commit). Without it the suite fails once S1b and §329 are both on main.
+6. **Tests.** `scripts/test_mobile_safety_followups.js` (fast shard, 16 checks): the banner card
+   under each combination of keys and its commands (no write, no picker, no upload without them;
+   the tree save with `categories:edit`); the media empty state; the approve block in each case and
+   in Chinese, against the desktop's pairs; and the desktop `ordNewCreate` run against a fake
+   server for the three refusals. `test_mobile_category_banner.js` gains an `mCan` stub.
+
+## §335 — THE WRITES NO PERMISSION GATED ARE GATED, EACH ON THE SCREENS THAT MAKE IT
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step S2a, the parity survey's defect 3 (`docs/tacet-phone-parity-rest-of-app.md`).
+Settings, polls, the voting and leaderboard settings, top-up packages, marking a
+top-up paid, the affiliate settings and referrals, and the whole mini-app editor
+(publish included) matched no rule in `lib/cap-routes.js`, so they fell through
+open: any signed-in operator could make them, enforcement on or not. The
+flash-sale keys gated nothing, because a flash sale is written through
+`/products/:id/flash-sale`, which answered `products:edit`. Each is now gated by
+§325.3: on the keys that open every desktop and phone screen making that write
+today, as an any-of. What this closes is the account that can open none of those
+screens. As with every gate in that file, nothing changes for the owner, for a
+shop with enforcement off, or while an operator's permissions cannot be resolved.
+No screen changed.
+
+1. **Settings (`PUT /config`) are gated per key family, in the handler.** One
+   any-of for the whole route would be wrong both ways: about twenty screens
+   write it, each its own keys, each opened by a different permission. A union
+   wide enough to keep all of them working would let a pop-up editor set the tax
+   rate. So `configKeyCap(key)` (new, `lib/cap-routes.js`) names each family's
+   screens, and the handler checks every key in the body before it writes
+   anything. This is §302's pattern: the choke point sees only the path, so it
+   passes this route through on purpose. One refused key refuses the whole body,
+   as `403 {error:'forbidden_capability', need, key}`.
+2. **The families, and who writes them today** (desktop = `01-core.js` `TAB_CAP` or
+   a `data-cap`; phone = `m.html` `ROUTE_CAP`):
+   - **Settings tab** — `shop.*`, `customer_service.*`, `currency`, `tax.*`,
+     `system_alerts.*`, the order-template id and webhook under `notifications.*`,
+     `inventory.*`, `product_page.*`, and `features.waste|production|lowStockHints`.
+     The desktop's Shop, Push, Customer service and Operations panels carry no gate
+     of their own, so this is `TAB_CAP.config`: `settings:shop`, `settings:push`,
+     `settings:payments`, `stores:view`, `shipping:config`, `delivery:view`.
+   - **Delivery panel** — `delivery.*`, `fees.*`, `pickup.*`, `batch.*`, `fresh.*`,
+     `notice.*`. Gated on `delivery:view` and `delivery:edit`: the desktop panel's
+     `data-cap` and the phone's Delivery (Resume delivery). Also `settings:shop` and
+     `stores:view`, the phone's Setup pair, because the desktop setup guide writes
+     currency, the pickup lead time and the delivery wizard's keys.
+     `PUT /config/gz-excluded-districts` (the Guangzhou district chips on the same
+     panel) takes `delivery:view` or `delivery:edit`, on the path.
+   - **Automatic updates** — `notifications.categories.*`: `broadcasts:view` (the
+     desktop's Broadcasts) and `broadcasts:send` (the phone's Automatic updates).
+   - **Pop-ups** — `popups.list`: `popups:view|edit|delete`. Desktop and phone both
+     open on `popups:view`.
+   - **Content** — `copy.*` (Snippets), `legal.*`, `faq.*`, `about.*`:
+     `content:view|edit`.
+   - **Social proof** — `social_proof` and `checkout.*` (the upsell card sits on
+     that tab): `social:edit`.
+   - **Share cards** — `sharing.*`: `sharing:edit`.
+   - **Membership** — `points.*` and `roots_club.*`: `loyalty:view|edit`.
+   - **Reviews** — `reviews.*`: `reviews:view|moderate`.
+   - **Mini-app editor** — `theme.*`, `tabBar.*`, `brand.*`, `me_page.*`:
+     `content:edit` (the gate `cms.html` and `cms-mobile.html` open on) or
+     `editor:edit`.
+   - **Product editor** — `cart_notices.*`: `products:edit`. The notice is written
+     only after the product's own save, which already needs that permission.
+   - **Features** — `features.<key>`: the feature's own page, plus the phone's
+     Settings, which has a switch for six of them (membership, affiliate, reviews,
+     feedback, social proof, FAQ). Feedback also takes `reviews:view`, because the
+     phone's Inbox shows "Enable" for it.
+   - **The Support button's Hide** (`support.hidden`) stays open. The floating
+     Support panel draws it for every operator, whatever permissions they hold.
+   - **A key no family names** takes the union of all of the above. So an unlisted
+     key closes only the account that can open none of these screens.
+3. **The other writes, on the path** (the same rule; each screen named is the only
+   caller):
+   - Polls (`POST /polls`, `PUT|DELETE /polls/:id`) and `PUT /voting/config` need
+     `voting:edit` (desktop Voting and phone Voting).
+   - `PUT /leaderboard/config` needs `leaderboard:edit`.
+   - Top-up packages (`POST`, `PATCH`, `DELETE`) and
+     `POST /topup-transactions/:id/finalize` (credits a wallet) need `topup:edit`
+     (desktop Top-up and phone Wallet).
+   - `PATCH /affiliate/settings` needs `affiliate:view`, `affiliate:edit` or
+     `sharing:edit`: the Affiliate tab, and the invite card on Share cards.
+   - `PATCH /affiliate/referrals/:id` needs `affiliate:view` or `affiliate:edit`.
+   - The mini-app editor's routes (`/cms/*`, publish included) need `content:edit`
+     or `editor:edit`. The picture upload (`POST /cms/media`) is shared, so it
+     also takes every desktop screen that uploads through it: the category banner
+     (`categories:view`), the customer-service QR (Settings), the pop-up picture
+     (`popups:view`), the About page (`content:view`), and `media:upload`.
+     Deleting an editor picture (`DELETE /cms/media/:id`) has no caller on any
+     screen, so it closes to the editor's keys and `media:delete`.
+4. **The flash-sale keys now gate the flash sale.**
+   - Setting a sale (`PUT /products/:id/flash-sale`) takes `flash:edit` or
+     `products:edit`.
+   - Ending one (`DELETE`) takes `flash:delete` or `products:delete`.
+   - The products key in each pair is the one that let the write through until
+     today, so nobody who could set or end a sale loses it.
+   - The `marketing` preset holds every flash permission and no `products:edit`,
+     so until now it was refused on its own Flash sales screen. It is not refused
+     any more.
+   - The old `/flash` and `/popups` path rules gate no route. They are left in
+     place, with a note saying so.
+5. **Every caller was checked**: desktop modules, `m.html`, `cms.html`,
+   `cms-mobile.html`, `product-editor.html` and `retail-admin.html`. The public
+   pages only read `/api/retail/*`. The suite pins the file list for each route,
+   so a new screen that writes one of them fails the suite until someone decides
+   what that screen needs.
+6. **Who is refused now who was not before:** only an account that can open none
+   of the screens that make the write. For example, an orders-only or
+   warehouse-only account can no longer change fees or pop-ups, credit a wallet
+   top-up, or publish the mini app. One narrow case, flagged:
+   - The desktop's setup guide row has no gate of its own (the note beside
+     `TAB_CAP` explains why).
+   - So on a shop that has not finished setup and has turned enforcement on, a
+     narrowed operator holding none of the Settings or Delivery permissions could
+     open it and set the currency or the pickup lead time. They are now refused
+     those two.
+   - The guide's store step already refused that operator (`stores:edit`).
+   - The phone gates Setup on `settings:shop` or `stores:view`, and both are
+     admitted.
+7. **Open for Ash, not decided here.** Several of these gates are a `:view`
+   permission, because that is what opens the screen:
+   - `delivery:view` for fees;
+   - `affiliate:view` for the affiliate settings;
+   - `loyalty:view` for points and tiers;
+   - `popups:view` for pop-ups;
+   - `content:view` for legal text.
+
+   Narrowing any of them to its `:edit` permission would take the write from
+   people who can do it today. That is Ash's call, family by family. The families
+   already include the `:edit` permission, so narrowing means removing one entry.
+8. **Tests.** `scripts/test_settings_write_gates.js` (fast shard, 172 checks). It
+   mounts the real `routes/retail.js` over a scratch database with enforcement
+   on, and resolves each operator's permissions from real grants, so the shipped
+   choke point and handler are what is tested, not a copy of them. It checks:
+   - every path rule;
+   - every family's allow for every screen that writes it;
+   - that families do not overlap (a pop-up editor cannot set the tax rate);
+   - refusals over HTTP, including that a refused body writes nothing;
+   - the owner, and enforcement off;
+   - the caller lists;
+   - that each screen really opens on the permission its gate names.
+9. **Nothing composed.** No operator strings were added.
+
+## §336 — THE DASHBOARD ANSWERS FOR THE STORE IT NAMES, AND §317'S CLAIM IS NOW TRUE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step S2b, the parity survey's defect 4. `GET /api/retail-admin/dashboard` read
+`store_id` into its cache key and nowhere else. So three places named one store
+and showed every store's figures:
+- the desktop's store picker;
+- the desktop's store lock (`RA_STORE_LOCK`);
+- the phone Trend's store select (§317).
+
+**§317 point 2 said Trend "also closes a leak"** by pinning a store-scoped
+operator to their store. **That was wrong when it was written.** The phone sent
+the store and the server ignored it, so the operator still read the whole shop.
+§325.2 recorded this without editing §317. **It is true as of this step.** No
+screen changed: both clients already send `store_id`.
+
+1. **Which stores an answer covers** (`dashStoreScope`, new):
+   - **No store asked for, and the operator not store-scoped:** every store. This
+     answer is exactly what it was: the same SQL text, the same payload, and no
+     new key.
+   - **A store asked for** (a positive whole number; `all` or blank means every
+     store): that store.
+   - **A store-scoped operator** (`req.scopeStores`, which `requireRetailAdmin`
+     sets): held to their scope whatever they ask for. If they ask for a store
+     that is theirs, they get that store; otherwise they get all of theirs,
+     never another store's and never the whole shop. An operator scoped to no
+     store sees nothing. This is the rule the restock counts already follow
+     (`routes/restock.js`, pick-count).
+   Because the server does this, **every screen that reads `/dashboard` for a
+   store-scoped operator now shows only their stores**, including the phone's
+   Home and the desktop's Dashboard, which do not send a store on their own.
+2. **What is narrowed is everything that carries a store**, which means every
+   figure read from `retail_orders`. The paid predicates are narrowed in one
+   place, `scopedP`/`scopedPO`, so the headline, trend, baseline, payment split,
+   delivery split, store and channel breakdowns, routing, top products and top
+   customers, buyers by channel, geography, vouchers and points, heatmap,
+   cohorts, composition, the funnel and the mini-app block all describe the same
+   orders. Store credit redeemed is narrowed too; it reads orders.
+3. **Money that belongs to no store is left out of a store's revenue.** Wallet
+   top-up cash is paid to the shop, and the legacy gzgrocery drift pickups carry
+   no store. Folding the shop's total into each store would overstate every
+   store by the same amount, and the stores would stop adding up to the shop.
+   With them left out, the stores plus the top-up cash add up to the shop's
+   answer, and the suite asserts that.
+4. **Counts that belong to no store stay shop-wide, and the answer says so.**
+   These are mini-app visits and sessions, new customers, the tier snapshot,
+   launch scenes, checkout abandonment and article views; none of those tables
+   has a store column.
+   - A narrowed answer carries
+     `store_scope: {store_ids, shop_wide: [...], left_out: [...]}`, so a screen
+     can say which figures are the shop's. The every-store answer does not carry
+     it.
+   - Conversion is null for a store: one store's orders divided by the whole
+     shop's sessions would divide one group of people by another, the fault the
+     route's own note on conversion describes.
+5. **"New buyer" still means first-ever paid order anywhere.** The "when did
+   they first buy" subquery stays across every store, for the reason the
+   mini-app block already gives: being new is a fact about the person, not about
+   the store. Cohort retention is the store's own (its customers' first order at
+   that store), because its sizes and its activity have to describe the same
+   people.
+6. **The cache key carries the stores covered, not the raw query.** A store's
+   answer is never served from another store's cached copy, and the every-store
+   answer keys exactly as before.
+7. **Not done here:** Home's needs-you counts ignoring the store lock (defect 5)
+   are the phone lane's step. The clients do not yet read `store_scope` or say
+   which figures are shop-wide. That is a screen change for the Dashboard lane.
+8. **Tests.** `scripts/test_dashboard_store_scope.js` (fast shard, 35 checks)
+   runs the real router over a scratch database with two stores that have
+   different takings, a refund and ¥200 of top-up cash. It checks:
+   - the every-store answer: the sum, no new key, and `store_id=all`;
+   - each store on its own: its orders, revenue, average order value, refunds,
+     payment split, trend and top customers; top-up cash left out; conversion
+     null;
+   - that the stores plus the top-up cash equal the shop;
+   - a store-scoped operator, including asking for another store and having no
+     store at all;
+   - that the cache keeps the three answers apart.
+9. **Nothing composed.** No operator strings were added.

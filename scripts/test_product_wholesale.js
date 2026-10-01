@@ -127,9 +127,13 @@ it('top customers still carries the gzgrocery exclusion', () => {
 });
 
 it('the two predicates are declared apart, not one widened', () => {
-  assert.ok(/const PAIDO_ALL = financeWindow\.PAID_O;/.test(ROUTE),
+  // §325: each may be wrapped in scopedPO(), the dashboard's store narrowing,
+  // which hands the predicate back untouched when no store is chosen
+  // (scripts/test_dashboard_store_scope.js pins that). What is pinned here is
+  // unchanged: two declarations, and only PAIDO carries the exclusion.
+  assert.ok(/const PAIDO_ALL = (?:scopedPO\()?financeWindow\.PAID_O\)?;/.test(ROUTE),
     'PAIDO_ALL is gone — the product reads and the customer reads have merged');
-  assert.ok(/const PAIDO = `\$\{financeWindow\.PAID_O\} AND \$\{NOTGZO\}`;/.test(ROUTE),
+  assert.ok(/const PAIDO = (?:scopedPO\()?`\$\{financeWindow\.PAID_O\} AND \$\{NOTGZO\}`\)?;/.test(ROUTE),
     'PAIDO was widened instead, which drags the customer reads with it');
 });
 
