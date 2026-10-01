@@ -651,12 +651,16 @@ async function place(taxCfg, body) {
          only says "not this error" passes just as happily when the handler
          refuses for some other reason. */
       let reached = false;
+      /* §325 added the per-key permission gate (capRoutes — the real one; with
+         no tenant on this request it refuses nothing). */
       const put = new Function('tax', 'withTransaction', 'tdb', 'loadConfig', 'logActivity',
+        'capRoutes',
         `return async (req, res) => {${body}};`
       )(tax,
         async (_db, fn) => { reached = true; fn({ prepare: () => ({ run: () => {} }) }); },
         () => ({ prepare: () => ({ run: () => {} }) }),
-        () => ({}), () => {});
+        () => ({}), () => {},
+        require(path.join(ROOT, 'lib', 'cap-routes')));
       const cases = [
         [{ 'tax.rateMicro': 200000 }, null, 'a real rate is let through to the write'],
         [{ 'tax.rateMicro': 90000000 }, 'bad_tax_rate', '900% is refused — it looks like a number and would nearly double every bill'],

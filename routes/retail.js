@@ -23248,6 +23248,20 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
   const entries = Object.entries(body);
   if (!entries.length) return res.status(400).json({ success: false, error: 'no_updates' });
 
+  /* §325 — EVERY KEY PASSES ITS OWN FAMILY'S GATE, before anything is read or
+     written. The choke point cannot see the body, so it lets this route
+     through (lib/cap-routes.js, requiredCapFor) and the decision is made here,
+     the way the purchase-order status and the full-refund gates are made in
+     their handlers. configKeyCap() says who may write each family: the keys
+     that open every screen writing it today. One refused key refuses the
+     whole body, in the choke point's own shape plus the key. */
+  for (const [k] of entries) {
+    const need = capRoutes.configKeyCap(k);
+    if (capRoutes.capDenied(req, need)) {
+      return res.status(403).json({ error: 'forbidden_capability', need, key: k });
+    }
+  }
+
   /* ── Tax settings are validated, and nothing else here is (audit I-03) ────
      This endpoint takes any dotted key and stores any JSON, which is right for
      a table of copy, colours and thresholds: a wrong one looks wrong and is
