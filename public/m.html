@@ -1435,6 +1435,12 @@ const state = {
      refusal, the locate-everything run, and the recently-deleted list. */
   /* §325 X3 — the count sheet's print view: false, true, or 'failed'. */
   countPrint:false,
+  /* §325 X4 — the Brand screen (the logo and name, a draft of the name being
+     typed, which save is in flight and each half's refusal) and the brand
+     studio (its form, the job being polled, the result and its Apply). */
+  brand:{data:null, tried:false, readErr:null, busy:null, name:'', nameTouched:false, nameErr:null, logoErr:null},
+  bst:{about:'', audience:'mixed', language:'bilingual', words:[], cust:[], colour:'', type:'', busy:false, err:null, seq:0,
+       result:null, applyBusy:false, applyErr:null, applyMsg:null},
   opsx:{busy:null, err:null, geoBusy:false, geoErr:null, bin:null, binDays:60, binTried:false, binErr:null, binBusy:null, binRowErr:{}},
   /* The Account screen's own reads and writes (screenAccount): the recovery
      contacts and two-step switches, the signed-in devices, the per-person
@@ -1567,6 +1573,9 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* §325 X2 — Operations re-reads what was deleted on every entry (something
      may have been deleted on another screen a minute ago), and a refusal from
      the last visit does not greet the next one. */
+  /* §325 X4 — Brand re-reads what is stored on every entry; a half-typed name
+     from the last visit is not carried into this one. */
+  if(route==='brand'){ const b=state.brand; b.tried=false; b.nameTouched=false; b.nameErr=null; b.logoErr=null; b.readErr=null; }
   if(route==='operations'){ const x=state.opsx; x.binTried=false; x.binErr=null; x.binRowErr={}; x.err=null; x.geoErr=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
@@ -24094,6 +24103,260 @@ reg('countPrintGo', ()=>{
   catch(e){ state.countPrint='failed'; render(); }
 });
 /* §325 X3 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X4 — THE BRAND, AND THE BRAND STUDIO
+   --------------------------------------------------------------------------
+   Two desktop pages the phone did not have (public/backend-brand.html and
+   public/brand-studio.html), reached from Settings → Store as the desktop
+   reaches them from Settings' nav.
+
+   BRAND. The logo and the brand name that lead the admin, the sign-in page
+   and customer emails. Every write is the page's own PUT /api/backend/brand:
+   {logo:<data URL>} — a raster image is first drawn onto a canvas no larger
+   than 512px and sent as PNG, an SVG is sent as it is — {logo:null} to remove
+   it, and {name} (60 characters at most) behind its own Save, as on the
+   desktop. The server answers for settings:shop (callerHas), which is the key
+   the desktop's link carries, so it is this screen's key too.
+
+   BRAND STUDIO. Describe the shop; the studio drafts a palette, fonts and a
+   Home layout; Apply puts it in the Mini App Editor as a DRAFT, never live.
+   POST /brand/generate, then GET /brand/job/:id every two seconds for up to
+   two minutes, then POST /brand/apply {theme, layout} — the page's own three
+   calls with its own bodies. The server gates all three on ai:generate
+   (lib/cap-routes.js), so the screen is gated on it.
+
+   THE DESKTOP STUDIO IS ENGLISH-ONLY. Every Chinese string on that screen was
+   composed for this step and is declared in the vocabulary. The words sent to
+   the designer stay the desktop's English values; only what is shown is
+   translated. What the SERVER writes back — its progress line, its errors, its
+   contrast warnings — is English and is shown as it comes.
+   ══════════════════════════════════════════════════════════════════════════ */
+function brandLoad(){
+  const b=state.brand; if(b.tried) return Promise.resolve();
+  b.tried=true; b.readErr=null;
+  return api('/api/backend/brand').then(j=>{
+    b.data=(j&&j.brand)||{};
+    if(!b.nameTouched) b.name=b.data.name||'';
+    render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    b.readErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render();
+  });
+}
+/* The server's refusal comes as "English · 中文"; this screen shows its half.
+   A network failure or a bare status gets the page's own sentences. */
+function brandErr(e){
+  if(e&&e.refused) return E(...e.words);
+  if(!e||e.name==='TypeError') return E('Network error — please try again','网络错误，请重试');
+  const s=String(e.message||'');
+  if(!s||/^HTTP \d+$/.test(s)) return E('Couldn’t save — please try again','保存失败，请重试');
+  return {toString(){ return tmOneLang(s); }};
+}
+function brandSave(which,payload,okEn,okZh){
+  const b=state.brand; if(b.busy||!canRoute('brand')) return Promise.resolve();
+  b.busy=which; b[which==='name'?'nameErr':'logoErr']=null; render();
+  return apiWrite('/api/backend/brand',payload,'PUT').then(j=>{
+    b.busy=null;
+    if(j&&j.brand) b.data=j.brand;
+    if(which==='name'){ b.nameTouched=false; b.name=(b.data&&b.data.name)||''; }
+    render(); showToast(T(okEn,okZh));
+  }).catch(e=>{
+    b.busy=null;
+    if(String(e&&e.message)==='auth') return;
+    b[which==='name'?'nameErr':'logoErr']=brandErr(e); render();
+  });
+}
+reg('brandName', v=>{ const b=state.brand; b.name=String(v||'').slice(0,60); b.nameTouched=true; });
+reg('brandNameSave', ()=>{ brandSave('name',{name:String(state.brand.name||'').trim()},'Saved','已保存'); });
+reg('brandLogoClear', ()=>{ brandSave('logo',{logo:null},'Logo removed','徽标已移除'); });
+reg('brandLogo', input=>{
+  const f=input&&input.files&&input.files[0];
+  if(!f) return;
+  input.value='';
+  const b=state.brand; if(b.busy||!canRoute('brand')) return;
+  const say=(en,zh)=>{ b.logoErr=E(en,zh); render(); };
+  if(!/^image\//.test(f.type||'')) return say('Please choose an image file','请选择图片文件');
+  const rd=new FileReader();
+  rd.onerror=()=>say('Couldn’t read that file','无法读取该文件');
+  if(/svg/.test(f.type)){
+    rd.onload=()=>brandSave('logo',{logo:String(rd.result||'')},'Logo updated','徽标已更新');
+    rd.readAsDataURL(f); return;
+  }
+  rd.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      let data=null;
+      try{
+        const MAX=512, sc=Math.min(1,MAX/Math.max(img.width||1,img.height||1));
+        const w=Math.round((img.width||1)*sc), h=Math.round((img.height||1)*sc);
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        data=cv.toDataURL('image/png');
+      }catch(e){ data=null; }
+      if(!data) return say('Couldn’t read that image','无法读取该图片');
+      brandSave('logo',{logo:data},'Logo updated','徽标已更新');
+    };
+    img.onerror=()=>say('Couldn’t read that image','无法读取该图片');
+    img.src=String(rd.result||'');
+  };
+  rd.readAsDataURL(f);
+});
+reg('brandRetry', ()=>{ state.brand.tried=false; render(); brandLoad(); });
+const brandErrLine=m=>m?`<div style="font-size:13.5px;color:var(--brick-ink);padding:10px 2px 0">${String(m)}</div>`:'';
+function screenBrand(){
+  const b=state.brand; brandLoad();
+  if(b.readErr&&!b.data) return x1Err(String(b.readErr),'brandRetry');
+  if(!b.data) return x1Loading();
+  const url=b.data.brandLogoUrl||null, busy=b.busy;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px">${T('Your logo and name lead the admin, sign-in page and customer emails. Everything else keeps the tacet look.','您的徽标与名称将展示在后台、登录页与顾客邮件上。其余部分保持 tacet 外观。')}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="width:72px;height:72px;border-radius:16px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${url?`<img src="${escAttr(url)}" alt="" style="max-width:100%;max-height:100%;object-fit:contain">`:ic('image',24)}</span>
+        <span style="display:flex;gap:8px;flex-wrap:wrap">
+          <label class="btn2" style="min-height:38px;padding:0 12px;font-size:14px;${busy?'opacity:.55;pointer-events:none':''}">${busy==='logo'?T('Saving…','保存中…'):T('Upload logo','上传徽标')}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none" onchange="APP.cmd('brandLogo',this)"></label>
+          ${url?`<button class="btn2" style="min-height:38px;padding:0 12px;font-size:14px" ${busy?'disabled':''} onclick="APP.cmd('brandLogoClear')">${T('Remove','移除')}</button>`:''}</span></div>
+      ${brandErrLine(b.logoErr)}
+      <label style="display:block">
+        <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Brand name','品牌名称')}</span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <input id="mBrandName" type="text" maxlength="60" spellcheck="false" placeholder="${T('Your brand','您的品牌')}" value="${escAttr(b.name)}" style="flex:1;min-width:0" oninput="APP.cmd('brandName',this.value)">
+          <button class="btn2" style="width:auto;flex:none;padding:0 16px" ${busy?'disabled':''} onclick="APP.cmd('brandNameSave')">${busy==='name'?T('Saving…','保存中…'):T('Save','保存')}</button></span></label>
+      ${brandErrLine(b.nameErr)}</div>
+    ${canRoute('brandstudio')?`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:16px;font-weight:500">${T('Not sure where to start?','还没有想好?')}</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${T('Describe your shop in a sentence and the brand studio will draft a name, a mark and a palette for you to look at. Nothing changes until you apply one.','用一句话描述你的店铺,品牌工作室会为你草拟名称、标志与配色供你挑选。在你确认应用前不会有任何改动。')}</div>
+      <button class="btn2" onclick="APP.cmd('push','brandstudio')">${T('Open the brand studio','打开品牌工作室')}</button></div>`:''}
+  </div>`;
+}
+SUBS.brand={title:['Brand','品牌'],render:()=>screenBrand()};
+
+/* ── The brand studio ─────────────────────────────────────────────────────── */
+/* [value sent, English shown, Chinese shown]. The value is the desktop's. */
+const BST_WORDS=[['Playful','Playful','活泼'],['Premium','Premium','高端'],['Minimal','Minimal','简约'],['Bold','Bold','大胆'],
+  ['Natural','Natural','自然'],['Warm','Warm','温暖'],['Modern','Modern','现代'],['Heritage','Heritage','传统'],['Quirky','Quirky','俏皮'],['Calm','Calm','沉静']];
+const BST_CUST=[['young-trendy','young-trendy','年轻潮流'],['families','families','家庭'],['premium-professional','premium-professional','高端职场人士'],
+  ['budget-conscious','budget-conscious','注重实惠'],['health-conscious','health-conscious','注重健康']];
+const BST_AUDIENCE=[['mixed','A mix of both','两者都有'],['chinese','Mostly Chinese','以中国顾客为主'],['international','Mostly international','以外国顾客为主']];
+const BST_LANGUAGE=[['bilingual','Bilingual','双语'],['en','English','English'],['cn','中文','中文']];
+const BST_COLOUR=[['','Surprise me','随你发挥'],['Earthy','Earthy','大地色'],['Vibrant','Vibrant','鲜艳'],['Soft/Pastel','Soft/Pastel','柔和粉彩'],
+  ['Dark/Moody','Dark/Moody','深沉'],['Monochrome','Monochrome','单色'],['Warm','Warm','暖色'],['Cool','Cool','冷色']];
+const BST_TYPE=[['','Match my vibe','配合我的风格'],['Modern sans','Modern sans','现代无衬线'],['Classic serif','Classic serif','经典衬线'],
+  ['Friendly rounded','Friendly rounded','亲和圆体'],['Bold display','Bold display','醒目标题体'],['Elegant','Elegant','优雅']];
+const BST_POLL_MS=2000, BST_POLL_MAX=60;
+/* The page's humErr: the server's own sentence, unless it names the model
+   provider, which an operator has no use for. */
+function bstErr(e){
+  if(e&&e.refused) return E(...e.words);
+  const m=String((e&&e.message)||'');
+  return (m&&!/^HTTP \d+$/.test(m)&&!/anthropic|claude/i.test(m))?{toString(){ return tmOneLang(m); }}
+    :E('The design service is busy — please try again.','设计服务繁忙，请稍后再试。');
+}
+function bstInputs(){
+  const s=state.bst;
+  return {about:s.about, audience:s.audience, language:s.language, words:s.words.slice(), customerType:s.cust.slice(),
+    colourDirection:s.colour, typographyFeel:s.type};
+}
+reg('bstField', (k,v)=>{ const s=state.bst; if(['about','audience','language','colour','type'].includes(k)) s[k]=String(v==null?'':v); });
+reg('bstPick', (k,v)=>{
+  const s=state.bst, list=k==='cust'?s.cust:s.words, i=list.indexOf(v);
+  if(i<0) list.push(v); else list.splice(i,1);
+  render();
+});
+reg('bstGo', ()=>{
+  const s=state.bst; if(s.busy||!canRoute('brandstudio')) return;
+  s.busy=true; s.err=null; s.seq++; const seq=s.seq; render();
+  apiWrite('/brand/generate',bstInputs(),'POST').then(j=>{
+    if(seq!==s.seq) return;
+    const id=j&&j.data&&j.data.job_id;
+    if(!id) throw new Error('');
+    bstPoll(id,0,seq);
+  }).catch(e=>{
+    if(seq!==s.seq||String(e&&e.message)==='auth') return;
+    s.busy=false; s.err=bstErr(e); render();
+  });
+});
+/* Every two seconds, sixty times — the page's own clock. A read that fails is
+   tried again on the next tick, as the page does; only the job's own answer
+   or the clock running out ends it. */
+function bstPoll(id,n,seq){
+  const s=state.bst;
+  if(n>=BST_POLL_MAX){ s.busy=false; s.err=E('This is taking a while — please try again.','耗时较长，请稍后再试。'); render(); return; }
+  setTimeout(()=>{
+    if(seq!==s.seq) return;
+    api('/brand/job/'+encodeURIComponent(id)).then(job=>{
+      if(seq!==s.seq) return;
+      if(job&&job.state==='ready'){ s.busy=false; s.result=job.result||null; s.applyMsg=null; s.applyErr=null; render(); return; }
+      if(job&&job.state==='error'){ s.busy=false; s.err=job.error?{toString(){ return tmOneLang(job.error); }}:E('Please try again.','请重试。'); render(); return; }
+      bstPoll(id,n+1,seq);
+    }).catch(e=>{
+      if(String(e&&e.message)==='auth') return;
+      /* A missed poll is not the job failing — the page's rule (`continue`). */
+      bstPoll(id,n+1,seq);
+    });
+  },BST_POLL_MS);
+}
+reg('bstApply', ()=>{
+  const s=state.bst; if(!s.result||s.applyBusy||!canRoute('brandstudio')) return;
+  s.applyBusy=true; s.applyErr=null; s.applyMsg=null; render();
+  apiWrite('/brand/apply',{theme:s.result.theme,layout:s.result.layout},'POST').then(()=>{
+    s.applyBusy=false; s.applyMsg=E('Saved as a draft — preview it in the Mini App Editor.','已保存为草稿 — 请在小程序编辑器中预览。'); render();
+  }).catch(e=>{
+    s.applyBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    s.applyErr=bstErr(e); render();
+  });
+});
+reg('bstAgain', ()=>{ const s=state.bst; s.result=null; s.busy=false; s.err=null; s.applyMsg=null; s.applyErr=null; s.seq++; render(); });
+function bstSelect(k,cur,opts){
+  return `<select style="width:100%" onchange="APP.cmd('bstField','${k}',this.value)">${opts.map(([v,en,zh])=>
+    `<option value="${escAttr(v)}"${v===cur?' selected':''}>${escAttr(T(en,zh))}</option>`).join('')}</select>`;
+}
+function bstChips(k,chosen,opts){
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px">${opts.map(([v,en,zh])=>
+    `<button class="chip ${chosen.includes(v)?'on':''}" onclick="APP.cmd('bstPick','${k}','${escAttr(v)}')"><span>${escAttr(T(en,zh))}</span></button>`).join('')}</div>`;
+}
+const bstLabel=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin:4px 0 8px">${t}</span>`;
+function bstResult(){
+  const s=state.bst, r=s.result||{}, th=r.theme||{}, p=th.palette||{}, f=th.fonts||{}, sh=th.shape||{};
+  const sw=['primary','accent','surface','ink','muted'].filter(k=>p[k]).map(k=>`<span style="width:64px;display:flex;flex-direction:column;gap:4px;align-items:center">
+      <span style="width:64px;height:42px;border-radius:8px;border:1px solid var(--border-default);background:${escAttr(p[k])}"></span>
+      <span class="num" style="font-size:11px;color:var(--text-secondary);text-align:center;line-height:1.3">${escAttr(k)}<br>${escAttr(p[k])}</span></span>`).join('');
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:17px;font-weight:500">${T('Your brand','您的品牌')}</div>
+    ${sw?`<div style="display:flex;flex-wrap:wrap;gap:10px">${sw}</div>`:''}
+    <div style="font-size:13.5px;line-height:1.55">${T('Fonts — display: ','字体 — 标题：')}${escAttr((f.display&&f.display.family)||'—')} · ${T('body: ','正文：')}${escAttr((f.body&&f.body.family)||'—')}</div>
+    <div style="font-size:13.5px;line-height:1.55">${T('Shape: ','形状：')}${escAttr(sh.radius||'—')} / ${escAttr(sh.energy||'—')} · ${T('density: ','密度：')}${escAttr(th.density||'—')} · ${T('audience: ','受众：')}${escAttr(th.audience||'—')}</div>
+    ${(r.warnings||[]).map(w=>`<div style="background:var(--amber-tint);color:var(--amber-ink);border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.5">${escAttr(w.msg||w.code||'')}</div>`).join('')}
+    ${(r.layout||[]).length?`<div class="list">${r.layout.map((b2,i)=>`${i?'<div class="sep"></div>':''}<div style="padding:10px 14px;font-size:14px">${i+1}. ${escAttr(b2&&b2.type)}</div>`).join('')}</div>`:''}
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1" ${s.applyBusy?'disabled':''} onclick="APP.cmd('bstApply')">${s.applyBusy?T('Saving draft…','正在保存草稿…'):T('Apply as draft','应用为草稿')}</button>
+      <button class="btn2" style="flex:1" ${s.applyBusy?'disabled':''} onclick="APP.cmd('bstAgain')">${T('Start over','重新开始')}</button></div>
+    ${s.applyErr?brandErrLine(s.applyErr):''}
+    ${s.applyMsg?`<div style="font-size:13.5px;color:var(--text-secondary)">${String(s.applyMsg)}</div>`:''}</div>`;
+}
+function screenBrandStudio(){
+  const s=state.bst;
+  const foot=`<div style="font-size:12.5px;color:var(--text-secondary);padding:0 4px">${T('Drafts preview in the Mini App Editor before they go live.','草稿会先在小程序编辑器中预览，确认后才会上线。')}</div>`;
+  if(s.result) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">${bstResult()}${foot}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;padding:0 4px">${T('Tell us about your shop and we’ll design your storefront — colours, fonts, and layout.','介绍一下你的店铺，我们来设计你的店面 — 配色、字体与版式。')}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      <label>${bstLabel(T('What’s your shop about?','你的店铺是做什么的？'))}
+        <textarea style="min-height:72px;resize:none" placeholder="${T('e.g. plant-based bakery with seasonal sourdough','例如：主打时令酸种面包的植物基烘焙店')}" oninput="APP.cmd('bstField','about',this.value)">${escAttr(s.about)}</textarea></label>
+      <label>${bstLabel(T('Who are your shoppers?','你的顾客是谁？'))}${bstSelect('audience',s.audience,BST_AUDIENCE)}</label>
+      <label>${bstLabel(T('Storefront language','店面语言'))}${bstSelect('language',s.language,BST_LANGUAGE)}</label>
+      <div>${bstLabel(T('Pick the words that describe your brand','选出描述你品牌的词'))}${bstChips('words',s.words,BST_WORDS)}</div>
+      <label>${bstLabel(T('Colour direction','配色方向'))}${bstSelect('colour',s.colour,BST_COLOUR)}</label>
+      <label>${bstLabel(T('Typography feel','字体风格'))}${bstSelect('type',s.type,BST_TYPE)}</label>
+      <div>${bstLabel(T('Who are your customers?','你的客户群体是？'))}${bstChips('cust',s.cust,BST_CUST)}</div>
+      <button class="cta" ${s.busy?'disabled':''} onclick="APP.cmd('bstGo')">${s.busy?T('Designing your storefront…','正在设计你的店面…'):T('Design my brand','设计我的品牌')}</button>
+      ${s.err?brandErrLine(s.err):''}</div>
+    ${foot}</div>`;
+}
+SUBS.brandstudio={title:['AI Brand Studio','AI 品牌工作室'],render:()=>screenBrandStudio()};
+/* §325 X4 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -24112,7 +24375,9 @@ function screenSettings(){
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
       /* §325 X1 — the desktop's two read-only records, beside the team whose work they record. */
       ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
-      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[])]},
+      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[]),
+      /* §325 X4 — the desktop's Brand page, from the same nav it sits in there. */
+      ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[])]},
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -31739,6 +32004,10 @@ const ROUTE_CAP={
   changes:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   sent:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   mirror_eleme:'eleme:view', elemecat:'eleme:view', needspoint:'orders:view',
+  /* §325 X4. Brand: the key the desktop's link carries and the server's
+     callerHas check (PUT /api/backend/brand). The studio: the server's own gate
+     on all three of its calls (lib/cap-routes.js, ai:generate). */
+  brand:'settings:shop', brandstudio:'ai:generate',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
