@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.293 · 2026-09-30 · §404 THE MANUAL-ALIPAY CARD'S FAILED READ — 1 STRING COMPOSED BY CLAUDE, 1 COPIED.** See *The manual-Alipay card that did not load (§404)*.
+
 **v1.292 · 2026-09-30 · §403 PAYMENTS ON THE PHONE — NOTHING COMPOSED; TWO DESKTOP PAIRS SPLIT INTO THEIR HALVES; THE REST COPIED WHOLE.** See *Payments on the phone (§403)*.
 
 **v1.291 · 2026-09-30 · §402 THE WEB STORE'S PAGE ON THE PHONE — NOTHING COMPOSED; EVERY PAIR COPIED FROM THE DESKTOP'S WEB STORE CONFIGURATION. X9a'S ONE COMPOSED STRING IS RETIRED.** See *The web store on the phone (§402)*.
@@ -12666,3 +12668,14 @@ Copied whole:
   (`09-products.js`; it marks a picked QR that is not saved yet), `On · 开` /
   `Off · 关` (the feature switches), `Save · 保存`, `Remove · 移除`.
 - **The phone's own:** `Could not load this. · 无法加载。`.
+
+## The manual-Alipay card that did not load (§404)
+
+**Operator register (Rule 1), 2026-10-01.** Settings → Operations, the
+manual-Alipay card (`public/retail-admin/02-settings-ops.js`).
+
+| String | Status |
+|---|---|
+| `Could not load this card, so Save leaves it unchanged. · 此卡片加载失败,保存时不会改动它。` | **composed by Claude.** `加载失败` is copied from the live `财务数据加载失败。` and `分类加载失败。`. `保存` is the Save bar's own word (`保存设置`). The second half says what the Save bar will do, because pressing that button is what destroyed data before. Rejected: the phone's live `Could not load this. · 无法加载。`, because it does not say what Save will do, and that is the point of the message. |
+
+Copied: `Try again · 重试` (live throughout the desktop).
