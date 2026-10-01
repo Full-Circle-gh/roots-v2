@@ -6026,7 +6026,7 @@ const MORE_GROUPS=[
     ['channelsync','refresh-cw','Channel sync','渠道同步']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
-  {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
+  {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题'],['snippets','languages','Mini-app copy','小程序文案']]},
   {h:null,rows:[['settings','settings','Settings','设置']]},
 ];
 /* MORE_GROUPS filtered to what this operator can reach, with each row resolved
@@ -6424,6 +6424,232 @@ function faqRemoveCat(i){
 reg('faqEditCat', i=>{ if(mCan(CONTENT_KEYS)) faqCatSheet(Number(i)); });
 reg('faqAddCat', ()=>{ if(!mCan(CONTENT_KEYS)||!FAQ_D) return;
   FAQ_D.cats.push({id:'',en:'',cn:'',color:'lime'}); faqTouch(); faqCatSheet(FAQ_D.cats.length-1); });
+
+/* ── About page (desktop: 10-extras.js ABOUT_CARD) ─────────────────────────
+   One key, about.content, as the desktop saves it: the loaded content first
+   (so a key no control asks about survives), then every field, the three
+   lists cleaned the desktop's way. Sections open in live sheets; the stat
+   strip and the IN / OUT lists add and remove rows; the two pictures go to
+   the editor's own upload (/cms/media, as the desktop's About does), shrunk on
+   the phone first. Words are the desktop editor's own pairs. */
+const ABOUT_EMPTY={kicker_en:'',kicker_cn:'',manifesto_en:'',manifesto_cn:'',stats:[],
+  founder_kicker_en:'',founder_kicker_cn:'',founder_name_en:'',founder_name_cn:'',founder_title_en:'',founder_title_cn:'',
+  founder_quote_en:'',founder_quote_cn:'',founder_photo_url:'',promise_kicker_en:'',promise_kicker_cn:'',
+  in_items:[],out_items:[],outro_en:'',outro_cn:'',cta_en:'',cta_cn:'',hero_image_url:''};
+const ABOUT_MAX_STATS=4;
+let ABOUT_D=null, ABOUT_IMG={busy:null, err:''};
+function aboutFrom(c){
+  const a=Object.assign({},ABOUT_EMPTY,(c&&typeof c==='object')?c:{});
+  ['stats','in_items','out_items'].forEach(k=>{ a[k]=Array.isArray(a[k])?a[k].map(x=>Object.assign({},x)):[]; });
+  return a;
+}
+function aboutCollect(){
+  const a=ABOUT_D, s=k=>String(a[k]==null?'':a[k]);
+  return Object.assign({},a,{
+    hero_image_url:a.hero_image_url||'',
+    kicker_en:s('kicker_en'), kicker_cn:s('kicker_cn'), manifesto_en:s('manifesto_en'), manifesto_cn:s('manifesto_cn'),
+    stats:a.stats.map(x=>({value_en:x.value_en||'',value_cn:x.value_cn||'',label_en:x.label_en||'',label_cn:x.label_cn||''})),
+    founder_kicker_en:s('founder_kicker_en'), founder_kicker_cn:s('founder_kicker_cn'),
+    founder_name_en:s('founder_name_en'), founder_name_cn:s('founder_name_cn'),
+    founder_title_en:s('founder_title_en'), founder_title_cn:s('founder_title_cn'),
+    founder_quote_en:s('founder_quote_en'), founder_quote_cn:s('founder_quote_cn'),
+    founder_photo_url:a.founder_photo_url||'',
+    promise_kicker_en:s('promise_kicker_en'), promise_kicker_cn:s('promise_kicker_cn'),
+    in_items:a.in_items.map(x=>({en:x.en||'',cn:x.cn||''})),
+    out_items:a.out_items.map(x=>({en:x.en||'',cn:x.cn||''})),
+    outro_en:s('outro_en'), outro_cn:s('outro_cn'), cta_en:s('cta_en'), cta_cn:s('cta_cn'),
+  });
+}
+const aboutCard=()=>cfgCard('about',{
+  read:()=>({'about.content':aboutCollect()}),
+  apply:b=>{ ABOUT_D=aboutFrom(b&&b['about.content']); },
+  words:{'about.content':['About page','关于页']},
+});
+function aboutEnsure(){
+  if(ABOUT_D||!state.cfg) return;
+  ABOUT_D=aboutFrom(cfgGet('about.content',null));
+  if(mCan(CONTENT_KEYS)) cfgCardStart(aboutCard());
+}
+function aboutTouch(){ const c=CFG_CARD.about; if(c&&c.auto) c.auto.touch(); }
+/* The desktop's sections, as live sheets: [title en, cn], fields [key, en, cn, multiline]. */
+const ABOUT_SECTIONS={
+  manifesto:[['Manifesto','宣言'],[['kicker_en','Kicker (EN)','引题(英文)'],['kicker_cn','Kicker suffix (CN)','引题后缀(中文)'],
+    ['manifesto_en','Body — English','正文(英文)',1],['manifesto_cn','Body — 中文','Body — 中文',1]]],
+  founder:[['Founder','创始人'],[['founder_kicker_en','Section kicker (EN)','栏目引题(英文)'],['founder_kicker_cn','Section kicker suffix (CN)','栏目引题后缀(中文)'],
+    ['founder_name_en','Name (EN)','姓名(英文)'],['founder_name_cn','Name (CN)','姓名(中文)'],
+    ['founder_title_en','Title (EN)','头衔(英文)'],['founder_title_cn','Title (CN)','头衔(中文)'],
+    ['founder_quote_en','Quote (EN)','引言(英文)',1],['founder_quote_cn','Quote (CN)','引言(中文)',1]]],
+  promise:[["What's IN / What's OUT",'是 / 否'],[['promise_kicker_en','Section kicker (EN)','栏目引题(英文)'],['promise_kicker_cn','Section kicker suffix (CN)','栏目引题后缀(中文)']]],
+  signoff:[['Sign-off','结尾'],[['outro_en','Headline (EN)','标题(英文)'],['outro_cn','Headline (CN)','标题(中文)'],
+    ['cta_en','Button label (EN)','按钮文字(英文)'],['cta_cn','Button label (CN)','按钮文字(中文)']]],
+};
+reg('aboutEdit', k=>{
+  const sec=ABOUT_SECTIONS[k]; if(!sec||!ABOUT_D||!mCan(CONTENT_KEYS)) return;
+  cfgSheet(aboutCard(), T(...sec[0]),
+    k==='manifesto'?T('Wrap a word with **double asterisks** to make it bold (e.g. **plant-based food**).','用 **双星号** 包住词语即可加粗(例如 **plant-based food**)。'):null,
+    sec[1].map(([id,en,cn,ml])=>({id,label:T(en,cn),multiline:!!ml})),
+    f=>ABOUT_D[f], (f,v)=>{ ABOUT_D[f]=v; });
+});
+/* A row of a list (the stat strip, IN, OUT), in its own sheet with Remove. */
+const ABOUT_ROWS={
+  stats:[['Stat strip','数据条'],[['value_en','Value EN','英文值'],['value_cn','Value CN','中文值'],['label_en','Label EN','英文标签'],['label_cn','Label CN','中文标签']]],
+  in_items:[["What's IN / What's OUT",'是 / 否'],[['en','EN','EN'],['cn','CN','CN']]],
+  out_items:[["What's IN / What's OUT",'是 / 否'],[['en','EN','EN'],['cn','CN','CN']]],
+};
+function aboutRowSheet(list, i){
+  const spec=ABOUT_ROWS[list]; if(!spec||!ABOUT_D||!ABOUT_D[list][i]) return;
+  cfgSheet(aboutCard(), T(...spec[0])+' · '+(i+1), null,
+    spec[1].map(([id,en,cn])=>({id,label:T(en,cn)})),
+    f=>{ const r=ABOUT_D[list][i]; return r?r[f]:''; }, (f,v)=>{ const r=ABOUT_D[list][i]; if(r) r[f]=v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>{ ABOUT_D[list].splice(i,1); aboutTouch(); state.ask=null; render(); }}]);
+}
+reg('aboutRow', (list,i)=>{ if(mCan(CONTENT_KEYS)) aboutRowSheet(list, Number(i)); });
+reg('aboutAddRow', list=>{
+  if(!mCan(CONTENT_KEYS)||!ABOUT_D||!ABOUT_ROWS[list]) return;
+  if(list==='stats'&&ABOUT_D.stats.length>=ABOUT_MAX_STATS) return;
+  ABOUT_D[list].push(list==='stats'?{value_en:'',value_cn:'',label_en:'',label_cn:''}:{en:'',cn:''});
+  aboutTouch(); aboutRowSheet(list, ABOUT_D[list].length-1);
+});
+const ABOUT_IMAGES={hero_image_url:1, founder_photo_url:1};
+reg('aboutPic', key=>{
+  if(!ABOUT_IMAGES[key]||ABOUT_IMG.busy||!mCan(CONTENT_KEYS)) return;
+  const el=document.createElement('input'); el.type='file'; el.accept='image/*';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) aboutUpload(key,f); };
+  el.click();
+});
+reg('aboutPicClear', key=>{ if(!ABOUT_IMAGES[key]||!ABOUT_D||!mCan(CONTENT_KEYS)) return; ABOUT_D[key]=''; aboutTouch(); render(); });
+async function aboutUpload(key, file){
+  ABOUT_IMG={busy:key, err:''}; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'about.jpg');
+    const r=await fetch(API+'/cms/media',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401){ location.href='/backend/login'; return; }
+    if(r.status===403){ ABOUT_IMG.err=(await apiRefusal(r)).message; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data){
+      const reason=MEDIA_ERR[j&&j.error];
+      ABOUT_IMG.err=T('That did not upload.','上传失败。')+(reason?' '+T(...reason):''); return;
+    }
+    ABOUT_D[key]=j.data.url||('/api/retail/media/'+j.data.id);
+    aboutTouch();
+  }catch(e){ ABOUT_IMG.err=T('That did not upload.','上传失败。'); }
+  finally{ ABOUT_IMG.busy=null; render(); }
+}
+function aboutPicCard(key, title, emptyText){
+  const url=ABOUT_D[key], busy=ABOUT_IMG.busy===key;
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${title}</div>
+    ${url?`<img src="${escAttr(url)}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;background:var(--surface-raised)">`
+      :`<div style="font-size:13.5px;color:var(--text-secondary)">${emptyText}</div>`}
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1" ${ABOUT_IMG.busy?'disabled':''} onclick="APP.cmd('aboutPic','${key}')">${busy?T('Uploading…','上传中…'):T('Choose image…','选择图片…')}</button>
+      ${url?`<button class="btn2" style="flex:1" ${ABOUT_IMG.busy?'disabled':''} onclick="APP.cmd('aboutPicClear','${key}')">${T('Remove','移除')}</button>`:''}</div></div>`;
+}
+function screenAboutEdit(){
+  const a=ABOUT_D, c=CFG_CARD.about;
+  const pick=(en,cn)=>LANG==='en'?(a[en]||a[cn]||''):(a[cn]||a[en]||'');
+  const sec=(k,summary)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+    <div class="eyebrow">${T(...ABOUT_SECTIONS[k][0])}</div>
+    ${summary?`<div style="font-size:14.5px;line-height:1.55;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical">${escAttr(summary)}</div>`:''}
+    <button class="btn2" style="width:100%" onclick="APP.cmd('aboutEdit','${k}')">${T('Edit','编辑')}</button></div>`;
+  const rows=(list,label)=>`${a[list].length?`<div class="list">${a[list].map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:48px;padding:10px 14px" onclick="APP.cmd('aboutRow','${list}',${i})">
+        <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(label(r))||'—'}</span>
+        <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`).join('')}</div>`:''}`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${ABOUT_IMG.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(ABOUT_IMG.err)}</div>`:''}
+    ${aboutPicCard('hero_image_url',T('Top of the page','图片'),T('No image — the page starts at the text.','暂无图片'))}
+    ${sec('manifesto',pick('manifesto_en','manifesto_cn').replace(/\*\*/g,''))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${T('Stat strip','数据条')}</div>
+      ${rows('stats',r=>[LANG==='en'?(r.value_en||r.value_cn):(r.value_cn||r.value_en),LANG==='en'?(r.label_en||r.label_cn):(r.label_cn||r.label_en)].filter(Boolean).join(' · '))}
+      ${a.stats.length<ABOUT_MAX_STATS?`<button class="btn2" style="width:100%" onclick="APP.cmd('aboutAddRow','stats')">${T('+ Add stat','添加数据项')}</button>`:''}
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('The strip is hidden from customers while it is empty. Four cells is the most the page shows.','留空则隐藏数据条。')}</div></div>
+    ${sec('founder',[pick('founder_name_en','founder_name_cn'),pick('founder_title_en','founder_title_cn')].filter(Boolean).join(' · '))}
+    ${aboutPicCard('founder_photo_url',T('Photo','照片'),T('No photo — placeholder tile will show.','暂无照片 — 将显示占位图。'))}
+    ${sec('promise',pick('promise_kicker_en','promise_kicker_cn'))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">IN · 是</div>
+      ${rows('in_items',r=>LANG==='en'?(r.en||r.cn):(r.cn||r.en))}
+      <button class="btn2" style="width:100%" onclick="APP.cmd('aboutAddRow','in_items')">${T('+ Add IN item','添加「是」项')}</button>
+      <div class="eyebrow" style="margin-top:6px">OUT · 否</div>
+      ${rows('out_items',r=>LANG==='en'?(r.en||r.cn):(r.cn||r.en))}
+      <button class="btn2" style="width:100%" onclick="APP.cmd('aboutAddRow','out_items')">${T('+ Add OUT item','添加「否」项')}</button></div>
+    ${sec('signoff',[pick('outro_en','outro_cn'),pick('cta_en','cta_cn')].filter(Boolean).join(' · '))}
+    ${c&&c.auto?cfgFoot(c):''}
+  </div>`;
+}
+
+/* ── Mini-app copy (desktop: 05-marketing.js SNIPPETS / SNIP_CARD) ─────────
+   The short words on the mini app's fixed screens, each { en, cn } under its
+   copy.* key, saved as one card ('copy.snippets') with every snippet in the
+   catalogue's order — what the desktop sends. The catalogue (keys, labels,
+   hints, defaults) is the desktop's, copied; scripts/test_mobile_content_about_copy.js
+   holds the two equal. */
+const SNIPPETS=[
+  {group:'Cart · 购物车', items:[
+    {key:'copy.cart.kicker',label:'Kicker · 小标签',help:'Small caps label above the cart title. · 购物车标题上方的小写标签。',en:'YOUR BASKET',cn:'购物车'},
+    {key:'copy.cart.title',label:'Headline · 大标题',help:'Big serif title on the cart screen. · 购物车页面的大号衬线标题。',en:'Almost yours.',cn:'即将拥有。'},
+    {key:'copy.cart.empty',label:'Empty cart message · 空购物车提示',help:'Shown when the customer has no items in their cart. · 当顾客购物车内没有商品时显示。',en:'Your basket is empty — shop the garden →',cn:'购物车空空如也 — 去逛逛 →'},
+    {key:'copy.cart.checkout_btn',label:'Checkout button · 结账按钮',help:'Full-width button at the bottom of the cart. · 购物车底部的通栏按钮。',en:'CHECK OUT',cn:'结账'}]},
+  {group:'Checkout · 结账', items:[
+    {key:'copy.checkout.kicker',label:'Kicker · 小标签',help:'Small caps label above the checkout title. · 结账标题上方的小写标签。',en:'CHECKOUT · 结账',cn:'结账'},
+    {key:'copy.checkout.title',label:'Headline · 大标题',help:'Big serif title on the checkout screen. · 结账页面的大号衬线标题。',en:'Where & how.',cn:'送到何处？'},
+    {key:'copy.checkout.place_order_btn',label:'Place order button · 提交订单按钮',help:'Final order-placement button. · 最终下单按钮。',en:'PLACE ORDER →',cn:'提交订单 →'}]},
+  {group:'Product detail · 产品详情', items:[
+    {key:'copy.product.add_btn',label:'Add to basket button · 加入购物车按钮',help:'Sticky bottom button on the product page. · 商品页面底部的吸附按钮。',en:'ADD TO BASKET',cn:'加入购物车'},
+    {key:'copy.product.sold_out',label:'Sold-out badge · 售罄标签',help:'Shown over the photo when stock is exhausted. · 库存售罄时显示在图片上方。',en:'SOLD OUT',cn:'已售罄'}]},
+  {group:'Profile · 我的', items:[
+    {key:'copy.profile.greeting',label:'Greeting template · 问候语模板',help:'Big serif greeting at top of profile. Use {name} for the customer\'s nickname. · 个人页顶部的大号衬线问候语。用 {name} 代表顾客昵称。',en:'Hey, {name}.',cn:'你好，{name}。'},
+    {key:'copy.profile.kicker',label:'Kicker template · 小标签模板',help:'Small caps line above the greeting. Use {since} for join year, {level} for tier number. · 问候语上方的小写行。用 {since} 代表加入年份,{level} 代表等级编号。',en:'MEMBER SINCE {since} · LVL {level}',cn:'加入年份 {since} · 等级 {level}'}]},
+  {group:'Order tracking · 订单跟踪', items:[
+    {key:'copy.order.in_transit_title',label:'In-transit headline · 配送中标题',help:'Big title when order is dispatched. · 订单已发货时的大标题。',en:'On its way.',cn:'配送中。'},
+    {key:'copy.order.delivered_title',label:'Delivered headline · 已送达标题',help:'Big title when order is delivered. · 订单已送达时的大标题。',en:'Delivered.',cn:'已送达。'},
+    {key:'copy.order.help_link',label:'Help link · 帮助链接',help:'Small "Need help" link in the tracking footer. · 物流跟踪页脚的小号「需要帮助」链接。',en:'NEED HELP',cn:'需要帮助'}]},
+  {group:'Onboarding · 欢迎', items:[
+    {key:'copy.onboarding.skip_btn',label:'Skip button · 跳过按钮',help:'Onboarding skip button. · 引导页的跳过按钮。',en:'SKIP',cn:'跳过'},
+    {key:'copy.onboarding.next_btn',label:'Next button · 下一步按钮',help:'Onboarding next/continue button. · 引导页的下一步/继续按钮。',en:'NEXT →',cn:'下一步 →'},
+    {key:'copy.onboarding.done_btn',label:'Done button (last slide) · 完成按钮(最后一页)',help:'Final onboarding button to enter the app. · 进入应用的最后一个引导按钮。',en:'GET STARTED',cn:'开始使用'}]},
+];
+/* The catalogue's fused "English · 中文" words, one side at a time. */
+function snipSide(s){ const i=String(s).indexOf(' · '); return i<0?String(s):(LANG==='en'?String(s).slice(0,i):String(s).slice(i+3)); }
+let SNIP_D=null;   // key → {en, cn}
+const snipCard=()=>cfgCard('copy.snippets',{
+  read:()=>{ const out={}; SNIPPETS.forEach(g=>g.items.forEach(s=>{ out[s.key]={en:SNIP_D[s.key].en, cn:SNIP_D[s.key].cn}; })); return out; },
+  apply:b=>{ SNIPPETS.forEach(g=>g.items.forEach(s=>{ const v=b&&b[s.key];
+    if(v&&typeof v==='object'){ if('en' in v) SNIP_D[s.key].en=String(v.en==null?'':v.en); if('cn' in v) SNIP_D[s.key].cn=String(v.cn==null?'':v.cn); } })); },
+});
+function snipEnsure(){
+  if(SNIP_D||!state.cfg) return;
+  SNIP_D={};
+  SNIPPETS.forEach(g=>g.items.forEach(s=>{ const v=cfgGet(s.key,null);
+    SNIP_D[s.key]={en:(v&&typeof v==='object'&&'en' in v)?String(v.en==null?'':v.en):s.en, cn:(v&&typeof v==='object'&&'cn' in v)?String(v.cn==null?'':v.cn):s.cn}; }));
+  if(mCan(CONTENT_KEYS)) cfgCardStart(snipCard());
+}
+reg('snipEdit', key=>{
+  if(!SNIP_D||!SNIP_D[key]||!mCan(CONTENT_KEYS)) return;
+  let s=null; SNIPPETS.forEach(g=>g.items.forEach(x=>{ if(x.key===key) s=x; }));
+  cfgSheet(snipCard(), escAttr(snipSide(s.label)), escAttr(snipSide(s.help))+`<div class="num" style="font-size:12px;margin-top:6px;opacity:.8">${escAttr(s.key)}</div>`,
+    [{id:'en',label:'EN'},{id:'cn',label:'中'}], f=>SNIP_D[key][f], (f,v)=>{ SNIP_D[key][f]=v; });
+});
+function screenSnippets(){
+  if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  snipEnsure();
+  const canEdit=mCan(CONTENT_KEYS), c=CFG_CARD['copy.snippets'];
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T('Short text labels shown on fixed mini-app screens (cart, checkout, profile, order tracking, etc). Customers see one language at a time based on their WeChat preference — fill in both the English and the Chinese.',
+      '显示在小程序固定页面（购物车、结算、个人中心、订单追踪等）上的短文案标签。顾客会根据微信语言偏好一次只看到一种语言——请同时填写英文和中文。')}</div>
+    ${SNIPPETS.map(g=>`<div><div class="eyebrow" style="padding:2px 4px 8px">${escAttr(snipSide(g.group))}</div>
+      <div class="list">${g.items.map((s,i)=>{ const v=SNIP_D[s.key]; const now=LANG==='en'?(v.en||v.cn):(v.cn||v.en);
+        return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
+        <button class="row" style="min-height:56px;padding:12px 14px" ${canEdit?`onclick="APP.cmd('snipEdit','${s.key}')"`:'disabled'}>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <span style="font-size:13px;color:var(--text-secondary)">${escAttr(snipSide(s.label))}</span>
+            <span style="font-size:15px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(now)||'—'}</span></span>
+          ${canEdit?`<span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span>`:''}</button>`; }).join('')}</div></div>`).join('')}
+    ${canEdit&&c&&c.auto?cfgFoot(c):''}
+  </div>`;
+}
 
 /* ==========================================================================
    FAQ & help (desktop: 07-content-billing.js)
@@ -13485,6 +13711,8 @@ const SUBS={
   about:{title:['About page','关于页'],render:()=>{
     const c=cfgGet('about.content',null);
     if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    // §325 M4 — written here too: the desktop's sections on the desktop's card.
+    if(mCan(CONTENT_KEYS)){ aboutEnsure(); if(ABOUT_D) return screenAboutEdit(); }
     if(!c) return nothingYet(T('Nothing written yet','还没有内容'),
       T('The about page is written on desktop. What you publish shows here and in the mini app.','关于页在电脑端撰写，发布后会显示在这里和小程序中。'));
     const pick=(en,cn)=>T(String(c&&c[en]||''),String(c&&c[cn]||c&&c[en]||''));
@@ -13556,6 +13784,8 @@ const SUBS={
     ${canEdit&&CFG_CARD.legal&&CFG_CARD.legal.auto?cfgFoot(CFG_CARD.legal):''}</div>`;
   }},
   faq:{title:['FAQ & help','常见问题'],render:()=>screenFaq()},
+  /* §325 M4 — the desktop's Mini-app copy (Snippets) tab. */
+  snippets:{title:['Mini-app copy','小程序文案'],render:()=>screenSnippets()},
   /* No `quickstock` screen. It was a menu row that led to a signpost — its
      whole content was "Counted in Products, open a product and set the count" —
      which is the same small lie as a control wired to nothing: you tap it
@@ -31456,7 +31686,7 @@ const ROUTE_CAP={
   // More → Loyalty & Wallet.
   membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit',
   // More → Content.
-  editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view',
+  editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view', snippets:'content:view',
   // Settings, and the screens reached from inside it or from the Products strip.
   settings:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   setup:['settings:shop','stores:view'],
