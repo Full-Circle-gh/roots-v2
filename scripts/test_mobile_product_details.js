@@ -119,11 +119,11 @@ function liftReg(name) {
   return M.slice(at + 1, skipBalanced(M, open)) + ';';
 }
 
-const FNS = ['E', 'mCan', 'canRoute', 'prodCanEdit', 'pcMoney', 'prodLowThreshold', 'nothingYet', 'footBar',
+const FNS = ['E', 'pill', 'mCan', 'canRoute', 'prodCanEdit', 'pcMoney', 'prodLowThreshold', 'nothingYet', 'footBar',
   'peBadgeOf', 'peRteClean', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
   'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'peEntryRow', 'pePopped',
-  'prodRecordsDrop'];
-const CONSTS = ['MCAN_MONEY_ONLY', 'ROUTE_CAP', 'money', 'cfgGet', 'PE_FACTS', 'PE_FREE_OF', 'PE_FREE_ALIAS', 'PE_BADGES',
+  'prodRecordsDrop', 'loadPeImages', 'pePhotosCard'];
+const CONSTS = ['PILL', 'KIND2PILL', 'PE_MAX_PHOTOS', 'MCAN_MONEY_ONLY', 'ROUTE_CAP', 'money', 'cfgGet', 'PE_FACTS', 'PE_FREE_OF', 'PE_FREE_ALIAS', 'PE_BADGES',
   'pePlainToHtml', 'peRichForEdit'];
 const REGS = ['peOpen', 'peField', 'peFact', 'peFlag', 'peShip', 'peFree', 'peDesc', 'peUndo'];
 const SRC = [...CONSTS.map(liftConst), 'let peAuto=null;', ...FNS.map(liftFn), ...REGS.map(liftReg)].join('\n');
@@ -159,6 +159,10 @@ function mk(opts = {}) {
     navTabs: () => [],
     api: (p) => { calls.reads.push(p); const v = (opts.serve || (() => ({})))(p);
       return v instanceof Error ? Promise.reject(v) : Promise.resolve(v); },
+    // The gallery read (§325 PD6) has its own list; this suite's reads are the
+    // row and the build list. test_mobile_product_photos.js holds the gallery.
+    apiRaw: (p) => { (calls.rawReads = calls.rawReads || []).push(p);
+      return Promise.resolve({ success: true, images: [], inherited: false }); },
     apiWrite: (p, body, method) => new Promise((res, rej) => {
       calls.writes.push({ p, body: JSON.parse(JSON.stringify(body)), method, res, rej });
     }),
