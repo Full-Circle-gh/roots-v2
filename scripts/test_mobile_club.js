@@ -61,7 +61,14 @@ const CASES = [
     ['perks are listed',                 `txt('content').includes('Birthday gift')`],
     ['a rung with no perks says so',     `txt('content').includes('No perks yet')`],
     ['rungs climb in order',             `txt('content').indexOf('Seed') < txt('content').indexOf('Tree')`],
-    ['editing is named as a desktop job', `txt('content').includes('edited on desktop')`],
+    // §325 M11 — the ladder is edited on the phone now (Edit tier, then Save
+    // tiers); the old "edited on desktop" note stopped being true.
+    ['the old "edited on desktop" note is gone', `!txt('content').includes('edited on desktop')`],
+  ]],
+  // The editor is money (§279.2), so it is drawn only once the account's keys
+  // are known and include the loyalty family.
+  ['the ladder is edited here, with the loyalty keys', `state.caps=['loyalty:view'];state.capsLoaded=true;` + CLUB, [
+    ['Edit tier is offered',       `txt('content').includes('Edit tier')`],
   ]],
   ['no ladder yet', ON + `state.tiersTried=true; state.tiers=[]; APP.cmd('push','membership');`, [
     ['says so',       `txt('content').includes('No tiers yet')`],

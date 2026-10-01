@@ -1,5 +1,17 @@
 # Tacet delivery vocabulary — locked
 
+**v1.300 · 2026-09-30 · §411 FLASH SALES ON THE PHONE — NOTHING COMPOSED; TWO DESKTOP LINES WITH A HALF IN ONE LANGUAGE ARE SPLIT, AND EVERYTHING ELSE IS COPIED WHOLE.** See *Flash sales run from the phone (§411)*.
+
+**v1.299 · 2026-09-30 · §410 COUPON WIZARD ON THE PHONE — NO NEW WORDS; THE DESKTOP'S BILINGUAL LINES SPLIT INTO THEIR HALVES, AND FOUR CHINESE LINES ASSEMBLED FROM THE DESKTOP'S OWN PIECES.** See *A coupon made on the phone (§410)*.
+
+**v1.298 · 2026-09-30 · §409 ONE COUPON ON THE PHONE — ONE STRING ASSEMBLED FROM THE DESKTOP'S OWN PIECES; EVERYTHING ELSE COPIED WHOLE.** See *Coupons changed and given out on the phone (§409)*.
+
+**v1.297 · 2026-09-30 · §408 POP-UPS ON THE PHONE — ONE STRING COMPOSED (INTERNAL NAME · 内部名称); EVERYTHING ELSE COPIED WHOLE.** See *Pop-ups written on the phone (§408)*.
+
+**v1.296 · 2026-09-30 · §407 LOYALTY MONEY ON THE PHONE — NOTHING COMPOSED; THREE LABELS LIFTED FROM DESKTOP PAIRS.** See *The loyalty programme's money on the phone (§407)*.
+
+**v1.295 · 2026-09-30 · §406 REVIEWS ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *Reviews on the phone (§406)*.
+
 **v1.294 · 2026-09-30 · §405 THE AFFILIATE PROGRAM ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *The affiliate program on the phone (§405)*.
 
 **v1.293 · 2026-09-30 · §404 THE MANUAL-ALIPAY CARD'S FAILED READ — 1 STRING COMPOSED BY CLAUDE, 1 COPIED.** See *The manual-Alipay card that did not load (§404)*.
@@ -12720,3 +12732,304 @@ Copied: `Try again · 重试` (live throughout the desktop).
 - **Leaving with unsaved changes** uses the desktop voting editor's `Leave
   without saving? The changes on this page are lost. · 不保存就离开?此页面的改动会丢失。`
   and `Leave · 离开`.
+
+## Reviews on the phone (§406)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1):
+`public/m.html`, the new Reviews screen and its door in the Inbox.
+
+- **The list** (desktop rvwRenderHead, rvwRenderChips, rvwRenderList,
+  rvwRow, rvwRenderPager, rvwDismissAll, rvwUndismiss, replyReview,
+  toggleReview, deleteReview): the status line's parts, `Waiting on a reply ·
+  待回复`, `Mark all N as handled · 将全部 N 条标记为已处理` and its confirm,
+  `Mark as handled · 标记为已处理`, the N-marked and queue-changed lines,
+  `N seeded reviews · 种子评价 N 条`, the four chips, `Search reviews and
+  products… · 搜索评价与商品…`, `Filter reviews by rating · 按评分筛选评价`,
+  `Any rating · 任意评分` and the five star counts, `Low rated · 低评分`,
+  `Seeded · 种子`, `No comment — tags only`, `No comment`, `Your reply ·
+  商家回复`, `Handled — no reply sent · 已处理 — 未回复`, `Put back · 放回待处理`,
+  `Back in the queue · 已放回待处理`, `Reply`, `Edit reply`, `Hide`, `Restore`,
+  `Remove`, `Public reply · 公开回复` and its line, `Save reply · 保存回复`,
+  `Reply saved`, `Reply removed`, `Restored`, `Hidden`, `Remove this seeded
+  review for good?`, `Remove review`, `Removed`, both group headings, the
+  empty lines, `Previous`, `Next`, `N–M of T · T 条中的 N–M`, `Could not load
+  reviews · 无法加载评价`, `That did not save. Nothing has changed. ·
+  没有保存成功。数据没有变化。`.
+- **Set up** (the tab's `#rvw-set-*` groups and their handlers): `Set up ·
+  设置`, `Read rarely, changed rarely. · 很少查看,很少更改。`, every label, line
+  and range message of Reward reviewers and Auto top-up, the top-up note in
+  its two language blocks, the turn-on confirm, `Run now · 立即运行`, the
+  estimate lines, `Added N reviews`, `Nothing to add`, `Saved · 已保存`, `Save
+  failed · 保存失败`, `Failed · 失败`; the tags' `Review tags · 评价标签`,
+  `English label · 英文名称`, `Chinese label · 中文标签`, `Colour · 颜色`, `+ Add
+  tag · 添加标签`, the three hold sentences, and the remove question.
+- **The phone's own**: `Reviews · 评价` and `Inbox · 消息` (route and back),
+  `Hide this review?` and its line (the Inbox's), `Edit`, `Save`, `Saving…`,
+  `Loading…`, `Remove · 删除` (for the tag remove button; the desktop's is
+  English only).
+
+## The loyalty programme's money on the phone (§407)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1):
+`public/m.html`, Membership, Top-up and their three new screens.
+
+- **How points work** (desktop `#tab-membership` rules, mpOutcome): `How points
+  work · 积分规则`, `Customers earn · 顾客获得`, `point for every ¥ · 积分,每消费 ¥`
+  (the shop's currency in place of ¥), `of · 的`, `what they pay · 实付金额`,
+  `order value before discounts · 折前金额`, `Each point is worth ¥ · 每积分价值 ¥`,
+  `at checkout. · (结账时抵扣)。`, `Points expire · 积分有效期`, `months after
+  they're earned. · 个月。`, `0 = never expire · 0 为永不过期`, `Points can pay for
+  shipping · 积分可抵运费`, `Off — shipping is always paid in cash ·
+  关闭时运费以现金支付`, the worked-example sentences, the short-expiry warning,
+  `Applies to new orders only. · 仅对新订单生效。`, `Save points rules ·
+  保存积分规则`, `Saved · 已保存`, `Save failed · 保存失败`. The rules' own number
+  boxes are labelled by the words in front of them (the desktop's labels are
+  English only).
+- **The tiers** (renderRctierCards, renderRctierEditor, saveRctiers):
+  `Edit tier · 编辑等级`, `Key · 标识`, `set automatically from the English name. ·
+  由英文名称自动生成。`, `Name (English) · 名称(英文)`, `Name (中文) · 名称(中文)`,
+  `Reached at lifetime spend · 达到门槛(累计消费)`, `Points multiplier · 积分倍率`,
+  `1.0 = base rate · 1.0 = 基础速率`, both perks labels, `Done · 完成`, `Remove tier
+  · 删除等级` and its question, `+ Add tier · 添加等级`, the tiers' intro and
+  sort note, `No tiers yet — add one to start the ladder.`, the four holds,
+  `Tiers saved · 已保存`.
+- **Top-up packages** (the `#tab-topup` table and its handlers): `Top-up
+  packages · 充值套餐`, `New top-up package · 新建充值套餐`, `Amount ¥ · 金额`,
+  `Bonus points · 赠送积分`, `Amount required · 请填写金额`, `Add · 添加`,
+  `Package added · 套餐已添加`, `Delete ¥N top-up package? · 删除 ¥N 充值套餐？`,
+  `Package deleted · 套餐已删除`.
+- **Lifted, not composed: three labels.**
+  - `Title · EN · 标题 · 英文`, split into its two sides.
+  - `Title · 中 · 标题(中文)`: the English side is the desktop field label and
+    the Chinese side is the desktop column header for the same field.
+  - `No top-up packages yet · 暂无充值套餐`: the desktop's empty line with
+    "— add one above" dropped from both halves, because the phone's button is
+    below the list.
+- **The phone's own**: `Membership · 会员积分`, `Top-up · 充值`, `Edit · 编辑`,
+  `Save · 保存`, `Saving… · 保存中…`, `points · 积分`, `no bonus · 无赠送`, `Could
+  not load this. · 无法加载。`, the leave question from the voting editor.
+
+## Pop-ups written on the phone (§408)
+
+**Operator register only (Rule 1):** `public/m.html`, the Pop-ups screen and
+its editor.
+
+- **Composed, 2026-10-01, by Claude: `Internal name · 内部名称`.** The desktop
+  label is English only ("Internal name") with a Chinese hint beside it (`— admin
+  only, never shown to customers · 仅管理员可见`), and the hint stays under the
+  label. Candidates rejected: `Name · 名称`, because it reads as the name
+  customers see, which is the one thing this field is not; and the tier
+  editor's `Name (English) · 名称(英文)`, which names a language this field
+  does not have. 内部名称 is the plain term for an internal-only name.
+- **Copied whole** from the desktop editor (`#pu-editor-bg`, PAGE_KEYS,
+  ctaTargetLabel and the handlers):
+  - Field labels and their hints: `— admin only, never shown to customers ·
+    仅管理员可见`, `The message · 内容`, `— optional · 可选`, `Headline · 标题`
+    and its language hint, `— optional, one or two short lines · 可选,一两句`,
+    `What the button opens · 按钮打开的内容`.
+  - The picture: `No image yet — text-only pop-up.`, `Add or replace an image ·
+    添加或替换图片`, `Remove image · 移除图片`.
+  - The button's destinations: every option, as the desktop shows them (three
+    "Opens CMS page · …" options are English only there too); `Type to search
+    products by name or SKU… · 按名称或货号搜索`, `(no matches)`, `(no categories
+    yet)`, `No destination — pop-up just dismisses.`, `Product · 商品`,
+    `Category · 分类`.
+  - The rules: `The rules · 规则`, `Where · 位置` and its hint, `Appears ·
+    触发时机` and both options, `Delay in seconds · 延时(秒)`, `How often · 频率`
+    and its four options, `Start · 开始`, `End · 结束`, `Leave blank to run until
+    you turn it off.`, `Live — show this to customers now · 启用 — 立即向顾客显示`,
+    `Closable — show a close button · 可关闭 — 显示关闭按钮`.
+  - The actions and their messages: `Pick at least one page`, `Pop-up saved`,
+    `Duplicate · 复制`, `Duplicated · edit the copy · 已复制 · 编辑副本`,
+    `(copy) · (副本)`, `Delete this pop-up? · 删除此弹窗?`, `Pop-up deleted`,
+    `New pop-up · 新建弹窗`, `Edit pop-up · 编辑弹窗`, `Pop-up · 弹窗`,
+    `Uploaded`, `Upload failed`, `Save failed`.
+  - The empty list: `Add one when you have something worth interrupting for —
+    a promo, a review nudge, a holiday notice.`
+- **Live phone or editor pairs:** `Message · 消息` (the broadcast composer's),
+  `Button text · 按钮文字` (cms.html's), `Picture · 图片`, `Edit`, `Save`,
+  `Delete`, `Working…`, `Uploading…`, `Loading…`, the leave question, and §337's
+  stale sentence.
+
+## Coupons changed and given out on the phone (§409)
+
+**Operator register only (Rule 1):** `public/m.html`, the coupon screen and the
+grant screen.
+
+- **Composed (assembled), 2026-10-01, by Claude: the grant-to-all toast,
+  `Granted to {n} customer(s) ({s} already had it) · 已发放给 {n} 位顾客({s} 已有,跳过)`.**
+  The desktop prints one bilingual line for both languages:
+  `Granted to · 已发放给 {n} customers / 位顾客 ({s} already had it · 已有,跳过)`.
+  The phone shows one language at a time, so the line is split into its two
+  halves using only the desktop's own words. Nothing is new except the order.
+  Rejected: printing the desktop's mixed line as is, because the phone shows
+  one language at a time everywhere else.
+- **Copied whole from the desktop drawer** (`vchDrawerRender`, `vchSetPerLimit`,
+  `vchSetExpiry`, `vchSaveLabel`, `vchTurn`, `vchTakeBack`, `vchLoadHolders`):
+  - Status: `Running · 生效中`, `Ended · 已到期`, `Off · 已停用`.
+  - The ended note: `This coupon ended. Set a new end date below to run it again.`
+  - The facts: `Gives · 优惠`, `On orders over · 最低订单金额`, `Any order · 无门槛`,
+    `Used · 已使用`, `Per customer · 每人限用`, `Ends · 截止`.
+  - The per-customer choices: `No limit · 不限`, `Once · 1 次`, `{n} times · {n} 次`.
+  - "How customers get it": `How customers get it · 顾客怎么获得`, the three
+    switches and their descriptions, including the three "Apply it for them"
+    variants.
+  - The label: `What customers see · 顾客看到的文字`, the public-label warning,
+    both placeholders, `Save label · 保存标签`.
+  - Giving it out: `Give it out · 发放`, the three grant lines,
+    `Give to a customer · 发放给顾客`, `(no name) · (未填写昵称)`,
+    `Take it back · 收回`, `See all {n} · 查看全部 {n}`,
+    `Couldn’t load who has it: · 无法加载持有名单:`.
+  - The confirms: `Take this coupon back?`, its body, and
+    `Give it back to customers who already used it?`, its body,
+    `Yes, let them use it again · 确认`.
+  - On and off: `Turn off · 停用`, `Turn on · 开启`, the history line.
+  - Every toast: `End date set`, `No end date — runs until turned off`,
+    the three per-customer toasts, `Label saved`, `On — customers can use it now`,
+    `Turned off`, `Taken back`, `It already ended — set a new end date first`,
+    `Failed: · 失败:`.
+- **Copied whole from the desktop grant dialog** (`#grant-modal-bg`,
+  `openGrantModal` and its handlers):
+  - The title and its line: `Grant coupon · 发放优惠券`,
+    `Recipients see this in their wallet & checkout, no code needed.`
+  - The fields: `Note (optional, internal only) · 备注(可选,仅内部可见)`,
+    `Grant to every customer · 发放给所有顾客` and its line,
+    `Grant to all · 全部发放`, `Or grant to a specific customer · 或发放给指定顾客`,
+    `Search by name, phone, or openid… · 搜索姓名、电话或 openid…`.
+  - The search: `Searching… · 搜索中…`, `No customers match. · 无匹配顾客。`,
+    `Grant · 发放`.
+  - The grants list: `Already granted · 已发放`, `Has it · 已拥有`,
+    `Used · 已使用`, `Unused · 未使用`, `Revoke · 撤销`,
+    `No grants yet. · 暂无发放记录。`.
+  - The confirms: `Grant this coupon to every customer?`,
+    `Existing grants are kept.`, `Revoke this grant? · 撤销此优惠券?`.
+  - The toasts: `Granted to customer #{id} · 已发放给顾客 #{id}`,
+    `Customer already had this coupon · 顾客已拥有此优惠券`, `Failed · 失败`.
+  - The desktop's English-only placeholder for the note
+    (`e.g. Goodwill credit for late delivery`) is left out rather than
+    given a Chinese half.
+- **Live phone pairs:**
+  - `Coupons · 优惠券`, `Nothing here. · 这里没有优惠券。`, `Loading… · 加载中…`,
+    `Saving… · 保存中…`, `Try again · 重试`;
+  - `On · 已启用` and `Off · 已关闭` (a switch the operator may not change);
+  - `no end date · 长期有效`;
+  - `Leave without saving? The changes on this page are lost. · 不保存就离开?此页面的改动会丢失。`
+    and `Leave · 离开`.
+
+## A coupon made on the phone (§410)
+
+**Operator register only (Rule 1):** `public/m.html`, the coupon wizard.
+
+The desktop wizard prints most of its lines as one `English · 中文` string.
+The phone shows one language at a time, so each was split at its ` · `. The
+lines below needed more than a split. Each was **assembled, 2026-10-01, by
+Claude**, using only words the desktop already prints.
+
+- **Who gets it, on the deal step** (vwWhoPlain). The desktop puts the bold
+  name in both languages and then the rest:
+  `<b>New customers · 新顾客</b> get it automatically when they join. · 加入时自动获得。`
+  The phone gives `<b>新顾客</b>加入时自动获得。`, and the same for the other
+  three paths.
+- **The recap** (vwRecapSentence). Its pieces are bilingual, but the verb
+  ("get") and the money ("¥10 off") are English only.
+  - The Chinese recap joins the desktop's own Chinese pieces with a colon
+    instead of a verb:
+    `<b>小程序内任何人</b>:<b>立减 ¥10</b> — 顾客自行领取,每人一次,直到你停用。`
+  - The money is the list's live pair (`立减 ¥10`, `10% 折扣`, `免运费`).
+  - Rejected: composing a verb (获得). The colon avoids minting one.
+- **Total limit** (vwRulesHtml). The desktop's sentence is
+  `Only <input> can be used in total. · 总数上限。`. The phone keeps the English
+  around the field and puts `总数上限` before it in Chinese.
+- **Per customer, on the small print.** The desktop's sentence is
+  `Each customer can use it <b>once · 一次</b>.`, and it has no Chinese
+  sentence. Restructured to the drawer's live pair `Per customer · 每人限用`
+  and its value (`Once · 1 次`, `{n} times · {n} 次`), so no Chinese sentence
+  had to be written.
+- **The ticket's big line** is the list's live `vchGives` pair, not the
+  desktop's `FREE` (English only) plus `shipping · 免运`.
+
+**Copied whole, split at ` · `:**
+- the step titles;
+- the five starting points and `Start from · 从以下开始`;
+- the three kinds and their lines;
+- `How much do they save? · 优惠多少?`;
+- the four paths and their lines, and `Also show it on the home page?` with
+  `No · 否` / `Yes · 是`;
+- `Change · 更改`;
+- every small-print line: minimum, the four end chips, the end sentences,
+  `No limit · 不限`, `Set a limit · 设上限`, `Set a minimum · 设最低金额`,
+  `Any order · 任意`, and the good-defaults line;
+- the ticket's condition and who/per/end pieces;
+- `What the customer sees · 顾客看到的`;
+- every heads-up note;
+- the code and label fields and their hints;
+- `Back · 返回`, `Next · 下一步`, `Save as draft · 存为草稿`, `Turn it on · 开启`;
+- every check, failure and toast;
+- `New coupon · 新建优惠券`;
+- the Coupons empty line: `Money off for your customers — typed as a code,
+  picked up in the app, or applied for them. · 给顾客的优惠 — 输码使用、在小程序领取、或结账自动抵扣。`
+  (the desktop Coupons page).
+
+**Customer-facing labels the wizard generates** (vwGenLabelEn/Cn) are copied
+exactly: `Free shipping`, `{n}% off`, `{money} off`, ` your first order`,
+`免运费`, `{n}% 折扣`, `立减 {money}`, `首单`.
+
+**Live phone pairs:**
+- `Coupons · 优惠券`, `Nothing here. · 这里没有优惠券。`, `Saving… · 保存中…`;
+- `On orders over · 最低订单金额` (the M13 coupon screen);
+- the leave confirm.
+
+## Flash sales run from the phone (§411)
+
+**Operator register only (Rule 1):** `public/m.html`, the Flash sales screen
+and its composer.
+
+- **Split, 2026-10-01, by Claude, using only the desktop's words:**
+  - **The price help.** The desktop builds it from mixed pieces:
+    `cuT('', '省 ') + <b>N% off</b> + cuT('', '· 原价 ') + money`.
+    - English: `<b>N% off</b> ¥X`, the desktop's English exactly.
+    - Chinese: `省 <b>N%</b> · 原价 ¥X`. The desktop's Chinese shows the
+      English word "off" inside the bold; the phone drops it, keeping only
+      the desktop's Chinese pieces.
+  - **The cap line in the preview.** The desktop prints
+    `cuT('Limited to ', '限 ') + cap + cuT('', ' 份')`. The phone prints the
+    same pieces: `Limited to N` / `限 N 份`.
+- **Copied whole from the desktop tab** (fsRenderTimeline, fsHeroTile,
+  fsTableRow, fsEndNow, and the composer fsc*):
+  - The list:
+    - `Live now · 进行中`, `running · 进行中`;
+    - `No sale is live this moment. Scheduled ones start on their own.`;
+    - `Scheduled & recent · 已排期与最近`, `scheduled · 已排期`;
+    - `End early · 提前结束`, `Edit · 编辑`, `Run again · 再来一次`;
+    - `Nothing's on the clock · 暂无秒杀` and its line;
+    - `New flash sale · 新建秒杀`.
+  - The confirms: `End the flash sale on "{name}" now?`, its body,
+    `End sale · 结束秒杀`, `Cancel the flash sale on "{name}"?`, its body,
+    `Cancel sale · 取消秒杀`.
+  - The composer:
+    - `Editing · 编辑中`, `Product · 产品`, `Choose a product · 选择产品`;
+    - `Search by name or SKU…`, `Loading products… · 正在加载产品…`,
+      `No products match — try another search.`, `regular · 原价`,
+      `Regular · 原价`;
+    - `Price & cap · 价格与限量`, `{¥} price · {¥} 价格`, `No cap · 不限量`,
+      `stock cap · 库存上限`, `flash price · 秒杀价`,
+      `Must be lower than regular · 必须低于原价`;
+    - `Window · 时间`, `starts now · 现在开始`, `schedule it · 排期`,
+      `scheduled — · 排期 —`, `start now instead · 改为现在开始`;
+    - the five end chips, `Tomorrow 09:00 · 明天 09:00`, `Pick a time · 自定义`;
+    - `Pick an end time · 选择结束时间`, `Ends · 结束`, `today · 今天`,
+      `tomorrow · 明天`;
+    - `Keep coupons off this price · 秒杀价不叠加优惠券` and its line, and the
+      stacking warning.
+  - The preview:
+    - `What customers see · 顾客看到`, the empty-preview line,
+      `Flash · 秒杀`, `save · 省`;
+    - both "Reverts to…" lines.
+  - The buttons: `Start · 开启`, `Schedule · 排期`,
+    `Cancel this sale · 取消此活动`.
+  - Every check, refusal and toast (fscValidate, fscStart's map, fscCancelSale,
+    fsEndNow), and `Failed to load · 加载失败`.
+- **Live phone pairs:**
+  - `Flash sales · 秒杀`, `Saving… · 保存中…`, `Failed · 失败`;
+  - the existing card's own lines;
+  - the leave confirm.
