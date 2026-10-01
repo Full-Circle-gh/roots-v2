@@ -913,6 +913,14 @@ const state = {
   prodSub:'all', prodStore:'', catalogMode:'self',
   prodGrid:{tried:false,seq:0,ready:false,stores:[],qty:{}},
   prodHi:{tried:false,seq:0,data:null},
+  /* §325 PD2 — the product sheet's Sales card (GET /products/:id/sales?days=)
+     and its Version history list (GET /products/:id/versions), each keyed by
+     the size it was read for. */
+  prodSales:{pid:null,days:'30',data:null,err:null,seq:0},
+  prodVer:{pid:null,open:false,rows:null,err:null,seq:0},
+  /* §325 PD2 — shop menus, read-only: every location's shop (`list`), and the
+     one open (`id`) with its listings, its QR answer and the menu filter. */
+  shm:{list:null,err:null,tried:false,seq:0,id:null,oneFor:null,shop:null,rows:null,oneErr:null,oneSeq:0,qr:null,q:''},
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   /* Which later step of a delay case has its controls out, as `<shipment>:<index>`,
      or null. STATE RATHER THAN A DOM TOGGLE because this sheet repaints on the
@@ -1890,6 +1898,7 @@ reg('rqSearch', v=>{
  ['mPsupQ','mPsupClr','psupQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
+ ['mShmQ','mShmClr','shmQ'],
  ['mChlQ','mChlClr','chlQ'],
  ['mNlgQ','mNlgClr','nlgQ'],
  ['mElmCatQ','mElmCatClr','elmCatQ'],
@@ -3552,7 +3561,10 @@ reg('priceTyped', v=>{
   const p=DB.products.find(x=>x.sku===state.productSku);
   if(p&&p._id!=null) sheetPrice[p._id]=v;   // no render: it would eat the keystroke
 });
-reg('closeProduct', ()=>{ state.productSku=null; state.oosSku=null; render(); });
+/* §325 PD2 — closing the sheet lets its Sales card and version list go, so
+   the next open reads them fresh, as the desktop's pdOpen does. */
+function prodRecordsDrop(){ state.prodVer.open=false; state.prodSales.pid=null; state.prodSales.seq++; }
+reg('closeProduct', ()=>{ state.productSku=null; state.oosSku=null; prodRecordsDrop(); render(); });
 reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; loadCustomers(); });
 /* THE THREE MULTI-SELECT ROWS, one toggle. 'all' is the row's clear — it empties
@@ -6651,6 +6663,10 @@ const MORE_GROUPS=[
     ['till','calculator','Counter till','前台收银','/till']]},
   {h:['Money and numbers','营收与数据'],rows:[
     ['sales','store','Sales','销售'],
+    /* §325 PD2 — the shop menus (desktop 28-shops.js), whose desktop door is
+       the Sales board's location card. A row of its own, beside Sales, because
+       the board opens for five keys and the phone's Sales for one. */
+    ['shopmenus','qr-code','Shop menu','门店商品'],
     ['trend','trending-up','Trend','趋势'],
     /* §300 F1 — the desktop's Finance tab, read-only for now. Beside Sales and
        Trend because it is the same kind of question at a longer reach. */
@@ -14143,6 +14159,170 @@ const SUBS={
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
 SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
+/* ==========================================================================
+   §325 PD2 — SHOP MENUS, READ-ONLY (desktop: retail-admin/28-shops.js)
+   --------------------------------------------------------------------------
+   The phone had no shop menu at all. This is the desktop's read half: every
+   location with its shop (GET /shops), and one shop's record — its public
+   code, its QR with the address a scan opens, and its listings with price,
+   kind and whether each is available (GET /shops/:id, GET /shops/:id/qr,
+   GET /shops/:id/qr.png). The daily edits (PD4) and the structure (PD13) come
+   in their own steps; nothing on these two screens writes.
+
+   THE DOOR. On the desktop it is the Sales board's location card, and the
+   board opens for any of five keys (TAB_CAP.sales) — so a Meituan-only
+   operator reaches it. The phone's Sales screen opens for dashboard:view
+   alone, so a door there would shut that operator out. A More row beside
+   Sales, gated on the desktop board's own any-of, is what lets every account
+   that reaches the desktop's page reach this one.
+
+   EVERY STRING IS THE DESKTOP SCREEN'S OWN, and so is its one omission: the
+   public code is shown unlabelled, because no live Chinese source exists for
+   "shop code" (28-shops.js's header). */
+function shmName(en,cn){ en=en||''; cn=cn||''; return (en||cn)?T(en||cn,cn||en):''; }
+function shmLocName(l){ return l?shmName(l.name_en||l.code,l.name_cn||l.code):''; }
+function loadShopMenus(force){
+  const s=state.shm;
+  if(s.tried&&!force) return;
+  s.tried=true; s.err=null;
+  const seq=++s.seq;
+  api('/shops').then(rows=>{
+    if(seq!==s.seq) return;
+    s.list=Array.isArray(rows)?rows:[]; render();
+  }).catch(e=>{
+    if(seq!==s.seq||String(e.message)==='auth') return;
+    s.list=null; s.err=E('Load failed','加载失败'); render();
+  });
+}
+/* One shop's record, and the address its QR opens — two reads, because the
+   desktop makes them as two: a tenant with no public domain still has a menu,
+   and its QR answer (`url: null`) must not take the listings down with it. */
+function loadShopMenu(force){
+  const s=state.shm, id=s.id;
+  if(id==null) return;
+  if(s.oneFor===id&&!force) return;
+  s.oneFor=id; s.oneErr=null; s.qr=null;
+  if(!force){ s.shop=null; s.rows=null; }
+  const seq=++s.oneSeq;
+  api('/shops/'+id).then(d=>{
+    if(seq!==s.oneSeq) return;
+    s.shop=(d&&d.shop)||null; s.rows=Array.isArray(d&&d.listings)?d.listings:[];
+    render();
+    if(s.shop&&s.shop.is_active) api('/shops/'+id+'/qr').then(q=>{
+      if(seq!==s.oneSeq) return;
+      s.qr={url:(q&&q.url)||null}; render();
+    }).catch(()=>{});
+  }).catch(e=>{
+    if(seq!==s.oneSeq||String(e.message)==='auth') return;
+    s.shop=null; s.rows=null; s.oneErr=E('Load failed','加载失败'); render();
+  });
+}
+function shmErrBox(msg,cmd){
+  return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${msg}</span></div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('${cmd}')">${T('Try again','重试')}</button></div>`;
+}
+const shmLoading=()=>`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+/* Every location, the Sales board's cards as a list: a location with no shop
+   says so in the board's own word and does not open (there is nothing to read
+   until one is set up, which is PD13's); an inactive shop wears the desktop's
+   Inactive pill; an active one counts what it lists. */
+function screenShopMenus(){
+  loadShopMenus();
+  const s=state.shm;
+  if(s.err) return shmErrBox(s.err,'shmRetry');
+  if(!s.list) return shmLoading();
+  if(!s.list.length) return nothingYet(T('No stores','没有门店'),'');
+  return `<div style="padding:14px 16px 24px"><div class="list">${s.list.map((x,i)=>{
+    const l=x.location||{}, sh=x.shop;
+    const n=sh?Number(sh.listing_count||0):0;
+    const sub=!sh ? T('Not set up','未开通') : n+' '+T(n===1?'product':'products','件商品');
+    const pillHtml=sh&&!sh.is_active?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Inactive','已停用')}</span>`:'';
+    const inner=`<span class="rowico">${ic('qr-code',18)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(shmLocName(l))}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(sub)}</span></span>
+      ${pillHtml}`;
+    return `${i?'<div class="sep"></div>':''}${sh
+      ? `<button class="row" onclick="APP.cmd('shmOpen',${Number(sh.id)})">${inner}<span style="color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span></button>`
+      : `<div class="row" style="cursor:default">${inner}</div>`}`;
+  }).join('')}</div></div>`;
+}
+/* A listing's name and, for one size of a family, that size — prodName's rule
+   in 28-shops.js: each language falls back to the other. */
+function shmProdName(r){
+  const size=String(T(r.variant_label||r.variant_label_cn||'',r.variant_label_cn||r.variant_label||'')||'').trim();
+  return escAttr(shmName(r.name_en,r.name_cn))+(size?` <span style="color:var(--text-secondary)">· ${escAttr(size)}</span>`:'');
+}
+/* The desktop's menu filter: name in either language, the size, or the SKU —
+   what the row shows. Local, over the listings already held. */
+function shmShown(){
+  const q=String(state.shm.q||'').trim().toLowerCase();
+  const rows=state.shm.rows||[];
+  if(!q) return rows;
+  return rows.filter(r=>[r.name_en,r.name_cn,r.variant_label,r.variant_label_cn,r.sku].map(v=>String(v||'')).join(' ').toLowerCase().indexOf(q)>=0);
+}
+function shmListHtml(){
+  const s=state.shm, rows=s.rows||[];
+  if(!rows.length) return `<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No products yet','还没有商品')}</div>`;
+  const list=shmShown();
+  const count=String(s.q||'').trim()?`<div class="num" style="padding:0 2px 8px;font-size:12.5px;color:var(--text-secondary);text-align:right">${list.length} / ${rows.length}</div>`:'';
+  if(!list.length) return count+`<div style="padding:34px 16px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('No products match this filter','没有匹配此筛选条件的产品')}</div>`;
+  return count+`<div class="list">${list.map((r,i)=>{
+    const on=Number(r.is_available)===1;
+    return `${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+      <span style="display:flex;flex-direction:column;min-width:0;gap:3px">
+        <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shmProdName(r)}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr([r.sku,r.fulfilment_mode==='made_here'?T('Made here','现做'):T('Stocked','备货')].filter(Boolean).join(' · '))}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none">
+        <span class="num" style="font-size:15px;font-weight:500">${money(CUR,r.price)}</span>
+        ${on?pill('on',T('Available','有货')):pill('off',T('Sold out','售罄'))}</span></div>`;
+  }).join('')}</div>`;
+}
+/* The record: the location, the unlabelled code, the QR with the address it
+   opens (or the reason there is none), Download, then the listings under the
+   desktop's filter. */
+function screenShopMenu(){
+  loadShopMenu();
+  const s=state.shm;
+  if(s.oneErr) return shmErrBox(s.oneErr,'shmOneRetry');
+  if(!s.shop) return shmLoading();
+  const sh=s.shop, id=Number(sh.id);
+  const loc=((s.list||[]).find(x=>x.shop&&Number(x.shop.id)===id)||{}).location;
+  const qrDead=s.qr&&!s.qr.url;
+  const qr=sh.is_active?`<div class="card" style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px">
+      <div class="eyebrow" style="align-self:flex-start">${T('QR code','二维码')}</div>
+      ${qrDead?'':`<img alt="" src="${escAttr(API+'/shops/'+id+'/qr.png?v='+encodeURIComponent(sh.updated_at||''))}" style="width:180px;height:180px;image-rendering:pixelated" onerror="this.style.display='none'">`}
+      ${s.qr?`<div class="num" style="font-size:12.5px;text-align:center;word-break:break-all;color:${qrDead?'var(--amber-ink)':'var(--text-secondary)'}">${qrDead?T('QR unavailable','二维码不可用'):escAttr(s.qr.url)}</div>`:''}
+      ${qrDead?'':`<a class="btn2" style="width:auto;padding:0 20px;gap:6px;text-decoration:none" href="${escAttr(API+'/shops/'+id+'/qr.png?download=1&scale=20')}" download="shop-${escAttr(sh.public_code)}.png">${ic('download',16)}${T('Download','下载')}</a>`}
+    </div>`:'';
+  const filter=(s.rows||[]).length?`<div style="padding:0 0 10px">${searchBox(`<input id="mShmQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}"
+      placeholder="${T('Search by name or SKU…','按名称或货号搜索…')}" style="width:100%"
+      oninput="APP.cmd('shmQ',this.value)"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mShmClr',!!s.q)}</div>`:'';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:17px;font-weight:500">${escAttr(shmLocName(loc)||shmName(sh.display_name_en,sh.display_name_cn))}</span>
+        ${sh.is_active?'':`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Inactive','已停用')}</span>`}</div>
+      <code class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(sh.public_code||'')}</code></div>
+    ${qr}
+    <div>${filter}<div id="mShmBody">${shmListHtml()}</div></div>
+  </div>`;
+}
+SUBS.shopmenus={title:['Shop menu','门店商品'],render:()=>screenShopMenus()};
+SUBS.shopmenu={title:['Shop menu','门店商品'],backLabel:()=>T('Shop menu','门店商品'),render:()=>screenShopMenu()};
+reg('shmRetry', ()=>{ loadShopMenus(true); render(); });
+reg('shmOneRetry', ()=>{ loadShopMenu(true); render(); });
+reg('shmOpen', id=>{ const s=state.shm; s.id=Number(id); s.q=''; s.oneFor=null; push('shopmenu'); });
+/* The filter repaints the list alone, so the keyboard stays (prodSearch's rule). */
+reg('shmQ', v=>{
+  state.shm.q=String(v||'');
+  searchClearShow('mShmClr', !!state.shm.q);
+  const host=document.getElementById('mShmBody');
+  if(host) host.innerHTML=shmListHtml(); else render();
+});
 /* ══════════════════════════════════════════════════════════════════════════
    ADD STOCK — the kitchen's other tool, in this app rather than beside it
    --------------------------------------------------------------------------
@@ -28286,6 +28466,149 @@ function sheetOos(){
    <div style="display:flex;gap:8px;padding:14px 20px 0">
      <button class="btn2" style="flex:1" onclick="APP.cmd('closeOos')">${T('Cancel','取消')}</button></div></div>`;
 }
+/* ==========================================================================
+   §325 PD2 — THE PRODUCT'S SALES CARD AND ITS VERSION HISTORY, READ
+   (desktop: 09-products.js pdLoadSales / pdOpenVersions)
+   --------------------------------------------------------------------------
+   SALES is the editor's card: units, revenue and rank over 7 / 30 / 90 days
+   or all time, and the two facts that stand in for a chart — when it last
+   sold, and on how many days. Same endpoint, same windows, same sentences.
+   Read for the size on screen, as the desktop reads it for the product open.
+
+   REVENUE IS THE ONE MONEY FIGURE, and the desktop shows it to anyone who can
+   open a product. The phone keeps that, with the phone's standing money rule
+   on top: a warehouse, dispatch or customer-service board (recapNoMoney) gets
+   units and rank and no revenue tile at all, as Trend and Home do.
+
+   VERSION HISTORY is the list the editor's button opens: every saved version,
+   newest first, Current on the newest, Original on the pre-edit baseline, and
+   who saved it. READ-ONLY IN THIS STEP — Restore is a write and comes with its
+   confirm in its own step, so no row carries a button that does nothing. */
+const PS_RANGES=[{key:'7',en:'7 days',zh:'7 天'},{key:'30',en:'30 days',zh:'30 天'},
+  {key:'90',en:'90 days',zh:'90 天'},{key:'all',en:'All',zh:'全部'}];
+function loadProdSales(pid,force){
+  const s=state.prodSales;
+  if(pid==null) return;
+  if(!force&&s.pid===pid&&(s.data||s.err||s.loading)) return;
+  s.pid=pid; s.data=null; s.err=null; s.loading=true;
+  const seq=++s.seq;
+  apiRaw('/products/'+pid+'/sales?days='+encodeURIComponent(s.days)).then(j=>{
+    if(seq!==s.seq) return;
+    s.loading=false;
+    if(!j||!j.success) throw new Error('load_failed');
+    s.data=j.data||{}; render();
+  }).catch(e=>{
+    if(seq!==s.seq||String(e&&e.message)==='auth') return;
+    s.loading=false; s.data=null; s.err=E('Couldn’t load sales','无法加载销量'); render();
+  });
+}
+/* pdSalesWhen: today, yesterday, N days ago inside a month, a date past it. */
+function psWhen(iso){
+  if(!iso) return '';
+  const today=shopToday();
+  if(iso===today) return T('today','今天');
+  if(iso===shopDayAdd(today,-1)) return T('yesterday','昨天');
+  const days=Math.round((Date.parse(today)-Date.parse(iso))/86400000);
+  if(days>1&&days<=30) return T(days+' days ago',days+' 天前');
+  return tdWhen(iso,'date',_tdL());
+}
+function psContext(d){
+  const n=Number(d.selling_days||0);
+  if(!n) return T('No sales in this window','此区间暂无销量');
+  const when=psWhen(d.last_sale);
+  const days=n===1?T('1 selling day','1 天有销量'):T(n+' selling days',n+' 天有销量');
+  return when?T('Last sale '+when,'最近售出 '+when)+' · '+days:days;
+}
+function psTitle(){
+  const d=state.prodSales.days;
+  if(d==='all') return T('Sales · all time','销量 · 全部时间');
+  return T('Sales · last '+d+' days','销量 · 最近 '+d+' 天');
+}
+function salesCard(p){
+  if(p._id==null) return '';
+  // The sheet's first paint (openProduct renders once with prodMounted false)
+  // reads afresh, however this size was last read — the desktop's pdOpen does.
+  loadProdSales(p._id,!state.prodMounted);
+  const s=state.prodSales, d=(s.pid===p._id)?s.data:null, err=(s.pid===p._id)?s.err:null;
+  const v=(x)=>d?x:(err?'—':'…');
+  const kpi=(val,label)=>`<div style="flex:1;min-width:0"><div class="num" style="font-size:20px;font-weight:500">${val}</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${label}</div></div>`;
+  const rank=d?(d.rank?'#'+d.rank+' / '+d.total_products:T('No sales','暂无销量')):v('');
+  return `<div class="card" style="padding:16px 0 14px;display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow" style="padding:0 16px">${psTitle()}</div>
+    ${chipRow(PS_RANGES,s.days,'psDays')}
+    <div style="display:flex;gap:12px;padding:0 16px">
+      ${kpi(v(d?Number(d.units||0).toLocaleString():''),T('units sold','售出件数'))}
+      ${recapNoMoney()?'':kpi(v(d?money0(CUR,d.revenue):''),T('revenue','营业额'))}
+      ${kpi(rank,T('rank','排名'))}</div>
+    <div style="padding:0 16px;font-size:13px;color:${err?'var(--brick-ink)':'var(--text-secondary)'}">${err?err:(d?escAttr(psContext(d)):'')}</div>
+  </div>`;
+}
+/* The row that opens the list. A product not saved yet has nothing to list,
+   which on the phone cannot happen (the sheet opens saved products only). */
+function versionsRow(p){
+  if(p._id==null) return '';
+  return `<div class="card" style="padding:0">
+    <button class="row" onclick="APP.cmd('pvOpen',${Number(p._id)})">
+      <span class="rowico">${ic('history',18)}</span>
+      <span style="flex:1;min-width:0;font-size:15px">${T('Version history','历史版本')}</span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',20)}</span></button></div>`;
+}
+function loadProdVersions(pid){
+  const v=state.prodVer;
+  v.pid=pid; v.rows=null; v.err=null;
+  const seq=++v.seq;
+  apiRaw('/products/'+pid+'/versions').then(j=>{
+    if(seq!==v.seq) return;
+    if(!j||!j.success) throw new Error('load_failed');
+    v.rows=Array.isArray(j.versions)?j.versions:[]; render();
+  }).catch(e=>{
+    if(seq!==v.seq||String(e&&e.message)==='auth') return;
+    v.err=T('Could not load versions: ','无法加载版本:')+escAttr(e&&e.message||''); render();
+  });
+}
+/* pdFmtVersionTime: "Today 14:32", "Yesterday 09:10", else the full stamp —
+   a history is read as "how long ago". The server's stamp is UTC. */
+function pvWhen(s){
+  if(!s) return '';
+  const d=new Date(String(s).replace(' ','T')+'Z');
+  if(isNaN(d.getTime())) return String(s);
+  const t=tdWhen(d,'time',_tdL()), day=tdWhen(d,'date',_tdL()), now=new Date();
+  if(day===tdWhen(now,'date',_tdL())) return T('Today ','今天 ')+t;
+  if(day===tdWhen(new Date(now.getTime()-86400000),'date',_tdL())) return T('Yesterday ','昨天 ')+t;
+  return tdWhen(d,'dateTime',_tdL());
+}
+function sheetVersions(){
+  const v=state.prodVer; if(!v.open) return '';
+  const tag=(t,ink)=>`<span class="pill" style="background:${PILL.muted[0]};color:${ink}">${t}</span>`;
+  const body = v.err
+    ? `<div style="display:flex;align-items:flex-start;gap:12px;margin:0 20px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${v.err}</span></div>`
+    : !v.rows ? `<div style="padding:28px 20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+    : !v.rows.length ? `<div style="padding:20px;font-size:14px;color:var(--text-secondary);line-height:1.55">${T('No earlier versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')}</div>`
+    : v.rows.map((r,i)=>`${i?'<div class="sep" style="margin:0 20px"></div>':''}<div style="display:flex;flex-direction:column;gap:3px;padding:12px 20px">
+        <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="num" style="font-size:15px">${escAttr(pvWhen(r.created_at))}</span>
+          ${r.is_baseline?tag(T('Original','原始版本'),'var(--text-secondary)'):(i===0?tag(T('Current','当前'),'var(--sage-ink)'):'')}</span>
+        ${r.edited_by?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('by ','操作人:')}${escAttr(r.edited_by)}</span>`:''}</div>`).join('');
+  return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('pvClose')"></div>
+   <div class="sheet" style="top:120px;z-index:48;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('pvClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500">${T('Version history','历史版本')}</span><span style="width:36px;flex:none"></span></div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div></div>`;
+}
+reg('psDays', k=>{
+  const s=state.prodSales;
+  if(!PS_RANGES.some(r=>r.key===k)||s.days===k) return;
+  s.days=k;
+  // A newer range supersedes the read in flight (the desktop's _pdSalesSeq).
+  if(s.pid!=null) loadProdSales(s.pid,true);
+  render();
+});
+reg('pvOpen', id=>{ state.prodVer.open=true; loadProdVersions(Number(id)); render(); });
+reg('pvClose', ()=>{ const v=state.prodVer; v.open=false; v.seq++; render(); });
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
   const noAnim=state.prodMounted?'animation:none;':'';
@@ -28314,6 +28637,8 @@ function sheetProduct(){
        ${stockCard(p)}
        ${oosCard(p)}
        ${pcEntryRow(p)}
+       ${salesCard(p)}
+       ${versionsRow(p)}
      </div>
      ${(prodCanEdit()||prodCanStock())?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div>`:''}</div>`;
@@ -31905,6 +32230,10 @@ const ROUTE_CAP={
   // on the capability that endpoint belongs to and not on a reports key they
   // never touch.
   inbox:['reviews:view','feedback:view'], sales:'dashboard:view', trend:'dashboard:view',
+  // §325 PD2 — the desktop Sales board's own any-of (TAB_CAP.sales), the door
+  // to the shop menu there.
+  shopmenus:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],
+  shopmenu:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],
   delivery:'delivery:view', invoices:'invoices:view', purchasing:'purchasing:view',
   /* §286 — a read of the same orders Purchasing shows, so the same key. Its
      writes (a payment, a correction) are purchasing:edit on the server and the
@@ -32887,6 +33216,8 @@ function render(){
   if(state.detailActions) html += layer('actions', sheetActions());
   if(state.rf&&state.detailId) html += layer('rf:'+state.rf.kind, sheetRefundForm());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
+  // §325 PD2 — over the product it lists, and only while that product is open.
+  if(state.productSku&&state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
@@ -33348,7 +33679,9 @@ function layers(){
      record it was opened from, exactly as its z-index says. */
   if(state.caddr) L.push(()=>{ state.caddr=null; });
   if(state.oosSku) L.push(()=>{ state.oosSku=null; });
-  if(state.productSku) L.push(()=>{ state.productSku=null; });
+  if(state.productSku) L.push(()=>{ state.productSku=null; prodRecordsDrop(); });
+  // After the product, so Back closes the version list first (§325 PD2).
+  if(state.productSku&&state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   // Over the order it prints, so Back closes the print view first (§300).
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
