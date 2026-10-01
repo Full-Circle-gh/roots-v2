@@ -1533,6 +1533,11 @@ const state = {
      typed, which save is in flight and each half's refusal) and the brand
      studio (its form, the job being polled, the result and its Apply). */
   brand:{data:null, tried:false, readErr:null, busy:null, name:'', nameTouched:false, nameErr:null, logoErr:null},
+  /* §325 X13 — Billing. view/plans the two reads, readErr their failure; busy
+     'choose:<code>' while a plan is being chosen and err {code,msg} its refusal;
+     ck the open checkout (its invoice_id carried in) and ckPlan its plan's name,
+     ckSeq so a closed checkout's QR wait stops asking. */
+  bill:{view:null, plans:null, tried:false, readErr:null, seq:0, busy:null, err:null, ck:null, ckPlan:null, ckSeq:0},
   bst:{about:'', audience:'mixed', language:'bilingual', words:[], cust:[], colour:'', type:'', busy:false, err:null, seq:0,
        result:null, applyBusy:false, applyErr:null, applyMsg:null},
   opsx:{busy:null, err:null, geoBusy:false, geoErr:null, bin:null, binDays:60, binTried:false, binErr:null, binBusy:null, binRowErr:{}},
@@ -1676,6 +1681,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* §325 X5 — each card is read fresh on entry: the desktop may have saved it. */
   if(route==='shopdisplay'||route==='custservice'){ const c=state.cfgc, k=route==='shopdisplay'?'shop':'cs';
     c.tried[k]=false; c[k]=null; c.err[k]=null; if(k==='cs'){ c.qrErr=null; c.qrBusy=false; } }
+  if(route==='billing'){ const b=state.bill; b.tried=false; b.readErr=null; b.err=null; b.busy=null; b.ck=null; b.ckPlan=null; b.ckSeq++; }
   if(route==='brand'){ const b=state.brand; b.tried=false; b.nameTouched=false; b.nameErr=null; b.logoErr=null; b.readErr=null; }
   /* §325 X6 — the store list is re-read with Operations; a store's staff and
      the team's devices are re-read on every entry (somebody may have been
@@ -30979,6 +30985,210 @@ function NOTIFICATION_ROWS(){
   rows.push({label:T('Which alerts','接收哪些通知'),cmd:"APP.cmd('acctOpen','alerts')",chev:true});
   return rows;
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X13 — BILLING ON THE PHONE (§326.8)
+   ══════════════════════════════════════════════════════════════════════════
+   The desktop's Billing page (public/backend-billing.html), reached from
+   Settings as it is there. Every request is that page's own:
+
+     GET  /api/backend/billing             the subscription, its alert, invoices
+     GET  /api/backend/plans               the plans on offer
+     POST /api/backend/billing/select-plan {plan_code}        → an open invoice
+     POST /api/backend/billing/checkout    {invoice_id, provider}
+     GET  /api/backend/billing/invoices/:id/payment-status    every 3 s while
+                                           the WeChat QR is open
+
+   WHO. The desktop's door is `data-cap="billing:view"`, so this screen is
+   billing:view (ROUTE_CAP.billing). Choosing a plan is `billing:pay`, the key
+   named for exactly that act ("Pay / change plan"), which no preset hands out
+   but the owner's. THE SERVER ASKS NEITHER — routes/billing*.js take any
+   signed-in operator (requireBackend) — so the phone asking for the keys can
+   only hide a control the server would allow, never draw one it would refuse.
+   That server gap is reported, not fixed here. Both wait for the keys to be
+   known (mCanKnown), as X12's switches do.
+
+   NOT HERE, as not on the desktop: paying an invoice that is already open
+   (the page has no Pay on its invoice rows), marking one paid (SaaS admin
+   only), and the Company line (the brand name, which Settings → Brand shows). */
+function billMoney(cents,cur){
+  return (cur==='CNY'||!cur?'¥':cur+' ')+(Number(cents||0)/100).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
+}
+function billDate(v){ return v?(tdWhen(v,'date',_tdL())||String(v)):'—'; }
+const BILL_SUB_STATUS={active:['success',['Active','活跃']], trialing:['success',['Trialing','试用']],
+  past_due:['warning',['Past due','逾期']], grace:['warning',['Grace period','宽限期']],
+  suspended:['danger',['Suspended','已暂停']], cancelled:['danger',['Cancelled','已取消']]};
+const BILL_INV_STATUS={paid:['success',['Paid','已付']], open:['warning',['Open','未结']],
+  past_due:['warning',['Past due','逾期']], void:['muted',['Void','作废']]};
+function billPill(map,st){
+  const m=map[st]; const tone=m?m[0]:'danger';
+  return `<span class="pill" style="background:${PILL[tone][0]};color:${PILL[tone][1]}">${m?T(...m[1]):escAttr(st||'—')}</span>`;
+}
+function billInterval(iv){ return iv==='year'?T('/ year','/ 年'):iv==='month'?T('/ month','/ 月'):'/ '+escAttr(iv||''); }
+function billLoad(){
+  const b=state.bill, seq=++b.seq;
+  b.tried=true;
+  return Promise.all([api('/api/backend/billing'),api('/api/backend/plans')]).then(([bill,plans])=>{
+    if(seq!==b.seq) return;
+    if(!bill||!bill.success||!plans||!plans.success) throw new Error('refused');
+    b.view=bill; b.plans=Array.isArray(plans.plans)?plans.plans:[]; b.readErr=null; render();
+  }).catch(e=>{
+    if(seq!==b.seq||String(e&&e.message)==='auth') return;
+    b.readErr=e&&e.refused?E(...e.words):E('Failed to load billing','加载账单失败'); render();
+  });
+}
+reg('billRetry', ()=>{ const b=state.bill; b.readErr=null; b.view=null; b.plans=null; render(); billLoad(); });
+function billAlert(v){
+  const dl=v.daysLeft;
+  const map={
+    expiring:['warning',T('Your subscription ends in '+dl+' day(s). Renew to avoid interruption.','订阅将在 '+dl+' 天后到期,请及时续订。')],
+    trial_ending:['warning',T('Your trial ends in '+dl+' day(s).','试用将在 '+dl+' 天后结束。')],
+    past_due:['danger',T('Payment is past due — please settle your latest invoice to keep access.','账单逾期,请尽快支付以保持访问。')],
+    suspended:['danger',T('This account is suspended for non-payment. Settle the outstanding invoice to restore access.','账户因欠费已暂停,支付后恢复。')],
+  };
+  const a=map[v.alert]; if(!a) return '';
+  return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:${PILL[a[0]][0]}">
+    <span style="flex:none;color:${PILL[a[0]][1]};display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:${PILL[a[0]][1]}">${a[1]}</span></div>`;
+}
+function billCurrent(v){
+  const sub=v.subscription, plan=v.plan;
+  if(!sub) return `<div class="card" style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('No subscription on file.','暂无订阅。')}</div>`;
+  const name=plan?(LANG==='en'?(plan.name||plan.name_cn):(plan.name_cn||plan.name)):T('No plan','暂无套餐');
+  const price=plan?(plan.price_cents?billMoney(plan.price_cents,plan.currency)+' '+billInterval(plan.billing_interval):T('Free','免费')):'—';
+  const renew=sub.is_internal?T('Perpetual (internal)','永久(内部)')
+    :sub.current_period_end?billDate(sub.current_period_end)+(v.daysLeft!=null?' · '+T(v.daysLeft===1?'1 day left':v.daysLeft+' days left','剩余 '+v.daysLeft+' 天'):''):'—';
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+      <span style="font-size:20px;font-weight:500;min-width:0;overflow-wrap:anywhere">${escAttr(name)}</span>${billPill(BILL_SUB_STATUS,sub.status)}</div>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px">
+      <span style="color:var(--text-secondary)">${T('Price','价格')}</span><span class="num">${price}</span>
+      <span style="color:var(--text-secondary)">${T('Renews','到期')}</span><span class="num">${escAttr(renew)}</span></div></div>`;
+}
+function billPlans(plans,curCode){
+  if(!plans.length) return `<div class="card" style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('No plans available.','暂无套餐。')}</div>`;
+  const b=state.bill, pay=mCanKnown('billing:pay');
+  return plans.map(p=>{
+    const cur=p.code===curCode;
+    const name=LANG==='en'?(p.name||p.name_cn):(p.name_cn||p.name);
+    const feats=(p.features||[]).map(f=>`<li style="padding:3px 0">${escAttr(typeof f==='string'?f:(LANG==='en'?(f.en||f.cn):(f.cn||f.en)))}</li>`).join('');
+    const busy=b.busy==='choose:'+p.code;
+    const err=b.err&&b.err.code===p.code?b.err.msg:null;
+    const btn=cur?`<button class="btn2" disabled style="width:100%">${T('Current plan','当前套餐')}</button>`
+      : pay?`<button class="cta" style="width:100%" ${b.busy?'disabled':''} onclick="APP.cmd('billChoose','${escAttr(p.code)}')">${busy?T('Saving…','保存中…'):T('Choose','选择')}</button>`:'';
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;${cur?'box-shadow:inset 0 0 0 1.5px var(--sage);':''}">
+      <span style="font-size:16px;font-weight:500">${escAttr(name)}</span>
+      <span class="num" style="font-size:22px;font-weight:300">${billMoney(p.price_cents,p.currency)} <span style="font-size:13px;color:var(--text-secondary)">${billInterval(p.billing_interval)}</span></span>
+      ${feats?`<ul style="margin:0;padding-left:18px;font-size:13.5px;color:var(--text-secondary)">${feats}</ul>`:''}
+      ${btn}${err?`<span style="font-size:13px;color:var(--brick-ink)">${err}</span>`:''}</div>`;
+  }).join('');
+}
+function billInvoices(rows){
+  if(!rows.length) return `<div style="padding:16px 14px;font-size:14px;color:var(--text-secondary)">${T('No invoices yet.','暂无发票。')}</div>`;
+  return rows.map((iv,i)=>`${i?'<div class="sep"></div>':''}<div style="display:flex;flex-direction:column;gap:4px;padding:12px 14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="num" style="font-size:14.5px;min-width:0;overflow-wrap:anywhere">${escAttr(iv.invoice_no||('#'+iv.id))}</span>${billPill(BILL_INV_STATUS,iv.status)}</div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px;color:var(--text-secondary)">
+      <span class="num">${escAttr(billDate(iv.period_start))} – ${escAttr(billDate(iv.period_end))}</span>
+      <span class="num" style="color:var(--text-primary);font-size:14px">${billMoney(iv.amount_cents,iv.currency)}</span></div></div>`).join('');
+}
+function screenBilling(){
+  const b=state.bill; if(!b.tried) billLoad();
+  if(!b.view&&b.readErr) return x1Err(String(b.readErr),'billRetry');
+  if(!b.view||!b.plans) return x1Loading();
+  const v=b.view, curCode=v.plan?v.plan.code:null;
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${billAlert(v)}
+    ${billCurrent(v)}
+    <div style="display:flex;flex-direction:column;gap:10px"><div class="eyebrow" style="padding:2px 4px 0">${T('Plans','套餐')}</div>${billPlans(b.plans,curCode)}</div>
+    <div><div class="eyebrow" style="padding:2px 4px 10px">${T('Invoices','发票')}</div><div class="list">${billInvoices(v.invoices||[])}</div></div></div>`;
+}
+SUBS.billing={title:['Billing','账单'],render:()=>screenBilling()};
+/* CHOOSING A PLAN — the desktop's onChoosePlan, step for step: ask, raise the
+   invoice, pick the provider the way it does (WeChat Pay when configured, else
+   manual), ask for the checkout, show it. The question says one thing the
+   desktop's does not, because it is true and nobody would guess it: the server
+   puts the subscription in past_due the moment the invoice is raised
+   (routes/billing-pay.js select-plan), so the account reads as owing until the
+   invoice is paid. */
+reg('billChoose', code=>{
+  const b=state.bill;
+  if(b.busy||!mCanKnown('billing:pay')) return;
+  const p=(b.plans||[]).find(x=>x.code===code); if(!p) return;
+  const name=LANG==='en'?(p.name||p.name_cn):(p.name_cn||p.name);
+  state.ask={
+    title:T('Select the '+name+' plan?','选择「'+name+'」套餐?'),
+    body:T('An invoice will be created for you to pay. Until it is paid, billing shows the account as past due.',
+           '系统将生成一张待支付发票。付款前，账单将显示为逾期。'),
+    confirmLabel:T('Select plan','选择套餐'),
+    run:()=>{
+      b.busy='choose:'+code; b.err=null; render();
+      /* The server's own words where it has them. Its refusals here are one
+         bilingual sentence ("Unknown plan · 未知套餐"), shown in one language;
+         a payment provider's error is English only and follows the desktop's
+         fallback, as the desktop's toast shows it raw. */
+      const fail=(e,en,zh)=>{
+        b.busy=null;
+        if(String(e&&e.message)==='auth') return;
+        const raw=String((e&&e.message)||'');
+        b.err={code, msg:e&&e.refused?E(...e.words)
+          :raw.indexOf(' · ')!==-1?tmOneLang(raw)
+          :E(en+(raw?': '+raw:''),zh+(raw?'：'+raw:''))};
+        render();
+      };
+      apiWrite('/api/backend/billing/select-plan',{plan_code:code},'POST').then(j=>{
+        if(!j||!j.success||!j.invoice) throw Object.assign(new Error((j&&j.error)||''),{x13:'select'});
+        const provs=j.providers||[];
+        const provider=['wechat_native','manual'].find(id=>provs.some(x=>x.id===id&&x.configured))||'manual';
+        return apiWrite('/api/backend/billing/checkout',{invoice_id:j.invoice.id, provider},'POST').then(c=>{
+          b.busy=null;
+          if(!c||!c.success||!c.checkout) throw Object.assign(new Error((c&&c.error)||''),{x13:'checkout'});
+          b.ck=Object.assign({invoice_id:j.invoice.id},c.checkout); b.ckPlan=name; b.ckSeq++;
+          render(); billLoad();
+          if(b.ck.kind==='wechat_native') billPoll(b.ckSeq);
+        }).catch(e=>{ fail(e,'Checkout unavailable','暂无法结算'); billLoad(); });
+      }).catch(e=>{ fail(e,'Could not select plan','无法选择套餐'); });
+    }};
+  render();
+});
+/* The WeChat QR's wait. Asks every three seconds while THIS checkout is open
+   and the billing screen is on top — closing the sheet, or leaving, ends it,
+   as the desktop's modal close does. A failed ask is simply asked again. */
+function billOnTop(){ return state.stack.length&&state.stack[state.stack.length-1].route==='billing'; }
+function billPoll(seq){
+  setTimeout(()=>{
+    const b=state.bill;
+    if(!b.ck||b.ckSeq!==seq||!billOnTop()) return;
+    apiRaw('/api/backend/billing/invoices/'+encodeURIComponent(b.ck.invoice_id)+'/payment-status').then(s=>{
+      if(!b.ck||b.ckSeq!==seq) return;
+      if(s&&s.status==='paid'){ b.ck=null; b.ckPlan=null; showToast(T('Payment received ✓','已收到付款 ✓')); billLoad(); render(); return; }
+      billPoll(seq);
+    }).catch(e=>{ if(String(e&&e.message)==='auth') return; billPoll(seq); });
+  },3000);
+}
+reg('billCkClose', ()=>{ const b=state.bill; b.ck=null; b.ckPlan=null; render(); });
+function sheetBillCheckout(){
+  const b=state.bill, ck=b.ck; if(!ck) return '';
+  const body=ck.kind==='wechat_native'
+    ? `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:8px 0">
+        ${ck.qr_data_url?`<img src="${escAttr(ck.qr_data_url)}" alt="WeChat Pay QR" style="width:200px;height:200px;border-radius:8px">`
+          :`<div style="width:200px;height:200px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-secondary)">${T('QR unavailable','二维码不可用')}</div>`}
+        <span class="num" style="font-size:18px;font-weight:500">${escAttr(ck.amount_display||'')}</span>
+        <span style="font-size:14px;color:var(--text-secondary)">${T('Scan with WeChat to pay','微信扫码支付')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('Waiting for payment…','等待支付…')}</span></div>`
+    : `<div style="display:flex;flex-direction:column;gap:10px;font-size:14.5px;line-height:1.55">
+        <span>${escAttr(LANG==='en'?(ck.instructions_en||ck.instructions_cn||''):(ck.instructions_cn||ck.instructions_en||''))}</span>
+        ${ck.reference?`<span class="num" style="font-size:13px;color:var(--text-secondary)">${T('Ref','单号')}: ${escAttr(ck.reference)}</span>`:''}
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('We’ll mark the invoice paid once the transfer is received.','到账后我们将标记为已付。')}</span></div>`;
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('billCkClose')"></div>
+   <div class="sheet" style="z-index:46">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('billCkClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Payment','支付')}</span></div>
+       ${b.ckPlan?`<div style="font-size:13px;color:var(--text-secondary);padding:2px 8px 0">${escAttr(b.ckPlan)}</div>`:''}</div>
+     <div style="padding:16px">${body}</div></div>`;
+}
+/* §325 X13 ends */
 function screenSettings(){
   const groups=[
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
@@ -30987,6 +31197,8 @@ function screenSettings(){
       ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[]),
       /* §325 X4 — the desktop's Brand page, from the same nav it sits in there. */
       ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[]),
+      /* §325 X13 — the desktop's Billing link, beside Brand as it is there. */
+      ...(mCanKnown('billing:view')?[{label:T('Billing','账单'),cmd:"APP.cmd('push','billing')",chev:true}]:[]),
       /* §325 X5 — the desktop's Shop tab and Customer service panels. */
       ...(canRoute('shopdisplay')?[{label:T('Shop tab','商城页'),cmd:"APP.cmd('push','shopdisplay')",chev:true}]:[]),
       ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[]),
@@ -40634,6 +40846,9 @@ const ROUTE_CAP={
      callerHas check (PUT /api/backend/brand). The studio: the server's own gate
      on all three of its calls (lib/cap-routes.js, ai:generate). */
   brand:'settings:shop', brandstudio:'ai:generate',
+  /* §325 X13. Billing: the key the desktop's Settings link carries
+     (data-cap="billing:view"). Choosing a plan asks billing:pay inside. */
+  billing:'billing:view',
   /* §325 X5. Two Settings panels, reached from Settings; the server gates
      shop.* and customer_service.* on the desktop Settings set, which holds
      this one (configKeyCap). */
@@ -41533,6 +41748,7 @@ function render(){
   if(state.fin.ret) html += layer('fintxret', sheetFinTxRet());
   if(state.supOwedId!=null) html += layer('supowed:'+state.supOwedId, sheetSupOwed());
   if(state.chanSheet) html += layer('chan', sheetChannel());
+  if(state.bill&&state.bill.ck&&billOnTop()) html += layer('billck:'+state.bill.ck.invoice_id, sheetBillCheckout());   // §325 X13
   if(state.quickSheet) html += layer('quick', sheetQuick());
   /* THE STEP SHEET BELONGS TO ONE SCREEN. `step` survives a Back out of
      Making one — pop() is generic and clears nothing — so without the route in
@@ -42015,6 +42231,7 @@ function layers(){
      and the app's own must never land anywhere different. */
   if(state.kq.orderId!=null) L.push(kqDropOrder);
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
+  if(state.bill&&state.bill.ck&&billOnTop()) L.push(()=>{ state.bill.ck=null; state.bill.ckPlan=null; });   // §325 X13
   /* Below the picker on purpose: taking Edit out of the dial closes the dial
      and opens the sheet, so the two are never both open — but if they ever
      were, the sheet is the one on top and the one Back must close first. */
