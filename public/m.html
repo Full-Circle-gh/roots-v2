@@ -1113,6 +1113,9 @@ const state = {
   /* §325 X8d — Meituan bundles: the list, the stores and the names read from
      Meituan, the products a component can be, the bundle being edited, the
      two searches, which write is in flight, and each refusal. */
+  /* §325 X8e — gzgrocery billing: the period and range asked for, the
+     answer, and the read's and the file's refusals. */
+  gzb:{period:'', from:'', to:'', data:null, tried:false, err:null, err2:null, seq:0},
   mtb:{list:null, tried:false, err:null, stores:null, names:null, prod:null, draft:null, q:'', pq:'', busy:null, note:null, saveErr:null, suggest:null, hint:null},
   /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
      flight (one at a time, per screen, exactly as the desktop page does it), and
@@ -30814,6 +30817,7 @@ function x8GyCard(){
       ${sync?x8Btn('x8GyRefresh',busy?T('refreshing…','刷新中'):T('Refresh list','刷新'),'gyls',T('refreshing…','刷新中')):''}
       ${map?x8Btn('x8GyMatch',T('Auto-match by SKU','按货号自动匹配'),'gymatch',T('Matching…','匹配中…')):''}
       ${sync?x8Btn('x8GyPush',T('Push all stock','推送全部库存'),'gypush',T('Queuing…','排队中…')):''}</span>`:''}
+    ${canRoute('gzbilling')?`<button class="btn2" style="width:100%" onclick="APP.cmd('gzbOpen')">${T('Billing','对账')}</button>`:''}
     ${map?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${T('Products are matched by the SKU embedded in the Guanyi name (e.g. "GVF 1-180").','通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。')}</span>`:''}
     ${x8Note('gy')}${x8Err('gy')}</div>`;
 }
@@ -31553,6 +31557,112 @@ function screenMtBundle(){
 SUBS.mtbundle={title:['Bundle','套餐'],titleOf:()=>{ const d=mtb().draft; return d&&d.id?T('Edit bundle','编辑套餐'):T('Add bundle','新增套餐'); },
   render:()=>screenMtBundle()};
 /* §325 X8d ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X8e — GZGROCERY BILLING: WHAT THEY OWE, AND THE STATEMENT
+   --------------------------------------------------------------------------
+   The desktop GZ Grocery tab's Billing panel (12-guanyi.js gyLoadAnalytics,
+   gyRenderAnalytics, gyExportStatement): billable units are gzgrocery's
+   orders (and the older applied pickups), priced at the imported gzgrocery
+   sheet. GET /guanyi/analytics?period=&from=&to= — the desktop's query.
+
+   • The period presets (Day, Week, Month) re-scope the range the way
+     gyPeriodRange does, on the shop's calendar day; the two dates set it by
+     hand. With neither, the server's own default (the last 90 days).
+   • The five figures, the unpriced warning, the breakdown by period, and the
+     products, top 50, as the desktop shows them.
+   • Statement CSV: the desktop's file, column for column and row for row
+     (BOM, quoted text, two decimals, the TOTAL line), built from the same
+     answer and saved by the phone.
+
+   MONEY. This is what another business owes the shop. The desktop shows it to
+   anyone on the GZ Grocery tab (guanyi:view), and so does the phone — but not
+   to the boards that never see money (recapNoMoney: warehouse, dispatch,
+   customer service), the rule Finance and Home's recap already follow. Read
+   only; nothing here writes.
+   ══════════════════════════════════════════════════════════════════════════ */
+const gzb=()=>state.gzb;
+const gzbYmd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+/* gyPeriodRange, word for word: Monday-start weeks, the month to today. */
+function gzbRange(p,now){
+  now=now||new Date(); const today=gzbYmd(now);
+  if(p==='week'){ const dow=(now.getDay()+6)%7; const mon=new Date(now); mon.setDate(now.getDate()-dow); return {from:gzbYmd(mon),to:today}; }
+  if(p==='month') return {from:gzbYmd(new Date(now.getFullYear(),now.getMonth(),1)),to:today};
+  return {from:today,to:today};
+}
+const gzbMoney=n=>(CUR||'¥')+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+function gzbQuery(){ const s=gzb(); let q='period='+encodeURIComponent(s.period);
+  if(s.from) q+='&from='+encodeURIComponent(s.from); if(s.to) q+='&to='+encodeURIComponent(s.to); return q; }
+function gzbLoad(){
+  const s=gzb(); if(s.tried) return; s.tried=true; s.err=null; const seq=++s.seq;
+  apiRaw('/guanyi/analytics?'+gzbQuery()).then(j=>{ if(seq!==s.seq) return; s.data=j||{}; render(); })
+    .catch(e=>{ if(seq!==s.seq||String(e&&e.message)==='auth') return; s.err=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+reg('gzbPeriod', p=>{ const s=gzb(); if(!['day','week','month'].includes(p)) return; const r=gzbRange(p); s.period=p; s.from=r.from; s.to=r.to; s.tried=false; render(); });
+reg('gzbDate', (k,v)=>{ const s=gzb(); if(k!=='from'&&k!=='to') return; v=String(v||''); if(v&&!/^\d{4}-\d{2}-\d{2}$/.test(v)) return; s[k]=v; s.tried=false; render(); });
+reg('gzbRetry', ()=>{ gzb().tried=false; render(); });
+/* gyExportStatement: the same file from the same answer. */
+function gzbCsv(r){
+  const cell=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lines=[['SKU','Product','Units','Unit gz price','Owed','Retail value','Discount %'].join(',')];
+  (r.products||[]).forEach(p=>{
+    const unit=p.units?(p.owed/p.units):0;
+    lines.push([cell(p.sku),cell(p.name),p.units,unit.toFixed(2),p.owed.toFixed(2),p.retail.toFixed(2),p.discount==null?'':(p.discount*100).toFixed(0)].join(','));
+  });
+  const sm=r.summary||{};
+  lines.push(['','TOTAL',sm.units||0,'',(sm.owed||0).toFixed(2),(sm.retail||0).toFixed(2),((sm.avgDiscount||0)*100).toFixed(1)].join(','));
+  return '﻿'+lines.join('\n');
+}
+function gzbFileName(r){ return 'gzgrocery-statement_'+((r.range&&r.range.from)||'start')+'_to_'+((r.range&&r.range.to)||'now')+'.csv'; }
+reg('gzbExport', ()=>{
+  const s=gzb(), r=s.data; if(!r||!(r.products||[]).length||!canRoute('gzbilling')) return;
+  try{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([gzbCsv(r)],{type:'text/csv;charset=utf-8'}));
+    a.download=gzbFileName(r);
+    document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){ s.err2=E('Could not save the file.','无法保存文件。'); render(); }
+});
+function screenGzBilling(){
+  const s=gzb(); gzbLoad();
+  if(s.err&&!s.data) return x1Err(escAttr(String(s.err)),'gzbRetry');
+  if(!s.data) return x1Loading();
+  const r=s.data, sm=r.summary||{}, prods=r.products||[], ts=r.timeSeries||[], per=r.period||'day';
+  const chips=chipRow([{key:'day',en:'Day',zh:'日'},{key:'week',en:'Week',zh:'周'},{key:'month',en:'Month',zh:'月'}],s.period,'gzbPeriod');
+  const tile=(k,v,sub)=>`<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:3px">
+    <span style="font-size:12.5px;color:var(--text-secondary)">${k}</span><span class="num" style="font-size:20px;font-weight:500">${escAttr(v)}</span>${sub?`<span style="font-size:12px;color:var(--text-secondary)">${sub}</span>`:''}</div>`;
+  const perWord=per==='month'?T('By month','按月'):per==='week'?T('By week','按周'):T('By day','按日');
+  const max=Math.max(1,...ts.map(t=>t.owed||0));
+  return `<div style="padding:12px 0 2px">${chips}</div>
+  <div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="date" value="${escAttr(s.from)}" aria-label="${escAttr(T('From','从'))}" style="flex:1;min-width:0" onchange="APP.cmd('gzbDate','from',this.value)">
+      <span style="color:var(--text-secondary)">→</span>
+      <input type="date" value="${escAttr(s.to)}" aria-label="${escAttr(T('To','至'))}" style="flex:1;min-width:0" onchange="APP.cmd('gzbDate','to',this.value)"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${tile(T('Units ordered','订货件数'),Number(sm.units||0).toLocaleString())}
+      ${tile(T('They owe you','欠款'),gzbMoney(sm.owed),T('gzgrocery price','gzgrocery 价格'))}
+      ${tile(T('Retail value','零售价值'),gzbMoney(sm.retail))}
+      ${tile(T('Avg discount','平均折扣'),((sm.avgDiscount||0)*100).toFixed(1)+'%')}
+      ${tile(T('Products','商品数'),String(sm.products||0))}</div>
+    ${(r.unpriced||[]).length?`<div style="display:flex;gap:10px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--amber-ink);line-height:1.5">
+      <span style="flex:none;display:flex">${ic('triangle-alert',16)}</span><span>${escAttr(T(r.unpriced.length+' ordered product(s) have no gzgrocery price yet — counted in units but billed at full retail: ',
+        r.unpriced.length+' 个已订货商品尚无 gzgrocery 价格 — 计入件数,但按零售全价计费:')+r.unpriced.slice(0,6).map(u=>u.name||('#'+u.product_id)).join(', ')+(r.unpriced.length>6?'…':''))}</span></div>`:''}
+    ${s.err2?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.err2))}</div>`:''}
+    ${!prods.length?`<div style="padding:20px 8px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${T('No gzgrocery orders in this range yet','暂无订货')}<br>${T('Pickups appear here automatically as gzgrocery sells.','gzgrocery 售出后会自动出现在这里。')}</div>`
+    :`<button class="btn2" style="width:100%" onclick="APP.cmd('gzbExport')">${T('Statement CSV','对账单 CSV')}</button>
+      ${ts.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${perWord} (${ts.length})</div>
+        ${tmList(ts.map(t=>tmRow({label:`<span class="num">${escAttr(t.bucket)}</span>`,note:`<span style="display:block;height:6px;border-radius:3px;background:var(--sage);width:${Math.max(2,Math.round((t.owed/max)*100))}%"></span>`,
+          value:`<span class="num">${escAttr(gzbMoney(t.owed))} · ${escAttr(String(t.units))}${T('u',' 件')}</span>`})))}</div>`:''}
+      <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Products','商品数')}</div>
+        ${tmList(prods.slice(0,50).map(p=>tmRow({label:escAttr(p.name||('#'+p.product_id))+(p.sku?` <span style="font-size:12px;color:var(--text-secondary)">${escAttr(p.sku)}</span>`:''),
+          note:`<span class="num">${escAttr(T(p.units+' units','共 '+p.units+' 件')+' · '+T('retail ','零售 ')+gzbMoney(p.retail)+' · '+(p.discount==null?'—':(p.discount*100).toFixed(0)+'%'))}</span>`,
+          value:`<span class="num" style="color:var(--text-primary)">${escAttr(gzbMoney(p.owed))}</span>`})))}
+        ${prods.length>50?`<div style="font-size:12.5px;color:var(--text-secondary);padding:8px 4px">${escAttr(T('Showing top 50 of '+prods.length+' — full list in the CSV.','显示前 50 个,共 '+prods.length+' 个 — 完整列表见 CSV。'))}</div>`:''}</div>`}
+  </div>`;
+}
+SUBS.gzbilling={title:['Billing','对账'],render:()=>screenGzBilling()};
+reg('gzbOpen', ()=>{ if(!canRoute('gzbilling')) return; const s=gzb(); Object.assign(s,{period:'',from:'',to:'',data:null,tried:false,err:null,err2:null}); push('gzbilling'); });
+/* §325 X8e ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -40886,6 +40996,8 @@ const ROUTE_CAP={
   /* §325 X8d. Bundles read for the Meituan screen's own key; every bundle
      write is meituan:sync on the server, and the editor is nothing but writes. */
   mtbundles:['meituan:view','meituan:sync'], mtbundle:'meituan:sync',
+  /* §325 X8e. Answered in canRoute (guanyi:view, and money). */
+  gzbilling:'guanyi:view',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -40951,6 +41063,9 @@ function canRoute(k){
      money (recapNoMoney: warehouse, dispatch, customer service) do not get it
      whatever their caps say — the rule Trend's revenue and Home's recap follow. */
   if(k==='finance') return mCan('finance:view') && !recapNoMoney();
+  /* §325 X8e — gzgrocery's billing is what another business owes the shop:
+     the GZ Grocery tab's key, as on the desktop, and the same money rule. */
+  if(k==='gzbilling') return mCan('guanyi:view') && !recapNoMoney();
   return mCan(ROUTE_CAP[k]);
 }
 /* NAMED FOR THE JOB THEY HOLD, not for where the screen lives. Someone who can
