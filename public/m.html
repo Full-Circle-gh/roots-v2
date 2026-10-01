@@ -1492,6 +1492,13 @@ const state = {
        staffFor:null, staffRec:null, staff:null, staffTried:false, staffErr:null, staffBusy:null, staffActErr:null,
        add:{name:'', user:'', pw:''}, addErr:null},
   tmd:{list:null, tried:false, err:null, kind:'all', busy:null, actErr:null},
+  /* §325 X7 — printers, courier keys, Qingyun and Push notifications: the
+     saved keys, the printer settings and their draft, the store whose printer
+     is shown and each store's preview, Qingyun's stores and the requests sent
+     this visit, every typed field's draft (d), which write is in flight, and
+     each card's refusal (err) or note (ok). */
+  x7:{integ:null, integTried:false, integErr:null, prn:null, prnTried:false, prnErr:null, prnD:null, prnStore:null, prev:{},
+      qy:null, qyTried:false, qyErr:null, qyAsked:{}, cfgTried:false, cfgErr:null, d:{}, busy:null, err:{}, ok:{}},
   /* §325 X4 — the Brand screen (the logo and name, a draft of the name being
      typed, which save is in flight and each half's refusal) and the brand
      studio (its form, the job being polled, the result and its Apply). */
@@ -1640,6 +1647,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      the team's devices are re-read on every entry (somebody may have been
      added, or signed in, a minute ago). */
   if(route==='operations'){ state.sto.listTried=false; state.sto.listErr=null; }
+  /* §325 X7 — each of the five is read fresh on entry: keys and printers may
+     have been changed on the desktop a minute ago. */
+  if(['printers','kd100cfg','jdcfg','qycfg','pushcfg'].includes(route)){ const x=state.x7;
+    x.integ=null; x.integTried=false; x.integErr=null; x.prn=null; x.prnD=null; x.prnTried=false; x.prnErr=null; x.prev={};
+    x.qy=null; x.qyTried=false; x.qyErr=null; x.cfgTried=false; x.cfgErr=null; x.d={}; x.err={}; x.ok={}; }
   if(route==='storestaff'){ const s=state.sto; s.staffTried=false; s.staff=null; s.staffErr=null; s.staffBusy=null; s.staffActErr=null;
     s.add={name:'',user:'',pw:''}; s.addErr=null; }
   if(route==='teamdevices'){ const t=state.tmd; t.tried=false; t.list=null; t.err=null; t.busy=null; t.actErr=null; }
@@ -7470,6 +7482,7 @@ function screenOperations(){
     ${settingsGroupCard([
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
     ])}
+    ${x7PrinterDoor()}
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Taking money','收款')}</div>
       ${settingsGroupCard([{label:T('Alipay by QR code','支付宝收款码'),
         value: !ali ? T('Loading…','加载中…')
@@ -7491,8 +7504,9 @@ function screenOperations(){
     ${/* §325 — "staff" came out: the phone's Team screen invites, edits and
           sets permissions (§300), so that clause was no longer true. The rest
           still is. The live pair with one item dropped, in both halves. */''}
-    ${/* §325 X6 — store details came out too: they are edited above. */''}
-    ${noteBar(T('Printers and payment keys are set on desktop.','打印机与支付密钥在电脑端设置。'))}</div>`;
+    ${/* §325 X6 — store details came out too: they are edited above. §325 X7 —
+          and printers: they have their own screen, the row above. */''}
+    ${noteBar(T('Payment keys are set on desktop.','支付密钥在电脑端设置。'))}</div>`;
 }
 
 /* ==========================================================================
@@ -7836,6 +7850,7 @@ function screenDelivery(){
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
       <span style="font-size:13.5px;color:var(--brick-ink);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
     ${noKey?noteBar(T('No maps key is configured, so nothing can be located','未配置地图密钥，无法进行定位')):''}
+    ${x7DeliveryDoors()/* §325 X7 — tracking, JD and Qingyun, as the desktop Delivery hub's cards */}
     ${desktopNote()}</div>`;
 }
 
@@ -26760,6 +26775,546 @@ function tmdDoor(){
 }
 SUBS.teamdevices={title:['Team devices','团队设备'],backLabel:()=>T('Team','团队'),render:()=>screenTeamDevices()};
 /* §325 X6 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X7 — PRINTERS, COURIER KEYS, QINGYUN, AND THE SHOP'S OWN ALERTS
+   --------------------------------------------------------------------------
+   The desktop panels that connect the shop to the outside, each on its
+   desktop endpoint and body:
+
+   • Receipt printing (02-settings-ops.js _savePrinter / _testPrinter): each
+     printer brand's account (PUT /integrations {feie}|{spyun}), the three
+     auto-print switches, the receipt header, each store's printer (SN, brand,
+     template, copies) with its preview and Save & test, the kitchen's printer,
+     the stock-request slip and the out-of-Guangzhou printer — PUT /printer.
+     Save all sends every brand's account first, then the printer settings, as
+     there. SETTINGS_SCREEN's keys, what the server asks of both.
+   • Package tracking (Kuaidi100) and JD Logistics keys, each with its Save and
+     Save & test (_saveIntegration, _testKd100, _testJd): the Delivery panel's
+     keys plus shipping:config, what the server asks of kd100 and jd.
+   • Qingyun riders: each store's status, Request setup, and Auto-send
+     (_requestQingyun, _setQingyunAutoPush): delivery:view or delivery:edit.
+   • Push notifications (05-marketing.js): the order-status template, the
+     WeCom app with its test, the group-bot webhook, System Alerts with its
+     test (those four config keys share one Save, as on the desktop), and SMS
+     when delivered with its Save and test SMS. SETTINGS_SCREEN's keys.
+
+   Keys and webhooks keep a button (§279 rule 2), here as there. A secret left
+   blank is kept; it is never shown back, only its mask.
+   ══════════════════════════════════════════════════════════════════════════ */
+const X7_SETTINGS=['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'];
+const X7_COURIER=['delivery:view','delivery:edit','shipping:config'];
+const X7_QY=['delivery:view','delivery:edit'];
+const x7=()=>state.x7;
+const x7d=k=>{ const v=state.x7.d[k]; return v==null?'':String(v); };
+/* What a failed write says, in place: a refusal says why, the server's own
+   sentence one language at a time, else the desktop's "Failed". */
+const x7Fail=e=>x6Words(e,'Failed','操作失败');
+function x7Note(card){
+  const s=x7(), e=s.err[card], ok=s.ok[card];
+  if(e) return `<div style="font-size:13.5px;color:var(--brick-ink);line-height:1.5;overflow-wrap:anywhere">${escAttr(String(e))}</div>`;
+  if(ok) return `<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5;overflow-wrap:anywhere">${escAttr(String(ok))}</div>`;
+  return '';
+}
+const X7_PILL={live:['LIVE','已启用','success'], off:['NOT CONFIGURED','未配置','danger'], unset:['NOT SET','未配置','muted'],
+  jdwait:['PENDING JD ACCOUNT','待开通京东账号','warning'], conn:['Connected','已连接','success'], noconn:['Not set up','未开通','danger']};
+function x7Pill(k){ const [en,zh,tone]=X7_PILL[k]; const [bg,fg]=PILL[tone]||PILL.muted;
+  return `<span class="pill" style="background:${bg};color:${fg};flex:none">${T(en,zh)}</span>`; }
+const x7Lbl=(t,hint)=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>${hint?`<span style="display:block;font-size:12px;color:var(--text-secondary);line-height:1.5;margin:-2px 0 6px">${hint}</span>`:''}`;
+/* A typed field writes its draft and repaints nothing — somebody is typing. */
+function x7In(k,label,o){
+  o=o||{};
+  return `<label style="display:block">${x7Lbl(label,o.hint)}
+    <input type="${o.type||'text'}" value="${escAttr(x7d(k))}" placeholder="${escAttr(o.ph||'')}" ${o.attrs||''}
+      autocapitalize="off" spellcheck="false" autocomplete="off" style="width:100%${o.mono?';font-family:monospace':''}" oninput="APP.cmd('x7In','${k}',this.value)"></label>`;
+}
+function x7Sel(k,label,opts,o){
+  o=o||{};
+  return `<label style="display:block">${x7Lbl(label,o.hint)}<select style="width:100%" onchange="APP.cmd('x7Pick','${k}',this.value)">${opts.map(([v,en,zh])=>
+    `<option value="${escAttr(v)}"${String(v)===x7d(k)?' selected':''}>${escAttr(zh==null?en:T(en,zh))}</option>`).join('')}</select></label>`;
+}
+reg('x7In', (k,v)=>{ const d=x7().d; if(!(k in d)) return; d[k]=String(v==null?'':v); });
+reg('x7Pick', (k,v)=>{ const d=x7().d; if(!(k in d)) return; d[k]=String(v==null?'':v); render(); });
+reg('x7Flip', k=>{ const d=x7().d; if(!(k in d)) return; d[k]=!d[k]; render(); });
+const x7Btn=(cmd,label,busyKey,o)=>{ o=o||{}; const s=x7(), b=s.busy===busyKey;
+  return `<button class="${o.primary?'cta':'btn2'}" style="${o.primary?'width:100%':'width:auto;padding:0 14px'}" ${s.busy?'disabled':''} onclick="APP.cmd('${cmd}'${o.arg!=null?`,'${escAttr(o.arg)}'`:''})">${b?(o.busyLabel||T('Saving…','保存中…')):label}</button>`; };
+const x7Card=(head,inner)=>`<div><div style="display:flex;align-items:center;gap:10px;padding:0 4px 8px">${head}</div><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">${inner}</div></div>`;
+const x7Head=(t,pill)=>`<span style="flex:1;min-width:0;font-size:15px;font-weight:500">${t}</span>${pill||''}`;
+const x7Help=t=>`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${t}</span>`;
+function x7Begin(card){ const s=x7(); s.err[card]=null; s.ok[card]=null; }
+
+/* ── The saved keys (GET /integrations), re-read on every entry ─────────── */
+/* The kd100 callback field opens on this address when nothing is stored —
+   the desktop input's own value, carried so both send the same body. */
+const X7_KD100_CB='https://rootskitchenchina.com/api/retail/tracking/kd100/callback';
+const X7_SECRETS={feie:['ukey'], spyun:['appsecret'], kd100:['key','secret'], jd:['app_secret','access_token'],
+  wecom_app:['secret'], aliyun_sms:['ak_secret']};
+function x7Seed(i,svc){
+  const d=x7().d, g=(s,f)=>((i&&i[s])||{})[f]||'';
+  const one=s=>!svc||svc===s;
+  if(one('feie')){ d['feie.user']=g('feie','user'); d['feie.ukey']=''; }
+  if(one('spyun')){ d['spyun.appid']=g('spyun','appid'); d['spyun.appsecret']=''; }
+  if(one('kd100')){ d['kd100.customer']=g('kd100','customer'); d['kd100.key']=''; d['kd100.callback']=g('kd100','callback')||X7_KD100_CB; d['kd100.secret']=''; }
+  if(one('jd')){ d['jd.app_key']=g('jd','app_key'); d['jd.app_secret']=''; d['jd.access_token']=''; d['jd.customer_code']=g('jd','customer_code'); d['jd.env']=g('jd','env')||'production'; }
+  if(one('wecom_app')){ d['wecom.corp_id']=g('wecom_app','corp_id'); d['wecom.agent_id']=g('wecom_app','agent_id'); d['wecom.secret']=''; }
+  if(one('aliyun_sms')){ d['sms.ak_id']=g('aliyun_sms','ak_id'); d['sms.ak_secret']=''; d['sms.sign_name']=g('aliyun_sms','sign_name');
+    d['sms.template_delivered']=g('aliyun_sms','template_delivered'); d['sms.template_otp']=g('aliyun_sms','template_otp'); if(!('sms.testphone' in d)) d['sms.testphone']=''; }
+}
+function x7LoadInteg(){
+  const s=x7(); if(s.integTried) return; s.integTried=true; s.integErr=null;
+  api('/integrations').then(i=>{ s.integ=i||{}; x7Seed(s.integ); render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.integErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+function x7Reread(svc){
+  const s=x7();
+  return api('/integrations').then(i=>{ s.integ=i||{}; x7Seed(s.integ,svc); render(); }).catch(()=>{});
+}
+reg('x7Retry', ()=>{ const s=x7(); s.integTried=false; s.prnTried=false; s.qyTried=false; s.cfgTried=false; render(); });
+const x7Masked=(svc,f)=>((x7().integ||{})[svc]||{})[f+'_masked']||'';
+/* A secret's field: the saved mask as its hint, blank keeps it. */
+const x7SecretPh=(svc,f,empty)=>{ const m=x7Masked(svc,f); return m?T(m+' — leave blank to keep',m+' — 留空保持不变'):empty; };
+
+/* ── Receipt printing ────────────────────────────────────────────────────── */
+const X7_TEMPLATES=[['receipt','Customer receipt','顾客小票'],['packing','Packing slip','配货单'],['compact','Compact','精简']];
+const X7_KITCHEN_WHEN=[['sent','When a request arrives','请求到达时'],['prepared','When the kitchen marks it made','制作完成时'],
+  ['both','Both','两者都打印'],['off','Never — notification only','不打印,仅通知']];
+const X7_TRANSFER_WHEN=[['sent','When a request arrives','请求到达时'],['off','Never — notification only','不打印,仅通知']];
+function x7PrnVendors(){ const p=x7().prn; return (p&&Array.isArray(p.vendors)&&p.vendors.length)?p.vendors:[{id:'feie',label_en:'Feie',label_cn:'飞鹅'}]; }
+/* loadPrinterPrefs's readings, default for default. */
+function x7PrnSeed(p){
+  p=p||{};
+  const d={auto_print:p.auto_print!==false, auto_print_addon:p.auto_print_addon!==false, auto_print_refund:p.auto_print_refund!==false,
+    shop_name:p.shop_name||'', kitchen_sn:p.kitchen_sn||'', kitchen_vendor:p.kitchen_vendor||'feie',
+    kitchen_print_on:p.kitchen_print_on||'sent', kitchen_copies:String(Number(p.kitchen_copies)||1),
+    transfer_print_on:p.transfer_print_on||'sent',
+    out_of_city_store_id:p.out_of_city_store_id==null?'':String(p.out_of_city_store_id), by_store:{}};
+  (p.stores||[]).forEach(s=>{ d.by_store[s.id]={sn:s.sn||'', vendor:s.vendor||'feie', template:s.template||'receipt', copies:String(Number(s.copies)||1)}; });
+  return d;
+}
+function x7LoadPrn(){
+  const s=x7(); if(s.prnTried) return; s.prnTried=true; s.prnErr=null;
+  api('/printer').then(p=>{
+    s.prn=p||{}; s.prnD=x7PrnSeed(s.prn);
+    const st=s.prn.stores||[];
+    if(!st.some(x=>x.id===s.prnStore)) s.prnStore=st.length?st[0].id:null;
+    render(); if(s.prnStore!=null) x7Preview(s.prnStore);
+  }).catch(e=>{ if(String(e&&e.message)==='auth') return; s.prnErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+/* _collectPrinterByStore: SN trimmed, brand, template, copies a whole number. */
+function x7ByStore(){
+  const d=x7().prnD, out={};
+  Object.keys(d.by_store).forEach(id=>{ const r=d.by_store[id];
+    out[id]={sn:String(r.sn||'').trim(), vendor:r.vendor||'feie', template:r.template||'receipt', copies:parseInt(r.copies,10)||1}; });
+  return out;
+}
+/* _savePrinter's body, key for key and in its order. */
+function x7PrnBody(){
+  const d=x7().prnD;
+  return {
+    auto_print:!!d.auto_print, auto_print_addon:!!d.auto_print_addon, auto_print_refund:!!d.auto_print_refund,
+    shop_name:d.shop_name||'',
+    kitchen_sn:d.kitchen_sn||'', kitchen_vendor:d.kitchen_vendor||'feie',
+    kitchen_print_on:d.kitchen_print_on||'sent', kitchen_copies:d.kitchen_copies||1,
+    transfer_print_on:d.transfer_print_on||'sent',
+    by_store:x7ByStore(),
+    out_of_city_store_id:d.out_of_city_store_id||null,
+  };
+}
+reg('x7Prn', (k,v)=>{ const d=x7().prnD; if(!d) return;
+  if(['auto_print','auto_print_addon','auto_print_refund'].includes(k)){ d[k]=!d[k]; render(); return; }
+  if(['shop_name','kitchen_sn','kitchen_copies'].includes(k)){ d[k]=String(v==null?'':v); return; }
+  if(k==='kitchen_vendor'){ if(x7PrnVendors().some(x=>x.id===v)) d[k]=v; render(); return; }
+  if(k==='kitchen_print_on'){ if(X7_KITCHEN_WHEN.some(x=>x[0]===v)) d[k]=v; render(); return; }
+  if(k==='transfer_print_on'){ if(X7_TRANSFER_WHEN.some(x=>x[0]===v)) d[k]=v; render(); return; }
+  if(k==='out_of_city_store_id'){ if(v===''||(x7().prn.stores||[]).some(s=>String(s.id)===String(v))) d[k]=String(v); render(); }
+});
+reg('x7PrnStore', (id,k,v)=>{ const d=x7().prnD; if(!d) return; const r=d.by_store[id]; if(!r) return;
+  if(k==='sn'||k==='copies'){ r[k]=String(v==null?'':v); return; }
+  if(k==='vendor'){ if(x7PrnVendors().some(x=>x.id===v)) r.vendor=v; render(); return; }
+  if(k==='template'){ if(X7_TEMPLATES.some(x=>x[0]===v)){ r.template=v; x7Preview(Number(id)); } render(); }
+});
+reg('x7PrnTab', id=>{ const s=x7(); id=Number(id); if(!(s.prnD&&s.prnD.by_store[id])) return; s.prnStore=id; render(); x7Preview(id); });
+/* The faux thermal slip: the vendor's line tags, drawn (desktop _renderThermal). */
+function x7Thermal(content){
+  return String(content==null?'':content).replace(/\s+$/,'').split('\n').map(line=>{
+    let st='', inner=line; const m=line.match(/^<(CB|B|L|BOLD|C)>([\s\S]*)<\/\1>$/);
+    if(m){ inner=m[2]; st=({CB:'text-align:center;font-size:15px;font-weight:600',B:'font-size:15px;font-weight:600',L:'font-size:15px',BOLD:'font-weight:600',C:'text-align:center'})[m[1]]||''; }
+    inner=inner.replace(/<\/?(CB|B|L|BOLD|C)>/g,'');
+    return `<div style="white-space:pre-wrap;min-height:1.3em;${st}">${escAttr(inner)}</div>`;
+  }).join('');
+}
+function x7Preview(id){
+  const s=x7(), d=s.prnD; if(!d||!d.by_store[id]) return;
+  const tpl=d.by_store[id].template||'receipt', key=id+':'+tpl;
+  s.prev[id]={key, busy:true, html:null, sample:false, err:false};
+  api('/printer/preview?store_id='+id+'&template='+encodeURIComponent(tpl)).then(j=>{
+    const p=s.prev[id]; if(!p||p.key!==key) return;
+    p.busy=false; if(!j||!j.ok){ p.err=true; render(); return; }
+    p.html=x7Thermal(j.content); p.sample=!!j.sample; render();
+  }).catch(e=>{ const p=s.prev[id]; if(!p||p.key!==key||String(e&&e.message)==='auth') return; p.busy=false; p.err=true; render(); });
+}
+/* Every brand's account first — each failure kept — then the printer
+   settings. Resolves true when the printer settings saved. */
+function x7SavePrn(){
+  const s=x7();
+  const sends=x7PrnVendors().map(v=>v.id).filter(id=>id==='feie'||id==='spyun').map(id=>()=>(id==='feie'
+    ? apiWrite('/integrations',{feie:{user:x7d('feie.user').trim()||null, ukey:x7d('feie.ukey')||undefined}},'PUT')
+    : apiWrite('/integrations',{spyun:{appid:x7d('spyun.appid').trim()||null, appsecret:x7d('spyun.appsecret')||undefined}},'PUT'))
+    .then(j=>{ if(j&&j.success===false) throw new Error(j.error||'save failed'); s.d[id==='feie'?'feie.ukey':'spyun.appsecret']=''; })
+    .catch(e=>{ if(String(e&&e.message)==='auth') throw e; s.err.printer=x7Fail(e); }));
+  return sends.reduce((p,f)=>p.then(f),Promise.resolve())
+    .then(()=>apiWrite('/printer',x7PrnBody(),'PUT'))
+    .then(()=>{ x7Reread('feie'); x7Reread('spyun'); s.prnTried=false; return !s.err.printer; })
+    .catch(e=>{ if(String(e&&e.message)==='auth') throw e; s.err.printer=x7Fail(e); return false; });
+}
+reg('x7PrnSave', ()=>{
+  const s=x7(); if(s.busy||!s.prnD||!canRoute('printers')) return;
+  x7Begin('printer'); s.busy='printer'; render();
+  x7SavePrn().then(ok=>{ s.busy=null; if(ok) showToast(T('Printer settings saved','已保存')); render(); })
+    .catch(()=>{ s.busy=null; });
+});
+reg('x7PrnTest', id=>{
+  const s=x7(); id=Number(id); if(s.busy||!s.prnD||!s.prnD.by_store[id]||!canRoute('printers')) return;
+  x7Begin('printer'); s.busy='test:'+id; render();
+  x7SavePrn().then(()=>apiWrite('/printer/test',{store_id:id},'POST')).then(j=>{
+    s.busy=null;
+    if(j&&j.ok){ showToast(T('Test sent — check that store\'s printer','已发送')); render(); return; }
+    const where=(j&&j.vendor_label&&j.sn)?' — '+j.vendor_label+' · SN '+j.sn:'';
+    const why=String((j&&j.error)||'unknown');
+    s.err.printer=j&&j.code==='unknown_printer'
+      ? E('Print failed: '+why+where+'. SN '+j.sn+' is not registered on your '+j.vendor_label+' account. Is the BRAND right for this store?',
+          '打印失败: '+why+where+'。编号 '+j.sn+' 未注册在你的'+j.vendor_label+'账号下。这家门店的品牌选对了吗?')
+      : E('Print failed: '+why+where,'打印失败: '+why+where);
+    render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.printer=x6Words(e,'Test failed','测试失败'); render(); });
+});
+function screenPrinters(){
+  const s=x7(); x7LoadInteg(); x7LoadPrn();
+  if((s.prnErr&&!s.prn)||(s.integErr&&!s.integ)) return x1Err(escAttr(String(s.prnErr||s.integErr)),'x7Retry');
+  if(!s.prn||!s.prnD||!s.integ) return x1Loading();
+  const d=s.prnD, i=s.integ, stores=s.prn.stores||[], vend=x7PrnVendors().map(v=>[v.id,v.label_en,v.label_cn]);
+  const sw=(k,en,zh)=>`<div style="display:flex;align-items:center;gap:14px;min-height:44px"><span style="flex:1;min-width:0;font-size:14.5px;line-height:1.45">${T(en,zh)}</span>${toggle(!!d[k],`APP.cmd('x7Prn','${k}')`)}</div>`;
+  const sel=(cmd,cur,opts,label)=>`<label style="display:block">${x7Lbl(label)}<select style="width:100%" onchange="${cmd}">${opts.map(([v,en,zh])=>
+    `<option value="${escAttr(v)}"${String(v)===String(cur)?' selected':''}>${escAttr(T(en,zh))}</option>`).join('')}</select></label>`;
+  const txt=(cmd,val,label,ph,attrs)=>`<label style="display:block">${x7Lbl(label)}<input type="text" value="${escAttr(val)}" placeholder="${escAttr(ph||'')}" ${attrs||''} style="width:100%" oninput="${cmd}"></label>`;
+  const id=s.prnStore, r=id!=null?d.by_store[id]:null, st=stores.find(x=>x.id===id), pv=id!=null?s.prev[id]:null;
+  const nm=x=>escAttr(LANG==='en'?(x.name_en||x.name_cn||x.code||('Store '+x.id)):(x.name_cn||x.name_en||x.code||('Store '+x.id)));
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:18px">
+    ${x7Help(T('Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Fill in the account for whichever brands you own, then pick each store\'s brand and SN below.',
+      '付款后自动在门店打印小票并语音播报。填写你所用品牌的账号,再为每家门店选择品牌与编号。'))}
+    ${noteBar(T('For both brands the credentials come from the vendor\'s developer console — not the 密钥/KEY printed on the device label. That label key only binds the printer to your account, once, in the vendor\'s own app.',
+      '两个品牌的凭据都来自厂商开发者后台 —— 不是设备标签上的 密钥/KEY(标签密钥只用于在厂商 App 里绑定设备一次)。'))}
+    ${x7Card(x7Head(T('Feie','飞鹅'),x7Pill(i.feie&&i.feie.enabled?'live':'off')),
+      x7In('feie.user',T('Account (USER)','账号 (USER)'),{mono:true,ph:T('feieyun login phone/email','飞鹅登录手机号/邮箱')})+
+      x7In('feie.ukey',T('USERKEY (UKEY)','用户密钥 (UKEY)'),{type:'password',ph:x7SecretPh('feie','ukey',T('paste USERKEY from dev console','从开发者后台粘贴 USERKEY'))}))}
+    ${x7Card(x7Head(T('Shangpeng','商鹏'),x7Pill(i.spyun&&i.spyun.enabled?'live':'unset')),
+      x7Help(T('Leave blank if you own no Shangpeng printers.','没有商鹏打印机则留空。'))+
+      x7In('spyun.appid',T('APPID','开发者ID'),{mono:true,ph:T('APPID from dev console','开发者后台的 APPID')})+
+      x7In('spyun.appsecret',T('APPSECRET','开发者密钥'),{type:'password',ph:x7SecretPh('spyun','appsecret',T('paste APPSECRET from dev console','从开发者后台粘贴 APPSECRET'))}))}
+    <div class="card" style="padding:6px 14px">
+      ${sw('auto_print','Auto-print every paid order at its store','付款后在对应门店自动打印')}
+      ${sw('auto_print_addon','Print an add-on slip when a customer adds to a paid order','顾客加单后补打加单小票')}
+      ${sw('auto_print_refund','Print a refund-request slip when a customer files a refund','顾客申请退款后自动打印退款申请单')}</div>
+    <div class="card" style="padding:14px">${txt("APP.cmd('x7Prn','shop_name',this.value)",d.shop_name,T('Receipt header','小票抬头'),T('shop name shown at top of receipt','小票顶部显示的店名'),'maxlength="40"')}</div>
+    <div>${cfgHead(T('Printers by store','各门店打印机'),T('Each store prints its own orders. Leave a store\'s SN blank if it has no printer.','每个门店打印自己的订单,没有打印机的门店留空。'))}
+      ${!stores.length?tmCaption(T('No active stores. Add stores under Stores first.','暂无门店,请先添加门店。'))
+      :`${stores.length>1?`<div style="margin:0 -16px 10px">${chipRow(stores.map(x=>({key:String(x.id),en:nm(x),zh:nm(x),on:x.id===id})),String(id),'x7PrnTab')}</div>`:''}
+      ${r&&st?`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+        <span style="font-size:15px;font-weight:500">${nm(st)}${st.code?` <span style="font-size:12px;color:var(--text-secondary)">#${escAttr(st.code)}</span>`:''}</span>
+        ${txt(`APP.cmd('x7PrnStore',${Number(id)},'sn',this.value)`,r.sn,T('Printer SN','编号'),T('e.g. 550540977','例如 550540977'),'inputmode="numeric" style="width:100%;font-family:monospace"')}
+        ${sel(`APP.cmd('x7PrnStore',${Number(id)},'vendor',this.value)`,r.vendor,vend,T('Brand','品牌'))}
+        ${sel(`APP.cmd('x7PrnStore',${Number(id)},'template',this.value)`,r.template,X7_TEMPLATES,T('Template','模板'))}
+        <label style="display:block">${x7Lbl(T('Copies','份数'))}<input type="number" min="1" max="5" inputmode="numeric" value="${escAttr(r.copies)}" style="width:100%" oninput="APP.cmd('x7PrnStore',${Number(id)},'copies',this.value)"></label>
+        <div>${x7Lbl(T('Print preview','打印预览'))}
+          <div style="background:#fbfaf6;color:#1d1d1f;border-radius:6px;padding:12px;font-family:monospace;font-size:12px;line-height:1.35;max-width:260px">${
+            !pv||pv.busy?escAttr(T('Loading…','加载中…')):pv.err?escAttr(T('No preview available','暂无预览')):pv.html}</div>
+          ${pv&&pv.html?`<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:6px">${pv.sample?T('Sample data','示例数据'):T('Your latest order','最近订单')}</span>`:''}</div>
+        ${x7Btn('x7PrnTest',T('Save & test this store','保存并测试本店'),'test:'+id,{arg:id,busyLabel:T('Sending…','发送中…')})}</div>`:''}`}</div>
+    <div>${cfgHead(T('Kitchen printer','厨房打印机'),T('The kitchen prints its own request slip when a job lands in the production queue. Leave the SN blank if the kitchen has no printer.','制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。'))}
+      <div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+        ${txt("APP.cmd('x7Prn','kitchen_sn',this.value)",d.kitchen_sn,T('Printer SN','编号'),T('e.g. 550540977','例如 550540977'),'inputmode="numeric" style="width:100%;font-family:monospace"')}
+        ${sel("APP.cmd('x7Prn','kitchen_vendor',this.value)",d.kitchen_vendor,vend,T('Brand','品牌'))}
+        ${sel("APP.cmd('x7Prn','kitchen_print_on',this.value)",d.kitchen_print_on,X7_KITCHEN_WHEN,T('When it prints','何时打印'))}
+        <label style="display:block">${x7Lbl(T('Copies','份数'))}<input type="number" min="1" max="5" inputmode="numeric" value="${escAttr(d.kitchen_copies)}" style="width:100%" oninput="APP.cmd('x7Prn','kitchen_copies',this.value)"></label></div></div>
+    <div>${cfgHead(T('Stock requests','补货申请'),T('A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop\'s own printer — the one set above — so there is nothing extra to configure.','补货申请发出时,在供货门店自动打印,使用该门店上方设置的打印机,无需另行配置。'))}
+      ${sel("APP.cmd('x7Prn','transfer_print_on',this.value)",d.transfer_print_on,X7_TRANSFER_WHEN,T('When a stock request prints','补货申请何时打印'))}</div>
+    <div>${cfgHead(T('Out-of-Guangzhou orders','广州以外订单'),T('Orders shipping outside Guangzhou always print at this store\'s printer (the warehouse that ships them). In-Guangzhou orders print at their own store.','广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。'))}
+      ${sel("APP.cmd('x7Prn','out_of_city_store_id',this.value)",d.out_of_city_store_id,[['','— Use each order’s own store —','— 按订单所属门店 —']].concat(stores.map(x=>[String(x.id),x.name_cn||x.name_en||x.code||('Store '+x.id),x.name_cn||x.name_en||x.code||('Store '+x.id)])),T('Which printer prints out-of-city orders','市外订单的打印门店'))}</div>
+    ${x7Note('printer')}
+    ${x7Btn('x7PrnSave',T('Save all','全部保存'),'printer',{primary:true})}</div>`;
+}
+SUBS.printers={title:['Receipt printing','云打印出单'],backLabel:()=>T('Operations','运营'),render:()=>screenPrinters()};
+function x7PrinterDoor(){
+  return canRoute('printers')?settingsGroupCard([{label:T('Receipt printing','云打印出单'),cmd:"APP.cmd('push','printers')",chev:true}]):'';
+}
+
+/* ── Package tracking (Kuaidi100) and JD Logistics ───────────────────────── */
+function x7SaveSvc(svc){
+  const t=k=>x7d(k).trim(), v=k=>x7d(k);
+  const send = svc==='kd100'
+    ? apiWrite('/integrations',{kd100:{customer:t('kd100.customer')||null, key:v('kd100.key')||undefined,
+        callback:t('kd100.callback')||null, secret:v('kd100.secret')||undefined}},'PUT')
+    : apiWrite('/integrations',{jd:{app_key:t('jd.app_key')||null, app_secret:v('jd.app_secret')||undefined,
+        access_token:v('jd.access_token')||undefined, customer_code:t('jd.customer_code')||null, env:v('jd.env')||'production'}},'PUT');
+  return send.then(j=>{ if(j&&j.success===false) throw new Error(j.error||'save failed'); x7Reread(svc); });
+}
+reg('x7SvcSave', svc=>{
+  const s=x7(); if(s.busy||!['kd100','jd'].includes(svc)||!canRoute(svc==='kd100'?'kd100cfg':'jdcfg')) return;
+  x7Begin(svc); s.busy=svc; render();
+  x7SaveSvc(svc).then(()=>{ s.busy=null; showToast(T('Saved','已保存')); render(); })
+    .catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err[svc]=x7Fail(e); render(); });
+});
+reg('x7SvcTest', svc=>{
+  const s=x7(); if(s.busy||!['kd100','jd'].includes(svc)||!canRoute(svc==='kd100'?'kd100cfg':'jdcfg')) return;
+  x7Begin(svc); s.busy=svc+':test'; render();
+  x7SaveSvc(svc).catch(e=>{ e.x7save=true; throw e; })
+    .then(()=>apiWrite('/integrations/'+svc+'/test',{},'POST')).then(j=>{
+      s.busy=null;
+      if(j&&j.ok){
+        showToast(svc==='kd100'?T('Kuaidi100 reachable · auth OK','快递100 连接正常'):T('JD reachable · auth OK','连接正常'));
+        if(svc==='jd'&&j.note&&/customercode|商家编码/i.test(j.note))
+          s.ok.jd=E('Next: enter CUSTOMER_CODE (商家编码) to enable waybill push','还需填写商家编码');
+      } else {
+        const why=String((j&&j.error)||'unknown');
+        s.err[svc]=svc==='kd100'?E('Test failed: '+why,'测试失败: '+why):E('JD ping failed: '+why,'连接失败: '+why);
+      }
+      render();
+    }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+      s.err[svc]=e&&e.x7save?x7Fail(e):x6Words(e,'Test failed','测试失败'); render(); });
+});
+function screenKd100(){
+  const s=x7(); x7LoadInteg();
+  if(s.integErr&&!s.integ) return x1Err(escAttr(String(s.integErr)),'x7Retry');
+  if(!s.integ) return x1Loading();
+  const k=s.integ.kd100||{};
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${x7Help(T('Live parcel tracking inside the customer\'s order page, via Kuaidi100 — works with every China carrier (JD, SF, YTO, ZTO…).','顾客订单页的实时快递轨迹,通过快递100 — 支持全部国内快递。'))}
+    ${x7Card(x7Head(T('Kuaidi100 tracking push','快递100轨迹订阅'),x7Pill(k.enabled?'live':'off')),
+      x7In('kd100.customer',T('Customer ID','客户编号'),{mono:true,ph:'e.g. ABCD1234'})+
+      x7In('kd100.key',T('Authorization key','授权 Key'),{type:'password',ph:k.key_masked?T(k.key_masked+' — leave blank to keep',k.key_masked+' — 留空保持不变'):T('paste authorization key','粘贴授权 Key')})+
+      x7In('kd100.callback',T('Callback URL','回调地址'),{mono:true,hint:T('Whitelist this in your kd100 dashboard. Webhook fires on every event update.','在快递100后台将其加入白名单;每次轨迹更新都会触发回调。')})+
+      x7In('kd100.secret',T('Callback secret','回调密钥'),{type:'password',ph:k.secret_masked?T(k.secret_masked+' — leave blank to keep',k.secret_masked+' — 留空保持不变'):T('random string — do not rotate','随机字符串,请勿更换'),
+        hint:T('Verifies pushes came from a request we made. Set once and leave alone.','用于验证回调确实来自我们发起的请求;设置一次后请勿改动。')})+
+      x7Note('kd100')+
+      `<span style="display:flex;gap:8px;flex-wrap:wrap">${x7Btn('x7SvcSave',T('Save','保存'),'kd100',{arg:'kd100'})}${x7Btn('x7SvcTest',T('Save & test','保存并测试'),'kd100:test',{arg:'kd100',busyLabel:T('Sending…','发送中…')})}</span>`)}</div>`;
+}
+SUBS.kd100cfg={title:['Package tracking','快递轨迹'],render:()=>screenKd100()};
+function screenJd(){
+  const s=x7(); x7LoadInteg();
+  if(s.integErr&&!s.integ) return x1Err(escAttr(String(s.integErr)),'x7Retry');
+  if(!s.integ) return x1Loading();
+  const j=s.integ.jd||{};
+  const ph=(f,empty)=>j[f+'_masked']?T(j[f+'_masked']+' — leave blank to keep',j[f+'_masked']+' — 留空保持不变'):empty;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${x7Help(T('Direct integration with JD Logistics. Once configured, Orders gains a "Push to JD" bulk action — paid orders push to JD and waybill numbers flow back automatically.','京东物流直连,一键推单、运单号自动回传。'))}
+    ${x7Card(x7Head(T('App keys','应用密钥'),x7Pill(j.enabled?'live':'jdwait')),
+      x7Help(T('Request LOP API access from your JD account manager.','请向您的京东客户经理申请 LOP API 权限。'))+
+      x7In('jd.app_key','app_key',{mono:true,ph:'from lop.jd.com app',hint:T('On your app\'s page at lop.jd.com, under 应用管理.','在 lop.jd.com 的「应用管理」中查看你的应用。')})+
+      x7In('jd.app_secret','app_secret',{type:'password',ph:ph('app_secret',T('paste app_secret','粘贴 app_secret'))})+
+      x7In('jd.access_token','access_token',{type:'password',ph:ph('access_token',T('Paste the token JD issued','粘贴京东签发的令牌')),
+        hint:T('Issued when you authorise the app against your merchant account; JD\'s account manager runs this with you once.','授权应用绑定商家账号时签发,由京东客户经理协助完成一次。')})+
+      x7In('jd.customer_code',T('customer_code','商家编码'),{mono:true,ph:'from jdl.com 商家后台',hint:T('Your merchant code, in the JD Logistics merchant back office at jdl.com.','商家编码,在 jdl.com 商家后台可见。')})+
+      x7Sel('jd.env',T('API environment','API 环境'),[['production','production',null],['sandbox','sandbox',null]],
+        {hint:T('Keep production unless JD has given you sandbox credentials to test with.','除非京东给了沙箱凭证用于测试,否则保持 production。')})+
+      x7Note('jd')+
+      `<span style="display:flex;gap:8px;flex-wrap:wrap">${x7Btn('x7SvcSave',T('Save','保存'),'jd',{arg:'jd'})}${x7Btn('x7SvcTest',T('Save & ping JD','保存并测试 JD'),'jd:test',{arg:'jd',busyLabel:T('Sending…','发送中…')})}</span>`+
+      x7Help(T('After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved.','保存后,完整推单还需对照你的 JD 商家配置做一次性字段确认 —— 凭证保存后请告知你的开发人员。')))}</div>`;
+}
+SUBS.jdcfg={title:['JD Logistics','京东物流'],render:()=>screenJd()};
+
+/* ── Qingyun riders ──────────────────────────────────────────────────────── */
+function x7LoadQy(){
+  const s=x7(); if(s.qyTried) return; s.qyTried=true; s.qyErr=null;
+  apiRaw('/integrations/qingyun').then(j=>{ s.qy={stores:Array.isArray(j&&j.data)?j.data:[], autoPush:!!(j&&j.autoPush===true), any:!!(j&&j.anyConnected)}; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.qyErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+reg('x7QyAsk', code=>{
+  const s=x7(); if(s.busy||!s.qy||!canRoute('qycfg')) return;
+  const st=s.qy.stores.find(x=>x.code===code); if(!st||st.connected||s.qyAsked[code]) return;
+  x7Begin('qy'); s.busy='qy:'+code; render();
+  apiWrite('/integrations/qingyun/request',{store_code:code},'POST').then(j=>{
+    if(!j||!j.success) throw new Error((j&&j.error)||'');
+    s.busy=null; s.qyAsked[code]=true; showToast(T('Request sent — we will set it up','已收到申请,我们会为你开通')); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.qy=x7Fail(e); render(); });
+});
+reg('x7QyAuto', ()=>{
+  const s=x7(); if(s.busy||!s.qy||!s.qy.any||!canRoute('qycfg')) return;
+  const on=!s.qy.autoPush;
+  x7Begin('qy'); s.busy='qy:auto'; render();
+  apiWrite('/integrations/qingyun/autopush',{enabled:on},'POST').then(j=>{
+    if(!j||!j.success) throw new Error((j&&j.error)||'');
+    s.busy=null; s.qy.autoPush=on; showToast(on?T('Auto-send on','已开启自动发单'):T('Auto-send off','已关闭')); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.qy=x7Fail(e); render(); });
+});
+function screenQingyun(){
+  const s=x7(); x7LoadQy();
+  if(s.qyErr&&!s.qy) return x1Err(escAttr(String(s.qyErr)),'x7Retry');
+  if(!s.qy) return x1Loading();
+  const q=s.qy;
+  const rows=q.stores.map(st=>tmRow({label:escAttr([st.name_en||st.code,st.name_cn].filter(Boolean).join(' · ')),
+    right:`${x7Pill(st.connected?'conn':'noconn')}${st.connected?'':s.qyAsked[st.code]
+      ?`<span style="font-size:13px;color:var(--text-secondary)">${T('Requested','已申请')}</span>`
+      :`<button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px" ${s.busy?'disabled':''} onclick="APP.cmd('x7QyAsk','${escAttr(st.code)}')">${s.busy==='qy:'+st.code?T('Sending…','提交中…'):T('Request setup','申请开通')}</button>`}`}));
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${x7Help(T('Shows the live courier on a map in the customer\'s order page for same-city (e-bike) deliveries via Qingyun. Each store needs a one-time login, so we connect it for you — request it below and we\'ll set it up.',
+      '同城配送(电动车)在顾客端订单页显示骑手实时位置。每家门店需一次性登录,由我们协助开通 —— 点击申请,我们会为你连接。'))}
+    ${q.any?tmList([tmRow({label:T('Auto-send paid orders to Qingyun','付款后自动发到青云'),
+      note:T('When on, every paid delivery order appears in your Qingyun 待配送 list, ready to pick a courier — no re-typing.','开启后,已付款的配送订单自动出现在青云"待配送",直接选运力发单,无需手动录入。'),
+      right:s.busy==='qy:auto'?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`:toggle(q.autoPush,"APP.cmd('x7QyAuto')")})]):''}
+    ${x7Note('qy')}
+    ${rows.length?tmList(rows):tmCaption(T('No active stores yet.','暂无门店。'))}</div>`;
+}
+SUBS.qycfg={title:['Qingyun riders','青云配送'],render:()=>screenQingyun()};
+function x7DeliveryRows(){
+  return [
+    ...(canRoute('kd100cfg')?[{label:T('Package tracking','快递轨迹'),cmd:"APP.cmd('push','kd100cfg')",chev:true}]:[]),
+    ...(canRoute('jdcfg')?[{label:T('JD Logistics','京东物流'),cmd:"APP.cmd('push','jdcfg')",chev:true}]:[]),
+    ...(canRoute('qycfg')?[{label:T('Qingyun riders','青云配送'),cmd:"APP.cmd('push','qycfg')",chev:true}]:[]),
+  ];
+}
+function x7DeliveryDoors(){ const r=x7DeliveryRows(); return r.length?settingsGroupCard(r):''; }
+
+/* ── Push notifications ──────────────────────────────────────────────────── */
+function x7LoadCfg(){
+  const s=x7(); if(s.cfgTried) return; s.cfgTried=true; s.cfgErr=null;
+  api('/config').then(c=>{
+    state.cfg=c||{};
+    const n=(state.cfg.notifications)||{}, a=(state.cfg.system_alerts)||{}, d=s.d;
+    d['cfg.template']=n.order_status_template_id||''; d['cfg.webhook']=n.wecom_order_webhook||'';
+    d['cfg.alerts_on']=!!a.enabled; d['cfg.alerts_webhook']=a.wecom_webhook||'';
+    render();
+  }).catch(e=>{ if(String(e&&e.message)==='auth') return; s.cfgErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); render(); });
+}
+/* saveConfig's four keys. The manual-Alipay card that shares the desktop's
+   Save bar is a money setting with its own screen (X10), so it is not here. */
+reg('x7CfgSave', ()=>{
+  const s=x7(); if(s.busy||!canRoute('pushcfg')||!('cfg.template' in s.d)) return;
+  x7Begin('cfg'); s.busy='cfg'; render();
+  apiWrite('/config',{'notifications.order_status_template_id':x7d('cfg.template').trim(),
+    'notifications.wecom_order_webhook':x7d('cfg.webhook').trim(),
+    'system_alerts.enabled':!!s.d['cfg.alerts_on'],
+    'system_alerts.wecom_webhook':x7d('cfg.alerts_webhook').trim()},'PUT').then(()=>{
+    s.busy=null; showToast(T('Settings saved','设置已保存')); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.cfg=x6Words(e,'Save failed','保存失败'); render(); });
+});
+reg('x7WecomSave', ()=>{
+  const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
+  x7Begin('wecom'); s.busy='wecom'; render();
+  apiWrite('/integrations',{wecom_app:{corp_id:x7d('wecom.corp_id').trim()||null, agent_id:x7d('wecom.agent_id').trim()||null,
+    secret:x7d('wecom.secret')?x7d('wecom.secret'):undefined}},'PUT').then(j=>{
+    if(j&&j.success===false) throw new Error(j.error||'save failed');
+    s.busy=null; s.d['wecom.secret']=''; showToast(T('Saved','已保存')); x7Reread('wecom_app'); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.wecom=x7Fail(e); render(); });
+});
+/* The server tries the saved app first, else the group-bot address typed
+   below — so it can be tried before that address is saved. */
+reg('x7WecomTest', ()=>{
+  const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
+  x7Begin('wecom'); s.busy='wecom:test'; render();
+  apiWrite('/wecom/test',{webhook:x7d('cfg.webhook').trim()},'POST').then(j=>{
+    s.busy=null;
+    if(j&&j.success===false) throw Object.assign(new Error(j.error||'failed'),{code:j.error});
+    showToast(T('Sent — check your WeCom','已发送,请查看企业微信')); render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return;
+    s.err.wecom=e&&e.code==='no_valid_webhook'
+      ? E('Set up the app above, or paste a qyapi.weixin.qq.com URL','请先配置上方 App 或填入正确地址')
+      : x6Words(e,'Failed','失败');
+    render(); });
+});
+function x7SmsBody(){
+  return {aliyun_sms:{ak_id:x7d('sms.ak_id').trim()||null, ak_secret:x7d('sms.ak_secret')?x7d('sms.ak_secret'):undefined,
+    sign_name:x7d('sms.sign_name').trim()||null, template_delivered:x7d('sms.template_delivered').trim()||null,
+    template_otp:x7d('sms.template_otp').trim()||null}};
+}
+function x7SmsSave(){
+  return apiWrite('/integrations',x7SmsBody(),'PUT').then(j=>{
+    if(j&&j.success===false) throw new Error(j.error||'save failed'); x7().d['sms.ak_secret']=''; });
+}
+reg('x7SmsSave', ()=>{
+  const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
+  x7Begin('sms'); s.busy='sms'; render();
+  x7SmsSave().then(()=>{ s.busy=null; showToast(T('Saved','已保存')); x7Reread('aliyun_sms'); render(); })
+    .catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.sms=x7Fail(e); render(); });
+});
+/* Save first, then a REAL delivered SMS to the typed number (desktop
+   _testAliyunSms) — the only proof the signature and template are approved. */
+reg('x7SmsTest', ()=>{
+  const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
+  x7Begin('sms');
+  const phone=x7d('sms.testphone').trim();
+  if(!/^1\d{10}$/.test(phone.replace(/\D/g,'').replace(/^86/,''))){ s.err.sms=E('Enter an 11-digit mainland mobile','请输入 11 位手机号'); render(); return; }
+  s.busy='sms:test'; render();
+  x7SmsSave().catch(e=>{ e.x7save=true; throw e; }).then(()=>apiWrite('/integrations/aliyun_sms/test',{phone},'POST')).then(j=>{
+    s.busy=null; x7Reread('aliyun_sms');
+    if(j&&j.ok){ showToast(T('Sent — check that phone','已发送,请查看该手机')); render(); return; }
+    const c=j&&j.error;
+    s.err.sms=c==='not_configured'?E('Fill in all four fields first','请先填写四项'):c==='bad_phone'?E('Bad phone number','手机号无效')
+      :E('Failed: '+(c||'failed'),'失败: '+(c||'failed'));
+    render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.sms=e&&e.x7save?x7Fail(e):x6Words(e,'Failed','失败'); render(); });
+});
+reg('x7AlertTest', ()=>{
+  const s=x7(); if(s.busy||!canRoute('pushcfg')) return;
+  x7Begin('alert');
+  const webhook=x7d('cfg.alerts_webhook').trim();
+  if(!webhook){ s.err.alert=E('Paste a webhook first','请先填入 Webhook'); render(); return; }
+  s.busy='alert'; render();
+  apiWrite('/system-alerts/test',{webhook},'POST').then(j=>{
+    s.busy=null;
+    if(j&&j.success){ showToast(T('Sent — check the group','已发送,请查看该群')); render(); return; }
+    const c=j&&j.error;
+    s.err.alert=c==='domain_not_allowed'?E('Only qyapi.weixin.qq.com URLs','仅接受 qyapi 地址'):c==='no_webhook'?E('Paste a webhook first','请先填入 Webhook')
+      :E('Failed: '+(c||'failed'),'失败: '+(c||'failed'));
+    render();
+  }).catch(e=>{ s.busy=null; if(String(e&&e.message)==='auth') return; s.err.alert=x6Words(e,'Failed','失败'); render(); });
+});
+function screenPushCfg(){
+  const s=x7(); x7LoadInteg(); x7LoadCfg();
+  if((s.cfgErr&&!('cfg.template' in s.d))||(s.integErr&&!s.integ)) return x1Err(escAttr(String(s.cfgErr||s.integErr)),'x7Retry');
+  if(!s.integ||!('cfg.template' in s.d)||!s.cfgTried) return x1Loading();
+  const w=s.integ.wecom_app||{}, a=s.integ.aliyun_sms||{};
+  const btns=(...b)=>`<span style="display:flex;gap:8px;flex-wrap:wrap">${b.join('')}</span>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:18px">
+    ${x7Card(x7Head(T('New-order alert to your phone','新订单手机提醒'),x7Pill(w.enabled?'live':'off')),
+      x7Help(T('Get a card in your WeChat Work (企业微信 / WeCom) app the moment a new order is paid — order number, amount, recipient and address. Works even when this backend is closed, and works on the international WeCom app.',
+        '每当有新订单付款,立即在企业微信 App 收到一张卡片(订单号、金额、收货人、地址)。即使后台没开也能收到,国际版 WeCom 同样适用。'))+
+      x7In('wecom.corp_id',T('Company ID (CorpID)','企业 ID'),{mono:true,ph:'ww… (我的企业 → 企业信息)'})+
+      x7In('wecom.agent_id',T('App ID (AgentId)','应用 AgentId'),{mono:true,ph:'e.g. 1000002',attrs:'inputmode="numeric"'})+
+      x7In('wecom.secret',T('App Secret','应用 Secret'),{type:'password',mono:true,ph:w.secret_masked?T(w.secret_masked+' — leave blank to keep',w.secret_masked+' — 留空保持不变'):T('paste app Secret','粘贴应用 Secret')})+
+      x7Help(T('Clear all three fields to turn off.','清空三项即关闭。'))+
+      x7Note('wecom')+
+      btns(x7Btn('x7WecomSave',T('Save','保存'),'wecom'),x7Btn('x7WecomTest',T('Send a test','发送测试'),'wecom:test',{busyLabel:T('Sending…','发送中…')})))}
+    ${x7Card(x7Head(T('SMS when delivered (out-of-Guangzhou orders)','送达短信(广州市外订单)'),x7Pill(a.enabled?'live':'off')),
+      x7Help(T('Text the customer the moment an out-of-town courier order is marked delivered — for shoppers who aren\'t watching the mini app. Same-city Guangzhou deliveries and in-store pickups are skipped.',
+        '当广州市外的快递订单标记为「已送达」时,给顾客发一条短信(适合不盯着小程序的顾客)。广州同城配送与到店自提不发送。'))+
+      x7In('sms.ak_id',T('AccessKey ID','访问密钥 ID'),{mono:true,ph:'LTAI…'})+
+      x7In('sms.ak_secret',T('AccessKey Secret','访问密钥'),{type:'password',mono:true,ph:a.ak_secret_masked?T(a.ak_secret_masked+' — leave blank to keep',a.ak_secret_masked+' — 留空保持不变'):T('paste AccessKey Secret','粘贴 AccessKey Secret')})+
+      x7In('sms.sign_name',T('Signature (签名)','短信签名'),{ph:'e.g. 满圆'})+
+      x7In('sms.template_delivered',T('Delivered template code (模板CODE)','送达模板编号'),{mono:true,ph:'e.g. SMS_123456789'})+
+      x7In('sms.template_otp',T('Login OTP template code (模板CODE)','网页登录验证码模板编号'),{mono:true,ph:'e.g. SMS_987654321'})+
+      x7In('sms.testphone',T('Test to this phone','测试发送至此手机号'),{mono:true,attrs:'inputmode="tel"',ph:T('11-digit mainland mobile','11 位手机号')})+
+      x7Help(T('Clear all four fields to turn off.','清空四项即关闭。'))+
+      x7Note('sms')+
+      btns(x7Btn('x7SmsSave',T('Save','保存'),'sms'),x7Btn('x7SmsTest',T('Send a test SMS','发送测试短信'),'sms:test',{busyLabel:T('Sending…','发送中…')})))}
+    ${x7Card(x7Head(T('Order-status subscribe-message template','订单状态订阅消息模板'),''),
+      x7Help(T('WeChat doesn\'t allow free push — instead, each customer opts in to one notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates.',
+        '微信不允许免费推送 —— 顾客每次提交只能订阅一条通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。'))+
+      x7In('cfg.template',T('Template ID','模板 ID'),{mono:true,ph:'e.g. WrA_C5n8KuQ0vWBg…'}))}
+    ${x7Card(x7Head(T('Alternative: group-bot webhook','备选:群机器人 Webhook'),''),
+      x7Help(T('Only if you use mainland 企业微信 with an internal (company-only) group. Paste the group robot\'s webhook and the card posts there instead. Leave blank if you\'re using the app above.',
+        '仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。'))+
+      x7In('cfg.webhook',T('Group-bot webhook URL','群机器人 Webhook 地址'),{mono:true,ph:'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'}))}
+    ${x7Card(x7Head(T('System Alerts','系统告警'),''),
+      x7Help(T('Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn\'t bury orders.',
+        '把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。'))+
+      `<div style="display:flex;align-items:center;gap:14px;min-height:44px"><span style="flex:1;font-size:14.5px">${T('Enable system alerts','开启系统告警')}</span>${toggle(!!s.d['cfg.alerts_on'],"APP.cmd('x7Flip','cfg.alerts_on')")}</div>`+
+      x7In('cfg.alerts_webhook',T('Group-bot webhook URL','群机器人 Webhook 地址'),{mono:true,ph:'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'})+
+      x7Note('alert')+
+      btns(x7Btn('x7AlertTest',T('Send test','发送测试'),'alert',{busyLabel:T('Sending…','发送中…')})))}
+    ${x7Note('cfg')}
+    ${x7Btn('x7CfgSave',T('Save settings','保存设置'),'cfg',{primary:true})}</div>`;
+}
+SUBS.pushcfg={title:['Push notifications','推送通知'],render:()=>screenPushCfg()};
+/* §325 X7 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -26783,7 +27338,11 @@ function screenSettings(){
       ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[]),
       /* §325 X5 — the desktop's Shop tab and Customer service panels. */
       ...(canRoute('shopdisplay')?[{label:T('Shop tab','商城页'),cmd:"APP.cmd('push','shopdisplay')",chev:true}]:[]),
-      ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[])]},
+      ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[]),
+      /* §325 X7 — the desktop's Push notifications panel: the shop's own alerts and keys. */
+      ...(canRoute('pushcfg')?[{label:T('Push notifications','推送通知'),cmd:"APP.cmd('push','pushcfg')",chev:true}]:[])]},
+    /* §325 X7 — the couriers' keys and Qingyun, the desktop Delivery hub's three cards. */
+    ...(x7DeliveryRows().length?[{h:T('Delivery','配送'),rows:x7DeliveryRows()}]:[]),
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -35262,6 +35821,15 @@ const ROUTE_CAP={
      store or the one that manages people (X6 decision 2). Team devices:
      team:manage, the key GET /sessions/team checks and the desktop card shows on. */
   storeone:'stores:edit', storestaff:['stores:edit','team:manage'], teamdevices:'team:manage',
+  /* §325 X7. Each on the keys the server asks of its writes: the printer
+     settings and the printer brands' accounts, the WeCom app, SMS and the
+     Push config keys are the desktop Settings set (lib/cap-routes.js
+     SETTINGS_SCREEN); Kuaidi100 and JD the Delivery panel's keys plus
+     shipping:config; Qingyun's request and auto-send the Delivery panel's. */
+  printers:['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'],
+  pushcfg:['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view'],
+  kd100cfg:['delivery:view','delivery:edit','shipping:config'], jdcfg:['delivery:view','delivery:edit','shipping:config'],
+  qycfg:['delivery:view','delivery:edit'],
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
