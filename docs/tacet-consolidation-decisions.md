@@ -25547,3 +25547,242 @@ noun_cn}`, `PATCH /products/:sid`, `POST /products/:id/duplicate
    card's text does not offer a tap that would be refused. A tenant whose
    catalogue is kept upstream does not see the Details screen at all, as
    before.
+
+## §372 — CHANNEL UPKEEP ON THE PHONE: SYNC NOW, THE CATALOGUE, AUTO-MATCH, SYNC FROM
+
+**Built 2026-10-01 under §325.** This is step X8a, the first part of X8
+(channel upkeep), on the Settings / Channels / Dashboard / Billing lane. The
+channel tabs' maintenance buttons are on the phone's three channel screens
+now. Each sends the desktop's own request.
+
+1. **Meituan** (`11-meituan.js`).
+   - **Sync now:** `POST /meituan/push-all {force:false}`. The phone has no
+     emergency "push while closed", just as the desktop has no button for it.
+   - **The catalogue line:** each store's count of listing names, and how
+     old they are.
+   - **Refresh catalogue:** `POST /meituan/listings/refresh`, then
+     `GET /meituan/listings` every 3 s, for at most 3 minutes, until no job
+     is running. It applies nothing. That is the whole difference from Match
+     names, which comes with matching (X8c).
+2. **Eleme** (`14-eleme.js`). **Push all stock:** `POST /eleme/push-all`.
+3. **gzgrocery** (`12-guanyi.js`).
+   - **The list line:** how many listings were read, and when.
+   - **Refresh list:** `POST /guanyi/listings/refresh`, then a look every
+     2 s, at most 30 times.
+   - **Auto-match by SKU:** `POST /guanyi/auto-match`. It reports matched,
+     ambiguous and unmatched. "Refresh first" is shown on the card, not as a
+     toast.
+   - **Push all stock:** `POST /guanyi/push-all`.
+4. **Sync from, per store, on Meituan and Eleme.**
+   - **What it sends:** `PATCH /stores/:id {sync_start_time}`, writing the
+     store's own row as the desktop does.
+   - **A blank box** says what it resolves to: "defaults to 08:00", or "no
+     opening hours set — syncs all day". That is the daemon's own rule,
+     including its clamp: a start later than opening reads as opening.
+   - **Without `stores:edit`** the effective time is shown, not edited.
+5. **Who can use each button.** Each is drawn only for the key the server
+   asks of its request: `meituan:sync`, `eleme:sync`, `guanyi:sync`,
+   `guanyi:map`, `stores:edit` (`lib/cap-routes.js`).
+   - The desktop draws these buttons with no key at all. The phone was born
+     closed, so it takes no access anyone had on the phone.
+   - The screens themselves keep their existing gates.
+6. **Two labels reuse words from elsewhere** instead of new Chinese. The
+   gzgrocery push button is labelled with Eleme's `Push all stock · 推送全部库存`
+   (the desktop's gzgrocery button is English-only, "Push all stock now").
+   Its toast is Eleme's `Queued N product(s)` (the desktop's is "Queued N
+   reconcile(s) to Guanyi"). Each queued reconcile is one product, so the words
+   stay true.
+7. **Next sub-steps.**
+   - X8b: the channel-sync picker and search, and per-item sync on/off with
+     §326.3's lasting-change confirm.
+   - X8c: matching and claims (and Match names).
+   - X8d: Meituan bundles.
+   - X8e: gzgrocery analytics and export.
+
+## §373 — FRESH BATCHES AND THE DELIVERY SET-UP WIZARD ON THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O9 of the Orders lane. Two parts of the desktop's Delivery panel that the
+phone did not have: the Fresh batches page (`06-delivery.js`
+saveBatchSchedule / fbSync / fbRenderPreview, `#dlv-fresh`) and the
+three-question set-up wizard (dlvWiz*, `#dlvwiz`). Both write `PUT /config`.
+Both are drawn for the Delivery panel's any-of, `delivery:view` /
+`delivery:edit` / `settings:shop` / `stores:view`, which is what
+`configKeyCap` checks for every key they send. The gates suite now pins those
+keys.
+
+1. **Fresh batches is a row on the phone's Delivery list.** The row shows the
+   hub's status: *Every N days, order by HH:00*, or *Off*. A writer's tap
+   opens a full sheet on a **fresh read of /config**, so a sheet opened over
+   a failed read cannot save empty boxes over a real schedule.
+   - The sheet has the switch and its sentence, then the schedule rows:
+     make every, a batch day, order-by hour, ready from the kitchen,
+     pre-order opens, pre-order cut-off, how many to offer, channels, skip
+     dates (as chips), evening-before lock, morning request hour.
+   - Then the next-batch hint, and the two checkout popups (outside and
+     inside Guangzhou). Each popup field's placeholder is the built-in
+     wording, and a preview fills `{ship_date}` / `{make_date}` from the
+     schedule while leaving `{delivery_date}` as a token.
+   - The fields fill from saved settings the way the desktop fills them. A
+     ready or lock hour that was never set stays blank. A start time or
+     quantity of 0 stays blank. A morning request hour that was never written
+     reads 6, while one deliberately left blank stays blank (off).
+2. **One Save sends the desktop's body:** `batch.schedule` **whole** (the
+   server replaces it, so a field left out would be deleted), plus
+   `fresh.rescheduleCutoffHour` and `fresh.morningRequestHour`. Every refusal
+   the desktop makes before saving is made here, in its words, and nothing is
+   sent past one:
+   - no batch day;
+   - an hour outside 0–23;
+   - pre-orders opening at or after their cut-off;
+   - a negative quantity.
+
+   A refusal or a failed save stays on the sheet.
+3. **The set-up wizard** is offered only while delivery is not set up at all.
+   That means no zone switched on, no national default switched on, and the
+   wizard never finished (`dlvIsConfigured`).
+   - It appears as the desktop's *Delivery to their door* card on the
+     Delivery screen. A reader sees the *Off — not set up yet* state and no
+     button.
+   - Three questions: where, what it costs, when it arrives. Step 1 has
+     nothing pre-ticked; steps 2 and 3 start on the desktop's flat price and
+     next day, with the same default amounts (8, 99, 10, 3, 16:00).
+   - Finishing sends the desktop's `dlvWizFinish` body. That body seeds the
+     national default zone only for city or country coverage with a simple
+     price, and adds the order-by time for same day.
+   - Then it re-reads the zones. When the answer was per-area coverage or
+     per-area pricing, it goes straight to the zones screen (§325 O5).
+4. **Two differences from the desktop, both refusals rather than changes:**
+   - A price typed as anything but a number of 0 or more is refused (money
+     fails closed). The desktop's `parseFloat` would quietly fall back to its
+     own default amount.
+   - The desktop's step 1 has a *Your city* box whose answer `dlvWizFinish`
+     never reads or sends. The phone does not draw a box whose answer goes
+     nowhere.
+5. **A store with no coordinates now points at the phone.** The Delivery
+   screen's warning said *Fix it on desktop*. Since X6 a store's address and
+   GPS pin are edited on the phone, so the warning keeps its first sentence
+   and, for `stores:edit`, leads to Operations, where the store is edited.
+6. **Tests.**
+   - `scripts/test_mobile_fresh_batches.js` (fast shard, 185 assertions):
+     the key gates; the fresh read; the draft rules; the exact body,
+     including blanks and the switched-off case; all ten refusals; the hint
+     dates; the preview; when the wizard is offered; every wizard body; the
+     money refusals; refused and failed saves; the no-permission cases; both
+     languages; the store-coordinates pointer. It also checks that every
+     copied pair exists on the desktop.
+   - `scripts/test_settings_write_gates.js` now pins the twenty-two keys the
+     phone's Delivery screen writes, and reads the two new key shapes
+     (`batch.*` / `fresh.*`, and a body added to after it is built).
+
+## §374 — A TAP AWAY FROM A FIELD CLOSES THE PHONE'S KEYBOARD AGAIN
+
+**Built 2026-10-01 under §325** (Step K1, the bug T1 found).
+On the phone, tapping the page away from a field is meant to put the keyboard
+away, unless the tap moved focus itself: onto another field, through a label,
+or into a field the tap just opened. That rule is `kbTapAway`, and it needs to
+know which field had the keyboard when the finger went down. The touch-down
+function records that.
+
+1. **What was wrong.**
+   - The touch-down function was named `kbMark`.
+   - On 2026-09-27 another lane added a second, different function with the same
+     name, sixty lines lower: the `html.kb-up` toggle.
+   - When two function declarations share a name, only the later one is kept. So
+     `pointerdown` and `mousedown` ran the toggle, the field was never recorded,
+     and `kbTapAway` always returned early.
+   - The result: a tap away from a field never closed the keyboard. The keyboard
+     simply stayed up, so nothing broke, but the rule did nothing.
+2. **The fix.**
+   - The touch-down function is renamed `kbTouchDown`, and both of its listeners
+     now call it. The toggle keeps the name `kbMark` and is unchanged.
+   - No behaviour was invented: this switches on the rule as it was written and
+     tested, including every case where the tap must leave the keyboard alone.
+   - T1's pinned list in `scripts/test_phone_scripts_compile.js` is now empty. The
+     compile suite now refuses a second declaration of any name.
+3. **Why the existing tests never saw it.** `scripts/test_mobile_keyboard.js`
+   copies functions out of `m.html` by name and takes the first function it finds
+   with that name. So it tested the touch-down copy the phone never ran. Its tests
+   of the tap rule passed the whole time.
+4. **Tests.** `scripts/test_mobile_keyboard.js` (fast shard, now 75 checks):
+   - **Rename.** It slices `kbTouchDown` everywhere it sliced `kbMark` for the tap
+     rule. Its keyboard-height section now slices the real `kbMark` toggle, which
+     its functions call.
+   - **New section 10.** It reads the touch-down from the shipped `pointerdown`
+     listeners. Each listener's function is resolved the way the browser does,
+     using the last declaration of that name. It then asserts four things:
+     - exactly one listener records the field;
+     - `mousedown` calls the same function;
+     - that function is declared exactly once;
+     - through it, a tap outside a focused field closes the keyboard, and a tap
+       inside it does not.
+   - **Checked against the old file.** Run against the version before this fix,
+     the suite fails.
+5. **Nothing composed.** No operator strings were added.
+
+## §375 — THE PHONE'S STATIC GUARDS RUN IN THE FAST SHARD
+
+**Built 2026-10-01 under §325** (test-only step T2). **This adds fast-shard
+coverage and changes no CI configuration**: no workflow, no `package.json`
+script, no runner change. The existing fast-shard runner picks the new suite up
+by its name.
+
+`scripts/test_mobile_screens.js` renders every phone screen in Chromium, so it
+is in the slow shard, which is not run (standing rule). Before it renders, it
+runs checks that only read `public/m.html` and need no browser. Those are the
+checks that catch real phone breakage, and lanes were copying them into their
+own suites by hand.
+
+1. **One implementation, two callers.** The checks now live in
+   `scripts/lib/m-static-guards.js`, as `scripts/lib/m-state-keys.js` already
+   does for state keys.
+   - **Fast:** `scripts/test_mobile_static_guards.js` (fast shard, 24 checks)
+     runs every one of them against the real `m.html`.
+   - **Slow:** `test_mobile_screens.js` keeps every check and still runs them
+     all before it renders. It now calls the module instead of carrying its own
+     copies, so the two can never disagree.
+   - Nothing in the slow suite was moved out of it, skipped, or made more lenient.
+2. **What the checks are:**
+   - every mapX / loadX / screenX / sheetX helper that is used is defined;
+   - every `T(en, zh)` pair has a Chinese half;
+   - `APP.cmd` forwards every argument a call passes;
+   - no control is wired to the `noop` command;
+   - every `reg('<name>')` command can be reached, with the comment stripper
+     tested against its own traps first;
+   - every tint and ink token is defined for the dark theme too, and no colour
+     is used as text on its own tint;
+   - every `DB.x` the app reads is in the DB literal.
+
+   The state-key check already had its own fast suite (`test_mobile_state_keys.js`).
+   Each check is also run on a small fixture that breaks it, so a check that stops
+   finding anything fails instead of passing quietly.
+3. **What was red on main today, and why.** These have not been reported before:
+   the slow suite is never run, and it stops at the first failing check.
+   - **The helper check reported `screenAboutEdit()` as "called but never
+     defined".**
+     - The function exists. The About editor's file input sets
+       `el.accept='image/*'`, and the helper check read the `/*` in that string
+       as the start of a comment. It then dropped everything up to the next
+       comment close, including the function's own definition.
+     - The reachable-command check hit the same trap months ago and was fixed
+       with a stricter stripper. The helper check had kept the old one.
+     - It now uses the same stricter stripper. This is a parsing fix, not a
+       relaxation: a fixture proves the check still finds a helper that is really
+       missing, and that a definition after an `image/*` string is no longer lost.
+   - **The theme check answered "cannot find the theme blocks" and checked
+     nothing.**
+     - It read the first `<style>` in the file, and a later edit had put the
+       font block first.
+     - It now reads the `<style>` block that declares both `:root` and the dark
+       theme, which is the one it always meant.
+     - With that fixed it passes: every tint and ink has a dark value. A fixture
+       proves it still finds a light-only ink and a colour used on its own tint,
+       and that a page with no theme block is an error, not a pass.
+   - **`loadErr`, which is pinned.** It is the Delivery zones screen's error
+     field (`state.zn.loadErr`), not a helper. The helper check reads any bare
+     `load` + Capital as a loader. The orders lane is renaming the field in O11.
+     The pin fails once the name is no longer reported, so it has to be removed
+     when O11 lands.
+
+   Both parsing fixes are in the shared module, so the slow suite gets them too.
+4. **Nothing composed.** No operator strings were added.
