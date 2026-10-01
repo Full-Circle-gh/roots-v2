@@ -267,6 +267,15 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 .chrome{margin-top:6px;padding-top:16px;border-top:1px solid var(--line-soft);}
 .chk{display:flex;align-items:center;gap:10px;min-height:44px;font:500 13.5px var(--f-sans);color:var(--text-1);cursor:pointer;}
 .chk input{width:20px;height:20px;accent-color:var(--accent);flex:0 0 auto;}
+/* §325 M2 — a picture or video field, the link list's "type it", the library */
+.md-thumb{flex:0 0 112px;height:84px;border-radius:var(--r-md);overflow:hidden;background:var(--bg-elev-2);border:1px solid var(--line);}
+.md-thumb img,.md-thumb video{width:100%;height:100%;object-fit:cover;display:block;}
+.lnk{margin-top:6px;padding:6px 0;border:0;background:transparent;color:var(--accent-hi);font:500 12.5px var(--f-sans);cursor:pointer;}
+.lib-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.lib-head b{font:600 14px var(--f-sans);}
+.lib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.lib-tile{aspect-ratio:1;padding:0;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--bg-elev-2);cursor:pointer;}
+.lib-tile img{width:100%;height:100%;object-fit:cover;display:block;}
 .edit-foot{display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line-soft);flex:0 0 auto;}
 .edit-foot button{flex:1;height:44px;border-radius:var(--r-lg);font:600 14px var(--f-sans);cursor:pointer;}
@@ -587,6 +596,7 @@ const M = {
   extra: null,            // §325 — the bridge's facts beside the selected block (show_on, coupons)
   frameColors: [],        // §325 — the inspector's Frame choices [{value,label,hex}]
   corners: [],            // §325 — the inspector's Corner radius choices [{value,label}]
+  targets: null,          // §325 M2 — the link picker's lists {pages,products,categories}, from the bridge
 };
 
 /* ── i18n chrome ──────────────────────────────────────────────────── */
@@ -640,9 +650,17 @@ window.addEventListener('message', (e) => {
     M.extra = d.extra || null;
     M.selectedId = M.selectedBlock ? M.selectedBlock.id : null;
     updateActbar();
-    if (M.editId != null) {
+    // Redrawn from the editor's copy — except while a text box in the sheet
+    // is being typed in. Every keystroke is a 'patch', every patch comes back
+    // as 'selected', and a redraw would throw away the box being typed in and
+    // close the phone's keyboard after one letter. The desktop inspector skips
+    // its own redraw for the same reason (renderInspector). §325 M2.
+    if (M.editId != null && !typingInSheet()) {
       if (M.selectedBlock && M.selectedBlock.id === M.editId) renderEdit();
     }
+  } else if (d.evt === 'targets') {
+    M.targets = { pages: d.pages || [], products: d.products || [], categories: d.categories || [] };
+    if (M.editId != null && !typingInSheet()) renderEdit();
   } else if (d.evt === 'design') {
     M.design = d;
     if (M.sheet === 'design') renderDesignBlock();
@@ -704,8 +722,11 @@ function gateLogin() {
 }
 function gateNoPerm() {
   $('#gate-spin').hidden = true;
-  $('#gate-title').textContent = cuT('No retail permission', '没有零售权限');
-  $('#gate-msg').innerHTML = cuT('Ask an admin to grant you the ', '请管理员授予你 ') + '<code>retail</code>' + cuT(' permission.', ' 权限。');
+  // §325 M2 — the gate checks content:edit, so it names that permission, by
+  // the name the Roles screen gives it (lib/capabilities.js). It used to name
+  // a `retail` permission that no longer exists.
+  $('#gate-title').textContent = cuT('You do not have permission to do that.', '你没有执行该操作的权限。');
+  $('#gate-msg').innerHTML = cuT('Ask an admin to grant you the ', '请管理员授予你 ') + '<code>' + esc(cuT('Edit content (about/legal/FAQ/copy)', '编辑内容(关于/条款/常见问题/文案)')) + '</code>' + cuT(' permission.', ' 权限。');
 }
 function gateError(e) {
   $('#gate-spin').hidden = true;
@@ -838,7 +859,8 @@ const F = {
   product_grid:     [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
   featured_item:    [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
   greeting:         [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
-  countdown_timer:  [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['ends_at', 'Ends at', '结束时间', 0, 'datetime-local']],
+  countdown_timer:  [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['ends_at', 'Ends at', '结束时间', 0, 'datetime-local'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  kitchen_status:   [['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],   // §325 M2 — the button its link needs
   flash_sale_strip: [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
   // §325 — the headline, subtitle, discount and code FOLLOW the linked coupon
   // (desktop shows them read-only), so they are not typed here: the picker
@@ -865,7 +887,9 @@ const F = {
 function openEdit(id) {
   M.editId = id;
   _promoErr = '';   // §299 — an upload error belongs to the block it happened on
+  _med = { busy: null, err: {}, manual: {}, lib: null };   // §325 M2 — likewise
   send('getSelected', { id });          // ask for fresh field values
+  send('getTargets');                   // §325 M2 — the link picker's lists, fresh
   renderEdit();
   openSheet('edit');
 }
@@ -877,6 +901,8 @@ function renderEdit() {
   $('#edit-title').textContent = M.lang === 'cn' ? m.name_cn : m.name;
   const body = $('#edit-body'); body.innerHTML = '';
   const fields = F[type];
+  // §325 M2 — the media library, open for one picture field, takes the sheet.
+  if (blk && _med.lib) { renderLibrary(body, blk); return; }
   if (!blk) {
     body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);padding:8px 0">' + cuT('Loading…', '加载中…') + '</div>';
   } else if (type === 'promo_cards') {
@@ -899,6 +925,8 @@ function renderEdit() {
     body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);line-height:1.5;margin-bottom:6px">' +
       cuT('This block has no quick text fields — arrange it here, then fine-tune its details on desktop.', '此模块没有快速文字字段 — 在此排版,详情请在电脑上微调。') + '</div>';
   }
+  // §325 M2 — pictures, video, a hero's buttons and every button link.
+  if (blk && type !== 'promo_cards') renderMedia(body, blk, type);
   // Per-block behaviour note (conditional/dynamic blocks) — rides along on the
   // palette payload from cms.html (BLOCK_META.editorNote). Pinned at the top via
   // afterbegin so it survives the !blk "Loading…" / no-fields branches above and
@@ -912,7 +940,9 @@ function renderEdit() {
   if (type === 'promo_cards') return;
   body.insertAdjacentHTML('beforeend',
     '<div class="desk-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' +
-    '<div>' + cuT('<b>Images, colours &amp; advanced options</b> for this block are tuned on desktop. ', '此模块的<b>图片、配色与高级选项</b>请在电脑上调整。') +
+    // §325 M2 — pictures are set here now, and colours in Design: what is
+    // left on desktop is the rest (M3 brings those too).
+    '<div>' + cuT('<b>Advanced options</b> for this block are tuned on desktop. ', '此模块的<b>高级选项</b>请在电脑上调整。') +
     '<a href="/cms?desktop=1">' + cuT('Open on a computer ↗', '在电脑上打开 ↗') + '</a></div></div>');
 }
 
@@ -1011,6 +1041,283 @@ function renderChrome(body, blk) {
   wrap.querySelectorAll('[data-corner]').forEach(ch => { ch.onclick = () => send('patch', { id: blk.id, patch: { corner_radius: ch.dataset.corner } }); });
   wrap.querySelector('[data-a=bleed]').onchange = (e) => send('patch', { id: blk.id, patch: { full_bleed: e.target.checked ? true : undefined } });
   body.appendChild(wrap);
+}
+
+/* ── §325 M2 · PICTURES, VIDEO AND BUTTON LINKS, ON THE PHONE ─────────────
+   What the desktop inspector sets with its picture, video and link pickers,
+   field for field and in its words. Promo cards keep their own editor (§299);
+   a Bento tile's pictures and a review's avatar come with their pickers (M3).
+
+   A PICTURE is uploaded, taken from the media library, pasted as a link, or
+   removed. It is committed with 'setImage', so the editor underneath runs the
+   inspector's own commit: a field that records the picture's shape
+   (image_aspect) has it measured there, and a removal sets both to empty.
+   Shrunk first by the inspector's own rules (1600px long side; GIFs and small
+   pictures untouched; PNG and WebP keep their transparency) — a phone photo
+   is often past the upload's 5 MB limit.
+
+   A VIDEO is uploaded (an MP4 of 20 MB at most, the server's own limit) or
+   pasted, or removed: a 'patch' of the one field, as the inspector's is.
+
+   A LINK is the inspector's link picker as a list: no link, the pages (the
+   block's suggested one first), products and categories, or typed by hand.
+   A saved link in none of them is kept, named the way the inspector names
+   it. A HERO'S BUTTONS are its list — label in both languages, link, style,
+   remove, add — sent whole, with the old single-button fields cleared, as
+   the inspector sends them. */
+const PICK_HINT = ['Pick where this button takes the customer.', '选择按钮将顾客带到哪里。'];
+const MEDIA = {
+  hero_banner: [
+    { kind: 'image', key: 'image_url', aspect: 'image_aspect', en: 'Picture', cn: '图片',
+      hint: (b) => ((b.view || 'full') === 'split'
+        ? ['Shown as a square on the left side.', '会裁成正方形,放在左边。']
+        : ['The banner becomes as tall as your picture. Nothing is cut or stretched.', '横幅会自动变成图片的高度,不裁剪、不拉伸。']) },
+    { kind: 'image', key: 'image_desktop_url', en: 'Desktop picture (optional)', cn: '电脑端图片(可选)',
+      hint: ['Used on the web store on wide screens. Upload a wide picture (about 3:1). Phones keep the picture above.', '仅网页版宽屏使用。请上传较宽的图片(约 3:1)。手机仍显示上面的图片。'] },
+    { kind: 'video', key: 'video_url', en: 'Video (optional)', cn: '视频(可选)',
+      hint: ['Plays on a loop with no sound and fills the banner. If you add a video, it shows instead of the picture (the picture is shown while the video is loading). Keep videos small — under 20MB, MP4.', '视频会无声循环播放,铺满横幅。添加后会代替图片显示(视频加载时会先显示图片)。请使用较小的视频 — 小于 20MB 的 MP4。'] },
+  ],
+  video_banner: [
+    { kind: 'video', key: 'video_url', en: 'Video clip', cn: '视频短片', hint: ['Upload an MP4, or paste a video link.', '上传 MP4,或粘贴视频链接。'] },
+    { kind: 'image', key: 'poster_url', en: 'Poster (optional)', cn: '封面图(可选)',
+      hint: ['A picture shown while the video loads. If empty, the first frame of the video is used.', '视频加载时显示的图片。留空则使用视频的第一帧。'] },
+  ],
+  recipe_story: [
+    { kind: 'image', key: 'image_url', aspect: 'image_aspect', en: 'Image', cn: '图片',
+      hint: ['The main photo. Very tall photos can take up a lot of space — choose a fixed shape above to crop it.', '主要照片。很高的照片会占很大空间 — 在上方选择固定形状来裁剪。'] },
+  ],
+  wecom_contact: [
+    { kind: 'image', key: 'qr_image_url', en: 'QR code image', cn: '二维码图片',
+      hint: ['Upload your 联系我 QR (PNG). Make it in 企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式 (one employee, or 活码 for a team). At least 300×300.', '上传你的「联系我」二维码 PNG。在企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式中生成(单个员工或团队活码)。最小 300×300。'] },
+  ],
+};
+// [field, label en, label cn, hint, suggested page (or a function of the block)]
+const LINKS = {
+  announcement_bar: [['link_target', 'Link (optional)', '链接(可选)', ['Makes the whole bar tappable. Leave empty for a plain bar.', '让整条横幅可点击。留空则只是普通横幅。'], 'promotions']],
+  video_banner:     [['link_target', 'Tap link (optional)', '点击跳转(可选)', ['Where tapping the banner goes. Leave empty so it cannot be tapped.', '点击横幅后跳转的位置。留空则不可点击。'], 'shop']],
+  category_tabs:    [['link_target', 'SEE ALL link', '「查看全部」跳转', ['Where the SEE ALL header link goes. Leave empty for the Shop tab.', '「查看全部」链接的跳转位置。留空则跳转「商品」标签页。'], 'shop']],
+  flash_sale_strip: [['cta_target', 'Button link', '按钮链接', PICK_HINT, 'shop']],
+  coupon_block:     [['cta_target', 'Button link', '按钮链接', PICK_HINT, 'coupons']],
+  points_widget:    [['cta_target', 'Button link', '按钮链接', PICK_HINT, 'me']],
+  top_up:           [['cta_target', 'Tap target', '点击跳转', ['Where a tier card goes. Defaults to the Top-up page so the customer can pay.', '点击梯度卡片跳转到哪里。默认充值页,顾客可直接付款。'], 'topup']],
+  voting_block:     [['cta_target', 'Button link', '按钮链接', ['Defaults to the Your-say page. The polls themselves are managed in Mini App Backend → Voting.', '默认打开「你的心声」页。投票本身在小程序后台 → 投票中管理。'], 'voting']],
+  affiliate_block:  [['cta_target', 'Tap link (whole block)', '整块点击链接', ['Tapping the block opens this page. Defaults to the Refer-a-friend page. Reward rules and amounts are set in Mini App Backend → Affiliate.', '点击模块打开此页面。默认打开「邀请好友」页。奖励规则和金额在小程序后台 → 邀请好友中设置。'], 'affiliate']],
+  greeting:         [['cta_target', 'Button link', '按钮链接', PICK_HINT, 'wallet']],
+  kitchen_status:   [['cta_target', 'Button link', '按钮链接', PICK_HINT, 'shop']],
+  recipe_story:     [['cta_target', 'Button link', '按钮链接', PICK_HINT, (b) => (b.product_id ? null : 'shop')]],
+  countdown_timer:  [['cta_target', 'Button link', '按钮链接', PICK_HINT, 'shop']],
+};
+const HERO_STYLES = [['primary', 'Primary', '主按钮'], ['secondary', 'Secondary', '次按钮'], ['link', 'Link only', '仅链接']];
+let _med = { busy: null, err: {}, manual: {}, lib: null };
+
+function typingInSheet() {
+  const a = document.activeElement;
+  if (!a || !a.closest || !a.closest('#edit-body')) return false;
+  return a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !['checkbox', 'radio', 'file', 'date'].includes(a.type));
+}
+
+/* The link picker's options, the inspector's `describe` for a saved link. */
+function linkOptions(cur, suggest) {
+  cur = (cur || '').trim();
+  const t = M.targets || { pages: [], products: [], categories: [] };
+  const opt = (v, l) => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>';
+  const pages = t.pages.slice();
+  if (suggest) { const i = pages.findIndex(p => p.v === suggest); if (i > 0) pages.unshift(pages.splice(i, 1)[0]); }
+  const known = [''].concat(pages.map(p => p.v), t.products.map(p => 'product:' + p.id), t.categories.map(c => 'category:' + c.id));
+  let keep = '';
+  if (cur && !known.includes(cur)) {
+    const id = cur.split(':')[1];
+    keep = opt(cur, cur.startsWith('product:') ? cuT('Product #', '商品 #') + id
+      : cur.startsWith('category:') ? cuT('Category #', '分类 #') + id
+      : cuT('Custom', '自定义') + ' · ' + cur);
+  }
+  return opt('', cuT('No link chosen — uses this block’s default.', '未选择链接 — 使用此模块的默认跳转。')) + keep +
+    (pages.length ? '<optgroup label="' + esc(cuT('Pages', '页面')) + '">' + pages.map(p => opt(p.v, cuT(p.en, p.cn) + (p.v === suggest ? ' · ' + cuT('SUGGESTED', '推荐') : ''))).join('') + '</optgroup>' : '') +
+    (t.products.length ? '<optgroup label="' + esc(cuT('Products', '商品')) + '">' + t.products.map(p => opt('product:' + p.id,
+      (pickLang(p.name_en, p.name_cn) || ('#' + p.id)) + (p.sku ? ' · ' + p.sku : '') + (p.is_published ? '' : ' · DRAFT'))).join('') + '</optgroup>' : '') +
+    (t.categories.length ? '<optgroup label="' + esc(cuT('Categories', '分类')) + '">' + t.categories.map(c => opt('category:' + c.id,
+      pickLang(c.name, c.name_cn) || ('#' + c.id))).join('') + '</optgroup>' : '');
+}
+/* One link field: the list, and the inspector's "type it by hand". `mkey`
+   names it for the hand-typed box's open state. */
+function linkField(label, hint, cur, suggest, mkey, onSet) {
+  const d = document.createElement('div'); d.className = 'fld';
+  const manual = !!_med.manual[mkey];
+  d.innerHTML = '<label>' + esc(label) + '</label><select data-a="link">' + linkOptions(cur, suggest) + '</select>' +
+    (hint ? '<div class="pc-hint" style="margin:6px 0 0">' + esc(hint) + '</div>' : '') +
+    (manual
+      ? '<input type="text" data-a="manual" style="margin-top:8px" placeholder="shop · product:12 · category:5" value="' + esc(cur || '') + '">'
+      : '<button type="button" class="lnk" data-a="manualopen">' + esc(cuT('Type a target manually', '手动输入跳转目标')) + '</button>');
+  d.querySelector('[data-a=link]').onchange = (e) => onSet((e.target.value || '').trim());
+  if (manual) d.querySelector('[data-a=manual]').onchange = (e) => onSet((e.target.value || '').trim());
+  else d.querySelector('[data-a=manualopen]').onclick = () => { _med.manual[mkey] = true; renderEdit(); };
+  return d;
+}
+
+function mediaHint(spec, blk) { const h = typeof spec.hint === 'function' ? spec.hint(blk) : spec.hint; return h ? cuT(h[0], h[1]) : ''; }
+function mediaField(blk, spec) {
+  const cur = blk[spec.key] ? String(blk[spec.key]) : '';
+  const busy = _med.busy === spec.key, err = _med.err[spec.key];
+  const video = spec.kind === 'video';
+  const d = document.createElement('div'); d.className = 'fld';
+  d.innerHTML = '<label>' + esc(cuT(spec.en, spec.cn)) + '</label>' +
+    '<div class="pc-pic"><div class="md-thumb">' + (cur
+      ? (video ? '<video src="' + esc(cur) + '" muted loop playsinline autoplay></video>' : '<img src="' + esc(cur) + '" alt="">') : '') + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;min-width:0">' +
+      '<button class="pc-btn" data-a="up"' + (busy ? ' disabled' : '') + '>' + esc(busy ? cuT('Uploading…', '上传中…')
+        : video ? (cur ? cuT('Replace video', '更换视频') : cuT('Video', '视频'))
+        : (cur ? cuT('Replace picture', '更换图片') : cuT('Picture', '图片'))) + '</button>' +
+      (video ? '' : '<button class="pc-btn" data-a="lib"' + (busy ? ' disabled' : '') + '>' + esc(cuT('Media library', '媒体库')) + '</button>') +
+      (cur ? '<button class="pc-btn danger" data-a="rm"' + (busy ? ' disabled' : '') + '>' + esc(cuT('Remove', '删除')) + '</button>' : '') +
+    '</div></div>' +
+    (err ? '<div class="pc-err">' + esc(err) + '</div>' : '') +
+    '<input type="url" data-a="url" placeholder="https://…" value="' + esc(cur) + '">' +
+    (mediaHint(spec, blk) ? '<div class="pc-hint" style="margin:6px 0 0">' + esc(mediaHint(spec, blk)) + '</div>' : '');
+  d.querySelector('[data-a=up]').onclick = () => {
+    const f = document.createElement('input'); f.type = 'file'; f.accept = video ? 'video/mp4,video/*' : 'image/*';
+    f.onchange = () => { const file = f.files && f.files[0]; if (file) mediaUpload(blk, spec, file); };
+    f.click();
+  };
+  if (!video) d.querySelector('[data-a=lib]').onclick = () => openLibrary(spec);
+  if (cur) d.querySelector('[data-a=rm]').onclick = () => setMedia(blk, spec, '');
+  d.querySelector('[data-a=url]').onchange = (e) => setMedia(blk, spec, (e.target.value || '').trim());
+  return d;
+}
+function setMedia(blk, spec, url) {
+  if (spec.kind === 'image') send('setImage', { id: blk.id, key: spec.key, url, aspectKey: spec.aspect || null });
+  else send('patch', { id: blk.id, patch: { [spec.key]: url } });
+}
+/* The inspector's prepareImageForUpload, for a phone: GIFs keep their motion,
+   a picture already small in pixels and bytes is sent as it is, PNG and WebP
+   keep their transparency, and a result no smaller than the original is
+   dropped for the original. */
+async function prepImage(file) {
+  try {
+    if (!file || !file.type || !file.type.startsWith('image/')) return file;
+    if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file;
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const longest = Math.max(bmp.width, bmp.height);
+    if (longest <= 1600 && file.size <= 1.5 * 1024 * 1024) return file;
+    const k = Math.min(1, 1600 / longest);
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const alpha = file.type === 'image/png' || file.type === 'image/webp';
+    const blob = await new Promise(r => c.toBlob(r, alpha ? 'image/webp' : 'image/jpeg', 0.9));
+    return (blob && blob.size < file.size) ? blob : file;
+  } catch (e) { return file; }
+}
+const IMG_ERR = {   // the phone app's own words for the same refusals (m.html MEDIA_ERR)
+  too_large: ['That photo is too large. Try a smaller one.', '图片太大，请换一张较小的。'],
+  not_an_image: ['That file is not an image the shop can use.', '该文件不是可用的图片格式。'],
+  no_file: ['Nothing was picked.', '没有选择文件。'],
+};
+const VIDEO_ERR = {
+  too_large: ['Video too large (20MB max)', '视频太大(最大 20MB)'],
+  not_a_video: ["That file isn't an MP4 video", '该文件不是 MP4 视频'],
+  no_file: ['Nothing was picked.', '没有选择文件。'],
+};
+function uploadErr(kind, code) {
+  const e = (kind === 'video' ? VIDEO_ERR : IMG_ERR)[code];
+  return e ? cuT(e[0], e[1]) : cuT('Upload failed', '上传失败') + (code ? ': ' + code : '');
+}
+async function mediaUpload(blk, spec, file) {
+  const video = spec.kind === 'video';
+  _med.busy = spec.key; _med.err = {}; renderEdit();
+  try {
+    const fd = new FormData();
+    fd.append('file', video ? file : await prepImage(file), file.name || (video ? 'clip.mp4' : 'picture.jpg'));
+    const r = await fetch(video ? '/api/retail-admin/cms/media/video' : '/api/retail-admin/cms/media', { method: 'POST', credentials: 'same-origin', body: fd });
+    if (r.status === 401) { location.href = '/backend/login'; return; }
+    const j = await r.json().catch(() => ({}));
+    if (!j || !j.success || !j.data || !j.data.url) {
+      _med.err[spec.key] = uploadErr(spec.kind, (j && j.error) || (r.status === 403 ? 'forbidden' : ''));
+      return;
+    }
+    setMedia(blk, spec, j.data.url);
+  } catch (e) {
+    _med.err[spec.key] = cuT('Upload failed', '上传失败');
+  } finally {
+    _med.busy = null; renderEdit();
+  }
+}
+
+/* The media library, as the inspector's: the pictures already uploaded, newest
+   first; one tap uses it. Clips are left out, as the desktop grid means to. */
+function openLibrary(spec) {
+  _med.lib = { spec, items: null, err: '' };
+  renderEdit();
+  const lib = _med.lib;
+  fetch('/api/retail-admin/cms/media', { credentials: 'same-origin' })
+    .then(r => { if (r.status === 401) { location.href = '/backend/login'; throw new Error('auth'); } return r.json(); })
+    .then(j => {
+      if (!j || !j.success || !Array.isArray(j.data)) throw new Error((j && j.error) || 'bad');
+      lib.items = j.data.filter(it => /^image\//.test(it.mime_type || ''));
+    })
+    .catch(() => { lib.err = cuT('Could not load', '加载失败'); })
+    .then(() => { if (_med.lib === lib) renderEdit(); });
+}
+function renderLibrary(body, blk) {
+  const lib = _med.lib;
+  const head = document.createElement('div'); head.className = 'lib-head';
+  head.innerHTML = '<b>' + esc(cuT('Media library', '媒体库')) + '</b><button class="pc-btn" data-a="cancel">' + esc(cuT('Cancel', '取消')) + '</button>';
+  head.querySelector('[data-a=cancel]').onclick = () => { _med.lib = null; renderEdit(); };
+  body.appendChild(head);
+  const g = document.createElement('div');
+  if (lib.err) { g.className = 'pc-err'; g.textContent = lib.err; }
+  else if (!lib.items) { g.className = 'pc-hint'; g.textContent = cuT('Loading…', '加载中…'); }
+  else if (!lib.items.length) { g.className = 'pc-hint'; g.textContent = cuT('Nothing in the library', '媒体库是空的'); }
+  else {
+    g.className = 'lib-grid';
+    g.innerHTML = lib.items.map(it => '<button class="lib-tile" data-id="' + esc(it.id) + '"><img src="/api/retail/media/' + esc(it.id) + '" alt="' + esc(it.filename || '') + '"></button>').join('');
+    g.querySelectorAll('[data-id]').forEach(t => {
+      t.onclick = () => { const spec = lib.spec; _med.lib = null; setMedia(blk, spec, '/api/retail/media/' + t.dataset.id); renderEdit(); };
+    });
+  }
+  body.appendChild(g);
+}
+
+/* A hero's buttons, the inspector's list. `extra.ctas` is its getCtas. */
+function heroButtons(body, blk) {
+  const ctas = ((M.extra && Array.isArray(M.extra.ctas)) ? M.extra.ctas : []).map(c => Object.assign({}, c));
+  const write = (next) => send('patch', { id: blk.id, patch: { ctas: next, cta_label: undefined, cta_target: undefined } });
+  const wrap = document.createElement('div'); wrap.className = 'fld';
+  wrap.innerHTML = '<label>' + esc(cuT('Buttons (' + ctas.length + ')', '按钮(' + ctas.length + ')')) + '</label>' +
+    (ctas.length ? '' : '<div class="pc-hint" style="margin:0 0 8px">' + esc(cuT('No buttons. The banner shows the image alone.', '暂无按钮。横幅仅显示图片。')) + '</div>');
+  body.appendChild(wrap);
+  ctas.forEach((c, idx) => {
+    // Kept in `ctas` itself: while a label is typed the sheet is not redrawn,
+    // so a second box typed into next must build on the first one's words.
+    const set = (patch) => { ctas[idx] = Object.assign({}, ctas[idx], patch); write(ctas.slice()); };
+    const card = document.createElement('div'); card.className = 'pc-card';
+    card.innerHTML =
+      '<div class="fld"><label>' + esc(cuT('Button label', '按钮文字')) + '</label><input type="text" data-a="en" value="' + esc(c.label_en || '') + '"></div>' +
+      '<div class="fld"><label>' + esc(cuT('Button label (中文)', '按钮文字(中文)')) + '</label><input type="text" data-a="cn" value="' + esc(c.label_cn || '') + '"></div>' +
+      '<div class="fld"><label>' + esc(cuT('Style', '样式')) + '</label><select data-a="style">' +
+        HERO_STYLES.map(([v, en, cn]) => '<option value="' + v + '"' + (v === (c.style || 'primary') ? ' selected' : '') + '>' + esc(cuT(en, cn)) + '</option>').join('') + '</select></div>';
+    card.appendChild(linkField(cuT('Button link', '按钮链接'), '', c.target, null, 'hero' + idx, (v) => set({ target: v })));
+    const rm = document.createElement('button'); rm.className = 'pc-btn danger'; rm.textContent = cuT('Remove', '删除');
+    rm.onclick = () => { const next = ctas.slice(); next.splice(idx, 1); write(next); };
+    card.appendChild(rm);
+    card.querySelector('[data-a=en]').oninput = (e) => set({ label_en: e.target.value });
+    card.querySelector('[data-a=cn]').oninput = (e) => set({ label_cn: e.target.value });
+    card.querySelector('[data-a=style]').onchange = (e) => set({ style: e.target.value });
+    body.appendChild(card);
+  });
+  const add = document.createElement('button'); add.className = 'pc-btn'; add.style.width = '100%'; add.style.marginBottom = '14px';
+  add.textContent = cuT('Add button', '添加按钮');
+  add.onclick = () => write(ctas.concat([{ label: 'NEW BUTTON', target: '', style: 'primary' }]));
+  body.appendChild(add);
+}
+
+function renderMedia(body, blk, type) {
+  (MEDIA[type] || []).forEach(spec => body.appendChild(mediaField(blk, spec)));
+  if (type === 'hero_banner') heroButtons(body, blk);
+  (LINKS[type] || []).forEach(([key, en, cn, hint, suggest]) => {
+    const sug = typeof suggest === 'function' ? suggest(blk) : suggest;
+    body.appendChild(linkField(cuT(en, cn), hint ? cuT(hint[0], hint[1]) : '', blk[key], sug, key,
+      (v) => send('patch', { id: blk.id, patch: { [key]: v } })));
+  });
 }
 
 /* ── §299 · PROMO CARDS, ON THE PHONE ─────────────────────────────────

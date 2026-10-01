@@ -23835,3 +23835,65 @@ resolved. No screen changed.
     - the owner, and enforcement off;
     - the screen permissions and the caller list each gate is built from.
 12. **Nothing composed.** No operator strings were added.
+
+## §341 — THE PHONE PAGE EDITOR SETS PICTURES, VIDEO AND BUTTON LINKS
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone editor's sheet edited words and sent everything else to desktop
+("Images, colours & advanced options for this block are tuned on desktop").
+It now sets what the desktop inspector's picture, video and link pickers set,
+field for field and in the inspector's words: a hero's picture, desktop
+picture, video and buttons; a video banner's clip, poster and tap link; a
+recipe story's image; the WeCom QR; and the button or tap link of every block
+that has one. The block pickers (product, category, coupon list, poll, store,
+review list), sizes and behaviour, and onboarding are M3, not this step.
+
+1. **A picture is uploaded, taken from the media library, pasted as a link,
+   or removed** — the desktop picker's four ways. It is committed through a
+   new bridge command, `setImage`, so the editor underneath runs the
+   inspector's own commit: a field that records the picture's shape
+   (`image_aspect`, on the hero and the recipe story) is measured there, and
+   removing the picture sets both to empty.
+2. **The phone shrinks a picture by the inspector's rules**
+   (`prepareImageForUpload`): 1600px long side; GIFs and pictures already
+   small in pixels and bytes go as they are; PNG and WebP keep transparency;
+   a result no smaller than the original is dropped. Promo cards keep §299's
+   own shrink, unchanged.
+3. **The media library** lists the pictures already uploaded to the editor
+   (`GET /cms/media`), newest first, clips left out (the desktop grid is meant
+   to be pictures only); one tap uses one. Loading, empty and failed states.
+4. **A video is uploaded** to `/cms/media/video` (an MP4, 20 MB at most, the
+   server's own limit), pasted, or removed — a `patch` of the one field, as
+   the inspector's is. No library: the desktop has none for clips.
+5. **A link is the inspector's link picker as a list**: no link, the
+   inspector's pages with the block's suggested page first, the products, the
+   categories, or typed by hand. A saved link in none of them is kept and
+   named as the inspector names it (Product #, Category #, Custom). The lists
+   come from the editor underneath (`getTargets`), so they are the ones the
+   desktop offers.
+6. **A hero's buttons are its list**: label in both languages, style, link,
+   remove, add. Every change sends the whole list with the old single-button
+   fields cleared, exactly as the inspector does (`getCtas` reads the list for
+   the phone, so an old one-button hero is edited the same way there).
+7. **Countdown and kitchen status get their button text**, so their new link
+   is not a link on a button that has no words.
+8. **The sheet is no longer redrawn under a box being typed in.** Every
+   keystroke is a `patch` that comes back from the editor as `selected`, and
+   the sheet redrew itself on it — throwing away the box and closing the
+   phone's keyboard after one letter, in every text field the sheet has ever
+   had. The redraw now waits while a text box in the sheet has focus, which is
+   the desktop inspector's own rule (`renderInspector`).
+9. **The foot note now says only "Advanced options for this block are tuned on
+   desktop"**: pictures are set here now and colours in Design.
+10. **The no-permission screen names the permission it checks.** It said "No
+    retail permission … grant you the `retail` permission"; the gate checks
+    `content:edit`, so it now names that permission by the Roles screen's name
+    for it. The desktop editor (`cms.html`) shows the same wrong sentence and
+    is not changed here.
+11. **No new server route.** Two bridge commands (`setImage`, `getTargets`)
+    and one more fact on `selected` (a hero's buttons), active only in
+    `?embed=preview`. Every upload is behind the editor's own `content:edit`
+    gate, which the server's `/cms/*` rule includes.
+12. **Not here**: a Bento tile's pictures (they come with the category
+    picker, M3) and a review's avatar (with the review list, M3); a store's
+    button link (with the store picker, M3).
