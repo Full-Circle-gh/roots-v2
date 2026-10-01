@@ -980,7 +980,7 @@ const state = {
        mtCfg / mtCfgTried    GET /meituan/config, the Meituan channel switch
        chSwBusy / chSwErr    a Meituan or Eleme channel switch write, keyed by
                     channel, and its refusal ({ch, msg}) */
-  oc:null, ocTried:false, ocLoadErr:null, ocBusy:null, ocErr:null,
+  oc:null, ocTried:false, ocLoadErr:null, ocBusy:null, ocErr:null, ocStayed:[],   /* §412.4 — what Open everything left closed */
   mtCfg:null, mtCfgTried:false, chSwBusy:null, chSwErr:null,
   team:null, teamTried:false, teamErr:null, teamEnforce:false, teamBusy:null, teamActErr:null,
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
@@ -5928,17 +5928,29 @@ function ocCard(){
           busy==='online'?T('Saving…','保存中…'):(on?T('Open','营业中'):T('Closed','已关闭'))}</span>
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>
     ${state.ocErr?`<div style="padding:0 16px 12px;font-size:13px;color:var(--brick-ink)">${state.ocErr}</div>`:''}
+    ${ocStayedLine(state.ocStayed)?`<div style="padding:0 16px 12px;font-size:13px;line-height:1.5;color:var(--amber-ink)">${escAttr(ocStayedLine(state.ocStayed))}</div>`:''}
   </div>`;
+}
+/* §412.4 — "Open everything" keeps its rule (a channel closed at one shop with
+   that shop's own switch stays closed) and says which stayed closed: the
+   server's `stayedClosed`, each shop with its channels, in the phone's channel
+   names (CHAN_META). Kept on the card until the next write. */
+function ocStayedLine(list){
+  const rows=(Array.isArray(list)?list:[]).filter(r=>r&&Array.isArray(r.channels)&&r.channels.length);
+  if(!rows.length) return '';
+  const chName=ch=>CHAN_META[ch]?T(CHAN_META[ch].en,CHAN_META[ch].zh):ch;
+  return T('Still closed — closed at the shop with its own switch: ','仍关闭 — 在门店单独关闭: ')
+    +rows.map(r=>T(r.nameEn||r.name||r.storeCode,r.nameCn||r.name||r.storeCode)+': '+r.channels.map(chName).join(T(', ','、'))).join(T('; ',';'));
 }
 /* One write path for both, as the desktop's _ocWrite: the card disables while
    it runs (two taps on "close everything" is how a shop gets reopened by the
    person shutting it), and both boards re-read afterwards — the master moves
    every shop's cells, so the grid below is stale the moment it lands. */
-function ocWrite(which,path,body,okText){
+function ocWrite(which,path,body,okText,after){
   if(state.ocBusy) return;
-  state.ocBusy=which; state.ocErr=null; render();
-  apiWrite(path,body,'POST').then(()=>{
-    state.ocBusy=null; showToast(okText);
+  state.ocBusy=which; state.ocErr=null; state.ocStayed=[]; render();
+  apiWrite(path,body,'POST').then(j=>{
+    state.ocBusy=null; if(after) after(j); showToast(okText);
     ocLoad(true); loadChannels(true);
   }).catch(e=>{
     state.ocBusy=null;
@@ -5983,7 +5995,9 @@ reg('ocMaster', next=>{
     confirmLabel: open?T('Open everything','全部营业'):T('Close everything','全部关闭'), danger:!open,
     run:()=>ocWrite('master','/store-status/master',{open},
       open?T('Opening every channel','正在开启全部渠道')
-          :T('Closing every channel — marketplaces follow within about a minute','正在关闭全部渠道 — 外卖平台约一分钟内跟随'))};
+          :T('Closing every channel — marketplaces follow within about a minute','正在关闭全部渠道 — 外卖平台约一分钟内跟随'),
+      /* §412.4 — what stayed closed, from the server's answer, kept on the card. */
+      j=>{ state.ocStayed=open&&j&&Array.isArray(j.stayedClosed)?j.stayedClosed:[]; })};
   render();
 });
 /* ONE CHANNEL, EVERY STORE — the desktop Sales card's master toggle

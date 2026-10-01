@@ -97,6 +97,8 @@ db.exec(`
     read_at DATETIME, target_open INTEGER, target_by TEXT, target_at DATETIME,
     last_result TEXT, fulfillment_open INTEGER DEFAULT 1, updated_at DATETIME);
   CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT, updated_at DATETIME, updated_by TEXT);
+  CREATE TABLE channel_status (channel TEXT NOT NULL, store_code TEXT NOT NULL,
+    is_open INTEGER DEFAULT 1, updated_at DATETIME, updated_by TEXT, PRIMARY KEY (channel, store_code));
   CREATE TABLE meituan_sync_queue (id INTEGER PRIMARY KEY, retail_store_id INT, product_id INT,
                                    store_code TEXT, new_qty INT, status TEXT);
   CREATE TABLE meituan_sync_log (id INTEGER PRIMARY KEY, store_code TEXT, event_type TEXT,
@@ -137,7 +139,7 @@ function call(method, url, body) {
   });
 }
 const reset = (rows) => {
-  db.exec('DELETE FROM retail_stores; DELETE FROM store_business_status; DELETE FROM storefront_config; DELETE FROM meituan_sync_queue;');
+  db.exec('DELETE FROM retail_stores; DELETE FROM store_business_status; DELETE FROM storefront_config; DELETE FROM meituan_sync_queue; DELETE FROM channel_status;');
   for (const [i, r] of (rows || []).entries()) {
     db.prepare('INSERT INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order) VALUES (?,?,?,?,1,?)')
       .run(i + 1, r.code, r.name || r.code, null, i);
@@ -238,6 +240,54 @@ const status = () => call('GET', '/api/retail-admin/store-status').then((r) => r
       const r = await call('POST', url, { open: 'false' });   // the STRING 'false'
       is(r.status, 400, `${name}: "false" as a string is refused, not read as closing`);
     }
+  }
+
+  section('7 · §412.4 — "Open everything" keeps its rule and says which stayed closed');
+  {
+    reset([{ code: 'S1', name: 'High Street', status: { isOpen: true } }, { code: 'S2', name: 'Market', status: { isOpen: true } }]);
+    await call('POST', '/api/retail-admin/store-status/master', { open: false });
+    // Channels closed at a shop with that shop's own switches (the Sales grid's cells).
+    const cell = db.prepare('INSERT OR REPLACE INTO channel_status (channel, store_code, is_open) VALUES (?,?,?)');
+    cell.run('mini_app', 'S1', 0); cell.run('eleme', 'S1', 0); cell.run('pos', 'S2', 0); cell.run('web', 'S2', 1);
+    const r = await call('POST', '/api/retail-admin/store-status/master', { open: true });
+    is(r.body.target, 'open', 'it opened');
+    is(r.body.stayedClosed, [
+      { storeCode: 'S1', name: 'High Street', nameEn: 'High Street', nameCn: 'High Street', channels: ['mini_app', 'eleme'] },
+      { storeCode: 'S2', name: 'Market', nameEn: 'Market', nameCn: 'Market', channels: ['pos'] },
+    ], 'and names each shop\'s channels that stayed closed, in the grid\'s order');
+    is(db.prepare('SELECT channel, store_code, is_open FROM channel_status WHERE is_open = 0 ORDER BY store_code, channel').all(),
+      [{ channel: 'eleme', store_code: 'S1', is_open: 0 }, { channel: 'mini_app', store_code: 'S1', is_open: 0 }, { channel: 'pos', store_code: 'S2', is_open: 0 }],
+      'the rule is unchanged: a channel closed at one shop with its own switch is still closed');
+    const st = await status();
+    is(st.meituan.map((m) => m.fulfillmentOpen), [true, true], 'while every shop is taking orders again');
+    db.exec('DELETE FROM channel_status');
+    is((await call('POST', '/api/retail-admin/store-status/master', { open: true })).body.stayedClosed, [], 'nothing closed: an empty list');
+    is((await call('POST', '/api/retail-admin/store-status/master', { open: false })).body.stayedClosed, [], 'closing names nothing');
+  }
+  {
+    // The desktop panel: its own _ocWrite and ocMaster, with a stand-in api.
+    const vm = require('vm');
+    const CORE = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8');
+    const csNameSrc = CORE.slice(CORE.indexOf('function csName(ch) {'), CORE.indexOf('let _csData = null;'));
+    const sent = [];
+    const ctx = { lang: 'en', window: {}, document: { getElementById: () => null }, toast: () => {}, escapeHtml: (x) => String(x),
+      api: async (p, o) => { sent.push({ p, o: JSON.parse(JSON.stringify(o)) }); return ctx.answer; } };
+    ctx.cuT = (en, cn) => (ctx.lang === 'cn' ? cn : en);
+    vm.createContext(ctx);
+    vm.runInContext(csNameSrc + OPS.slice(OPS.indexOf('let _ocState = null;'), OPS.indexOf('window.ocSetOnline')), ctx);
+    ctx.answer = { success: true, target: 'open', stayedClosed: [
+      { storeCode: 'yuexiu', name: '越秀店', nameEn: 'Yuexiu', nameCn: '越秀店', channels: ['mini_app', 'eleme'] },
+      { storeCode: 'tianhe', name: '天河店', nameEn: 'Tianhe', nameCn: '天河店', channels: ['pos'] }] };
+    await ctx.window.ocMaster(true);
+    is(sent, [{ p: '/api/retail-admin/store-status/master', o: { method: 'POST', body: { open: true } } }], 'desktop: the same request');
+    is(vm.runInContext('ocStayedLine(_ocStayed)', ctx),
+      'Still closed — closed at the shop with its own switch: Yuexiu: WeChat, Eleme; Tianhe: Counter sale', 'desktop: the sentence, in the panel\'s channel names');
+    ctx.lang = 'cn';
+    is(vm.runInContext('ocStayedLine(_ocStayed)', ctx), '仍关闭 — 在门店单独关闭: 越秀店: 微信、饿了么;天河店: 前台销售', '…and in Chinese');
+    ctx.answer = { success: true, target: 'closed', stayedClosed: [] };
+    await ctx.window.ocMaster(false);
+    is(vm.runInContext('ocStayedLine(_ocStayed)', ctx), '', 'desktop: the next write clears it');
+    yes(OPS.includes('${ocStayedLine(_ocStayed) ? `<div id="oc-stayed"'), 'desktop: the line is painted under the master button');
   }
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
