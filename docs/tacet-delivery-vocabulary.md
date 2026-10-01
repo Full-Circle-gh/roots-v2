@@ -1,5 +1,31 @@
 # Tacet delivery vocabulary — locked
 
+**v1.293 · 2026-09-30 · §404 THE MANUAL-ALIPAY CARD'S FAILED READ — 1 STRING COMPOSED BY CLAUDE, 1 COPIED.** See *The manual-Alipay card that did not load (§404)*.
+
+**v1.292 · 2026-09-30 · §403 PAYMENTS ON THE PHONE — NOTHING COMPOSED; TWO DESKTOP PAIRS SPLIT INTO THEIR HALVES; THE REST COPIED WHOLE.** See *Payments on the phone (§403)*.
+
+**v1.291 · 2026-09-30 · §402 THE WEB STORE'S PAGE ON THE PHONE — NOTHING COMPOSED; EVERY PAIR COPIED FROM THE DESKTOP'S WEB STORE CONFIGURATION. X9a'S ONE COMPOSED STRING IS RETIRED.** See *The web store on the phone (§402)*.
+
+**v1.290 · 2026-09-30 · §401 THE WECHAT MINI PROGRAM'S PAGES ON THE PHONE — NOTHING COMPOSED; EVERY PAIR COPIED FROM THE DESKTOP'S MINI APP PAGES.** See *The WeChat mini program on the phone (§401)*.
+
+**v1.289 · 2026-09-30 · §400 THE CHANNEL HUB ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP'S CHANNEL HUB.** See *The channel hub on the phone (§400)*.
+
+**v1.288 · 2026-09-30 · §399 GZGROCERY BILLING ON THE PHONE — 14 STRINGS OR HALVES COMPOSED BY CLAUDE (THE DESKTOP BILLING PANEL IS ALMOST ALL ENGLISH-ONLY), THE REST COPIED.** See *gzgrocery billing on the phone (§399)*.
+
+**v1.287 · 2026-09-30 · §398 MEITUAN BUNDLES ON THE PHONE — 12 CHINESE HALVES COMPOSED BY CLAUDE (THE DESKTOP BUNDLE STRINGS WERE ENGLISH-ONLY), THE REST COPIED.** See *Meituan bundles on the phone (§398)*.
+
+**v1.286 · 2026-09-30 · §397 MATCH NAMES ON THE PHONE — 6 STRINGS COMPOSED BY CLAUDE (THE DESKTOP'S ENGLISH-ONLY, ROOTS-NAMED CLEAR-ALL DIALOG AND TWO HALVES), THE REST COPIED.** See *Meituan's Match names on the phone (§397)*.
+
+**v1.285 · 2026-09-30 · §396 MATCHING AND CLAIMS ON THE PHONE — 6 STRINGS COMPOSED BY CLAUDE, THE REST COPIED FROM THE MEITUAN, ELEME AND CHANNEL SYNC PANELS.** See *Matching and claims on the phone (§396)*.
+
+**v1.284 · 2026-09-30 · §395 CHANNEL SYNC PICKER, SEARCH AND SWITCH ON THE PHONE — 3 STRINGS COMPOSED BY CLAUDE (THE LASTING-CHANGE CONFIRM §326.3 ASKED FOR), THE REST COPIED.** See *The channel sync switch's confirm, and the picker (§395)*.
+
+**v1.283 · 2026-09-30 · §394 THE SETUP GUIDE'S ACTIONS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE FROM THE DESKTOP GUIDE.** See *The setup guide's actions on the phone (§394)*.
+
+**v1.282 · 2026-09-30 · §393 CLOSING ELEME SAYS WHAT IT DOES — 5 STRINGS COMPOSED BY CLAUDE, ONE SENTENCE NO LONGER SHOWN FOR ELEME.** See *Closing Eleme at a store, said truthfully (§393)*.
+
+**v1.281 · 2026-09-30 · §391 BILLING ON THE PHONE — 5 STRINGS COMPOSED BY CLAUDE, 1 RESTRUCTURED, 3 CHINESE HALVES LIFTED, THE REST COPIED WHOLE.** See *Billing on the phone (§391)*.
+
 **v1.280 · 2026-09-30 · §390 ORDER-STOPPING SWITCHES ON THE PHONE — 18 STRINGS COMPOSED BY CLAUDE, 2 RESTRUCTURED, 1 LIFTED, THE REST COPIED WHOLE.** See *The switches that stop orders everywhere, on the phone (§390)*.
 
 **v1.279 · 2026-09-30 · §387 SKU CODES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP SKU CODES TAB.** See *SKU code rules for materials, on the phone (§387)*.
@@ -12279,3 +12305,377 @@ The phone's own, already live: `Open · 营业中`, `Closed · 已关闭`, `Open
 一次性关闭整个渠道请在电脑端操作。` (the channel sheet) and `Closing a whole
 channel everywhere is on desktop · 一次性关闭整个渠道在电脑端` (the Sales footer,
 v1.137). Both were made untrue by this step.
+
+## Billing on the phone (§391)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Billing screen and its
+checkout sheet (`public/m.html`). Almost everything is copied from the desktop
+Billing page (`public/backend-billing.html`). The status words come from the
+platform back office (`public/store-admin.html`). The desktop shows the raw
+status codes, which are English in both languages.
+
+| String | Status |
+|---|---|
+| `Grace period · 宽限期` | **composed by Claude.** The one subscription status with no live pair. `宽限期` is the standard term for the `grace` step of the dunning ladder (`lib/billing-lifecycle.js`). Rejected: showing the raw `grace`. |
+| `/ month · / 月`, `/ year · / 年` | **composed by Claude.** The desktop prints the raw interval (`/ month`) in both languages. |
+| `1 day left` / `N days left · 剩余 N 天` | **composed by Claude.** The desktop's renewal line says `N day(s) left` in English only. Built from the live alert's `N 天`. |
+| `Until it is paid, billing shows the account as past due. · 付款前，账单将显示为逾期。` | **composed by Claude**, after the desktop's own confirm. `逾期` is copied from the live `Past due · 逾期` and `账单逾期`. It is here because `select-plan` sets the subscription to `past_due` at once. |
+| `Open · 未结` (an invoice's status) | **restructured** from the back office's live `Open invoices · 未结`. Rejected: the live `Open · 进行中` / `营业中` / `开启`, which mean a running task, a trading shop and a switch. |
+| `No plan · 暂无套餐` | **Chinese lifted** from the desktop's `No plans available. · 暂无套餐。`. The English `No plan` is the desktop's own. |
+| `Renews · 到期` | **Chinese lifted** from the desktop alert's `…天后到期`. The English `Renews` is the desktop's own label, which had no Chinese. |
+| `Select plan · 选择套餐` | **Chinese lifted** from the desktop's `Could not select plan · 无法选择套餐`. The English `Select plan` is the desktop's own confirm label, which had no Chinese. |
+
+Copied whole from the desktop Billing page:
+
+- `Billing · 账单`, `Plans · 套餐`, `Invoices · 发票`, `Current plan · 当前套餐`,
+  `Choose · 选择`, `Free · 免费`, `Perpetual (internal) · 永久(内部)`, `Payment · 支付`.
+- The empty states: `No subscription on file. · 暂无订阅。`,
+  `No plans available. · 暂无套餐。`, `No invoices yet. · 暂无发票。`.
+- `Failed to load billing · 加载账单失败`, and the four alerts (expiring,
+  trial ending, past due, suspended).
+- The confirm `Select the X plan? · 选择「X」套餐?` and
+  `An invoice will be created for you to pay. · 系统将生成一张待支付发票。`.
+  These are split, not composed: the desktop prints them as one bilingual string.
+- `Could not select plan · 无法选择套餐`, `Checkout unavailable · 暂无法结算`.
+- `Scan with WeChat to pay · 微信扫码支付`, `Waiting for payment… · 等待支付…`,
+  `QR unavailable · 二维码不可用`, `Ref · 单号`,
+  `We’ll mark the invoice paid once the transfer is received. · 到账后我们将标记为已付。`
+  (the apostrophe set typographically).
+- `Payment received ✓ · 已收到付款 ✓`.
+
+Copied from the back office's dashboard tiles, which count tenants by these same statuses: `Active · 活跃`, `Trialing · 试用`,
+`Past due · 逾期`, `Suspended · 已暂停`.
+
+The phone's own, already live: `Price · 价格`, `Cancelled · 已取消`, `Paid · 已付`,
+`Void · 作废`, `Saving… · 保存中…`, `Loading… · 加载中…`, `Try again · 重试`.
+
+## Closing Eleme at a store, said truthfully (§393)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Sales confirms
+(`public/m.html` ELEME_CLOSE_WORDS), the desktop Sales grid's reopen confirm
+(`public/retail-admin/01-core.js` csCell), and the desktop open/close panel's
+note (`public/retail-admin.html`). The desktop strings copy the phone's
+composed pairs word for word, so the two surfaces say one thing.
+
+| String | Status |
+|---|---|
+| `Stock stops being sent to Eleme for this store: updates already waiting are dropped, and new ones wait until it reopens. Eleme is not told the store is closed — customers can still order there, and those orders still come in. · 将停止向饿了么推送该门店的库存：已排队的更新会被清除，新的更新等到重新开启后再发送。饿了么不会收到门店关闭的通知 — 顾客仍可下单，订单照常导入。` | **composed by Claude.** Built from X12's live `停止向美团推送库存`, the live `已排队` and `订单未导入`, and `门店关闭` from the shop switch. |
+| The same for every store (`for every store` / `所有门店`, `the stores are closed`) | **composed by Claude.** The sentence above, with the store widened to every store. |
+| `Stock is sent to Eleme for this store again. · 恢复向饿了么推送该门店的库存。` | **composed by Claude.** Built from X12's live `恢复向美团推送库存`. It is also shown on the desktop. |
+| `Stock is sent to Eleme again. A shop that is closed stays closed. · 恢复向饿了么推送库存。已关闭的门店保持关闭。` | **composed by Claude.** The second sentence is copied from X12's whole-channel opening confirm. |
+| `Eleme is the exception: it is not told, so Eleme orders can still come in. · 饿了么除外：它不会收到通知，饿了么订单仍可能进来。` | **composed by Claude.** Added to the shop switch and Close everything confirms, and to the desktop panel's note. |
+
+**No longer shown for Eleme:** `No new orders arrive at this store on this channel. ·
+该门店在此渠道将不再接到新订单。` and `New orders can arrive at this store again. ·
+这家门店可以重新接单。`. Both are still live for every other channel, where they
+are true.
+
+**Rejected:** keeping the old sentence and adding "except Eleme" to it. On the
+Eleme confirm, the exception would be the whole message.
+
+## The setup guide's actions on the phone (§394)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's setup guide
+(`public/m.html` screenSetup, setupActions, suFulfil, suOpen). Every action
+string is copied whole from the desktop guide (`public/retail-admin/17-setup-guide.js`).
+
+| String | Status |
+|---|---|
+| `Payment methods and WeChat sign-in are set up on desktop. · 收款方式与微信登录在电脑端设置。` | **composed by Claude.** The guide's new foot note. Built from the phone's live `Payment keys are set on desktop. · 支付密钥在电脑端设置。` and the step label `Connect WeChat sign-in · 连接微信登录`. `收款方式` is the desktop's own word, from `选择收款方式`. Rejected: the live `支付密钥…`, because the payment step is more than keys (it includes the Alipay QR upload); and listing every remaining step, because only these two are left. |
+
+Copied whole from the desktop guide:
+
+- The row buttons: `Set up · 去设置`, `Open · 打开`.
+- The chooser: `How customers get their order · 顾客如何拿到货`,
+  `Pickup at your store is already on. You can add delivery now, or keep pickup only for now. · 到店自取已开启。你可以现在开通配送，或暂时只做自取。`,
+  `Set up delivery · 开通配送`, `Pickup only for now · 暂时只做自取`, and the toast
+  `Pickup confirmed · 已确认自取`.
+- Opening: `Almost there · 就差一点`,
+  `Finish these first so customers get a working store: · 先完成这些，顾客才能看到一个可用的店：`,
+  `OK · 好的`, `Open your store now? · 现在开店？`,
+  `Your web store goes live and can take orders. You can keep editing anything afterwards. · 你的网页商店将上线并可接单。之后仍可继续编辑任何内容。`,
+  `Not yet · 还没`, `Open the doors · 正式开店`, and the toast
+  `Your store is open · 你的店开张了`.
+
+The phone's own, already live: `Saving… · 保存中…`,
+`That did not save. Nothing has changed — try again. · 没有保存成功。数据没有变化 — 请重试。`.
+The blocker list uses the phone's own step labels (SETUP_LABEL), joined with
+`, ` / `、`.
+
+**Two pairs differ only in Chinese, recorded rather than reconciled:**
+- The guide's header reads `Your store is open · 店铺已开业` (phone, live). The
+  toast reads the desktop's `Your store is open · 你的店开张了`.
+- O10's row button `Set up delivery · 设置配送` is retired; the chooser carries
+  the desktop's `开通配送` instead.
+
+**Retired:** `Each step is a wizard on desktop — a store with its address and
+hours, a payment method, delivery or pickup. ·
+每一步在电脑端以引导方式完成 — 门店地址与营业时间、收款方式、配送或自提。`
+
+## The channel sync switch's confirm, and the picker (§395)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Channel sync screen
+(`public/m.html`, the §325 X8b block). The desktop switch has no confirm.
+§326.3 asked for one that says the change is lasting, so its words are new.
+
+| String | Status |
+|---|---|
+| `Stop syncing {item} to {channel}? · 停止将「{item}」同步到{channel}?` | **composed by Claude (X8b)**. No live candidate: the desktop's switch asks nothing. |
+| `{channel} keeps the number it shows now and stops following your shelf. This is a lasting change: it stays off until somebody turns it back on, and nothing reminds you. · {channel}将保持当前显示的数量,不再跟随货架库存。这是一项持久的更改:在有人重新开启之前会一直保持关闭,且不会有任何提醒。` | **composed by Claude (X8b)**, as §326.3 asked: "says it is a lasting change". |
+| `Turn sync off · 关闭同步` | **composed by Claude (X8b)**. Rejected: `Sync off · 已关闭`, the live STATE word, which names where the switch ends up rather than the act. |
+
+Copied whole:
+- `Channel · 渠道` and `All channels · 全部渠道` (the desktop picker).
+- `Sync on / off · 同步开关` (the switch's title on the desktop and both channel panels).
+- `Name not checked · 尚未读取商品` (the phone's own state word, now as a chip).
+- `Search · 搜索`, `Saving… · 保存中…`.
+
+## Matching and claims on the phone (§396)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's channel matching
+screen (`public/m.html`, the §325 X8c block). It is copied from the desktop
+Meituan and Eleme product panels and the GZ Grocery mapping table. The
+exceptions are below. Each composed string was searched for across
+`public/` first, and no live Chinese was found.
+
+| String | Status |
+|---|---|
+| `no listings read from this store yet, so nothing can be checked here · 尚未从该门店读取商品名称,无法在此核对` | **Chinese composed by Claude (X8c).** English: `11-meituan.js MT_PENDING_CN.noneRead`. |
+| `This name matches no listing on this store. Pick one from the list. · 该名称与本门店的任何商品都不符,请从列表中选择。` | **Chinese composed by Claude (X8c).** English: `MT_PENDING_CN.pickIt` / `EL_PENDING_CN.pickIt`. |
+| `No Guanyi listing carries this product's SKU. Refresh the list on the gzgrocery screen, then look again. · 没有管易商品使用该商品的货号。请在 gzgrocery 页面刷新列表后再查看。` | **composed by Claude (X8c), both halves.** The desktop's cell says `no match`, English-only, beside a Refresh button that sits on another screen here. |
+| `Bind · 绑定` | **Chinese composed by Claude (X8c)**, from the live toast `Bound · 已绑定`. The desktop button is `Bind →`, English-only. |
+| `Unbind · 解绑` | **Chinese composed by Claude (X8c)**, from the live toast `Unbound · 已解绑`. The desktop's ✕ carries `Unbind` as its title. |
+| `N matches · 共 N 个匹配` | **composed by Claude (X8c), both halves.** The desktop's name field is a native dropdown and never counts. |
+
+Copied whole:
+- **From the desktop:**
+  - `Open {channel} · 前往{channel}` (the Channel sync page's button);
+  - `Meituan delivery name · 美团外卖商品名`, `Eleme listing name · 饿了么商品名`;
+  - `Remove · 移除`, with Eleme's whole remove explanation and `This mapping carries no listing name.`;
+  - `Which options is this product? · 这是该商品的哪些规格？` and the "Tick every option…" help;
+  - `claimed by another product · 已被其他商品占用`, `units · 份`;
+  - the add-on sentence (`N options: …`, `The count goes to …. The add-ons open and close with it.`);
+  - the 闪购 SKU sentences;
+  - Eleme's three store sentences (no shop linked, still holds a mapping, the "pick one of the N read" line);
+  - `Size N · 规格 N`, `No matches · 无匹配`, `Mapping removed · 已删除匹配`, `Saved · 已保存`, `Bound · 已绑定`, `Unbound · 已解绑`;
+  - the auto-match hint.
+- **From the phone:** `Save failed: · 保存失败:`, `Could not load this. · 无法加载。`, `Nothing here. · 暂无商品。`.
+
+Server refusals (`name_not_in_catalogue`, `catalogue_not_read`) arrive in the
+server's English and are shown as they come.
+
+## Meituan's Match names on the phone (§397)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Match names screen
+(`public/m.html`, the §325 X8c-2 block), copied from `11-meituan.js` except
+the rows below. Each composed string was searched for across `public/`
+first, and no live Chinese was found.
+
+| String | Status |
+|---|---|
+| `N were refused — those names are not in the catalogue read from this store. Refresh the catalogue on the Meituan page, then run this again. · N 个被拒绝 — 这些名称不在从本门店读取的商品名称中。请在美团页面刷新商品名称后再运行一次。` | **Chinese composed by Claude (X8c-2).** The desktop sends the English to both languages (`refusedTxt`). |
+| `Clear all N Meituan names on {store}? · 清除 {store} 的全部 N 个美团名称?` | **composed by Claude (X8c-2), both halves.** The desktop's title is English-only and names Roots' stores (`Clear ALL N 天河 外卖 Meituan name mapping(s)?`). |
+| `The store that links itself by 货号 is left untouched. This deletes the names on {store} — you can fill them again afterwards. · 按货号自动关联的门店不受影响。将删除 {store} 的名称 — 之后可以重新填写。` | **composed by Claude (X8c-2), both halves**, for the same reason (`越秀 闪购 (auto by 货号) is left untouched…`). |
+| `Clear mappings · 清除映射` | **Chinese composed by Claude (X8c-2).** The desktop button is English-only. |
+| `Nothing to clear — no names are set on {store}. · 无可清除 — {store} 尚未设置任何名称。` | **composed by Claude (X8c-2), both halves.** The desktop's is English-only and names 天河 外卖. |
+| `Pick a store first. · 请先选择门店。` | **Chinese composed by Claude (X8c-2).** The desktop's is English-only. |
+| `Reads the product names from your Meituan {store} store … · 从美团{store}读取商品名称…` | **the store's own name put in place of** the desktop's fixed `Tianhe` / `天河店`; otherwise the live pair. |
+
+Copied whole from `11-meituan.js`:
+- **The button and the first screen:** `Match names · 匹配名称`; `Match names with Meituan · 与美团匹配商品名`; `Start matching · 开始匹配`; `Cannot connect? Paste the names yourself · 无法连接？自己粘贴名称`.
+- **While it reads:** `Reading your Meituan listings… · 正在读取美团商品…`; `matching against N products · 对比 N 个商品` and its "N listings read ·" form; `Matching… x/y · 匹配中… x/y`.
+- **The results:** `N matched automatically`; `N failed to save — try again in a minute.`; `N need your pick — choose the right Meituan listing`; `N are not on Meituan — their stock stays frozen until they are listed there`; `Use · 使用`; `no suggestion · 无建议`; `Use suggested names for all`; `Everything is matched.`; `Start over — clear every matched name`.
+- **When it fails:** `Match failed: · 匹配失败:`; `could not read the listings — is the sync service logged in?`; `No stores detected.`.
+- **Paste:** `Paste Meituan names`; `Store · 门店`; the paste field's label and hint; `Cancel · 取消`; `Match and fill · 匹配并填写`; `Paste at least one title.`.
+- **After Start over:** `Cleared N mapping(s), M failed.`.
+
+## Meituan bundles on the phone (§398)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Bundles screens
+(`public/m.html`, the §325 X8d block). They are copied from `11-meituan.js`
+and the Bundles tab markup. The desktop keeps the bundle title's four
+sentences in `MT_PENDING_CN` (English-only), and its save and delete words
+are plain English. The Chinese below is composed under the 2026-09-06
+amendment; each string was searched for across `public/` first.
+
+| String | Status |
+|---|---|
+| `Pick the title from the list. Typing it risks a difference you cannot see. · 请从列表中选择套餐名。手动输入可能产生看不出的差异。` | **Chinese composed by Claude (X8d)**; English `MT_PENDING_CN.bPick`. |
+| `Matches a listing on this store. · 与本门店的一个商品相符。` | **Chinese composed by Claude (X8d)**; English `bMatches`. |
+| `This stored title matches no listing on this store. It can be left alone, or replaced with one from the list. · 该已保存的套餐名与本门店的任何商品都不符。可以保持不变,或从列表中换一个。` | **Chinese composed by Claude (X8d)**; English `bStoredBad`. |
+| `Refused — that name is not in the catalogue. Refresh it and try again. · 已拒绝 — 该名称不在商品名称中。请刷新后重试。` | **Chinese composed by Claude (X8d)**; English `refusedOne`. |
+| `Pick a store. · 请选择门店。` | **Chinese composed by Claude (X8d).** |
+| `Enter the Meituan bundle title. · 请选择美团套餐名。` | **Chinese composed by Claude (X8d).** It says 选择 (pick) rather than 填写 (enter), because on the phone the title can only be picked. |
+| `Bundle saved. · 套餐已保存。` | **Chinese composed by Claude (X8d).** |
+| `Delete this bundle? · 删除这个套餐?` | **Chinese composed by Claude (X8d).** |
+| `This only stops auto-stock — it does not touch the Meituan listing. · 这只会停止自动同步库存 — 不会改动美团上的商品。` | **Chinese composed by Claude (X8d).** |
+| `Delete bundle · 删除套餐` | **Chinese composed by Claude (X8d).** |
+| `Deleted. · 已删除。` | **Chinese composed by Claude (X8d).** |
+| `Delete failed: · 删除失败:` | **Chinese composed by Claude (X8d).** |
+
+Copied whole (live pairs in `11-meituan.js` and the Bundles tab):
+- **The tab and the list:** `Bundles · 套餐`; the tab's sentence `Combos sold on Meituan that use up your products. …`; `Add bundle · 新增套餐`, `Edit bundle · 编辑套餐`, `Suggest bundles · 套餐建议`; `No bundles yet. · 暂无套餐。`; `no components yet · 尚未添加组成商品`; `Available now · 当前可做`, `cap · 上限`, `sync off · 同步已关`, `pushed · 推送`; `Edit · 编辑`, `Delete · 删除`.
+- **The editor:** `Store · 门店`; `Meituan bundle title — pick it from the list · 美团套餐名 — 从列表中选择`; `Maximum stock cap (optional) · 库存上限（可选）`, `none · 无`; `Components — the products this bundle uses up · 组成商品 — 该套餐消耗的商品`; `No components yet — add at least one. · 尚未添加组成商品，至少添加一个。`; `Search products… · 搜索商品…`; ` · inactive · · 已下架`; `qty · 数量`.
+- **Suggest:** `N possible bundle(s) — Create sets the components · …`; `Create · 创建`; `No combo-looking titles found. …`.
+- **The phone's own:** `Save · 保存`, `Save failed: · 保存失败:`, `No matches · 无匹配`.
+
+## gzgrocery billing on the phone (§399)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Billing screen
+(`public/m.html`, the §325 X8e block). The desktop panel (`12-guanyi.js`
+`gyRenderAnalytics`) writes nearly all of its words in English only. The
+Chinese below is composed under the 2026-09-06 amendment; each string was
+searched for across `public/` first.
+
+| String | Status |
+|---|---|
+| `Day · 日`, `Week · 周`, `Month · 月` | **Chinese composed by Claude (X8e).** No live pair for any of the three. Rejected: `Day-only · 仅按日` (a different meaning). |
+| `gzgrocery price · gzgrocery 价格` | **Chinese composed by Claude (X8e).** |
+| `Retail value · 零售价值` | **Chinese composed by Claude (X8e).** |
+| `Avg discount · 平均折扣` | **Chinese composed by Claude (X8e).** |
+| `N ordered product(s) have no gzgrocery price yet — counted in units but billed at full retail: · N 个已订货商品尚无 gzgrocery 价格 — 计入件数,但按零售全价计费:` | **Chinese composed by Claude (X8e).** |
+| `Pickups appear here automatically as gzgrocery sells. · gzgrocery 售出后会自动出现在这里。` | **Chinese composed by Claude (X8e).** It sits under the live `No gzgrocery orders in this range yet · 暂无订货`. |
+| `By day · 按日`, `By week · 按周`, `By month · 按月` | **Chinese composed by Claude (X8e).** |
+| `Statement CSV · 对账单 CSV` | **Chinese composed by Claude (X8e)**, from the live `Billing · 对账`. |
+| `Showing top 50 of N — full list in the CSV. · 显示前 50 个,共 N 个 — 完整列表见 CSV。` | **Chinese composed by Claude (X8e).** |
+| `N units · 共 N 件`, `retail · 零售`, `u · 件` | **Chinese composed by Claude (X8e).** These are the desktop table's column words (Units, Retail), carried on each product's line, since a phone has no table. |
+| `Could not save the file. · 无法保存文件。` | **composed by Claude (X8e), both halves.** The desktop has no failure path for the download. |
+
+Copied whole:
+- `Billing · 对账`.
+- `They owe you · 欠款`, `Units ordered · 订货件数`, `Products · 商品数` (the desktop's Billing snapshot tiles).
+- `No gzgrocery orders in this range yet · 暂无订货`.
+- `From · 从`, `To · 至`.
+- The phone's `Could not load this. · 无法加载。`.
+
+The CSV file itself is the desktop's, English headers included, because it is
+the same document.
+
+## The channel hub on the phone (§400)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's channel hub, box and
+Eleme screens (`public/m.html`, the §325 X9a block). Every pair was searched
+for across `public/` first.
+
+| String | Status |
+|---|---|
+| `Set up on desktop for now · 暂请在电脑端设置` | **Chinese composed by Claude (X9a).** On the WeChat mini program and web store cards until X9b / X9c bring their wizards to the phone. Rejected: the live `Fix this on the desktop` pair (it says something is broken, which these are not) and `Set up · 开始设置` alone (it would promise a screen the phone does not have yet). |
+
+Copied whole from the desktop's channel hub (`15-integrations.js`):
+- The seven states: `Connected · 已连接`, `Ready to set up · 待设置`,
+  `In setup · 设置中`, `Connecting… · 连接中…`, `Needs attention · 需处理`,
+  `Paused · 已暂停`, `Not set up · 未配置`.
+- `Set up · 开始设置`, `Manage · 管理`, `Fix · 修复`, `Dismiss · 忽略`,
+  `Get help · 获取帮助`, `Configure · 配置`, `No channels available. · 暂无可用渠道。`.
+- `New location … — link it here · 新门店 … — 请在此关联`.
+- The help prompt, `Note · 备注`, `Send request · 发送求助`,
+  `Help request sent — we’ll be in touch. · 求助已发送 — 我们会尽快联系您。`.
+- The box copy: `Request the box · 申请盒子`, `Box requested · 已申请盒子`,
+  `Box shipped — on its way · 盒子已寄出 — 在路上`, `Box delivered · 盒子已送达`,
+  `Tracking · 快递`, the three explanations, `I already have it — continue`,
+  `Box is plugged in — continue`, `Box requested — we’ll contact you`,
+  `Request failed — try again · 申请失败,请重试`.
+- Eleme's wizard: `Set up Eleme · 设置饿了么`, `Link shops · 关联门店`,
+  `Verify & enable · 验证并开启`, `Eleme shop id · 店铺ID`, the shop-id
+  explanation, the all-linked and needs-login lines, `Enable channel · 开启渠道`,
+  `Eleme enabled · 已开启`, `Map products · 商品映射`.
+- The phone's `Could not load this. · 无法加载。`.
+
+## The WeChat mini program on the phone (§401)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's mini program wizard,
+finish page and configuration page (`public/m.html`, the §325 X9b block).
+
+No string was composed. All 80 pairs are copied whole from
+`15-integrations.js` (`igMiniappSetup`, `igMwVerifyLogin`, `igMwSaveMch`,
+`igMwVerifyPay`, `igMwFinish`, `igMiniappConfigFull`, `igSaveMiniappCreds`):
+the step names, the "where do I find this" walkthroughs, the console links, the
+field labels and placeholders, every check and every answer from WeChat, the
+ready marks, the finish page and its to-dos, `Save & verify · 保存并验证`,
+`Saved · 已保存`, `Replace · 更换`, `Keep saved value · 保留已保存的值`,
+`Do it later · 稍后再做` and `Finish anyway · 仍然完成`. The load failure is
+the phone's own `Could not load this. · 无法加载。`.
+
+The desktop's footer has both "Skip this step" and "Do it later", and the two
+do the same thing. The phone carries one, `Do it later · 稍后再做`.
+
+X9a's composed `Set up on desktop for now · 暂请在电脑端设置` now shows only on
+the web store's card, until X9c.
+
+## The web store on the phone (§402)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's web store page
+(`public/m.html`, the §325 X9c block).
+
+No string was composed. All 76 pairs are copied whole from `15-integrations.js`
+(`igWebConfig`, `SIGNIN_META`, `wcSiteHtml`, `wcSiteProblems`,
+`igWebSaveSignin`, `igWebAddDomain`, `igWebCheckDns`, `igWebRemoveDomain`):
+
+- the ready marks and section heads;
+- the address lines, the domain steps and the DNS table's headings;
+- each refusal of a domain, and the DNS answers;
+- the five sign-in ways with their descriptions, `Ready · 就绪` and
+  `Not available yet · 暂不可用`;
+- the site editor's labels, notes and its four row problems;
+- `Save failed: · 保存失败:` with its two part names;
+- the payment rows, `Open WeChat config · 打开小程序配置`, and
+  `Save changes · 保存更改`.
+
+The load failure is the phone's own `Could not load this. · 无法加载。`.
+
+**Retired:** X9a's composed `Set up on desktop for now · 暂请在电脑端设置`. With
+X9b and X9c every card in the hub opens a phone page, so the string is no
+longer in the code. X9a's pending note says so; it needs no row in the
+vocabulary.
+
+**Retired with this step.** X9a's composed `Set up on desktop for now · 暂请在电脑端设置`
+(filed under §400) stood on the mini program and web store cards only until those
+got their own phone pages (X9b, X9c). It is no longer anywhere in the code; read
+the §400 row as history, not as a live string.
+
+## Payments on the phone (§403)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Payments screen
+(`public/m.html`, the §325 X10 block).
+
+Nothing composed. Two desktop strings that show both languages at once are
+shown one half at a time:
+
+| Phone pair | From the desktop's | Why split |
+|---|---|---|
+| `Chinese Yuan (¥) · 人民币 (¥)` | preset label `Chinese Yuan · 人民币 (¥)` (`CURRENCY_PRESETS`) | The phone shows one language; the symbol goes with each half. The other nine presets are English on the desktop in both languages and stay so. |
+| `✓ LIVE · ✓ 已启用`, `✗ OFF · ✗ 未启用` | the Alipay card's chip `✓ LIVE · 已启用` / `✗ OFF · 未启用` | The same; the mark goes with each half. |
+
+Copied whole:
+- **From `retail-admin.html` and `05-marketing.js`:**
+  - Currency: `Currency · 货币`, `Display currency · 显示货币`, the card's
+    explanation, `Currency saved · 货币已保存`.
+  - Tax: `Tax · 税费`, its explanation, `Charge tax on orders · 订单收取税费`,
+    `How prices are shown · 价格含税方式`, and its two options.
+  - Tax fields: `Rate % · 税率 %`, `What to call it · 税费名称`,
+    `Registration number · 税号`, `optional · 选填`,
+    `Tax the delivery fee too · 运费同样计税`.
+  - Tax messages: the three preview sentences, the two checks,
+    `Pick how prices are shown. · 请选择价格含税方式。`,
+    `Save tax settings · 保存税费设置`, `Tax settings saved · 税费设置已保存`,
+    `Off · 关闭`.
+- **From `retail-admin.html` and `02-settings-ops.js`:** every label, help
+  line and warning on the Alipay card, the three key placeholders, and the
+  four refusal messages (`qr_required`, `image_too_big`, `ocr_key_required`,
+  `bad_image`).
+- **Elsewhere on the desktop:** `Payments · 收款` (`15-integrations.js`),
+  `Set up · 设置` (the web store's Alipay row), `Not saved yet · 尚未保存`
+  (`09-products.js`; it marks a picked QR that is not saved yet), `On · 开` /
+  `Off · 关` (the feature switches), `Save · 保存`, `Remove · 移除`.
+- **The phone's own:** `Could not load this. · 无法加载。`.
+
+## The manual-Alipay card that did not load (§404)
+
+**Operator register (Rule 1), 2026-10-01.** Settings → Operations, the
+manual-Alipay card (`public/retail-admin/02-settings-ops.js`).
+
+| String | Status |
+|---|---|
+| `Could not load this card, so Save leaves it unchanged. · 此卡片加载失败,保存时不会改动它。` | **composed by Claude.** `加载失败` is copied from the live `财务数据加载失败。` and `分类加载失败。`. `保存` is the Save bar's own word (`保存设置`). The second half says what the Save bar will do, because pressing that button is what destroyed data before. Rejected: the phone's live `Could not load this. · 无法加载。`, because it does not say what Save will do, and that is the point of the message. |
+
+Copied: `Try again · 重试` (live throughout the desktop).

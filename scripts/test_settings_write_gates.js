@@ -262,6 +262,12 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     for (const k of ['notifications.order_status_template_id', 'notifications.wecom_order_webhook', 'system_alerts.enabled', 'system_alerts.wecom_webhook']) {
       rows.push([k, list(route('pushcfg')), 'phone Settings → Push notifications (§325 X7)']);
     }
+    // §325 X10 — the phone's Payments screen writes the display currency and
+    // the desktop tax card's seven keys, drawn for the keys these families ask.
+    rows.push(['currency', list(route('paycfg')), 'phone Payments — currency (§325 X10)']);
+    for (const k of ['tax.enabled', 'tax.mode', 'tax.rateMicro', 'tax.label', 'tax.number', 'tax.shippingTaxable']) {
+      rows.push([k, list(route('paycfg')), 'phone Payments — tax (§325 X10)']);
+    }
     for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq', 'production', 'waste', 'lowStockHints']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
     }
@@ -443,9 +449,11 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // card: 'shop.display' (the shop.* family) and 'customer_service'.
       // §325 X7 adds the Push notifications Save: ONE site, two families
       // (notifications.* and system_alerts.*), as the desktop's saveConfig.
-      const FAMS = ['customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
+      // §325 X10 adds Payments: the currency and the tax.* keys, each its own
+      // write site, as the desktop's renderCurrencyControl and saveTaxSettings.
+      const FAMS = ['currency', 'customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
         'notifications.categories.', 'notifications.order_status_template_id', 'popups.list', 'product_page.sections', 'reviews.reward', 'reviews.topup',
-        'roots_club.tiers', 'shop.', 'support.hidden', 'system_alerts.'];
+        'roots_club.tiers', 'shop.', 'support.hidden', 'system_alerts.', 'tax.'];
       // §325 M10 adds the Reviews screen's two Set up saves — the reward and
       // auto top-up — each its own site, as the desktop's saveReviewReward /
       // saveReviewTopup; the review tags are a cfgCard below.
@@ -487,7 +495,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
       }
       is(famSites.filter((i) => i !== CARD_SITE).map((i) => famAt(i).join('|')).sort(),
-        SITE_FAMS, 'the phone writes fifteen families at fifteen write sites, each asserted in section 2 (support.hidden as the open one)');
+        SITE_FAMS, 'the phone writes seventeen families at seventeen write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'

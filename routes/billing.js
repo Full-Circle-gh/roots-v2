@@ -23,7 +23,10 @@ const express = require('express');
 // covered side of the boundary. Proven by scripts/diagnose_seam_batch.js.
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
-const { requireBackend } = require('../lib/require-cap');
+// §325 (S2l) — every read and write here takes the Billing screens' keys
+// (billing:view or billing:pay), with the keyless doors kept open: see
+// lib/require-cap.js requireBillingAccess.
+const { requireBillingAccess } = require('../lib/require-cap');
 const router = express.Router();
 
 // ── Schema (idempotent) ─────────────────────────────────────────────────
@@ -150,11 +153,11 @@ function billingView(tenantId) {
 }
 
 // ── Read APIs ──────────────────────────────────────────────────────────────
-router.get('/api/backend/billing', requireBackend, (req, res) => {
+router.get('/api/backend/billing', requireBillingAccess, (req, res) => {
   res.json({ success: true, ...billingView(req.session.tenantId) });
 });
 
-router.get('/api/backend/plans', requireBackend, (req, res) => {
+router.get('/api/backend/plans', requireBillingAccess, (req, res) => {
   const plans = db.prepare(
     'SELECT id, code, name, name_cn, price_cents, currency, billing_interval, features_json, sort_order FROM billing_plans WHERE is_active = 1 AND is_public = 1 ORDER BY sort_order ASC'
   ).all();

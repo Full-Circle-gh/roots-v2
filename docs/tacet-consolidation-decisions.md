@@ -26646,3 +26646,664 @@ loaded. Holiday mode ON, also in §326.2, is not part of this step.
 8. **Not done:** holiday mode ON (§326.2), and messages for when the online store
    is closed (`message_en` / `message_cn`). The desktop panel does not write
    those messages either, and the server keeps the stored ones.
+
+## §391 — BILLING COMES TO THE PHONE: THE PLAN, THE PLANS, CHOOSING ONE AND PAYING IT, AND THE INVOICES
+
+**Built 2026-10-01 under §325** (Ash, §326.8: *"Billing and plans come to the phone, last."*).
+The phone gets the desktop Billing page (`public/backend-billing.html`). It is a
+row in Settings next to Brand, which is where the desktop links to it. It shows
+the subscription and its alert, the plans, choosing a plan and paying for it,
+and the invoices. Every request is the desktop page's own.
+
+1. **What it reads:**
+   - `GET /api/backend/billing` and `GET /api/backend/plans`, asked together. If
+     either read fails, the screen shows the desktop's *Failed to load billing*
+     with a retry.
+   - The four alerts are the desktop's own sentences.
+   - Statuses are shown as words, not the desktop's raw codes. The words come
+     from the platform back office (`store-admin.html`); one is composed (see
+     the vocabulary entry).
+   - Plan names and features are shown in one language.
+2. **Choosing a plan follows the desktop's `onChoosePlan` step for step:**
+   - First, a confirm.
+   - Then `POST /api/backend/billing/select-plan {plan_code}`.
+   - Then the payment provider, picked the desktop's way: WeChat Pay when it is
+     configured, otherwise manual.
+   - Then `POST /api/backend/billing/checkout {invoice_id, provider}`.
+   - Then the checkout appears in a sheet. For WeChat Pay it shows the QR, and
+     the phone asks `GET …/invoices/:id/payment-status` every 3 s. For a manual
+     transfer it shows the instructions and the reference.
+
+   The screen reads again afterwards, so the new invoice shows. The QR wait
+   stops when the sheet closes or the screen is left, as the desktop's modal
+   does.
+3. **The confirm says one thing the desktop's does not:** "Until it is paid,
+   billing shows the account as past due." The server sets the subscription to
+   `past_due` the moment the invoice is raised (`select-plan`), even partway
+   through a paid period. That is true and nobody would guess it.
+4. **Who:**
+   - The screen asks for `billing:view`, the key on the desktop's link.
+   - Choose asks for `billing:pay`, the key named "Pay / change plan". No preset
+     includes it; only the owner has it.
+   - Both wait for the operator's keys to load (`mCanKnown`, from X12).
+
+   **The server asks for neither key.** Every `/api/backend/billing*` route
+   accepts any signed-in operator (`requireBackend`). The phone's check can
+   only hide a control the server would allow; it never shows one the server
+   would refuse. The server gap is reported for a server step, not fixed here.
+5. **Not done, matching the desktop:**
+   - Paying an invoice that is already open. The desktop has no Pay button on
+     its invoice rows.
+   - Marking an invoice paid. That is SaaS-admin only.
+   - The *Company* line. It is the brand name, which Settings → Brand already
+     shows.
+
+   A WeChat QR shown on the phone has to be scanned with another device, just
+   as it would be from the desktop.
+
+## §392 — BILLING NEEDS A PERMISSION, AND THE TWO DOORS THAT SEND EVERYONE TO PAY STAY OPEN
+
+**Built 2026-10-01 under §325** (§325.3's rule; found while building the phone's Billing, §325 X13).
+Every `/api/backend/billing*` route (`routes/billing.js`, `routes/billing-pay.js`)
+accepted any signed-in operator. So anyone in the back office could raise an
+invoice, change the shop's plan (which also marks the subscription past due) or
+start a checkout. The capability keys `billing:view` and `billing:pay` existed
+but nothing on the server checked them.
+
+1. **Reads and writes now take `billing:view` or `billing:pay`**
+   (`lib/cap-routes.js` billingCap). Those are the keys that open the two screens
+   using these routes today:
+   - The desktop Billing page. Its door is the Settings link tagged
+     `data-cap="billing:view"`, and the page then draws Choose for whoever is on
+     it. So `billing:view` alone can pay there today, and keeps that.
+   - The phone's Billing screen (X13): `billing:view` to open it, `billing:pay`
+     to choose a plan.
+
+   The owner holds every key. The admin and manager presets hold `billing:view`
+   and keep their access. The shop-floor and narrower presets hold neither and
+   are now refused.
+
+   The gate is the six routes: billing, plans, providers, select-plan, checkout
+   and payment-status. `mark-paid` and `run-lifecycle` stay SaaS-admin only. The
+   WeChat callback stays unauthenticated, because its signature is the gate.
+2. **Two doors reach the Billing page with no key at all, and both stay open**
+   (`lib/require-cap.js` requireBillingAccess):
+   - **A shop that is not active** (suspended for non-payment). `serveRetailAdmin`
+     sends every operator of it to `/backend/billing?suspended=1` to pay.
+   - **The provisioning hold.** Until `TENANT_DATA_ISOLATION=1`, every operator
+     of a tenant other than Roots is sent to `/backend/billing?provisioning=1`.
+
+   Shutting either door would take paying away from people who can pay from a
+   screen today, which §325.3 does not allow. Whether these doors should stay
+   keyless is Ash's decision. Until isolation is cut over, the second door means
+   the gate bites only on Roots' own operators, and Roots' internal plan already
+   refuses a plan change.
+3. **Enforced whether or not the shop has switched enforcement on.** This works
+   like the Team and store-staff writes, which use `requireCap` the same way.
+4. **Not changed** (both go to Ash): choosing a plan still marks the
+   subscription past due at once, and the desktop page does not yet show a
+   refusal. A refused operator, who can only reach the page by its URL, sees it
+   stay on "Loading…".
+
+## §393 — CLOSING ELEME AT A STORE STOPS ITS STOCK, NOT ITS ORDERS, AND THE SCREENS NOW SAY SO
+
+**Investigated and reworded 2026-10-01 under §325** (found while building X12).
+The phone's confirm for closing Eleme at a store said "No new orders arrive at
+this store on this channel". The code does something smaller, so the sentence
+now says what is true. No behaviour changed.
+
+1. **What closing Eleme at a store actually does** (the phone's
+   `POST /channel-status/cell`, the desktop Sales grid's toggle, and the
+   whole-channel and shop-wide closes that include Eleme):
+   - **It writes the store's Eleme cell to closed.** This happens in
+     `lib/store-close.js` setChannelOpen, in `channel_status`.
+   - **It deletes that store's queued Eleme stock pushes.** Pending,
+     processing and error rows go, and the deletion is logged.
+   - **The Eleme daemon then skips that store's pushes.**
+     `processStockQueue` skips it via `channelClosedStores('eleme')`. Stock
+     changes made while it is closed wait in the queue and go out when it
+     reopens.
+   - **Reopening queues no fresh full snapshot.** Only Meituan does that.
+2. **What it does NOT do:**
+   - **Nothing tells Eleme the shop is shut.** No code anywhere writes an Eleme
+     shop status (unlike Meituan's 置休). So the shop stays open on Eleme and
+     customers can still order.
+   - **The order poll does not read the close.** It is gated on opening hours
+     only (`isStoreOpen`), and `pollOrders` never reads the close. So those
+     orders are still brought in.
+   - **Eleme keeps showing the last stock it was sent.** Pushes are dropped and
+     paused, so a closed store can take Eleme orders against stale numbers.
+3. **The words now say this, on both surfaces:**
+   - **Phone, closing or opening Eleme at one store, or at every store:** its
+     own sentences. Closing says what stops and that orders still come in.
+     Opening says the stock comes back, not that orders can arrive again.
+   - **Phone, closing a whole shop or Close everything:** these end with "Eleme
+     is the exception: it is not told, so Eleme orders can still come in", but
+     only when Eleme is live there.
+   - **Desktop, opening Eleme at a shut shop:** says the stock comes back.
+   - **Desktop, the open/close panel's line "Closing pauses new orders…":**
+     gains the same exception.
+   - Every other channel's sentence is unchanged. Meituan really is closed on
+     Meituan, and the mini app, web store and till obey the close at checkout.
+4. **Not decided here, for Ash:** whether closing Eleme should actually close
+   the shop on Eleme. That would mean adding a shop-status write to the
+   browser-automation daemon. Until it exists, closing Eleme at a store pauses
+   the stock and nothing else.
+
+## §394 — THE SETUP GUIDE DOES ITS STEPS ON THE PHONE, AND OPENS THE DOORS
+
+**Built 2026-10-01 under §325.** The phone's setup guide used to report only:
+"Nothing here is actionable on purpose… none of that is phone work." Since then
+X6 (stores), O10 (the delivery wizard) and X4 (Brand) have moved most of that
+work to the phone. Each step the phone can now do leads where the desktop's
+step leads (`17-setup-guide.js` suRun), using the desktop's own buttons:
+**Set up** on the next step and **Open** on the others.
+
+1. **Where each step leads:**
+   - **Your store:** Operations, where stores are edited and added (X6). It is
+     offered to the store screen's key, `stores:edit`.
+   - **Your first product:** the product editor's Add (`peCanCreate`).
+   - **Delivery or pickup:** the desktop's chooser (suFulfillChooser), in its
+     own words.
+     - *Set up delivery* opens the O10 wizard, on O10's own conditions.
+     - *Pickup only for now* sends `POST /setup {pickupConfirmed:true}` and shows
+       the desktop's toast.
+     - Not built: the chooser's "Earliest pickup" minutes field. The Delivery
+       screen's Store pickup row already sets those.
+   - **Open the doors:** the desktop's suOpenDoors, word for word.
+     - With steps left, it shows *Almost there* and names them, with only an OK
+       button. Nothing is sent.
+     - With none left, it asks *Open your store now?* (*Not yet* / *Open the
+       doors*), then sends `POST /setup {storeOpened:true}` and shows the
+       desktop's *Your store is open*.
+     - As on the desktop, the blocker check is on the screen. The server
+       accepts the flag regardless.
+   - **Your brand** (optional): the Brand screen (X4).
+2. **The real server key.** Both `/setup` writes take `setupFlagCap`
+   (`settings:shop` or `stores:view`, the `SETUP_SCREEN` pair). That is also the
+   pair that opens this screen. A test compares the phone's list with the
+   server's. Both writes wait for the operator's keys to load (`mCanKnown`), so
+   nothing is drawn while `/me` is still loading.
+3. **Three states.** While a write runs, its button reads *Saving…* and the
+   others are disabled. A refusal stays on the screen in a red bar. A toast
+   appears only on success. The server's answer replaces the guide's status.
+4. **The stale foot note is replaced.** It said every step was a wizard on the
+   desktop; it now names what still is: *Payment methods and WeChat sign-in are
+   set up on desktop.* The payment step means the Alipay QR upload and WeChat
+   Pay merchant keys. WeChat sign-in means the mini-app credentials wizard.
+   Neither step draws a button.
+
+## §395 — THE CHANNEL SYNC SCREEN ON THE PHONE GAINS THE DESKTOP'S PICKER, SEARCH AND SYNC SWITCH (§326.3)
+
+**Built 2026-10-01 under §325.** This is step X8b, the second part of X8,
+on the Settings / Channels / Dashboard / Billing lane. The phone's Channel
+sync screen now has what the desktop page's tools have
+(`29-channel-sync.js`).
+
+1. **The channel picker.** "All channels" or one channel.
+   - With a channel picked, each item is counted and filtered by that
+     channel's own state; with none, by its worst. That is the desktop's
+     `stateOf` / `countsFor`, so the chips' numbers follow the pick.
+   - The phone now counts locally too (with no channel picked, the numbers
+     are the same as the server's).
+   - A **Name not checked** chip appears when something is in it, as on the
+     desktop.
+2. **The search.** Matches name (both languages), SKU and size.
+   - It repaints the list alone, so typing keeps the keyboard.
+   - It does not change the counts, as on the desktop.
+   - It is cleared each time the screen opens.
+3. **The Sync on / off switch, beside Sync now on each channel line.**
+   §326.3 overturned §124's "the switch stays on the desktop" by name.
+   - **What it sends:** the desktop's write,
+     `POST /channel-sync/:channel/products/:id/sync {on}`.
+   - **Who sees it:** it is drawn for `{channel}:map`, the key
+     `lib/cap-routes.js` asks of that path. Without the key there is no
+     switch and nothing is sent.
+   - **Not drawn** where nothing is mapped.
+4. **Turning sync off asks first** (§326.3). The confirm names the item and
+   the channel. It says the channel keeps the number it shows now and stops
+   following the shelf. It also says this is a lasting change that stays
+   until somebody turns it back on, with no reminder.
+   - Turning sync back on asks nothing, as on the desktop.
+   - As with Sync now, the result shows when the list reloads; a refusal
+     or a "somebody else changed this" answer is said on the row.
+5. **Kept:** "Fix this on the desktop" still names the three reasons that
+   need the channel's catalogue picker (`no_name`, `name_not_found`,
+   `no_option`). Matching and claims are X8c.
+
+## §396 — MATCHING AND CLAIMS ON THE PHONE: ONE PRODUCT ON ONE CHANNEL
+
+**Built 2026-10-01 under §325.** This is step X8c, the third part of X8,
+on the Settings / Channels / Dashboard / Billing lane. Until now, a Channel
+sync card whose fix needed product matching said "Fix this on the desktop".
+These are the reasons with no listing name, a name the listing does not
+carry, or no option picked. Such a card now has the desktop's **Open
+Meituan / Open Eleme** button. It opens that channel's product panel on this
+product, which is what the desktop's `csFix` does. Without a matching key
+the sentence stays.
+
+1. **Meituan** (`11-meituan.js` `mtPanelStore`).
+   - **The delivery store** (the desktop's own guess: code `tianhe` or a
+     name containing 天河, else the first store):
+     - the listing name, picked by searching the names read from Meituan
+       and tapping one;
+     - nothing typed is ever sent; the server refuses anything else too
+       (`lib/meituan-map-write.js`);
+     - **Remove**, which asks first with the name;
+     - on a listing several products share, which options this product is
+       and how many units each sells;
+     - an add-on listing says where the count goes, with nothing to pick.
+   - **The 闪购 store** is read-only. It links by 货号, and says so when no
+     listing carries the SKU.
+   - **Writes:** `POST /meituan/products/:id/map {storeId, storeCode,
+     meituanName, syncEnabled, source}` and `POST …/claim {storeId,
+     storeCode, specSkuId, specLabel, units, on}`.
+2. **Eleme** (`14-eleme.js` `elPanelStore`).
+   - **Each linked store:** the listing name from that store's catalogue,
+     **Remove**, and the options with units.
+   - **Remove deletes the mapping.** It asks first, in the desktop's words,
+     which tell the difference from switching sync off.
+   - **A store with no Eleme shop linked** says why nothing can be matched.
+     It still offers Remove for a leftover mapping, as the desktop does.
+   - **Writes:** `POST /eleme/products/:id/map {storeId, storeCode,
+     elemeName, syncEnabled}` or `{…, remove:true}`, and `POST …/claim
+     {storeId, storeCode, elemeName, specId, specName, units, on}`.
+3. **GZ Grocery** (`12-guanyi.js`).
+   - **Bind** to the listing the SKU suggests, with sync on, as the desktop
+     does: `{skuId, syncEnabled:true}`.
+   - **Unbind** (`{skuId:''}`).
+   - With no suggestion, it says where to refresh the list.
+4. **Naming never moves the sync switch.** Meituan keeps the stored switch
+   (the desktop's `mtKeepSync`). Eleme passes the stored value through, so a
+   new mapping starts off. Naming and switching sync on stay two separate acts.
+5. **Who sees each control.** Each is drawn for the key the server asks of
+   its path (`lib/cap-routes.js`):
+   - `{channel}:map` for the name, Remove and the GZ Grocery binding;
+   - `{channel}:sync` for the option claims.
+   - The screen opens for any of the five keys.
+   - Every write reads the product again, because claiming an option
+     releases it from whichever product held it before. A refusal is said
+     where it happened.
+6. **Not built here; candidates for a later step.**
+   - Meituan's **Match names** guided flow: read the catalogue, apply every
+     confident match, then review the ambiguous and unmatched ones.
+   - **Paste names**, and **Clear all**.
+   - Linking an Eleme store to its shop id (`elSetShop`).
+   - The panels' own sync switches are not repeated here; the Channel sync
+     switch (X8b) is the phone's.
+
+**Open for Ash (SERVER).** The Channel sync switch, on the desktop page and
+now the phone, writes through `lib/channel-sync-write.js` `setSync`. That
+code does not refuse a nameless Eleme mapping. The Eleme panel refuses to
+switch a nameless mapping on, because the daemon then pushes at the
+product's own Chinese name (`docs/eleme-findings.md` finding 6). Closing
+this server-side would cover both screens.
+
+## §397 — MEITUAN'S MATCH NAMES, PASTE NAMES AND START OVER ON THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X8c-2, finishing X8c (matching
+and claims) on the Settings / Channels / Dashboard / Billing lane. The
+desktop Meituan page's guided name-matching flow is on the phone now
+(`11-meituan.js` `mtOpenMatch` … `mtPasteApply`). It is reached from
+**Match names** on the Meituan screen's upkeep card.
+
+1. **Start matching.**
+   - **Read:** `POST /meituan/listings/refresh`, then `GET /meituan/listings`
+     every 3 s for at most 3 minutes, until no job runs.
+   - **Match:** every active product with no name on the delivery store is
+     matched with the desktop's own rule, `mtMatchListing`:
+     - the 货号 first;
+     - then the Chinese name exactly;
+     - then a unique substring;
+     - then the size, to break a tie;
+     - then the English name.
+     The suite runs the desktop's function and the phone's against one table.
+   - **Save:** each confident match is saved, `POST
+     /meituan/products/:id/map {storeId, storeCode, meituanName, syncEnabled,
+     source:'match_names'}`. The sync switch keeps its value.
+   - **Never touched:** a name the operator already set, and paused
+     products.
+2. **The review**, as the desktop shows it:
+   - how many were matched automatically;
+   - failures, and refusals counted apart from them, because the remedy for
+     a refusal is to refresh the catalogue, not to try again;
+   - the ambiguous ones as names to tap;
+   - the ones Meituan does not have, each with its suggested name where
+     Meituan carries exactly that string, plus "Use suggested names for
+     all";
+   - a refusal of a tapped name is shown in the server's words, and the row
+     stays.
+3. **Start over.** It asks first, then clears every name on the delivery
+   store (`meituanName:''`, `syncEnabled:0`, `source:'remove'`) and returns to
+   the start.
+   - The store that links itself by 货号 is never written, which is the
+     desktop's `mtClearAll` rule.
+   - With nothing to clear it says so rather than asking.
+4. **Paste names.** The operator pastes the titles, one per line. They are
+   de-duplicated, with leading bullets stripped as on the desktop, and feed
+   the same matcher. No refresh is sent.
+5. **Who can use it.** The screen is `meituan:map`, the key every write here
+   asks. Start matching also reads the listings again (`meituan:sync`), so
+   it is drawn only with both. Paste needs only `meituan:map`.
+6. **The delivery store is named, not fixed.** The desktop picks it by code
+   `tianhe` or a name containing 天河, else the first store. Its texts write
+   "Tianhe" / "天河 外卖" into the sentences. The phone uses the same pick but
+   says the store's own name, so another tenant reads its own store, not
+   Roots'.
+
+## §398 — MEITUAN BUNDLES ON THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X8d on the Settings / Channels
+/ Dashboard / Billing lane. The desktop Meituan page's Bundles tab is on the
+phone (`11-meituan.js` `mtRenderBundles` … `mtDeleteBundle`). It is reached
+from **Bundles** on the Meituan screen's upkeep card.
+
+1. **The list**, as the desktop draws it:
+   - title, store and components;
+   - available now, the cap, whether sync is off, and the last push.
+2. **Add and Edit** send `POST /meituan/bundles {id, storeId, storeCode,
+   meituanName, maxQty, syncEnabled, components:[{productId, qty}]}`, the
+   desktop's body key for key.
+   - **The switch is carried through unchanged**, as the desktop now does.
+     Fixing a component never switches a paused bundle back on.
+   - **A blank cap is sent as null.**
+   - **The title** is picked from the names read from Meituan for the chosen
+     store, or is the title the bundle already holds. That is the desktop's
+     `mtBundleNameCommit` rule, and the server's: it refuses anything else.
+   - **The line under the title** says what it holds: pick from the list,
+     matches a listing, a stored title that matches nothing, or nothing read
+     to check against.
+   - **Components** can be any product, paused ones included (the desktop
+     reads products with `includeInactive`), each added once with a quantity.
+   - **A refused title** is said under the field with the server's own
+     sentence, and the screen stays open.
+3. **Delete** asks the desktop's question, then sends
+   `DELETE /meituan/bundles/:id`.
+4. **Suggest bundles** finds the combo-looking titles read from Meituan that
+   are not a bundle yet: 套餐 / Combo, or a + / & joiner (the desktop's
+   `mtComboCandidates`). Each one opens Add with its title.
+5. **Who can use it.** Every bundle write is `meituan:sync` on the server,
+   so Add, Edit, Delete and Suggest are drawn for it and the editor's route
+   needs it. The list itself reads for `meituan:view` or `meituan:sync`.
+
+## §399 — GZGROCERY BILLING AND THE STATEMENT ON THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X8e, the last part of X8, on
+the Settings / Channels / Dashboard / Billing lane. The desktop GZ Grocery
+tab's Billing panel is on the phone (`12-guanyi.js` `gyLoadAnalytics`,
+`gyRenderAnalytics`, `gyExportStatement`). It is reached from **Billing**
+on the gzgrocery screen's card. It is read-only.
+
+1. **The read is the desktop's:** `GET /guanyi/analytics?period=&from=&to=`.
+   - **It opens with no period and no dates,** so the server's default
+     applies (the last 90 days), as on the desktop.
+   - **Day / Week / Month** re-scope the range the way `gyPeriodRange` does:
+     Monday-start weeks, the month so far, on the shop's calendar day. The
+     suite runs the desktop's function against the phone's.
+   - **The two date fields** set the range by hand.
+2. **What it shows, as the desktop does:**
+   - units ordered, what they owe (at the gzgrocery price), the retail value,
+     the average discount, and the number of products;
+   - the warning for ordered products with no gzgrocery price;
+   - the breakdown by period;
+   - the products, top 50, with "full list in the CSV" beyond that.
+3. **Statement CSV** is the desktop's file byte for byte: BOM, columns,
+   quoting, two decimals, the TOTAL line and the file name. The suite runs
+   the desktop's own `gyExportStatement` on the same answer and compares.
+4. **Who can open it.** This is what another business owes the shop.
+   - The desktop shows it to anyone on the GZ Grocery tab (`guanyi:view`),
+     and so does the phone.
+   - Not on the boards that never see money (`recapNoMoney`: warehouse,
+     dispatch, customer service), the rule Finance and Home's recap follow.
+   - The check sits in `canRoute`, next to Finance's.
+
+## §400 — THE CHANNEL HUB AND ITS SETUP WIZARDS ON THE PHONE (PART ONE)
+
+**Built 2026-10-01 under §325.** This is step X9a on the Settings / Channels /
+Dashboard / Billing lane. X9 was split in three because the three groups of
+wizards share nothing but the hub:
+
+- **X9a (this):** the hub itself, the to-dos, Get help, the Meituan / Qingyun
+  box, Eleme's two steps, and JD's door.
+- **X9b (to do):** the WeChat mini program wizard (the AppID and secret, WeChat
+  Pay, the pay check).
+- **X9c (to do):** the web store wizard (sign-in, the site, domains, DNS).
+
+The desktop's channel hub (`15-integrations.js`: `igLoad`, `igCard`, `STATUS`,
+`igDismissTodo`, `igHelp`, `igRelayWizard` / `igRelayBoxRequest`,
+`igElemeWizard` / `igElemeShop` / `igElemeEnable`, `igLaunchSetup`) is on the
+phone. It is reached from **Configure** on the Sales screen.
+
+1. **The read is the desktop's:** `GET /channel-hub`, the cards and the stores.
+   Every card shows its state in the desktop's seven words, its health line
+   or its blurb, and its open to-dos ("New location … — link it here").
+2. **The writes are the desktop's, with the same bodies:**
+   - Dismiss a to-do: `POST /channel-hub/:kind/todos/dismiss {todoId}`.
+   - Get help: `POST /channel-hub/help {kind, note}`. The note is optional,
+     as the desktop's prompt makes it.
+   - Request the box: `POST /channel-hub/:kind/box-request {}`.
+   - Link an Eleme shop: `POST /eleme/shop {storeId, storeCode, shopId}`.
+     Nothing is sent with the box empty, as on the desktop.
+   - Enable Eleme: `POST /eleme/enable {enabled:true}`.
+   After each, the hub is read again, as the desktop's `igLoad()` does.
+3. **Where Set up / Manage / Fix go follows `igLaunchSetup`:** Meituan and
+   Qingyun to the box screen; Eleme to its two steps; JD to the phone's JD
+   Logistics keys (X7). The WeChat mini program and the web store say "Set up
+   on desktop for now" until X9b and X9c.
+4. **The box screen follows the box's state** from the card's config:
+   none yet (what it is, Request the box, "I already have it — continue"),
+   requested, shipped (with its date and tracking), delivered. Continuing
+   opens Get help, which is how a box gets connected (§257).
+5. **Who sees what.** Each control is the server's key (`lib/cap-routes.js`):
+   - `integrations:manage` for Get help, the box and Dismiss;
+   - `eleme:sync` for the shop ids and Enable.
+   Without the key the control is not drawn and the command sends nothing.
+   The hub opens for the Sales page's keys.
+6. **The three states.** Each button disables and says what it is doing; a
+   refusal or failure is said in place and stays; a toast only confirms.
+
+## §401 — THE WECHAT MINI PROGRAM'S SETUP AND CONFIGURATION ON THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X9b on the Settings / Channels /
+Dashboard / Billing lane, the second of X9's three parts (X9a the hub, X9c the
+web store). The desktop's Mini App pages (`15-integrations.js`:
+`igMiniappConfig`, the `igMiniappSetup` wizard, `igMwVerifyLogin`,
+`igMwSaveMch`, `igMwVerifyPay`, `igMwFinish`, `igMiniappConfigFull`,
+`igSaveMiniappCreds`) are on the phone. They open from the WeChat mini
+program's card in the channel hub, which no longer says "Set up on desktop for
+now".
+
+1. **The read is the desktop's:** `GET /channel-hub/miniapp/wechat-config`.
+2. **Which page opens is the desktop's rule:**
+   - the account the server's own config fills (`source: 'env'`), or one
+     whose login works and whose payments are ready or put off, gets the
+     one-page configuration;
+   - anyone else gets the wizard, at the first step not done.
+   - **One phone rule on top:** somebody without `integrations:manage` gets
+     the configuration page read-only, because the wizard is nothing but
+     saves.
+3. **The wizard's writes are the desktop's, with the same bodies:**
+   - Step 1: `POST /channel-hub/miniapp/wechat-creds {appId, appSecret}`.
+     WeChat must accept the pair to go on.
+   - Step 2: the same endpoint, `{mchId}`.
+   - Step 3: `POST /channel-hub/miniapp/wechat-pay-verify {serialNo,
+     apiV3Key, privateKey, platformPubKey}`, a real signed call to WeChat Pay.
+     When it fails, "Finish anyway" appears, as on the desktop.
+   - Each step makes the desktop's checks before anything is sent: the AppID's
+     shape, the secret present, the merchant ID a number, the v3 key 32
+     characters, the key file a private key.
+   - "Do it later" on step 1 closes. On steps 2 and 3 it puts payments off
+     and finishes. "Put off" is remembered on this device under the desktop's
+     own key (`fc_miniapp_pay_skip`).
+4. **The configuration page's Save & verify** sends the desktop's seven
+   fields to `wechat-creds`. The server's own config account sees its values
+   read-only, as on the desktop.
+5. **Secrets.**
+   - The server never sends a saved secret, only whether it is set. The phone
+     keeps only those flags of what it reads, so even a server that sent one
+     could not have it drawn.
+   - A saved secret shows as dots and "Saved". Replace opens an empty box;
+     "Keep saved value" closes it and throws away what was typed.
+   - A secret goes in the body only as typed. A box left empty sends `''`,
+     which the server reads as "keep the stored one", exactly the desktop's
+     body.
+   - What was typed is dropped once the server has stored it, and whenever
+     the wizard moves to another step.
+6. **Who can save.** Every write is `integrations:manage`, the server's key for
+   `/channel-hub` (`lib/cap-routes.js`). Without it nothing is drawn to press
+   and the commands send nothing.
+7. **The three states.** Each button disables and says what it is doing
+   ("Checking with WeChat…", "Verifying…"). A refusal or WeChat's no is said
+   in place and stays. A toast only confirms a verified save.
+
+## §402 — THE WEB STORE'S CONFIGURATION ON THE PHONE
+
+**Built 2026-10-01 under §325.** This is step X9c on the Settings / Channels /
+Dashboard / Billing lane, the last of X9's three parts (X9a the hub, X9b the
+WeChat mini program). The desktop's Web store configuration
+(`15-integrations.js`: `igWebConfig`, `igWebSaveSignin`, the `wcSite*` editor,
+`wcSiteProblems`, `igWebAddDomain`, `igWebCheckDns`, `igWebRemoveDomain`) is on
+the phone. It opens from the web store's card in the channel hub. With it, no
+card in the hub sends anyone to the desktop.
+
+1. **The read is the desktop's:** `GET /channel-hub/web/config`. It shows:
+   - the three ready marks;
+   - the shop address: the live one (Copy, Open), the free one reserved, or
+     none yet;
+   - the domains you added;
+   - the five sign-in ways;
+   - the title, menu and footer;
+   - payments.
+2. **Domains, with the desktop's endpoints and bodies:**
+   - Add: `POST /channel-hub/web/domain {host}`, trimmed and lower-cased,
+     with the desktop's word for each refusal (`bad_domain`, `reserved`,
+     `taken`, `already_yours`).
+   - A pending one shows the CNAME record to add. Check DNS:
+     `POST /channel-hub/web/domain/:id/check`.
+   - Remove: asked first, then `DELETE /channel-hub/web/domain/:id`. The
+     platform address is never offered for removal, as the server refuses it.
+3. **Save changes sends the desktop's two writes, one after the other, each
+   reported on its own:**
+   - `POST /channel-hub/web/signin {phone, email, google, apple, wechat}`. A
+     way that is not available cannot be switched on.
+   - `POST /channel-hub/web/site` with the eight fields, in the desktop's
+     order.
+   - Before either is sent, the desktop's own check runs: a bare domain gets
+     its `https://`, and a menu or footer row the server would drop is named.
+     The suite runs the desktop's `wcSiteProblems` side by side with the
+     phone's.
+   - A failure names the part ("Save failed: sign-in"), and the other part is
+     still sent, as on the desktop.
+4. **Payments:** WeChat Pay with Open WeChat config, which opens the X9b page;
+   Alipay's state. Alipay's QR is set up in X10, which will add its door here.
+5. **One difference, on purpose.** After a domain is added or removed, the
+   desktop reloads its whole page and throws away sign-in switches and site
+   words not yet saved. The phone reads the page again but keeps them.
+6. **Who can save.** Every write is `integrations:manage`, the server's key for
+   `/channel-hub` (`lib/cap-routes.js`). Without it the page is read-only and
+   nothing is sent.
+7. **The three states.** Each button disables and says what it is doing
+   ("Saving…", "Adding…", "Checking DNS…"). A refusal or failure is said in
+   place and stays. A toast only confirms a save or a copy.
+
+## §403 — PAYMENTS ON THE PHONE: THE DISPLAY CURRENCY, TAX AND ALIPAY BY QR CODE, EACH BEHIND A CONFIRM
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*). This is
+step X10 on the Settings / Channels / Dashboard / Billing lane, its last.
+
+The desktop's three money cards (`05-marketing.js` `renderCurrencyControl`,
+`taxCardSync` / `saveTaxSettings`; `02-settings-ops.js` `loadAlipayManual` /
+`saveAlipayManualInline`) are on one phone screen, **Payments**. It is reached
+from the Alipay row under Operations → Taking money, and from Alipay's Set up on
+the web store page (§325 X9c). The X7 decision left the manual-Alipay card for
+this step.
+
+1. **Currency.** The desktop's ten presets, field for field. The write is
+   `PUT /config {currency: {code, symbol, decimals, position}}`.
+2. **Tax.** The phone carries:
+   - the switch, how prices are shown, and the rate in percent (stored in
+     micro: 20 → 200000);
+   - the tax's name in both languages, the registration number, and whether
+     delivery is taxed;
+   - the desktop's live preview of what a ¥100 order becomes, in the shop's
+     currency.
+
+   Before anything is asked or sent, the desktop's two checks run: the rate
+   must be between 0 and 100, and tax switched on with no rate is refused. The
+   write is `PUT /config` with the desktop's seven `tax.*` keys. Turning tax
+   off keeps the rate for next time, as on the desktop.
+3. **Alipay by QR code.** The phone carries:
+   - on or off, and the payee label;
+   - the 收款码 image, downscaled before it is sent, as on the desktop;
+   - the AI auto-read, with its key, accepted payee names, pay window,
+     screenshot age and auto-mark. Its fields grey out while auto-read is off.
+
+   The write is `PUT /alipay-manual` with every field the desktop sends. The
+   server replaces the record whole, so every field must go. The image goes
+   only when a new one was picked. The AI key goes only when typed; it is
+   never shown, only the server's own mask (`sk-…abcd`).
+4. **Strong confirms (new on the phone).** The desktop saves these with no
+   question asked: the currency on a change, tax and Alipay on a button. On a
+   phone, a slip of the thumb changes what every customer is charged or where
+   their money goes. So each save asks first and says what changes:
+   - the currency, from and to, with the desktop's note that WeChat Pay and
+     Alipay always charge in RMB;
+   - tax, with the preview, or "Charge tax on orders: Off";
+   - Alipay, each field that moved. A new QR is shown before it goes live.
+     When the channel is switched, the QR changes, or the payee label changes,
+     the desktop's own sentence on where the money lands is added. Turning
+     auto-mark on adds the desktop's warning about fake screenshots.
+   - An Alipay save that changes nothing is sent without a question.
+5. **Fails closed.**
+   - The screen opens only once the account's keys are known (`mCanKnown`),
+     for the keys the server asks of these writes: the desktop Settings set,
+     `configKeyCap` for `currency` and `tax.*`, and `requiredCapFor` for
+     `/alipay-manual`.
+   - It never opens on the boards that see no money (`recapNoMoney`).
+   - A card whose read failed has no Save. Saving an Alipay card that never
+     loaded would replace the record with blanks and switch Alipay off.
+6. **The three states.** Each Save disables and says "Saving…". A refusal is
+   said in the card, in the desktop's words for each server error. A toast
+   only confirms.
+7. **The Operations line "Payment keys are set on desktop." is gone.** WeChat
+   Pay's keys are set from the channel hub (§325 X9b), and Alipay's QR, tax and
+   currency from Payments. No payment setting is desktop-only now.
+8. **A fix to §325 X7's doors.** The settings card the X7 doors used (Receipt
+   printing under Operations; Package tracking, JD Logistics and Qingyun
+   riders on the Delivery screen) never drew a row's command. Those rows showed
+   but did nothing when tapped. The X7 suite stood in a fake card that did draw
+   it, which is how this shipped. The card now makes a row with a command into
+   a tappable row with a chevron. The X7 suite uses the real card and asserts
+   each door.
+
+## §404 — A MANUAL-ALIPAY CARD THAT DID NOT LOAD IS NEVER SAVED
+
+**Fixed 2026-10-01 under §325** (desktop data-loss bug, found during the parity work).
+The manual-Alipay card in Settings → Operations is saved by the shared "Save
+settings" bar (`saveConfig` → `saveAlipayManualInline`).
+`PUT /api/retail-admin/alipay-manual` rebuilds the whole stored record from
+what it is sent; it keeps only the QR image and the API key when those are
+left out.
+
+The card's read (`loadAlipayManual`) gave up silently on any failure: an HTTP
+error, a refusal or a network drop. That left a blank form behind the Save bar.
+The next Save, made for any card on that bar, then wrote the blank form back.
+That switched manual Alipay off and wiped its payee account and OCR settings.
+Customers lost the Alipay option without anyone having touched the card.
+
+1. **The card is saved only after a good read.** A flag
+   (`_alipayManualLoaded`) is set only once a successful answer has been
+   written into the form. It is cleared again when a read starts, so pressing
+   Save while the answer is still on its way sends nothing as well.
+2. **A failed read says so where the card sits, with a way to retry.** It
+   shows *Could not load this card, so Save leaves it unchanged.* and a *Try
+   again* button that reads the card again. A successful retry clears the
+   message and saving works again.
+   - These failures all count: an HTTP error, a refusal, an answer that is not
+     a success, an answer with no data, and a network failure.
+3. **The other cards on the Save bar still save.** The Alipay card is simply
+   skipped, and the toast is unchanged. The skipped card already shows why.
+4. **Not changed:** the server's replace-the-whole-record behaviour on
+   `PUT /alipay-manual`. Making the server keep fields it is not sent would
+   also protect against this. That is a second, separate change, left for a
+   server step if wanted.
