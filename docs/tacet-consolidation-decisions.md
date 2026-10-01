@@ -22,7 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-01 · v4.461 — **§377 · AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST — DECIDED BY ASH:** *"there should always be an option to select land transport if user want and it comes with a warning"*. The mirror of the 2026-09-16 land→air warning: an air parcel's JD label dialog now lists both ground services after air, and picking one asks on the click. The parcel's mode is never written.
+2026-10-01 · v4.461 — **§378 · AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST — DECIDED BY ASH:** *"there should always be an option to select land transport if user want and it comes with a warning"*. The mirror of the 2026-09-16 land→air warning: an air parcel's JD label dialog now lists both ground services after air, and picking one asks on the click. The parcel's mode is never written.
 
 2026-09-29 · v4.460 — **§290 · THE SIZE ON A TILL TILE IS NEVER CUT OFF — FOUND BY CLAUDE WHILE BUILDING §289, FIXED ON ASH'S WORD** (*"fix this and after merge"*). §183 put a product's size (*Large*, *Regular*) on its own line under the name so two sizes of one drink could be told apart, but wrote it INSIDE the name's element, and the name is clamped to two lines. The clamp counted the size as a third line and cut it, so on an iPad column (140px) *Organic Matcha Latte* wrapped to two lines and *Large* vanished: the one word §183 exists to show. It was there before §289; the screenshots taken for §289 are where it showed. **THE FIX**: the name and the size share a wrapper (`.hd`) and only the name is clamped. Two name lines, the size and the price row were then 6px taller than a 100px row, so the tile's top and bottom padding went 12px → 10px and the size line was tightened, rather than making every row of every till taller. Checked in Chromium at 1280, 1024 and 390 wide, with and without photos: every size visible, no tile overflowing. `scripts/test_till_options.js` gains a check that the name closes before the size on both kinds of tile; it goes red on the old markup. No new string, no server change, no change to `.gitignore` or CI.
 
@@ -25843,7 +25843,41 @@ operator who closed the drawer before that lost them.
    - **The INSERT itself** lists the four columns, with one value per column.
 4. **Nothing composed.** No operator strings were added.
 
-## §377 — AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST
+## §377 — SHIPPING IS ONE SETTING FOR THE WHOLE PRODUCT, NOT ONE PER SIZE
+
+**Decided by Ash 2026-10-01** (*"fix it"*, to Claude's proposal to copy the
+Shipping setting to every size). Found on TC000899: *Misfit Medjool Dates*
+went in an Air parcel while the product page read Land.
+
+1. **The trap.** Each size is its own `store_products` row with its own
+   `ship_modes`. The Shipping chips (desktop and phone) PATCH only the size
+   that is open, so one size could read Land while another still said
+   *Air only*. Checkout snapshots the bought size's own value onto the order
+   line, and `planShipments` / `bucketForItem` put an *Air only* line in an
+   Air parcel.
+2. **The rule.** A write of `ship_modes` to one size is a write to the whole
+   family: every other active size gets the same value. A lone product is a
+   family of one. This is how *Local only* was already read at checkout
+   (`filterLocalOnly`), so Air and Land now match it. Archived sizes are left
+   alone.
+3. **Where it lives.** `syncFamilyShipModes` in `lib/family-ship-modes.js`,
+   called by the product PATCH and by `restore-version`. Each size written
+   gets its own version checkpoint and activity entry, as §294's
+   family-publish does. Covered: desktop editor, phone editor, bulk *Set
+   shipping*, version restore. The response carries `ship_modes_family`, and
+   the desktop editor copies the new value into those sizes in its list, so
+   opening one cannot autosave the old value back over the family.
+4. **Not changed.** Orders already placed keep the setting saved on their
+   lines at checkout. Families whose sizes disagree today stay that way until
+   someone saves Shipping on any one size. There is no automatic repair,
+   because nothing can tell which size held the intended value.
+5. **Tests.** `scripts/test_family_ship_modes.js` (fast shard, 11 checks),
+   on a real database through the real router. With the route hook removed,
+   7 of them fail.
+
+No new words; nothing composed in Chinese. No schema change.
+
+## §378 — AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST
 
 **Decided by Ash, 2026-10-01**, from a combined parcel (Jackfruit Chips + Misfit
 Medjool Dates, merged into one Air parcel) whose JD label dialog showed only a
@@ -25880,8 +25914,9 @@ with a warning I thought we have that"*.
    parcel.
 7. **What this does not fix.** Why combining produced an AIR parcel holding a
    land-only item is a planning question (`planShipments` / the combine route).
-   It was being looked at in a separate session the same day. This section is
-   the escape hatch, not the cure.
+   §377, merged the same day, fixes the cause seen on this order: a product's
+   shipping setting now applies to every size of it. This section is the
+   escape hatch, not the cure.
 8. **Held by** `scripts/test_jd_label_air_option.js` section 6.
    `scripts/test_jd_waybill_land_default.js` and
    `scripts/test_chengdu_air_sf_only.js` are unchanged and still pass.

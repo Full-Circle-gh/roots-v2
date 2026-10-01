@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.270 · 2026-10-01 · §377 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§377)*.
+**v1.270 · 2026-10-01 · §378 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§378)*.
 
 **v1.269 · 2026-09-30 · §373 FRESH BATCHES AND THE DELIVERY WIZARD ON THE PHONE — NOTHING COMPOSED; ONE LIVE SENTENCE SHORTENED.** See *Fresh batches and the delivery set-up wizard on the phone (§373)*.
 
@@ -11797,7 +11797,7 @@ the Delivery screen, the Fresh batches sheet and the set-up wizard in
 |---|---|
 | `One store has no coordinates, so it can never be the nearest one.` / `N stores have no coordinates, so they can never be the nearest one.` · `N 家门店没有坐标，无法参与就近派单。` | **The phone's live sentence, shortened.** Its last clause (*Fix it on desktop.* / *请在电脑端处理。*) is dropped, because since X6 a store's address and pin are fixed on the phone. The pointer that replaces it is a button carrying the live `Operations · 运营` pair, drawn for stores:edit. Nothing new was written. |
 
-## Ground on an air parcel's label, and the question it asks (§377)
+## Ground on an air parcel's label, and the question it asks (§378)
 
 **Operator register (Rule 1), 2026-10-01.** The JD label dialog
 (`createJdLabel`, `public/retail-admin/04-orders.js`). An air parcel now lists
