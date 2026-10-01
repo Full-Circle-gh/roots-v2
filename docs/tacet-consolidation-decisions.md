@@ -23630,3 +23630,208 @@ cannot be resolved.
    - **Unchanged:** an order that does not exist is still a 404, and both screens
      still draw the button on Ordered only.
 6. **Nothing composed.** No operator strings were added.
+
+## §339 — PUTTING A DELETED RECORD BACK, AND THE MAPS BACKFILL, NEED A PERMISSION
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Two writes matched no rule in `lib/cap-routes.js`, so any signed-in operator
+could make them, enforcement on or not. Both are now gated by §325.3: the keys
+that open every screen calling them today. As with every gate in that file,
+nothing changes for the owner, for a shop with enforcement off, or while an
+operator's permissions cannot be resolved.
+
+1. **Put a deleted record back** (`POST /deleted/:id/restore`) needs the key
+   that edits that kind of record. These are the keys the phone draws "Put it
+   back" on:
+
+   | Kind | Key needed |
+   |---|---|
+   | delivery zone | `delivery:edit` |
+   | ledger row (money in or out) | `finance:record` |
+   | coupon | `coupons:edit` or `coupons:delete` |
+   | draft purchase order | `purchasing:edit` |
+
+   The path does not say which kind a copy is, so the choke point admits anyone
+   holding any of these keys. `routes/recycle.js` then reads the stored copy and
+   asks `restoreKindCap(kind)` (new) before anything is written. A refusal comes
+   back as `403 {error:'forbidden_capability', need}`. A copy that does not exist
+   still gets a 404.
+2. **No desktop operator loses anything.** The desktop's Recently deleted list
+   draws its button for `settings:edit`. That key does not exist, so the button
+   is drawn for nobody who holds a real permission set.
+3. **A new kind must be given a key.** The suite fails if `lib/recycle.js` gains a
+   kind this table does not name. Until it is named, an unlisted kind takes the
+   union of the keys above.
+4. **Geocode every store and address now** (`POST /inventory/geocode-backfill`)
+   uses up the maps quota. It needs one of the Settings tab's keys: `settings:shop`,
+   `settings:push`, `settings:payments`, `stores:view`, `shipping:config` or
+   `delivery:view`. Its only button is in desktop Settings → Operations, which has
+   no gate of its own. The phone's Operations screen only reads the counts.
+5. **The sweep: writes that still match no rule. Listed, not gated, for the
+   coordinator to decide.** Every `router.(post|put|patch|delete)` under
+   `/api/retail-admin` in `routes/*.js` was checked against `requiredCapFor`. The
+   sweep found 40 with no rule. Two of those are false positives from the sweep's
+   placeholder ids (the channel-sync push and sync routes, which are gated as
+   `{channel}:sync` and `{channel}:map`). That leaves 38. Line numbers are as of
+   this commit.
+   - **Already gated another way:**
+     - `PUT /config` (`routes/retail.js:23343`) is checked in its handler, key by
+       key (S2a).
+     - `POST /channel-signin/start|finish` (`routes/channel-signin.js:33, 89`)
+       checks `integrations:signin` itself (`lib/channel-signin.js`).
+     - The `/shops` writes check `stores:edit` (or `till:use` for sold-out) in
+       their own handler (`routes/retail-shops.js:54`):
+       - `POST /shops` (`retail-shops.js:186`)
+       - `PATCH /shops/:id` (`:214`)
+       - `POST /shops/:id/move` (`:256`)
+       - `POST /shops/:id/listings` (`:405`)
+       - `POST /shops/:id/listings/add-published` (`:459`)
+       - `PATCH /shops/:id/listings/:lid` (`:486`)
+       - `POST /shops/:id/listings/reorder` (`:564`)
+       - `DELETE /shops/:id/listings/:lid` (`:576`)
+   - **Open, in `routes/meituan-admin.js`:** opening and closing stores and
+     channels.
+     - `POST /store-status/online` (`:978`)
+     - `POST /store-status/master` (`:999`)
+     - `POST /store-status/store/:code` (`:1039`)
+     - `POST /channel-status/cell` (`:1207`)
+     - `POST /channel-status/channel` (`:1230`)
+     - `POST /channel-status/location` (`:1251`)
+   - **Open, settings and connections in `routes/retail.js`:**
+     - `PUT /alipay-manual` (`:23587`): a payment QR code and an API key.
+     - `PUT /fapiao-settings` (`:28749`)
+     - `PUT /integrations` (`:31828`): credentials.
+     - `PUT /printer` (`:32394`)
+     - `POST /integrations/qingyun/autopush` (`:30483`)
+     - `POST /integrations/qingyun/request` (`:31778`)
+   - **Open, tests and probes that send something out but store nothing:**
+     - `POST /system-alerts/test` (`retail.js:23542`)
+     - `POST /wecom/test` (`:31804`)
+     - `POST /integrations/jd/test` (`:31910`)
+     - `POST /integrations/nuonuo/test` (`:31930`)
+     - `POST /integrations/aliyun_sms/test` (`:31940`)
+     - `POST /printer/test` (`:32534`)
+     - `POST /integrations/kd100/test` (`:32608`)
+     - `POST /poi-search` (`:10032`)
+     - `POST /geocode` (`retail-inventory.js:231`)
+   - **Open, other:**
+     - `POST /setup` (`routes/retail-setup.js:156`): the setup guide's own flags.
+     - `POST /page-templates` and `DELETE /page-templates/:id`
+       (`routes/retail-page-templates.js:56, 108`).
+     - `POST /views`, `PATCH /views/:id` and `DELETE /views/:id`
+       (`routes/saved-views.js:103, 140, 166`): an operator's own saved filters.
+6. **Tests.** `scripts/test_restore_geocode_gates.js` (fast shard, 38 checks)
+   runs the real `routes/recycle.js` and `routes/retail-inventory.js` over a
+   scratch database with enforcement on. It checks:
+   - the rules, including that every kind `lib/recycle.js` keeps has a key;
+   - a real delivery zone, deleted and captured: refused to a finance account
+     with nothing written, and put back under its own id by `delivery:edit`;
+   - each other kind, with the wrong key and the right key;
+   - the owner, and a missing copy (404);
+   - the backfill, with the wrong key and two Settings keys;
+   - the callers, including that `settings:edit` is not a real key.
+7. **Nothing composed.** No operator strings were added.
+
+## §340 — THE LAST OPEN WRITES ARE GATED; WHAT STAYS OPEN, AND WHY
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+This step closes the open writes that the S2e sweep found. Each now takes the
+permissions that open every desktop and phone screen making that write today, as an
+any-of (§325.3). What this closes is the account that can open none of those
+screens. As with every gate in `lib/cap-routes.js`, nothing changes for the owner,
+for a shop with enforcement off, or while an operator's permissions cannot be
+resolved. No screen changed.
+
+1. **Shop and channel open/close, per channel, per shop and per cell**
+   (`POST /channel-status/cell|channel|location`).
+   - These need one of the desktop Sales page's permissions: `dashboard:view`,
+     `meituan:view`, `guanyi:view`, `eleme:view` or `integrations:view`
+     (`TAB_CAP.sales`). The switches on that page carry no gate of their own.
+   - The phone's per-shop and per-cell switches (§181, §253) are on its Sales
+     screen, which opens on `dashboard:view`. That key is in the list, so the
+     phone keeps them.
+2. **Open or close everything, the online store, or one shop**
+   (`POST /store-status/online|master|store/:code`).
+   - They take the Sales permissions above plus the Settings tab's
+     (`settings:shop|push|payments`, `stores:view`, `shipping:config`,
+     `delivery:view`).
+   - The only buttons are in the desktop's Settings → Operations, and they are
+     drawn for `settings:edit`, which is not a real permission, so nobody presses
+     them today.
+   - §326.2 brings these switches to the phone. Using the same permissions as the
+     per-channel switches means a phone screen built on either door is not refused
+     from the start.
+3. **Manual Alipay** (`PUT /alipay-manual`: the payment QR code, the AI key and
+   auto-mark-paid) and **the printer** (`PUT /printer`) take the Settings tab's
+   permissions.
+   - Alipay is written from Settings → Push and from the setup guide, whose
+     permission pair (`settings:shop` or `stores:view`) is part of the Settings set.
+   - The printer is written from the desktop's Operations card and from the phone's
+     auto-print switch on Operations, which is reached from Settings.
+4. **Integration credentials** (`PUT /integrations`) are checked per service, in
+   the handler (`integrationServiceCap`), the way S2a checks settings per key.
+   - **kd100 and jd** (the couriers' keys) are the Delivery panel's: `delivery:view`
+     or `delivery:edit`, or `shipping:config`.
+   - **feie and spyun** (the Operations printer card) take the Settings permissions.
+   - **wecom_app and aliyun_sms** (Settings → Push) take the Settings permissions.
+   - **nuonuo** is written by no screen today, so it closes to `invoices:manage`.
+   - If any one service in a save is refused, the whole save is refused and nothing
+     is written. The refusal names the service.
+5. **The fapiao settings** (`PUT /fapiao-settings`) are written by no screen, so they
+   close to `invoices:manage`, the permission for issuing fapiao.
+6. **Qingyun: request setup and auto-push** (`POST /integrations/qingyun/request|autopush`)
+   need `delivery:view` or `delivery:edit`. Their only buttons are on the Delivery
+   panel's Qingyun view.
+7. **The setup guide's flags** (`POST /setup`) are checked per flag, in the handler
+   (`setupFlagCap`).
+   - `welcomeSeen` stays open: it is set when the first-login welcome is
+     dismissed, and every operator sees that welcome.
+   - `pickupConfirmed`, `storeOpened` and `storeInfoDone` are steps of the guide.
+     They take the phone's Setup pair, `settings:shop` or `stores:view`.
+   - This carries the same narrow edge as the currency key in S2a. The desktop's
+     setup rail row has no gate of its own, so a narrowed operator who holds
+     neither permission, on a shop that has not finished setup and has turned
+     enforcement on, now loses those three steps.
+8. **Product page templates** (`POST /page-templates`, `DELETE /page-templates/:id`)
+   are written only by the product editor. They take the permissions of every way
+   into that editor: `products:view` or `products:edit` (from Products),
+   `editor:view` or `editor:edit` (the desktop Editor tab), and `content:edit` (the
+   mini-app editor).
+9. **Decided open, left ungated on purpose** (the coordinator's ruling):
+   - **Connection tests**: `system-alerts/test`, `wecom/test`,
+     `integrations/jd|nuonuo|aliyun_sms|kd100/test`, `printer/test`. Each sends one
+     probe using credentials already saved, or ones typed into the form, and stores
+     nothing.
+   - **`poi-search`**: a place lookup for an address being typed. It reads from the
+     maps provider and writes nothing.
+   - **`geocode`**: turns one typed address into coordinates for the form in front
+     of the operator, and writes nothing.
+   - **`views` (`POST`, `PATCH /:id`, `DELETE /:id`)**: each operator's own saved
+     filters, scoped to that operator. They grant nothing and move nothing.
+
+   Still unmapped on the path, but gated elsewhere: `PUT /config` (per key, S2a),
+   `POST /setup` (per flag, item 7), the channel sign-in (`integrations:signin`,
+   checked in its own handler), and the `/shops` writes (`stores:edit`, checked in
+   their handler). A re-run of the sweep finds those plus the two channel-sync false
+   positives, and nothing else.
+10. **Open for Ash, not decided here.** Following the screens means some gates are
+    weaker than the write deserves:
+    - Anyone who can open Sales (`dashboard:view`) may close a channel or a shop.
+    - Anyone who can open Settings may change where the Alipay takings land, or
+      switch on auto-mark-paid.
+    - `delivery:view` may switch on Qingyun auto-push, which books couriers and
+      spends the courier account's balance (`orders:dispatch_courier` is the
+      permission that otherwise means that).
+
+    Narrowing any of these takes a working switch from somebody, so it is Ash's
+    call.
+11. **Tests.** `scripts/test_last_open_writes.js` (fast shard, 65 checks) runs the
+    real routers over a scratch database with enforcement on. It checks:
+    - each write refused to an account outside its screens, and let through for
+      each screen's permission;
+    - integrations per service, including the whole save refused with nothing
+      written;
+    - setup per flag, including a refused save writing nothing;
+    - the owner, and enforcement off;
+    - the screen permissions and the caller list each gate is built from.
+12. **Nothing composed.** No operator strings were added.
