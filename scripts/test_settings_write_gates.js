@@ -205,6 +205,20 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['faq.categories', list(route('faq')), 'phone FAQ (card faq)'],
       ['about.content', list(route('about')), 'phone About (card about)'],
       ['copy.cart.title', list(route('snippets')), 'phone Mini-app copy (card copy.snippets)'],
+      // §325 O4 — the phone's Delivery screen writes the Delivery panel's cards.
+      ['delivery.holidayMessage', list(route('delivery')), 'phone Delivery — Holiday mode on, and its message'],
+      ['delivery.sameDayCutoffMinutes', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
+      ['delivery.sameDayCutoffMessage', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
+      ['delivery.kitchenAddress', list(route('delivery')), 'phone Delivery — Kitchen address'],
+      ['delivery.bulkTracking', list(route('delivery')), 'phone Delivery — Bulk attach tracking'],
+      ['delivery.boxLabel', list(route('delivery')), 'phone Delivery — Box label'],
+      ['delivery.defaultZone', list(route('delivery')), 'phone Delivery — Everywhere else'],
+      ['fees.freeShippingThreshold', list(route('delivery')), 'phone Delivery — Fees & minimum'],
+      ['fees.minOrder', list(route('delivery')), 'phone Delivery — Fees & minimum'],
+      ['fees.pickupPackingFee', list(route('delivery')), 'phone Delivery — Fees & minimum'],
+      ['pickup.window', list(route('delivery')), 'phone Delivery — Store pickup'],
+      ['pickup.leadMinutes', list(route('delivery')), 'phone Delivery — Store pickup'],
+      ['notice.preorder', list(route('delivery')), 'phone Delivery — Pre-orders'],
     ];
     for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
@@ -348,6 +362,14 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         'public/retail-admin/07-content-billing.js', 'public/retail-admin/09-products.js', 'public/retail-admin/10-extras.js',
         'public/retail-admin/17-setup-guide.js', 'public/retail-admin/31-product-page.js',
       ], 'PUT /config: the desktop files, the two editors and the product editor');
+      /* §325 O4 — the phone's Delivery settings write through ONE helper,
+         dlvCfgPut, whose site names no family itself (its keys arrive in the
+         body). It is set apart from the four one-family sites, and its keys
+         are pinned below instead. */
+      const dlvSite = M.indexOf("function dlvCfgPut(");
+      const dlvSites = sites.filter((i) => i > dlvSite && i < M.indexOf('\n}\n', dlvSite));
+      is(dlvSites.length, 1, 'the Delivery settings helper is one write site');
+      const famSites = sites.filter((i) => !dlvSites.includes(i));
       const FAMS = ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'];
       // §325 M4 — the phone's content cards (m.html cfgCard: legal, faq, about,
       // copy.snippets) share ONE write site, PUT /config?history=<card>; each
@@ -356,8 +378,22 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ok(CARD_SITE !== -1 && sites.includes(CARD_SITE), 'the content cards write through the one cfgCard site');
       const cards = (M.match(/cfgCard\('([a-z.]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z.]+)'/)[1]).sort();
       is(cards, ['about', 'copy.snippets', 'faq', 'legal'], 'the phone\'s content cards: about, copy, faq, legal');
-      is(sites.filter((i) => i !== CARD_SITE).map((i) => FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f)).join('|')).sort(),
+      is(famSites.filter((i) => i !== CARD_SITE).map((i) => FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f)).join('|')).sort(),
         FAMS, 'the phone writes four families, one per write site, each asserted in section 2');
+      /* §325 O4 — the phone's Delivery settings write through one helper
+         (dlvCfgPut), so their keys are read from where they are named: the
+         live cards' `keys`, the two switches' `key`, and the three sheets'
+         bodies. Every one is in the list asserted in section 2, and every one
+         passes for the key that opens the phone's Delivery screen. */
+      const dlvBlock = M.slice(M.indexOf('const DLV_LIVE={'), M.indexOf("reg('faqToggle',"));
+      const dlvKeys = new Set();
+      for (const m of dlvBlock.matchAll(/keys:\[([^\]]*)\]/g)) for (const k of m[1].match(/'([^']+)'/g) || []) dlvKeys.add(k.slice(1, -1));
+      for (const m of dlvBlock.matchAll(/\bkey:'([a-zA-Z.]+)'/g)) dlvKeys.add(m[1]);
+      for (const m of dlvBlock.matchAll(/const body=\{('[^]*?)\};/g)) for (const k of m[1].match(/'((?:delivery|fees|pickup|notice)\.[a-zA-Z]+)'/g) || []) dlvKeys.add(k.slice(1, -1));
+      is([...dlvKeys].sort(), ['delivery.boxLabel', 'delivery.bulkTracking', 'delivery.defaultZone', 'delivery.holidayMessage', 'delivery.holidayMode',
+        'delivery.kitchenAddress', 'delivery.sameDayCutoffMessage', 'delivery.sameDayCutoffMinutes', 'fees.freeShippingThreshold', 'fees.minOrder',
+        'fees.pickupPackingFee', 'notice.preorder', 'pickup.leadMinutes', 'pickup.window'], 'the phone\'s Delivery settings write these fourteen keys (§325 O4)');
+      for (const k of dlvKeys) ok(list(route('delivery')).every((c) => has(configKeyCap(k), c)), 'phone Delivery may write ' + k);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
