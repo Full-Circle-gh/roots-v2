@@ -7489,7 +7489,394 @@ function screenInbox(){
     ${state.revErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.revErr}</span></div>`:''}
+    ${/* §325 M10 — the desktop's Reviews tab: the queue, the filters, Set up. */''}
+    ${seg==='reviews'&&mCan(RVW_KEYS)?`<button class="card" onclick="APP.cmd('rvwOpen')" style="padding:14px;display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer;color:var(--text-primary);font-family:inherit;width:100%">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:500">${T('Reviews','评价')}</span>
+        ${RVW.meta?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${rvwStatusLine()}</span>`:''}</span>
+      <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`:''}
     ${body}</div>`;
+}
+
+/* ==========================================================================
+   §325 M10 — REVIEWS, AS THE DESKTOP RUNS THEM (desktop: 07-content-billing.js
+   loadReviews / rvwRow / rvwDismissAll / review reward / auto top-up / tags)
+   --------------------------------------------------------------------------
+   The Inbox shows the newest reviews and lets one be answered or hidden. The
+   desktop's Reviews tab is the rest of the job, and this is it, opened from
+   the top of the Inbox's Reviews: the queue first ("Needs reply", the count,
+   and Mark all N as handled — which publishes nothing and asks, in red only
+   when a low-rated one is in the set), then Everything / Low rated / Hidden
+   with their counts, search, a rating filter and pages; each row's Reply
+   (blank removes it), Hide / Restore, Put back for one handled without a
+   reply, and Remove for a seeded one. Below, the desktop's Set up: the
+   reward for reviewing, auto top-up (turning it on asks — it publishes
+   seeded reviews), and the review tags as a §279 card.
+
+   Keys, as the server has them: every /reviews write is reviews:moderate;
+   the reward and top-up settings are the 'reviews' /config family
+   (reviews:view or reviews:moderate); the screen opens on either.
+   ========================================================================== */
+const RVW_KEYS=['reviews:view','reviews:moderate'];
+const RVW_LIMIT=50;
+const RVW={filter:'needs', q:'', rating:'', page:0, rows:null, meta:null, err:null, busy:null, rowErr:'',
+  reward:null, rewardErr:'', rewardBusy:false, rewardNote:'', topup:null, topupErr:'', topupBusy:false};
+const rvwMod=()=>mCan('reviews:moderate');
+// The client mirror of REVIEW_WAITING_SQL — the desktop's rvwNeedsReply.
+function rvwNeedsReply(r){
+  if(r.source==='synthetic') return false;
+  if(r.reply&&String(r.reply).trim()) return false;
+  if(!(r.comment&&String(r.comment).trim())) return false;
+  if(r.dismissed_at) return false;
+  return true;
+}
+function rvwDaysSince(iso){
+  const t=Date.parse(String(iso||'').replace(' ','T')+'Z');
+  return Number.isFinite(t)?Math.max(0,Math.floor((Date.now()-t)/86400000)):null;
+}
+async function loadRvw(){
+  const qs=new URLSearchParams();
+  if(RVW.filter==='needs') qs.set('needs_reply','1');
+  if(RVW.filter==='low') qs.set('low','1');
+  if(RVW.filter==='hidden') qs.set('visible','0');
+  if(RVW.rating) qs.set('rating',RVW.rating);
+  if(RVW.q) qs.set('q',RVW.q);
+  qs.set('limit',String(RVW_LIMIT)); qs.set('offset',String(RVW.page*RVW_LIMIT));
+  try{
+    const j=await apiRaw('/reviews?'+qs);
+    RVW.rows=Array.isArray(j&&j.data)?j.data:[]; RVW.meta=(j&&j.meta)||null; RVW.err=null;
+  }catch(e){ if(String(e.message)==='auth') return; RVW.err=E('Could not load reviews','无法加载评价'); }
+  const host=typeof document!=='undefined'?document.getElementById('mRvwList'):null;
+  if(host&&RVW.inPlace){ RVW.inPlace=false; host.innerHTML=rvwListHtml(); } else render();
+}
+reg('rvwOpen', ()=>{ if(!mCan(RVW_KEYS)) return; RVW.rows=null; RVW.page=0; CMD.push('reviews'); loadRvw(); loadRvwReward(); loadRvwTopup(); });
+reg('rvwFilter', k=>{ if(['needs','all','low','hidden'].indexOf(k)<0) return; RVW.filter=k; RVW.page=0; RVW.rows=null; render(); loadRvw(); });
+reg('rvwRating', v=>{ RVW.rating=/^[1-5]$/.test(String(v))?String(v):''; RVW.page=0; loadRvw(); });
+let rvwQT=null;
+reg('rvwQ', v=>{ RVW.q=String(v||'').trim(); searchClearShow('mRvwClr',!!v);
+  clearTimeout(rvwQT); rvwQT=setTimeout(()=>{ RVW.page=0; RVW.inPlace=true; loadRvw(); },250); });
+reg('mRvwClr', ()=>searchClearRun('mRvwQ','mRvwClr','rvwQ'));
+reg('rvwPage', d=>{ const total=(RVW.meta&&RVW.meta.total)||0, p=RVW.page+Number(d);
+  if(p<0||p*RVW_LIMIT>=total) return; RVW.page=p; loadRvw(); });
+/* One write, three states: the row says Saving…, a refusal stays above the
+   list, success reads the list again (the counts move with it). */
+function rvwWrite(r, call, okText){
+  RVW.busy=r.id+':'+(r.source||'real'); RVW.rowErr=''; render();
+  call.then(()=>{ RVW.busy=null; if(okText) showToast(okText); loadRvw(); })
+    .catch(e=>{ RVW.busy=null; if(String(e.message)==='auth') return;
+      RVW.rowErr=e.refused?T(...e.words):T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'); render(); });
+}
+const rvwFind=(id,src)=>(RVW.rows||[]).find(x=>x.id===Number(id)&&(x.source||'real')===(src||'real'));
+reg('rvwReply', (id,src)=>{
+  const r=rvwFind(id,src); if(!r||!rvwMod()||RVW.busy) return;
+  const existing=String(r.reply||'');
+  state.ask={title:T('Public reply','公开回复'),
+    body:T('Customers see it under their review. Leave blank to remove.','顾客会在自己的评价下看到。留空则删除回复。'),
+    fields:[{id:'reply', label:T('Your reply','商家回复'), multiline:true, value:existing}],
+    confirmLabel:T('Save reply','保存回复'),
+    run:vals=>{ const reply=String((vals&&vals.reply)||'').trim();
+      if(reply===existing.trim()) return;
+      rvwWrite(r, apiWrite('/reviews/'+r.id,{reply, source:r.source||'real'},'PATCH'),
+        reply?T('Reply saved','回复已保存'):T('Reply removed','回复已删除')); }};
+  state.askErr=null; render();
+});
+/* Hiding takes it off the product page, so it asks — the phone's Inbox does
+   too, in the same words. Restoring puts back what was public, so it does not. */
+reg('rvwVisible', (id,src)=>{
+  const r=rvwFind(id,src); if(!r||!rvwMod()||RVW.busy) return;
+  const go=v=>rvwWrite(r, apiWrite('/reviews/'+r.id,{is_visible:v, source:r.source||'real'},'PATCH'), v?T('Restored','已恢复'):T('Hidden','已隐藏'));
+  if(!r.is_visible){ go(true); return; }
+  state.ask={title:T('Hide this review?','隐藏这条评价？'),
+    body:T('It stops showing on the product page. Nothing is deleted — you can restore it from here.','评价将不再显示在商品页。内容不会删除 — 可随时在此恢复。'),
+    confirmLabel:T('Hide','隐藏'), danger:true, run:()=>go(false)};
+  render();
+});
+reg('rvwRemove', id=>{
+  const r=rvwFind(id,'synthetic'); if(!r||!rvwMod()||RVW.busy) return;
+  state.ask={title:T('Remove this seeded review for good?','永久删除这条种子评价?'),
+    confirmLabel:T('Remove review','删除评价'), danger:true,
+    run:()=>rvwWrite(r, apiWrite('/reviews/'+r.id+'?source=synthetic',{},'DELETE'), T('Removed','已删除'))};
+  render();
+});
+// Put one back — so a mis-tapped bulk action is not undone only by publishing a reply.
+reg('rvwUndismiss', id=>{
+  const r=rvwFind(id,'real'); if(!r||!rvwMod()||RVW.busy) return;
+  rvwWrite(r, apiWrite('/reviews/'+r.id+'/undismiss',{},'POST'), T('Back in the queue','已放回待处理'));
+});
+/* Clear the queue. Nothing is published. The count goes with the request, so
+   a queue that moved meanwhile is refused rather than silently resized; the
+   confirm names the low-rated ones and is red only when there are some. */
+reg('rvwDismissAll', ()=>{
+  const s=(RVW.meta&&RVW.meta.summary)||{}, n=Number(s.needs_reply||0), low=Number(s.waiting_low||0);
+  if(!n||!rvwMod()||RVW.busy) return;
+  state.ask={title:T(`Mark all ${n} as handled?`,`将全部 ${n} 条标记为已处理？`),
+    body:[T('They leave the queue. Nothing is sent to the customer and nothing appears in the shop — a reply is a separate action.','它们将从待处理列表移除。不会向顾客发送任何内容，店铺中也不会显示 — 回复是单独的操作。'),
+      low?T(`${low} of them ${low===1?'is':'are'} rated 3 or less.`,`其中 ${low} 条评分为 3 星或更低。`):''].filter(Boolean).join(' '),
+    confirmLabel:T('Mark as handled','标记为已处理'), danger:low>0,
+    run:()=>{
+      RVW.busy='bulk'; RVW.rowErr=''; render();
+      apiWrite('/reviews/dismiss-waiting',{expect:n},'POST').then(j=>{
+        RVW.busy=null; const d=(j&&j.data)||{};
+        showToast(T(`${d.dismissed||0} marked as handled`,`已标记 ${d.dismissed||0} 条为已处理`)); loadRvw();
+      }).catch(e=>{ RVW.busy=null; if(String(e.message)==='auth') return;
+        RVW.rowErr=e.refused?T(...e.words):e.code==='queue_changed'
+          ?T('The queue changed — nothing was marked. Reloading.','待处理列表已变化 — 未做任何更改。正在重新加载。')
+          :T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。');
+        loadRvw(); });
+    }};
+  render();
+});
+function rvwTagLabel(id){
+  const t=(cfgGet('reviews.tags',null)||[]).find(x=>x&&x.id===id);
+  return t?(LANG==='en'?(t.en||t.cn||id):(t.cn||t.en||id)):id;
+}
+function rvwRowHtml(r){
+  const synthetic=r.source==='synthetic', src=synthetic?'synthetic':'real', key=r.id+':'+src, busy=RVW.busy===key, mod=rvwMod();
+  const product=LANG==='en'?(r.product_name_en||r.product_name_cn||('#'+r.product_id)):(r.product_name_cn||r.product_name_en||('#'+r.product_id));
+  const who=r.customer_name||(synthetic?'—':('#'+r.customer_id));
+  const rating=Math.max(0,Math.min(5,parseInt(r.rating,10)||0));
+  const mark=(t,bg,fg)=>`<span class="pill" style="background:${bg};color:${fg}">${t}</span>`;
+  const marks=[!r.is_visible?mark(T('Hidden','已隐藏'),PILL.muted[0],PILL.muted[1]):'',
+    rating<=3?mark(T('Low rated','低评分'),'var(--brick-tint)','var(--brick-ink)'):'',
+    synthetic?mark(T('Seeded','种子'),PILL.muted[0],PILL.muted[1]):''].join('');
+  const tags=(r.tags||[]).map(id=>`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary)">${escAttr(rvwTagLabel(id))}</span>`).join('');
+  const btn=(label,cmd)=>`<button class="btn2" style="min-height:34px;padding:0 12px;font-size:13px" ${RVW.busy?'disabled':''} onclick="${cmd}">${label}</button>`;
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px${r.is_visible?'':';opacity:.7'}">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="num" aria-label="${rating}/5" style="letter-spacing:1px;color:var(--text-primary)">${'★'.repeat(rating)}<span style="color:var(--border-strong)">${'★'.repeat(5-rating)}</span></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${marks}</span></div>
+    ${r.comment?`<div style="font-size:14.5px;line-height:1.55">${escAttr(r.comment)}</div>`
+      :`<div style="font-size:14px;color:var(--text-secondary)">${(r.tags||[]).length?T('No comment — tags only','无评论 — 仅标签'):T('No comment','无评论')}</div>`}
+    <div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis">${escAttr(product)} · ${escAttr(who)} · <span class="num">${fmtDay(r.created_at)||''}</span></div>
+    ${tags?`<div style="display:flex;gap:6px;flex-wrap:wrap">${tags}</div>`:''}
+    ${(r.photos||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap">${r.photos.slice(0,4).map(u=>
+      `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="width:52px;height:52px;border-radius:8px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(u).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`).join('')}</div>`:''}
+    ${r.reply?`<div style="border-left:2px solid var(--border-default);padding:2px 0 2px 10px;display:flex;flex-direction:column;gap:3px">
+        <span class="eyebrow">${T('Your reply','商家回复')}</span><span style="font-size:13.5px;line-height:1.55">${escAttr(r.reply)}</span></div>`
+      :r.dismissed_at?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--text-secondary)">${T('Handled — no reply sent','已处理 — 未回复')}
+        ${mod?btn(T('Put back','放回待处理'),`APP.cmd('rvwUndismiss',${Number(r.id)})`):''}</div>`:''}
+    ${mod?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+      ${btn(busy?T('Saving…','保存中…'):r.reply?T('Edit reply','编辑回复'):T('Reply','回复'),`APP.cmd('rvwReply',${Number(r.id)},'${src}')`)}
+      ${btn(r.is_visible?T('Hide','隐藏'):T('Restore','恢复'),`APP.cmd('rvwVisible',${Number(r.id)},'${src}')`)}
+      ${synthetic?btn(`<span style="color:var(--brick-ink)">${T('Remove','删除')}</span>`,`APP.cmd('rvwRemove',${Number(r.id)})`):''}</div>`:''}</div>`;
+}
+function rvwListHtml(){
+  if(RVW.err) return `<div style="padding:30px 16px;text-align:center;display:flex;flex-direction:column;gap:6px">
+    <span style="font-size:15px;font-weight:500;color:var(--brick-ink)">${RVW.err}</span></div>`;
+  const rows=RVW.rows;
+  if(!rows) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return `<div style="padding:30px 16px;text-align:center;display:flex;flex-direction:column;gap:6px">
+    <span style="font-size:15px;font-weight:500">${RVW.filter==='needs'?T('Nothing waiting on a reply','没有待回复的评价'):T('No reviews match','没有符合条件的评价')}</span>
+    <span style="font-size:13.5px;color:var(--text-secondary)">${RVW.filter==='needs'?T('Every customer review has an answer.','每条顾客评价都已回复。'):T('Try another filter, or clear the search.','请更换筛选条件,或清除搜索。')}</span></div>`;
+  const group=t=>`<div class="eyebrow" style="padding:6px 4px 0">${t}</div>`;
+  let html;
+  if(RVW.filter!=='all') html=rows.map(rvwRowHtml).join('');
+  else { const open=rows.filter(rvwNeedsReply), done=rows.filter(r=>!rvwNeedsReply(r));
+    html=(open.length?group(T('Waiting on a reply','待回复'))+open.map(rvwRowHtml).join(''):'')
+      +(done.length?group(T('Not waiting on you','无需回复'))+done.map(rvwRowHtml).join(''):''); }
+  const total=(RVW.meta&&RVW.meta.total)||0, from=RVW.page*RVW_LIMIT+1, to=Math.min(total,(RVW.page+1)*RVW_LIMIT);
+  const pager=total>RVW_LIMIT?`<div style="display:flex;align-items:center;gap:8px">
+      <span class="num" style="flex:1;font-size:12.5px;color:var(--text-secondary)">${T(from+'–'+to+' of '+total,total+' 条中的 '+from+'–'+to)}</span>
+      <button class="btn2" style="min-height:34px;padding:0 12px" ${RVW.page===0?'disabled':''} onclick="APP.cmd('rvwPage',-1)">${T('Previous','上一页')}</button>
+      <button class="btn2" style="min-height:34px;padding:0 12px" ${to>=total?'disabled':''} onclick="APP.cmd('rvwPage',1)">${T('Next','下一页')}</button></div>`:'';
+  return `<div style="display:flex;flex-direction:column;gap:10px">${html}${pager}</div>`;
+}
+/* ── Set up: the reward for reviewing (desktop saveReviewReward) ─────────── */
+function loadRvwReward(){
+  return api('/reviews/reward').then(d=>{ RVW.reward=d||{}; RVW.rewardErr=''; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; RVW.rewardErr=T('Failed','失败'); render(); });
+}
+function rvwRewardSave(next){
+  const points=parseInt(next.points,10), max=parseInt(next.max_per_order,10);
+  if(!(points>=0&&points<=10000)) return T('Points must be 0–10000','积分需为 0–10000');
+  if(!(max>=1&&max<=50)) return T('Per-order cap must be 1–50','每单上限需为 1–50');
+  RVW.rewardBusy=true; RVW.rewardErr=''; render();
+  apiWrite('/config',{'reviews.reward':{enabled:!!next.enabled, points, max_per_order:max}},'PUT').then(()=>{
+    RVW.rewardBusy=false;
+    RVW.rewardNote=next.enabled?T('On. The mini app needs a republish before shoppers are told about it.','已开启。需重新发布小程序,顾客才会看到该奖励提示。'):'';
+    showToast(T('Saved','已保存')); loadRvwReward();
+  }).catch(e=>{ RVW.rewardBusy=false; if(String(e.message)==='auth') return;
+    RVW.rewardErr=e.refused?T(...e.words):T('Save failed','保存失败'); render(); });
+  return '';
+}
+reg('rvwRewardToggle', ()=>{ const r=RVW.reward; if(!r||RVW.rewardBusy||!mCan(RVW_KEYS)) return;
+  rvwRewardSave({enabled:!r.enabled, points:r.points, max_per_order:r.max_per_order}); });
+reg('rvwRewardEdit', ()=>{ const r=RVW.reward; if(!r||RVW.rewardBusy||!mCan(RVW_KEYS)) return;
+  state.ask={title:T('Reward reviewers','发放奖励'),
+    fields:[{id:'points',label:T('Points per review','每条评价积分'),type:'number',value:String(r.points)},
+            {id:'max',label:T('Most rewarded per order','每单最多奖励'),type:'number',value:String(r.max_per_order)}],
+    validate:v=>{ const p=parseInt(v.points,10), m=parseInt(v.max,10);
+      return !(p>=0&&p<=10000)?T('Points must be 0–10000','积分需为 0–10000'):!(m>=1&&m<=50)?T('Per-order cap must be 1–50','每单上限需为 1–50'):''; },
+    confirmLabel:T('Save','保存'),
+    run:v=>{ rvwRewardSave({enabled:!!r.enabled, points:v.points, max_per_order:v.max}); }};
+  state.askErr=null; render();
+});
+/* ── Set up: auto top-up (desktop saveReviewTopup / runReviewTopupNow) ───── */
+function loadRvwTopup(){
+  return api('/reviews/topup').then(d=>{ RVW.topup=d||{}; RVW.topupErr=''; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; RVW.topupErr=T('Failed','失败'); render(); });
+}
+function rvwTopupSave(next){
+  RVW.topupBusy=true; RVW.topupErr=''; render();
+  apiWrite('/config',{'reviews.topup':{enabled:!!next.enabled, min_reviews:parseInt(next.min_reviews,10), max_per_run:parseInt(next.max_per_run,10)}},'PUT').then(()=>{
+    RVW.topupBusy=false; showToast(T('Saved','已保存')); loadRvwTopup();
+  }).catch(e=>{ RVW.topupBusy=false; if(String(e.message)==='auth') return;
+    RVW.topupErr=e.refused?T(...e.words):T('Save failed','保存失败'); render(); });
+}
+/* Turning it ON starts publishing made-up reviews, so it asks — only on the
+   off → on step, as the desktop does. */
+reg('rvwTopupToggle', ()=>{ const t=RVW.topup; if(!t||RVW.topupBusy||!mCan(RVW_KEYS)) return;
+  const next={enabled:!t.enabled, min_reviews:t.min_reviews, max_per_run:t.max_per_run};
+  if(!next.enabled){ rvwTopupSave(next); return; }
+  const min=parseInt(t.min_reviews,10)||3;
+  state.ask={title:T('Turn on auto top-up? Every published product below '+min+' reviews will be filled with seeded reviews under made-up names. Customers see them as ordinary reviews.',
+      '开启自动补充?所有评价数低于 '+min+' 条的已上架商品,都会以虚构昵称补充种子评价。顾客看到的与普通评价无异。'),
+    confirmLabel:T('Turn on','开启'), run:()=>rvwTopupSave(next)};
+  render();
+});
+reg('rvwTopupEdit', ()=>{ const t=RVW.topup; if(!t||RVW.topupBusy||!mCan(RVW_KEYS)) return;
+  state.ask={title:T('Auto top-up','自动补充'),
+    fields:[{id:'min',label:T('Minimum reviews per product','每个商品最少评价数'),type:'number',value:String(t.min_reviews)},
+            {id:'max',label:T('Most to add per run','每次最多添加'),type:'number',value:String(t.max_per_run)}],
+    validate:v=>{ const a=parseInt(v.min,10), b=parseInt(v.max,10);
+      return !(a>=1&&a<=20)?T('Minimum must be 1–20','最少评价数需为 1–20'):!(b>=1&&b<=500)?T('Per-run cap must be 1–500','每次上限需为 1–500'):''; },
+    confirmLabel:T('Save','保存'),
+    run:v=>rvwTopupSave({enabled:!!t.enabled, min_reviews:v.min, max_per_run:v.max})};
+  state.askErr=null; render();
+});
+// One sweep by hand — works while the switch is off, to see what it does first.
+reg('rvwTopupRun', ()=>{ if(RVW.topupBusy||!rvwMod()) return;
+  RVW.topupBusy=true; RVW.topupErr=''; render();
+  apiWrite('/reviews/topup/run',{},'POST').then(j=>{
+    RVW.topupBusy=false; const d=(j&&j.data)||{};
+    showToast(d.added?T('Added '+d.added+' reviews','已补充 '+d.added+' 条评价'):T('Nothing to add','无需补充'));
+    loadRvwTopup(); if(d.added) loadRvw();
+  }).catch(e=>{ RVW.topupBusy=false; if(String(e.message)==='auth') return;
+    RVW.topupErr=e.refused?T(...e.words):T('Failed','失败'); render(); });
+});
+function rvwTopupLine(d){
+  if(!d) return '';
+  if(!d.available) return T('Not available on this database.','此数据库不支持。');
+  if(!d.products) return T('Every product is at the line.','所有商品都已达到设定值。');
+  const capped=d.uncapped>d.reviews?T(' ('+d.reviews+' this run)','(本次 '+d.reviews+' 条)'):'';
+  return T(d.products+' products below '+d.min_reviews+' — would add '+d.uncapped+' reviews'+capped,
+           d.products+' 个商品低于 '+d.min_reviews+' 条 — 将补充 '+d.uncapped+' 条评价'+capped);
+}
+/* ── Set up: the review tags (desktop RTAGS_CARD), a §279 card ──────────── */
+const RTAG_COLOURS=['lime','papaya','sky','corn','pea','cucumber','pink','berry','carrot','lotus','almond','lemon','avocado','forest'];
+let RTAG_D=null;
+const rtagCard=()=>cfgCard('reviews.tags',{
+  read:()=>({'reviews.tags':RTAG_D.map(t=>({id:t.id, en:t.en, cn:t.cn, color:t.color}))}),
+  hold:b=>{ const ids=new Set();
+    for(const t of b['reviews.tags']){
+      if(!t.id) return T('Every tag needs an id','每个标签都需要 id');
+      if(ids.has(t.id)) return T('Duplicate id "'+t.id+'"','重复 id "'+t.id+'"');
+      if(!t.en&&!t.cn) return T('Tag "'+t.id+'" needs a label','标签需至少一个名称');
+      ids.add(t.id);
+    } return ''; },
+  apply:b=>{ RTAG_D=((b&&b['reviews.tags'])||[]).map(t=>Object.assign({},t)); },
+  words:{'reviews.tags':['Review tags','评价标签']},
+});
+function rtagEnsure(){
+  if(RTAG_D||!state.cfg) return;
+  const list=cfgGet('reviews.tags',null);
+  RTAG_D=Array.isArray(list)?list.map(t=>({id:String(t.id||''),en:String(t.en||''),cn:String(t.cn||''),color:String(t.color||'lime')})):[];
+  if(mCan(RVW_KEYS)) cfgCardStart(rtagCard());
+}
+const rtagSlug=v=>String(v).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
+function rtagSheet(i){
+  const c=CFG_CARD['reviews.tags'], t=RTAG_D&&RTAG_D[i]; if(!c||!c.auto||!t) return;
+  cfgSheet(c, T('Review tags','评价标签')+' · '+(i+1), null,
+    [{id:'id',label:'id',commit:true},
+     {id:'en',label:T('English label','英文名称')},
+     {id:'cn',label:T('Chinese label','中文标签')},
+     {id:'color',label:T('Colour','颜色'),choices:RTAG_COLOURS.map(x=>[x,x])}],
+    f=>{ const cur=RTAG_D[i]; return cur?cur[f]:''; },
+    (f,v)=>{ const cur=RTAG_D[i]; if(cur) cur[f]=f==='id'?rtagSlug(v):v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>rtagRemove(i)}]);
+}
+function rtagRemove(i){
+  const c=CFG_CARD['reviews.tags'], t=RTAG_D&&RTAG_D[i]; if(!c||!c.auto||!t) return;
+  const go=()=>{ RTAG_D.splice(i,1); c.auto.touch(); state.ask=null; render(); };
+  if(!t.id){ go(); return; }
+  state.ask={title:T('Remove "'+t.id+'"? Reviews already tagged with this id will lose that chip.','移除 "'+t.id+'"？已使用此标签的评价将失去该标记。'),
+    confirmLabel:T('Remove','删除'), danger:true, run:go};
+  render();
+}
+reg('rtagEdit', i=>{ if(mCan(RVW_KEYS)) rtagSheet(Number(i)); });
+reg('rtagAdd', ()=>{ const c=CFG_CARD['reviews.tags']; if(!c||!c.auto||!mCan(RVW_KEYS)) return;
+  RTAG_D.push({id:'',en:'',cn:'',color:'lime'}); c.auto.touch(); rtagSheet(RTAG_D.length-1); });
+function rvwSetupHtml(){
+  const can=mCan(RVW_KEYS), mod=rvwMod();
+  const r=RVW.reward, t=RVW.topup;
+  const sw=(label,desc,on,cmd)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${label}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${desc}</span></span>${can?toggle(on,cmd):''}</div>`;
+  const line=t2=>`<div class="num" style="font-size:13px;color:var(--text-secondary);line-height:1.5">${t2}</div>`;
+  const reward=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${T('Reward reviewers','发放奖励')}</div>
+    ${!r?(RVW.rewardErr?line(RVW.rewardErr):line(T('Loading…','加载中…'))):`
+      ${sw(T('Reward reviewers','发放奖励'),T('Points for leaving a review, whatever the rating.','顾客发表评价即可获得积分,与评分无关。'),!!r.enabled,"APP.cmd('rvwRewardToggle')")}
+      ${line(T('Points per review','每条评价积分')+': '+escAttr(r.points)+' · '+T('Most rewarded per order','每单最多奖励')+': '+escAttr(r.max_per_order))}
+      ${line(r.grants?T(r.grants+' rewarded · '+r.points_given+' points given','已奖励 '+r.grants+' 条 · 共 '+r.points_given+' 积分'):T('Nothing rewarded yet.','尚未发放奖励。'))}
+      ${RVW.rewardNote?line(RVW.rewardNote):''}
+      ${RVW.rewardErr?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(RVW.rewardErr)}</div>`:''}
+      ${can?`<button class="btn2" style="width:100%" ${RVW.rewardBusy?'disabled':''} onclick="APP.cmd('rvwRewardEdit')">${RVW.rewardBusy?T('Saving…','保存中…'):T('Edit','编辑')}</button>`:''}`}</div>`;
+  const topup=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${T('Auto top-up','自动补充')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${LANG==='en'
+      ?'<b>These are seeded reviews, not customer ones</b> — written from the built-in copy, signed with made-up names, and marked as seeded in the list above. No customer, order or real name is ever used. Products listed in the last 24 hours are left alone.'
+      :'<b>补充的是种子评价,并非顾客评价。</b>文案由系统生成,署名为虚构昵称,并在上方列表中标记出来。不会使用任何顾客、订单或真实姓名。上架未满二十四小时的商品不会补充。'}</div>
+    ${!t?(RVW.topupErr?line(RVW.topupErr):line(T('Loading…','加载中…'))):`
+      ${sw(T('Keep products topped up','保持补充'),T('Fills anything below the line, and checks again every few hours.','自动补足低于设定值的商品,每几小时检查一次。'),!!t.enabled,"APP.cmd('rvwTopupToggle')")}
+      ${line(T('Minimum reviews per product','每个商品最少评价数')+': '+escAttr(t.min_reviews)+' · '+T('Most to add per run','每次最多添加')+': '+escAttr(t.max_per_run))}
+      ${line(RVW.topupBusy?T('Working…','处理中…'):rvwTopupLine(t))}
+      ${RVW.topupErr?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(RVW.topupErr)}</div>`:''}
+      ${can?`<div style="display:flex;gap:8px">
+        <button class="btn2" style="flex:1" ${RVW.topupBusy?'disabled':''} onclick="APP.cmd('rvwTopupEdit')">${T('Edit','编辑')}</button>
+        ${mod?`<button class="btn2" style="flex:1" ${RVW.topupBusy?'disabled':''} onclick="APP.cmd('rvwTopupRun')">${T('Run now','立即运行')}</button>`:''}</div>`:''}`}</div>`;
+  rtagEnsure();
+  const c=CFG_CARD['reviews.tags'];
+  const tags=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${T('Review tags','评价标签')}</div>
+    ${RTAG_D&&RTAG_D.length?`<div class="list">${RTAG_D.map((x,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:48px;padding:10px 14px" ${can&&c&&c.auto?`onclick="APP.cmd('rtagEdit',${i})"`:'disabled'}>
+        <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([x.en,x.cn].filter(Boolean).join(' · '))||'—'}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);flex:none">${escAttr(x.id)} · ${escAttr(x.color)}</span></button>`).join('')}</div>`:''}
+    ${can&&c&&c.auto?`<button class="btn2" style="width:100%" onclick="APP.cmd('rtagAdd')">${T('+ Add tag','添加标签')}</button>${cardFoot(c)}`:''}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:4px;padding:8px 4px 0">
+      <span style="font-size:15px;font-weight:500">${T('Set up','设置')}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Read rarely, changed rarely.','很少查看,很少更改。')}</span></div>
+    ${reward}${topup}${tags}`;
+}
+function rvwStatusLine(){
+  const s=(RVW.meta&&RVW.meta.summary)||null; if(!s) return '';
+  const total=s.total||0, open=s.needs_reply||0;
+  const parts=[T(total+' reviews',total+' 条评价'),T(open+' waiting on a reply',open+' 条待回复')];
+  if(s.hidden) parts.push(T(s.hidden+' hidden',s.hidden+' 条已隐藏'));
+  const days=rvwDaysSince(s.oldest_unanswered);
+  if(open&&days!==null) parts.push(days===0?T('oldest is from today','最早一条是今天'):T('oldest is '+days+' days old','最早一条已等待 '+days+' 天'));
+  return parts.join(' · ');
+}
+function screenReviews(){
+  const s=(RVW.meta&&RVW.meta.summary)||{};
+  const open=Number(s.needs_reply||0);
+  const chips=[{key:'needs',en:'Needs reply',zh:'待回复',count:RVW.meta?s.needs_reply:null},{key:'all',en:'Everything',zh:'全部',count:RVW.meta?s.total:null},
+    {key:'low',en:'Low rated',zh:'低评分',count:RVW.meta?Number(s.low||0):null},{key:'hidden',en:'Hidden',zh:'已隐藏',count:RVW.meta?s.hidden:null}];
+  const ratings=[['',T('Any rating','任意评分')],['5',T('5 stars','5 星')],['4',T('4 stars','4 星')],['3',T('3 stars','3 星')],['2',T('2 stars','2 星')],['1',T('1 star','1 星')]];
+  return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:12px">
+    ${RVW.meta?`<div class="num" style="padding:0 20px;font-size:13px;color:var(--text-secondary)">${rvwStatusLine()}</div>`:''}
+    ${open>0?`<div style="padding:0 16px"><div class="card" style="padding:16px;display:flex;align-items:center;gap:14px">
+        <span class="num" style="font-size:28px;font-weight:500">${open}</span>
+        <span style="flex:1;font-size:14px;color:var(--text-secondary)">${T('Waiting on a reply','待回复')}</span>
+        ${rvwMod()?`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" ${RVW.busy?'disabled':''} onclick="APP.cmd('rvwDismissAll')">${RVW.busy==='bulk'?T('Saving…','保存中…'):T('Mark all '+open+' as handled','将全部 '+open+' 条标记为已处理')}</button>`:''}</div></div>`:''}
+    ${s.seeded?`<div style="padding:0 20px;font-size:12.5px;color:var(--text-secondary)">${T(s.seeded+' seeded reviews','种子评价 '+s.seeded+' 条')}</div>`:''}
+    ${chipRow(chips,RVW.filter,'rvwFilter')}
+    <div style="padding:0 16px;display:flex;gap:8px;align-items:center">
+      ${searchBox(`<input id="mRvwQ" inputmode="search" enterkeyhint="search" value="${escAttr(RVW.q)}" placeholder="${escAttr(T('Search reviews and products…','搜索评价与商品…'))}" style="width:100%" oninput="APP.cmd('rvwQ',this.value)">`,'mRvwClr',!!RVW.q,'flex:1;min-width:0')}
+      <select aria-label="${escAttr(T('Filter reviews by rating','按评分筛选评价'))}" style="flex:none;width:auto" onchange="APP.cmd('rvwRating',this.value)">${ratings.map(([v,l])=>`<option value="${v}"${RVW.rating===v?' selected':''}>${l}</option>`).join('')}</select></div>
+    ${RVW.rowErr?`<div style="margin:0 16px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(RVW.rowErr)}</div>`:''}
+    <div id="mRvwList" style="padding:0 16px">${rvwListHtml()}</div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px">${rvwSetupHtml()}</div></div>`;
 }
 
 /* ==========================================================================
@@ -17098,6 +17485,8 @@ const SUBS={
    places. Both keep every screen they had; the inbox also rides every top-level
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
+/* §325 M10 — the desktop's Reviews tab, from the top of the Inbox's Reviews. */
+SUBS.reviews={title:['Reviews','评价'],backLabel:()=>T('Inbox','消息'),render:()=>screenReviews()};
 SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
 /* ==========================================================================
    §325 PD2 — SHOP MENUS, READ-ONLY (desktop: retail-admin/28-shops.js)
@@ -38786,7 +39175,7 @@ const ROUTE_CAP={
   // More → Operations. sales and trend both read /dashboard, so they are gated
   // on the capability that endpoint belongs to and not on a reports key they
   // never touch.
-  inbox:['reviews:view','feedback:view'], sales:'dashboard:view', trend:'dashboard:view',
+  inbox:['reviews:view','feedback:view'], reviews:['reviews:view','reviews:moderate'], sales:'dashboard:view', trend:'dashboard:view',
   // §325 PD2 — the desktop Sales board's own any-of (TAB_CAP.sales), the door
   // to the shop menu there.
   shopmenus:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],

@@ -212,6 +212,10 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['sharing.homeTitle', list(route('sharecards')), 'phone Share cards (card share.home)'],
       ['sharing.product', list(route('sharecards')), 'phone Share cards (card share.product)'],
       ['sharing.votingTitle', list(route('sharecards')), 'phone Share cards (card share.voting)'],
+      // §325 M10 — the phone's Reviews screen: Set up's two saves and the tags card.
+      ['reviews.reward', list(route('reviews')), 'phone Reviews — Reward reviewers'],
+      ['reviews.topup', list(route('reviews')), 'phone Reviews — Auto top-up'],
+      ['reviews.tags', list(route('reviews')), 'phone Reviews — review tags (card reviews.tags)'],
       // §325 O4 — the phone's Delivery screen writes the Delivery panel's cards.
       ['delivery.holidayMessage', list(route('delivery')), 'phone Delivery — Holiday mode on, and its message'],
       ['delivery.sameDayCutoffMinutes', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
@@ -416,8 +420,11 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       // §325 X7 adds the Push notifications Save: ONE site, two families
       // (notifications.* and system_alerts.*), as the desktop's saveConfig.
       const FAMS = ['customer_service', 'delivery.holidayMode', 'features.', 'inventory.lowStockDigest', 'inventory.lowStockThreshold',
-        'notifications.categories.', 'notifications.order_status_template_id', 'popups.list', 'product_page.sections', 'shop.', 'support.hidden',
-        'system_alerts.'];
+        'notifications.categories.', 'notifications.order_status_template_id', 'popups.list', 'product_page.sections', 'reviews.reward', 'reviews.topup',
+        'shop.', 'support.hidden', 'system_alerts.'];
+      // §325 M10 adds the Reviews screen's two Set up saves — the reward and
+      // auto top-up — each its own site, as the desktop's saveReviewReward /
+      // saveReviewTopup; the review tags are a cfgCard below.
       const SITE_FAMS = FAMS.filter((f) => f !== 'notifications.order_status_template_id' && f !== 'system_alerts.')
         .concat(['notifications.order_status_template_id|system_alerts.']).sort();
       // A site whose body is written inline names its family in the call itself;
@@ -434,8 +441,8 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const CARD_SITE = M.indexOf("apiWrite('/config?history='+encodeURIComponent(c.card)");
       ok(CARD_SITE !== -1 && sites.includes(CARD_SITE), 'the content cards write through the one cfgCard site');
       const cards = (M.match(/cfgCard\('([a-z._]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z._]+)'/)[1]).sort();
-      is(cards, ['about', 'checkout.upsell', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'social_proof', 'voting'],
-        'the phone\'s cards: about, copy, faq, legal, social proof and the upsell on /config; leaderboard and voting on their own routes');
+      is(cards, ['about', 'checkout.upsell', 'copy.snippets', 'faq', 'leaderboard', 'legal', 'reviews.tags', 'social_proof', 'voting'],
+        'the phone\'s cards: about, copy, faq, legal, review tags, social proof and the upsell on /config; leaderboard and voting on their own routes');
       // §325 M8 — the share cards are one card per page, 'share.<key>': three on
       // /config (sharing.<key>), the invite card on PATCH /affiliate/settings.
       ok(M.includes("return cfgCard('share.'+key,pg.aff?{"), 'the share cards are cfgCard(\'share.\'+key)');
@@ -446,7 +453,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
         ok(own.includes("put:(b,note)=>apiWrite('" + url + "'+cfgHistQ('" + card + "',note),b,'PUT')"), 'the ' + card + ' card writes its own route, ' + url + ', not /config');
       }
       is(famSites.filter((i) => i !== CARD_SITE).map((i) => famAt(i).join('|')).sort(),
-        SITE_FAMS, 'the phone writes twelve families at eleven write sites, each asserted in section 2 (support.hidden as the open one)');
+        SITE_FAMS, 'the phone writes fourteen families at thirteen write sites, each asserted in section 2 (support.hidden as the open one)');
       /* §325 O4 — the phone's Delivery settings write through one helper
          (dlvCfgPut), so their keys are read from where they are named: the
          live cards' `keys`, the two switches' `key`, and the three sheets'
@@ -500,6 +507,7 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
     is(route('sharecards'), 'sharing:edit', 'phone Share cards');
     is(route('sharecard'), 'sharing:edit', 'phone Share cards → one page');
     is(route('social'), 'social:edit', 'phone Social proof');
+    is(list(route('reviews')).sort().join('|'), 'reviews:moderate|reviews:view', 'phone Reviews — the reviews family\'s own any-of');
     is(tab('flash'), 'flash:view', 'desktop Flash sales');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms.html')), 'cms.html opens on content:edit');
     ok(/caps && !caps\.includes\('content:edit'\)/.test(read('public/cms-mobile.html')), 'cms-mobile.html likewise');
