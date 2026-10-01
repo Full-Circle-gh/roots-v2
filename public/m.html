@@ -1490,6 +1490,15 @@ const state = {
   /* §325 X5 — the Shop tab and Customer service cards: whether each has been
      read this visit, its load error, its draft, and the QR upload. */
   cfgc:{tried:{shop:false, cs:false}, err:{shop:null, cs:null}, shop:null, cs:null, qrBusy:false, qrErr:null},
+  /* §325 X6 — a store being added or edited (its draft, its record, the new
+     store's Save and the manual pin), the list's own read, and the stock staff
+     of the store whose screen is open (its list, the add form, which write is
+     in flight and each one's refusal). Then the team's devices. */
+  sto:{id:null, rec:null, d:null, err:null, busy:false, pinLat:'', pinLng:'', pinBusy:false, pinErr:null,
+       listTried:false, listErr:null,
+       staffFor:null, staffRec:null, staff:null, staffTried:false, staffErr:null, staffBusy:null, staffActErr:null,
+       add:{name:'', user:'', pw:''}, addErr:null},
+  tmd:{list:null, tried:false, err:null, kind:'all', busy:null, actErr:null},
   /* §325 X4 — the Brand screen (the logo and name, a draft of the name being
      typed, which save is in flight and each half's refusal) and the brand
      studio (its form, the job being polled, the result and its Apply). */
@@ -1634,6 +1643,13 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   if(route==='shopdisplay'||route==='custservice'){ const c=state.cfgc, k=route==='shopdisplay'?'shop':'cs';
     c.tried[k]=false; c[k]=null; c.err[k]=null; if(k==='cs'){ c.qrErr=null; c.qrBusy=false; } }
   if(route==='brand'){ const b=state.brand; b.tried=false; b.nameTouched=false; b.nameErr=null; b.logoErr=null; b.readErr=null; }
+  /* §325 X6 — the store list is re-read with Operations; a store's staff and
+     the team's devices are re-read on every entry (somebody may have been
+     added, or signed in, a minute ago). */
+  if(route==='operations'){ state.sto.listTried=false; state.sto.listErr=null; }
+  if(route==='storestaff'){ const s=state.sto; s.staffTried=false; s.staff=null; s.staffErr=null; s.staffBusy=null; s.staffActErr=null;
+    s.add={name:'',user:'',pw:''}; s.addErr=null; }
+  if(route==='teamdevices'){ const t=state.tmd; t.tried=false; t.list=null; t.err=null; t.busy=null; t.actErr=null; }
   if(route==='operations'){ const x=state.opsx; x.binTried=false; x.binErr=null; x.binRowErr={}; x.err=null; x.geoErr=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
@@ -1666,6 +1682,7 @@ function pop(){
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
   if(top==='shopdisplay'||top==='custservice') cfgFlushAll();   // §325 X5 — a pending edit goes on the way out
+  if(top==='storeone') stoFlush();   // §325 X6 — and a store's
   forgetScroll(); const gone=state.stack.pop(); if(top==='productcost') pcPopped(gone);
   if(top==='productedit') pePopped(gone);   // §325 PD5 — its edits go, and the sheet comes back
   render(); }
@@ -8447,13 +8464,15 @@ function screenOperations(){
     ${opsxLowCard()}
     ${opsxSupportCard()}
     ${ppgmCard()}
-    ${stores&&stores.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>
-      <div class="list">${stores.map(opsStoreRow).join('')}</div></div>`:''}
+    ${/* §325 X6 — each store opens to be edited, and to its stock staff; a new
+          one is added under the list. */''}
+    ${stoSection()}
     ${opsxBinCard()}
     ${/* §325 — "staff" came out: the phone's Team screen invites, edits and
           sets permissions (§300), so that clause was no longer true. The rest
           still is. The live pair with one item dropped, in both halves. */''}
-    ${noteBar(T('Store details, printers and payment keys are set on desktop.','门店资料、打印机与支付密钥在电脑端设置。'))}</div>`;
+    ${/* §325 X6 — store details came out too: they are edited above. */''}
+    ${noteBar(T('Printers and payment keys are set on desktop.','打印机与支付密钥在电脑端设置。'))}</div>`;
 }
 
 /* ==========================================================================
@@ -27313,6 +27332,424 @@ function screenCustService(){
 }
 SUBS.custservice={title:['Customer service','客户服务'],render:()=>screenCustService()};
 /* §325 X5 ends */
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X6 — STORES, THEIR STOCK STAFF, AND THE TEAM'S DEVICES
+   --------------------------------------------------------------------------
+   Three desktop panels the phone only listed or did not have:
+
+   • A store, added or edited (02-settings-ops.js _opsStoreForm). An existing
+     store saves itself (§279): each pause sends the desktop's whole body,
+     PATCH /stores/:id?history=store.<id>, filed on the history the desktop's
+     Version history reads (GET /stores/:id/history), through the same engine
+     (public/tacet-autosave.js). City, district and street address are sent
+     when they are left, not on every key — a change there re-locates the
+     store, as the desktop's data-as-commit fields say. A new store keeps Save,
+     because saving it creates it: POST /stores, the code required, the
+     coordinates sent only when both are typed and real. The manual pin on an
+     existing store is its own Save, PATCH {lat,lng}, as there. All of it is
+     stores:edit, the key lib/cap-routes.js asks of every /stores write.
+
+   • A store's stock staff (_opsStoreStaff): the people who can only open
+     Quick Stock, and only for that store. Listed, added, removed (with the
+     desktop's confirm) and given a new password, on the desktop's endpoints
+     and bodies. The server asks only for a signed-in session there; the phone
+     offers them to stores:edit or team:manage (X6 decision 2).
+
+   • Team devices (§326.5): every device the team is signed in on, the
+     All / Desktop / Mobile filter, and Sign out — team:manage, which is what
+     GET /sessions/team and the desktop card both ask for. Signing out the
+     device in hand confirms first and goes to the sign-in page, as there.
+   ══════════════════════════════════════════════════════════════════════════ */
+let stoAuto=null;
+function stoFlush(){ if(stoAuto) stoAuto.flush(); }
+function stoRec(id){ return (Array.isArray(state.stores)?state.stores:[]).find(s=>s.id===id)||null; }
+function stoName(s){ return s?(LANG==='en'?(s.name_en||s.name_cn||s.code):(s.name_cn||s.name_en||s.code))||'':''; }
+/* A server sentence is one language on each side of " · "; a refusal says why. */
+function x6Words(e,en,zh){
+  if(e&&e.refused) return E(...e.words);
+  const m=String((e&&e.message)||'');
+  return m?E(en+': '+x6En(m),zh+': '+x6Zh(m)):E(en,zh);
+}
+const x6En=m=>{ const i=m.indexOf(' · '); return i===-1?m:m.slice(0,i); };
+const x6Zh=m=>{ const i=m.indexOf(' · '); return i===-1?m:m.slice(i+3); };
+function stoFail(e){
+  if(e&&!e.refused&&e.code==='code_taken') return E('That code is already used by another store.','该编号已被其他门店使用。');
+  return x6Words(e,'Failed','操作失败');
+}
+/* The list behind Operations, re-read on the way in and after every save. A
+   read that lands while somebody is typing patches the located line only. */
+function stoReadStores(quiet){
+  const s=state.sto;
+  return api('/stores').then(r=>{
+    s.listErr=null;
+    state.stores=(Array.isArray(r)?r:[]).filter(x=>x.is_active==null||x.is_active);
+    const el=quiet&&typeof document!=='undefined'?document.getElementById('mStoLoc'):null;
+    if(el) el.innerHTML=stoLocHtml(); else render();
+  }).catch(e=>{ if(String(e&&e.message)==='auth') return;
+    s.listErr=e&&e.refused?E(...e.words):E('Could not load this.','无法加载。'); if(!quiet) render(); });
+}
+function stoLoadStores(){ const s=state.sto; if(s.listTried) return; s.listTried=true; stoReadStores(false); }
+/* The address re-locates in the background, so look again shortly, as the
+   desktop does, for the located line to catch up. */
+function stoLater(){ if(typeof setTimeout==='function') setTimeout(()=>stoReadStores(true),2500); }
+function stoPut(rec){
+  if(!rec||rec.id==null||!Array.isArray(state.stores)) return;
+  const i=state.stores.findIndex(x=>x.id===rec.id);
+  if(i!==-1) state.stores[i]=rec;
+}
+reg('stoRetry', ()=>{ state.sto.listTried=false; render(); });
+
+/* ── Operations: the store list's doors ──────────────────────────────────── */
+function stoRow(st,i){
+  const edit=canRoute('storeone'), staff=canRoute('storestaff');
+  const b=(cmd,label)=>`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13.5px" onclick="APP.cmd('${cmd}',${Number(st.id)})">${label}</button>`;
+  return opsStoreRow(st,i)+((edit||staff)?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 12px">
+    ${edit?b('stoOpen',T('Edit','编辑')):''}${staff?b('stfOpen',T('Stock staff','库存员')):''}</div>`:'');
+}
+function stoSection(){
+  stoLoadStores();
+  const s=state.sto, stores=Array.isArray(state.stores)?state.stores:null, add=canRoute('storeone');
+  const head=`<div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>`;
+  const addBtn=add?`<button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('stoNew')">${T('+ Add store','添加门店')}</button>`:'';
+  if(!stores&&s.listErr) return `<div>${head}${x1Err(escAttr(String(s.listErr)),'stoRetry')}</div>`;
+  if(!stores) return '';
+  if(!stores.length) return add?`<div>${head}${tmCaption(T('No stores yet. Add one below.','暂无门店,请在下方添加。'))}${addBtn}</div>`:'';
+  return `<div>${head}<div class="list">${stores.map(stoRow).join('')}</div>${addBtn}</div>`;
+}
+
+/* ── One store ───────────────────────────────────────────────────────────── */
+const STO_FIELDS=['name_en','name_cn','city','district','address','phone','sort_order','open_time','close_time','sync_start_time','low_stock_threshold'];
+function stoSeed(r){
+  r=r||{}; const v=x=>x==null?'':String(x);
+  const d={code:v(r.code), pickup_enabled:!!r.pickup_enabled};
+  STO_FIELDS.forEach(k=>{ d[k]=v(r[k]); });
+  d.sort_order=String(r.sort_order==null?0:r.sort_order);
+  return d;
+}
+/* _opsStoreBody, key for key and in its order: blank times clear (the daemons
+   fall back to their default), a blank low-stock line clears the override. */
+function stoBody(){
+  const d=state.sto.d, t=k=>String(d[k]==null?'':d[k]).trim();
+  return {
+    name_en:t('name_en'), name_cn:t('name_cn'),
+    city:t('city'), district:t('district'),
+    address:t('address'), phone:t('phone'),
+    sort_order:(+t('sort_order'))||0,
+    pickup_enabled:!!d.pickup_enabled,
+    open_time:t('open_time')||null, close_time:t('close_time')||null,
+    sync_start_time:t('sync_start_time')||null,
+    low_stock_threshold:t('low_stock_threshold')===''?null:(parseInt(t('low_stock_threshold'),10)||0),
+  };
+}
+function stoApply(b){ const d=state.sto.d; if(!d||!b) return; const v=x=>x==null?'':String(x);
+  STO_FIELDS.forEach(k=>{ if(k in b) d[k]=v(b[k]); });
+  if('sort_order' in b) d.sort_order=String(b.sort_order==null?0:b.sort_order);
+  if('pickup_enabled' in b) d.pickup_enabled=!!b.pickup_enabled; }
+function stoFootHtml(){
+  const a=stoAuto; if(!a) return '';
+  const st=a.state;
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…'):st==='hold'?escAttr(a.message)
+    :st==='error'?escAttr(T('Save failed: ','保存失败:')+(a.message||'')):T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<span style="flex:1;min-width:0;font-size:12.5px;color:${tone}">${line}</span>
+    ${a.canUndo()?`<button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('stoUndo')">${T('Undo','撤销')}</button>`:''}
+    <button class="btn2" style="width:auto;padding:0 12px" onclick="APP.cmd('stoHistory')">${T('Version history','历史版本')}</button>`;
+}
+function stoFootPaint(){ const f=(typeof document!=='undefined')?document.getElementById('mStoFoot'):null; if(f) f.innerHTML=stoFootHtml(); }
+/* Opened fresh every time, from the record the list holds now. The store open
+   before this one is sent before it is replaced. */
+function stoBegin(id){
+  const s=state.sto;
+  if(stoAuto){ stoAuto.flush(); stoAuto=null; }
+  const r=id==null?null:stoRec(id);
+  s.id=id; s.rec=r; s.d=stoSeed(r); s.err=null; s.busy=false;
+  s.pinLat=''; s.pinLng=''; s.pinBusy=false; s.pinErr=null;
+  if(id==null||!r||!canRoute('storeone')||typeof TacetAutosave==='undefined') return;
+  stoAuto=TacetAutosave.create({
+    read:()=>stoBody(),
+    send:(b,note)=>apiWrite('/stores/'+id+'?history='+encodeURIComponent('store.'+id)+(note?'&note='+note:''),b,'PATCH')
+      .then(j=>{ stoPut(j&&j.data); stoLater(); }).catch(e=>{ throw cfgSendErr(e); }),
+    onChange:stoFootPaint,
+  });
+  stoAuto.start();
+}
+reg('stoOpen', id=>{ id=Number(id); if(!canRoute('storeone')||!stoRec(id)) return; stoBegin(id); push('storeone'); });
+reg('stoNew', ()=>{ if(!canRoute('storeone')) return; stoBegin(null); push('storeone'); });
+const STO_COMMIT=['city','district','address','open_time','close_time','sync_start_time'];
+/* A typed field nudges the engine and repaints nothing — somebody is typing. */
+reg('stoText', (k,v)=>{
+  const s=state.sto, d=s.d; if(!d) return;
+  if(k==='code'){ if(s.id==null) d.code=String(v==null?'':v); return; }
+  if(!STO_FIELDS.includes(k)) return;
+  d[k]=String(v==null?'':v);
+  if(stoAuto) stoAuto.touch();
+});
+reg('stoPickup', ()=>{ const d=state.sto.d; if(!d) return; d.pickup_enabled=!d.pickup_enabled; if(stoAuto) stoAuto.touch(); render(); });
+reg('stoPinIn', (k,v)=>{ const s=state.sto; if(k==='lat') s.pinLat=String(v==null?'':v); else if(k==='lng') s.pinLng=String(v==null?'':v); });
+reg('stoUndo', ()=>{ if(stoAuto) stoAuto.undo(b=>{ stoApply(b); render(); }); });
+const STO_KEY_WORDS={name_en:['Name (English)','名称(英文)'], name_cn:['Name (中文)','名称(中文)'], phone:['Phone','电话'],
+  city:['City','城市'], district:['District','区'], address:['Street address','详细地址'], open_time:['Opens','开门'],
+  close_time:['Closes','关门'], sync_start_time:['Channel sync starts','渠道同步开始'], sort_order:['Sort priority','排序'],
+  low_stock_threshold:['Low-stock alert at','低库存提醒'], pickup_enabled:['Offer store pickup','到店自提']};
+reg('stoHistory', ()=>{
+  const a=stoAuto, id=state.sto.id; if(!a||id==null) return;
+  Promise.resolve(a.flush()).then(()=>api('/stores/'+id+'/history')).then(j=>{
+    const list=Array.isArray(j&&j.versions)?j.versions:[];
+    if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+    liveHistorySheet(list, v=>(v.changed||[]).map(k=>STO_KEY_WORDS[k]?T(...STO_KEY_WORDS[k]):k).join(' · '),
+      v=>{ stoApply(v.snapshot||{}); render();
+        return Promise.resolve(a.flush('restore')).then(()=>{ if(a.state==='error') throw new Error(a.message||''); }); });
+  }).catch(e=>{ if(String(e&&e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+});
+const stoCoordsOk=(lat,lng)=>Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180;
+/* The manual pin on an existing store: sent alone, when asked. */
+reg('stoPin', ()=>{
+  const s=state.sto, id=s.id; if(id==null||s.pinBusy||!canRoute('storeone')) return;
+  const lat=parseFloat(s.pinLat), lng=parseFloat(s.pinLng);
+  if(!stoCoordsOk(lat,lng)){ s.pinErr=E('Invalid coordinates','坐标无效'); render(); return; }
+  s.pinBusy=true; s.pinErr=null; render();
+  apiWrite('/stores/'+id,{lat,lng},'PATCH').then(j=>{
+    s.pinBusy=false; s.pinLat=''; s.pinLng=''; stoPut(j&&j.data); if(j&&j.data) s.rec=j.data;
+    showToast(T('Saved','已保存')); render();
+  }).catch(e=>{ s.pinBusy=false; if(String(e&&e.message)==='auth') return; s.pinErr=stoFail(e); render(); });
+});
+/* CREATES a store. Coordinates go only when both are typed — never lat:null,
+   which would both clear them and stop the address locating the store. */
+reg('stoSave', ()=>{
+  const s=state.sto; if(s.id!=null||s.busy||!s.d||!canRoute('storeone')) return;
+  const body=stoBody();
+  const latRaw=String(s.pinLat||'').trim(), lngRaw=String(s.pinLng||'').trim();
+  if(latRaw&&lngRaw){
+    const lat=parseFloat(latRaw), lng=parseFloat(lngRaw);
+    if(!stoCoordsOk(lat,lng)){ s.err=E('Invalid coordinates','坐标无效'); render(); return; }
+    body.lat=lat; body.lng=lng;
+  }
+  body.code=String(s.d.code||'').trim();
+  if(!body.code){ s.err=E('Code required','请填写编号'); render(); return; }
+  s.busy=true; s.err=null; render();
+  apiWrite('/stores',body,'POST').then(j=>{
+    s.busy=false;
+    if(j&&j.data&&Array.isArray(state.stores)) state.stores=state.stores.concat([j.data]);
+    showToast(T('Saved','已保存'));
+    if(state.stack.length&&state.stack[state.stack.length-1].route==='storeone') pop();
+    stoReadStores(false); stoLater();
+  }).catch(e=>{ s.busy=false; if(String(e&&e.message)==='auth') return; s.err=stoFail(e); render(); });
+});
+function stoLocHtml(){
+  const s=state.sto, r=(s.id!=null&&stoRec(s.id))||s.rec;
+  if(!r) return '';
+  const located=r.lat!=null&&r.lng!=null;
+  return located
+    ? `<span style="color:var(--text-secondary)">${T('GPS located','已定位')} · <span class="num">${Number(r.lat).toFixed(6)}, ${Number(r.lng).toFixed(6)}</span></span>`
+    : `<span style="color:var(--brick-ink)">${T('no GPS — set a street address','未定位,请填写详细地址')}</span>`;
+}
+const stoLbl=(t,hint)=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>${hint?`<span style="display:block;font-size:12px;color:var(--text-secondary);line-height:1.5;margin:-2px 0 6px">${hint}</span>`:''}`;
+function stoInput(k,label,ph,o){
+  o=o||{};
+  const d=state.sto.d, ev=STO_COMMIT.includes(k)?'onchange':'oninput';
+  return `<label style="display:block">${stoLbl(label,o.hint)}
+    <input type="${o.type||'text'}" value="${escAttr(d[k])}" placeholder="${escAttr(ph||'')}" ${o.attrs||''} style="width:100%" ${ev}="APP.cmd('stoText','${k}',this.value)"></label>`;
+}
+function screenStoreOne(){
+  const s=state.sto, isNew=s.id==null, d=s.d;
+  if(!d) return x1Loading();
+  const card=inner=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">${inner}</div>`;
+  const errLine=x=>x?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(x))}</div>`:'';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${card(
+      (isNew?stoInput('code',T('Code','短标识'),'pudong','autocapitalize="off" spellcheck="false" style="width:100%;font-family:monospace"')
+        :`<div>${stoLbl(T('Code','短标识'))}<span class="num" style="font-family:monospace;color:var(--text-secondary)">${escAttr(d.code)}</span></div>`)+
+      stoInput('name_en',T('Name (English)','名称(英文)'),'Roots — Tianhe')+
+      stoInput('name_cn',T('Name (中文)','名称(中文)'),'Roots · 天河店')+
+      stoInput('phone',T('Phone','电话'),'020-XXXXXXXX',{attrs:'inputmode="tel"'}))}
+    ${card(
+      stoInput('city',T('City','城市'),'广州')+
+      stoInput('district',T('District','区'),'天河区')+
+      stoInput('address',T('Street address','详细地址'),'新塘大街3号新塘科创园2栋',{hint:T('Sets the store GPS, auto-geocoded on save','决定门店 GPS,保存时自动定位')})+
+      (isNew?'':`<div id="mStoLoc" style="font-size:12.5px">${stoLocHtml()}</div>`))}
+    ${card(
+      `<div style="display:flex;gap:10px"><div style="flex:1;min-width:0">${stoInput('open_time',T('Opens','开门'),'',{type:'time'})}</div>
+        <div style="flex:1;min-width:0">${stoInput('close_time',T('Closes','关门'),'',{type:'time'})}</div></div>`+
+      stoInput('sync_start_time',T('Channel sync starts','渠道同步开始'),'',{type:'time',
+        hint:T('When Meituan / Eleme stock starts syncing each day. Customers pre-order before you open, so set this earlier than opening. Blank = 2 h before.',
+               '美团/饿了么每天从此时开始同步库存;顾客会提前下单,建议早于开门时间。留空 = 开门前 2 小时。')})+
+      stoInput('sort_order',T('Sort priority','排序'),'0',{type:'number',attrs:'inputmode="numeric"',hint:T('Lower = preferred','数字越小越优先')})+
+      stoInput('low_stock_threshold',T('Low-stock alert at','低库存提醒'),T('Store default','全店默认'),{type:'number',attrs:'inputmode="numeric" min="0"',
+        hint:T('Flag this store\'s items low at this many units. Blank = store-wide default.','门店商品降到此数量时提醒;留空用全店默认。')})+
+      `<div style="display:flex;align-items:center;gap:14px;min-height:40px"><span style="flex:1;min-width:0;font-size:15px">${T('Offer store pickup','到店自提')}</span>${toggle(!!d.pickup_enabled,"APP.cmd('stoPickup')")}</div>`)}
+    ${card(
+      `<div>${stoLbl(T('GPS coordinates','经纬度'),T('Optional manual override. Leave blank to auto-locate from the address on save. Only fill these to pin an exact spot.','留空则保存时按地址自动定位;仅在需要精确指定时填写。'))}</div>
+      <div style="display:flex;gap:10px">
+        <input type="number" step="0.000001" inputmode="decimal" value="${escAttr(s.pinLat)}" placeholder="${escAttr(T('Latitude','纬度'))} 23.1519" style="flex:1;min-width:0" oninput="APP.cmd('stoPinIn','lat',this.value)">
+        <input type="number" step="0.000001" inputmode="decimal" value="${escAttr(s.pinLng)}" placeholder="${escAttr(T('Longitude','经度'))} 113.4061" style="flex:1;min-width:0" oninput="APP.cmd('stoPinIn','lng',this.value)"></div>
+      ${isNew?'':`<button class="btn2" style="width:100%" ${s.pinBusy?'disabled':''} onclick="APP.cmd('stoPin')">${s.pinBusy?T('Saving…','保存中…'):T('Save','保存')}</button>`}
+      ${errLine(s.pinErr)}`)}
+    ${!isNew&&canRoute('storestaff')?tmList([tmRow({label:T('Stock staff','库存员'),cmd:`APP.cmd('stfOpen',${Number(s.id)})`})]):''}
+    ${isNew
+      ? `${errLine(s.err)}<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('stoSave')">${s.busy?T('Saving…','保存中…'):T('Save','保存')}</button>`
+      : `<div id="mStoFoot" class="card" style="display:flex;align-items:center;gap:8px;padding:10px 12px">${stoFootHtml()}</div>`}
+  </div>`;
+}
+SUBS.storeone={title:['Store','门店'],
+  titleOf:()=>state.sto.id==null?T('New store','新建门店'):(escAttr(stoName(state.sto.rec))||T('Edit store','编辑门店')),
+  backLabel:()=>T('Operations','运营'),
+  render:()=>screenStoreOne()};
+
+/* ── A store's stock staff ───────────────────────────────────────────────── */
+function stfLoad(){
+  const s=state.sto; if(s.staffTried) return; s.staffTried=true; s.staffErr=null;
+  const id=s.staffFor;
+  api('/api/backend/stores/'+id+'/staff').then(j=>{ if(state.sto.staffFor!==id) return; s.staff=(j&&j.staff)||[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; s.staffErr=x6Words(e,'Failed to load staff','加载失败'); render(); });
+}
+function stfReread(){ const s=state.sto; s.staffTried=false; stfLoad(); }
+reg('stfRetry', ()=>{ state.sto.staffTried=false; render(); });
+reg('stfOpen', id=>{
+  id=Number(id); if(!canRoute('storestaff')||!stoRec(id)) return;
+  stoFlush();   // the store's pending edit goes first, as the desktop's does
+  const s=state.sto; s.staffFor=id; s.staffRec=stoRec(id);
+  push('storestaff');
+});
+reg('stfIn', (k,v)=>{ const a=state.sto.add; if(k in a) a[k]=String(v==null?'':v); });
+reg('stfAdd', ()=>{
+  const s=state.sto, id=s.staffFor; if(s.staffBusy||!canRoute('storestaff')||id==null) return;
+  const name=s.add.name.trim(), username=s.add.user.trim(), password=s.add.pw.trim();
+  if(!username){ s.addErr=E('Login required','请填写登录名'); render(); return; }
+  if(password.length<10){ s.addErr=E('Password must be at least 10 characters','密码至少需要 10 位'); render(); return; }
+  s.staffBusy='add'; s.addErr=null; s.staffActErr=null; render();
+  apiWrite('/api/backend/stores/'+id+'/staff',{display_name:name, username, password},'POST').then(()=>{
+    s.staffBusy=null; s.add={name:'',user:'',pw:''};
+    showToast(T('Added','已添加')); stfReread(); render();
+  }).catch(e=>{ s.staffBusy=null; if(String(e&&e.message)==='auth') return; s.addErr=x6Words(e,'Failed','操作失败'); render(); });
+});
+reg('stfRemove', uid=>{
+  const s=state.sto, id=s.staffFor; uid=Number(uid); if(s.staffBusy||!canRoute('storestaff')||id==null) return;
+  if(!(s.staff||[]).some(u=>u.id===uid&&u.isActive)) return;   // only a row the screen shows
+  state.askErr=null;
+  state.ask={title:T('Remove this stock staff member? They will lose access immediately.','移除该库存员?其访问权限将立即失效。'),
+    confirmLabel:T('Remove','移除'), danger:true,
+    run:()=>{
+      s.staffBusy='u'+uid; s.staffActErr=null; render();
+      apiWrite('/api/backend/stores/'+id+'/staff/'+uid,null,'DELETE').then(()=>{
+        s.staffBusy=null; showToast(T('Removed','已移除')); stfReread(); render();
+      }).catch(e=>{ s.staffBusy=null; if(String(e&&e.message)==='auth') return; s.staffActErr=x6Words(e,'Failed','操作失败'); render(); });
+    }};
+  render();
+});
+reg('stfReset', uid=>{
+  const s=state.sto, id=s.staffFor; uid=Number(uid); if(s.staffBusy||!canRoute('storestaff')||id==null) return;
+  if(!(s.staff||[]).some(u=>u.id===uid&&u.isActive)) return;   // only a row the screen shows
+  state.askErr=null;
+  state.ask={title:T('New password (at least 10 characters)','新密码(至少 10 位)'),
+    fields:[{id:'pw',label:T('Password','密码'),placeholder:'••••••••••'}],
+    confirmLabel:T('Reset password','重置密码'),
+    validate:v=>v.pw.length<10?T('Password must be at least 10 characters','密码至少需要 10 位'):null,
+    run:v=>{
+      s.staffBusy='u'+uid; s.staffActErr=null; render();
+      apiWrite('/api/backend/stores/'+id+'/staff/'+uid+'/password',{new_password:v.pw},'POST').then(()=>{
+        s.staffBusy=null; showToast(T('Password reset','密码已重置')); render();
+      }).catch(e=>{ s.staffBusy=null; if(String(e&&e.message)==='auth') return; s.staffActErr=x6Words(e,'Failed','操作失败'); render(); });
+    }};
+  render();
+});
+function screenStoreStaff(){
+  const s=state.sto; stfLoad();
+  const st=stoRec(s.staffFor)||s.staffRec, name=escAttr(stoName(st));
+  if(s.staffErr&&!s.staff) return x1Err(escAttr(String(s.staffErr)),'stfRetry');
+  if(!s.staff) return x1Loading();
+  const active=s.staff.filter(u=>u.isActive);
+  const busy=!!s.staffBusy;
+  const rows=active.map(u=>tmRow({label:`<b style="font-weight:500">${escAttr(u.displayName||u.username)}</b>`,
+    note:`<span style="font-family:monospace">${escAttr(u.username)}</span>`,
+    right:`<span style="display:flex;gap:6px">
+      <button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px" ${busy?'disabled':''} onclick="APP.cmd('stfReset',${Number(u.id)})">${s.staffBusy==='u'+u.id?T('Saving…','保存中…'):T('Reset password','重置密码')}</button>
+      <button class="btn2" style="width:auto;min-height:34px;padding:0 10px;font-size:13px;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('stfRemove',${Number(u.id)})">${T('Remove','移除')}</button></span>`}));
+  const fld=(k,label,ph,attrs,hint)=>`<label style="display:block">${stoLbl(label,hint)}
+    <input type="text" value="${escAttr(s.add[k])}" placeholder="${escAttr(ph)}" ${attrs||''} style="width:100%" oninput="APP.cmd('stfIn','${k}',this.value)"></label>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${tmCaption(T('These people can only open the Quick Stock app, and only for '+name+' — never another store.','这些成员仅可使用快捷库存,且只能操作'+name+',无法操作其他门店。'))}
+    ${s.staffActErr?`<div style="font-size:13.5px;color:var(--brick-ink);padding:0 4px">${escAttr(String(s.staffActErr))}</div>`:''}
+    ${rows.length?tmList(rows):tmCaption(T('No stock staff yet for this store.','该门店暂无库存员。'))}
+    <div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+      ${fld('name',T('Name','姓名'),'张三')}
+      ${fld('user',T('Login','登录名'),'yuexiu.stock','autocapitalize="off" spellcheck="false" style="width:100%;font-family:monospace"',T('Username may use letters, numbers, . _ - only','用户名仅限字母、数字和 . _ -'))}
+      ${fld('pw',T('Password','密码'),'••••••••••','autocapitalize="off" spellcheck="false"',T('At least 10 characters','至少 10 位'))}
+      ${s.addErr?`<div style="font-size:13.5px;color:var(--brick-ink)">${escAttr(String(s.addErr))}</div>`:''}
+      <button class="cta" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('stfAdd')">${s.staffBusy==='add'?T('Saving…','保存中…'):T('+ Add stock staff','添加库存员')}</button></div>
+  </div>`;
+}
+SUBS.storestaff={title:['Stock staff','库存员'],
+  titleOf:()=>{ const st=stoRec(state.sto.staffFor)||state.sto.staffRec; return st?escAttr(stoName(st)):T('Stock staff','库存员'); },
+  render:()=>screenStoreStaff()};
+
+/* ── Team devices (§326.5) ───────────────────────────────────────────────── */
+const tmdWhenOf=s=>new Date(String(s).replace(' ','T')+(/[zZ]|[+\-]\d\d:?\d\d$/.test(s)?'':'Z'));
+const tmdGroup=k=>(k==='phone'||k==='tablet')?'mobile':'desktop';
+function tmdLoadList(){
+  const t=state.tmd; if(t.tried) return; t.tried=true; t.err=null;
+  api('/api/backend/sessions/team').then(j=>{ t.list=(j&&j.sessions)||[]; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; t.err=e&&e.refused?E(...e.words):E('Couldn’t load devices.','无法加载设备。'); render(); });
+}
+reg('tmdRetry', ()=>{ state.tmd.tried=false; render(); });
+reg('tmdKind', k=>{ if(!['all','desktop','mobile'].includes(k)) return; state.tmd.kind=k; render(); });
+reg('tmdOut', sid=>{
+  const t=state.tmd; if(t.busy||!sid||!canRoute('teamdevices')) return;
+  const d=(t.list||[]).find(x=>x.id===sid); if(!d) return;
+  const go=()=>{
+    t.busy=sid; t.actErr=null; render();
+    apiWrite('/api/backend/sessions/revoke',{sid},'POST').then(j=>{
+      t.busy=null;
+      if(j&&j.wasCurrent){ location.href='/backend/login'; return; }
+      t.list=(t.list||[]).filter(x=>x.id!==sid); render();
+    }).catch(e=>{ t.busy=null; if(String(e&&e.message)==='auth') return;
+      const m=String((e&&e.message)||'');
+      t.actErr=e&&e.refused?E(...e.words):m?E(x6En(m),x6Zh(m)):E('Couldn’t sign out device','无法登出设备'); render(); });
+  };
+  /* The device in hand ends the session this app runs on: the desktop asks. */
+  if(d.current){ state.askErr=null;
+    state.ask={title:T('Sign out of this device?','登出此设备？'), body:T('You’ll be returned to the login page.','您将返回登录页面。'),
+      confirmLabel:T('Sign out','登出'), danger:true, run:go};
+    render(); return; }
+  go();
+});
+function screenTeamDevices(){
+  const t=state.tmd; tmdLoadList();
+  if(t.err&&!t.list) return x1Err(escAttr(String(t.err)),'tmdRetry');
+  if(!t.list) return x1Loading();
+  const kind=k=>k==='phone'?T('Phone','手机'):k==='tablet'?T('Tablet','平板'):T('Desktop','桌面');
+  const icon=k=>k==='phone'?'smartphone':k==='tablet'?'tablet':'monitor';
+  const list=t.kind==='all'?t.list:t.list.filter(d=>tmdGroup(d.kind)===t.kind);
+  const rows=list.map(d=>{
+    const meta=[d.current?T('Active now','当前活动'):acctAgo(d.lastSeen), kind(d.kind)];
+    if(d.location||d.ip) meta.push(escAttr(d.location||d.ip));
+    if(d.createdAt&&d.lastSeen&&tmdWhenOf(d.createdAt)<new Date(tmdWhenOf(d.lastSeen).getTime()-86400000)){
+      const on=tdWhen(tmdWhenOf(d.createdAt),'date',_tdL()); meta.push(T('since '+on,on+'以来')); }
+    const who=d.ownerName?escAttr(d.ownerName)+(d.isYou?' '+T('(You)','(你)'):'')+' · ':'';
+    const b=t.busy===d.id;
+    return `<div style="display:flex;align-items:center;gap:14px;padding:13px 16px">
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic(icon(d.kind))}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;overflow-wrap:anywhere">${who}${escAttr(d.label||'')}${d.current?` <span style="font-size:12px;color:var(--text-secondary)">· ${T('This device','当前设备')}</span>`:''}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${meta.join(' · ')}</span></span>
+      <button class="btn2" style="min-height:36px;padding:0 12px;font-size:13.5px;flex:none" ${t.busy?'disabled':''}
+        onclick="APP.cmd('tmdOut','${escAttr(d.id)}')">${b?T('Signing out…','正在登出…'):d.current?T('Sign out of this device','登出此设备'):T('Sign out','登出')}</button></div>`;
+  });
+  return `<div style="padding:12px 0 2px">${chipRow([{key:'all',en:'All',zh:'全部'},{key:'desktop',en:'Desktop',zh:'桌面'},{key:'mobile',en:'Mobile',zh:'移动'}],t.kind,'tmdKind')}</div>
+  <div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    ${tmCaption(T('Every device your team is signed in on. Sign out anything that looks wrong.','团队所有已登录的设备。如发现异常，请将其登出。'))}
+    ${t.actErr?`<div style="font-size:13.5px;color:var(--brick-ink);padding:0 4px">${escAttr(String(t.actErr))}</div>`:''}
+    ${rows.length?tmList(rows)+tmCaption(list.length+' '+(list.length===1?T('device signed in','台设备已登录'):T('devices signed in','台设备已登录')))
+      :tmCaption(t.list.length?T('No devices match this filter.','没有符合筛选条件的设备。'):T('No devices signed in.','没有已登录的设备。'))}
+  </div>`;
+}
+/* The door, under the People list, where the desktop's card sits. */
+function tmdDoor(){
+  return canRoute('teamdevices')?tmList([tmRow({label:T('Team devices','团队设备'),
+    note:T('Every device your team is signed in on. Sign out anything that looks wrong.','团队所有已登录的设备。如发现异常，请将其登出。'),
+    cmd:"APP.cmd('push','teamdevices')"})]):'';
+}
+SUBS.teamdevices={title:['Team devices','团队设备'],backLabel:()=>T('Team','团队'),render:()=>screenTeamDevices()};
+/* §325 X6 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -33297,6 +33734,7 @@ function teamPeoplePane(){
             state.teamBusy===u.id?T('Saving…','保存中…'):(u.isActive?T('Can sign in','可登录'):T('Off','已停用'))}</span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
     }).join('')}</div>
+    ${tmdDoor()}
     ${can?'':tmCaption(T('Adding somebody, and changing what they reach, needs permission to manage the team.','添加成员及更改其权限需要管理团队的权限。'))}</div>`;
 }
 function teamRolesPane(){
@@ -35942,6 +36380,12 @@ const ROUTE_CAP={
      this one (configKeyCap). */
   shopdisplay:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   custservice:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  /* §325 X6. A store's editor: stores:edit, what lib/cap-routes.js asks of
+     every /stores write. Its stock staff: the server asks only for a session
+     (routes/backend-team.js), so the phone asks for the key that edits the
+     store or the one that manages people (X6 decision 2). Team devices:
+     team:manage, the key GET /sessions/team checks and the desktop card shows on. */
+  storeone:'stores:edit', storestaff:['stores:edit','team:manage'], teamdevices:'team:manage',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -37233,7 +37677,7 @@ function layers(){
   /* A recipe being edited puts its work on the wire on the way out (§300 R2) —
      the edge swipe cannot wait for an answer, the desktop's browser Back. */
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
-    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll();   // §325 X5: a pending card edit goes too
+    const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
     if(t&&t.route==='productcost'&&!pcMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
