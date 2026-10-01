@@ -25429,3 +25429,121 @@ desktop's conditions.
      copied pair exists on the desktop.
    - `test_mobile_orders_facts.js` loads the new helpers. A reader's card
      still has no control, and the O1 slice still adds no write.
+
+## §370 — EVERY PAGE'S SCRIPT IS COMPILED WHOLE IN THE FAST SHARD, AND NOTHING IS DECLARED TWICE
+
+**Built 2026-10-01 under §325** (test-only step T1).
+Every phone suite tests a slice of `public/m.html`. So if a merge left the whole
+script unable to run, every fast suite would still pass. The likely cause is a
+`const` and a `function` with the same name, arriving from two lanes. Only the
+slow, browser-driven `test_mobile_screens` would have caught it, and that suite
+is not run (standing rule). `scripts/test_phone_scripts_compile.js` (fast shard;
+22 checks) is that missing whole-file check. No CI, workflow or `package.json`
+change: the existing runner picks the suite up by its name.
+
+1. **Every inline script compiles.** The suite reads every `public/*.html` page,
+   the three phone pages (`m.html`, `cms-mobile.html`, `cms.html`) first and then
+   every other page, because checking them costs nothing.
+   - Each inline `<script>` is compiled with `vm.Script`, or parsed with `acorn`
+     as a module for `type="module"`. Scripts loaded with `src=` and non-JS types
+     are skipped.
+   - A failure names the file, the script's index and the error.
+   - All 18 pages compile today.
+2. **No top-level name is declared twice across one page's scripts.** Classic
+   scripts on a page share one global scope, so:
+   - a `let`, `const` or `class` that meets any other declaration of its name
+     throws when the page loads;
+   - two `function`s with one name silently keep only the later one, and the
+     earlier lane's code never runs.
+
+   Two `var`s with one name are legal and are not flagged. The names are read
+   from the parsed tree (acorn, already a dependency), so text inside comments
+   and template strings is never mistaken for a declaration.
+3. **No command is registered twice in m.html.** A second `reg('<name>', …)`
+   silently replaces the first. Only real top-level calls are counted, not
+   mentions in comments.
+4. **The three known duplicates in main, investigated:**
+   - **`function cfgMerge`, twice. Removed.** One copy was written for Delivery,
+     the other for the Settings cards. They do the same thing in two spellings
+     (`forEach` and a `for` loop). The later copy always won, so the earlier one
+     was never called. The kept copy is the one every caller already ran.
+     `scripts/test_mobile_delivery_settings.js` had been running the dead copy,
+     because it sat inside the delivery section that suite slices out. It now
+     slices the kept one.
+   - **`reg('openOrder')`, twice. Removed.** The earlier copy was a one-line
+     leftover from the mock-data days. The live registration further down
+     replaced it at load, before anyone could tap, so it never ran.
+     `scripts/test_mobile_orders_list.js` used that line as the end of a slice. It
+     now ends at the next command, `reg('closeOrder'`, so the slice holds the
+     same code.
+   - **`function kbMark`, twice. Pinned, not fixed, and reported.** These are two
+     different functions, from two lanes on 2026-09-27:
+     - The first records which field had the keyboard at touch-down. It is
+       registered on `pointerdown` and `mousedown` for `kbTapAway`.
+     - The second toggles the `html.kb-up` class.
+     - The second is later, so it wins. As a result `kbWas` is never set and the
+       tap-away keyboard close never fires. Every tap leaves the keyboard alone.
+       That is the safe direction, so nothing is broken for the operator, but a
+       built feature is dead.
+     - Renaming either would switch that phone behaviour back on, which is a
+       phone change, not a test step's. It is pinned in the suite's `ALLOWED` list
+       with that reason. The list can only shrink: a pinned entry that is no
+       longer duplicated fails the suite, so the pin is removed once the
+       duplicate is fixed.
+5. **The suite proves its own checks.** It confirms two things:
+   - a `const` and a `function` with one name fail to compile in one script;
+   - across two scripts of one page, they throw on load. This is why names are
+     checked page-wide and not per script.
+6. **Nothing composed.** No operator strings were added.
+
+## §371 — A PRODUCT'S SIZES ARE EDITED FROM THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Details screen for a product gained a **Variants** card. It does
+what the desktop editor's Variants table does. It lists every size of the
+family in the order shoppers see, each with its photo, its label in both
+languages, SKU and size, price and was-price, stock, and a per-size **Show**
+switch. From the card an operator can add a size, delete a size, move sizes
+up and down, change a size's labels and fields, give a size its own photo,
+and set the word the shop's picker uses ("size", "flavour"). Every write is
+the desktop's own request: `PUT /products/:id/variants {members, noun_en,
+noun_cn}`, `PATCH /products/:sid`, `POST /products/:id/duplicate
+{as_variant: true, label: ""}` and `DELETE /products/:sid`.
+
+1. **Each action is one save, made when it is taken.** The desktop gathers
+   labels, order and the other sizes' fields into the editor's Save. The
+   phone has no Save button to gather them into. So:
+   - labels, order and the picker word go at once, as the whole family in
+     one PUT, which is what the server checks against;
+   - another size's SKU, size, price and was-price go in one PATCH of that
+     size, carrying only the fields that moved;
+   - after every write the family and the catalogue are read again, so the
+     product sheet's size chips follow;
+   - while a write is out, the card's controls wait and the card says what
+     is running;
+   - a refusal stays on the card. A toast only confirms.
+2. **The size that is open on the screen is edited through the boxes above
+   the card.** Its SKU, size, price and was-price go into the Details fields
+   and save with them. The desktop does the same (`vaSelfField`). This keeps
+   one box per fact and avoids a second write that could disagree with the
+   first. Its photo is the Photos card. It cannot be deleted from this card.
+   Deleting the product itself is the single delete, which comes in PD14.
+3. **A hidden size stays hidden (§294).** The Show switch on the card is the
+   per-size tick box. It writes `is_published` for that one size and never
+   uses the family switch. A new size arrives hidden, as on the desktop, and
+   wears the Hidden label until someone turns it on. Its edit sheet opens
+   straight away, as the desktop puts the cursor in the new row's label.
+4. **The desktop's guards come with each write:**
+   - an emptied price is never sent;
+   - an emptied was-price is sent as 0, which means no strike-through;
+   - a SKU another product already holds is named in the desktop's words,
+     including which size it was typed on;
+   - deleting asks the desktop's question first;
+   - a photo over 25 MB is refused, and any other photo is shrunk with the
+     product preset before it is sent.
+5. **Gates are what the server checks.** `products:edit` covers the card,
+   order, labels, fields, Show and photos. `products:create` covers Add,
+   because a new size is a new product. `products:delete` covers Delete. The
+   card's text does not offer a tap that would be refused. A tenant whose
+   catalogue is kept upstream does not see the Details screen at all, as
+   before.
