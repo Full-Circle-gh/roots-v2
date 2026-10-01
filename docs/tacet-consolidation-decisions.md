@@ -25144,3 +25144,209 @@ permissions cannot be resolved.
    - that each phone test command runs behind a route whose permissions the
      server admits.
 8. **Nothing composed.** No operator strings were added.
+
+## §364 — LEGAL, FAQ, ABOUT AND THE MINI-APP COPY ARE WRITTEN ON THE PHONE, AND SAVE THEMSELVES
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone showed the Legal pages, the FAQ and the About page read-only, each
+saying it was "written on desktop", and had no screen at all for the mini
+app's short wording (the desktop's Snippets tab). All four are now edited on
+the phone as §279 cards: the desktop's own card names and payloads, on the one
+engine both surfaces load (`public/tacet-autosave.js`), so a version saved on
+either is a version on both and either can put it back.
+
+1. **One phone card for all four** (`cfgCard`, `public/m.html`): the page's
+   whole payload is read from the phone's own draft, held for the desktop's
+   reasons, sent after the pause as `PUT /config?history=<card>`, Undo goes back
+   to where the visit started (`note=undo`), and Version history lists the
+   card's versions and puts one back (`note=restore`). A refusal is said in the
+   card's foot and is never a toast. Leaving the app sends what is pending; the
+   reload guard waits for it. Card names: `legal`, `faq`, `about`,
+   `copy.snippets` — the desktop's.
+2. **Legal**: each document, in both languages, in a live sheet; every save
+   stamps today (the shop's day) on both pages' "updated" line, as the desktop
+   card does. The whole text now shows on the phone; the "clipped — the rest
+   is on desktop" line and note are retired.
+3. **FAQ**: the questions in the order customers see them, numbered; each
+   opens a live sheet (category, question and answer in both languages, id),
+   with Move up / Move down and Remove, which asks first when the question has
+   words. Categories (id, two labels, colour) are added, edited and removed;
+   removing one questions still use asks first and says how many. The
+   desktop's defaults, its ids made from the question (and kept, so later edits
+   do not mint another), and its holds, word for word. An account without the
+   content keys keeps the read-only grouped view.
+4. **About**: the desktop's sections — the top picture, manifesto, stat strip
+   (four at most), founder and photo, IN / OUT lists, sign-off — each section
+   in a live sheet, each list row in its own with Remove. The payload is the
+   desktop's: the loaded content first, so a key no control asks about
+   survives, then every field. The two pictures go to the editor's own upload
+   (`/cms/media`, as the desktop's About does), shrunk on the phone first; a
+   refusal is said on the screen.
+5. **Mini-app copy** gets a phone screen (More → Content → Mini-app copy, on
+   `content:view`, the desktop tab's key): the desktop's catalogue of
+   seventeen words in six groups, copied whole and held equal to the desktop's
+   by a test; each opens a sheet with its English and Chinese; the save sends
+   every word in the catalogue's order.
+6. **Who sees the controls**: the content keys (`content:view` or
+   `content:edit`), which is what opens these screens and what the server's
+   rule for the `legal`, `faq`, `about` and `copy` key families admits.
+   The server's write-gate suite now lists these four phone writes.
+7. **One control per field in the page editor**: the phone editor's Frame
+   swatches (§325 M1) are removed; the frame's colour is the Design sheet's.
+
+## §365 — THE MEDIA LIBRARY ON THE PHONE IS THE DESKTOP'S LIBRARY
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Media screen listed the newest thirty pictures and said "Folders,
+tags and alt text are on desktop". It now does what the desktop's Media tab
+does (`07-content-billing.js`), on the same endpoints, with the same words.
+
+1. **Finding a picture**: search by file name or alt text (sent when the
+   search is done, so the keyboard stays while typing), the folder filter (All
+   media, Unsorted, each folder, with counts) and the tag filter (with
+   counts), and pages of sixty with Load more — the desktop's page size.
+2. **"Used in"**: every tile carries the desktop's count from the same scan
+   (`/media/usage`), "× n" or "unused".
+3. **A picture's details** — file name, alt text, folder, tags — save
+   themselves on the desktop's own card (`PATCH /media/<id>?history=media.<id>`),
+   with Undo and Version history (restore filed as a restore). Tags are typed
+   comma-separated and made lower-case with hyphens, as the desktop makes them.
+   The sheet also shows the picture's size, where it is used and its address,
+   with Copy.
+4. **A selection**: Select turns taps into picking (a phone has no ctrl-click);
+   the picked pictures are moved to a folder (`bulk-move`), tagged — add and
+   remove in one go (`bulk-tag`) — or deleted (`bulk-delete`).
+5. **Deleting asks first and says where the pictures are used**, in the
+   desktop's words: a used picture "is referenced in n places", a selection
+   "n references will be broken".
+6. **Folders** are made, renamed and deleted (a deleted folder's pictures go to
+   Unsorted, which the confirm says).
+7. **Keys** are the server's: every `/media` write is `media:upload` except a
+   delete (a picture or a folder), which is `media:delete`; each control is
+   drawn only for its key. Without `media:upload` a picture's details are read
+   only; without either, there is no Select.
+8. A refused or failed write is said on the screen and stays; the toast only
+   confirms. The reload guard and the background flush know the open
+   picture's pending details.
+
+## §366 — A BROADCAST IS SENT AGAIN AND RECALLED FROM THE PHONE, AND EVERY REGION IS OFFERED
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone wrote broadcasts (§63) and cancelled scheduled ones, but did not do
+what the desktop's feed does with a past one (`05-marketing.js` bxFeedRow,
+bxSendAgain, recallBroadcast), offered only the first twelve regions, and
+called a recalled, cancelled or expired broadcast "Draft".
+
+1. **Send again** on every broadcast that is not waiting to go: its words in
+   both languages, its link and its audience become a new broadcast, opened at
+   the last look ("Ready to send?") with the audience counted again. Like the
+   desktop it always starts "now" with no end date — an old schedule, or an
+   end date from a window that has run out, would only have to be corrected.
+   The words keep their columns: the operator's language goes in the first
+   field, the other in the second, so nothing written in Chinese is re-filed
+   as English. A city in the old audience that no saved address is in any more
+   is dropped, as the desktop's composer drops it (it has no box to tick).
+2. **Recall** on a sent broadcast still showing: it removes the message from
+   every customer's inbox, so it asks first in the desktop's words, then calls
+   the same `…/recall`. A sent broadcast whose end date has passed says
+   "Ended" and offers no Recall, as on the desktop.
+3. **Every status in the desktop's words**: Sent, Scheduled, Draft, Recalled,
+   Cancelled, Expired, Ended. A scheduled send that went out between the list
+   being read and Cancel send being tapped is recalled by the same call, and
+   the row and the toast now say Recalled rather than Sent.
+4. **Every region** a customer has saved an address in is offered in the
+   composer's Regions step; it stopped at twelve.
+5. All on `broadcasts:send`, the key every `/broadcasts` write needs.
+
+## §367 — POLLS ARE WRITTEN ON THE PHONE, AND THE VOTING AND LEADERBOARD SETTINGS SAVE THEMSELVES THERE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Voting screen could open and close a poll, without asking, and
+nothing else: the question, the options, the rules and the page's own two
+settings were "written on desktop". The Leaderboard screen showed the board
+and said its metric, period, rewards and hidden members were "set on desktop".
+Both are now the desktop's (`10-extras.js`), on the same endpoints with the
+same bodies.
+
+1. **The poll editor is a screen of its own** (`polledit`), as the desktop's
+   is a page of its own (§1.7a): the question, the small label and the line
+   under it in the language picked at the top; up to eight options with their
+   colours, an option with votes never removed on its own; points, closing
+   date, featured, order, the winner once closed; the display floor with the
+   desktop's real → shown line. Save draft / Publish / Save changes send
+   `POST /polls` or `PUT /polls/:id` with every field `votCollect` sends;
+   Delete sends `DELETE /polls/:id`. It is NOT a §279 autosave card: a poll is
+   an authored object with a lifecycle (§154), and the desktop saves it only
+   on a button. So leaving with changes asks, in the desktop's words, through
+   the app's Back, the edge swipe and the reload guard alike.
+2. **Every confirm the desktop asks, the phone asks**: publish, reopen and
+   close (`votSetStatus`), clear every vote, delete. The list's status button
+   keeps its words (Open / Close / Reopen) but now confirms first; the confirm
+   then runs the same `PUT /polls/:id {status}`.
+3. **The holds are the desktop's**: a question in either language (a
+   Chinese-only question is sent as the English one too, because the server
+   keys polls off it), and at least two named options.
+4. **The voting page settings** — the line under "Your say" in both languages,
+   and whether customers see the counts — are a §279 card (`voting`) on
+   `PUT /voting/config?history=voting`, history from
+   `snapshot['voting.config']`. Like the desktop, it starts only once the
+   stored settings have arrived, so a failed read can never write blanks over
+   the real wording.
+5. **The leaderboard settings** are a §279 card (`leaderboard`) on
+   `PUT /leaderboard/config?history=leaderboard`, a full replace with every
+   field `lbReadForm` sends (top_n a number, hide_names a list), history from
+   `snapshot['leaderboard.config']`, the board underneath read again after each
+   save. The visibility switch saves like any other field, as on the desktop.
+   The placeholder generator is the desktop's: its name pools, its curve, 3–50
+   members, a top of at least ¥50; generating switches the placeholders on.
+6. **Route-owned cards.** The phone's config card (§325 M4) gains a `put` for
+   settings whose route is not `/config`, and a `fromSnapshot` for history
+   stored under one key. The four `/config` cards are unchanged and still
+   write through their one site.
+7. All on `voting:edit` and `leaderboard:edit`, the keys the server gates
+   these writes on and the two screens open on. The poll editor route opens on
+   `voting:edit`.
+
+## §368 — SOCIAL PROOF AND SHARE CARDS ARE SET ON THE PHONE, AND SAVE THEMSELVES
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+The phone's Social proof screen had the one on/off switch and said what counts
+as recent was "set on desktop"; Share cards showed which pages had a picture
+and said pictures and titles were "set on desktop". Both now carry the
+desktop's §279 cards, on the same endpoints with the same bodies.
+
+1. **Social proof** is the desktop tab's two cards on `PUT /config`:
+   `social_proof` (the five widgets — bought count, recent-buyers ticker with
+   its manual entries, viewing now, last ordered, the SOLD badge — as one
+   nested blob) and `checkout.upsell` (the pop-up before paying). The draft
+   holds what the desktop form holds (paintSocialProof's defaults; an old
+   single boost spread over both ends of its range) and the save is
+   buildSocialProof's: the same clamps, a range typed backwards swapped, a
+   manual entry with no name or no product left out. Each widget's switch
+   saves at once; its numbers are a sheet; a manual entry is a row with its
+   own sheet and Remove. The `features.socialProof` switch stays where it was.
+   All on `social:edit`, which the server gives both families.
+2. **Share cards** are the desktop's four cards (SC_CARDS), one per page:
+   `share.home`, `share.product`, `share.voting` on `PUT /config`
+   (`sharing.<key>`, `sharing.<key>Title`), and `share.invite` on
+   `PATCH /affiliate/settings`, sending `shareImage` and `shareTitle` only —
+   the same keys Affiliate shows. Each page opens on its own screen with both
+   titles (60 at most; the product card has none), the picture (replace,
+   remove) and the card's foot. A card starts only once its own source has
+   arrived: if Affiliate does not answer, the invite card says so and is
+   never started, because its empty box is not the truth.
+3. **The phone now writes `/affiliate/settings`, from the invite card only.**
+   The server already gives that write to `sharing:edit` for exactly this
+   card (cap-routes.js); the settings-write suite, which recorded "the phone
+   only reads them", now pins that one site and its two fields. The referrals
+   stay read-only on the phone.
+4. **A new picture is `POST /media/upload`**, the desktop's, which the server
+   gates `media:upload`. So Choose / Replace is drawn only for an account
+   holding it as well as `sharing:edit`; Remove needs only `sharing:edit`.
+   The same gap exists on the desktop (a Share-cards-only operator is refused
+   the upload there) — see *Open* below.
+5. **Not ported:** the desktop's live WeChat-forward preview of a card. The
+   phone shows the picture at its 5:4 shape and the title as typed.
+
+**Open (Ash's call):** should `sharing:edit` be allowed to upload a share-card
+picture without `media:upload`? Today neither surface lets it.

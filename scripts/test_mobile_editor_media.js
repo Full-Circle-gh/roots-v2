@@ -91,7 +91,7 @@ function mk(opts = {}) {
   let renders = 0;
   const pickers = [];
   const ctx = {
-    M: { lang: opts.lang || 'en', editId: 'b1', extra: opts.extra || null, frameColors: [], corners: [], targets: opts.targets === undefined ? TARGETS : opts.targets },
+    M: { lang: opts.lang || 'en', editId: 'b1', extra: opts.extra || null, corners: [], targets: opts.targets === undefined ? TARGETS : opts.targets },
     cuT: (en, cn) => (opts.lang === 'cn' ? cn : en),
     esc: (s) => (s == null ? '' : String(s)).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])),
     send: (cmd, x) => sent.push({ cmd, x }),
