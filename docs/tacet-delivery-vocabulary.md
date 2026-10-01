@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.275 · 2026-09-30 · §383 CUSTOMER CHOICES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *What the customer chooses, edited on the phone (§383)*.
+
 **v1.274 · 2026-09-30 · §382 BUNDLES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's two bundles, edited on the phone (§382)*.
 
 **v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
@@ -11979,3 +11981,54 @@ buRender / bpRender / bpPickerList):
 **Live candidate rejected:** `套装产品(作为一个产品出售)`. It is the desktop's
 longer header, shown only before a new product has saved. The section header
 the operator sees uses `套装产品`.
+
+## What the customer chooses, edited on the phone (§383)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+labels appear on the Options card of the phone's product Details screen and
+in its stock picker (`public/m.html`).
+
+**Copied whole from the desktop editor** (`public/retail-admin/09-products.js`
+optRender / _optChoiceRow / optPickerList):
+
+- **The card:**
+  - `Options (customer chooses) · 选项(顾客选择)`
+  - its sentence
+  - `None · tap to add a choice · 无 · 点击添加选项`
+  - `Could not load. Close and try again. · 加载失败，请关闭后重试。`
+  - `+ Add a pick (free) · + 添加选择(免费)`
+  - `+ Add paid extras · + 添加付费加项`
+- **A question:**
+  - `Question EN (e.g. Choose your dressing) · 问题(英文,如:选择酱料)`
+  - `Question 中文 · 问题(中文)`
+  - `How the customer answers · 顾客如何选择`
+  - `Pick one · 单选`
+  - `Pick any · 多选`
+  - `Type an answer (unsupported) · 填写(暂不支持)`
+  - `Required · 必选` and its title
+  - `Remove this option · 移除此选项`
+  - the pick-any sentence
+  - `+ Add choice · + 添加选项`
+  - `Add at least one choice. · 请至少添加一个选项。`
+- **Limits:**
+  - `Pick · 选` and the trailing `项`
+  - `0 in a box means no limit · 填 0 表示不限`
+  - both box titles
+- **A choice:**
+  - `Choice EN · 选项(英文)`
+  - `Choice 中文 · 选项(中文)`
+  - `Default pick · 默认选项`
+  - `Pre-selected · 默认勾选`
+  - `Extra charge for this choice (0 = free) · 此选项加价(0 = 免费)`
+- **Linked stock:**
+  - `+ Stock product · + 关联库存商品` and its title
+  - `Draws from this product’s stock · 占用该商品库存`
+  - `in stock · 库存`
+  - `Unlink · 取消关联`
+  - `Search a product to use for stock… · 搜索作为库存来源的商品…`
+
+The paid-extras seed `Add extras? · 加点配料?` is shop content the desktop
+writes as it stands, and is copied as it stands.
+
+**Phone live pairs reused:** `Move up · 上移`, `Move down · 下移`, `Remove · 移除`,
+`No matches · 无匹配`, `Close · 关闭`.
