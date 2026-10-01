@@ -12127,8 +12127,15 @@ async function ordNewCreate(ev) {
       ordNewSetBusy(btn, false, cuT('Create order', '创建订单'));
       // An unmapped code that names a product goes to the product block, as the
       // note above ONW_ERR_WHERE has always said it would; the rest to the top.
+      /* §325 S1d — "cannot create customers" is the HANDLER's refusal, which
+         names customers:edit in `need` (retail.js, the save-as-customer step).
+         A forbidden_capability from the choke point — no orders:edit — or any
+         other key is not about the customer box, and telling the operator to
+         clear it sends them to change something that fixes nothing. That one
+         gets the general sentence every other screen gives (TD_ERR). */
+      const notCust = code === 'forbidden_capability' && j.need !== 'customers:edit';
       ordNewShowError(ONW_ERR_WHERE[code] || (pid != null ? 'prod' : 'cust'),
-                      ordNewErrText(code, j.message, pid));
+                      notCust ? tdErrorText('forbidden_capability') : ordNewErrText(code, j.message, pid));
       return;
     }
     btn.textContent = cuT('Created', '已创建');
