@@ -68,6 +68,8 @@ const SRC = [
   slice(M, 'const CHAN_META={', 'function statusSales(){'),
   block(M, 'function screenSales(){'),
   '/*' + X12,
+  // §325 S2m — the Eleme close sentences the X12 confirms share.
+  '/*' + slice(M, '§325 S2m — WHAT CLOSING ELEME ACTUALLY DOES', '/* One store on one channel.'),
 ].join('\n');
 
 const SALES = ['dashboard:view'];
