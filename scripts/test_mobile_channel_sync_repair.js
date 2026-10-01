@@ -25,9 +25,10 @@
 //      lib/cap-routes.js to {channel}:sync. That file fails OPEN for a mutation it
 //      does not recognise, so a path that misses its regex is a write with no gate
 //      at all — which is the whole reason to pin the string rather than trust it.
-//   3. THE BUTTON IS GATED CLIENT-SIDE TOO, through mCan. Not decoration: this
-//      file's apiWrite sends a 403 to /backend/login exactly as it sends a 401, so
-//      an ungated button answers a missing permission by logging the operator out.
+//   3. THE BUTTON IS GATED CLIENT-SIDE TOO, through mCan. Not decoration: an
+//      ungated button is a dead end for somebody the server refuses. (It used to
+//      log them out — apiWrite sent a 403 to /backend/login like a 401 — until
+//      §325; the refusal is now said on the row, through csErrText.)
 //   4. THE DESKTOP IS NAMED ONLY WHERE A DESKTOP IS NEEDED — the three reasons
 //      that need the channel's own catalogue picker, and no others.
 //   5. THE SCREEN NO LONGER CALLS ITSELF READ-ONLY.
@@ -142,16 +143,19 @@ check('the switch’s path is NOT built by the phone — §124 keeps it on the d
   ok(PHONE.indexOf('csSetSync') === -1, 'the phone carries the desktop’s switch handler');
 });
 
-// ── 3 · The button carries its own capability, because 403 is a logout here ──
+// ── 3 · The button carries its own capability: a refused tap is a dead end ──
 section('The button is gated where it is drawn');
 
 check('Sync now is drawn through mCan(‘{channel}:sync’)', () => {
   ok(/mCan\(x\.ch\.key\+':sync'\)/.test(PHONE), 'no mCan gate on the push button');
 });
-check('the gate is the reason it matters: apiWrite sends 403 to the login page', () => {
+check('a refused push is said on the row, never a logout (§325)', () => {
   const w = fnBlock(PHONE, 'apiWrite', 'm.html');
-  ok(/r\.status===401\|\|r\.status===403/.test(w) && /backend\/login/.test(w),
-    'apiWrite no longer treats 403 as auth — re-read §124’s gate argument before relaxing the check above');
+  ok(/r\.status===401\)\{ location\.href='\/backend\/login'/.test(w) && !/status===403\)\{ location/.test(w),
+    'apiWrite sends something other than a 401 to the login page');
+  ok(/r\.status===403\) throw await apiRefusal\(r\)/.test(w), 'apiWrite no longer throws the refusal');
+  const t = fnBlock(PHONE, 'csErrText', 'm.html');
+  ok(/e&&e\.refused\) return T\(\.\.\.e\.words\)/.test(t), 'csErrText does not say the refusal');
 });
 check('the SCREEN’s gate is unchanged — any-of the three views, no write key', () => {
   ok(/channelsync:\['meituan:view','eleme:view','guanyi:view'\]/.test(PHONE),

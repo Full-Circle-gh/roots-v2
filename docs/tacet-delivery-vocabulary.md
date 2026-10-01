@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.235 · 2026-09-30 · §331 A REFUSAL ON THE PHONE — NOTHING COMPOSED, EVERY PAIR COPIED WHOLE.** See *A refusal on the phone, said in words (§331)*.
+
+**v1.234 · 2026-09-30 · §330 CHANGE HISTORY, WHAT WAS SENT, BROWSING NOW, TWO HOME ROWS AND ELEME ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, 1 SHARED WITH O1, THE REST COPIED WHOLE.** See *Records, presence, parked orders and Eleme on the phone (§330)*.
+
+**v1.233 · 2026-09-30 · §329 THE PHONE'S PRODUCTS, STOCK ACTIVITY AND WASTE LISTS — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *The stock lists' filters and exports on the phone (§329)*.
+
 **v1.232 · 2026-09-30 · §328 ORDER FACTS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *The order sheet's facts on the phone (§328)*.
 
 **v1.231 · 2026-09-30 · §327 THE PAGE EDITOR'S DOOR AND ITS BLOCK CHROME ON THE PHONE — NOTHING COMPOSED, EVERY STRING COPIED WHOLE.** See *The page editor from the phone (§327)*.
@@ -10369,3 +10375,100 @@ Copied whole from the desktop:
 
 The phone's own, already live: `Copy · 复制`, `Could not load this. · 无法加载。`,
 `Try again · 重试`, `Loading… · 加载中…`.
+
+## The stock lists' filters and exports on the phone (§329)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's Products catalogue, Stock activity and Waste screens
+(`public/m.html`). Every new label is copied whole from the desktop screen
+that does the same thing, or is a pair the phone already uses for the same
+control.
+
+From the desktop Products screen (`public/retail-admin.html`,
+`public/retail-admin/09-products.js`): `All subcategories · 全部子分类`,
+`All stores · 全部门店`, `Going nowhere · 无人问津`, `On promotion · 促销中`,
+`Export CSV · 导出`.
+
+From the desktop Stock activity toolbar (`public/retail-admin.html`): the
+search placeholder `SKU / name / order · 货号 / 名称 / 订单` and
+`Export CSV · 导出`.
+
+The phone's own live pairs, from Finance's and Trend's Custom sheet: `Custom ·
+自定义`, `From · 从`, `To · 至`, `Apply · 应用`, `Pick a date · 选日期`,
+`From is after to · 起始日期晚于结束日期`. The Custom window's two days are
+printed as dates (`fmtDateOnly`), with no label.
+
+Store names, category and subcategory names are the shop's own data, shown in
+the language they were entered in, with the tree's Chinese name where it has
+one.
+
+## Records, presence, parked orders and Eleme on the phone (§330)
+
+**Operator register (Rule 1), 2026-10-01.** The phone admin (`public/m.html`,
+the §325 X1 block). Copied whole from the desktop (`public/retail-admin/
+02-settings-ops.js`, `03-dashboard.js`, `14-eleme.js` and their markup in
+`public/retail-admin.html`) except the rows below.
+
+| String | Status |
+|---|---|
+| `View Eleme sync · 查看饿了么同步` | **composed by Claude (X1).** The button in Sales' Eleme sheet that opens the new screen, beside Meituan's `View orders from Meituan · 查看美团订单`. Built from that live pair's `查看`, the channel's live `饿了么`, and the live `同步` (`Channel sync · 渠道同步`). Rejected: `View orders from … · 查看…订单`, because Eleme's order import is not wired and the screen holds no orders; `View pickups · 查看提货记录`, gzgrocery's; the bare `Eleme · 饿了么`, because inside a sheet already titled Eleme a button reading only the channel's name says nothing about where it goes. |
+| `The point is placed on the desktop map. · 配送点请在电脑端地图上标记。` | **shared with O1**, not composed again. The Orders lane composed it (step O1) for the order sheet's parked-order surface; the parked-orders list here states the same fact and reuses the same pair so the two screens cannot word it two ways. If O1 has not landed when this does, this row is its declaration. |
+| `has no Eleme shop linked yet · 尚未关联饿了么店铺` | **copied, one character corrected.** The desktop writes this pair in `\u` escapes (`EL_BLOCK_TXT` in `14-eleme.js`) and its 饿 is `饶` — 饶 (ráo) — the misprint this document's Eleme entry already corrected once in that tab's plain-text strings. The phone prints the platform's real name. The desktop escape, and the same one in its `Not on Eleme` chip, are still wrong. |
+| `Nothing has been changed yet. · 暂无修改记录。` / `Every edit your team makes will appear here. · 团队的每次修改都会显示在这里。` and `Nothing has been sent yet. · 暂无发送记录。` / `Every push, email and text will appear here. · 每条推送、邮件与短信都会显示在这里。` | **split, not composed.** Each is one desktop sentence pair cut at its full stop, because the phone's empty state has a title and a line under it. Nothing added or dropped. |
+
+Copied whole from the desktop:
+
+- Change history: `Change history · 修改记录`, `Everyone · 全部人员`,
+  `Everything · 全部类型`, `When · 时间` (its column header, here the date
+  button and its sheet), `Export CSV · 导出`, `Clear filters · 清除筛选`,
+  `Nothing matches those filters. · 没有符合条件的记录。`, `Clear them · 清除筛选`,
+  `Showing N of M · 显示 N / M`, `Show more · 显示更多`, `(unknown) · (未知)`,
+  the seventeen action words (`Created · 新建` … `Exported · 导出`), and both
+  load failures (`Could not load the change history. · 无法加载修改记录。` and its
+  connection twin).
+- What was sent: `What was sent · 发送记录`, `Every way · 全部方式`,
+  `Everything · 全部内容`, the six ways (`Phone alert · 手机推送` …), the seven
+  kinds (`A customer paid · 顾客已付款` …), `Sent · 已发送`,
+  `N of M reached · M 台中 N 台已送达`, `N muted · N 已静音`,
+  `N device gone · N 设备失效`, `Did not arrive · 未送达`,
+  `Did not arrive (N) · 未送达(N)`, `your team · 团队`, and both load failures.
+- Browsing now: `browsing now · 人正在浏览`, `no one browsing right now · 暂无人浏览`.
+- Home: `Orders waiting for a delivery point · 待确认配送点`,
+  `Parcels to recover · 待收回包裹`, `more · 更多`; the parked list's
+  `No name on the order · 订单未留姓名`, `Store not recorded · 未记录门店`,
+  `Tomorrow · D · 明天 · D`, `parked Nm/h/d · 已挂起 N 分钟/小时/天`, `Parked · 已挂起`,
+  `and N more waiting for a delivery point · 另有 N 单待确认配送点`.
+- Eleme: `Stock updates waiting · 待推送库存`, `Channel on · 渠道开启`,
+  `Channel off · 渠道已关闭`, `is signed out · 已退出登录`,
+  `is not syncing · 同步已停`, `N stock updates waiting · N 条库存待推送`,
+  `Up to date · 已是最新`, `N listings read · 已读取 N 个商品`, the four ages
+  (`just now · 刚刚`, `N min ago · N 分钟前`, `N h ago · N 小时前`, `N d ago · N 天前`),
+  `no catalogue read yet, so nothing can be matched here · 尚未读取商品目录，无法匹配`,
+  `Stock pushes · 库存推送`, `Sync events · 系统事件`, `Nothing yet · 暂无记录`,
+  `No matches · 无匹配`.
+
+The phone's own, already live: `Loading… · 加载中…`, `Try again · 重试`,
+`Search · 搜索`, `From · 从`, `To · 至`, `Apply · 应用`,
+`From is after to · 起始日期晚于结束日期`, `Stores · 门店`, `Stock · 库存`,
+`Could not load this. · 无法加载。`, `Eleme · 饿了么`,
+`This order could not be opened. Close and try again. · 无法打开该订单，请关闭后重试。`,
+and `The channel did not answer. Nothing is wrong with your orders — try again in
+a moment. · 渠道没有响应。订单数据没有问题 — 请稍后重试。` (the Meituan and gzgrocery
+screens' failure, reused for Eleme's).
+
+## A refusal on the phone, said in words (§331)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone admin
+(`public/m.html`), wherever a request comes back 403. The three coded refusals are
+the desktop's own pairs from `01-core.js` TD_ERR, copied whole, so both surfaces
+answer the same refusal with the same sentence:
+`Your role does not include this action. An owner can grant it on the Team page. ·
+你的角色不包含此操作。可由负责人在团队页授权。` (`forbidden_capability`),
+`You can only do that in a location you are assigned to. · 只能在你被分配的门店执行该操作。`
+(`forbidden_store`) and `You are not assigned to that location. · 你未被分配到该门店。`
+(`store_not_assigned`). A 403 that carries nothing readable gets
+`lib/require-cap.js`'s own `You don’t have permission for this · 你没有此操作的权限`.
+A 403 that carries its own bilingual sentence (the backend team and role routes)
+is shown as the server wrote it, one half per language. The new-order form's
+`forbidden_capability` sentence (*Your account cannot create customers…*) is
+unchanged and now shown only for the refusal it names (`need: customers:edit`).
