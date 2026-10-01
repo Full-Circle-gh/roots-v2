@@ -28,6 +28,7 @@ const router = express.Router();
 const { requireRetailAdmin } = require('./retail');
 const { tdb } = require('../lib/tenant-db');
 const { credsStatus } = require('../lib/tenant-creds');
+const capRoutes = require('../lib/cap-routes');
 
 function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
 
@@ -158,6 +159,16 @@ router.post('/api/retail-admin/setup', requireRetailAdmin, express.json(), (req,
     const db = tdb();
     const cur = readFlags(db);
     const body = req.body || {};
+    /* §325 — every flag but the first-login welcome is a step of the guide,
+       and takes the guide's keys (lib/cap-routes.js setupFlagCap). Checked
+       before anything is written. */
+    for (const k of ['welcomeSeen', 'pickupConfirmed', 'storeOpened', 'storeInfoDone']) {
+      if (!(k in body)) continue;
+      const need = capRoutes.setupFlagCap(k);
+      if (capRoutes.capDenied(req, need)) {
+        return res.status(403).json({ error: 'forbidden_capability', need, flag: k });
+      }
+    }
     const next = { ...cur };
     for (const k of ['welcomeSeen', 'pickupConfirmed', 'storeOpened', 'storeInfoDone']) {
       if (k in body) next[k] = body[k] === true;
