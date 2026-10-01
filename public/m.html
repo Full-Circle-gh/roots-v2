@@ -767,6 +767,13 @@ function TB(en){ return en; }
    resolved by its renderer. The sweep renders every screen a third time, in
    Chinese, and fails on any English half of a bilingual pair that survives. */
 function E(en, zh){ return {toString(){ return T(en, zh); }}; }
+/* §325 — a whole-structure save refused because somebody else changed it
+   first (stale_tree, stale_config). The screen has already reloaded what is
+   there now, so the sentence says that and asks for the change again. Composed
+   from the desktop's live refusal for the same situation (01-core.js
+   row_moved) — see the vocabulary entry. */
+const staleSaveText=()=>E('Somebody else changed this while you had it open. It has been reloaded — try again.',
+  '该记录已被他人修改,现已刷新,请重试。');
 
 /* ---- status pill palette (from the mockup's PILL map) ---- */
 const DELIV_TONE={brick:'var(--brick-ink)',amber:'var(--amber-ink)',plain:'var(--text-secondary)'};
@@ -1050,6 +1057,7 @@ const state = {
   // act-from / act-to / act-search). `actQ` is what the box holds; Enter reads it.
   actFrom:null, actTo:null, actQ:'',
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
+  catsVersion:null,   // §325 the tree's version as loaded; a save sends it back
   catBannerBusy:false, catBannerErr:null, catShelf:null,   // §298 the open category's banner editor
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
   alipay:null, alipayTried:false, puBusy:null, puErr:null,
@@ -3957,14 +3965,29 @@ reg('togglePopup', id=>{
   const next=!p.enabled;
   state.puBusy=p.id; state.puErr=null; render();
   const out=list.map(x=>String(x.id)===String(id)?Object.assign({},x,{enabled:next,updated_at:Date.now()}):x);
-  apiWrite('/config',{'popups.list':out},'PUT').then(()=>{
-    state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list:out})});
+  /* §325 — the whole list goes up, so it says which version of the list it
+     was built from. If a pop-up was added or edited elsewhere since, the
+     server refuses (stale_config) and hands back the list as it is now: the
+     screen shows that list and says why nothing was saved. */
+  const ver=((state.cfg||{})._versions||{})['popups.list'];
+  const cfgPath='/config'+(ver?'?expect='+encodeURIComponent('popups.list:'+ver):'');
+  apiWrite(cfgPath,{'popups.list':out},'PUT').then(j=>{
+    const nv=j&&j.data&&j.data._versions;
+    state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list:out})},
+      nv?{_versions:Object.assign({},(state.cfg||{})._versions||{},nv)}:{});
     state.puBusy=null; render();
     showToast(next?T('Pop-up is on','弹窗已启用'):T('Pop-up is off','弹窗已停用'));
   }).catch(e=>{
     state.puBusy=null;
     if(String(e.message)==='auth') return;
-    state.puErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    if(e.code==='stale_config'&&e.body){
+      const cur=Array.isArray(e.body.value)?e.body.value:[];
+      state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list:cur}),
+        _versions:Object.assign({},(state.cfg||{})._versions||{},{'popups.list':e.body.version})});
+      state.puErr=staleSaveText();
+    } else {
+      state.puErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    }
     render();
   });
 });
@@ -8122,9 +8145,14 @@ function screenLeaderboard(){
 function loadCategories(){
   if(state.catsTried) return;
   state.catsTried=true;
-  Promise.all([api('/category-tree'),apiRaw('/category-counts').catch(()=>({counts:{}}))])
-    .then(([tree,cn])=>{
+  /* apiRaw, not api: the tree's `version` rides beside `data`, and api() keeps
+     only `data`. The version goes back with the banner save (§325) so a save
+     from a copy somebody has since changed is refused instead of undoing it. */
+  Promise.all([apiRaw('/category-tree'),apiRaw('/category-counts').catch(()=>({counts:{}}))])
+    .then(([tj,cn])=>{
+      const tree=tj&&tj.data!==undefined?tj.data:tj;
       state.cats=Array.isArray(tree)?tree:[];
+      state.catsVersion=(tj&&tj.version)||null;
       state.catCounts=(cn&&cn.counts)||{};
       state.catsErr=null; render();
     }).catch(e=>{
@@ -8245,15 +8273,23 @@ function catBannerCard(top){
 }
 // Save the whole tree (the banner lives on its node). On failure the screen
 // reloads the tree so it never shows a banner the server did not keep.
+/* §325 — the save carries the version the tree was loaded at. If somebody
+   else has changed the tree since (the desktop's category editor, say), the
+   server refuses with stale_tree rather than putting this old copy back, and
+   the screen reloads the tree and says so where the banner is. */
 async function catSaveTree(){
   try{
-    const j=await apiWrite('/category-tree',{tree:state.cats},'PUT');
+    const body={tree:state.cats};
+    if(state.catsVersion) body.version=state.catsVersion;
+    const j=await apiWrite('/category-tree',body,'PUT');
     if(j&&Array.isArray(j.data)) state.cats=j.data;
+    if(j&&j.version) state.catsVersion=j.version;
     state.catBannerErr=null; showToast(T('Saved','已保存'));
   }catch(e){
     if(String(e.message)==='auth') return;
-    state.catBannerErr=T('Save failed','保存失败')+(e.message?': '+e.message:'');
-    state.catsTried=false; state.cats=null; loadCategories();
+    state.catBannerErr=e.code==='stale_tree' ? staleSaveText()
+      : T('Save failed','保存失败')+(e.message?': '+e.message:'');
+    state.catsTried=false; state.cats=null; state.catsVersion=null; loadCategories();
     render();
   }
 }
