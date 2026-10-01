@@ -917,7 +917,7 @@ const state = {
      and its Version history list (GET /products/:id/versions), each keyed by
      the size it was read for. */
   prodSales:{pid:null,days:'30',data:null,err:null,seq:0},
-  prodVer:{pid:null,open:false,rows:null,err:null,seq:0},
+  prodVer:{pid:null,open:false,rows:null,err:null,seq:0,busy:null,restoreErr:null},
   /* §325 PD5 — the Details screen: the product's row as read, the draft the
      screen shows, the payload last saved (`base`), whether a Product details
      box has been touched, and whether the cost is loaded and the operator's. */
@@ -28897,16 +28897,22 @@ function sheetVersions(){
         <span style="font-size:14px;color:var(--brick-ink)">${v.err}</span></div>`
     : !v.rows ? `<div style="padding:28px 20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
     : !v.rows.length ? `<div style="padding:20px;font-size:14px;color:var(--text-secondary);line-height:1.55">${T('No earlier versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')}</div>`
-    : v.rows.map((r,i)=>`${i?'<div class="sep" style="margin:0 20px"></div>':''}<div style="display:flex;flex-direction:column;gap:3px;padding:12px 20px">
+    : v.rows.map((r,i)=>`${i?'<div class="sep" style="margin:0 20px"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:12px 20px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
         <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="num" style="font-size:15px">${escAttr(pvWhen(r.created_at))}</span>
           ${r.is_baseline?tag(T('Original','原始版本'),'var(--text-secondary)'):(i===0?tag(T('Current','当前'),'var(--sage-ink)'):'')}</span>
-        ${r.edited_by?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('by ','操作人:')}${escAttr(r.edited_by)}</span>`:''}</div>`).join('');
+        ${r.edited_by?`<span style="font-size:12.5px;color:var(--text-secondary)">${T('by ','操作人:')}${escAttr(r.edited_by)}</span>`:''}</span>
+        ${/* §325 PD7 — Restore, the desktop's row button: never on the newest
+             (it is what the product already is), and only for products:edit. */
+          pvCanRestore()&&i>0?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" ${v.busy?'disabled':''} onclick="APP.cmd('pvRestore',${Number(r.id)})">${v.busy===r.id?T('Restoring…','还原中…'):T('Restore','还原')}</button>`:''}</div>`).join('');
   return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('pvClose')"></div>
    <div class="sheet" style="top:120px;z-index:48;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:center;gap:8px">
          <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('pvClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
-         <span style="flex:1;font-size:17px;font-weight:500">${T('Version history','历史版本')}</span><span style="width:36px;flex:none"></span></div></div>
+         <span style="flex:1;font-size:17px;font-weight:500">${T('Version history','历史版本')}</span><span style="width:36px;flex:none"></span></div>
+       ${pvCanRestore()?`<div style="padding:6px 4px 0;font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Roll this product back to any saved version. Stock counts are never changed.','将此产品还原到任意已保存的版本。库存数量不会被更改。')}</div>`:''}
+       ${v.restoreErr?`<div style="margin-top:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(v.restoreErr)}</div>`:''}</div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div></div>`;
 }
 reg('psDays', k=>{
@@ -28917,8 +28923,85 @@ reg('psDays', k=>{
   if(s.pid!=null) loadProdSales(s.pid,true);
   render();
 });
-reg('pvOpen', id=>{ state.prodVer.open=true; loadProdVersions(Number(id)); render(); });
-reg('pvClose', ()=>{ const v=state.prodVer; v.open=false; v.seq++; render(); });
+reg('pvOpen', id=>{ const v=state.prodVer; v.open=true; v.busy=null; v.restoreErr=null; loadProdVersions(Number(id)); render(); });
+reg('pvClose', ()=>{ const v=state.prodVer; if(v.busy) return; v.open=false; v.seq++; render(); });
+/* §325 PD7 — RESTORE (desktop pdRestoreVersion). products:edit, the key the
+   server's cap-routes maps POST /products/:id/restore-version to. The
+   desktop's confirm, word for word, then POST {version_id}. The server keeps
+   the current state as a version first, so a restore is itself undoable, and
+   stock is never touched.
+
+   ANYTHING STILL WAITING ON THE DETAILS SCREEN GOES FIRST. A pending autosave
+   that landed after the restore would put the edit back over the version just
+   chosen; flushing it before means the restore is the last word. After it,
+   the Details screen (if open on this product) reads the product again, and
+   the catalogue is re-read so the list and the sheet say what is there now. */
+function pvCanRestore(){ return prodCanEdit(); }
+reg('pvRestore', vid=>{
+  const v=state.prodVer, pid=v.pid;
+  if(!v.open||v.busy||pid==null||!pvCanRestore()) return;
+  const versionId=Number(vid);
+  if(!(v.rows||[]).some((r,i)=>i>0&&Number(r.id)===versionId)) return;
+  state.ask={title:T('Restore this version?','还原此版本?'),
+    body:T('The product’s current content (name, price, description, photos, category…) is replaced with this version. A new version is kept first, so you can undo. Stock is not changed.',
+           '产品当前内容(名称、价格、描述、图片、分类…)将被此版本替换。会先保留一个新版本以便撤销。库存不会更改。'),
+    confirmLabel:T('Restore','还原'), danger:true,
+    run:()=>{
+      v.busy=versionId; v.restoreErr=null; render();
+      const pending=(peAuto&&state.pe&&Number(state.pe.pid)===Number(pid))?Promise.resolve(peAuto.flush()):Promise.resolve();
+      pending.catch(()=>{}).then(()=>apiWrite('/products/'+pid+'/restore-version',{version_id:versionId},'POST')).then(()=>{
+        v.busy=null; v.open=false; v.seq++;
+        showToast(T('Restored to the chosen version.','已还原到所选版本。'));
+        if(state.pe&&Number(state.pe.pid)===Number(pid)){ if(peAuto){ if(peAuto.stop) peAuto.stop(); peAuto=null; } loadPe(pid); }
+        try{ loadCatalogue(true); }catch(e){}
+        render();
+      }).catch(e=>{
+        v.busy=null;
+        if(String(e&&e.message)==='auth') return;
+        v.restoreErr=T('Restore failed: ','还原失败:')+(e&&e.refused?T(...e.words):String((e&&e.message)||''));
+        render();
+      });
+    }};
+  render();
+});
+/* §325 PD7 — DUPLICATE (desktop pdDoDuplicate, as_variant false — the only
+   form the desktop's two Duplicate buttons send). products:create, the key the
+   server's cap-routes gives a duplicate (it is a create); an upstream
+   catalogue cannot create (catalog_locked), so it is not offered there. No
+   confirm, as on the desktop: nothing existing changes. The copy is opened
+   for tweaking — its Details for an editor, its sheet otherwise — with the
+   desktop's reminder, because a copy carries a blank SKU and the original's
+   price and size. */
+function prodCanDuplicate(){ return mCan('products:create')&&state.catalogMode!=='upstream'; }
+function dupRow(p){
+  if(!p||p._id==null||!prodCanDuplicate()) return '';
+  const busy=state.prodBusy==='dup'+p._id;
+  return `<div class="card" style="padding:0">
+    <button class="row" ${state.prodBusy?'disabled':''} onclick="APP.cmd('prodDuplicate',${Number(p._id)})">
+      <span class="rowico">${ic('copy',18)}</span>
+      <span style="flex:1;min-width:0;font-size:15px">${busy?T('Duplicating…','复制中…'):T('Duplicate','复制')}</span></button></div>`;
+}
+reg('prodDuplicate', id=>{
+  const pid=Number(id);
+  if(!prodCanDuplicate()||state.prodBusy||!(pid>0)) return;
+  state.prodBusy='dup'+pid; state.prodErr=null; render();
+  apiWrite('/products/'+pid+'/duplicate',{as_variant:false,label:null},'POST').then(j=>{
+    state.prodBusy=false;
+    const row=j&&j.data;
+    if(!row||row.id==null) throw new Error('duplicate_failed');
+    const copy=mapProduct(row);
+    DB.products=[copy].concat(DB.products||[]);
+    showToast(T('Duplicated — set the new SKU / price / size, then publish.','已复制 — 请设置新货号 / 价格 / 规格后再上架。'));
+    if(prodCanEdit()&&state.catalogMode!=='upstream'&&canRoute('productedit')) CMD.peOpen(copy._id);
+    else CMD.openProduct(copy.sku);
+    try{ loadCatalogue(true); }catch(e){}
+  }).catch(e=>{
+    state.prodBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    state.prodErr=T('Duplicate failed: ','复制失败:')+(e&&e.refused?T(...e.words):String((e&&e.message)||''));
+    render();
+  });
+});
 /* ==========================================================================
    §325 PD5 — A PRODUCT'S CORE FIELDS AND ITS DESCRIPTION, EDITED ON THE PHONE
    (desktop: 09-products.js pdOpen / pdCollectBody / pdSaveCore / pdAutoSaveNow)
@@ -29541,6 +29624,7 @@ function sheetProduct(){
        ${peEntryRow(p)}
        ${salesCard(p)}
        ${versionsRow(p)}
+       ${dupRow(p)}
      </div>
      ${(prodCanEdit()||prodCanStock())?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div>`:''}</div>`;
