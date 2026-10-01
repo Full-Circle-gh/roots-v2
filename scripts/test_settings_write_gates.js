@@ -198,6 +198,20 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['features.feedback', list(route('inbox')), 'phone Inbox "Enable"'],
       ['features.socialProof', list(route('social')), 'phone Social proof switch'],
       ['features.faq', list(tab('faq')), 'desktop FAQ switch'],
+      // §325 O4 — the phone's Delivery screen writes the Delivery panel's cards.
+      ['delivery.holidayMessage', list(route('delivery')), 'phone Delivery — Holiday mode on, and its message'],
+      ['delivery.sameDayCutoffMinutes', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
+      ['delivery.sameDayCutoffMessage', list(route('delivery')), 'phone Delivery — Same-day cutoff'],
+      ['delivery.kitchenAddress', list(route('delivery')), 'phone Delivery — Kitchen address'],
+      ['delivery.bulkTracking', list(route('delivery')), 'phone Delivery — Bulk attach tracking'],
+      ['delivery.boxLabel', list(route('delivery')), 'phone Delivery — Box label'],
+      ['delivery.defaultZone', list(route('delivery')), 'phone Delivery — Everywhere else'],
+      ['fees.freeShippingThreshold', list(route('delivery')), 'phone Delivery — Fees & minimum'],
+      ['fees.minOrder', list(route('delivery')), 'phone Delivery — Fees & minimum'],
+      ['fees.pickupPackingFee', list(route('delivery')), 'phone Delivery — Fees & minimum'],
+      ['pickup.window', list(route('delivery')), 'phone Delivery — Store pickup'],
+      ['pickup.leadMinutes', list(route('delivery')), 'phone Delivery — Store pickup'],
+      ['notice.preorder', list(route('delivery')), 'phone Delivery — Pre-orders'],
     ];
     for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
@@ -341,6 +355,20 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const historyFam = (M.match(/const body=\{'([a-zA-Z.]+)'[^}]*\};[\s\S]{0,300}?apiWrite\('\/config\?history=/g) || []).map((s) => s.match(/const body=\{'([a-zA-Z.]+)'/)[1]);
       is([...inlineFam, ...historyFam].sort(),
         ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'], 'the phone writes four families, each asserted in section 2');
+      /* §325 O4 — the phone's Delivery settings write through one helper
+         (dlvCfgPut), so their keys are read from where they are named: the
+         live cards' `keys`, the two switches' `key`, and the three sheets'
+         bodies. Every one is in the list asserted in section 2, and every one
+         passes for the key that opens the phone's Delivery screen. */
+      const dlvBlock = M.slice(M.indexOf('const DLV_LIVE={'), M.indexOf("reg('faqToggle',"));
+      const dlvKeys = new Set();
+      for (const m of dlvBlock.matchAll(/keys:\[([^\]]*)\]/g)) for (const k of m[1].match(/'([^']+)'/g) || []) dlvKeys.add(k.slice(1, -1));
+      for (const m of dlvBlock.matchAll(/\bkey:'([a-zA-Z.]+)'/g)) dlvKeys.add(m[1]);
+      for (const m of dlvBlock.matchAll(/const body=\{('[^]*?)\};/g)) for (const k of m[1].match(/'((?:delivery|fees|pickup|notice)\.[a-zA-Z]+)'/g) || []) dlvKeys.add(k.slice(1, -1));
+      is([...dlvKeys].sort(), ['delivery.boxLabel', 'delivery.bulkTracking', 'delivery.defaultZone', 'delivery.holidayMessage', 'delivery.holidayMode',
+        'delivery.kitchenAddress', 'delivery.sameDayCutoffMessage', 'delivery.sameDayCutoffMinutes', 'fees.freeShippingThreshold', 'fees.minOrder',
+        'fees.pickupPackingFee', 'notice.preorder', 'pickup.leadMinutes', 'pickup.window'], 'the phone\'s Delivery settings write these fourteen keys (§325 O4)');
+      for (const k of dlvKeys) ok(list(route('delivery')).every((c) => has(configKeyCap(k), c)), 'phone Delivery may write ' + k);
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
