@@ -1831,7 +1831,13 @@ function kbEnterDown(e){
    with Enter) closes nothing, which is the safe direction: this rule only ever
    takes a keyboard away. */
 let kbWas=null;
-function kbMark(){ kbWas=kbField(document.activeElement); }
+/* NAMED kbTouchDown, NOT kbMark (§325 K1). It was kbMark, and so was the
+   html.kb-up toggle further down, from another lane the same day; two function
+   declarations with one name keep only the later, so pointerdown ran the
+   toggle, kbWas was never set, and kbTapAway always returned early — a tap
+   away from a field never closed the keyboard. The guard in
+   scripts/test_phone_scripts_compile.js now refuses a second declaration. */
+function kbTouchDown(){ kbWas=kbField(document.activeElement); }
 function kbTapAway(e){
   const was=kbWas; kbWas=null;
   const on=kbField(document.activeElement);
@@ -1848,8 +1854,8 @@ document.addEventListener('keydown', kbEnterDown);
    touch-down seen — and both spellings, because pointerdown is absent on older
    webviews and mousedown follows a tap on every one of them. Both fire BEFORE
    the browser moves focus, so what they read is the state before the tap. */
-document.addEventListener('pointerdown', kbMark, true);
-document.addEventListener('mousedown', kbMark, true);
+document.addEventListener('pointerdown', kbTouchDown, true);
+document.addEventListener('mousedown', kbTouchDown, true);
 document.addEventListener('click', kbTapAway);
 
 /* ── THE KEYBOARD THAT OPENS BY ITSELF ─────────────────────────────────────
