@@ -80,6 +80,7 @@ const CARDS = () => [
   { kind: 'eleme', category: 'channel', labelEn: 'Eleme', labelCn: '饿了么', status: 'error', health: { last_error: 'signed out' },
     config: { todos: [{ id: 't1', store_code: 'yx', store_name: 'Yuexiu' }] } },
   { kind: 'wechat_miniapp', category: 'first_party', labelEn: 'WeChat mini program', labelCn: '微信小程序', status: 'connected', blurbEn: 'Your shop in WeChat.', blurbCn: '微信里的店铺。' },
+  { kind: 'web', category: 'first_party', labelEn: 'Web store', labelCn: '网店', status: 'not_configured', blurbEn: 'Your own site.', blurbCn: '自己的网站。' },
   { kind: 'jd', category: 'logistics', labelEn: 'JD Logistics', labelCn: '京东物流', status: 'configured', blurbEn: 'Waybills.', blurbCn: '运单。' },
   { kind: 'qingyun', category: 'logistics', labelEn: 'Qingyun', labelCn: '青云', status: 'in_setup', config: { box: { status: 'shipped', shipped_at: '2026-09-28 10:00:00', tracking: 'SF123' } } },
 ];
@@ -151,7 +152,7 @@ section('2 · the hub');
     const h = await hubOpen();
     const t = h.text(h.sc('chhub'));
     for (const w of ['Meituan Not set up', 'Delivery orders from Meituan.', 'Set up', 'Eleme Needs attention', 'signed out',
-      '⚑ New location Yuexiu — link it here', 'Fix', 'WeChat mini program Connected', 'Set up on desktop for now',
+      '⚑ New location Yuexiu — link it here', 'Fix', 'WeChat mini program Connected', 'Web store Not set up', 'Set up on desktop for now',
       'JD Logistics Ready to set up', 'Qingyun In setup', 'Get help']) assert.ok(t.includes(w), w);
     const STATUS = slice(IG, 'const STATUS = {', '};');
     for (const [en, zh] of [['Connected', '已连接'], ['Ready to set up', '待设置'], ['Needs attention', '需处理'], ['Not set up', '未配置'], ['In setup', '设置中']]) {
@@ -162,6 +163,8 @@ section('2 · the hub');
     const h = await hubOpen();
     const html = h.sc('chhub');
     assert.ok(html.includes(`APP.cmd('hubBoxOpen','meituan')`) && html.includes(`APP.cmd('hubElemeOpen')`) && html.includes(`APP.cmd('push','jdcfg')`) && html.includes(`APP.cmd('hubBoxOpen','qingyun')`));
+    assert.ok(html.includes(`APP.cmd('wxmOpen')`), 'the mini program opens its own pages (X9b)');
+    assert.strictEqual(h.text(html).split('Set up on desktop for now').length - 1, 1, 'only the web store still says desktop');
   });
   it('a to-do is dismissed with its id, and the hub is read again', async () => {
     const h = await hubOpen();
