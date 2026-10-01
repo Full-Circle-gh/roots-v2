@@ -198,6 +198,13 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       ['features.feedback', list(route('inbox')), 'phone Inbox "Enable"'],
       ['features.socialProof', list(route('social')), 'phone Social proof switch'],
       ['features.faq', list(tab('faq')), 'desktop FAQ switch'],
+      // §325 M4 — the phone's content cards (m.html cfgCard), each on its screen's key.
+      ['legal.terms.body_en', list(route('legal')), 'phone Legal (card legal)'],
+      ['legal.privacy.updated_at', list(route('legal')), 'phone Legal (card legal)'],
+      ['faq.questions', list(route('faq')), 'phone FAQ (card faq)'],
+      ['faq.categories', list(route('faq')), 'phone FAQ (card faq)'],
+      ['about.content', list(route('about')), 'phone About (card about)'],
+      ['copy.cart.title', list(route('snippets')), 'phone Mini-app copy (card copy.snippets)'],
     ];
     for (const f of ['membership', 'affiliate', 'reviews', 'feedback', 'socialProof', 'faq']) {
       rows.push(['features.' + f, phoneSettings, 'phone Settings → Features']);
@@ -341,6 +348,11 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       const historyFam = (M.match(/const body=\{'([a-zA-Z.]+)'[^}]*\};[\s\S]{0,300}?apiWrite\('\/config\?history=/g) || []).map((s) => s.match(/const body=\{'([a-zA-Z.]+)'/)[1]);
       is([...inlineFam, ...historyFam].sort(),
         ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'], 'the phone writes four families, each asserted in section 2');
+      // §325 M4 — and its content cards, which write PUT /config?history=<card>
+      // from cfgCard: each card's family is asserted in section 2.
+      const cards = (M.match(/cfgCard\('([a-z.]+)',\{/g) || []).map((x) => x.match(/cfgCard\('([a-z.]+)'/)[1]).sort();
+      is(cards, ['about', 'copy.snippets', 'faq', 'legal'], 'the phone\'s content cards: about, copy, faq, legal');
+      ok(/apiWrite\('\/config\?history='\+encodeURIComponent\(c\.card\)/.test(M), '…all through the one cfgCard write');
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
