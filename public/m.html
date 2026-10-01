@@ -1064,7 +1064,7 @@ const state = {
      ('toggle' | 'save' | 'del<id>'), a refusal above the rules, and the rule's
      sheet with its own refusal. */
   sku:{data:null,err:null,tried:false,seq:0,busy:null,actErr:null,draft:null,saveErr:null},
-  cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
+  cfg:null, setup:null, suBusy:null, suErr:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
   /* One per list that has no other way to tell "nothing yet" from "not
@@ -1692,6 +1692,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* §325 X5 — each card is read fresh on entry: the desktop may have saved it. */
   if(route==='shopdisplay'||route==='custservice'){ const c=state.cfgc, k=route==='shopdisplay'?'shop':'cs';
     c.tried[k]=false; c[k]=null; c.err[k]=null; if(k==='cs'){ c.qrErr=null; c.qrBusy=false; } }
+  if(route==='setup'){ state.suErr=null; }   // §325 X11 — a refusal belongs to the visit it happened in
   if(route==='billing'){ const b=state.bill; b.tried=false; b.readErr=null; b.err=null; b.busy=null; b.ck=null; b.ckPlan=null; b.ckSeq++; }
   if(route==='brand'){ const b=state.brand; b.tried=false; b.nameTouched=false; b.nameErr=null; b.logoErr=null; b.readErr=null; }
   /* §325 X6 — the store list is re-read with Operations; a store's staff and
@@ -10244,7 +10245,25 @@ function screenDelivery(){
 }
 
 /* ==========================================================================
-   Setup guide — read-only (desktop: 17-setup-guide.js)
+   Setup guide (desktop: 17-setup-guide.js)
+   --------------------------------------------------------------------------
+   §325 X11 — THE GUIDE'S ACTIONS, WHERE THE PHONE CAN DO THE WORK. The note
+   below is the original reasoning and is kept for the history; it stopped
+   being true step by step. Each step now leads where the desktop's does, when
+   the phone has that surface and the operator holds its key:
+     store        Operations, where X6 edits and adds stores (stores:edit)
+     products     the product editor's Add (peCanCreate, products:create)
+     fulfillment  the delivery wizard (O10) — or the desktop chooser's other
+                  half, "Pickup only for now": POST /setup {pickupConfirmed}
+     open         "Open the doors": the desktop's blocker list, then its
+                  confirm, then POST /setup {storeOpened:true}
+     brand        the Brand screen (X4, settings:shop)
+   Still desktop-only, and the note at the foot says so: payment (the Alipay
+   QR upload and WeChat Pay merchant keys) and WeChat sign-in (the mini-app
+   credentials wizard). The two /setup writes take lib/cap-routes.js
+   setupFlagCap — SETUP_SCREEN, settings:shop or stores:view, the same pair
+   that opens this screen — and are drawn only once the keys are known
+   (mCanKnown), never while /me is still loading.
    --------------------------------------------------------------------------
    The phone's version had three controls that did nothing: every step row was
    a button with a chevron wired to noop, and so was "Continue setup". It also
@@ -10276,8 +10295,24 @@ function setupDetail(x){
   }
   return '';
 }
+const SU_KEYS=['settings:shop','stores:view'];   // lib/cap-routes.js SETUP_SCREEN
+/* What the phone can do for a step that is not done yet: the desktop's own
+   route into it, or nothing. `n` is the next step, which the desktop labels
+   "Set up"; the rest it labels "Open". */
+function setupActions(x,n){
+  if(x.done) return [];
+  const lab=n?T('Set up','去设置'):T('Open','打开');
+  if(x.key==='store') return canRoute('storeone')?[{cmd:"APP.cmd('push','operations')",label:lab}]:[];
+  if(x.key==='products') return peCanCreate()?[{cmd:"APP.cmd('peNew')",label:lab}]:[];
+  if(x.key==='fulfillment') return mCanKnown(SU_KEYS)||(dlvCanWrite()&&dlvUnconfigured())?[{cmd:"APP.cmd('suFulfil')",label:lab}]:[];
+  if(x.key==='open') return mCanKnown(SU_KEYS)?[{cmd:"APP.cmd('suOpen')",label:lab}]:[];
+  if(x.key==='brand') return canRoute('brand')?[{cmd:"APP.cmd('push','brand')",label:lab}]:[];
+  return [];
+}
 function setupRow(x,i,n){
   const det=setupDetail(x);
+  const acts=setupActions(x,n);
+  const busy=state.suBusy===x.key;
   return `${i?'<div class="sep" style="margin-left:52px"></div>':''}
     <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
       ${x.done?`<span style="width:24px;height:24px;border-radius:50%;background:rgba(163,180,159,.28);display:flex;align-items:center;justify-content:center;color:var(--sage-ink);flex:none">${ic('check',15,2.25)}</span>`
@@ -10286,11 +10321,69 @@ function setupRow(x,i,n){
         <span style="font-size:15px">${T(...(SETUP_LABEL[x.key]||[x.key,x.key]))}</span>
         ${det?`<span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${det}</span>`:''}</span>
       ${x.done?''
-        /* §325 O10 — the delivery half of this step runs on the phone now (O9's
-           wizard), offered exactly where the Delivery screen offers it. */
-        :(x.key==='fulfillment'&&dlvCanWrite()&&dlvUnconfigured())?`<button class="btn2" style="width:auto;flex:none;padding:0 12px;min-height:36px;font-size:13.5px" onclick="APP.cmd('dwizOpen')">${T('Set up delivery','设置配送')}</button>`
+        /* §325 O10 put the delivery wizard here; X11 widens it to the desktop's
+           whole chooser (suFulfil) and gives every step the phone can do the
+           desktop's own button. A step it cannot do says where it stands. */
+        :acts.length?acts.map(a=>`<button class="btn2" style="width:auto;flex:none;padding:0 12px;min-height:36px;font-size:13.5px" ${state.suBusy?'disabled':''} onclick="${a.cmd}">${busy?T('Saving…','保存中…'):a.label}</button>`).join('')
         :`<span style="font-size:12.5px;color:var(--text-secondary);flex:none">${n?T('next','下一步'):T('to do','待办')}</span>`}</div>`;
 }
+/* The two /setup writes, as the desktop's suSetFlag: the server answers with
+   the whole status, which replaces what the screen holds. */
+function suFlag(key,patch,okText,after){
+  if(state.suBusy||!mCanKnown(SU_KEYS)) return;
+  state.suBusy=key; state.suErr=null; render();
+  apiWrite('/setup',patch,'POST').then(j=>{
+    state.suBusy=null;
+    if(j&&j.data&&j.data.percent!=null) state.setup=j.data;
+    if(okText) showToast(okText);
+    if(after) after();
+    render();
+  }).catch(e=>{
+    state.suBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    state.suErr=e&&e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
+/* HOW CUSTOMERS GET THEIR ORDER — the desktop's chooser (suFulfillChooser):
+   delivery by its wizard, or pickup only for now. Delivery is offered only to
+   whoever can run the wizard (O10's rule); pickup only to the guide's keys. */
+reg('suFulfil', ()=>{
+  if(state.suBusy) return;
+  const opts=[];
+  if(dlvCanWrite()&&dlvUnconfigured()) opts.push({key:'delivery',label:T('Set up delivery','开通配送')});
+  if(mCanKnown(SU_KEYS)) opts.push({key:'pickup',label:T('Pickup only for now','暂时只做自取')});
+  if(!opts.length) return;
+  state.ask={title:T('How customers get their order','顾客如何拿到货'),
+    body:T('Pickup at your store is already on. You can add delivery now, or keep pickup only for now.','到店自取已开启。你可以现在开通配送，或暂时只做自取。'),
+    options:opts,
+    run:k=>{
+      if(k==='delivery') APP.cmd('dwizOpen');
+      else if(k==='pickup') suFlag('fulfillment',{pickupConfirmed:true},T('Pickup confirmed','已确认自取'));
+    }};
+  render();
+});
+/* OPEN THE DOORS — the desktop's suOpenDoors, word for word: the steps still
+   to do are named first, and only with none left does it ask, in the desktop's
+   own question, before POST /setup {storeOpened:true}. The server takes the
+   flag whatever else is done; the guard is the screen's, as it is there. */
+reg('suOpen', ()=>{
+  if(state.suBusy||!mCanKnown(SU_KEYS)) return;
+  const d=state.setup; if(!d) return;
+  const blockers=(d.steps||[]).filter(x=>x.key!=='open'&&!x.done);
+  if(blockers.length){
+    state.ask={title:T('Almost there','就差一点'),
+      body:escAttr(T('Finish these first so customers get a working store:','先完成这些，顾客才能看到一个可用的店：'))
+        +`<div style="margin-top:8px;font-weight:500">${escAttr(blockers.map(x=>T(...(SETUP_LABEL[x.key]||[x.key,x.key]))).join(T(', ','、')))}</div>`,
+      options:[{key:'ok',label:T('OK','好的')}]};
+    render(); return;
+  }
+  state.ask={title:T('Open your store now?','现在开店？'),
+    body:T('Your web store goes live and can take orders. You can keep editing anything afterwards.','你的网页商店将上线并可接单。之后仍可继续编辑任何内容。'),
+    cancelLabel:T('Not yet','还没'), confirmLabel:T('Open the doors','正式开店'),
+    run:()=>suFlag('open',{storeOpened:true},T('Your store is open','你的店开张了'))};
+  render();
+});
 function screenSetup(){
   const d=state.setup;
   if(!d) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
@@ -10310,7 +10403,13 @@ function screenSetup(){
     ${opt.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Optional','可选')}</div>
       <div class="list">${opt.map((x,i)=>setupRow(x,i,false)).join('')}</div>
       <div style="font-size:12.5px;color:var(--text-secondary);padding:8px 4px 0">${T('These do not gate opening.','这些不影响开业。')}</div></div>`:''}
-    ${noteBar(T('Each step is a wizard on desktop — a store with its address and hours, a payment method, delivery or pickup.','每一步在电脑端以引导方式完成 — 门店地址与营业时间、收款方式、配送或自提。'))}</div>`;
+    ${state.suErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.suErr}</span></div>`:''}
+    ${/* §325 X11 — this said every step was a wizard on desktop. Stores (X6),
+          the first product, delivery or pickup (O10, X11), opening and the
+          brand (X4) are on the phone now; what is left is said. */''}
+    ${noteBar(T('Payment methods and WeChat sign-in are set up on desktop.','收款方式与微信登录在电脑端设置。'))}</div>`;
 }
 function screenMore(){
   const su=setupState();
