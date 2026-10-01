@@ -1,6 +1,8 @@
 # Tacet delivery vocabulary — locked
 
-**v1.272 · 2026-10-01 · §380 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§380)*.
+**v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
+
+**v1.272 · 2026-09-30 · §380 JD WAYBILL ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *JD waybill create and cancel on the phone (§380)*.
 
 **v1.271 · 2026-09-30 · §379 CUSTOMERS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Customers on the phone (§379)*.
 
@@ -11872,7 +11874,42 @@ the roster, the customer record and the statement sheet in `public/m.html`.
 **Phone pairs already live:** `Print · 打印`, `Print failed · 打印失败`, `Loading… · 加载中…`,
 `Close · 关闭`, `Saving… · 保存中…`, `Copied · 已复制`, and the refusal sentences.
 
-## Ground on an air parcel's label, and the question it asks (§380)
+## JD waybill create and cancel on the phone (§380)
+
+**Nothing composed, 2026-10-01.** These are operator strings only (Rule 1):
+the parcel cards and the JD sheet in `public/m.html`.
+
+**Copied whole from the desktop (`04-orders.js`):**
+
+- **Create:**
+  - `Create JD label · 生成京东运单`, `Free live tracking — JD bills the parcel. · 免费物流追踪，京东承担费用。`,
+    `— or attach an existing waybill manually — · — 或手动填写已有运单 —`
+  - the sheet's sub-lines (air parcel / ground parcel)
+  - the three services from `JD_SERVICES` (`Fresh · Air · 生鲜 · 空运`, `Fresh · Ground · 生鲜 · 陆运`,
+    `Ambient · Ground · 普通 · 陆运`, each with its code line)
+  - `Pieces (boxes) · 箱数` and its note, `Create & ship · 生成并发货`
+  - `Land only · 仅陆运`, `Land shipping only — airline rejected · 仅陆运 — 航空拒运`
+  - the land-only question, `Create air waybill anyway · 仍要生成空运运单`, `Not yet · 暂不`
+  - `SF Express only · 仅顺丰速运` and its question
+  - `JD waybill created · 京东运单已生成`, ` boxes ·  箱`,
+    `Set the store’s sender phone first (Settings → Stores) · 请先在门店设置寄件电话`,
+    `JD label failed · 生成运单失败`
+- **Cancel:**
+  - `Cancel JD pickup · 取消揽收`, the Cancel-vs-Clear note
+  - the confirm title (Cancel the JD pickup / recall this parcel with JD? · 向京东取消揽收 / 拦截此包裹?)
+  - `JD pickup cancelled · 已取消揽收`, `JD parcel intercepted (was already collected) · 已拦截在途包裹`,
+    `JD cancel failed · 取消揽收失败`
+- **From `01-core.js`:** the sentences for `jd_not_configured`, `not_shippable`, `parcel_awaiting_restock`,
+  `invalid_shipment_id`, and `has_tracking` (used for `already_has_waybill`).
+
+**Phone pairs already live:** `Cancel · 取消`, `Close · 关闭`, `Working… · 处理中…`, `Clear · 清除`,
+`Save tracking · 保存运单号`, and the refusal sentences.
+
+| String | Note |
+|---|---|
+| Cancel's confirm button | The desktop's is English-only ("Cancel pickup"). The phone uses the desktop's own `Cancel JD pickup · 取消揽收` pair from the same card, so nothing is composed. |
+
+## Ground on an air parcel's label, and the question it asks (§381)
 
 **Operator register (Rule 1), 2026-10-01.** The JD label dialog
 (`createJdLabel`, `public/retail-admin/04-orders.js`). An air parcel now lists

@@ -22,7 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-01 · v4.461 — **§380 · AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST — DECIDED BY ASH:** *"there should always be an option to select land transport if user want and it comes with a warning"*. The mirror of the 2026-09-16 land→air warning: an air parcel's JD label dialog now lists both ground services after air, and picking one asks on the click. The parcel's mode is never written.
+2026-10-01 · v4.461 — **§381 · AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST — DECIDED BY ASH:** *"there should always be an option to select land transport if user want and it comes with a warning"*. The mirror of the 2026-09-16 land→air warning: an air parcel's JD label dialog now lists both ground services after air, and picking one asks on the click. The parcel's mode is never written.
 
 2026-09-29 · v4.460 — **§290 · THE SIZE ON A TILL TILE IS NEVER CUT OFF — FOUND BY CLAUDE WHILE BUILDING §289, FIXED ON ASH'S WORD** (*"fix this and after merge"*). §183 put a product's size (*Large*, *Regular*) on its own line under the name so two sizes of one drink could be told apart, but wrote it INSIDE the name's element, and the name is clamped to two lines. The clamp counted the size as a third line and cut it, so on an iPad column (140px) *Organic Matcha Latte* wrapped to two lines and *Large* vanished: the one word §183 exists to show. It was there before §289; the screenshots taken for §289 are where it showed. **THE FIX**: the name and the size share a wrapper (`.hd`) and only the name is clamped. Two name lines, the size and the price row were then 6px taller than a 100px row, so the tile's top and bottom padding went 12px → 10px and the size line was tightened, rather than making every row of every till taller. Checked in Chromium at 1280, 1024 and 390 wide, with and without photos: every size visible, no tile overflowing. `scripts/test_till_options.js` gains a check that the name closes before the size on both kinds of tile; it goes red on the old markup. No new string, no server change, no change to `.gitignore` or CI.
 
@@ -26011,7 +26011,71 @@ desktop roster and drawer have (`08-customers.js`, `26-print.js`).
      `test_mobile_customers.js` check that Block's row holds one control
      still holds. That check was confirmed by reading it, not by running it.
 
-## §380 — AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST
+## §380 — A JD WAYBILL, CREATED AND CANCELLED FROM THE PHONE (NO PRINTING)
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Step O12, the last step of the Orders lane. The desktop order drawer's
+`createJdLabel` / `submitJdLabel` / `cancelJdPickup` (`04-orders.js`), on the
+phone's parcel cards. Both writes are `orders:edit` (lib/cap-routes.js). Both
+controls are drawn for that key, and neither appears on a mirrored channel's
+order.
+
+1. **Where.** *Create JD label* appears where the desktop draws it:
+   - on a parcel that is out with no waybill (the hoisted tracking card),
+     ahead of the manual *Save tracking*, which now sits under the desktop's
+     line *— or attach an existing waybill manually —*;
+   - on a pending Guangzhou outer-district parcel switched to JD, on an order
+     still being made.
+
+   Never on a supplier parcel.
+2. **The question.** The service is the one thing the order cannot answer,
+   and it is asked the desktop's way:
+   - An air parcel ships fresh express (生鲜特快) and asks nothing, except
+     into Fujian or Guangxi. There ground is pre-selected from the two fresh
+     services; `lib/jd.js` is the authority and re-applies the rule on the
+     server.
+   - A ground parcel chooses between fresh ground, ambient ground and air.
+     Fresh is pre-selected when an item in the box needs an ice pack, ambient
+     otherwise.
+   - On a ground parcel, air is marked *Land only* where the airline refuses
+     an item, with that item named.
+
+   There is also a pieces count (1–30), for one waybill split across boxes.
+3. **The desktop's two "anyway?" questions, each where the desktop puts it.**
+   - Picking air on a land parcel asks on the pick and names what is in the
+     box. Declining leaves the choice where it was.
+   - An order into a city whose air lane belongs to SF asks at submit,
+     because an air parcel has no list to pick from.
+4. **Create** sends `POST /orders/:id/jd-waybill {shipment_id, product,
+   package_count}`. The server attaches the waybill and marks the parcel
+   dispatched. The toast names the waybill and the box count, and the order
+   is read again.
+   - The desktop's sentences are used for a missing sender phone, JD not set
+     up, an order not ready to ship, a parcel waiting on restock, an unknown
+     parcel and a waybill already attached.
+   - Any other code is shown after *JD label failed*, as the desktop shows
+     it.
+5. **Cancel JD pickup** appears on a JD waybill beside *Clear*, with the
+   desktop's line on the difference: Cancel calls the courier off with JD;
+   Clear only removes the number locally. It asks first, then
+   `POST …/jd-waybill/cancel {shipment_id}`. The toast says whether JD
+   cancelled the pickup or intercepted a parcel already collected.
+6. **No printing.** The desktop sends the label to JD's print component
+   running on the PC wired to the label printer (`jdSendToComponent`, its
+   per-machine auto-print switch, the box-label sticker). A phone has none of
+   these, so the label is printed there. Nothing on the phone fetches print
+   data.
+7. **Tests.**
+   - `scripts/test_mobile_jd_waybill.js` (fast shard, 84 assertions): the
+     gates; where each control appears; every plan (air, Fujian/Guangxi,
+     ground, iced); both questions; the request bodies and the pieces clamp;
+     every refusal; the busy lock; cancel and intercept; the order-read
+     fields; both languages; the desktop's words.
+   - `test_mobile_controls_gated.js`: now also checks Create JD label + Save
+     tracking on a bare parcel, and Cancel JD pickup on a JD waybill. Both
+     commands are on its guard list.
+
+## §381 — AN AIR PARCEL CAN BE BOOKED ON THE GROUND, AND PICKING GROUND ASKS FIRST
 
 **Decided by Ash, 2026-10-01**, from a combined parcel (Jackfruit Chips + Misfit
 Medjool Dates, merged into one Air parcel) whose JD label dialog showed only a
@@ -26054,3 +26118,6 @@ with a warning I thought we have that"*.
 8. **Held by** `scripts/test_jd_label_air_option.js` section 6.
    `scripts/test_jd_waybill_land_default.js` and
    `scripts/test_chengdu_air_sf_only.js` are unchanged and still pass.
+9. **Not on the phone yet.** §380's phone JD label, merged the same day, copies
+   the old desktop rule: a plain air parcel gets no list (`isAir?[]` in
+   `public/m.html`). That is a follow-up, kept out of this change.

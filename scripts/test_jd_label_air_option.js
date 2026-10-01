@@ -378,7 +378,7 @@ async function main() {
 
   console.log('\n  5. the cases that must NOT have changed');
   await it('a plain AIR parcel left on air asks nothing and books 生鲜特快', async () => {
-    // Its list is no longer empty (§380, section 6 below), but air is still
+    // Its list is no longer empty (§381, section 6 below), but air is still
     // pre-selected, and an operator who leaves it alone is never questioned.
     const d = openDialog({ mode: 'air', items: [AIRONLY], province: '北京市' });
     assert.strictEqual(preselected(d), 'LL-SD-M', 'an air parcel no longer pre-selects air');
@@ -405,11 +405,11 @@ async function main() {
     assert.strictEqual(BOOKED[0].pieces, 3, `booked ${BOOKED[0].pieces} pieces`);
   });
 
-  // §380 — the mirror. Ash (2026-10-01), on a combined parcel the plan made
+  // §381 — the mirror. Ash (2026-10-01), on a combined parcel the plan made
   // air: "there should always be an option to select land transport if user
   // want and it comes with a warning". Before this, an air parcel's dialog
   // had no list at all and 生鲜特快 was the only thing it could book.
-  console.log('\n  6. §380 — ground is on an AIR parcel\'s list, and picking it asks');
+  console.log('\n  6. §381 — ground is on an AIR parcel\'s list, and picking it asks');
   await it('an AIR parcel offers all three services, air first and pre-selected', () => {
     const d = openDialog({ mode: 'air', items: [ANY, NO_AIR], province: '北京市' });
     assert.deepStrictEqual(offered(d), ['LL-SD-M', 'LL-HD-M', 'ed-m-0001'],
