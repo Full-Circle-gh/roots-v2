@@ -25260,6 +25260,35 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), as
     }
     return Object.keys(out).length ? JSON.stringify(out) : null;
   })();
+  /* §325 S2i — FOUR FIELDS THE CREATE USED TO DROP. The desktop product
+     drawer's FIRST save is this POST, and it sends the cost, the
+     "cost is not the whole cost" tag, the low-stock line and "made in fresh
+     batches" with everything else (09-products.js pdCollectBody). The insert
+     never stored them, so they reached the database only on the NEXT autosave
+     — and an operator who closed the drawer before it lost them. They are now
+     stored here with exactly the PATCH handler's rules:
+       • the cost keys are struck first for an operator who cannot see costs
+         (stripProductCostWrites, the PATCH's guard), so a hidden field's ''
+         cannot write anything;
+       • unit_cost: a positive number, else NULL ("unknown", never 0) — a new
+         product has no recipe and no bundle components yet, so the PATCH's
+         two "derived cost" branches cannot apply;
+       • cost_incomplete and is_batch_made: 1 or 0;
+       • low_stock_threshold: a whole number >= 0, else NULL (use the default).
+     A key that is absent keeps the column's own default, as before. */
+  stripProductCostWrites(req, b);
+  const createCost = ('unit_cost' in b) ? (() => {
+    const raw = b.unit_cost;
+    const v = (raw === '' || raw == null) ? NaN : parseFloat(raw);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  })() : null;
+  const createCostIncomplete = ('cost_incomplete' in b) ? (b.cost_incomplete ? 1 : 0) : null;
+  const createLowStock = ('low_stock_threshold' in b) ? (() => {
+    const raw = b.low_stock_threshold;
+    const v = (raw === '' || raw == null) ? null : parseInt(raw, 10);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  })() : null;
+  const createBatchMade = ('is_batch_made' in b) ? (b.is_batch_made ? 1 : 0) : 0;
   // Reclaim the SKU from any hidden/deleted holder before the INSERT so a brand
   // new product can take a code that's only wedged on an unreachable row.
   const freedOnCreate = releaseSkuFromHiddenHolders(sku, null);
@@ -25270,8 +25299,9 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), as
          (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price, stock_qty, ship_modes,
           description_en, description_cn, description_format, image_data, images, image_aspect, tags,
           status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
-          is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+          is_published, unit_cost, cost_incomplete, low_stock_threshold, is_batch_made,
+          is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       sku, cat2.top,
@@ -25285,7 +25315,8 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), as
       status, (b.barcode || '').trim() || null, (b.free_of || '').trim() || null, (b.notes || '').trim() || null,
       factsJson, // product_facts — bind the real value on create (needs the 26th placeholder above)
       b.is_market ? 1 : 0, b.is_restock_only ? 1 : 0,
-      b.is_published ? 1 : 0
+      b.is_published ? 1 : 0,
+      createCost, createCostIncomplete, createLowStock, createBatchMade   // §325 S2i
     );
   } catch (e) {
     if (String(e.message || '').includes('UNIQUE'))
@@ -25309,11 +25340,15 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), as
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, tags,
-            colophon_character, colophon_tagline_en, colophon_tagline_cn
+            colophon_character, colophon_tagline_en, colophon_tagline_cn,
+            unit_cost, cost_incomplete, low_stock_threshold, is_batch_made
        FROM store_products WHERE id = ?`
   ).get(id);
   row.description_blocks = null;
   row.nutrition = null;
+  // §325 S2i: the answer now carries what was stored — and, as every product
+  // read does, no cost to an operator who may not see costs.
+  stripProductCosts(req, row);
   res.json({ success: true, data: row });
 });
 
