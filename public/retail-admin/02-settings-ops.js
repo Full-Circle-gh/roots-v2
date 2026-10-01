@@ -241,6 +241,26 @@ window.recycleRestore = recycleRestore;
 // Stopgap while 当面付 API access is blocked: operator uploads a static收款码 +
 // payee label; customer scans/pays/uploads a screenshot; staff Mark paid.
 let _alipayManualQr = null;   // pending data URL from the file picker (null = keep existing)
+/* §325 D1 — WAS THE CARD READ? PUT /alipay-manual replaces the whole record
+   from what it is sent (only the QR and the API key are kept when absent), so
+   a card that never loaded is a blank form that, saved, switches manual
+   Alipay off and wipes its account and OCR settings. The read used to fail
+   quietly and leave exactly that form behind the shared Save bar. So the card
+   is saved only after a good read; until then it says it could not load, with
+   a retry, and Save leaves it alone (the other cards on the bar still save).
+   False while a read is in flight too: a Save pressed before the answer
+   arrives is the same blank form. */
+let _alipayManualLoaded = false;
+function _alipayManualLoadFailed() {
+  _alipayManualLoaded = false;
+  const st = document.getElementById('alipay-manual-status');
+  if (st) {
+    st.innerHTML = '<span style="color:var(--danger)">' + escapeHtml(cuT('Could not load this card, so Save leaves it unchanged.', '此卡片加载失败,保存时不会改动它。'))
+      + '</span> <button class="btn btn-sm" type="button" onclick="loadAlipayManual()">' + escapeHtml(cuT('Try again', '重试')) + '</button>';
+  }
+  const chip = document.getElementById('alipay-manual-chip');
+  if (chip) chip.innerHTML = '';
+}
 
 function _alipayManualChip(enabled) {
   const el = document.getElementById('alipay-manual-chip');
@@ -251,10 +271,13 @@ function _alipayManualChip(enabled) {
 }
 
 async function loadAlipayManual() {
+  _alipayManualLoaded = false;
   try {
     const r = await fetch('/api/retail-admin/alipay-manual');
-    if (!r.ok) return;
-    const d = (await r.json()).data || {};
+    if (!r.ok) { _alipayManualLoadFailed(); return; }
+    const j = await r.json();
+    if (!j || j.success === false || !j.data || typeof j.data !== 'object') { _alipayManualLoadFailed(); return; }
+    const d = j.data;
     const cb = document.getElementById('alipay-manual-enabled');
     const ac = document.getElementById('alipay-manual-account');
     const pv = document.getElementById('alipay-manual-preview');
@@ -286,7 +309,10 @@ async function loadAlipayManual() {
     _alipayOcrToggle();
     _alipayManualQr = null;   // existing image stays unless operator picks a new one
     _alipayManualChip(!!d.enabled);
-  } catch (e) { console.warn('[alipay-manual] load failed', e); }
+    const st = document.getElementById('alipay-manual-status');
+    if (st) st.innerHTML = '';   // a warning from an earlier failed read goes
+    _alipayManualLoaded = true;
+  } catch (e) { console.warn('[alipay-manual] load failed', e); _alipayManualLoadFailed(); }
 }
 
 // Grey the OCR detail fields with the master OCR checkbox — never hide them.
@@ -351,6 +377,9 @@ function _alipayManualPickFile(event) {
 async function saveAlipayManualInline() {
   // Card absent from this build → nothing to save (keeps saveConfig generic).
   if (!document.getElementById('alipay-manual-enabled')) return;
+  // §325 D1 — never send a card that was not read: it would replace the stored
+  // record with a blank one. The card already says so where it sits.
+  if (!_alipayManualLoaded) return;
   const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
   const chk = (id) => !!(document.getElementById(id) || {}).checked;
   const status = document.getElementById('alipay-manual-status');
