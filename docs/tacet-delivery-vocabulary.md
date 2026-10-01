@@ -1,7 +1,5 @@
 # Tacet delivery vocabulary — locked
 
-**v1.275 · 2026-10-01 · §381 ON THE PHONE — NOTHING COMPOSED; THE DESKTOP'S GROUND QUESTION COPIED WHOLE.** See *Ground on an air parcel's label, and the question it asks (§381)*, last paragraph.
-
 **v1.274 · 2026-09-30 · §382 BUNDLES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's two bundles, edited on the phone (§382)*.
 
 **v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
@@ -11941,7 +11939,7 @@ them.
 **English "ground", Chinese 陆运.** The rows say `Fresh · Ground · 生鲜 · 陆运`.
 The question uses the same pair as the row being picked, so the two read alike.
 
-**On the phone (v1.275).** The phone's JD label sheet (`jdSvc`, `public/m.html`)
+**On the phone (2026-10-01, nothing composed).** The phone's JD label sheet (`jdSvc`, `public/m.html`)
 asks the same question with every string copied whole from the desktop:
 `空运包裹`, both bodies, `仍要生成陆运运单` and `暂不`. Nothing new was composed.
 `scripts/test_mobile_jd_waybill.js` fails if the phone's words drift from the
