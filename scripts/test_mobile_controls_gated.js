@@ -58,6 +58,7 @@ const SRC = [
   slice("reg('advance', to=>{", 'function currentOrder(){'),
   slice('const PRINT_NO_RECEIPT=', 'function printOrderAt('),   // §325 O7: orderHeadPrint's guard
   fn('orderActionRow'), fn('sheetActions'), fn('shopNoteCard'),
+  slice('/* ── §325 O12 — A JD WAYBILL', '\nfunction trackingCard('),   // §325 O12: the card's JD controls
   fn('trackingCard'), fn('etaPretty'), fn('localEtaCard'), fn('noContactCard'), fn('deliveryPhotoCard'), fn('mDcActs'),
   slice("reg('toggleShop', ids=>{", '/* The status buckets are derived'),
   slice('function prodCanEdit(){', '/* Needs you, from the same snapshot'),
@@ -234,6 +235,9 @@ section('1 · the order sheet');
     const rw = mk(['orders:view', 'orders:edit']);
     assert.deepStrictEqual(cmds(rw.ctx.trackingCard(rw.order, sp, 'P')), ['copyWaybill', 'resubWaybill', 'clearWaybill']);
     assert.deepStrictEqual(cmds(rw.ctx.localEtaCard(rw.order, sp, 'x')), ['setEta', 'clearEta']);
+    // §325 O12 — a parcel out with no waybill: Create JD label, then the manual way; a JD waybill: Cancel JD pickup.
+    assert.deepStrictEqual(cmds(rw.ctx.trackingCard(rw.order, { id: 4, mode: 'land' }, 'P')), ['jdOpen', 'addWaybill']);
+    assert.deepStrictEqual(cmds(rw.ctx.trackingCard(rw.order, { id: 5, trk: { number: 'JD9', carrier_code: 'jd' } }, 'P')), ['copyWaybill', 'jdCancel', 'clearWaybill']);
   });
   it('the courier-could-not-reach card, the delivery photo and the delay steps: no controls without orders:edit', () => {
     const ro = mk(['orders:view']);
@@ -254,7 +258,7 @@ section('1 · the order sheet');
   it('every order-sheet write command carries the guard', () => {
     const edit = ['clearAirDelay', 'ackNoContact', 'dcPhoto', 'dcDelEv', 'dphAdd', 'dphDel', 'dcReplacement', 'dcClaim', 'dcNoClaim',
       'dcNoRemedy', 'dcSettle', 'dispatchParcel', 'prepareParcel', 'undoParcelDispatch', 'combineParcels', 'splitParcels',
-      'ordNoteOpen', 'ordNoteSave', 'addWaybill', 'clearWaybill', 'resubWaybill', 'setEta', 'clearEta', 'printOrder'];
+      'ordNoteOpen', 'ordNoteSave', 'addWaybill', 'clearWaybill', 'resubWaybill', 'setEta', 'clearEta', 'printOrder', 'jdOpen', 'jdCancel'];
     for (const c of edit) {
       const a = M.indexOf("reg('" + c + "',"); assert.ok(a > 0, c);
       assert.ok(/^\s*if\(!mCan\('orders:edit'\)\) return;/.test(M.slice(M.indexOf('\n', a) + 1)), c + ' has no guard');
