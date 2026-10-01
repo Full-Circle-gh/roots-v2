@@ -82,14 +82,17 @@ const CASES = [
     ['which payment methods',          `txt('content').includes('WeChat Pay and Alipay')`],
     ['optional steps are separated',   `txt('content').includes('Optional')`],
     ['and said not to gate opening',   `txt('content').includes('do not gate opening')`],
-    ['where the work happens',         `txt('content').includes('wizard on desktop')`],
+    // §325 X11 — the steps the phone can do lead there now; the note names what is still desktop-only.
+    ['what is still on the desktop',   `txt('content').includes('Payment methods and WeChat sign-in are set up on desktop.')`],
   ]],
   ['and offers nothing it cannot do', SETUP, [
     // Three controls used to sit here wired to noop: every step row, and a
     // "Continue setup" call to action.
     ['no Continue setup button', `!${btnTexts}.some(function(t){return t.indexOf('Continue setup')>=0})`],
-    ['no buttons at all in the step list',
-     "document.querySelectorAll('#content .list button').length === 0"],
+    // §325 X11 — the step list carries real actions now (the desktop's own
+    // Set up / Open); what must never come back is a control that goes nowhere.
+    ['every button in the step list goes somewhere',
+     "[].slice.call(document.querySelectorAll('#content .list button')).every(function(b){return /APP\\.cmd\\('(push|peNew|suFulfil|suOpen)'/.test(b.getAttribute('onclick')||'')})"],
   ]],
   ['a finished setup', `state.setup={percent:100,requiredDone:5,requiredTotal:5,allDone:true,
      steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:9},{key:'payment',done:true,method:'alipay'},
