@@ -16122,9 +16122,8 @@ document.addEventListener('keydown', (e) => {
     POST({
       evt: 'ready',
       pages: PAGES.map(p => ({ id: p.id, name: p.name, cn: p.cn })),
-      // §325 — the universal Frame and Corner radius choices, from the
-      // inspector's own option lists, with each colour's swatch.
-      frameColors: BRAND_COLOR_OPTIONS.map(o => ({ value: o.value, label: o.label, hex: dcResolveHex(o.value) || null })),
+      // §325 — the universal Corner radius choices, from the inspector's own
+      // list. (The frame's colour is a colour: the Design sheet has it.)
       corners: CORNER_RADIUS_OPTIONS.map(o => ({ value: o.value, label: o.label })),
       page: state.page, lang: state.lang, palette: palette(),
     });

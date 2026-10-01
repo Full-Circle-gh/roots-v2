@@ -1101,7 +1101,7 @@ const state = {
      the PRODUCT, because the card is the product and that is where it is drawn. */
   csBusy:null, csNote:null,
   mtStatus:null, mtStatusTried:false, mtOffline:false,
-  scAff:null, scTried:false,
+  scAff:null, scAffErr:null, scTried:false, scSel:null,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -1467,7 +1467,7 @@ const state = {
   rf:null,
   /* §325 O6 — "Ship part later": the parcel being split and the lines ticked;
      and the orders whose split suggestion was dismissed this session. */
-  splitPick:null, splitDismissed:[],
+  splitPick:null, splitDismissed:[], shipTo:null,
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
@@ -1690,6 +1690,7 @@ function pop(){
   if(top==='recipeone'&&!rcpMayLeave()) return;
   if(top==='materialone'&&!matMayLeave()) return;
   if(top==='productcost'&&!pcMayLeave()) return;
+  if(top==='polledit'&&!pollMayLeave()) return;   // §325 M7 — an unsaved poll asks first
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
   if(top==='posupplier'&&psupAuto) psupAuto.flush();   // §300 P7 — what the supplier's fields still hold goes
@@ -2389,7 +2390,7 @@ reg('ordViewDel', id=>{
 /* reg('openOrder') is registered ONCE, with the live orders (§325 T1). A
    one-line copy here from the mock-data days was overwritten by that later
    registration before anybody could tap, so it never ran and is gone. */
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null;
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
   state.ordNoteOpen=null;
@@ -3600,19 +3601,240 @@ async function rereadOrder(o){
 }
 
 /* The printer can succeed as a request and fail as a print — the endpoint says
-   so with ok:false, and so does this. */
-reg('printOrder', ()=>{
-  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
-  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
-  state.detailActions=false;
-  if(!o||o._id==null) return;
+   so with ok:false, and so does this.
+
+   §325 O7 — AT WHICH STORE. The desktop's reprintOrder reads the printers
+   (GET /printer) and, when two or more stores have one, asks which counter the
+   slip comes out of; with none or one there is no choice and the server routes
+   it to the order's own store. A failed read falls back to that same routing,
+   as the desktop's does. And its guard comes with it (orderHeadPrint): no
+   receipt for an order that is unpaid, cancelled or refunded. */
+const PRINT_NO_RECEIPT=['pending_payment','cancelled','refunded'];
+const printable=o=>!!o&&!PRINT_NO_RECEIPT.includes(o.raw);
+function printOrderAt(o,storeId){
   orderWrite('print', async()=>{
-    const r=await apiWrite('/orders/'+o._id+'/print',{});
+    const r=await apiWrite('/orders/'+o._id+'/print',storeId!=null?{store_id:storeId}:{});
     if(r&&r.ok) return T('Sent to the printer','已发送到打印机');
     const why=r&&r.error==='not_configured'
       ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
+      : r&&r.error==='no_printer_for_store'
+      ? T('No printer is set up for that location.','该门店未配置打印机。')
       : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
     const err=new Error(why); err.code='__plain'; throw err;
+  });
+}
+reg('printOrder', async()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  state.detailActions=false;
+  if(!o||o._id==null||!printable(o)||state.orderBusy) return;
+  state.orderBusy='print'; state.orderErr=null; render();
+  let stores=[];
+  try{ const d=await api('/printer'); stores=((d&&d.stores)||[]).filter(x=>x&&x.sn); }catch(e){ stores=[]; }
+  state.orderBusy=null;
+  if(state.detailId!==o.id){ render(); return; }   // the order was closed while the printers were read
+  if(stores.length<2){ printOrderAt(o); return; }
+  state.ask={title:T('Print at which store?','在哪个门店打印？'),
+    options:stores.map(x=>{ const cn=x.name_cn||x.name_en||x.code||('#'+x.id), en=x.name_en||x.name_cn||x.code||('#'+x.id);
+      return {key:String(x.id), label:escAttr(T(en,cn))}; }),
+    run:k=>{ const id=parseInt(k,10); if(Number.isFinite(id)) printOrderAt(o,id); }};
+  render();
+});
+/* ── §325 O7 — WRITES THE CUSTOMER FEELS ──────────────────────────────────
+   Four of the desktop order drawer's writes that reach the customer or their
+   parcel, each sending the desktop's request: tell them again (ordRenotify),
+   correct the ship-to (openEditShipTo), turn an English address into a Chinese
+   one for the waybill (openAddressToChinese), and read the payment screenshot
+   again (rerunAlipayOcr). Every path is under /orders, so every one is
+   orders:edit (lib/cap-routes.js): each control is drawn for it and each
+   command refuses without it. */
+const SHIPTO_REASON={no_match:['couldn’t match the saved address','未找到对应的保存地址'],
+  no_customer:['no customer on file','无顾客记录']};
+function shipToBtns(o){
+  if(!o||!o.shipTo||o._id==null||o.viewOnly||!mCan('orders:edit')) return '';
+  const b=(cmd,label)=>`<button class="btn2" style="width:auto;padding:7px 12px;gap:6px;font-size:13px" onclick="APP.cmd('shipToOpen','${cmd}')">${ic('map-pin',14)} ${label}</button>`;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${b('edit',T('Edit ship-to','修改收货地址'))}${o.shipTo.latin?b('cn',T('Make address Chinese','转为中文地址')):''}</div>`;
+}
+/* Offered where the desktop offers it: a read that did not match, or did not
+   complete. The server measures freshness from the original upload, re-applies
+   the reuse guard, and will not flip an order already past pending. */
+function ocrRerunBtn(o){
+  if(!o||!o.proof||o._id==null||o.viewOnly||!mCan('orders:edit')) return '';
+  if(o.ocrVerdict!=='mismatch'&&o.ocrVerdict!=='error') return '';
+  return `<button class="btn2" style="width:auto;padding:7px 12px;margin-top:10px" ${state.orderBusy?'disabled':''} onclick="APP.cmd('ocrRerun')">${state.orderBusy==='ocr'?T('Reading …','识别中 …'):T('Try reading again','重新识别')}</button>`;
+}
+function shipToField(k,en,zh,v,extra){
+  const s=state.shipTo;
+  return `<label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T(en,zh)}</span>
+    <input id="mShipTo_${k}" value="${escAttr(v||'')}" ${extra||''}${s.busy?' disabled':''} oninput="APP.cmd('shipToSet','${k}',this.value)"></label>`;
+}
+function shipToTick(k,label){
+  const s=state.shipTo, on=!!s[k];
+  return `<button role="checkbox" aria-checked="${on?'true':'false'}"${s.busy?' disabled':''} onclick="APP.cmd('shipToTog','${k}')" style="display:flex;align-items:center;gap:12px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+    <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${on?ic('check',15,2.5):''}</span>
+    <span style="flex:1;min-width:0;font-size:14px">${label}</span></button>`;
+}
+function sheetShipTo(){
+  const s=state.shipTo; if(!s) return '';
+  const cn=s.mode==='cn';
+  const title=cn?T('Make address Chinese','转为中文地址'):T('Edit ship-to','修改收货地址');
+  const sub=cn?T('Check the Chinese address, edit if needed, then save.','请核对中文地址,如需可修改,然后保存。')
+    :T('This changes the address on this order only.','仅修改此订单的收货地址。');
+  const head=`<div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <span style="flex:1;font-size:18px;font-weight:500">${title}</span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('shipToClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+       ${s.f?`<div style="font-size:13px;color:var(--text-secondary);margin-top:2px;line-height:1.5;padding-right:8px">${sub}</div>`:''}</div>`;
+  let body;
+  if(!s.f){
+    // The proposal is still being read, or could not be: no form yet.
+    body=s.loadErr
+      ?`<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start"><span style="font-size:15px;color:var(--brick-ink)">${s.loadErr}</span>
+          <button class="btn2" style="width:auto;padding:8px 18px" onclick="APP.cmd('shipToRetry')">${T('Try again','重试')}</button></div>`
+      :`<div style="font-size:15px;color:var(--text-secondary)">${T('Translating address…','正在翻译地址…')}</div>`;
+    return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shipToClose')"></div>
+     <div class="sheet" style="z-index:48;padding:0;overflow:hidden">${head}<div style="padding:16px 20px calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div></div>`;
+  }
+  const f=s.f, g=s.geo;
+  let geo='';
+  if(cn&&g&&g.configured){
+    const level=({rooftop:T('matched the building','匹配到楼栋门牌'),street:T('matched the street','匹配到道路'),
+      coarse:T('only matched the district centre','仅匹配到区域中心')})[g.precision]||T('no map match','地图无匹配');
+    geo=`<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:12px;font-weight:500;color:var(--${g.ok?'sage-ink':'amber-ink'})">${ic(g.ok?'check':'triangle-alert',13)}${level}${(!g.ok&&g.reason==='city_mismatch')?' — '+T('different city!','城市不符!'):''}</span>`;
+  }
+  body=(cn?`<div style="padding:10px 12px;border-radius:10px;background:var(--surface-raised)">
+        <span class="eyebrow">${T('As entered','原始地址')}</span>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-top:4px;overflow-wrap:anywhere">${escAttr(s.original||'')}</div></div>
+      <div><span class="eyebrow">${T('Chinese address','中文地址')}</span>${geo}
+        ${g&&g.matched?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;overflow-wrap:anywhere">${T('Map reads this as','地图识别为')}: ${escAttr(g.matched)}</div>`:''}</div>`
+     :`${shipToField('name','Recipient name','收货人',f.name,'maxlength="60"')}
+      ${shipToField('phone','Phone','电话',f.phone,'inputmode="tel" maxlength="20"')}`)
+    +`${shipToField('province','Province','省 / 市',f.province)}
+      ${shipToField('city','City','市',f.city)}
+      ${shipToField('district','District','区 / 县',f.district)}
+      ${shipToField('address','Street / building','街道 / 楼栋',f.address,'maxlength="200"')}
+      ${shipToField('detail','Unit / floor (optional)','单元 / 楼层(可选)',f.detail,'maxlength="200"')}
+      ${cn?shipToTick('saveOrder',T('Update this order (prints on the waybill)','更新此订单(用于运单打印)')):''}
+      ${shipToTick('saveCust',cn?T('Also fix the customer’s saved address','同时更新顾客保存的地址'):T('Also update the customer’s saved address','同时更新顾客保存的地址'))}`;
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('shipToClose')"></div>
+   <div class="sheet" style="z-index:48;top:46px;overflow:hidden;padding:0">${head}
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px">${body}</div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${s.err?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${s.err}</div>`:''}
+       <div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1"${s.busy?' disabled':''} onclick="APP.cmd('shipToClose')">${T('Cancel','取消')}</button>
+         <button class="cta" style="flex:1"${s.busy?' disabled':''} onclick="APP.cmd('shipToSave')">${s.busy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>
+   </div>`;
+}
+/* The proposal is a POST that writes nothing (the desktop's to-chinese): the
+   AI's street, the region table's names, and what the map matched. */
+function shipToPropose(o){
+  const s=state.shipTo; if(!s) return;
+  s.f=null; s.loadErr=null; render();
+  apiWrite('/orders/'+o._id+'/address/to-chinese',{}).then(r=>{
+    const t=state.shipTo; if(!t||t.oid!==o.id||t.mode!=='cn') return;
+    const d=(r&&r.data)||{}, c=d.chinese||{};
+    t.f={province:c.province||'', city:c.city||'', district:c.district||'', address:c.address||'', detail:c.detail||''};
+    t.original=d.original_full||'';
+    t.geo={configured:!!d.geocode_configured, ok:!!d.geocode_ok, precision:d.geocode_precision||null,
+      matched:d.geocode_matched||null, reason:d.geocode_reason||null};
+    render();
+  }).catch(e=>{
+    const t=state.shipTo; if(!t||t.oid!==o.id) return;
+    if(String(e.message)==='auth') return;
+    t.loadErr=e.refused?T(...e.words)
+      :e.code==='ai_not_configured'?T('Translation service is off','翻译服务未启用')
+      :e.code==='pickup_order'?T('Pickup order — no shipping address','自提订单 — 无收货地址')
+      :T('Couldn’t translate the address','地址翻译失败');
+    render();
+  });
+}
+reg('shipToOpen', mode=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!o||o._id==null||o.viewOnly||!o.shipTo||state.shipTo) return;
+  if(mode==='cn'){
+    state.shipTo={mode:'cn', oid:o.id, f:null, loadErr:null, geo:null, original:'', saveOrder:true, saveCust:true, busy:false, err:null};
+    shipToPropose(o); return;
+  }
+  const a=o.shipTo;
+  state.shipTo={mode:'edit', oid:o.id, f:{name:a.name, phone:a.phone, province:a.province, city:a.city, district:a.district,
+    address:a.address, detail:a.detail}, saveOrder:true, saveCust:false, busy:false, err:null};
+  render();
+});
+reg('shipToRetry', ()=>{
+  if(!mCan('orders:edit')) return;
+  const o=currentOrder(), s=state.shipTo; if(!o||!s||s.oid!==o.id||s.mode!=='cn') return;
+  shipToPropose(o);
+});
+reg('shipToClose', ()=>{ if(state.shipTo&&state.shipTo.busy) return; state.shipTo=null; render(); });
+// Typing never repaints; the box keeps its caret. The value waits for Save.
+reg('shipToSet', (k,v)=>{ const s=state.shipTo; if(s&&s.f&&k in s.f) s.f[k]=String(v==null?'':v); });
+reg('shipToTog', k=>{ const s=state.shipTo; if(!s||s.busy||(k!=='saveOrder'&&k!=='saveCust')) return; s[k]=!s[k]; render(); });
+reg('shipToSave', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(), s=state.shipTo;
+  if(!o||o._id==null||!s||!s.f||s.oid!==o.id||s.busy) return;
+  const f=s.f, cn=s.mode==='cn';
+  // The desktop's three refusals, before anything is sent.
+  if(cn&&!s.saveOrder&&!s.saveCust){ s.err=T('Pick at least one place to save','请至少选择一处保存'); render(); return; }
+  if(!String(f.address).trim()){ s.err=T('Street / building is required','街道 / 楼栋不能为空'); render(); return; }
+  if(!cn&&!String(f.name).trim()){ s.err=T('Recipient name is required','收货人不能为空'); render(); return; }
+  const body=Object.assign(cn?{}:{recipient_name:f.name, recipient_phone:f.phone},
+    {province:f.province, city:f.city, district:f.district, address:f.address, detail:f.detail,
+     save_order:cn?!!s.saveOrder:true, save_customer:!!s.saveCust});
+  s.busy=true; s.err=null; render();
+  apiWrite('/orders/'+o._id+'/address/apply-chinese',body).then(r=>{
+    const d=(r&&r.data)||{};
+    let msg=T('Address updated','地址已更新');
+    if(body.save_customer&&!d.saved_customer){
+      const w=SHIPTO_REASON[d.customer_reason]||['saved address not updated','保存地址未更新'];
+      msg=T('Order updated · '+w[0],'订单已更新 · '+w[1]);
+    }
+    state.shipTo=null; render();
+    showToast(msg);
+    return rereadOrder(o);
+  }).catch(e=>{
+    const t=state.shipTo; if(!t||t.oid!==o.id) return;
+    t.busy=false;
+    if(String(e.message)==='auth') return;
+    t.err=e.code==='missing_address'?T('Street / building is required','街道 / 楼栋不能为空')
+      :e.code==='missing_recipient_name'?T('Recipient name is required','收货人不能为空')
+      :e.code==='pickup_order'?T('Pickup order — no shipping address','自提订单 — 无收货地址')
+      :orderErrorText(e);
+    render();
+  });
+});
+/* The sends are detached and record their own outcome, so — like the desktop —
+   this says it is trying and reads the order again a moment later, rather than
+   claiming a result the endpoint could not have seen. */
+reg('renotify', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!o||o._id==null||o.viewOnly) return;
+  orderWrite('renotify', async()=>{
+    await apiWrite('/orders/'+o._id+'/renotify',{});
+    setTimeout(()=>{ if(state.detailId===o.id) rereadOrder(o); },2500);
+    return T('Trying again — the result appears below in a moment.','正在重试,稍后在下方显示结果。');
+  });
+});
+reg('ocrRerun', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!o||o._id==null||o.viewOnly) return;
+  orderWrite('ocr', async()=>{
+    let r;
+    try{ r=await apiWrite('/orders/'+o._id+'/alipay-ocr/rerun',{}); }
+    catch(e){
+      // The desktop's own sentence for a refused read, code and all: a key that
+      // is off (ocr_unavailable) is not cured by trying again.
+      if(e&&!e.refused&&(e.code==='ocr_unavailable'||e.code==='no_proof')){
+        const err=new Error(T('Re-run failed ('+e.code+')','重新识别失败 ('+e.code+')')); err.code='__plain'; throw err;
+      }
+      throw e;
+    }
+    const v=r&&r.data&&r.data.verdict;
+    await rereadOrder(o);
+    return v==='match'?T('Verified ✓','核对通过 ✓')
+      :v==='mismatch'?T('Read it — does not match','已识别 · 不一致')
+      :T('Still could not read — try again or verify manually','仍无法识别 · 请重试或人工核对');
   });
 });
 reg('copyAddr', ()=>{
@@ -4032,23 +4254,7 @@ reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('inboxGo', s=>{ state.inboxSeg=s; CMD.push('inbox'); });
 reg('poSeg', v=>{ state.poSeg=v; render(); });
 reg('pollOpen', id=>{ state.pollOpen = state.pollOpen===Number(id) ? null : Number(id); render(); });
-/* Opening a poll makes it visible to every customer; closing one stops the
-   voting. Both are one tap and both are reversible, so neither asks — but the
-   card says what a draft means before you open it. */
-reg('pollStatus', (id,st)=>{
-  const p=(state.polls||[]).find(x=>x.id===Number(id)); if(!p||state.pollBusy) return;
-  state.pollBusy=p.id; state.pollsErr=null; render();
-  apiWrite('/polls/'+p.id,{status:st},'PUT').then(()=>{
-    state.pollBusy=null;
-    showToast(st==='open'?T('Poll is live','投票已开启'):T('Poll closed','投票已关闭'));
-    state.pollsTried=false; loadPolls(true);
-  }).catch(e=>{
-    state.pollBusy=null;
-    if(String(e.message)==='auth') return;
-    state.pollsErr=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
-    render();
-  });
-});
+/* The poll status write and its confirm live with the Voting screen (§325 M7). */
 reg('finalizeTopup', id=>{
   const t=(state.tup||[]).find(x=>x.id===Number(id)); if(!t||state.tupBusy) return;
   // It credits a real wallet. The desktop asks; so does this.
@@ -4873,6 +5079,17 @@ reg('closeReply', ()=>{ state.reply=null; state.thread=null; render(); });
    purchase order is received in sheetPO now, which actually PUTs. */
 reg('toggleCoupon', code=>toggleCoupon(code));
 reg('recallBroadcast', id=>recallBroadcast(Number(id)));
+/* §325 M6 — Recall takes a sent broadcast out of every customer's inbox, so it
+   asks first, in the desktop's words. */
+reg('recallAsk', id=>{
+  id=Number(id);
+  const b=(DB.broadcasts||[]).find(x=>x.id===id);
+  if(!b||b.st!=='sent'||b.ended||!mCan('broadcasts:send')) return;
+  state.ask={title:T('Recall this broadcast (remove from every customer\'s inbox)?','撤回此群发消息（从每位客户的收件箱中移除）?'),
+    confirmLabel:T('Recall','撤回'), danger:true, run:()=>recallBroadcast(id)};
+  render();
+});
+reg('bcAgain', id=>bcSendAgain(Number(id)));
 reg('togglePrint', ()=>togglePrint());
 /* qsInc/qsDec went the same way: Quick stock has counted in Products since the
    parity sweep, and these two moved a number nothing ever saved. */
@@ -7341,7 +7558,7 @@ const MORE_GROUPS=[
     ['channelsync','refresh-cw','Channel sync','渠道同步']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
-  {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
+  {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题'],['snippets','languages','Mini-app copy','小程序文案']]},
   {h:null,rows:[['settings','settings','Settings','设置']]},
 ];
 /* MORE_GROUPS filtered to what this operator can reach, with each row resolved
@@ -7511,6 +7728,471 @@ function setupState(){
   return {pct:null, real:false, allDone:false};
 }
 /* ==========================================================================
+   §325 M4 — CONTENT THAT SAVES ITSELF: a settings card on the phone (§279)
+   --------------------------------------------------------------------------
+   Legal, FAQ, About and the mini-app copy are §279 cards on the desktop
+   (autosaveCard in 01-core.js): the page's whole payload is read, held if the
+   server would refuse it, sent after a pause as PUT /config?history=<card>,
+   and Undo / Version history work on that card's own history. This is the
+   same card for the phone, on the same engine (TacetAutosave), the same card
+   names and the same payloads, so a version saved on one surface is a version
+   on the other, and a restore on either puts back the same keys.
+
+   The card holds its own draft (the screen draws from the draft, never from
+   state.cfg, which the save replaces under it). A field in a live sheet writes
+   into the draft and nudges the engine; a list change (add, move, remove)
+   does the same from the screen. Leaving, or the app going to the
+   background, sends what is pending; the reload guard waits for it.
+
+   Drawn for the keys that open these screens: the server's rule for the
+   legal / faq / about / copy keys is content:view OR content:edit, the
+   desktop tabs' own (TAB_CAP). ========================================== */
+const CONTENT_KEYS=['content:view','content:edit'];
+const CFG_CARD={};
+function cfgCard(card, o){
+  const c=CFG_CARD[card]||(CFG_CARD[card]={card, auto:null});
+  Object.assign(c,o);
+  return c;
+}
+/* The visit starts once the draft holds the server's values. */
+function cfgCardStart(c){
+  if(typeof TacetAutosave==='undefined') return;
+  if(c.auto) c.auto.stop();
+  c.auto=TacetAutosave.create({
+    read:()=>c.read(),
+    hold:p=>c.hold?c.hold(p):'',
+    /* §325 M7 — a card whose settings live behind a route of their own (the
+       voting and leaderboard settings, withConfigHistory on the server) sends
+       through its own `put`; every other card is PUT /config. */
+    send:(body,note)=>(c.put?c.put(body,note):apiWrite('/config?history='+encodeURIComponent(c.card)+(note?'&note='+note:''),body,'PUT').then(j=>{
+      // The rest of the app reads state.cfg; the screen reads its draft.
+      if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
+    })).then(()=>{ if(c.after) c.after(body); }),
+    onChange:()=>{ askLiveRepaint(); cardFootRepaint(c); },
+  });
+  c.auto.start();
+}
+/* Named card*, not cfg*: Settings' own autosave cards (§325 X5) brought a
+   cfgFoot / cfgFootHtml / cfgUndo / cfgHistory of their own, for 'shop' and
+   'cs'. Two of each in one script is a SyntaxError for the const and a silent
+   last-one-wins for the rest, so these took the other name. */
+function cardFootHtml(c){
+  const A=c.auto, st=A?A.state:'saved';
+  const line=st==='saving'||st==='pending'?T('Saving…','保存中…')
+    : st==='hold'?escAttr(A.message)
+    : st==='error'?escAttr(T('Save failed: ','保存失败:')+(A.message||''))
+    : T('All changes saved','已自动保存');
+  const tone=st==='error'?'var(--brick-ink)':st==='hold'?'var(--amber-ink)':'var(--text-secondary)';
+  return `<div style="font-size:12.5px;color:${tone};text-align:center">${line}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      ${A&&A.canUndo()?`<button class="btn2" style="flex:1" onclick="APP.cmd('cardUndo','${c.card}')">${T('Undo','撤销')}</button>`:''}
+      <button class="btn2" style="flex:1" onclick="APP.cmd('cardHistory','${c.card}')">${T('Version history','历史版本')}</button></div>`;
+}
+function cardFoot(c){ return `<div id="mCardFoot-${c.card.replace(/[^a-z0-9]/gi,'_')}">${cardFootHtml(c)}</div>`; }
+function cardFootRepaint(c){ const el=document.getElementById('mCardFoot-'+c.card.replace(/[^a-z0-9]/gi,'_')); if(el) el.innerHTML=cardFootHtml(c); }
+/* The history query a route-owned card adds to its own path (§279). */
+const cfgHistQ=(card,note)=>'?history='+encodeURIComponent(card)+(note?'&note='+note:'');
+function cfgBusy(){ return Object.keys(CFG_CARD).some(k=>{ const a=CFG_CARD[k].auto; return !!(a&&a.busy()); }); }
+reg('cardUndo', card=>{ const c=CFG_CARD[card]; if(!c||!c.auto) return; c.auto.undo(p=>{ c.apply(p); render(); }); });
+reg('cardHistory', card=>{ const c=CFG_CARD[card]; if(c) cfgHistory(c); });
+/* The card's versions, newest first; a restore puts the snapshot into the
+   draft and sends it as a restore — what the desktop's history does. */
+function cfgHistory(c){
+  if(!c.auto) return;
+  Promise.resolve(c.auto.flush()).then(()=>api('/config/history?card='+encodeURIComponent(c.card))).then(j=>{
+    const list=Array.isArray(j&&j.versions)?j.versions:[];
+    if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+    liveHistorySheet(list, v=>(v.changed||[]).map(k=>c.words&&c.words[k]?T(...c.words[k]):k).join(' · '),
+      v=>{ const snap=v.snapshot||{}; c.apply(c.fromSnapshot?c.fromSnapshot(snap):snap); render(); return c.auto.flush('restore').then(()=>{
+        if(c.auto.state==='error') throw new Error(c.auto.message||''); }); });
+  }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); });
+}
+/* A live sheet on a card: `fields` read and write the card's draft through
+   get / set; `acts` are the item's own buttons (move, remove). */
+function cfgSheet(c, title, body, fields, get, set, acts){
+  if(!c.auto) return;
+  state.ask={title, body, fields, live:{auto:c.auto, get, set:(k,v)=>set(k,v), apply:p=>c.apply(p),
+    history:()=>cfgHistory(c), acts:acts||null,
+    close:()=>{ Promise.resolve(c.auto.flush()).then(()=>render()); }}};
+  state.askErr=null;
+  render();
+}
+reg('askLiveAct', k=>{ const L=state.ask&&state.ask.live; if(!L||!L.acts) return; const a=L.acts.find(x=>x.key===k); if(a) a.run(); });
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden'){ Object.keys(CFG_CARD).forEach(k=>{ const a=CFG_CARD[k].auto; if(a) a.flush(); });
+    if(ML.auto) ML.auto.flush(); }
+});
+
+/* ── Legal pages (desktop: LEGAL_CARD, 05-marketing.js) ────────────────────
+   Both documents in both languages, as one card ('legal'), and every save
+   stamps today (the shop's day) as both pages' "updated" line — what the
+   desktop card sends. */
+let LEGAL_D=null;
+const LEGAL_KEYS=['legal.privacy.body_en','legal.privacy.body_cn','legal.terms.body_en','legal.terms.body_cn'];
+const legalCard=()=>cfgCard('legal',{
+  read:()=>{ const today=shopToday(); return {
+    'legal.privacy.body_en':LEGAL_D['legal.privacy.body_en'], 'legal.privacy.body_cn':LEGAL_D['legal.privacy.body_cn'],
+    'legal.terms.body_en':LEGAL_D['legal.terms.body_en'],     'legal.terms.body_cn':LEGAL_D['legal.terms.body_cn'],
+    'legal.privacy.updated_at':today, 'legal.terms.updated_at':today}; },
+  apply:b=>{ LEGAL_KEYS.forEach(k=>{ LEGAL_D[k]=String((b&&b[k])||''); }); },
+  words:{'legal.privacy.body_en':['Privacy policy','隐私政策'],'legal.privacy.body_cn':['Privacy policy','隐私政策'],
+    'legal.terms.body_en':['Terms of service','服务条款'],'legal.terms.body_cn':['Terms of service','服务条款']},
+});
+function legalEnsure(){
+  if(LEGAL_D||!state.cfg) return;
+  LEGAL_D={}; LEGAL_KEYS.forEach(k=>{ LEGAL_D[k]=String(cfgGet(k,'')||''); });
+  if(mCan(CONTENT_KEYS)) cfgCardStart(legalCard());
+}
+reg('legalEdit', key=>{
+  if(!mCan(CONTENT_KEYS)||!LEGAL_D||(key!=='terms'&&key!=='privacy')) return;
+  const name=key==='terms'?T('Terms of service','服务条款'):T('Privacy policy','隐私政策');
+  cfgSheet(legalCard(), name, null,
+    [{id:'en',label:T('English body','英文正文'),multiline:true},
+     {id:'cn',label:'中文正文',multiline:true}],
+    f=>LEGAL_D['legal.'+key+'.body_'+f], (f,v)=>{ LEGAL_D['legal.'+key+'.body_'+f]=v; });
+});
+
+/* ── FAQ & help (desktop: 07-content-billing.js FAQ_CARD) ─────────────────
+   Two lists — categories and questions — saved whole as one card ('faq'),
+   held for the desktop's reasons in the desktop's words, questions given an
+   id from their text the way the desktop gives them one, and that id kept. */
+const FAQ_DEFAULT_CATS=[{id:'orders',en:'Orders',cn:'订单',color:'lime'},{id:'delivery',en:'Delivery',cn:'配送',color:'papaya'},
+  {id:'products',en:'Products',cn:'产品',color:'pink'},{id:'wallet',en:'Wallet',cn:'钱包',color:'sky'},
+  {id:'membership',en:'Membership',cn:'会员',color:'corn'},{id:'account',en:'Account',cn:'账户',color:'avocado'}];
+const FAQ_COLOURS=['lime','papaya','sky','corn','pea','cucumber','pink','berry','carrot','lotus','almond','lemon','avocado','forest'];
+let FAQ_D=null;   // {cats:[{id,en,cn,color}], qs:[{id,cat,q_en,q_cn,a_en,a_cn}]}
+const faqSlug=v=>String(v).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
+function faqPayload(){
+  const qIds=new Set();
+  const qs=FAQ_D.qs.map((q,i)=>{
+    let id=q.id;
+    if(!id){ const base=(q.q_en||q.q_cn||`q-${i+1}`).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+      id=`q-${base||(i+1)}`; }
+    let unique=id, n=2;
+    while(qIds.has(unique)) unique=`${id}-${n++}`;
+    qIds.add(unique);
+    return {id:unique, cat:q.cat, q_en:q.q_en, q_cn:q.q_cn, a_en:q.a_en, a_cn:q.a_cn};
+  });
+  return {'faq.categories':FAQ_D.cats.map(c=>({id:c.id, en:c.en, cn:c.cn, color:c.color})), 'faq.questions':qs};
+}
+function faqHold(b){
+  const catIds=new Set();
+  for(const c of b['faq.categories']){
+    if(!c.id) return T('Every category needs an id','每个分类都需要 id');
+    if(catIds.has(c.id)) return T('Duplicate category id "'+c.id+'"','分类 id 重复 "'+c.id+'"');
+    if(!c.en&&!c.cn) return T('Category "'+c.id+'" needs a label','分类需要名称');
+    catIds.add(c.id);
+  }
+  for(const q of b['faq.questions']){
+    if(!q.cat) return T('Question "'+(q.q_en||q.q_cn||q.id)+'" needs a category','该问题需要选择分类');
+    if(!q.q_en&&!q.q_cn) return T('Question "'+q.id+'" needs a Q in at least one language','问题至少需一种语言');
+    if(!q.a_en&&!q.a_cn) return T('Question "'+q.id+'" needs an A in at least one language','回答至少需一种语言');
+  }
+  return '';
+}
+const faqCard=()=>cfgCard('faq',{
+  read:faqPayload, hold:faqHold,
+  apply:b=>{ FAQ_D={cats:((b&&b['faq.categories'])||[]).map(c=>Object.assign({},c)), qs:((b&&b['faq.questions'])||[]).map(q=>Object.assign({},q))}; },
+  /* The ids the save assigned are kept, matched on the text as well as the
+     place, without repainting: the operator may be mid-answer. */
+  after:b=>{ (b['faq.questions']||[]).forEach((q,i)=>{ const cur=FAQ_D&&FAQ_D.qs[i];
+    if(cur&&!cur.id&&cur.q_en===q.q_en&&cur.q_cn===q.q_cn) cur.id=q.id; }); },
+  words:{'faq.categories':['Categories','分类'],'faq.questions':['Questions & answers','问题与答案']},
+});
+function faqEnsure(){
+  if(FAQ_D||!state.cfg) return;
+  const cats=cfgGet('faq.categories',null), qs=cfgGet('faq.questions',null);
+  FAQ_D={
+    cats:Array.isArray(cats)&&cats.length?cats.map(c=>({id:String(c.id||''),en:String(c.en||''),cn:String(c.cn||''),color:String(c.color||'lime')})):FAQ_DEFAULT_CATS.map(c=>Object.assign({},c)),
+    qs:Array.isArray(qs)&&qs.length?qs.map(q=>({id:String(q.id||''),cat:String(q.cat||''),q_en:String(q.q_en||''),q_cn:String(q.q_cn||''),a_en:String(q.a_en||''),a_cn:String(q.a_cn||'')})):[],
+  };
+  if(mCan(CONTENT_KEYS)) cfgCardStart(faqCard());
+}
+function faqTouch(){ const c=CFG_CARD.faq; if(c&&c.auto) c.auto.touch(); }
+function faqQSheet(i){
+  const q=FAQ_D&&FAQ_D.qs[i]; if(!q) return;
+  const n=FAQ_D.qs.length;
+  const acts=[];
+  if(i>0) acts.push({key:'up',label:T('Move up','上移'),run:()=>{ faqMove(i,-1); faqQSheet(i-1); }});
+  if(i<n-1) acts.push({key:'down',label:T('Move down','下移'),run:()=>{ faqMove(i,1); faqQSheet(i+1); }});
+  acts.push({key:'rm',label:T('Remove','删除'),danger:true,run:()=>faqRemoveQ(i)});
+  cfgSheet(faqCard(), T('Question','问题')+' '+String(i+1).padStart(2,'0'), null,
+    [{id:'cat',label:T('Category','分类'),choices:[['',T('— pick category —','— 选择分类 —')]].concat(FAQ_D.cats.filter(c=>c.id).map(c=>[c.id,escAttr(c.id+' · '+(c.en||c.cn))]))},
+     {id:'q_en',label:'EN question',placeholder:'When will my order arrive?'},
+     {id:'q_cn',label:'中文问题',placeholder:'订单什么时候到？'},
+     {id:'a_en',label:'EN answer',multiline:true,placeholder:'Standard orders ship within 24 hours…'},
+     {id:'a_cn',label:'中文回答',multiline:true,placeholder:'标准订单 24 小时内发货…'},
+     {id:'id',label:T('id (optional)','选填'),placeholder:'auto',commit:true}],
+    f=>{ const cur=FAQ_D.qs[i]; return cur?cur[f]:''; },
+    (f,v)=>{ const cur=FAQ_D.qs[i]; if(cur) cur[f]=f==='id'?faqSlug(v):v; }, acts);
+}
+function faqMove(i,dir){ const j=i+dir; if(!FAQ_D||j<0||j>=FAQ_D.qs.length) return;
+  const t=FAQ_D.qs[i]; FAQ_D.qs[i]=FAQ_D.qs[j]; FAQ_D.qs[j]=t; faqTouch(); }
+function faqRemoveQ(i){
+  const q=FAQ_D&&FAQ_D.qs[i]; if(!q) return;
+  const go=()=>{ FAQ_D.qs.splice(i,1); faqTouch(); state.ask=null; render(); };
+  if(!(q.q_en||q.q_cn)){ go(); return; }
+  const t=q.q_en||q.q_cn;
+  state.ask={title:T('Remove "'+t+'"?','移除 "'+t+'"？'), confirmLabel:T('Remove','删除'), danger:true, run:go};
+  render();
+}
+reg('faqEditQ', i=>{ if(mCan(CONTENT_KEYS)) faqQSheet(Number(i)); });
+reg('faqAddQ', ()=>{ if(!mCan(CONTENT_KEYS)||!FAQ_D) return;
+  FAQ_D.qs.push({id:'',cat:(FAQ_D.cats[0]&&FAQ_D.cats[0].id)||'',q_en:'',q_cn:'',a_en:'',a_cn:''});
+  faqTouch(); faqQSheet(FAQ_D.qs.length-1); });
+function faqCatSheet(i){
+  const c=FAQ_D&&FAQ_D.cats[i]; if(!c) return;
+  cfgSheet(faqCard(), T('Category','分类'), null,
+    [{id:'id',label:'id',commit:true},
+     {id:'en',label:T('English label','英文名称')},
+     {id:'cn',label:'中文标签'},
+     {id:'color',label:T('Colour','颜色'),choices:FAQ_COLOURS.map(x=>[x,x])}],
+    f=>{ const cur=FAQ_D.cats[i]; return cur?cur[f]:''; },
+    (f,v)=>{ const cur=FAQ_D.cats[i]; if(cur) cur[f]=f==='id'?faqSlug(v):v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>faqRemoveCat(i)}]);
+}
+function faqRemoveCat(i){
+  const c=FAQ_D&&FAQ_D.cats[i]; if(!c) return;
+  const used=FAQ_D.qs.filter(q=>q.cat===c.id).length;
+  const go=()=>{ FAQ_D.cats.splice(i,1); faqTouch(); state.ask=null; render(); };
+  if(!used){ go(); return; }
+  const nm=c.id||'(empty)';
+  state.ask={title:T('Remove "'+nm+'"? '+used+' question(s) still reference it and will be left uncategorised.',
+                     '移除 "'+nm+'"？仍有 '+used+' 个问题引用它，将变为未分类。'),
+    confirmLabel:T('Remove','删除'), danger:true, run:go};
+  render();
+}
+reg('faqEditCat', i=>{ if(mCan(CONTENT_KEYS)) faqCatSheet(Number(i)); });
+reg('faqAddCat', ()=>{ if(!mCan(CONTENT_KEYS)||!FAQ_D) return;
+  FAQ_D.cats.push({id:'',en:'',cn:'',color:'lime'}); faqTouch(); faqCatSheet(FAQ_D.cats.length-1); });
+
+/* ── About page (desktop: 10-extras.js ABOUT_CARD) ─────────────────────────
+   One key, about.content, as the desktop saves it: the loaded content first
+   (so a key no control asks about survives), then every field, the three
+   lists cleaned the desktop's way. Sections open in live sheets; the stat
+   strip and the IN / OUT lists add and remove rows; the two pictures go to
+   the editor's own upload (/cms/media, as the desktop's About does), shrunk on
+   the phone first. Words are the desktop editor's own pairs. */
+const ABOUT_EMPTY={kicker_en:'',kicker_cn:'',manifesto_en:'',manifesto_cn:'',stats:[],
+  founder_kicker_en:'',founder_kicker_cn:'',founder_name_en:'',founder_name_cn:'',founder_title_en:'',founder_title_cn:'',
+  founder_quote_en:'',founder_quote_cn:'',founder_photo_url:'',promise_kicker_en:'',promise_kicker_cn:'',
+  in_items:[],out_items:[],outro_en:'',outro_cn:'',cta_en:'',cta_cn:'',hero_image_url:''};
+const ABOUT_MAX_STATS=4;
+let ABOUT_D=null, ABOUT_IMG={busy:null, err:''};
+function aboutFrom(c){
+  const a=Object.assign({},ABOUT_EMPTY,(c&&typeof c==='object')?c:{});
+  ['stats','in_items','out_items'].forEach(k=>{ a[k]=Array.isArray(a[k])?a[k].map(x=>Object.assign({},x)):[]; });
+  return a;
+}
+function aboutCollect(){
+  const a=ABOUT_D, s=k=>String(a[k]==null?'':a[k]);
+  return Object.assign({},a,{
+    hero_image_url:a.hero_image_url||'',
+    kicker_en:s('kicker_en'), kicker_cn:s('kicker_cn'), manifesto_en:s('manifesto_en'), manifesto_cn:s('manifesto_cn'),
+    stats:a.stats.map(x=>({value_en:x.value_en||'',value_cn:x.value_cn||'',label_en:x.label_en||'',label_cn:x.label_cn||''})),
+    founder_kicker_en:s('founder_kicker_en'), founder_kicker_cn:s('founder_kicker_cn'),
+    founder_name_en:s('founder_name_en'), founder_name_cn:s('founder_name_cn'),
+    founder_title_en:s('founder_title_en'), founder_title_cn:s('founder_title_cn'),
+    founder_quote_en:s('founder_quote_en'), founder_quote_cn:s('founder_quote_cn'),
+    founder_photo_url:a.founder_photo_url||'',
+    promise_kicker_en:s('promise_kicker_en'), promise_kicker_cn:s('promise_kicker_cn'),
+    in_items:a.in_items.map(x=>({en:x.en||'',cn:x.cn||''})),
+    out_items:a.out_items.map(x=>({en:x.en||'',cn:x.cn||''})),
+    outro_en:s('outro_en'), outro_cn:s('outro_cn'), cta_en:s('cta_en'), cta_cn:s('cta_cn'),
+  });
+}
+const aboutCard=()=>cfgCard('about',{
+  read:()=>({'about.content':aboutCollect()}),
+  apply:b=>{ ABOUT_D=aboutFrom(b&&b['about.content']); },
+  words:{'about.content':['About page','关于页']},
+});
+function aboutEnsure(){
+  if(ABOUT_D||!state.cfg) return;
+  ABOUT_D=aboutFrom(cfgGet('about.content',null));
+  if(mCan(CONTENT_KEYS)) cfgCardStart(aboutCard());
+}
+function aboutTouch(){ const c=CFG_CARD.about; if(c&&c.auto) c.auto.touch(); }
+/* The desktop's sections, as live sheets: [title en, cn], fields [key, en, cn, multiline]. */
+const ABOUT_SECTIONS={
+  manifesto:[['Manifesto','宣言'],[['kicker_en','Kicker (EN)','引题(英文)'],['kicker_cn','Kicker suffix (CN)','引题后缀(中文)'],
+    ['manifesto_en','Body — English','正文(英文)',1],['manifesto_cn','Body — 中文','Body — 中文',1]]],
+  founder:[['Founder','创始人'],[['founder_kicker_en','Section kicker (EN)','栏目引题(英文)'],['founder_kicker_cn','Section kicker suffix (CN)','栏目引题后缀(中文)'],
+    ['founder_name_en','Name (EN)','姓名(英文)'],['founder_name_cn','Name (CN)','姓名(中文)'],
+    ['founder_title_en','Title (EN)','头衔(英文)'],['founder_title_cn','Title (CN)','头衔(中文)'],
+    ['founder_quote_en','Quote (EN)','引言(英文)',1],['founder_quote_cn','Quote (CN)','引言(中文)',1]]],
+  promise:[["What's IN / What's OUT",'是 / 否'],[['promise_kicker_en','Section kicker (EN)','栏目引题(英文)'],['promise_kicker_cn','Section kicker suffix (CN)','栏目引题后缀(中文)']]],
+  signoff:[['Sign-off','结尾'],[['outro_en','Headline (EN)','标题(英文)'],['outro_cn','Headline (CN)','标题(中文)'],
+    ['cta_en','Button label (EN)','按钮文字(英文)'],['cta_cn','Button label (CN)','按钮文字(中文)']]],
+};
+reg('aboutEdit', k=>{
+  const sec=ABOUT_SECTIONS[k]; if(!sec||!ABOUT_D||!mCan(CONTENT_KEYS)) return;
+  cfgSheet(aboutCard(), T(...sec[0]),
+    k==='manifesto'?T('Wrap a word with **double asterisks** to make it bold (e.g. **plant-based food**).','用 **双星号** 包住词语即可加粗(例如 **plant-based food**)。'):null,
+    sec[1].map(([id,en,cn,ml])=>({id,label:T(en,cn),multiline:!!ml})),
+    f=>ABOUT_D[f], (f,v)=>{ ABOUT_D[f]=v; });
+});
+/* A row of a list (the stat strip, IN, OUT), in its own sheet with Remove. */
+const ABOUT_ROWS={
+  stats:[['Stat strip','数据条'],[['value_en','Value EN','英文值'],['value_cn','Value CN','中文值'],['label_en','Label EN','英文标签'],['label_cn','Label CN','中文标签']]],
+  in_items:[["What's IN / What's OUT",'是 / 否'],[['en','EN','EN'],['cn','CN','CN']]],
+  out_items:[["What's IN / What's OUT",'是 / 否'],[['en','EN','EN'],['cn','CN','CN']]],
+};
+function aboutRowSheet(list, i){
+  const spec=ABOUT_ROWS[list]; if(!spec||!ABOUT_D||!ABOUT_D[list][i]) return;
+  cfgSheet(aboutCard(), T(...spec[0])+' · '+(i+1), null,
+    spec[1].map(([id,en,cn])=>({id,label:T(en,cn)})),
+    f=>{ const r=ABOUT_D[list][i]; return r?r[f]:''; }, (f,v)=>{ const r=ABOUT_D[list][i]; if(r) r[f]=v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>{ ABOUT_D[list].splice(i,1); aboutTouch(); state.ask=null; render(); }}]);
+}
+reg('aboutRow', (list,i)=>{ if(mCan(CONTENT_KEYS)) aboutRowSheet(list, Number(i)); });
+reg('aboutAddRow', list=>{
+  if(!mCan(CONTENT_KEYS)||!ABOUT_D||!ABOUT_ROWS[list]) return;
+  if(list==='stats'&&ABOUT_D.stats.length>=ABOUT_MAX_STATS) return;
+  ABOUT_D[list].push(list==='stats'?{value_en:'',value_cn:'',label_en:'',label_cn:''}:{en:'',cn:''});
+  aboutTouch(); aboutRowSheet(list, ABOUT_D[list].length-1);
+});
+const ABOUT_IMAGES={hero_image_url:1, founder_photo_url:1};
+reg('aboutPic', key=>{
+  if(!ABOUT_IMAGES[key]||ABOUT_IMG.busy||!mCan(CONTENT_KEYS)) return;
+  const el=document.createElement('input'); el.type='file'; el.accept='image/*';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) aboutUpload(key,f); };
+  el.click();
+});
+reg('aboutPicClear', key=>{ if(!ABOUT_IMAGES[key]||!ABOUT_D||!mCan(CONTENT_KEYS)) return; ABOUT_D[key]=''; aboutTouch(); render(); });
+async function aboutUpload(key, file){
+  ABOUT_IMG={busy:key, err:''}; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'about.jpg');
+    const r=await fetch(API+'/cms/media',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401){ location.href='/backend/login'; return; }
+    if(r.status===403){ ABOUT_IMG.err=(await apiRefusal(r)).message; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data){
+      const reason=MEDIA_ERR[j&&j.error];
+      ABOUT_IMG.err=T('That did not upload.','上传失败。')+(reason?' '+T(...reason):''); return;
+    }
+    ABOUT_D[key]=j.data.url||('/api/retail/media/'+j.data.id);
+    aboutTouch();
+  }catch(e){ ABOUT_IMG.err=T('That did not upload.','上传失败。'); }
+  finally{ ABOUT_IMG.busy=null; render(); }
+}
+function aboutPicCard(key, title, emptyText){
+  const url=ABOUT_D[key], busy=ABOUT_IMG.busy===key;
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${title}</div>
+    ${url?`<img src="${escAttr(url)}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;background:var(--surface-raised)">`
+      :`<div style="font-size:13.5px;color:var(--text-secondary)">${emptyText}</div>`}
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1" ${ABOUT_IMG.busy?'disabled':''} onclick="APP.cmd('aboutPic','${key}')">${busy?T('Uploading…','上传中…'):T('Choose image…','选择图片…')}</button>
+      ${url?`<button class="btn2" style="flex:1" ${ABOUT_IMG.busy?'disabled':''} onclick="APP.cmd('aboutPicClear','${key}')">${T('Remove','移除')}</button>`:''}</div></div>`;
+}
+function screenAboutEdit(){
+  const a=ABOUT_D, c=CFG_CARD.about;
+  const pick=(en,cn)=>LANG==='en'?(a[en]||a[cn]||''):(a[cn]||a[en]||'');
+  const sec=(k,summary)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+    <div class="eyebrow">${T(...ABOUT_SECTIONS[k][0])}</div>
+    ${summary?`<div style="font-size:14.5px;line-height:1.55;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical">${escAttr(summary)}</div>`:''}
+    <button class="btn2" style="width:100%" onclick="APP.cmd('aboutEdit','${k}')">${T('Edit','编辑')}</button></div>`;
+  const rows=(list,label)=>`${a[list].length?`<div class="list">${a[list].map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:48px;padding:10px 14px" onclick="APP.cmd('aboutRow','${list}',${i})">
+        <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(label(r))||'—'}</span>
+        <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`).join('')}</div>`:''}`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${ABOUT_IMG.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(ABOUT_IMG.err)}</div>`:''}
+    ${aboutPicCard('hero_image_url',T('Top of the page','图片'),T('No image — the page starts at the text.','暂无图片'))}
+    ${sec('manifesto',pick('manifesto_en','manifesto_cn').replace(/\*\*/g,''))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${T('Stat strip','数据条')}</div>
+      ${rows('stats',r=>[LANG==='en'?(r.value_en||r.value_cn):(r.value_cn||r.value_en),LANG==='en'?(r.label_en||r.label_cn):(r.label_cn||r.label_en)].filter(Boolean).join(' · '))}
+      ${a.stats.length<ABOUT_MAX_STATS?`<button class="btn2" style="width:100%" onclick="APP.cmd('aboutAddRow','stats')">${T('+ Add stat','添加数据项')}</button>`:''}
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('The strip is hidden from customers while it is empty. Four cells is the most the page shows.','留空则隐藏数据条。')}</div></div>
+    ${sec('founder',[pick('founder_name_en','founder_name_cn'),pick('founder_title_en','founder_title_cn')].filter(Boolean).join(' · '))}
+    ${aboutPicCard('founder_photo_url',T('Photo','照片'),T('No photo — placeholder tile will show.','暂无照片 — 将显示占位图。'))}
+    ${sec('promise',pick('promise_kicker_en','promise_kicker_cn'))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">IN · 是</div>
+      ${rows('in_items',r=>LANG==='en'?(r.en||r.cn):(r.cn||r.en))}
+      <button class="btn2" style="width:100%" onclick="APP.cmd('aboutAddRow','in_items')">${T('+ Add IN item','添加「是」项')}</button>
+      <div class="eyebrow" style="margin-top:6px">OUT · 否</div>
+      ${rows('out_items',r=>LANG==='en'?(r.en||r.cn):(r.cn||r.en))}
+      <button class="btn2" style="width:100%" onclick="APP.cmd('aboutAddRow','out_items')">${T('+ Add OUT item','添加「否」项')}</button></div>
+    ${sec('signoff',[pick('outro_en','outro_cn'),pick('cta_en','cta_cn')].filter(Boolean).join(' · '))}
+    ${c&&c.auto?cardFoot(c):''}
+  </div>`;
+}
+
+/* ── Mini-app copy (desktop: 05-marketing.js SNIPPETS / SNIP_CARD) ─────────
+   The short words on the mini app's fixed screens, each { en, cn } under its
+   copy.* key, saved as one card ('copy.snippets') with every snippet in the
+   catalogue's order — what the desktop sends. The catalogue (keys, labels,
+   hints, defaults) is the desktop's, copied; scripts/test_mobile_content_about_copy.js
+   holds the two equal. */
+const SNIPPETS=[
+  {group:'Cart · 购物车', items:[
+    {key:'copy.cart.kicker',label:'Kicker · 小标签',help:'Small caps label above the cart title. · 购物车标题上方的小写标签。',en:'YOUR BASKET',cn:'购物车'},
+    {key:'copy.cart.title',label:'Headline · 大标题',help:'Big serif title on the cart screen. · 购物车页面的大号衬线标题。',en:'Almost yours.',cn:'即将拥有。'},
+    {key:'copy.cart.empty',label:'Empty cart message · 空购物车提示',help:'Shown when the customer has no items in their cart. · 当顾客购物车内没有商品时显示。',en:'Your basket is empty — shop the garden →',cn:'购物车空空如也 — 去逛逛 →'},
+    {key:'copy.cart.checkout_btn',label:'Checkout button · 结账按钮',help:'Full-width button at the bottom of the cart. · 购物车底部的通栏按钮。',en:'CHECK OUT',cn:'结账'}]},
+  {group:'Checkout · 结账', items:[
+    {key:'copy.checkout.kicker',label:'Kicker · 小标签',help:'Small caps label above the checkout title. · 结账标题上方的小写标签。',en:'CHECKOUT · 结账',cn:'结账'},
+    {key:'copy.checkout.title',label:'Headline · 大标题',help:'Big serif title on the checkout screen. · 结账页面的大号衬线标题。',en:'Where & how.',cn:'送到何处？'},
+    {key:'copy.checkout.place_order_btn',label:'Place order button · 提交订单按钮',help:'Final order-placement button. · 最终下单按钮。',en:'PLACE ORDER →',cn:'提交订单 →'}]},
+  {group:'Product detail · 产品详情', items:[
+    {key:'copy.product.add_btn',label:'Add to basket button · 加入购物车按钮',help:'Sticky bottom button on the product page. · 商品页面底部的吸附按钮。',en:'ADD TO BASKET',cn:'加入购物车'},
+    {key:'copy.product.sold_out',label:'Sold-out badge · 售罄标签',help:'Shown over the photo when stock is exhausted. · 库存售罄时显示在图片上方。',en:'SOLD OUT',cn:'已售罄'}]},
+  {group:'Profile · 我的', items:[
+    {key:'copy.profile.greeting',label:'Greeting template · 问候语模板',help:'Big serif greeting at top of profile. Use {name} for the customer\'s nickname. · 个人页顶部的大号衬线问候语。用 {name} 代表顾客昵称。',en:'Hey, {name}.',cn:'你好，{name}。'},
+    {key:'copy.profile.kicker',label:'Kicker template · 小标签模板',help:'Small caps line above the greeting. Use {since} for join year, {level} for tier number. · 问候语上方的小写行。用 {since} 代表加入年份,{level} 代表等级编号。',en:'MEMBER SINCE {since} · LVL {level}',cn:'加入年份 {since} · 等级 {level}'}]},
+  {group:'Order tracking · 订单跟踪', items:[
+    {key:'copy.order.in_transit_title',label:'In-transit headline · 配送中标题',help:'Big title when order is dispatched. · 订单已发货时的大标题。',en:'On its way.',cn:'配送中。'},
+    {key:'copy.order.delivered_title',label:'Delivered headline · 已送达标题',help:'Big title when order is delivered. · 订单已送达时的大标题。',en:'Delivered.',cn:'已送达。'},
+    {key:'copy.order.help_link',label:'Help link · 帮助链接',help:'Small "Need help" link in the tracking footer. · 物流跟踪页脚的小号「需要帮助」链接。',en:'NEED HELP',cn:'需要帮助'}]},
+  {group:'Onboarding · 欢迎', items:[
+    {key:'copy.onboarding.skip_btn',label:'Skip button · 跳过按钮',help:'Onboarding skip button. · 引导页的跳过按钮。',en:'SKIP',cn:'跳过'},
+    {key:'copy.onboarding.next_btn',label:'Next button · 下一步按钮',help:'Onboarding next/continue button. · 引导页的下一步/继续按钮。',en:'NEXT →',cn:'下一步 →'},
+    {key:'copy.onboarding.done_btn',label:'Done button (last slide) · 完成按钮(最后一页)',help:'Final onboarding button to enter the app. · 进入应用的最后一个引导按钮。',en:'GET STARTED',cn:'开始使用'}]},
+];
+/* The catalogue's fused "English · 中文" words, one side at a time. */
+function snipSide(s){ const i=String(s).indexOf(' · '); return i<0?String(s):(LANG==='en'?String(s).slice(0,i):String(s).slice(i+3)); }
+let SNIP_D=null;   // key → {en, cn}
+const snipCard=()=>cfgCard('copy.snippets',{
+  read:()=>{ const out={}; SNIPPETS.forEach(g=>g.items.forEach(s=>{ out[s.key]={en:SNIP_D[s.key].en, cn:SNIP_D[s.key].cn}; })); return out; },
+  apply:b=>{ SNIPPETS.forEach(g=>g.items.forEach(s=>{ const v=b&&b[s.key];
+    if(v&&typeof v==='object'){ if('en' in v) SNIP_D[s.key].en=String(v.en==null?'':v.en); if('cn' in v) SNIP_D[s.key].cn=String(v.cn==null?'':v.cn); } })); },
+});
+function snipEnsure(){
+  if(SNIP_D||!state.cfg) return;
+  SNIP_D={};
+  SNIPPETS.forEach(g=>g.items.forEach(s=>{ const v=cfgGet(s.key,null);
+    SNIP_D[s.key]={en:(v&&typeof v==='object'&&'en' in v)?String(v.en==null?'':v.en):s.en, cn:(v&&typeof v==='object'&&'cn' in v)?String(v.cn==null?'':v.cn):s.cn}; }));
+  if(mCan(CONTENT_KEYS)) cfgCardStart(snipCard());
+}
+reg('snipEdit', key=>{
+  if(!SNIP_D||!SNIP_D[key]||!mCan(CONTENT_KEYS)) return;
+  let s=null; SNIPPETS.forEach(g=>g.items.forEach(x=>{ if(x.key===key) s=x; }));
+  cfgSheet(snipCard(), escAttr(snipSide(s.label)), escAttr(snipSide(s.help))+`<div class="num" style="font-size:12px;margin-top:6px;opacity:.8">${escAttr(s.key)}</div>`,
+    [{id:'en',label:'EN'},{id:'cn',label:'中'}], f=>SNIP_D[key][f], (f,v)=>{ SNIP_D[key][f]=v; });
+});
+function screenSnippets(){
+  if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  snipEnsure();
+  const canEdit=mCan(CONTENT_KEYS), c=CFG_CARD['copy.snippets'];
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T('Short text labels shown on fixed mini-app screens (cart, checkout, profile, order tracking, etc). Customers see one language at a time based on their WeChat preference — fill in both the English and the Chinese.',
+      '显示在小程序固定页面（购物车、结算、个人中心、订单追踪等）上的短文案标签。顾客会根据微信语言偏好一次只看到一种语言——请同时填写英文和中文。')}</div>
+    ${SNIPPETS.map(g=>`<div><div class="eyebrow" style="padding:2px 4px 8px">${escAttr(snipSide(g.group))}</div>
+      <div class="list">${g.items.map((s,i)=>{ const v=SNIP_D[s.key]; const now=LANG==='en'?(v.en||v.cn):(v.cn||v.en);
+        return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
+        <button class="row" style="min-height:56px;padding:12px 14px" ${canEdit?`onclick="APP.cmd('snipEdit','${s.key}')"`:'disabled'}>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <span style="font-size:13px;color:var(--text-secondary)">${escAttr(snipSide(s.label))}</span>
+            <span style="font-size:15px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(now)||'—'}</span></span>
+          ${canEdit?`<span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span>`:''}</button>`; }).join('')}</div></div>`).join('')}
+    ${canEdit&&c&&c.auto?cardFoot(c):''}
+  </div>`;
+}
+
+/* ==========================================================================
    FAQ & help (desktop: 07-content-billing.js)
    --------------------------------------------------------------------------
    The questions were live already; what the phone dropped was the shape. Help
@@ -7523,6 +8205,7 @@ function setupState(){
    ========================================================================== */
 function screenFaq(){
   if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(mCan(CONTENT_KEYS)){ faqEnsure(); if(FAQ_D) return screenFaqEdit(); }
   const qs=cfgGet('faq.questions',null);
   const cats=cfgGet('faq.categories',null);
   const list=Array.isArray(qs)?qs:[];
@@ -7554,7 +8237,38 @@ function screenFaq(){
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${groups.map(g=>`<div>${g.name?`<div class="eyebrow" style="padding:2px 4px 8px">${escAttr(g.name)}</div>`:''}
       <div class="list">${g.rows.map((q,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${row(q)}`).join('')}</div></div>`).join('')}
-    ${desktopNote()}</div>`;
+    </div>`;
+}
+/* §325 M4 — the FAQ as the desktop edits it: the questions in the order
+   customers see them (the desktop's list, numbered), each opening its own
+   live sheet; the categories below; the card's foot last. */
+function screenFaqEdit(){
+  const c=CFG_CARD.faq;
+  const catOf=id=>FAQ_D.cats.find(x=>x.id===id);
+  const qRow=(q,i)=>{ const qt=LANG==='en'?(q.q_en||q.q_cn):(q.q_cn||q.q_en); const cat=catOf(q.cat);
+    return `${i?'<div class="sep" style="margin-left:52px"></div>':''}
+    <button class="row" style="min-height:56px;padding:12px 14px" onclick="APP.cmd('faqEditQ',${i})">
+      <span class="num" style="width:24px;flex:none;font-size:12px;color:var(--text-secondary)">${String(i+1).padStart(2,'0')}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${qt?escAttr(qt):`<span style="color:var(--text-secondary)">—</span>`}</span>
+        <span style="font-size:12.5px;color:${q.cat&&!cat?'var(--amber-ink)':'var(--text-secondary)'};margin-top:2px">${escAttr(cat?(LANG==='en'?(cat.en||cat.cn):(cat.cn||cat.en)):(q.cat||T('— pick category —','— 选择分类 —')))}</span></span>
+      <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`; };
+  const cRow=(k,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+    <button class="row" style="min-height:52px;padding:12px 14px" onclick="APP.cmd('faqEditCat',${i})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px">${escAttr((LANG==='en'?(k.en||k.cn):(k.cn||k.en))||'—')}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${escAttr(k.id||'—')} · ${escAttr(k.color)}</span></span>
+      <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Questions & answers','问题与答案')}</div>
+      ${FAQ_D.qs.length?`<div class="list">${FAQ_D.qs.map(qRow).join('')}</div>`
+        :nothingYet(T('No questions yet','还没有常见问题'),T('Questions you publish appear here, and in the mini app under Help.','发布后会出现在这里，也会出现在小程序帮助页。'))}
+      <button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('faqAddQ')">${T('+ Add question','添加问题')}</button></div>
+    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Categories','分类')}</div>
+      ${FAQ_D.cats.length?`<div class="list">${FAQ_D.cats.map(cRow).join('')}</div>`:''}
+      <button class="btn2" style="width:100%;margin-top:10px" onclick="APP.cmd('faqAddCat')">${T('+ Add category','添加分类')}</button></div>
+    ${c&&c.auto?cardFoot(c):''}
+  </div>`;
 }
 
 /* ==========================================================================
@@ -7791,7 +8505,8 @@ function screenBcNew(){
         // The INDEX, not the city name: a name reaches the handler through an
         // HTML attribute and a JS string literal, and one apostrophe in it
         // would end the argument early. Nothing is escaped that is not sent.
-        `<div style="display:flex;flex-wrap:wrap;gap:8px">${regions.slice(0,12).map((r,i)=>
+        // §325 M6 — every region, as the desktop lists them; it stopped at twelve.
+        `<div style="display:flex;flex-wrap:wrap;gap:8px">${regions.map((r,i)=>
           `<button class="chip ${f.cities.indexOf(r.city)>=0?'on':''}" onclick="APP.cmd('bcfCity',${i})"><span>${escAttr(LANG==='en'&&r.city_en?r.city_en:r.city)}</span><span class="c">${r.n}</span></button>`).join('')}</div>`,
         T('None chosen reaches every region.','不选则包含所有地区。')):''}`;
   } else if(step===3){
@@ -8444,6 +9159,14 @@ function screenMore(){
    dropped the reward points, the closing time, whether a poll is featured, and
    the fact that a draft is invisible to customers. And it carried two invented
    polls in its source for whenever /polls came back empty.
+
+   §325 M7 — and it could not write one. The question, the options, the
+   rewards and the page's own two settings were "written on desktop". They are
+   written here now, on the desktop's endpoints with the desktop's bodies: the
+   editor (votRenderEditor / votCollect / votSavePoll / votDeletePoll) as a
+   screen of its own, every confirm the desktop asks before a write, and the
+   page settings (VOT_CARD) as a §279 card on /voting/config. All of it on
+   voting:edit, the key the server gates polls and the voting settings on.
    ========================================================================== */
 function loadPolls(force){
   if(state.pollsTried&&!force) return;
@@ -8488,11 +9211,10 @@ function pollCard(p){
     total+' '+T(total===1?'vote':'votes','票'),
     Number(p.reward_points||0)?'+'+p.reward_points+' '+T('pts','积分'):null,
     p.closes_at?T('closes ','截止 ')+fmtDay(p.closes_at):null].filter(Boolean).join(' · ');
-  // The one action a phone is the right place for: a poll you have decided
-  // about, closed on the spot. Writing the question is desktop work.
+  // The status write asks first, in the desktop's words (votSetStatus).
   const next = p.status==='open'?'closed':'open';
   const verb = p.status==='draft'?T('Open','开启') : p.status==='open'?T('Close','关闭') : T('Reopen','重新开启');
-  const busy=state.pollBusy===p.id;
+  const busy=state.pollBusy===p.id, can=mCan('voting:edit');
   const btn=(label,cmd,dis)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
   return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -8502,23 +9224,369 @@ function pollCard(p){
     ${p.status==='draft'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Customers cannot see a draft.','草稿对顾客不可见。')}</div>`:''}
     ${floor?`<div style="font-size:12.5px;color:var(--amber-ink)">${T('Customers are shown at least '+floor+' votes, whatever the real count is.','顾客看到的票数下限为 '+floor+' 票，与真实票数无关。')}</div>`:''}
     ${open?pollBars(p):''}
-    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap">
       ${btn(open?T('Hide results','收起结果'):T('See results','查看结果'),`APP.cmd('pollOpen',${p.id})`,false)}
-      ${btn(busy?T('Saving…','保存中…'):verb,`APP.cmd('pollStatus',${p.id},'${next}')`,busy)}</div></div>`;
+      ${can?btn(busy?T('Saving…','保存中…'):verb,`APP.cmd('pollAsk',${p.id},'${next}')`,busy):''}
+      ${can?btn(T('Edit','编辑'),`APP.cmd('pollEdit',${p.id})`,busy):''}</div></div>`;
+}
+/* ── The status write (desktop: votSetStatus) ─────────────────────────────
+   Publishing puts a poll in front of every customer and starts paying points;
+   closing locks the voting. The desktop asks before either, in these words,
+   and so does this: the card's button and the editor's go through pollAsk,
+   and pollStatus is the write the confirm runs. */
+reg('pollAsk', (id,st)=>{
+  const p=(state.polls||[]).find(x=>x.id===Number(id));
+  if(!p||state.pollBusy||!mCan('voting:edit')) return;
+  if(st!=='open'&&st!=='closed') return;
+  if(st==='open'&&p.status==='open') return;
+  const ask = st==='closed'
+    ? {title:T('Close this poll? Voting locks and the result moves to past results.','关闭此投票?投票将被锁定,结果会移到“往期结果”。'), confirmLabel:T('Close poll','关闭投票')}
+    : p.status==='closed'
+    ? {title:T('Reopen this poll? Customers can vote again.','重新开启此投票?顾客可以再次投票。'), confirmLabel:T('Reopen poll','重新开启')}
+    : {title:T('Publish this poll? Customers see it immediately and start earning points for voting.','发布此投票?顾客会立即看到,并可通过投票获得积分。'), confirmLabel:T('Publish poll','发布投票')};
+  state.ask=Object.assign(ask,{run:()=>CMD.pollStatus(p.id,st)});
+  render();
+});
+reg('pollStatus', (id,st)=>{
+  const p=(state.polls||[]).find(x=>x.id===Number(id)); if(!p||state.pollBusy||!mCan('voting:edit')) return;
+  state.pollBusy=p.id; state.pollsErr=null; if(PE&&PE.d.id===p.id) PE.err=''; render();
+  apiWrite('/polls/'+p.id,{status:st},'PUT').then(()=>{
+    state.pollBusy=null;
+    showToast(st==='open'?T('Poll published','投票已发布'):T('Poll closed','投票已关闭'));
+    // Pressed from inside the editor: the page in front takes the poll's new
+    // state, and keeps whatever else is being typed (the desktop's editor does).
+    if(PE&&PE.d.id===p.id) PE.d.status=st;
+    state.pollsTried=false; loadPolls(true); render();
+  }).catch(e=>{
+    state.pollBusy=null;
+    if(String(e.message)==='auth') return;
+    const why=e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    if(PE&&PE.d.id===p.id) PE.err=why; else state.pollsErr=why;
+    render();
+  });
+});
+
+/* ── The page's own settings (desktop: VOT_CARD) ──────────────────────────
+   The line under "Your say" in both languages, and whether customers see the
+   numbers: one §279 card ('voting') on PUT /voting/config?history=voting, the
+   desktop's three fields trimmed as it trims them. It starts only once the
+   stored settings have arrived — a card started on blanks would write blanks
+   over the real wording, which is why the desktop waits too. */
+let VOT_D=null, VOT_ERR=null, votCfgTried=false;
+const votCard=()=>cfgCard('voting',{
+  read:()=>({intro_en:String(VOT_D.intro_en||'').trim(), intro_cn:String(VOT_D.intro_cn||'').trim(), show_counts:!!VOT_D.show_counts}),
+  apply:b=>{ VOT_D=Object.assign({},VOT_D,b||{}); },
+  fromSnapshot:s=>s['voting.config']||{},
+  put:(b,note)=>apiWrite('/voting/config'+cfgHistQ('voting',note),b,'PUT'),
+  words:{'voting.config':['Page settings','页面设置']},
+});
+function loadVotCfg(){
+  if(votCfgTried) return;
+  votCfgTried=true;
+  api('/voting/config').then(d=>{
+    const c=d||{};
+    VOT_D={intro_en:String(c.intro_en||''), intro_cn:String(c.intro_cn||''), show_counts:c.show_counts!==false};
+    VOT_ERR=null;
+    if(mCan('voting:edit')) cfgCardStart(votCard());
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return; VOT_ERR=E('Could not load this.','无法加载。'); render(); });
+}
+reg('votIntroEdit', ()=>{
+  const c=CFG_CARD.voting; if(!VOT_D||!c||!c.auto||!mCan('voting:edit')) return;
+  cfgSheet(c, T('The line under “Your say”','“你说了算”下方的一行字'),
+    escAttr(T('The first thing customers read on the Your say page, under its headline. Write {pts} anywhere in it and the points the featured poll pays are filled in for you, so the line stays true when you change the reward. Saving here is live at once — you do not republish the mini app.',
+      '顾客打开“你说了算”页面后,在标题下方最先读到的一行。在文中任意位置写 {pts},系统会自动填入精选投票的奖励积分,改了奖励这行字也不会说错。此处保存后立即生效 —— 无需重新发布小程序。')),
+    [{id:'intro_en',label:'English',max:240,placeholder:'Every poll closes Sundays. Voting earns {pts} pts.'},
+     {id:'intro_cn',label:'中文',max:240,placeholder:'每周日截止,投票得 {pts} 积分。'}],
+    f=>VOT_D[f], (f,v)=>{ VOT_D[f]=v; });
+});
+reg('votCounts', ()=>{
+  const c=CFG_CARD.voting; if(!VOT_D||!c||!c.auto||!mCan('voting:edit')) return;
+  VOT_D.show_counts=!VOT_D.show_counts;
+  c.auto.touch(); render();
+});
+function votSettingsCard(){
+  const head=`<div class="eyebrow" style="padding:2px 4px 8px">${T('Page settings','页面设置')}</div>`;
+  if(VOT_ERR) return `<div>${head}<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${VOT_ERR}</div></div>`;
+  if(!VOT_D) return `<div>${head}<div style="padding:16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
+  const c=CFG_CARD.voting, can=mCan('voting:edit')&&!!(c&&c.auto);
+  const line=LANG==='en'?(VOT_D.intro_en||VOT_D.intro_cn):(VOT_D.intro_cn||VOT_D.intro_en);
+  const on=!!VOT_D.show_counts;
+  return `<div>${head}<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('The line under “Your say”','“你说了算”下方的一行字')}</span>
+      <span style="font-size:14.5px;line-height:1.5">${line?escAttr(line):'—'}</span>
+      ${can?`<button class="btn2" style="width:100%;margin-top:4px" onclick="APP.cmd('votIntroEdit')">${T('Edit','编辑')}</button>`:''}</div>
+    <div class="sep"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span style="font-size:15px">${T('Show vote counts to customers','向顾客显示票数')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on?T('On. Customers see the tallies and percentages.','开启。顾客能看到票数和百分比。'):T('Off. Customers see which option leads, never the numbers.','关闭。顾客只看到哪个选项领先,看不到数字。')}</span></span>
+      ${can?toggle(on,"APP.cmd('votCounts')"):''}</div>
+    ${can?cardFoot(c):''}</div></div>`;
 }
 function screenVoting(){
-  loadPolls();
+  loadPolls(); loadVotCfg();
   if(state.pollsErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.pollsErr}</span></div></div>`;
   if(!state.polls) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!state.polls.length) return nothingYet(T('No polls yet','还没有投票'),
-    T('Polls are written on desktop. Once one exists you can read the split and open or close it from here.',
-      '投票在电脑端创建。创建后可在此查看结果并开启或关闭。'));
+  const list=state.polls.length?state.polls.map(pollCard).join('')
+    : nothingYet(T('No polls yet','还没有投票'),
+      T('Your first poll takes about a minute. It lands on Me → Your say.','第一个投票大约一分钟就能建好,会出现在“我的 → 你说了算”。'));
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${state.polls.map(pollCard).join('')}
-    ${noteBar(T('Questions, options and rewards are written on desktop.','问题、选项与奖励在电脑端编写。'))}</div>`;
+    ${list}
+    ${votSettingsCard()}</div>`;
+}
+
+/* ── The editor (desktop: votOpenEditor … votDeletePoll) ──────────────────
+   A screen of its own, as the desktop's is a page of its own (§1.7a): the
+   question, the small label and the line under it in the language picked at
+   the top; the options with their colours (eight at most, one with votes
+   never removed on its own); the rules; the display floor and what it does to
+   the numbers. Nothing is sent until Save draft / Publish / Save changes —
+   a poll is an authored object, not a setting — so leaving with changes asks,
+   in the desktop's words, and the reload guard holds while they are unsaved. */
+const POLL_PALETTE=['#F2CA6C','#F4B8CB','#F4F087','#E96174','#B2CFED','#7BBD3B','#A8D185','#FFAF60'];
+const pollLetter=i=>String.fromCharCode(65+i);
+let PE=null;   // {d, lang, dirty, reset, qErr, err, busy}
+function pollBlank(){
+  return {id:null, question_en:'', question_cn:'', explainer_en:'', explainer_cn:'', category_en:'', category_cn:'',
+    status:'draft', closes_at:'', reward_points:5, is_featured:0, sort_order:0, display_min_total:0, winner_option_id:null,
+    options:[{label_en:'',label_cn:'',color_hex:POLL_PALETTE[0],votes:0},{label_en:'',label_cn:'',color_hex:POLL_PALETTE[1],votes:0}]};
+}
+const pollTotal=d=>(d.options||[]).reduce((s,o)=>s+(Number(o.votes)||0),0);
+reg('pollEdit', id=>{
+  if(!mCan('voting:edit')) return;
+  let d;
+  if(id!=null&&id!==''){
+    const p=(state.polls||[]).find(x=>x.id===Number(id)); if(!p) return;
+    d=JSON.parse(JSON.stringify(p));
+    d.closes_at=d.closes_at?String(d.closes_at).slice(0,16).replace(' ','T'):'';
+    if(!Array.isArray(d.options)) d.options=[];
+  } else d=pollBlank();
+  PE={d, lang:LANG==='en'?'en':'cn', dirty:false, reset:false, qErr:'', err:'', busy:null};
+  CMD.push('polledit');
+});
+/* Typing writes into the draft and repaints nothing — a repaint would take the
+   keyboard away. The display floor's line is the one thing that follows a
+   keystroke, and it is written in place. */
+reg('pollEdSet', (f,v)=>{
+  if(!PE) return;
+  PE.d[f]=v; PE.dirty=true;
+  if(f==='display_min_total'){ const el=document.getElementById('mPollBoost'); if(el) el.textContent=pollBoostLine(PE.d); }
+  if(f==='question_en'||f==='question_cn'){ if(PE.qErr){ PE.qErr=''; const el=document.getElementById('mPollQErr'); if(el) el.textContent=''; } }
+});
+reg('pollEdOpt', (i,f,v)=>{ if(!PE) return; const o=PE.d.options[Number(i)]; if(!o) return; o[f]=v; PE.dirty=true; });
+reg('pollEdLang', l=>{ if(!PE) return; PE.lang=l==='cn'?'cn':'en'; render(); });
+reg('pollEdAdd', ()=>{
+  if(!PE||PE.d.options.length>=8) return;
+  PE.d.options.push({label_en:'',label_cn:'',color_hex:POLL_PALETTE[PE.d.options.length%POLL_PALETTE.length],votes:0});
+  PE.dirty=true; render();
+});
+reg('pollEdRemove', i=>{
+  if(!PE) return; const o=PE.d.options[Number(i)]; if(!o) return;
+  if((Number(o.votes)||0)>0) return;   // votes are never dropped quietly
+  PE.d.options.splice(Number(i),1); PE.dirty=true; render();
+});
+reg('pollEdReset', on=>{ if(PE) PE.reset=!!on; });
+// The desktop's real → shown line (votBoostLine): the server's display boost.
+function pollBoostLine(d){
+  const total=pollTotal(d);
+  const floor=Math.max(0,parseInt(d.display_min_total,10)||0);
+  if(!floor||total<=0||floor<=total) return total>0
+    ? T(`Off. Customers see the real ${total} votes.`,`关闭。顾客看到真实的 ${total} 票。`)
+    : T('Off. Nothing is scaled until the first real vote.','关闭。在第一票之前不会放大任何数字。');
+  const factor=floor/total;
+  let shown=0; (d.options||[]).forEach(o=>{ shown+=Math.round((Number(o.votes)||0)*factor); });
+  return T(`Customers will see about ${shown} votes — every option ×${factor.toFixed(1)}.`,`顾客将看到约 ${shown} 票 —— 所有选项均放大 ${factor.toFixed(1)} 倍。`);
+}
+// The desktop's votCollect, field for field.
+function pollCollect(){
+  const d=PE.d;
+  const out={
+    question_en:String(d.question_en||'').trim(), question_cn:String(d.question_cn||'').trim(),
+    category_en:String(d.category_en||'').trim(), category_cn:String(d.category_cn||'').trim(),
+    explainer_en:String(d.explainer_en||'').trim(), explainer_cn:String(d.explainer_cn||'').trim(),
+    status:d.status,
+    reward_points:Math.max(0,parseInt(d.reward_points,10)||0),
+    is_featured:d.is_featured?1:0,
+    closes_at:d.closes_at||null,
+    sort_order:parseInt(d.sort_order,10)||0,
+    display_min_total:Math.max(0,parseInt(d.display_min_total,10)||0),
+    options:(d.options||[]).map((o,i)=>({id:o.id||null, label_en:String(o.label_en||'').trim(), label_cn:String(o.label_cn||'').trim(),
+      color_hex:String(o.color_hex||'').trim(), image_url:String(o.image_url||'').trim(), sort_order:i})),
+  };
+  if(d.id){
+    if('winner_option_id' in d) out.winner_option_id=d.winner_option_id?parseInt(d.winner_option_id,10):null;
+    // The clear-votes box is drawn only when there are votes to clear.
+    if((d.options||[]).some(o=>(Number(o.votes)||0)>0)) out.replace_options=!!PE.reset;
+  }
+  return out;
+}
+/* One confirm after another, each in the desktop's words; the write runs
+   only once every one of them has been answered yes. */
+function pollConfirmChain(steps, done){
+  if(!steps.length){ done(); return; }
+  const s=steps[0];
+  state.ask={title:s.title, confirmLabel:s.confirmLabel, danger:!!s.danger,
+    run:()=>{ if(s.then) s.then(); pollConfirmChain(steps.slice(1), done); }};
+  render();
+}
+function pollDone(){
+  PE=null;
+  const top=state.stack.length?state.stack[state.stack.length-1].route:null;
+  if(top==='polledit'){ forgetScroll(); state.stack.pop(); }
+  state.pollsTried=false; loadPolls(true); render();
+}
+reg('pollSave', publishAs=>{
+  if(!PE||PE.busy||state.pollBusy||!mCan('voting:edit')) return;
+  const body=pollCollect();
+  // The failure stays beside the field that caused it (§1.12).
+  if(!body.question_en&&!body.question_cn){
+    PE.qErr=E('Give the poll a question — customers see this line first.','请填写问题 —— 顾客最先看到的就是这一行。');
+    render(); return;
+  }
+  PE.qErr='';
+  // The server keys polls off the English question; a Chinese-only poll sends its own text there.
+  if(!body.question_en) body.question_en=body.question_cn;
+  const named=body.options.filter(o=>o.label_en||o.label_cn);
+  if(named.length<2){ PE.err=E('A poll needs at least two options to choose between.','投票至少需要两个可供选择的选项。'); render(); return; }
+  named.forEach(o=>{ if(!o.label_en) o.label_en=o.label_cn; });
+  body.options=named;
+  PE.err='';
+  const steps=[];
+  if(publishAs==='open'&&body.status!=='open') steps.push({
+    title:T('Publish this poll? Customers see it immediately and start earning points for voting.','发布此投票?顾客会立即看到,并可通过投票获得积分。'),
+    confirmLabel:T('Publish poll','发布投票'), then:()=>{ body.status='open'; }});
+  if(body.replace_options) steps.push({
+    title:T('Clear every vote on this poll? The tally cannot be recovered.','清空此投票的全部票数?票数无法恢复。'),
+    confirmLabel:T('Clear votes','清空票数'), danger:true});
+  pollConfirmChain(steps, ()=>{
+    if(!PE) return;
+    const id=PE.d.id;
+    PE.busy='save'; render();
+    apiWrite(id?'/polls/'+id:'/polls', body, id?'PUT':'POST').then(()=>{
+      showToast(id
+        ? (body.status==='open'&&publishAs==='open'?T('Poll published','投票已发布'):T('Poll saved','投票已保存'))
+        : (body.status==='open'?T('Poll published','投票已发布'):T('Poll created','投票已创建')));
+      pollDone();
+    }).catch(e=>{
+      if(!PE) return;
+      PE.busy=null;
+      if(String(e.message)==='auth') return;
+      PE.err=e.refused?E(...e.words):id?E('Save failed','保存失败'):E('Could not create the poll','创建投票失败');
+      render();
+    });
+  });
+});
+reg('pollDelete', ()=>{
+  if(!PE||!PE.d.id||PE.busy||state.pollBusy||!mCan('voting:edit')) return;
+  const total=pollTotal(PE.d), id=PE.d.id;
+  pollConfirmChain([{title:total?T(`Delete this poll? Its ${total} votes go with it.`,`删除此投票?已有的 ${total} 票也会一并删除。`):T('Delete this poll?','删除此投票?'),
+    confirmLabel:T('Delete poll','删除投票'), danger:true}], ()=>{
+    if(!PE||PE.d.id!==id) return;
+    PE.busy='delete'; render();
+    apiWrite('/polls/'+id,{},'DELETE').then(()=>{ showToast(T('Poll deleted','投票已删除')); pollDone(); })
+      .catch(e=>{
+        if(!PE) return;
+        PE.busy=null;
+        if(String(e.message)==='auth') return;
+        PE.err=e.refused?E(...e.words):E('Delete failed','删除失败');
+        render();
+      });
+  });
+});
+/* Back asks only when something was changed and not saved. */
+function pollMayLeave(){
+  if(!PE||!PE.dirty){ PE=null; return true; }
+  state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+    confirmLabel:T('Leave','离开'), danger:true,
+    run:()=>{ PE=null; forgetScroll(); state.stack.pop(); render(); }};
+  render();
+  return false;
+}
+function screenPollEdit(){
+  if(!PE) return screenVoting();
+  const d=PE.d, cn=PE.lang==='cn', isEdit=!!d.id;
+  const qF=cn?'question_cn':'question_en', eF=cn?'explainer_cn':'explainer_en', kF=cn?'category_cn':'category_en', lF=cn?'label_cn':'label_en';
+  const total=pollTotal(d), hasVotes=(d.options||[]).some(o=>(Number(o.votes)||0)>0);
+  const busy=!!PE.busy||state.pollBusy===d.id;
+  const stateLine=d.status==='open'?T('Open. Customers can vote on it now.','进行中。顾客现在可以投票。')
+    : d.status==='closed'?T('Closed. It shows under past results.','已结束。展示在“往期结果”中。')
+    : isEdit?T('Draft. Nobody can see it yet.','草稿。顾客还看不到。')
+    : T('New. Nothing is saved until you save it.','新建。保存前不会存下任何内容。');
+  const lab=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
+  const hint=t=>`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.5">${t}</div>`;
+  const group=(title,body,right)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span class="eyebrow">${title}</span>${right||''}</div>${body}</div>`;
+  const num=(f,v,mn,mx,label)=>`<input type="number" inputmode="numeric" ${mn!=null?`min="${mn}"`:''} ${mx!=null?`max="${mx}"`:''} value="${escAttr(String(v))}" aria-label="${escAttr(label)}" style="width:100%" oninput="APP.cmd('pollEdSet','${f}',this.value)">`;
+  const opts=(d.options||[]).map((o,i)=>{ const v=Number(o.votes)||0; return `<div style="display:flex;align-items:center;gap:10px">
+      <input type="color" value="${escAttr(o.color_hex||POLL_PALETTE[i%POLL_PALETTE.length])}" aria-label="${escAttr(T('Colour for option ','选项颜色 ')+pollLetter(i))}"
+        style="width:36px;height:36px;padding:0;border:none;background:none;flex:none" oninput="APP.cmd('pollEdOpt',${i},'color_hex',this.value)">
+      <input value="${escAttr(o[lF]||'')}" placeholder="${pollLetter(i)}" aria-label="${escAttr(T('Option ','选项 ')+pollLetter(i))}" style="flex:1;min-width:0"
+        oninput="APP.cmd('pollEdOpt',${i},'${lF}',this.value)">
+      <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${v} ${T('votes','票')}</span>
+      <button ${v>0?'disabled':''} onclick="APP.cmd('pollEdRemove',${i})" aria-label="${escAttr(T('Remove option ','删除选项 ')+pollLetter(i))}"
+        style="flex:none;width:32px;height:32px;border-radius:8px;border:1px solid var(--border-default);background:var(--surface-raised);color:var(--text-primary);font-size:18px;line-height:1;cursor:pointer;${v>0?'opacity:.4':''}">&times;</button></div>`; }).join('');
+  const winner=(d.options||[]).map((o,i)=>`<option value="${o.id||''}" ${String(d.winner_option_id||'')===String(o.id||'')?'selected':''}>${pollLetter(i)} · ${escAttr(pollOptLabel(o)==='—'?T('(unnamed)','(未命名)'):pollOptLabel(o))}</option>`).join('');
+  const primary=d.status==='draft'
+    ? `<button class="cta" ${busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pollSave','open')">${PE.busy==='save'?T('Saving…','保存中…'):T('Publish','发布')}</button>`
+    : `<button class="cta" ${busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('pollSave','')">${PE.busy==='save'?T('Saving…','保存中…'):T('Save changes','保存更改')}</button>`;
+  const secondary=d.status==='draft'
+    ? `<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('pollSave','')">${T('Save draft','保存草稿')}</button>`
+    : d.status==='open'
+    ? `<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('pollAsk',${d.id},'closed')">${state.pollBusy===d.id?T('Saving…','保存中…'):T('Close poll','关闭投票')}</button>`
+    : `<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('pollAsk',${d.id},'open')">${state.pollBusy===d.id?T('Saving…','保存中…'):T('Reopen','重新开启')}</button>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13.5px;color:var(--text-secondary)">${stateLine}</div>
+    ${group(T('The question','问题'),`
+      <div style="display:flex;gap:8px">${[['en','English'],['cn','中文']].map(([k,l])=>`<button class="chip ${PE.lang===k?'on':''}" onclick="APP.cmd('pollEdLang','${k}')"><span>${l}</span></button>`).join('')}</div>
+      <label style="display:block">${lab(T('Question','问题'))}
+        <input value="${escAttr(d[qF]||'')}" style="width:100%" oninput="APP.cmd('pollEdSet','${qF}',this.value)">
+        ${hint(T('What you are asking. Customers read this first, in bold at the top of the card.','你要问的问题。顾客最先读到的就是它,以粗体显示在卡片顶部。'))}
+        <div id="mPollQErr" style="font-size:13px;color:var(--brick-ink);margin-top:6px">${PE.qErr||''}</div></label>
+      <label style="display:block">${lab(T('Small label above it','上方的小标签'))}
+        <input value="${escAttr(d[kF]||'')}" style="width:100%" oninput="APP.cmd('pollEdSet','${kF}',this.value)">
+        ${hint(T('Optional. One or two words saying what kind of question this is — New flavour, Opening hours. Leave it empty and nothing shows.','可不填。用一两个词说明这是什么类型的问题 —— 新口味、营业时间。留空则不显示。'))}</label>
+      <label style="display:block">${lab(T('Line under the question','问题下方的一行字'))}
+        <textarea style="width:100%;min-height:72px;resize:none" oninput="APP.cmd('pollEdSet','${eF}',this.value)">${escAttr(d[eF]||'')}</textarea>
+        ${hint(T('Optional. One line telling customers why you are asking, or what happens to the winner.','可不填。用一行字告诉顾客你为什么问,或者胜出的选项会怎样。'))}</label>`)}
+    ${group(T('Options','选项'),`
+      ${opts}
+      <div><button class="btn2" style="width:100%" ${d.options.length>=8?'disabled':''} onclick="APP.cmd('pollEdAdd')">${T('Add option','添加选项')}</button>
+        ${hint(T('Customers pick exactly one of these. The colour is the dot shown beside it in the mini app. An option that already has votes cannot be removed on its own — clearing the whole poll below is the only way.','顾客只能从中选一项。颜色就是小程序里显示在该选项旁边的圆点。已有票数的选项无法单独删除 —— 只能用下方的清空整个投票。'))}</div>
+      ${isEdit&&hasVotes?`<label style="display:flex;align-items:flex-start;gap:10px">
+          <input type="checkbox" ${PE.reset?'checked':''} onchange="APP.cmd('pollEdReset',this.checked)" style="margin-top:3px">
+          <span style="font-size:14px;color:var(--brick-ink)">${T(`Clear all ${total} votes and rebuild the options`,`清空全部 ${total} 票并重建选项`)}</span></label>
+        ${hint(T('Only when you are rewriting the question entirely. Editing the labels in place keeps every vote.','仅在彻底改写问题时使用。就地修改文字不会影响任何票数。'))}`:''}`,
+      `<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${d.options.length} / 8</span>`)}
+    ${group(T('Rules','规则'),`
+      <label style="display:block">${lab(T('Points for voting','投票奖励积分'))}${num('reward_points',d.reward_points!=null?d.reward_points:5,0,100,T('Points for voting','投票奖励积分'))}
+        ${hint(T('Each customer may vote once on this poll, and that one vote pays these points. Voting on your other polls pays their own points again.','每位顾客在本投票中只能投一次,这一票即可获得这些积分。参与你的其他投票可再次获得该投票的积分。'))}</label>
+      <label style="display:block">${lab(T('Closes','截止时间'))}
+        <input type="datetime-local" value="${escAttr(d.closes_at||'')}" aria-label="${escAttr(T('Closes','截止时间'))}" style="width:100%" oninput="APP.cmd('pollEdSet','closes_at',this.value)">
+        ${hint(T('A date customers see as days left. It closes nothing by itself — the poll keeps taking votes until you press Close poll.','顾客会看到由此算出的剩余天数。它本身不会关闭投票 —— 在你点击“关闭投票”之前,投票一直接受投票。'))}</label>
+      <div>${lab(T('Feature it','设为精选'))}
+        <label style="display:flex;align-items:center;gap:10px"><input type="checkbox" ${d.is_featured?'checked':''} onchange="APP.cmd('pollEdSet','is_featured',this.checked?1:0)"><span style="font-size:15px">${T('Featured','精选')}</span></label>
+        ${hint(T('The featured poll is the big card at the top of Your say. Everything else sits under it in a plain list.','精选投票会以大卡片显示在“你说了算”页面顶部,其余投票以普通列表排在下方。'))}</div>
+      <label style="display:block">${lab(T('Order','排序'))}${num('sort_order',d.sort_order||0,null,null,T('Order','排序'))}
+        ${hint(T('Where this poll sits when several are open at once. Lower numbers come first.','多个投票同时进行时,决定本投票的位置。数值越小越靠前。'))}</label>
+      ${isEdit&&d.status==='closed'?`<label style="display:block">${lab(T('Winner','获胜选项'))}
+        <select style="width:100%" aria-label="${escAttr(T('Winner','获胜选项'))}" onchange="APP.cmd('pollEdSet','winner_option_id',this.value)">
+          <option value="">${T('The most-voted option','票数最高的选项')}</option>${winner}</select>
+        ${hint(T('The option customers see marked as the winner under past results. Leave it alone and whichever option took the most votes is marked.','顾客在“往期结果”中看到的获胜选项。留空则票数最高的选项自动标为获胜。'))}</label>`:''}`)}
+    ${group(T('What customers see as the count','顾客看到的票数'),`
+      <label style="display:block">${lab(T('Show at least','至少显示'))}${num('display_min_total',d.display_min_total||0,0,100000,T('Show at least','至少显示'))}
+        ${hint(T('Customers see at least this many votes. If real turnout is lower, every option is multiplied by the same number — the leader and every percentage stay exactly as they are, only the size of the numbers changes. 0 shows the real count. This page always shows you the real count.','顾客至少会看到这么多票。若真实票数低于此值,所有选项按同一倍数放大 —— 领先项与每个百分比完全不变,变的只是数字的大小。填 0 即显示真实票数。本页始终向你显示真实票数。'))}</label>
+      <div id="mPollBoost" style="font-size:13px;color:var(--text-secondary)">${pollBoostLine(d)}</div>`)}
+    ${PE.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${PE.err}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${primary}
+      ${secondary}
+      ${isEdit?`<button class="btn2" style="width:100%;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('pollDelete')">${PE.busy==='delete'?T('Working…','处理中…'):T('Delete','删除')}</button>`:''}</div>
+  </div>`;
 }
 
 /* ==========================================================================
@@ -8677,14 +9745,207 @@ function lbValue(v,metric){
   if(metric==='orders_count') return n.toLocaleString()+' '+T(n===1?'order':'orders','单');
   return n.toLocaleString()+' '+T('pts','分');
 }
+/* ==========================================================================
+   §325 M7 — THE LEADERBOARD'S SETTINGS, ON THE PHONE (desktop: LB_CARD)
+   --------------------------------------------------------------------------
+   Metric, period, how many, how names show, the headline, the rewards, the
+   placeholder board and who is hidden were "set on desktop". They are one
+   §279 card ('leaderboard') here, as there: PUT /leaderboard/config
+   ?history=leaderboard, a full replace with every field the desktop's
+   lbReadForm sends, in its shapes (top_n a number, hide_names a list split on
+   commas). The visibility switch saves like any other field — the desktop's
+   does. The placeholder members are the desktop's generator, names and curve.
+   The card starts once the stored board has arrived; leaderboard:edit, the key
+   the server gates the write on and the screen opens on.
+   ========================================================================== */
+const LB_FIELDS=['enabled','title_en','title_cn','kicker_en','kicker_cn','subhead_en','subhead_cn',
+  'metric','period','top_n','reveal_mode',
+  'reward_top1_en','reward_top1_cn','reward_top3_en','reward_top3_cn','reward_top10_en','reward_top10_cn'];
+let LB_D=null, LB_ERR=null, lbCfgTried=false;
+// The stored board, as the desktop's form holds it (lbApplyConfigToForm).
+function lbFrom(cfg){
+  const c=cfg||{}, d={};
+  LB_FIELDS.forEach(f=>{ d[f]=f==='enabled'?!!c[f]:(c[f]!=null?String(c[f]):''); });
+  d.seed_enabled=!!c.seed_enabled;
+  d.seed_entries=Array.isArray(c.seed_entries)?c.seed_entries.map(s=>Object.assign({},s)):[];
+  d.hide_names=Array.isArray(c.hide_names)?c.hide_names.join(', '):String(c.hide_names||'');
+  return d;
+}
+// What the desktop sends (lbReadForm), field for field.
+function lbPayload(){
+  const out={};
+  LB_FIELDS.forEach(f=>{ out[f]=f==='enabled'?!!LB_D.enabled : f==='top_n'?(parseInt(LB_D.top_n,10)||20) : LB_D[f]; });
+  out.seed_enabled=!!LB_D.seed_enabled;
+  out.seed_entries=LB_D.seed_entries;
+  out.hide_names=String(LB_D.hide_names||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean);
+  return out;
+}
+/* After a save the board underneath is read again (the desktop's `after`),
+   and redrawn only when no sheet is open — a repaint mid-sentence would take
+   the keyboard away. Closing the sheet draws it. */
+function lbPreviewRefresh(){
+  return api('/leaderboard/preview').then(d=>{ state.lb=d||{}; state.lbErr=null; if(!state.ask) render(); }).catch(()=>{});
+}
+const lbCard=()=>cfgCard('leaderboard',{
+  read:lbPayload,
+  apply:b=>{ LB_D=lbFrom(b); },
+  fromSnapshot:s=>s['leaderboard.config']||{},
+  put:(b,note)=>apiWrite('/leaderboard/config'+cfgHistQ('leaderboard',note),b,'PUT'),
+  after:()=>lbPreviewRefresh(),
+  words:{'leaderboard.config':['Leaderboard','排行榜']},
+});
+function loadLbCfg(){
+  if(lbCfgTried) return;
+  lbCfgTried=true;
+  api('/leaderboard/config').then(d=>{
+    LB_D=lbFrom(d); LB_ERR=null;
+    if(mCan('leaderboard:edit')) cfgCardStart(lbCard());
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    LB_ERR=E('Failed to load leaderboard config','加载排行榜配置失败'); render(); });
+}
+const lbLive=()=>{ const c=CFG_CARD.leaderboard; return LB_D&&c&&c.auto&&mCan('leaderboard:edit')?c:null; };
+reg('lbToggle', k=>{
+  const c=lbLive(); if(!c||(k!=='enabled'&&k!=='seed_enabled')) return;
+  LB_D[k]=!LB_D[k]; c.auto.touch(); render();
+});
+/* The desktop's cards, one live sheet each. A label is the desktop's word
+   plus the language it is typed in, rather than a new pair per field. */
+const lbLang=(w,l)=>T(...w)+' · '+l;
+const LB_SHEETS={
+  copy:{title:['Headline copy','标题文案'],
+    body:['Shown on the leaderboard hero. Keep the kicker short — it\'s the small all-caps line above the title.','显示在排行榜顶部;引题简短为佳 — 标题上方的大写小字行。'],
+    fields:()=>[
+      {id:'kicker_en',label:lbLang(['Kicker','引题'],'EN'),placeholder:'ROOTS CLUB · LEADERBOARD'},
+      {id:'kicker_cn',label:lbLang(['Kicker','引题'],'中文'),placeholder:'ROOTS 会员 · 排行榜'},
+      {id:'title_en',label:lbLang(['Title','标题'],'EN'),placeholder:'Top growers'},
+      {id:'title_cn',label:lbLang(['Title','标题'],'中文'),placeholder:'排行榜'},
+      {id:'subhead_en',label:lbLang(['Subhead','副标题'],'EN'),multiline:true,placeholder:'The members who keep our garden growing.'},
+      {id:'subhead_cn',label:lbLang(['Subhead','副标题'],'中文'),multiline:true,placeholder:'让花园持续生长的会员们。'}]},
+  rank:{title:['Ranking rules','排序规则'],
+    body:['What members are ranked by, and over what window.','排名所用的指标及统计区间。'],
+    fields:()=>[
+      {id:'metric',label:T('Metric','指标'),choices:[['lifetime_spend',T('Lifetime spend (¥)','累计消费')],['points_balance',T('Points balance','积分余额')],['orders_count',T('Paid orders count','付款订单数')]]},
+      {id:'period',label:T('Period','周期'),choices:[['all',T('All time','全部时间')],['year',T('Last 12 months','近 12 个月')],['month',T('Last 30 days','近 30 天')],['week',T('Last 7 days','近 7 天')]]},
+      {id:'top_n',label:T('Show top N','显示前 N 名'),type:'number',commit:true},
+      {id:'reveal_mode',label:T('Reveal nicknames','显示昵称'),choices:[['first_char',T('First character + asterisks (recommended)','首字 + 星号(推荐)')],['full',T('Full nickname + avatar','完整昵称 + 头像')],['masked',T('Fully masked (**)','完全隐藏(**)')]]}]},
+  rewards:{title:['Rewards (optional)','奖励(可选)'],
+    body:['Plain-text reward callouts shown under the list. Leave blank to hide.','列表下方的奖励说明纯文本;留空则隐藏。'],
+    fields:()=>[
+      {id:'reward_top1_en',label:lbLang(['Top 1 reward','第 1 名奖励'],'EN'),placeholder:money0(CUR,500)+' store credit + harvest box'},
+      {id:'reward_top1_cn',label:lbLang(['Top 1 reward','第 1 名奖励'],'中文'),placeholder:money0(CUR,500)+' 储值 + 丰收礼盒'},
+      {id:'reward_top3_en',label:lbLang(['Top 3 reward','前 3 名奖励'],'EN'),placeholder:money0(CUR,200)+' store credit'},
+      {id:'reward_top3_cn',label:lbLang(['Top 3 reward','前 3 名奖励'],'中文'),placeholder:money0(CUR,200)+' 储值'},
+      {id:'reward_top10_en',label:lbLang(['Top 10 reward','前 10 名奖励'],'EN'),placeholder:'500 bonus points'},
+      {id:'reward_top10_cn',label:lbLang(['Top 10 reward','前 10 名奖励'],'中文'),placeholder:'500 积分奖励'}]},
+  hide:{title:['Hide these real members','隐藏指定真实会员'],
+    body:['Comma-separated nicknames (e.g. staff or test accounts). They stay active everywhere else — just hidden from the board.','逗号分隔的昵称(如员工或测试账号);仅从榜单隐藏,其他功能不受影响。'],
+    fields:()=>[{id:'hide_names',label:T('Hide these real members','隐藏指定真实会员'),placeholder:'mimi, asher, steve'}]},
+};
+reg('lbEdit', k=>{
+  const c=lbLive(), s=LB_SHEETS[k]; if(!c||!s) return;
+  cfgSheet(c, T(...s.title), escAttr(T(...s.body)), s.fields(), f=>LB_D[f], (f,v)=>{ LB_D[f]=v; });
+});
+/* The placeholder board — the desktop's generator (lbGenerateSeed): a
+   believable descending spend from the top value down, 70% Western names and
+   30% Chinese, shuffled, strictly decreasing. Generating switches it on. */
+const LB_SEED_NAMES_WEST=['Emma','Oliver','Sophie','Liam','Chloe','Lucas','Grace','Ethan',
+  'Ava','Noah','Isla','Max','Ruby','Leo','Hazel','Theo','Nina',
+  'Ivy','Felix','Daisy','Owen','Lily','Jasper','Elena','Marcus',
+  'Clara','Hugo','Stella','Adrian','Naomi','Victor','Freya'];
+const LB_SEED_NAMES_CN=['小确幸','清晨慢跑','一颗西兰花','半糖主义','林深时见鹿','番茄炒蛋',
+  '海盐柠檬','江南细雨','木棉花','一勺蜂蜜','南山以南','慢慢来呀',
+  '小满','晚风温柔','橙子味的猫','麦田守望者'];
+const LB_SEED_WEST_RATIO=0.7;
+function lbSeedTier(frac){ return frac<0.10?'tree':frac<0.35?'root':frac<0.70?'sprout':'seed'; }
+function lbShuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function lbSeedEntries(maxRaw,countRaw){
+  const max=Math.max(50,parseInt(maxRaw,10)||3000);
+  const count=Math.max(3,Math.min(50,parseInt(countRaw,10)||18));
+  const westN=Math.round(count*LB_SEED_WEST_RATIO);
+  const names=lbShuffle(lbShuffle(LB_SEED_NAMES_WEST).slice(0,westN).concat(lbShuffle(LB_SEED_NAMES_CN).slice(0,count-westN)));
+  const entries=[];
+  for(let i=0;i<count;i++){
+    const frac=count>1?i/(count-1):0;
+    let v=max*Math.pow(1-frac,1.35);
+    v=v*(1+(Math.random()-0.5)*0.08);
+    v=Math.max(max*0.04,v);
+    entries.push({name:names[i]||('Member '+(i+1)), value:Math.round(v/5)*5, tier_key:lbSeedTier(frac)});
+  }
+  entries[0].value=max;
+  for(let i=1;i<entries.length;i++){ if(entries[i].value>=entries[i-1].value) entries[i].value=Math.max(20,entries[i-1].value-5); }
+  return entries;
+}
+reg('lbSeedAsk', ()=>{
+  const c=lbLive(); if(!c) return;
+  state.ask={title:T('Generate placeholder members','生成占位会员'),
+    body:escAttr(T('Fill the board with realistic-looking members so it doesn\'t sit empty before real activity picks up. Real customers blend in and outrank placeholders as they spend — switch this off once the board fills on its own.',
+      '在真实消费产生前,用拟真会员填充榜单,避免空榜。真实顾客会自动混入并在消费后超越占位会员;榜单自然填满后请关闭。')),
+    fields:[{id:'max',label:T('Top spender (¥)','榜首消费'),type:'number',value:'3000'},
+            {id:'count',label:T('How many members','会员数量'),type:'number',value:'18'}],
+    confirmLabel:T('Generate placeholder members','生成占位会员'),
+    run:vals=>{ const c2=lbLive(); if(!c2) return;
+      LB_D.seed_entries=lbSeedEntries(vals.max,vals.count);
+      LB_D.seed_enabled=true;              // generating implies "use it"
+      c2.auto.touch();
+      showToast(T('Placeholder members generated','已生成占位会员'));
+      render(); }};
+  state.askErr=null;
+  render();
+});
+function lbSeedSummary(){
+  const s=LB_D.seed_entries;
+  if(!s.length) return T('No placeholder members yet.','尚未生成占位会员。');
+  const top=money0(CUR,s[0].value), bottom=money0(CUR,s[s.length-1].value);
+  return T(s.length+' members · '+top+' → '+bottom, s.length+' 位会员 · '+top+' → '+bottom);
+}
+function lbSettings(){
+  if(LB_ERR) return `<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${LB_ERR}</div>`;
+  if(!LB_D) return `<div style="padding:16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const c=lbLive();
+  if(!c) return '';
+  const pick=(en,cn)=>LANG==='en'?(LB_D[en]||LB_D[cn]):(LB_D[cn]||LB_D[en]);
+  const sec=(k,summary,extra)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+    <div class="eyebrow">${T(...LB_SHEETS[k].title)}</div>
+    ${summary?`<div style="font-size:14.5px;line-height:1.5">${summary}</div>`:`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(...LB_SHEETS[k].body)}</div>`}
+    ${extra||''}
+    <button class="btn2" style="width:100%;margin-top:4px" onclick="APP.cmd('lbEdit','${k}')">${T('Edit','编辑')}</button></div>`;
+  const choice=(k,v)=>{ const f=LB_SHEETS.rank.fields().find(x=>x.id===k); const ch=f&&f.choices.find(x=>x[0]===v); return ch?ch[1]:escAttr(v); };
+  const rewards=[['reward_top1_en','reward_top1_cn',['Top 1 reward','第 1 名奖励']],['reward_top3_en','reward_top3_cn',['Top 3 reward','前 3 名奖励']],['reward_top10_en','reward_top10_cn',['Top 10 reward','前 10 名奖励']]]
+    .filter(([e,z])=>pick(e,z)).map(([e,z,w])=>T(...w)+': '+escAttr(pick(e,z))).join('<br>');
+  const hidden=String(LB_D.hide_names||'').split(/[,\n]/).map(s=>s.trim()).filter(Boolean);
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Visibility','可见度')}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${T('When off, the mini-app menu entry stays hidden and the API returns 404.','关闭后,小程序入口隐藏,接口返回 404。')}</span></span>
+        ${toggle(!!LB_D.enabled,"APP.cmd('lbToggle','enabled')")}</div></div>
+    ${sec('copy',[pick('kicker_en','kicker_cn'),pick('title_en','title_cn')].filter(Boolean).map(escAttr).join(' · '))}
+    ${sec('rank',[choice('metric',LB_D.metric),choice('period',LB_D.period),T('Show top N','显示前 N 名').replace('N',String(parseInt(LB_D.top_n,10)||20)),choice('reveal_mode',LB_D.reveal_mode)].join(' · '),
+      LB_D.metric==='points_balance'?`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Note: points-balance metric is point-in-time. Period selector is ignored for this metric.','说明:积分余额为实时快照指标,该指标会忽略周期选择。')}</div>`:'')}
+    ${sec('rewards',rewards)}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${T('Placeholder board (temporary)','占位榜单(临时)')}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Show placeholder members','显示占位会员')}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${T('Blends the generated members below into the live board.','将下方生成的会员混入实时榜单。')}</span></span>
+        ${toggle(!!LB_D.seed_enabled,"APP.cmd('lbToggle','seed_enabled')")}</div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${lbSeedSummary()}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('lbSeedAsk')">${T('Generate placeholder members','生成占位会员')}</button>
+      <div class="sep"></div>
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Hide these real members','隐藏指定真实会员')}</span>
+      <div style="font-size:14.5px">${hidden.length?escAttr(hidden.join(', ')):'—'}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('lbEdit','hide')">${T('Edit','编辑')}</button></div>
+    ${cardFoot(c)}`;
+}
 function screenLeaderboard(){
-  loadLeaderboard();
+  loadLeaderboard(); loadLbCfg();
   if(state.lbErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.lbErr}</span></div></div>`;
   if(!state.lb) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  const cfg=state.lb.config||{};
+  // The head reads the card's draft once it is there, so a change shows at once.
+  const cfg=LB_D?lbPayload():(state.lb.config||{});
   // The preview is what STAFF see. reveal_mode is what CUSTOMERS see, so the
   // masked list is the one on screen and the note says which it is.
   const rows=state.lb.revealed_entries||state.lb.raw_entries||[];
@@ -8707,7 +9968,7 @@ function screenLeaderboard(){
         <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(e.name||e.nickname||'—')}</span>
         <span class="num" style="font-size:13.5px;color:var(--text-secondary);flex:none">${lbValue(e.value,metric)}</span></div>`).join('')}</div>`
       :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nobody is on the board yet.','排行榜还没有人。')}</div>`}
-    ${noteBar(T('Metric, period, rewards and who is hidden are set on desktop.','排名依据、周期、奖励与隐藏名单在电脑端设置。'))}</div>`;
+    ${lbSettings()}</div>`;
 }
 
 /* ==========================================================================
@@ -15005,7 +16266,12 @@ const SUBS={
         ${ic('link',14)}<span class="num" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(b.deeplink)}</span></div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--border-default)">
         <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.meta)}</span>
-        ${b.st==='scheduled'&&b.id!=null&&mCan('broadcasts:send')?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}</div>
+        ${b.st==='scheduled'&&b.id!=null&&mCan('broadcasts:send')?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}
+        ${/* §325 M6 — the desktop's other two: Send again on everything that is
+              not waiting to go, and Recall while a sent one is still showing. */''}
+        ${b.st!=='scheduled'&&b.id!=null&&b.raw&&mCan('broadcasts:send')?`<span style="display:flex;gap:8px;flex:none">
+          ${b.st==='sent'&&!b.ended?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;color:var(--brick-ink)" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallAsk','${b.id}')">${T('Recall','撤回')}</button>`:''}
+          <button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px" onclick="APP.cmd('bcAgain','${b.id}')">${T('Send again','再次发送')}</button></span>`:''}</div>
     </div>`).join('')}</div>`;
     // No desktopNote: this screen writes and sends now (§63), so "best edited
     // on desktop" would be sending an operator away from the tool they are in.
@@ -15013,29 +16279,26 @@ const SUBS={
   bcnew:{title:['New broadcast','新建广播'],render:()=>screenBcNew()},
   bcauto:{title:['Automatic updates','自动通知'],status:()=>statusNotifCats(),render:()=>screenNotifCats()},
   sharecards:{title:['Share cards','分享卡片'],render:()=>screenShareCards()},
+  /* §325 M8 — one page's share card, as the desktop's stage. */
+  sharecard:{title:['Share cards','分享卡片'],
+    titleOf:()=>{ const pg=scPage(state.scSel); return pg?T(...pg.name):T('Share cards','分享卡片'); },
+    backLabel:()=>T('Share cards','分享卡片'),
+    render:()=>screenShareCard()},
   popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),render:()=>screenPopups()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
-  social:{title:['Social proof','社交证明'],render:()=>{
-    // The switch is real (features.socialProof) and reachable from Settings, so
-    // this screen states what it is currently doing rather than saying nothing
-    // can be read from here — which stopped being true.
-    const on=featOn('socialProof'), busy=state.featBusy==='socialProof';
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-      <div class="card" style="padding:16px;display:flex;align-items:center;gap:14px">
-        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
-          <span style="font-size:15px;font-weight:500">${busy?T('Saving…','保存中…'):(on?T('Showing recent buyers','正在展示最近购买'):T('Switched off','已关闭'))}</span>
-          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on
-            ? T('Shoppers see bought-counts, a recent-buyers ticker and the SOLD badge.','顾客会看到购买人数、最近购买动态与“已售”标签。')
-            : T('None of the bought-counts, the recent-buyers ticker or the SOLD badge are shown.','购买人数、最近购买动态与“已售”标签均不显示。')}</span></span>
-        ${toggle(on,"APP.cmd('toggleFeature','socialProof')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
-      ${noteBar(T('What counts as recent, and which products show it, are set on desktop.','“最近”的范围与展示哪些商品在电脑端设置。'))}</div>`;
-  }},
+  social:{title:['Social proof','社交证明'],render:()=>screenSocial()},
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
   wallet:{title:['Top-up','充值'],status:()=>statusTopups(),render:()=>screenTopups()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
-  voting:{title:['Voting','投票'],render:()=>screenVoting()},
+  voting:{title:['Voting','投票'],
+    cta:()=>mCan('voting:edit')?`<button class="cta inhead" onclick="APP.cmd('pollEdit')">${T('New poll','新建投票')}</button>`:'',
+    render:()=>screenVoting()},
+  /* §325 M7 — the desktop's poll editor, a screen of its own. */
+  polledit:{title:['New poll','新建投票'],
+    titleOf:()=>PE?(PE.d.id?escAttr(pollQ(PE.d)):T('New poll','新建投票')):T('Voting','投票'),
+    backLabel:()=>T('Voting','投票'),
+    render:()=>screenPollEdit()},
   /* §325 — the door to the phone editor. It LEAVES this app (the 'leave'
      command, as Quick Stock's row once did); ?from=m gives the editor a Back. */
   editor:{title:['Editor','编辑器'],status:()=>statusEditor(),render:()=>screenEditor(),
@@ -15044,6 +16307,8 @@ const SUBS={
   about:{title:['About page','关于页'],render:()=>{
     const c=cfgGet('about.content',null);
     if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    // §325 M4 — written here too: the desktop's sections on the desktop's card.
+    if(mCan(CONTENT_KEYS)){ aboutEnsure(); if(ABOUT_D) return screenAboutEdit(); }
     if(!c) return nothingYet(T('Nothing written yet','还没有内容'),
       T('The about page is written on desktop. What you publish shows here and in the mini app.','关于页在电脑端撰写，发布后会显示在这里和小程序中。'));
     const pick=(en,cn)=>T(String(c&&c[en]||''),String(c&&c[cn]||c&&c[en]||''));
@@ -15065,40 +16330,26 @@ const SUBS={
     cta:()=>{ if(!mCan('media:upload')) return ''; const b=state.mediaBusy;
       return `<button class="cta inhead" ${b?'disabled':''} onclick="APP.cmd('pickMedia')">${
         b?T('Uploading '+b.done+'/'+b.total+'…','上传中 '+b.done+'/'+b.total+'…'):T('Add photos','添加图片')}</button>`; },
-    render:()=>{
-    const err=state.mediaErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick-ink)">${state.mediaErr}</span></div>`:'';
-    if(!state.media){ if(!state.mediaTried) loadMedia();
-      return `<div style="padding:0 16px">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
-    /* §325 S1d — the invitation names the Add photos button in the header, so
-       it is made only to somebody that button is drawn for (media:upload). To
-       anyone else the empty library says it is empty and stops: no sentence
-       pointing at a control they do not have. */
-    if(!state.media.rows.length) return `<div style="padding:0 16px">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
-      mCan('media:upload')?T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'):'');
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
-      ${err}
-      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+(state.media.total===1?' image':' images'),'共 '+state.media.total+' 张')}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${state.media.rows.map(m=>`
-        <div style="aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
-          <img loading="lazy" src="/api/retail/media/${m.id}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
-        </div>`).join('')}</div>
-      <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Folders, tags and alt text are on desktop','分组、标签与替代文本在电脑端设置')}</div></div>`;
-  }},
+    /* §325 M5 — the desktop's library: screenMedia. */
+    render:()=>screenMedia()},
   legal:{title:['Legal pages','法律条款'],render:()=>{
     // Both documents live in storefront_config; the dates are theirs, not a
     // pair of numbers typed into a mockup.
+    // §325 M4 — and they are edited here: each one in a live sheet on the
+    // desktop's own card ('legal'), the whole text shown, no "on desktop".
+    const canEdit=mCan(CONTENT_KEYS);
+    if(canEdit) legalEnsure();
     const docs=[
       {key:'terms',   name:['Terms of service','服务条款']},
       {key:'privacy', name:['Privacy policy','隐私政策']},
     ].map(d=>{
-      const body=cfgGet('legal.'+d.key+'.body_'+(LANG==='en'?'en':'cn'),'')||cfgGet('legal.'+d.key+'.body_en','');
+      const get=k=>LEGAL_D?LEGAL_D[k]:cfgGet(k,'');
+      const body=get('legal.'+d.key+'.body_'+(LANG==='en'?'en':'cn'))||get('legal.'+d.key+'.body_en');
       return Object.assign({},d,{body:String(body||''), updated:cfgGet('legal.'+d.key+'.updated_at','')});
     });
     const any=docs.some(d=>d.body);
     if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    if(!any) return nothingYet(T('Nothing published yet','尚未发布'),
+    if(!any&&!canEdit) return nothingYet(T('Nothing published yet','尚未发布'),
       T('Your terms and privacy policy are written on desktop. Once published they show here and in the mini app.','服务条款与隐私政策在电脑端撰写，发布后会显示在这里和小程序中。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     <div class="list">${docs.map((d,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
@@ -15109,11 +16360,13 @@ const SUBS={
             <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d.updated?T('Updated '+fmtDay(d.updated),'更新于 '+fmtDay(d.updated)):T('Not published','未发布')}</span>
           </span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.legalOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>
-        ${String(d.body).length>1200?`<span style="font-size:12.5px;color:var(--text-secondary);opacity:.85">${T('Clipped here — the rest is on desktop.','此处已截断 — 完整内容见电脑端。')}</span>`:''}`:''}</button>`).join('')}</div>
-    ${desktopNote()}</div>`;
+        ${state.legalOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).replace(/</g,'&lt;')}</span>`:''}</button>
+      ${canEdit?`<div style="padding:0 14px 14px"><button class="btn2" style="width:100%" onclick="APP.cmd('legalEdit','${d.key}')">${T('Edit','编辑')}</button></div>`:''}`).join('')}</div>
+    ${canEdit&&CFG_CARD.legal&&CFG_CARD.legal.auto?cardFoot(CFG_CARD.legal):''}</div>`;
   }},
   faq:{title:['FAQ & help','常见问题'],render:()=>screenFaq()},
+  /* §325 M4 — the desktop's Mini-app copy (Snippets) tab. */
+  snippets:{title:['Mini-app copy','小程序文案'],render:()=>screenSnippets()},
   /* No `quickstock` screen. It was a menu row that led to a signpost — its
      whole content was "Counted in Products, open a product and set the count" —
      which is the same small lie as a control wired to nothing: you tap it
@@ -24412,9 +25665,11 @@ function recallBroadcast(id){
   state.bcBusy=id; state.bcErr=null; render();
   apiWrite('/broadcasts/'+id+'/recall',{}).then(r=>{
     const st=(r&&r.data&&r.data.status)||'cancelled';
-    b.st=st; b.status=st==='cancelled'?['Cancelled','已取消']:['Sent','已发送']; b.kind=st==='cancelled'?'off':'delivered';
+    // §325 M6 — the server's answer names what happened: a scheduled send that
+    // went out in the meantime is RECALLED by the same call, not left "Sent".
+    b.st=st; b.status=BC_LABEL[st]||BC_LABEL.cancelled; b.kind=BC_KIND[st]||'off';
     state.bcBusy=null; render();
-    showToast(st==='cancelled'?T('Send cancelled','已取消发送'):T('It had already gone out','已经发送完成'));
+    showToast(st==='cancelled'?T('Send cancelled','已取消发送'):st==='recalled'?T('Recalled','已撤回'):T('It had already gone out','已经发送完成'));
   }).catch(e=>{
     state.bcBusy=null;
     if(String(e.message)==='auth') return;
@@ -24474,6 +25729,42 @@ function bcfCount(){
     }).catch(()=>{ if(seq!==f.countSeq) return; f.count=null; f.countBusy=false; render(); });
   },250);
 }
+/* §325 M6 — SEND AGAIN (desktop bxSendAgain): a past broadcast's words, link
+   and audience become a new one, opened at its last look. Like the desktop it
+   always starts "now" and with no end date: an old schedule, or an end date
+   from a window that has already run out, would only have to be corrected.
+   The words keep their columns — the operator's language in the first field,
+   the other in the second — so nothing written in Chinese is re-filed as
+   English. */
+function bcSendAgain(id){
+  if(!mCan('broadcasts:send')) return;
+  const b=(DB.broadcasts||[]).find(x=>x.id===id);
+  if(!b||!b.raw||b.st==='scheduled') return;
+  push('bcnew');   // resets the form, as every new broadcast does
+  const f=state.bcf, r=b.raw;
+  const prime=LANG==='cn'?'cn':'en', other=LANG==='cn'?'en':'cn';
+  f.title=r['title_'+prime]||''; f.body=r['body_'+prime]||'';
+  f.title2=r['title_'+other]||''; f.body2=r['body_'+other]||'';
+  f.lang2=!!(f.title2||f.body2);
+  f.deeplink=r.deeplink||'';
+  let aud={};
+  if(r.audience&&typeof r.audience==='object') aud=r.audience;
+  else { try{ aud=JSON.parse(r.audience||'{}')||{}; }catch(e){ aud={}; } }
+  f.activity=BC_ACT[aud.activity]?aud.activity:'all';
+  f.tiers=Array.isArray(aud.tiers)?aud.tiers.slice():[];
+  f.cities=Array.isArray(aud.cities)?aud.cities.slice():[];
+  bcfKnownCities();
+  f.when='now'; f.at=''; f.ends='never'; f.endsAt='';
+  f.step=4;
+  bcfLoadRegions(); bcfCount();
+  render();
+}
+/* A city carried over by Send again that no saved address is in any more is
+   dropped, as the desktop's composer drops it (it has no box to tick). */
+function bcfKnownCities(){
+  const f=state.bcf, known=f.regions;
+  if(Array.isArray(known)) f.cities=f.cities.filter(c=>known.some(x=>x.city===c));
+}
 /* Cities customers have actually saved an address in. Best-effort: the region
    filter is optional, so a shop whose regions cannot be read still sends — it
    just cannot narrow by one. */
@@ -24481,7 +25772,7 @@ function bcfLoadRegions(){
   const f=state.bcf;
   if(f.regions||f.regionsTried) return;
   f.regionsTried=true;
-  api('/broadcasts/regions').then(r=>{ f.regions=Array.isArray(r)?r:[]; render(); })
+  api('/broadcasts/regions').then(r=>{ f.regions=Array.isArray(r)?r:[]; bcfKnownCities(); render(); })
     .catch(()=>{ f.regions=[]; render(); });
 }
 /* Local wall-clock ("2026-09-08T09:00") as the server's UTC instant. The input
@@ -24934,6 +26225,15 @@ function screenChannelSync(){
    are different jobs, and the second is a phone job: four pages, each either
    carrying a picture you set or falling back to the page's own look. "Did the
    invite card ever get set" is a question with a picture for an answer.
+
+   §325 M8 — and now the first job too: each page's picture and title, as the
+   desktop's SC_CARDS — one §279 card per page. Home, Product and Voting are
+   'share.<key>' on PUT /config (sharing.<key>, sharing.<key>Title); the
+   invite card is 'share.invite' on PATCH /affiliate/settings (shareImage,
+   shareTitle — the same keys as Affiliate, sent nothing else). Each card
+   starts only once its own source has arrived; one whose source failed stays
+   inert, because its empty box is not the truth. A new picture is POST
+   /media/upload, the desktop's, so it is drawn for media:upload as well.
    ========================================================================== */
 const SC_PAGES=[
   {key:'home',    name:['Home page','首页'],    titled:true,
@@ -24945,28 +26245,73 @@ const SC_PAGES=[
   {key:'invite',  name:['Invite card','邀请卡片'], titled:true, aff:true,
    blurb:['A customer sharing their referral code.','顾客分享推荐码时显示。']},
 ];
+const SC_D={};      // key → {img, title:{en,cn}}
+let SC_IMG={busy:null, err:''};
+const scPage=k=>SC_PAGES.find(p=>p.key===k);
+function scSeed(key,img,title){ SC_D[key]={img:String(img||''), title:{en:String((title&&title.en)||''), cn:String((title&&title.cn)||'')}}; }
+// The desktop's scCardBody.
+function scBody(key){
+  const pg=scPage(key), d=SC_D[key]||{};
+  const img=String(d.img||'').trim();
+  const title=pg.titled?{en:String((d.title&&d.title.en)||'').trim(), cn:String((d.title&&d.title.cn)||'').trim()}:{en:'',cn:''};
+  if(pg.aff) return {shareImage:img, shareTitle:title};
+  const body={}; body['sharing.'+key]=img;
+  if(pg.titled) body['sharing.'+key+'Title']=title;
+  return body;
+}
+function scCard(key){
+  const pg=scPage(key);
+  return cfgCard('share.'+key,pg.aff?{
+    read:()=>scBody(key),
+    apply:b=>{ scSeed(key,b&&b.shareImage,b&&b.shareTitle); },
+    fromSnapshot:s=>({shareImage:s['affiliate.shareImage']||'', shareTitle:s['affiliate.shareTitle']||{en:'',cn:''}}),
+    put:(b,note)=>apiWrite('/affiliate/settings'+cfgHistQ('share.invite',note),b,'PATCH'),
+    words:{'affiliate.shareImage':['Picture','图片'],'affiliate.shareTitle':['Card title','卡片标题']},
+  }:{
+    read:()=>scBody(key),
+    apply:b=>{ scSeed(key,b&&b['sharing.'+key],b&&b['sharing.'+key+'Title']); },
+    words:Object.assign({['sharing.'+key]:['Picture','图片']}, pg.titled?{['sharing.'+key+'Title']:['Card title','卡片标题']}:{}),
+  });
+}
+const scCan=()=>mCan('sharing:edit');
+const scLive=k=>{ const c=CFG_CARD['share.'+k]; return scCan()&&SC_D[k]&&c&&c.auto?c:null; };
 function loadShareCards(){
   if(state.scTried) return; state.scTried=true;
-  api('/affiliate/settings').then(d=>{ state.scAff=d||{}; render(); }).catch(()=>{ state.scAff={}; render(); });
+  api('/affiliate/settings').then(d=>{ state.scAff=d||{}; state.scAffErr=null; render(); }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.scAff=null; state.scAffErr=E('Couldn’t load invite card','邀请卡片加载失败'); render(); });
+}
+// The three page cards hold what /config holds, so they may start once it is here.
+function scEnsurePages(){
+  // The invite card, once Affiliate has answered.
+  if(state.scAff&&!SC_D.invite){
+    scSeed('invite',state.scAff.shareImage,state.scAff.shareTitle);
+    if(scCan()) cfgCardStart(scCard('invite'));
+  }
+  if(SC_D.home||!state.cfg) return;
+  const sharing=cfgGet('sharing',null)||{};
+  scSeed('home',sharing.home,sharing.homeTitle);
+  scSeed('product',sharing.product,null);
+  scSeed('voting',sharing.voting,sharing.votingTitle);
+  if(scCan()) ['home','product','voting'].forEach(k=>cfgCardStart(scCard(k)));
 }
 function screenShareCards(){
   if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  loadShareCards();
-  const sharing=cfgGet('sharing',null)||{};
-  const aff=state.scAff;
+  loadShareCards(); scEnsurePages();
+  const can=scCan();
   const rows=SC_PAGES.map(pg=>{
-    const img = pg.aff ? (aff&&aff.shareImage) : sharing[pg.key];
-    const tObj = pg.aff ? (aff&&aff.shareTitle) : sharing[pg.key+'Title'];
+    const d=SC_D[pg.key];
+    const tObj=d&&d.title;
     const title = pg.titled&&tObj ? (LANG==='en'?(tObj.en||tObj.cn||''):(tObj.cn||tObj.en||'')) : '';
-    return Object.assign({},pg,{img:img||'', title:String(title||'').trim(),
-      pending: pg.aff && !aff});
+    return Object.assign({},pg,{img:(d&&d.img)||'', title:String(title||'').trim(),
+      pending: pg.aff && !d && !state.scAffErr, failed: pg.aff && !!state.scAffErr});
   });
   const set=rows.filter(r=>r.img).length;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     <div style="font-size:13px;color:var(--text-secondary)">${T(
       set+' of '+rows.length+' pages have a picture you set. The rest use the page’s own look.',
       rows.length+' 个页面中有 '+set+' 个使用了自定义图片，其余使用页面自带样式。')}</div>
-    ${rows.map(r=>`<div class="card" style="padding:14px;display:flex;gap:13px;align-items:flex-start">
+    ${rows.map(r=>{ const open=can&&!r.pending&&!r.failed;
+      return `<div class="card" style="padding:14px;display:flex;gap:13px;align-items:flex-start">
       ${r.img
         ? `<a href="${escAttr(r.img)}" target="_blank" rel="noopener" style="width:70px;height:56px;flex:none;border-radius:9px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(r.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`
         : `<span style="width:70px;height:56px;flex:none;border-radius:9px;border:1px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('image',20)}</span>`}
@@ -24974,12 +26319,292 @@ function screenShareCards(){
         <span style="display:flex;align-items:center;justify-content:space-between;gap:8px">
           <span style="font-size:15px;font-weight:500;min-width:0">${T(...r.name)}</span>
           ${r.pending?`<span style="font-size:12px;color:var(--text-secondary);flex:none">${T('Loading…','加载中…')}</span>`
+            :r.failed?`<span style="font-size:12px;color:var(--brick-ink);flex:none">${state.scAffErr}</span>`
             :`<span class="pill" style="background:${r.img?PILL.success[0]:PILL.muted[0]};color:${r.img?PILL.success[1]:PILL.muted[1]};flex:none">${r.img?T('Set','已设置'):T('Default','默认')}</span>`}</span>
-        ${r.titled?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${r.title
+        ${r.titled&&!r.failed?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${r.title
             ? '“'+escAttr(r.title)+'”'
             : T('No title set — the page titles itself.','未设置标题 — 由页面自动生成。')}</span>`:''}
-        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;opacity:.9">${T(...r.blurb)}</span></span></div>`).join('')}
-    ${noteBar(T('Pictures and titles are set on desktop — about 500 × 400 works best.','图片与标题在电脑端设置 — 建议尺寸约 500 × 400。'))}</div>`;
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;opacity:.9">${T(...r.blurb)}</span>
+        ${open?`<button class="btn2" style="align-self:flex-start;min-height:36px;padding:0 14px;font-size:13px;margin-top:4px" onclick="APP.cmd('scOpen','${r.key}')">${T('Edit','编辑')}</button>`:''}</span></div>`; }).join('')}
+  </div>`;
+}
+/* One page's card (desktop: scRenderStage): the title in both languages, 60
+   at most, typed in place (no repaint — the keyboard stays); the picture,
+   replaced or removed; the card's own foot. */
+reg('scOpen', k=>{ if(!scPage(k)||!scLive(k)) return; state.scSel=k; SC_IMG={busy:null,err:''}; CMD.push('sharecard'); });
+reg('scTitle', (lang,v)=>{
+  const k=state.scSel, c=scLive(k); if(!c||!scPage(k).titled||(lang!=='en'&&lang!=='cn')) return;
+  SC_D[k].title[lang]=String(v==null?'':v);
+  const el=document.getElementById('mScCount-'+lang); if(el) el.textContent=SC_D[k].title[lang].length+' / 60';
+  c.auto.touch();
+});
+reg('scClear', ()=>{
+  const k=state.scSel, c=scLive(k); if(!c||SC_IMG.busy) return;
+  SC_D[k].img=''; c.auto.touch();
+  showToast(T('Picture removed','已移除图片')); render();
+});
+reg('scPick', ()=>{
+  const k=state.scSel; if(!scLive(k)||SC_IMG.busy||!mCan('media:upload')) return;
+  const el=document.createElement('input'); el.type='file'; el.accept='image/png,image/jpeg';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) scUpload(k,f); };
+  el.click();
+});
+async function scUpload(k,file){
+  if(!scLive(k)||!mCan('media:upload')) return;
+  SC_IMG={busy:k, err:''}; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'share.jpg');
+    const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401){ location.href='/backend/login'; return; }
+    if(r.status===403){ SC_IMG.err=(await apiRefusal(r)).message; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data||!j.data.url){
+      const reason=MEDIA_ERR[j&&j.error];
+      SC_IMG.err=T('Upload failed','上传失败')+(reason?' '+T(...reason):''); return;
+    }
+    SC_D[k].img=j.data.url;
+    const c=scLive(k); if(c) c.auto.touch();
+    showToast(T('Uploaded','已上传'));
+  }catch(e){ SC_IMG.err=T('Upload failed','上传失败'); }
+  finally{ SC_IMG.busy=null; render(); }
+}
+function screenShareCard(){
+  const k=state.scSel, pg=scPage(k), c=scLive(k);
+  if(!pg||!c) return screenShareCards();
+  const d=SC_D[k], busy=SC_IMG.busy===k;
+  const lab=t=>`<span style="display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}</span>`;
+  const titleField=(lang,label,ph)=>`<label style="display:block">${lab(`<span>${label}</span><span class="num" id="mScCount-${lang}">${d.title[lang].length} / 60</span>`)}
+      <input maxlength="60" value="${escAttr(d.title[lang])}" placeholder="${escAttr(ph)}" style="width:100%" oninput="APP.cmd('scTitle','${lang}',this.value)"></label>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T(...pg.blurb)}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+      ${pg.titled?titleField('en',T('Card title','卡片标题')+' · English',T('e.g. Fresh this week','例如:本周上新'))
+        +titleField('cn','卡片标题 · 中文','例如:本周上新')
+        :`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('Products share their own name and photo. This picture only fills in when a product has none.','商品使用自己的名称和图片,此图仅在商品没有图片时兜底。')}</div>`}
+      ${pg.aff?`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('Leave the titles empty to keep the automatic one (with the reward and code).','标题留空则使用自动文案(含奖励金额与邀请码)。')}</div>`:''}
+      <div>
+        ${lab(`<span>${T('Picture','图片')} · ${T('about 500 × 400','约 500 × 400')}</span>`)}
+        ${d.img?`<span style="display:block;width:100%;aspect-ratio:5/4;border-radius:10px;border:1px solid var(--border-default);background-image:url('${String(d.img).replace(/'/g,'%27')}');background-size:cover;background-position:center"></span>`
+          :`<div style="font-size:13px;color:var(--text-secondary)">${T('Leave empty to use the page’s own look.','留空则使用该页面自带样式。')}</div>`}
+        ${SC_IMG.err?`<div style="margin-top:10px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(SC_IMG.err)}</div>`:''}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          ${mCan('media:upload')?`<button class="btn2" style="flex:1" ${SC_IMG.busy?'disabled':''} onclick="APP.cmd('scPick')">${busy?T('Uploading…','上传中…'):d.img?T('Replace the picture','更换图片'):T('Choose image…','选择图片…')}</button>`:''}
+          ${d.img?`<button class="btn2" style="flex:1;color:var(--brick-ink)" ${SC_IMG.busy?'disabled':''} onclick="APP.cmd('scClear')">${T('Remove picture','移除图片')}</button>`:''}</div>
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('PNG or JPG · shown at 5:4','PNG 或 JPG · 按 5:4 显示')}</div></div>
+      ${cardFoot(c)}</div></div>`;
+}
+
+/* ==========================================================================
+   §325 M8 — SOCIAL PROOF, SET ON THE PHONE (desktop: 05-marketing.js
+   paintSocialProof / buildSocialProof / SOCIAL_CARD / UPSELL_CARD)
+   --------------------------------------------------------------------------
+   The phone had the one switch (features.socialProof) and a note saying what
+   counts as recent was set on desktop. The desktop's Social proof tab is two
+   §279 cards on PUT /config: 'social_proof' (the five widgets, the manual
+   buyers among them, as ONE nested blob) and 'checkout.upsell' (the pop-up
+   before paying). These are those cards: the draft holds what the desktop's
+   form holds (paintSocialProof's defaults, legacy single boosts spread over
+   both ends of the range), and the save is buildSocialProof's clamps, swaps
+   and empty-row drop, field for field. All on social:edit, the key the
+   server gives both families and the screen opens on.
+   ========================================================================== */
+let SP_D=null, UP_D=null;
+const SP_KEYS=['social:edit'];
+function spFrom(sp){
+  const s=sp||{}, bc=s.bought_count||{}, rb=s.recent_buyers||{}, vn=s.viewing_now||{}, lo=s.last_ordered||{}, sb=s.sold_badge||{};
+  const v=(x,d)=>String(x!=null?x:d);
+  const bcL=Number(bc.boost)||0, vnL=Number(vn.boost)||0, sbL=Number(sb.boost)||0, loL=Number(lo.fallback_minutes)||0;
+  return {
+    bc:{enabled:bc.enabled!==false, min_today:v(bc.min_today,2), min_week:v(bc.min_week,2), min_month:v(bc.min_month,1), min_all:v(bc.min_all,2),
+      boost_min:v(bc.boost_min,bcL), boost_max:v(bc.boost_max,bcL)},
+    rb:{enabled:rb.enabled!==false, window_days:v(rb.window_days,7), visible_secs:v(rb.visible_secs,4.5), gap_secs:v(rb.gap_secs,5),
+      manual:Array.isArray(rb.manual)?rb.manual.map(m=>({name:String((m&&m.name)||''), product_en:String((m&&m.product_en)||''),
+        product_cn:String((m&&m.product_cn)||''), minutes_ago:Number(m&&m.minutes_ago)||0})):[]},
+    vn:{enabled:vn.enabled!==false, show_in_app:vn.show_in_app!==false, ttl_sec:v(vn.ttl_sec,45), boost_min:v(vn.boost_min,vnL), boost_max:v(vn.boost_max,vnL)},
+    lo:{enabled:lo.enabled!==false, max_hours:v(lo.max_hours,24), fallback_min_minutes:v(lo.fallback_min_minutes,loL), fallback_max_minutes:v(lo.fallback_max_minutes,loL)},
+    sb:{enabled:sb.enabled!==false, min_units:v(sb.min_units,3), boost_min:v(sb.boost_min,sbL), boost_max:v(sb.boost_max,sbL)},
+  };
+}
+// The desktop's buildSocialProof, on the draft.
+function spBuild(){
+  const d=SP_D;
+  const range=(a,b,lo,hi)=>{ lo=lo||0; hi=hi==null?Number.MAX_SAFE_INTEGER:hi;
+    let mn=Math.max(lo,Math.min(hi,Number(a)||0)), mx=Math.max(lo,Math.min(hi,Number(b)||0));
+    if(mx<mn){ const t=mn; mn=mx; mx=t; } return {min:mn,max:mx}; };
+  const bcR=range(d.bc.boost_min,d.bc.boost_max), vnR=range(d.vn.boost_min,d.vn.boost_max), sbR=range(d.sb.boost_min,d.sb.boost_max);
+  const loR=range(d.lo.fallback_min_minutes,d.lo.fallback_max_minutes,0,1440);
+  return {
+    bought_count:{enabled:!!d.bc.enabled,
+      min_today:Math.max(1,Number(d.bc.min_today)||2), min_week:Math.max(1,Number(d.bc.min_week)||2),
+      min_month:Math.max(1,Number(d.bc.min_month)||1), min_all:Math.max(1,Number(d.bc.min_all)||2),
+      boost_min:bcR.min, boost_max:bcR.max},
+    recent_buyers:{enabled:!!d.rb.enabled,
+      window_days:Math.max(1,Math.min(60,Number(d.rb.window_days)||7)),
+      visible_secs:Math.max(0.5,Math.min(60,Number(d.rb.visible_secs)||4.5)),
+      gap_secs:Math.max(0.5,Math.min(60,Number(d.rb.gap_secs)||5)),
+      manual:d.rb.manual.map(m=>({name:String(m.name||'').trim().slice(0,40), product_en:String(m.product_en||'').trim().slice(0,80),
+        product_cn:String(m.product_cn||'').trim().slice(0,80), minutes_ago:Math.max(0,Math.min(60*24*60,Number(m.minutes_ago)||0))}))
+        .filter(m=>m.name&&(m.product_en||m.product_cn))},
+    viewing_now:{enabled:!!d.vn.enabled, show_in_app:!!d.vn.show_in_app,
+      ttl_sec:Math.max(5,Math.min(600,Number(d.vn.ttl_sec)||45)), boost_min:vnR.min, boost_max:vnR.max},
+    last_ordered:{enabled:!!d.lo.enabled, max_hours:Math.max(1,Math.min(720,Number(d.lo.max_hours)||24)),
+      fallback_min_minutes:loR.min, fallback_max_minutes:loR.max},
+    sold_badge:{enabled:!!d.sb.enabled, min_units:Math.max(1,Number(d.sb.min_units)||3), boost_min:sbR.min, boost_max:sbR.max},
+  };
+}
+const spCard=()=>cfgCard('social_proof',{
+  read:()=>({'social_proof':spBuild()}),
+  apply:b=>{ SP_D=spFrom(b&&b['social_proof']); },
+  words:{'social_proof':['Social proof','社交证明']},
+});
+function upFrom(u){ const x=u||{}; return {enabled:x.enabled!==false, bundles:x.bundles!==false, extras:x.extras!==false, flash:x.flash!==false, max:String(x.max!=null?x.max:4)}; }
+const upCard=()=>cfgCard('checkout.upsell',{
+  read:()=>({'checkout.upsell':{enabled:!!UP_D.enabled, bundles:!!UP_D.bundles, extras:!!UP_D.extras, flash:!!UP_D.flash,
+    max:Math.max(1,Math.min(6,Number(UP_D.max)||4))}}),
+  apply:b=>{ UP_D=upFrom(b&&b['checkout.upsell']); },
+  words:{'checkout.upsell':['Checkout upsell pop-up','结账推荐弹窗']},
+});
+function spEnsure(){
+  if(SP_D||!state.cfg) return;
+  SP_D=spFrom(cfgGet('social_proof',null));
+  UP_D=upFrom(cfgGet('checkout.upsell',null));
+  if(mCan(SP_KEYS)){ cfgCardStart(spCard()); cfgCardStart(upCard()); }
+}
+const spLive=()=>SP_D&&mCan(SP_KEYS)&&CFG_CARD.social_proof&&CFG_CARD.social_proof.auto?CFG_CARD.social_proof:null;
+const upLive=()=>UP_D&&mCan(SP_KEYS)&&CFG_CARD['checkout.upsell']&&CFG_CARD['checkout.upsell'].auto?CFG_CARD['checkout.upsell']:null;
+/* The five widgets, in the desktop's order and words: [key, title, line,
+   switch label, fields [id, label]]. The labels are the desktop's own
+   accessible names for each box, which say the unit. */
+const SP_W=[
+  ['bc',['"N people bought this" — product page','"X 人买了这个" — 商品页'],
+    ['Distinct buyers across widening windows (today → week → month → all-time). Shows the narrowest window that clears its minimum. Empty data → line hides (we never fake counts).','显示满足阈值的最短时间窗口的真实买家人数;数据不足时自动隐藏。'],
+    ['Show this widget','显示此组件'],
+    [['min_today',['Min today','今日最低']],['min_week',['Min this week','本周最低']],['min_month',['Min this month','本月最低']],['min_all',['Min all-time','全部最低']],
+     ['boost_min',['Extra buyers per day, lowest','每日额外买家下限']],['boost_max',['Extra buyers per day, highest','每日额外买家上限']]]],
+  ['rb',['Recent-buyers ticker — home','最近购买滚动条 — 首页'],
+    ['Cycles real recent purchases as a dismissible toast ("W** bought X, 5 min ago"). Names are masked server-side; only paid orders count.','在首页循环显示真实的近期购买记录(姓名已脱敏)。'],
+    ['Show the ticker','显示滚动条'],
+    [['window_days',['Look-back window in days','回溯天数']],['visible_secs',['Seconds on screen','显示秒数']],['gap_secs',['Seconds between','间隔秒数']]]],
+  ['vn',['"N viewing now" — product page','"X 人正在查看" — 商品页'],
+    ['Real concurrent-viewer count. In-memory; resets when the app restarts. Mini-app shows the badge only at 2+ viewers.','实时查看人数(内存中保存,重启后重置);客户端在 2 人以上才显示。'],
+    ['Track viewer counts (powers the dashboard LIVE pane)','追踪在线人数(用于后台实时面板)'],
+    [['ttl_sec',['Viewer freshness in seconds','在线时长(秒)']],['boost_min',['Fake viewers at peak, lowest','高峰虚拟在线下限']],['boost_max',['Fake viewers at peak, highest','高峰虚拟在线上限']]]],
+  ['lo',['"Last ordered X ago" — product page','"上次订购于 X 前" — 商品页'],
+    ['A freshness nudge from the most recent order. It shows the real time when there\'s been a recent sale; otherwise it fills in believable activity that ages on its own (the "X ago" climbs over time and resets, never stuck on one number) and only appears on some products at a time — popular ones often, quiet ones now and then — so it\'s never on every product at once. Hidden when the bought-count line is already showing "today/this week" (so the two don\'t repeat).',
+     '基于最近一次订单的新鲜度提示。有真实近期订单时显示真实时间;否则填充会自动变旧的可信活动(“X 前”随时间增长并适时重置,不再固定),且只在部分商品上出现——热销品常见、冷门品偶尔——不会同时出现在每个商品上。'],
+    ['Show "last ordered"','显示"上次订购"'],
+    [['max_hours',['Hide if older than this many hours','超过多少小时则隐藏']],
+     ['fallback_min_minutes',['Freshness for active products, lowest minutes','活跃商品新鲜度下限(分钟)']],['fallback_max_minutes',['Freshness for active products, highest minutes','活跃商品新鲜度上限(分钟)']]]],
+  ['sb',['"X SOLD" badge — shop & home cards','"已售 X 件"标签'],
+    ['All-time paid units per product, shown as a corner cap on shop cards and home blocks. Low-sellers stay neutral (no badge) so we don\'t advertise a weak number.','显示在商品卡片上的全期销量标签;低于阈值则不显示。'],
+    ['Show "X SOLD" badges','显示已售标签'],
+    [['min_units',['Minimum units to show','最低显示销量']],['boost_min',['Starting sold baseline, lowest','起始已售基数下限']],['boost_max',['Starting sold baseline, highest','起始已售基数上限']]]],
+];
+const spW=k=>SP_W.find(w=>w[0]===k);
+reg('spToggle', (k,f)=>{
+  const c=spLive(); if(!c||!SP_D[k]) return;
+  if(f!=='enabled'&&!(k==='vn'&&f==='show_in_app')) return;
+  SP_D[k][f]=!SP_D[k][f]; c.auto.touch(); render();
+});
+reg('spEdit', k=>{
+  const c=spLive(), w=spW(k); if(!c||!w) return;
+  cfgSheet(c, T(...w[1]), escAttr(T(...w[2])),
+    w[4].map(([id,lab])=>({id, label:T(...lab), type:'number', commit:true})),
+    f=>SP_D[k][f], (f,v)=>{ SP_D[k][f]=v; });
+});
+/* The manual entries — rows mixed into the real ticker. A row is edited in
+   its own sheet with Remove, as the About page's rows are; an empty one is
+   kept in the draft and left out of the save (the desktop drops it too). */
+function spManSheet(i){
+  const c=spLive(); if(!c) return;
+  const row=SP_D.rb.manual[i]; if(!row) return;
+  cfgSheet(c, T('Manual fake entries','手动虚拟条目')+' · '+(i+1),
+    escAttr(T('Mixed into the real feed and sorted by time. Names should be pre-masked (type "W**" or "M***"). The minutes you set is the average age — each entry\'s "X ago" drifts up and resets around it over time (and entries don\'t tick together), so it reads like a live order instead of a fixed label.',
+      '与真实订单合并并按时间排序;姓名请预先脱敏。所填分钟数为平均时间,实际“X 前”会围绕它自然增减并适时重置(各条不同步),读起来像真实下单而非固定文字。')),
+    [{id:'name',label:T('Masked name, e.g. W**','已脱敏姓名,如 李**'),max:40},
+     {id:'product_en',label:T('Product (English)','产品名(英文)'),max:80},
+     {id:'product_cn',label:T('Product (Chinese)','产品名(中文)'),max:80},
+     {id:'minutes_ago',label:T('min ago','分钟前'),type:'number',commit:true}],
+    f=>{ const r=SP_D.rb.manual[i]; return r?r[f]:''; },
+    (f,v)=>{ const r=SP_D.rb.manual[i]; if(r) r[f]=f==='minutes_ago'?(Number(v)||0):v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>{ SP_D.rb.manual.splice(i,1); c.auto.touch(); state.ask=null; render(); }}]);
+}
+reg('spMan', i=>spManSheet(Number(i)));
+reg('spManAdd', ()=>{
+  const c=spLive(); if(!c) return;
+  SP_D.rb.manual.push({name:'',product_en:'',product_cn:'',minutes_ago:5});
+  c.auto.touch(); spManSheet(SP_D.rb.manual.length-1);
+});
+reg('upToggle', f=>{
+  const c=upLive(); if(!c||['enabled','bundles','extras','flash'].indexOf(f)<0) return;
+  UP_D[f]=!UP_D[f]; c.auto.touch(); render();
+});
+reg('upMax', ()=>{
+  const c=upLive(); if(!c) return;
+  cfgSheet(c, T('Checkout upsell pop-up','结账推荐弹窗'), null,
+    [{id:'max',label:T('Max items shown','最多展示数量'),type:'number',commit:true}], f=>UP_D[f], (f,v)=>{ UP_D[f]=v; });
+});
+function spSwitchRow(label, on, cmd, sub){
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${label}</span>
+      ${sub?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${sub}</span>`:''}</span>
+    ${toggle(on,cmd)}</div>`;
+}
+function spSettings(){
+  if(!state.cfg) return `<div style="padding:16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  spEnsure();
+  const c=spLive(), u=upLive();
+  if(!c||!u) return '';
+  const fieldsLine=(k)=>{ const w=spW(k); return w[4].map(([id,lab])=>escAttr(T(...lab))+': '+escAttr(SP_D[k][id])).join(' · '); };
+  const widget=(w)=>{ const k=w[0], d=SP_D[k];
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${escAttr(T(...w[1]))}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${escAttr(T(...w[2]))}</div>
+      ${spSwitchRow(escAttr(T(...w[3])),!!d.enabled,`APP.cmd('spToggle','${k}','enabled')`)}
+      ${k==='vn'?spSwitchRow(escAttr(T('Also show the "N viewing now" badge to customers','同时向客户显示"N 人正在查看"标签')),!!d.show_in_app,"APP.cmd('spToggle','vn','show_in_app')",
+        T('Leave the second box off to count viewers for yourself only — the backend LIVE pane fills in, but customers never see the badge.','仅勾选第一项即可只在后台统计,客户端不显示。')):''}
+      <div class="num" style="font-size:13px;color:var(--text-secondary);line-height:1.6">${fieldsLine(k)}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('spEdit','${k}')">${T('Edit','编辑')}</button>
+      ${k==='rb'?spManual():''}</div>`; };
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">${T('Checkout upsell pop-up','结账推荐弹窗')}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${escAttr(T('The "before you pay" pop-up that suggests add-ons. Turn it off entirely, or choose which content it may offer. Shows only when a chosen tier has something relevant; hides itself otherwise. Applies instantly to web + mini-app.','结账付款前推荐加购商品的弹窗。可整体关闭,或选择允许展示的内容类型。仅在所选类型有相关内容时显示。即时生效,无需重新发布。'))}</div>
+      ${spSwitchRow(T('Show the checkout upsell pop-up','显示结账推荐弹窗'),!!UP_D.enabled,"APP.cmd('upToggle','enabled')")}
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Content it may offer','可展示的内容')}</span>
+      ${spSwitchRow(escAttr(T('Bundles ("buy together")','套餐(搭配购买)')),!!UP_D.bundles,"APP.cmd('upToggle','bundles')")}
+      ${spSwitchRow(T('Linked extras','关联加购'),!!UP_D.extras,"APP.cmd('upToggle','extras')")}
+      ${spSwitchRow(T('Flash sales (active deals)','限时秒杀(进行中)'),!!UP_D.flash,"APP.cmd('upToggle','flash')")}
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T('Max items shown','最多展示数量')}: ${escAttr(UP_D.max)}</div>
+      <button class="btn2" style="width:100%" onclick="APP.cmd('upMax')">${T('Edit','编辑')}</button>
+      ${cardFoot(u)}</div>
+    ${SP_W.map(widget).join('')}
+    ${cardFoot(c)}`;
+}
+function spManual(){
+  const rows=SP_D.rb.manual;
+  return `<div class="sep"></div>
+    <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Manual fake entries','手动虚拟条目')}</span>
+    ${rows.length?`<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:48px;padding:10px 14px" onclick="APP.cmd('spMan',${i})">
+        <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([r.name,LANG==='en'?(r.product_en||r.product_cn):(r.product_cn||r.product_en)].filter(Boolean).join(' · '))||'—'}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${Number(r.minutes_ago)||0} ${T('min ago','分钟前')}</span></button>`).join('')}</div>`
+      :`<div style="font-size:12.5px;color:var(--text-secondary)">${T('No fake entries yet.','暂无虚拟条目。')}</div>`}
+    <button class="btn2" style="width:100%" onclick="APP.cmd('spManAdd')">${T('+ Add fake entry','添加虚拟条目')}</button>`;
+}
+function screenSocial(){
+  // The switch is real (features.socialProof) and reachable from Settings, so
+  // this screen states what it is currently doing.
+  const on=featOn('socialProof'), busy=state.featBusy==='socialProof';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div class="card" style="padding:16px;display:flex;align-items:center;gap:14px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px;font-weight:500">${busy?T('Saving…','保存中…'):(on?T('Showing recent buyers','正在展示最近购买'):T('Switched off','已关闭'))}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on
+          ? T('Shoppers see bought-counts, a recent-buyers ticker and the SOLD badge.','顾客会看到购买人数、最近购买动态与“已售”标签。')
+          : T('None of the bought-counts, the recent-buyers ticker or the SOLD badge are shown.','购买人数、最近购买动态与“已售”标签均不显示。')}</span></span>
+      ${toggle(on,"APP.cmd('toggleFeature','socialProof')")}</div>
+    ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
+    ${spSettings()}</div>`;
 }
 
 /* Meituan's health, which the phone did not show at all.
@@ -29500,13 +31125,234 @@ async function loadChannels(force){
     state.sales=(d&&d.channels)||null; state.salesSummary=(d&&d.summary)||null; }catch(e){}
   render();
 }
+/* ==========================================================================
+   §325 M5 — THE MEDIA LIBRARY, AS THE DESKTOP KEEPS IT (07-content-billing.js)
+   --------------------------------------------------------------------------
+   The phone listed the newest thirty pictures and said folders, tags and alt
+   text were on desktop. It now has the desktop's library: search (file name or
+   alt text), the folder and tag filters with their counts, pages of sixty,
+   each picture's "used in" count from the same scan, the details (file name,
+   alt text, folder, tags) that save themselves with Undo and Version history
+   on the desktop's own card ('media.<id>'), folders made, renamed and
+   deleted, and a selection moved, tagged or deleted — deleting says how many
+   places the pictures are used in, in the desktop's words, before it goes.
+
+   Keys, the server's: every /media write is media:upload except a delete
+   (DELETE, bulk-delete), which is media:delete. Each control is drawn only
+   for its key; the library itself reads for anybody who can open it.
+   ========================================================================== */
+const ML_PAGE=60;
+const ML={q:'', tag:'', folder:'', folders:null, unsorted:0, total:0, tags:null, usage:{}, sel:null, more:false, err:'', auto:null};
+const mlUsed=id=>Number(ML.usage[id]||0);
+function mlParams(offset){
+  const p=new URLSearchParams();
+  if(ML.q.trim()) p.set('q',ML.q.trim());
+  if(ML.tag) p.set('tag',ML.tag);
+  if(ML.folder) p.set('folder',ML.folder);
+  p.set('limit',ML_PAGE); p.set('offset',offset);
+  return p.toString();
+}
 async function loadMedia(){
   if(state.mediaLoading||state.mediaTried) return; state.mediaLoading=true; state.mediaTried=true;
-  try{ const d=await api('/media/list?limit=30');
+  // ML.err is not cleared here: a write's refusal must outlive the re-read it starts.
+  try{
+    const [d,f,t,u]=await Promise.all([api('/media/list?'+mlParams(0)), api('/media/folders').catch(()=>null),
+      api('/media/tags').catch(()=>null), api('/media/usage').catch(()=>null)]);
     state.media={rows:(d&&d.rows)||[], total:(d&&d.total)||0};
-  }catch(e){ state.media={rows:[],total:0}; }
+    if(f){ ML.folders=f.folders||[]; ML.unsorted=f.unsorted_count||0; ML.total=f.total_count||0; }
+    ML.tags=Array.isArray(t)?t:(ML.tags||[]);
+    ML.usage=(u&&typeof u==='object')?u:{};
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    state.media={rows:[],total:0};
+    ML.err=e&&e.refused?e.message:T('Load failed','加载失败');
+  }
   state.mediaLoading=false; render();
 }
+function mlReload(){ state.mediaTried=false; state.media=null; ML.sel=ML.sel?new Set():null; loadMedia(); }
+reg('mlMore', ()=>{
+  if(!state.media||ML.more||state.media.rows.length>=state.media.total) return;
+  ML.more=true; render();
+  api('/media/list?'+mlParams(state.media.rows.length)).then(d=>{
+    state.media={rows:state.media.rows.concat((d&&d.rows)||[]), total:(d&&d.total)||state.media.total};
+  }).catch(e=>{ if(String(e.message)!=='auth') showToast(T('Load failed','加载失败')); })
+    .then(()=>{ ML.more=false; render(); });
+});
+reg('mlQ', v=>{ ML.q=String(v||''); searchClearShow('mMlClr', !!ML.q); });
+reg('mlSearchGo', ()=>{ ML.err=''; mlReload(); });
+reg('mMlClr', ()=>{ searchClearRun('mMlQ','mMlClr','mlQ'); ML.err=''; mlReload(); });
+reg('mlFolder', k=>{ ML.folder=k==='all'?'':String(k); ML.err=''; mlReload(); });
+reg('mlTag', k=>{ ML.tag=k==='__all'?'':String(k); ML.err=''; mlReload(); });
+/* Selecting: the desktop's ctrl-click, as a mode — a phone has no modifier key. */
+reg('mlSelect', ()=>{ ML.sel=ML.sel?null:new Set(); render(); });
+reg('mlTap', id=>{
+  id=Number(id);
+  if(ML.sel){ ML.sel.has(id)?ML.sel.delete(id):ML.sel.add(id); render(); return; }
+  mlDetail(id);
+});
+function mlFolderName(fid){ const f=(ML.folders||[]).find(x=>x.id===fid); return f?f.name:''; }
+/* ── One picture's details: a live sheet on the desktop's card ──────────── */
+const mlTagList=s=>{ const out=[]; String(s||'').split(',').forEach(x=>{ const t=x.trim().toLowerCase().replace(/\s+/g,'-').slice(0,40); if(t&&!out.includes(t)) out.push(t); }); return out; };
+function mlFmtBytes(n){ if(!n) return '0 B'; if(n<1024) return n+' B'; if(n<1024*1024) return (n/1024).toFixed(0)+' KB'; return (n/1024/1024).toFixed(1)+' MB'; }
+function mlDetail(id){
+  const m=state.media&&state.media.rows.find(r=>r.id===id); if(!m) return;
+  const used=mlUsed(id);
+  const url='/api/retail/media/'+id;
+  const body=`<img src="${url}" alt="" style="width:100%;max-height:220px;object-fit:contain;border-radius:10px;background:var(--surface-raised)">
+    <div class="num" style="font-size:12.5px;margin-top:8px">${escAttr(m.mime_type||'')} · ${mlFmtBytes(m.size_bytes)}${m.width&&m.height?' · '+m.width+'×'+m.height:''}</div>
+    <div style="font-size:13px;margin-top:4px">${T('Used in','引用')}: ${used?T('Used in '+used+' place'+(used===1?'':'s'),'被引用 '+used+' 处'):T('Not used yet','未使用')}</div>
+    <div class="num" style="font-size:12px;margin-top:4px;word-break:break-all">${url}</div>`;
+  const acts=[{key:'copy',label:T('Copy','复制'),run:()=>copyText(url)}];
+  if(mCan('media:delete')) acts.push({key:'del',label:T('Delete','删除'),danger:true,run:()=>mlDeleteAsk([id])});
+  if(!mCan('media:upload')||typeof TacetAutosave==='undefined'){
+    // Read only: what the picture is, where it is used, its address.
+    state.ask={title:escAttr(m.filename||('#'+id)), body:body+`<div style="font-size:13px;margin-top:8px">${escAttr(m.alt_text||'')}</div>`,
+      options:acts.map(a=>({key:a.key,label:a.label})), run:k=>{ const a=acts.find(x=>x.key===k); if(a) a.run(); }};
+    render(); return;
+  }
+  const d={filename:m.filename||'', alt_text:m.alt_text||'', folder:m.folder_id==null?'':String(m.folder_id), tags:(m.tags||[]).join(', ')};
+  const payload=()=>({filename:d.filename.trim()||null, alt_text:d.alt_text.trim()||null, tags:mlTagList(d.tags),
+    folder_id:d.folder===''?null:parseInt(d.folder,10)});
+  const auto=TacetAutosave.create({
+    read:payload,
+    send:(p,note)=>apiWrite('/media/'+id+'?history='+encodeURIComponent('media.'+id)+(note?'&note='+note:''),p,'PATCH').then(()=>{
+      const cur=state.media&&state.media.rows.find(r=>r.id===id);
+      if(cur) Object.assign(cur,{filename:p.filename, alt_text:p.alt_text, tags:p.tags, folder_id:p.folder_id}); }),
+    onChange:()=>askLiveRepaint(),
+  });
+  auto.start();
+  ML.auto=auto;   // the reload guard and the background flush read it
+  const apply=p=>{ d.filename=p.filename||''; d.alt_text=p.alt_text||''; d.folder=p.folder_id==null?'':String(p.folder_id); d.tags=(p.tags||[]).join(', '); };
+  state.ask={title:escAttr(m.filename||('#'+id)), body,
+    fields:[{id:'filename',label:T('Filename','文件名'),placeholder:'(optional)'},
+      {id:'alt_text',label:T('Alt text','替代文字')+' '+T('(for screen readers and SEO)','(用于读屏与 SEO)'),placeholder:'Coconut milk in a glass jar, top-down'},
+      {id:'folder',label:T('Folder','文件夹'),choices:[['',T('(unsorted)','未分组')]].concat((ML.folders||[]).map(f=>[String(f.id),escAttr(f.name)]))},
+      {id:'tags',label:T('Tags','标签'),placeholder:'banner, hero, product…',commit:true}],
+    live:{auto, get:k=>d[k], set:(k,v)=>{ d[k]=v; }, apply, acts,
+      history:()=>{ Promise.resolve(auto.flush()).then(()=>api('/media/'+id+'/history')).then(j=>{
+        const list=Array.isArray(j&&j.versions)?j.versions:[];
+        if(!list.length){ showToast(T('No versions yet — they’re saved automatically as you edit.','暂无历史版本 — 编辑时会自动保存。')); return; }
+        liveHistorySheet(list, v=>(v.changed||[]).join(' · '), v=>{ apply(v.snapshot||{}); return auto.flush('restore'); });
+      }).catch(e=>{ if(String(e.message)==='auth') return; showToast(T('Could not load the history','无法加载历史版本')); }); },
+      close:()=>{ Promise.resolve(auto.flush()).then(()=>mlReload()); }}};
+  state.askErr=null;
+  render();
+}
+/* ── Delete: the where-used warning first, in the desktop's words ──────── */
+function mlDeleteAsk(ids){
+  if(!mCan('media:delete')||!ids.length) return;
+  const used=ids.reduce((s,i)=>s+mlUsed(i),0);
+  let title;
+  if(ids.length===1){
+    const m=state.media&&state.media.rows.find(r=>r.id===ids[0]); const nm=(m&&m.filename)||('#'+ids[0]);
+    title=used?T('This media is referenced in '+used+' place'+(used===1?'':'s')+'. Delete anyway?','此媒体被 '+used+' 处引用。仍要删除吗？')
+      :T('Delete "'+nm+'"?','删除 "'+nm+'"？');
+  }else{
+    title=used?T('Delete '+ids.length+' items — '+used+' reference'+(used===1?'':'s')+' will be broken. Continue?','删除 '+ids.length+' 项，将破坏 '+used+' 处引用，是否继续？')
+      :T('Delete '+ids.length+' items?','删除 '+ids.length+' 项？');
+  }
+  state.ask={title:escAttr(title), confirmLabel:T('Delete','删除'), danger:true, run:()=>mlWrite(()=>apiWrite('/media/bulk-delete',{ids}), T('Deleted','已删除'))};
+  render();
+}
+/* Every list write: the refusal or failure stays on the screen; the toast
+   only confirms; the library is read again either way. */
+function mlWrite(go, okText){
+  ML.err=''; render();
+  return Promise.resolve().then(go).then(()=>{ showToast(okText); mlReload(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; ML.err=e&&e.refused?e.message:T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。')+(e&&e.message&&!e.refused?' ('+e.message+')':''); mlReload(); });
+}
+reg('mlBulkDelete', ()=>{ if(ML.sel) mlDeleteAsk([...ML.sel]); });
+reg('mlBulkMove', ()=>{
+  if(!ML.sel||!ML.sel.size||!mCan('media:upload')) return;
+  const ids=[...ML.sel];
+  state.ask={title:T('Move to folder','移到文件夹'),
+    options:[{key:'unsorted',label:T('(unsorted)','未分组')+` <span class="num" style="color:var(--text-secondary)">${ML.unsorted}</span>`}]
+      .concat((ML.folders||[]).map(f=>({key:String(f.id),label:escAttr(f.name)+` <span class="num" style="color:var(--text-secondary)">${f.count}</span>`}))),
+    run:k=>{ const folder_id=k==='unsorted'?null:parseInt(k,10);
+      mlWrite(()=>apiWrite('/media/bulk-move',{ids, folder_id}), T('Moved '+ids.length,'已移动 '+ids.length)); }};
+  render();
+});
+reg('mlBulkTag', ()=>{
+  if(!ML.sel||!ML.sel.size||!mCan('media:upload')) return;
+  const ids=[...ML.sel];
+  state.ask={title:T('Tag selected','批量加标签'),
+    fields:[{id:'add',label:T('Add tags','添加标签')+' '+T('(comma or Enter)','(逗号或回车)'),placeholder:'banner, hero…'},
+            {id:'remove',label:T('Remove tags','移除标签'),placeholder:'(optional)'}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(mlTagList(v.add).length||mlTagList(v.remove).length)?'':T('Nothing to apply','无变更'),
+    run:v=>mlWrite(()=>apiWrite('/media/bulk-tag',{ids, add:mlTagList(v.add), remove:mlTagList(v.remove)}), T('Tags updated','标签已更新'))};
+  render();
+});
+/* ── Folders: made, renamed, deleted ─────────────────────────────────────── */
+reg('mlFolders', ()=>{
+  const opts=[];
+  if(mCan('media:upload')) opts.push({key:'__new',label:T('+ New folder','+ 新建文件夹')});
+  (ML.folders||[]).forEach(f=>opts.push({key:String(f.id),label:escAttr(f.name)+` <span class="num" style="color:var(--text-secondary)">${f.count}</span>`}));
+  state.ask={title:T('Folder','文件夹'), options:opts, run:k=>{
+    if(k==='__new'){ state.ask={title:T('+ New folder','+ 新建文件夹'), fields:[{id:'name',label:T('Folder','文件夹')}], confirmLabel:T('Save','保存'),
+      // An empty name does nothing, as on the desktop.
+      run:v=>{ if(!v.name) return; mlWrite(()=>apiWrite('/media/folders',{name:v.name}), T('Folder created','文件夹已创建')); }}; render(); return; }
+    const f=(ML.folders||[]).find(x=>String(x.id)===k); if(!f) return;
+    const acts=[];
+    if(mCan('media:upload')) acts.push({key:'rename',label:T('Rename','重命名')});
+    if(mCan('media:delete')) acts.push({key:'delete',label:T('Delete','删除')});
+    if(!acts.length) return;
+    state.ask={title:escAttr(f.name), options:acts, run:a=>{
+      if(a==='rename'){ state.ask={title:T('Rename folder','重命名文件夹'), fields:[{id:'name',label:T('Folder','文件夹'),value:f.name}], confirmLabel:T('Rename','重命名'),
+        run:v=>{ if(!v.name||v.name===f.name) return; mlWrite(()=>apiWrite('/media/folders/'+f.id,{name:v.name},'PATCH'), T('Renamed','已重命名')); }}; render(); return; }
+      const msg=f.count?T('Delete folder "'+f.name+'"? Its '+f.count+' item'+(f.count===1?'':'s')+' will move to Unsorted (images are kept).','删除文件夹 "'+f.name+'"？其中 '+f.count+' 个项目将移至未分类（图片保留）。')
+        :T('Delete empty folder "'+f.name+'"?','删除空文件夹 "'+f.name+'"？');
+      state.ask={title:escAttr(msg), confirmLabel:T('Delete','删除'), danger:true,
+        run:()=>{ if(ML.folder===String(f.id)) ML.folder='';
+          mlWrite(()=>apiWrite('/media/folders/'+f.id,{},'DELETE'), T('Folder deleted','文件夹已删除')); }};
+      render(); }};
+    render(); }};
+  render();
+});
+function screenMedia(){
+  const err=(state.mediaErr||ML.err)?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${[state.mediaErr,ML.err?escAttr(ML.err):''].filter(Boolean).join(' ')}</span></div>`:'';
+  const search=`${searchBox(`<input id="mMlQ" inputmode="search" enterkeyhint="search" value="${escAttr(ML.q)}"
+      placeholder="${T('Search filename or alt text','搜索文件名/alt')}" style="width:100%"
+      oninput="APP.cmd('mlQ',this.value)" onchange="APP.cmd('mlSearchGo')"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mMlClr',!!ML.q)}`;
+  const folderChips=chipRow([{key:'all',en:'All media',zh:'全部',count:ML.total},{key:'unsorted',en:'Unsorted',zh:'未分组',count:ML.unsorted}]
+    .concat((ML.folders||[]).map(f=>({key:String(f.id),en:f.name,zh:f.name,count:f.count}))), ML.folder||'all', 'mlFolder');
+  const tagChips=(ML.tags&&ML.tags.length)?chipRow([{key:'__all',en:'All',zh:'全部'}].concat(ML.tags.map(t=>({key:t.tag,en:t.tag,zh:t.tag,count:t.n}))), ML.tag||'__all', 'mlTag'):'';
+  const head=`<div style="padding:12px 16px 0;display:flex;gap:8px;align-items:center"><div style="flex:1;min-width:0">${search}</div>
+      <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('mlFolders')">${T('Folder','文件夹')}</button></div>
+    <div style="padding-top:10px">${folderChips}</div>${tagChips?`<div style="padding-top:8px">${tagChips}</div>`:''}`;
+  if(!state.media){ if(!state.mediaTried) loadMedia();
+    return `${head}<div style="padding:8px 16px 0">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
+  const filtered=!!(ML.q.trim()||ML.tag||ML.folder);
+  /* §325 S1d — the invitation is made only to somebody the Add photos button
+     is drawn for; §325 M5 — and not when a filter is what emptied the list. */
+  if(!state.media.rows.length) return `${head}<div style="padding:8px 16px 0">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
+      filtered?'':mCan('media:upload')?T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'):'');
+  const sel=ML.sel;
+  const canBulk=mCan('media:upload')||mCan('media:delete');
+  const rows=state.media.rows, total=state.media.total;
+  return `${head}<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${err}
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="num" style="flex:1;font-size:13px;color:var(--text-secondary)">${T(rows.length+' of '+total,'共 '+total+' 项')}</span>
+      ${canBulk?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('mlSelect')">${sel?T('Done','完成'):T('Select','选择')}</button>`:''}</div>
+    ${sel?`<div class="card" style="padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <span class="num" style="font-size:13px;flex:1;min-width:80px">${sel.size} ${T('selected','已选')}</span>
+      ${mCan('media:upload')?`<button class="btn2" style="width:auto;padding:0 12px" ${sel.size?'':'disabled'} onclick="APP.cmd('mlBulkMove')">${T('Move to','移到')}</button>
+        <button class="btn2" style="width:auto;padding:0 12px" ${sel.size?'':'disabled'} onclick="APP.cmd('mlBulkTag')">${T('Tag','加标签')}</button>`:''}
+      ${mCan('media:delete')?`<button class="btn2" style="width:auto;padding:0 12px;color:var(--brick-ink)" ${sel.size?'':'disabled'} onclick="APP.cmd('mlBulkDelete')">${T('Delete','删除')}</button>`:''}</div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${rows.map(m=>{ const used=mlUsed(m.id), on=sel&&sel.has(m.id);
+      return `<button onclick="APP.cmd('mlTap',${m.id})" style="position:relative;padding:0;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:${on?'2px solid var(--accent)':'1px solid var(--border-default)'}">
+        <img loading="lazy" src="/api/retail/media/${m.id}" alt="${escAttr(m.alt_text||m.filename||'')}" style="width:100%;height:100%;object-fit:cover;display:block">
+        <span class="num" style="position:absolute;left:4px;bottom:4px;font-size:10.5px;padding:1px 6px;border-radius:999px;background:rgba(17,26,43,.62);color:#fff">${used?'× '+used:T('unused','未被引用')}</span>
+        ${on?`<span style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center">${ic('check',14,2.5)}</span>`:''}
+      </button>`; }).join('')}</div>
+    ${rows.length<total?`<button class="btn2" style="width:100%" ${ML.more?'disabled':''} onclick="APP.cmd('mlMore')">${ML.more?T('Loading…','加载中…'):T('Load more','加载更多')}</button>`:''}
+  </div>`;
+}
+
 /* The fapiao list read, named so it has two callers: loadLive's boot pass and
    the snooze's stale-row recovery. apiRaw, not api: the chip counts ride the
    envelope beside `data`, and api() returns `data` alone — so liveInvoiceCounts
@@ -29763,6 +31609,11 @@ function toldCard(o){
           ${r.at?`<span class="num" style="flex:none;font-size:12px;color:var(--text-secondary)">${escAttr(tdWhen(r.at,'dateTime',_tdL()))}</span>`:''}</span>
         ${r.ok?'':`<span style="display:block;font-size:12.5px;line-height:1.45;margin-top:3px;color:var(--brick-ink);overflow-wrap:anywhere">${escAttr(pair(M_NOTIFY_WHY,r.error,mCodeWords))}</span>`}
       </span></div>`).join('')}
+    ${/* §325 O7 — the desktop's "Try telling them again" (ordRenotify): only when
+         one attempt did not arrive, and only for orders:edit, which is what
+         POST …/renotify is on the server (lib/cap-routes.js). */''}
+    ${(rows.some(r=>!r.ok)&&o._id!=null&&!o.viewOnly&&mCan('orders:edit'))
+      ?`<div style="padding-top:10px;border-top:1px solid var(--hairline)"><button class="btn2" style="width:auto;padding:8px 14px" ${state.orderBusy?'disabled':''} onclick="APP.cmd('renotify')">${state.orderBusy==='renotify'?T('Sending…','发送中…'):T('Try telling them again','重新通知顾客')}</button></div>`:''}
   </div>`;
 }
 /* ── §325 O1 — A MARKETPLACE ORDER'S SETTLEMENT ────────────────────────────
@@ -30319,6 +32170,7 @@ function sheetOrderDetail(){
            :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore[0],'自提门店 '+o.pickupStore[1]):T('Collects in store','到店自提'))
            :o.addr?T(...o.addr):T('No address on file','没有收货地址')}</div>
          ${(!o.counter&&!o.pickup)?addrMovedNote(o):''}
+         ${shipToBtns(o)}
          ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('View customer','查看顾客')}</button>`:''}</div>
        <!-- Payment reads as the tender and nothing else: the WeChat mark plus the
             word. The status word is dropped when it agrees with the pill in the
@@ -30337,7 +32189,7 @@ function sheetOrderDetail(){
          ${o.proof?`<div style="margin-top:10px">
            <div style="display:block;border-radius:10px;overflow:hidden;border:1px solid var(--border-default);cursor:zoom-in" onclick="APP.cmd('zoomImg','${o.proof}')">
              <img src="${escAttr(o.proof)}" alt="${T('Payment screenshot','付款截图')}" style="display:block;width:100%;max-height:220px;object-fit:cover"></div>
-           <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${T('The screenshot the customer sent — tap to see it whole','顾客上传的付款截图 — 点击查看大图')}</div></div>`:''}</div>
+           <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${T('The screenshot the customer sent — tap to see it whole','顾客上传的付款截图 — 点击查看大图')}</div>${ocrRerunBtn(o)}</div>`:''}</div>
        <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
          ${o.route?`<div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div>`:''}
@@ -31535,7 +33387,7 @@ function orderActionRow(o,isPO){
   const btns=[];
   if(canPay) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('markPaid')">${busy==='advance'?T('Marking…','处理中…'):T('Mark paid','标记已付款')}</button>`);
   else if(next) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('advance','${next.to}')">${busy==='advance'?T(next.busyEn,next.busyZh):T(next.en,next.zh)}</button>`);
-  if(canEdit) btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
+  if(canEdit&&printable(o)) btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
   // ONE LIST DECIDES BOTH. This condition and the sheet's rows used to be
   // written out separately and had drifted apart; now the button asks the sheet.
   if(orderActs(o).length) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
@@ -31590,7 +33442,7 @@ function sheetAsk(){
                `<option value="${escAttr(v2)}"${String(val(f)==null?'':val(f))===String(v2)?' selected':''}>${lab}</option>`).join('')}</select>`
            : f.multiline
            ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none" ${wire(f)}>${val(f)!=null?escAttr(val(f)):''}</textarea>`
-           : `<div style="display:flex;gap:8px;align-items:center"><input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${val(f)!=null?escAttr(val(f)):''}" style="flex:1;min-width:0" ${wire(f)}
+           : `<div style="display:flex;gap:8px;align-items:center"><input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.max?`maxlength="${f.max}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${val(f)!=null?escAttr(val(f)):''}" style="flex:1;min-width:0" ${wire(f)}
                     onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();${L?'':"APP.cmd('askRun','')"}}">${
                L&&f.ownSave?`<button class="btn2" id="ask-own-${f.id}" style="flex:none;${L.ownDirty(f.id)?'':'display:none'}" onclick="APP.cmd('askLiveOwnSave','${f.id}')">${T('Save','保存')}</button>`:''}</div>`}
        </label>`).join('')}
@@ -31598,7 +33450,7 @@ function sheetAsk(){
      </div>`:''}
      ${/* Capped and scrolled: a role's version history can run to thirty rows,
           which is taller than the phone. Short lists never reach the cap. */''}
-     ${L?`<div style="padding:16px 20px 0"><div id="mAskLiveFoot">${askLiveFoot()}</div>
+     ${L?`<div style="padding:16px 20px 0">${L.acts&&L.acts.length?`<div style="display:flex;gap:8px;margin-bottom:12px">${L.acts.map(x=>`<button class="btn2" style="flex:1;${x.danger?'color:var(--brick-ink)':''}" onclick="APP.cmd('askLiveAct','${x.key}')">${x.label}</button>`).join('')}</div>`:''}<div id="mAskLiveFoot">${askLiveFoot()}</div>
           <div style="display:flex;gap:8px;margin-top:10px">
             ${L.history?`<button class="btn2" style="flex:1" onclick="APP.cmd('askLiveHistory')">${T('Version history','历史版本')}</button>`:''}
             <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Done','完成')}</button></div></div>`
@@ -31630,7 +33482,7 @@ function sheetActions(){
   const o=currentOrder();
   // Reprint is the drawer's own toolbar button and rides at the top of the
   // sheet as well; everything else is orderActs, which the "…" button gates on.
-  const acts=(mCan('orders:edit')?[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]]:[]).concat(orderActs(o));   // §325
+  const acts=((mCan('orders:edit')&&printable(o))?[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]]:[]).concat(orderActs(o));   // §325; O7: orderHeadPrint's guard
   return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeActions')"></div>
    <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber" style="margin-bottom:10px"></div>
    ${acts.map(([i,l,c])=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${c}"><span style="display:flex;flex:none;color:var(--text-secondary)">${ic(i)}</span><span style="flex:1;font-size:15px">${l}</span></button>`).join('')}</div>`;
@@ -36341,7 +38193,7 @@ const ROUTE_CAP={
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
   coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
-  sharecards:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
+  sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
      so the screen can never be walked into by an operator whose send would
@@ -36350,9 +38202,9 @@ const ROUTE_CAP={
      screen it lives inside rather than left open on a screen that is not. */
   bcnew:'broadcasts:send', bcauto:'broadcasts:send',
   // More → Loyalty & Wallet.
-  membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit',
+  membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit', polledit:'voting:edit',
   // More → Content.
-  editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view',
+  editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view', snippets:'content:view',
   // Settings, and the screens reached from inside it or from the Products strip.
   settings:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   setup:['settings:shop','stores:view'],
@@ -37231,6 +39083,7 @@ function render(){
   if(state.detailId) html += layer('detail:'+state.detailId, sheetOrderDetail());
   if(state.detailActions) html += layer('actions', sheetActions());
   if(state.rf&&state.detailId) html += layer('rf:'+state.rf.kind, sheetRefundForm());
+  if(state.shipTo&&state.detailId===state.shipTo.oid) html += layer('shipto:'+state.shipTo.mode, sheetShipTo());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
   // §325 PD4 — a shop menu's row sheet and its Add product picker.
   if(state.shm.edit) html += layer('shmedit:'+state.shm.edit.id, sheetShmEdit());
@@ -37680,7 +39533,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -37885,6 +39738,12 @@ function mUnsavedWork(){
     if(rcpAuto&&rcpAuto.busy()) return true;
     /* A material edit likewise (§300 R5). */
     if(matAuto&&matAuto.busy()) return true;
+    /* A content card (Legal, FAQ, About, copy) likewise (§325 M4). */
+    if(cfgBusy()) return true;
+    /* A picture's details likewise (§325 M5). */
+    if(ML.auto&&ML.auto.busy()) return true;
+    /* A poll typed and not yet saved (§325 M7) — held in memory only. */
+    if(PE&&PE.dirty&&(state.stack||[]).some(f=>f&&f.route==='polledit')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
@@ -39433,6 +41292,24 @@ function mapDetail(o){
   // Where a same-city rider collects, and any parked state (renderQyShipFrom).
   base.shipFrom=o.qingyun_ship_from||null;
   base.storeCode=o.store_code||null;
+  /* §325 O7 — what Edit ship-to and Make address Chinese start from: the
+     desktop's openEditShipTo prefill (the parsed address object, else the
+     stored line split on spaces for a legacy row), and its two conditions —
+     not a counter sale or a pickup, and the Chinese button only while the line
+     still carries a Latin letter. */
+  base.shipTo=(()=>{
+    if(o.fulfillment_type==='pickup'||o.fulfillment_type==='counter') return null;
+    let a=(o.address&&typeof o.address==='object')?o.address:{};
+    if(a.pickup) return null;
+    if(!a.address&&!a.province&&!a.city&&o.address_full){
+      const p=String(o.address_full).trim().split(/\s+/);
+      a={province:p[0]||'', city:p[1]||'', district:p[2]||'', address:p.slice(3).join(' ')};
+    }
+    return {name:o.recipient_name||'', phone:o.recipient_phone||'', province:a.province||'', city:a.city||'',
+      district:a.district||'', address:a.address||'', detail:a.detail||'', latin:/[A-Za-z]/.test(o.address_full||'')};
+  })();
+  // The screenshot's verdict (renderAlipayProof), for its Try reading again.
+  base.ocrVerdict=o.alipay_ocr_verdict||null;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[[['Subtotal','小计'],money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[[['Shipping','运费'],money(CUR,o.shipping_fee)]]:[]);
   }
@@ -39672,7 +41549,11 @@ function mapFlash(r){
     noCoupon:!!Number(r.no_coupon_on_flash),
     status:label, kind:FLASH_KIND[state]||'draft'};
 }
-const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft'};
+const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft',recalled:'off',cancelled:'off',expired:'off',ended:'off'};
+/* §325 M6 — every status the desktop names (05-marketing.js bxFeedRow). A
+   recalled, cancelled or expired broadcast read "Draft" here. */
+const BC_LABEL={sent:['Sent','已发送'],scheduled:['Scheduled','已排期'],draft:['Draft','草稿'],
+  recalled:['Recalled','已撤回'],cancelled:['Cancelled','已取消'],expired:['Expired','已过期']};
 /* WHO a broadcast goes to, in the desktop's own words. "Sent to 2,140" is a
    number without a population behind it — the operator cancelling a scheduled
    send needs to know whether it is about to reach every customer or forty
@@ -39698,7 +41579,11 @@ function bcAudience(raw){
 }
 function mapBroadcast(r){
   const st=String(r.status||'draft').toLowerCase();
-  const label=st==='sent'?['Sent','已发送']:st==='scheduled'?['Scheduled','已排期']:['Draft','草稿'];
+  /* A sent broadcast whose end date has passed still reads 'sent' in the
+     database; the desktop says "Ended" and offers no Recall, and so does this. */
+  const endMs=r.expires_at?new Date(String(r.expires_at).replace(' ','T')+(/Z|[+-]\d\d:?\d\d$/.test(String(r.expires_at))?'':'Z')).getTime():NaN;
+  const ended=st==='sent'&&!isNaN(endMs)&&endMs<=Date.now();
+  const label=ended?['Ended','已结束']:(BC_LABEL[st]||BC_LABEL.draft);
   // fmtDay, not the raw column: a scheduled send read "Scheduled 2026-08-27T09:00:00Z".
   const meta = st==='sent'
     ? ['Sent '+fmtDay(r.sent_at)+' to '+(r.recipient_count||0), fmtDay(r.sent_at)+' 发送给 '+(r.recipient_count||0)+' 人']
@@ -39713,7 +41598,11 @@ function mapBroadcast(r){
     body:[(r.body_en||r.body_cn||'').trim(),(r.body_cn||r.body_en||'').trim()],
     audience:bcAudience(r.audience),
     deeplink:r.deeplink||null,
-    meta, status:label, kind:BC_KIND[st]||'draft'};
+    meta, status:label, kind:ended?BC_KIND.ended:(BC_KIND[st]||'draft'), ended,
+    // §325 M6 — what Send again copies: the words in both languages, the link
+    // and the audience, exactly as stored.
+    raw:{title_en:r.title_en||'', title_cn:r.title_cn||'', body_en:r.body_en||'', body_cn:r.body_cn||'',
+      deeplink:r.deeplink||'', audience:r.audience||null}};
 }
 /* A feedback row is a THREAD, and the desktop's leads with its NEWEST turn for
    a stated reason: on a conversation staff started, the root is the operator's
