@@ -894,6 +894,18 @@ const state = {
      leaves the previous complete catalogue describing itself correctly. Every
      count derived by walking the array is drawn only while this is true. */
   catalogueComplete:false,
+  /* §325 PD1 — the catalogue's other three narrowings, as the desktop's
+     toolbar has them (09-products.js). `prodSub` is the subcategory chip's key
+     (an index, like prodCat's). `prodStore` is the store the stock figures and
+     the Low / Out chips answer for — '' is every store — and `prodGrid` is the
+     per-store stock read behind it (GET /inventory/grid, paLoadStoreStock's
+     read). `prodHi` is the Going nowhere / On promotion id sets
+     (GET /products/highlights, paLoadHighlights'). `catalogMode` is the
+     tenant's, from /me: an upstream-catalogue tenant keeps no stock here, so
+     the desktop never offers it the store switch. */
+  prodSub:'all', prodStore:'', catalogMode:'self',
+  prodGrid:{tried:false,seq:0,ready:false,stores:[],qty:{}},
+  prodHi:{tried:false,seq:0,data:null},
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   /* Which later step of a delay case has its controls out, as `<shipment>:<index>`,
      or null. STATE RATHER THAN A DOM TOGGLE because this sheet repaints on the
@@ -1030,6 +1042,9 @@ const state = {
   supOwed:null, supOwedErr:null, supOwedTried:false, supOwedId:null,
   supAcct:null, supAcctErr:null, supAcctBusy:false, supAcctMounted:false,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
+  // §325 PD1 — a Custom window's two days, and the ledger's search (desktop's
+  // act-from / act-to / act-search). `actQ` is what the box holds; Enter reads it.
+  actFrom:null, actTo:null, actQ:'',
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
   catBannerBusy:false, catBannerErr:null, catShelf:null,   // §298 the open category's banner editor
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
@@ -1371,6 +1386,8 @@ const state = {
       q:'',pick:null,matched:0,pickErr:null,pickSeq:0,health:null,healthSeq:0,actBusy:null,actErr:null,link:null,stale:false},
   wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
        range:'week',reason:'',store:'',reasons:null,
+       /* §325 PD1 — the desktop's free date range: a Custom window's two days. */
+       from:null,to:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
           tap. render() rebuilds the whole app with innerHTML, so the .sheet
           node is DESTROYED AND RECREATED on each keystroke and each chip —
@@ -1399,7 +1416,11 @@ const state = {
      ask, so there is nothing to wait for and the sample app paints at once,
      exactly as it always did. Only a real deployment holds. */
   capsLoaded:(typeof location!=='undefined' && location.protocol==='file:'),
-  liveOrders:null, liveDetail:null, liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
+  liveOrders:null, liveDetail:null,
+  /* §325 O1 — the refund panel's History, unfolded on demand for ONE order
+     (id), read from GET /orders/:id/refund/events. */
+  rfHist:{open:false, id:null, busy:false, err:false, rows:null},
+  liveKpis:null, liveBaseline:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
@@ -3055,6 +3076,32 @@ reg('copyAddr', ()=>{
   copyText(o?[o.cust&&T(...o.cust), o.phone, o.addr&&T(...o.addr)]
     .filter(v=>v&&v!=='—').join('\n'):'');
 });
+/* §325 O1 — the guest pay link, copied whole (payLinkURL) so it can be pasted
+   into a chat with the customer. Nothing to copy is nothing to copy. */
+reg('copyPayLink', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  const url=payLinkURL(o);
+  if(url) copyText(url);
+});
+/* §325 O1 — the refund panel's History. A tap on an open, loaded history folds
+   it; any other tap (closed, another order's, or after a failed read) reads it
+   again. The answer is kept only if the same order still owns the slot, so a
+   slow read cannot paint one order's history into another's panel. */
+reg('rfHist', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null) return;
+  const h=state.rfHist, id=o._id;
+  if(h.open&&h.id===id&&!h.busy&&!h.err){ h.open=false; render(); return; }
+  if(h.open&&h.id===id&&h.busy) return;
+  h.open=true; h.id=id; h.busy=true; h.err=false; h.rows=null; render();
+  api('/orders/'+id+'/refund/events').then(rows=>{
+    if(h.id!==id) return;
+    h.rows=Array.isArray(rows)?rows:[]; h.busy=false; render();
+  }).catch(()=>{
+    if(h.id!==id) return;
+    h.busy=false; h.err=true; render();
+  });
+});
 reg('copyTxn', ()=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||!o.txn) return;   // nothing to copy is nothing to copy
@@ -3219,7 +3266,19 @@ reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; state.custErr=
 reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; state.caddr=null; render(); });
 reg('prodView', v=>{ state.prodView=v; render(); });
 reg('prodStatus', v=>{ state.prodStatus=(state.prodStatus===v?'all':v); render(); });
-reg('prodCat', v=>{ state.prodCat=v; render(); });
+/* A new category resets the subcategory, as the desktop's picker does — a
+   subcategory belongs to one category, and a leftover one would narrow the
+   next category to nothing. The tree is read for the subcategory chips' order
+   and Chinese names (the desktop reads it for the same); until it lands, or
+   if it cannot, they are the product's own names, A–Z. */
+reg('prodCat', v=>{ state.prodCat=v; state.prodSub='all'; if(v&&v!=='all') loadCategories(); render(); });
+reg('prodSub', v=>{ state.prodSub=v; render(); });
+/* §325 PD1 — which store the stock figures and Low / Out answer for. A view,
+   not a filter: it changes what each product says, never which are listed. */
+reg('prodStore', v=>{ state.prodStore=String(v||''); render(); });
+/* paExportCsv — the server's own file of the whole catalogue, taken as a plain
+   navigation, as custExport and finTxExport are. */
+reg('prodExport', ()=>{ location.href=API+'/products/export.csv'; });
 /* THE RESTOCK FIRE'S DOOR. Home's "Restock needed" row opened the
    Products tab and stopped there — on All, on whatever sub-view and category
    the operator had left behind, with the three empty shelves it had just
@@ -3245,7 +3304,7 @@ reg('goRestock', which=>{
   if(!canRoute('products')) return;
   state.prodView='catalogue';
   state.prodStatus=(which==='low')?'low':'out';
-  state.prodCat='all'; state.prodQ='';
+  state.prodCat='all'; state.prodSub='all'; state.prodQ='';
   CMD.tab('products');
 });
 /* The whole app re-renders into one innerHTML, so an input loses focus on
@@ -3390,7 +3449,7 @@ function reKindProduct(p){
   else { p.kind='on'; p.status=['Live','在售']; }
 }
 reg('vchSeg', v=>{ state.vchSeg=v; render(); });
-reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; render(); });
+reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; state.prodSub='all'; render(); });
 /* The catalogue walk again, from the top. FORCED, because an unforced call is
    the render loop asking whether the read has happened and `catalogueTried` is
    already set — the button would do nothing at all. Offered only where the walk
@@ -3516,7 +3575,40 @@ reg('togglePopup', id=>{
 reg('affSeg', v=>{ state.affSeg=v; state.affRows=null; state.affiliateTried=false; render(); loadAffiliate(true); });
 reg('cmsPage', v=>{ state.cmsPage=v; state.cmsErr=null; render(); loadCms(v); });
 reg('catTop', v=>{ state.catTop=v||null; state.catBannerErr=null; render(); });
-reg('actRange', v=>{ state.actRange=v; state.act=null; state.actTried=false; render(); loadActivity(); });
+/* §325 PD1 — a preset moves the window at once; Custom asks for its two days
+   first, in the ask-sheet, exactly as Finance's and Trend's do, and a pick
+   that IS a preset lights the preset. */
+function actReload(){ state.act=null; state.actErr=null; state.actTried=false; render(); loadActivity(); }
+reg('actRange', v=>{
+  if(v==='custom'){
+    const w=actWindow();
+    state.ask={title:T('Custom','自定义'),
+      fields:[{id:'from',label:T('From','从'),type:'date',value:w.from},{id:'to',label:T('To','至'),type:'date',value:w.to}],
+      confirmLabel:T('Apply','应用'),
+      validate:x=>(!x.from||!x.to)?T('Pick a date','选日期'):x.from>x.to?T('From is after to','起始日期晚于结束日期'):null,
+      run:x=>{
+        const hit=['today','week','month'].find(k=>{ const p=actPreset(k); return p.from===x.from&&p.to===x.to; });
+        if(hit){ state.actRange=hit; state.actFrom=null; state.actTo=null; }
+        else { state.actRange='custom'; state.actFrom=x.from; state.actTo=x.to; }
+        actReload();
+      }};
+    render(); return;
+  }
+  state.actRange=v; state.actFrom=null; state.actTo=null; actReload(); });
+/* The box holds what is typed; Enter (the input's change) runs it. */
+reg('actQ', v=>{ state.actQ=String(v||''); searchClearShow('mActClr', !!state.actQ); });
+reg('actSearchGo', ()=>actReload());
+reg('mActClr', ()=>{ searchClearRun('mActQ','mActClr','actQ'); actReload(); });
+/* actExportCsv — the file of the view on screen: its window, its channel, its
+   search. A plain navigation, as custExport's is. */
+reg('actExport', ()=>{
+  const {from,to}=actWindow();
+  const q=new URLSearchParams({from,to});
+  if(state.actSource) q.set('source',state.actSource);
+  const term=String(state.actQ||'').trim();
+  if(term) q.set('q',term);
+  location.href=API+'/activity/export.csv?'+q;
+});
 reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loadActivity(true); });
 /* ── Waste ────────────────────────────────────────────────────────────────
@@ -3532,10 +3624,26 @@ reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loa
    Rows after a write are merely one entry short, which the arriving answer
    fixes without ever having shown anything false. */
 function wstRefilter(){ const w=state.wst; w.rows=null; w.totals=null; loadWaste(true); render(); }
-reg('wstRange',  v=>{ state.wst.range=v;  wstRefilter(); });
+/* §325 PD1 — Custom asks for its two days, as Stock activity's does. */
+reg('wstRange',  v=>{
+  const w=state.wst;
+  if(v==='custom'){
+    const cur=wstWindow();
+    state.ask={title:T('Custom','自定义'),
+      fields:[{id:'from',label:T('From','从'),type:'date',value:cur.from},{id:'to',label:T('To','至'),type:'date',value:cur.to}],
+      confirmLabel:T('Apply','应用'),
+      validate:x=>(!x.from||!x.to)?T('Pick a date','选日期'):x.from>x.to?T('From is after to','起始日期晚于结束日期'):null,
+      run:x=>{
+        const hit=['today','week','month'].find(k=>{ const p=wstPreset(k); return p.from===x.from&&p.to===x.to; });
+        if(hit){ w.range=hit; w.from=null; w.to=null; } else { w.range='custom'; w.from=x.from; w.to=x.to; }
+        wstRefilter();
+      }};
+    render(); return;
+  }
+  w.range=v; w.from=null; w.to=null; wstRefilter(); });
 reg('wstReason', v=>{ state.wst.reason=v; wstRefilter(); });
 reg('wstStore',  v=>{ state.wst.store=v;  wstRefilter(); });
-reg('wstClear',  ()=>{ const w=state.wst; w.range='week'; w.reason=''; w.store=''; wstRefilter(); });
+reg('wstClear',  ()=>{ const w=state.wst; w.range='week'; w.from=null; w.to=null; w.reason=''; w.store=''; wstRefilter(); });
 reg('wstRetry',  ()=>{ state.wst.err=null; wstRefilter(); });
 /* Opening the sheet RESETS the form half, always. A sheet that reopens
    carrying the last entry's product is how the second jar of the morning gets
@@ -5402,7 +5510,7 @@ function screenOrders(){
         ${o.waitingList?`<div style="display:flex;align-items:flex-start;gap:7px;color:var(--amber-ink);font-size:13px;line-height:1.45">
           <span style="flex:none;display:flex;margin-top:1px">${ic('clock',15)}</span>
           <span style="min-width:0;overflow-wrap:anywhere"><span style="font-weight:500">${T('Waiting on stock','等待补货')}</span> · ${escAttr(o.waitingList.map(p=>T(p[0],p[1])).join(T(', ','、')))}</span></div>`:''}
-        ${o.notes?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.notes.map(nt=>
+        ${(o.notes||o.partRefund!=null)?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.partRefund!=null?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${PILL.muted[0]};color:${PILL.muted[1]}">${ic('undo',12)}${T('Partial refund','部分退款')}${o.partRefund>0?` <span class="num">${money(CUR,o.partRefund)}</span>`:''}</span>`:''}${(o.notes||[]).map(nt=>
           `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${nt.sev==='muted'?PILL.muted[0]:'var(--'+nt.sev+'-tint)'};color:${nt.sev==='muted'?PILL.muted[1]:'var(--'+nt.sev+')'}">${ic(nt.icon,12)}${nt.label}</span>`).join('')}</div>`:''}
         ${o.parcels?`<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap">
           ${ic('package',14)}<span>${T(o.parcels.total+(o.parcels.total===1?' parcel':' parcels'),o.parcels.total+' 个包裹')}</span>
@@ -6643,11 +6751,20 @@ function screenAffiliate(){
 
    It reads /cms/layout now: the live blocks in their real order, and the one
    fact the desktop composer leads with — whether the draft differs from what
-   is live, i.e. whether somebody's edits are sitting unpublished. Composing is
-   a drag-and-drop canvas and stays there.
+   is live, i.e. whether somebody's edits are sitting unpublished.
+
+   §325 — AND IT IS THE DOOR TO THE EDITOR. Blocks are placed, edited and
+   published on a phone too, in the phone editor (/cms answers a phone with
+   cms-mobile.html); the header's button opens it, drawn for `content:edit`,
+   the key that editor's own gate admits. The screen used to say publishing
+   and editing were desktop-only, which stopped being true when the phone
+   editor learned to publish. The page names are the editor's own (cms.html
+   PAGES): the one this list called "Categories" is "Shop landing" there
+   (§296), and a name that differs between the list and the editor it opens
+   sends an operator looking for a page that is not there.
    ========================================================================== */
-const CMS_PAGES=[['home','Home','首页'],['promotions','Promotions','促销'],
-  ['membership','Membership','会员'],['categories','Categories','分类'],['onboarding','Onboarding','引导']];
+const CMS_PAGES=[['home','Home','首页'],['promotions','Promotions','优惠'],
+  ['categories','Shop landing','商品'],['membership','Membership','会员'],['onboarding','Onboarding','欢迎']];
 /* The composer's own names for its blocks (cms.html BLOCK_META), so the phone
    never invents a label for something an operator placed by a different one. */
 const CMS_BLOCK={
@@ -6716,8 +6833,8 @@ function screenEditor(){
         <span style="font-size:15px;font-weight:500">${T('Not what shoppers see','与顾客所见不同')}</span>
         <span class="pill" style="background:${bg};color:${fg}">${T('Unpublished changes','有未发布的修改')}</span></div>
       <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(
-        'A draft is saved that does not match what shoppers see'+(draft.length!==live.length?' — '+draft.length+' blocks in the draft, '+live.length+' live':'')+'. Publishing is on desktop.',
-        '已保存的草稿与顾客当前看到的不一致'+(draft.length!==live.length?' — 草稿 '+draft.length+' 个模块，线上 '+live.length+' 个':'')+'。发布请在电脑端进行。')}</div>
+        'A draft is saved that does not match what shoppers see'+(draft.length!==live.length?' — '+draft.length+' blocks in the draft, '+live.length+' live':'')+'.',
+        '已保存的草稿与顾客当前看到的不一致'+(draft.length!==live.length?' — 草稿 '+draft.length+' 个模块，线上 '+live.length+' 个':'')+'。')}</div>
     </div>`:''}
     ${live.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('In order','按顺序')}</div>
       <div class="list">${live.map((b,i)=>{ const lbl=cmsBlockLabel(b);
@@ -6729,8 +6846,7 @@ function screenEditor(){
             ${lbl?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(lbl)}</span>`:''}</span></div>`;
       }).join('')}</div></div>`
       :`<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
-        T('Nothing is published on this page yet.','这个页面还没有发布任何内容。')}</div>`}
-    ${noteBar(T('Blocks are placed, edited and published on desktop.','模块的添加、编辑与发布在电脑端进行。'))}</div>`;
+        T('Nothing is published on this page yet.','这个页面还没有发布任何内容。')}</div>`}</div>`;
 }
 
 /* ==========================================================================
@@ -7447,8 +7563,16 @@ function screenCategories(){
    for: the time, the store, the balance after the move, and who made it.
 
    The date window is the same one the endpoint defaults to — today — with the
-   desktop's two other quick ranges. CSV export stays on the desktop: it is a
-   download, and a phone has nowhere to put it.
+   desktop's two other quick ranges.
+
+   §325 PD1 — AND NOW THE REST OF THE DESKTOP'S TOOLBAR. The "CSV export stays
+   on the desktop" rule that stood here is retired with §97's: a phone takes a
+   download like any browser, and Customers and Finance already hand theirs
+   over. So: a Custom window (the desktop's two date boxes, asked for in the
+   ask-sheet as Finance and Trend ask for theirs), the free-text search the
+   server has always taken (`q` — SKU, either name, or the note, which holds
+   the order number), and Export CSV of exactly the view on screen — window,
+   channel and search — which is what the desktop's caption promises.
    ========================================================================== */
 const ACT_SRC={miniapp:['Mini-app','小程序'],gzgrocery:['Gzgrocery','Gzgrocery'],
   meituan_tianhe:['Meituan Tianhe','美团天河'],meituan_yuexiu:['Meituan Yuexiu','美团越秀'],
@@ -7456,11 +7580,15 @@ const ACT_SRC={miniapp:['Mini-app','小程序'],gzgrocery:['Gzgrocery','Gzgrocer
 const actSrcName=k=>ACT_SRC[k]?T(...ACT_SRC[k]):(k||'—');
 /* The desktop's three quick ranges, ending on today, on the STORE's clock —
    the same boundary the server counts its days on. */
-function actWindow(){
+function actPreset(k){
   const to=shopToday();
   const back=d=>new Date(Date.parse(to+'T00:00:00Z')-d*86400000).toISOString().slice(0,10);
-  const from = state.actRange==='week'?back(6) : state.actRange==='month'?back(29) : to;
+  const from = k==='week'?back(6) : k==='month'?back(29) : to;
   return {from,to};
+}
+function actWindow(){
+  if(state.actRange==='custom'&&state.actFrom&&state.actTo) return {from:state.actFrom,to:state.actTo};
+  return actPreset(state.actRange);
 }
 function loadActivity(more){
   const {from,to}=actWindow();
@@ -7468,6 +7596,8 @@ function loadActivity(more){
   if(!more){ if(state.actTried) return; state.actTried=true; }
   const q=new URLSearchParams({from,to,limit:'60',offset:String(offset)});
   if(state.actSource) q.set('source',state.actSource);
+  const term=String(state.actQ||'').trim();
+  if(term) q.set('q',term);
   apiRaw('/activity?'+q).then(j=>{
     const rows=(j&&j.rows)||[];
     state.act = more && state.act
@@ -7484,7 +7614,14 @@ function loadActivity(more){
    exactly as the desktop's actFmtClock does. */
 function actClock(ts){
   const s=String(ts||'');
-  return state.actRange==='today' ? s.slice(11,16) : s.slice(5,16);
+  // The WINDOW decides, not the chip: a Custom window of one day is a day.
+  const w=actWindow();
+  return w.from===w.to ? s.slice(11,16) : s.slice(5,16);
+}
+/* A Custom window, said as its dates under the switch — the switch itself can
+   only say "Custom". Same day twice reads as one day. */
+function actRangeLine(from,to){
+  return `<div class="num" style="padding:6px 2px 0;font-size:12.5px;color:var(--text-secondary)">${escAttr(fmtDateOnly(from))}${from===to?'':' – '+escAttr(fmtDateOnly(to))}</div>`;
 }
 function actDelta(n){
   const v=Number(n||0);
@@ -7517,13 +7654,29 @@ function screenActivity(){
   loadActivity();
   const rangeBtn=(k,label)=>`<button onclick="APP.cmd('actRange','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${state.actRange===k?'var(--surface-card)':'transparent'};color:${state.actRange===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${state.actRange===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}</button>`;
-  const ranges=`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
-    ${rangeBtn('today',T('Today','今天'))}${rangeBtn('week',T('7 days','7 天'))}${rangeBtn('month',T('30 days','30 天'))}</div>`;
-  if(state.actErr) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${ranges}
-    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+  const aw=actWindow();
+  const ranges=`<div><div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+    ${rangeBtn('today',T('Today','今天'))}${rangeBtn('week',T('7 days','7 天'))}${rangeBtn('month',T('30 days','30 天'))}${rangeBtn('custom',T('Custom','自定义'))}</div>
+    ${state.actRange==='custom'?actRangeLine(aw.from,aw.to):''}</div>`;
+  /* The search is the SERVER's (buildActivityQuery's `q`), so it runs on Enter
+     rather than per keystroke — customers' rule — and the keyboard stays up
+     while typing. Export sits beside it, the desktop's order, on its own
+     capability: activity:export is the key the Stockroom preset holds and the
+     Shop floor one does not. */
+  const search=`<div style="padding:0 16px;display:flex;gap:8px;align-items:center">
+    <div style="flex:1;min-width:0">${searchBox(`<input id="mActQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.actQ)}"
+      placeholder="${T('SKU / name / order','货号 / 名称 / 订单')}" style="width:100%"
+      oninput="APP.cmd('actQ',this.value)" onchange="APP.cmd('actSearchGo')"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mActClr',!!state.actQ)}</div>
+    ${mCan('activity:export')?`<button class="btn2" style="width:auto;flex:none;padding:0 14px;gap:6px" onclick="APP.cmd('actExport')">${ic('download',16)}${T('Export CSV','导出')}</button>`:''}</div>`;
+  // The search stays on screen through a load and a failure: it is what was
+  // asked, and a box that vanished while its answer was coming would read as
+  // the search having been thrown away.
+  if(state.actErr) return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:12px"><div style="padding:0 16px">${ranges}</div>${search}
+    <div style="margin:0 16px;display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.actErr}</span></div></div>`;
-  if(!state.act) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${ranges}
+  if(!state.act) return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:12px"><div style="padding:0 16px">${ranges}</div>${search}
     <div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
   const j=state.act, rows=j.rows||[], summary=j.summary||[], dg=j.digest||{};
   // Channel counts come from the server's UNFILTERED summary, so they stay put
@@ -7551,6 +7704,7 @@ function screenActivity(){
       <span style="flex:none;font-size:14px">${actDelta(b.delta)}</span></div>`; });
   return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:12px">
     <div style="padding:0 16px">${ranges}</div>
+    ${search}
     ${chipRow(chips,act,'actSource')}
     <div style="padding:0 16px;font-size:13px;color:var(--text-secondary)">
       <b style="color:var(--text-primary);font-weight:500">${act?escAttr(actSrcName(act)):T('All channels','全部渠道')}</b> ·
@@ -7594,17 +7748,18 @@ function screenActivity(){
        second copy in the browser is exactly how the kitchen screen ended up
        with a vocabulary that existed only in a browser constant.
 
-   THREE THINGS THE DESKTOP HAS THAT THIS DELIBERATELY DOES NOT:
+   THREE THINGS THE DESKTOP HAS THAT THIS DELIBERATELY DID NOT — §325 PD1
+   brings the date range back (below), and void follows in its own step:
      • NO VOID. It is waste:void — an owner capability that neither warehouse
        nor store_manager holds, so it would be a control almost nobody
        standing in the aisle can press. Voided rows still LIST, greyed, with
        their reversal beside them: a ledger that hides its own corrections is
        how one goes unnoticed, and that is true on a phone too.
-     • NO FREE DATE RANGE. Two native date pickers to ask "this week" is four
-       taps and a keyboard for a question with three usual answers. Three
-       range chips instead — the same three Stock activity already offers, on
-       the same Guangzhou day boundary. The range a preset cannot express
-       stays on the desktop.
+     • NO FREE DATE RANGE — retired by §325 PD1. The three presets still
+       answer the usual question in one tap; a fourth, Custom, asks for the
+       two days in the ask-sheet (Finance's, Trend's and now Stock
+       activity's), so the range a preset cannot express is no longer the
+       desktop's alone.
      • NO STATUS LINE. Nothing in a waste ledger is WAITING on an operator —
        every row is finished business (§1.7's work rule, and the desktop
        screen says the same about itself). The money figure that would be
@@ -7639,11 +7794,15 @@ const wstShowMoney=()=>Array.isArray(state.caps)&&state.caps.indexOf('waste:cost
 /* The same three windows Stock activity offers, ending on the STORE's today —
    the boundary the server counts its business days on, so "today" here and
    `business_date` there mean the same day. */
-function wstWindow(){
+function wstPreset(r){
   const to=shopToday();
   const back=d=>new Date(Date.parse(to+'T00:00:00Z')-d*86400000).toISOString().slice(0,10);
-  const r=state.wst.range;
   return {from:r==='today'?to:r==='month'?back(29):back(6), to};
+}
+function wstWindow(){
+  const w=state.wst;
+  if(w.range==='custom'&&w.from&&w.to) return {from:w.from,to:w.to};
+  return wstPreset(w.range);
 }
 /* The reason list is the SERVER's (routes/retail-waste.js REASONS), fetched
    once. A failure here must not stop the ledger painting: the codes fall back
@@ -7763,8 +7922,9 @@ function screenWaste(){
   const w=state.wst;
   const rangeBtn=(k,label)=>`<button onclick="APP.cmd('wstRange','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${w.range===k?'var(--surface-card)':'transparent'};color:${w.range===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${w.range===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}</button>`;
-  const ranges=`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
-    ${rangeBtn('today',T('Today','今天'))}${rangeBtn('week',T('7 days','7 天'))}${rangeBtn('month',T('30 days','30 天'))}</div>`;
+  const ranges=`<div><div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+    ${rangeBtn('today',T('Today','今天'))}${rangeBtn('week',T('7 days','7 天'))}${rangeBtn('month',T('30 days','30 天'))}${rangeBtn('custom',T('Custom','自定义'))}</div>
+    ${w.range==='custom'&&w.from&&w.to?actRangeLine(w.from,w.to):''}</div>`;
   /* §1.9 data precondition — a picker that can only pick one thing is not a
      choice. One store, no store filter, and no placeholder explaining its
      absence. */
@@ -12671,13 +12831,20 @@ let sheetPrice={};
    arrow cannot be called from a search handler, and that is the only reason this
    is a named function now. */
 function screenProductCatalogue(){
-    loadCatalogue();
+    loadCatalogue(); loadProdGrid(); loadProdHi();
+    /* §325 PD1 — Export CSV beside the search, as the desktop's toolbar has it
+       and as Finance's ledger does here. The WHOLE catalogue, never the filtered
+       view (paExportCsv's own rule: a download next to a search box must not
+       quietly hand over part of a list). Its own capability, products:export —
+       the file carries prices, and cost where the server allows it. */
+    const exp=mCan('products:export')
+      ? `<button class="btn2" style="width:auto;flex:none;padding:0 14px;gap:6px" onclick="APP.cmd('prodExport')">${ic('download',16)}${T('Export CSV','导出')}</button>` : '';
     return `<div>
-      <div style="padding:12px 16px 4px">
-        ${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
+      <div style="padding:12px 16px 4px;display:flex;gap:8px;align-items:center">
+        <div style="flex:1;min-width:0">${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
           oninput="APP.cmd('prodSearch',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>${exp}</div>
       <div id="mProdBody">${prodBodyHtml()}</div>
     </div>`;
 }
@@ -12686,7 +12853,11 @@ function screenProductCatalogue(){
    came from, which drops the soft keyboard back to its letter page. The chips
    ride inside because their counts are derived from the same filtered walk. */
 function prodBodyHtml(){
-    const L=state.liveProductsLoaded, P=DB.products;
+    /* Store-aware (§325 PD1): with a store picked, each product answers for
+       that store's shelf, so Low and Out count it, as the desktop's tiles
+       follow its "Stock for" pick. One row per product either way — every
+       length read off P below is the catalogue's. */
+    const L=state.liveProductsLoaded, P=prodRows();
     /* WHOLE, not merely loaded. Two different permissions live in these two
        flags and the four chips below need the stronger one: `L` says a real
        read has landed, `C` says the array it landed in is the entire shelf.
@@ -12718,9 +12889,16 @@ function prodBodyHtml(){
       {key:'draft',en:'Draft',zh:'草稿',count:n('draft')},
       {key:'low',en:'Low',zh:'库存低',count:n('restock')},
       {key:'out',en:'Out',zh:'缺货',count:n('off')}];
+    // Going nowhere / On promotion ride at the end of the same row, each only
+    // while the server counts one (§325 PD1, the desktop's two jump tiles).
+    const hi=state.prodHi.data;
+    if(hi&&hi.deadN) cd.push({key:'dead',en:'Going nowhere',zh:'无人问津',count:hi.deadN});
+    if(hi&&hi.promoN) cd.push({key:'promo',en:'On promotion',zh:'促销中',count:hi.promoN});
     const cats=prodCategories();
+    const subs=prodSubcats();
+    const stores=prodStoreOn()?state.prodGrid.stores:[];
     const rows=prodFiltered();
-    const narrowed=!(state.prodStatus==='all'&&state.prodCat==='all'&&!state.prodQ);
+    const narrowed=!(state.prodStatus==='all'&&state.prodCat==='all'&&state.prodSub==='all'&&!state.prodQ);
     /* "THIS IS NOT ALL OF IT", and the alternative is what this screen used to
        do: show a prefix and let four counts, a search, the category chips and
        every variant family describe it as the catalogue. The walk stopped short
@@ -12741,8 +12919,11 @@ function prodBodyHtml(){
           '仅显示前 '+P.length+' 条，共 '+state.prodTotal+' 件。')}</span>
         <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('catRetry')">${T('Try again','重试')}</button>
       </div>`:'';
-    return `      <div style="padding:8px 0 4px">${chipRow(cd,state.prodStatus,'prodStatus')}</div>
+    return `      ${stores.length?`<div style="padding:8px 0 0">${chipRow([{key:'',en:'All stores',zh:'全部门店'}].concat(stores.map(x=>
+          ({key:String(x.id),en:x.name_en||x.code||('#'+x.id),zh:x.name_cn||x.name_en||x.code||('#'+x.id)}))),String(state.prodStore||''),'prodStore')}</div>`:''}
+      <div style="padding:8px 0 4px">${chipRow(cd,state.prodStatus,'prodStatus')}</div>
       ${cats.length>1?`<div style="padding:0 0 4px">${chipRow(cats,state.prodCat,'prodCat')}</div>`:''}
+      ${subs.length>1?`<div style="padding:0 0 4px">${chipRow(subs,state.prodSub,'prodSub')}</div>`:''}
       <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
         ${noteBar(T('Quick edits here · full authoring on desktop','这里可快速编辑 · 完整编辑请用电脑端'))}
         ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
@@ -13015,7 +13196,11 @@ const SUBS={
   wallet:{title:['Top-up','充值'],status:()=>statusTopups(),render:()=>screenTopups()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
   voting:{title:['Voting','投票'],render:()=>screenVoting()},
-  editor:{title:['Editor','编辑器'],status:()=>statusEditor(),render:()=>screenEditor()},
+  /* §325 — the door to the phone editor. It LEAVES this app (the 'leave'
+     command, as Quick Stock's row once did); ?from=m gives the editor a Back. */
+  editor:{title:['Editor','编辑器'],status:()=>statusEditor(),render:()=>screenEditor(),
+    cta:()=>mCan('content:edit')
+      ? `<button class="cta inhead" onclick="APP.cmd('leave','/cms?from=m')">${T('Open page editor','打开页面编辑器')}</button>` : ''},
   about:{title:['About page','关于页'],render:()=>{
     const c=cfgGet('about.content',null);
     if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
@@ -23518,6 +23703,8 @@ async function saveProductEdits(answers){
        it to the first fifty products — the same fault as the refresh, reached
        by a quick edit instead of a pull. */
     try{ await loadCatalogue(true); }catch(e){}
+    // The shelves just written are the store switch's figures too (§325 PD1).
+    if(state.prodGrid.tried) loadProdGrid(true);
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
@@ -24572,10 +24759,13 @@ function refundPanel(o){
     (credit!=null&&credit>0.005)?fig(T('As cash','现金'),r.cash):'',
     (credit!=null&&credit>0.005)?fig(T('To wallet','退回余额'),credit):'',
   ].filter(Boolean).join('');
+  const histOpen=state.rfHist.open&&state.rfHist.id===o._id;
   return `<div style="border-radius:14px;background:${bg};padding:14px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <span style="font-size:15px;font-weight:500;color:${fg}">${T(st.en,st.zh)}</span>
-      ${r.at?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('asked '+fmtDay(r.at),'申请于 '+fmtDay(r.at))}</span>`:''}</div>
+      ${r.at?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('asked '+fmtDay(r.at),'申请于 '+fmtDay(r.at))}</span>`:''}
+      ${o._id!=null?`<button class="rowact" style="min-height:34px;margin-left:auto" aria-expanded="${histOpen?'true':'false'}" onclick="APP.cmd('rfHist')">${ic('history',15)}&nbsp;${T('History','历史')}</button>`:''}</div>
+    ${histOpen?rfHistBody(o):''}
     ${(open&&r.requested!=null)?`<div style="font-size:14px">${T('The customer asked for '+money(CUR,r.requested)+' of '+o.total,'顾客申请退 '+money(CUR,r.requested)+' / 共 '+o.total)}</div>`:''}
     ${r.reason?`<div style="font-size:14px;line-height:1.55;background:var(--surface-card);border-radius:10px;padding:10px 12px">
       <span class="eyebrow" style="display:block;margin-bottom:4px">${T('In their words','顾客说明')}</span>${escAttr(r.reason)}</div>`:''}
@@ -24591,6 +24781,268 @@ function refundPanel(o){
       <span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;margin-top:5px"></span>
       <span>${T('The money is moving through the payment gateway. This finishes on its own — nothing to do.','正在通过支付网关打款，会自动完成，无需操作。')}</span></div>`:''}
   </div>`;
+}
+/* ── §325 O1 — REFUND HISTORY ──────────────────────────────────────────────
+   The desktop's openRefundEvents (04-orders.js): every step the refund took —
+   asked, reviewed, approved, paid, rejected, withdrawn — with who took it,
+   when, how much, the note, and the lines. Read on demand from
+   GET /orders/:id/refund/events (a read; no capability gates it, and the
+   desktop offers it to everyone who can open the order), unfolded inside the
+   refund panel rather than on a sheet of its own, because the panel is what it
+   explains. The step names are the phone's own REFUND_STATE words, so the
+   panel's heading and its history cannot name one state two ways; a step the
+   server adds tomorrow reads as words, never as a blank. */
+function rfEventWord(ev){
+  const st=REFUND_STATE[ev];
+  if(st) return T(st.en,st.zh);
+  const w=String(ev||'').replace(/_/g,' ').trim();
+  return w?w.charAt(0).toUpperCase()+w.slice(1):'';
+}
+function rfHistBody(o){
+  const h=state.rfHist;
+  const box=inner=>`<div style="background:var(--surface-card);border-radius:10px;padding:10px 12px">
+    <span class="eyebrow" style="display:block;margin-bottom:6px">${T('Refund history','退款历史')}</span>${inner}</div>`;
+  if(h.busy) return box(`<div style="font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
+  if(h.err) return box(`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px;color:var(--brick-ink)">
+      <span>${T('Could not load this.','无法加载。')}</span>
+      <button class="rowact" style="min-height:34px" onclick="APP.cmd('rfHist')">${T('Try again','重试')}</button></div>`);
+  const rows=h.rows||[];
+  if(!rows.length) return box(`<div style="font-size:13.5px;color:var(--text-secondary)">${T('No events yet','暂无记录')}</div>`);
+  /* A line is named off this order's own items (ITEM_TUPLE keeps the line id in
+     slot 6); a line that is gone reads as its id, as the desktop's does. */
+  const byId=new Map((o.items||[]).filter(t=>t&&t[6]!=null).map(t=>[t[6],t]));
+  const lineName=l=>{ const t=byId.get(l.item_id);
+    return t?T(t[1][0],t[1][1]):('#'+(l.item_id!=null?l.item_id:(l.product_id!=null?l.product_id:'?'))); };
+  return box(rows.map((ev,i)=>{
+    const m=(ev.meta&&typeof ev.meta==='object')?ev.meta:{};
+    const who=ev.user_username||ev.customer_nickname||(ev.user_id?'staff#'+ev.user_id:T('customer','顾客'));
+    const method=m.payout_method||m.method||'', ref=m.payout_ref||m.reference||'';
+    const lines=Array.isArray(m.lines)?m.lines:[];
+    return `<div style="padding:8px 0;${i?'border-top:1px solid var(--hairline)':''}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:14px;font-weight:500;min-width:0">${escAttr(rfEventWord(ev.event))}</span>
+        ${ev.amount!=null?`<span class="num" style="flex:none;font-size:14px">${money(CUR,ev.amount)}</span>`:''}</div>
+      <div class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${ev.created_at?escAttr(tdWhen(ev.created_at,'dateTime',_tdL()))+' · ':''}${T('by','操作人')} ${escAttr(who)}</div>
+      ${ev.note?`<div style="font-size:13px;line-height:1.5;margin-top:4px;overflow-wrap:anywhere">${escAttr(ev.note)}</div>`:''}
+      ${lines.length?`<div style="margin-top:4px">
+        <span style="display:block;font-size:11px;color:var(--text-secondary)">${T('Lines','退款明细')}</span>
+        ${lines.map(l=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px">
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(lineName(l))}${l.qty!=null?' ×'+escAttr(l.qty):''}</span>
+          ${l.amount!=null?`<span class="num" style="flex:none">${money(CUR,l.amount)}</span>`:''}</div>`).join('')}</div>`:''}
+      ${m.reason?`<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${T('Reason','原因')}: ${escAttr(m.reason)}</div>`:''}
+      ${method?`<div class="num" style="font-size:12px;color:var(--text-secondary);margin-top:4px">${T('Payout','打款')}: ${escAttr(method)}${ref?' · '+escAttr(ref):''}</div>`:''}
+    </div>`;
+  }).join(''));
+}
+/* ── §325 O1 — WAS THE CUSTOMER TOLD ───────────────────────────────────────
+   The desktop's wasCustomerToldBlock (audit P-02): the latest attempt per kind
+   of message, with its outcome and, when one did not arrive, why — in words
+   that say what to do next. DRAWN ONLY WHEN THERE IS SOMETHING TO SAY: an
+   order nobody tried to message gets no card, which is a different fact from
+   "tried and failed" and must not look like it. Read-only here; trying again
+   (POST /renotify) is a later step. The three tables are the desktop's,
+   copied whole. */
+const M_NOTIFY_KINDS={
+  order_paid:['Payment received','已收到付款'], order_preparing:['Preparing','备货中'],
+  order_dispatched:['Dispatched','已发货'], order_delivered:['Delivered','已送达'],
+  order_cancelled:['Cancelled','已取消'], order_refunded:['Refunded','已退款'],
+  delivery_update:['Delivery update','配送更新'],
+};
+const M_NOTIFY_CHANNELS={ wechat:['WeChat','微信'], sms:['Text','短信'], email:['Email','邮件'] };
+const M_NOTIFY_WHY={
+  no_consent:['they have not agreed to be messaged in the mini app','顾客未在小程序中同意接收通知'],
+  no_openid:['this customer has no linked mini-app account','该顾客未绑定小程序账号'],
+  no_template_id:['no message template is set up yet — Settings → Push notifications','尚未配置消息模板 — 设置 → 推送通知'],
+  no_access_token:['the WeChat connection is not working','微信连接异常'],
+  dev_mode_nothing_sent:['this shop is in test mode, so nothing was actually sent','本店处于测试模式,消息未真正发送'],
+  aliyun_sms_not_configured:['text messaging is not set up yet','短信服务尚未配置'],
+  bad_phone:['their phone number is not one we can text','该号码无法发送短信'],
+};
+// An unknown code reads as words, so one added tomorrow is legible on the day it ships.
+function mCodeWords(k){ const w=String(k||'').replace(/_/g,' ').trim(); return w?w.charAt(0).toUpperCase()+w.slice(1):''; }
+function toldCard(o){
+  const rows=o.told; if(!rows||!rows.length) return '';
+  const pair=(tbl,k,fb)=>{ const e=tbl[k]; return e?T(e[0],e[1]):fb(k); };
+  return `<div class="card" style="padding:14px">
+    <span class="eyebrow">${T('Was the customer told','顾客是否已收到通知')}</span>
+    ${rows.map(r=>`<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--hairline);margin-top:${r===rows[0]?'8px':'0'}">
+      <span style="flex:none;width:14px;display:flex;justify-content:center;margin-top:2px;color:var(--${r.ok?'sage-ink':'brick-ink'})">${r.ok?ic('check',14,2.25):'!'}</span>
+      <span style="flex:1;min-width:0">
+        <span style="display:flex;gap:10px;align-items:baseline;justify-content:space-between">
+          <span style="font-size:14px;min-width:0;overflow-wrap:anywhere">${escAttr(pair(M_NOTIFY_KINDS,r.kind,mCodeWords))}<span style="color:var(--text-secondary)"> · ${escAttr(pair(M_NOTIFY_CHANNELS,r.channel,String))}</span></span>
+          ${r.at?`<span class="num" style="flex:none;font-size:12px;color:var(--text-secondary)">${escAttr(tdWhen(r.at,'dateTime',_tdL()))}</span>`:''}</span>
+        ${r.ok?'':`<span style="display:block;font-size:12.5px;line-height:1.45;margin-top:3px;color:var(--brick-ink);overflow-wrap:anywhere">${escAttr(pair(M_NOTIFY_WHY,r.error,mCodeWords))}</span>`}
+      </span></div>`).join('')}
+  </div>`;
+}
+/* ── §325 O1 — A MARKETPLACE ORDER'S SETTLEMENT ────────────────────────────
+   The desktop's renderChannelMoneyPanel: what the customer paid, row by row,
+   and — only once those rows reconcile to the total AND the platform has
+   published both — the commission and the estimated income. When the rows
+   do not add up, the sum, the total and the gap are printed, with the
+   desktop's instruction to check the channel before refunding.
+
+   WHO SEES IT. The desktop draws it for everyone who can open the order, and
+   so does this — except that the COMMISSION and the ESTIMATED INCOME are the
+   shop's takings, not what the customer paid, and the three boards that never
+   see the shop's money (recapNoMoney: warehouse, dispatch, customer service)
+   do not get those two rows or the "not published yet" note about them. The
+   customer-side rows and the reconcile warning stay: the warning is what stops
+   a wrong refund, and customer service is who refunds. */
+function settlePanel(o){
+  const g=o.settle; if(!g) return '';
+  const rows=[];
+  if(g.items>0) rows.push([T('Subtotal','小计'),g.items]);
+  if(g.packaging>0) rows.push([T('Packing','打包费'),g.packaging]);
+  if(g.delivery>0) rows.push([T('Customer delivery fee','顾客配送费'),g.delivery]);
+  if(g.discount>0) rows.push([T('Merchant discount','商家对顾客的活动补贴'),-g.discount]);
+  if(!rows.length&&g.commission==null&&g.settle==null) return '';
+  const takings=!recapNoMoney();
+  const row=(l,v,strong)=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px${strong?';font-weight:500;padding-top:7px;border-top:1px solid var(--border-default)':''}">
+    <span style="color:var(--text-${strong?'primary':'secondary'})">${l}</span><span class="num">${v<0?'−':''}${money(CUR,Math.abs(v))}</span></div>`;
+  let note='';
+  if(!g.reconciled) note=T(
+    'These rows add up to '+money(CUR,g.expected)+', but the order records '+money(CUR,g.total)+' — '+money(CUR,Math.abs(g.gap))+' unaccounted for. Check the channel before refunding.',
+    '以上各项合计 '+money(CUR,g.expected)+'，但订单金额为 '+money(CUR,g.total)+' — 相差 '+money(CUR,Math.abs(g.gap))+'。退款前请先核对平台。');
+  else if(g.awaiting&&takings) note=T('Commission and income not published by the channel yet.','平台尚未公布佣金与预计收入。');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:7px">
+    <span class="eyebrow" style="margin-bottom:2px">${T('Settlement','结算明细')}</span>
+    ${rows.map(([l,v])=>row(l,v)).join('')}
+    ${(takings&&g.complete&&g.commission)?row(T('Commission','佣金'),-Math.abs(g.commission)):''}
+    ${(takings&&g.complete&&g.settle)?row(T('Estimated income','预计收入'),g.settle,true):''}
+    ${note?`<div style="font-size:12.5px;line-height:1.5;color:${g.reconciled?'var(--text-secondary)':'var(--amber-ink)'}">${note}</div>`:''}
+  </div>`;
+}
+/* ── §325 O1 — STOCK HOLDS THAT WENT WRONG ─────────────────────────────────
+   The desktop's reservations table. A hold's normal life (pending, then
+   committed) is plumbing nobody acts on, so — as there — nothing is drawn
+   unless one hold is abnormal: expired, released back, or pending past its
+   own expiry (stuck). Then every hold on the order is listed, so the odd one
+   can be read against the rest. The status is printed as the server's word,
+   exactly as the desktop prints it. The expiry is read through _date, the
+   phone's zone-correct parser, where the desktop's `new Date()` reads the
+   zoneless UTC stamp as local time. */
+function resvCard(o){
+  const list=o.resv; if(!list||!list.length) return '';
+  const now=Date.now();
+  const stuck=r=>{ if(r.status!=='pending'||!r.expires_at) return false; const d=_date(r.expires_at); return !!d&&d.getTime()<now; };
+  if(!list.some(r=>r.status==='expired'||r.status==='released'||stuck(r))) return '';
+  const when=v=>v?escAttr(tdWhen(v,'dateTime',_tdL())):'—';
+  const tone=s=>s==='committed'?PILL.muted:(s==='expired'||s==='released')?['var(--brick-tint)','var(--brick-ink)']:['var(--amber-tint)','var(--amber-ink)'];
+  return `<div class="card" style="padding:14px;border-color:var(--amber-ink)">
+    <div style="display:flex;align-items:center;gap:8px;color:var(--amber-ink)">${ic('triangle-alert',16)}
+      <span class="eyebrow" style="color:var(--amber-ink);flex:1;min-width:0">${T('Stock reservations — needs attention','库存预留 — 需留意')}</span>
+      <span class="num" style="font-size:13px">${list.length}</span></div>
+    ${list.map(r=>{ const [bg,fg]=tone(r.status);
+      const nm=(r.product_name_en||r.product_name_cn)?T(r.product_name_en||r.product_name_cn, r.product_name_cn||r.product_name_en):('product_id '+r.product_id);
+      return `<div style="padding:10px 0;border-top:1px solid var(--hairline);margin-top:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1;min-width:0;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>
+          <span class="num" style="flex:none;font-size:13px">×${escAttr(r.qty)}</span>
+          <span class="pill" style="flex:none;background:${bg};color:${fg}">${escAttr(r.status)}</span></div>
+        <div class="num" style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.55">
+          ${r.channel?escAttr(r.channel)+' · ':''}${T('Expires','到期')} ${when(r.expires_at)} · ${T('Committed','提交')} ${when(r.committed_at)} · ${T('Released','释放')} ${when(r.released_at)}</div></div>`; }).join('')}
+  </div>`;
+}
+/* ── §325 O1 — WHERE THE SAME-CITY RIDER COLLECTS, AND WHAT IS HOLDING IT ──
+   The desktop's renderQyShipFrom and its two parked surfaces, IN WORDS. Present
+   only for orders we created in Qingyun (the server sends qingyun_ship_from for
+   nothing else). No map: §97's exceptions keep the point picker on the desktop,
+   and this card says so rather than showing a surface it cannot finish.
+   What is NOT here yet, on purpose: every button the desktop puts beside these
+   words — Retry push, Change, Remove it, Reschedule, pick a place, compare
+   couriers — and the desktop sentences that point at them. They are writes and
+   arrive with the rider-operations step; a sentence telling the operator to
+   press a button the phone does not draw would be worse than no sentence. */
+function shipFromCard(o){
+  const sf=o.shipFrom; if(!sf) return '';
+  const card=(inner,warn)=>`<div class="card" style="padding:14px${warn?';border-color:var(--amber-ink)':''}">
+    <span class="eyebrow">${T('Same-city courier','同城配送')}</span>${inner}</div>`;
+  const head=(txt,tone)=>`<div style="font-size:14.5px;font-weight:500;margin-top:7px${tone?';color:var(--'+tone+')':''}">${txt}</div>`;
+  const sub=txt=>`<div style="font-size:13px;line-height:1.5;color:var(--text-secondary);margin-top:4px">${txt}</div>`;
+  const pd=escAttr(sf.promised_date||'');
+  if(!sf.qingyun_order_id){
+    const choice=!sf.awaiting_point&&sf.awaiting_choice&&Array.isArray(sf.candidates)&&sf.candidates.length;
+    if(sf.awaiting_point||choice){
+      if(sf.date_posture==='passed') return card(head(T('Delivery date passed','配送日期已过'),'brick-ink')+sub(T(
+        'Nobody was sent for this order and '+(pd||'the day it was promised for')+' has gone. A same-day rider can no longer take it — pick a new day to put it back in the queue.',
+        '此订单无人接单，'+(pd||'承诺配送日')+' 已过。同城骑手已无法配送，请选择新的配送日期重新排队。')),true);
+      const urgent=sf.date_posture==='tomorrow'?`<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);font-size:12.5px;line-height:1.5">
+        <span style="flex:none;display:flex;margin-top:1px">${ic('clock',15)}</span>
+        <span><b style="font-weight:600">${T('Promised tomorrow, '+pd+'.','明天('+pd+')送达。')}</b> ${choice
+          ?T('Pick the place today — after tonight this order can no longer go to a same-day rider.','请今天选择配送点 — 过了今晚将无法安排同城骑手。')
+          :T('Confirm the point today — after tonight this order can no longer go to a same-day rider.','请今天确认配送点 — 过了今晚将无法安排同城骑手。')}</span></div>`:'';
+      if(!choice){
+        const g=sf.guess_grade||{};
+        return card(head(T('Confirm delivery point','确认配送点'),'amber-ink')
+          +sub(T('We could not place this address precisely. Check the point and confirm.','无法精确定位该地址，请核对后确认配送点。'))
+          +((g.en||g.cn)?sub(escAttr(T(g.en||g.cn,g.cn||g.en))):'')
+          +urgent
+          +sub(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。')),true);
+      }
+      return card(head(T('Pick the delivery point','选择配送点'),'amber-ink')
+        +sub(T('This address matches more than one place. Pick the right one.','该地址匹配到多个地点，请选择正确的一个。'))
+        +`<div style="margin-top:8px">${sf.candidates.map(c=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--hairline)">
+            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500;overflow-wrap:anywhere">${escAttr(c.name||'')}</span>
+              <span style="display:block;font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(c.address||'')}</span></span>
+            ${c.drop_km!=null?`<span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(String(c.drop_km))}km</span>`:''}</div>`).join('')}</div>`
+        +sub(T('Distances are from the store the rider collects from.','距离为骑手取货门店到该地点的距离。'))
+        +urgent,true);
+    }
+    const refused=!!sf.needs_attention, held=!refused&&!!sf.push_held,
+          booked=!refused&&!held&&!!sf.awaiting_dispatch;
+    const line=refused?head(T('Push refused — nobody is collecting this','发单被拒 — 无人接单'),'amber-ink')
+      :held?head(T('Held — map service unavailable, retrying','已挂起 — 地图服务不可用,正在重试')+(sf.push_held_since&&fmtTime(sf.push_held_since)?' · '+T('since','自')+' '+escAttr(fmtTime(sf.push_held_since)):''),'amber-ink')
+      :booked?head(T('No courier called yet','尚未呼叫运力'))
+      :head(T('Queued for push…','排队发单中…')+(sf.push_since&&courierAgo(sf.push_since)?' · '+courierAgo(sf.push_since):''));
+    return card(line
+      +(sf.push_error?`<div class="num" style="font-size:12px;line-height:1.5;color:var(--text-secondary);margin-top:4px;overflow-wrap:anywhere">${escAttr(sf.push_error)}</div>`:'')
+      +(held?sub(T('Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.','地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')):''),
+      refused||held);
+  }
+  const moved=!!(o.storeCode&&sf.store_code!==o.storeCode);
+  const fe=(o.fulfil&&o.fulfil[0])||o.storeCode||'', fz=(o.fulfil&&o.fulfil[1])||o.storeCode||'';
+  return card(`<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:7px">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('Ships from','取货门店')}</span>
+      <span style="font-size:14.5px;font-weight:500">${escAttr(T(sf.name_en||sf.store_code,sf.name_cn||sf.store_code))}</span></div>`
+    +(moved?sub(T('Collected here, but the order still counts against '+escAttr(fe)+' for stock and reports.',
+                  '在此取货,但库存与报表仍算在 '+escAttr(fz)+'。')):'')
+    +(sf.stale?`<div style="display:flex;gap:7px;align-items:flex-start;margin-top:8px;font-size:12.5px;line-height:1.5;font-weight:500;color:var(--amber-ink)">
+        <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',14)}</span>
+        <span>${T('The old job at '+escAttr(sf.stale.name_en||sf.stale.store_code)+' is still in Qingyun — someone there could send a rider for it.',
+                  escAttr(sf.stale.name_cn||sf.stale.store_code)+' 的原配送单仍在青云中 — 那边有人可能会再叫一位骑手。')}</span></div>`:''),
+    !!sf.stale);
+}
+/* ── §325 O1 — THE GUEST PAY LINK ──────────────────────────────────────────
+   The desktop's orderPayLinkTile: the page a customer without an app account
+   pays this one order on. Only while unpaid and only with something to pay
+   (mapDetail's payPath carries the server's two conditions). Copy is the
+   phone's own copyText; Open goes to the page, for the customer to scan. */
+function payLinkURL(o){
+  if(!o||!o.payPath) return '';
+  return ((typeof location!=='undefined'&&location.origin)||'')+o.payPath;
+}
+function payLinkBlock(o){
+  const url=payLinkURL(o); if(!url) return '';
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="eyebrow">${T('Payment link','付款链接')}</span>
+      <button onclick="APP.cmd('copyPayLink')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
+    <a href="${escAttr(url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:14.5px;font-weight:500;color:var(--text-primary)">${ic('link',15)} ${T('Open pay page','打开付款页')}</a>
+    <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${T('Send this to the customer, or show the page for them to scan.','发给顾客,或打开页面让其扫码支付。')}</div></div>`;
+}
+/* ── §325 O1 — THE CUSTOMER MOVED THE SHIP-TO ──────────────────────────────
+   The desktop's addressChangedNote. Before the order goes out: an amber band
+   with the instruction, because a label already printed is now wrong. After:
+   a quiet trace — the fact stays on the record, the nagging does not. */
+function addrMovedNote(o){
+  const a=o.addrMoved; if(!a) return '';
+  const when=a.at?escAttr(tdWhen(a.at,'dateTime',_tdL())):'';
+  if(a.gone) return `<div style="font-size:12.5px;color:var(--text-secondary);margin-top:8px">${T('Address changed by the customer','顾客修改了收货地址')}${when?' · '+when:''}</div>`;
+  return `<div style="display:flex;align-items:flex-start;gap:9px;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink)">
+    <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',15)}</span>
+    <span style="font-size:12.5px;line-height:1.5"><span style="display:block;font-weight:500">${T('Address changed by the customer','顾客修改了收货地址')}</span>
+      <span style="display:block;margin-top:2px">${T('Check the shipping label against the address above before this goes out','发货前请核对面单与上方地址')}${when?' · '+when:''}</span></span></div>`;
 }
 /* The band under the total when it disagrees with the lines beneath it. The
    desktop has carried one since the drawer could be wrong out loud; the phone
@@ -24948,7 +25400,9 @@ function sheetOrderDetail(){
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
        ${shopNoteCard(o)}
+       ${toldCard(o)}
        ${riderCard(o)}
+       ${shipFromCard(o)}
        ${deliveryPhotoCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!o.viewOnly&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
@@ -24964,6 +25418,7 @@ function sheetOrderDetail(){
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
          </div>`:''}</div>
        ${moneyGapBand(o)}
+       ${settlePanel(o)}
        ${isPO?'':`
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
          <span class="eyebrow">${o.counter?T('Counter sale','前台销售'):o.pickup?T('Pickup','到店自提'):T('Ship to','收货地址')}</span>
@@ -24973,6 +25428,7 @@ function sheetOrderDetail(){
            o.counter?T('Handed over at the till','已在前台交付')
            :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore[0],'自提门店 '+o.pickupStore[1]):T('Collects in store','到店自提'))
            :o.addr?T(...o.addr):T('No address on file','没有收货地址')}</div>
+         ${(!o.counter&&!o.pickup)?addrMovedNote(o):''}
          ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('View customer','查看顾客')}</button>`:''}</div>
        <!-- Payment reads as the tender and nothing else: the WeChat mark plus the
             word. The status word is dropped when it agrees with the pill in the
@@ -24987,6 +25443,7 @@ function sheetOrderDetail(){
          ${o.payNote?`<div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);color:var(--${o.payNote.sev});font-size:13px">
            <span style="flex:none;display:flex;margin-top:1px">${ic(o.payNote.icon,15)}</span>
            <span>${T(...o.payNote.why)}</span></div>`:''}
+         ${payLinkBlock(o)}
          ${o.proof?`<div style="margin-top:10px">
            <div style="display:block;border-radius:10px;overflow:hidden;border:1px solid var(--border-default);cursor:zoom-in" onclick="APP.cmd('zoomImg','${o.proof}')">
              <img src="${escAttr(o.proof)}" alt="${T('Payment screenshot','付款截图')}" style="display:block;width:100%;max-height:220px;object-fit:cover"></div>
@@ -24996,6 +25453,12 @@ function sheetOrderDetail(){
          ${o.route?`<div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div>`:''}
          ${o.routedByArea?`<div style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;color:var(--amber-ink);font-size:12.5px;line-height:1.5">
            ${ic('triangle-alert',14)}<span>${T('Routed by area — the address could not be located, so check the store is right.','按区域派单 — 地址无法定位，请核对门店是否正确。')}</span></div>`:''}
+         ${o.movedFrom?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('Rerouted, shop was closed','改派 · 门店已关闭')} · <span class="num" style="font-weight:500;color:var(--text-primary)">${escAttr(o.movedFrom)}</span></div>`:''}
+         ${o.preorderSold?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
+           <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--text-secondary)">
+             <span style="width:6px;height:6px;border-radius:50%;background:var(--text-secondary);flex:none"></span>${T('Pre-order','预订')}</span>
+           <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${o.preorderSold.map(nm=>
+             `<span style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(nm[0],nm[1]))}</span>`).join('')}</div></div>`:''}
          ${o.shortItems?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
            <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--amber-ink)">
              <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex:none"></span>${T('The nearer store was short on','就近门店缺货')}</span>
@@ -25008,6 +25471,7 @@ function sheetOrderDetail(){
        ${invoiceBlock(o)}
        ${orderItemsBlock(o)}
        ${addonTimeline(o)}
+       ${resvCard(o)}
      </div>
    </div>`;
 }
@@ -29651,6 +30115,129 @@ function prodCatName(){
   const c=prodCategories().find(x=>x.key===k);
   return c?c.en:null;
 }
+/* §325 PD1 — THE SUBCATEGORY CHIPS, paFillSubFilter on a phone. Drawn only
+   once a category is picked, and only when that category's products carry a
+   subcategory at all: the tree's own order and Chinese names where the tree
+   has them, then any subcategory a product carries that the tree no longer
+   names (a rename's leftovers), A–Z — which is how the operator finds them.
+   Keys are indexes, for prodCategories' reason. */
+function prodSubcats(){
+  const cat=prodCatName(); if(!cat) return [];
+  const present=new Set();
+  (DB.products||[]).forEach(p=>{ if(String(p.cat||'')===cat&&p.sub) present.add(p.sub); });
+  if(!present.size) return [];
+  const node=(state.cats||[]).find(t=>t&&t.name===cat);
+  const treeSubs=node?(node.subs||[]):[];
+  const cn={};
+  treeSubs.forEach(x=>{ if(x&&x.name) cn[x.name]=x.name_cn||''; });
+  const order=treeSubs.map(x=>x&&x.name).filter(Boolean);
+  const extras=[...present].filter(x=>order.indexOf(x)<0).sort((a,b)=>a.localeCompare(b));
+  const subs=order.filter(x=>present.has(x)).concat(extras);
+  return [{key:'all',en:'All subcategories',zh:'全部子分类'}].concat(subs.map((x,i)=>({key:String(i),en:x,zh:cn[x]||x})));
+}
+function prodSubName(){
+  const k=state.prodSub;
+  if(!k||k==='all') return null;
+  const c=prodSubcats().find(x=>x.key===k);
+  return c?c.en:null;
+}
+/* §325 PD1 — THE STORE SWITCH (paRenderStoreSeg / _paStockOf). With one store
+   picked, a product's stock is that store's shelf, and Low and Out are judged
+   against it — "out of stock where I am looking" — with the same ladder
+   mapProduct uses for the whole shop. A store's own low-stock line sits
+   between the product's and the shop's, as paLowThreshold orders them. An
+   assembled bundle holds no stock of its own: at one store it is how many
+   whole sets its parts make there.
+
+   OFFERED ONLY WHERE IT HAS A JOB AND AN ANSWER: two stores or more, a shop
+   that keeps its own stock, and a grid read that came back whole. A grid cut
+   short would make every product past the cut read as zero at every store —
+   a sold-out list invented by a row ceiling — so it is not offered at all. */
+function prodStoreOn(){
+  const g=state.prodGrid;
+  return state.catalogMode!=='upstream'&&g.ready&&(g.stores||[]).length>1;
+}
+function prodStoreQty(pid,sid){ const m=state.prodGrid.qty[pid]; return m?(Number(m[sid])||0):0; }
+function prodAtStore(p){
+  const sid=state.prodStore;
+  if(!sid||!prodStoreOn()) return p;
+  let stock;
+  if(p.parts&&(p.bItems||[]).length){
+    let min=Infinity;
+    for(const c of p.bItems) min=Math.min(min,Math.floor(prodStoreQty(c.id,sid)/c.qty));
+    stock=Number.isFinite(min)?Math.max(0,min):0;
+  } else stock=prodStoreQty(p._id,sid);
+  const st=(state.prodGrid.stores||[]).find(x=>String(x.id)===String(sid));
+  const sl=st&&st.low_stock_threshold;
+  const low=p.lowOwn!=null?p.lowOwn:((sl!=null&&sl!==''&&Number(sl)>=0)?Number(sl):prodLowThreshold({}));
+  let kind,status;
+  if(!p.pub){ kind='draft'; status=['Draft','草稿']; }
+  else if(p.paused){ kind='off'; status=['Paused','已暂停']; }
+  else if(!p.supplier&&stock<=0){ kind='off'; status=['Out','缺货']; }
+  else if(!p.supplier&&stock<=low){ kind='restock'; status=['Low','库存低']; }
+  else { kind='on'; status=['Live','在售']; }
+  return Object.assign({},p,{stock,stockLabel:[stock+' in stock',('库存 '+stock)],kind,status});
+}
+/* The catalogue as the list reads it: every product, each answering for the
+   picked store. DB.products itself is never rewritten — it is the phone's
+   product lookup (see loadCatalogue), and a store pick is a view of it. */
+function prodRows(){ return (DB.products||[]).map(prodAtStore); }
+/* paLoadStoreStock's read: every active store and every product's shelf at
+   each, in one request. Asked for up to the endpoint's ceiling, because the
+   phone holds the whole catalogue rather than the desktop's first 500; where
+   even that comes back cut short (`truncated`), the switch is not offered.
+   A failed read is the desktop's answer too: back to the shop-wide figures. */
+function loadProdGrid(force){
+  const g=state.prodGrid;
+  if(!force&&g.tried) return Promise.resolve();
+  if(state.catalogMode==='upstream') return Promise.resolve();
+  g.tried=true;
+  const seq=++g.seq;
+  return apiRaw('/inventory/grid?limit=5000').then(j=>{
+    if(seq!==g.seq) return;
+    const d=(j&&j.data)||{};
+    const qty={};
+    (Array.isArray(d.products)?d.products:[]).forEach(r=>{
+      const m={}; (r.stocks||[]).forEach(x=>{ m[x.store_id]=Number(x.physical_qty)||0; });
+      qty[r.product_id]=m;
+    });
+    g.stores=Array.isArray(d.stores)?d.stores:[];
+    g.qty=qty;
+    g.ready=!!(j&&j.success!==false)&&!(j&&j.truncated);
+    if(!prodStoreOn()||!g.stores.some(x=>String(x.id)===String(state.prodStore))) state.prodStore='';
+    render();
+  }).catch(e=>{
+    if(seq!==g.seq||String(e.message)==='auth') return;
+    g.ready=false; state.prodStore=''; render();
+  });
+}
+/* §325 PD1 — GOING NOWHERE AND ON PROMOTION (paLoadHighlights). Two more
+   status chips, each the server's count and the server's own id set, so the
+   chip's number and the list it opens are one answer. Each is drawn only
+   while its count is above zero, as the desktop's tiles hide at zero; a failed
+   read draws neither. A chip that goes away while it is the one lit takes its
+   filter with it, or the list would stay narrowed by a chip nobody can see. */
+function loadProdHi(force){
+  const h=state.prodHi;
+  if(!force&&h.tried) return Promise.resolve();
+  h.tried=true;
+  const seq=++h.seq;
+  const ids=x=>(x&&Array.isArray(x.ids))?x.ids.map(Number):[];
+  return apiRaw('/products/highlights').then(j=>{
+    if(seq!==h.seq) return;
+    if(!j||!j.success) throw new Error('load_failed');
+    h.data={dead:ids(j.goingNowhere),deadN:Number((j.goingNowhere||{}).count)||0,
+            promo:ids(j.onPromotion),promoN:Number((j.onPromotion||{}).count)||0};
+  }).catch(e=>{
+    if(seq!==h.seq||String(e&&e.message)==='auth') return;
+    h.data=null;
+  }).then(()=>{
+    if(seq!==h.seq) return;
+    const d=h.data;
+    if((state.prodStatus==='dead'&&!(d&&d.deadN))||(state.prodStatus==='promo'&&!(d&&d.promoN))) state.prodStatus='all';
+    render();
+  });
+}
 /* One catalogue card. The desktop's is a photograph with its marks on it, a
    name, its sizes, and the switch that takes it off the shop; the phone's was a
    line of text. A picture is what a person recognises a product by and what a
@@ -29742,8 +30329,14 @@ const PROD_STATUS_KIND={live:'on',draft:'draft',low:'restock',out:'off'};
 function prodFiltered(){
   const q=String(state.prodQ||'').trim().toLowerCase();
   const cat=prodCatName();
+  const sub=prodSubName();
   const want=PROD_STATUS_KIND[state.prodStatus||'all'];
-  return (DB.products||[]).filter(p=>{
+  // Going nowhere / On promotion are the server's id sets, not a rule this
+  // phone applies — _paStatusMatch's 'dead' and 'promo'.
+  const hi=state.prodHi.data;
+  const inSet=(state.prodStatus==='dead'||state.prodStatus==='promo')
+    ? new Set(hi?hi[state.prodStatus]:[]) : null;
+  return prodRows().filter(p=>{
     if(q){
       // Live rows carry a prebuilt haystack; the sample rows do not, so fall
       // back to both names and the SKU — the desktop's own three fields.
@@ -29751,7 +30344,9 @@ function prodFiltered(){
       if(hay.indexOf(q)<0) return false;
     }
     if(cat&&String(p.cat||'')!==cat) return false;
+    if(sub&&String(p.sub||'')!==sub) return false;
     if(want&&p.kind!==want) return false;
+    if(inSet&&!inSet.has(Number(p._id))) return false;
     return true;
   });
 }
@@ -30999,6 +31594,10 @@ function refreshNow(){
      sub-screen too, and once the catalogue is loaded a refresh from anywhere
      should leave it fresh rather than stale. */
   if(state.catalogueTried) jobs.push(mSettled(loadCatalogue(true)));
+  // §325 PD1 — the per-store shelves and the two highlight sets are the same
+  // list's, so a refresh that re-reads the list re-reads them.
+  if(state.prodGrid.tried) jobs.push(mSettled(loadProdGrid(true)));
+  if(state.prodHi.tried) jobs.push(mSettled(loadProdHi(true)));
   // A spinner that vanishes in 80ms reads as a glitch, not as work — hold the
   // floor at half a second so the gesture visibly did something.
   const floor=new Promise(r=>setTimeout(r,500));
@@ -32572,6 +33171,14 @@ function mapOrderRow(r){
        else called it, so it is gone rather than left as a second way to get
        this wrong; mapDetail's `route` already carried the pair. */
     routeNote: routingNotePair(r.routing_reason),
+    /* §325 O1 — A PARTIAL REFUND, on the row. A full refund flips the order to
+       Refunded and the status pill says so; a partial one leaves it Paid or
+       Delivered, and the row said nothing. The desktop's refundBadge: the
+       cumulative amount paid back, falling back to approved, then requested,
+       for rows older than the accumulation fix. A number, worded by the row. */
+    partRefund:(r.refund_status==='paid'&&r.status!=='refunded')
+      ?([r.refund_amount_paid,r.refund_amount_approved,r.refund_amount_requested].map(Number).find(n=>Number.isFinite(n)&&n>0)||0)
+      :null,
     // The Status cell's stack of note lines. Each is a fact about the order that
     // changes what an operator does with it, and none of them were here.
     notes: orderNotes(r),
@@ -32673,6 +33280,29 @@ function orderWaitingOn(o){
     else lines.push([null,['#'+pid,'#'+pid],'','','',null,null]);
   });
   return {lines, store, chose:o.fallback_choice==='wait_for_restock'};
+}
+/* §325 O1 — A MARKETPLACE ORDER'S SETTLEMENT, the desktop's
+   channelMoneyBreakdown (04-orders.js) line for line: items + packing +
+   delivery − merchant discount should equal what the customer paid, and only
+   when it does — and the platform has published both — are commission and
+   estimated income printed. The arithmetic is the test, not the columns'
+   presence (packing_fee and shipping_fee default to 0 whether or not they were
+   captured). Meituan and Eleme only; every other channel has no commission. */
+function chanMoneyOf(o){
+  const c=String((o&&o.channel)||'').toLowerCase();
+  if(c!=='meituan'&&c!=='eleme') return null;
+  const items=Number(o.subtotal)||0, packaging=Number(o.packing_fee)||0,
+        delivery=Number(o.shipping_fee)||0, discount=Number(o.channel_discount)||0,
+        total=Number(o.total)||0;
+  const hasCommission=o.channel_commission!=null, hasSettle=o.channel_settle_amount!=null;
+  const expected=Math.round((items+packaging+delivery-discount)*100)/100;
+  const reconciled=Math.abs(expected-total)<0.01;
+  return {items, packaging, delivery, discount,
+    commission:hasCommission?Number(o.channel_commission):null,
+    settle:hasSettle?Number(o.channel_settle_amount):null,
+    expected, gap:Math.round((expected-total)*100)/100, total, reconciled,
+    awaiting:reconciled&&!(hasCommission&&hasSettle),
+    complete:reconciled&&hasCommission&&hasSettle};
 }
 function mapDetail(o){
   const base=mapOrderRow(o);
@@ -32862,6 +33492,38 @@ function mapDetail(o){
       return it?[it.name_en||it.name_cn||('#'+pid), it.name_cn||it.name_en||('#'+pid)]:[('#'+pid),('#'+pid)]; }); })();
   base.waitingOn=orderWaitingOn(o);
   base.routedByArea=o.routed_by_distance===0;
+  /* §325 O1 — THE ORDER FACTS THE DESKTOP DRAWER CARRIES AND THE PHONE DID NOT.
+     Every one is already in the GET /orders/:id payload; each is carried raw
+     (a pair, a stamp, a code) and worded at render time, for the language
+     reason ITEM_TUPLE gives. */
+  // The guest pay link (04-orders.js orderPayLinkTile): only while unpaid and
+  // only when there is something to pay — the server's own two conditions.
+  base.payPath=(o.status==='pending_payment'&&o.pay_token&&Number(o.total)>0)?('/pay/'+o.pay_token):null;
+  // The customer moved the ship-to after placing it (addressChangedNote). Loud
+  // until it has gone out, a quiet trace after.
+  base.addrMoved=o.address_changed_at?{at:o.address_changed_at, gone:!!o.dispatched_at}:null;
+  // Sold as a pre-order (preorderSoldNote): the lines the checkout notice named.
+  base.preorderSold=(()=>{
+    let pids=[]; try{ pids=JSON.parse(o.preorder_pids||'[]')||[]; }catch(e){ pids=[]; }
+    if(!Array.isArray(pids)||!pids.length) return null;
+    const by=new Map((o.items||[]).map(it=>[it.product_id,it]));
+    return pids.map(pid=>{ const it=by.get(pid);
+      return it?[it.name_en||it.name_cn||('#'+pid), it.name_cn||it.name_en||('#'+pid)]:[('#'+pid),('#'+pid)]; }); })();
+  // The shop this address would have gone to had nothing been closed
+  // (movedFromNote). Its presence IS the fact.
+  base.movedFrom=String(o.moved_from_store||'').trim()||null;
+  // Was the customer told (wasCustomerToldBlock): the latest attempt per kind.
+  base.told=(Array.isArray(o.notifications)&&o.notifications.length)
+    ?o.notifications.map(r=>({kind:r.kind||'', channel:r.channel||'', at:r.created_at||null, ok:!!r.ok, error:r.error||null}))
+    :null;
+  // A Meituan / Eleme order's settlement (renderChannelMoneyPanel).
+  base.settle=chanMoneyOf(o);
+  // The stock holds, drawn only when one is abnormal — decided at render time,
+  // because "stuck" is a pending hold past its expiry and the clock moves.
+  base.resv=Array.isArray(o.reservations)&&o.reservations.length?o.reservations:null;
+  // Where a same-city rider collects, and any parked state (renderQyShipFrom).
+  base.shipFrom=o.qingyun_ship_from||null;
+  base.storeCode=o.store_code||null;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
   }
@@ -32934,6 +33596,14 @@ function mapProduct(r){
     parts:!!r.is_bundle,
     unitCost:Object.prototype.hasOwnProperty.call(r,'unit_cost')?(r.unit_cost==null?null:Number(r.unit_cost)):undefined,
     cat:String(r.top_category||r.category||'').trim(),
+    /* §325 PD1 — what the subcategory chips and the store switch read: the
+       subcategory, the product's OWN low-stock line (null = follow the store,
+       then the shop — paLowThreshold's order), and an assembled bundle's parts,
+       whose stock at one store is how many whole sets its parts make there
+       (_paBundleStock). */
+    sub:String(r.subcategory||'').trim(),
+    lowOwn:(r.low_stock_threshold!=null&&r.low_stock_threshold!==''&&Number(r.low_stock_threshold)>=0)?Number(r.low_stock_threshold):null,
+    bItems:Array.isArray(r.bundle_items)?r.bundle_items.map(c=>({id:Number(c&&c.id),qty:Math.max(1,Number(c&&c.qty)||1)})):[],
     // One lowercased haystack per product, built once: name in both languages
     // and the SKU, which is what the desktop's search box matches on.
     hay:[r.name_en||'',r.name_cn||'',r.sku||''].join(' ').toLowerCase()};
@@ -33359,6 +34029,9 @@ async function loadMe(){
     // preference nobody will ever honour is worse than an absent one. A
     // missing key means entitled, so the default is an empty object.
     state.ent=(u.tenant&&u.tenant.entitlements)||{};
+    // §325 PD1 — CATALOG_MODE's own read (02-settings-ops.js): 'upstream' keeps
+    // no stock of its own, so Products offers it no store switch.
+    state.catalogMode=(u.tenant&&u.tenant.catalogMode)||'self';
     /* caps are kept, not gated on: this screen has no data-cap machinery and
        re-renders template strings into #content, so what it does with them is
        FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */

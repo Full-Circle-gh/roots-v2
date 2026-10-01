@@ -299,10 +299,16 @@ console.log('\n══ screenProductCatalogue · Products ══');
   const mk = (over) => Object.assign({
     prodQ: '', prodStatus: 'all', prodCat: 'all', prodErr: null,
     liveProductsLoaded: true, catalogueComplete: true, catalogueLoading: false, prodTotal: 2,
+    // §325 PD1: the store switch, the subcategory chips and the two highlight
+    // chips, all at rest — none drawn — so the comparison is of the same list.
+    prodSub: 'all', prodStore: '', prodGrid: { stores: [] }, prodHi: { data: null },
   }, over);
   const extra = {
     DB: { products: PRODS.slice() },
     loadCatalogue: () => {},
+    loadProdGrid: () => {}, loadProdHi: () => {},
+    prodRows: () => PRODS.slice(), prodSubcats: () => [], prodStoreOn: () => false,
+    mCan: () => false,
     prodCategories: () => [],
     prodFiltered: () => PRODS.slice(),
     prodUnits: (r) => r,
