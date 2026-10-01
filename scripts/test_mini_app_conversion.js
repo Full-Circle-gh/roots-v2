@@ -162,7 +162,9 @@ check('the all-channel count really is the bigger number — the error only ever
 section('conversion_rate takes its numerator from the mini app');
 
 check('it divides miniOrders by sessions, never kpi.orders', () => {
-  const line = /const conversion = vis\.sessions > 0 \? \(([^)]*)\) \* 100 : null;/.exec(RETAIL);
+  // §325: `!SCOPED &&` — a store's answer has no conversion, because its
+  // orders over the shop's sessions would divide two populations.
+  const line = /const conversion = (?:!SCOPED && )?vis\.sessions > 0 \? \(([^)]*)\) \* 100 : null;/.exec(RETAIL);
   ok(line, 'the conversion line has moved or changed shape');
   eq(line[1].replace(/\s+/g, ''), 'miniOrders/vis.sessions', 'conversion numerator ÷ denominator');
 });
