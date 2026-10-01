@@ -69,7 +69,9 @@ const CASES = [
     ['no integration says so, not Closed', `txt('content').includes('Not connected')`],
     ['a mirror says it is read-only',   `txt('content').includes('View only')`],
     ['the head line names what is shut', `txt('content').includes('In store is closed everywhere')`],
-    ['closing stays on the desktop',    `txt('content').includes('on desktop')`],
+    // §326.2 — the whole-channel flip came to the phone (§325 X12), so the
+    // footer that sent it to the desktop is gone rather than left untrue.
+    ['nothing sends closing to the desktop', `!txt('content').includes('everywhere is on desktop')`],
   ]],
   ['today\'s money is said as today\'s', GRID, [
     // The day's total is what this screen is opened for, and loadChannels used
@@ -159,12 +161,26 @@ CASES.push(['reopening a shop names what comes back', STUB + SHUT + `APP.cmd('sh
   ['not "every sales channel"', `!sheetText().includes('Every sales channel at this shop opens')`],
 ]]);
 
-// The whole-channel endpoint exists and is deliberately unreachable from here:
-// one tap should not be able to stop orders arriving everywhere.
-CASES.push(['no way to close a channel everywhere', GRID + `APP.cmd('openChannel','meituan');`, [
-  ['the sheet says where that lives', `sheetText().includes('everywhere at once is on desktop')`],
-  ['and offers no control for it',
-   `![].slice.call(document.querySelectorAll('.sheet button')).some(function(b){return /everywhere|all stores/i.test(b.innerText)})`],
+// §326.2 brought the whole-channel flip to the phone (§325 X12): one button
+// under the rows, drawn only once the operator's keys are known to hold, and
+// it asks before it sends — one tap must not stop orders arriving everywhere.
+CASES.push(['no whole-channel control while the keys are unknown', GRID + `state.caps=null; APP.cmd('openChannel','meituan');`, [
+  ['the sheet offers no Close channel',
+   `![].slice.call(document.querySelectorAll('.sheet button')).some(function(b){return /Close channel/.test(b.innerText)})`],
+  ['and no longer sends it to the desktop', `!sheetText().includes('everywhere at once is on desktop')`],
+]]);
+CASES.push(['closing a channel everywhere asks first', STUB + GRID + `state.caps=['dashboard:view']; APP.cmd('openChannel','meituan');
+  [].slice.call(document.querySelectorAll('.sheet button')).filter(function(b){return /Close channel/.test(b.innerText)})[0].click();`, [
+  ['the desktop\'s own question', `sheetText().includes('Close this channel at every store?')`],
+  ['it says what does NOT stop',   `sheetText().includes('Orders already placed are not affected')`],
+  ['and nothing was sent yet',     `!${sent('/channel-status')}`],
+]]);
+CASES.push(['confirming sends the whole-channel write', STUB + GRID + `state.caps=['dashboard:view']; APP.cmd('openChannel','meituan');
+  APP.cmd('chanAll','meituan',0); APP.cmd('askRun');`, [
+  ['to the whole-channel endpoint', sent('/channel-status/channel')],
+  ['not the per-store one',         `!${sent('/channel-status/cell')}`],
+  ['carrying the channel',          body('"channel":"meituan"')],
+  ['and open:false',                body('"open":false')],
 ]]);
 
 run('sales', CASES);

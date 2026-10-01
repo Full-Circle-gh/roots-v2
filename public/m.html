@@ -972,6 +972,16 @@ const state = {
                     which is why it is not chanErr wearing a second hat */
   chanSheet:null, chanBusy:null, chanErr:null, chanLoadErr:null,
   shopBusy:null, shopErr:null,
+  /* §325 X12 — the switches that stop orders everywhere at once.
+       oc           GET /store-status: the online store, every shop, the master
+       ocTried / ocLoadErr   its read, and the read failing (a different state
+                    from a write failing, as chanLoadErr is from chanErr)
+       ocBusy / ocErr        a /store-status/* write in flight, and its refusal
+       mtCfg / mtCfgTried    GET /meituan/config, the Meituan channel switch
+       chSwBusy / chSwErr    a Meituan or Eleme channel switch write, keyed by
+                    channel, and its refusal ({ch, msg}) */
+  oc:null, ocTried:false, ocLoadErr:null, ocBusy:null, ocErr:null,
+  mtCfg:null, mtCfgTried:false, chSwBusy:null, chSwErr:null,
   team:null, teamTried:false, teamErr:null, teamEnforce:false, teamBusy:null, teamActErr:null,
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
@@ -1561,6 +1571,11 @@ const state = {
      typed, which save is in flight and each half's refusal) and the brand
      studio (its form, the job being polled, the result and its Apply). */
   brand:{data:null, tried:false, readErr:null, busy:null, name:'', nameTouched:false, nameErr:null, logoErr:null},
+  /* §325 X13 — Billing. view/plans the two reads, readErr their failure; busy
+     'choose:<code>' while a plan is being chosen and err {code,msg} its refusal;
+     ck the open checkout (its invoice_id carried in) and ckPlan its plan's name,
+     ckSeq so a closed checkout's QR wait stops asking. */
+  bill:{view:null, plans:null, tried:false, readErr:null, seq:0, busy:null, err:null, ck:null, ckPlan:null, ckSeq:0},
   bst:{about:'', audience:'mixed', language:'bilingual', words:[], cust:[], colour:'', type:'', busy:false, err:null, seq:0,
        result:null, applyBusy:false, applyErr:null, applyMsg:null},
   opsx:{busy:null, err:null, geoBusy:false, geoErr:null, bin:null, binDays:60, binTried:false, binErr:null, binBusy:null, binRowErr:{}},
@@ -1706,6 +1721,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* §325 X5 — each card is read fresh on entry: the desktop may have saved it. */
   if(route==='shopdisplay'||route==='custservice'){ const c=state.cfgc, k=route==='shopdisplay'?'shop':'cs';
     c.tried[k]=false; c[k]=null; c.err[k]=null; if(k==='cs'){ c.qrErr=null; c.qrBusy=false; } }
+  if(route==='billing'){ const b=state.bill; b.tried=false; b.readErr=null; b.err=null; b.busy=null; b.ck=null; b.ckPlan=null; b.ckSeq++; }
   if(route==='brand'){ const b=state.brand; b.tried=false; b.nameTouched=false; b.nameErr=null; b.logoErr=null; b.readErr=null; }
   /* §325 X6 — the store list is re-read with Operations; a store's staff and
      the team's devices are re-read on every entry (somebody may have been
@@ -5790,6 +5806,256 @@ reg('shopOpen', (storeCode, next)=>{
     }};
   render();
 });
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X12 — THE SWITCHES THAT STOP ORDERS EVERYWHERE AT ONCE (§326.2)
+   ══════════════════════════════════════════════════════════════════════════
+   Four writes the phone held back on purpose and §326.2 brought over, each
+   behind a confirm that names what stops and what does not:
+
+     Online store        POST /store-status/online  {open}   (02-settings-ops.js ocSetOnline)
+     Everything          POST /store-status/master  {open}   (ocMaster)
+     A channel at every  POST /channel-status/channel {channel, open}
+       store                                                  (01-core.js csChannelToggle)
+     Meituan / Eleme     POST /meituan/enable, /eleme/enable {enabled}
+       channel switch                                          (11-meituan.js mtToggleChannel,
+                                                                14-eleme.js elToggleEnabled)
+
+   Same paths, same bodies as the desktop. The per-shop /store-status/store/:code
+   is NOT here: the Sales screen's own shop switch (shopOpen above, the Sales
+   page's /channel-status/location) already does that job on the phone, and two
+   switches for one shop that write different tables is how a shop reads open in
+   one place and closed in the other.
+
+   WHO SEES THEM. Each is drawn only for the keys lib/cap-routes.js asks of that
+   write, and only once those keys are known (mCanKnown):
+     /store-status/*         OPEN_CLOSE — the Sales screen's keys plus Settings'
+     /channel-status/channel SALES_SCREEN
+     /meituan/enable         meituan:sync      /eleme/enable  eleme:sync
+   The desktop draws the first two for `settings:edit`, a key that does not
+   exist; the last two have no button on the desktop at all today (the functions
+   are there, the markup is not). The phone asks for the keys the server asks
+   for, so nothing is drawn that would be refused. */
+const X12_SALES_KEYS=['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'];
+const X12_OC_KEYS=X12_SALES_KEYS.concat(['settings:shop','settings:push','settings:payments','stores:view','shipping:config','delivery:view']);
+function ocLoad(force){
+  if(state.ocTried&&!force) return;
+  state.ocTried=true;
+  return apiRaw('/store-status').then(j=>{
+    if(!j||j.success===false) throw new Error('refused');
+    state.oc=j; state.ocLoadErr=null; render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth') return;
+    // The desktop's words (loadOpenClose): a shop that cannot read its own
+    // open/closed state must not draw a control that looks live.
+    state.ocLoadErr=E('Could not read the shop status','无法读取营业状态'); render();
+  });
+}
+reg('ocRetry', ()=>{ state.ocLoadErr=null; state.oc=null; render(); ocLoad(true); });
+/* The card. Above the Shops card, because it outranks it: the master closes
+   every shop, and the online store is the one channel no shop card holds. */
+function ocCard(){
+  if(!mCanKnown(X12_OC_KEYS)) return '';
+  ocLoad();
+  const st=state.oc;
+  const head=`<div style="padding:12px 16px 8px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Open for business','营业状态')}</div>`;
+  if(!st&&state.ocLoadErr) return `<div class="card" style="padding:4px 0 12px;display:flex;flex-direction:column">${head}
+    <div style="padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="font-size:14px;color:var(--brick-ink)">${state.ocLoadErr}</span>
+      <button class="btn2" onclick="APP.cmd('ocRetry')">${T('Try again','重试')}</button></div></div>`;
+  if(!st) return `<div class="card" style="padding:4px 0 12px;display:flex;flex-direction:column">${head}
+    <div style="padding:0 16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
+  const master=st.master;   // 'open' | 'closed' | 'mixed'
+  const mLabel=master==='open'?T('Everything is open','全部营业中'):master==='closed'?T('Everything is closed','全部已关闭'):T('Some channels are closed','部分渠道已关闭');
+  const mPill=master==='open'?PILL.success:master==='closed'?PILL.danger:PILL.warning;
+  const on=!!(st.online&&st.online.online_open);
+  const busy=state.ocBusy;
+  return `<div class="card" style="padding:4px 0;display:flex;flex-direction:column">${head}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 16px 12px">
+      <span class="pill" style="background:${mPill[0]};color:${mPill[1]}">${mLabel}</span>
+      <button class="btn2" ${busy?'disabled':''} onclick="APP.cmd('ocMaster',${master==='closed'?'1':'0'})">${
+        busy==='master'?T('Saving…','保存中…'):master==='closed'?T('Open everything','全部营业'):T('Close everything','全部关闭')}</button></div>
+    <div class="sep" style="margin-left:16px"></div>
+    <button ${busy?'disabled':''} onclick="APP.cmd('ocOnline',${on?'0':'1'})"
+      style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;${busy&&busy!=='online'?'opacity:.5':''}">
+      <span style="font-size:15px;color:var(--text-primary)">${T('Online store','线上商城')}</span>
+      <span style="display:flex;align-items:center;gap:9px;flex:none">
+        <span class="pill" style="background:${on?PILL.success[0]:PILL.danger[0]};color:${on?PILL.success[1]:PILL.danger[1]}">${
+          busy==='online'?T('Saving…','保存中…'):(on?T('Open','营业中'):T('Closed','已关闭'))}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>
+    ${state.ocErr?`<div style="padding:0 16px 12px;font-size:13px;color:var(--brick-ink)">${state.ocErr}</div>`:''}
+  </div>`;
+}
+/* One write path for both, as the desktop's _ocWrite: the card disables while
+   it runs (two taps on "close everything" is how a shop gets reopened by the
+   person shutting it), and both boards re-read afterwards — the master moves
+   every shop's cells, so the grid below is stale the moment it lands. */
+function ocWrite(which,path,body,okText){
+  if(state.ocBusy) return;
+  state.ocBusy=which; state.ocErr=null; render();
+  apiWrite(path,body,'POST').then(()=>{
+    state.ocBusy=null; showToast(okText);
+    ocLoad(true); loadChannels(true);
+  }).catch(e=>{
+    state.ocBusy=null;
+    if(String(e&&e.message)==='auth') return;
+    state.ocErr=e&&e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
+reg('ocOnline', next=>{
+  if(state.ocBusy||!mCanKnown(X12_OC_KEYS)) return;
+  const open=String(next)==='1';
+  state.ask={
+    title: open?T('Open the online store?','开启线上商城？'):T('Close the online store?','关闭线上商城？'),
+    // The online store is the storefront the shop owns — the mini app and the
+    // web store share it (routes/retail.js loadStoreStatus) — and nothing else.
+    body: open?T('The mini app and web store take new orders again, wherever their own channel is open.',
+                 '小程序与网店将在各自渠道开启的门店恢复接新订单。')
+              :T('The mini app and web store stop taking new orders, and shoppers there see that the store is closed. Every other channel and the counter till keep selling, and orders already placed are not affected.',
+                 '小程序与网店将停止接新订单，顾客会看到商城已关闭。其他渠道与门店收银照常营业，已下单的订单不受影响。'),
+    confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
+    run:()=>ocWrite('online','/store-status/online',{open},
+      open?T('Online store is open','线上商城已开启'):T('Online store is closed','线上商城已关闭'))};
+  render();
+});
+reg('ocMaster', next=>{
+  if(state.ocBusy||!mCanKnown(X12_OC_KEYS)) return;
+  const open=String(next)==='1';
+  state.ask={
+    title: open?T('Open everything?','全部营业？'):T('Close everything?','全部关闭？'),
+    /* What the server's master does (routes/meituan-admin.js
+       /store-status/master): the online-store flag, every Meituan shop through
+       the sync daemon, and every shop's fulfilment flag — which is what the
+       routing, pickup and the counter till all obey. It does NOT touch a
+       channel's own cell, so on the way back up a channel closed at a shop on
+       its own, or by that shop's switch, stays closed. Said, because "Open
+       everything" reads as if it would. */
+    body: open?T('The online store opens, every shop takes orders and counter sales again, and every Meituan shop opens within about a minute. Any other channel closed at a shop — on its own or with the shop’s switch — stays closed; open those below.',
+                 '线上商城将开启，所有门店恢复接单与门店收银，美团各门店约一分钟内开启。在门店单独关闭（或随门店开关关闭）的其他渠道保持关闭，请在下方开启。')
+              :T('The online store closes, every shop stops taking orders on every channel and at the counter till, and every Meituan shop closes within about a minute. Orders already placed are not affected.',
+                 '线上商城将关闭，所有门店的所有渠道及门店收银停止接单，美团各门店约一分钟内关闭。已下单的订单不受影响。'),
+    confirmLabel: open?T('Open everything','全部营业'):T('Close everything','全部关闭'), danger:!open,
+    run:()=>ocWrite('master','/store-status/master',{open},
+      open?T('Opening every channel','正在开启全部渠道')
+          :T('Closing every channel — marketplaces follow within about a minute','正在关闭全部渠道 — 外卖平台约一分钟内跟随'))};
+  render();
+});
+/* ONE CHANNEL, EVERY STORE — the desktop Sales card's master toggle
+   (csChannelToggle). The desktop asks only before closing; here both ways ask,
+   as every switch on this screen does. Opening never reopens a shop that is
+   closed (§253) — the server skips it and names it, and the toast says which,
+   in the desktop's own words. */
+reg('chanAll', (channel, next)=>{
+  if(state.chanBusy||!mCanKnown(X12_SALES_KEYS)) return;
+  const d=state.chan, c=((d&&d.channels)||[]).find(x=>x.channel===channel); if(!c) return;
+  const open=String(next)==='1';
+  const mt=channel==='meituan';
+  state.ask={
+    title: open?T('Open this channel at every store?','开启所有门店的该渠道？'):T('Close this channel at every store?','关闭所有门店的该渠道？'),
+    body: (open?T('New orders can arrive on this channel again. A shop that is closed stays closed.','该渠道可以重新接单。已关闭的门店保持关闭。')
+               :T('No new orders arrive on this channel at any store. Orders already placed are not affected.','所有门店在此渠道将不再接到新订单。已下单的订单不受影响。'))
+          +(mt?' '+T('Meituan follows within about a minute.','美团约一分钟内跟随。'):''),
+    confirmLabel: open?T('Open channel','开启渠道'):T('Close channel','关闭渠道'), danger:!open,
+    run:()=>{
+      state.chanBusy=channel+'|*'; state.chanErr=null; render();
+      apiWrite('/channel-status/channel',{channel,open},'POST').then(r=>{
+        state.chanBusy=null;
+        const locs=(state.chan&&state.chan.locations)||[];
+        const skipped=((r&&r.skipped)||[]).map(code=>locs.find(l=>l.storeCode===code)||{storeCode:code});
+        showToast(skipped.length
+          ? T('Saved','已保存')+' · '+skipped.map(chanStoreName).join(T(', ','、'))+T(': ','：')+T('Shop closed','门店已关闭')
+          : T('Saved','已保存'));
+        loadChannels(true); if(state.oc) ocLoad(true);
+      }).catch(e=>{
+        state.chanBusy=null;
+        if(String(e&&e.message)==='auth') return;
+        state.chanErr=e&&e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        render();
+      });
+    }};
+  render();
+});
+/* THE MEITUAN AND ELEME CHANNEL SWITCHES. Not the same act as closing, and the
+   confirm has to say so, because the two are easy to confuse and do opposite
+   things to orders:
+     Meituan off  the 外卖 and 闪购 daemons stop pushing stock; queued rows wait
+                  and go out when it is back on. Orders keep coming in and the
+                  shops stay open on Meituan (scripts/meituan-daemon.js,
+                  shangou-daemon.js processStockQueue).
+     Eleme off    the Eleme daemon stops entirely — stock pushes, the order
+                  import and the catalogue read (scripts/eleme-daemon.js main
+                  loop). The shops stay open on Eleme itself. */
+const X12_CH_KEY={meituan:'meituan:sync', eleme:'eleme:sync'};
+function mtCfgLoad(){
+  if(state.mtCfgTried) return;
+  state.mtCfgTried=true;
+  apiRaw('/meituan/config').then(j=>{ state.mtCfg=j||null; render(); })
+    .catch(e=>{ if(String(e&&e.message)==='auth') return; state.mtCfg=null; render(); });
+}
+function chSwitchOn(ch){
+  const cfg=ch==='meituan'?state.mtCfg:(state.elm&&state.elm.cfg);
+  return cfg&&cfg.success!==false&&typeof cfg.enabled==='boolean'?cfg.enabled:null;
+}
+function chSwitchCard(ch){
+  if(!mCanKnown(X12_CH_KEY[ch])) return '';
+  if(ch==='meituan') mtCfgLoad();
+  const on=chSwitchOn(ch);
+  // A switch whose state did not read is not drawn as if it had: the desktop
+  // reverts to whatever the server says, and with no answer there is nothing
+  // honest to show.
+  if(on==null) return '';
+  const busy=state.chSwBusy===ch;
+  const err=state.chSwErr&&state.chSwErr.ch===ch?state.chSwErr.msg:null;
+  // Off says what is not happening, in the desktop's and this app's own words;
+  // on needs no sentence — the pill says it.
+  const what=on?'':ch==='meituan'
+    ? T('Meituan channel off — nothing will be pushed','美团渠道已关闭 — 将不再推送')
+    : T('Orders are not being imported and stock is not being pushed.','订单未导入，库存也未推送。');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span class="pill" style="background:${on?PILL.success[0]:PILL.muted[0]};color:${on?PILL.success[1]:PILL.muted[1]}">${on?T('Channel on','渠道开启'):T('Channel off','渠道已关闭')}</span>
+      <button class="btn2" ${busy||state.chSwBusy?'disabled':''} onclick="APP.cmd('chSwitch','${ch}',${on?'0':'1'})">${
+        busy?T('Saving…','保存中…'):on?T('Turn off','停用'):T('Turn on','开启')}</button></div>
+    ${what?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${what}</span>`:''}
+    ${err?`<span style="font-size:13px;color:var(--brick-ink)">${err}</span>`:''}</div>`;
+}
+reg('chSwitch', (ch, next)=>{
+  if(state.chSwBusy||!X12_CH_KEY[ch]||!mCanKnown(X12_CH_KEY[ch])) return;
+  const enabled=String(next)==='1';
+  const mt=ch==='meituan';
+  state.ask={
+    title: mt?(enabled?T('Turn the Meituan channel on?','开启美团渠道？'):T('Turn the Meituan channel off?','停用美团渠道？'))
+             :(enabled?T('Turn the Eleme channel on?','开启饿了么渠道？'):T('Turn the Eleme channel off?','停用饿了么渠道？')),
+    body: mt
+      ? (enabled?T('Stock pushes to Meituan start again, beginning with the changes that waited while it was off.',
+                   '恢复向美团推送库存，先发送停用期间排队的变更。')
+                :T('Stock stops being pushed to Meituan, at every shop and on 闪购 too. Changes wait in the queue and go out when it is back on. Meituan orders keep coming in and your shops stay open on Meituan — to stop orders, close Meituan at your stores instead.',
+                   '将停止向美团推送库存（所有门店，含闪购）。变更会在队列中等待，重新开启后发送。美团订单照常进来，门店在美团上保持营业 — 如需停止接单，请改为在门店关闭美团。'))
+      : (enabled?T('Eleme starts syncing again: stock is pushed, Eleme orders are brought in and the listing catalogue is read.',
+                   '饿了么恢复同步：推送库存、导入饿了么订单并读取商品目录。')
+                :T('Eleme stops syncing altogether: no stock is pushed, no Eleme orders are brought in — not even ones already placed — and the listing catalogue stops refreshing, until it is turned back on. Your shops stay open on Eleme itself, so customers can still order there.',
+                   '饿了么将完全停止同步：不再推送库存，也不再导入饿了么订单（包括已下单的订单），商品目录也停止刷新，直到重新开启。门店在饿了么平台上仍然营业，顾客仍可下单。')),
+    confirmLabel: enabled?T('Turn on','开启'):T('Turn off','停用'), danger:!enabled,
+    run:()=>{
+      state.chSwBusy=ch; state.chSwErr=null; render();
+      apiWrite('/'+ch+'/enable',{enabled},'POST').then(()=>{
+        state.chSwBusy=null;
+        if(mt){ state.mtCfg=Object.assign({},state.mtCfg||{},{success:true,enabled}); x8MtStatus(); }
+        else { state.elm.cfg=Object.assign({},state.elm.cfg||{},{success:true,enabled}); state.elm.tried=false; }
+        showToast(mt?(enabled?T('Meituan channel on','美团渠道已开启'):T('Meituan channel off — nothing will be pushed','美团渠道已关闭 — 将不再推送'))
+                    :(enabled?T('Channel on','渠道开启'):T('Channel off','渠道已关闭')));
+        render();
+      }).catch(e=>{
+        state.chSwBusy=null;
+        if(String(e&&e.message)==='auth') return;
+        // Back to whatever the server still says, as the desktop does.
+        if(mt){ state.mtCfgTried=false; } else { state.elm.tried=false; }
+        state.chSwErr={ch, msg:e&&e.refused?E(...e.words):E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。')};
+        render();
+      });
+    }};
+  render();
+});
 /* The Sales board's own retry, for the read that failed. */
 reg('reloadChannels', ()=>{ state.chanTried=false; state.chanLoadErr=null; render(); loadChannels(true); });
 /* Holiday mode, one direction. See the comment on the button in screenDelivery
@@ -8140,10 +8406,10 @@ const CHAN_META={
    the switch did not. It is the most phone-shaped write in the app: you are
    standing in a slammed kitchen and you want Meituan off at Tianhe.
 
-   PER STORE, never the whole channel. The endpoint has both — /channel-status/cell
-   and /channel-status/channel — and only the first is here, because the second
-   stops orders arriving everywhere on one tap and a thumb on a phone is not
-   the place for that. Closing a channel outright stays on the desktop.
+   Per store first, and the whole channel last. The rows write
+   /channel-status/cell; the button under them writes /channel-status/channel,
+   which stops orders arriving everywhere on one tap — held back from the phone
+   until §326.2 brought it over behind its own confirm (§325 X12, chanAll).
 
    The confirm names what stops and what does not, because "closed" is easy to
    read as "cancelled": orders already placed are untouched either way. */
@@ -8155,6 +8421,13 @@ function sheetChannel(){
   const m=CHAN_META[key]; if(!c||!m) return '';
   const cells=c.cells||[];
   const open=cells.filter(x=>x.open).length;
+  /* §325 X12 — the whole channel, every store: the desktop card's own toggle.
+     Close while any store is open, open once none is, as the desktop decides. */
+  const allBusy=state.chanBusy===key+'|*';
+  const allBtn=cells.length&&mCanKnown(X12_SALES_KEYS)
+    ? `<button class="btn2" style="width:100%;${open?'color:var(--brick-ink)':''}" ${state.chanBusy?'disabled':''} onclick="APP.cmd('chanAll','${escAttr(key)}',${open?'0':'1'})">${
+        allBusy?T('Saving…','保存中…'):open?T('Close channel','关闭渠道'):T('Open channel','开启渠道')}</button>`
+    : '';
   return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('closeChannel')"></div>
    <div class="sheet" style="top:140px;z-index:46;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
@@ -8197,7 +8470,7 @@ function sheetChannel(){
        ${m.mirror&&canRoute('mirror_'+m.mirror)?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
          m.mirror==='meituan'?T('View orders from Meituan','查看美团订单')
          :m.mirror==='eleme'?T('View Eleme sync','查看饿了么同步'):T('View pickups','查看提货记录')}</button>`:''}
-       ${noteBar(T('Closing a channel everywhere at once is on desktop.','一次性关闭整个渠道请在电脑端操作。'))}
+       ${allBtn}
      </div></div>`;
 }
 function statusSales(){
@@ -8244,6 +8517,7 @@ function screenSales(){
     <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
       <span style="width:8px;height:8px;border-radius:50%;background:var(--${head.sev==='sage'?'sage':'amber'});flex:none"></span>
       <span style="font-size:14px;font-weight:500;min-width:0">${head.text}</span></div>
+    ${ocCard()/* §325 X12 — the online store and everything at once */}
     ${/* THE SHOP SWITCH, which this screen did not have at all. The channel
          cards below it are per-channel-per-shop, and a shop-wide close beats
          every one of them — so the phone could show six channels closed at a
@@ -8323,14 +8597,12 @@ function screenSales(){
             (!notIntegrated&&cells.length)?T('Open or close','开关门店'):T('View','查看')
             }<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>`:''}</div>`:''}
       </${Tag}>`;}).join('')}
-    ${/* This used to read "Opening and closing a channel is on desktop", which
-         had stopped being true: the card above it opens a sheet whose rows do
-         exactly that, per shop. A footer that denies the control directly
-         above it teaches an operator to stop trying. What IS still desktop-only
-         is the whole-channel flip — every shop at once — and the sheet's own
-         note already says so, where it applies. */''}
+    ${/* This used to read "Opening and closing a channel is on desktop", and
+         then "Closing a whole channel everywhere is on desktop". Neither is true
+         now: the rows open and close per shop, and since §325 X12 the sheet's
+         own button flips the whole channel. A footer that denies the control
+         directly above it teaches an operator to stop trying, so it is gone. */''}
     ${x9HubDoor()/* §325 X9a — the channel hub: set up, fix, get help */}
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Closing a whole channel everywhere is on desktop','一次性关闭整个渠道在电脑端')}</div>
   </div>`;
 }
 
@@ -27949,7 +28221,7 @@ function gzFlaggedBlock(){
 function mirrorScreen(which,note){
   const rows=(state.mirror&&state.mirror[which])||null;
   if(!rows&&state.mirrorLoading!==which&&!state.mirrorTried){ /* first paint kicks the load */ }
-  const mt = which==='meituan' ? mtHealthCard()+x8MtCard() : '';   // §325 X8a — and its upkeep
+  const mt = which==='meituan' ? chSwitchCard('meituan')+mtHealthCard()+x8MtCard() : '';   // §325 X8a — and its upkeep; X12 — its channel switch
   const gz = which==='gzgrocery'
     ? `${state.gzErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -28618,6 +28890,7 @@ function screenEleme(){
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${String(e.err)}</span></div>`:''}
     ${head}
+    ${chSwitchCard('eleme')/* §325 X12 — the channel switch */}
     ${x8ElCard()/* §325 X8a — Push all stock, and each store's Sync from */}
     ${stores.length?`<div><div class="eyebrow" style="padding:2px 4px 10px">${T('Stores','门店')}</div><div class="list">${storeRows}</div></div>`:''}
     ${elmLog(T('Stock pushes','库存推送'),e.st.recentStock||[],elmStockRow,stores)}
@@ -32223,6 +32496,210 @@ function NOTIFICATION_ROWS(){
   rows.push({label:T('Which alerts','接收哪些通知'),cmd:"APP.cmd('acctOpen','alerts')",chev:true});
   return rows;
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X13 — BILLING ON THE PHONE (§326.8)
+   ══════════════════════════════════════════════════════════════════════════
+   The desktop's Billing page (public/backend-billing.html), reached from
+   Settings as it is there. Every request is that page's own:
+
+     GET  /api/backend/billing             the subscription, its alert, invoices
+     GET  /api/backend/plans               the plans on offer
+     POST /api/backend/billing/select-plan {plan_code}        → an open invoice
+     POST /api/backend/billing/checkout    {invoice_id, provider}
+     GET  /api/backend/billing/invoices/:id/payment-status    every 3 s while
+                                           the WeChat QR is open
+
+   WHO. The desktop's door is `data-cap="billing:view"`, so this screen is
+   billing:view (ROUTE_CAP.billing). Choosing a plan is `billing:pay`, the key
+   named for exactly that act ("Pay / change plan"), which no preset hands out
+   but the owner's. THE SERVER ASKS NEITHER — routes/billing*.js take any
+   signed-in operator (requireBackend) — so the phone asking for the keys can
+   only hide a control the server would allow, never draw one it would refuse.
+   That server gap is reported, not fixed here. Both wait for the keys to be
+   known (mCanKnown), as X12's switches do.
+
+   NOT HERE, as not on the desktop: paying an invoice that is already open
+   (the page has no Pay on its invoice rows), marking one paid (SaaS admin
+   only), and the Company line (the brand name, which Settings → Brand shows). */
+function billMoney(cents,cur){
+  return (cur==='CNY'||!cur?'¥':cur+' ')+(Number(cents||0)/100).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
+}
+function billDate(v){ return v?(tdWhen(v,'date',_tdL())||String(v)):'—'; }
+const BILL_SUB_STATUS={active:['success',['Active','活跃']], trialing:['success',['Trialing','试用']],
+  past_due:['warning',['Past due','逾期']], grace:['warning',['Grace period','宽限期']],
+  suspended:['danger',['Suspended','已暂停']], cancelled:['danger',['Cancelled','已取消']]};
+const BILL_INV_STATUS={paid:['success',['Paid','已付']], open:['warning',['Open','未结']],
+  past_due:['warning',['Past due','逾期']], void:['muted',['Void','作废']]};
+function billPill(map,st){
+  const m=map[st]; const tone=m?m[0]:'danger';
+  return `<span class="pill" style="background:${PILL[tone][0]};color:${PILL[tone][1]}">${m?T(...m[1]):escAttr(st||'—')}</span>`;
+}
+function billInterval(iv){ return iv==='year'?T('/ year','/ 年'):iv==='month'?T('/ month','/ 月'):'/ '+escAttr(iv||''); }
+function billLoad(){
+  const b=state.bill, seq=++b.seq;
+  b.tried=true;
+  return Promise.all([api('/api/backend/billing'),api('/api/backend/plans')]).then(([bill,plans])=>{
+    if(seq!==b.seq) return;
+    if(!bill||!bill.success||!plans||!plans.success) throw new Error('refused');
+    b.view=bill; b.plans=Array.isArray(plans.plans)?plans.plans:[]; b.readErr=null; render();
+  }).catch(e=>{
+    if(seq!==b.seq||String(e&&e.message)==='auth') return;
+    b.readErr=e&&e.refused?E(...e.words):E('Failed to load billing','加载账单失败'); render();
+  });
+}
+reg('billRetry', ()=>{ const b=state.bill; b.readErr=null; b.view=null; b.plans=null; render(); billLoad(); });
+function billAlert(v){
+  const dl=v.daysLeft;
+  const map={
+    expiring:['warning',T('Your subscription ends in '+dl+' day(s). Renew to avoid interruption.','订阅将在 '+dl+' 天后到期,请及时续订。')],
+    trial_ending:['warning',T('Your trial ends in '+dl+' day(s).','试用将在 '+dl+' 天后结束。')],
+    past_due:['danger',T('Payment is past due — please settle your latest invoice to keep access.','账单逾期,请尽快支付以保持访问。')],
+    suspended:['danger',T('This account is suspended for non-payment. Settle the outstanding invoice to restore access.','账户因欠费已暂停,支付后恢复。')],
+  };
+  const a=map[v.alert]; if(!a) return '';
+  return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:${PILL[a[0]][0]}">
+    <span style="flex:none;color:${PILL[a[0]][1]};display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:${PILL[a[0]][1]}">${a[1]}</span></div>`;
+}
+function billCurrent(v){
+  const sub=v.subscription, plan=v.plan;
+  if(!sub) return `<div class="card" style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('No subscription on file.','暂无订阅。')}</div>`;
+  const name=plan?(LANG==='en'?(plan.name||plan.name_cn):(plan.name_cn||plan.name)):T('No plan','暂无套餐');
+  const price=plan?(plan.price_cents?billMoney(plan.price_cents,plan.currency)+' '+billInterval(plan.billing_interval):T('Free','免费')):'—';
+  const renew=sub.is_internal?T('Perpetual (internal)','永久(内部)')
+    :sub.current_period_end?billDate(sub.current_period_end)+(v.daysLeft!=null?' · '+T(v.daysLeft===1?'1 day left':v.daysLeft+' days left','剩余 '+v.daysLeft+' 天'):''):'—';
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+      <span style="font-size:20px;font-weight:500;min-width:0;overflow-wrap:anywhere">${escAttr(name)}</span>${billPill(BILL_SUB_STATUS,sub.status)}</div>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px">
+      <span style="color:var(--text-secondary)">${T('Price','价格')}</span><span class="num">${price}</span>
+      <span style="color:var(--text-secondary)">${T('Renews','到期')}</span><span class="num">${escAttr(renew)}</span></div></div>`;
+}
+function billPlans(plans,curCode){
+  if(!plans.length) return `<div class="card" style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('No plans available.','暂无套餐。')}</div>`;
+  const b=state.bill, pay=mCanKnown('billing:pay');
+  return plans.map(p=>{
+    const cur=p.code===curCode;
+    const name=LANG==='en'?(p.name||p.name_cn):(p.name_cn||p.name);
+    const feats=(p.features||[]).map(f=>`<li style="padding:3px 0">${escAttr(typeof f==='string'?f:(LANG==='en'?(f.en||f.cn):(f.cn||f.en)))}</li>`).join('');
+    const busy=b.busy==='choose:'+p.code;
+    const err=b.err&&b.err.code===p.code?b.err.msg:null;
+    const btn=cur?`<button class="btn2" disabled style="width:100%">${T('Current plan','当前套餐')}</button>`
+      : pay?`<button class="cta" style="width:100%" ${b.busy?'disabled':''} onclick="APP.cmd('billChoose','${escAttr(p.code)}')">${busy?T('Saving…','保存中…'):T('Choose','选择')}</button>`:'';
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;${cur?'box-shadow:inset 0 0 0 1.5px var(--sage);':''}">
+      <span style="font-size:16px;font-weight:500">${escAttr(name)}</span>
+      <span class="num" style="font-size:22px;font-weight:300">${billMoney(p.price_cents,p.currency)} <span style="font-size:13px;color:var(--text-secondary)">${billInterval(p.billing_interval)}</span></span>
+      ${feats?`<ul style="margin:0;padding-left:18px;font-size:13.5px;color:var(--text-secondary)">${feats}</ul>`:''}
+      ${btn}${err?`<span style="font-size:13px;color:var(--brick-ink)">${err}</span>`:''}</div>`;
+  }).join('');
+}
+function billInvoices(rows){
+  if(!rows.length) return `<div style="padding:16px 14px;font-size:14px;color:var(--text-secondary)">${T('No invoices yet.','暂无发票。')}</div>`;
+  return rows.map((iv,i)=>`${i?'<div class="sep"></div>':''}<div style="display:flex;flex-direction:column;gap:4px;padding:12px 14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="num" style="font-size:14.5px;min-width:0;overflow-wrap:anywhere">${escAttr(iv.invoice_no||('#'+iv.id))}</span>${billPill(BILL_INV_STATUS,iv.status)}</div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px;color:var(--text-secondary)">
+      <span class="num">${escAttr(billDate(iv.period_start))} – ${escAttr(billDate(iv.period_end))}</span>
+      <span class="num" style="color:var(--text-primary);font-size:14px">${billMoney(iv.amount_cents,iv.currency)}</span></div></div>`).join('');
+}
+function screenBilling(){
+  const b=state.bill; if(!b.tried) billLoad();
+  if(!b.view&&b.readErr) return x1Err(String(b.readErr),'billRetry');
+  if(!b.view||!b.plans) return x1Loading();
+  const v=b.view, curCode=v.plan?v.plan.code:null;
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${billAlert(v)}
+    ${billCurrent(v)}
+    <div style="display:flex;flex-direction:column;gap:10px"><div class="eyebrow" style="padding:2px 4px 0">${T('Plans','套餐')}</div>${billPlans(b.plans,curCode)}</div>
+    <div><div class="eyebrow" style="padding:2px 4px 10px">${T('Invoices','发票')}</div><div class="list">${billInvoices(v.invoices||[])}</div></div></div>`;
+}
+SUBS.billing={title:['Billing','账单'],render:()=>screenBilling()};
+/* CHOOSING A PLAN — the desktop's onChoosePlan, step for step: ask, raise the
+   invoice, pick the provider the way it does (WeChat Pay when configured, else
+   manual), ask for the checkout, show it. The question says one thing the
+   desktop's does not, because it is true and nobody would guess it: the server
+   puts the subscription in past_due the moment the invoice is raised
+   (routes/billing-pay.js select-plan), so the account reads as owing until the
+   invoice is paid. */
+reg('billChoose', code=>{
+  const b=state.bill;
+  if(b.busy||!mCanKnown('billing:pay')) return;
+  const p=(b.plans||[]).find(x=>x.code===code); if(!p) return;
+  const name=LANG==='en'?(p.name||p.name_cn):(p.name_cn||p.name);
+  state.ask={
+    title:T('Select the '+name+' plan?','选择「'+name+'」套餐?'),
+    body:T('An invoice will be created for you to pay. Until it is paid, billing shows the account as past due.',
+           '系统将生成一张待支付发票。付款前，账单将显示为逾期。'),
+    confirmLabel:T('Select plan','选择套餐'),
+    run:()=>{
+      b.busy='choose:'+code; b.err=null; render();
+      /* The server's own words where it has them. Its refusals here are one
+         bilingual sentence ("Unknown plan · 未知套餐"), shown in one language;
+         a payment provider's error is English only and follows the desktop's
+         fallback, as the desktop's toast shows it raw. */
+      const fail=(e,en,zh)=>{
+        b.busy=null;
+        if(String(e&&e.message)==='auth') return;
+        const raw=String((e&&e.message)||'');
+        b.err={code, msg:e&&e.refused?E(...e.words)
+          :raw.indexOf(' · ')!==-1?tmOneLang(raw)
+          :E(en+(raw?': '+raw:''),zh+(raw?'：'+raw:''))};
+        render();
+      };
+      apiWrite('/api/backend/billing/select-plan',{plan_code:code},'POST').then(j=>{
+        if(!j||!j.success||!j.invoice) throw Object.assign(new Error((j&&j.error)||''),{x13:'select'});
+        const provs=j.providers||[];
+        const provider=['wechat_native','manual'].find(id=>provs.some(x=>x.id===id&&x.configured))||'manual';
+        return apiWrite('/api/backend/billing/checkout',{invoice_id:j.invoice.id, provider},'POST').then(c=>{
+          b.busy=null;
+          if(!c||!c.success||!c.checkout) throw Object.assign(new Error((c&&c.error)||''),{x13:'checkout'});
+          b.ck=Object.assign({invoice_id:j.invoice.id},c.checkout); b.ckPlan=name; b.ckSeq++;
+          render(); billLoad();
+          if(b.ck.kind==='wechat_native') billPoll(b.ckSeq);
+        }).catch(e=>{ fail(e,'Checkout unavailable','暂无法结算'); billLoad(); });
+      }).catch(e=>{ fail(e,'Could not select plan','无法选择套餐'); });
+    }};
+  render();
+});
+/* The WeChat QR's wait. Asks every three seconds while THIS checkout is open
+   and the billing screen is on top — closing the sheet, or leaving, ends it,
+   as the desktop's modal close does. A failed ask is simply asked again. */
+function billOnTop(){ return state.stack.length&&state.stack[state.stack.length-1].route==='billing'; }
+function billPoll(seq){
+  setTimeout(()=>{
+    const b=state.bill;
+    if(!b.ck||b.ckSeq!==seq||!billOnTop()) return;
+    apiRaw('/api/backend/billing/invoices/'+encodeURIComponent(b.ck.invoice_id)+'/payment-status').then(s=>{
+      if(!b.ck||b.ckSeq!==seq) return;
+      if(s&&s.status==='paid'){ b.ck=null; b.ckPlan=null; showToast(T('Payment received ✓','已收到付款 ✓')); billLoad(); render(); return; }
+      billPoll(seq);
+    }).catch(e=>{ if(String(e&&e.message)==='auth') return; billPoll(seq); });
+  },3000);
+}
+reg('billCkClose', ()=>{ const b=state.bill; b.ck=null; b.ckPlan=null; render(); });
+function sheetBillCheckout(){
+  const b=state.bill, ck=b.ck; if(!ck) return '';
+  const body=ck.kind==='wechat_native'
+    ? `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:8px 0">
+        ${ck.qr_data_url?`<img src="${escAttr(ck.qr_data_url)}" alt="WeChat Pay QR" style="width:200px;height:200px;border-radius:8px">`
+          :`<div style="width:200px;height:200px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-secondary)">${T('QR unavailable','二维码不可用')}</div>`}
+        <span class="num" style="font-size:18px;font-weight:500">${escAttr(ck.amount_display||'')}</span>
+        <span style="font-size:14px;color:var(--text-secondary)">${T('Scan with WeChat to pay','微信扫码支付')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('Waiting for payment…','等待支付…')}</span></div>`
+    : `<div style="display:flex;flex-direction:column;gap:10px;font-size:14.5px;line-height:1.55">
+        <span>${escAttr(LANG==='en'?(ck.instructions_en||ck.instructions_cn||''):(ck.instructions_cn||ck.instructions_en||''))}</span>
+        ${ck.reference?`<span class="num" style="font-size:13px;color:var(--text-secondary)">${T('Ref','单号')}: ${escAttr(ck.reference)}</span>`:''}
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('We’ll mark the invoice paid once the transfer is received.','到账后我们将标记为已付。')}</span></div>`;
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('billCkClose')"></div>
+   <div class="sheet" style="z-index:46">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('billCkClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Payment','支付')}</span></div>
+       ${b.ckPlan?`<div style="font-size:13px;color:var(--text-secondary);padding:2px 8px 0">${escAttr(b.ckPlan)}</div>`:''}</div>
+     <div style="padding:16px">${body}</div></div>`;
+}
+/* §325 X13 ends */
 function screenSettings(){
   const groups=[
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
@@ -32231,6 +32708,8 @@ function screenSettings(){
       ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[]),
       /* §325 X4 — the desktop's Brand page, from the same nav it sits in there. */
       ...(canRoute('brand')?[{label:T('Brand','品牌'),cmd:"APP.cmd('push','brand')",chev:true}]:[]),
+      /* §325 X13 — the desktop's Billing link, beside Brand as it is there. */
+      ...(mCanKnown('billing:view')?[{label:T('Billing','账单'),cmd:"APP.cmd('push','billing')",chev:true}]:[]),
       /* §325 X5 — the desktop's Shop tab and Customer service panels. */
       ...(canRoute('shopdisplay')?[{label:T('Shop tab','商城页'),cmd:"APP.cmd('push','shopdisplay')",chev:true}]:[]),
       ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[]),
@@ -42851,6 +43330,9 @@ const ROUTE_CAP={
      callerHas check (PUT /api/backend/brand). The studio: the server's own gate
      on all three of its calls (lib/cap-routes.js, ai:generate). */
   brand:'settings:shop', brandstudio:'ai:generate',
+  /* §325 X13. Billing: the key the desktop's Settings link carries
+     (data-cap="billing:view"). Choosing a plan asks billing:pay inside. */
+  billing:'billing:view',
   /* §325 X5. Two Settings panels, reached from Settings; the server gates
      shop.* and customer_service.* on the desktop Settings set, which holds
      this one (configKeyCap). */
@@ -42929,6 +43411,12 @@ function mCan(v){
   const has=k=>state.caps ? state.caps.indexOf(k)!==-1 : !MCAN_MONEY_ONLY.has(k);
   return Array.isArray(v) ? v.some(has) : has(v);
 }
+/* §325 X12 — FAIL CLOSED WHILE THE KEYS ARE LOADING. mCan treats unknown caps
+   as allowed for everything but money (§301), which is right for a screen and
+   wrong for a switch that stops orders everywhere: drawn before /me answers, it
+   is a button the server may refuse a second later. These controls ask this
+   instead, so they appear only once the operator's keys are known to hold. */
+function mCanKnown(v){ return Array.isArray(state.caps) && mCan(v); }
 function canRoute(k){
   /* THE TILL NEEDS BOTH CAPS, and it is the only route that does. Receiving's
      note in ROUTE_CAP makes the argument: a screen whose entire purpose is the
@@ -43769,6 +44257,7 @@ function render(){
   if(state.fin.ret) html += layer('fintxret', sheetFinTxRet());
   if(state.supOwedId!=null) html += layer('supowed:'+state.supOwedId, sheetSupOwed());
   if(state.chanSheet) html += layer('chan', sheetChannel());
+  if(state.bill&&state.bill.ck&&billOnTop()) html += layer('billck:'+state.bill.ck.invoice_id, sheetBillCheckout());   // §325 X13
   if(state.quickSheet) html += layer('quick', sheetQuick());
   /* THE STEP SHEET BELONGS TO ONE SCREEN. `step` survives a Back out of
      Making one — pop() is generic and clears nothing — so without the route in
@@ -44252,6 +44741,7 @@ function layers(){
      and the app's own must never land anywhere different. */
   if(state.kq.orderId!=null) L.push(kqDropOrder);
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
+  if(state.bill&&state.bill.ck&&billOnTop()) L.push(()=>{ state.bill.ck=null; state.bill.ckPlan=null; });   // §325 X13
   /* Below the picker on purpose: taking Edit out of the dial closes the dial
      and opens the sheet, so the two are never both open — but if they ever
      were, the sheet is the one on top and the one Back must close first. */

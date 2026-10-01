@@ -177,7 +177,8 @@ operator('owner', [], 'owner');
     } };
     walk('public');
     const who = (re) => files.filter((f) => re.test(read(f))).sort();
-    is(who(/store-status\/(online|master|store)/), ['public/retail-admin/02-settings-ops.js'], '/store-status: one desktop panel');
+    is(who(/store-status\/(online|master|store)/), ['public/m.html', 'public/retail-admin/02-settings-ops.js'],
+      '/store-status: the desktop panel, and the phone\'s Sales screen since §325 X12 (online and master only)');
     is(who(/channel-status\/(cell|channel|location)/), ['public/m.html', 'public/retail-admin/01-core.js'], '/channel-status: desktop Sales and the phone');
     is(who(/retail-admin\/alipay-manual|'\/alipay-manual'/), ['public/m.html', 'public/retail-admin/02-settings-ops.js', 'public/retail-admin/17-setup-guide.js'],
       '/alipay-manual: Settings and the setup guide write, the phone reads');

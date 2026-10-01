@@ -26559,3 +26559,144 @@ Chinese name happens to match, or to none (finding 6).
      calling `/map`, and that no library writes a mapping's name or switch behind
      the route.
 4. **Nothing composed.** No operator strings were added.
+
+## §390 — THE PHONE CAN STOP ORDERS EVERYWHERE: THE ONLINE STORE, EVERYTHING, A CHANNEL AT EVERY STORE, AND THE MEITUAN AND ELEME SWITCHES
+
+**Built 2026-10-01 under §325** (Ash, §326.2: *"as you advice"*).
+§326.2 brought over the switches the phone had held back because one tap stops
+orders arriving everywhere. The phone now has four of them, each with a strong
+confirm that says what stops and what does not. Each is drawn only for the keys
+the server asks for that write. None is drawn until the operator's keys have
+loaded. Holiday mode ON, also in §326.2, is not part of this step.
+
+1. **The online store and "everything", on the Sales screen.** A new card, *Open
+   for business · 营业状态*, sits above the Shops card. It reads
+   `GET /store-status` and shows the desktop's master pill (*Everything is open /
+   Everything is closed / Some channels are closed*), a *Close everything / Open
+   everything* button (`POST /store-status/master {open}`), and an *Online store*
+   row (`POST /store-status/online {open}`). The paths and bodies are the desktop
+   Settings → Operations panel's (`02-settings-ops.js` ocMaster / ocSetOnline).
+   After a write, both the status and the channel grid are read again, because
+   the master changes every shop.
+2. **The confirms say what the server actually does.** I read this from the
+   handlers, not from the button names:
+   - **Close everything:** closes the online store, sets every shop's fulfilment
+     flag to closed, and queues every Meituan shop closed. The fulfilment flag is
+     what routing, pickup, the counter till (`posClosedForStore`) and every
+     channel's trading check obey. So the confirm names the online store, every
+     channel at every shop, the till, and Meituan's one-minute delay.
+   - **Open everything:** does NOT touch a channel's own cell. A channel closed
+     at a shop on its own stays closed. So does every channel at a shop closed
+     with the Sales shop switch, because that switch writes every cell closed.
+     The confirm says so, because "Open everything" reads as if it would reopen
+     them.
+   - **Online store:** covers the mini app and the web store only. Every other
+     channel and the till keep selling.
+3. **The per-shop `/store-status/store/:code` is NOT on the phone.** The Sales
+   screen's existing shop switch (`/channel-status/location`, §181/§253) already
+   does that job, with the §253 memory of which channels to bring back. Two
+   switches for one shop that write different things is how a shop ends up open
+   in one place and closed in the other.
+4. **A channel at every store, in the channel sheet.** Under the per-store rows
+   there is now a button, *Close channel · 关闭渠道* or *Open channel*:
+   `POST /channel-status/channel {channel, open}`, the desktop Sales card's own
+   toggle (`01-core.js` csChannelToggle).
+   - It closes while any store is open, and opens once none is, as the desktop
+     decides.
+   - The desktop asks only before closing; the phone asks both ways, like every
+     other switch on that screen.
+   - Opening skips a closed shop (§253). The toast names that shop in the
+     desktop's words.
+   - The note *Closing a channel everywhere at once is on desktop* and the Sales
+     footer *Closing a whole channel everywhere is on desktop* are retired, and
+     so is the `sheetChannel` comment that held this back.
+5. **The Meituan and Eleme channel switches, on each channel's own screen.**
+   - Meituan: `POST /meituan/enable {enabled}` on the Meituan screen, which reads
+     `GET /meituan/config`.
+   - Eleme: `POST /eleme/enable {enabled}` on the Eleme screen, which already
+     read `/eleme/config` for its pill.
+
+   The two switches do different things, and the confirms say so (from the
+   daemons):
+   - **Meituan off:** stops stock pushes from both the 外卖 and 闪购 daemons.
+     Queued changes wait and go out when it is back on. Orders keep coming in
+     and the shops stay open on Meituan.
+   - **Eleme off:** stops the Eleme daemon's whole loop. That is stock pushes,
+     the order import (including orders already placed) and the catalogue read.
+     The shops stay open on Eleme itself.
+
+   The desktop has the functions for these switches (mtToggleChannel,
+   elToggleEnabled) but no button calls either of them today. Their toasts and
+   *Channel on / off* labels are copied.
+6. **Every control asks for the server's own keys, from lib/cap-routes.js.**
+   - `/store-status/*` takes OPEN_CLOSE: the Sales screen's keys plus Settings'.
+   - `/channel-status/channel` takes SALES_SCREEN.
+   - The two switches take `meituan:sync` and `eleme:sync`.
+
+   The desktop draws the open/close panel for `settings:edit`, which is not a
+   key, so no one can use it there today; the phone does not copy that. A test
+   compares the phone's key lists with `requiredCapFor`, so the two cannot drift
+   apart.
+7. **They fail closed while the keys load.** `mCan` treats unknown keys as
+   allowed for everything except money (§301). A new `mCanKnown` draws these
+   controls only once `/me` has returned the operator's keys and they include
+   one that is needed. A switch whose own state did not load (the store status,
+   or a channel's config) is not drawn either. The failed read says so, with a
+   retry where the desktop has one.
+8. **Not done:** holiday mode ON (§326.2), and messages for when the online store
+   is closed (`message_en` / `message_cn`). The desktop panel does not write
+   those messages either, and the server keeps the stored ones.
+
+## §391 — BILLING COMES TO THE PHONE: THE PLAN, THE PLANS, CHOOSING ONE AND PAYING IT, AND THE INVOICES
+
+**Built 2026-10-01 under §325** (Ash, §326.8: *"Billing and plans come to the phone, last."*).
+The phone gets the desktop Billing page (`public/backend-billing.html`). It is a
+row in Settings next to Brand, which is where the desktop links to it. It shows
+the subscription and its alert, the plans, choosing a plan and paying for it,
+and the invoices. Every request is the desktop page's own.
+
+1. **What it reads:**
+   - `GET /api/backend/billing` and `GET /api/backend/plans`, asked together. If
+     either read fails, the screen shows the desktop's *Failed to load billing*
+     with a retry.
+   - The four alerts are the desktop's own sentences.
+   - Statuses are shown as words, not the desktop's raw codes. The words come
+     from the platform back office (`store-admin.html`); one is composed (see
+     the vocabulary entry).
+   - Plan names and features are shown in one language.
+2. **Choosing a plan follows the desktop's `onChoosePlan` step for step:**
+   - First, a confirm.
+   - Then `POST /api/backend/billing/select-plan {plan_code}`.
+   - Then the payment provider, picked the desktop's way: WeChat Pay when it is
+     configured, otherwise manual.
+   - Then `POST /api/backend/billing/checkout {invoice_id, provider}`.
+   - Then the checkout appears in a sheet. For WeChat Pay it shows the QR, and
+     the phone asks `GET …/invoices/:id/payment-status` every 3 s. For a manual
+     transfer it shows the instructions and the reference.
+
+   The screen reads again afterwards, so the new invoice shows. The QR wait
+   stops when the sheet closes or the screen is left, as the desktop's modal
+   does.
+3. **The confirm says one thing the desktop's does not:** "Until it is paid,
+   billing shows the account as past due." The server sets the subscription to
+   `past_due` the moment the invoice is raised (`select-plan`), even partway
+   through a paid period. That is true and nobody would guess it.
+4. **Who:**
+   - The screen asks for `billing:view`, the key on the desktop's link.
+   - Choose asks for `billing:pay`, the key named "Pay / change plan". No preset
+     includes it; only the owner has it.
+   - Both wait for the operator's keys to load (`mCanKnown`, from X12).
+
+   **The server asks for neither key.** Every `/api/backend/billing*` route
+   accepts any signed-in operator (`requireBackend`). The phone's check can
+   only hide a control the server would allow; it never shows one the server
+   would refuse. The server gap is reported for a server step, not fixed here.
+5. **Not done, matching the desktop:**
+   - Paying an invoice that is already open. The desktop has no Pay button on
+     its invoice rows.
+   - Marking an invoice paid. That is SaaS-admin only.
+   - The *Company* line. It is the brand name, which Settings → Brand already
+     shows.
+
+   A WeChat QR shown on the phone has to be scanned with another device, just
+   as it would be from the desktop.
