@@ -26832,3 +26832,109 @@ step leads (`17-setup-guide.js` suRun), using the desktop's own buttons:
    set up on desktop.* The payment step means the Alipay QR upload and WeChat
    Pay merchant keys. WeChat sign-in means the mini-app credentials wizard.
    Neither step draws a button.
+
+## §395 — THE CHANNEL SYNC SCREEN ON THE PHONE GAINS THE DESKTOP'S PICKER, SEARCH AND SYNC SWITCH (§326.3)
+
+**Built 2026-10-01 under §325.** This is step X8b, the second part of X8,
+on the Settings / Channels / Dashboard / Billing lane. The phone's Channel
+sync screen now has what the desktop page's tools have
+(`29-channel-sync.js`).
+
+1. **The channel picker.** "All channels" or one channel.
+   - With a channel picked, each item is counted and filtered by that
+     channel's own state; with none, by its worst. That is the desktop's
+     `stateOf` / `countsFor`, so the chips' numbers follow the pick.
+   - The phone now counts locally too (with no channel picked, the numbers
+     are the same as the server's).
+   - A **Name not checked** chip appears when something is in it, as on the
+     desktop.
+2. **The search.** Matches name (both languages), SKU and size.
+   - It repaints the list alone, so typing keeps the keyboard.
+   - It does not change the counts, as on the desktop.
+   - It is cleared each time the screen opens.
+3. **The Sync on / off switch, beside Sync now on each channel line.**
+   §326.3 overturned §124's "the switch stays on the desktop" by name.
+   - **What it sends:** the desktop's write,
+     `POST /channel-sync/:channel/products/:id/sync {on}`.
+   - **Who sees it:** it is drawn for `{channel}:map`, the key
+     `lib/cap-routes.js` asks of that path. Without the key there is no
+     switch and nothing is sent.
+   - **Not drawn** where nothing is mapped.
+4. **Turning sync off asks first** (§326.3). The confirm names the item and
+   the channel. It says the channel keeps the number it shows now and stops
+   following the shelf. It also says this is a lasting change that stays
+   until somebody turns it back on, with no reminder.
+   - Turning sync back on asks nothing, as on the desktop.
+   - As with Sync now, the result shows when the list reloads; a refusal
+     or a "somebody else changed this" answer is said on the row.
+5. **Kept:** "Fix this on the desktop" still names the three reasons that
+   need the channel's catalogue picker (`no_name`, `name_not_found`,
+   `no_option`). Matching and claims are X8c.
+
+## §396 — MATCHING AND CLAIMS ON THE PHONE: ONE PRODUCT ON ONE CHANNEL
+
+**Built 2026-10-01 under §325.** This is step X8c, the third part of X8,
+on the Settings / Channels / Dashboard / Billing lane. Until now, a Channel
+sync card whose fix needed product matching said "Fix this on the desktop".
+These are the reasons with no listing name, a name the listing does not
+carry, or no option picked. Such a card now has the desktop's **Open
+Meituan / Open Eleme** button. It opens that channel's product panel on this
+product, which is what the desktop's `csFix` does. Without a matching key
+the sentence stays.
+
+1. **Meituan** (`11-meituan.js` `mtPanelStore`).
+   - **The delivery store** (the desktop's own guess: code `tianhe` or a
+     name containing 天河, else the first store):
+     - the listing name, picked by searching the names read from Meituan
+       and tapping one;
+     - nothing typed is ever sent; the server refuses anything else too
+       (`lib/meituan-map-write.js`);
+     - **Remove**, which asks first with the name;
+     - on a listing several products share, which options this product is
+       and how many units each sells;
+     - an add-on listing says where the count goes, with nothing to pick.
+   - **The 闪购 store** is read-only. It links by 货号, and says so when no
+     listing carries the SKU.
+   - **Writes:** `POST /meituan/products/:id/map {storeId, storeCode,
+     meituanName, syncEnabled, source}` and `POST …/claim {storeId,
+     storeCode, specSkuId, specLabel, units, on}`.
+2. **Eleme** (`14-eleme.js` `elPanelStore`).
+   - **Each linked store:** the listing name from that store's catalogue,
+     **Remove**, and the options with units.
+   - **Remove deletes the mapping.** It asks first, in the desktop's words,
+     which tell the difference from switching sync off.
+   - **A store with no Eleme shop linked** says why nothing can be matched.
+     It still offers Remove for a leftover mapping, as the desktop does.
+   - **Writes:** `POST /eleme/products/:id/map {storeId, storeCode,
+     elemeName, syncEnabled}` or `{…, remove:true}`, and `POST …/claim
+     {storeId, storeCode, elemeName, specId, specName, units, on}`.
+3. **GZ Grocery** (`12-guanyi.js`).
+   - **Bind** to the listing the SKU suggests, with sync on, as the desktop
+     does: `{skuId, syncEnabled:true}`.
+   - **Unbind** (`{skuId:''}`).
+   - With no suggestion, it says where to refresh the list.
+4. **Naming never moves the sync switch.** Meituan keeps the stored switch
+   (the desktop's `mtKeepSync`). Eleme passes the stored value through, so a
+   new mapping starts off. Naming and switching sync on stay two separate acts.
+5. **Who sees each control.** Each is drawn for the key the server asks of
+   its path (`lib/cap-routes.js`):
+   - `{channel}:map` for the name, Remove and the GZ Grocery binding;
+   - `{channel}:sync` for the option claims.
+   - The screen opens for any of the five keys.
+   - Every write reads the product again, because claiming an option
+     releases it from whichever product held it before. A refusal is said
+     where it happened.
+6. **Not built here; candidates for a later step.**
+   - Meituan's **Match names** guided flow: read the catalogue, apply every
+     confident match, then review the ambiguous and unmatched ones.
+   - **Paste names**, and **Clear all**.
+   - Linking an Eleme store to its shop id (`elSetShop`).
+   - The panels' own sync switches are not repeated here; the Channel sync
+     switch (X8b) is the phone's.
+
+**Open for Ash (SERVER).** The Channel sync switch, on the desktop page and
+now the phone, writes through `lib/channel-sync-write.js` `setSync`. That
+code does not refuse a nameless Eleme mapping. The Eleme panel refuses to
+switch a nameless mapping on, because the daemon then pushes at the
+product's own Chinese name (`docs/eleme-findings.md` finding 6). Closing
+this server-side would cover both screens.

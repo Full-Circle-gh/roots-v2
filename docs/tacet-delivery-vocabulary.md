@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.285 · 2026-09-30 · §396 MATCHING AND CLAIMS ON THE PHONE — 6 STRINGS COMPOSED BY CLAUDE, THE REST COPIED FROM THE MEITUAN, ELEME AND CHANNEL SYNC PANELS.** See *Matching and claims on the phone (§396)*.
+
+**v1.284 · 2026-09-30 · §395 CHANNEL SYNC PICKER, SEARCH AND SWITCH ON THE PHONE — 3 STRINGS COMPOSED BY CLAUDE (THE LASTING-CHANGE CONFIRM §326.3 ASKED FOR), THE REST COPIED.** See *The channel sync switch's confirm, and the picker (§395)*.
+
 **v1.283 · 2026-09-30 · §394 THE SETUP GUIDE'S ACTIONS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE FROM THE DESKTOP GUIDE.** See *The setup guide's actions on the phone (§394)*.
 
 **v1.282 · 2026-09-30 · §393 CLOSING ELEME SAYS WHAT IT DOES — 5 STRINGS COMPOSED BY CLAUDE, ONE SENTENCE NO LONGER SHOWN FOR ELEME.** See *Closing Eleme at a store, said truthfully (§393)*.
@@ -12391,3 +12395,55 @@ The blocker list uses the phone's own step labels (SETUP_LABEL), joined with
 **Retired:** `Each step is a wizard on desktop — a store with its address and
 hours, a payment method, delivery or pickup. ·
 每一步在电脑端以引导方式完成 — 门店地址与营业时间、收款方式、配送或自提。`
+
+## The channel sync switch's confirm, and the picker (§395)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Channel sync screen
+(`public/m.html`, the §325 X8b block). The desktop switch has no confirm.
+§326.3 asked for one that says the change is lasting, so its words are new.
+
+| String | Status |
+|---|---|
+| `Stop syncing {item} to {channel}? · 停止将「{item}」同步到{channel}?` | **composed by Claude (X8b)**. No live candidate: the desktop's switch asks nothing. |
+| `{channel} keeps the number it shows now and stops following your shelf. This is a lasting change: it stays off until somebody turns it back on, and nothing reminds you. · {channel}将保持当前显示的数量,不再跟随货架库存。这是一项持久的更改:在有人重新开启之前会一直保持关闭,且不会有任何提醒。` | **composed by Claude (X8b)**, as §326.3 asked: "says it is a lasting change". |
+| `Turn sync off · 关闭同步` | **composed by Claude (X8b)**. Rejected: `Sync off · 已关闭`, the live STATE word, which names where the switch ends up rather than the act. |
+
+Copied whole:
+- `Channel · 渠道` and `All channels · 全部渠道` (the desktop picker).
+- `Sync on / off · 同步开关` (the switch's title on the desktop and both channel panels).
+- `Name not checked · 尚未读取商品` (the phone's own state word, now as a chip).
+- `Search · 搜索`, `Saving… · 保存中…`.
+
+## Matching and claims on the phone (§396)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's channel matching
+screen (`public/m.html`, the §325 X8c block). It is copied from the desktop
+Meituan and Eleme product panels and the GZ Grocery mapping table. The
+exceptions are below. Each composed string was searched for across
+`public/` first, and no live Chinese was found.
+
+| String | Status |
+|---|---|
+| `no listings read from this store yet, so nothing can be checked here · 尚未从该门店读取商品名称,无法在此核对` | **Chinese composed by Claude (X8c).** English: `11-meituan.js MT_PENDING_CN.noneRead`. |
+| `This name matches no listing on this store. Pick one from the list. · 该名称与本门店的任何商品都不符,请从列表中选择。` | **Chinese composed by Claude (X8c).** English: `MT_PENDING_CN.pickIt` / `EL_PENDING_CN.pickIt`. |
+| `No Guanyi listing carries this product's SKU. Refresh the list on the gzgrocery screen, then look again. · 没有管易商品使用该商品的货号。请在 gzgrocery 页面刷新列表后再查看。` | **composed by Claude (X8c), both halves.** The desktop's cell says `no match`, English-only, beside a Refresh button that sits on another screen here. |
+| `Bind · 绑定` | **Chinese composed by Claude (X8c)**, from the live toast `Bound · 已绑定`. The desktop button is `Bind →`, English-only. |
+| `Unbind · 解绑` | **Chinese composed by Claude (X8c)**, from the live toast `Unbound · 已解绑`. The desktop's ✕ carries `Unbind` as its title. |
+| `N matches · 共 N 个匹配` | **composed by Claude (X8c), both halves.** The desktop's name field is a native dropdown and never counts. |
+
+Copied whole:
+- **From the desktop:**
+  - `Open {channel} · 前往{channel}` (the Channel sync page's button);
+  - `Meituan delivery name · 美团外卖商品名`, `Eleme listing name · 饿了么商品名`;
+  - `Remove · 移除`, with Eleme's whole remove explanation and `This mapping carries no listing name.`;
+  - `Which options is this product? · 这是该商品的哪些规格？` and the "Tick every option…" help;
+  - `claimed by another product · 已被其他商品占用`, `units · 份`;
+  - the add-on sentence (`N options: …`, `The count goes to …. The add-ons open and close with it.`);
+  - the 闪购 SKU sentences;
+  - Eleme's three store sentences (no shop linked, still holds a mapping, the "pick one of the N read" line);
+  - `Size N · 规格 N`, `No matches · 无匹配`, `Mapping removed · 已删除匹配`, `Saved · 已保存`, `Bound · 已绑定`, `Unbound · 已解绑`;
+  - the auto-match hint.
+- **From the phone:** `Save failed: · 保存失败:`, `Could not load this. · 无法加载。`, `Nothing here. · 暂无商品。`.
+
+Server refusals (`name_not_in_catalogue`, `catalogue_not_read`) arrive in the
+server's English and are shown as they come.
