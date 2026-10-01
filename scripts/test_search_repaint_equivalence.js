@@ -312,6 +312,8 @@ console.log('\n══ screenProductCatalogue · Products ══');
     // §325 X3: the Count sheet button beside Export. With mCan false it is not
     // drawn, exactly as Export is not, so the two outputs still compare.
     countButton: () => '',
+    // §325 PD14: Select and the bulk bar — not selecting, so neither is drawn.
+    prodBulkAny: () => false, prodBulkBar: () => '',
     prodCategories: () => [],
     prodFiltered: () => PRODS.slice(),
     prodUnits: (r) => r,

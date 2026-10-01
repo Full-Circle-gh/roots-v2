@@ -128,6 +128,8 @@ const FNS = ['chipRow', 'searchBox', 'searchClearShow', 'searchClearRun', 'noteB
   'pill', 'toggle', 'prodLowThreshold', 'mapProduct', 'prodCategories', 'prodCatName', 'prodSubcats', 'prodSubName',
   'prodStoreOn', 'prodStoreQty', 'prodAtStore', 'prodRows', 'loadProdGrid', 'loadProdHi', 'productCard',
   'prodUnits', 'prodFiltered', 'prodBodyHtml', 'screenProductCatalogue', 'mCan', 'prodCanEdit',
+  // §325 PD14 — Select and the bulk bar (test_mobile_products_bulk.js).
+  'prodBulkCanEdit', 'prodBulkCanDelete', 'prodBulkAny', 'prodVisibleIds', 'prodBulkBar',
   // §325 X3 — the Count sheet button rides the catalogue's top row beside Export.
   'countOffered', 'countButton',
   'actPreset', 'actWindow', 'loadActivity', 'actClock', 'actRangeLine', 'actDelta', 'actRow', 'actDigestCard',
