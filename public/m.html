@@ -1712,6 +1712,8 @@ function pop(){
   if(top==='pointsrules'&&!prMayLeave()) return;    // §325 M11 — and unsaved points rules,
   if(top==='tiersedit'&&!teMayLeave()) return;      // and an unsaved ladder
   if(top==='popupedit'&&!puMayLeave()) return;      // §325 M12 — and an unsaved new pop-up
+  if(top==='coupon'&&!vdMayLeave()) return;         // §325 M13 — and a coupon label typed, not saved
+  if(top==='coupongrant') VG=null;
   if(top==='affeligible') loadAffElig();   // the count on the offer is re-read, as the desktop's dialog does on close
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
@@ -18612,7 +18614,8 @@ const SUBS={
     ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${state.couponErr}</div>`:''}
     ${!list.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${
       seg==='on'?T('Nothing running right now.','当前没有生效中的优惠券。'):T('Nothing here.','这里没有优惠券。')}</div>`:''}
-    ${list.map(c=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px${c.on?'':';opacity:.7'}">
+    ${list.map(c=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px${c.on?'':';opacity:.7'}${c.id!=null&&c.raw?';cursor:pointer':''}"${
+      /* §325 M13 — the card opens the coupon; the switch keeps its own tap. */c.id!=null&&c.raw?` onclick="APP.cmd('vchOpen',${Number(c.id)})"`:''}>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
         <span style="min-width:0;display:flex;flex-direction:column;gap:2px">
           <span style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -18623,7 +18626,7 @@ const SUBS={
               the card says where the coupon stands, as a sample row does. */''}
         ${(c.id==null||!mCan('coupons:edit'))?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
           :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
-          :`<span style="flex:none">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
+          :`<span style="flex:none" onclick="event.stopPropagation()">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
       </div>
       <div style="font-size:18px;font-weight:500;letter-spacing:-.01em">${T(...c.gives)}</div>
       <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(...c.rules)}</div>
@@ -18639,6 +18642,12 @@ const SUBS={
       T(off.length+(off.length===1?' coupon is off':' coupons are off'),off.length+' 张已停用')} · <button onclick="APP.cmd('vchSeg','off')" style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary);text-decoration:underline">${T('view','查看')}</button></div>`:''}
     ${desktopNote()}</div></div>`;
   }},
+  /* §325 M13 — one coupon (the desktop's drawer) and its grant dialog. */
+  coupon:{title:['Coupons','优惠券'],titleOf:()=>{ const r=vdRaw(); return r?escAttr(r.code):T('Coupons','优惠券'); },
+    backLabel:()=>T('Coupons','优惠券'),render:()=>screenCoupon()},
+  coupongrant:{title:['Grant coupon','发放优惠券'],titleOf:()=>{ const c=VG&&(DB.coupons||[]).find(x=>x.id===VG.id);
+      return T('Grant coupon','发放优惠券')+(c?' '+escAttr(c.code):''); },
+    backLabel:()=>{ const r=vdRaw(); return r?escAttr(r.code):T('Coupons','优惠券'); },render:()=>screenCouponGrant()},
   flash:{title:['Flash sales','秒杀'],render:()=>{
     const list=DB.flash||[];
     if(!state.flashLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
@@ -28103,6 +28112,10 @@ function toggleCoupon(code){
   // an expired coupon back on makes it active and still not live — and the card
   // has to keep saying "Ended" rather than flipping to running.
   const next=!c.active;
+  /* §325 M13 — and it is refused, as the desktop's vchTurn refuses it: switched
+     on past its end date it is dead anyway, and the switch would read as though
+     it had worked. The date is changed on the coupon's own screen. */
+  if(next&&c.ended){ state.couponErr=E('It already ended — set a new end date first','优惠券已到期 — 请先设置新的截止日期'); render(); return; }
   state.couponBusy=code; state.couponErr=null; render();
   apiWrite('/vouchers/'+c.id,{is_active:next},'PATCH').then(()=>{
     c.active=next; c.on=next&&!c.ended; state.sw['c_'+code]=next; state.couponBusy=null; render();
@@ -28112,6 +28125,370 @@ function toggleCoupon(code){
     if(String(e.message)==='auth') return;
     state.couponErr=e.refused?E(...e.words):E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
   });
+}
+/* ── §325 M13 — ONE COUPON, AND WHO HAS IT ────────────────────────────────
+   The desktop's coupon drawer (05-marketing.js vchDrawerRender) and its grant
+   dialog (openGrantModal), as two phone screens. Same endpoints, same bodies:
+     PATCH  /vouchers/:id            — per customer, end date, the three
+                                       switches, the label, on/off
+     GET    /vouchers/:id/grants     — who holds it (?limit=8 for the head)
+     POST   /vouchers/:id/grant      — {customer_ids:[id], note} or {to_all:true, note}
+     DELETE /voucher-grants/:id      — take one back
+   Keys (lib/cap-routes.js): the PATCH is coupons:edit; grant, the grants list
+   and the DELETE are coupons:grant. Both are money:'moves' in
+   lib/capabilities.js, so each control here fails closed until the keys are
+   known (vdCan), not open as plain mCan would while state.caps is null.
+   Creating one is M14. */
+let VD=null;   // {id, raw, busy, err, lblEn, lblCn, lblDirty, holders, holdersTotal, holdersErr}
+let VG=null;   // {id, note, q, picks, picksErr, pickSeq, grants, grantsErr, busy, err}
+let vgQT=null;
+const vdCan=k=>!!state.caps&&mCan(k);
+const vdRaw=()=>{ if(!VD) return null; const c=(DB.coupons||[]).find(x=>x.id===VD.id); return (c&&c.raw)||VD.raw; };
+const vdExpired=r=>!!(r&&r.expires_at&&_date(r.expires_at)&&_date(r.expires_at)<=new Date());
+const vdPerLabel=n=>n===0?T('No limit','不限'):n===1?T('Once','1 次'):T(n+' times',n+' 次');
+/* The list again, after a write — the desktop's loadVouchers. The counts on the
+   card (used, given) move with a grant, so they are read rather than guessed. */
+function vchReload(){
+  return api('/vouchers').then(r=>{ if(Array.isArray(r)){ DB.coupons=r.map(mapVoucher);
+    DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); }
+    state.vchLoaded=true; render(); }).catch(()=>{ /* the write itself landed; the list re-reads on its next load */ });
+}
+reg('vchOpen', id=>{
+  const c=(DB.coupons||[]).find(x=>String(x.id)===String(id));
+  if(!c||c.id==null||!c.raw) return;   // a sample row has nothing behind it to open
+  VD={id:c.id, raw:c.raw, busy:null, err:'', lblEn:null, lblCn:null, lblDirty:false,
+    holders:null, holdersTotal:0, holdersErr:''};
+  CMD.push('coupon');
+  vdLoadHolders();
+});
+/* The head of who holds it: eight, as the desktop drawer shows. A grant to
+   everyone can run to thousands; the rest is on the next screen. */
+const VD_HOLDER_HEAD=8;
+function vdLoadHolders(){
+  const v=VD; if(!v) return Promise.resolve();
+  const r=vdRaw();
+  if(!r||!Number(r.grant_count)){ v.holders=[]; v.holdersTotal=0; v.holdersErr=''; render(); return Promise.resolve(); }
+  v.holders=null; v.holdersErr=''; render();
+  return apiRaw('/vouchers/'+v.id+'/grants?limit='+VD_HOLDER_HEAD).then(j=>{
+    if(VD!==v) return;   // left, or another coupon opened, mid-flight
+    v.holders=(j&&j.data)||[]; v.holdersTotal=(j&&j.total!=null)?Number(j.total):v.holders.length; render();
+  }).catch(e=>{ if(VD!==v||String(e.message)==='auth') return;
+    v.holders=[]; v.holdersErr=T('Couldn’t load who has it: ','无法加载持有名单:')+(e.message||''); render(); });
+}
+reg('vdHoldersRetry', ()=>{ vdLoadHolders(); });
+/* One PATCH, three states: the control says Saving…, a refusal stays on the
+   screen above the facts, success merges what was sent and reads the list. */
+function vdPatch(key, body, okText){
+  const v=VD; if(!v||v.busy||!vdCan('coupons:edit')) return Promise.resolve(false);
+  v.busy=key; v.err=''; render();
+  return apiWrite('/vouchers/'+v.id, body, 'PATCH').then(()=>{
+    v.busy=null; v.raw=Object.assign({}, vdRaw()||{}, body);
+    const c=(DB.coupons||[]).find(x=>x.id===v.id);
+    if(c){ const i=DB.coupons.indexOf(c); DB.coupons[i]=mapVoucher(Object.assign({}, c.raw, body)); }
+    if(okText) showToast(okText);
+    render(); vchReload(); return true;
+  }).catch(e=>{ v.busy=null; if(String(e.message)==='auth') return false;
+    v.err=e.refused?String(E(...e.words)):T('Failed: ','失败:')+(e.message||''); render(); return false; });
+}
+reg('vdSwitch', field=>{
+  if(['is_public','auto_grant_signup','auto_apply'].indexOf(field)<0) return;
+  const r=vdRaw(); if(!r) return;
+  vdPatch(field, {[field]:!r[field]});
+});
+reg('vdExpiry', value=>{
+  const val=String(value||'');
+  vdPatch('expires_at', {expires_at:val||null},
+    val?T('End date set','已更新截止日期'):T('No end date — runs until turned off','已改为无截止日期'));
+});
+/* Moving off "once each" turns every hand-out into a standing one — including
+   hand-outs a customer already spent, which come back to life. The desktop
+   asks first; so does this, and a No puts the select back where it was. */
+reg('vdPer', value=>{
+  const v=VD, r=vdRaw(); if(!v||!r||v.busy||!vdCan('coupons:edit')) return;
+  const n=parseInt(value,10)||0;
+  const ok=()=>vdPatch('per_customer_limit', {per_customer_limit:n},
+    n===0?T('No limit — each customer can use it on every order','已改为不限次数')
+    :n===1?T('Once per customer','每人限用 1 次'):T('Up to '+n+' orders per customer','每人最多 '+n+' 次'));
+  const revived=n!==1?Number(r.grant_used_count||0):0;
+  if(revived>0){
+    state.ask={title:T('Give it back to customers who already used it?','让已使用过的顾客重新获得?'),
+      body:T(revived+(revived===1?' customer has':' customers have')+' already used this coupon. They get it back and can use it again.',
+        '已有 '+revived+' 位顾客使用过这张优惠券。他们会重新获得,并可再次使用。'),
+      confirmLabel:T('Yes, let them use it again','确认'), run:ok};
+    render(); return;   // a Cancel re-renders, and the select reads what is stored
+  }
+  ok();
+});
+reg('vdLbl', (lang,value)=>{ if(!VD||!vdCan('coupons:edit')) return;
+  if(lang==='en') VD.lblEn=String(value==null?'':value); else VD.lblCn=String(value==null?'':value);
+  VD.lblDirty=true; });
+/* The label is the one thing here that is typed, so it has its own Save, as
+   on the desktop. */
+reg('vdSaveLabel', ()=>{
+  const v=VD, r=vdRaw(); if(!v||!r) return;
+  const en=(v.lblEn!=null?v.lblEn:(r.title_en||'')).trim(), cn=(v.lblCn!=null?v.lblCn:(r.title_cn||'')).trim();
+  vdPatch('label', {title_en:en||null, title_cn:cn||null}, T('Label saved','标签已保存')).then(done=>{
+    if(done&&VD===v){ v.lblEn=null; v.lblCn=null; v.lblDirty=false; render(); } });
+});
+/* Turning on a coupon past its end date would leave it dead anyway, so it is
+   refused with the reason and the date to change, as on the desktop. */
+reg('vdTurn', on=>{
+  const v=VD, r=vdRaw(); if(!v||!r) return;
+  const next=!!Number(on);
+  if(next&&vdExpired(r)){ v.err=T('It already ended — set a new end date first','优惠券已到期 — 请先设置新的截止日期'); render(); return; }
+  vdPatch('is_active', {is_active:next}, next?T('On — customers can use it now','已开启'):T('Turned off','已停用'));
+});
+/* Take one customer's coupon back. A used one-shot hand-out is the receipt
+   for an order and the server refuses it (already_used_or_missing), so the
+   button is not offered there — the desktop's grant list draws the same line. */
+const vgStanding=r=>!!r&&Number(r.per_customer_limit||0)!==1;
+const vgRevocable=(r,g)=>vgStanding(r)||!g.used_at;
+function vchTakeBack(grantId, owner){
+  if(!owner||owner.busy||!vdCan('coupons:grant')) return;
+  state.ask={title:T('Take this coupon back?','收回这张优惠券?'),
+    body:T('They lose it at their next checkout. Orders they already placed keep their discount.','该顾客下次结账将不再享有。已下单的订单不受影响。'),
+    confirmLabel:T('Take it back','收回'), danger:true, run:()=>{
+      owner.busy='take:'+grantId; owner.err=''; render();
+      apiWrite('/voucher-grants/'+grantId, {}, 'DELETE').then(()=>{
+        owner.busy=null; showToast(T('Taken back','已收回'));
+        vchReload().then(()=>{ if(VD) vdLoadHolders(); if(VG) vgLoadGrants(); });
+      }).catch(e=>{ owner.busy=null; if(String(e.message)==='auth') return;
+        owner.err=e.refused?String(E(...e.words)):T('Failed: ','失败:')+(e.message||''); render(); });
+    }};
+  render();
+}
+reg('vdTakeBack', gid=>{ vchTakeBack(Number(gid), VD); });
+reg('vdHolder', cid=>{ if(cid&&mCan('customers:view')) CMD.openCustomer(Number(cid)); });
+function vdMayLeave(){
+  if(!VD) return true;
+  if(VD.lblDirty){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ VD=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  VD=null; return true;
+}
+function screenCoupon(){
+  const v=VD, r=vdRaw();
+  if(!v||!r) return nothingYet(T('Nothing here.','这里没有优惠券。'),'');
+  const edit=vdCan('coupons:edit'), give=vdCan('coupons:grant');
+  const expired=vdExpired(r), live=!!r.is_active&&!expired;
+  const per=Number(r.per_customer_limit||0), standing=per!==1;
+  const busy=v.busy, dis=busy?'disabled':'';
+  const saving=k=>busy===k?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`:'';
+  const fact=(k,val)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px">
+    <span style="font-size:14px;color:var(--text-secondary)">${k}</span><span class="num" style="font-size:15px;text-align:right;min-width:0">${val}</span></div>`;
+  const perOpts=[1,2,3,5,10]; if(per>0&&perOpts.indexOf(per)<0) perOpts.push(per);
+  perOpts.sort((a,b)=>a-b).push(0);
+  const perCtl=edit?`<select aria-label="${escAttr(T('Per customer','每人限用'))}" style="width:auto" ${dis} onchange="APP.cmd('vdPer',this.value)">${
+      perOpts.map(n=>`<option value="${n}"${n===per?' selected':''}>${vdPerLabel(n)}</option>`).join('')}</select>`:vdPerLabel(per);
+  const dateVal=r.expires_at?String(r.expires_at).slice(0,10):'';
+  const endCtl=edit?`<input type="date" aria-label="${escAttr(T('Ends','截止'))}" value="${escAttr(dateVal)}" style="width:auto" ${dis} onchange="APP.cmd('vdExpiry',this.value)">`
+    :(r.expires_at?fmtDay(r.expires_at):T('no end date','长期有效'));
+  const autoDesc=r.auto_grant_signup
+    ? T('New signups who received it get it at checkout — no code, no tap.','收到的新顾客结账时自动抵扣,无需输入或点选。')
+    : r.is_public
+    ? T('Every customer gets it at checkout — no code, no tap.','每位顾客结账时自动抵扣,无需输入或点选。')
+    : T('Only the customers you give it to get it at checkout — no code, no tap.','仅发放到的顾客结账时自动抵扣,无需输入或点选。');
+  const sw=(field,title,desc)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px">
+    <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${title}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${desc}</span></span>
+    ${busy===field?saving(field):edit?toggle(!!r[field],`APP.cmd('vdSwitch','${field}')`)
+      :`<span style="font-size:13px;color:var(--text-secondary);flex:none">${r[field]?T('On','已启用'):T('Off','已关闭')}</span>`}</div>`;
+  const gc=Number(r.grant_count||0);
+  const grantLine=gc
+    ? (standing
+        ? T('Given to '+gc+(gc===1?' customer':' customers')+' — they keep it, '+(per===0?'with no limit on how many orders':'for up to '+per+' orders')+'.',
+            '已发放给 '+gc+' 位顾客 — 可长期使用,'+(per===0?'不限订单数':'最多 '+per+' 单')+'。')
+        : T('Given to '+gc+(gc===1?' customer':' customers')+' — '+(r.grant_used_count||0)+' of those have used it.',
+            '已发放给 '+gc+' 位顾客,'+(r.grant_used_count||0)+' 张已使用。'))
+    : T('Hand it to specific customers — it lands in their coupons, no code needed.','发给指定顾客,直接进入他们的优惠券,无需编码。');
+  const lblEn=v.lblEn!=null?v.lblEn:(r.title_en||''), lblCn=v.lblCn!=null?v.lblCn:(r.title_cn||'');
+  const holders=v.holders;
+  const holderHtml=!gc?'':holders===null
+    ? `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+    : v.holdersErr
+    ? `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:13px;color:var(--brick-ink);min-width:0">${escAttr(v.holdersErr)}</span>
+        <button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" onclick="APP.cmd('vdHoldersRetry')">${T('Try again','重试')}</button></div>`
+    : holders.map((g,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 16px">
+        <button ${mCan('customers:view')?`onclick="APP.cmd('vdHolder',${Number(g.customer_id)||0})"`:'disabled'} style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+          <span style="font-size:15px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(g.nickname||T('(no name)','(未填写昵称)'))}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(g.phone||'—')}</span></button>
+        ${busy==='take:'+g.id?saving('take:'+g.id)
+          :give&&vgRevocable(r,g)?`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px;color:var(--brick-ink)" ${dis} onclick="APP.cmd('vdTakeBack',${Number(g.id)})">${T('Take it back','收回')}</button>`:''}
+      </div>`).join('')
+      +(v.holdersTotal>holders.length?`<div class="sep" style="margin-left:16px"></div>
+        <button class="row" style="min-height:48px;padding:10px 16px" onclick="APP.cmd('vgOpen')"><span style="flex:1;font-size:14.5px">${T('See all '+v.holdersTotal,'查看全部 '+v.holdersTotal)}</span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`:'');
+  const kicker=t=>`<div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="num" style="font-size:20px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis">${escAttr(r.code)}</span>
+      ${live?pill('live',T('Running','生效中')):pill('off',r.is_active?T('Ended','已到期'):T('Off','已停用'))}</div>
+    ${expired&&r.is_active?`<div style="padding:12px 16px;border-radius:14px;background:var(--amber-tint);font-size:14px;color:var(--amber-ink)">${
+      T('This coupon ended. Set a new end date below to run it again.','优惠券已到期。在下方设置新的截止日期即可重新生效。')}</div>`:''}
+    ${v.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(v.err)}</div>`:''}
+    <div class="card" style="padding:4px 0">
+      ${fact(T('Gives','优惠'),T(...vchGives(r)))}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('On orders over','最低订单金额'),Number(r.min_subtotal)>0?money(CUR,r.min_subtotal):T('Any order','无门槛'))}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('Used','已使用'),Number(r.used_count||0)+(r.max_uses!=null?' / '+r.max_uses:''))}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('Per customer','每人限用'),busy==='per_customer_limit'?saving('per_customer_limit'):perCtl)}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('Ends','截止'),busy==='expires_at'?saving('expires_at'):endCtl)}</div>
+    ${kicker(T('How customers get it','顾客怎么获得'))}
+    <div class="card" style="padding:4px 0">
+      ${sw('is_public',T('Show in the app','在小程序展示'),T('Anyone can find it and tap to save — no code needed.','顾客可自行领取,无需输入编码。'))}<div class="sep" style="margin-left:16px"></div>
+      ${sw('auto_grant_signup',T('Give to new signups','发给新注册顾客'),T('Lands in every new customer’s coupons automatically.','自动进入每位新顾客的优惠券。'))}<div class="sep" style="margin-left:16px"></div>
+      ${sw('auto_apply',T('Apply it for them','自动抵扣'),autoDesc)}</div>
+    ${kicker(T('What customers see','顾客看到的文字'))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      ${r.is_public&&!(r.title_en||r.title_cn)?`<div style="font-size:13px;color:var(--amber-ink)">${T('Public coupons need a label customers can read.','公开优惠券需要顾客能看懂的标签。')}</div>`:''}
+      ${edit?`<input id="mVdLblEn" value="${escAttr(lblEn)}" placeholder="${escAttr(T('English — e.g. '+money0(CUR,20)+' off your first order','英文标签'))}" oninput="APP.cmd('vdLbl','en',this.value)">
+        <input id="mVdLblCn" value="${escAttr(lblCn)}" placeholder="${escAttr(T('Chinese — e.g. 首单立减 '+money0(CUR,20),'中文标签,如 首单立减 '+money0(CUR,20)))}" oninput="APP.cmd('vdLbl','cn',this.value)">
+        <button class="btn2" style="width:100%" ${dis} onclick="APP.cmd('vdSaveLabel')">${busy==='label'?T('Saving…','保存中…'):T('Save label','保存标签')}</button>`
+      :`<div style="font-size:15px">${escAttr(r.title_en||'—')}</div><div style="font-size:15px">${escAttr(r.title_cn||'—')}</div>`}</div>
+    ${kicker(T('Give it out','发放'))}
+    <div class="card" style="padding:4px 0">
+      <div style="padding:12px 16px;font-size:13px;color:var(--text-secondary);line-height:1.5">${grantLine}</div>
+      ${give?`<div style="padding:0 16px 12px"><button class="btn2" style="width:100%" onclick="APP.cmd('vgOpen')">${T('Give to a customer','发放给顾客')}</button></div>`:''}
+      ${gc?`<div class="sep"></div>${holderHtml}`:''}</div>
+    ${edit?`<div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+      ${r.is_active
+        ? `<button class="btn2" style="width:100%;color:var(--brick-ink)" ${dis} onclick="APP.cmd('vdTurn',0)">${busy==='is_active'?T('Saving…','保存中…'):T('Turn off','停用')}</button>`
+        : `<button class="btn2" style="width:100%" ${dis} onclick="APP.cmd('vdTurn',1)">${busy==='is_active'?T('Saving…','保存中…'):T('Turn on','开启')}</button>`}
+      <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Turning it off keeps its history.','停用会保留历史记录,可随时重新开启。')}</div></div>`:''}
+  </div>`;
+}
+/* ── The grant screen: the desktop's grant dialog, whole. The note travels
+   with either kind of grant; the list below says who already has it. ── */
+reg('vgOpen', ()=>{
+  if(!VD) return;
+  VG={id:VD.id, note:'', q:'', picks:null, picksErr:'', pickSeq:0, grants:null, grantsErr:'', busy:null, err:''};
+  CMD.push('coupongrant');
+  vgLoadGrants();
+  if(vdCan('coupons:grant')) vgSearch();
+});
+function vgLoadGrants(){
+  const g=VG; if(!g) return Promise.resolve();
+  g.grants=null; g.grantsErr=''; render();
+  return apiRaw('/vouchers/'+g.id+'/grants').then(j=>{ if(VG!==g) return;
+    g.grants=(j&&j.data)||[]; render();
+  }).catch(e=>{ if(VG!==g||String(e.message)==='auth') return;
+    g.grants=[]; g.grantsErr=T('Failed','失败')+': '+(e.message||''); render(); });
+}
+reg('vgGrantsRetry', ()=>{ vgLoadGrants(); });
+/* Search repaints the result box only, so the field keeps its caret. */
+function vgSearch(){
+  const g=VG; if(!g) return;
+  const seq=++g.pickSeq;
+  g.picks=null; g.picksErr=''; vgPicksRepaint();
+  apiRaw('/customers?pageSize=20&page=1'+(g.q?'&q='+encodeURIComponent(g.q):'')).then(j=>{
+    if(VG!==g||seq!==g.pickSeq) return;
+    g.picks=((j&&j.data)||[]).slice(0,20); vgPicksRepaint();
+  }).catch(e=>{ if(VG!==g||seq!==g.pickSeq||String(e.message)==='auth') return;
+    g.picks=[]; g.picksErr=T('Failed','失败')+': '+(e.message||''); vgPicksRepaint(); });
+}
+reg('vgQ', v=>{ if(!VG) return; VG.q=String(v||'').trim(); searchClearShow('mVgClr',!!v);
+  clearTimeout(vgQT); vgQT=setTimeout(vgSearch,200); });
+reg('mVgClr', ()=>searchClearRun('mVgQ','mVgClr','vgQ'));
+reg('vgNote', v=>{ if(VG) VG.note=String(v==null?'':v); });
+function vgPicksRepaint(){ const el=typeof document!=='undefined'&&document.getElementById('mVgPicks'); if(el) el.innerHTML=vgPicksHtml(); else render(); }
+function vgPicksHtml(){
+  const g=VG; if(!g) return '';
+  if(g.picks===null) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Searching…','搜索中…')}</div>`;
+  if(g.picksErr) return `<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink)">${escAttr(g.picksErr)}</div>`;
+  if(!g.picks.length) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('No customers match.','无匹配顾客。')}</div>`;
+  return g.picks.map((c,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.nickname||T('(no name)','(未填写昵称)'))} <span class="num" style="font-size:12.5px;color:var(--text-secondary)">#${Number(c.id)}</span></span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(c.phone||'—')}</span></span>
+      ${g.busy==='one:'+c.id?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
+        :`<button class="btn2" style="flex:none;min-height:36px;padding:0 14px;font-size:13px" ${g.busy?'disabled':''} onclick="APP.cmd('vgGrant',${Number(c.id)})">${T('Grant','发放')}</button>`}
+    </div>`).join('');
+}
+function vgWrite(key, body, okText){
+  const g=VG; if(!g||g.busy||!vdCan('coupons:grant')) return;
+  g.busy=key; g.err=''; render();
+  apiWrite('/vouchers/'+g.id+'/grant', body).then(j=>{
+    g.busy=null; showToast(okText(j||{})); render();
+    vchReload().then(()=>{ if(VG===g) vgLoadGrants(); if(VD&&VD.id===g.id) vdLoadHolders(); });
+  }).catch(e=>{ g.busy=null; if(String(e.message)==='auth') return;
+    g.err=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(e.message||''); render(); });
+}
+reg('vgGrant', cid=>{
+  const g=VG, n=Number(cid); if(!g||!n) return;
+  vgWrite('one:'+n, {customer_ids:[n], note:g.note.trim()||null},
+    j=>j.granted?T('Granted to customer #'+n,'已发放给顾客 #'+n):T('Customer already had this coupon','顾客已拥有此优惠券'));
+});
+reg('vgAll', ()=>{
+  const g=VG; if(!g||g.busy||!vdCan('coupons:grant')) return;
+  state.ask={title:T('Grant this coupon to every customer?','向所有顾客发放此优惠券?'),
+    body:T('Existing grants are kept.','已有发放记录会保留。'),
+    confirmLabel:T('Grant to all','全部发放'), run:()=>{
+      vgWrite('all', {to_all:true, note:g.note.trim()||null}, j=>{
+        const n=Number(j.granted||0), s=Number(j.skipped||0);
+        return T('Granted to '+n+' customer'+(n===1?'':'s')+(s?' ('+s+' already had it)':''),
+          '已发放给 '+n+' 位顾客'+(s?'('+s+' 已有,跳过)':''));
+      });
+    }};
+  render();
+});
+reg('vgRevoke', gid=>{
+  const g=VG; if(!g||g.busy||!vdCan('coupons:grant')) return;
+  const id=Number(gid);
+  state.ask={title:T('Revoke this grant?','撤销此优惠券?'), confirmLabel:T('Revoke','撤销'), danger:true, run:()=>{
+    g.busy='rev:'+id; g.err=''; render();
+    apiWrite('/voucher-grants/'+id, {}, 'DELETE').then(()=>{
+      g.busy=null; render();
+      vchReload().then(()=>{ if(VG===g) vgLoadGrants(); if(VD&&VD.id===g.id) vdLoadHolders(); });
+    }).catch(e=>{ g.busy=null; if(String(e.message)==='auth') return;
+      g.err=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(e.message||''); render(); });
+  }};
+  render();
+});
+function screenCouponGrant(){
+  const g=VG; if(!g) return nothingYet(T('Nothing here.','这里没有优惠券。'),'');
+  const c=(DB.coupons||[]).find(x=>x.id===g.id), r=c&&c.raw;
+  const give=vdCan('coupons:grant');
+  // Not known (a list that failed to read) is treated as one-shot: the stricter
+  // pill, and never a Revoke the server would refuse — the desktop's own rule.
+  const standing=vgStanding(r);
+  const list=g.grants===null
+    ? `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+    : g.grantsErr
+    ? `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:13px;color:var(--brick-ink);min-width:0">${escAttr(g.grantsErr)}</span>
+        <button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" onclick="APP.cmd('vgGrantsRetry')">${T('Try again','重试')}</button></div>`
+    : !g.grants.length
+    ? `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('No grants yet.','暂无发放记录。')}</div>`
+    : g.grants.map((x,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 16px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(x.nickname||T('(no name)','(未填写昵称)'))}</span>
+          <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary)">#${Number(x.customer_id)} · ${escAttr(x.phone||'—')}</span>
+            ${standing?pill('live',T('Has it','已拥有')):x.used_at?pill('live',T('Used','已使用')):pill('draft',T('Unused','未使用'))}</span></span>
+        ${g.busy==='rev:'+x.id?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
+          :give&&!(!standing&&x.used_at)?`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px;color:var(--brick-ink)" ${g.busy?'disabled':''} onclick="APP.cmd('vgRevoke',${Number(x.id)})">${T('Revoke','撤销')}</button>`:''}
+      </div>`).join('');
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;padding:0 4px">${T('Recipients see this in their wallet & checkout, no code needed.','收件人会在钱包和结账时看到,无需编码。')}</div>
+    ${g.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(g.err)}</div>`:''}
+    ${give?`<label style="display:block;padding:0 4px">
+        <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Note (optional, internal only)','备注(可选,仅内部可见)')}</span>
+        <input id="mVgNote" maxlength="200" value="${escAttr(g.note)}" style="width:100%" oninput="APP.cmd('vgNote',this.value)"></label>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+        <span style="font-size:15px;font-weight:500">${T('Grant to every customer','发放给所有顾客')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Bulk-grants to all non-blocked customers. Idempotent — customers who already have it are skipped.','批量发放给所有未封禁顾客;幂等操作,已拥有的会自动跳过。')}</span>
+        <button class="btn2" style="width:100%" ${g.busy?'disabled':''} onclick="APP.cmd('vgAll')">${g.busy==='all'?T('Saving…','保存中…'):T('Grant to all','全部发放')}</button></div>
+      <div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Or grant to a specific customer','或发放给指定顾客')}</div>
+      ${searchBox(`<input id="mVgQ" inputmode="search" enterkeyhint="search" value="${escAttr(g.q)}" placeholder="${escAttr(T('Search by name, phone, or openid…','搜索姓名、电话或 openid…'))}" style="width:100%" oninput="APP.cmd('vgQ',this.value)">`,'mVgClr',!!g.q,'display:block')}
+      <div class="card" style="padding:4px 0" id="mVgPicks">${vgPicksHtml()}</div>`:''}
+    <div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Already granted','已发放')}</div>
+    <div class="card" style="padding:4px 0">${list}</div>
+  </div>`;
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
    the judge — it refuses anything already on its way out. */
@@ -41489,7 +41866,7 @@ const ROUTE_CAP={
      advances than that it advances into a dead end. */
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
-  coupons:'coupons:view', flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
+  coupons:'coupons:view', coupon:'coupons:view', coupongrant:'coupons:view', flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
   sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
@@ -42836,7 +43213,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return; if(t&&t.route==='coupon'&&!vdMayLeave()) return; if(t&&t.route==='coupongrant') VG=null;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -43054,6 +43431,8 @@ function mUnsavedWork(){
     if(teDirty()&&(state.stack||[]).some(f=>f&&f.route==='tiersedit')) return true;
     /* A new pop-up typed and not yet saved (§325 M12); an existing one is a card. */
     if(PUE&&PUE.isNew&&PUE.dirty&&(state.stack||[]).some(f=>f&&f.route==='popupedit')) return true;
+    /* A coupon label typed and not yet saved (§325 M13). */
+    if(VD&&VD.lblDirty&&(state.stack||[]).some(f=>f&&f.route==='coupon')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
@@ -44827,7 +45206,9 @@ function mapVoucher(r){
     // Ending inside a week is the desktop's quiet amber: time to decide whether
     // to extend it, and the only moment this date is worth noticing.
     soon:!!(exp&&!ended&&(exp-Date.now())<7*864e5),
-    pills, on:live, active:!!r.is_active};
+    pills, on:live, active:!!r.is_active,
+    // §325 M13 — the row as read, for the coupon screen's controls.
+    raw:r};
 }
 const FLASH_KIND={live:'live',running:'live',scheduled:'draft',upcoming:'draft',ended:'off',none:'off'};
 /* A flash sale is a PRICE for a WINDOW, and the phone's card showed neither —
