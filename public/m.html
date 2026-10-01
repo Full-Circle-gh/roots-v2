@@ -1396,6 +1396,9 @@ const state = {
        range:'week',reason:'',store:'',reasons:null,
        /* §325 PD1 — the desktop's free date range: a Custom window's two days. */
        from:null,to:null,
+       /* §325 PD3 — the row whose void is in flight, and a refused void's
+          sentence, which stays above the list until the next void or filter. */
+       voidBusy:null,voidErr:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
           tap. render() rebuilds the whole app with innerHTML, so the .sheet
           node is DESTROYED AND RECREATED on each keystroke and each chip —
@@ -3560,7 +3563,7 @@ reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loa
    arithmetic over the OLD filter and would sit there looking authoritative.
    Rows after a write are merely one entry short, which the arriving answer
    fixes without ever having shown anything false. */
-function wstRefilter(){ const w=state.wst; w.rows=null; w.totals=null; loadWaste(true); render(); }
+function wstRefilter(){ const w=state.wst; w.rows=null; w.totals=null; w.voidErr=null; loadWaste(true); render(); }
 /* §325 PD1 — Custom asks for its two days, as Stock activity's does. */
 reg('wstRange',  v=>{
   const w=state.wst;
@@ -3582,6 +3585,40 @@ reg('wstReason', v=>{ state.wst.reason=v; wstRefilter(); });
 reg('wstStore',  v=>{ state.wst.store=v;  wstRefilter(); });
 reg('wstClear',  ()=>{ const w=state.wst; w.range='week'; w.from=null; w.to=null; w.reason=''; w.store=''; wstRefilter(); });
 reg('wstRetry',  ()=>{ state.wst.err=null; wstRefilter(); });
+/* §325 PD3 — VOID, the desktop's doVoid: a reversal, never an edit or a
+   delete (§32 rule 11). It moves live stock, so it asks first, and the
+   question says what moves — the desktop's own sentence, with no measure word
+   (a waste entry is not always pieces). Then POST /waste/:id/void with the
+   desktop's empty body; the row says Voiding… and every Void waits. A refusal
+   stays above the list in words; the toast only ever confirms. Either way the
+   list is read again, because a 409 means this screen was already out of date. */
+reg('wstVoid', id=>{
+  const w=state.wst;
+  if(w.voidBusy!=null||!mCan('waste:void')) return;
+  const r=(w.rows||[]).find(x=>Number(x.id)===Number(id));
+  if(!r||r.voided_by_waste_id!=null||r.reverses_waste_id!=null) return;
+  const qty=r.qty, what=wstProductName(r);
+  state.ask={title:T('Void this waste entry?','作废这条损耗记录?'),
+    body:escAttr(T(qty+' × '+what+' goes back into stock. The entry stays in the list, marked voided.',
+                   what+' × '+qty+' 将退回库存。该记录仍保留在列表中,标记为已作废。')),
+    confirmLabel:T('Void','作废'), danger:true,
+    run:()=>{
+      w.voidBusy=r.id; w.voidErr=null; render();
+      apiWrite('/waste/'+r.id+'/void',{},'POST').then(()=>{
+        w.voidBusy=null;
+        showToast(T('Voided','已作废'));
+        loadWaste(true); render();
+      }).catch(e=>{
+        w.voidBusy=null;
+        if(String(e&&e.message)==='auth') return;
+        w.voidErr = e&&e.refused ? T(...e.words)
+          : (e&&(e.code==='already_voided'||e.code==='cannot_void_a_reversal')) ? e.message
+          : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+        loadWaste(true); render();
+      });
+    }};
+  render();
+});
 /* Opening the sheet RESETS the form half, always. A sheet that reopens
    carrying the last entry's product is how the second jar of the morning gets
    logged against the first one's SKU. The store is the exception and is
@@ -7623,13 +7660,15 @@ function screenActivity(){
        second copy in the browser is exactly how the kitchen screen ended up
        with a vocabulary that existed only in a browser constant.
 
-   THREE THINGS THE DESKTOP HAS THAT THIS DELIBERATELY DID NOT — §325 PD1
-   brings the date range back (below), and void follows in its own step:
-     • NO VOID. It is waste:void — an owner capability that neither warehouse
-       nor store_manager holds, so it would be a control almost nobody
-       standing in the aisle can press. Voided rows still LIST, greyed, with
-       their reversal beside them: a ledger that hides its own corrections is
-       how one goes unnoticed, and that is true on a phone too.
+   THREE THINGS THE DESKTOP HAS THAT THIS DELIBERATELY DID NOT — §325 brought
+   back the first two (PD1, PD3):
+     • NO VOID — retired by §325 PD3. It is still waste:void, an owner
+       capability that neither warehouse nor store_manager holds, so the
+       button is drawn only for an account holding it, on a live loss only
+       (never a reversal, never twice), behind the desktop's confirm that says
+       what goes back into stock. Voided rows still LIST, greyed, with their
+       reversal beside them: a ledger that hides its own corrections is how
+       one goes unnoticed, and that is true on a phone too.
      • NO FREE DATE RANGE — retired by §325 PD1. The three presets still
        answer the usual question in one tap; a fourth, Custom, asks for the
        two days in the ask-sheet (Finance's, Trend's and now Stock
@@ -7790,7 +7829,17 @@ function wstRow(r){
            the PHONE's. They agree for a phone in the shop's timezone, which is
            every phone this ships to, and a traveller sees a date rather than a
            wrong word. Same helper and same trade as the PO arrival dates. */''}
-      <span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDateOnly(r.business_date)}</span></span></div>`;
+      <span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDateOnly(r.business_date)}</span>
+      ${wstVoidBtn(r)}</span></div>`;
+}
+/* §325 PD3 — Void, the desktop's row action: a live loss only, never a
+   reversal and never twice, and only for an account holding waste:void (the
+   desktop's data-cap). Every Void waits while one is in flight. */
+function wstVoidBtn(r){
+  if(r.voided_by_waste_id!=null||r.reverses_waste_id!=null||!mCan('waste:void')) return '';
+  const w=state.wst, busy=w.voidBusy===r.id;
+  return `<button class="btn2" style="width:auto;min-height:0;padding:5px 12px;font-size:13px;margin-top:4px" ${w.voidBusy!=null?'disabled':''}
+    onclick="APP.cmd('wstVoid',${Number(r.id)})">${busy?T('Voiding…','作废中…'):T('Void','作废')}</button>`;
 }
 function screenWaste(){
   loadWasteReasons(); loadWaste();
@@ -7832,6 +7881,9 @@ function screenWaste(){
         T('Long may it last. Anything written off here comes straight off the shelf count.','希望一直如此。在此登记的损耗会直接从库存中扣减。'))+'</div>');
   return head+`
     ${wstPulse()}
+    ${w.voidErr?`<div style="margin:0 16px;display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(w.voidErr)}</span></div>`:''}
     <div style="padding:0 16px 24px"><div class="list">${w.rows.map((r,i)=>
       `${i?'<div class="sep" style="margin-left:14px"></div>':''}${wstRow(r)}`).join('')}</div></div>
   </div>`;
@@ -32526,10 +32578,14 @@ function layers(){
   /* After the record, so Back closes it FIRST: the address sheet sits over the
      record it was opened from, exactly as its z-index says. */
   if(state.caddr) L.push(()=>{ state.caddr=null; });
-  if(state.oosSku) L.push(()=>{ state.oosSku=null; });
   if(state.productSku) L.push(()=>{ state.productSku=null; prodRecordsDrop(); });
   // After the product, so Back closes the version list first (§325 PD2).
   if(state.productSku&&state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
+  /* "When it runs out" sits OVER the product sheet it was opened from (z-index
+     48 over 46), so it is listed after it and Back closes it first. It was
+     listed before, so Back took the product away from under an open picker
+     (§325 PD3, found in PD2). */
+  if(state.oosSku) L.push(()=>{ state.oosSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   // Over the order it prints, so Back closes the print view first (§300).
   if(state.poId!=null&&state.poPrint) L.push(()=>{ state.poPrint=false; });
