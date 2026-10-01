@@ -21,7 +21,10 @@ const db = seam(require('../database'));
 const providers = require('../lib/billing-providers');
 const { decryptWxBillingCallback, parseSubOutTradeNo } = providers;
 const lifecycle = require('../lib/billing-lifecycle');
-const { requireBackend } = require('../lib/require-cap');
+// §325 (S2l) — every read and write here takes the Billing screens' keys
+// (billing:view or billing:pay), with the keyless doors kept open: see
+// lib/require-cap.js requireBillingAccess.
+const { requireBillingAccess } = require('../lib/require-cap');
 const router = express.Router();
 
 // Start the daily lifecycle heartbeat (idempotent — only ever starts once).
@@ -71,12 +74,12 @@ function activateInvoice(invoice, providerName) {
 }
 
 // ── GET providers ────────────────────────────────────────────────────────
-router.get('/api/backend/billing/providers', requireBackend, (req, res) => {
+router.get('/api/backend/billing/providers', requireBillingAccess, (req, res) => {
   res.json({ success: true, providers: providers.listProviders() });
 });
 
 // ── POST select-plan — tenant chooses a plan, we raise an open invoice ────
-router.post('/api/backend/billing/select-plan', requireBackend, express.json(), (req, res) => {
+router.post('/api/backend/billing/select-plan', requireBillingAccess, express.json(), (req, res) => {
   const tenantId = req.session.tenantId;
   const { plan_code } = req.body || {};
   if (!plan_code) return res.status(400).json({ error: 'plan_code required · 缺少套餐代码' });
@@ -113,7 +116,7 @@ router.post('/api/backend/billing/select-plan', requireBackend, express.json(), 
 });
 
 // ── POST checkout — get a payment descriptor for an open invoice ──────────
-router.post('/api/backend/billing/checkout', requireBackend, express.json(), async (req, res) => {
+router.post('/api/backend/billing/checkout', requireBillingAccess, express.json(), async (req, res) => {
   const tenantId = req.session.tenantId;
   const { invoice_id, provider } = req.body || {};
   if (!invoice_id || !provider) return res.status(400).json({ error: 'invoice_id and provider required · 缺少发票或支付方式' });
@@ -146,7 +149,7 @@ router.post('/api/backend/billing/invoices/:id/mark-paid', requireSaasAdmin, exp
 });
 
 // ── GET payment-status — polled from the checkout QR screen ─────────────────
-router.get('/api/backend/billing/invoices/:id/payment-status', requireBackend, (req, res) => {
+router.get('/api/backend/billing/invoices/:id/payment-status', requireBillingAccess, (req, res) => {
   const tenantId = req.session.tenantId;
   const row = db.prepare('SELECT status, paid_at FROM billing_invoices WHERE id = ? AND tenant_id = ?')
                 .get(req.params.id, tenantId);
