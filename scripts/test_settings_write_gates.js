@@ -329,15 +329,21 @@ const list = (v) => (Array.isArray(v) ? v : [v]);
       walk('public');
       const src = Object.fromEntries(files.map((f) => [f, read(f)]));
       const who = (re) => files.filter((f) => re.test(src[f])).sort();
-      ok(!/apiWrite\((?!'\/config'|cfgPath)[^,]*config/.test(M), 'the phone writes /config through no other path');
+      // Every phone write to /config: a literal path starting '/config' (with or
+      // without ?history / ?expect), or the pop-up switch's cfgPath.
+      const SITE = /apiWrite\(('\/config[^']*'[^,]*|cfgPath),/g;
+      const sites = [];
+      for (let mm; (mm = SITE.exec(M));) sites.push(mm.index);
+      ok(!/apiWrite\((?!'\/config|cfgPath)[^,]*config/.test(M), 'the phone writes /config through no other path');
       is(who(/retail-admin\/config['"`?]/), [
         'public/cms-mobile.html', 'public/cms.html', 'public/product-editor.html', 'public/retail-admin.html',
         'public/retail-admin/01-core.js', 'public/retail-admin/05-marketing.js', 'public/retail-admin/06-delivery.js',
         'public/retail-admin/07-content-billing.js', 'public/retail-admin/09-products.js', 'public/retail-admin/10-extras.js',
         'public/retail-admin/17-setup-guide.js', 'public/retail-admin/31-product-page.js',
       ], 'PUT /config: the desktop files, the two editors and the product editor');
-      is((M.match(/apiWrite\((?:'\/config'|cfgPath),\{([^}]*)\}/g) || []).map((s) => s.replace(/apiWrite\((?:'\/config'|cfgPath),\{\[?'?/, '').split(/['\]]/)[0]).sort(),
-        ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'], 'the phone writes four families, each asserted in section 2');
+      const FAMS = ['delivery.holidayMode', 'features.', 'notifications.categories.', 'popups.list'];
+      is(sites.map((i) => FAMS.filter((f) => M.slice(Math.max(0, i - 900), i + 200).includes("'" + f)).join('|')).sort(),
+        FAMS, 'the phone writes four families, one per write site, each asserted in section 2');
       is(who(/retail-admin\/polls|apiWrite\('\/polls/), ['public/cms.html', 'public/m.html', 'public/retail-admin/10-extras.js'], 'polls: Voting on both, the editor only reads');
       is(who(/retail-admin\/(voting|leaderboard)\/config/), ['public/retail-admin/10-extras.js'], 'voting and leaderboard settings: the desktop tabs');
       is(who(/retail-admin\/topup-|'\/topup-(packages|transactions)/), ['public/m.html', 'public/retail-admin/07-content-billing.js'], 'top-ups: the desktop tab and the phone\'s Wallet');
