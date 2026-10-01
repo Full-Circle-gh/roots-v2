@@ -112,7 +112,7 @@ function liftReg(name) {
 
 const FNS = ['E', 'pill', 'mCan', 'canRoute', 'prodCanEdit', 'pcMoney', 'prodLowThreshold', 'nothingYet', 'footBar',
   'searchBox', 'searchClearShow',
-  'peBadgeOf', 'peRteClean', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
+  'peBadgeOf', 'peRteClean', 'peBundleDraft', 'peBuBody', 'peBpBody', 'peBpModeBody', 'peBundleOwnsCost', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
   'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'pePopped', 'prodRecordsDrop',
   'peFmtBytes', 'loadPeImages', 'peGalleryChanged', 'pePhotosCard', 'peLibGridHtml', 'sheetPeLib', 'peLibCountText',
   'peLibRepaint', 'peLibFetch'];
@@ -143,6 +143,8 @@ function mk(opts = {}) {
     reg: (n, f) => { CMD[n] = f; },
     // The sizes card (§325 PD9) has its own suite, test_mobile_product_sizes.js.
     loadPeSizes: () => {}, peSizesCard: () => '',
+    // The two bundle cards (§325 PD10): test_mobile_product_bundles.js.
+    peBuCard: () => '', peBpCard: () => '',
     push: (route) => { ctx.state.stack.push({ route }); },
     loadCategories: () => {}, recapNoMoney: () => false, featOn: () => true, navTabs: () => [],
     showToast: (m) => calls.toasts.push(String(m)),

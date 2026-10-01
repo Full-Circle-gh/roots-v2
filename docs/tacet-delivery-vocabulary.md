@@ -1,5 +1,11 @@
 # Tacet delivery vocabulary — locked
 
+**v1.274 · 2026-09-30 · §382 BUNDLES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's two bundles, edited on the phone (§382)*.
+
+**v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
+
+**v1.272 · 2026-09-30 · §380 JD WAYBILL ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *JD waybill create and cancel on the phone (§380)*.
+
 **v1.271 · 2026-09-30 · §379 CUSTOMERS ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *Customers on the phone (§379)*.
 
 **v1.270 · 2026-09-30 · §378 DESK WORK ON THE PHONE — ONE STRING COMPOSED (Drafts · 草稿); THE REST COPIED WHOLE.** See *Desk work on the phone (§378)*.
@@ -11869,3 +11875,107 @@ the roster, the customer record and the statement sheet in `public/m.html`.
 
 **Phone pairs already live:** `Print · 打印`, `Print failed · 打印失败`, `Loading… · 加载中…`,
 `Close · 关闭`, `Saving… · 保存中…`, `Copied · 已复制`, and the refusal sentences.
+
+## JD waybill create and cancel on the phone (§380)
+
+**Nothing composed, 2026-10-01.** These are operator strings only (Rule 1):
+the parcel cards and the JD sheet in `public/m.html`.
+
+**Copied whole from the desktop (`04-orders.js`):**
+
+- **Create:**
+  - `Create JD label · 生成京东运单`, `Free live tracking — JD bills the parcel. · 免费物流追踪，京东承担费用。`,
+    `— or attach an existing waybill manually — · — 或手动填写已有运单 —`
+  - the sheet's sub-lines (air parcel / ground parcel)
+  - the three services from `JD_SERVICES` (`Fresh · Air · 生鲜 · 空运`, `Fresh · Ground · 生鲜 · 陆运`,
+    `Ambient · Ground · 普通 · 陆运`, each with its code line)
+  - `Pieces (boxes) · 箱数` and its note, `Create & ship · 生成并发货`
+  - `Land only · 仅陆运`, `Land shipping only — airline rejected · 仅陆运 — 航空拒运`
+  - the land-only question, `Create air waybill anyway · 仍要生成空运运单`, `Not yet · 暂不`
+  - `SF Express only · 仅顺丰速运` and its question
+  - `JD waybill created · 京东运单已生成`, ` boxes ·  箱`,
+    `Set the store’s sender phone first (Settings → Stores) · 请先在门店设置寄件电话`,
+    `JD label failed · 生成运单失败`
+- **Cancel:**
+  - `Cancel JD pickup · 取消揽收`, the Cancel-vs-Clear note
+  - the confirm title (Cancel the JD pickup / recall this parcel with JD? · 向京东取消揽收 / 拦截此包裹?)
+  - `JD pickup cancelled · 已取消揽收`, `JD parcel intercepted (was already collected) · 已拦截在途包裹`,
+    `JD cancel failed · 取消揽收失败`
+- **From `01-core.js`:** the sentences for `jd_not_configured`, `not_shippable`, `parcel_awaiting_restock`,
+  `invalid_shipment_id`, and `has_tracking` (used for `already_has_waybill`).
+
+**Phone pairs already live:** `Cancel · 取消`, `Close · 关闭`, `Working… · 处理中…`, `Clear · 清除`,
+`Save tracking · 保存运单号`, and the refusal sentences.
+
+| String | Note |
+|---|---|
+| Cancel's confirm button | The desktop's is English-only ("Cancel pickup"). The phone uses the desktop's own `Cancel JD pickup · 取消揽收` pair from the same card, so nothing is composed. |
+
+## Ground on an air parcel's label, and the question it asks (§381)
+
+**Operator register (Rule 1), 2026-10-01.** The JD label dialog
+(`createJdLabel`, `public/retail-admin/04-orders.js`). An air parcel now lists
+the two ground services after air, and picking one asks first. This mirrors
+*Air on a land parcel's label, marked rather than hidden (2026-09-16)* above.
+The rows themselves are the `JD_SERVICES` labels, unchanged. Nothing new is on
+them.
+
+### Reused verbatim
+
+| Chinese | English | Lifted from |
+|---|---|---|
+| `空运包裹` | Air parcel | this dialog's own subtitle (`空运包裹 — 生鲜特快`), and the parcel card's mode label. Now the question's title |
+| `暂不` | Not yet | the land→air question's decline, itself from `transition()` |
+| `此包裹` | This parcel | the land→air question's fallback body, `此包裹仅陆运。…` |
+
+### Composed — declared, by Claude, under Rule 4's 2026-09-06 delegation
+
+| Chinese | English | Why it is here |
+|---|---|---|
+| `<names> 计划空运,陆运较慢。仍要生成陆运运单吗?` | `<names> — planned for air. Ground is slower. Create the ground waybill anyway?` | The question's body when the parcel's items are known. **Lifted parts:** the item names in bold are the land→air question's own. `计划` + a plan is live in this file: `此订单计划于 <b>…</b> 当天新鲜制作,…` (the early-dispatch question). `空运` and `陆运` are the locked mode words. `仍要生成…运单吗?` is the locked `仍要生成空运运单吗?` with `空运` swapped for `陆运`. **Composed:** `较慢` (slower) — no live Chinese says one service is slower than another, and the question needs to give the reason for asking. **Rejected:** `改走陆运` / `走陆运` — not found anywhere in `public/`, and `生成陆运运单` keeps the parallel with the live air question exactly. **Rejected:** naming 生鲜 spoilage — the parcel may hold nothing fresh (the screenshot's was dates and chips), and a reason that is sometimes false teaches people to skip it |
+| `此包裹计划空运,陆运较慢。仍要生成陆运运单吗?` | `This parcel is planned for air. Ground is slower. Create the ground waybill anyway?` | The same body when the order's items are not loaded. `此包裹` opens it, as the land→air fallback does |
+| `仍要生成陆运运单` | Create ground waybill anyway | The confirm button. It is the body question without `吗?`, the same pairing as `仍要生成空运运单` / `仍要生成空运运单吗?` |
+
+**English "ground", Chinese 陆运.** The rows say `Fresh · Ground · 生鲜 · 陆运`.
+The question uses the same pair as the row being picked, so the two read alike.
+
+## A product's two bundles, edited on the phone (§382)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the Suggested add-ons and Bundle — sold as one cards of the
+phone's product Details screen, and in their picker (`public/m.html`).
+
+**Copied whole from the desktop editor** (`public/retail-admin/09-products.js`
+buRender / bpRender / bpPickerList):
+
+- **Suggested add-ons:**
+  - `Suggested add-ons · 推荐搭配`
+  - its explanatory sentence, whole
+  - `Title EN · 标题(英文)`
+  - `Title CN · 标题(中文)`
+  - the placeholders `Goes well with` and `推荐搭配`, as literal as on the desktop
+  - `No products yet — add some below. · 尚未添加商品 — 在下方添加。`
+  - `Set price ¥ (optional) · 搭配价 ¥(可选)`
+  - `blank = item total · 留空 = 各项合计`
+  - `Auto voucher (optional) · 自动优惠券(可选)`
+  - `code · 券码`
+- **Bundle — sold as one:**
+  - `Bundle — sold as one · 套装产品`: the shorter Chinese, which is the one the desktop's section header uses
+  - `Customers see ONE product at the price you set above. Choose how you stock it.`, with its pair
+  - `Assembled from other products · 由其他产品组成`, with its sentence
+  - `Pre-packed on a shelf · 预先包装成套`, with its sentence
+  - `Quantity in the bundle · 套装内数量`
+  - `Add the products this bundle contains. · 添加本套装包含的商品。`
+- **Both:**
+  - `+ Add product · + 添加商品`
+  - `Remove · 移除`
+  - `Search a product to add… · 搜索商品以添加…`
+  - `No matches · 无匹配`
+  - `Close · 关闭`
+
+**Phone live pairs reused:** `Loading… · 加载中…`, `Load failed · 加载失败`,
+`Try again · 重试`.
+
+**Live candidate rejected:** `套装产品(作为一个产品出售)`. It is the desktop's
+longer header, shown only before a new product has saved. The section header
+the operator sees uses `套装产品`.
