@@ -24098,3 +24098,123 @@ to the same endpoints.
     sent before the figures are read; a new request offers Start review and a
     reviewing one does not; the refusal list includes reviewRefund and
     rfSubmit and asserts no form opens).
+
+## §345 — DELIVERY SETTINGS ARE WRITTEN FROM THE PHONE, HOLIDAY MODE ON INCLUDED
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*; holiday ON
+under §326.2). Step O4 of the Orders lane. The phone's Delivery screen read a
+summary and could only Resume delivery. It now writes every card of the
+desktop's Delivery panel except zones (O5) and fresh batches (O9), each with
+the desktop card's keys and body.
+
+1. **The self-saving cards save themselves here too (§279).** Same-day cutoff
+   (`delivery.cutoff`), Store pickup hours and lead (`pickup`), Pre-orders
+   (`delivery.preorder`) and Kitchen address (`delivery.kitchen`) open as live
+   sheets with Undo and Version history; every write is
+   `PUT /config?history=<the desktop card's own name>` (Undo adds
+   `&note=undo`, a restore `&note=restore`), so a version made on either
+   surface is a version on both. A sheet opens on a fresh read of `/config`
+   and sends nothing until its fields are filled from it; a failed read opens
+   nothing and says so.
+2. **The bodies are the desktop's, normalisation included.** Cutoff minutes
+   clamped to 0–180 and both message halves trimmed; pickup window defaulting
+   to 10:00–20:00 and the lead read as the desktop reads it; the pre-order
+   notice written wholesale, blanks kept as blanks (blank means "the built-in
+   wording", so clearing a box undoes an override), the day pair normalised
+   the server's way (one alone is a one-day window, a reversed pair swapped,
+   both blank is no window).
+3. **Bulk attach tracking and Box label** are switches on the screen; a flip
+   writes its one key under its card (`delivery.bulktracking`,
+   `delivery.boxlabel`).
+4. **The two cards that keep a Save button on the desktop keep one here, and
+   write plain `PUT /config` with no history, as there:** Fees & minimum —
+   all three keys every time (`fees.freeShippingThreshold`,
+   `fees.pickupPackingFee`, `fees.minOrder`, the desktop's
+   `saveDeliveryFees`; the pickup packing fee sits in this sheet because it
+   rides that save) — and Everywhere else — default delivery
+   (`delivery.defaultZone` whole, blank Free over and Packing cap as null,
+   `day_only: 1`). **One deliberate difference:** a money field that is not a
+   number of 0 or more is refused on the sheet. The desktop's `Number()||0`
+   saves a typo such as "1o0" as 0, which on the free-shipping threshold
+   means free shipping for everybody.
+5. **Holiday mode ON (§326.2).** The Holiday mode row opens a sheet with the
+   message in English and Chinese, both required — a shopper reads one or the
+   other, and a blank half is a blank banner (the one composed string).
+   Turning it on then asks again, in a danger confirm whose body is the
+   desktop's own sentence naming what stops and what does not (*Customers can
+   still place orders — same-day delivery is hidden, the calendar still works,
+   and your message appears on checkout*, which is what the server does:
+   `same_day_allowed` is forced off, nothing else) and the message shoppers
+   will read. Only then `PUT /config?history=delivery.holiday` with the
+   card's two keys. While on, the same sheet saves the message at once. Off is
+   the existing Resume. The `screenDelivery` comment holding ON to the
+   desktop is retired.
+6. **Who may.** Every key is the Delivery panel's family on the server
+   (S2a's `configKeyCap`: delivery / fees / pickup / notice →
+   `delivery:view | delivery:edit | settings:shop | stores:view`). The phone's
+   Delivery screen opens on `delivery:view`; every control is drawn for that
+   same any-of, every command refuses without it, and anybody else sees the
+   rows as read-only lines. `scripts/test_settings_write_gates.js` now lists
+   all fourteen keys as phone Delivery writes in its section 2 and reads them
+   back out of `m.html` in section 5, so a new key cannot arrive unpinned.
+7. **Three states.** A row says *Loading…* while its sheet reads; a switch
+   says *Saving…*; a refusal is kept under the rows (its own slot, apart from
+   Resume's) until the next write; a toast confirms.
+8. **Not done here:** zones (O5), the fresh-batch schedule and the setup
+   wizard (O9).
+9. **Tests.** `scripts/test_mobile_delivery_settings.js` (fast shard, 130
+   assertions) runs the sliced code with the real autosave engine: every
+   request on method, path and body, Undo and restore notes, the history
+   read, both holiday asks and the refusal of a missing half, the money
+   refusal, the load failure, the capability-denied case, both languages.
+   `scripts/test_mobile_settings.js` (slow shard, not run) pinned "no way to
+   switch it ON" — the hold §326.2 overturned; its case now asserts the row,
+   and three new cases drive ON through both asks to the request.
+
+## §346 — A PRODUCT'S SALES AND VERSION HISTORY, AND THE SHOP MENUS, READ ON THE PHONE
+
+**Built 2026-10-01 under §325** (Ash: *"let's start do them all"*).
+Three read-only records reached the phone. The product sheet now carries the
+editor's Sales card (units, revenue and rank over 7 / 30 / 90 days or all
+time, plus when the product last sold and on how many days) and a Version
+history row that opens the list of saved versions. A new **Shop menu** row in
+More lists every location's shop and opens one shop's record: its public
+code, its QR picture, the address a scan opens, a Download link, and its
+listings with price, kind and availability, under the desktop's menu filter.
+Nothing on these screens writes. Version restore (PD7), shop menu daily edits
+(PD4) and shop menu structure (PD13) come in their own steps, each with its
+desktop confirm.
+
+1. **Same endpoints, same windows, same sentences.** The Sales card calls
+   `GET /products/:id/sales?days=` with the desktop's four windows, for the
+   size on screen, and says "Last sale … · N selling days" exactly as
+   `pdSalesContext` does. A newer window wins over a slower, older answer (the
+   desktop's `_pdSalesSeq`). The card reads afresh each time the sheet opens.
+2. **Revenue follows the phone's money rule on top of the desktop's.** The
+   desktop shows revenue to anyone who can open a product, and so does the
+   phone, except a warehouse, dispatch or customer-service board
+   (`recapNoMoney`), which gets units and rank and no revenue tile at all, as
+   Trend and Home already do.
+3. **Version history is read-only until PD7.** The list shows Current on the
+   newest, Original on the baseline, and who saved each version. It carries no
+   Restore button yet: a row offering a write that is not built would be a
+   control that does nothing. The desktop's "Roll this product back…" subline
+   is left off for the same reason.
+4. **The shop menu's door is a More row, beside Sales.** On the desktop the
+   door is the Sales board's location card, and the board opens for any of
+   five keys (`dashboard:view`, `meituan:view`, `guanyi:view`, `eleme:view`,
+   `integrations:view`). The phone's Sales screen opens for `dashboard:view`
+   alone, so a door there would shut out a Meituan-only operator who reaches
+   the desktop page. The More row and both routes are gated on the board's
+   own any-of. This is the 29th row under Operations.
+5. **A location with no shop says "Not set up" and does not open.** There is
+   nothing to read until a shop is created, and creating one is PD13's.
+6. **The QR is the desktop's, including its honesty.** The picture is
+   `qr.png`, and the address underneath comes from `GET /shops/:id/qr`. A
+   tenant with no public domain gets "QR unavailable" and neither the picture
+   nor a Download link that would only answer with a refusal. An inactive
+   shop shows no QR and does not ask for one. The public code stays
+   unlabelled, as on the desktop (no live Chinese source for "shop code").
+7. **Prices on the menu are shown as the desktop shows them**: to anyone who
+   reaches the page. They are catalogue-level prices, already shown on the
+   phone's Products list.

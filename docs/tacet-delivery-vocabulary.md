@@ -1,5 +1,9 @@
 # Tacet delivery vocabulary — locked
 
+**v1.245 · 2026-09-30 · §346 A PRODUCT'S SALES AND VERSIONS, AND THE SHOP MENUS, ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE.** See *A product's sales, its versions, and the shop menus on the phone (§346)*.
+
+**v1.244 · 2026-09-30 · §345 DELIVERY SETTINGS ON THE PHONE — 1 STRING COMPOSED BY CLAUDE, THE REST COPIED WHOLE.** See *Delivery settings on the phone (§345)*.
+
 **v1.243 · 2026-09-30 · §344 THE REFUND WORKFLOW ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *The refund workflow on the phone (§344)*.
 
 **v1.242 · 2026-09-30 · §343 THE ORDERS LIST ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *The Orders list's chips, customer scope, export and saved views on the phone (§343)*.
@@ -10731,3 +10735,75 @@ The phone's own, already live: `Working… · 处理中…`, `Cancel · 取消`,
 `Amount · 金额`, `Optional · 可选`, `Reason / note · 原因 / 备注`, `Refund order · 退款订单`,
 `Refund · 退款`, `Enter an amount above 0 · 请输入大于 0 的金额`,
 `Enter an amount first. · 请先填写金额。`, and the by-amount path's two toasts.
+
+## Delivery settings on the phone (§345)
+
+**Operator register (Rule 1), 2026-10-01.** The phone's Delivery screen and its
+sheets (`public/m.html`). Everything is copied from the desktop's Delivery panel
+(`public/retail-admin.html`, `06-delivery.js`, `05-marketing.js`) except the row
+below.
+
+| String | Status |
+|---|---|
+| `Write the message in English and in Chinese first — shoppers read one or the other. · 请先填写中英文两种提示 — 顾客会看到其中一种。` | **composed by Claude (O4).** The refusal when Holiday mode is turned on, or its message saved, with a half missing. The desktop requires neither half, so there is no live sentence. 提示 is the desktop's own word for this message (`结账页显示您的提示`). Rejected: `Message (English) · 英文消息` alone as the refusal, which names one field when either can be the missing one. |
+| `Holiday mode · 假日模式` | **the phone's own live pair, kept.** The desktop's panel says `Holiday mode · 假期模式`; the phone has said 假日模式 since the summary row and its banner (`假日模式已开启 — 配送已暂停`). Changing one surface to match the other is a vocabulary decision, not this step's — flagged for Ash. |
+| `Same-day cutoff · 当日截单` | **copied** from the desktop, replacing the phone summary row's `Same-day cut-off · 当日达截单`; its value line (`N min before close · N 分钟(打烊前)`) is the phone's existing pair. |
+| `Free over · 满额免运` (on the Fees row's value) | **copied** from the desktop's default-zone card, used as the row's short summary. |
+
+Copied whole: `Same-day cutoff · 当日截单` and its description, `Cutoff · 截单时间`,
+`min before close · 分钟(关门前)`, `Message (English) · 英文消息`, `Message (Chinese) · 消息(中文)`,
+`— optional, leave blank for the default · — 可留空,使用默认文案`; `Fees & minimum · 费用与起送`
+and its description, `Free-shipping threshold · 包邮门槛`, `Minimum order · 起送金额`,
+`Packing fee · 包装费`; `Store pickup · 到店自提`, `Opens · 开始`, `Closes · 结束`,
+`Earliest pickup · 最早可取` and its sentence; `Everywhere else — default delivery · 其他地区 — 默认配送`
+and its description, `Status · 状态`, `Flat fee · 统一运费`, `Packing / item · 每件包装费`,
+`Packing cap · 包装费上限`, `Lead time · 备货天数`, `days · 天`; `Pre-orders · 预订`,
+`Restock window · 预计补货时间`, `From · 最快(天)`, `To · 最慢(天)`, `Popup eyebrow · 弹窗小标题`,
+`Popup title · 弹窗标题`, `Checkout notice · 结账提示` and the popup sentence;
+`Kitchen address (customer-facing) · 厨房地址(顾客可见)`, `Address · 地址`;
+`Bulk attach tracking · 批量绑定运单号`, `Box label · 箱贴打印` and their sentences; the
+holiday sentence (`Turn ON when the kitchen is closed for a holiday. … · 厨房放假时开启。…`)
+and the two message placeholders. The pre-order fields' language tags are
+`English` and `中文`, as on the desktop.
+
+The phone's own, already live: `Shoppers are told · 顾客看到`,
+`Holiday mode is on — delivery is paused · 假日模式已开启 — 配送已暂停`, `Turn on · 开启`,
+`On · 开`, `Off · 关`, `Save · 保存`, `Saved · 已保存`, `Saving… · 保存中…`,
+`Loading… · 加载中…`, `Could not load this. · 无法加载。`,
+`Enter a price — a number, 0 or more. · 请输入价格 — 0 或以上的数字。`, the version-history
+strings, and the save-refusal sentence.
+
+## A product's sales, its versions, and the shop menus on the phone (§346)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1): the phone
+admin's product sheet and its two new Shop menu screens (`public/m.html`).
+
+From the desktop product editor (`public/retail-admin/09-products.js`,
+`public/retail-admin.html`): the Sales card's title `Sales · last N days ·
+销量 · 最近 N 天` and `Sales · all time · 销量 · 全部时间`; `units sold ·
+售出件数`, `revenue · 营业额`, `rank · 排名`; `No sales · 暂无销量`;
+`No sales in this window · 此区间暂无销量`; `Last sale … · 最近售出 …`, `today ·
+今天`, `yesterday · 昨天`, `N days ago · N 天前`, `1 selling day · 1 天有销量`,
+`N selling days · N 天有销量`; `Couldn’t load sales · 无法加载销量`. The
+version list's `Version history · 历史版本`, `Current · 当前`, `Original ·
+原始版本`, `by · 操作人:`, `Today · 今天`, `Yesterday · 昨天`, `Could not load
+versions: · 无法加载版本:` and `No earlier versions yet — they’re saved
+automatically as you edit. · 暂无历史版本 — 编辑时会自动保存。`
+
+From the desktop shop menu (`public/retail-admin/28-shops.js`, and the Sales
+board's `Shop menu · 门店商品` link in `01-core.js`): `Shop menu · 门店商品`,
+`QR code · 二维码`, `QR unavailable · 二维码不可用`, `Download · 下载`,
+`Inactive · 已停用`, `Not set up · 未开通`, `Load failed · 加载失败`, `Search by
+name or SKU… · 按名称或货号搜索…`, `No products yet · 还没有商品`, `No products
+match this filter · 没有匹配此筛选条件的产品`, `Stocked · 备货`, `Made here ·
+现做`, `Available · 有货`, `Sold out · 售罄`. The filter's count is bare
+numerals ("1 / 3"), as on the desktop.
+
+The phone's own live pairs: the window chips `7 days · 7 天`, `30 days · 30 天`,
+`90 days · 90 天`, `All · 全部`; a shop's count `N products · 件商品` (the
+Categories screen's); `No stores · 没有门店`; `Try again · 重试`; `Loading… ·
+加载中…`.
+
+The public shop code stays unlabelled, as on the desktop: there is still no
+live Chinese source for "shop code", and restructuring around it was
+preferred over composing one.
