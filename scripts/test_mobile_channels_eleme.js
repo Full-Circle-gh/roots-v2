@@ -86,6 +86,7 @@ function mk(opts = {}) {
     reg: (n, f) => { CMD[n] = f; },
     push: (r) => { calls.pushed.push(r); },
     recapNoMoney: () => false, featOn: () => true,
+    x8ElCard: () => '',   // §325 X8a's upkeep card has its own suite (test_mobile_channels_upkeep.js)
     tdWhen, _tdL: () => ({ lang: ctx.LANG === 'en' ? 'en' : 'cn' }),
     api: (p) => new Promise((res, rej) => { calls.api.push({ p, res, rej }); }),
     apiRaw: (p) => new Promise((res, rej) => { calls.api.push({ p, res, rej }); }),
