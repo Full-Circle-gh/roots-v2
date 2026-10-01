@@ -1065,7 +1065,7 @@ const state = {
      sheet with its own refusal. */
   sku:{data:null,err:null,tried:false,seq:0,busy:null,actErr:null,draft:null,saveErr:null},
   cfg:null, setup:null, suBusy:null, suErr:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
-  couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
+  couponBusy:null, couponErr:null, flashBusy:null, flashErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
   /* One per list that has no other way to tell "nothing yet" from "not
      asked yet". Without them, emptying the sample data turned every one
@@ -1774,6 +1774,13 @@ function pop(){
   if(top==='productcost'&&!pcMayLeave()) return;
   if(top==='polledit'&&!pollMayLeave()) return;   // §325 M7 — an unsaved poll asks first
   if(top==='affsettings'&&!affMayLeave()) return;   // §325 M9 — so does an unsaved offer
+  if(top==='pointsrules'&&!prMayLeave()) return;    // §325 M11 — and unsaved points rules,
+  if(top==='tiersedit'&&!teMayLeave()) return;      // and an unsaved ladder
+  if(top==='popupedit'&&!puMayLeave()) return;      // §325 M12 — and an unsaved new pop-up
+  if(top==='coupon'&&!vdMayLeave()) return;         // §325 M13 — and a coupon label typed, not saved
+  if(top==='coupongrant') VG=null;
+  if(top==='couponnew'&&!cwMayLeave()) return;      // §325 M14 — a coupon half made asks first
+  if(top==='flashedit'&&!fscMayLeave()) return;     // §325 M15 — and a flash sale half set
   if(top==='affeligible') loadAffElig();   // the count on the offer is re-read, as the desktop's dialog does on close
   if(top==='receive') recvFlush();
   if(top==='teamrole'&&tmAuto) tmAuto.flush();
@@ -8425,7 +8432,394 @@ function screenInbox(){
     ${state.revErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.revErr}</span></div>`:''}
+    ${/* §325 M10 — the desktop's Reviews tab: the queue, the filters, Set up. */''}
+    ${seg==='reviews'&&mCan(RVW_KEYS)?`<button class="card" onclick="APP.cmd('rvwOpen')" style="padding:14px;display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer;color:var(--text-primary);font-family:inherit;width:100%">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:500">${T('Reviews','评价')}</span>
+        ${RVW.meta?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${rvwStatusLine()}</span>`:''}</span>
+      <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`:''}
     ${body}</div>`;
+}
+
+/* ==========================================================================
+   §325 M10 — REVIEWS, AS THE DESKTOP RUNS THEM (desktop: 07-content-billing.js
+   loadReviews / rvwRow / rvwDismissAll / review reward / auto top-up / tags)
+   --------------------------------------------------------------------------
+   The Inbox shows the newest reviews and lets one be answered or hidden. The
+   desktop's Reviews tab is the rest of the job, and this is it, opened from
+   the top of the Inbox's Reviews: the queue first ("Needs reply", the count,
+   and Mark all N as handled — which publishes nothing and asks, in red only
+   when a low-rated one is in the set), then Everything / Low rated / Hidden
+   with their counts, search, a rating filter and pages; each row's Reply
+   (blank removes it), Hide / Restore, Put back for one handled without a
+   reply, and Remove for a seeded one. Below, the desktop's Set up: the
+   reward for reviewing, auto top-up (turning it on asks — it publishes
+   seeded reviews), and the review tags as a §279 card.
+
+   Keys, as the server has them: every /reviews write is reviews:moderate;
+   the reward and top-up settings are the 'reviews' /config family
+   (reviews:view or reviews:moderate); the screen opens on either.
+   ========================================================================== */
+const RVW_KEYS=['reviews:view','reviews:moderate'];
+const RVW_LIMIT=50;
+const RVW={filter:'needs', q:'', rating:'', page:0, rows:null, meta:null, err:null, busy:null, rowErr:'',
+  reward:null, rewardErr:'', rewardBusy:false, rewardNote:'', topup:null, topupErr:'', topupBusy:false};
+const rvwMod=()=>mCan('reviews:moderate');
+// The client mirror of REVIEW_WAITING_SQL — the desktop's rvwNeedsReply.
+function rvwNeedsReply(r){
+  if(r.source==='synthetic') return false;
+  if(r.reply&&String(r.reply).trim()) return false;
+  if(!(r.comment&&String(r.comment).trim())) return false;
+  if(r.dismissed_at) return false;
+  return true;
+}
+function rvwDaysSince(iso){
+  const t=Date.parse(String(iso||'').replace(' ','T')+'Z');
+  return Number.isFinite(t)?Math.max(0,Math.floor((Date.now()-t)/86400000)):null;
+}
+async function loadRvw(){
+  const qs=new URLSearchParams();
+  if(RVW.filter==='needs') qs.set('needs_reply','1');
+  if(RVW.filter==='low') qs.set('low','1');
+  if(RVW.filter==='hidden') qs.set('visible','0');
+  if(RVW.rating) qs.set('rating',RVW.rating);
+  if(RVW.q) qs.set('q',RVW.q);
+  qs.set('limit',String(RVW_LIMIT)); qs.set('offset',String(RVW.page*RVW_LIMIT));
+  try{
+    const j=await apiRaw('/reviews?'+qs);
+    RVW.rows=Array.isArray(j&&j.data)?j.data:[]; RVW.meta=(j&&j.meta)||null; RVW.err=null;
+  }catch(e){ if(String(e.message)==='auth') return; RVW.err=E('Could not load reviews','无法加载评价'); }
+  const host=typeof document!=='undefined'?document.getElementById('mRvwList'):null;
+  if(host&&RVW.inPlace){ RVW.inPlace=false; host.innerHTML=rvwListHtml(); } else render();
+}
+reg('rvwOpen', ()=>{ if(!mCan(RVW_KEYS)) return; RVW.rows=null; RVW.page=0; CMD.push('reviews'); loadRvw(); loadRvwReward(); loadRvwTopup(); });
+reg('rvwFilter', k=>{ if(['needs','all','low','hidden'].indexOf(k)<0) return; RVW.filter=k; RVW.page=0; RVW.rows=null; render(); loadRvw(); });
+reg('rvwRating', v=>{ RVW.rating=/^[1-5]$/.test(String(v))?String(v):''; RVW.page=0; loadRvw(); });
+let rvwQT=null;
+reg('rvwQ', v=>{ RVW.q=String(v||'').trim(); searchClearShow('mRvwClr',!!v);
+  clearTimeout(rvwQT); rvwQT=setTimeout(()=>{ RVW.page=0; RVW.inPlace=true; loadRvw(); },250); });
+reg('mRvwClr', ()=>searchClearRun('mRvwQ','mRvwClr','rvwQ'));
+reg('rvwPage', d=>{ const total=(RVW.meta&&RVW.meta.total)||0, p=RVW.page+Number(d);
+  if(p<0||p*RVW_LIMIT>=total) return; RVW.page=p; loadRvw(); });
+/* One write, three states: the row says Saving…, a refusal stays above the
+   list, success reads the list again (the counts move with it). */
+function rvwWrite(r, call, okText){
+  RVW.busy=r.id+':'+(r.source||'real'); RVW.rowErr=''; render();
+  call.then(()=>{ RVW.busy=null; if(okText) showToast(okText); loadRvw(); })
+    .catch(e=>{ RVW.busy=null; if(String(e.message)==='auth') return;
+      RVW.rowErr=e.refused?T(...e.words):T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'); render(); });
+}
+const rvwFind=(id,src)=>(RVW.rows||[]).find(x=>x.id===Number(id)&&(x.source||'real')===(src||'real'));
+reg('rvwReply', (id,src)=>{
+  const r=rvwFind(id,src); if(!r||!rvwMod()||RVW.busy) return;
+  const existing=String(r.reply||'');
+  state.ask={title:T('Public reply','公开回复'),
+    body:T('Customers see it under their review. Leave blank to remove.','顾客会在自己的评价下看到。留空则删除回复。'),
+    fields:[{id:'reply', label:T('Your reply','商家回复'), multiline:true, value:existing}],
+    confirmLabel:T('Save reply','保存回复'),
+    run:vals=>{ const reply=String((vals&&vals.reply)||'').trim();
+      if(reply===existing.trim()) return;
+      rvwWrite(r, apiWrite('/reviews/'+r.id,{reply, source:r.source||'real'},'PATCH'),
+        reply?T('Reply saved','回复已保存'):T('Reply removed','回复已删除')); }};
+  state.askErr=null; render();
+});
+/* Hiding takes it off the product page, so it asks — the phone's Inbox does
+   too, in the same words. Restoring puts back what was public, so it does not. */
+reg('rvwVisible', (id,src)=>{
+  const r=rvwFind(id,src); if(!r||!rvwMod()||RVW.busy) return;
+  const go=v=>rvwWrite(r, apiWrite('/reviews/'+r.id,{is_visible:v, source:r.source||'real'},'PATCH'), v?T('Restored','已恢复'):T('Hidden','已隐藏'));
+  if(!r.is_visible){ go(true); return; }
+  state.ask={title:T('Hide this review?','隐藏这条评价？'),
+    body:T('It stops showing on the product page. Nothing is deleted — you can restore it from here.','评价将不再显示在商品页。内容不会删除 — 可随时在此恢复。'),
+    confirmLabel:T('Hide','隐藏'), danger:true, run:()=>go(false)};
+  render();
+});
+reg('rvwRemove', id=>{
+  const r=rvwFind(id,'synthetic'); if(!r||!rvwMod()||RVW.busy) return;
+  state.ask={title:T('Remove this seeded review for good?','永久删除这条种子评价?'),
+    confirmLabel:T('Remove review','删除评价'), danger:true,
+    run:()=>rvwWrite(r, apiWrite('/reviews/'+r.id+'?source=synthetic',{},'DELETE'), T('Removed','已删除'))};
+  render();
+});
+// Put one back — so a mis-tapped bulk action is not undone only by publishing a reply.
+reg('rvwUndismiss', id=>{
+  const r=rvwFind(id,'real'); if(!r||!rvwMod()||RVW.busy) return;
+  rvwWrite(r, apiWrite('/reviews/'+r.id+'/undismiss',{},'POST'), T('Back in the queue','已放回待处理'));
+});
+/* Clear the queue. Nothing is published. The count goes with the request, so
+   a queue that moved meanwhile is refused rather than silently resized; the
+   confirm names the low-rated ones and is red only when there are some. */
+reg('rvwDismissAll', ()=>{
+  const s=(RVW.meta&&RVW.meta.summary)||{}, n=Number(s.needs_reply||0), low=Number(s.waiting_low||0);
+  if(!n||!rvwMod()||RVW.busy) return;
+  state.ask={title:T(`Mark all ${n} as handled?`,`将全部 ${n} 条标记为已处理？`),
+    body:[T('They leave the queue. Nothing is sent to the customer and nothing appears in the shop — a reply is a separate action.','它们将从待处理列表移除。不会向顾客发送任何内容，店铺中也不会显示 — 回复是单独的操作。'),
+      low?T(`${low} of them ${low===1?'is':'are'} rated 3 or less.`,`其中 ${low} 条评分为 3 星或更低。`):''].filter(Boolean).join(' '),
+    confirmLabel:T('Mark as handled','标记为已处理'), danger:low>0,
+    run:()=>{
+      RVW.busy='bulk'; RVW.rowErr=''; render();
+      apiWrite('/reviews/dismiss-waiting',{expect:n},'POST').then(j=>{
+        RVW.busy=null; const d=(j&&j.data)||{};
+        showToast(T(`${d.dismissed||0} marked as handled`,`已标记 ${d.dismissed||0} 条为已处理`)); loadRvw();
+      }).catch(e=>{ RVW.busy=null; if(String(e.message)==='auth') return;
+        RVW.rowErr=e.refused?T(...e.words):e.code==='queue_changed'
+          ?T('The queue changed — nothing was marked. Reloading.','待处理列表已变化 — 未做任何更改。正在重新加载。')
+          :T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。');
+        loadRvw(); });
+    }};
+  render();
+});
+function rvwTagLabel(id){
+  const t=(cfgGet('reviews.tags',null)||[]).find(x=>x&&x.id===id);
+  return t?(LANG==='en'?(t.en||t.cn||id):(t.cn||t.en||id)):id;
+}
+function rvwRowHtml(r){
+  const synthetic=r.source==='synthetic', src=synthetic?'synthetic':'real', key=r.id+':'+src, busy=RVW.busy===key, mod=rvwMod();
+  const product=LANG==='en'?(r.product_name_en||r.product_name_cn||('#'+r.product_id)):(r.product_name_cn||r.product_name_en||('#'+r.product_id));
+  const who=r.customer_name||(synthetic?'—':('#'+r.customer_id));
+  const rating=Math.max(0,Math.min(5,parseInt(r.rating,10)||0));
+  const mark=(t,bg,fg)=>`<span class="pill" style="background:${bg};color:${fg}">${t}</span>`;
+  const marks=[!r.is_visible?mark(T('Hidden','已隐藏'),PILL.muted[0],PILL.muted[1]):'',
+    rating<=3?mark(T('Low rated','低评分'),'var(--brick-tint)','var(--brick-ink)'):'',
+    synthetic?mark(T('Seeded','种子'),PILL.muted[0],PILL.muted[1]):''].join('');
+  const tags=(r.tags||[]).map(id=>`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary)">${escAttr(rvwTagLabel(id))}</span>`).join('');
+  const btn=(label,cmd)=>`<button class="btn2" style="min-height:34px;padding:0 12px;font-size:13px" ${RVW.busy?'disabled':''} onclick="${cmd}">${label}</button>`;
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px${r.is_visible?'':';opacity:.7'}">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="num" aria-label="${rating}/5" style="letter-spacing:1px;color:var(--text-primary)">${'★'.repeat(rating)}<span style="color:var(--border-strong)">${'★'.repeat(5-rating)}</span></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${marks}</span></div>
+    ${r.comment?`<div style="font-size:14.5px;line-height:1.55">${escAttr(r.comment)}</div>`
+      :`<div style="font-size:14px;color:var(--text-secondary)">${(r.tags||[]).length?T('No comment — tags only','无评论 — 仅标签'):T('No comment','无评论')}</div>`}
+    <div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis">${escAttr(product)} · ${escAttr(who)} · <span class="num">${fmtDay(r.created_at)||''}</span></div>
+    ${tags?`<div style="display:flex;gap:6px;flex-wrap:wrap">${tags}</div>`:''}
+    ${(r.photos||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap">${r.photos.slice(0,4).map(u=>
+      `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="width:52px;height:52px;border-radius:8px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(u).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`).join('')}</div>`:''}
+    ${r.reply?`<div style="border-left:2px solid var(--border-default);padding:2px 0 2px 10px;display:flex;flex-direction:column;gap:3px">
+        <span class="eyebrow">${T('Your reply','商家回复')}</span><span style="font-size:13.5px;line-height:1.55">${escAttr(r.reply)}</span></div>`
+      :r.dismissed_at?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--text-secondary)">${T('Handled — no reply sent','已处理 — 未回复')}
+        ${mod?btn(T('Put back','放回待处理'),`APP.cmd('rvwUndismiss',${Number(r.id)})`):''}</div>`:''}
+    ${mod?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+      ${btn(busy?T('Saving…','保存中…'):r.reply?T('Edit reply','编辑回复'):T('Reply','回复'),`APP.cmd('rvwReply',${Number(r.id)},'${src}')`)}
+      ${btn(r.is_visible?T('Hide','隐藏'):T('Restore','恢复'),`APP.cmd('rvwVisible',${Number(r.id)},'${src}')`)}
+      ${synthetic?btn(`<span style="color:var(--brick-ink)">${T('Remove','删除')}</span>`,`APP.cmd('rvwRemove',${Number(r.id)})`):''}</div>`:''}</div>`;
+}
+function rvwListHtml(){
+  if(RVW.err) return `<div style="padding:30px 16px;text-align:center;display:flex;flex-direction:column;gap:6px">
+    <span style="font-size:15px;font-weight:500;color:var(--brick-ink)">${RVW.err}</span></div>`;
+  const rows=RVW.rows;
+  if(!rows) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return `<div style="padding:30px 16px;text-align:center;display:flex;flex-direction:column;gap:6px">
+    <span style="font-size:15px;font-weight:500">${RVW.filter==='needs'?T('Nothing waiting on a reply','没有待回复的评价'):T('No reviews match','没有符合条件的评价')}</span>
+    <span style="font-size:13.5px;color:var(--text-secondary)">${RVW.filter==='needs'?T('Every customer review has an answer.','每条顾客评价都已回复。'):T('Try another filter, or clear the search.','请更换筛选条件,或清除搜索。')}</span></div>`;
+  const group=t=>`<div class="eyebrow" style="padding:6px 4px 0">${t}</div>`;
+  let html;
+  if(RVW.filter!=='all') html=rows.map(rvwRowHtml).join('');
+  else { const open=rows.filter(rvwNeedsReply), done=rows.filter(r=>!rvwNeedsReply(r));
+    html=(open.length?group(T('Waiting on a reply','待回复'))+open.map(rvwRowHtml).join(''):'')
+      +(done.length?group(T('Not waiting on you','无需回复'))+done.map(rvwRowHtml).join(''):''); }
+  const total=(RVW.meta&&RVW.meta.total)||0, from=RVW.page*RVW_LIMIT+1, to=Math.min(total,(RVW.page+1)*RVW_LIMIT);
+  const pager=total>RVW_LIMIT?`<div style="display:flex;align-items:center;gap:8px">
+      <span class="num" style="flex:1;font-size:12.5px;color:var(--text-secondary)">${T(from+'–'+to+' of '+total,total+' 条中的 '+from+'–'+to)}</span>
+      <button class="btn2" style="min-height:34px;padding:0 12px" ${RVW.page===0?'disabled':''} onclick="APP.cmd('rvwPage',-1)">${T('Previous','上一页')}</button>
+      <button class="btn2" style="min-height:34px;padding:0 12px" ${to>=total?'disabled':''} onclick="APP.cmd('rvwPage',1)">${T('Next','下一页')}</button></div>`:'';
+  return `<div style="display:flex;flex-direction:column;gap:10px">${html}${pager}</div>`;
+}
+/* ── Set up: the reward for reviewing (desktop saveReviewReward) ─────────── */
+function loadRvwReward(){
+  return api('/reviews/reward').then(d=>{ RVW.reward=d||{}; RVW.rewardErr=''; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; RVW.rewardErr=T('Failed','失败'); render(); });
+}
+function rvwRewardSave(next){
+  const points=parseInt(next.points,10), max=parseInt(next.max_per_order,10);
+  if(!(points>=0&&points<=10000)) return T('Points must be 0–10000','积分需为 0–10000');
+  if(!(max>=1&&max<=50)) return T('Per-order cap must be 1–50','每单上限需为 1–50');
+  RVW.rewardBusy=true; RVW.rewardErr=''; render();
+  apiWrite('/config',{'reviews.reward':{enabled:!!next.enabled, points, max_per_order:max}},'PUT').then(()=>{
+    RVW.rewardBusy=false;
+    RVW.rewardNote=next.enabled?T('On. The mini app needs a republish before shoppers are told about it.','已开启。需重新发布小程序,顾客才会看到该奖励提示。'):'';
+    showToast(T('Saved','已保存')); loadRvwReward();
+  }).catch(e=>{ RVW.rewardBusy=false; if(String(e.message)==='auth') return;
+    RVW.rewardErr=e.refused?T(...e.words):T('Save failed','保存失败'); render(); });
+  return '';
+}
+reg('rvwRewardToggle', ()=>{ const r=RVW.reward; if(!r||RVW.rewardBusy||!mCan(RVW_KEYS)) return;
+  rvwRewardSave({enabled:!r.enabled, points:r.points, max_per_order:r.max_per_order}); });
+reg('rvwRewardEdit', ()=>{ const r=RVW.reward; if(!r||RVW.rewardBusy||!mCan(RVW_KEYS)) return;
+  state.ask={title:T('Reward reviewers','发放奖励'),
+    fields:[{id:'points',label:T('Points per review','每条评价积分'),type:'number',value:String(r.points)},
+            {id:'max',label:T('Most rewarded per order','每单最多奖励'),type:'number',value:String(r.max_per_order)}],
+    validate:v=>{ const p=parseInt(v.points,10), m=parseInt(v.max,10);
+      return !(p>=0&&p<=10000)?T('Points must be 0–10000','积分需为 0–10000'):!(m>=1&&m<=50)?T('Per-order cap must be 1–50','每单上限需为 1–50'):''; },
+    confirmLabel:T('Save','保存'),
+    run:v=>{ rvwRewardSave({enabled:!!r.enabled, points:v.points, max_per_order:v.max}); }};
+  state.askErr=null; render();
+});
+/* ── Set up: auto top-up (desktop saveReviewTopup / runReviewTopupNow) ───── */
+function loadRvwTopup(){
+  return api('/reviews/topup').then(d=>{ RVW.topup=d||{}; RVW.topupErr=''; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; RVW.topupErr=T('Failed','失败'); render(); });
+}
+function rvwTopupSave(next){
+  RVW.topupBusy=true; RVW.topupErr=''; render();
+  apiWrite('/config',{'reviews.topup':{enabled:!!next.enabled, min_reviews:parseInt(next.min_reviews,10), max_per_run:parseInt(next.max_per_run,10)}},'PUT').then(()=>{
+    RVW.topupBusy=false; showToast(T('Saved','已保存')); loadRvwTopup();
+  }).catch(e=>{ RVW.topupBusy=false; if(String(e.message)==='auth') return;
+    RVW.topupErr=e.refused?T(...e.words):T('Save failed','保存失败'); render(); });
+}
+/* Turning it ON starts publishing made-up reviews, so it asks — only on the
+   off → on step, as the desktop does. */
+reg('rvwTopupToggle', ()=>{ const t=RVW.topup; if(!t||RVW.topupBusy||!mCan(RVW_KEYS)) return;
+  const next={enabled:!t.enabled, min_reviews:t.min_reviews, max_per_run:t.max_per_run};
+  if(!next.enabled){ rvwTopupSave(next); return; }
+  const min=parseInt(t.min_reviews,10)||3;
+  state.ask={title:T('Turn on auto top-up? Every published product below '+min+' reviews will be filled with seeded reviews under made-up names. Customers see them as ordinary reviews.',
+      '开启自动补充?所有评价数低于 '+min+' 条的已上架商品,都会以虚构昵称补充种子评价。顾客看到的与普通评价无异。'),
+    confirmLabel:T('Turn on','开启'), run:()=>rvwTopupSave(next)};
+  render();
+});
+reg('rvwTopupEdit', ()=>{ const t=RVW.topup; if(!t||RVW.topupBusy||!mCan(RVW_KEYS)) return;
+  state.ask={title:T('Auto top-up','自动补充'),
+    fields:[{id:'min',label:T('Minimum reviews per product','每个商品最少评价数'),type:'number',value:String(t.min_reviews)},
+            {id:'max',label:T('Most to add per run','每次最多添加'),type:'number',value:String(t.max_per_run)}],
+    validate:v=>{ const a=parseInt(v.min,10), b=parseInt(v.max,10);
+      return !(a>=1&&a<=20)?T('Minimum must be 1–20','最少评价数需为 1–20'):!(b>=1&&b<=500)?T('Per-run cap must be 1–500','每次上限需为 1–500'):''; },
+    confirmLabel:T('Save','保存'),
+    run:v=>rvwTopupSave({enabled:!!t.enabled, min_reviews:v.min, max_per_run:v.max})};
+  state.askErr=null; render();
+});
+// One sweep by hand — works while the switch is off, to see what it does first.
+reg('rvwTopupRun', ()=>{ if(RVW.topupBusy||!rvwMod()) return;
+  RVW.topupBusy=true; RVW.topupErr=''; render();
+  apiWrite('/reviews/topup/run',{},'POST').then(j=>{
+    RVW.topupBusy=false; const d=(j&&j.data)||{};
+    showToast(d.added?T('Added '+d.added+' reviews','已补充 '+d.added+' 条评价'):T('Nothing to add','无需补充'));
+    loadRvwTopup(); if(d.added) loadRvw();
+  }).catch(e=>{ RVW.topupBusy=false; if(String(e.message)==='auth') return;
+    RVW.topupErr=e.refused?T(...e.words):T('Failed','失败'); render(); });
+});
+function rvwTopupLine(d){
+  if(!d) return '';
+  if(!d.available) return T('Not available on this database.','此数据库不支持。');
+  if(!d.products) return T('Every product is at the line.','所有商品都已达到设定值。');
+  const capped=d.uncapped>d.reviews?T(' ('+d.reviews+' this run)','(本次 '+d.reviews+' 条)'):'';
+  return T(d.products+' products below '+d.min_reviews+' — would add '+d.uncapped+' reviews'+capped,
+           d.products+' 个商品低于 '+d.min_reviews+' 条 — 将补充 '+d.uncapped+' 条评价'+capped);
+}
+/* ── Set up: the review tags (desktop RTAGS_CARD), a §279 card ──────────── */
+const RTAG_COLOURS=['lime','papaya','sky','corn','pea','cucumber','pink','berry','carrot','lotus','almond','lemon','avocado','forest'];
+let RTAG_D=null;
+const rtagCard=()=>cfgCard('reviews.tags',{
+  read:()=>({'reviews.tags':RTAG_D.map(t=>({id:t.id, en:t.en, cn:t.cn, color:t.color}))}),
+  hold:b=>{ const ids=new Set();
+    for(const t of b['reviews.tags']){
+      if(!t.id) return T('Every tag needs an id','每个标签都需要 id');
+      if(ids.has(t.id)) return T('Duplicate id "'+t.id+'"','重复 id "'+t.id+'"');
+      if(!t.en&&!t.cn) return T('Tag "'+t.id+'" needs a label','标签需至少一个名称');
+      ids.add(t.id);
+    } return ''; },
+  apply:b=>{ RTAG_D=((b&&b['reviews.tags'])||[]).map(t=>Object.assign({},t)); },
+  words:{'reviews.tags':['Review tags','评价标签']},
+});
+function rtagEnsure(){
+  if(RTAG_D||!state.cfg) return;
+  const list=cfgGet('reviews.tags',null);
+  RTAG_D=Array.isArray(list)?list.map(t=>({id:String(t.id||''),en:String(t.en||''),cn:String(t.cn||''),color:String(t.color||'lime')})):[];
+  if(mCan(RVW_KEYS)) cfgCardStart(rtagCard());
+}
+const rtagSlug=v=>String(v).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
+function rtagSheet(i){
+  const c=CFG_CARD['reviews.tags'], t=RTAG_D&&RTAG_D[i]; if(!c||!c.auto||!t) return;
+  cfgSheet(c, T('Review tags','评价标签')+' · '+(i+1), null,
+    [{id:'id',label:'id',commit:true},
+     {id:'en',label:T('English label','英文名称')},
+     {id:'cn',label:T('Chinese label','中文标签')},
+     {id:'color',label:T('Colour','颜色'),choices:RTAG_COLOURS.map(x=>[x,x])}],
+    f=>{ const cur=RTAG_D[i]; return cur?cur[f]:''; },
+    (f,v)=>{ const cur=RTAG_D[i]; if(cur) cur[f]=f==='id'?rtagSlug(v):v; },
+    [{key:'rm',label:T('Remove','删除'),danger:true,run:()=>rtagRemove(i)}]);
+}
+function rtagRemove(i){
+  const c=CFG_CARD['reviews.tags'], t=RTAG_D&&RTAG_D[i]; if(!c||!c.auto||!t) return;
+  const go=()=>{ RTAG_D.splice(i,1); c.auto.touch(); state.ask=null; render(); };
+  if(!t.id){ go(); return; }
+  state.ask={title:T('Remove "'+t.id+'"? Reviews already tagged with this id will lose that chip.','移除 "'+t.id+'"？已使用此标签的评价将失去该标记。'),
+    confirmLabel:T('Remove','删除'), danger:true, run:go};
+  render();
+}
+reg('rtagEdit', i=>{ if(mCan(RVW_KEYS)) rtagSheet(Number(i)); });
+reg('rtagAdd', ()=>{ const c=CFG_CARD['reviews.tags']; if(!c||!c.auto||!mCan(RVW_KEYS)) return;
+  RTAG_D.push({id:'',en:'',cn:'',color:'lime'}); c.auto.touch(); rtagSheet(RTAG_D.length-1); });
+function rvwSetupHtml(){
+  const can=mCan(RVW_KEYS), mod=rvwMod();
+  const r=RVW.reward, t=RVW.topup;
+  const sw=(label,desc,on,cmd)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${label}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${desc}</span></span>${can?toggle(on,cmd):''}</div>`;
+  const line=t2=>`<div class="num" style="font-size:13px;color:var(--text-secondary);line-height:1.5">${t2}</div>`;
+  const reward=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${T('Reward reviewers','发放奖励')}</div>
+    ${!r?(RVW.rewardErr?line(RVW.rewardErr):line(T('Loading…','加载中…'))):`
+      ${sw(T('Reward reviewers','发放奖励'),T('Points for leaving a review, whatever the rating.','顾客发表评价即可获得积分,与评分无关。'),!!r.enabled,"APP.cmd('rvwRewardToggle')")}
+      ${line(T('Points per review','每条评价积分')+': '+escAttr(r.points)+' · '+T('Most rewarded per order','每单最多奖励')+': '+escAttr(r.max_per_order))}
+      ${line(r.grants?T(r.grants+' rewarded · '+r.points_given+' points given','已奖励 '+r.grants+' 条 · 共 '+r.points_given+' 积分'):T('Nothing rewarded yet.','尚未发放奖励。'))}
+      ${RVW.rewardNote?line(RVW.rewardNote):''}
+      ${RVW.rewardErr?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(RVW.rewardErr)}</div>`:''}
+      ${can?`<button class="btn2" style="width:100%" ${RVW.rewardBusy?'disabled':''} onclick="APP.cmd('rvwRewardEdit')">${RVW.rewardBusy?T('Saving…','保存中…'):T('Edit','编辑')}</button>`:''}`}</div>`;
+  const topup=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${T('Auto top-up','自动补充')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${LANG==='en'
+      ?'<b>These are seeded reviews, not customer ones</b> — written from the built-in copy, signed with made-up names, and marked as seeded in the list above. No customer, order or real name is ever used. Products listed in the last 24 hours are left alone.'
+      :'<b>补充的是种子评价,并非顾客评价。</b>文案由系统生成,署名为虚构昵称,并在上方列表中标记出来。不会使用任何顾客、订单或真实姓名。上架未满二十四小时的商品不会补充。'}</div>
+    ${!t?(RVW.topupErr?line(RVW.topupErr):line(T('Loading…','加载中…'))):`
+      ${sw(T('Keep products topped up','保持补充'),T('Fills anything below the line, and checks again every few hours.','自动补足低于设定值的商品,每几小时检查一次。'),!!t.enabled,"APP.cmd('rvwTopupToggle')")}
+      ${line(T('Minimum reviews per product','每个商品最少评价数')+': '+escAttr(t.min_reviews)+' · '+T('Most to add per run','每次最多添加')+': '+escAttr(t.max_per_run))}
+      ${line(RVW.topupBusy?T('Working…','处理中…'):rvwTopupLine(t))}
+      ${RVW.topupErr?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(RVW.topupErr)}</div>`:''}
+      ${can?`<div style="display:flex;gap:8px">
+        <button class="btn2" style="flex:1" ${RVW.topupBusy?'disabled':''} onclick="APP.cmd('rvwTopupEdit')">${T('Edit','编辑')}</button>
+        ${mod?`<button class="btn2" style="flex:1" ${RVW.topupBusy?'disabled':''} onclick="APP.cmd('rvwTopupRun')">${T('Run now','立即运行')}</button>`:''}</div>`:''}`}</div>`;
+  rtagEnsure();
+  const c=CFG_CARD['reviews.tags'];
+  const tags=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="eyebrow">${T('Review tags','评价标签')}</div>
+    ${RTAG_D&&RTAG_D.length?`<div class="list">${RTAG_D.map((x,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:48px;padding:10px 14px" ${can&&c&&c.auto?`onclick="APP.cmd('rtagEdit',${i})"`:'disabled'}>
+        <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([x.en,x.cn].filter(Boolean).join(' · '))||'—'}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);flex:none">${escAttr(x.id)} · ${escAttr(x.color)}</span></button>`).join('')}</div>`:''}
+    ${can&&c&&c.auto?`<button class="btn2" style="width:100%" onclick="APP.cmd('rtagAdd')">${T('+ Add tag','添加标签')}</button>${cardFoot(c)}`:''}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:4px;padding:8px 4px 0">
+      <span style="font-size:15px;font-weight:500">${T('Set up','设置')}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Read rarely, changed rarely.','很少查看,很少更改。')}</span></div>
+    ${reward}${topup}${tags}`;
+}
+function rvwStatusLine(){
+  const s=(RVW.meta&&RVW.meta.summary)||null; if(!s) return '';
+  const total=s.total||0, open=s.needs_reply||0;
+  const parts=[T(total+' reviews',total+' 条评价'),T(open+' waiting on a reply',open+' 条待回复')];
+  if(s.hidden) parts.push(T(s.hidden+' hidden',s.hidden+' 条已隐藏'));
+  const days=rvwDaysSince(s.oldest_unanswered);
+  if(open&&days!==null) parts.push(days===0?T('oldest is from today','最早一条是今天'):T('oldest is '+days+' days old','最早一条已等待 '+days+' 天'));
+  return parts.join(' · ');
+}
+function screenReviews(){
+  const s=(RVW.meta&&RVW.meta.summary)||{};
+  const open=Number(s.needs_reply||0);
+  const chips=[{key:'needs',en:'Needs reply',zh:'待回复',count:RVW.meta?s.needs_reply:null},{key:'all',en:'Everything',zh:'全部',count:RVW.meta?s.total:null},
+    {key:'low',en:'Low rated',zh:'低评分',count:RVW.meta?Number(s.low||0):null},{key:'hidden',en:'Hidden',zh:'已隐藏',count:RVW.meta?s.hidden:null}];
+  const ratings=[['',T('Any rating','任意评分')],['5',T('5 stars','5 星')],['4',T('4 stars','4 星')],['3',T('3 stars','3 星')],['2',T('2 stars','2 星')],['1',T('1 star','1 星')]];
+  return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:12px">
+    ${RVW.meta?`<div class="num" style="padding:0 20px;font-size:13px;color:var(--text-secondary)">${rvwStatusLine()}</div>`:''}
+    ${open>0?`<div style="padding:0 16px"><div class="card" style="padding:16px;display:flex;align-items:center;gap:14px">
+        <span class="num" style="font-size:28px;font-weight:500">${open}</span>
+        <span style="flex:1;font-size:14px;color:var(--text-secondary)">${T('Waiting on a reply','待回复')}</span>
+        ${rvwMod()?`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" ${RVW.busy?'disabled':''} onclick="APP.cmd('rvwDismissAll')">${RVW.busy==='bulk'?T('Saving…','保存中…'):T('Mark all '+open+' as handled','将全部 '+open+' 条标记为已处理')}</button>`:''}</div></div>`:''}
+    ${s.seeded?`<div style="padding:0 20px;font-size:12.5px;color:var(--text-secondary)">${T(s.seeded+' seeded reviews','种子评价 '+s.seeded+' 条')}</div>`:''}
+    ${chipRow(chips,RVW.filter,'rvwFilter')}
+    <div style="padding:0 16px;display:flex;gap:8px;align-items:center">
+      ${searchBox(`<input id="mRvwQ" inputmode="search" enterkeyhint="search" value="${escAttr(RVW.q)}" placeholder="${escAttr(T('Search reviews and products…','搜索评价与商品…'))}" style="width:100%" oninput="APP.cmd('rvwQ',this.value)">`,'mRvwClr',!!RVW.q,'flex:1;min-width:0')}
+      <select aria-label="${escAttr(T('Filter reviews by rating','按评分筛选评价'))}" style="flex:none;width:auto" onchange="APP.cmd('rvwRating',this.value)">${ratings.map(([v,l])=>`<option value="${v}"${RVW.rating===v?' selected':''}>${l}</option>`).join('')}</select></div>
+    ${RVW.rowErr?`<div style="margin:0 16px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(RVW.rowErr)}</div>`:''}
+    <div id="mRvwList" style="padding:0 16px">${rvwListHtml()}</div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px">${rvwSetupHtml()}</div></div>`;
 }
 
 /* ==========================================================================
@@ -9817,7 +10211,7 @@ function screenPopups(){
   const list=cfgGet('popups.list',null);
   if(!Array.isArray(list)) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!list.length) return nothingYet(T('The app is quiet','暂无弹窗'),
-    T('Nothing is interrupting your customers. Pop-ups are written on desktop — a promo, a review nudge, a holiday notice.','目前没有弹窗打扰顾客。弹窗在电脑端创建 — 活动、邀请评价或歇业通知。'));
+    T('Add one when you have something worth interrupting for — a promo, a review nudge, a holiday notice.','有值得打扰顾客的事时再新建一个——活动、邀请评价或歇业通知。'));
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     ${state.puErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -9841,9 +10235,284 @@ function screenPopups(){
         ${puWindow(p,st)?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${puWindow(p,st)}</div>`:''}
         <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
           <span style="flex:1;font-size:13.5px;color:var(--text-secondary)">${busy?T('Saving…','保存中…'):(p.enabled?T('On','已启用'):T('Off','已停用'))}</span>
+          ${puCan()?`<button class="btn2" style="min-height:34px;padding:0 14px;font-size:13px" onclick="APP.cmd('puEdit','${escAttr(p.id)}')">${T('Edit','编辑')}</button>`:''}
           ${toggle(!!p.enabled,`APP.cmd('togglePopup','${escAttr(p.id)}')`)}</div></div>`;
-    }).join('')}
-    ${noteBar(T('Pop-ups are written, scheduled and previewed on desktop.','弹窗的撰写、排期与预览在电脑端进行。'))}</div>`;
+    }).join('')}</div>`;
+}
+
+/* ==========================================================================
+   §325 M12 — POP-UPS ARE WRITTEN ON THE PHONE (desktop: 05-marketing.js
+   openPopupEditor / PU_CARD / savePopup / deletePopup / duplicatePopup)
+   --------------------------------------------------------------------------
+   The phone could switch a pop-up on and off and said the rest was "written,
+   scheduled and previewed on desktop". The desktop's editor is here now, field
+   for field: the internal name, the picture (POST /cms/media), the headline,
+   message and button in both languages and what the button opens, the pages,
+   when and how often, the dates, live and closable.
+
+   The pop-ups are ONE stored list written whole, so every write here goes
+   through puPut, which sends the version of the list it was built from
+   (§337, ?expect=popups.list:<v>). A stale list is refused and the screen is
+   handed the list as it is now:
+     · an EXISTING pop-up saves itself (§279, the desktop's PU_CARD, card
+       'popup.<id>', with Undo and Version history). Refused as stale, it is
+       sent again on the fresh list at once if nobody else changed THIS pop-up
+       — nothing of theirs is overwritten, because only this one is swapped
+       in; if somebody did, the editor takes their copy and says so;
+     · a NEW one keeps its Save (it creates the record), as do Duplicate and
+       Delete (asks): refused as stale, nothing is written and the sentence
+       says so — the next press saves on the fresh list.
+   On the pop-ups family's keys (popups:view or popups:edit), as the desktop.
+   ========================================================================== */
+const PU_KEYS=['popups:view','popups:edit'];
+const puCan=()=>mCan(PU_KEYS);
+let PUE=null;   // {id, isNew, d, loaded, openStamp, err, busy, img:{busy,err}}
+const puList=()=>{ const l=cfgGet('popups.list',null); return Array.isArray(l)?l:[]; };
+const puUid=()=>'pu_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+function puBlank(){
+  return {id:puUid(), enabled:true, name:'', pages:['home'], trigger:'on_load', delay_seconds:3, frequency:'once',
+    start_at:'', end_at:'', image_url:'', title_en:'', title_cn:'', body_en:'', body_cn:'',
+    cta_label_en:'', cta_label_cn:'', cta_target:'', dismissible:true, updated_at:Date.now()};
+}
+function puDraft(p){
+  return {id:p.id, enabled:!!p.enabled, name:String(p.name||''), pages:Array.isArray(p.pages)?p.pages.slice():[],
+    trigger:p.trigger||'on_load', delay_seconds:p.delay_seconds!=null?p.delay_seconds:3, frequency:p.frequency||'once',
+    start_at:String(p.start_at||'').slice(0,10), end_at:String(p.end_at||'').slice(0,10), image_url:String(p.image_url||''),
+    title_en:String(p.title_en||''), title_cn:String(p.title_cn||''), body_en:String(p.body_en||''), body_cn:String(p.body_cn||''),
+    cta_label_en:String(p.cta_label_en||''), cta_label_cn:String(p.cta_label_cn||''), cta_target:String(p.cta_target||''),
+    dismissible:p.dismissible!==false};
+}
+// The desktop's popupFromForm: the pop-up the form holds, as the list stores it.
+function puFromDraft(d){
+  return {id:d.id, enabled:!!d.enabled, name:String(d.name||'').trim(), pages:d.pages.slice(), trigger:d.trigger,
+    delay_seconds:Number(d.delay_seconds)||0, frequency:d.frequency, start_at:String(d.start_at||'').trim(), end_at:String(d.end_at||'').trim(),
+    image_url:d.image_url, title_en:d.title_en, title_cn:d.title_cn, body_en:d.body_en, body_cn:d.body_cn,
+    cta_label_en:d.cta_label_en, cta_label_cn:d.cta_label_cn, cta_target:String(d.cta_target||'').trim(), dismissible:!!d.dismissible};
+}
+/* EVERY pop-up write: the whole list, the version it was built from, and —
+   for the self-saving card — its history card. A stale list is refused by the
+   server with the list as it is now, which becomes the loaded list here. */
+function puPut(list, card, note){
+  const ver=((state.cfg||{})._versions||{})['popups.list'];
+  const q=[ver?'expect='+encodeURIComponent('popups.list:'+ver):'', card?'history='+encodeURIComponent(card)+(note?'&note='+note:''):''].filter(Boolean).join('&');
+  const cfgPath='/config'+(q?'?'+q:'');
+  return apiWrite(cfgPath,{'popups.list':list},'PUT').then(j=>{
+    const d=j&&j.data;
+    if(d&&typeof d==='object') state.cfg=d;
+    else state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list})});
+    return j;
+  }).catch(e=>{
+    if(e&&e.code==='stale_config'&&e.body){
+      state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list:Array.isArray(e.body.value)?e.body.value:[]}),
+        _versions:Object.assign({},(state.cfg||{})._versions||{},{'popups.list':e.body.version})});
+      e.stale=true;
+    }
+    throw e;
+  });
+}
+const puSame=(a,b)=>JSON.stringify(a||null)===JSON.stringify(b||null);
+/* The card holds ITS editor's state, not whatever PUE is now: leaving sends
+   what is pending, and that send reads after the screen has gone. */
+function puCard(id, st){
+  return cfgCard('popup.'+id,{
+    read:()=>({'popups.list':puList().map(p=>p.id===id?Object.assign(puFromDraft(st.d),{updated_at:st.openStamp}):p)}),
+    hold:()=>st.d.pages.length?'':T('Pick at least one page','至少选择一个页面'),
+    put:(b,note)=>{
+      // `updated_at` is stamped on what is SENT, never on what is compared.
+      const stamp=list=>list.map(p=>p.id===id?Object.assign({},b['popups.list'].find(x=>x.id===id)||p,{updated_at:Date.now()}):p);
+      return puPut(stamp(b['popups.list']),'popup.'+id,note).catch(e=>{
+        if(!e.stale) throw e;
+        const now=puList().find(p=>p.id===id);
+        if(now&&puSame(now,st.loaded)) return puPut(stamp(puList()),'popup.'+id,note);
+        // Somebody changed THIS pop-up meanwhile: the editor takes their copy.
+        if(now){ st.d=puDraft(now); st.loaded=JSON.parse(JSON.stringify(now)); st.openStamp=now.updated_at||null; }
+        st.err=staleSaveText();
+        setTimeout(()=>{ const c=CFG_CARD['popup.'+id]; if(c&&PUE===st) cfgCardStart(c); render(); },0);
+        throw new Error(String(staleSaveText()));
+      }).then(()=>{ const now=puList().find(p=>p.id===id); if(now) st.loaded=JSON.parse(JSON.stringify(now)); });
+    },
+    apply:b=>{ const p=((b&&b['popups.list'])||[]).find(x=>x.id===id); if(p) st.d=puDraft(p); },
+    // A restored version is the whole stored list; only THIS pop-up is taken from it.
+    fromSnapshot:s=>{ const old=(s['popups.list']||[]).find(x=>x.id===id); return {'popups.list':puList().map(p=>p.id===id&&old?old:p)}; },
+    words:{'popups.list':['Pop-up','弹窗']},
+  });
+}
+function puOpen(p, isNew){
+  PUE={id:p.id, isNew, d:puDraft(p), loaded:isNew?null:JSON.parse(JSON.stringify(p)), openStamp:p.updated_at||null, err:'', busy:null, img:{busy:false,err:''}, pq:'', pres:null, cats:null};
+  if(!isNew) cfgCardStart(puCard(p.id, PUE));
+  CMD.push('popupedit');
+}
+reg('puNew', ()=>{ if(!puCan()||!Array.isArray(cfgGet('popups.list',null))) return; puOpen(puBlank(), true); });
+reg('puEdit', id=>{ if(!puCan()) return; const p=puList().find(x=>String(x.id)===String(id)); if(p) puOpen(p,false); });
+const puTouch=()=>{ if(!PUE) return; if(!PUE.isNew){ const c=CFG_CARD['popup.'+PUE.id]; if(c&&c.auto) c.auto.touch(); } else PUE.dirty=true; };
+const PU_TEXT=['name','title_en','title_cn','body_en','body_cn','cta_label_en','cta_label_cn','delay_seconds','start_at','end_at'];
+reg('puSet', (k,v)=>{ if(!PUE||!puCan()) return;
+  if(PU_TEXT.indexOf(k)>=0){ PUE.d[k]=String(v==null?'':v); puTouch(); return; }
+  if(k==='trigger'||k==='frequency'){ PUE.d[k]=String(v); puTouch(); render(); return; }
+  if(k==='enabled'||k==='dismissible'){ PUE.d[k]=!PUE.d[k]; puTouch(); render(); } });
+// "All pages" overrides the rest; picking a page drops "All pages" (renderPopupPageChips).
+reg('puPage', k=>{ if(!PUE||!puCan()||!PU_PAGE[k]) return;
+  const on=PUE.d.pages.indexOf(k)>=0;
+  if(k==='all') PUE.d.pages=on?[]:['all'];
+  else { PUE.d.pages=PUE.d.pages.filter(x=>x!=='all'&&x!==k); if(!on) PUE.d.pages.push(k); }
+  puTouch(); render(); });
+/* What the button opens: the desktop's simple destinations, a product (found
+   by name or SKU) or a category (the desktop's own category list). */
+const PU_TARGETS=[['',['— No button, just close','无按钮,仅关闭']],['shop',['Opens Shop tab','打开商城页']],['cart',['Opens Cart tab','打开购物车页']],
+  ['home',['Opens Home tab','打开首页']],['me',['Opens Me tab','打开我的']],['membership',['Opens Membership page','打开会员页']],
+  ['promotions',['Opens CMS page · Promotions','Opens CMS page · Promotions']],['about',['Opens CMS page · About','Opens CMS page · About']],
+  ['categories',['Opens CMS page · Categories','Opens CMS page · Categories']],['product',['Opens a specific product…','指定产品…']],['category',['Opens a specific category…','指定分类…']]];
+const puTargetKind=t=>!t?'':t.indexOf('product:')===0?'product':t.indexOf('category:')===0?'category':(PU_TARGETS.some(x=>x[0]===t)?t:'');
+reg('puTarget', k=>{ if(!PUE||!puCan()) return;
+  if(k==='product'){ PUE.pick='product'; PUE.pres=null; PUE.pq=''; render(); return; }
+  if(k==='category'){ PUE.pick='category'; render();
+    if(!PUE.cats) api('/categories').then(r=>{ if(PUE){ PUE.cats=Array.isArray(r)?r:[]; render(); } }).catch(()=>{ if(PUE){ PUE.cats=[]; render(); } });
+    return; }
+  PUE.pick=null; PUE.d.cta_target=k; puTouch(); render(); });
+let puPQT=null;
+reg('puProdQ', v=>{ if(!PUE) return; PUE.pq=String(v||''); clearTimeout(puPQT);
+  puPQT=setTimeout(()=>{ const q=PUE&&PUE.pq.trim(); if(!q){ PUE.pres=null; render(); return; }
+    api('/products?limit=10&q='+encodeURIComponent(q)).then(r=>{ if(PUE){ PUE.pres=Array.isArray(r)?r:[]; const h=document.getElementById('mPuPick'); if(h) h.innerHTML=puPickHtml(); else render(); } }).catch(()=>{}); },250); });
+reg('puPickProduct', id=>{ if(!PUE||!puCan()) return; PUE.d.cta_target='product:'+Number(id); PUE.pick=null; puTouch(); render(); });
+reg('puPickCategory', i=>{ if(!PUE||!puCan()||!PUE.cats) return; const c=PUE.cats[Number(i)]; if(!c) return; PUE.d.cta_target='category:'+c.id; PUE.pick=null; puTouch(); render(); });
+function puPickHtml(){
+  const rows=PUE.pres||[];
+  return rows.length?`<div class="list">${rows.map((p,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button class="row" style="min-height:44px;padding:8px 14px" onclick="APP.cmd('puPickProduct',${Number(p.id)})"><span style="flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([p.name_en,p.name_cn].filter(Boolean).join(' · ')||('#'+p.id))}${p.sku?` <span class="num" style="color:var(--text-secondary)">[${escAttr(p.sku)}]</span>`:''}</span></button>`).join('')}</div>`
+    :PUE.pq.trim()&&PUE.pres?`<div style="font-size:13px;color:var(--text-secondary)">${T('(no matches)','(无匹配)')}</div>`:'';
+}
+function puTargetLabel(t){
+  if(!t) return T('No destination — pop-up just dismisses.','无跳转 — 弹窗仅关闭。');
+  if(t.indexOf('product:')===0) return '→ '+T('Product','商品')+' #'+t.split(':')[1];
+  if(t.indexOf('category:')===0){ const k=t.split(':')[1], c=(PUE&&PUE.cats||[]).find(x=>String(x.id)===k); return '→ '+T('Category','分类')+' '+(c?c.name:k); }
+  const x=PU_TARGETS.find(y=>y[0]===t); return '→ '+(x?T(...x[1]):t);
+}
+// The picture: POST /cms/media, as the desktop's uploadPopupImage.
+reg('puPic', ()=>{ if(!PUE||!puCan()||PUE.img.busy) return;
+  const el=document.createElement('input'); el.type='file'; el.accept='image/*';
+  el.onchange=()=>{ const f=el.files&&el.files[0]; if(f) puUpload(f); }; el.click(); });
+async function puUpload(file){
+  if(!PUE||!puCan()) return;
+  PUE.img={busy:true,err:''}; render();
+  try{
+    const fd=new FormData(); fd.append('file',await catBannerShrink(file),'popup.jpg');
+    const r=await fetch(API+'/cms/media',{method:'POST',credentials:'same-origin',body:fd});
+    if(r.status===401){ location.href='/backend/login'; return; }
+    if(r.status===403){ PUE.img.err=(await apiRefusal(r)).message; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j||!j.success||!j.data){ const reason=MEDIA_ERR[j&&j.error]; PUE.img.err=T('Upload failed','上传失败')+(reason?' '+T(...reason):''); return; }
+    PUE.d.image_url=j.data.url||('/api/retail/media/'+j.data.id); puTouch(); showToast(T('Uploaded','已上传'));
+  }catch(e){ if(PUE) PUE.img.err=T('Upload failed','上传失败'); }
+  finally{ if(PUE) PUE.img.busy=false; render(); }
+}
+reg('puPicClear', ()=>{ if(!PUE||!puCan()) return; PUE.d.image_url=''; puTouch(); render(); });
+/* Save (a NEW pop-up), Duplicate, Delete — each one press, each on the list
+   as loaded, each refused as stale rather than applied over somebody else. */
+function puWrite(list, done, okText){
+  PUE.busy=true; PUE.err=''; render();
+  puPut(list).then(()=>{ if(PUE) PUE.busy=null; if(okText) showToast(okText); done(); })
+    .catch(e=>{ if(!PUE) return; PUE.busy=null; if(String(e.message)==='auth') return;
+      PUE.err=e.stale?String(staleSaveText()):e.refused?T(...e.words):T('Save failed','保存失败')+(e.message?': '+e.message:''); render(); });
+}
+const puLeave=()=>{ PUE=null; const top=state.stack.length?state.stack[state.stack.length-1].route:null; if(top==='popupedit'){ forgetScroll(); state.stack.pop(); } render(); };
+reg('puSave', ()=>{
+  if(!PUE||!PUE.isNew||PUE.busy||!puCan()) return;
+  if(!PUE.d.pages.length){ PUE.err=T('Pick at least one page','至少选择一个页面'); render(); return; }
+  const next=Object.assign(puFromDraft(PUE.d),{updated_at:Date.now()});
+  puWrite([next].concat(puList().filter(p=>p.id!==next.id)), puLeave, T('Pop-up saved','弹窗已保存'));
+});
+reg('puDuplicate', ()=>{
+  if(!PUE||PUE.isNew||PUE.busy||!puCan()) return;
+  const c=CFG_CARD['popup.'+PUE.id];
+  Promise.resolve(c&&c.auto?c.auto.flush():null).then(()=>{
+    const src=puList().find(p=>p.id===PUE.id); if(!src) return;
+    // A fresh id, "(copy)" on the name, left OFF so nothing goes live by accident.
+    const copy=Object.assign(JSON.parse(JSON.stringify(src)),{id:puUid(), enabled:false, updated_at:Date.now(),
+      name:(src.name||T('Untitled','未命名'))+T(' (copy)','(副本)')});
+    puWrite([copy].concat(puList()), ()=>{ if(c&&c.auto) c.auto.stop(); state.stack.pop(); puOpen(copy,false); },
+      T('Duplicated · edit the copy','已复制 · 编辑副本'));
+  });
+});
+reg('puDelete', ()=>{
+  if(!PUE||PUE.isNew||PUE.busy||!puCan()) return;
+  const id=PUE.id;
+  state.ask={title:T('Delete this pop-up?','删除此弹窗?'), confirmLabel:T('Delete','删除'), danger:true, run:()=>{
+    const c=CFG_CARD['popup.'+id];
+    // What was waiting goes first, then the card stops: a pop-up that is gone
+    // must not be written back by a pause that outlived it.
+    Promise.resolve(c&&c.auto?c.auto.flush():null).then(()=>{ if(c&&c.auto) c.auto.stop();
+      puWrite(puList().filter(p=>p.id!==id), puLeave, T('Pop-up deleted','弹窗已删除')); });
+  }};
+  render();
+});
+/* A NEW pop-up asks before it is dropped; an existing one sends what is
+   pending on the way out (it saves itself). */
+function puMayLeave(){
+  if(!PUE) return true;
+  if(PUE.isNew&&PUE.dirty){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ PUE=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  if(!PUE.isNew){ const c=CFG_CARD['popup.'+PUE.id]; if(c&&c.auto) c.auto.flush(); }
+  PUE=null; return true;
+}
+function screenPopupEdit(){
+  if(!PUE) return screenPopups();
+  const d=PUE.d, busy=!!PUE.busy;
+  const lab=(t,opt)=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${t}${opt?` <span style="font-weight:400">${opt}</span>`:''}</span>`;
+  const hint=t=>`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.5">${t}</div>`;
+  const inp=(k,ph,type)=>`<input ${type?`type="${type}"`:''} value="${escAttr(d[k])}" placeholder="${escAttr(ph||'')}" style="width:100%" oninput="APP.cmd('puSet','${k}',this.value)">`;
+  const area=(k,ph)=>`<textarea style="width:100%;min-height:64px;resize:none" placeholder="${escAttr(ph||'')}" oninput="APP.cmd('puSet','${k}',this.value)">${escAttr(d[k])}</textarea>`;
+  const two=(a,b)=>`<div style="display:flex;flex-direction:column;gap:8px">${a}${b}</div>`;
+  const card=(title,body)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px"><div class="eyebrow">${title}</div>${body}</div>`;
+  const kind=PUE.pick||puTargetKind(d.cta_target);
+  const c=PUE.isNew?null:CFG_CARD['popup.'+PUE.id];
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <label style="display:block">${lab(T('Internal name','内部名称'),T('— admin only, never shown to customers','仅管理员可见'))}${inp('name','e.g. Spring promo · home')}</label>
+    ${card(T('The message','内容'),`
+      <div>${lab(T('Picture','图片'),T('— optional','可选'))}
+        ${d.image_url?`<img src="${escAttr(d.image_url)}" alt="" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--border-default);display:block">`
+          :`<div style="font-size:12.5px;color:var(--text-secondary)">${T('No image yet — text-only pop-up.','暂无图片 — 纯文字弹窗。')}</div>`}
+        ${PUE.img.err?`<div style="font-size:13px;color:var(--brick-ink);margin-top:8px">${escAttr(PUE.img.err)}</div>`:''}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn2" style="flex:1" ${PUE.img.busy?'disabled':''} onclick="APP.cmd('puPic')">${PUE.img.busy?T('Uploading…','上传中…'):T('Add or replace an image','添加或替换图片')}</button>
+          ${d.image_url?`<button class="btn2" style="flex:1" onclick="APP.cmd('puPicClear')">${T('Remove image','移除图片')}</button>`:''}</div></div>
+      <div>${lab(T('Headline','标题'))}${two(inp('title_en','Welcome'),inp('title_cn','欢迎'))}
+        ${hint(T('English · 中文 — customers see one, based on their WeChat language.','顾客按微信语言看到其中一种。'))}</div>
+      <div>${lab(T('Message','消息'),T('— optional, one or two short lines','可选,一两句'))}${two(area('body_en','One or two short lines.'),area('body_cn','一两句简短文字。'))}</div>
+      <div>${lab(T('Button text','按钮文字'),T('— optional','可选'))}${two(inp('cta_label_en','Shop now'),inp('cta_label_cn','立即购买'))}
+        <select style="width:100%;margin-top:8px" aria-label="${escAttr(T('What the button opens','按钮打开的内容'))}" onchange="APP.cmd('puTarget',this.value)">
+          ${PU_TARGETS.map(([v,l])=>`<option value="${v}"${kind===v?' selected':''}>${escAttr(T(...l))}</option>`).join('')}</select>
+        ${PUE.pick==='product'?`<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+            <input id="mPuProdQ" value="${escAttr(PUE.pq)}" placeholder="${escAttr(T('Type to search products by name or SKU…','按名称或货号搜索'))}" style="width:100%" oninput="APP.cmd('puProdQ',this.value)">
+            <div id="mPuPick">${puPickHtml()}</div></div>`:''}
+        ${PUE.pick==='category'?`<div style="margin-top:8px">${!PUE.cats?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+            :PUE.cats.length?`<div class="list">${PUE.cats.map((x,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<button class="row" style="min-height:44px;padding:8px 14px" onclick="APP.cmd('puPickCategory',${i})"><span style="flex:1;font-size:14px">${escAttr(x.name)}</span></button>`).join('')}</div>`
+            :`<div style="font-size:13px;color:var(--text-secondary)">${T('(no categories yet)','(暂无分类)')}</div>`}</div>`:''}
+        ${hint(escAttr(puTargetLabel(d.cta_target)))}</div>`)}
+    ${card(T('The rules','规则'),`
+      <div>${lab(T('Where','位置'))}${hint(T('Pick one or more pages. "All pages" overrides the rest.','选择一个或多个页面;"全部页面"将覆盖其余选项。'))}
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${Object.keys(PU_PAGE).map(k=>`<button class="chip ${d.pages.indexOf(k)>=0?'on':''}" onclick="APP.cmd('puPage','${k}')"><span>${T(...PU_PAGE[k])}</span></button>`).join('')}</div></div>
+      <div>${lab(T('Appears','触发时机'))}<select style="width:100%" onchange="APP.cmd('puSet','trigger',this.value)">
+          <option value="on_load"${d.trigger==='on_load'?' selected':''}>${T('The moment the page opens','打开页面即弹出')}</option>
+          <option value="after_seconds"${d.trigger==='after_seconds'?' selected':''}>${T('A few seconds after','数秒后弹出')}</option></select>
+        ${d.trigger==='after_seconds'?`<div style="margin-top:10px">${lab(T('Delay in seconds','延时(秒)'))}${inp('delay_seconds','3','number')}</div>`:''}</div>
+      <div>${lab(T('How often','频率'))}<select style="width:100%" onchange="APP.cmd('puSet','frequency',this.value)">
+          ${[['once',['Once per customer, ever','每位顾客仅一次']],['daily',['Once a day','每天一次']],['session',['Once per app session','每次打开小程序一次']],['every_visit',['Every time the page opens','每次打开页面']]]
+            .map(([v,l])=>`<option value="${v}"${d.frequency===v?' selected':''}>${T(...l)}</option>`).join('')}</select></div>
+      <div style="display:flex;gap:10px"><label style="flex:1;display:block">${lab(T('Start','开始'))}${inp('start_at','','date')}</label>
+        <label style="flex:1;display:block">${lab(T('End','结束'))}${inp('end_at','','date')}</label></div>
+      ${hint(T('Leave blank to run until you turn it off.','留空则一直显示,直到你停用它。'))}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-size:15px">${T('Live — show this to customers now','启用 — 立即向顾客显示')}</span>${toggle(!!d.enabled,"APP.cmd('puSet','enabled')")}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-size:15px">${T('Closable — show a close button','可关闭 — 显示关闭按钮')}</span>${toggle(!!d.dismissible,"APP.cmd('puSet','dismissible')")}</div>`)}
+    ${PUE.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(PUE.err)}</div>`:''}
+    ${PUE.isNew?`<button class="cta" ${busy?'disabled style="opacity:.55"':''} onclick="APP.cmd('puSave')">${busy?T('Saving…','保存中…'):T('Save','保存')}</button>`
+      :`${c&&c.auto?cardFoot(c):''}
+        <div style="display:flex;gap:8px">
+          <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('puDuplicate')">${T('Duplicate','复制')}</button>
+          <button class="btn2" style="flex:1;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('puDelete')">${busy?T('Working…','处理中…'):T('Delete','删除')}</button></div>`}
+  </div>`;
 }
 
 /* ==========================================================================
@@ -11405,9 +12074,16 @@ function screenMembership(){
       <span style="font-size:14px;color:var(--brick-ink)">${state.tiersErr}</span></div></div>`;
   if(!state.tiers) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const tiers=state.tiers.slice().sort((a,b)=>(Number(a.threshold)||0)-(Number(b.threshold)||0));
-  if(!tiers.length) return nothingYet(T('No tiers yet','暂无会员等级'),
-    T('The membership ladder is built on desktop. Once there are rungs, they show here with how many members stand on each.',
-      '会员等级在电脑端设置。设置后会连同各等级人数显示在这里。'));
+  /* §325 M11 — the points rules and the ladder are edited here now, each a
+     draft with its own Save (§279.2); the cards below stay the read. */
+  const can=loyCan();
+  const rules=state.cfg?`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div class="eyebrow">${T('How points work','积分规则')}</div>
+      <div style="font-size:13.5px;line-height:1.55">${prOutcome(prFrom(cfgGet('points',null)),true)}</div>
+      ${can?`<button class="btn2" style="width:100%" onclick="APP.cmd('prOpen')">${T('Edit','编辑')}</button>`:''}</div>`:'';
+  const editTiers=can?`<button class="btn2" style="width:100%" onclick="APP.cmd('teOpen')">${tiers.length?T('Edit tier','编辑等级'):T('+ Add tier','添加等级')}</button>`:'';
+  if(!tiers.length) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${rules}
+    <div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No tiers yet — add one to start the ladder.','暂无等级 — 添加一个以开始等级体系。')}</div>${editTiers}</div>`;
   const card=t=>{
     const th=Number(t.threshold)||0;
     /* The merchant's own zero, not a yuan one (audit D-03) — this is the only
@@ -11429,8 +12105,291 @@ function screenMembership(){
         :`<div style="font-size:13px;color:var(--text-secondary);opacity:.8">${T('No perks yet','暂无权益')}</div>`}</div>`;
   };
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${rules}
     ${tiers.map(card).join('')}
-    ${noteBar(T('Thresholds, multipliers and perks are edited on desktop.','门槛、倍数与权益在电脑端编辑。'))}</div>`;
+    ${editTiers}</div>`;
+}
+
+/* ==========================================================================
+   §325 M11 — LOYALTY MONEY, SET ON THE PHONE (desktop: 07-content-billing.js
+   savePointsSettings / saveRctiers / the top-up packages table)
+   --------------------------------------------------------------------------
+   Thresholds, multipliers, perks, the points rules and the top-up packages
+   were "edited on desktop". Each decides what a customer is given, so under
+   §279.2 none of them saves itself: each is a draft with an explicit Save,
+   sending the desktop's body, and leaving with unsaved changes asks.
+     · How points work: the desktop's four rules and the shipping switch, as
+       the seven keys savePointsSettings sends (PUT /config), with its worked
+       example and its short-expiry nudge.
+     · The tiers: the whole ladder staged, then Save tiers — every tier keyed
+       from its English name once and kept, no two the same, at least one, the
+       lowest starting at 0, sorted by spend — PUT /config 'roots_club.tiers'.
+     · Top-up packages: add (POST), change (PATCH, only what changed), switch
+       on or off, delete (asks) — /topup-packages.
+   Keys: the points and tiers are the loyalty family (loyalty:view or
+   loyalty:edit); packages are topup:edit. All fail CLOSED while the account's
+   keys are unknown — each one is money.
+   ========================================================================== */
+const LOY_KEYS=['loyalty:view','loyalty:edit'];
+const loyKnown=()=>!!state.caps;
+const loyCan=()=>loyKnown()&&mCan(LOY_KEYS);
+const tupCan=()=>loyKnown()&&mCan('topup:edit');
+const mpFmt=n=>{ if(!Number.isFinite(n)) return '0'; const r=Math.round(n*100)/100; return Number.isInteger(r)?String(r):String(r).replace(/0+$/,'').replace(/\.$/,''); };
+/* ── How points work ────────────────────────────────────────────────────── */
+const PR={d:null, saved:null, busy:false, err:'', said:false};
+function prFrom(pts){
+  const p=pts||{};
+  const redeem=Number(p.redeemRate)||100;
+  return {earnPoints:String(p.earnPoints!=null?p.earnPoints:1), earnSpend:String(p.earnSpend!=null?p.earnSpend:(p.earnRate!=null?p.earnRate:100)),
+    earnBase:p.earnBase==='subtotal'?'subtotal':'paid', pointValue:(1/redeem).toFixed(2),
+    expiryMonths:String(p.expiryMonths!=null?p.expiryMonths:12), coverShipping:!!p.coverShipping};
+}
+// The desktop's savePointsSettings body, field for field.
+function prBody(d){
+  const earnPoints=Math.max(1,parseInt(d.earnPoints,10)||1), earnSpend=Math.max(1,parseInt(d.earnSpend,10)||100);
+  const pointValue=Math.min(1,Math.max(0.01,parseFloat(d.pointValue)||1));
+  return {'points.earnPoints':earnPoints, 'points.earnSpend':earnSpend,
+    'points.earnRate':Math.max(1,Math.ceil(earnSpend/earnPoints)),
+    'points.earnBase':d.earnBase==='subtotal'?'subtotal':'paid',
+    'points.redeemRate':Math.max(1,Math.round(1/pointValue)),
+    'points.expiryMonths':Math.max(0,parseInt(d.expiryMonths,10)||0),
+    'points.coverShipping':!!d.coverShipping};
+}
+const prDirty=()=>!!(PR.d&&PR.saved)&&JSON.stringify(PR.d)!==JSON.stringify(PR.saved);
+function topTier(){ const t=state.tiers||[]; return t.length?t.reduce((a,b)=>(Number(b.points_mult)||1)>(Number(a.points_mult)||1)?b:a,t[0]):null; }
+// The grey "what it adds up to" line (mpOutcome).
+function prOutcome(d, noTier){
+  const earnPoints=Math.max(0,parseFloat(d.earnPoints)||0), earnSpend=Math.max(1,parseFloat(d.earnSpend)||100), pv=Math.max(0,parseFloat(d.pointValue)||0);
+  if(!earnPoints||!pv) return T('Set an earn rate and point value above to see what an order gives back.','在上方填写积分速率与积分价值,即可预览一笔订单的回馈。');
+  const S=200, base=(S/earnSpend)*earnPoints, val=base*pv, pct=val/S*100;
+  let s=T(`So a ${money(CUR,S)} order earns ${mpFmt(base)} points = ${money(CUR,mpFmt(val))} off a future order (${mpFmt(pct)}% back).`,
+          `一笔 ${money(CUR,S)} 订单可得 ${mpFmt(base)} 积分 = ${money(CUR,mpFmt(val))},可抵扣后续订单(回馈 ${mpFmt(pct)}%)。`);
+  const top=topTier(), m=top?(Number(top.points_mult)||1):1;
+  if(!noTier&&top&&m>1) s+=' '+T(`A ${tierName(top)} member at ${mpFmt(m)}× earns ${mpFmt(base*m)} points on the same order.`,`${tierName(top)} 会员按 ${mpFmt(m)} 倍,同一订单可得 ${mpFmt(base*m)} 积分。`);
+  return s;
+}
+function prExpiryHint(d){ const m=parseInt(d.expiryMonths,10);
+  return Number.isFinite(m)&&m>0&&m<6?T('Short — most stores give 12–24, or 0 so points never expire.','偏短 — 多数商家设 12–24 个月,或设 0 让积分永不过期。'):''; }
+reg('prOpen', ()=>{ if(!loyCan()||!state.cfg) return; PR.d=prFrom(cfgGet('points',null)); PR.saved=Object.assign({},PR.d); PR.err=''; PR.said=false; CMD.push('pointsrules'); });
+reg('prSet', (k,v)=>{
+  if(!PR.d||!loyCan()||['earnPoints','earnSpend','earnBase','pointValue','expiryMonths'].indexOf(k)<0) return;
+  PR.d[k]=String(v==null?'':v); PR.said=false;
+  const o=document.getElementById('mPrOut'); if(o) o.textContent=prOutcome(PR.d);
+  const h=document.getElementById('mPrHint'); if(h) h.textContent=prExpiryHint(PR.d);
+  const b=document.getElementById('mPrSave'); if(b) b.disabled=!prDirty()||PR.busy;
+});
+reg('prShip', ()=>{ if(!PR.d||!loyCan()) return; PR.d.coverShipping=!PR.d.coverShipping; PR.said=false; render(); });
+reg('prSave', ()=>{
+  if(!PR.d||PR.busy||!prDirty()||!loyCan()) return;
+  PR.busy=true; PR.err=''; render();
+  apiWrite('/config',prBody(PR.d),'PUT').then(j=>{
+    if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
+    PR.busy=false; PR.saved=Object.assign({},PR.d); PR.said=true; showToast(T('Saved','已保存')); render();
+  }).catch(e=>{ PR.busy=false; if(String(e.message)==='auth') return;
+    PR.err=e.refused?T(...e.words):T('Save failed','保存失败')+(e.message&&!e.refused?': '+e.message:''); render(); });
+});
+function prMayLeave(){
+  if(!prDirty()) return true;
+  state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+    confirmLabel:T('Leave','离开'), danger:true, run:()=>{ PR.d=Object.assign({},PR.saved); forgetScroll(); state.stack.pop(); render(); }};
+  render(); return false;
+}
+function screenPointsRules(){
+  const d=PR.d; if(!d) return screenMembership();
+  const inp=(k,label,w)=>`<input type="number" inputmode="decimal" value="${escAttr(d[k])}" aria-label="${escAttr(label)}" style="width:${w||'72px'}" oninput="APP.cmd('prSet','${k}',this.value)">`;
+  const row=html=>`<div style="font-size:15px;line-height:2.2">${html}</div>`;
+  const hint=prExpiryHint(d);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      ${row(`${T('Customers earn','顾客获得')} ${inp('earnPoints',T('Customers earn','顾客获得'))} ${T('point for every ¥','积分,每消费 ¥').replace('¥',CUR||'¥')} ${inp('earnSpend',T('point for every ¥','积分,每消费 ¥'))} ${T('of','的')}
+        <select onchange="APP.cmd('prSet','earnBase',this.value)">
+          <option value="paid"${d.earnBase==='paid'?' selected':''}>${T('what they pay','实付金额')}</option>
+          <option value="subtotal"${d.earnBase==='subtotal'?' selected':''}>${T('order value before discounts','折前金额')}</option></select>`)}
+      ${row(`${T('Each point is worth ¥','每积分价值 ¥').replace('¥',CUR||'¥')} ${inp('pointValue',T('Each point is worth ¥','每积分价值 ¥'))} ${T('at checkout.','(结账时抵扣)。')}`)}
+      ${row(`${T('Points expire','积分有效期')} ${inp('expiryMonths',T('Points expire','积分有效期'))} ${T('months after they\'re earned.','个月。')}`)}
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('0 = never expire','0 为永不过期')}</div>
+      <div id="mPrHint" style="font-size:12.5px;color:var(--amber-ink)">${hint}</div>
+      <div class="sep"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Points can pay for shipping','积分可抵运费')}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${T('Off — shipping is always paid in cash','关闭时运费以现金支付')}</span></span>
+        ${toggle(!!d.coverShipping,"APP.cmd('prShip')")}</div>
+      <div id="mPrOut" style="font-size:13px;color:var(--text-secondary);line-height:1.55">${prOutcome(d)}</div></div>
+    ${PR.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(PR.err)}</div>`:''}
+    <div style="font-size:12.5px;color:var(--text-secondary);text-align:center">${PR.said&&!prDirty()?T('Saved','已保存'):T('Applies to new orders only.','仅对新订单生效。')}</div>
+    <button id="mPrSave" class="cta" ${!prDirty()||PR.busy?'disabled':''} onclick="APP.cmd('prSave')">${PR.busy?T('Saving…','保存中…'):T('Save points rules','保存积分规则')}</button></div>`;
+}
+/* ── The tiers (renderRctierCards / saveRctiers) ───────────────────────── */
+const TE={d:null, saved:'', busy:false, err:''};
+function teCopy(list){ return (list||[]).map(t=>({key:String(t.key||'').trim(), name_en:String(t.name_en||'').trim(), name_cn:String(t.name_cn||'').trim(),
+  threshold:Math.max(0,Number(t.threshold)||0),
+  points_mult:(()=>{ const m=Number(t.points_mult); return Number.isFinite(m)&&m>0?Math.max(0.1,Math.min(10,m)):1; })(),
+  perks_en:Array.isArray(t.perks_en)?t.perks_en.slice():[], perks_cn:Array.isArray(t.perks_cn)?t.perks_cn.slice():[]})); }
+const teDirty=()=>!!TE.d&&JSON.stringify(TE.d)!==TE.saved;
+reg('teOpen', ()=>{ if(!loyCan()||!state.tiers) return; TE.d=teCopy(state.tiers); TE.saved=JSON.stringify(TE.d); TE.err=''; CMD.push('tiersedit'); });
+// One tier in a sheet; its edits go into the staged ladder, not to the server.
+function teSheet(i){
+  const t=TE.d&&TE.d[i]; if(!t) return;
+  state.ask={title:T('Edit tier','编辑等级'),
+    body:`${T('Key','标识')} <span class="num">${escAttr(tierKey(t)||'—')}</span> — ${T('set automatically from the English name.','由英文名称自动生成。')}`,
+    fields:[{id:'name_en',label:T('Name (English)','名称(英文)'),value:t.name_en},
+      {id:'name_cn',label:T('Name (中文)','名称(中文)'),value:t.name_cn},
+      {id:'threshold',label:T('Reached at lifetime spend','达到门槛(累计消费)')+' · '+(CUR||'¥'),type:'number',value:String(t.threshold)},
+      {id:'points_mult',label:T('Points multiplier','积分倍率')+' — '+T('1.0 = base rate','1.0 = 基础速率'),type:'number',value:String(t.points_mult)},
+      {id:'perks_en',label:T('Perks — one per line (English)','权益 — 每行一条(英文)'),multiline:true,value:t.perks_en.join('\n')},
+      {id:'perks_cn',label:T('Perks — one per line (中文)','权益 — 每行一条(中文)'),multiline:true,value:t.perks_cn.join('\n')}],
+    confirmLabel:T('Done','完成'),
+    run:v=>{ const cur=TE.d[i]; if(!cur) return;
+      cur.name_en=String(v.name_en||''); cur.name_cn=String(v.name_cn||'');
+      cur.threshold=Math.max(0,parseInt(v.threshold,10)||0);
+      const m=parseFloat(v.points_mult); cur.points_mult=Number.isFinite(m)&&m>0?Math.max(0.1,Math.min(10,m)):1;
+      const lines=s=>String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);
+      cur.perks_en=lines(v.perks_en); cur.perks_cn=lines(v.perks_cn); TE.err=''; render(); }};
+  state.askErr=null; render();
+}
+reg('teEdit', i=>{ if(loyCan()) teSheet(Number(i)); });
+reg('teAdd', ()=>{
+  if(!TE.d||!loyCan()) return;
+  // The next ¥1000 above the top tier, so the ladder stays in order.
+  const top=TE.d.reduce((m,t)=>Math.max(m,Number(t.threshold)||0),0);
+  TE.d.push({key:'',name_en:'',name_cn:'',threshold:top+1000,points_mult:1,perks_en:[],perks_cn:[]});
+  teSheet(TE.d.length-1);
+});
+reg('teRemove', i=>{
+  i=Number(i); const t=TE.d&&TE.d[i]; if(!t||!loyCan()) return;
+  state.ask={title:T(`Remove tier "${t.name_en||t.name_cn||'(unnamed)'}"?`,`删除等级"${t.name_cn||t.name_en||'(未命名)'}"?`),
+    confirmLabel:T('Remove tier','删除等级'), danger:true, run:()=>{ TE.d.splice(i,1); render(); }};
+  render();
+});
+// The desktop's holds, in its words; then sorted by spend and sent whole.
+function teCheck(list){
+  for(const t of list){ if(!t.key) t.key=tierKey(t); }
+  const keys=new Set();
+  for(const t of list){
+    if(!t.key) return T('Every tier needs an English name','每个等级需要英文名称');
+    if(keys.has(t.key)) return T(`Two tiers resolve to the same key "${t.key}" — rename one.`,`两个等级标识重复"${t.key}" — 请重命名其一。`);
+    keys.add(t.key);
+  }
+  if(!list.length) return T('At least one tier is required','至少需要一个等级');
+  const lowest=list.reduce((m,t)=>Math.min(m,Number(t.threshold)||0),Infinity);
+  if(lowest!==0) return T('The lowest tier must start at '+money0(CUR,0),'最低等级门槛必须为 0');
+  return '';
+}
+reg('teSave', ()=>{
+  if(!TE.d||TE.busy||!loyCan()) return;
+  const list=TE.d.map(t=>Object.assign({},t,{perks_en:t.perks_en.slice(),perks_cn:t.perks_cn.slice()}));
+  const why=teCheck(list); if(why){ TE.err=why; render(); return; }
+  const sorted=list.slice().sort((a,b)=>(Number(a.threshold)||0)-(Number(b.threshold)||0));
+  TE.busy=true; TE.err=''; render();
+  apiWrite('/config',{'roots_club.tiers':sorted},'PUT').then(j=>{
+    if(j&&j.data&&typeof j.data==='object') state.cfg=j.data;
+    TE.busy=false; state.tiers=sorted.map(t=>Object.assign({},t)); TE.d=teCopy(sorted); TE.saved=JSON.stringify(TE.d);
+    showToast(T('Tiers saved','已保存')); render();
+  }).catch(e=>{ TE.busy=false; if(String(e.message)==='auth') return;
+    TE.err=e.refused?T(...e.words):T('Save failed','保存失败')+(e.message?': '+e.message:''); render(); });
+});
+function teMayLeave(){
+  if(!teDirty()) return true;
+  state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+    confirmLabel:T('Leave','离开'), danger:true, run:()=>{ TE.d=null; forgetScroll(); state.stack.pop(); render(); }};
+  render(); return false;
+}
+function screenTiersEdit(){
+  if(!TE.d) return screenMembership();
+  const card=(t,i)=>{
+    const th=Number(t.threshold)||0;
+    const from=th===0?T('from '+money0(CUR,0)+' — everyone starts here','从 '+money0(CUR,0)+' 起 — 人人有份')
+      :T('from '+money0(CUR,th)+' lifetime spend','累计消费 '+money0(CUR,th)+' 起');
+    const perks=LANG==='en'?(t.perks_en.length?t.perks_en:t.perks_cn):(t.perks_cn.length?t.perks_cn:t.perks_en);
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:16px;font-weight:500;min-width:0">${escAttr(tierName(t))}</span>
+        <span class="num" style="font-size:13px;color:var(--text-secondary);flex:none">${multText(t.points_mult)}× ${T('points','积分')}</span></div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${from}</div>
+      ${perks.length?`<ul style="margin:2px 0 0;padding-left:18px">${perks.map(p=>`<li style="font-size:13.5px;color:var(--text-secondary)">${escAttr(p)}</li>`).join('')}</ul>`
+        :`<div style="font-size:13px;color:var(--text-secondary)">${T('No perks yet','暂无权益')}</div>`}
+      <div style="display:flex;gap:8px">
+        <button class="btn2" style="flex:1" onclick="APP.cmd('teEdit',${i})">${T('Edit tier','编辑等级')}</button>
+        <button class="btn2" style="flex:1;color:var(--brick-ink)" onclick="APP.cmd('teRemove',${i})">${T('Remove tier','删除等级')}</button></div></div>`;
+  };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T('Shoppers reach a tier by lifetime spend and keep it — the lowest tier starts at '+money0(CUR,0)+' so everyone belongs somewhere. Each tier multiplies the points earned above.','顾客按累计消费达到并保留等级;最低等级从 '+money0(CUR,0)+' 起,人人有份。各等级在上述基础上叠加积分倍率。')}</div>
+    ${TE.d.length?TE.d.map(card).join(''):`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No tiers yet — add one to start the ladder.','暂无等级 — 添加一个以开始等级体系。')}</div>`}
+    <button class="btn2" style="width:100%" onclick="APP.cmd('teAdd')">${T('+ Add tier','添加等级')}</button>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Tiers sort by spend when you save. Everyone\'s tier updates automatically from their lifetime spend.','保存后按门槛排序;顾客等级依累计消费自动更新。')}</div>
+    ${TE.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(TE.err)}</div>`:''}
+    <button class="cta" ${!teDirty()||TE.busy?'disabled':''} onclick="APP.cmd('teSave')">${TE.busy?T('Saving…','保存中…'):T('Save tiers','保存等级')}</button></div>`;
+}
+
+/* ── Top-up packages (the desktop's table: add, change, switch, delete) ──── */
+const TP={rows:null, err:null, busy:null, rowErr:''};
+function loadTupPkgs(){
+  return api('/topup-packages').then(r=>{ TP.rows=Array.isArray(r)?r:[]; TP.err=null; state.tupPkgs=TP.rows; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; TP.err=E('Could not load this.','无法加载。'); render(); });
+}
+reg('tpOpen', ()=>{ if(!tupCan()) return; TP.rows=null; TP.rowErr=''; CMD.push('topuppkgs'); loadTupPkgs(); });
+function tpWrite(id, call, okText){
+  TP.busy=id; TP.rowErr=''; render();
+  call.then(()=>{ TP.busy=null; if(okText) showToast(okText); loadTupPkgs(); })
+    .catch(e=>{ TP.busy=null; if(String(e.message)==='auth') return;
+      TP.rowErr=e.refused?T(...e.words):T('Save failed','保存失败')+(e.message?': '+e.message:''); loadTupPkgs(); });
+}
+const tpFields=pk=>[
+  {id:'amount',label:T('Amount ¥','金额').replace('¥',CUR||'¥'),type:'number',value:pk?String(pk.amount):'',placeholder:'200'},
+  {id:'bonus',label:T('Bonus points','赠送积分'),type:'number',value:pk?String(pk.bonus_points||0):'',placeholder:'50'},
+  {id:'title_en',label:T('Title · EN','标题 · 英文'),value:pk?String(pk.title_en||''):'',placeholder:money(CUR,200)+' + 50 bonus pts'},
+  {id:'title_cn',label:T('Title · 中','标题(中文)'),value:pk?String(pk.title_cn||''):'',placeholder:'充200送50积分'}];
+reg('tpAdd', ()=>{
+  if(!tupCan()||TP.busy) return;
+  state.ask={title:T('New top-up package','新建充值套餐'), fields:tpFields(null),
+    validate:v=>Number(v.amount)>0?'':T('Amount required','请填写金额'),
+    confirmLabel:T('Add','添加'),
+    run:v=>tpWrite('new', apiWrite('/topup-packages',{amount:Number(v.amount), bonus_points:Math.max(0,parseInt(v.bonus,10)||0),
+      title_en:v.title_en||null, title_cn:v.title_cn||null},'POST'), T('Package added','套餐已添加'))};
+  state.askErr=null; render();
+});
+/* A change sends only the fields that changed — the desktop's table sends one
+   field per edit; nothing here is sent until Save. */
+reg('tpEdit', id=>{
+  const pk=(TP.rows||[]).find(x=>x.id===Number(id)); if(!pk||!tupCan()||TP.busy) return;
+  state.ask={title:money(CUR,pk.amount), fields:tpFields(pk),
+    validate:v=>Number(v.amount)>0?'':T('Amount required','请填写金额'),
+    confirmLabel:T('Save','保存'),
+    run:v=>{ const body={};
+      if(Number(v.amount)!==Number(pk.amount)) body.amount=Number(v.amount);
+      if((parseInt(v.bonus,10)||0)!==(Number(pk.bonus_points)||0)) body.bonus_points=Math.max(0,parseInt(v.bonus,10)||0);
+      if(v.title_en!==String(pk.title_en||'')) body.title_en=v.title_en;
+      if(v.title_cn!==String(pk.title_cn||'')) body.title_cn=v.title_cn;
+      if(!Object.keys(body).length) return;
+      tpWrite(pk.id, apiWrite('/topup-packages/'+pk.id,body,'PATCH'), T('Saved','已保存')); }};
+  state.askErr=null; render();
+});
+reg('tpActive', id=>{
+  const pk=(TP.rows||[]).find(x=>x.id===Number(id)); if(!pk||!tupCan()||TP.busy) return;
+  tpWrite(pk.id, apiWrite('/topup-packages/'+pk.id,{is_active:pk.is_active?0:1},'PATCH'));
+});
+reg('tpDelete', id=>{
+  const pk=(TP.rows||[]).find(x=>x.id===Number(id)); if(!pk||!tupCan()||TP.busy) return;
+  state.ask={title:T(`Delete ${money(CUR,pk.amount)} top-up package?`,`删除 ${money(CUR,pk.amount)} 充值套餐？`),
+    confirmLabel:T('Delete','删除'), danger:true,
+    run:()=>tpWrite(pk.id, apiWrite('/topup-packages/'+pk.id,{},'DELETE'), T('Package deleted','套餐已删除'))};
+  render();
+});
+function screenTupPkgs(){
+  if(TP.err) return `<div style="padding:14px 16px 24px"><div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${TP.err}</div></div>`;
+  if(!TP.rows) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const busy=TP.busy!=null;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${TP.rowErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(TP.rowErr)}</div>`:''}
+    ${TP.rows.length?`<div class="list">${TP.rows.map((pk,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+        <button onclick="APP.cmd('tpEdit',${Number(pk.id)})" ${busy?'disabled':''} style="flex:1;min-width:0;display:flex;flex-direction:column;text-align:left;background:none;border:0;padding:0;font-family:inherit;color:var(--text-primary);cursor:pointer">
+          <span class="num" style="font-size:14.5px">${money(CUR,pk.amount)} · ${Number(pk.bonus_points||0)?'+'+pk.bonus_points+' '+T('points','积分'):T('no bonus','无赠送')}</span>
+          ${pk.title_en||pk.title_cn?`<span style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(LANG==='en'?(pk.title_en||pk.title_cn):(pk.title_cn||pk.title_en))}</span>`:''}</button>
+        ${toggle(!!pk.is_active,`APP.cmd('tpActive',${Number(pk.id)})`)}
+        <button class="iconbtn" aria-label="${escAttr(T('Delete','删除'))}" ${busy?'disabled':''} onclick="APP.cmd('tpDelete',${Number(pk.id)})">${ic('trash-2',18)}</button></div>`).join('')}</div>`
+      :`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No top-up packages yet','暂无充值套餐')}</div>`}
+    <button class="cta" ${busy?'disabled':''} onclick="APP.cmd('tpAdd')">${TP.busy==='new'?T('Saving…','保存中…'):T('New top-up package','新建充值套餐')}</button></div>`;
 }
 
 /* ── Top-up ──────────────────────────────────────────────────────────────── */
@@ -11494,7 +12453,7 @@ function screenTopups(){
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recent top-ups','最近充值')}</div>
       ${rows.length?`<div class="list">${rows.map((t,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${tupRow(t)}`).join('')}</div>`
         :`<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No top-ups yet.','暂无充值记录。')}</div>`}</div>
-    ${noteBar(T('Packages are created and priced on desktop.','充值套餐在电脑端创建与定价。'))}</div>`;
+    ${tupCan()?`<button class="btn2" style="width:100%" onclick="APP.cmd('tpOpen')">${T('Top-up packages','充值套餐')}</button>`:''}</div>`;
 }
 
 /* ── Leaderboard ─────────────────────────────────────────────────────────── */
@@ -18110,11 +19069,14 @@ const SUBS={
                    ${state.invSnoozeBusy===v.dbId?'disabled':''}><span>${T('Remind me tomorrow','明天提醒我')}</span></button>`
               : ''}</div></div>`).join('')}</div></div>`;
   }},
-  coupons:{title:['Coupons','优惠券'],render:()=>{
+  coupons:{title:['Coupons','优惠券'],
+    /* §325 M14 — a coupon is made here now, through the desktop's wizard. */
+    cta:()=>cwCan()?`<button class="cta inhead" onclick="APP.cmd('cwOpen')">${T('New coupon','新建优惠券')}</button>`:'',
+    render:()=>{
     const all=DB.coupons||[];
     if(!state.vchLoaded&&!all.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(!all.length) return nothingYet(T('No coupons','没有优惠券'),
-      T('Coupons are written on desktop. Running ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
+      T('Money off for your customers — typed as a code, picked up in the app, or applied for them.','给顾客的优惠 — 输码使用、在小程序领取、或结账自动抵扣。'));
     const on=all.filter(c=>c.on), off=all.filter(c=>!c.on);
     const seg=state.vchSeg||'on';
     const list=seg==='on'?on:seg==='off'?off:on.concat(off);
@@ -18127,7 +19089,8 @@ const SUBS={
     ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${state.couponErr}</div>`:''}
     ${!list.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${
       seg==='on'?T('Nothing running right now.','当前没有生效中的优惠券。'):T('Nothing here.','这里没有优惠券。')}</div>`:''}
-    ${list.map(c=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px${c.on?'':';opacity:.7'}">
+    ${list.map(c=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px${c.on?'':';opacity:.7'}${c.id!=null&&c.raw?';cursor:pointer':''}"${
+      /* §325 M13 — the card opens the coupon; the switch keeps its own tap. */c.id!=null&&c.raw?` onclick="APP.cmd('vchOpen',${Number(c.id)})"`:''}>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
         <span style="min-width:0;display:flex;flex-direction:column;gap:2px">
           <span style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -18135,10 +19098,12 @@ const SUBS={
             ${!c.on?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};flex:none">${c.ended?T('Ended','已到期'):T('Off','已停用')}</span>`:''}</span>
           ${c.title?`<span style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span>`:''}</span>
         ${/* §325 — PATCH /vouchers/:id is coupons:edit (lib/cap-routes.js); without it
-              the card says where the coupon stands, as a sample row does. */''}
-        ${(c.id==null||!mCan('coupons:edit'))?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
+              the card says where the coupon stands, as a sample row does. §325 M14:
+              coupons:edit is money:'moves', so the switch also waits for the keys
+              (vdCan) rather than showing while they load. */''}
+        ${(c.id==null||!vdCan('coupons:edit'))?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
           :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
-          :`<span style="flex:none">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
+          :`<span style="flex:none" onclick="event.stopPropagation()">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
       </div>
       <div style="font-size:18px;font-weight:500;letter-spacing:-.01em">${T(...c.gives)}</div>
       <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(...c.rules)}</div>
@@ -18152,43 +19117,24 @@ const SUBS={
     </div>`).join('')}
     ${seg==='on'&&off.length?`<div style="text-align:center;font-size:13px;color:var(--text-secondary);padding-top:4px">${
       T(off.length+(off.length===1?' coupon is off':' coupons are off'),off.length+' 张已停用')} · <button onclick="APP.cmd('vchSeg','off')" style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary);text-decoration:underline">${T('view','查看')}</button></div>`:''}
-    ${desktopNote()}</div></div>`;
+    </div></div>`;
   }},
-  flash:{title:['Flash sales','秒杀'],render:()=>{
-    const list=DB.flash||[];
-    if(!state.flashLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    if(!list.length) return nothingYet(T('No flash sales','没有秒杀'),
-      T('Flash sales are built on desktop. Running and upcoming ones show here.','秒杀在电脑端创建。进行中与即将开始的会显示在这里。'));
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${list.map(f=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;gap:12px;align-items:flex-start">
-        <span style="width:52px;height:52px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${f.img?`;background-image:url('${String(f.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${f.img?'':ic('zap',20)}</span>
-        <span style="flex:1;min-width:0">
-          ${/* The name gets the whole line. It was sharing it with the status
-               pill and losing — "Lemongrass Kombucha" clipped to make room for
-               the word "Live" — and letting the row wrap only moved the
-               threshold rather than removing it. The pill joins the price row
-               below, which already wraps and has room. */''}
-          <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...f.title)}</span>
-          <span style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
-            ${pill(f.kind,T(...f.status))}
-            ${f.price?`<span class="num" style="font-size:18px;font-weight:500">${f.price}</span>`:''}
-            ${f.price&&f.was?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${f.was}</span>`:''}
-            ${f.off?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T(f.off+'% off',f.off+'% 折扣')}</span>`:''}</span>
-          ${f.sku?`<span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px">${escAttr(f.sku)}</span>`:''}
-        </span></div>
-      ${f.win?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${f.win}</div>`:''}
-      ${f.limit!=null?`<div>
-        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px">
-          <span class="num" style="color:var(--text-secondary)">${T(f.sold+' of '+f.limit+' sold',f.limit+' 件中已售 '+f.sold)}</span>
-          <span class="num" style="color:${f.left===0?'var(--brick-ink)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
-        <span style="display:block;margin-top:6px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${f.pct||0}%;border-radius:999px;background:${f.left===0?'var(--brick)':'var(--text-primary)'}"></span></span></div>`:''}
-      ${(f.hidden||f.noCoupon)?`<div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Product is not on the shop','商品未上架')}</span>`:''}
-        ${f.noCoupon?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No coupons on top','不可叠加优惠券')}</span>`:''}</div>`:''}
-    </div>`).join('')}
-    ${desktopNote()}</div>`;
-  }},
+  /* §325 M13 — one coupon (the desktop's drawer) and its grant dialog. */
+  coupon:{title:['Coupons','优惠券'],titleOf:()=>{ const r=vdRaw(); return r?escAttr(r.code):T('Coupons','优惠券'); },
+    backLabel:()=>T('Coupons','优惠券'),render:()=>screenCoupon()},
+  couponnew:{title:['New coupon','新建优惠券'],titleOf:()=>CW&&CW_TITLES[CW.step]?T(...CW_TITLES[CW.step]):T('New coupon','新建优惠券'),
+    backLabel:()=>T('Coupons','优惠券'),render:()=>screenCouponNew()},
+  coupongrant:{title:['Grant coupon','发放优惠券'],titleOf:()=>{ const c=VG&&(DB.coupons||[]).find(x=>x.id===VG.id);
+      return T('Grant coupon','发放优惠券')+(c?' '+escAttr(c.code):''); },
+    backLabel:()=>{ const r=vdRaw(); return r?escAttr(r.code):T('Coupons','优惠券'); },render:()=>screenCouponGrant()},
+  /* §325 M15 — the desktop's Flash sales tab: the timeline, its row actions,
+     and the composer (route flashedit). */
+  flash:{title:['Flash sales','秒杀'],
+    cta:()=>fsCanPut()?`<button class="cta inhead" onclick="APP.cmd('fsNew')">${T('New flash sale','新建秒杀')}</button>`:'',
+    render:()=>screenFlash()},
+  flashedit:{title:['New flash sale','新建秒杀'],
+    titleOf:()=>FSC&&FSC.product?escAttr(fsName(FSC.product)):T('New flash sale','新建秒杀'),
+    backLabel:()=>T('Flash sales','秒杀'),render:()=>screenFlashEdit()},
   /* §63 — writing one is no longer a desktop-only act, so the CTA is a Write
      button rather than a note saying where to go. It carries broadcasts:send
      on its own, exactly as Waste carries waste:record: the SCREEN is
@@ -18240,7 +19186,14 @@ const SUBS={
     titleOf:()=>{ const pg=scPage(state.scSel); return pg?T(...pg.name):T('Share cards','分享卡片'); },
     backLabel:()=>T('Share cards','分享卡片'),
     render:()=>screenShareCard()},
-  popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),render:()=>screenPopups()},
+  popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),
+    cta:()=>puCan()&&Array.isArray(cfgGet('popups.list',null))?`<button class="cta inhead" onclick="APP.cmd('puNew')">${T('New pop-up','新建弹窗')}</button>`:'',
+    render:()=>screenPopups()},
+  /* §325 M12 — the desktop's pop-up editor. */
+  popupedit:{title:['Pop-up','弹窗'],
+    titleOf:()=>PUE?(PUE.isNew?T('New pop-up','新建弹窗'):T('Edit pop-up','编辑弹窗')):T('Pop-ups','弹窗'),
+    backLabel:()=>T('Pop-ups','弹窗'),
+    render:()=>screenPopupEdit()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
   /* §325 M9 — the offer, and who earns the repeat-order share. */
   affsettings:{title:['The offer','奖励方案'],backLabel:()=>T('Affiliate','分销'),render:()=>screenAffSettings()},
@@ -18249,6 +19202,10 @@ const SUBS={
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
   wallet:{title:['Top-up','充值'],status:()=>statusTopups(),render:()=>screenTopups()},
+  /* §325 M11 — the money of the loyalty programme, each with its own Save. */
+  pointsrules:{title:['How points work','积分规则'],backLabel:()=>T('Membership','会员积分'),render:()=>screenPointsRules()},
+  tiersedit:{title:['Membership','会员积分'],backLabel:()=>T('Membership','会员积分'),render:()=>screenTiersEdit()},
+  topuppkgs:{title:['Top-up packages','充值套餐'],backLabel:()=>T('Top-up','充值'),render:()=>screenTupPkgs()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
   voting:{title:['Voting','投票'],
     cta:()=>mCan('voting:edit')?`<button class="cta inhead" onclick="APP.cmd('pollEdit')">${T('New poll','新建投票')}</button>`:'',
@@ -18345,6 +19302,8 @@ const SUBS={
    places. Both keep every screen they had; the inbox also rides every top-level
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
+/* §325 M10 — the desktop's Reviews tab, from the top of the Inbox's Reviews. */
+SUBS.reviews={title:['Reviews','评价'],backLabel:()=>T('Inbox','消息'),render:()=>screenReviews()};
 SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
 /* ==========================================================================
    §325 PD2 — SHOP MENUS, READ-ONLY (desktop: retail-admin/28-shops.js)
@@ -27603,13 +28562,17 @@ SUBS.receive={title:['Receive','收货'],
    single field on a single record, and it is what an operator reaches for when
    a code is being abused. Creating one is authoring, and stays on the desktop. */
 function toggleCoupon(code){
-  if(!mCan('coupons:edit')) return;   // §325
+  if(!vdCan('coupons:edit')) return;   // §325; M14: money, so closed until the keys are known
   const c=(DB.coupons||[]).find(x=>x.code===code);
   if(!c||c.id==null||state.couponBusy) return;
   // The switch controls is_active. LIVE is is_active AND unexpired, so turning
   // an expired coupon back on makes it active and still not live — and the card
   // has to keep saying "Ended" rather than flipping to running.
   const next=!c.active;
+  /* §325 M13 — and it is refused, as the desktop's vchTurn refuses it: switched
+     on past its end date it is dead anyway, and the switch would read as though
+     it had worked. The date is changed on the coupon's own screen. */
+  if(next&&c.ended){ state.couponErr=E('It already ended — set a new end date first','优惠券已到期 — 请先设置新的截止日期'); render(); return; }
   state.couponBusy=code; state.couponErr=null; render();
   apiWrite('/vouchers/'+c.id,{is_active:next},'PATCH').then(()=>{
     c.active=next; c.on=next&&!c.ended; state.sw['c_'+code]=next; state.couponBusy=null; render();
@@ -27619,6 +28582,1158 @@ function toggleCoupon(code){
     if(String(e.message)==='auth') return;
     state.couponErr=e.refused?E(...e.words):E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
   });
+}
+/* ── §325 M13 — ONE COUPON, AND WHO HAS IT ────────────────────────────────
+   The desktop's coupon drawer (05-marketing.js vchDrawerRender) and its grant
+   dialog (openGrantModal), as two phone screens. Same endpoints, same bodies:
+     PATCH  /vouchers/:id            — per customer, end date, the three
+                                       switches, the label, on/off
+     GET    /vouchers/:id/grants     — who holds it (?limit=8 for the head)
+     POST   /vouchers/:id/grant      — {customer_ids:[id], note} or {to_all:true, note}
+     DELETE /voucher-grants/:id      — take one back
+   Keys (lib/cap-routes.js): the PATCH is coupons:edit; grant, the grants list
+   and the DELETE are coupons:grant. Both are money:'moves' in
+   lib/capabilities.js, so each control here fails closed until the keys are
+   known (vdCan), not open as plain mCan would while state.caps is null.
+   Creating one is M14. */
+let VD=null;   // {id, raw, busy, err, lblEn, lblCn, lblDirty, holders, holdersTotal, holdersErr}
+let VG=null;   // {id, note, q, picks, picksErr, pickSeq, grants, grantsErr, busy, err}
+let vgQT=null;
+const vdCan=k=>!!state.caps&&mCan(k);
+const vdRaw=()=>{ if(!VD) return null; const c=(DB.coupons||[]).find(x=>x.id===VD.id); return (c&&c.raw)||VD.raw; };
+const vdExpired=r=>!!(r&&r.expires_at&&_date(r.expires_at)&&_date(r.expires_at)<=new Date());
+const vdPerLabel=n=>n===0?T('No limit','不限'):n===1?T('Once','1 次'):T(n+' times',n+' 次');
+/* The list again, after a write — the desktop's loadVouchers. The counts on the
+   card (used, given) move with a grant, so they are read rather than guessed. */
+function vchReload(){
+  return api('/vouchers').then(r=>{ if(Array.isArray(r)){ DB.coupons=r.map(mapVoucher);
+    DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); }
+    state.vchLoaded=true; render(); }).catch(()=>{ /* the write itself landed; the list re-reads on its next load */ });
+}
+reg('vchOpen', id=>{
+  const c=(DB.coupons||[]).find(x=>String(x.id)===String(id));
+  if(!c||c.id==null||!c.raw) return;   // a sample row has nothing behind it to open
+  VD={id:c.id, raw:c.raw, busy:null, err:'', lblEn:null, lblCn:null, lblDirty:false,
+    holders:null, holdersTotal:0, holdersErr:''};
+  CMD.push('coupon');
+  vdLoadHolders();
+});
+/* The head of who holds it: eight, as the desktop drawer shows. A grant to
+   everyone can run to thousands; the rest is on the next screen. */
+const VD_HOLDER_HEAD=8;
+function vdLoadHolders(){
+  const v=VD; if(!v) return Promise.resolve();
+  const r=vdRaw();
+  if(!r||!Number(r.grant_count)){ v.holders=[]; v.holdersTotal=0; v.holdersErr=''; render(); return Promise.resolve(); }
+  v.holders=null; v.holdersErr=''; render();
+  return apiRaw('/vouchers/'+v.id+'/grants?limit='+VD_HOLDER_HEAD).then(j=>{
+    if(VD!==v) return;   // left, or another coupon opened, mid-flight
+    v.holders=(j&&j.data)||[]; v.holdersTotal=(j&&j.total!=null)?Number(j.total):v.holders.length; render();
+  }).catch(e=>{ if(VD!==v||String(e.message)==='auth') return;
+    v.holders=[]; v.holdersErr=T('Couldn’t load who has it: ','无法加载持有名单:')+(e.message||''); render(); });
+}
+reg('vdHoldersRetry', ()=>{ vdLoadHolders(); });
+/* One PATCH, three states: the control says Saving…, a refusal stays on the
+   screen above the facts, success merges what was sent and reads the list. */
+function vdPatch(key, body, okText){
+  const v=VD; if(!v||v.busy||!vdCan('coupons:edit')) return Promise.resolve(false);
+  v.busy=key; v.err=''; render();
+  return apiWrite('/vouchers/'+v.id, body, 'PATCH').then(()=>{
+    v.busy=null; v.raw=Object.assign({}, vdRaw()||{}, body);
+    const c=(DB.coupons||[]).find(x=>x.id===v.id);
+    if(c){ const i=DB.coupons.indexOf(c); DB.coupons[i]=mapVoucher(Object.assign({}, c.raw, body)); }
+    if(okText) showToast(okText);
+    render(); vchReload(); return true;
+  }).catch(e=>{ v.busy=null; if(String(e.message)==='auth') return false;
+    v.err=e.refused?String(E(...e.words)):T('Failed: ','失败:')+(e.message||''); render(); return false; });
+}
+reg('vdSwitch', field=>{
+  if(['is_public','auto_grant_signup','auto_apply'].indexOf(field)<0) return;
+  const r=vdRaw(); if(!r) return;
+  vdPatch(field, {[field]:!r[field]});
+});
+reg('vdExpiry', value=>{
+  const val=String(value||'');
+  vdPatch('expires_at', {expires_at:val||null},
+    val?T('End date set','已更新截止日期'):T('No end date — runs until turned off','已改为无截止日期'));
+});
+/* Moving off "once each" turns every hand-out into a standing one — including
+   hand-outs a customer already spent, which come back to life. The desktop
+   asks first; so does this, and a No puts the select back where it was. */
+reg('vdPer', value=>{
+  const v=VD, r=vdRaw(); if(!v||!r||v.busy||!vdCan('coupons:edit')) return;
+  const n=parseInt(value,10)||0;
+  const ok=()=>vdPatch('per_customer_limit', {per_customer_limit:n},
+    n===0?T('No limit — each customer can use it on every order','已改为不限次数')
+    :n===1?T('Once per customer','每人限用 1 次'):T('Up to '+n+' orders per customer','每人最多 '+n+' 次'));
+  const revived=n!==1?Number(r.grant_used_count||0):0;
+  if(revived>0){
+    state.ask={title:T('Give it back to customers who already used it?','让已使用过的顾客重新获得?'),
+      body:T(revived+(revived===1?' customer has':' customers have')+' already used this coupon. They get it back and can use it again.',
+        '已有 '+revived+' 位顾客使用过这张优惠券。他们会重新获得,并可再次使用。'),
+      confirmLabel:T('Yes, let them use it again','确认'), run:ok};
+    render(); return;   // a Cancel re-renders, and the select reads what is stored
+  }
+  ok();
+});
+reg('vdLbl', (lang,value)=>{ if(!VD||!vdCan('coupons:edit')) return;
+  if(lang==='en') VD.lblEn=String(value==null?'':value); else VD.lblCn=String(value==null?'':value);
+  VD.lblDirty=true; });
+/* The label is the one thing here that is typed, so it has its own Save, as
+   on the desktop. */
+reg('vdSaveLabel', ()=>{
+  const v=VD, r=vdRaw(); if(!v||!r) return;
+  const en=(v.lblEn!=null?v.lblEn:(r.title_en||'')).trim(), cn=(v.lblCn!=null?v.lblCn:(r.title_cn||'')).trim();
+  vdPatch('label', {title_en:en||null, title_cn:cn||null}, T('Label saved','标签已保存')).then(done=>{
+    if(done&&VD===v){ v.lblEn=null; v.lblCn=null; v.lblDirty=false; render(); } });
+});
+/* Turning on a coupon past its end date would leave it dead anyway, so it is
+   refused with the reason and the date to change, as on the desktop. */
+reg('vdTurn', on=>{
+  const v=VD, r=vdRaw(); if(!v||!r) return;
+  const next=!!Number(on);
+  if(next&&vdExpired(r)){ v.err=T('It already ended — set a new end date first','优惠券已到期 — 请先设置新的截止日期'); render(); return; }
+  vdPatch('is_active', {is_active:next}, next?T('On — customers can use it now','已开启'):T('Turned off','已停用'));
+});
+/* Take one customer's coupon back. A used one-shot hand-out is the receipt
+   for an order and the server refuses it (already_used_or_missing), so the
+   button is not offered there — the desktop's grant list draws the same line. */
+const vgStanding=r=>!!r&&Number(r.per_customer_limit||0)!==1;
+const vgRevocable=(r,g)=>vgStanding(r)||!g.used_at;
+function vchTakeBack(grantId, owner){
+  if(!owner||owner.busy||!vdCan('coupons:grant')) return;
+  state.ask={title:T('Take this coupon back?','收回这张优惠券?'),
+    body:T('They lose it at their next checkout. Orders they already placed keep their discount.','该顾客下次结账将不再享有。已下单的订单不受影响。'),
+    confirmLabel:T('Take it back','收回'), danger:true, run:()=>{
+      owner.busy='take:'+grantId; owner.err=''; render();
+      apiWrite('/voucher-grants/'+grantId, {}, 'DELETE').then(()=>{
+        owner.busy=null; showToast(T('Taken back','已收回'));
+        vchReload().then(()=>{ if(VD) vdLoadHolders(); if(VG) vgLoadGrants(); });
+      }).catch(e=>{ owner.busy=null; if(String(e.message)==='auth') return;
+        owner.err=e.refused?String(E(...e.words)):T('Failed: ','失败:')+(e.message||''); render(); });
+    }};
+  render();
+}
+reg('vdTakeBack', gid=>{ vchTakeBack(Number(gid), VD); });
+reg('vdHolder', cid=>{ if(cid&&mCan('customers:view')) CMD.openCustomer(Number(cid)); });
+function vdMayLeave(){
+  if(!VD) return true;
+  if(VD.lblDirty){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ VD=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  VD=null; return true;
+}
+function screenCoupon(){
+  const v=VD, r=vdRaw();
+  if(!v||!r) return nothingYet(T('Nothing here.','这里没有优惠券。'),'');
+  const edit=vdCan('coupons:edit'), give=vdCan('coupons:grant');
+  const expired=vdExpired(r), live=!!r.is_active&&!expired;
+  const per=Number(r.per_customer_limit||0), standing=per!==1;
+  const busy=v.busy, dis=busy?'disabled':'';
+  const saving=k=>busy===k?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`:'';
+  const fact=(k,val)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px">
+    <span style="font-size:14px;color:var(--text-secondary)">${k}</span><span class="num" style="font-size:15px;text-align:right;min-width:0">${val}</span></div>`;
+  const perOpts=[1,2,3,5,10]; if(per>0&&perOpts.indexOf(per)<0) perOpts.push(per);
+  perOpts.sort((a,b)=>a-b).push(0);
+  const perCtl=edit?`<select aria-label="${escAttr(T('Per customer','每人限用'))}" style="width:auto" ${dis} onchange="APP.cmd('vdPer',this.value)">${
+      perOpts.map(n=>`<option value="${n}"${n===per?' selected':''}>${vdPerLabel(n)}</option>`).join('')}</select>`:vdPerLabel(per);
+  const dateVal=r.expires_at?String(r.expires_at).slice(0,10):'';
+  const endCtl=edit?`<input type="date" aria-label="${escAttr(T('Ends','截止'))}" value="${escAttr(dateVal)}" style="width:auto" ${dis} onchange="APP.cmd('vdExpiry',this.value)">`
+    :(r.expires_at?fmtDay(r.expires_at):T('no end date','长期有效'));
+  const autoDesc=r.auto_grant_signup
+    ? T('New signups who received it get it at checkout — no code, no tap.','收到的新顾客结账时自动抵扣,无需输入或点选。')
+    : r.is_public
+    ? T('Every customer gets it at checkout — no code, no tap.','每位顾客结账时自动抵扣,无需输入或点选。')
+    : T('Only the customers you give it to get it at checkout — no code, no tap.','仅发放到的顾客结账时自动抵扣,无需输入或点选。');
+  const sw=(field,title,desc)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px">
+    <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${title}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${desc}</span></span>
+    ${busy===field?saving(field):edit?toggle(!!r[field],`APP.cmd('vdSwitch','${field}')`)
+      :`<span style="font-size:13px;color:var(--text-secondary);flex:none">${r[field]?T('On','已启用'):T('Off','已关闭')}</span>`}</div>`;
+  const gc=Number(r.grant_count||0);
+  const grantLine=gc
+    ? (standing
+        ? T('Given to '+gc+(gc===1?' customer':' customers')+' — they keep it, '+(per===0?'with no limit on how many orders':'for up to '+per+' orders')+'.',
+            '已发放给 '+gc+' 位顾客 — 可长期使用,'+(per===0?'不限订单数':'最多 '+per+' 单')+'。')
+        : T('Given to '+gc+(gc===1?' customer':' customers')+' — '+(r.grant_used_count||0)+' of those have used it.',
+            '已发放给 '+gc+' 位顾客,'+(r.grant_used_count||0)+' 张已使用。'))
+    : T('Hand it to specific customers — it lands in their coupons, no code needed.','发给指定顾客,直接进入他们的优惠券,无需编码。');
+  const lblEn=v.lblEn!=null?v.lblEn:(r.title_en||''), lblCn=v.lblCn!=null?v.lblCn:(r.title_cn||'');
+  const holders=v.holders;
+  const holderHtml=!gc?'':holders===null
+    ? `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+    : v.holdersErr
+    ? `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:13px;color:var(--brick-ink);min-width:0">${escAttr(v.holdersErr)}</span>
+        <button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" onclick="APP.cmd('vdHoldersRetry')">${T('Try again','重试')}</button></div>`
+    : holders.map((g,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 16px">
+        <button ${mCan('customers:view')?`onclick="APP.cmd('vdHolder',${Number(g.customer_id)||0})"`:'disabled'} style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+          <span style="font-size:15px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(g.nickname||T('(no name)','(未填写昵称)'))}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(g.phone||'—')}</span></button>
+        ${busy==='take:'+g.id?saving('take:'+g.id)
+          :give&&vgRevocable(r,g)?`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px;color:var(--brick-ink)" ${dis} onclick="APP.cmd('vdTakeBack',${Number(g.id)})">${T('Take it back','收回')}</button>`:''}
+      </div>`).join('')
+      +(v.holdersTotal>holders.length?`<div class="sep" style="margin-left:16px"></div>
+        <button class="row" style="min-height:48px;padding:10px 16px" onclick="APP.cmd('vgOpen')"><span style="flex:1;font-size:14.5px">${T('See all '+v.holdersTotal,'查看全部 '+v.holdersTotal)}</span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`:'');
+  const kicker=t=>`<div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="num" style="font-size:20px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis">${escAttr(r.code)}</span>
+      ${live?pill('live',T('Running','生效中')):pill('off',r.is_active?T('Ended','已到期'):T('Off','已停用'))}</div>
+    ${expired&&r.is_active?`<div style="padding:12px 16px;border-radius:14px;background:var(--amber-tint);font-size:14px;color:var(--amber-ink)">${
+      T('This coupon ended. Set a new end date below to run it again.','优惠券已到期。在下方设置新的截止日期即可重新生效。')}</div>`:''}
+    ${v.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(v.err)}</div>`:''}
+    <div class="card" style="padding:4px 0">
+      ${fact(T('Gives','优惠'),T(...vchGives(r)))}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('On orders over','最低订单金额'),Number(r.min_subtotal)>0?money(CUR,r.min_subtotal):T('Any order','无门槛'))}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('Used','已使用'),Number(r.used_count||0)+(r.max_uses!=null?' / '+r.max_uses:''))}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('Per customer','每人限用'),busy==='per_customer_limit'?saving('per_customer_limit'):perCtl)}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('Ends','截止'),busy==='expires_at'?saving('expires_at'):endCtl)}</div>
+    ${kicker(T('How customers get it','顾客怎么获得'))}
+    <div class="card" style="padding:4px 0">
+      ${sw('is_public',T('Show in the app','在小程序展示'),T('Anyone can find it and tap to save — no code needed.','顾客可自行领取,无需输入编码。'))}<div class="sep" style="margin-left:16px"></div>
+      ${sw('auto_grant_signup',T('Give to new signups','发给新注册顾客'),T('Lands in every new customer’s coupons automatically.','自动进入每位新顾客的优惠券。'))}<div class="sep" style="margin-left:16px"></div>
+      ${sw('auto_apply',T('Apply it for them','自动抵扣'),autoDesc)}</div>
+    ${kicker(T('What customers see','顾客看到的文字'))}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      ${r.is_public&&!(r.title_en||r.title_cn)?`<div style="font-size:13px;color:var(--amber-ink)">${T('Public coupons need a label customers can read.','公开优惠券需要顾客能看懂的标签。')}</div>`:''}
+      ${edit?`<input id="mVdLblEn" value="${escAttr(lblEn)}" placeholder="${escAttr(T('English — e.g. '+money0(CUR,20)+' off your first order','英文标签'))}" oninput="APP.cmd('vdLbl','en',this.value)">
+        <input id="mVdLblCn" value="${escAttr(lblCn)}" placeholder="${escAttr(T('Chinese — e.g. 首单立减 '+money0(CUR,20),'中文标签,如 首单立减 '+money0(CUR,20)))}" oninput="APP.cmd('vdLbl','cn',this.value)">
+        <button class="btn2" style="width:100%" ${dis} onclick="APP.cmd('vdSaveLabel')">${busy==='label'?T('Saving…','保存中…'):T('Save label','保存标签')}</button>`
+      :`<div style="font-size:15px">${escAttr(r.title_en||'—')}</div><div style="font-size:15px">${escAttr(r.title_cn||'—')}</div>`}</div>
+    ${kicker(T('Give it out','发放'))}
+    <div class="card" style="padding:4px 0">
+      <div style="padding:12px 16px;font-size:13px;color:var(--text-secondary);line-height:1.5">${grantLine}</div>
+      ${give?`<div style="padding:0 16px 12px"><button class="btn2" style="width:100%" onclick="APP.cmd('vgOpen')">${T('Give to a customer','发放给顾客')}</button></div>`:''}
+      ${gc?`<div class="sep"></div>${holderHtml}`:''}</div>
+    ${edit?`<div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+      ${r.is_active
+        ? `<button class="btn2" style="width:100%;color:var(--brick-ink)" ${dis} onclick="APP.cmd('vdTurn',0)">${busy==='is_active'?T('Saving…','保存中…'):T('Turn off','停用')}</button>`
+        : `<button class="btn2" style="width:100%" ${dis} onclick="APP.cmd('vdTurn',1)">${busy==='is_active'?T('Saving…','保存中…'):T('Turn on','开启')}</button>`}
+      <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Turning it off keeps its history.','停用会保留历史记录,可随时重新开启。')}</div></div>`:''}
+  </div>`;
+}
+/* ── The grant screen: the desktop's grant dialog, whole. The note travels
+   with either kind of grant; the list below says who already has it. ── */
+reg('vgOpen', ()=>{
+  if(!VD) return;
+  VG={id:VD.id, note:'', q:'', picks:null, picksErr:'', pickSeq:0, grants:null, grantsErr:'', busy:null, err:''};
+  CMD.push('coupongrant');
+  vgLoadGrants();
+  if(vdCan('coupons:grant')) vgSearch();
+});
+function vgLoadGrants(){
+  const g=VG; if(!g) return Promise.resolve();
+  g.grants=null; g.grantsErr=''; render();
+  return apiRaw('/vouchers/'+g.id+'/grants').then(j=>{ if(VG!==g) return;
+    g.grants=(j&&j.data)||[]; render();
+  }).catch(e=>{ if(VG!==g||String(e.message)==='auth') return;
+    g.grants=[]; g.grantsErr=T('Failed','失败')+': '+(e.message||''); render(); });
+}
+reg('vgGrantsRetry', ()=>{ vgLoadGrants(); });
+/* Search repaints the result box only, so the field keeps its caret. */
+function vgSearch(){
+  const g=VG; if(!g) return;
+  const seq=++g.pickSeq;
+  g.picks=null; g.picksErr=''; vgPicksRepaint();
+  apiRaw('/customers?pageSize=20&page=1'+(g.q?'&q='+encodeURIComponent(g.q):'')).then(j=>{
+    if(VG!==g||seq!==g.pickSeq) return;
+    g.picks=((j&&j.data)||[]).slice(0,20); vgPicksRepaint();
+  }).catch(e=>{ if(VG!==g||seq!==g.pickSeq||String(e.message)==='auth') return;
+    g.picks=[]; g.picksErr=T('Failed','失败')+': '+(e.message||''); vgPicksRepaint(); });
+}
+reg('vgQ', v=>{ if(!VG) return; VG.q=String(v||'').trim(); searchClearShow('mVgClr',!!v);
+  clearTimeout(vgQT); vgQT=setTimeout(vgSearch,200); });
+reg('mVgClr', ()=>searchClearRun('mVgQ','mVgClr','vgQ'));
+reg('vgNote', v=>{ if(VG) VG.note=String(v==null?'':v); });
+function vgPicksRepaint(){ const el=typeof document!=='undefined'&&document.getElementById('mVgPicks'); if(el) el.innerHTML=vgPicksHtml(); else render(); }
+function vgPicksHtml(){
+  const g=VG; if(!g) return '';
+  if(g.picks===null) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Searching…','搜索中…')}</div>`;
+  if(g.picksErr) return `<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink)">${escAttr(g.picksErr)}</div>`;
+  if(!g.picks.length) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('No customers match.','无匹配顾客。')}</div>`;
+  return g.picks.map((c,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.nickname||T('(no name)','(未填写昵称)'))} <span class="num" style="font-size:12.5px;color:var(--text-secondary)">#${Number(c.id)}</span></span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(c.phone||'—')}</span></span>
+      ${g.busy==='one:'+c.id?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
+        :`<button class="btn2" style="flex:none;min-height:36px;padding:0 14px;font-size:13px" ${g.busy?'disabled':''} onclick="APP.cmd('vgGrant',${Number(c.id)})">${T('Grant','发放')}</button>`}
+    </div>`).join('');
+}
+function vgWrite(key, body, okText){
+  const g=VG; if(!g||g.busy||!vdCan('coupons:grant')) return;
+  g.busy=key; g.err=''; render();
+  apiWrite('/vouchers/'+g.id+'/grant', body).then(j=>{
+    g.busy=null; showToast(okText(j||{})); render();
+    vchReload().then(()=>{ if(VG===g) vgLoadGrants(); if(VD&&VD.id===g.id) vdLoadHolders(); });
+  }).catch(e=>{ g.busy=null; if(String(e.message)==='auth') return;
+    g.err=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(e.message||''); render(); });
+}
+reg('vgGrant', cid=>{
+  const g=VG, n=Number(cid); if(!g||!n) return;
+  vgWrite('one:'+n, {customer_ids:[n], note:g.note.trim()||null},
+    j=>j.granted?T('Granted to customer #'+n,'已发放给顾客 #'+n):T('Customer already had this coupon','顾客已拥有此优惠券'));
+});
+reg('vgAll', ()=>{
+  const g=VG; if(!g||g.busy||!vdCan('coupons:grant')) return;
+  state.ask={title:T('Grant this coupon to every customer?','向所有顾客发放此优惠券?'),
+    body:T('Existing grants are kept.','已有发放记录会保留。'),
+    confirmLabel:T('Grant to all','全部发放'), run:()=>{
+      vgWrite('all', {to_all:true, note:g.note.trim()||null}, j=>{
+        const n=Number(j.granted||0), s=Number(j.skipped||0);
+        return T('Granted to '+n+' customer'+(n===1?'':'s')+(s?' ('+s+' already had it)':''),
+          '已发放给 '+n+' 位顾客'+(s?'('+s+' 已有,跳过)':''));
+      });
+    }};
+  render();
+});
+reg('vgRevoke', gid=>{
+  const g=VG; if(!g||g.busy||!vdCan('coupons:grant')) return;
+  const id=Number(gid);
+  state.ask={title:T('Revoke this grant?','撤销此优惠券?'), confirmLabel:T('Revoke','撤销'), danger:true, run:()=>{
+    g.busy='rev:'+id; g.err=''; render();
+    apiWrite('/voucher-grants/'+id, {}, 'DELETE').then(()=>{
+      g.busy=null; render();
+      vchReload().then(()=>{ if(VG===g) vgLoadGrants(); if(VD&&VD.id===g.id) vdLoadHolders(); });
+    }).catch(e=>{ g.busy=null; if(String(e.message)==='auth') return;
+      g.err=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(e.message||''); render(); });
+  }};
+  render();
+});
+function screenCouponGrant(){
+  const g=VG; if(!g) return nothingYet(T('Nothing here.','这里没有优惠券。'),'');
+  const c=(DB.coupons||[]).find(x=>x.id===g.id), r=c&&c.raw;
+  const give=vdCan('coupons:grant');
+  // Not known (a list that failed to read) is treated as one-shot: the stricter
+  // pill, and never a Revoke the server would refuse — the desktop's own rule.
+  const standing=vgStanding(r);
+  const list=g.grants===null
+    ? `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+    : g.grantsErr
+    ? `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:13px;color:var(--brick-ink);min-width:0">${escAttr(g.grantsErr)}</span>
+        <button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" onclick="APP.cmd('vgGrantsRetry')">${T('Try again','重试')}</button></div>`
+    : !g.grants.length
+    ? `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('No grants yet.','暂无发放记录。')}</div>`
+    : g.grants.map((x,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 16px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(x.nickname||T('(no name)','(未填写昵称)'))}</span>
+          <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary)">#${Number(x.customer_id)} · ${escAttr(x.phone||'—')}</span>
+            ${standing?pill('live',T('Has it','已拥有')):x.used_at?pill('live',T('Used','已使用')):pill('draft',T('Unused','未使用'))}</span></span>
+        ${g.busy==='rev:'+x.id?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
+          :give&&!(!standing&&x.used_at)?`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px;color:var(--brick-ink)" ${g.busy?'disabled':''} onclick="APP.cmd('vgRevoke',${Number(x.id)})">${T('Revoke','撤销')}</button>`:''}
+      </div>`).join('');
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;padding:0 4px">${T('Recipients see this in their wallet & checkout, no code needed.','收件人会在钱包和结账时看到,无需编码。')}</div>
+    ${g.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(g.err)}</div>`:''}
+    ${give?`<label style="display:block;padding:0 4px">
+        <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Note (optional, internal only)','备注(可选,仅内部可见)')}</span>
+        <input id="mVgNote" maxlength="200" value="${escAttr(g.note)}" style="width:100%" oninput="APP.cmd('vgNote',this.value)"></label>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+        <span style="font-size:15px;font-weight:500">${T('Grant to every customer','发放给所有顾客')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Bulk-grants to all non-blocked customers. Idempotent — customers who already have it are skipped.','批量发放给所有未封禁顾客;幂等操作,已拥有的会自动跳过。')}</span>
+        <button class="btn2" style="width:100%" ${g.busy?'disabled':''} onclick="APP.cmd('vgAll')">${g.busy==='all'?T('Saving…','保存中…'):T('Grant to all','全部发放')}</button></div>
+      <div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Or grant to a specific customer','或发放给指定顾客')}</div>
+      ${searchBox(`<input id="mVgQ" inputmode="search" enterkeyhint="search" value="${escAttr(g.q)}" placeholder="${escAttr(T('Search by name, phone, or openid…','搜索姓名、电话或 openid…'))}" style="width:100%" oninput="APP.cmd('vgQ',this.value)">`,'mVgClr',!!g.q,'display:block')}
+      <div class="card" style="padding:4px 0" id="mVgPicks">${vgPicksHtml()}</div>`:''}
+    <div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Already granted','已发放')}</div>
+    <div class="card" style="padding:4px 0">${list}</div>
+  </div>`;
+}
+/* ── §325 M14 — MAKING A COUPON ON THE PHONE ─────────────────────────────
+   The desktop's guided coupon wizard (05-marketing.js vwOpen … vwSave), step
+   for step: the deal (with the five starting points beside it), who gets it
+   (Start fresh, or "Change"), the small print, then turn it on. The same
+   live ticket and the same heads-up, read off the live coupons, on every step.
+   One POST /vouchers with the desktop's body; is_active:false is a draft.
+   coupons:create is money:'moves' (lib/capabilities.js), so the door and the
+   save fail closed until the keys are known (vdCan, M13). A coupon for chosen
+   customers goes straight on to the grant screen, as the desktop hands off to
+   its grant dialog. */
+let CW=null;   // the coupon being built — the desktop's _vw, plus busy/err/dirty and the snapshot
+const CW_TITLES={deal:['The deal','优惠内容'], who:['Who gets it','谁可以用'], rules:['The small print','使用规则'], review:['Turn it on','开启优惠券']};
+const cwSteps=()=>CW&&CW.showWho?['deal','who','rules','review']:['deal','rules','review'];
+const cwCan=()=>vdCan('coupons:create');
+function cwBlank(){
+  return {goal:'public', step:'deal', showWho:false,
+    type:'fixed_amount', value:10,
+    path:'public', showOnHome:false,
+    min:0, setMin:false, expires:'', endChip:'none',
+    perCust:1, maxUses:'', setMax:false,
+    code:'', title_en:'', title_cn:'',
+    codeEdited:false, labelEdited:false,
+    busy:null, err:'', dirty:false, vouchers:null};
+}
+reg('cwOpen', ()=>{
+  if(!cwCan()) return;
+  CW=cwBlank();
+  // The heads-up reads what is live now: the list as last read at once, and
+  // again from the server, as the desktop reads it on opening.
+  CW.vouchers=(DB.coupons||[]).map(c=>c.raw).filter(Boolean);
+  CMD.push('couponnew');
+  const w=CW;
+  api('/vouchers').then(r=>{ if(CW===w&&Array.isArray(r)){ w.vouchers=r; render(); } }).catch(()=>{ /* the snapshot above stands */ });
+});
+const cwTouch=()=>{ if(CW){ CW.dirty=true; CW.err=''; } };
+/* The five starting points set the same fields the first question edits, so
+   picking one REPLACES the answers (the desktop's vwApplyGoal). */
+reg('cwGoal', goal=>{
+  const w=CW; if(!w||w.busy) return;
+  w.goal=goal;
+  if(goal==='welcome')       Object.assign(w,{type:'fixed_amount', value:20, path:'welcome', showOnHome:true});
+  else if(goal==='sale')     Object.assign(w,{type:'percent', value:10, path:'auto', showOnHome:false});
+  else if(goal==='public')   Object.assign(w,{type:'fixed_amount', value:10, path:'public', showOnHome:false});
+  else if(goal==='shipping') Object.assign(w,{type:'free_shipping', value:0, path:'auto', showOnHome:false});
+  else { w.goal='fresh'; Object.assign(w,{type:'fixed_amount', value:0, path:'public', showOnHome:false}); }
+  w.showWho=(w.goal==='fresh');
+  w.codeEdited=false; w.labelEdited=false;
+  w.min=0; w.setMin=false; w.expires=''; w.endChip='none'; w.perCust=1; w.maxUses=''; w.setMax=false;
+  w.step='deal'; cwTouch(); render();
+});
+reg('cwType', t=>{ const w=CW; if(!w||['fixed_amount','percent','free_shipping'].indexOf(t)<0) return;
+  w.type=t;
+  if(t==='free_shipping') w.value=0;
+  else if(!(Number(w.value)>0)) w.value=(t==='percent'?10:20);
+  cwTouch(); render(); });
+reg('cwAmt', v=>{ if(!CW) return; CW.value=Number(v); cwTouch(); render(); });
+/* Typed fields repaint the ticket only, so the field keeps its caret. */
+reg('cwVal', v=>{ if(!CW) return; CW.value=String(v==null?'':v); cwTouch(); cwTicketRepaint(); });
+reg('cwChangeWho', ()=>{ if(!CW) return; CW.showWho=true; CW.step='who'; render(); });
+reg('cwPath', p=>{ if(!CW||['auto','public','welcome','pick'].indexOf(p)<0) return; CW.path=p; cwTouch(); render(); });
+reg('cwHome', b=>{ if(!CW) return; CW.showOnHome=!!Number(b); cwTouch(); render(); });
+reg('cwMinOn', ()=>{ if(!CW) return; CW.setMin=true; if(!(Number(CW.min)>0)) CW.min=''; cwTouch(); render(); });
+reg('cwMinOff', ()=>{ if(!CW) return; CW.setMin=false; CW.min=0; cwTouch(); render(); });
+reg('cwMin', v=>{ if(!CW) return; CW.min=Number(v)||0; cwTouch(); cwTicketRepaint(); });
+const cwDateFrom=days=>{ const d=new Date(); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); };
+reg('cwEnd', k=>{ const w=CW; if(!w) return;
+  w.endChip=k;
+  if(k==='none') w.expires='';
+  else if(k==='1w') w.expires=cwDateFrom(7);
+  else if(k==='1m') w.expires=cwDateFrom(30);
+  else w.expires=w.expires||cwDateFrom(30);
+  cwTouch(); render(); });
+reg('cwDate', v=>{ if(!CW) return; CW.expires=String(v||''); cwTouch(); cwTicketRepaint(); });
+reg('cwStep', d=>{ if(!CW) return; CW.perCust=Math.max(1,(Number(CW.perCust)||1)+Number(d)); cwTouch(); render(); });
+reg('cwMaxOn', ()=>{ if(!CW) return; CW.setMax=true; cwTouch(); render(); });
+reg('cwMaxOff', ()=>{ if(!CW) return; CW.setMax=false; CW.maxUses=''; cwTouch(); render(); });
+reg('cwMax', v=>{ if(!CW) return; CW.maxUses=String(v==null?'':v); cwTouch(); cwTicketRepaint(); });
+reg('cwCode', v=>{ if(!CW) return; CW.code=String(v||'').toUpperCase(); CW.codeEdited=true; cwTouch(); cwTicketRepaint(); });
+reg('cwLbl', (lang,v)=>{ if(!CW) return; CW[lang==='en'?'title_en':'title_cn']=String(v==null?'':v); CW.labelEdited=true; cwTouch(); cwTicketRepaint(); });
+
+/* ── what the wizard derives (the desktop's vwGenCode, vwGenLabel*, vwFlags) ── */
+function cwGenCode(w){
+  const v=Number(w.value)||0;
+  if(w.type==='free_shipping') return 'FREESHIP';
+  if(w.path==='welcome') return 'WELCOME'+(v||'');
+  if(w.path==='auto') return (w.type==='percent'?'SAVE':'SALE')+(v||'');
+  return (w.type==='percent'?'PERCENT':'OFF')+(v||'');
+}
+function cwGenLabelEn(w){
+  if(w.type==='free_shipping') return 'Free shipping';
+  const amt=w.type==='percent'?(Number(w.value)||0)+'% off':money(CUR,Number(w.value)||0)+' off';
+  return w.path==='welcome'?amt+' your first order':amt;
+}
+function cwGenLabelCn(w){
+  if(w.type==='free_shipping') return '免运费';
+  const amt=w.type==='percent'?(Number(w.value)||0)+'% 折扣':'立减 '+money(CUR,Number(w.value)||0);
+  return w.path==='welcome'?'首单'+amt:amt;
+}
+function cwFlags(w){
+  const p=w.path;
+  return {is_public:p==='public'||(p==='welcome'&&!!w.showOnHome), auto_grant_signup:p==='welcome', auto_apply:p==='auto'};
+}
+/* ── the step checks (vwCommitDeal / vwCommitRules), kept on the screen ── */
+function cwCheck(step){
+  const w=CW;
+  if(step==='deal'&&w.type!=='free_shipping'){
+    const v=Number(w.value);
+    if(!(v>0)) return T('Enter how much they save','请填写优惠金额');
+    if(w.type==='percent'&&v>100) return T('Percent can be at most 100','折扣最多 100%');
+  }
+  if(step==='rules'){
+    if(!w.setMin) w.min=0;
+    if(!w.setMax) w.maxUses='';
+    if(w.expires){ const d=new Date(w.expires+'T23:59:59');
+      if(d<new Date()) return T('That end date has passed — pick a later one','到期日已过,请选更晚的日期'); }
+  }
+  return '';
+}
+reg('cwNext', ()=>{
+  const w=CW; if(!w||w.busy) return;
+  const steps=cwSteps(), next=steps[steps.indexOf(w.step)+1];
+  if(!next) return;
+  const bad=cwCheck(w.step); if(bad){ w.err=bad; render(); return; }
+  w.err='';
+  if(next==='review'){
+    if(!w.codeEdited||!w.code) w.code=cwGenCode(w);
+    if(!w.labelEdited){ w.title_en=cwGenLabelEn(w); w.title_cn=cwGenLabelCn(w); }
+  }
+  w.step=next; render();
+});
+reg('cwBack', ()=>{
+  const w=CW; if(!w||w.busy) return;
+  const steps=cwSteps(), i=steps.indexOf(w.step);
+  if(i<=0) return;
+  w.err=''; w.step=steps[i-1]; render();
+});
+const cwExpired=v=>!!(v&&v.expires_at&&_date(v.expires_at)&&_date(v.expires_at)<new Date());
+/* ── the save (vwSave): the desktop's checks, then its body ── */
+reg('cwSave', activate=>{
+  const w=CW; if(!w||w.busy||!cwCan()) return;
+  const on=!!Number(activate);
+  const flags=cwFlags(w);
+  const code=String(w.code||'').trim().toUpperCase();
+  if(!code){ w.err=T('Code required','请填写编码'); render(); return; }
+  if(w.path!=='auto'&&!(String(w.title_en||'').trim()||String(w.title_cn||'').trim())){
+    w.err=T('Add a label customers see (EN or 中)','请填写顾客看到的标签'); render(); return; }
+  const clash=(w.vouchers||[]).find(v=>String(v.code).toUpperCase()===code);
+  if(clash&&clash.is_active&&!cwExpired(clash)){
+    w.err=T('A live coupon already uses '+code+' — change the code','已有生效中的优惠券使用此编码'); render(); return; }
+  const wasPick=w.path==='pick';
+  const body={code, type:w.type,
+    value:w.type==='free_shipping'?0:(Number(w.value)||0),
+    min_subtotal:Number(w.min)||0,
+    max_uses:(w.maxUses!==''&&w.maxUses!=null)?Number(w.maxUses):null,
+    per_customer_limit:w.perCust!=null?Number(w.perCust):1,
+    expires_at:w.expires||null,
+    is_public:flags.is_public, auto_grant_signup:flags.auto_grant_signup, auto_apply:flags.auto_apply,
+    title_en:String(w.title_en||'').trim()||null, title_cn:String(w.title_cn||'').trim()||null,
+    is_active:on};   // draft-first: off unless they chose "Turn it on"
+  w.busy=on?'live':'draft'; w.err=''; render();
+  apiWrite('/vouchers', body).then(r=>{
+    const vid=r&&r.data&&r.data.id;
+    showToast(r&&r.reused?T('Reused code '+code,'已复用 '+code)
+      :on?T('Created & live '+code,'已创建并开启 '+code):T('Saved as draft '+code,'已存为草稿 '+code));
+    if(CW===w){ CW=null; const top=state.stack[state.stack.length-1]; if(top&&top.route==='couponnew'){ forgetScroll(); state.stack.pop(); } }
+    render();
+    vchReload().then(()=>{ if(wasPick&&vid&&!CW){ CMD.vchOpen(vid); if(VD&&VD.id===vid) CMD.vgOpen(); } });
+  }).catch(e=>{ w.busy=null; if(String(e.message)==='auth') return;
+    w.err=e.refused?String(E(...e.words))
+      :T('Failed','失败')+': '+(e.code==='code_active'?T('A live coupon already uses this code','已有生效中的优惠券使用此编码')
+        :e.code==='code_exists'?T('Code already exists','编码已存在'):(e.message||''));
+    render(); });
+});
+function cwMayLeave(){
+  if(!CW) return true;
+  if(CW.dirty&&!CW.busy){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ CW=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  if(CW.busy) return false;   // a save on the wire finishes first
+  CW=null; return true;
+}
+
+/* ── the living ticket and the heads-up (vwTicketHtml, vwHeadsUp) ── */
+function cwTicketHtml(){
+  const w=CW; if(!w) return '';
+  const g=vchGives({type:w.type, value:w.value});
+  const min=Number(w.min)||0;
+  const cond=w.path==='welcome'
+    ? (min>0?T('first order over '+money(CUR,min),'首单满 '+money(CUR,min)):T('their first order','首单'))
+    : (min>0?T('orders '+money(CUR,min)+'+','满 '+money(CUR,min)):T('any order','任意订单'));
+  const who=w.path==='welcome'?T('New customers','新顾客'):w.path==='auto'?T('Automatic','自动应用')
+    :w.path==='pick'?T('Customers you pick','指定顾客'):T('Anyone','人人可用');
+  const pc=Number(w.perCust)||1;
+  const per=pc>1?T(pc+'× each','每人 '+pc+' 次'):T('once each','每人一次');
+  const end=w.expires?T('ends '+w.expires,'至 '+w.expires):T('no end date','永久');
+  const label=(w.labelEdited&&(w.title_en||w.title_cn))?`<div style="font-size:14px;font-weight:500">${escAttr(w.title_en||w.title_cn)}</div>`:'';
+  return `<div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);padding:0 4px 8px">${T('What the customer sees','顾客看到的')}</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--amber)">
+      <div class="num" style="font-size:24px;font-weight:500;letter-spacing:-.01em">${escAttr(T(...g))}</div>
+      <div style="font-size:13px;color:var(--text-secondary)">${escAttr(cond)}</div>
+      ${label}
+      <div style="border-top:1px dashed var(--border-default);margin:6px 0 2px"></div>
+      <div style="font-size:13px;color:var(--text-secondary)"><b style="color:var(--text-primary);font-weight:500">${escAttr(who)}</b> · ${escAttr(per)} · ${escAttr(end)}</div>
+      ${w.step==='review'&&w.code?`<span class="num pill" style="align-self:flex-start;background:${PILL.muted[0]};color:${PILL.muted[1]}">${escAttr(w.code)}</span>`:''}
+    </div>
+    ${cwHeadsUpHtml()}`;
+}
+function cwTicketRepaint(){ const el=typeof document!=='undefined'&&document.getElementById&&document.getElementById('mCwTicket'); if(el) el.innerHTML=cwTicketHtml(); }
+/* The desktop's own resolution rules: best one wins, no stacking, signup
+   grants, a code on a dead coupon is reused. */
+function cwDiscAt(v, sub){
+  if(v.type==='fixed_amount') return Math.min(Number(v.value)||0, sub);
+  if(v.type==='percent') return sub*(Math.max(0,Math.min(100,Number(v.value)||0)))/100;
+  return 0;   // free shipping depends on the live fee — not comparable here
+}
+function cwHeadsUp(){
+  const w=CW, notes=[];
+  const code=String((w.code||cwGenCode(w))||'').toUpperCase();
+  const flags=cwFlags(w);
+  const all=w.vouchers||[];
+  const active=all.filter(v=>v.is_active);
+  const b=s=>'<b>'+escAttr(s)+'</b>';
+  const clash=all.find(v=>String(v.code).toUpperCase()===code);
+  if(clash){
+    if(clash.is_active&&!cwExpired(clash)) notes.push({tone:'red', html:T('A live coupon already uses '+b(code)+'. Pick another code, or turn the old one off first.',
+      '已有生效中的优惠券使用 '+b(code)+',请换一个编码或先停用旧的。')});
+    else notes.push({tone:'brass', html:T('You used '+b(code)+' before and it is off now. Saving reuses it and starts its count from zero.',
+      '你以前用过 '+b(code)+'(现已停用),保存会复用它并把使用次数清零。')});
+  }
+  if(flags.auto_apply){
+    const others=active.filter(v=>v.auto_apply&&String(v.code).toUpperCase()!==code);
+    if(others.length){
+      const list=others.map(v=>b(v.code)).join(', ');
+      notes.push({tone:'', html:T('You already have automatic deal(s): '+list+'. Customers get the single best one — these do not add together.',
+        '你已有自动优惠:'+list+'。顾客只享最优的一张,不叠加。')});
+      if(w.type!=='free_shipping'){
+        const ref=200, mine=cwDiscAt(w,ref);
+        const bigger=others.filter(v=>v.type!=='free_shipping'&&cwDiscAt(v,ref)>=mine);
+        const at=money0(CUR,ref);
+        notes.push(bigger.length
+          ? {tone:'brass', html:T('On a typical '+at+' order, '+b(bigger[0].code)+' gives more — your new deal may rarely be used.',
+              '以 '+at+' 订单为例,'+b(bigger[0].code)+' 更划算,你的新优惠可能很少被用到。')}
+          : {tone:'brass', html:T('On a typical '+at+' order, your new deal gives the most — it will usually win.',
+              '以 '+at+' 订单为例,你的新优惠最划算,通常会胜出。')});
+      }
+    }
+  }
+  if(flags.auto_grant_signup){
+    const others=active.filter(v=>v.auto_grant_signup&&String(v.code).toUpperCase()!==code);
+    if(others.length){ const list=others.map(v=>b(v.code)).join(', ');
+      notes.push({tone:'', html:T('New customers will also get '+list+'. They can use one per order.','新顾客还会获得 '+list+',每单只能用一张。')}); }
+  }
+  if(w.path==='pick') notes.push({tone:'', html:T('After saving, pick the customers to give it to — it lands in their coupons, no code needed.',
+    '保存后挑选顾客,优惠券直接进入他们的账户,无需编码。')});
+  else if(flags.is_public) notes.push({tone:'', html:T('Anyone can find this in the app, and a shared code also works.','任何人都能在小程序看到,分享的编码也能用。')});
+  return notes;
+}
+function cwHeadsUpHtml(){
+  const notes=cwHeadsUp(); if(!notes.length) return '';
+  return `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">${notes.map(n=>{
+    const bg=n.tone==='red'?'var(--brick-tint)':n.tone==='brass'?'var(--amber-tint)':'var(--surface-raised)';
+    const fg=n.tone==='red'?'var(--brick-ink)':n.tone==='brass'?'var(--amber-ink)':'var(--text-secondary)';
+    return `<div style="padding:12px 14px;border-radius:12px;background:${bg};font-size:13px;line-height:1.5;color:${fg}">${n.html}</div>`; }).join('')}</div>`;
+}
+
+/* ── the steps (vwDealHtml, vwWhoHtml, vwRulesHtml, vwReviewHtml) ── */
+const cwLab=t=>`<div style="font-size:13px;font-weight:500;color:var(--text-secondary);padding:4px 4px 0">${t}</div>`;
+const cwPick=(on,cmd,title,sub)=>`<button onclick="${cmd}" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:14px 16px;border-radius:14px;cursor:pointer;font-family:inherit;text-align:left;background:var(--surface-card);color:var(--text-primary);border:${on?'2px solid var(--text-primary)':'1px solid var(--border-default)'}">
+    <span style="font-size:15px;font-weight:500">${title}</span>${sub?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${sub}</span>`:''}</button>`;
+const cwLink=(cmd,label)=>`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" onclick="${cmd}">${label}</button>`;
+function cwWhoPlain(w){
+  if(w.path==='welcome') return T('<b>New customers</b> get it automatically when they join.','<b>新顾客</b>加入时自动获得。');
+  if(w.path==='auto')    return T('<b>Applied for everyone</b> at checkout — no code needed.','<b>自动应用</b>结账自动,无需编码。');
+  if(w.path==='pick')    return T('<b>Customers you pick</b> — chosen after saving.','<b>你指定的顾客</b>保存后由你挑选。');
+  return T('<b>Anyone</b> can find it in the app and tap to save.','<b>人人可用</b>在小程序内自行领取。');
+}
+function cwDealHtml(w){
+  const goals=[{key:'welcome',en:'Welcome gift',zh:'新人礼'},{key:'sale',en:'Store sale',zh:'店铺促销'},{key:'public',en:'Anyone can use',zh:'人人可领'},
+    {key:'shipping',en:'Free shipping',zh:'免运费'},{key:'fresh',en:'Start fresh',zh:'从头开始'}];
+  const types=[['fixed_amount',T('Money off','立减'),T('a set '+CUR+' amount','固定金额')],
+    ['percent',T('Percent off','折扣'),T('a % of the order','按比例')],
+    ['free_shipping',T('Free shipping','免运费'),T('no delivery fee','不收运费')]];
+  let amt='';
+  if(w.type!=='free_shipping'){
+    const presets=w.type==='percent'?[5,10,20]:[10,20,50];
+    amt=`${cwLab(T('How much do they save?','优惠多少?'))}
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:6px;flex:none"><span class="num" style="font-size:17px;color:var(--text-secondary)">${w.type==='percent'?'%':escAttr(CUR)}</span>
+          <input id="mCwValue" inputmode="decimal" value="${escAttr(String(w.value||''))}" style="width:96px" oninput="APP.cmd('cwVal',this.value)"></span>
+        ${presets.map(p=>`<button class="chip ${Number(w.value)===p?'on':''}" onclick="APP.cmd('cwAmt',${p})"><span>${p}</span></button>`).join('')}</div>`;
+  }
+  return `${cwLab(T('Start from','从以下开始'))}
+    <div style="margin:0 -16px">${chipRow(goals,w.goal,'cwGoal')}</div>
+    ${cwLab(T('What kind of discount?','哪种优惠?'))}
+    <div style="display:flex;flex-direction:column;gap:8px">${types.map(t=>cwPick(w.type===t[0],`APP.cmd('cwType','${t[0]}')`,t[1],t[2])).join('')}</div>
+    ${amt}
+    ${!w.showWho?`<div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13.5px;line-height:1.5">${cwWhoPlain(w)}</span>${cwLink("APP.cmd('cwChangeWho')",T('Change','更改'))}</div>`:''}`;
+}
+function cwWhoHtml(w){
+  const paths=[['auto',T('Applied for everyone','自动应用'),T('At checkout the best deal is applied. No code.','结账自动取最优,无需编码。')],
+    ['public',T('Anyone can use it','人人可用'),T('Shows in the app; a shared code also works.','显示在小程序,分享码也能用。')],
+    ['welcome',T('A welcome gift','新人礼'),T('Lands in every new customer\'s coupons.','自动进入新顾客账户。')],
+    ['pick',T('I choose who gets it','我来指定'),T('Pick the customers after saving.','保存后挑选顾客。')]];
+  return `${cwLab(T('How do customers get it?','顾客怎么获得?'))}
+    <div style="display:flex;flex-direction:column;gap:8px">${paths.map(p=>cwPick(w.path===p[0],`APP.cmd('cwPath','${p[0]}')`,p[1],p[2])).join('')}</div>
+    ${w.path==='welcome'?`<div class="card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="font-size:14px;min-width:0">${T('Also show it on the home page?','也在首页展示?')}</span>
+      <span style="display:flex;gap:6px;flex:none">
+        <button class="chip ${!w.showOnHome?'on':''}" onclick="APP.cmd('cwHome',0)"><span>${T('No','否')}</span></button>
+        <button class="chip ${w.showOnHome?'on':''}" onclick="APP.cmd('cwHome',1)"><span>${T('Yes','是')}</span></button></span></div>`:''}`;
+}
+function cwEndPlain(w){
+  if(w.endChip==='none') return T('Runs <b>until you turn it off</b>.','一直有效,直到你停用。');
+  if(w.endChip==='1w')   return T('Ends in <b>one week</b>.','一周后结束。');
+  if(w.endChip==='1m')   return T('Ends in <b>one month</b>.','一月后结束。');
+  return w.expires?T('Ends <b>'+escAttr(w.expires)+'</b>.','到期结束。'):T('Pick the last day it works.','选择截止日期。');
+}
+function cwRulesHtml(w){
+  const row=(txt,ctl)=>`<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-size:14px;line-height:1.5;min-width:0">${txt}</span>${ctl||''}</div></div>`;
+  const minRow=w.setMin
+    ? `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span style="font-size:14px">${T('On orders over','最低订单金额')}</span>${cwLink("APP.cmd('cwMinOff')",T('Any order','任意'))}</div>
+        <span style="display:flex;align-items:center;gap:6px"><span class="num" style="font-size:17px;color:var(--text-secondary)">${escAttr(CUR)}</span>
+          <input id="mCwMin" inputmode="decimal" value="${escAttr(String(w.min||''))}" style="flex:1;min-width:0" oninput="APP.cmd('cwMin',this.value)"></span></div>`
+    : row(T('Works on <b>any order size</b>.','任意订单金额可用。'),cwLink("APP.cmd('cwMinOn')",T('Set a minimum','设最低金额')));
+  const ends=[{key:'none',en:'No end date',zh:'永久'},{key:'1w',en:'One week',zh:'一周'},{key:'1m',en:'One month',zh:'一月'},{key:'pick',en:'Pick a day',zh:'选日期'}];
+  const endRow=`<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:14px;line-height:1.5">${cwEndPlain(w)}</span>
+    <div style="margin:0 -16px">${chipRow(ends,w.endChip,'cwEnd')}</div>
+    ${w.endChip==='pick'?`<input id="mCwDate" type="date" value="${escAttr(w.expires||'')}" oninput="APP.cmd('cwDate',this.value)">`:''}</div>`;
+  const pc=Number(w.perCust)||1;
+  const pcRow=row(`${T('Per customer','每人限用')} · <b>${vdPerLabel(pc)}</b>`,
+    `<span style="display:flex;align-items:center;gap:8px;flex:none">
+      <button class="stepbtn" aria-label="−" ${pc<=1?'disabled':''} onclick="APP.cmd('cwStep',-1)">${ic('minus',18,2.25)}</button>
+      <span class="num" style="min-width:20px;text-align:center">${pc}</span>
+      <button class="stepbtn" aria-label="+" onclick="APP.cmd('cwStep',1)">${ic('plus',18,2.25)}</button></span>`);
+  const maxRow=w.setMax
+    ? `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span style="font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0">${LANG==='en'?'Only ':'总数上限 '}<input id="mCwMax" inputmode="numeric" value="${escAttr(String(w.maxUses||''))}" style="width:80px" oninput="APP.cmd('cwMax',this.value)">${LANG==='en'?' can be used in total.':''}</span>${cwLink("APP.cmd('cwMaxOff')",T('No limit','不限'))}</div></div>`
+    : row(T('<b>No limit</b> on total uses.','总数不限。'),cwLink("APP.cmd('cwMaxOn')",T('Set a limit','设上限')));
+  return `<div style="font-size:13px;color:var(--text-secondary);padding:0 4px">${T('Good defaults are set. Change only what you want.','已有合适的默认值,只改你想改的。')}</div>
+    ${minRow}${endRow}${pcRow}${maxRow}`;
+}
+function cwRecap(w){
+  const g=vchGives({type:w.type, value:w.value});
+  const min=Number(w.min)>0;
+  const pc=Number(w.perCust)||1;
+  if(LANG==='en'){
+    const who=w.path==='welcome'?'New customers':w.path==='auto'?'Everyone':w.path==='pick'?'Customers you pick':'Anyone in the app';
+    const how=w.path==='auto'?' — applied automatically':w.path==='welcome'?' — placed in their coupons':w.path==='pick'?' — after you pick them':' — they tap to save';
+    return '<b>'+escAttr(who)+'</b> get <b>'+escAttr(g[0])+'</b>'+(min?' on orders '+escAttr(money(CUR,w.min))+'+':'')+escAttr(how)
+      +escAttr(pc>1?', up to '+pc+' times each':', once each')+escAttr(w.expires?', until '+w.expires:', until you turn it off')+'.';
+  }
+  const who=w.path==='welcome'?'新顾客':w.path==='auto'?'所有人':w.path==='pick'?'你指定的顾客':'小程序内任何人';
+  const how=w.path==='auto'?' — 自动应用':w.path==='welcome'?' — 自动进入账户':w.path==='pick'?' — 保存后挑选':' — 顾客自行领取';
+  return '<b>'+escAttr(who)+'</b>:<b>'+escAttr(g[1])+'</b>'+(min?',满 '+escAttr(money(CUR,w.min)):'')+escAttr(how)
+    +escAttr(pc>1?',每人限 '+pc+' 次':',每人一次')+escAttr(w.expires?',至 '+w.expires:',直到你停用')+'。';
+}
+function cwReviewHtml(w){
+  return `<div class="card" style="padding:16px;font-size:14.5px;line-height:1.6">${cwRecap(w)}</div>
+    <label style="display:block">
+      <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Coupon code','优惠码')} <span style="font-weight:400">${T('— made for you, change it if you like','已自动生成')}</span></span>
+      <input id="mCwCode" class="num" autocapitalize="characters" value="${escAttr(w.code)}" style="width:100%;text-transform:uppercase" oninput="APP.cmd('cwCode',this.value)"></label>
+    ${w.path!=='auto'?`<label style="display:block">
+      <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('What customers see','顾客看到')} <span style="font-weight:400">${T('— shown on the ticket','显示在券面')}</span></span>
+      <input id="mCwLblEn" value="${escAttr(w.title_en||'')}" placeholder="English" style="width:100%" oninput="APP.cmd('cwLbl','en',this.value)"></label>
+      <input id="mCwLblCn" value="${escAttr(w.title_cn||'')}" placeholder="中文" style="width:100%" oninput="APP.cmd('cwLbl','cn',this.value)">`:''}`;
+}
+function screenCouponNew(){
+  const w=CW;
+  if(!w) return nothingYet(T('Nothing here.','这里没有优惠券。'),'');
+  const steps=cwSteps(), i=steps.indexOf(w.step);
+  const body=w.step==='who'?cwWhoHtml(w):w.step==='rules'?cwRulesHtml(w):w.step==='review'?cwReviewHtml(w):cwDealHtml(w);
+  const can=cwCan(), dis=w.busy?'disabled':'';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${body}
+    <div id="mCwTicket" style="padding-top:8px">${cwTicketHtml()}</div>
+    ${w.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(w.err)}</div>`:''}
+    <div style="display:flex;justify-content:center;gap:6px;padding-top:4px">${steps.map(s=>
+      `<span style="width:6px;height:6px;border-radius:50%;background:${s===w.step?'var(--text-primary)':'var(--border-default)'}"></span>`).join('')}</div>
+    ${w.step==='review'
+      ? `<div style="display:flex;gap:8px">
+          <button class="btn2" style="flex:1" ${dis} onclick="APP.cmd('cwBack')">${T('Back','返回')}</button>
+          ${can?`<button class="btn2" style="flex:1" ${dis} onclick="APP.cmd('cwSave',0)">${w.busy==='draft'?T('Saving…','保存中…'):T('Save as draft','存为草稿')}</button>`:''}</div>
+        ${can?`<button class="cta" style="width:100%" ${dis} onclick="APP.cmd('cwSave',1)">${w.busy==='live'?T('Saving…','保存中…'):T('Turn it on','开启')}</button>`:''}`
+      : `<div style="display:flex;gap:8px">
+          ${i>0?`<button class="btn2" style="flex:1" onclick="APP.cmd('cwBack')">${T('Back','返回')}</button>`:''}
+          <button class="btn2" style="flex:1" onclick="APP.cmd('cwNext')">${T('Next','下一步')}</button></div>`}
+  </div>`;
+}
+/* ── §325 M15 — FLASH SALES ARE RUN FROM THE PHONE ────────────────────────
+   The desktop's Flash sales tab (07-content-billing.js fsRenderTimeline,
+   fsEndNow, and the composer fsc*): the timeline grouped Live now, then
+   Scheduled & recent; End early on a live sale, Edit on a live or scheduled
+   one, Run again on an ended one; and the composer — product, price & cap,
+   window, keep coupons off — with Start / Schedule and Cancel this sale.
+   Same endpoints, same bodies:
+     PUT    /products/:id/flash-sale  {flash_price, flash_ends_at, flash_starts_at,
+                                       flash_stock_limit, no_coupon_on_flash}
+     DELETE /products/:id/flash-sale
+   Keys (lib/cap-routes.js): the PUT is flash:edit OR products:edit, the DELETE
+   flash:delete OR products:delete. flash:edit and products:edit are
+   money:'moves', so every control here fails closed until the keys are known
+   (vdCan, M13); the DELETE keys are held to the same rule — there was no
+   phone control before this, so nobody's working access is narrowed. */
+let FSC=null;        // the composer — the desktop's _fsc, plus busy/err/dirty
+let FS_SKEW=0;       // server_time_ms − Date.now() at the last read, as the desktop keeps it
+let fscPQT=null;
+const FS_PUT=['flash:edit','products:edit'], FS_DEL=['flash:delete','products:delete'];
+const fsCanPut=()=>vdCan(FS_PUT), fsCanDel=()=>vdCan(FS_DEL);
+const fsNow=()=>Date.now()+FS_SKEW;
+const fsPad=n=>String(n).padStart(2,'0');
+function fsToMs(s){
+  if(!s) return null;
+  if(typeof s==='string'&&/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) s=s.replace(' ','T')+'Z';
+  const t=new Date(s).getTime();
+  return Number.isFinite(t)?t:null;
+}
+function fsLocalInput(ms){
+  if(ms==null) return '';
+  const d=new Date(ms);
+  return d.getFullYear()+'-'+fsPad(d.getMonth()+1)+'-'+fsPad(d.getDate())+'T'+fsPad(d.getHours())+':'+fsPad(d.getMinutes());
+}
+const fsName=p=>(LANG==='en'?(p.name_en||p.name_cn):(p.name_cn||p.name_en))||('#'+p.id);
+/* The list again, with the server's clock — the desktop's fsLoadList. */
+function flashReload(){
+  return apiRaw('/flash-sales').then(j=>{
+    const rows=(j&&j.data)||[];
+    if(j&&j.meta&&j.meta.server_time_ms) FS_SKEW=j.meta.server_time_ms-Date.now();
+    DB.flash=rows.map(mapFlash); state.flashLoaded=true; render();
+  }).catch(()=>{ /* the write itself landed; the list re-reads on its next load */ });
+}
+const fsRow=id=>{ const f=(DB.flash||[]).find(x=>String(x._id)===String(id)); return f&&f.raw; };
+/* End early — the desktop's confirm, then the DELETE. The card says Saving…
+   and a failure stays above the list. */
+reg('fsEndNow', id=>{
+  const r=fsRow(id); if(!r||state.flashBusy||!fsCanDel()) return;
+  const name=fsName(r);
+  state.ask={title:T('End the flash sale on "'+name+'" now?','立即结束 "'+name+'" 的秒杀？'),
+    body:T('The regular price comes back immediately.','将马上恢复原价。'),
+    confirmLabel:T('End sale','结束秒杀'), danger:true, run:()=>{
+      state.flashBusy=r.id; state.flashErr=null; render();
+      apiWrite('/products/'+r.id+'/flash-sale',{},'DELETE').then(()=>{
+        state.flashBusy=null; showToast(T('Flash sale ended','秒杀已结束')); flashReload();
+      }).catch(e=>{ state.flashBusy=null; if(String(e.message)==='auth') return;
+        state.flashErr=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(e.message||''); render(); });
+    }};
+  render();
+});
+function fscBlank(){
+  return {mode:'new', editId:null, product:null, pickerOpen:false, psearch:'', picks:null, picksErr:'', pickSeq:0,
+    price:'', cap:'', endChip:'tonight', endsCustom:'', endEdit:false, winTouched:false,
+    startLater:false, startChip:'now', startsCustom:'',
+    noCoupon:true,   // the desktop defaults "keep coupons off" ON (protects margin)
+    busy:null, err:'', dirty:false};
+}
+reg('fsNew', ()=>{ if(!fsCanPut()) return; FSC=fscBlank(); CMD.push('flashedit'); });
+/* Edit keeps the window; Run again starts a fresh clock now (fscFillFromRow). */
+function fscFill(id, mode){
+  const row=fsRow(id); if(!row||!fsCanPut()) return;
+  const w=fscBlank();
+  w.mode=mode; w.editId=row.id;
+  w.product={id:row.id, name_en:row.name_en, name_cn:row.name_cn, sku:row.sku, size:row.size,
+    sell_price:row.sell_price, image_url:row.image_url, image_data:row.image_data};
+  w.price=row.flash_price!=null?String(row.flash_price):'';
+  w.cap=row.flash_stock_limit!=null?String(row.flash_stock_limit):'';
+  w.noCoupon=!!Number(row.no_coupon_on_flash);
+  w.winTouched=true;
+  if(mode==='edit'){
+    w.endChip='custom'; w.endsCustom=fsLocalInput(fsToMs(row.flash_ends_at)); w.endEdit=false;
+    if(row.flash_starts_at&&row.flash_state==='upcoming'){ w.startLater=true; w.startChip='custom'; w.startsCustom=fsLocalInput(fsToMs(row.flash_starts_at)); }
+  } else { w.editId=null; w.mode='again'; w.endChip='tonight'; }
+  FSC=w; CMD.push('flashedit');
+}
+reg('fsEdit', id=>fscFill(id,'edit'));
+reg('fsAgain', id=>fscFill(id,'again'));
+const fscTouch=()=>{ if(FSC){ FSC.dirty=true; FSC.err=''; } };
+
+/* ── the derived values (fscRegular … fscEndLabel) ── */
+const fscRegular=w=>Number(w.product&&w.product.sell_price)||0;
+const fscPriceNum=w=>Number(w.price)||0;
+const fscCapNum=w=>{ const n=parseInt(w.cap,10); return Number.isFinite(n)&&n>0?n:null; };
+const fscOffPct=w=>{ const r=fscRegular(w), f=fscPriceNum(w); return (r>0&&f>0&&f<r)?Math.round(((r-f)/r)*100):0; };
+function fscTonight(){ const d=new Date(fsNow()); d.setHours(22,0,0,0); if(d.getTime()<=fsNow()) d.setDate(d.getDate()+1); return d; }
+function fscStartsDate(w){
+  if(!w.startLater||w.startChip==='now') return null;
+  if(w.startChip==='tomorrow9'){ const d=new Date(fsNow()); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return d; }
+  return w.startsCustom?new Date(w.startsCustom):null;
+}
+function fscEndsDate(w){
+  if(w.endChip==='custom') return w.endsCustom?new Date(w.endsCustom):null;
+  if(w.endChip==='tonight') return fscTonight();
+  const m=String(w.endChip).match(/^\+(\d+)([hd])$/);
+  if(!m) return null;
+  const base=fscStartsDate(w)||new Date(fsNow());
+  return new Date(base.getTime()+(m[2]==='h'?+m[1]*3600:+m[1]*86400)*1000);
+}
+function fscDayWord(ms){
+  const d=new Date(ms), n=new Date(fsNow()), tm=new Date(fsNow()); tm.setDate(tm.getDate()+1);
+  const same=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+  if(same(d,n)) return T('today','今天');
+  if(same(d,tm)) return T('tomorrow','明天');
+  return d.getFullYear()+'-'+fsPad(d.getMonth()+1)+'-'+fsPad(d.getDate());
+}
+const fscClock=d=>fscDayWord(d.getTime())+' '+fsPad(d.getHours())+':'+fsPad(d.getMinutes());
+function fscEndLabel(w){
+  const ed=fscEndsDate(w);
+  if(!ed||isNaN(ed.getTime())) return T('Pick an end time','选择结束时间');
+  return T('Ends ','结束 ')+fscClock(ed);
+}
+
+/* ── the composer's commands ── */
+reg('fscOpenPicker', ()=>{ const w=FSC; if(!w) return; w.pickerOpen=true; w.psearch=''; render(); fscSearch(); });
+function fscSearch(){
+  const w=FSC; if(!w) return;
+  const seq=++w.pickSeq; w.picks=null; w.picksErr=''; fscPicksRepaint();
+  api('/products?published=1&limit=20'+(w.psearch?'&q='+encodeURIComponent(w.psearch):'')).then(r=>{
+    if(FSC!==w||seq!==w.pickSeq) return;
+    w.picks=(Array.isArray(r)?r:[]).filter(p=>p.is_published==null||Number(p.is_published)); fscPicksRepaint();
+  }).catch(e=>{ if(FSC!==w||seq!==w.pickSeq||String(e.message)==='auth') return;
+    w.picks=[]; w.picksErr=T('Failed to load','加载失败')+': '+(e.message||''); fscPicksRepaint(); });
+}
+reg('fscPQ', v=>{ if(!FSC) return; FSC.psearch=String(v||'').trim(); searchClearShow('mFscClr',!!v);
+  clearTimeout(fscPQT); fscPQT=setTimeout(fscSearch,250); });
+reg('mFscClr', ()=>searchClearRun('mFscPQ','mFscClr','fscPQ'));
+reg('fscPick', id=>{ const w=FSC; if(!w) return;
+  const p=(w.picks||[]).find(x=>String(x.id)===String(id)); if(!p) return;
+  w.product=p; w.pickerOpen=false;
+  const f=fscPriceNum(w), r=fscRegular(w);
+  if(!(f>0&&(r<=0||f<r))) w.price='';
+  fscTouch(); render(); });
+reg('fscPrice', v=>{ if(!FSC) return; FSC.price=String(v==null?'':v); fscTouch(); fscLiveRepaint(); });
+reg('fscCap', v=>{ if(!FSC) return; FSC.cap=String(v==null?'':v); fscTouch(); fscLiveRepaint(); });
+reg('fscEndChip', k=>{ const w=FSC; if(!w||['+1h','+6h','tonight','+3d','+7d'].indexOf(k)<0) return;
+  w.endChip=k; w.endEdit=false; w.winTouched=true; fscTouch(); render(); });
+reg('fscOpenEnd', ()=>{ const w=FSC; if(!w) return;
+  w.endChip='custom'; w.endEdit=true; w.winTouched=true;
+  if(!w.endsCustom){ const ed=fscEndsDate(w)||fscTonight(); w.endsCustom=fsLocalInput(ed.getTime()); }
+  fscTouch(); render(); });
+reg('fscSetEnd', v=>{ const w=FSC; if(!w) return; w.endsCustom=String(v||''); w.endChip='custom'; w.winTouched=true; fscTouch(); render(); });
+reg('fscStartLater', ()=>{ const w=FSC; if(!w) return;
+  w.startLater=!w.startLater;
+  if(w.startLater&&w.startChip==='now') w.startChip='tomorrow9';
+  if(!w.startLater) w.startChip='now';
+  fscTouch(); render(); });
+reg('fscStartChip', k=>{ const w=FSC; if(!w||['tomorrow9','custom'].indexOf(k)<0) return;
+  w.startChip=k;
+  if(k==='custom'&&!w.startsCustom){ const d=new Date(fsNow()); d.setHours(d.getHours()+1,0,0,0); w.startsCustom=fsLocalInput(d.getTime()); }
+  fscTouch(); render(); });
+reg('fscSetStart', v=>{ if(!FSC) return; FSC.startsCustom=String(v||''); fscTouch(); render(); });
+reg('fscCoupon', ()=>{ if(!FSC) return; FSC.noCoupon=!FSC.noCoupon; fscTouch(); render(); });
+
+/* ── the save (fscValidate, fscStart) and Cancel this sale ── */
+function fscCheck(w){
+  if(!w.product) return T('Pick a product first','请先选择产品');
+  if(!(fscPriceNum(w)>0)) return T('Enter a flash price','请输入秒杀价');
+  if(fscRegular(w)>0&&fscPriceNum(w)>=fscRegular(w)) return T('Flash price must be lower than regular','秒杀价必须低于原价');
+  const ed=fscEndsDate(w);
+  if(!ed||isNaN(ed.getTime())) return T('Set an end time','请设置结束时间');
+  const sd=fscStartsDate(w);
+  if(sd&&sd.getTime()>=ed.getTime()) return T('Start must be before end','开始须早于结束');
+  if(ed.getTime()<=fsNow()&&!sd) return T('End time is in the past','结束时间已过');
+  return '';
+}
+const FSC_ERR={flash_price_invalid:['Flash price must be greater than 0','秒杀价必须大于 0'],
+  flash_ends_at_required:['End time required','请填写结束时间'], flash_ends_at_invalid:['End time invalid','结束时间无效'],
+  flash_starts_at_invalid:['Start time invalid','开始时间无效'], flash_starts_after_ends:['Start must be before end','开始须早于结束'],
+  flash_stock_limit_invalid:['Stock cap must be a positive number','库存上限必须为正数']};
+function fscDone(w, msg){
+  showToast(msg);
+  if(FSC===w){ FSC=null; const top=state.stack[state.stack.length-1]; if(top&&top.route==='flashedit'){ forgetScroll(); state.stack.pop(); } }
+  render(); flashReload();
+}
+const fscFail=w=>e=>{ w.busy=null; if(String(e.message)==='auth') return;
+  w.err=e.refused?String(E(...e.words)):T('Failed','失败')+': '+(FSC_ERR[e.code]?T(...FSC_ERR[e.code]):(e.message||''));
+  render(); };
+reg('fscStart', ()=>{
+  const w=FSC; if(!w||w.busy||!fsCanPut()) return;
+  const bad=fscCheck(w); if(bad){ w.err=bad; render(); return; }
+  const ends=fscEndsDate(w), starts=fscStartsDate(w);
+  const body={flash_price:fscPriceNum(w), flash_ends_at:ends.toISOString(),
+    flash_starts_at:starts?starts.toISOString():null, flash_stock_limit:fscCapNum(w),
+    no_coupon_on_flash:w.noCoupon?1:0};
+  w.busy='start'; w.err=''; render();
+  apiWrite('/products/'+w.product.id+'/flash-sale', body, 'PUT')
+    .then(()=>fscDone(w, starts?T('Flash sale scheduled','秒杀已排期'):T('Flash sale started','秒杀已开启')))
+    .catch(fscFail(w));
+});
+reg('fscCancelSale', ()=>{
+  const w=FSC; if(!w||!w.editId||w.busy||!fsCanDel()) return;
+  const name=fsName(w.product);
+  state.ask={title:T('Cancel the flash sale on "'+name+'"?','取消 "'+name+'" 的秒杀？'),
+    body:T("The product returns to its regular price and the sale leaves the list. This can't be undone.",'商品将恢复原价,此活动会从列表中移除,且无法撤销。'),
+    confirmLabel:T('Cancel sale','取消秒杀'), danger:true, run:()=>{
+      w.busy='cancel'; w.err=''; render();
+      apiWrite('/products/'+w.editId+'/flash-sale', {}, 'DELETE')
+        .then(()=>fscDone(w, T('Flash sale cancelled','秒杀已取消'))).catch(fscFail(w));
+    }};
+  render();
+});
+function fscMayLeave(){
+  if(!FSC) return true;
+  if(FSC.busy) return false;   // a write on the wire finishes first
+  if(FSC.dirty){
+    state.ask={title:T('Leave without saving? The changes on this page are lost.','不保存就离开?此页面的改动会丢失。'),
+      confirmLabel:T('Leave','离开'), danger:true, run:()=>{ FSC=null; forgetScroll(); state.stack.pop(); render(); }};
+    render(); return false;
+  }
+  FSC=null; return true;
+}
+
+/* ── the composer's screen ── */
+const fsThumb=(p,size)=>{ const src=p&&(p.image_url||p.image_data)||'';
+  return `<span style="width:${size}px;height:${size}px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${src?`;background-image:url('${String(src).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${src?'':ic('package',18)}</span>`; };
+function fscPicksHtml(){
+  const w=FSC; if(!w) return '';
+  if(w.picks===null) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('Loading products…','正在加载产品…')}</div>`;
+  if(w.picksErr) return `<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink)">${escAttr(w.picksErr)}</div>`;
+  if(!w.picks.length) return `<div style="padding:12px 16px;font-size:14px;color:var(--text-secondary)">${T('No products match — try another search.','无匹配产品 — 换个关键词。')}</div>`;
+  return w.picks.map((p,i)=>{ const sub=[p.sku,p.size].filter(Boolean).join(' · ');
+    return `${i?'<div class="sep" style="margin-left:16px"></div>':''}<button class="row" style="min-height:56px;padding:10px 16px;gap:12px" onclick="APP.cmd('fscPick',${Number(p.id)})">
+      ${fsThumb(p,40)}<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(fsName(p))}</span>
+        ${sub?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(sub)}</span>`:''}</span>
+      ${p.sell_price?`<span class="num" style="font-size:13px;color:var(--text-secondary);flex:none">${money(CUR,p.sell_price)} ${T('regular','原价')}</span>`:''}</button>`; }).join('');
+}
+function fscPicksRepaint(){ const el=typeof document!=='undefined'&&document.getElementById&&document.getElementById('mFscPicks'); if(el) el.innerHTML=fscPicksHtml(); else render(); }
+function fscPriceHelp(w){
+  const reg=fscRegular(w), f=fscPriceNum(w);
+  if(reg>0&&f>0){
+    if(f>=reg) return `<span style="color:var(--brick-ink)">${T('Must be lower than regular','必须低于原价')}</span>`;
+    return LANG==='en'?`<b>${fscOffPct(w)}% off</b> ${money(CUR,reg)}`:`省 <b>${fscOffPct(w)}%</b> · 原价 ${money(CUR,reg)}`;
+  }
+  if(reg>0) return T('Regular','原价')+' '+money(CUR,reg);
+  return T('flash price','秒杀价');
+}
+/* The customer's view, as the desktop's right-hand pane draws it. */
+function fscPreviewHtml(w){
+  const p=w.product, f=fscPriceNum(w), reg=fscRegular(w);
+  const head=`<div style="font-size:12.5px;font-weight:500;color:var(--text-secondary);padding:0 4px 8px">${T('What customers see','顾客看到')}</div>`;
+  if(!p||!(f>0)) return head+`<div class="card" style="padding:16px;font-size:13px;color:var(--text-secondary)">${T('Pick a product and set a price to preview the shopper’s view.','选择产品并填写价格,预览顾客看到的样子。')}</div>`;
+  const off=fscOffPct(w), cap=fscCapNum(w), ends=fscEndsDate(w);
+  const endTxt=(ends&&!isNaN(ends.getTime()))?fscClock(ends):'';
+  return head+`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:12px;align-items:flex-start">${fsThumb(p,52)}
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+        <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="pill" style="background:var(--brick-tint);color:var(--brick-ink);flex:none">${T('Flash','秒杀')}</span>
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(fsName(p))}</span></span>
+        <span style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <span class="num" style="font-size:18px;font-weight:500">${money(CUR,f)}</span>
+          ${reg>0?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${money(CUR,reg)}</span>`:''}
+          ${off?`<span style="font-size:13px;color:var(--brick-ink)">${T('save','省')} ${off}%</span>`:''}</span>
+        ${endTxt?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Ends ','结束 ')}${escAttr(endTxt)}</span>`:''}
+        ${cap!=null?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${LANG==='en'?'Limited to '+cap:'限 '+cap+' 份'}</span>`:''}</span></div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${reg>0
+      ?T('Reverts to '+money(CUR,reg)+' on its own when the clock runs out.','倒计时结束后自动恢复 '+money(CUR,reg)+'。')
+      :T('Reverts to the regular price when the clock runs out.','倒计时结束后自动恢复原价。')}</div></div>`;
+}
+/* Typing the price or the cap repaints the help line and the preview only,
+   so the field keeps its caret. */
+function fscLiveRepaint(){
+  const w=FSC; if(!w||typeof document==='undefined'||!document.getElementById) return;
+  const h=document.getElementById('mFscHelp'); if(h) h.innerHTML=fscPriceHelp(w);
+  const v=document.getElementById('mFscPv'); if(v) v.innerHTML=fscPreviewHtml(w);
+}
+function fscCouponNote(w){
+  // The desktop reads the live coupons for this; the phone already holds them.
+  const live=(DB.coupons||[]).some(c=>c&&c.raw&&c.raw.is_active&&(c.raw.auto_apply||c.raw.is_public));
+  return live&&!w.noCoupon?`<div style="padding:12px 14px;border-radius:12px;background:var(--amber-tint);font-size:13px;line-height:1.5;color:var(--amber-ink)">${
+    T('A sitewide coupon is live — it will stack on this price. Keep coupons off to protect your margin.','有全场优惠券进行中 — 会叠加在此价格上。禁止叠加可保住利润。')}</div>`:'';
+}
+function screenFlashEdit(){
+  const w=FSC;
+  if(!w) return nothingYet(T("Nothing's on the clock",'暂无秒杀'),'');
+  const p=w.product, reg=fscRegular(w), can=fsCanPut(), dis=w.busy?'disabled':'';
+  const step=(n,title,body)=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px"><span class="num" style="width:22px;height:22px;border-radius:50%;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none">${n}</span>
+      <span style="font-size:15px;font-weight:500;min-width:0">${title}</span></div>${body}</div>`;
+  const chip=(on,cmd,label)=>`<button class="chip ${on?'on':''}" onclick="${cmd}"><span>${label}</span></button>`;
+  const picker=w.pickerOpen
+    ? `${searchBox(`<input id="mFscPQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.psearch)}" placeholder="${escAttr(T('Search by name or SKU…','按名称或货号搜索…'))}" style="width:100%" oninput="APP.cmd('fscPQ',this.value)">`,'mFscClr',!!w.psearch,'display:block')}
+       <div class="list" id="mFscPicks" style="max-height:320px;overflow:auto">${fscPicksHtml()}</div>`
+    : `<button class="row" style="min-height:56px;padding:10px 12px;gap:12px;border:1px solid var(--border-default);border-radius:12px" ${w.mode==='edit'?'disabled':''} onclick="APP.cmd('fscOpenPicker')">
+        ${fsThumb(p,40)}<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+          <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap${p?'':';color:var(--text-secondary)'}">${p?escAttr(fsName(p)):T('Choose a product','选择产品')}</span>
+          ${p&&reg>0?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Regular','原价')} ${money(CUR,reg)}</span>`:''}</span>
+        ${w.mode==='edit'?'':`<span style="color:var(--text-secondary);display:flex">${ic('chevron-down')}</span>`}</button>`;
+  const ends=[['+1h',T('+1h','+1小时')],['+6h',T('+6h','+6小时')],['tonight',T('Tonight','今晚')],['+3d',T('+3d','+3天')],['+7d',T('+7d','+7天')]];
+  const startNote=w.startLater
+    ? `${T('scheduled — ','排期 — ')}<button style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-primary);text-decoration:underline" onclick="APP.cmd('fscStartLater')">${T('start now instead','改为现在开始')}</button>`
+    : `${T('starts now','现在开始')} — <button style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-primary);text-decoration:underline" onclick="APP.cmd('fscStartLater')">${T('schedule it','排期')}</button>`;
+  const future=!!fscStartsDate(w);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${w.mode!=='new'?`<div style="padding:0 4px">${pill('draft',w.mode==='edit'?T('Editing','编辑中'):T('Run again','再来一次'))}</div>`:''}
+    ${step(1,T('Product','产品'),picker)}
+    ${step(2,T('Price & cap','价格与限量'),`<div style="display:flex;gap:10px">
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+        <input id="mFscPrice" class="num" inputmode="decimal" autocomplete="off" value="${escAttr(String(w.price||''))}" placeholder="${escAttr(T(CUR+' price',CUR+' 价格'))}" oninput="APP.cmd('fscPrice',this.value)">
+        <span id="mFscHelp" style="font-size:12.5px;color:var(--text-secondary)">${fscPriceHelp(w)}</span></label>
+      <label style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+        <input id="mFscCap" class="num" inputmode="numeric" autocomplete="off" value="${escAttr(String(w.cap||''))}" placeholder="${escAttr(T('No cap','不限量'))}" oninput="APP.cmd('fscCap',this.value)">
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('stock cap','库存上限')}</span></label></div>`)}
+    ${step(3,T('Window','时间'),`<div style="font-size:13px;color:var(--text-secondary)">${startNote}</div>
+      <button class="row num" style="min-height:44px;padding:10px 12px;border:1px solid var(--border-default);border-radius:12px;font-size:15px" onclick="APP.cmd('fscOpenEnd')"><span style="flex:1;text-align:left">${escAttr(fscEndLabel(w))}</span></button>
+      ${w.endEdit?`<input id="mFscEnd" type="datetime-local" value="${escAttr(w.endsCustom)}" onchange="APP.cmd('fscSetEnd',this.value)">`:''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${ends.map(e=>chip(w.endChip===e[0],`APP.cmd('fscEndChip','${e[0]}')`,e[1])).join('')}</div>
+      ${w.startLater?`<div style="display:flex;gap:8px;flex-wrap:wrap">${chip(w.startChip==='tomorrow9',"APP.cmd('fscStartChip','tomorrow9')",T('Tomorrow 09:00','明天 09:00'))}${chip(w.startChip==='custom',"APP.cmd('fscStartChip','custom')",T('Pick a time','自定义'))}</div>
+        ${w.startChip==='custom'?`<input id="mFscStart" type="datetime-local" value="${escAttr(w.startsCustom)}" onchange="APP.cmd('fscSetStart',this.value)">`:''}`:''}`)}
+    <div class="card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px">${T('Keep coupons off this price','秒杀价不叠加优惠券')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${T('Sitewide coupons skip this product while the sale runs.','活动期间,全场优惠券会跳过此商品。')}</span></span>
+      ${toggle(!!w.noCoupon,"APP.cmd('fscCoupon')")}</div>
+    ${fscCouponNote(w)}
+    <div id="mFscPv">${fscPreviewHtml(w)}</div>
+    ${w.err?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(w.err)}</div>`:''}
+    ${can?`<button class="cta" style="width:100%" ${dis} onclick="APP.cmd('fscStart')">${w.busy==='start'?T('Saving…','保存中…'):future?T('Schedule','排期'):T('Start','开启')}</button>`:''}
+    ${w.mode==='edit'&&w.editId&&fsCanDel()?`<button class="btn2" style="width:100%;color:var(--brick-ink)" ${dis} onclick="APP.cmd('fscCancelSale')">${w.busy==='cancel'?T('Saving…','保存中…'):T('Cancel this sale','取消此活动')}</button>`:''}
+  </div>`;
+}
+
+/* ── the list: the desktop's timeline, Live now, then Scheduled & recent ── */
+function flashCardHtml(f){
+  const r=f.raw||{}, st=String(r.flash_state||'');
+  const busy=state.flashBusy===f._id;
+  const acts=[];
+  if(f._id!=null&&r.flash_state){
+    if(st==='active'||st==='live'){
+      if(fsCanDel()) acts.push(`<button class="btn2" style="flex:1;color:var(--brick-ink)" ${state.flashBusy?'disabled':''} onclick="APP.cmd('fsEndNow',${Number(f._id)})">${busy?T('Saving…','保存中…'):T('End early','提前结束')}</button>`);
+      if(fsCanPut()) acts.push(`<button class="btn2" style="flex:1" onclick="APP.cmd('fsEdit',${Number(f._id)})">${T('Edit','编辑')}</button>`);
+    } else if(st==='upcoming'||st==='scheduled'){
+      if(fsCanPut()) acts.push(`<button class="btn2" style="flex:1" onclick="APP.cmd('fsEdit',${Number(f._id)})">${T('Edit','编辑')}</button>`);
+    } else if(st==='ended'){
+      if(fsCanPut()) acts.push(`<button class="btn2" style="flex:1" onclick="APP.cmd('fsAgain',${Number(f._id)})">${T('Run again','再来一次')}</button>`);
+    }
+  }
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px${st==='ended'?';opacity:.75':''}">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <span style="width:52px;height:52px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${f.img?`;background-image:url('${String(f.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${f.img?'':ic('zap',20)}</span>
+        <span style="flex:1;min-width:0">
+          ${/* The name gets the whole line. It was sharing it with the status
+               pill and losing — "Lemongrass Kombucha" clipped to make room for
+               the word "Live" — and letting the row wrap only moved the
+               threshold rather than removing it. The pill joins the price row
+               below, which already wraps and has room. */''}
+          <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...f.title)}</span>
+          <span style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
+            ${pill(f.kind,T(...f.status))}
+            ${f.price?`<span class="num" style="font-size:18px;font-weight:500">${f.price}</span>`:''}
+            ${f.price&&f.was?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${f.was}</span>`:''}
+            ${f.off?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T(f.off+'% off',f.off+'% 折扣')}</span>`:''}</span>
+          ${f.sku?`<span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px">${escAttr(f.sku)}</span>`:''}
+        </span></div>
+      ${f.win?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${f.win}</div>`:''}
+      ${f.limit!=null?`<div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px">
+          <span class="num" style="color:var(--text-secondary)">${T(f.sold+' of '+f.limit+' sold',f.limit+' 件中已售 '+f.sold)}</span>
+          <span class="num" style="color:${f.left===0?'var(--brick-ink)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
+        <span style="display:block;margin-top:6px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${f.pct||0}%;border-radius:999px;background:${f.left===0?'var(--brick)':'var(--text-primary)'}"></span></span></div>`:''}
+      ${(f.hidden||f.noCoupon)?`<div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Product is not on the shop','商品未上架')}</span>`:''}
+        ${f.noCoupon?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No coupons on top','不可叠加优惠券')}</span>`:''}</div>`:''}
+      ${acts.length?`<div style="display:flex;gap:8px">${acts.join('')}</div>`:''}
+    </div>`;
+}
+function screenFlash(){
+  const list=DB.flash||[];
+  if(!state.flashLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!list.length) return nothingYet(T("Nothing's on the clock",'暂无秒杀'),
+    T('Put a product on a timer and it sells at the sale price until the window closes.','给产品加上倒计时,它会以秒杀价出售,直到时间结束。'));
+  const stOf=f=>String((f.raw&&f.raw.flash_state)||'');
+  const live=list.filter(f=>['active','live'].indexOf(stOf(f))>=0);
+  const rest=list.filter(f=>['active','live'].indexOf(stOf(f))<0);
+  const upcoming=rest.filter(f=>['upcoming','scheduled'].indexOf(stOf(f))>=0);
+  const head=t=>`<div style="padding:8px 4px 0;font-size:13px;font-weight:500;color:var(--text-secondary)">${t}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${state.flashErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(state.flashErr)}</div>`:''}
+    ${head(T('Live now','进行中')+(live.length?' · '+live.length+' '+T('running','进行中'):''))}
+    ${live.length?live.map(flashCardHtml).join('')
+      :`<div style="padding:4px 4px 8px;font-size:14px;color:var(--text-secondary)">${T('No sale is live this moment. Scheduled ones start on their own.','当前没有进行中的秒杀,已排期的会自动开始。')}</div>`}
+    ${rest.length?head(T('Scheduled & recent','已排期与最近')+' · '+upcoming.length+' '+T('scheduled','已排期'))+upcoming.concat(rest.filter(f=>upcoming.indexOf(f)<0)).map(flashCardHtml).join(''):''}
+  </div>`;
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
    the judge — it refuses anything already on its way out. */
@@ -44283,7 +46398,7 @@ const ROUTE_CAP={
   // More → Operations. sales and trend both read /dashboard, so they are gated
   // on the capability that endpoint belongs to and not on a reports key they
   // never touch.
-  inbox:['reviews:view','feedback:view'], sales:'dashboard:view', trend:'dashboard:view',
+  inbox:['reviews:view','feedback:view'], reviews:['reviews:view','reviews:moderate'], sales:'dashboard:view', trend:'dashboard:view',
   // §325 PD2 — the desktop Sales board's own any-of (TAB_CAP.sales), the door
   // to the shop menu there.
   shopmenus:['dashboard:view','meituan:view','guanyi:view','eleme:view','integrations:view'],
@@ -44409,7 +46524,7 @@ const ROUTE_CAP={
      advances than that it advances into a dead end. */
   logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
-  coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
+  coupons:'coupons:view', coupon:'coupons:view', coupongrant:'coupons:view', couponnew:'coupons:create', flashedit:['flash:edit','products:edit'], flash:'flash:view', popups:'popups:view', popupedit:['popups:view','popups:edit'], affiliate:'affiliate:view', affsettings:['affiliate:view','affiliate:edit'], affeligible:'affiliate:edit',
   sharecards:'sharing:edit', sharecard:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
   /* The composer is gated on the capability its POST is gated on server-side
      (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
@@ -44419,7 +46534,7 @@ const ROUTE_CAP={
      screen it lives inside rather than left open on a screen that is not. */
   bcnew:'broadcasts:send', bcauto:'broadcasts:send',
   // More → Loyalty & Wallet.
-  membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit', polledit:'voting:edit',
+  membership:'loyalty:view', pointsrules:['loyalty:view','loyalty:edit'], tiersedit:['loyalty:view','loyalty:edit'], wallet:'topup:edit', topuppkgs:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit', polledit:'voting:edit',
   // More → Content.
   editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view', snippets:'content:view',
   // Settings, and the screens reached from inside it or from the Products strip.
@@ -45800,7 +47915,7 @@ function layers(){
   for(let i=0;i<state.stack.length;i++) L.push(()=>{
     const t=state.stack[state.stack.length-1]; if(t&&t.route==='recipeone') rcpLeaveNow(false); if(t&&(t.route==='shopdisplay'||t.route==='custservice')) cfgFlushAll(); if(t&&t.route==='storeone') stoFlush();   // §325 X5/X6: a pending card edit goes too
     if(t&&t.route==='materialone') matLeaveNow(false);
-    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
+    if(t&&t.route==='productcost'&&!pcMayLeave()) return; if(t&&t.route==='polledit'&&!pollMayLeave()) return; if(t&&t.route==='affsettings'&&!affMayLeave()) return; if(t&&t.route==='pointsrules'&&!prMayLeave()) return; if(t&&t.route==='tiersedit'&&!teMayLeave()) return; if(t&&t.route==='popupedit'&&!puMayLeave()) return; if(t&&t.route==='coupon'&&!vdMayLeave()) return; if(t&&t.route==='coupongrant') VG=null; if(t&&t.route==='couponnew'&&!cwMayLeave()) return; if(t&&t.route==='flashedit'&&!fscMayLeave()) return;   // §300 R6: an unsaved build list asks, and the layer stays; §325 M7: so does an unsaved poll
     forgetScroll(); const gone=state.stack.pop(); if(gone&&gone.route==='productcost') pcPopped(gone);
     if(gone&&gone.route==='productedit') pePopped(gone); });
   // Order first, record second: the record opens ON TOP of the order it was
@@ -46016,6 +48131,17 @@ function mUnsavedWork(){
     if(PE&&PE.dirty&&(state.stack||[]).some(f=>f&&f.route==='polledit')) return true;
     /* The affiliate offer, changed and not yet saved (§325 M9). */
     if(affDirty()&&(state.stack||[]).some(f=>f&&f.route==='affsettings')) return true;
+    /* The points rules and the ladder, changed and not yet saved (§325 M11). */
+    if(prDirty()&&(state.stack||[]).some(f=>f&&f.route==='pointsrules')) return true;
+    if(teDirty()&&(state.stack||[]).some(f=>f&&f.route==='tiersedit')) return true;
+    /* A new pop-up typed and not yet saved (§325 M12); an existing one is a card. */
+    if(PUE&&PUE.isNew&&PUE.dirty&&(state.stack||[]).some(f=>f&&f.route==='popupedit')) return true;
+    /* A coupon label typed and not yet saved (§325 M13). */
+    if(VD&&VD.lblDirty&&(state.stack||[]).some(f=>f&&f.route==='coupon')) return true;
+    /* A coupon half made in the wizard (§325 M14). */
+    if(CW&&CW.dirty&&(state.stack||[]).some(f=>f&&f.route==='couponnew')) return true;
+    /* A flash sale half set in the composer (§325 M15). */
+    if(FSC&&FSC.dirty&&(state.stack||[]).some(f=>f&&f.route==='flashedit')) return true;
     /* A build list edited and not yet saved (§300 R6) — held in memory only. */
     if(state.pc&&state.pc.dirty&&(state.stack||[]).some(f=>f&&f.route==='productcost')) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
@@ -47789,7 +49915,9 @@ function mapVoucher(r){
     // Ending inside a week is the desktop's quiet amber: time to decide whether
     // to extend it, and the only moment this date is worth noticing.
     soon:!!(exp&&!ended&&(exp-Date.now())<7*864e5),
-    pills, on:live, active:!!r.is_active};
+    pills, on:live, active:!!r.is_active,
+    // §325 M13 — the row as read, for the coupon screen's controls.
+    raw:r};
 }
 const FLASH_KIND={live:'live',running:'live',scheduled:'draft',upcoming:'draft',ended:'off',none:'off'};
 /* A flash sale is a PRICE for a WINDOW, and the phone's card showed neither —
@@ -47830,7 +49958,9 @@ function mapFlash(r){
     // A flash price on an UNPUBLISHED product is a sale no customer can see.
     hidden:r.is_published!=null&&!Number(r.is_published),
     noCoupon:!!Number(r.no_coupon_on_flash),
-    status:label, kind:FLASH_KIND[state]||'draft'};
+    status:label, kind:FLASH_KIND[state]||'draft',
+    // §325 M15 — the row as read, for Edit / Run again / End early.
+    raw:r};
 }
 const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft',recalled:'off',cancelled:'off',expired:'off',ended:'off'};
 /* §325 M6 — every status the desktop names (05-marketing.js bxFeedRow). A
