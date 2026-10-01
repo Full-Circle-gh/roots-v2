@@ -994,6 +994,7 @@ const state = {
   /* The operator's own store when they are store-scoped (/me scopeStores): every
      store-scoped read is pinned to it, as the desktop's RA_STORE_LOCK is. */
   storeLock:null,
+  scopeStores:null,   /* §412.5 — every scoped store id; null = unscoped */
   trendOpen:{},          // which Trend fact section is expanded, by key
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   /* The role's Dashboard cards, from the Roles editor — null until /me
@@ -32705,8 +32706,17 @@ function stoPut(rec){
 reg('stoRetry', ()=>{ state.sto.listTried=false; render(); });
 
 /* ── Operations: the store list's doors ──────────────────────────────────── */
+/* §412.5 — A STORE-SCOPED OPERATOR MANAGES STOCK STAFF ONLY AT THEIR OWN
+   STORES (routes/backend-team.js requireOwnStore). The owner and an unscoped
+   operator anywhere. Fails closed while /me is loading: neither the keys nor
+   the scope is known yet. */
+function stfHere(id){
+  if(!Array.isArray(state.caps)||!canRoute('storestaff')) return false;
+  if((state.me&&state.me.role)==='owner'||!Array.isArray(state.scopeStores)) return true;
+  return state.scopeStores.includes(Number(id));
+}
 function stoRow(st,i){
-  const edit=canRoute('storeone'), staff=canRoute('storestaff');
+  const edit=canRoute('storeone'), staff=stfHere(st.id);
   const b=(cmd,label)=>`<button class="btn2" style="width:auto;min-height:34px;padding:0 12px;font-size:13.5px" onclick="APP.cmd('${cmd}',${Number(st.id)})">${label}</button>`;
   return opsStoreRow(st,i)+((edit||staff)?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 12px">
     ${edit?b('stoOpen',T('Edit','编辑')):''}${staff?b('stfOpen',T('Stock staff','库存员')):''}</div>`:'');
@@ -32889,7 +32899,7 @@ function screenStoreOne(){
         <input type="number" step="0.000001" inputmode="decimal" value="${escAttr(s.pinLng)}" placeholder="${escAttr(T('Longitude','经度'))} 113.4061" style="flex:1;min-width:0" oninput="APP.cmd('stoPinIn','lng',this.value)"></div>
       ${isNew?'':`<button class="btn2" style="width:100%" ${s.pinBusy?'disabled':''} onclick="APP.cmd('stoPin')">${s.pinBusy?T('Saving…','保存中…'):T('Save','保存')}</button>`}
       ${errLine(s.pinErr)}`)}
-    ${!isNew&&canRoute('storestaff')?tmList([tmRow({label:T('Stock staff','库存员'),cmd:`APP.cmd('stfOpen',${Number(s.id)})`})]):''}
+    ${!isNew&&stfHere(s.id)?tmList([tmRow({label:T('Stock staff','库存员'),cmd:`APP.cmd('stfOpen',${Number(s.id)})`})]):''}
     ${isNew
       ? `${errLine(s.err)}<button class="cta" style="width:100%" ${s.busy?'disabled':''} onclick="APP.cmd('stoSave')">${s.busy?T('Saving…','保存中…'):T('Save','保存')}</button>`
       : `<div id="mStoFoot" class="card" style="display:flex;align-items:center;gap:8px;padding:10px 12px">${stoFootHtml()}</div>`}
@@ -32910,14 +32920,14 @@ function stfLoad(){
 function stfReread(){ const s=state.sto; s.staffTried=false; stfLoad(); }
 reg('stfRetry', ()=>{ state.sto.staffTried=false; render(); });
 reg('stfOpen', id=>{
-  id=Number(id); if(!canRoute('storestaff')||!stoRec(id)) return;
+  id=Number(id); if(!stfHere(id)||!stoRec(id)) return;
   stoFlush();   // the store's pending edit goes first, as the desktop's does
   const s=state.sto; s.staffFor=id; s.staffRec=stoRec(id);
   push('storestaff');
 });
 reg('stfIn', (k,v)=>{ const a=state.sto.add; if(k in a) a[k]=String(v==null?'':v); });
 reg('stfAdd', ()=>{
-  const s=state.sto, id=s.staffFor; if(s.staffBusy||!canRoute('storestaff')||id==null) return;
+  const s=state.sto, id=s.staffFor; if(s.staffBusy||id==null||!stfHere(id)) return;
   const name=s.add.name.trim(), username=s.add.user.trim(), password=s.add.pw.trim();
   if(!username){ s.addErr=E('Login required','请填写登录名'); render(); return; }
   if(password.length<10){ s.addErr=E('Password must be at least 10 characters','密码至少需要 10 位'); render(); return; }
@@ -32928,7 +32938,7 @@ reg('stfAdd', ()=>{
   }).catch(e=>{ s.staffBusy=null; if(String(e&&e.message)==='auth') return; s.addErr=x6Words(e,'Failed','操作失败'); render(); });
 });
 reg('stfRemove', uid=>{
-  const s=state.sto, id=s.staffFor; uid=Number(uid); if(s.staffBusy||!canRoute('storestaff')||id==null) return;
+  const s=state.sto, id=s.staffFor; uid=Number(uid); if(s.staffBusy||id==null||!stfHere(id)) return;
   if(!(s.staff||[]).some(u=>u.id===uid&&u.isActive)) return;   // only a row the screen shows
   state.askErr=null;
   state.ask={title:T('Remove this stock staff member? They will lose access immediately.','移除该库存员?其访问权限将立即失效。'),
@@ -32942,7 +32952,7 @@ reg('stfRemove', uid=>{
   render();
 });
 reg('stfReset', uid=>{
-  const s=state.sto, id=s.staffFor; uid=Number(uid); if(s.staffBusy||!canRoute('storestaff')||id==null) return;
+  const s=state.sto, id=s.staffFor; uid=Number(uid); if(s.staffBusy||id==null||!stfHere(id)) return;
   if(!(s.staff||[]).some(u=>u.id===uid&&u.isActive)) return;   // only a row the screen shows
   state.askErr=null;
   state.ask={title:T('New password (at least 10 characters)','新密码(至少 10 位)'),
@@ -50289,6 +50299,8 @@ async function loadMe(){
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null};
     // §300 F5 — RA_STORE_LOCK's rule: the first of the operator's scoped stores.
     state.storeLock=(Array.isArray(u.scopeStores)&&u.scopeStores.length)?String(u.scopeStores[0]):null;
+    // §412.5 — the whole scope: stock staff are managed only at these stores.
+    state.scopeStores=Array.isArray(u.scopeStores)?u.scopeStores.map(Number):null;
     /* The operator's own language, from their account (audit M-01 / M-02). It
        wins over whatever this handset had — that is the point. null means they
        have never chosen, and then the handset's value stands: nobody who has
