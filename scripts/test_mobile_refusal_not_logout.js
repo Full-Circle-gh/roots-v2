@@ -80,6 +80,7 @@ function mk(opts = {}) {
     refreshOrders: () => { calls.refreshed++; },
     loadMedia: () => { calls.media++; },
     revKey: (r) => 'r' + r.id,
+    mCan: () => true,   // every key held: this suite is about the server's refusal, S1b's about the client's
     FormData: class { append() {} },
     fetch: async (u, o) => {
       calls.fetches.push({ u, method: (o && o.method) || 'GET', body: o && o.body });
