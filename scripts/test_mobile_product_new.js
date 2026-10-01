@@ -375,7 +375,7 @@ it('the server’s create stores every key the phone trusts it with, and (since 
     else assert.ok(!reads, 'POST still ignores b.' + k + ', so only the follow-up PATCH carries it');
   });
   S2I.forEach((k) => assert.ok(k in def, 'the follow-up still covers ' + k));
-  assert.ok(/is_published, is_active, created_at/.test(create) && create.includes('b.is_published ? 1 : 0'), 'hidden unless told otherwise');
+  assert.ok(/\bis_published,[^`]*\bis_active, created_at/.test(create) && create.includes('b.is_published ? 1 : 0'), 'hidden unless told otherwise (S2i put its columns between these two)');
 });
 
 (async () => {
