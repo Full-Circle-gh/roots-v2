@@ -1424,6 +1424,13 @@ const state = {
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   invSnoozeBusy:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
+  /* §325 X1 — Change history (chl), What was sent (nlg), Eleme (elm), and
+     Home's "browsing now" count. One key per screen, so none can collide with
+     a name another screen takes later. */
+  chl:{rows:null, total:0, people:[], kinds:[], who:'', what:'', from:'', to:'', q:'', err:null, tried:false, more:false, seq:0, open:null},
+  nlg:{rows:null, total:0, failed:0, channels:[], kinds:[], channel:'', kind:'', from:'', to:'', q:'', onlyFailed:false, err:null, tried:false, more:false, seq:0, open:null},
+  elm:{cfg:null, st:null, err:null, tried:false, seq:0, cat:{}, catStore:null, catQ:''},
+  presence:null,
   /* The Account screen's own reads and writes (screenAccount): the recovery
      contacts and two-step switches, the signed-in devices, the per-person
      alert switches, and which write is in flight. One key, so the screen's
@@ -1547,6 +1554,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      carried over from the last time the app was opened may already have been
      worked by somebody else. */
   if(route==='approvals') aprFresh();
+  /* §325 X1 — the two records screens and Eleme are re-read on every entry:
+     what was changed, what was sent and what a channel is doing are facts about
+     now, and `rows`/`st` back to null draws Loading rather than the last visit. */
+  if(route==='changes'||route==='sent'){ const c=route==='sent'?state.nlg:state.chl; c.tried=false; c.rows=null; c.err=null; c.open=null; }
+  if(route==='mirror_eleme'){ const e=state.elm; e.tried=false; e.st=null; e.cfg=null; e.err=null; }
   /* §300 F1 — Finance opens on Summary and re-reads it: money is a fact about
      now. The window chosen last time is kept, as the desktop keeps it. */
   if(route==='finance'){ const f=state.fin; f.view='summary'; f.tried=false; f.err=''; f.cat=null; f.pol=null;
@@ -1856,6 +1868,9 @@ reg('rqSearch', v=>{
  ['mPsupQ','mPsupClr','psupQ'],
  ['mWstQ','mWstClr','wstSearch'],
  ['mFinTxQ','mFinTxClr','finTxQ'],
+ ['mChlQ','mChlClr','chlQ'],
+ ['mNlgQ','mNlgClr','nlgQ'],
+ ['mElmCatQ','mElmCatClr','elmCatQ'],
  ['mOnwCustQ','mOnwCustClr','onwCustQ'],
  ['mOnwProdQ','mOnwProdClr','onwProdQ'],
  ['mOnwCityQ','mOnwCityClr','onwCityQ'],
@@ -4814,7 +4829,7 @@ function vitalsBlock(){
       ${cell(T('Refunded','已退款'), String(v.refunded),
         v.refunded?T((v.refundRate||0).toFixed(1)+'% of orders','占订单 '+(v.refundRate||0).toFixed(1)+'%')
                   :T('nothing sent back','无退款'))}
-    </div></div>`;
+    </div>${presenceLine()}</div>`;
 }
 /* ONE HEADING OVER BOTH CARDS, and it belongs to the section rather than to
    either card. The second card used to carry its own — "Also today ·
@@ -5158,7 +5173,7 @@ function screenHome(){
    server resolves, and nothing but that card ever sets it. */
 const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
   delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',pending:'pending_payment',
-  delayed:'delayed'};
+  delayed:'delayed', recover:'recover_parcel'};
 const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual',shop:'shop'};
 const ORDERS_PAGE=25;
 function ordersQuery(offset){
@@ -5281,6 +5296,9 @@ function ordersHeader(){
           that sets it carries — this names one thing and must not name it twice.
           Clears to All, which is the only status this can have come from. */''}
     ${state.statusF==='delayed'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Delivery needs a call','配送需要跟进')}</span>${ic('x',14,2)}</button></div>`:''}
+    ${/* §325 X1 — the same chip for Home's "Parcels to recover" row, whose
+          pseudo-status (recover_parcel) is the one the desktop's row opens. */''}
+    ${state.statusF==='recover'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Parcels to recover','待收回包裹')}</span>${ic('x',14,2)}</button></div>`:''}
     ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}
     ${stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,'storeF')}`:''}</div>`;
 }
@@ -5482,7 +5500,7 @@ const CHAN_META={
   mini_app:{icon:'smartphone',en:'Mini app',zh:'小程序',key:'wechat'},
   web:{icon:'globe',en:'Web store',zh:'网店',key:'web'},
   meituan:{icon:'bike',en:'Meituan',zh:'美团',key:'meituan',mirror:'meituan'},
-  eleme:{icon:'utensils-crossed',en:'Eleme',zh:'饿了么',key:'eleme'},
+  eleme:{icon:'utensils-crossed',en:'Eleme',zh:'饿了么',key:'eleme',mirror:'eleme'},
   gzgrocery:{icon:'warehouse',en:'gzgrocery ERP',zh:'gzgrocery',key:'gzgrocery',mirror:'gzgrocery'},
   pos:{icon:'store',en:'In store',zh:'门店',key:'pos'},
 };
@@ -5545,8 +5563,9 @@ function sheetChannel(){
                busy?T('Saving…','保存中…'):shopShut?T('Shop closed','门店已关闭'):(cell.open?T('Open','营业中'):T('Closed','已关闭'))}</span>
              <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
        }).join('')}</div>
-       ${m.mirror?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
-         m.mirror==='meituan'?T('View orders from Meituan','查看美团订单'):T('View pickups','查看提货记录')}</button>`:''}
+       ${m.mirror&&canRoute('mirror_'+m.mirror)?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
+         m.mirror==='meituan'?T('View orders from Meituan','查看美团订单')
+         :m.mirror==='eleme'?T('View Eleme sync','查看饿了么同步'):T('View pickups','查看提货记录')}</button>`:''}
        ${noteBar(T('Closing a channel everywhere at once is on desktop.','一次性关闭整个渠道请在电脑端操作。'))}
      </div></div>`;
 }
@@ -5657,7 +5676,7 @@ function screenSales(){
       // inside that sheet. A channel with no integration has nothing to show
       // and stays flat.
       const go=(!notIntegrated&&cells.length)?`APP.cmd('openChannel','${c.channel}')`
-              : m.mirror?`APP.cmd('mirror','${m.mirror}')`:'';
+              : (m.mirror&&canRoute('mirror_'+m.mirror))?`APP.cmd('mirror','${m.mirror}')`:'';
       const Tag=go?'button':'div';
       return `<${Tag} class="card" ${go?`onclick="${go}"`:''} style="display:flex;flex-direction:column;gap:12px;text-align:left;${go?'cursor:pointer;':''}padding:16px;color:var(--text-primary);width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -22083,6 +22102,9 @@ reg('bcfLink', v=>{ state.bcf.deeplink=String(v||'').trim(); bcfRepaintFoot(); }
 reg('bcfSend', ()=>bcfSend());
 
 async function loadMirror(which){
+  // Eleme reads for itself (elmLoad, §325 X1): its screen is not a list of
+  // records and shares nothing below.
+  if(which==='eleme') return;
   if(state.mirrorLoading===which) return;
   state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
   try{
@@ -22664,6 +22686,634 @@ function PUSH_NOTE(){
        : state.push==='unsupported' ? T('This browser cannot deliver them.','此浏览器无法接收推送。')
        : null;
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   §325 X1 — WHAT THE SHOP DID, WHAT IT SENT, WHO IS LOOKING, AND ELEME
+   --------------------------------------------------------------------------
+   Five reads the desktop has had and the phone had not (the Settings,
+   Dashboard and Channels rows of docs/tacet-phone-parity-rest-of-app.md).
+   Nothing here writes. Every request is the desktop's own, path and query:
+
+     Change history   GET /activity-log, /activity-log/export.csv
+                      (02-settings-ops.js, ch*)
+     What was sent    GET /notification-log            (02-settings-ops.js, nl*)
+     Browsing now     GET /dashboard/presence          (03-dashboard.js)
+     Two Home rows    /dashboard/ops needs_point and parcel_recovery, which Home
+                      already fetches                  (03-dashboard.js)
+     Eleme            GET /eleme/config, /eleme/status, /eleme/catalogue
+                      (14-eleme.js)
+
+   WHO OPENS WHAT. Change history and What was sent are not gated on the
+   desktop beyond reaching Settings ("an operator who can reach Settings can see
+   what was done to the shop they work in" — retail-admin.html's own note), so
+   here they carry exactly the Settings screen's key set and live inside it.
+   Eleme is the desktop tab's `eleme:view`. The two Home rows open orders, so
+   they need the Orders tab — the desktop gates its order worklists the same
+   way (DASH_CARD_CAP.orders).
+
+   Every string is the desktop's live pair unless docs/tacet-delivery-
+   vocabulary.md says otherwise under this step.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* One opener for an order a Home row points at, by its numeric id. The shape
+   of openDeliveryAlert's, deliberately: the sheet holds the screen until the
+   order arrives, and a failed read says so where the operator is looking. */
+function x1OpenOrder(id,no){
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const row=list.find(o=>o._id===id); if(row) row.isNew=false; }
+  });
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  return api('/orders/'+id).then(o=>{
+    if(state.detailId!==no) return;
+    const d=mapDetail(o);
+    state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
+  }).catch(e=>{
+    if(String(e&&e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=T('This order could not be opened. Close and try again.',
+                     '无法打开该订单，请关闭后重试。');
+    render();
+  });
+}
+/* The row's item, found again in the snapshot rather than carried through an
+   attribute — an order number is data and does not belong inside an onclick. */
+reg('openOpsOrder', (key,id)=>{
+  const k=String(key||''), n=Number(id);
+  const it=((((state.ops||{})[k])||{}).items||[])
+    .find(x=>x&&Number(k==='parcel_recovery'?x.order_id:x.id)===n);
+  if(!it) return;
+  x1OpenOrder(n, it.order_no||('#'+n));
+});
+
+/* ── Two rows for Home's Needs you ───────────────────────────────────────────
+   ORDERS WAITING FOR A DELIVERY POINT. A same-city push that could only place
+   the address to an area parks and waits for somebody to point at the door;
+   nothing retries it (docs/tacet-delivery-point-confirmation-spec.md §7). The
+   desktop gives it a block of its own that is absent at zero; here it is a
+   Needs-you row, which is absent at zero by construction. Brick, like the
+   other delivery row: it is a delivery nobody is coming for.
+
+   PARCELS TO RECOVER (§189). Boxes already out when their order was cancelled.
+   Amber, as on the desktop — the money is back with the customer and the count
+   is honest; what waits is a decision.
+
+   ONE OPENS THE ORDER ITSELF (Ash's rule for "Delivery needs a call"); more
+   open the list — the parked list for the first, the Orders filter the desktop
+   uses for the second (status=recover_parcel). Order numbers are the line, as
+   on the desktop's parcel row: they are what identifies an order. */
+function x1OrderNos(items,total){
+  const nos=(items||[]).map(x=>x&&x.order_no).filter(Boolean).slice(0,2);
+  const rest=Math.max(0,Number(total||0)-nos.length);
+  return nos.length?nos.join(T(', ','，'))+(rest>0?' +'+rest+' '+T('more','更多'):''):'';
+}
+function recoverFires(o){
+  const out=[];
+  if(!o||!canRoute('orders')) return out;
+  const np=o.needs_point||{}, pr=o.parcel_recovery||{};
+  const npN=Number(np.count)||0, prN=Number(pr.count)||0;
+  if(npN){
+    const it=np.items||[];
+    const ages=it.map(x=>({waiting_since:x&&x.parked_since}));
+    const nos=x1OrderNos(it,npN);
+    out.push({sev:'brick',icon:'map-pin',label:T('Orders waiting for a delivery point','待确认配送点'),n:npN,
+      meta:nos||oldestOf(ages),age:!nos,mins:oldestMins(ages),
+      go:(npN===1&&it.length===1&&it[0]&&it[0].id!=null)
+        ?`APP.cmd('openOpsOrder','needs_point',${Number(it[0].id)})`:"APP.cmd('push','needspoint')"});
+  }
+  if(prN){
+    const it=pr.items||[];
+    const nos=x1OrderNos(it,prN);
+    out.push({sev:'amber',icon:'box',label:T('Parcels to recover','待收回包裹'),n:prN,
+      meta:nos||oldestOf(it),age:!nos,mins:oldestMins(it),
+      go:(prN===1&&it.length===1&&it[0]&&it[0].order_id!=null)
+        ?`APP.cmd('openOpsOrder','parcel_recovery',${Number(it[0].order_id)})`:"APP.cmd('ordersGo','recover')"});
+  }
+  return out;
+}
+/* The parked orders, one row each, opening the order. The desktop lists five
+   and counts the rest; this lists what the snapshot carries (eight) and counts
+   the rest the same way. The point itself is picked on a map, which is one of
+   §97's three desktop-shaped exceptions — so the screen says where. */
+function x1ParkedFor(since){
+  const d=_date(since); if(!d) return T('Parked','已挂起');
+  const mins=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  if(mins<60) return T('parked '+mins+'m','已挂起 '+mins+' 分钟');
+  const hrs=Math.floor(mins/60);
+  if(hrs<24) return T('parked '+hrs+'h','已挂起 '+hrs+' 小时');
+  return T('parked '+Math.floor(hrs/24)+'d','已挂起 '+Math.floor(hrs/24)+' 天');
+}
+function screenNeedsPoint(){
+  const np=state.ops&&state.ops.needs_point;
+  if(!np) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const it=np.items||[], n=Number(np.count)||0;
+  const rest=Math.max(0,n-it.length);
+  const row=(x,i)=>{
+    const who=x.buyer||T('No name on the order','订单未留姓名');
+    const where=T(x.store_en||x.store_cn||'',x.store_cn||x.store_en||'')||x.store_code||T('Store not recorded','未记录门店');
+    const tomorrow=x.date_posture==='tomorrow';
+    const day=x.promised_day?tdWhen(x.promised_day,'date',_tdL()):'';
+    const when=x.promised_day?(tomorrow?T('Tomorrow · '+day,'明天 · '+day):day):x1ParkedFor(x.parked_since);
+    return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:60px;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('openOpsOrder','needs_point',${Number(x.id)})">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+        <span class="num" style="font-size:15px;font-weight:500">${escAttr(x.order_no||'')}</span>
+        <span style="font-size:13px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(who)} · ${escAttr(where)}</span></span>
+      <span class="num" style="flex:none;font-size:13px;color:${tomorrow?'var(--amber-ink)':'var(--text-secondary)'}">${escAttr(when)}</span></button>`;
+  };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${it.length?`<div class="list">${it.map(row).join('')}</div>`
+      :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing yet','暂无记录')}</div>`}
+    ${rest>0?`<div style="font-size:13px;color:var(--text-secondary);padding:0 4px">${T('and '+rest+' more waiting for a delivery point','另有 '+rest+' 单待确认配送点')}</div>`:''}
+    ${noteBar(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。'))}</div>`;
+}
+SUBS.needspoint={title:['Orders waiting for a delivery point','待确认配送点'],render:()=>screenNeedsPoint()};
+
+/* ── Browsing now ─────────────────────────────────────────────────────────────
+   The desktop's quiet line in the foot of its Customers card: a Sage dot, the
+   count, and a label; at zero the label carries the whole sentence. It rides the
+   phone's twin of that card (vitalsBlock) and its gates. The desktop polls every
+   15s; this rides Home's own 60s tick, the one clock the phone keeps for Home,
+   rather than starting a second timer for one number. */
+function loadPresence(){
+  if(!canRoute('home')) return Promise.resolve();
+  return api('/dashboard/presence').then(d=>{ state.presence=d||null; }).catch(e=>{
+    /* A missed poll keeps the last count on screen and the next tick asks again —
+       the desktop's own rule for this number (dashHeroLoadPresence: "silent —
+       next tick retries"). Nothing else reads it. */
+    if(String(e&&e.message)==='auth') return;
+  });
+}
+function presenceLine(){
+  const p=state.presence; if(!p) return '';
+  const v=Number(p.viewing||0);
+  return `<div style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--text-secondary)">
+    <span style="width:8px;height:8px;border-radius:50%;background:var(--sage);opacity:${v?1:.45};flex:none"></span>
+    ${v?`<span class="num" style="font-weight:500;color:var(--text-primary)">${v}</span><span>${T('browsing now','人正在浏览')}</span>`
+       :`<span>${T('no one browsing right now','暂无人浏览')}</span>`}</div>`;
+}
+
+/* ── Shared by the two records screens ─────────────────────────────────────── */
+/* Patch the body only, so a search box keeps its keyboard (the Suppliers
+   screen's rule); anywhere else, an ordinary render. */
+function x1Paint(bodyId,build){
+  const b=(typeof document!=='undefined')?document.getElementById(bodyId):null;
+  if(b) b.innerHTML=build(); else render();
+}
+function x1Select(cmd,cur,first,vals,label){
+  const opts=(vals||[]).slice();
+  // A filtered read returns only the values that survive the filter, so the
+  // active choice can vanish from its own list. Put it back — the desktop does.
+  if(cur&&opts.indexOf(cur)<0) opts.push(cur);
+  return `<select onchange="APP.cmd('${cmd}',this.value)" style="flex:1;min-width:0;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0">
+    <option value="">${first}</option>${opts.map(v=>`<option value="${escAttr(v)}"${v===cur?' selected':''}>${escAttr(label(v))}</option>`).join('')}</select>`;
+}
+function x1WhenLabel(from,to){ return (from||to)?escAttr((from||'…')+' – '+(to||'…')):T('When','时间'); }
+function x1Err(msg,retry){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:34px 16px;text-align:center">
+    <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',24)}</span>
+    <span style="font-size:14.5px;color:var(--text-primary)">${msg}</span>
+    <button class="btn2" onclick="APP.cmd('${retry}')">${T('Try again','重试')}</button></div>`;
+}
+const x1Loading=()=>`<div style="padding:40px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+/* Two empty states, never one (§1.12): "your filters matched nothing" and
+   "nothing has happened yet" are different facts with different next moves. */
+function x1Empty(filtered,clearCmd,titleEn,titleZh,msgEn,msgZh){
+  return filtered
+    ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px 16px;text-align:center">
+        <span style="font-size:14px;color:var(--text-secondary)">${T('Nothing matches those filters.','没有符合条件的记录。')}</span>
+        <button class="btn2" style="width:auto;padding:0 18px" onclick="APP.cmd('${clearCmd}')">${T('Clear them','清除筛选')}</button></div>`
+    : nothingYet(T(titleEn,titleZh),T(msgEn,msgZh));
+}
+function x1Foot(n,total,moreCmd,busy){
+  if(!n) return '';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 4px">
+    <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Showing '+n+' of '+total,'显示 '+n+' / '+total)}</span>
+    ${n<total?`<button class="btn2" style="width:auto;flex:none;padding:0 14px" ${busy?'disabled':''} onclick="APP.cmd('${moreCmd}')">${busy?T('Loading…','加载中…'):T('Show more','显示更多')}</button>`:''}</div>`;
+}
+/* ── Change history ───────────────────────────────────────────────────────────
+   Who changed what: `activity_log`, which every significant write has filled
+   for as long as the admin has existed. READ-ONLY on both surfaces — a history
+   somebody can tidy is not a history. Not the Stock activity screen: that one
+   answers "how did this number get here". */
+const CHL_ACTIONS={
+  create:['Created','新建'], update:['Edited','修改'], delete:['Deleted','删除'],
+  login:['Signed in','登录'], logout:['Signed out','退出'],
+  publish:['Published','上架'], unpublish:['Unpublished','下架'],
+  refund:['Refunded','退款'], cancel:['Cancelled','取消'],
+  approve:['Approved','批准'], reject:['Rejected','拒绝'],
+  receive:['Received','收货'], adjust:['Adjusted','调整'],
+  block:['Blocked','封禁'], unblock:['Unblocked','解封'],
+  import:['Imported','导入'], export:['Exported','导出'],
+};
+/* The desktop's chActionText, rule for rule: a known key reads as a word, a
+   key that starts or ends with one reads as the word and the rest, and anything
+   else reads as its own words rather than as a code. */
+function chlAction(action){
+  const key=String(action||'').toLowerCase();
+  if(CHL_ACTIONS[key]) return T(...CHL_ACTIONS[key]);
+  for(const k of Object.keys(CHL_ACTIONS)){
+    if(key.startsWith(k+'_')||key.endsWith('_'+k)){
+      const noun=key.replace(new RegExp('_?'+k+'_?'),'').replace(/_/g,' ');
+      return (T(...CHL_ACTIONS[k])+(noun?' '+noun:'')).trim();
+    }
+  }
+  return key.replace(/_/g,' ');
+}
+/* The details column is a JSON blob with no schema; "field: value" pairs, or
+   the raw text when it is not an object — chDetailsText's rule. */
+function chlDetails(details){
+  if(!details) return '';
+  let o=null;
+  try{ o=JSON.parse(details); }catch(e){ return String(details); }
+  if(o==null||typeof o!=='object') return String(details);
+  return Object.entries(o).map(([k,v])=>k.replace(/_/g,' ')+': '+(v==null?'—':(typeof v==='object'?JSON.stringify(v):v))).join(' · ');
+}
+function chlQs(){
+  const c=state.chl, qs=new URLSearchParams();
+  if(c.who) qs.set('who',c.who);
+  if(c.what) qs.set('entity_type',c.what);
+  if(c.from) qs.set('from',c.from);
+  if(c.to) qs.set('to',c.to);
+  if(String(c.q||'').trim()) qs.set('q',String(c.q).trim());
+  return qs;
+}
+const chlFiltered=()=>[...chlQs().keys()].length>0;
+function chlLoad(append){
+  const c=state.chl, seq=++c.seq;
+  c.tried=true; if(append) c.more=true;
+  const qs=chlQs(); qs.set('limit','100'); qs.set('offset',String(append?(c.rows||[]).length:0));
+  return apiRaw('/activity-log?'+qs.toString()).then(j=>{
+    if(seq!==c.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=append?(c.rows||[]).concat(j.data||[]):(j.data||[]);
+    c.total=Number(j.total)||0; c.people=j.people||[]; c.kinds=j.kinds||[];
+    c.err=null; c.more=false; chlPaint();
+  }).catch(e=>{
+    if(seq!==c.seq||String(e&&e.message)==='auth') return;
+    c.more=false;
+    if(!append) c.rows=null;
+    c.err=(e&&e.name==='TypeError')
+      ? E('Could not load the change history. Check your connection and try again.','无法加载修改记录,请检查网络后重试。')
+      : E('Could not load the change history.','无法加载修改记录。');
+    chlPaint();
+  });
+}
+function chlPaint(){ x1Paint('mChlBody',chlBody); }
+function chlRow(r,i){
+  const c=state.chl, open=c.open===Number(r.id);
+  const det=chlDetails(r.details);
+  const rec=[r.entity_type?String(r.entity_type).replace(/_/g,' '):'', r.entity_id?'#'+r.entity_id:''].filter(Boolean).join(' ');
+  const when=tdWhen(r.created_at,'dateTime',_tdL())||r.at_local||'';
+  return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('chlOpen',${Number(r.id)})">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+      <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(r.username||T('(unknown)','(未知)'))} · ${escAttr(chlAction(r.action))}</span>
+      ${rec?`<span class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(rec)}</span>`:''}
+      ${det?`<span style="font-size:12.5px;color:var(--text-secondary);${open?'white-space:pre-wrap;overflow-wrap:anywhere':'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}">${escAttr(det)}</span>`:''}</span>
+    <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(when)}</span></button>`;
+}
+function chlBody(){
+  const c=state.chl, filtered=chlFiltered();
+  const bar=`<div style="display:flex;gap:8px">
+      ${x1Select('chlWho',c.who,T('Everyone','全部人员'),c.people,v=>v)}
+      ${x1Select('chlWhat',c.what,T('Everything','全部类型'),c.kinds,v=>String(v).replace(/_/g,' '))}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn2" style="flex:1;min-width:0;gap:6px" onclick="APP.cmd('chlWhen')">${ic('calendar',16)}<span>${x1WhenLabel(c.from,c.to)}</span></button>
+      <button class="btn2" style="width:auto;flex:none;padding:0 14px;gap:6px" onclick="APP.cmd('chlExport')">${ic('download',16)}${T('Export CSV','导出')}</button></div>
+    ${filtered?`<div><button class="chip on" onclick="APP.cmd('chlClear')"><span>${T('Clear filters','清除筛选')}</span>${ic('x',14,2)}</button></div>`:''}`;
+  if(c.err) return bar+x1Err(String(c.err),'chlRetry');
+  if(!c.rows) return bar+x1Loading();
+  if(!c.rows.length) return bar+x1Empty(filtered,'chlClear','Nothing has been changed yet.','暂无修改记录。',
+    'Every edit your team makes will appear here.','团队的每次修改都会显示在这里。');
+  return bar+`<div class="list">${c.rows.map(chlRow).join('')}</div>`+x1Foot(c.rows.length,c.total,'chlMore',c.more);
+}
+function screenChanges(){
+  const c=state.chl; if(!c.tried) chlLoad(false);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mChlQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chlQ',this.value)">`,'mChlClr',!!c.q)}
+    <div id="mChlBody" style="display:flex;flex-direction:column;gap:12px">${chlBody()}</div></div>`;
+}
+SUBS.changes={title:['Change history','修改记录'],render:()=>screenChanges()};
+let chlT=null;
+/* A new filter blanks the list to Loading, as the desktop's table does, so a
+   list never sits under a filter it was not read with. */
+function chlRefilter(){ const c=state.chl; c.rows=null; c.err=null; c.open=null; chlPaint(); chlLoad(false); }
+reg('chlQ', v=>{ state.chl.q=String(v||''); searchClearShow('mChlClr',!!state.chl.q);
+  clearTimeout(chlT); chlT=setTimeout(chlRefilter,250); });
+reg('chlWho', v=>{ state.chl.who=String(v||''); chlRefilter(); });
+reg('chlWhat', v=>{ state.chl.what=String(v||''); chlRefilter(); });
+reg('chlWhen', ()=>{
+  const c=state.chl;
+  state.ask={title:T('When','时间'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:c.from},{id:'to',label:T('To','至'),type:'date',value:c.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(v.from&&v.to&&v.from>v.to)?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{ c.from=v.from||''; c.to=v.to||''; chlRefilter(); }};
+  render();
+});
+reg('chlClear', ()=>{ const c=state.chl; c.who=''; c.what=''; c.from=''; c.to=''; c.q='';
+  const el=(typeof document!=='undefined')?document.getElementById('mChlQ'):null; if(el) el.value='';
+  searchClearShow('mChlClr',false); chlRefilter(); });
+/* The same file the desktop downloads, with the same filters on it. */
+reg('chlExport', ()=>{ const qs=chlQs().toString(); location.href=API+'/activity-log/export.csv'+(qs?'?'+qs:''); });
+reg('chlMore', ()=>{ if(state.chl.more) return; chlLoad(true); chlPaint(); });
+reg('chlOpen', id=>{ const c=state.chl; c.open=c.open===Number(id)?null:Number(id); chlPaint(); });
+reg('chlRetry', ()=>chlRefilter());
+
+/* ── What was sent ────────────────────────────────────────────────────────────
+   Every message the system tried to deliver — a push to the team, a sign-in
+   code, a text to a customer — and whether it landed. Read-only, for the
+   change history's reason: a delivery record somebody can edit is not one. */
+const NLG_CHANNELS={
+  push:['Phone alert','手机推送'], email:['Email','邮件'], sms:['Text message','短信'],
+  wechat:['WeChat message','微信消息'], wecom:['Work chat','企业微信'], webhook:['Chat app','聊天应用'],
+};
+const NLG_KINDS={
+  order_paid:['A customer paid','顾客已付款'], ship_reminder:['Time to ship an order','订单该发货了'],
+  pickup_reminder:['A collection is due','自提订单临近'], low_stock_digest:['Daily low-stock list','每日低库存清单'],
+  signin_code:['Sign-in code','登录验证码'], restock_request:['A stock request','补货申请'],
+  new_order:['A new order','新订单'],
+};
+function nlgChannel(c){ const e=NLG_CHANNELS[c]; return e?T(...e):String(c||'').replace(/_/g,' '); }
+function nlgWords(k){ const w=String(k||'').replace(/_/g,' ').trim(); return w?w.charAt(0).toUpperCase()+w.slice(1):''; }
+function nlgKind(k){ const e=NLG_KINDS[k]; return e?T(...e):nlgWords(k); }
+/* A broadcast says how many phones it reached; a send to one says whether it
+   arrived; a failure says why. The desktop runs the stored reason through its
+   error dictionary (tdErrorText), which this app does not carry, so the reason
+   reads as that function's last resort does: the code, in words. */
+function nlgResult(r){
+  if(r.ok){
+    const d=r.detail||{};
+    if(typeof d.sent==='number'&&typeof d.total==='number'&&d.total>1){
+      const extra=[];
+      if(d.muted) extra.push(T(d.muted+' muted',d.muted+' 已静音'));
+      if(d.pruned) extra.push(T(d.pruned+' device gone',d.pruned+' 设备失效'));
+      return {ok:true,label:T('Sent','已发送'),line:[T(d.sent+' of '+d.total+' reached',d.total+' 台中 '+d.sent+' 台已送达')].concat(extra).join(' · ')};
+    }
+    return {ok:true,label:T('Sent','已发送'),line:''};
+  }
+  return {ok:false,label:T('Did not arrive','未送达'),line:nlgWords(r.error)};
+}
+function nlgQs(){
+  const c=state.nlg, qs=new URLSearchParams();
+  if(c.channel) qs.set('channel',c.channel);
+  if(c.kind) qs.set('kind',c.kind);
+  if(c.from) qs.set('from',c.from);
+  if(c.to) qs.set('to',c.to);
+  if(String(c.q||'').trim()) qs.set('q',String(c.q).trim());
+  if(c.onlyFailed) qs.set('failed','1');
+  return qs;
+}
+const nlgFiltered=()=>[...nlgQs().keys()].length>0;
+function nlgLoad(append){
+  const c=state.nlg, seq=++c.seq;
+  c.tried=true; if(append) c.more=true;
+  const qs=nlgQs(); qs.set('limit','100'); qs.set('offset',String(append?(c.rows||[]).length:0));
+  return apiRaw('/notification-log?'+qs.toString()).then(j=>{
+    if(seq!==c.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=append?(c.rows||[]).concat(j.data||[]):(j.data||[]);
+    c.total=Number(j.total)||0; c.failed=Number(j.failed)||0;
+    c.channels=j.channels||[]; c.kinds=j.kinds||[];
+    c.err=null; c.more=false; nlgPaint();
+  }).catch(e=>{
+    if(seq!==c.seq||String(e&&e.message)==='auth') return;
+    c.more=false;
+    if(!append) c.rows=null;
+    c.err=(e&&e.name==='TypeError')
+      ? E('Could not load the send record. Check your connection and try again.','无法加载发送记录,请检查网络后重试。')
+      : E('Could not load the send record.','无法加载发送记录。');
+    nlgPaint();
+  });
+}
+function nlgPaint(){ x1Paint('mNlgBody',nlgBody); }
+function nlgRow(r,i){
+  const c=state.nlg, open=c.open===Number(r.id), res=nlgResult(r);
+  const [bg,fg]=res.ok?PILL.success:PILL.danger;
+  const to=r.recipient?escAttr(r.recipient):T('your team','团队');
+  return `${i?'<div class="sep"></div>':''}<button class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" onclick="APP.cmd('nlgOpen',${Number(r.id)})">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+      <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(nlgKind(r.kind))}</span>
+      ${r.subject?`<span style="font-size:13px;color:var(--text-secondary);${open?'overflow-wrap:anywhere':'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}">${escAttr(r.subject)}</span>`:''}
+      <span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(nlgChannel(r.channel))} · ${to} · <span class="num">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></span>
+      ${res.line?`<span style="font-size:12.5px;color:${res.ok?'var(--text-secondary)':'var(--brick-ink)'};overflow-wrap:anywhere">${escAttr(res.line)}</span>`:''}</span>
+    <span class="pill" style="flex:none;background:${bg};color:${fg}">${res.label}</span></button>`;
+}
+function nlgBody(){
+  const c=state.nlg, filtered=nlgFiltered();
+  const failN=c.failed;
+  const bar=`<div style="display:flex;gap:8px">
+      ${x1Select('nlgChannel',c.channel,T('Every way','全部方式'),c.channels,nlgChannel)}
+      ${x1Select('nlgKind',c.kind,T('Everything','全部内容'),c.kinds,nlgKind)}</div>
+    <button class="btn2" style="gap:6px" onclick="APP.cmd('nlgWhen')">${ic('calendar',16)}<span>${x1WhenLabel(c.from,c.to)}</span></button>
+    ${(failN||c.onlyFailed||filtered)?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${(failN||c.onlyFailed)?`<button class="chip ${c.onlyFailed?'on':''}" onclick="APP.cmd('nlgFailed')"><span>${failN?T('Did not arrive ('+failN+')','未送达('+failN+')'):T('Did not arrive','未送达')}</span></button>`:''}
+      ${filtered?`<button class="chip on" onclick="APP.cmd('nlgClear')"><span>${T('Clear filters','清除筛选')}</span>${ic('x',14,2)}</button>`:''}</div>`:''}`;
+  if(c.err) return bar+x1Err(String(c.err),'nlgRetry');
+  if(!c.rows) return bar+x1Loading();
+  if(!c.rows.length) return bar+x1Empty(filtered,'nlgClear','Nothing has been sent yet.','暂无发送记录。',
+    'Every push, email and text will appear here.','每条推送、邮件与短信都会显示在这里。');
+  return bar+`<div class="list">${c.rows.map(nlgRow).join('')}</div>`+x1Foot(c.rows.length,c.total,'nlgMore',c.more);
+}
+function screenSent(){
+  const c=state.nlg; if(!c.tried) nlgLoad(false);
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mNlgQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('nlgQ',this.value)">`,'mNlgClr',!!c.q)}
+    <div id="mNlgBody" style="display:flex;flex-direction:column;gap:12px">${nlgBody()}</div></div>`;
+}
+SUBS.sent={title:['What was sent','发送记录'],render:()=>screenSent()};
+let nlgT=null;
+function nlgRefilter(){ const c=state.nlg; c.rows=null; c.err=null; c.open=null; nlgPaint(); nlgLoad(false); }
+reg('nlgQ', v=>{ state.nlg.q=String(v||''); searchClearShow('mNlgClr',!!state.nlg.q);
+  clearTimeout(nlgT); nlgT=setTimeout(nlgRefilter,250); });
+reg('nlgChannel', v=>{ state.nlg.channel=String(v||''); nlgRefilter(); });
+reg('nlgKind', v=>{ state.nlg.kind=String(v||''); nlgRefilter(); });
+reg('nlgFailed', ()=>{ state.nlg.onlyFailed=!state.nlg.onlyFailed; nlgRefilter(); });
+reg('nlgWhen', ()=>{
+  const c=state.nlg;
+  state.ask={title:T('When','时间'),
+    fields:[{id:'from',label:T('From','从'),type:'date',value:c.from},{id:'to',label:T('To','至'),type:'date',value:c.to}],
+    confirmLabel:T('Apply','应用'),
+    validate:v=>(v.from&&v.to&&v.from>v.to)?T('From is after to','起始日期晚于结束日期'):null,
+    run:v=>{ c.from=v.from||''; c.to=v.to||''; nlgRefilter(); }};
+  render();
+});
+reg('nlgClear', ()=>{ const c=state.nlg; c.channel=''; c.kind=''; c.from=''; c.to=''; c.q=''; c.onlyFailed=false;
+  const el=(typeof document!=='undefined')?document.getElementById('mNlgQ'):null; if(el) el.value='';
+  searchClearShow('mNlgClr',false); nlgRefilter(); });
+reg('nlgMore', ()=>{ if(state.nlg.more) return; nlgLoad(true); nlgPaint(); });
+reg('nlgOpen', id=>{ const c=state.nlg; c.open=c.open===Number(id)?null:Number(id); nlgPaint(); });
+reg('nlgRetry', ()=>nlgRefilter());
+
+/* ── Eleme ────────────────────────────────────────────────────────────────────
+   The phone's third channel screen, beside the Meituan and gzgrocery ones:
+   what the desktop's Eleme tab says about the channel, read-only. The switch's
+   state, the stock waiting to go, one line per store (why it cannot push, or how
+   much is waiting, and how fresh its catalogue is), each store's catalogue as
+   last read, and the two logs of the tab's Activity view.
+
+   NOT HERE, deliberately, because they are later steps of §325 and each is a
+   write: the channel switch, linking a shop, Sign in, Sync from, Push all
+   stock, and matching. The desktop's Synced and Need-attention tiles are not
+   here either — they are counted by the matching classifier (elGroup), which
+   arrives with matching; a count shown without the list it counts is a number
+   nobody can act on. */
+function elmStoreName(st){ return LANG==='en'?((st&&(st.nameEn||st.name))||(st&&st.code)||'')
+                                             :((st&&(st.name||st.nameEn))||(st&&st.code)||''); }
+function elmAgo(iso){
+  const d=_date(iso); if(!d) return '';
+  const m=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  if(m<1) return T('just now','刚刚');
+  if(m<60) return T(m+' min ago',m+' 分钟前');
+  const h=Math.floor(m/60);
+  if(h<24) return T(h+' h ago',h+' 小时前');
+  return T(Math.floor(h/24)+' d ago',Math.floor(h/24)+' 天前');
+}
+/* The desktop's store line, word for word: why it cannot push, or what is
+   waiting, then how fresh the catalogue its pickers read is. */
+const ELM_BLOCK={no_shop:['has no Eleme shop linked yet','尚未关联饿了么店铺'], needs_login:['is signed out','已退出登录']};
+function elmStoreLine(st){
+  const cat=Number(st.catalogueCount)
+    ? T(st.catalogueCount+' listings read','已读取 '+st.catalogueCount+' 个商品')+(st.catalogueAt?' · '+elmAgo(st.catalogueAt):'')
+    : T('no catalogue read yet, so nothing can be matched here','尚未读取商品目录，无法匹配');
+  if(st.blocked){ const w=ELM_BLOCK[st.blockedBy]||['is not syncing','同步已停']; return {bad:true,text:T(...w)+' · '+cat}; }
+  const n=Number(st.pending||0)+Number(st.processing||0);
+  return {bad:false,text:(n?T(n+' stock updates waiting',n+' 条库存待推送'):T('Up to date','已是最新'))+' · '+cat};
+}
+function elmLoad(){
+  const e=state.elm, seq=++e.seq;
+  e.tried=true;
+  /* Two reads. The switch's state failing must not blank the health below it,
+     so it is asked on its own and simply not drawn when it does not answer. */
+  apiRaw('/eleme/config').then(j=>{ if(seq===e.seq){ e.cfg=j||null; render(); } }).catch(err=>{
+    /* The pill is left off and the rest of the screen still answers — the
+       desktop's own handling (elLoadConfig: "surfaced by api()"). */
+    if(String(err&&err.message)==='auth') return;
+  });
+  return apiRaw('/eleme/status').then(j=>{
+    if(seq!==e.seq) return;
+    if(!j||!j.success) throw new Error('refused');
+    e.st=j; e.err=null; render();
+  }).catch(err=>{
+    if(seq!==e.seq||String(err&&err.message)==='auth') return;
+    e.err=E('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。');
+    render();
+  });
+}
+function elmStockRow(r,stores){
+  let d={}; try{ d=JSON.parse(r.detail||'{}')||{}; }catch(e){ d={}; /* an unreadable detail prints the row without a name, as the desktop does */ }
+  const p=(DB.products||[]).find(x=>Number(x._id)===Number(d.product_id));
+  const name=p?T(...p.name):(d.sku||('#'+(d.product_id!=null?d.product_id:'?')));
+  const st=stores.find(s=>s.code===r.store_code);
+  const bad=r.status==='error';
+  return `<div style="display:flex;flex-direction:column;gap:3px;padding:11px 14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+      <span style="font-size:14.5px;min-width:0;overflow-wrap:anywhere">${escAttr(name)}${d.qty!=null?`<span class="num" style="color:var(--text-secondary)"> → ${escAttr(d.qty)}</span>`:''}</span>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></div>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(st?elmStoreName(st):(r.store_code||'-'))}</span>
+    ${bad?`<span style="font-size:12.5px;color:var(--brick-ink);overflow-wrap:anywhere">${escAttr(r.error_msg||'')}</span>`:''}</div>`;
+}
+function elmSysRow(r,stores){
+  const st=stores.find(s=>s.code===r.store_code);
+  return `<div style="display:flex;flex-direction:column;gap:3px;padding:11px 14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+      <span style="font-size:14.5px;min-width:0;overflow-wrap:anywhere;color:${r.status==='error'?'var(--brick-ink)':'var(--text-primary)'}">${escAttr(r.event_type)}: ${escAttr(r.error_msg||r.event_type)}</span>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary)">${escAttr(tdWhen(r.created_at,'dateTime',_tdL())||'')}</span></div>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(st?elmStoreName(st):(r.store_code||'-'))}</span></div>`;
+}
+function elmLog(title,rows,one,stores){
+  return `<div><div class="eyebrow" style="padding:2px 4px 10px">${title}</div>
+    <div class="list">${rows.length?rows.map((r,i)=>(i?'<div class="sep"></div>':'')+one(r,stores)).join('')
+      :`<div style="padding:16px 14px;font-size:14px;color:var(--text-secondary)">${T('Nothing yet','暂无记录')}</div>`}</div></div>`;
+}
+function screenEleme(){
+  const e=state.elm; if(!e.tried) elmLoad();
+  if(!e.st&&e.err) return x1Err(String(e.err),'elmRetry');
+  if(!e.st) return x1Loading();
+  const stores=e.st.stores||[];
+  const wait=r=>Number(r.pending||0)+Number(r.processing||0);
+  const waiting=stores.reduce((a,r)=>a+wait(r),0);
+  const on=e.cfg&&e.cfg.success!==false?!!e.cfg.enabled:null;
+  const [pbg,pfg]=on?PILL.success:PILL.muted;
+  const head=`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:13px;color:var(--text-secondary)">${T('Stock updates waiting','待推送库存')}</span>
+      ${on==null?'':`<span class="pill" style="background:${pbg};color:${pfg}">${on?T('Channel on','渠道开启'):T('Channel off','渠道已关闭')}</span>`}</div>
+    <span class="num" style="font-size:26px;font-weight:500;line-height:1.3">${waiting}</span>
+    ${stores.length?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(stores.map(r=>wait(r)+' '+elmStoreName(r)).join(' · '))}</span>`:''}</div>`;
+  const storeRows=stores.map((st,i)=>{
+    const l=elmStoreLine(st), go=Number(st.catalogueCount)>0;
+    const Tag=go?'button':'div';
+    return `${i?'<div class="sep"></div>':''}<${Tag} class="row" style="min-height:0;padding:12px 14px;align-items:flex-start" ${go?`onclick="APP.cmd('elmCat',${Number(st.id)})"`:''}>
+      <span style="width:8px;height:8px;border-radius:50%;flex:none;margin-top:7px;background:${l.bad?'var(--brick-ink)':'var(--sage)'}"></span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+        <span style="font-size:15px">${escAttr(elmStoreName(st))}</span>
+        <span style="font-size:13px;color:${l.bad?'var(--brick-ink)':'var(--text-secondary)'};overflow-wrap:anywhere">${escAttr(l.text)}</span></span>
+      ${go?`<span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span>`:''}</${Tag}>`;
+  }).join('');
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${e.err?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${String(e.err)}</span></div>`:''}
+    ${head}
+    ${stores.length?`<div><div class="eyebrow" style="padding:2px 4px 10px">${T('Stores','门店')}</div><div class="list">${storeRows}</div></div>`:''}
+    ${elmLog(T('Stock pushes','库存推送'),e.st.recentStock||[],elmStockRow,stores)}
+    ${elmLog(T('Sync events','系统事件'),e.st.recentSystem||[],elmSysRow,stores)}</div>`;
+}
+SUBS.mirror_eleme={title:['Eleme','饿了么'],render:()=>screenEleme()};
+reg('elmRetry', ()=>{ state.elm.err=null; state.elm.st=null; render(); elmLoad(); });
+
+/* ONE STORE'S CATALOGUE, as the daemon last read it — the listings Eleme holds
+   for that shop and the stock each shows. It is the cache the desktop's name
+   and size pickers read (routes/eleme-admin.js /eleme/catalogue), so what is
+   here is exactly what matching will be able to pick from. The search filters
+   what was read; it asks the server nothing. */
+function elmCatStore(){ const e=state.elm; return ((e.st&&e.st.stores)||[]).find(s=>s.code===e.catStore)||null; }
+function elmCatLoad(code){
+  const e=state.elm, c={rows:null,at:null,err:null};
+  e.cat[code]=c;
+  return apiRaw('/eleme/catalogue?storeCode='+encodeURIComponent(code)).then(j=>{
+    if(e.cat[code]!==c) return;
+    if(!j||!j.success) throw new Error('refused');
+    c.rows=j.data||[]; c.at=j.refreshedAt||null; render();
+  }).catch(err=>{
+    if(e.cat[code]!==c||String(err&&err.message)==='auth') return;
+    c.err=E('Could not load this.','无法加载。'); render();
+  });
+}
+function elmCatBody(){
+  const e=state.elm, c=e.cat[e.catStore];
+  if(!c) return x1Loading();
+  if(c.err) return x1Err(String(c.err),'elmCatRetry');
+  if(!c.rows) return x1Loading();
+  if(!c.rows.length) return `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('no catalogue read yet, so nothing can be matched here','尚未读取商品目录，无法匹配')}</div>`;
+  const q=String(e.catQ||'').toLowerCase().trim();
+  const rows=q?c.rows.filter(r=>String(r.name||'').toLowerCase().indexOf(q)>=0):c.rows;
+  const headLine=T(c.rows.length+' listings read','已读取 '+c.rows.length+' 个商品')+(c.at?' · '+elmAgo(c.at):'');
+  return `<div class="num" style="font-size:12.5px;color:var(--text-secondary);padding:0 4px">${escAttr(headLine)}</div>
+    ${rows.length?`<div class="list">${rows.map((r,i)=>`${i?'<div class="sep"></div>':''}<div class="row" style="min-height:48px;padding:10px 14px">
+      <span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${escAttr(r.name||'')}</span>
+      <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary)">${T('Stock','库存')} ${escAttr(r.stock==null?'—':r.stock)}</span></div>`).join('')}</div>`
+      :`<div style="padding:24px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No matches','无匹配')}</div>`}`;
+}
+function screenElemeCat(){
+  const e=state.elm;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${searchBox(`<input id="mElmCatQ" inputmode="search" enterkeyhint="search" value="${escAttr(e.catQ)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('elmCatQ',this.value)">`,'mElmCatClr',!!e.catQ)}
+    <div id="mElmCatBody" style="display:flex;flex-direction:column;gap:12px">${elmCatBody()}</div></div>`;
+}
+SUBS.elemecat={title:['Eleme','饿了么'],
+  titleOf:()=>{ const s=elmCatStore(); return s?escAttr(elmStoreName(s)):T('Eleme','饿了么'); },
+  render:()=>screenElemeCat()};
+reg('elmCat', id=>{
+  const e=state.elm, st=((e.st&&e.st.stores)||[]).find(s=>Number(s.id)===Number(id));
+  if(!st) return;
+  e.catStore=st.code; e.catQ='';
+  push('elemecat'); elmCatLoad(st.code);
+});
+reg('elmCatQ', v=>{ state.elm.catQ=String(v||''); searchClearShow('mElmCatClr',!!state.elm.catQ); x1Paint('mElmCatBody',elmCatBody); });
+reg('elmCatRetry', ()=>{ const code=state.elm.catStore; if(!code) return; elmCatLoad(code); render(); });
+/* §325 X1 ends */
 function NOTIFICATION_ROWS(){
   const rows=[
     {label:T('Sound','提示音'),tgl:'__sound'},
@@ -22679,7 +23329,10 @@ function NOTIFICATION_ROWS(){
 }
 function screenSettings(){
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true}]},
+    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true},
+      /* §325 X1 — the desktop's two read-only records, beside the team whose work they record. */
+      ...(canRoute('changes')?[{label:T('Change history','修改记录'),cmd:"APP.cmd('push','changes')",chev:true}]:[]),
+      ...(canRoute('sent')?[{label:T('What was sent','发送记录'),cmd:"APP.cmd('push','sent')",chev:true}]:[])]},
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -24111,6 +24764,8 @@ function opsFires(){
       mins:pk.oldest_at?oldestMins([{waiting_since:pk.oldest_at}]):null,
       go:"APP.cmd('push','pick')"});
   }
+  /* §325 X1 — orders parked for a delivery point, and parcels to recover. */
+  recoverFires(o).forEach(x=>f.push(x));
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){
     // The pill counts what is actually OUT; the line names the rest. One number
@@ -30207,6 +30862,13 @@ const ROUTE_CAP={
   settings:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   setup:['settings:shop','stores:view'],
   team:'team:view', categories:'categories:view', activity:'activity:view',
+  /* §325 X1. Change history and What was sent are read-only and live inside
+     Settings; the desktop gates neither beyond reaching Settings, so each takes
+     exactly the Settings screen's own set. Eleme and its catalogue are the
+     desktop tab's key. The parked-orders list opens orders. */
+  changes:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  sent:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  mirror_eleme:'eleme:view', elemecat:'eleme:view', needspoint:'orders:view',
   /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
      are gated on server-side (routes/backend-team.js) — the call Receiving's
      line above makes, for the same reason: a screen whose entire purpose is the
@@ -31385,6 +32047,7 @@ function mLiveTick(){
   const jobs=[
     mSettled(loadToday()),
     mSettled(loadOps()),
+    mSettled(loadPresence()),
     mSettled(api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
       state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{})),
   ];
@@ -33873,6 +34536,7 @@ async function loadLive(){
      opened rather than after a tap. */
   refreshPushState();
   loadOps();
+  loadPresence().then(()=>render());
   /* From here the board keeps itself current — the live stream plus the 60s
      backstop. Wired here rather than at the bottom of the file because this is
      the first point at which the caps are known AND the flatNav gate above has
