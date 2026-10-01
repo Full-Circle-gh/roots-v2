@@ -627,7 +627,6 @@ const M = {
   sheet: null,            // which bottom sheet is open ('add'|'edit'|'design'|'theme')
   design: null,           // last 'design' payload from the bridge (per-block colours)
   extra: null,            // §325 — the bridge's facts beside the selected block (show_on, coupons)
-  frameColors: [],        // §325 — the inspector's Frame choices [{value,label,hex}]
   corners: [],            // §325 — the inspector's Corner radius choices [{value,label}]
   targets: null,          // §325 M2 — the link picker's lists {pages,products,categories}, from the bridge
   form: null,             // §325 M3 — the inspector's controls for the selected block {blockId, nodes}
@@ -663,7 +662,6 @@ window.addEventListener('message', (e) => {
     M.ready = true;
     M.pages = d.pages || [];
     M.palette = d.palette || [];
-    M.frameColors = d.frameColors || [];
     M.corners = d.corners || [];
     if (d.page) M.page = d.page;
     if (d.lang) { M.lang = d.lang; try { localStorage.setItem(LANG_KEY, M.lang); } catch (e2) {} applyLang(); }
@@ -952,8 +950,10 @@ function renderEdit() {
    here sends 'pickCoupon' and the bridge runs the desktop select's own
    handler, so what gets copied onto the block is decided in one place.
 
-   SHOW ON (§272), FRAME, CORNER RADIUS, FULL WIDTH are on every block's
-   inspector ("Show on" and "Frame, radius & width"). Each one is a 'patch' of
+   SHOW ON (§272), CORNER RADIUS, FULL WIDTH are on every block's
+   inspector ("Show on" and "Frame, radius & width"). The frame's colour is
+   not drawn here: it is a colour, so the Design sheet already carries it, and
+   two controls for one field is one too many (§325 M4). Each one is a 'patch' of
    exactly the field desktop writes, with desktop's value for "none" (the key
    left out, never an empty string). The effective show_on and its type's
    default come from the bridge (showOnFor / SHOW_ON_DEFAULTS), so a block
@@ -1007,7 +1007,6 @@ function renderChrome(body, blk) {
   const showOn = x.showOn || 'both';
   const wrap = document.createElement('div'); wrap.className = 'chrome';
   const opt = (v, l, cur) => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>';
-  const frame = blk.frame_color || '';
   const corner = blk.corner_radius || 'subtle';
   wrap.innerHTML =
     '<div class="dgroup"><div class="t">' + esc(cuT('Show on', '显示位置')) + '</div>' +
@@ -1020,20 +1019,12 @@ function renderChrome(body, blk) {
         ? '<div class="edit-note" style="margin:10px 0 0">' + esc(cuT('The website has no wallet, notifications or order pages yet, so this block is off there unless you turn it on.', '网页版暂无钱包、通知和订单页面,因此本模块默认不在网页版显示,除非你打开它。')) + '</div>' : '') +
     '</div>' +
     '<div class="dgroup"><div class="t">' + esc(cuT('Frame, radius & width', '边框、圆角与宽度')) + '</div>' +
-      '<div class="cfield"><div class="cflabel">' + esc(cuT('Frame', '边框')) + '</div>' +
-        '<div class="pc-hint" style="margin:-4px 0 8px">' + esc(cuT('Add a coloured outline around this block.', '为本模块添加彩色边框。')) + '</div>' +
-        '<div class="swatches">' +
-          '<div class="sw none' + (frame === '' ? ' on' : '') + '" data-frame="" title="' + esc(cuT('— none —', '— 无 —')) + '"></div>' +
-          (M.frameColors || []).map(c => '<div class="sw' + (c.value === frame ? ' on' : '') + '" data-frame="' + esc(c.value) + '" title="' + esc(labelSide(c.label)) + '"' +
-            (c.hex ? ' style="background:' + esc(c.hex) + '"' : '') + '></div>').join('') +
-        '</div></div>' +
       '<div class="cfield"><div class="cflabel">' + esc(cuT('Corner radius', '圆角')) + '</div>' +
         '<div class="pc-hint" style="margin:-4px 0 8px">' + esc(cuT('Sharp = square edges · Subtle = default · Bold = pronounced rounding.', '直角 = 方角 · 微圆角 = 默认 · 大圆角 = 明显圆角。')) + '</div>' +
         '<div class="vchips">' + (M.corners || []).map(c => '<button class="vchip' + (c.value === corner ? ' on' : '') + '" data-corner="' + esc(c.value) + '">' + esc(labelSide(c.label)) + '</button>').join('') + '</div></div>' +
       '<label class="chk"><input type="checkbox" data-a="bleed"' + (blk.full_bleed === true ? ' checked' : '') + '><span>' + esc(cuT('Stretch full width (edge to edge)', '拉伸至全宽（贴合屏幕两侧）')) + '</span></label>' +
     '</div>';
   wrap.querySelector('[data-a=showon]').onchange = (e) => send('patch', { id: blk.id, patch: { show_on: e.target.value } });
-  wrap.querySelectorAll('[data-frame]').forEach(sw => { sw.onclick = () => send('patch', { id: blk.id, patch: { frame_color: sw.dataset.frame || undefined } }); });
   wrap.querySelectorAll('[data-corner]').forEach(ch => { ch.onclick = () => send('patch', { id: blk.id, patch: { corner_radius: ch.dataset.corner } }); });
   wrap.querySelector('[data-a=bleed]').onchange = (e) => send('patch', { id: blk.id, patch: { full_bleed: e.target.checked ? true : undefined } });
   body.appendChild(wrap);
