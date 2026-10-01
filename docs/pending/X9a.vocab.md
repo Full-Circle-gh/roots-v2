@@ -1,4 +1,9 @@
-HEADLINE: THE CHANNEL HUB ON THE PHONE — ONE STRING COMPOSED BY CLAUDE, THE REST COPIED FROM THE DESKTOP'S CHANNEL HUB.
+HEADLINE: THE CHANNEL HUB ON THE PHONE — NOTHING LEFT COMPOSED: THE ONE STRING X9a COMPOSED WAS RETIRED BY X9c BEFORE REACHING MAIN; THE REST COPIED FROM THE DESKTOP'S CHANNEL HUB.
+
+**Note added with X9c (2026-10-01).** `Set up on desktop for now · 暂请在电脑端设置`
+below stood on the mini program and web store cards only until those got their
+own phone pages (X9b, X9c). It is no longer anywhere in the code. Do not record
+it as a live string; the row is kept here only so the history reads straight.
 
 ## The channel hub on the phone (§NEW)
 

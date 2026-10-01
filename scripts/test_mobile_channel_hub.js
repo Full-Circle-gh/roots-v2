@@ -152,7 +152,7 @@ section('2 · the hub');
     const h = await hubOpen();
     const t = h.text(h.sc('chhub'));
     for (const w of ['Meituan Not set up', 'Delivery orders from Meituan.', 'Set up', 'Eleme Needs attention', 'signed out',
-      '⚑ New location Yuexiu — link it here', 'Fix', 'WeChat mini program Connected', 'Web store Not set up', 'Set up on desktop for now',
+      '⚑ New location Yuexiu — link it here', 'Fix', 'WeChat mini program Connected', 'Web store Not set up',
       'JD Logistics Ready to set up', 'Qingyun In setup', 'Get help']) assert.ok(t.includes(w), w);
     const STATUS = slice(IG, 'const STATUS = {', '};');
     for (const [en, zh] of [['Connected', '已连接'], ['Ready to set up', '待设置'], ['Needs attention', '需处理'], ['Not set up', '未配置'], ['In setup', '设置中']]) {
@@ -164,7 +164,8 @@ section('2 · the hub');
     const html = h.sc('chhub');
     assert.ok(html.includes(`APP.cmd('hubBoxOpen','meituan')`) && html.includes(`APP.cmd('hubElemeOpen')`) && html.includes(`APP.cmd('push','jdcfg')`) && html.includes(`APP.cmd('hubBoxOpen','qingyun')`));
     assert.ok(html.includes(`APP.cmd('wxmOpen')`), 'the mini program opens its own pages (X9b)');
-    assert.strictEqual(h.text(html).split('Set up on desktop for now').length - 1, 1, 'only the web store still says desktop');
+    assert.ok(html.includes(`APP.cmd('wcfOpen')`), 'and the web store its own page (X9c)');
+    assert.ok(!h.text(html).includes('desktop'), 'no card sends anyone to the desktop now');
   });
   it('a to-do is dismissed with its id, and the hub is read again', async () => {
     const h = await hubOpen();
@@ -265,7 +266,7 @@ section('5 · in Chinese');
   it('reads in Chinese', async () => {
     const h = await hubOpen({ lang: 'zh' });
     const t = h.text(h.sc('chhub'));
-    for (const w of ['美团', '未配置', '开始设置', '需处理', '修复', '已连接', '暂请在电脑端设置', '获取帮助', '新门店 Yuexiu — 请在此关联']) assert.ok(t.includes(w), w);
+    for (const w of ['美团', '未配置', '开始设置', '需处理', '修复', '已连接', '获取帮助', '新门店 Yuexiu — 请在此关联']) assert.ok(t.includes(w), w);
     h.CMD.hubBoxOpen('meituan');
     assert.ok(h.text(h.sc('hubbox')).includes('申请盒子'));
   });
