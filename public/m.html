@@ -1909,6 +1909,7 @@ reg('rqSearch', v=>{
  ['mFinTxQ','mFinTxClr','finTxQ'],
  ['mShmQ','mShmClr','shmQ'],
  ['mShmPickQ','mShmPickClr','shmPickQ'],
+ ['mPeLibQ','mPeLibClr','peLibQ'],
  ['mChlQ','mChlClr','chlQ'],
  ['mNlgQ','mNlgClr','nlgQ'],
  ['mElmCatQ','mElmCatClr','elmCatQ'],
@@ -28735,7 +28736,8 @@ function peBody(d,e){
     e.factsTouched?{product_facts:facts}:{},
     {is_market:d.is_market,is_restock_only:d.is_restock_only,is_batch_made:d.is_batch_made,
      ship_modes:modes.join(',')||'air,land',
-     description_en:peRteClean(d.desc_en),description_cn:peRteClean(d.desc_cn),description_format:'rich'});
+     description_en:peRteClean(d.desc_en),description_cn:peRteClean(d.desc_cn),description_format:'rich'},
+    Array.isArray(e.images)?{images:e.images.slice()}:{});
 }
 /* What one save sends: the keys whose value moved since the last save that
    landed, the two descriptions together with their format, and the cost with
@@ -28780,6 +28782,7 @@ function peApplyToCatalogue(pid,row){
   if(row.sell_price!=null){ p.priceNum=Number(row.sell_price)||0; p.price=money(CUR,p.priceNum); }
   p.cat=String(row.top_category||row.category||'').trim(); p.sub=String(row.subcategory||'').trim();
   if(row.size!=null) p.size=String(row.size||'').trim();
+  if('image_data' in row||'image_url' in row) p.img=row.image_data||row.image_url||'';
   p.hay=[row.name_en||'',row.name_cn||'',row.sku||''].join(' ').toLowerCase();
 }
 function peCostOn(e){ return !!(e&&e.costLoaded&&pcMoney()&&!e.costOwned); }
@@ -28788,7 +28791,9 @@ function peAutoStart(){
   const e=state.pe; if(!e||!e.draft||!prodCanEdit()||typeof TacetAutosave==='undefined') return;
   const pid=e.pid;
   const auto=TacetAutosave.create({
-    read:()=>peBody(state.pe.draft,{costOn:peCostOn(state.pe),factsTouched:state.pe.factsTouched,factsOrig:state.pe.row&&state.pe.row.product_facts}),
+    read:()=>peBody(state.pe.draft,{costOn:peCostOn(state.pe),factsTouched:state.pe.factsTouched,factsOrig:state.pe.row&&state.pe.row.product_facts,
+      // §325 PD6 — the gallery goes only once it was loaded and then changed here.
+      images:(state.pe.gallery&&state.pe.galDirty)?state.pe.gallery:null}),
     hold:b=>(!b.name_en&&!b.name_cn)?T('Add a name to start autosaving','填写名称后自动保存')
       :(state.pe.draft.sell_price.trim()!==''&&!(Number(state.pe.draft.sell_price)>=0))?T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。')
       :'',
@@ -28809,8 +28814,10 @@ function peAutoStart(){
    box is offered only once all three are answered — an unanswered build-list
    read is not "no build list". */
 function loadPe(pid){
-  const e={pid,row:null,err:null,draft:null,base:null,factsTouched:false,costLoaded:false,costOwned:true,tried:true};
+  const e={pid,row:null,err:null,draft:null,base:null,factsTouched:false,costLoaded:false,costOwned:true,tried:true,
+    gallery:null,galInherited:false,galDirty:false,galErr:null,photoBusy:false,photoErr:null,lib:null};
   state.pe=e;
+  loadPeImages(e);
   const wantCost=pcMoney();
   Promise.all([api('/products/'+pid),
     wantCost?api('/products/'+pid+'/build-lines').then(d=>({ok:true,lines:(d&&Array.isArray(d.lines))?d.lines:[]})).catch(()=>({ok:false})):Promise.resolve({ok:false})])
@@ -28869,6 +28876,7 @@ function screenProductEdit(){
   const costOn=peCostOn(e);
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     ${card(T('Basics','基础'),`${inp('name_en',T('Name','名称'))}${inp('name_cn',T('Name (second language)','名称(第二语言)'))}${inp('sku',T('SKU','货号'),'autocapitalize="characters"')}`)}
+    ${pePhotosCard()}
     ${card(T('Where it shows','分类与陈列'),`<label style="display:flex;flex-direction:column;gap:6px">${lab(T('Shop section','商店分区'))}${sel('top_category',topOpts)}</label>
       <label style="display:flex;flex-direction:column;gap:6px">${lab(T('Subcategory','子分类'))}${sel('subcategory',subOpts)}</label>
       <label style="display:flex;flex-direction:column;gap:6px">${lab(T('Badge','标签'))}${sel('tags',PE_BADGES.map(([v,en,zh])=>[v,T(en,zh)]))}</label>
@@ -28987,9 +28995,232 @@ reg('peUndo', ()=>{ if(!peAuto) return; peAuto.undo(b=>{ const e=state.pe; if(!e
   d.free=fo.filter(x=>PE_FREE_OF.some(y=>y[0]===x)); d.freeExtra=fo.filter(x=>!PE_FREE_OF.some(y=>y[0]===x));
   if(b.product_facts){ PE_FACTS.forEach(([,col])=>{ d.facts[col+'_en']=b.product_facts[col+'_en']||''; d.facts[col+'_cn']=b.product_facts[col+'_cn']||''; }); }
   d.desc_en=b.description_en; d.desc_cn=b.description_cn;
+  // §325 PD6 — a gallery changed this visit goes back to the one loaded.
+  if(e.galDirty&&e.galOrig) e.gallery=e.galOrig.slice();
   render(); }); });
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden'&&peAuto) peAuto.flush();
+});
+/* ==========================================================================
+   §325 PD6 — A PRODUCT'S PHOTOS, ON THE DETAILS SCREEN
+   (desktop: 09-products.js pdRenderGallery / pdAddPhotos / pdOpenLibraryPicker
+    / pdRemovePhoto / pdGalleryWire, and pdResizeImage with PD_IMG_OPTS)
+   --------------------------------------------------------------------------
+   The gallery is an ordered list of up to eight pictures, the first the main
+   one, read from GET /products/:id/images and written back WHOLE as `images`
+   in the same PATCH the Details screen autosaves with — the server replaces
+   the gallery with it and keeps image_data on the first. So the phone obeys
+   the desktop's one rule about it: `images` is sent only after the gallery
+   was LOADED and then CHANGED here (_pdGalleryDirty). A gallery that did not
+   load is not shown as empty and offers no control, because a list sent from
+   a phone that never saw the real one would replace it.
+
+   Add shrinks each picture on the phone first, with the desktop's product
+   preset (1440px long edge, JPEG 0.88, untouched under 200KB; refused over
+   25MB). From library lists the Media library (GET /media/list?mime=image),
+   and each picked picture is fetched and shrunk the same way, so it lands
+   self-contained exactly as an upload does. Order is Move up / Move down
+   rather than the desktop's drag: the same reorder for a thumb. */
+const PE_MAX_PHOTOS=8;
+const PE_IMG={maxLong:1440,quality:0.88,passThroughBelow:200*1024,hardCapMB:25};
+const PE_LIB_PAGE=60;
+function peFmtBytes(b){ if(b==null) return '?'; if(b<1024) return b+' B'; if(b<1024*1024) return Math.round(b/1024)+' KB'; return (b/(1024*1024)).toFixed(1)+' MB'; }
+/* pdResizeImage with PD_IMG_OPTS: always JPEG (a transparent PNG flattens to
+   white), the long edge capped, a small JPEG passed through untouched. */
+async function peShrinkPhoto(file){
+  const read=blob=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsDataURL(blob); });
+  if(file.size<=PE_IMG.passThroughBelow&&file.type==='image/jpeg') return {dataURL:await read(file),resized:false,orig:file.size,final:file.size};
+  const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});
+  const k=Math.min(1,PE_IMG.maxLong/Math.max(bmp.width,bmp.height));
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(bmp.width*k)); c.height=Math.max(1,Math.round(bmp.height*k));
+  const g=c.getContext('2d'); g.fillStyle='#ffffff'; g.fillRect(0,0,c.width,c.height); g.drawImage(bmp,0,0,c.width,c.height);
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',PE_IMG.quality));
+  if(!blob) throw new Error('toBlob failed');
+  if(bmp.close) try{ bmp.close(); }catch(e){}
+  return {dataURL:await read(blob),resized:true,orig:file.size,final:blob.size};
+}
+function loadPeImages(e){
+  apiRaw('/products/'+e.pid+'/images').then(j=>{
+    if(state.pe!==e) return;
+    if(!j||!j.success||!Array.isArray(j.images)) throw new Error('load_failed');
+    e.gallery=j.images.slice(); e.galOrig=j.images.slice(); e.galInherited=!!j.inherited; e.galErr=null; render();
+  }).catch(err=>{
+    if(state.pe!==e||String(err&&err.message)==='auth') return;
+    e.gallery=null; e.galErr=err&&err.refused?T(...err.words):T('Load failed','加载失败'); render();
+  });
+}
+/* Every gallery edit: the list changes, it becomes this size's own (no longer
+   a sibling's), and the autosave is told. */
+function peGalleryChanged(){
+  const e=state.pe; e.galDirty=true; e.galInherited=false; e.photoErr=null;
+  render(); if(peAuto) peAuto.touch();
+}
+function pePhotosCard(){
+  const e=state.pe, edit=prodCanEdit();
+  const lab=`<div class="eyebrow">${T('Photos','图片')}</div>`;
+  if(e.galErr) return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">${lab}
+    <span style="font-size:14px;color:var(--brick-ink)">${escAttr(e.galErr)}</span>
+    <button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" onclick="APP.cmd('pePhotosRetry')">${T('Try again','重试')}</button></div>`;
+  if(!e.gallery) return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">${lab}
+    <span style="font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
+  const g=e.gallery, busy=!!e.photoBusy, room=PE_MAX_PHOTOS-g.length;
+  const rows=g.map((src,i)=>`${i?'<div class="sep" style="margin-left:76px"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:8px 0">
+      <button onclick="APP.cmd('pePhotoZoom',${i})" aria-label="${T('Photos','图片')}" style="flex:none;width:64px;height:64px;border-radius:10px;border:1px solid var(--border-default);background:var(--surface-raised) center/cover no-repeat url('${String(src).replace(/'/g,'%27').replace(/"/g,'%22')}');padding:0;cursor:pointer"></button>
+      <span style="flex:1;min-width:0">${i===0?pill('on',T('Main','主图')):''}</span>
+      ${edit?`<span style="display:flex;gap:4px;flex:none">
+        <button class="iconbtn" style="width:36px;height:36px" ${busy||i===0?'disabled':''} aria-label="${T('Move up','上移')}" onclick="APP.cmd('pePhotoMove',${i},-1)">${ic('chevron-up',18,2)}</button>
+        <button class="iconbtn" style="width:36px;height:36px" ${busy||i===g.length-1?'disabled':''} aria-label="${T('Move down','下移')}" onclick="APP.cmd('pePhotoMove',${i},1)">${ic('chevron-down',18,2)}</button>
+        <button class="iconbtn" style="width:36px;height:36px" ${busy?'disabled':''} aria-label="${T('Remove','移除')}" onclick="APP.cmd('pePhotoRemove',${i})">${ic('x',18,2)}</button></span>`:''}</div>`).join('');
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:6px">${lab}
+    ${e.galInherited&&g.length?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Shared from another variant — add a photo here to give this variant its own.','与其他规格共用图片 — 在此添加图片可为本规格单独设置。')}</span>`:''}
+    ${g.length?`<div>${rows}</div>`:`<span style="font-size:13.5px;color:var(--text-secondary)">${T('No photos yet','暂无图片')}</span>`}
+    ${e.photoErr?`<span style="font-size:13.5px;color:var(--brick-ink)">${escAttr(e.photoErr)}</span>`:''}
+    ${edit?`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+      <label class="btn2" style="width:auto;padding:0 16px;${busy||room<=0?'opacity:.5;pointer-events:none':''}">${busy?T('Adding…','添加中…'):T('Add','添加')}
+        <input type="file" accept="image/*" multiple style="display:none" ${busy||room<=0?'disabled':''} onchange="APP.cmd('pePhotoFiles',this)"></label>
+      <button class="btn2" style="width:auto;padding:0 16px" ${busy||room<=0?'disabled':''} onclick="APP.cmd('peLibOpen')">${T('From library','从图库选择')}</button>
+      <span style="font-size:12px;color:var(--text-secondary)">${T('Up to 8','最多 8 张')}</span></div>`:''}
+  </div>`;
+}
+/* The library picker: the Media library's pictures, a search that waits for a
+   pause, Load more, and as many picks as the gallery has room for. */
+function peLibGridHtml(){
+  const L=state.pe&&state.pe.lib; if(!L) return '';
+  if(L.err) return `<div style="padding:20px;font-size:14px;color:var(--brick-ink)">${escAttr(L.err)}</div>`;
+  if(L.loading&&!L.rows.length) return `<div style="padding:20px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!L.rows.length) return `<div style="padding:24px 20px;text-align:center;font-size:14px;color:var(--text-secondary)">${L.q?T('No photos match your search','没有匹配的图片'):T('Your media library is empty — upload photos in Content → Media','图库为空 — 请在「内容 → 媒体」中上传图片')}</div>`;
+  return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">${L.rows.map(m=>{
+    const on=L.sel.indexOf(Number(m.id))>=0;
+    return `<button onclick="APP.cmd('peLibToggle',${Number(m.id)})" aria-pressed="${on}" style="position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;padding:0;cursor:pointer;border:2px solid ${on?'var(--text-primary)':'transparent'};background:var(--surface-raised)">
+      <img loading="lazy" src="/api/retail/media/${Number(m.id)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+      ${on?`<span style="position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;background:var(--text-primary);color:var(--surface-base);display:flex;align-items:center;justify-content:center">${ic('check',14,2.5)}</span>`:''}</button>`; }).join('')}</div>
+    ${L.rows.length<L.total?`<div style="padding:12px 16px 0"><button class="btn2" style="width:100%" ${L.loading?'disabled':''} onclick="APP.cmd('peLibMore')">${T('Load more','加载更多')}</button></div>`:''}`;
+}
+function sheetPeLib(){
+  const L=state.pe&&state.pe.lib; if(!L) return '';
+  const n=L.sel.length;
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('peLibClose')"></div>
+   <div class="sheet" style="top:70px;z-index:48;overflow:hidden">
+     <div style="flex:none;padding:8px 16px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+         <span style="flex:1;font-size:17px;font-weight:500">${T('Choose from library','从图库选择')}</span>
+         <button class="iconbtn" onclick="APP.cmd('peLibClose')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button></div>
+       ${searchBox(`<input id="mPeLibQ" inputmode="search" enterkeyhint="search" value="${escAttr(L.q)}" placeholder="${T('Search photos…','搜索图片…')}" style="width:100%"
+         oninput="APP.cmd('peLibQ',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mPeLibClr',!!L.q)}</div>
+     <div id="mPeLibGrid" style="flex:1;min-height:0;overflow-y:auto;padding:12px 0 16px">${peLibGridHtml()}</div>
+     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px">
+       <span id="mPeLibCount" style="flex:1;font-size:13px;color:${L.full?'var(--brick-ink)':'var(--text-secondary)'}">${peLibCountText()}</span>
+       <button class="cta" style="width:auto;padding:0 20px" ${!n||L.busy?'disabled':''} onclick="APP.cmd('peLibAdd')">${L.busy?T('Adding…','添加中…'):T('Add selected','添加所选')}</button></div></div>`;
+}
+function peLibCountText(){
+  const L=state.pe&&state.pe.lib; if(!L) return '';
+  if(L.full) return T('Up to 8 photos','最多 8 张图片');
+  const n=L.sel.length; return n?T(n+' selected','已选 '+n+' 张'):'';
+}
+function peLibRepaint(){ render(); }
+let _peLibTimer=null;
+function peLibFetch(reset){
+  const e=state.pe, L=e&&e.lib; if(!L) return;
+  const seq=++L.seq; L.loading=true;
+  if(reset){ L.offset=0; }
+  const q=new URLSearchParams({mime:'image',limit:String(PE_LIB_PAGE),offset:String(L.offset)});
+  if(L.q) q.set('q',L.q);
+  api('/media/list?'+q).then(d=>{
+    if(!e.lib||seq!==L.seq) return;
+    const rows=(d&&Array.isArray(d.rows))?d.rows:[];
+    L.rows=reset?rows:L.rows.concat(rows); L.total=Number(d&&d.total)||0; L.loading=false; L.err=null; peLibRepaint();
+  }).catch(err=>{
+    if(!e.lib||seq!==L.seq||String(err&&err.message)==='auth') return;
+    L.loading=false; L.err=err&&err.refused?T(...err.words):T('Load failed','加载失败'); peLibRepaint();
+  });
+}
+reg('pePhotoZoom', i=>{ const e=state.pe, src=e&&e.gallery&&e.gallery[Number(i)]; if(src) CMD.zoomImg(src); });
+reg('pePhotosRetry', ()=>{ const e=state.pe; if(!e) return; e.galErr=null; e.gallery=null; render(); loadPeImages(e); });
+reg('pePhotoMove', (i,d)=>{
+  const e=state.pe; if(!e||!e.gallery||e.photoBusy||!prodCanEdit()) return;
+  const a=Number(i), b=a+Number(d), g=e.gallery;
+  if(!(a>=0&&a<g.length&&b>=0&&b<g.length)) return;
+  const [m]=g.splice(a,1); g.splice(b,0,m); peGalleryChanged();
+});
+reg('pePhotoRemove', i=>{
+  const e=state.pe; if(!e||!e.gallery||e.photoBusy||!prodCanEdit()) return;
+  const a=Number(i); if(!(a>=0&&a<e.gallery.length)) return;
+  e.gallery.splice(a,1); peGalleryChanged();
+});
+/* Add: as many files as there is room for, each shrunk first. One that is too
+   big, or cannot be read, is said on the card; the rest still go in. */
+reg('pePhotoFiles', el=>{
+  const e=state.pe; if(!e||!e.gallery||e.photoBusy||!prodCanEdit()) return;
+  const files=Array.from((el&&el.files)||[]); if(el) el.value='';
+  const room=PE_MAX_PHOTOS-e.gallery.length;
+  if(room<=0){ e.photoErr=T('Up to 8 photos','最多 8 张图片'); render(); return; }
+  const take=files.slice(0,room); if(!take.length) return;
+  e.photoBusy=true; e.photoErr=null; render();
+  (async()=>{
+    let added=0, err=null, saved=null;
+    for(const f of take){
+      if(f.size>PE_IMG.hardCapMB*1024*1024){ err=T('Image too huge (max '+PE_IMG.hardCapMB+'MB)','图片过大,上限 '+PE_IMG.hardCapMB+'MB'); continue; }
+      try{ const r=await peShrinkPhoto(f);
+        if(state.pe!==e) return;
+        e.gallery.push(r.dataURL); added++;
+        if(r.resized) saved=(saved||0)+(r.orig-r.final);
+        if(r.resized) showToast(T('Optimized','已优化')+' '+peFmtBytes(r.orig)+' → '+peFmtBytes(r.final));
+      }catch(x){ err=T('Failed to process image','图片处理失败'); }
+    }
+    e.photoBusy=false;
+    if(added) peGalleryChanged();
+    if(err){ e.photoErr=err; render(); } else if(!added) render();
+  })();
+});
+reg('peLibOpen', ()=>{
+  const e=state.pe; if(!e||!e.gallery||e.photoBusy||!prodCanEdit()) return;
+  if(PE_MAX_PHOTOS-e.gallery.length<=0){ e.photoErr=T('Up to 8 photos','最多 8 张图片'); render(); return; }
+  e.lib={rows:[],total:0,offset:0,q:'',loading:false,err:null,sel:[],busy:false,seq:0,addErr:null};
+  render(); peLibFetch(true);
+});
+reg('peLibClose', ()=>{ const e=state.pe; if(!e||!e.lib||e.lib.busy) return; clearTimeout(_peLibTimer); e.lib=null; render(); });
+reg('peLibQ', v=>{
+  const L=state.pe&&state.pe.lib; if(!L) return;
+  L.q=String(v||'').trim(); searchClearShow('mPeLibClr',!!L.q);
+  clearTimeout(_peLibTimer); _peLibTimer=setTimeout(()=>{ L.rows=[]; peLibFetch(true); },220);
+});
+reg('peLibMore', ()=>{ const L=state.pe&&state.pe.lib; if(!L||L.loading) return; L.offset+=PE_LIB_PAGE; peLibFetch(false); });
+reg('peLibToggle', id=>{
+  const e=state.pe, L=e&&e.lib; if(!L||L.busy) return;
+  const n=Number(id), i=L.sel.indexOf(n);
+  L.full=false;
+  if(i>=0) L.sel.splice(i,1);
+  else {
+    // Said in the sheet's own foot, where the thumb is — not a toast.
+    if(L.sel.length>=PE_MAX_PHOTOS-e.gallery.length){ L.full=true; peLibRepaint(); return; }
+    L.sel.push(n);
+  }
+  peLibRepaint();
+});
+/* Each pick fetched and shrunk like an upload, so it lands self-contained —
+   no library address the mini app would have to resolve. */
+reg('peLibAdd', ()=>{
+  const e=state.pe, L=e&&e.lib; if(!L||L.busy||!L.sel.length||!prodCanEdit()) return;
+  L.busy=true; render();
+  (async()=>{
+    let added=0;
+    for(const id of L.sel.slice()){
+      if(PE_MAX_PHOTOS-e.gallery.length<=0) break;
+      try{
+        const resp=await fetch('/api/retail/media/'+id,{credentials:'same-origin'});
+        if(!resp.ok) throw new Error('HTTP '+resp.status);
+        const blob=await resp.blob();
+        const file=new File([blob],'library-'+id+'.jpg',{type:blob.type||'image/jpeg'});
+        const r=await peShrinkPhoto(file);
+        if(state.pe!==e) return;
+        if(r&&r.dataURL){ e.gallery.push(r.dataURL); added++; }
+      }catch(x){}
+    }
+    e.lib=null;
+    if(added){ peGalleryChanged(); showToast(T('Added '+added,'已添加 '+added+' 张')); }
+    else { e.photoErr=T('Failed to process image','图片处理失败'); render(); }
+  })();
 });
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
@@ -33606,6 +33837,7 @@ function render(){
   if(state.shm.pick) html += layer('shmpick', sheetShmPick());
   // §325 PD2 — over the product it lists, and only while that product is open.
   if(state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
+  if(state.pe&&state.pe.lib) html += layer('pelib', sheetPeLib());   // §325 PD6
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
@@ -34073,6 +34305,7 @@ function layers(){
   if(state.shm.pick) L.push(()=>{ if(!state.shm.pick.busy){ clearTimeout(_shmPickTimer); state.shm.pick=null; } });
   // After the product, so Back closes the version list first (§325 PD2).
   if(state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
+  if(state.pe&&state.pe.lib) L.push(()=>{ if(!state.pe.lib.busy){ clearTimeout(_peLibTimer); state.pe.lib=null; } });   // §325 PD6
   /* "When it runs out" sits OVER the product sheet it was opened from (z-index
      48 over 46), so it is listed after it and Back closes it first. It was
      listed before, so Back took the product away from under an open picker
