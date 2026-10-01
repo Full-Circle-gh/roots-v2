@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.274 · 2026-09-30 · §382 BUNDLES ON THE PHONE — NOTHING COMPOSED, EVERY LABEL COPIED WHOLE FROM THE DESKTOP EDITOR.** See *A product's two bundles, edited on the phone (§382)*.
+
 **v1.273 · 2026-10-01 · §381 GROUND ON AN AIR PARCEL'S LABEL — THREE STRINGS COMPOSED BY CLAUDE (THE GROUND QUESTION, MIRRORING THE LIVE AIR ONE), THREE LIFTED.** See *Ground on an air parcel's label, and the question it asks (§381)*.
 
 **v1.272 · 2026-09-30 · §380 JD WAYBILL ON THE PHONE — NOTHING COMPOSED; EVERY STRING COPIED WHOLE.** See *JD waybill create and cancel on the phone (§380)*.
@@ -11936,3 +11938,44 @@ them.
 
 **English "ground", Chinese 陆运.** The rows say `Fresh · Ground · 生鲜 · 陆运`.
 The question uses the same pair as the row being picked, so the two read alike.
+
+## A product's two bundles, edited on the phone (§382)
+
+**Nothing composed, 2026-10-01.** Operator register only (Rule 1). These
+strings appear on the Suggested add-ons and Bundle — sold as one cards of the
+phone's product Details screen, and in their picker (`public/m.html`).
+
+**Copied whole from the desktop editor** (`public/retail-admin/09-products.js`
+buRender / bpRender / bpPickerList):
+
+- **Suggested add-ons:**
+  - `Suggested add-ons · 推荐搭配`
+  - its explanatory sentence, whole
+  - `Title EN · 标题(英文)`
+  - `Title CN · 标题(中文)`
+  - the placeholders `Goes well with` and `推荐搭配`, as literal as on the desktop
+  - `No products yet — add some below. · 尚未添加商品 — 在下方添加。`
+  - `Set price ¥ (optional) · 搭配价 ¥(可选)`
+  - `blank = item total · 留空 = 各项合计`
+  - `Auto voucher (optional) · 自动优惠券(可选)`
+  - `code · 券码`
+- **Bundle — sold as one:**
+  - `Bundle — sold as one · 套装产品`: the shorter Chinese, which is the one the desktop's section header uses
+  - `Customers see ONE product at the price you set above. Choose how you stock it.`, with its pair
+  - `Assembled from other products · 由其他产品组成`, with its sentence
+  - `Pre-packed on a shelf · 预先包装成套`, with its sentence
+  - `Quantity in the bundle · 套装内数量`
+  - `Add the products this bundle contains. · 添加本套装包含的商品。`
+- **Both:**
+  - `+ Add product · + 添加商品`
+  - `Remove · 移除`
+  - `Search a product to add… · 搜索商品以添加…`
+  - `No matches · 无匹配`
+  - `Close · 关闭`
+
+**Phone live pairs reused:** `Loading… · 加载中…`, `Load failed · 加载失败`,
+`Try again · 重试`.
+
+**Live candidate rejected:** `套装产品(作为一个产品出售)`. It is the desktop's
+longer header, shown only before a new product has saved. The section header
+the operator sees uses `套装产品`.
