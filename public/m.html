@@ -1050,6 +1050,10 @@ const state = {
   /* §325 PD14 — the catalogue's ticks (null = not selecting; else member ids)
      and the bulk write in flight / its shortfall, which stays on the bar. */
   prodSel:null, prodBulk:{busy:null,err:null},
+  /* §325 PD15 — Settings → SKU codes: the one read, a write in flight
+     ('toggle' | 'save' | 'del<id>'), a refusal above the rules, and the rule's
+     sheet with its own refusal. */
+  sku:{data:null,err:null,tried:false,seq:0,busy:null,actErr:null,draft:null,saveErr:null},
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
@@ -31910,7 +31914,9 @@ function screenSettings(){
       ...(canRoute('shopdisplay')?[{label:T('Shop tab','商城页'),cmd:"APP.cmd('push','shopdisplay')",chev:true}]:[]),
       ...(canRoute('custservice')?[{label:T('Customer service','客户服务'),cmd:"APP.cmd('push','custservice')",chev:true}]:[]),
       /* §325 X7 — the desktop's Push notifications panel: the shop's own alerts and keys. */
-      ...(canRoute('pushcfg')?[{label:T('Push notifications','推送通知'),cmd:"APP.cmd('push','pushcfg')",chev:true}]:[])]},
+      ...(canRoute('pushcfg')?[{label:T('Push notifications','推送通知'),cmd:"APP.cmd('push','pushcfg')",chev:true}]:[]),
+      /* §325 PD15 — the desktop's Settings → SKU codes. */
+      ...(canRoute('skucodes')?[{label:T('SKU codes','编码规则'),cmd:"APP.cmd('push','skucodes')",chev:true}]:[])]},
     /* §325 X7 — the couriers' keys and Qingyun, the desktop Delivery hub's three cards. */
     ...(x7DeliveryRows().length?[{h:T('Delivery','配送'),rows:x7DeliveryRows()}]:[]),
     {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
@@ -37765,6 +37771,312 @@ reg('peDelete', ()=>{
   });
 });
 /* ==========================================================================
+   §325 PD15 — SKU CODE RULES FOR MATERIALS, ON THE PHONE
+   (desktop: Settings → SKU codes, public/retail-admin/23-sku.js)
+   --------------------------------------------------------------------------
+   How the tenant's material codes are shaped, per kind and category, and
+   whether a material saved without a code is given one. Read in one call
+   (GET /sku/material — settings, rules with their plain reading `simple`,
+   their next number and how many materials sit under each, the kinds and the
+   categories in use, and the token list), and written the desktop's way:
+     the switch      PUT  /sku/material/settings {enabled}
+     a rule          POST /sku/material/rules — upsert by scope, with the four
+                     plain controls as `simple` {text:'', useCode, year, sep,
+                     digits}, or the raw `pattern` from the Advanced field
+     remove a rule   DELETE /sku/material/rules/:id, behind the desktop's
+                     danger confirm saying what it means (codes kept, new
+                     materials fall to the rule above). The fallback is never
+                     removable — only changed.
+   The four controls, Advanced and its token palette, the live "Codes will look
+   like" samples and their problems are the desktop's, ported line for line:
+   renderPattern / composePattern / readPattern are its browser twins of
+   lib/sku-format.js, used only to preview — the server composes what is
+   stored. Looking needs materials:view (the desktop's tab); every write needs
+   materials:edit, as the server gates /sku/ (lib/cap-routes.js). A refusal or
+   a failed save stays where it happened — on the rule's sheet, or above the
+   rules — and a toast only confirms. */
+const SKU_KIND={food:['Food','食品'],packaging:['Packaging','包装'],equipment:['Equipment','设备'],retail:['Retail','零售'],other:['Other','其他']};
+const skuKind=k=>SKU_KIND[k]?T(...SKU_KIND[k]):String(k||'');
+const skuCanEdit=()=>mCan('materials:edit');
+function loadSkuRules(force){
+  const s=state.sku;
+  if(s.tried&&!force) return;
+  s.tried=true;
+  const seq=++s.seq;
+  apiRaw('/api/retail-admin/sku/material').then(j=>{
+    if(seq!==s.seq) return;
+    if(!j||!j.success) throw new Error((j&&j.error)||'load_failed');
+    s.data=j; s.err=null; render();
+  }).catch(e=>{
+    if(seq!==s.seq||String(e&&e.message)==='auth') return;
+    s.err=T('Could not load the SKU rules','无法加载编码规则')+': '+(e&&e.refused?T(...e.words):String((e&&e.message)||''));
+    render();
+  });
+}
+/* lib/sku-format.js render(), for previews only. */
+function skuRender(pattern,ctx){
+  const now=new Date(), pad=(n,w)=>String(n).padStart(w,'0');
+  return String(pattern||'').replace(/\{([A-Z]+)(?::(\d))?\}/g,(raw,name,arg)=>{
+    switch(name){
+      case 'SEQ':{ const w=arg===undefined?4:Number(arg); return w>0?pad(ctx.seq,w):String(ctx.seq); }
+      case 'CAT': return String(ctx.categoryCode||'');
+      case 'SUB': return String(ctx.subcategoryCode||'');
+      case 'YYYY': return String(now.getFullYear());
+      case 'YY': return String(now.getFullYear()).slice(-2);
+      case 'MM': return pad(now.getMonth()+1,2);
+      case 'DD': return pad(now.getDate(),2);
+      case 'NAME':{ const n=arg===undefined?3:Number(arg); const letters=String(ctx.name||'').toUpperCase().replace(/[^A-Z]/g,''); return n>0?letters.slice(0,n):letters; }
+      default: return '';
+    }
+  }).toUpperCase();
+}
+function skuCatCode(category){
+  const c=String(category||'').toLowerCase();
+  const hit=((state.sku.data&&state.sku.data.rules)||[]).find(r=>r.scope==='category'&&String(r.category).toLowerCase()===c);
+  return hit?hit.code:'';
+}
+function skuNext(r){
+  return skuRender(r.pattern,{seq:r.next_seq||1,categoryCode:r.scope==='category'?r.code:skuCatCode(r.category),subcategoryCode:r.scope==='subcategory'?r.code:'',name:''});
+}
+function skuSummary(r){
+  if(!r.simple) return T('Custom format','自定义格式');
+  const bits=[];
+  if(r.simple.text) bits.push('“'+r.simple.text+'”');
+  if(r.simple.useCode&&r.code) bits.push(r.code);
+  if(r.simple.year) bits.push(T('the year','年份'));
+  const n=Number(r.simple.digits);
+  bits.push(n>0?T(n+'-digit number',n+' 位数字'):T('a number','数字'));
+  return bits.join(' + ');
+}
+const skuScopeOf=d=>d.locked?'default':(d.subcategory?'subcategory':'category');
+const skuCodeToken=scope=>scope==='subcategory'?'{SUB}':'{CAT}';
+function skuCompose(d){
+  const sim=d.simple||{};
+  const head=d.code?skuCodeToken(skuScopeOf(d)):'';
+  const year=Number(sim.year)===4?'{YYYY}':Number(sim.year)===2?'{YY}':'';
+  const digits=Number(sim.digits===undefined?4:sim.digits);
+  return [head,year,'{SEQ:'+digits+'}'].filter(x=>x!=='').join(sim.sep||'');
+}
+function skuReadPattern(pattern,scope){
+  const m=String(pattern||'').match(new RegExp('^('+skuCodeToken(scope).replace(/[{}]/g,'\\$&')+')?([-._/]?)(\\{YYYY\\}|\\{YY\\})?([-._/]?)\\{SEQ:(\\d)\\}$'));
+  if(!m) return null;
+  const seps=[m[2],m[4]].filter(Boolean);
+  if(seps.length&&seps.some(x=>x!==seps[0])) return null;
+  return {digits:Number(m[5]),sep:seps[0]||'',year:m[3]==='{YYYY}'?4:m[3]==='{YY}'?2:0};
+}
+/* paintLive: the problems, or three codes and the no-number warning. */
+function skuLiveHtml(d){
+  const data=state.sku.data||{};
+  const pattern=d.advanced?(d.pattern||''):skuCompose(d);
+  const problems=[];
+  const unsafe=T('A code may only contain letters, digits and . _ / - — remove any spaces.','编码只能包含字母、数字与 . _ / -,请删除空格。');
+  if(d.advanced){
+    const known=(data.tokens||[]).map(t=>t.name);
+    const unknown=(pattern.match(/\{[^}]*\}/g)||[]).filter(b=>!known.some(n=>new RegExp('^\\{'+n+'(:\\d)?\\}$').test(b)));
+    if(!pattern.trim()) problems.push(T('A format is required.','必须填写格式。'));
+    if(unknown.length) problems.push(T(`${unknown.join(', ')} is not one of the pieces above.`,`${unknown.join('、')} 不是上方可用的组件。`));
+    if(/[^A-Za-z0-9._/{}:-]/.test(pattern)) problems.push(unsafe);
+  }else if(/[^A-Za-z0-9._/-]/.test(d.code||'')) problems.push(unsafe);
+  if(problems.length) return `<div style="font-size:13px;color:var(--brick-ink);line-height:1.6">${problems.map(escAttr).join('<br>')}</div>`;
+  const samples=[1,2,3].map(seq=>skuRender(pattern,{seq,categoryCode:d.subcategory?skuCatCode(d.category):d.code,subcategoryCode:d.subcategory?d.code:'',name:'Dried Mango'}));
+  return `<div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px"><span style="font-size:13px;color:var(--text-secondary)">${T('Codes will look like','编码效果')}</span>
+      ${samples.map(x=>`<b class="num" style="font-size:15px">${escAttr(x)}</b>`).join('<span style="color:var(--text-secondary)">·</span>')}</div>
+    ${/\{SEQ(:\d)?\}/.test(pattern)?'':`<div style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-top:6px">${T('Without a number, every material here would get the same code — the system will add one to keep them apart.','缺少序号时,此范围内的物料编码将完全相同,系统会自动追加数字加以区分。')}</div>`}`;
+}
+function skuRuleRow(r){
+  const s=state.sku, edit=skuCanEdit(), busy=!!s.busy, def=r.scope==='default';
+  const what=def?T('Everything else','其余全部'):(r.scope==='subcategory'?skuKind(r.category)+' ▸ '+r.subcategory:T('All of ','全部 ')+skuKind(r.category));
+  const note=def?T('when no rule above fits','当上方规则都不适用时'):(r.scope==='subcategory'?T('this subcategory only','仅此子分类'):T('every category here without its own rule','此类下所有没有专属规则的分类'));
+  return `<div style="display:flex;flex-direction:column;gap:6px;padding:12px;border:1px ${def?'dashed':'solid'} var(--border-default);border-radius:12px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:500">${escAttr(what)}</span>${r.code?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${escAttr(r.code)}</span>`:''}</div>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${note}</span>
+    <span style="font-size:13px;color:var(--text-secondary)">${T('next','下一个')}: <b class="num" style="color:var(--text-primary);font-size:14px">${escAttr(skuNext(r))}</b></span>
+    <span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(skuSummary(r))}${r.in_use!=null?` · ${escAttr(String(r.in_use))} ${T('materials','个物料')}`:''}</span>
+    ${edit?`<div style="display:flex;gap:8px">
+      <button class="btn2" style="width:auto;padding:0 14px;min-height:36px" ${busy?'disabled':''} onclick="APP.cmd('skuEdit',${Number(r.id)})">${T('Edit','编辑')}</button>
+      ${def?'':`<button class="btn2" style="width:auto;padding:0 14px;min-height:36px;color:var(--brick-ink)" ${busy?'disabled':''} onclick="APP.cmd('skuDeleteAsk',${Number(r.id)})">${s.busy==='del'+r.id?'…':T('Remove','删除')}</button>`}</div>`:''}
+  </div>`;
+}
+function screenSkuCodes(){
+  loadSkuRules();
+  const s=state.sku;
+  if(s.err&&!s.data) return `<div style="padding:16px">${noteBar(escAttr(s.err))}<button class="btn2" style="width:auto;padding:0 18px;margin-top:12px" onclick="APP.cmd('skuRetry')">${T('Try again','重试')}</button></div>`;
+  if(!s.data) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const d=s.data, on=!!(d.settings&&d.settings.enabled), edit=skuCanEdit();
+  const rules=d.rules||[], def=rules.find(r=>r.scope==='default'), scoped=rules.filter(r=>r.scope!=='default');
+  const card=(title,desc,inner)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px"><div class="eyebrow">${title}</div>
+    <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${desc}</span>${inner}</div>`;
+  const err=s.actErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(s.actErr)}</span></div>`:'';
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${err}
+    ${card(T('Automatic SKUs for materials','物料自动编码'),T('Give a category the shape of its code once, and every new material filed under it is numbered for you. Codes already on your catalogue are never changed, and you can always type your own instead.','为分类设定一次编码格式,之后归入该分类的每个新物料都会自动编号。已有编码不会被修改,您也可以随时手动输入。'),
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-size:15px;flex:1;min-width:0">${T('Generate a SKU when a material is saved without one','保存未填写编码的物料时自动生成')}</span>
+        ${s.busy==='toggle'?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">…</span>`:edit?toggle(on,"APP.cmd('skuToggle')"):`<span style="font-size:13px;color:var(--text-secondary)">${on?T('On','开'):T('Off','关')}</span>`}</div>
+      ${on?'':`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${T('Numbering is off. New materials are saved with whatever SKU is typed, and blank if none is — exactly as before.','自动编号已关闭。新物料按手动填写的编码保存,未填写则留空 —— 与以前一致。')}</span>`}`)}
+    ${card(T('Your rules','您的规则'),T('A material takes the most specific rule that fits it: its own subcategory first, then its category, then the fallback at the bottom. Each rule counts on its own — that is where a number series starts over.','物料按最具体的规则编码:先看所属子分类,再看主分类,最后使用底部的兜底规则。每条规则各自计数 —— 序号也从这里重新开始。'),
+      (scoped.length?scoped.map(skuRuleRow).join(''):`<span style="font-size:13.5px;color:var(--text-secondary)">${T('No category rules yet. Everything is numbered by the fallback below.','尚未设置分类规则,当前全部使用下方兜底规则编号。')}</span>`)
+      +(edit?`<button class="btn2" style="width:auto;align-self:flex-start;padding:0 16px" ${s.busy?'disabled':''} onclick="APP.cmd('skuAdd')">+ ${T('Add a rule','新增规则')}</button>`:''))}
+    ${card(T('Fallback','兜底规则'),T('Used for anything with no rule of its own, so nothing is ever left without a code. It cannot be deleted — only changed.','用于没有专属规则的物料,确保任何物料都有编码。此规则不可删除,只能修改。'),def?skuRuleRow(def):'')}
+  </div>`;
+}
+/* The rule's sheet: the desktop's form, the four controls or Advanced. */
+function sheetSkuDraft(){
+  const s=state.sku, d=s.draft; if(!d||!s.data) return '';
+  const levels=s.data.levels||{kinds:[],byKind:{}};
+  const kinds=levels.kinds.length?levels.kinds:['food'];
+  const subs=(levels.byKind&&levels.byKind[d.category])||[];
+  const sim=d.simple||{}, busy=s.busy==='save', dis=busy?'disabled':'';
+  const lab=t=>`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">${t}</span>`;
+  const hint=t=>`<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.5">${t}</span>`;
+  const opt=(v,label,on)=>`<option value="${escAttr(v)}"${on?' selected':''}>${escAttr(label)}</option>`;
+  const code=`<label style="display:block">${lab(T('Codes start with','编码开头'))}<input id="mSkuCode" maxlength="8" value="${escAttr(d.code||'')}" placeholder="B" autocapitalize="characters" ${dis} oninput="APP.cmd('skuField','code',this.value)">${d.advanced?'':hint(T('A letter or two of your choosing. Leave it blank for numbers only.','由您自定的一到两个字母。留空则只用数字。'))}</label>`;
+  const scope=d.locked?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.55">${T('This is the fallback — it applies to everything with no rule of its own, so it has no category to choose.','这是兜底规则,适用于所有没有专属规则的物料,因此无需选择分类。')}</span>`
+    :`<label style="display:block">${lab(T('Kind','类别'))}<select style="width:100%" ${dis} onchange="APP.cmd('skuKindPick',this.value)">${kinds.map(k=>opt(k,skuKind(k),k===d.category)).join('')}</select></label>
+      <label style="display:block">${lab(T('Category','分类'))}<select style="width:100%" ${dis} onchange="APP.cmd('skuField','subcategory',this.value)">${opt('',T('— all of this kind —','— 此类别全部 —'),!d.subcategory)}${subs.map(x=>opt(x,x,x===d.subcategory)).join('')}${d.subcategory&&subs.indexOf(d.subcategory)<0?opt(d.subcategory,d.subcategory,true):''}</select>
+      ${hint(T('The categories your materials are actually filed under.','此处列出物料实际使用的分类。'))}</label>`;
+  const body=d.advanced
+    ? `<label style="display:block">${lab(T('Format','格式'))}<input id="mSkuPattern" maxlength="60" spellcheck="false" autocapitalize="characters" value="${escAttr(d.pattern||'')}" ${dis} oninput="APP.cmd('skuField','pattern',this.value)">
+        ${hint(T('Drop in a piece wherever the value changes. Everything else appears exactly as typed.','在需要变化的位置插入组件,其余字符原样出现。'))}</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${(s.data.tokens||[]).map(t=>`<button class="btn2" style="width:auto;padding:6px 10px;min-height:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px" ${dis} title="${escAttr(T(t.hint_en,t.hint_cn))}" onclick="APP.cmd('skuInsert','${escAttr(t.insert)}')"><code style="font-size:12px;font-weight:600">${escAttr(t.insert)}</code><span style="font-size:11px;color:var(--text-secondary)">${escAttr(T(t.label_en,t.label_cn))}</span></button>`).join('')}</div>
+      ${code}`
+    : `${code}
+      <label style="display:block">${lab(T('Followed by','后接'))}<select style="width:100%" ${dis} onchange="APP.cmd('skuSimple','digits',this.value)">${[3,4,5,6].map(n=>opt(n,T(n+' digits',n+' 位')+' · '+'0'.repeat(n-1)+'1',Number(sim.digits)===n)).join('')}</select>
+        ${hint(T('The number counts up on its own, one series per rule.','序号自动递增,每条规则各自计数。'))}</label>
+      <label style="display:block">${lab(T('Separator','分隔符'))}<select style="width:100%" ${dis} onchange="APP.cmd('skuSimple','sep',this.value)">${[['',T('None','无'),'B0001'],['-',T('Dash','连字符'),'B-0001'],['.',T('Dot','点'),'B.0001'],['/',T('Slash','斜杠'),'B/0001']].map(([v,l,eg])=>opt(v,l+' · '+eg,(sim.sep||'')===v)).join('')}</select></label>
+      <button onclick="APP.cmd('skuSimple','year',${sim.year?0:2})" ${dis} aria-pressed="${!!sim.year}" style="display:flex;align-items:center;gap:12px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;color:var(--text-primary);font-size:15px">
+        <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${sim.year?'var(--text-primary)':'var(--border-strong)'};background:${sim.year?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${sim.year?ic('check',15,2.5):''}</span>${T('Include the year','包含年份')}</button>`;
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('skuCancel')"></div>
+   <div class="sheet" style="top:60px;z-index:48;overflow:hidden">
+     <div style="flex:none;padding:8px 20px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="font-size:17px;font-weight:500">${d.id?T('Edit rule','编辑规则'):T('New rule','新增规则')}</div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:14px 20px;display:flex;flex-direction:column;gap:14px">
+       ${scope}${body}
+       <div id="mSkuLive">${skuLiveHtml(d)}</div>
+       ${s.saveErr?`<div style="font-size:14px;color:var(--brick-ink)">${escAttr(s.saveErr)}</div>`:''}
+       <button style="background:none;border:none;padding:0;font-family:inherit;font-size:13px;color:var(--text-secondary);text-align:left;cursor:pointer" ${dis} onclick="APP.cmd('skuAdvanced')">${d.advanced?T('← Back to the simple form','← 返回简易设置'):T('Write the format myself','自定义格式')}</button></div>
+     <div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);display:flex;gap:8px">
+       <button class="btn2" style="flex:1" ${dis} onclick="APP.cmd('skuCancel')">${T('Cancel','取消')}</button>
+       <button class="cta" style="flex:1" ${dis} onclick="APP.cmd('skuSave')">${busy?T('Saving…','保存中…'):T('Save rule','保存规则')}</button></div></div>`;
+}
+const skuLiveRepaint=()=>{ const el=document.getElementById('mSkuLive'); if(el&&state.sku.draft) el.innerHTML=skuLiveHtml(state.sku.draft); };
+reg('skuRetry', ()=>{ state.sku.err=null; loadSkuRules(true); render(); });
+reg('skuToggle', ()=>{
+  const s=state.sku; if(!s.data||!skuCanEdit()||s.busy) return;
+  const on=!(s.data.settings&&s.data.settings.enabled);
+  s.busy='toggle'; s.actErr=null; render();
+  apiWrite('/api/retail-admin/sku/material/settings',{enabled:on},'PUT').then(()=>{
+    s.busy=null; showToast(on?T('Automatic SKUs are on','已开启自动编码'):T('Automatic SKUs are off','已关闭自动编码'));
+    loadSkuRules(true); render();
+  }).catch(e=>{
+    s.busy=null; if(String(e&&e.message)==='auth') return;
+    s.actErr=T('Could not change the setting','设置未能保存')+': '+(e&&e.refused?T(...e.words):String((e&&e.message)||''));
+    loadSkuRules(true); render();
+  });
+});
+/* skuAdd: the shape almost everybody wants — a letter and four digits. */
+reg('skuAdd', ()=>{
+  const s=state.sku; if(!s.data||!skuCanEdit()||s.busy) return;
+  const kinds=(s.data.levels&&s.data.levels.kinds)||[];
+  s.draft={id:null,category:kinds[0]||'food',subcategory:'',code:'',simple:{digits:4,sep:'',year:0},pattern:'{SUB}{SEQ:4}',advanced:false};
+  s.saveErr=null; render();
+});
+/* skuEdit: a pattern the four controls cannot describe opens in Advanced, never flattened. */
+reg('skuEdit', id=>{
+  const s=state.sku; if(!s.data||!skuCanEdit()||s.busy) return;
+  const r=(s.data.rules||[]).find(x=>Number(x.id)===Number(id)); if(!r) return;
+  s.draft={id:r.id,category:r.category,subcategory:r.subcategory,code:r.code,
+    simple:r.simple?{digits:r.simple.digits,sep:r.simple.sep,year:r.simple.year}:{digits:4,sep:'',year:0},
+    pattern:r.pattern,advanced:!r.simple,locked:r.scope==='default'};
+  s.saveErr=null; render();
+});
+reg('skuCancel', ()=>{ const s=state.sku; if(s.busy==='save') return; s.draft=null; s.saveErr=null; render(); });
+/* skuDraftKind: a new kind empties the category beneath it. */
+reg('skuKindPick', v=>{ const d=state.sku.draft; if(!d||d.locked) return; d.category=String(v||''); d.subcategory=''; render(); });
+reg('skuField', (k,v)=>{
+  const d=state.sku.draft; if(!d||['code','pattern','subcategory'].indexOf(k)<0) return;
+  d[k]=String(v==null?'':v);
+  if(k==='subcategory') render(); else skuLiveRepaint();
+});
+reg('skuSimple', (k,v)=>{
+  const d=state.sku.draft; if(!d||['digits','sep','year'].indexOf(k)<0) return;
+  if(!d.simple) d.simple={digits:4,sep:'',year:0};
+  d.simple[k]=k==='sep'?String(v):Number(v);
+  render();
+});
+/* skuToggleAdvanced: in carries the four controls across as a pattern; out reads
+   it back the way the server does, and refuses rather than flatten a custom one. */
+reg('skuAdvanced', ()=>{
+  const s=state.sku, d=s.draft; if(!d) return;
+  if(!d.advanced){ d.pattern=skuCompose(d); d.advanced=true; s.saveErr=null; render(); return; }
+  const back=skuReadPattern(d.pattern,skuScopeOf(d));
+  if(!back){ s.saveErr=T('This format uses pieces the simple form cannot show. Clear it first to go back.','此格式包含简易设置无法显示的组件,请先清除后再返回。'); render(); return; }
+  d.simple={digits:back.digits,sep:back.sep,year:back.year}; d.advanced=false; s.saveErr=null; render();
+});
+/* skuInsert: at the caret, where the operator is looking. */
+reg('skuInsert', token=>{
+  const d=state.sku.draft; if(!d||!d.advanced) return;
+  const el=document.getElementById('mSkuPattern');
+  const v=String(d.pattern||'');
+  const a=el&&el.selectionStart!=null?el.selectionStart:v.length, b=el&&el.selectionEnd!=null?el.selectionEnd:v.length;
+  d.pattern=v.slice(0,a)+token+v.slice(b);
+  render();
+  const el2=document.getElementById('mSkuPattern');
+  if(el2){ try{ el2.focus(); el2.setSelectionRange(a+token.length,a+token.length); }catch(e){} }
+});
+/* skuSaveDraft: the four FIELDS (the server composes), or the Advanced pattern. */
+function skuSaveBody(d){
+  const scope={category:d.locked?'':(d.category||''),subcategory:d.locked?'':(d.subcategory||''),code:d.code||''};
+  return d.advanced
+    ? Object.assign(scope,{pattern:d.pattern||''})
+    : Object.assign(scope,{simple:{text:'',useCode:!!d.code,year:Number((d.simple||{}).year)||0,sep:(d.simple||{}).sep||'',
+        digits:Number((d.simple||{}).digits===undefined?4:d.simple.digits)}});
+}
+function skuSaveErr(e){
+  if(e&&e.refused) return T(...e.words);
+  const b=(e&&e.body)||{}, detail=b.detail&&b.detail[0], code=b.error||(e&&e.code);
+  return detail?T(detail.message_en,detail.message_cn)
+    :code==='subcategory_needs_category'?T('Pick a kind before a category.','请先选择类别,再选择分类。')
+    :code==='code_unsafe'?T('A code may only contain letters, digits and . _ / -','代码只能包含字母、数字与 . _ / -')
+    :code==='code_too_long'?T('A code may be at most 8 characters.','代码最多 8 个字符。')
+    :String((e&&e.message)||'');
+}
+reg('skuSave', ()=>{
+  const s=state.sku, d=s.draft; if(!d||!skuCanEdit()||s.busy) return;
+  s.busy='save'; s.saveErr=null; render();
+  apiWrite('/api/retail-admin/sku/material/rules',skuSaveBody(d),'POST').then(j=>{
+    s.busy=null; s.draft=null;
+    // A warning is not a refusal — the rule saved; say what is odd about it.
+    const w=j&&Array.isArray(j.warnings)&&j.warnings[0];
+    showToast(w?T(w.message_en,w.message_cn):T('Rule saved','规则已保存'));
+    loadSkuRules(true); render();
+  }).catch(e=>{
+    s.busy=null; if(String(e&&e.message)==='auth') return;
+    s.saveErr=T('Could not save the rule','规则保存失败')+': '+skuSaveErr(e); render();
+  });
+});
+/* skuDelete: what removing it MEANS, behind the desktop's danger confirm. */
+reg('skuDeleteAsk', id=>{
+  const s=state.sku; if(!s.data||!skuCanEdit()||s.busy) return;
+  const r=(s.data.rules||[]).find(x=>Number(x.id)===Number(id)); if(!r||r.scope==='default') return;
+  const where=escAttr(r.scope==='subcategory'?skuKind(r.category)+' ▸ '+r.subcategory:T('All of ','全部 ')+skuKind(r.category));
+  state.ask={title:T(`Remove the rule for ${where}?`,`删除 ${where} 的编码规则？`),
+    body:T('Materials already coded keep their SKUs. New ones will be numbered by the rule above it instead.','已有物料的编码保持不变，新物料将改用上一层规则编号。'),
+    confirmLabel:T('Remove','删除'), danger:true, run:()=>CMD.skuDelete(r.id)};
+  render();
+});
+reg('skuDelete', id=>{
+  const s=state.sku; if(!s.data||!skuCanEdit()||s.busy) return;
+  s.busy='del'+Number(id); s.actErr=null; render();
+  apiWrite('/api/retail-admin/sku/material/rules/'+Number(id),{},'DELETE').then(()=>{
+    s.busy=null; showToast(T('Rule removed','规则已删除')); loadSkuRules(true); render();
+  }).catch(e=>{
+    s.busy=null; if(String(e&&e.message)==='auth') return;
+    s.actErr=T('Could not remove the rule','删除失败')+': '+(e&&e.refused?T(...e.words):String((e&&e.message)||'')); render();
+  });
+});
+SUBS.skucodes={title:['SKU codes','编码规则'],backLabel:()=>T('Settings','设置'),render:()=>screenSkuCodes()};
+/* ==========================================================================
    §325 PD9 — A PRODUCT'S SIZES, ON THE DETAILS SCREEN
    (desktop: 09-products.js vaLoad / vaRender / vaSelfField / vaField /
     vaPhotoUpload / vaRemove / vaAddSize / vaPersist / vaPersistSiblings)
@@ -42109,6 +42421,7 @@ const ROUTE_CAP={
      tab gate; every write inside carries `materials:edit`, and every price
      `materials:costs` (failing closed). */
   materials:'materials:view', materialone:'materials:view',
+  skucodes:'materials:view',   // §325 PD15 — the desktop's Settings → SKU codes tab is materials:view
   // §325 PD5 — the product's Details screen: every write on it is products:edit.
   productedit:'products:edit',
   /* A product's Cost & Pricing (§300 R6) opens with the catalogue; its link
@@ -43116,6 +43429,7 @@ function render(){
   if(state.prodVer.open) html += layer('pv:'+state.prodVer.pid, sheetVersions());
   if(state.pe&&state.pe.lib) html += layer('pelib', sheetPeLib());   // §325 PD6
   if(state.pe&&state.pe.pick) html += layer('pepick:'+state.pe.pick.kind, sheetPePick());   // §325 PD10
+  if(state.sku&&state.sku.draft) html += layer('skudraft', sheetSkuDraft());   // §325 PD15
   if(state.oosSku) html += layer('oos:'+state.oosSku, sheetOos());
   if(state.reply!=null) html += layer('reply:'+state.reply, sheetReply());
   if(state.poId!=null) html += layer('po:'+state.poId, sheetPO());
@@ -43586,6 +43900,7 @@ function layers(){
   if(state.prodVer.open) L.push(()=>{ state.prodVer.open=false; });
   if(state.pe&&state.pe.lib) L.push(()=>{ if(!state.pe.lib.busy){ clearTimeout(_peLibTimer); state.pe.lib=null; } });   // §325 PD6
   if(state.pe&&state.pe.pick) L.push(()=>{ state.pe.pick=null; });   // §325 PD10
+  if(state.sku&&state.sku.draft) L.push(()=>{ if(state.sku.busy!=='save'){ state.sku.draft=null; state.sku.saveErr=null; } });   // §325 PD15
   /* "When it runs out" sits OVER the product sheet it was opened from (z-index
      48 over 46), so it is listed after it and Back closes it first. It was
      listed before, so Back took the product away from under an open picker
