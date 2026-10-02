@@ -27979,3 +27979,30 @@ for the picture reasonably concluded it could not be changed there.
 4. **Tests.** `scripts/test_mobile_product_details.js` (the row, its gate, both
    languages, that Details has the Photos card, the string declared);
    `scripts/test_mobile_controls_gated.js` (the bar's two wordings).
+
+## §420 — THE PHONE APP CANNOT BE PINCH-ZOOMED
+
+**Decided 2026-10-02 by Ash** (*"turn it off"*), reversing audit fix R-01 for
+the staff phone app only.
+
+1. **What happened.** R-01 (`docs/tacet-audit-2026-09.md`) switched pinch-zoom
+   back on in `public/m.html` on 2026-09-29. Ash then sent an Orders
+   screenshot cut off on the right with the tab bar missing. The layout was
+   not at fault: at 400px the page is exactly 400px wide. Rendered at a page
+   scale of 1.12 it matches the screenshot exactly. A stray two-finger touch
+   had zoomed the installed app, and nothing on screen said so or offered a
+   way back.
+2. **The rule.** `public/m.html`'s viewport tag carries `maximum-scale=1,
+   user-scalable=no`, as `till.html` and `cms-mobile.html` already do. Every
+   other key on it is unchanged, `interactive-widget=resizes-content` (§282)
+   included.
+3. **Why this outweighs R-01 here.** It is a staff tool, installed as an app
+   and used one-handed all day. An accidental zoom crops it with no visible
+   way out. Bigger text comes from Chrome's text-size setting, which reflows
+   the page instead of cropping it. Anyone who still needs zoom can turn on
+   Chrome → Settings → Accessibility → *Force enable zoom*, which overrides
+   this tag.
+4. **Not changed.** The customer pages (`shop.html`, `storefront.html`) keep
+   zoom: a shopper reading a shop is not using an app shell.
+5. **Test.** `scripts/test_mobile_zoom_off.js` (fast shard) pins the tag, the
+   keys it kept, and that the customer pages still allow zoom.
