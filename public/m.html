@@ -2,21 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- user-scalable=no on top of maximum-scale=1: an installed app is not a page.
-     Pinch-zoom on a fixed 402px shell only ever moves the whole app off-screen
-     with no way to see the edge you have lost, and double-tap-to-zoom costs
-     every button a 300ms wait for the second tap that isn't coming. -->
-<!-- No maximum-scale / user-scalable=no. Switching zoom off is the standard
-     way to make an app unusable for anyone who needs to enlarge text, and it
-     bought nothing here: the layout is already sized for a phone and the
-     double-tap-zoom it was guarding against is not a hazard on any screen in
-     this app. -->
+<!-- Pinch-zoom is OFF again (§420, Ash, 2026-10-02). It was switched back on
+     for the September audit (R-01), and a stray two-finger touch then left the
+     app zoomed about 12%: the right edge and the whole tab bar off-screen, and
+     nothing on screen to say why or how back (Ash's Orders screenshot). This
+     is a staff tool installed as an app, used one-handed all day; larger text
+     comes from Chrome's text-size setting, which reflows instead of cropping,
+     and Chrome's "Force enable zoom" still overrides this for anyone who needs it.
+     The phone's other app shells (till.html, cms-mobile.html) already block
+     it. Customer-facing pages keep zoom. -->
 <!-- interactive-widget=resizes-content (§282): on Android Chrome the keyboard
      SHRINKS the page instead of covering its bottom, so the pinned bar holding
      a form's button (.footbar) rides above the keyboard. The viewport script
      below already re-measures the app when the height changes; this is what
      makes the height change. Browsers that do not know the key ignore it. -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" id="mThemeColor" content="#FBF9F4">
 <meta name="color-scheme" content="light dark">
 <!-- Order numbers and SKUs are not phone numbers. iOS Safari turns anything
