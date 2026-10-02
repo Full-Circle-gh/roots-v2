@@ -191,7 +191,8 @@
     "test:affiliate-new-customer": "node scripts/test_affiliate_new_customer.js",
     "test:po-cost-unit-guard": "node scripts/test_po_cost_unit_guard.js",
     "test:production-log": "node scripts/test_production_log.js",
-    "test:platform-single-deduct": "node scripts/test_platform_order_single_deduct.js"
+    "test:platform-single-deduct": "node scripts/test_platform_order_single_deduct.js",
+    "test:route-error": "node scripts/test_route_error.js"
   },
   "dependencies": {
     "@novnc/novnc": "^1.7.0",
