@@ -113,7 +113,7 @@ function liftReg(name) {
 const FNS = ['E', 'pill', 'mCan', 'canRoute', 'prodCanEdit', 'pcMoney', 'prodLowThreshold', 'nothingYet', 'footBar',
   'searchBox', 'searchClearShow',
   'peBadgeOf', 'peRteClean', 'peBundleDraft', 'peBuBody', 'peBpBody', 'peBpModeBody', 'peBundleOwnsCost', 'peOptsDraft', 'peOptBody', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
-  'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'pePopped', 'prodRecordsDrop',
+  'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'peDoorOk', 'pePopped', 'prodRecordsDrop',
   'peFmtBytes', 'loadPeImages', 'peGalleryChanged', 'pePhotosCard', 'peLibGridHtml', 'sheetPeLib', 'peLibCountText',
   'peLibRepaint', 'peLibFetch'];
 const CONSTS = ['PILL', 'KIND2PILL', 'MCAN_MONEY_ONLY', 'ROUTE_CAP', 'money', 'cfgGet', 'PE_FACTS', 'PE_FREE_OF',

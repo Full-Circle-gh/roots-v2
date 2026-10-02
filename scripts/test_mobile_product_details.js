@@ -121,7 +121,7 @@ function liftReg(name) {
 
 const FNS = ['E', 'pill', 'mCan', 'canRoute', 'prodCanEdit', 'pcMoney', 'prodLowThreshold', 'nothingYet', 'footBar',
   'peBadgeOf', 'peRteClean', 'peBundleDraft', 'peBuBody', 'peBpBody', 'peBpModeBody', 'peBundleOwnsCost', 'peOptsDraft', 'peOptBody', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
-  'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'peEntryRow', 'pePopped',
+  'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'peDoorOk', 'peEntryRow', 'pePhotoRow', 'pePopped',
   'prodRecordsDrop', 'loadPeImages', 'pePhotosCard'];
 const CONSTS = ['PILL', 'KIND2PILL', 'PE_MAX_PHOTOS', 'MCAN_MONEY_ONLY', 'ROUTE_CAP', 'money', 'cfgGet', 'PE_FACTS', 'PE_FREE_OF', 'PE_FREE_ALIAS', 'PE_BADGES',
   'pePlainToHtml', 'peRichForEdit'];
@@ -207,6 +207,20 @@ it('products:edit gets Details on the sheet; without it, or on an upstream catal
   assert.strictEqual(mk({ catalogMode: 'upstream' }).ctx.peEntryRow({ _id: 7 }), '');
   const h = mk({ caps: ['products:view'] }); h.CMD.peOpen(7);
   assert.strictEqual(h.s.stack.length, 0, 'the command refuses too');
+});
+it('§419: the sheet’s photo row shows the main photo and opens Details, behind the same door', async () => {
+  const P = { _id: 7, sku: 'SKU OM-1', img: 'data:image/jpeg;base64,AAA' };
+  const row = mk().ctx.pePhotoRow(P);
+  assert.ok(row.includes("APP.cmd('peOpen',7)") && row.includes("url('data:image/jpeg;base64,AAA')"));
+  assert.strictEqual(mk().text(row), 'Photos');
+  assert.strictEqual(mk().text(mk().ctx.pePhotoRow({ _id: 7, img: '' })), 'Photos No photos yet');
+  assert.strictEqual(mk({ caps: ['products:view'] }).ctx.pePhotoRow(P), '');
+  assert.strictEqual(mk({ catalogMode: 'upstream' }).ctx.pePhotoRow(P), '');
+  assert.strictEqual(mk().ctx.pePhotoRow({ img: 'x' }), '', 'an unsaved row has no door');
+  const zh = mk({ lang: 'zh' }); assert.strictEqual(zh.text(zh.ctx.pePhotoRow({ _id: 7, img: '' })), '图片 暂无图片');
+  // The Photos card it promises is on the screen it opens.
+  const h = await opened();
+  assert.ok(h.text(h.ctx.screenProductEdit()).includes('Photos'));
 });
 it('opening closes the sheet, stacks the screen for this product, and reads the row and its build list', async () => {
   const h = await opened();
@@ -404,6 +418,13 @@ it('copied whole', () => {
     assert.ok(PRODUCTS_JS.includes(`cuT('${en}', '${zh}')`) || CORE_JS.includes(`cuT('${en}', '${zh}')`), 'desktop has ' + en);
     assert.ok(M.includes(`T('${en}','${zh}')`), 'phone uses ' + en);
   }
+});
+it('§419: the note bar’s composed line is declared in the vocabulary', () => {
+  const vocab = fs.readFileSync(path.join(ROOT, 'docs/tacet-delivery-vocabulary.md'), 'utf8');
+  assert.ok(M.includes("T('Quick-edit stock and price · full editing in Details','快改库存与价格 · 完整编辑在「详情」')"));
+  assert.ok(vocab.includes('`快改库存与价格 · 完整编辑在「详情」`'), 'declared');
+  // The photo row's two labels are the Photos card's own, already live.
+  assert.ok(M.includes("T('Photos','图片')") && M.includes("T('No photos yet','暂无图片')"));
 });
 
 (async () => {

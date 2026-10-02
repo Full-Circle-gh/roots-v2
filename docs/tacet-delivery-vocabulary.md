@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.305 · 2026-10-02 · §419 THE PRODUCT SHEET'S NOTE BAR POINTS AT DETAILS — 1 STRING COMPOSED BY CLAUDE; THE PHOTO ROW'S TWO LABELS COPIED WHOLE.** See *The product sheet's photo row and note bar (§419)*.
+
 **v1.304 · 2026-09-30 · §417 STOCK STAFF AT ANOTHER STORE — 1 STRING COMPOSED BY CLAUDE.** See *Stock staff only at your own stores (§417)*.
 
 **v1.303 · 2026-09-30 · §416 CHOOSING A PLAN WHILE PAID UP — 1 STRING COMPOSED BY CLAUDE.** See *Choosing a plan while paid up, on the phone (§416)*.
@@ -13126,3 +13128,29 @@ a stale screen.
 | String | Status |
 |---|---|
 | `You can manage stock staff only at your own stores · 你只能管理自己门店的库存员` | **composed by Claude.** `库存员` is copied from the live `Stock staff · 库存员`; `门店` is live throughout. Rejected: the live `所属门店`, which names a record's store rather than the operator's own. |
+
+## The product sheet's photo row and note bar (§419)
+
+**Operator register (Rule 1), 2026-10-02.** The phone's product sheet
+(`public/m.html` sheetProduct). It now has a photo row at the top that opens
+Details. The note bar under the title said full editing was on the desktop,
+which stopped being true once Details could change everything, photos included
+(§349, §350).
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Photos · 图片` | the Details screen's Photos card (§350) |
+| `No photos yet · 暂无图片` | the same card, when it is empty |
+
+### Composed — one
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `快改库存与价格 · 完整编辑在「详情」` | Quick-edit stock and price · full editing in Details | the locked note bar `快改库存与价格 · 完整编辑在电脑端` with `电脑端` replaced by the live row name `详情` (`Details · 详情`), in the 「」 this app already uses to name a screen (`在「物料」中`, `在「内容 → 媒体」中`) | `图片与完整编辑在「详情」`, which names photos twice now that the photo row sits right under the bar. Also rejected: dropping the second half altogether, which would leave the bar saying only what the sheet does and nothing about where the rest went. |
+
+Composed by Claude under the 2026-09-06 amendment. The locked line
+`快改库存与价格 · 完整编辑在电脑端` is NOT retired: it is still shown to whoever
+has no Details door (no `products:edit`, or an upstream catalogue), for whom
+the desktop is still where full editing lives.

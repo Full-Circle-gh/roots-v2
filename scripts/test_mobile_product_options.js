@@ -114,7 +114,7 @@ function liftReg(name) {
 
 const FNS = ['E', 'pill', 'mCan', 'canRoute', 'prodCanEdit', 'pcMoney', 'prodLowThreshold', 'nothingYet', 'footBar',
   'peBadgeOf', 'peRteClean', 'peBundleDraft', 'peBuBody', 'peBpBody', 'peBpModeBody', 'peBundleOwnsCost', 'peOptsDraft', 'peOptBody', 'peDraftFrom', 'peBody', 'peDiff', 'peSkuTaken', 'peErrText', 'peApplyToCatalogue',
-  'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'peEntryRow', 'pePopped',
+  'peCostOn', 'peAutoStart', 'loadPe', 'peFootHtml', 'peSubcats', 'screenProductEdit', 'peDoorOk', 'peEntryRow', 'pePopped',
   'prodRecordsDrop', 'loadPeImages', 'pePhotosCard', 'searchBox', 'searchClearShow',
   'peProdName', 'peBuCard', 'peBpCard', 'pePickRows', 'pePickListHtml', 'sheetPePick', 'pePickRepaint',
   'peOptLinkTo', 'peOptCard', 'peOptAt'];
