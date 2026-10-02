@@ -6132,7 +6132,9 @@ function initCanvasLayout() {
   });
 
   // ── first-run coach marks: two, then gone ──
-  cfMaybeCoach(rail);
+  // Not in the phone preview: the rail is hidden there, and the tips' 9s
+  // auto-dismiss would mark them seen for the desktop editor on this browser.
+  if (!root.classList.contains('fc-preview-embed')) cfMaybeCoach(rail);
 }
 
 let cfPendingInsert = null;
@@ -16417,7 +16419,13 @@ document.addEventListener('keydown', (e) => {
   .fc-preview-embed .toast,
   .fc-preview-embed .phone-preview-bg,
   .fc-preview-embed #live-preview-drawer,
-  .fc-preview-embed .lp-drawer { display: none !important; }
+  .fc-preview-embed .lp-drawer,
+  /* The canvas layout's tool rail and its first-run tips. The rail's buttons
+     open the left pane, which is hidden above, so here they did nothing; and
+     with .body no longer a grid the rail stacked its icons across the top of
+     the phone preview. The phone shell has its own Add block / Design bar. */
+  .fc-preview-embed .cf-rail,
+  .fc-preview-embed .cf-coach { display: none !important; }
   .fc-preview-embed .body { height: auto; padding: 0; margin: 0; display: block; }
   .fc-preview-embed .canvas { padding: 0; margin: 0; display: block; height: auto; overflow: visible; background: transparent; }
   /* .phone grows with its content (height:auto) — no fixed inner height, no
