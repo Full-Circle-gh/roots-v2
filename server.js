@@ -1121,13 +1121,9 @@ function pageRouteError(req, err) {
 // unhandled error. Must be registered LAST, after all routes and the 404.
 // (Async rejections are routed here too, by lib/express-async-guard; without it
 // they would never reach next() and the request would hang.)
-app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
-  console.error(`[route-error] ${req.method} ${req.originalUrl}:`, err && err.stack);
-  pageRouteError(req, err);
-  if (res.headersSent) return next(err);
-  if (req.path.startsWith('/api/')) return res.status(500).json({ error: 'server_error' });
-  res.status(500).send('Server error');
-});
+// A bad request (malformed JSON, body too large, …) is the client's fault and
+// gets its own 4xx without a page — see lib/route-error.js for why.
+app.use(require('./lib/route-error').routeErrorHandler({ page: pageRouteError }));
 
 const PORT = process.env.PORT || 4000;
 const httpServer = app.listen(PORT, () => {
