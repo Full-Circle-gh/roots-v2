@@ -86,6 +86,8 @@ function mk(caps, opts = {}) {
     salesCard: () => '', versionsRow: () => '',
     // §325 PD5's Details row, products:edit's; test_mobile_product_details.js holds it.
     peEntryRow: () => '',
+    // §419's photo row and the gate it shares with Details; test_mobile_product_details.js holds both.
+    pePhotoRow: () => '', peDoorOk: () => !!opts.door,
     // §325 PD7's Duplicate row, products:create's; test_mobile_product_restore_duplicate.js holds it.
     dupRow: () => '',
     money: (c, n) => c + Number(n).toFixed(2),
@@ -292,6 +294,11 @@ section('2 · the product sheet');
     const html = h.ctx.sheetProduct();
     assert.deepStrictEqual(cmds(html), ['closeProduct']);
     assert.ok(/Tianhe<\/div><span class="num"[^>]*>3</.test(html));
+  });
+  it('§419: the note bar points at Details when the door is there, and at the desktop when it is not', () => {
+    const at = (door) => { const h = mk(['products:edit'], { products: [P()], door }); h.ctx.state.productSku = 'SKU-4'; return h.ctx.sheetProduct(); };
+    assert.ok(at(true).includes('full editing in Details') && !at(true).includes('full editing on desktop'));
+    assert.ok(at(false).includes('full editing on desktop') && !at(false).includes('full editing in Details'));
   });
   it('a supplier item: the pause switch is products:edit\'s', () => {
     const sup = Object.assign(P(), { supplier: true, paused: false });

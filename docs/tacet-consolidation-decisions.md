@@ -27954,3 +27954,28 @@ every other shop.
    - `scripts/test_mobile_settings_keys.js`: both surfaces carry no default; a
      tenant's built address is shown read-only on both; the printer route
      suggests no store.
+
+## §419 — THE PHONE'S PRODUCT SHEET SHOWS THE PHOTO AND SAYS WHERE FULL EDITING IS
+
+**Built 2026-10-02, at Ash's request** (*"can't change the product picture from
+mobile"*). Photos could already be changed from the phone (§350), but only
+from Details. Details is a plain row below the fold of the product sheet. The
+sheet's note bar still said *full editing on desktop*. So an operator looking
+for the picture reasonably concluded it could not be changed there.
+
+1. **The photo row.** `pePhotoRow(p)` sits at the top of the sheet, under the
+   note bar. It shows the main photo (`p.img`), or a placeholder and *No photos
+   yet*, and opens Details (`peOpen`). The Photos card is second on that
+   screen, so it is on screen without scrolling. No new write: the photos
+   are still changed only by the Photos card, with all its rules (§350).
+2. **One gate.** `peDoorOk(p)` is the Details row's old condition
+   (`products:edit`, not an upstream catalogue, the route allowed, a saved
+   product). The Details row, the photo row, the note bar and `peOpen` all read
+   it, so they cannot disagree.
+3. **The note bar.** With the door: *Quick-edit stock and price · full editing
+   in Details*. Without it: the locked desktop line, unchanged, because for
+   that operator it is still true. The Chinese is declared in
+   `docs/tacet-delivery-vocabulary.md` (v1.305).
+4. **Tests.** `scripts/test_mobile_product_details.js` (the row, its gate, both
+   languages, that Details has the Photos card, the string declared);
+   `scripts/test_mobile_controls_gated.js` (the bar's two wordings).
