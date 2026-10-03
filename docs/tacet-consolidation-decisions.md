@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.462
+# Tacet shared-core consolidation — decisions record, v4.463
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-03 · v4.463 — **§422 · A PRODUCT'S WARNING SITS ON THE CHECKOUT RECEIPT, EVERY TIME, AND A TAP OPENS THE FULL CARD — DECIDED BY ASH:** *"i was thinknig to add here an attention message , maybe if clicking on it , it open the poop up ? … so even if he forgot aobut it , at the chekcout page he wont miss it"*, then *"it shoulf also give an option to open the full pop up notice"* and *"go"*. **AMENDS §197's "NOT A FIFTH CHECKOUT NOTICE" IN ITS LETTER, NOT ITS REASON.** §197 kept product care out of the checkout because a MODAL there would stand between a shopper and payment and land on §196's delivery notices. This is not a modal: it is a line under the product on the receipt, like the drop-ship tag beside it, and it opens nothing until tapped. **WHY IT IS NEEDED:** the add-to-cart card shows once per phone per notice version (§197's seen-mark), so a returning customer meets it once and never again, and the one who did tapped it away while choosing flavours. **WHAT IT IS:** under each receipt line whose product carries a notice, a box with the notice's own title and *Read full notice · 查看详情 ›*; a tap opens the same card the add raised, with the whole text. Both clients: `miniapp/pages/checkout` and `public/shop.html` (`coLoadLineNotices`, `coNoteTag`). **A TAP SPENDS NOTHING:** opening it from the receipt does not mark it seen, or a customer who read it there first would lose the card on the add it was meant for. **THE CHECKOUT'S CARD NEVER OPENS BY ITSELF:** the mini-app card gains a `passive` mode that never drains the add-to-cart queue, so §196's rule holds. **ONE RESOLVER STILL:** the line reads `cart_notice` off `/api/retail/products?ids=…`, which the server stamps — not the cart line (stale from the day it was added) and not the quote (which waits for an address the receipt is drawn without). No new Chinese is composed: `查看详情` is copied whole from the block renderer's live button label; see `docs/tacet-delivery-vocabulary.md` v1.306. Tests: `scripts/test_cart_notice.js` §7 (11 new); two were re-run against deliberately broken copies and failed. `npm run test:fast` 492/492. The mini-app half reaches customers only after an upload and WeChat review; the web half on deploy. No schema, no migration, no change to `.gitignore` or CI.
 
 2026-10-01 · v4.462 — **§381 AMENDED · THE PHONE ASKS THE SAME QUESTION — ON ASH'S WORD** (*"do the phone"*). The phone's JD label sheet now offers ground on an air parcel and asks first, with the desktop's words. See §381 point 9.
 
@@ -28073,3 +28075,24 @@ according to air."*
    from a new direction:** a backfill that changes a live alert's input is a
    widening too, and must be measured against live data before it ships, not
    after.
+
+## §422 — A PRODUCT'S WARNING SITS ON THE CHECKOUT RECEIPT, AND A TAP OPENS IT
+
+**Decided 2026-10-03 by Ash** (*"go"*). A product that carries an add-to-cart
+notice (§197) shows it again on the checkout receipt, under its line, on every
+checkout: the notice's own title and *Read full notice · 查看详情*. A tap opens
+the full card. This amends §197's "not a checkout notice" for a passive line
+only: nothing at checkout opens by itself, and §196's delivery notices are
+never covered.
+
+1. **Every checkout.** The once-per-phone rule governs the card raised on an
+   add. It does not apply to the receipt line.
+2. **A tap does not mark the notice seen.** Reading it on the receipt must not
+   take away the card on the add.
+3. **The server resolves it.** Both clients read `cart_notice` off the product
+   payload (`/api/retail/products?ids=`), so the receipt, the product page,
+   the add card and the order page agree, sizes included (§267).
+4. **Both clients.** Mini app and web shop. The mini-app half needs an upload
+   and WeChat review before customers see it.
+
+See the v4.463 changelog entry.

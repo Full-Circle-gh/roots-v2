@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.306 · 2026-10-03 · §422 THE CHECKOUT RECEIPT'S NOTICE LINE — NOTHING COMPOSED; ONE LABEL COPIED WHOLE.** See *The checkout receipt's notice line (§422)*.
+
 **v1.305 · 2026-10-02 · §419 THE PRODUCT SHEET'S NOTE BAR POINTS AT DETAILS — 1 STRING COMPOSED BY CLAUDE; THE PHOTO ROW'S TWO LABELS COPIED WHOLE.** See *The product sheet's photo row and note bar (§419)*.
 
 **v1.304 · 2026-09-30 · §417 STOCK STAFF AT ANOTHER STORE — 1 STRING COMPOSED BY CLAUDE.** See *Stock staff only at your own stores (§417)*.
@@ -13154,3 +13156,24 @@ Composed by Claude under the 2026-09-06 amendment. The locked line
 `快改库存与价格 · 完整编辑在电脑端` is NOT retired: it is still shown to whoever
 has no Details door (no `products:edit`, or an upstream catalogue), for whom
 the desktop is still where full editing lives.
+
+## The checkout receipt's notice line (§422)
+
+**Customer register, 2026-10-03.** The checkout receipt, mini app
+(`miniapp/pages/checkout`) and web shop (`public/shop.html` `coNoteTag`). Under
+a product that carries an add-to-cart notice, a box shows the notice's title
+and a link that opens the full card. The title is the tenant's own words; the
+card's only chrome is the live `知道了`.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Read full notice · 查看详情` | `查看详情` is the block renderer's live default button label (`miniapp/components/block-renderer`, `OPEN · 查看详情`), a button that opens more. The English is written for this line, because `OPEN` names no notice. |
+
+### Composed — none
+
+Rejected: `了解更多`, which is not live anywhere in the customer clients, and
+`查看全文`, likewise not live. `查看详情` already means *open the details* to a
+customer of this shop.
+

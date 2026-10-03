@@ -22,6 +22,11 @@ const cartNotice = require('../../utils/cart-notice');
 const lang = require('../../utils/lang');
 
 Component({
+  properties: {
+    // true on the checkout: the card opens only through open(), on a tap.
+    passive: { type: Boolean, value: false },
+  },
+
   data: {
     open: false,
     // The confirmation line the page would otherwise have toasted ("Added to
@@ -41,6 +46,11 @@ Component({
     attached() {
       this._lang = getApp()?.globalData?.lang || 'en';
       this.setData({ cta: this._lang === 'cn' ? '知道了' : 'Got it' });
+      // A PASSIVE card (the checkout's, §422) only opens when it is asked to.
+      // It never drains the queue: the checkout has §196's delivery notices of
+      // its own, and a queued add-to-cart card arriving by itself would land on
+      // top of one of them — the burying §196 exists to have removed.
+      if (this.data.passive) return;
       // A notice queued on another page (a + from the grid, a favourite added
       // from the favourites tab) has nowhere to show until a screen carrying
       // this component appears. Drain on arrival so it is late rather than lost.
@@ -57,7 +67,7 @@ Component({
     // Me, so a customer can change it between the add and the card.
     show() {
       this._lang = getApp()?.globalData?.lang || 'en';
-      if (!this.data.open) this.showNext();
+      if (!this.data.passive && !this.data.open) this.showNext();
     },
   },
 
@@ -85,8 +95,23 @@ Component({
       return true;
     },
 
+    // Open ONE given notice, on the customer's own tap — the checkout line's
+    // "Read full notice" (§422). It is not taken from the queue and does not
+    // mark anything seen: the seen-mark governs whether the card INTERRUPTS an
+    // add, and a customer asking to read it again is not being interrupted.
+    open(n) {
+      if (!n) return false;
+      const L = this._lang = getApp()?.globalData?.lang || 'en';
+      const title = lang.pick(n.title_en, n.title_cn, L);
+      const body  = lang.pick(n.body_en,  n.body_cn,  L);
+      if (!title && !body) return false;
+      this.setData({ open: true, title, body, kicker: '', cta: L === 'cn' ? '知道了' : 'Got it' });
+      return true;
+    },
+
     onClose() {
       this.setData({ open: false });
+      if (this.data.passive) { this.triggerEvent('closed'); return; }
       // Next in the queue, if the same gesture raised two. Nothing waiting →
       // tell the page, which may have a navigation of its own parked on this.
       if (this.showNext()) return;

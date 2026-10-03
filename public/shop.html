@@ -1758,9 +1758,17 @@ function cnTake(){
 // card must not be where the two start disagreeing.
 function cnShowNext(kicker){
   const n=cnTake(); if(!n)return false;
+  return cnDraw(n,kicker)||cnShowNext(kicker);
+}
+// Open ONE given notice on the customer's own tap — the checkout line's "Read
+// full notice" (§422). Not taken from the queue and not marked seen: the
+// seen-mark governs whether the card INTERRUPTS an add, and a customer asking
+// to read it again is not being interrupted.
+function cnOpen(n){return !!n&&cnDraw(n,'');}
+function cnDraw(n,kicker){
   const L=state.lang;
   const title=pick(n.title_en,n.title_cn), body=pick(n.body_en,n.body_cn);
-  if(!title&&!body)return cnShowNext(kicker);
+  if(!title&&!body)return false;
   let ov=$('#cnotePop');
   if(!ov){ov=document.createElement('div');ov.id='cnotePop';ov.className='cnote-overlay';document.body.appendChild(ov);}
   ov.innerHTML=`<div class="cnote-card">
@@ -1881,6 +1889,13 @@ function coInjectCheckoutStyle(){
   .cx-line-nm{font-family:var(--bf-bear);}
   .cx-line-qty{color:var(--olive);}
   .cx-line-opts{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.2;}
+  /* The product's own warning on the receipt (§422) — the product page's
+     .pd-care in miniature, so the customer recognises the words. A button: it
+     is the one thing on the receipt meant to be tapped. */
+  .cx-note{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;width:100%;margin-top:5px;padding:6px 9px;border:0;border-left:3px solid var(--forest);border-radius:4px;background:rgba(217,230,179,.28);font:inherit;text-align:left;color:var(--ink);cursor:pointer;}
+  .cx-note .gly{flex-shrink:0;width:16px;height:16px;line-height:16px;border-radius:50%;background:var(--forest);color:var(--lime);font-size:10px;font-weight:700;text-align:center;}
+  .cx-note .t{flex:1;min-width:0;font-size:12px;font-weight:700;line-height:1.25;}
+  .cx-note .more{flex-shrink:0;font-size:11px;color:var(--forest);text-decoration:underline;}
   .cx-line-tot{font-family:var(--bf-bear);font-size:15px;white-space:nowrap;}
   /* address */
   .cx-hint{font-family:var(--bf-gothic);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);margin-bottom:9px;line-height:1.4;}
@@ -2053,19 +2068,46 @@ async function renderCheckout(){
   $('#coInvoice').addEventListener('change',e=>{co.needsInvoice=e.target.checked;coRenderInvoiceForm();});
   $('#coPlace').addEventListener('click',coPlace);
   coRenderItems(); coRenderPay(); coRenderInvoiceForm(); coRenderCoupon();
+  coLoadLineNotices();   // needs no address, so it does not wait on the quote
   await coLoadAddrs();
   await coQuote();
 }
 // Order receipt — cart lines with thumbnail, name ×qty, chosen options, line total.
 function coRenderItems(){
   const box=$('#coItems'); if(!box)return;
+  box.onclick=e=>{const b=e.target.closest('.cx-note');if(b)cnOpen(coLineNotices[b.dataset.pid]);};
   box.innerHTML=cartGet().map(l=>`<div class="cx-line">
     <div class="cx-line-lead">
       ${l.image?`<img class="cx-thumb" src="${escAttr(l.image)}" alt="">`:'<div class="cx-thumb"></div>'}
-      <div class="cx-line-name"><span class="cx-line-nm">${esc(l.name||'')}</span><span class="cx-line-qty"> ×${Number(l.qty)||1}</span>${l.optLabel?`<div class="cx-line-opts">${esc(l.optLabel)}</div>`:''}${l.ship_from_supplier?supTag():''}</div>
+      <div class="cx-line-name"><span class="cx-line-nm">${esc(l.name||'')}</span><span class="cx-line-qty"> ×${Number(l.qty)||1}</span>${l.optLabel?`<div class="cx-line-opts">${esc(l.optLabel)}</div>`:''}${l.ship_from_supplier?supTag():''}${coNoteTag(l.product_id)}</div>
     </div>
     <div class="cx-line-tot">${money((Number(l.price)||0)*(Number(l.qty)||1))}</div>
   </div>`).join('');
+}
+// The add-to-cart notices of what is in the basket, restated on the receipt as
+// a line under each product that carries one (§422) — the web half of the mini
+// app's checkout loadLineNotices(), rule for rule. The add-to-cart card shows
+// once per browser and is tapped away while choosing; this is there on every
+// checkout, and a tap opens the full card. Read off the PRODUCT payload the
+// server stamps (§197's one resolver), not off the cart line, which holds what
+// the product said on the day it was added.
+var coLineNotices={};
+async function coLoadLineNotices(){
+  const ids=[...new Set(cartGet().map(l=>Number(l.product_id)).filter(Number.isFinite))].slice(0,100);
+  const next={};
+  if(ids.length){
+    let rows;
+    try{rows=await api('/api/retail/products?ids='+ids.join(','));}
+    catch(e){return;}   // a failed read draws no line; the order page restates it anyway
+    for(const r of (Array.isArray(rows)?rows:[])){if(r&&r.cart_notice)next[r.id]=r.cart_notice;}
+  }
+  coLineNotices=next;
+  coRenderItems();
+}
+function coNoteTag(pid){
+  const n=coLineNotices[pid]; if(!n)return '';
+  const cn=state.lang==='cn';
+  return `<button type="button" class="cx-note" data-pid="${escAttr(String(pid))}"><span class="gly">!</span><span class="t">${esc(pick(n.title_en,n.title_cn)||'')}</span><span class="more">${cn?'查看详情':'Read full notice'} ›</span></button>`;
 }
 // Detect the shopper's environment so we can pick the right WeChat/Alipay web
 // product. WeChat: in-app → JSAPI; mobile browser → H5 (opens the WeChat app);

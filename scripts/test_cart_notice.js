@@ -68,6 +68,10 @@ const PRODUCT_JS = fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'product'
 const SHOP_JS = fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'shop', 'shop.js'), 'utf8');
 const CART_JS = fs.readFileSync(path.join(ROOT, 'miniapp', 'utils', 'cart.js'), 'utf8');
 const EDITOR = fs.readFileSync(path.join(ROOT, 'public', 'product-editor.html'), 'utf8');
+const CHECKOUT_JS = fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'checkout', 'checkout.js'), 'utf8');
+const CHECKOUT_WXML = fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'checkout', 'checkout.wxml'), 'utf8');
+const CHECKOUT_JSON = fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'checkout', 'checkout.json'), 'utf8');
+const CARD_JS = fs.readFileSync(path.join(ROOT, 'miniapp', 'components', 'cart-notice', 'cart-notice.js'), 'utf8');
 
 // Lift one top-level `function name(` … `\n}` block out of a source file. An
 // `async function` is lifted WITH its keyword: slicing from `function` alone
@@ -423,6 +427,7 @@ it('no customer client reads the notice LIST — they read what the server resol
     'miniapp/pages/product/product.js': codeOnly(PRODUCT_JS),
     'miniapp/pages/shop/shop.js': codeOnly(SHOP_JS),
     'miniapp/pages/order/order.js': codeOnly(fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'order', 'order.js'), 'utf8')),
+    'miniapp/pages/checkout/checkout.js': codeOnly(CHECKOUT_JS),
   };
   for (const [name, src] of Object.entries(clients)) {
     assert.ok(!/cart_notices\.list/.test(src), `${name} reads cart_notices.list`);
@@ -585,6 +590,204 @@ it('the family helper always includes the open product', () => {
 it('the picker is filled from any size in the family', () => {
   assert.ok(/const fam = paNoticeFamily\(pid\);\s*const mine = PA_NOTICES\.find\([^\n]*fam\.includes/.test(EDITOR),
     'paFillCartNotice must look up the notice across the family, or the 1 L shows None while it is covered');
+});
+
+/* ── 7 · the checkout receipt restates it, every time (§422) ─────────────── */
+section('7 · the checkout receipt line (§422)');
+
+// Ash, 2026-10-03: the add-to-cart card shows once per phone and is tapped away
+// while choosing flavours, so the warning sits on the checkout receipt under
+// the product, on every checkout, and a tap opens the full card.
+//
+// WHAT THIS LOCKS:
+//   • A TAP OPENS THE FULL CARD AND SPENDS NOTHING. Reading it again from the
+//     receipt must not mark the notice seen, or a customer who taps it first
+//     would never get the card on the add it was meant for.
+//   • THE CHECKOUT'S CARD NEVER OPENS BY ITSELF. It must not drain the
+//     add-to-cart queue there: the checkout has §196's delivery notices, and a
+//     card arriving on its own would land on top of one of them.
+//   • THE LINE COMES FROM THE SERVER'S RESOLVER, keyed by product id, and a
+//     product without a notice draws nothing.
+//   • BOTH CLIENTS OR NEITHER.
+
+// The mini app's notice card, run for real: Component() captured, its
+// lifetimes and methods called with a fake `this`.
+function card(props = {}) {
+  const store = new Map();
+  global.wx = {
+    getStorageSync: k => (store.has(k) ? store.get(k) : ''),
+    setStorageSync: (k, v) => store.set(k, v),
+  };
+  global.getApp = () => ({ globalData: { lang: 'en' } });
+  const cnPath = require.resolve(path.join(ROOT, 'miniapp', 'utils', 'cart-notice.js'));
+  delete require.cache[cnPath];
+  const mod = require(cnPath);
+  mod._reset();
+  let def;
+  const sandbox = {
+    Component: d => { def = d; },
+    require: r => (r.endsWith('cart-notice') ? mod : require(path.join(ROOT, 'miniapp', 'components', 'cart-notice', r))),
+    getApp: global.getApp,
+    console,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(CARD_JS, sandbox);
+  const events = [];
+  const self = {
+    data: { ...JSON.parse(JSON.stringify(def.data)), passive: false, ...props },
+    setData(p) { Object.assign(this.data, p); },
+    triggerEvent(e) { events.push(e); },
+  };
+  for (const [k, fn] of Object.entries(def.methods)) self[k] = fn.bind(self);
+  return { def, self, mod, store, events };
+}
+
+it('mini app: a tap opens the FULL card and marks nothing seen', () => {
+  const { self, mod } = card({ passive: true });
+  assert.strictEqual(self.open(FRIDGE), true);
+  assert.strictEqual(self.data.open, true);
+  assert.strictEqual(self.data.title, FRIDGE.title_en);
+  assert.strictEqual(self.data.body, FRIDGE.body_en, 'the body is the point — the line only carries the title');
+  assert.strictEqual(mod.hasSeen(FRIDGE), false, 'reading it from the receipt must not spend the add-to-cart card');
+});
+
+it('mini app: a notice with no words opens nothing', () => {
+  const { self } = card({ passive: true });
+  assert.strictEqual(self.open({ id: 'x', title_en: '', body_en: '' }), false);
+  assert.strictEqual(self.open(null), false);
+  assert.strictEqual(self.data.open, false);
+});
+
+it('mini app: the PASSIVE card never drains the queue — not on attach, show, or close', () => {
+  const { def, self, mod } = card({ passive: true });
+  mod.queue({ cart_notice: FRIDGE });
+  def.lifetimes.attached.call(self);
+  def.pageLifetimes.show.call(self);
+  assert.strictEqual(self.data.open, false, 'a queued card must not open by itself on the checkout');
+  self.open({ id: 'cn_tofu', title_en: 'Tofu', updated_at: 1 });
+  self.onClose();
+  assert.strictEqual(self.data.open, false, 'closing the tapped card must not pull the queued one up');
+  assert.strictEqual(mod.waiting(), 1, 'the queued notice is still waiting for a screen that may show it');
+});
+
+it('mini app: an ordinary card still drains the queue as before', () => {
+  const { def, self, mod } = card();
+  mod.queue({ cart_notice: FRIDGE });
+  def.lifetimes.attached.call(self);
+  assert.strictEqual(self.data.open, true);
+  assert.strictEqual(mod.hasSeen(FRIDGE), true);
+});
+
+// The page method, lifted out of Page({…}) and run with its few dependencies.
+function checkoutLoader(items, rows, { fail = false } = {}) {
+  const at = CHECKOUT_JS.indexOf('  async loadLineNotices() {');
+  assert.ok(at > -1, 'loadLineNotices not found');
+  const end = CHECKOUT_JS.indexOf('\n  },', at);
+  const body = CHECKOUT_JS.slice(at, end + 4).trim().replace(/,$/, '');
+  const calls = [];
+  const sandbox = {
+    console: { warn() {} },
+    cart: { get: () => ({ items }) },
+    api: { get: async u => { calls.push(u); if (fail) throw new Error('down'); return { success: true, data: rows }; } },
+    lang: { pick: (en, cn, L) => ((L === 'cn' ? cn : en) || en || cn || '') },
+  };
+  vm.createContext(sandbox);
+  const obj = vm.runInContext(`({ ${body} })`, sandbox);
+  const page = { data: { lang: 'en', lineNotices: {} }, setData(p) { Object.assign(this.data, p); } };
+  return { run: () => obj.loadLineNotices.call(page), page, calls };
+}
+
+it('mini app: the line is read from the server-stamped product, keyed by id', async () => {
+  const { run, page, calls } = checkoutLoader(
+    [{ product_id: 90 }, { product_id: 7 }, { product_id: 90 }],
+    [{ id: 90, cart_notice: FRIDGE }, { id: 7 }]);
+  await run();
+  assert.deepStrictEqual(calls, ['/api/retail/products?ids=90,7']);
+  // Compared as JSON: the map is built inside the vm sandbox, and its
+  // prototype is that context's Object, which deepStrictEqual counts as a diff.
+  assert.strictEqual(JSON.stringify(page.data.lineNotices), JSON.stringify({ 90: FRIDGE.title_en }), 'a product with no notice draws no line');
+  assert.strictEqual(page._lineNotices[90], FRIDGE, 'the full notice is kept for the tap');
+});
+
+it('mini app: a failed read draws no line rather than breaking the checkout', async () => {
+  const { run, page } = checkoutLoader([{ product_id: 90 }], [], { fail: true });
+  await run();
+  assert.strictEqual(JSON.stringify(page.data.lineNotices), '{}');
+});
+
+it('mini app: the receipt draws the line, the tap opens the passive card', () => {
+  assert.ok(/wx:if="\{\{lineNotices\[item\.product_id\]\}\}"[^>]*catchtap="openLineNotice"/.test(CHECKOUT_WXML),
+    'each receipt line must draw its notice and open it on a tap');
+  assert.ok(/<cart-notice id="line-notice" passive="\{\{true\}\}">/.test(CHECKOUT_WXML),
+    'the checkout card must be passive, or it drains the queue over §196\'s notices');
+  assert.ok(/"cart-notice":\s*"\/components\/cart-notice\/cart-notice"/.test(CHECKOUT_JSON));
+  assert.ok(/'查看详情' : 'Read full notice'/.test(CHECKOUT_WXML));
+  assert.ok(/this\.loadLineNotices\(\);\s*if \(!isBound\) return;/.test(CHECKOUT_JS),
+    'loaded before the bind gate — the warning is on the receipt whoever is looking');
+});
+
+function webCheckout(rows, { fail = false } = {}) {
+  const ls = new Map();
+  let drawn = null;
+  const sandbox = {
+    console,
+    state: { lang: 'en' },
+    localStorage: { getItem: k => (ls.has(k) ? ls.get(k) : null), setItem: (k, v) => ls.set(k, v) },
+    pick: (en, cn) => ((sandbox.state.lang === 'cn' ? cn : en) || en || cn || ''),
+    esc: s => String(s == null ? '' : s),
+    escAttr: s => String(s == null ? '' : s),
+    cartGet: () => [{ product_id: 90 }, { product_id: 7 }],
+    coRenderItems: () => {},
+    api: async () => { if (fail) throw new Error('down'); return rows; },
+    document: {
+      body: { appendChild() {} },
+      createElement: () => ({ set innerHTML(v) { drawn = v; }, get innerHTML() { return drawn; } }),
+    },
+    $: () => null,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    'var cnPending=[];\n'
+    + grab(SHOP, 'cnSeenKey') + '\n' + grab(SHOP, 'cnHasSeen') + '\n' + grab(SHOP, 'cnMarkSeen') + '\n'
+    + grab(SHOP, 'cnOpen') + '\n' + grab(SHOP, 'cnDraw') + '\n'
+    + 'var coLineNotices={};\n'
+    + grab(SHOP, 'coLoadLineNotices') + '\n' + grab(SHOP, 'coNoteTag') + '\n',
+    sandbox);
+  // cnDraw finds its overlay through $; hand it one that records what it drew.
+  const ov = { hidden: true, set innerHTML(v) { drawn = v; }, get innerHTML() { return drawn; } };
+  sandbox.$ = sel => (sel === '#cnotePop' ? ov : { addEventListener() {} });
+  return { w: sandbox, ov, drawn: () => drawn };
+}
+
+it('web: a tap opens the FULL card and marks nothing seen', () => {
+  const { w, ov, drawn } = webCheckout([]);
+  assert.strictEqual(w.cnOpen(FRIDGE), true);
+  assert.strictEqual(ov.hidden, false);
+  assert.ok(drawn().includes(FRIDGE.body_en), 'the full text, not just the title');
+  assert.strictEqual(w.cnHasSeen(FRIDGE), false);
+  assert.strictEqual(w.cnOpen(null), false);
+});
+
+it('web: the line is read from the server-stamped product and draws only where there is a notice', async () => {
+  const { w } = webCheckout([{ id: 90, cart_notice: FRIDGE }, { id: 7 }]);
+  await w.coLoadLineNotices();
+  const tag = w.coNoteTag(90);
+  assert.ok(tag.includes(FRIDGE.title_en) && tag.includes('Read full notice') && tag.includes('data-pid="90"'));
+  assert.strictEqual(w.coNoteTag(7), '');
+  w.state.lang = 'cn';
+  assert.ok(w.coNoteTag(90).includes('查看详情'));
+});
+
+it('web: a failed read draws no line', async () => {
+  const { w } = webCheckout([], { fail: true });
+  await w.coLoadLineNotices();
+  assert.strictEqual(w.coNoteTag(90), '');
+});
+
+it('web: the receipt draws the line and a tap opens it; the checkout loads it without waiting on an address', () => {
+  assert.ok(/\$\{l\.ship_from_supplier\?supTag\(\):''\}\$\{coNoteTag\(l\.product_id\)\}/.test(SHOP));
+  assert.ok(/closest\('\.cx-note'\);if\(b\)cnOpen\(coLineNotices\[b\.dataset\.pid\]\)/.test(SHOP));
+  assert.ok(/coLoadLineNotices\(\);[^\n]*\n\s*await coLoadAddrs\(\);/.test(SHOP));
 });
 
 /* ── run ─────────────────────────────────────────────────────────────────── */
