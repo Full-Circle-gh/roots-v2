@@ -460,9 +460,11 @@
           <input type="text" id="wst-r-note" class="wst-in" autocomplete="off">
         </label>
         <div class="wst-hint" id="wst-r-hint"></div>
-      </div>`;
+      </div>
+      <div class="wst-list" id="wst-r-list" hidden></div>`;
     const footHtml = `
       <button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${esc(T('Cancel', '取消'))}</button>
+      <button type="button" class="tdlg-btn tdlg-btn--ghost" data-add disabled>${esc(T('Add to list', '加入清单'))}</button>
       <button type="button" class="tdlg-btn tdlg-btn--primary" data-submit disabled>${esc(T('Record waste', '记录损耗'))}</button>`;
 
     // Shared shell (public/tacet-dialogs.js) — the same mechanism askConfirm
@@ -482,7 +484,72 @@
     const hint = $('#wst-r-hint');
     const onhand = $('#wst-r-onhand');
     const submit = $('[data-submit]');
+    const addBtn = $('[data-add]');
+    const listBox = $('#wst-r-list');
     locSel.value = defaultLocation();
+    // §423 — expired is the usual reason, by Ash's word, so it is the starting
+    // one. A list line always SHOWS its reason in its own drop-down, which is
+    // what keeps a default from being a thing nobody re-reads.
+    if (_reasons.some(r => r.code === 'expired')) reasonSel.value = 'expired';
+
+    // ── the list (§423) ──
+    // Each line: { pid, name_en, name_cn, sku, on_hand, qty, code, note }.
+    // Saved by ONE call that writes all of it or none of it.
+    const list = [];
+    let badLine = null;      // the line the server refused, outlined until the list changes
+    let busy = false;
+    const lineName = l => T(l.name_en || l.name_cn || '', l.name_cn || l.name_en || '');
+    function listBlocked() {
+      if (picked) return T('Add the chosen product to the list first.', '请先将所选产品加入清单。');
+      const used = {};
+      for (const l of list) {
+        if (!Number.isInteger(l.qty) || l.qty <= 0) return T('Quantity must be a whole number above zero.', '数量必须是大于零的整数。');
+        if (l.code === 'other' && !l.note.trim()) return T('Tell us what happened for ' + lineName(l) + '.', '请填写「' + lineName(l) + '」的备注说明。');
+        used[l.pid] = (used[l.pid] || 0) + l.qty;
+        if (used[l.pid] > l.on_hand) return T('Only ' + l.on_hand + ' of ' + lineName(l) + ' in stock.', '「' + lineName(l) + '」库存只有 ' + l.on_hand + '。');
+      }
+      return '';
+    }
+    function paintList() {
+      listBox.hidden = !list.length;
+      locSel.disabled = list.length > 0;
+      if (!list.length) { listBox.innerHTML = ''; return; }
+      listBox.innerHTML = `<div class="wst-list-h"><span>${esc(T('List', '清单'))} · ${list.length}</span>
+          <button type="button" class="wst-btn ghost sm" data-clear>${esc(T('Clear', '清除'))}</button></div>`
+        + list.map((l, i) => {
+          const opts = (_reasons.some(r => r.code === l.code) ? _reasons : _reasons.concat([{ code: l.code, en: l.code, cn: l.code }]))
+            .map(r => `<option value="${esc(r.code)}"${r.code === l.code ? ' selected' : ''}>${esc(T(r.en, r.cn))}</option>`).join('');
+          return `<div class="wst-li${badLine === i ? ' bad' : ''}" data-i="${i}">
+            <span class="wst-li-n" data-no-i18n>${i + 1}</span>
+            <span class="wst-li-p">${esc(lineName(l))}<span class="wst-li-m" data-no-i18n>${esc(l.sku || '')}</span></span>
+            <input type="number" class="wst-in wst-li-q" min="1" max="${l.on_hand}" step="1" value="${l.qty}" aria-label="${esc(T('Quantity', '数量'))}">
+            <select class="wst-sel wst-li-r" aria-label="${esc(T('Reason', '原因'))}">${opts}</select>
+            <button type="button" class="wst-btn ghost sm" data-rm aria-label="${esc(T('Remove', '移除'))}">${I.trash}</button>
+            ${l.code === 'other' ? `<input type="text" class="wst-in wst-li-note" value="${esc(l.note)}" placeholder="${esc(T('What happened?', '发生了什么？'))}">` : ''}
+          </div>`;
+        }).join('');
+      listBox.querySelector('[data-clear]').addEventListener('click', () => { list.length = 0; badLine = null; paintList(); refresh(); });
+      listBox.querySelectorAll('.wst-li').forEach(row => {
+        const i = Number(row.dataset.i), l = list[i];
+        // Typing in a line updates the model and the foot only. Repainting the
+        // list here would replace the field being typed in and drop the caret.
+        row.querySelector('.wst-li-q').addEventListener('input', ev => { l.qty = Number(ev.target.value); badLine = null; refresh(); });
+        row.querySelector('.wst-li-r').addEventListener('change', ev => { l.code = ev.target.value; badLine = null; paintList(); refresh(); });
+        row.querySelector('[data-rm]').addEventListener('click', () => { list.splice(i, 1); badLine = null; paintList(); refresh(); });
+        const n = row.querySelector('.wst-li-note');
+        if (n) n.addEventListener('input', ev => { l.note = ev.target.value; badLine = null; refresh(); });
+      });
+    }
+    addBtn.addEventListener('click', () => {
+      if (!picked || addBtn.disabled) return;
+      list.push({ pid: picked.id, name_en: picked.name_en, name_cn: picked.name_cn, sku: picked.sku,
+        on_hand: Number(picked.on_hand), qty: Number(qtyIn.value), code: reasonSel.value, note: noteIn.value.trim() });
+      // The reason is KEPT for the next line — a clean-out is one reason after
+      // another. Product, quantity and note are the per-item half and reset.
+      picked = null; prodIn.value = ''; qtyIn.value = '1'; noteIn.value = '';
+      onhand.hidden = true; preview = null; badLine = null;
+      paintList(); refresh(); prodIn.focus();
+    });
 
     // ── the picker ──
     // Gated on the WASTE capability alone. This endpoint exists because the
@@ -571,6 +638,20 @@
         // before they press, and again by the API so it cannot be bypassed.
         reason = T('Tell us what happened when the reason is Other.', '原因选择“其他”时请填写备注。');
       }
+      // §423 — Add to list follows the single-entry rules exactly; with lines on
+      // the list the Record button speaks for the LIST instead, and the
+      // single-entry behaviour returns the moment the list is empty.
+      addBtn.disabled = !!reason || busy;
+      addBtn.hidden = !picked;
+      if (list.length) {
+        const lb = listBlocked();
+        submit.disabled = !!lb || busy;
+        if (!busy) submit.textContent = T('Record ' + list.length + (list.length === 1 ? ' item' : ' items'), '登记 ' + list.length + ' 条');
+        hint.textContent = lb;
+        hint.className = 'wst-hint' + (lb ? ' warn' : '');
+        return;
+      }
+      if (!busy) submit.textContent = T('Record waste', '记录损耗');
       submit.disabled = !!reason;
       let text = reason || '';
       // `preview` is null for a cost-blind operator (loadPreview returns early),
@@ -603,6 +684,54 @@
       btn.disabled = true;
       const prev = btn.textContent;
       btn.textContent = T('Recording…', '登记中…');
+      if (list.length) {
+        // §423 — the whole list in one call: every line is written or none is.
+        const n = list.length;
+        busy = true; addBtn.disabled = true;
+        try {
+          const j = await api('/api/retail-admin/waste/bulk', {
+            method: 'POST',
+            body: {
+              location_id: Number(locSel.value),
+              items: list.map(l => ({ store_product_id: l.pid, qty: l.qty, reason_code: l.code, note: l.note.trim() || null })),
+            },
+          });
+          const rows = j.data || [];
+          closer(true);
+          // A money surface, like the single write's toast: the total only for
+          // somebody who may read one. Uncosted lines are counted, never summed
+          // as zero.
+          let msg = T('Recorded ' + n + (n === 1 ? ' item' : ' items'), '已登记 ' + n + ' 条');
+          if (showMoney()) {
+            const unc = rows.filter(r => r.is_uncosted).length;
+            const cents = rows.reduce((a, r) => a + (r.is_uncosted ? 0 : Number(r.cost_total_cents || 0)), 0);
+            msg += ' · ' + money(cents);
+            if (unc) msg += ' · ' + T(unc + ' with no cost on file', '其中 ' + unc + ' 条暂无成本');
+          }
+          toast(msg);
+          load();
+        } catch (e) {
+          // Stays in the modal, next to the button, and says which line.
+          busy = false;
+          const d = (e && e.data) || {};
+          const at = Number.isInteger(d.line) ? d.line : null;
+          badLine = at;
+          const none = T(' Nothing has changed.', '数据没有变化。');
+          let msg;
+          if (e && e.code === 'insufficient_stock' && at !== null) {
+            msg = T('Line ' + (at + 1) + ': only ' + d.on_hand + ' in stock, ' + d.requested + ' asked.',
+                    '第 ' + (at + 1) + ' 行：库存只有 ' + d.on_hand + '，登记了 ' + d.requested + '。') + none;
+          } else if (at !== null) {
+            msg = T('Line ' + (at + 1) + ' did not pass.', '第 ' + (at + 1) + ' 行未通过。') + none;
+          } else {
+            msg = (e && e.message) ? e.message : T('Failed', '操作失败');
+          }
+          paintList(); refresh();
+          hint.className = 'wst-hint warn';
+          hint.textContent = msg;
+        }
+        return;
+      }
       try {
         const j = await api('/api/retail-admin/waste', {
           method: 'POST',

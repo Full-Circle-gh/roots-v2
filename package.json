@@ -113,6 +113,7 @@
     "test:mobile-pwa": "node scripts/test_mobile_pwa.js && node scripts/test_mobile_i18n_names.js",
     "test:roles": "node scripts/test_tenant_roles.js && node scripts/test_role_editor_client.js",
     "test:waste-costs": "node scripts/test_waste_cost_visibility.js",
+    "test:waste-bulk": "node scripts/test_waste_bulk.js && node scripts/test_mobile_waste_list.js && node scripts/test_waste_bulk_desktop.js",
     "test:material-costs": "node scripts/test_material_cost_visibility.js",
     "test:sku": "node scripts/test_sku_generation.js",
     "test:product-costs": "node scripts/test_product_cost_visibility.js",

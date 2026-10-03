@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.307 · 2026-10-03 · §423 THE WASTE LIST, PHONE AND DESKTOP — 10 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *The waste list (§423)*.
+
 **v1.306 · 2026-10-03 · §422 THE CHECKOUT RECEIPT'S NOTICE LINE — NOTHING COMPOSED; ONE LABEL COPIED WHOLE.** See *The checkout receipt's notice line (§422)*.
 
 **v1.305 · 2026-10-02 · §419 THE PRODUCT SHEET'S NOTE BAR POINTS AT DETAILS — 1 STRING COMPOSED BY CLAUDE; THE PHOTO ROW'S TWO LABELS COPIED WHOLE.** See *The product sheet's photo row and note bar (§419)*.
@@ -13177,3 +13179,44 @@ Rejected: `了解更多`, which is not live anywhere in the customer clients, an
 `查看全文`, likewise not live. `查看详情` already means *open the details* to a
 customer of this shop.
 
+
+## The waste list (§423)
+
+**Operator register, 2026-10-03.** The phone's Record sheet (`public/m.html`)
+and the desktop's Record dialog (`public/retail-admin/20-waste.js`). An operator
+builds a list of losses and records them with one button. Each line shows its
+own reason; the reason starts at Expired.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Remove · 移除` | the quick-actions editor's remove control (`m.html`), and this vocabulary's own `remove` row |
+| `Clear · 清除` | the Orders selection bar's Clear (`m.html`, `ordSelClear`) |
+| `What happened? · 发生了什么？` | the same sheet's note placeholder |
+| `Record waste · 记录损耗` | the sheet's title and its single-entry button |
+| `Recording… · 登记中…` | the same button, in flight |
+| `Reason · 原因`, `Quantity · 数量`, `Less · 减少`, `More · 增加` | the same sheet |
+| `Nothing has changed. · 数据没有变化。` | the second sentence of the live failure line `没有保存成功。数据没有变化 — 请重试。`, taken whole |
+| the reason names | the server's own list (`routes/retail-waste.js` `REASONS`), unchanged |
+
+### Composed — ten, by Claude (2026-09-06 amendment)
+
+Every one is built from fragments already live on the same surface. `第 N 行` is
+the only fragment with no live source anywhere.
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `加入清单` | Add to list | `加入` (`加入库存`, `加入购物车`) + `清单` (`每天发送库存偏低清单`) | `添加到清单`, `加到清单` — the add verb on this surface is `加入` |
+| `清单 · N` | List · N | `清单` as above | `列表`: live, but it names a screen's table (`订单列表`), not the set of things about to be submitted |
+| `登记 N 条` | Record N items | `登记` (`已登记`, `登记中…`) + the live entry counter `N 条` | `记录 N 项` — `记录` is the title noun, the commit verb is `登记`, and `项` is not a live counter; `提交 N 条` — `提交` is not used for stock |
+| `已登记 N 条` | Recorded N items | the toast verb `已登记` + `N 条` | — |
+| `其中 N 条暂无成本` | N with no cost on file | `暂无成本` (live in the single toast and the sheet) with `其中 N 条` | — |
+| `请先将所选产品加入清单。` | Add the chosen product to the list first. | `请先` (`请先选择门店。`) + `产品` (`请选择产品。`) + `加入清单` | `请先添加所选商品` |
+| `请填写「{name}」的备注说明。` | Tell us what happened for {name}. | the live `请填写备注说明。` with the product named in `「」` | — |
+| `「{name}」库存只有 {n}。` | Only {n} of {name} on hand. | the live `库存只有 {n}。` with the product named | — |
+| `第 {N} 行：库存只有 {A}，登记了 {R}。` | Line {N}: only {A} on hand, {R} asked. | `库存只有` live; `第 N 行` new | `第 N 条` — reads as the Nth entry already recorded, which a list line is not yet; `第 N 项` |
+| `第 {N} 行未通过。` | Line {N} did not pass. | `第 N 行` as above | `第 N 行有误` — nothing is known to be *wrong* with it, only that the list was refused |
+
+The desktop says *in stock* (`库存`) where the phone says *on hand*, each
+following its own surface's existing English; the Chinese is the same.
