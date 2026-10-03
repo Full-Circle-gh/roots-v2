@@ -72,3 +72,30 @@ console.log(`\n── NEWLY late under §421: ${newly.length}`);
 for (const r of newly) console.log(JSON.stringify(r));
 console.log(`\n── NO LONGER late under §421: ${lifted.length}`);
 for (const r of lifted) console.log(JSON.stringify(r));
+
+// ── Preview of shipment_waybill_product_v2 (database.js), run as a SELECT ──
+// The same condition the correction uses: a log row booked for THIS parcel —
+// same order, same waybill, and shipment_id this parcel's or absent.
+console.log('\n── TC000809 label log rows');
+for (const r of db.prepare(`SELECT a.id, a.created_at, a.details FROM activity_log a
+    JOIN retail_orders o ON o.id = a.entity_id
+   WHERE o.order_no = 'TC000809' AND a.entity_type = 'retail_order' AND a.action = 'jd_waybill_created'`).all()) {
+  console.log(JSON.stringify(r));
+}
+if (hasBooked) {
+  const FOR_THIS = `a.action = 'jd_waybill_created' AND a.entity_type = 'retail_order'
+     AND a.entity_id = s.order_id AND (a.tenant_id IS NULL OR a.tenant_id = 1)
+     AND json_valid(a.details) AND json_extract(a.details, '$.waybill') = s.tracking_number
+     AND (json_extract(a.details, '$.shipment_id') IS NULL OR json_extract(a.details, '$.shipment_id') = s.id)`;
+  const clears = db.prepare(`SELECT o.order_no, s.id, s.mode, s.waybill_product, s.tracking_number
+      FROM retail_shipments s JOIN retail_orders o ON o.id = s.order_id
+     WHERE s.waybill_product IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM activity_log a WHERE ${FOR_THIS})`).all();
+  console.log(`\n── the correction would take the booking off: ${clears.length}`);
+  for (const r of clears) console.log(JSON.stringify(r));
+  const ids = new Set(clears.map(r => r.id));
+  const still = newly.filter(r => !ids.has(r.id));
+  console.log(`\n── NEWLY late under §421 once corrected: ${still.length}`);
+  for (const r of still) console.log(JSON.stringify(r));
+  console.log(`booked parcels in total: ${db.prepare('SELECT COUNT(*) n FROM retail_shipments WHERE waybill_product IS NOT NULL').get().n}`);
+}
