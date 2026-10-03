@@ -59,6 +59,7 @@ const CODE = [
   sliceFn('toldCard'), sliceFn('sheetActions'), sliceFn('orderActs'),
   sliceBetween('const ORDER_ALSO={', '\n};\n') + '\n};',
   sliceBetween("reg('askRun', key=>{", "reg('copyWaybill'"),
+  sliceFn('orderBreakdown'),
   sliceFn('itemOpts'), sliceBetween('\nconst ITEM_TUPLE=', '\nfunction '), sliceFn('mapDetail'),
 ].join('\n');
 

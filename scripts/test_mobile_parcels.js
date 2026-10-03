@@ -52,6 +52,7 @@ const CODE = [
   sliceFn('parcelExtras'), sliceFn('splitSuggestionCard'), sliceFn('orderActs'), sliceFn('orderErrorText'),
   sliceBetween('const ORDER_ALSO={', '\n};\n') + '\n};',
   sliceBetween("reg('askRun', key=>{", "reg('copyWaybill'"),
+  sliceFn('orderBreakdown'),
   sliceFn('itemOpts'), sliceBetween('\nconst ITEM_TUPLE=', '\nfunction '), sliceFn('mapDetail'),
 ].join('\n');
 

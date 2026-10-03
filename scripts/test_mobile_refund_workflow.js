@@ -62,6 +62,7 @@ const CODE = [
   sliceFn('orderWrite'),
   sliceFn('itemOpts'),
   sliceBetween('\nconst ITEM_TUPLE=', '\nfunction '),
+  sliceFn('orderBreakdown'),
   sliceFn('mapDetail'),
 ].join('\n');
 

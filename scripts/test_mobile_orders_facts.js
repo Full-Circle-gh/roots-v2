@@ -66,6 +66,7 @@ const CODE = [
   sliceBetween('\nconst ITEM_TUPLE=', '\nfunction '),
   sliceFn('orderWaitingOn'),
   sliceFn('chanMoneyOf'),
+  sliceFn('orderBreakdown'),
   sliceFn('mapOrderRow'),
   sliceFn('mapDetail'),
   sliceBetween("reg('copyPayLink',", "reg('copyTxn',"),

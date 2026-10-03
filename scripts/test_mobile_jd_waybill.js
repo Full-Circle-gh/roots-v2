@@ -51,6 +51,7 @@ const CODE = [
   sliceFn('trackingCard'), sliceFn('parcelExtras'),
   sliceFn('orderWrite', true), sliceFn('rereadOrder', true), sliceFn('orderErrorText'),
   sliceBetween("reg('askRun', key=>{", "reg('copyWaybill'"),
+  sliceFn('orderBreakdown'),
   sliceFn('itemOpts'), sliceBetween('\nconst ITEM_TUPLE=', '\nfunction '), sliceFn('mapDetail'),
   'globalThis.__x={jdCan,jdPlan,jdLandDefault,JD_SERVICES};',
 ].join('\n');

@@ -49560,7 +49560,7 @@ function mapOrderRow(r){
        English word handed to T(l,l), so a Chinese screen read "Subtotal" and
        "Delivery". The pairs are live ones: Subtotal · 小计 and Shipping · 运费,
        the desktop's own word for this fee (orderTotalSubline). */
-    items:[], breakdown:[[['Subtotal','小计'],money(CUR,r.subtotal!=null?r.subtotal:r.total)]].concat(r.shipping_fee?[[['Shipping','运费'],money(CUR,r.shipping_fee)]]:[]),
+    items:[], breakdown:orderBreakdown(r),
   };
 }
 /* The choices the CUSTOMER made on this line — "Heat up?: Yes", a size, a
@@ -49652,6 +49652,18 @@ function chanMoneyOf(o){
     expected, gap:Math.round((expected-total)*100)/100, total, reconciled,
     awaiting:reconciled&&!(hasCommission&&hasSettle),
     complete:reconciled&&hasCommission&&hasSettle};
+}
+/* The rows under an order's total: Subtotal, then Shipping and Packing when
+   they were charged. Packing was never read here, so an order that carried one
+   showed a total larger than its subtotal with nothing between (TC000917: ¥572
+   → ¥581.60). Pairs are the desktop's own (orderTotalSubline, 04-orders.js):
+   Subtotal · 小计, Shipping · 运费, Packing · 打包费. One builder for the list
+   row and the detail read so they cannot drift apart again. */
+function orderBreakdown(o){
+  const rows=[[['Subtotal','小计'],money(CUR,o.subtotal!=null?o.subtotal:o.total)]];
+  if(Number(o.shipping_fee)>0) rows.push([['Shipping','运费'],money(CUR,o.shipping_fee)]);
+  if(Number(o.packing_fee)>0) rows.push([['Packing','打包费'],money(CUR,o.packing_fee)]);
+  return rows;
 }
 function mapDetail(o){
   const base=mapOrderRow(o);
@@ -49924,7 +49936,7 @@ function mapDetail(o){
   // The screenshot's verdict (renderAlipayProof), for its Try reading again.
   base.ocrVerdict=o.alipay_ocr_verdict||null;
   if(o.subtotal!=null||o.shipping_fee!=null){
-    base.breakdown=[[['Subtotal','小计'],money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[[['Shipping','运费'],money(CUR,o.shipping_fee)]]:[]);
+    base.breakdown=orderBreakdown(o);
   }
   /* Tax (audit I-03). Carried as a PAIR of facts, not a rendered string: the
      amount, and which kind it is — an exclusive tax was added to the figures
