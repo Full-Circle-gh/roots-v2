@@ -68,6 +68,7 @@ const CODE = [
   sliceFn('custRecentOrders'),
   sliceFn('orderNotes'),
   sliceFn('ordNoteLabel'),
+  sliceFn('orderBreakdown'),
   sliceFn('mapOrderRow'),
   sliceBetween("reg('statusF',", "reg('closeOrder',"),
   // §325 O10 — the header's Drafts door asks the drafts' own gate.
@@ -308,7 +309,10 @@ async function main() {
     is(r.breakdown.map((b) => b[0]), [['Subtotal', '小计'], ['Shipping', '运费']], 'the total\'s labels are pairs, the live Subtotal · 小计 and Shipping · 运费');
     has(src, '${Array.isArray(l)?T(l[0],l[1]):escAttr(l)}', 'and the sheet says them in the language on screen');
     hasnt(src, '${T(l,l)}', 'the T(l,l) that printed English on a Chinese screen is gone');
-    has(src, "base.breakdown=[[['Subtotal','小计'],", 'the detail read carries pairs too');
+    has(src, 'base.breakdown=orderBreakdown(o);', 'the detail read uses the same breakdown builder');
+    const pk = m.ctx.mapOrderRow({ id: 2, order_no: 'TC2', status: 'paid', total: 581.6, subtotal: 572, shipping_fee: 0, packing_fee: 9.6 });
+    is(pk.breakdown.map((b) => b[0]), [['Subtotal', '小计'], ['Packing', '打包费']], 'a packing fee gets its own row, a zero shipping fee does not');
+    is(m.ctx.orderBreakdown({ subtotal: 50, shipping_fee: 8, packing_fee: 2 }).map((b) => b[0][0]), ['Subtotal', 'Shipping', 'Packing'], 'all three rows when all three were charged');
     const notes = r.notes;
     is(m.ctx.ordNoteLabel(notes[0]), 'Items added after paying', 'a note in English…');
     m.ctx.LANG = 'zh';
