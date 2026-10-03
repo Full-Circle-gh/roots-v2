@@ -4115,6 +4115,52 @@ addColumn('retail_shipments', 'prepared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
 
+// §421 — THE JD SERVICE THIS PARCEL WAS BOOKED ON, AND THE WAYBILL IT WAS
+// BOOKED FOR. The parcel's `mode` is the plan and §381 never rewrites it, so
+// an air parcel booked on the ground stayed 'air' everywhere — including in the
+// late rule, which held JD to air's one day for a ground parcel. The late rule
+// now reads this instead (lib/delay-case.js bookedMode). The number is kept
+// beside it so the product only counts while that waybill is still the
+// parcel's: cancel or overwrite the number and the parcel falls back to mode.
+addColumn('retail_shipments', 'waybill_product',    'TEXT');
+addColumn('retail_shipments', 'waybill_product_no', 'TEXT');
+// One-shot backfill from the label log, so parcels already on the road (and
+// already delivered) are judged by what they were booked on, not only new
+// ones. The log is control plane and carries tenant_id; the shipments here are
+// account 1's (NULL = written before the column existed, which is account 1).
+// Matched on the waybill number itself, so a cancelled and re-booked label
+// takes the product of the waybill the parcel actually carries.
+try {
+  db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('shipment_waybill_product_v1');
+  if (!ran) {
+    const r = db.prepare(`
+      UPDATE retail_shipments
+         SET waybill_product = (
+               SELECT json_extract(a.details, '$.product') FROM activity_log a
+                WHERE a.action = 'jd_waybill_created' AND a.entity_type = 'retail_order'
+                  AND a.entity_id = retail_shipments.order_id
+                  AND (a.tenant_id IS NULL OR a.tenant_id = 1)
+                  AND json_valid(a.details)
+                  AND json_extract(a.details, '$.waybill') = retail_shipments.tracking_number
+                ORDER BY a.id DESC LIMIT 1),
+             waybill_product_no = tracking_number
+       WHERE tracking_carrier = 'jd' AND tracking_number IS NOT NULL
+         AND waybill_product IS NULL
+         AND EXISTS (
+               SELECT 1 FROM activity_log a
+                WHERE a.action = 'jd_waybill_created' AND a.entity_type = 'retail_order'
+                  AND a.entity_id = retail_shipments.order_id
+                  AND (a.tenant_id IS NULL OR a.tenant_id = 1)
+                  AND json_valid(a.details)
+                  AND json_extract(a.details, '$.waybill') = retail_shipments.tracking_number
+                  AND json_extract(a.details, '$.product') IS NOT NULL)
+    `).run();
+    console.log(`[migration shipment_waybill_product_v1] backfilled ${r.changes} parcels with their booked JD product`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('shipment_waybill_product_v1');
+  }
+} catch (e) { console.error('[migration shipment_waybill_product_v1]', e); }
+
 // §284 — THE COURIER COULD NOT REACH THE CUSTOMER, KEPT UNTIL SOMEONE ANSWERS
 // FOR IT. `tracking_scenario` is classified from the NEWEST carrier line only,
 // so a courier's "无人接听" was overwritten by his next scan ("再次派送",

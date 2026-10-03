@@ -88,7 +88,8 @@ function shipFixture() {
   const db = new Database(':memory:');
   db.exec(`CREATE TABLE retail_shipments (
              id INTEGER PRIMARY KEY, mode TEXT, dispatched_at TEXT,
-             delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT);
+             delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
+             tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT);
            CREATE TABLE retail_delay_cases (
              id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, shipment_id INTEGER);`);
   return db;
@@ -578,6 +579,111 @@ it('both surfaces offer the third answer, and neither offers it as a button', ()
     assert.ok(drawnAsLink,
       `${f} draws 'nothing needed' outside link:{} — an opt-out that ends a track is not a button`);
   }
+});
+
+// ── §421 · The carrier is held to the service it was booked on ─────────────
+// TC000899: planned as air, booked on 生鲜标快 (ground) at the label, out
+// 2026-10-01. Judged on air's one day it was "late" on 10-03 and a claim went
+// to JD that JD would rightly refuse. Ground's three days put it due 10-04.
+const BOOKED = [
+  // [label, row, late by lateDays]
+  ['TC000899: air plan, ground waybill, day two',
+    { mode: 'air', tracking_number: 'JD1', waybill_product: 'LL-HD-M', waybill_product_no: 'JD1',
+      dispatched_at: '2026-10-01 08:00:00', delivered_at: '2026-10-03 09:00:00' }, 0],
+  ['air plan, ground waybill, day five — late against ground',
+    { mode: 'air', tracking_number: 'JD2', waybill_product: 'ed-m-0001', waybill_product_no: 'JD2',
+      dispatched_at: '2026-10-01 08:00:00', delivered_at: '2026-10-06 09:00:00' }, 2],
+  ['air plan, air waybill, day two — air still holds',
+    { mode: 'air', tracking_number: 'JD3', waybill_product: 'LL-SD-M', waybill_product_no: 'JD3',
+      dispatched_at: '2026-10-01 08:00:00', delivered_at: '2026-10-03 09:00:00' }, 1],
+  ['land plan, air waybill, day two — JD was paid for air',
+    { mode: 'land', tracking_number: 'JD4', waybill_product: 'LL-SD-M', waybill_product_no: 'JD4',
+      dispatched_at: '2026-10-01 08:00:00', delivered_at: '2026-10-03 09:00:00' }, 1],
+  ['stale product from a cancelled label — the plan stands',
+    { mode: 'air', tracking_number: 'SF9', waybill_product: 'LL-HD-M', waybill_product_no: 'JD5',
+      dispatched_at: '2026-10-01 08:00:00', delivered_at: '2026-10-03 09:00:00' }, 1],
+  ['no booking on record — the plan stands',
+    { mode: 'air', tracking_number: 'SF8',
+      dispatched_at: '2026-10-01 08:00:00', delivered_at: '2026-10-03 09:00:00' }, 1],
+  ['unknown product code — the plan stands',
+    { mode: 'air', tracking_number: 'JD6', waybill_product: 'XX-1', waybill_product_no: 'JD6',
+      dispatched_at: '2026-10-01 08:00:00', delivered_at: '2026-10-03 09:00:00' }, 1],
+];
+
+it('§421: lateDays judges by the booked service, and only for the waybill it was booked for', () => {
+  for (const [label, row, want] of BOOKED) {
+    assert.strictEqual(dc.lateDays({ ...row, tracking_status: 'delivered' }), want, label);
+  }
+});
+
+it('§421: the SQL and the JS still agree, booked service included', () => {
+  const db = shipFixture();
+  const ins = db.prepare(`INSERT INTO retail_shipments
+    (id, mode, dispatched_at, delivered_at, tracking_status, tracking_number, waybill_product, waybill_product_no)
+    VALUES (@id, @mode, @dispatched_at, @delivered_at, 'delivered', @tracking_number, @waybill_product, @waybill_product_no)`);
+  BOOKED.forEach(([, row], i) => ins.run({ waybill_product: null, waybill_product_no: null, ...row, id: i + 1 }));
+  const sql = db.prepare(`SELECT id FROM retail_shipments WHERE ${dc.lateShipmentSql()} ORDER BY id`)
+    .all().map(r => r.id);
+  const js = BOOKED.map(([, row], i) => [i + 1, dc.lateDays({ ...row, tracking_status: 'delivered' })])
+    .filter(([, d]) => d > 0).map(([id]) => id);
+  assert.deepStrictEqual(sql, js);
+  assert.ok(!sql.includes(1), 'TC000899 is still counted late against air');
+});
+
+it('§421: running late uses the same booked service — TC000899 is not running late on 10-03', () => {
+  const now = new Date('2026-10-03T12:00:00Z');
+  const tc = { ...BOOKED[0][1], delivered_at: null, tracking_status: 'in_transit' };
+  assert.strictEqual(dc.runningLateDays(tc, now), 0);
+  assert.strictEqual(dc.runningLateDays({ ...tc, waybill_product: 'LL-SD-M' }, now), 1,
+    'the same parcel booked on air is one day past due');
+  const db = shipFixture();
+  db.prepare(`INSERT INTO retail_shipments (id, mode, dispatched_at, tracking_number, waybill_product, waybill_product_no)
+              VALUES (1, 'air', '2026-10-01 08:00:00', 'JD1', 'LL-HD-M', 'JD1'),
+                     (2, 'air', '2026-10-01 08:00:00', 'JD2', 'LL-SD-M', 'JD2')`).run();
+  const hits = db.prepare(`SELECT id FROM retail_shipments WHERE ${dc.runningLateSql('', "DATE('2026-10-03')")}`)
+    .all().map(r => r.id);
+  assert.deepStrictEqual(hits, [2]);
+});
+
+it('§421: every JD product the label route accepts has a mode', () => {
+  const { JD_PRODUCTS, JD_PRODUCT_MODE } = require('../lib/jd');
+  for (const code of Object.keys(JD_PRODUCTS)) {
+    assert.ok(dc.LATE_AFTER_DAYS[JD_PRODUCT_MODE[code]], `${code} has no deadline`);
+  }
+});
+
+it('§421: the label route stores the product with the waybill it was booked for', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+  assert.match(src,
+    /waybill_product = \?, waybill_product_no = \?,[\s\S]{0,200}\.run\(waybill, derived, packageCount, product, waybill, shipment\.id\)/);
+});
+
+it('§421: the backfill reads the label log and matches on the waybill number', () => {
+  const upd = DB_SRC.match(/(UPDATE retail_shipments\s+SET waybill_product = \([\s\S]*?)`\)\.run\(\)/);
+  assert.ok(upd, 'backfill UPDATE not found in database.js');
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY, order_id INTEGER, tracking_carrier TEXT,
+             tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT);
+           CREATE TABLE activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, entity_type TEXT,
+             entity_id INTEGER, details TEXT, tenant_id INTEGER);`);
+  db.prepare(`INSERT INTO retail_shipments (id, order_id, tracking_carrier, tracking_number) VALUES
+    (1, 899, 'jd', 'JD-NEW'), (2, 900, 'jd', 'JD-X'), (3, 901, 'sf', 'SF1'), (4, 902, 'jd', 'JD-T2')`).run();
+  const log = db.prepare(`INSERT INTO activity_log (action, entity_type, entity_id, details, tenant_id) VALUES (?, 'retail_order', ?, ?, ?)`);
+  // 899 was cancelled and re-booked: the old waybill was air, the live one ground.
+  log.run('jd_waybill_created', 899, JSON.stringify({ waybill: 'JD-OLD', product: 'LL-SD-M' }), null);
+  log.run('jd_waybill_created', 899, JSON.stringify({ waybill: 'JD-NEW', product: 'LL-HD-M' }), null);
+  // 900's log names a different number — nothing to match, left alone.
+  log.run('jd_waybill_created', 900, JSON.stringify({ waybill: 'JD-Y', product: 'LL-HD-M' }), 1);
+  // 902's only matching row belongs to another account.
+  log.run('jd_waybill_created', 902, JSON.stringify({ waybill: 'JD-T2', product: 'LL-HD-M' }), 2);
+  db.exec(upd[1]);
+  const rows = db.prepare('SELECT id, waybill_product, waybill_product_no FROM retail_shipments ORDER BY id').all();
+  assert.deepStrictEqual(rows, [
+    { id: 1, waybill_product: 'LL-HD-M', waybill_product_no: 'JD-NEW' },
+    { id: 2, waybill_product: null, waybill_product_no: null },
+    { id: 3, waybill_product: null, waybill_product_no: null },
+    { id: 4, waybill_product: null, waybill_product_no: null },
+  ]);
 });
 
 console.log('\n  driver: better-sqlite3\n');
