@@ -75,15 +75,20 @@ named.forEach(([id, nid]) => {
 
 // The products Ash named, found by name in both languages.
 const hits = db.prepare(`
-  SELECT id, name_en, name_cn, variant_group_id FROM store_products
+  SELECT id, name_en, name_cn, variant_group_id,
+         (is_published = 1 AND COALESCE(is_active, 1) = 1) AS on_sale
+    FROM store_products
    WHERE lower(name_en) LIKE '%kombucha%' OR lower(name_en) LIKE '%ferment%'
       OR lower(name_en) LIKE '%tofu%'     OR name_cn LIKE '%康普茶%'
       OR name_cn LIKE '%发酵%'             OR name_cn LIKE '%腐乳%'
    ORDER BY variant_group_id, id`).all();
+// ON SALE is the shop's own filter (published and active, as /api/retail/products
+// reads it). A hidden listing with no notice cannot be added, so it is not a gap.
 console.log(`Products matching kombucha / ferment / tofu — ${hits.length}`);
 hits.forEach(p => {
   const c = cover.get(p.id);
   console.log(`  ${String(p.id).padStart(5)}  grp=${String(p.variant_group_id ?? '-').padEnd(5)} ` +
+    `${p.on_sale ? 'ON SALE ' : 'hidden  '}` +
     `${(p.name_en || p.name_cn || '').slice(0, 44).padEnd(44)}  ` +
     (c ? `notice ${JSON.stringify(c.nid)} (${c.how})` : '— NO NOTICE —'));
 });
