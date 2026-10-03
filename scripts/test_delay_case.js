@@ -485,6 +485,24 @@ it('a parcel delivered before the cutover raises nothing, whatever its mode', ()
     'only parcels delivered on or after the cutover may raise a case');
 });
 
+it('lateDays is 0 for a parcel that has not landed, as the query is', () => {
+  // TC000899: out for delivery, last synced two days after dispatch. The drawer
+  // drew the checklist off the sync time; the query, which needs a delivery,
+  // did not count it — so 'Mark handled' cleared no parcel and said it had.
+  const db = shipFixture();
+  db.prepare(`INSERT INTO retail_shipments (id,mode,dispatched_at,tracking_status,tracking_synced_at)
+              VALUES (?,?,?,?,?)`).run(1, 'air', '2026-10-01', 'out_for_delivery', '2026-10-03 08:41:00');
+  const row = db.prepare('SELECT * FROM retail_shipments WHERE id = 1').get();
+  const sqlN = db.prepare(`SELECT COUNT(*) AS n FROM retail_shipments WHERE ${dc.lateShipmentSql()}`).get().n;
+  assert.strictEqual(sqlN, 0, 'the query does not count a parcel still on the road');
+  assert.strictEqual(dc.lateDays(row), 0, 'so neither may the drawer');
+  // And once JD says delivered, without stamping delivered_at, both count it.
+  db.prepare(`UPDATE retail_shipments SET tracking_status = 'delivered' WHERE id = 1`).run();
+  const landed = db.prepare('SELECT * FROM retail_shipments WHERE id = 1').get();
+  assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM retail_shipments WHERE ${dc.lateShipmentSql()}`).get().n, 1);
+  assert.strictEqual(dc.lateDays(landed), 1);
+});
+
 it('lateDays mirrors the cutover, so no screen disagrees with the query', () => {
   // A drawer drawing a checklist the dashboard has filtered out is one screen
   // saying there is work and two saying there is none.
