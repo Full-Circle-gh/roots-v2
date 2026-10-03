@@ -4130,6 +4130,23 @@ addColumn('retail_shipments', 'waybill_product_no', 'TEXT');
 // account 1's (NULL = written before the column existed, which is account 1).
 // Matched on the waybill number itself, so a cancelled and re-booked label
 // takes the product of the waybill the parcel actually carries.
+//
+// AND ON THE PARCEL THE LABEL WAS BOOKED FOR, which v1 as first shipped did
+// not do. Two parcels can carry ONE waybill: TC000809's air and land halves
+// went out in one box under one air label. Matched on the number alone, the
+// land half took the air booking, was judged on air's day, and raised a fresh
+// "delivery delayed" on an order whose one box had been handled on 09-23. The
+// label route only ever writes the product on the parcel it booked; the
+// backfill now does the same — the log row's shipment_id must be this parcel,
+// or absent (rows logged before the route recorded it).
+const BOOKED_FOR_THIS_PARCEL = `
+                  a.action = 'jd_waybill_created' AND a.entity_type = 'retail_order'
+                  AND a.entity_id = retail_shipments.order_id
+                  AND (a.tenant_id IS NULL OR a.tenant_id = 1)
+                  AND json_valid(a.details)
+                  AND json_extract(a.details, '$.waybill') = retail_shipments.tracking_number
+                  AND (json_extract(a.details, '$.shipment_id') IS NULL
+                       OR json_extract(a.details, '$.shipment_id') = retail_shipments.id)`;
 try {
   db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
   const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('shipment_waybill_product_v1');
@@ -4138,28 +4155,37 @@ try {
       UPDATE retail_shipments
          SET waybill_product = (
                SELECT json_extract(a.details, '$.product') FROM activity_log a
-                WHERE a.action = 'jd_waybill_created' AND a.entity_type = 'retail_order'
-                  AND a.entity_id = retail_shipments.order_id
-                  AND (a.tenant_id IS NULL OR a.tenant_id = 1)
-                  AND json_valid(a.details)
-                  AND json_extract(a.details, '$.waybill') = retail_shipments.tracking_number
+                WHERE ${BOOKED_FOR_THIS_PARCEL}
                 ORDER BY a.id DESC LIMIT 1),
              waybill_product_no = tracking_number
        WHERE tracking_carrier = 'jd' AND tracking_number IS NOT NULL
          AND waybill_product IS NULL
          AND EXISTS (
                SELECT 1 FROM activity_log a
-                WHERE a.action = 'jd_waybill_created' AND a.entity_type = 'retail_order'
-                  AND a.entity_id = retail_shipments.order_id
-                  AND (a.tenant_id IS NULL OR a.tenant_id = 1)
-                  AND json_valid(a.details)
-                  AND json_extract(a.details, '$.waybill') = retail_shipments.tracking_number
+                WHERE ${BOOKED_FOR_THIS_PARCEL}
                   AND json_extract(a.details, '$.product') IS NOT NULL)
     `).run();
     console.log(`[migration shipment_waybill_product_v1] backfilled ${r.changes} parcels with their booked JD product`);
     db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('shipment_waybill_product_v1');
   }
 } catch (e) { console.error('[migration shipment_waybill_product_v1]', e); }
+// The correction, for a database where v1 already ran matched on the number
+// alone: take the booking back off any parcel the log never booked it for.
+// It then falls back to its own mode, exactly as a parcel with no JD booking
+// does. On a database where the corrected v1 ran, this finds nothing.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('shipment_waybill_product_v2');
+  if (!ran) {
+    const r = db.prepare(`
+      UPDATE retail_shipments
+         SET waybill_product = NULL, waybill_product_no = NULL
+       WHERE waybill_product IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM activity_log a WHERE ${BOOKED_FOR_THIS_PARCEL})
+    `).run();
+    console.log(`[migration shipment_waybill_product_v2] took the booking off ${r.changes} parcels it was never booked for`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('shipment_waybill_product_v2');
+  }
+} catch (e) { console.error('[migration shipment_waybill_product_v2]', e); }
 
 // §284 — THE COURIER COULD NOT REACH THE CUSTOMER, KEPT UNTIL SOMEONE ANSWERS
 // FOR IT. `tracking_scenario` is classified from the NEWEST carrier line only,

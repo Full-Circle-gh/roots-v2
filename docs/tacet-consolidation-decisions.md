@@ -28053,3 +28053,23 @@ according to air."*
    from a cancelled label, the running-late twin, every bookable product
    having a deadline, and the backfill run against a log with a re-booked
    label and another account's row.
+8. **Amended 2026-10-03, same day: the booking belongs to the parcel the label
+   was booked for.** As first shipped, the backfill matched the log on the
+   waybill number alone. TC000809 (placed 09-20) went out as an air and a land
+   parcel; the land half had its own ground label, then took the air box's
+   number when the two were packed together. Matched on the number, the land
+   half took the air booking, was judged on air's one day, and raised a fresh
+   "delivery delayed" on an order whose one box had been handled on 09-23.
+   Reported by Ash: *"this is an old delivery why it show me now"*. The
+   backfill now also requires the log row's `shipment_id` to be this parcel
+   (or absent, for rows logged before the route recorded it), which is what
+   the label route has always done for new labels. A one-shot correction,
+   `shipment_waybill_product_v2`, takes the booking off any parcel the log
+   never booked it for. Measured on live data before the fix
+   (`scripts/diagnose_booked_mode_lateness.js` via the read-only query
+   workflow): §421 had newly marked exactly one parcel late, TC000809's land
+   half; the correction clears exactly that parcel and leaves 0 newly late;
+   636 other parcels keep their booking. **The lesson is the CASES_FROM lesson again (lib/delay-case.js),
+   from a new direction:** a backfill that changes a live alert's input is a
+   widening too, and must be measured against live data before it ships, not
+   after.
