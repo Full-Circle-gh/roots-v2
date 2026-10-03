@@ -14145,6 +14145,29 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   font: 400 13px/1.5 var(--f-sans); color: var(--td-text2);
 }
 .wst-modal .wst-hint.warn { color: var(--td-amber-ink); }
+/* §423 — the list. Bounded like the picker: it scrolls inside its own box rather
+   than growing the modal, so the Record button never leaves the screen. */
+.wst-modal .wst-list {
+  margin-top: 8px; text-align: left;
+  max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--td-border); border-radius: 8px;
+}
+.wst-modal .wst-list-h {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 12px; font: 500 13px/1.4 var(--f-sans); color: var(--td-text2);
+  border-bottom: 1px solid var(--td-border);
+}
+.wst-modal .wst-li {
+  display: grid; grid-template-columns: 24px 1fr 80px 150px auto; gap: 8px;
+  align-items: center; padding: 8px 12px;
+  border-bottom: 1px solid var(--td-border);
+}
+.wst-modal .wst-li:last-child { border-bottom: none; }
+.wst-modal .wst-li.bad { outline: 2px solid var(--td-brick-ink); outline-offset: -2px; }
+.wst-modal .wst-li-n { font: 400 13px/1.4 var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.wst-modal .wst-li-p { display: flex; flex-direction: column; min-width: 0; font: 400 14px/1.4 var(--f-sans); }
+.wst-modal .wst-li-m { font: 400 12px/1.4 var(--f-sans); color: var(--td-text2); }
+.wst-modal .wst-li-note { grid-column: 2 / -1; }
 
   /* ════════════════════════════════════════════════════════════════════
      PRODUCT BUILD LIST — the "Cost & Pricing" pane (Step 3,

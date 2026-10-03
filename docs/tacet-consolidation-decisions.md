@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.463
+# Tacet shared-core consolidation — decisions record, v4.464
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-03 · v4.464 — **§423 · WASTE IS RECORDED AS A LIST, NOT ONE PRODUCT AT A TIME — DECIDED BY ASH:** *"Staff asking to create to input the waste as a list, not as a one by one product because it takes too much time and it's not efficient"*, then, on phone and PC, *"reasons should be able to change … most of the time the response is expired"*. The Record sheet (phone) and Record dialog (desktop) gain **Add to list**: pick a product, set a quantity, add it, repeat, then record the whole list with one button. Each line carries its own reason and note, and the reason **starts at Expired**. The list is written by one new call, `POST /waste/bulk`, **all or nothing**: one line the shelf cannot cover refuses the lot, names the line, and writes nothing. **AMENDS the phone sheet's "reason left unset" rule** (the reason it gave still stands; §423 point 2 says what replaces the guard). The single entry is unchanged and returns whenever the list is empty. See §423.
 
 2026-10-03 · v4.463 — **§422 · A PRODUCT'S WARNING SITS ON THE CHECKOUT RECEIPT, EVERY TIME, AND A TAP OPENS THE FULL CARD — DECIDED BY ASH:** *"i was thinknig to add here an attention message , maybe if clicking on it , it open the poop up ? … so even if he forgot aobut it , at the chekcout page he wont miss it"*, then *"it shoulf also give an option to open the full pop up notice"* and *"go"*. **AMENDS §197's "NOT A FIFTH CHECKOUT NOTICE" IN ITS LETTER, NOT ITS REASON.** §197 kept product care out of the checkout because a MODAL there would stand between a shopper and payment and land on §196's delivery notices. This is not a modal: it is a line under the product on the receipt, like the drop-ship tag beside it, and it opens nothing until tapped. **WHY IT IS NEEDED:** the add-to-cart card shows once per phone per notice version (§197's seen-mark), so a returning customer meets it once and never again, and the one who did tapped it away while choosing flavours. **WHAT IT IS:** under each receipt line whose product carries a notice, a box with the notice's own title and *Read full notice · 查看详情 ›*; a tap opens the same card the add raised, with the whole text. Both clients: `miniapp/pages/checkout` and `public/shop.html` (`coLoadLineNotices`, `coNoteTag`). **A TAP SPENDS NOTHING:** opening it from the receipt does not mark it seen, or a customer who read it there first would lose the card on the add it was meant for. **THE CHECKOUT'S CARD NEVER OPENS BY ITSELF:** the mini-app card gains a `passive` mode that never drains the add-to-cart queue, so §196's rule holds. **ONE RESOLVER STILL:** the line reads `cart_notice` off `/api/retail/products?ids=…`, which the server stamps — not the cart line (stale from the day it was added) and not the quote (which waits for an address the receipt is drawn without). No new Chinese is composed: `查看详情` is copied whole from the block renderer's live button label; see `docs/tacet-delivery-vocabulary.md` v1.306. Tests: `scripts/test_cart_notice.js` §7 (11 new); two were re-run against deliberately broken copies and failed. `npm run test:fast` 492/492. The mini-app half reaches customers only after an upload and WeChat review; the web half on deploy. No schema, no migration, no change to `.gitignore` or CI.
 
@@ -28096,3 +28098,70 @@ never covered.
    and WeChat review before customers see it.
 
 See the v4.463 changelog entry.
+
+
+## §423 — WASTE IS RECORDED AS A LIST, NOT ONE PRODUCT AT A TIME
+
+**Decided 2026-10-03 by Ash.** Staff reported that recording a clean-out one
+product at a time takes too long. Asked whether this should be phone, desktop or
+both, Ash said both, and that the reason must be changeable per line, with
+*expired* the usual answer.
+
+1. **A list, built where the entry already is.** The phone's Record sheet and the
+   desktop's Record dialog each gain **Add to list**. The operator picks a
+   product, sets a quantity, adds it, and repeats; one button then records the
+   whole list. The single entry is untouched and is what the screen does while
+   the list is empty. The list belongs to one store, so the store cannot change
+   while it has lines.
+2. **Each line has its own reason and note, and the reason starts at Expired.**
+   The reason is kept for the next line, because a clean-out is one reason after
+   another, and can be changed on any line. **This reverses the phone sheet's old
+   rule that the reason is left unset.** That rule's reason still stands: a
+   pre-picked reason is the one field somebody in a hurry does not re-read, and
+   *spoiled*, *expired* and *staff consumption* are different facts (§32 rule 8).
+   What replaces the guard is that a list line always SHOWS its reason in its own
+   drop-down, so a wrong one is on screen before Record is pressed. The server
+   never defaults: a line with no valid reason is refused exactly as the single
+   write refuses it. `other` still needs a note, per line.
+3. **All or nothing.** `POST /api/retail-admin/waste/bulk` takes
+   `{ location_id, items: [{ store_product_id, qty, reason_code, note }] }`,
+   checks every line, then writes every line inside one transaction. A line that
+   fails rolls back all of them and the refusal carries `line` (0-based) so the
+   screen can mark it. The alternative, saving the good lines and skipping the
+   bad, was rejected: staff would believe the whole clean-out is in while stock
+   quietly disagrees with the paper they wrote it from.
+4. **The same product on two lines is checked together.** Two reasons for the
+   same product is normal (one jar dropped in a batch that expired). The shelf
+   must cover both; the server reads on-hand inside the transaction, line by
+   line, so the second line is the one refused. Neither client merges lines.
+5. **One cost, one costing, one ledger.** Each line goes through
+   `recordProductWaste` (`lib/waste-record.js`), the same writer the single entry
+   and Production use. The checks every line passes (quantity, whole units,
+   reason, note-for-other) moved into one helper in `routes/retail-waste.js`
+   that both the single and the list write call.
+6. **The money gate is unchanged.** A caller without `waste:costs` is sent no
+   cost on the list response (`costs_hidden`), and the confirming toast carries a
+   count only. With it, the toast adds the total and counts uncosted lines
+   instead of summing them as zero (§32 rule 10).
+7. **Limits.** At most 100 lines per list. On the phone the list survives
+   closing the sheet (a long list lost to one stray tap is the worst failure this
+   feature has) and is emptied by Clear, by a successful Record, and by nothing
+   else.
+8. **Not built, and not recommended yet: paste a list or import a spreadsheet.**
+   Matching typed names to real products would be wrong often, and a wrong match
+   on a stock write is silent. Revisit only if staff still find the list slow.
+9. **Ships with the deploy.** The staff phone app (`public/m.html`) and the
+   desktop admin are both served by the server; nothing here touches the customer
+   mini program, so no WeChat upload or review is involved.
+
+**Known cost of point 2, stated so it can be weighed later:** with Expired as the
+default, a lazy tap records a spoiled or damaged item as expired. The visible
+per-line reason is the whole defence. If the waste report starts showing
+suspiciously high Expired, this is the first place to look.
+
+Tests: `scripts/test_waste_bulk.js` (server, in-memory SQLite),
+`scripts/test_mobile_waste_list.js` (phone logic), `scripts/test_waste_bulk_desktop.js`
+(desktop dialog in Chromium) and the phone's render cases in
+`scripts/test_mobile_waste.js`.
+
+See the v4.464 changelog entry.

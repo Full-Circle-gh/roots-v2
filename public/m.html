@@ -1497,6 +1497,12 @@ const state = {
           detailMounted / prodMounted / custMounted. */
        open:false,mounted:false,busy:false,formErr:null,
        storeId:null,pick:null,qty:1,code:'',note:'',q:'',
+       /* §423 — the list being built. Lives with the LEDGER half's lifetime, not
+          the form's: wasteNew does not reset it, because a long list lost to one
+          stray tap on the scrim is the worst failure this feature has. Cleared
+          by a successful Record, by Clear, and by nothing else. `badLine` is the
+          line the server refused, outlined until the list changes. */
+       list:[],badLine:null,
        /* TWO sequence counters, not one. The picker and the cost preview are
           two independent races — a keystroke supersedes a keystroke, a
           quantity tap supersedes a quantity tap — and sharing a counter makes
@@ -5048,12 +5054,14 @@ reg('wasteNew', ()=>{
   const w=state.wst, stores=state.stores||[];
   w.open=true; w.busy=false; w.formErr=null;
   w.pick=null; w.qty=1; w.note=''; w.q=''; w.picks=null; w.pickErr=null; w.preview=null;
-  /* The reason is left UNSET rather than defaulted to Spoiled. A pre-picked
-     reason is the one field somebody in a hurry will not re-read, and
-     "spoiled" and "staff consumption" are a different fact about the same
-     jar — §32 rule 8 keeps them apart precisely so the number can be acted
-     on, which a default quietly undoes. */
-  w.code='';
+  /* §423 — DEFAULTS TO EXPIRED, by Ash's word: nearly every write-off is an
+     expiry. This reverses the old "left UNSET" rule, whose reason still stands:
+     a pre-picked reason is the one field somebody in a hurry will not re-read,
+     and "spoiled" and "staff consumption" are a different fact about the same
+     jar (§32 rule 8). The guard that replaces it is that a list line always
+     SHOWS its reason in its own drop-down, so a wrong one is on screen before
+     Record is pressed. */
+  w.code='expired';
   /* One store, no question: it is not a choice (§1.9). The filter's store is
      preferred over the first in the list — somebody who narrowed the ledger to
      Panyu and then pressed Record means Panyu. */
@@ -5067,6 +5075,7 @@ reg('wasteNew', ()=>{
 reg('wstClose', ()=>{ state.wst.open=false; state.wst.mounted=false; state.wst.formErr=null; render(); });
 reg('wstPickStore', id=>{ const w=state.wst;
   if(String(w.storeId)===String(id)) return;
+  if(w.list.length) return;   // §423: the list belongs to one shelf; the chips are disabled while it has lines
   /* A different shelf holds different stock, so the chosen product and its
      on-hand no longer mean anything — dropped rather than carried across. */
   w.storeId=Number(id); w.pick=null; w.picks=null; w.preview=null; w.q=''; render(); loadWastePicks(); });
@@ -5134,6 +5143,71 @@ reg('wstSave', ()=>{
     w.formErr=(e.code==='insufficient_stock'||e.code==='note_required_for_other'||e.code==='waste_disabled')
       ? e.message
       : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
+/* ── §423 — the list. Add a line, change it, remove it, record all of it. ──
+   Every line carries its own reason and note; the list is saved by ONE call
+   (POST /waste/bulk) that writes all of it or none of it. Lines are numbered on
+   screen because a refusal names one ("line 3"). */
+const wstNm=l=>T(l.name_en||l.name_cn||'', l.name_cn||l.name_en||'');
+reg('wstAdd', ()=>{
+  const w=state.wst;
+  if(wstBlocked()) return;
+  w.list.push({pid:w.pick.id,name_en:w.pick.name_en,name_cn:w.pick.name_cn,sku:w.pick.sku,
+    on_hand:Number(w.pick.on_hand),qty:w.qty,code:w.code,note:w.note.trim()});
+  /* The reason is KEPT for the next line — a clean-out is one reason after
+     another. Product, quantity and note are the per-item half and reset. */
+  w.pick=null; w.qty=1; w.note=''; w.q=''; w.preview=null; w.formErr=null; w.badLine=null;
+  render(); loadWastePicks();
+});
+const wstLineArgs=s=>{ const k=String(s).indexOf(':'); return [Number(String(s).slice(0,k)),String(s).slice(k+1)]; };
+reg('wstLineQty', s=>{ const w=state.wst,[i,d]=wstLineArgs(s), l=w.list[i]; if(!l) return;
+  l.qty=Math.max(1,Math.min(l.on_hand,l.qty+Number(d))); w.badLine=null; w.formErr=null; render(); });
+reg('wstLineCode', s=>{ const w=state.wst,[i,c]=wstLineArgs(s), l=w.list[i]; if(!l) return;
+  l.code=c; w.badLine=null; w.formErr=null; render(); });
+reg('wstLineNote', s=>{ const w=state.wst,[i,v]=wstLineArgs(s), l=w.list[i]; if(!l) return;
+  const el=document.getElementById('mWstLN'+i);
+  l.note=v; state.focus={id:'mWstLN'+i,pos:el?el.selectionStart:null}; w.badLine=null; render(); });
+reg('wstLineRm', i=>{ const w=state.wst; w.list.splice(Number(i),1); w.badLine=null; w.formErr=null; render(); });
+reg('wstListClear', ()=>{ const w=state.wst; w.list=[]; w.badLine=null; w.formErr=null; render(); });
+reg('wstSaveList', ()=>{
+  const w=state.wst;
+  if(w.busy||!w.list.length||wstListBlocked()) return;
+  w.busy=true; w.formErr=null; w.badLine=null; render();
+  const n=w.list.length;
+  apiWrite('/waste/bulk',{location_id:Number(w.storeId),
+    items:w.list.map(l=>({store_product_id:l.pid,qty:l.qty,reason_code:l.code,note:l.note||null}))})
+  .then(j=>{
+    const rows=(j&&j.data)||[];
+    w.busy=false; w.open=false; w.list=[];
+    /* The toast is a money surface (see wstSave): the total only for somebody
+       who may read one. Uncosted lines are counted, never summed as zero. */
+    let msg=T('Recorded '+n+(n===1?' item':' items'),'已登记 '+n+' 条');
+    if(wstShowMoney()){
+      const unc=rows.filter(r=>r.is_uncosted).length;
+      const cents=rows.reduce((a,r)=>a+(r.is_uncosted?0:Number(r.cost_total_cents||0)),0);
+      msg+=' · '+wstMoney(cents);
+      if(unc) msg+=' · '+T(unc+' with no cost on file','其中 '+unc+' 条暂无成本');
+    }
+    showToast(msg);
+    loadWaste(true); render();
+  })
+  .catch(e=>{
+    w.busy=false;
+    if(String(e.message)==='auth') return;
+    const b=e.body||{}, at=Number.isInteger(b.line)?b.line:null;
+    w.badLine=at;
+    const none=T(' Nothing has changed.','数据没有变化。');
+    if(e.code==='insufficient_stock'&&at!==null){
+      w.formErr=T('Line '+(at+1)+': only '+b.on_hand+' on hand, '+b.requested+' asked.','第 '+(at+1)+' 行：库存只有 '+b.on_hand+'，登记了 '+b.requested+'。')+none;
+    } else if(at!==null){
+      w.formErr=T('Line '+(at+1)+' did not pass.','第 '+(at+1)+' 行未通过。')+none;
+    } else if(e.code==='waste_disabled'){
+      w.formErr=e.message;
+    } else {
+      w.formErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    }
     render();
   });
 });
@@ -13881,6 +13955,51 @@ function wstBlocked(){
   if(w.code==='other'&&!w.note.trim()) return T('Tell us what happened.','请填写备注说明。');
   return '';
 }
+/* §423 — the same job as wstBlocked, for the list: one place decides, and it
+   always says why. Quantities are summed PER PRODUCT across lines, because the
+   same product can sit on two lines (two reasons) and the shelf has to cover
+   both together — the server checks the same thing, in order, inside its
+   transaction, and is the backstop. */
+function wstListBlocked(){
+  const w=state.wst, used={};
+  if(w.pick) return T('Add the chosen product to the list first.','请先将所选产品加入清单。');
+  for(const l of w.list){
+    if(l.code==='other'&&!l.note.trim())
+      return T('Tell us what happened for '+wstNm(l)+'.','请填写「'+wstNm(l)+'」的备注说明。');
+    used[l.pid]=(used[l.pid]||0)+l.qty;
+    if(used[l.pid]>l.on_hand)
+      return T('Only '+l.on_hand+' of '+wstNm(l)+' on hand.','「'+wstNm(l)+'」库存只有 '+l.on_hand+'。');
+  }
+  return '';
+}
+function wstListHtml(){
+  const w=state.wst; if(!w.list.length) return '';
+  const rs=w.reasons||[];
+  const rows=w.list.map((l,i)=>{
+    const bad=w.badLine===i;
+    const opts=(rs.some(r=>r.code===l.code)?rs:rs.concat([{code:l.code,en:l.code,cn:l.code}])).map(r=>
+      `<option value="${escAttr(r.code)}"${r.code===l.code?' selected':''}>${T(r.en,r.cn)}</option>`).join('');
+    return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px;${bad?'outline:2px solid var(--brick-ink);':''}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="num" style="flex:none;font-size:13px;color:var(--text-secondary);min-width:18px">${i+1}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(wstNm(l))}</span>
+          <span class="num" style="font-size:12px;color:var(--text-secondary)">${T(l.on_hand+' on hand','库存 '+l.on_hand)}${l.sku?' · '+escAttr(l.sku):''}</span></span>
+        <button class="iconbtn" style="width:36px;height:36px;margin-right:-4px" aria-label="${T('Remove','移除')}" onclick="APP.cmd('wstLineRm',${i})">${ic('x',20,2)}</button></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="stepbtn" onclick="APP.cmd('wstLineQty','${i}:-1')" ${l.qty<=1?'disabled':''} aria-label="${T('Less','减少')}">${ic('minus',20)}</button>
+        <span class="num" style="min-width:34px;text-align:center;font-size:20px;font-weight:500">${l.qty}</span>
+        <button class="stepbtn" onclick="APP.cmd('wstLineQty','${i}:1')" ${l.qty>=l.on_hand?'disabled':''} aria-label="${T('More','增加')}">${ic('plus',20)}</button>
+        <select aria-label="${T('Reason','原因')}" style="flex:1;min-width:0" onchange="APP.cmd('wstLineCode','${i}:'+this.value)">${opts}</select></div>
+      ${l.code==='other'?`<input id="mWstLN${i}" value="${escAttr(l.note)}" placeholder="${T('What happened?','发生了什么？')}" style="width:100%" oninput="APP.cmd('wstLineNote','${i}:'+this.value)">`:''}
+    </div>`;
+  }).join('');
+  return `<div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span class="eyebrow">${T('List','清单')} · <span class="num">${w.list.length}</span></span>
+      <button style="background:none;border:none;color:var(--text-secondary);font-size:13px;padding:6px 0" onclick="APP.cmd('wstListClear')">${T('Clear','清除')}</button></div>
+    ${rows}</div>`;
+}
 /* The results fragment ALONE — never the input above it. loadWastePicks()
    patches this element's innerHTML directly instead of going through
    render() while the operator is still typing, so #mWstQ itself is never
@@ -13907,7 +14026,7 @@ function sheetWaste(){
     <div style="display:flex;flex-direction:column;gap:6px">
       <span class="eyebrow">${T('Store','门店')}</span>
       <div class="hscroll" style="display:flex;gap:8px">${stores.map(s=>
-        `<button class="chip ${String(w.storeId)===String(s.id)?'on':''}" onclick="APP.cmd('wstPickStore',${s.id})"><span>${escAttr(LANG==='en'?(s.name_en||s.name_cn):(s.name_cn||s.name_en))}</span></button>`).join('')}</div>
+        `<button class="chip ${String(w.storeId)===String(s.id)?'on':''}" ${w.list.length?'disabled style="opacity:.55"':''} onclick="APP.cmd('wstPickStore',${s.id})"><span>${escAttr(LANG==='en'?(s.name_en||s.name_cn):(s.name_cn||s.name_en))}</span></button>`).join('')}</div>
     </div>` : '';
   /* Chosen product: the search field is replaced by the thing it found, with
      ON-HAND under the NAME rather than under the stepper. The API refuses a
@@ -13962,7 +14081,15 @@ function sheetWaste(){
      shelf figure is not money and is the more useful of the two to somebody
      standing in front of it. */
   const shelfAfter = w.pick ? `${T('Stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>` : '';
-  const costLine = blocked
+  /* §423 — with lines on the list the foot speaks for the LIST: its refusal, or
+     how many it will record. The single-entry foot above is untouched and
+     returns the moment the list is empty. */
+  const listMode=w.list.length>0, listBlock=listMode?wstListBlocked():'';
+  const nL=w.list.length;
+  const addBtn = w.pick ? `<button class="btn2" ${blocked?'disabled':''} style="${blocked?'opacity:.55':''}" onclick="APP.cmd('wstAdd')">${ic('plus',18)} ${T('Add to list','加入清单')}</button>` : '';
+  const costLine = listMode
+    ? (listBlock ? `<span style="color:var(--amber-ink)">${listBlock}</span>` : '&nbsp;')
+    : blocked
     ? `<span style="color:var(--amber-ink)">${blocked}</span>`
     : !wstShowMoney()
       ? (shelfAfter || '&nbsp;')
@@ -13996,7 +14123,7 @@ function sheetWaste(){
           and tapping one threw the sheet back to the top, which is the same
           "it jumps" the entrance animation was causing one layer up. */''}
      <div id="mWstBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
-       ${storeRow}${product}${w.pick?qty:''}${w.pick?reasons:''}${w.pick?note:''}
+       ${storeRow}${wstListHtml()}${product}${w.pick?qty:''}${w.pick?reasons:''}${w.pick?note:''}${addBtn}
        ${/* §1.12 error — a failed write renders where the operator is looking
             and STAYS. Never a toast that flies away: a loss the operator
             believes was recorded and was not is worse than one they know
@@ -14007,7 +14134,9 @@ function sheetWaste(){
      </div>
      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
        <div style="font-size:13px;color:var(--text-secondary);min-height:18px">${costLine}</div>
-       <button class="cta" ${blocked||w.busy?'disabled':''} style="${blocked||w.busy?'opacity:.55':''}" onclick="APP.cmd('wstSave')">${w.busy?T('Recording…','登记中…'):T('Record waste','记录损耗')}</button></div></div>`;
+       ${listMode
+         ? `<button class="cta" ${listBlock||w.busy?'disabled':''} style="${listBlock||w.busy?'opacity:.55':''}" onclick="APP.cmd('wstSaveList')">${w.busy?T('Recording…','登记中…'):T('Record '+nL+(nL===1?' item':' items'),'登记 '+nL+' 条')}</button>`
+         : `<button class="cta" ${blocked||w.busy?'disabled':''} style="${blocked||w.busy?'opacity:.55':''}" onclick="APP.cmd('wstSave')">${w.busy?T('Recording…','登记中…'):T('Record waste','记录损耗')}</button>`}</div></div>`;
 }
 
 /* ==========================================================================

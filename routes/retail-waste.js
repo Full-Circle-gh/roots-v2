@@ -354,6 +354,28 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
   res.json({ success: true, data: rows, totals });
 });
 
+// The three checks every written loss passes, in one place so the single write
+// and the list write (§423) cannot disagree about what a valid line is. Returns
+// the 400 body, or null when the line is fine.
+function refuseLine(qty, reason, note) {
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return { error: 'qty_positive_required', message: 'Quantity must be greater than zero.' };
+  }
+  // Products are counted in whole units (§7). The stock column is an INTEGER,
+  // so a fractional quantity would be recorded in full on the waste row and
+  // truncated on the movement — the two records would disagree by design.
+  if (!Number.isInteger(qty)) {
+    return { error: 'qty_whole_units_required', message: 'Products are counted in whole units.' };
+  }
+  if (!REASON_CODES.has(reason)) {
+    return { error: 'reason_invalid', allowed: [...REASON_CODES] };
+  }
+  if (reason === 'other' && !note) {
+    return { error: 'note_required_for_other', message: 'Tell us what happened when the reason is Other.' };
+  }
+  return null;
+}
+
 // ── POST / — record a loss ───────────────────────────────────────────────────
 router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (req, res) => {
   const db = tdb();
@@ -380,21 +402,8 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
 
   if (!locationId) return res.status(400).json({ error: 'location_required' });
   if (!productId)  return res.status(400).json({ error: 'store_product_id_required' });
-  if (!Number.isFinite(qty) || qty <= 0) {
-    return res.status(400).json({ error: 'qty_positive_required', message: 'Quantity must be greater than zero.' });
-  }
-  // Products are counted in whole units (§7). The stock column is an INTEGER,
-  // so a fractional quantity would be recorded in full on the waste row and
-  // truncated on the movement — the two records would disagree by design.
-  if (!Number.isInteger(qty)) {
-    return res.status(400).json({ error: 'qty_whole_units_required', message: 'Products are counted in whole units.' });
-  }
-  if (!REASON_CODES.has(reason)) {
-    return res.status(400).json({ error: 'reason_invalid', allowed: [...REASON_CODES] });
-  }
-  if (reason === 'other' && !note) {
-    return res.status(400).json({ error: 'note_required_for_other', message: 'Tell us what happened when the reason is Other.' });
-  }
+  const lineRefusal = refuseLine(qty, reason, note);
+  if (lineRefusal) return res.status(400).json(lineRefusal);
 
   // `unit` is left EMPTY for a product unless the caller states one. A product
   // subject is counted in whole selling units by definition (§7, and the
@@ -443,6 +452,93 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
     }
     console.error('[waste] record failed:', e);
     res.status(500).json({ error: 'record_failed', message: e.message });
+  }
+});
+
+// ── POST /bulk — record a list of losses at once (§423) ──────────────────────
+//
+// ALL OR NOTHING. A list where the good lines save and the bad ones are skipped
+// leaves staff believing the whole clean-out is in, with stock quietly
+// disagreeing with the paper they wrote it from. So every line is checked first,
+// then every line is written inside ONE transaction, and a failure on any line
+// rolls back all of them. The refusal names the line (`line`, 0-based) so the
+// screen can point at it.
+//
+// EACH LINE CARRIES ITS OWN REASON AND NOTE. A clean-out is usually all
+// "expired", and sometimes one jar in it was dropped. The client defaults the
+// reason; the server never does — a line without a valid reason is refused
+// exactly as it is on the single write.
+//
+// THE SAME PRODUCT MAY APPEAR ON MORE THAN ONE LINE (two reasons for the same
+// product). That needs no merging: recordProductWaste reads on-hand inside the
+// transaction, so the second line sees the stock the first one left and is
+// refused if the shelf cannot cover both. Not clamped, not merged away.
+const MAX_BULK_LINES = 100;
+router.post('/api/retail-admin/waste/bulk', requireRetailAdmin, requireWasteEnabled, (req, res) => {
+  const db = tdb();
+  const b = req.body || {};
+  const items = Array.isArray(b.items) ? b.items : null;
+  if (!items || !items.length) return res.status(400).json({ error: 'items_required', message: 'Add at least one product to the list.' });
+  if (items.length > MAX_BULK_LINES) {
+    return res.status(400).json({ error: 'too_many_lines', max: MAX_BULK_LINES, message: `A list can hold up to ${MAX_BULK_LINES} lines.` });
+  }
+
+  const locationId = Number(b.location_id);
+  if (!locationId) return res.status(400).json({ error: 'location_required' });
+  const location = db.prepare('SELECT id FROM retail_stores WHERE id = ?').get(locationId);
+  if (!location) return res.status(404).json({ error: 'location_not_found' });
+
+  // Validate EVERYTHING before writing anything, so a bad line 7 is reported
+  // before line 1 has touched stock.
+  const lines = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i] || {};
+    const productId = Number(it.store_product_id);
+    const qty = Number(it.qty);
+    const reason = String(it.reason_code || '');
+    const note = it.note == null ? null : String(it.note).trim() || null;
+    if (!productId) return res.status(400).json({ error: 'store_product_id_required', line: i });
+    const refusal = refuseLine(qty, reason, note);
+    if (refusal) return res.status(400).json({ ...refusal, line: i });
+    const product = db.prepare('SELECT id, name_en FROM store_products WHERE id = ?').get(productId);
+    if (!product) return res.status(404).json({ error: 'product_not_found', line: i });
+    lines.push({ productId, qty, reason, note, name: product.name_en, unit: it.unit });
+  }
+
+  const actor = actorOf(req);
+  const businessDate = businessDateForLocation(db, locationId);
+
+  let at = 0;   // the line being written, so a refusal can name it
+  try {
+    const rows = db.transaction(() => {
+      return lines.map((l, i) => {
+        at = i;
+        const wasteId = recordProductWaste({
+          db, locationId, productId: l.productId, qty: l.qty, unit: l.unit,
+          reason: l.reason, note: l.note, actor, businessDate,
+        });
+        return db.prepare(`SELECT ${ROW_COLS} FROM waste_records WHERE id = ?`).get(wasteId);
+      });
+    })();
+
+    // Logged after the commit, one entry per line, same shape as the single
+    // write — the audit trail keeps the real figure.
+    rows.forEach((out, i) => logActivity(actor.id, actor.label, 'create', 'waste_record', out.id,
+      { product: lines[i].name, qty: lines[i].qty, reason: lines[i].reason, cost_total_cents: out.cost_total_cents, bulk: true }, req.ip));
+
+    if (!canSeeCosts(req)) return res.json({ success: true, costs_hidden: true, data: rows.map(stripCost) });
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    if (e.message === 'insufficient_stock') {
+      return res.status(409).json({
+        error: 'insufficient_stock',
+        line: at,
+        message: `Only ${e.detail.on_hand} on hand at this location — cannot write off ${e.detail.requested}.`,
+        ...e.detail,
+      });
+    }
+    console.error('[waste] bulk record failed:', e);
+    res.status(500).json({ error: 'record_failed', line: at, message: e.message });
   }
 });
 

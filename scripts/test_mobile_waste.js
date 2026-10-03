@@ -146,12 +146,35 @@ const CASES = [
     ['no product carried over', `state.wst.pick===null`],
     ['quantity back to one',    `state.wst.qty===1`],
     ['the note is gone',        `state.wst.note===''`],
-    ['no reason pre-picked',    `state.wst.code===''`],
+    // §423: Ash's word — nearly every write-off is an expiry.
+    ['reason starts at Expired', `state.wst.code==='expired'`],
     ['but the shelf is remembered', `state.wst.storeId===1`],
   ]],
   ['a different shelf drops the product chosen on the last one', `${FORM}APP.cmd('wstPickStore',2);`, [
     ['product cleared', `state.wst.pick===null`],
     ['and its cost with it', `state.wst.preview===null`],
+  ]],
+  // §423 — the list. The logic is pinned in test_mobile_waste_list.js; these are
+  // the parts only a real render can answer: that the controls are on the sheet
+  // and that they say what they should.
+  ['Add to list is offered once a product is chosen', FORM, [
+    ['the button is there', `sheetText().includes('Add to list')`],
+    ['and live',            `!/disabled/.test([...document.querySelectorAll('.sheet button')].find(b=>b.textContent.includes('Add to list')).outerHTML)`],
+  ]],
+  ['and not before one is', `${OPEN}APP.cmd('wasteNew');`, [
+    ['no Add to list yet', `!sheetText().includes('Add to list')`],
+  ]],
+  ['a product on the list', `${FORM}APP.cmd('wstAdd');`, [
+    ['the line shows',              `sheetText().includes('Oat milk 1L')&&sheetText().includes('List · 1')`],
+    ['the foot records the list',   `sheetText().includes('Record 1 item')`],
+    ['not the single entry',        `!sheetText().includes('Record waste')||document.querySelector('.sheet .cta').textContent.includes('Record 1 item')`],
+    ['the line shows its reason',   `!!document.querySelector('.sheet select option[selected][value="spoiled"]')`],
+    ['the item half starts over',   `state.wst.pick===null&&state.wst.qty===1`],
+    ['the shelf cannot change under it', `document.querySelectorAll('.sheet .chip[disabled]').length===2`],
+  ]],
+  ['the list in Chinese', `LANG='zh';${FORM}APP.cmd('wstAdd');`, [
+    ['the foot',   `document.querySelector('.sheet .cta').textContent.includes('登记 1 条')`],
+    ['the heading', `sheetText().includes('清单')`],
   ]],
   // waste:view is a real grant on its own — an owner reading what the shop lost
   // holds it without waste:record — so the SCREEN is view and the BUTTON is
