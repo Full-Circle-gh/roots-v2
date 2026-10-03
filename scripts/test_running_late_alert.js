@@ -77,7 +77,8 @@ function fixture() {
     CREATE TABLE retail_orders (id INTEGER PRIMARY KEY, status TEXT);
     CREATE TABLE retail_delay_cases (id INTEGER PRIMARY KEY, shipment_id INTEGER);
     CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY, order_id INTEGER, mode TEXT,
-      dispatched_at TEXT, delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT);`);
+      dispatched_at TEXT, delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
+      tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT);`);
   return db;
 }
 const PARCELS = [

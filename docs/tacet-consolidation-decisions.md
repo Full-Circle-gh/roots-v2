@@ -28006,3 +28006,50 @@ the staff phone app only.
    zoom: a shopper reading a shop is not using an app shell.
 5. **Test.** `scripts/test_mobile_zoom_off.js` (fast shard) pins the tag, the
    keys it kept, and that the customer pages still allow zoom.
+
+## §421 — A LATE PARCEL IS JUDGED BY THE SERVICE JD WAS BOOKED ON
+
+**Decided 2026-10-03 by Ash** (*"go"*), on Claude's survey of TC000899: *"order
+eventually shipped by land but the dispute because of delay was calculated
+according to air."*
+
+1. **What happened.** TC000899 was planned as air and booked on 生鲜标快
+   (ground) at the label, as §381 allows. §381 deliberately never rewrites the
+   parcel's `mode`, so the parcel stayed `air`, and the late rule
+   (`LATE_AFTER_DAYS` in `lib/delay-case.js`) gave it air's one day. It showed
+   "1 day late" on day two, and staff filed a claim with JD that JD would
+   rightly refuse: by ground's three days it was not due until 10-04. Every
+   Fujian / Guangxi air parcel had the same hole, since those book ground by
+   default (`jd.isLandDefaultProvince`).
+2. **The rule.** The late rule judges a parcel by the JD service it was booked
+   on, both ways: a ground product (`LL-HD-M`, `ed-m-0001`) gets land's figure
+   and an air product (`LL-SD-M`, `ed-m-0002`) air's. With no JD booking on
+   record (another carrier, a pasted number, a local rider) the parcel's `mode`
+   stands, as before. One helper, `bookedMode` / `bookedModeSql`, feeds every
+   reader: `lateDays`, `runningLateDays` and `lateAfterSql` (and through it the
+   dashboard card, the list badge, the Needs-you row and the close route).
+3. **What "late" now means, said plainly.** Late is measured against what we
+   bought from JD, not what the customer paid for. A customer who paid for air
+   and was sent by ground is not "late" on day two. Accepted by Ash: the panel
+   exists to chase the carrier, and JD can only be held to what it was paid for.
+4. **Where the product lives.** Two columns on `retail_shipments`:
+   `waybill_product` and `waybill_product_no` (the waybill it was booked for),
+   written by the JD label route. The product counts only while
+   `waybill_product_no` is still the parcel's `tracking_number`, so a cancelled
+   label or a number pasted over it falls back to `mode` without any of the
+   routes that write `tracking_number` having to clear it. The product map is
+   `JD_PRODUCT_MODE` in `lib/jd.js`, beside `JD_PRODUCTS`.
+5. **Past parcels.** A one-shot backfill (`shipment_waybill_product_v1` in
+   `database.js`) copies the product from each parcel's `jd_waybill_created`
+   log row, matched on the waybill number and limited to account 1, whose
+   parcels live in the main database. Other accounts' parcels get the product
+   from their next label onward.
+6. **Not changed.** The parcel's `mode` is still never written; packing,
+   planning and the "Air" label on the parcel card are untouched. Case rows
+   already open stay in the database; a parcel that is no longer late simply
+   stops being listed.
+7. **Tests.** `scripts/test_delay_case.js` (fast shard): TC000899's own
+   case, SQL and JS agreeing with booked services in the mix, a stale product
+   from a cancelled label, the running-late twin, every bookable product
+   having a deadline, and the backfill run against a log with a re-booked
+   label and another account's row.

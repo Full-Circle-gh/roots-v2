@@ -33515,13 +33515,16 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   const waybill = cr.waybillCode;
   const derived = tracking.deriveStatusFromOrder('dispatched');
   // Attach to the shipment — NO kd100 (JD's own trace.get handles it for free).
+  // §421 — the service JD was paid for, kept with the number it was bought for.
+  // The late rule holds JD to this, not to the parcel's planned mode.
   tdb().prepare(
     `UPDATE retail_shipments
         SET tracking_carrier = 'jd', tracking_number = ?, tracking_status = ?,
             tracking_events_json = NULL, tracking_synced_at = NULL,
             tracking_last_error = NULL, tracking_kd100_subscribed = 0, package_count = ?,
+            waybill_product = ?, waybill_product_no = ?,
             dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?`).run(waybill, derived, packageCount, shipment.id);
+      WHERE id = ?`).run(waybill, derived, packageCount, product, waybill, shipment.id);
   // Mirror to the order row for the primary parcel OR when no parcel has yet
   // populated it — so the orders-list TRACKING cell shows this waybill instead
   // of "⚠ missing" when a non-primary parcel (e.g. the land half of a split
