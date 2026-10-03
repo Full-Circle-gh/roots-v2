@@ -70,6 +70,9 @@ function lineSaveFields(it, L) {
 Page({
   data: {
     items: [],
+    // product id → the line's attention label (§422): the notice's own title
+    // in the live language. Read by the receipt as lineNotices[item.product_id].
+    lineNotices: {},
     subtotal: 0,
     deliveryFee: 0,
     packingFee: 0,
@@ -484,6 +487,10 @@ Page({
     if (this.data.placing)      patch.placing = false;
     if (this.data.fallbackBusy) patch.fallbackBusy = false;
     if (Object.keys(patch).length) this.setData(patch);
+    // Before the bind gate: the warning belongs on the receipt whoever is
+    // looking at it, and it needs no address — the quote that does is why it
+    // is fetched here rather than read off the quote's lines.
+    this.loadLineNotices();
     if (!isBound) return;
     // Always re-fetch saved addresses on onShow — coming back from the
     // /addresses page after editing a recipient name / address text must
@@ -504,6 +511,48 @@ Page({
     } else {
       this.reloadSavedAddresses();
     }
+  },
+
+  // The add-to-cart notices of what is in the basket, restated on the receipt
+  // as a line under each product that carries one (§422). The add-to-cart card
+  // shows once per phone and is tapped away while choosing flavours; this one
+  // is there on every checkout, and tapping it opens the full card.
+  //
+  // READ OFF THE PRODUCT PAYLOAD, which the server stamps (`cart_notice`) — the
+  // one resolver §197 pinned. Not off the cart line, which holds whatever the
+  // product said on the day it was added, and not off the quote, which waits
+  // for an address the receipt is drawn without.
+  async loadLineNotices() {
+    const ids = [...new Set(cart.get().items.map(it => Number(it.product_id)).filter(Number.isFinite))];
+    if (!ids.length) { this._lineNotices = {}; this.setData({ lineNotices: {} }); return; }
+    let rows = [];
+    try {
+      const res = await api.get(`/api/retail/products?ids=${ids.slice(0, 100).join(',')}`);
+      rows = Array.isArray(res) ? res : (res?.data || []);
+    } catch (e) {
+      // A failed read draws no line. The order page restates the notice anyway.
+      console.warn('[checkout] loadLineNotices failed:', e && e.message);
+      return;
+    }
+    const L = this.data.lang;
+    const byPid = {}, labels = {};
+    for (const r of rows) {
+      const n = r && r.cart_notice;
+      if (!n) continue;
+      byPid[r.id] = n;
+      // The title is the label; a notice written with no title still gets the
+      // line — "Read full notice" alone — because its body is what matters.
+      labels[r.id] = lang.pick(n.title_en, n.title_cn, L) || ' ';
+    }
+    this._lineNotices = byPid;
+    this.setData({ lineNotices: labels });
+  },
+
+  openLineNotice(e) {
+    const pid = e && e.currentTarget && e.currentTarget.dataset.pid;
+    const n = (this._lineNotices || {})[pid];
+    const card = this.selectComponent('#line-notice');
+    if (n && card) card.open(n);
   },
 
   // Fetch the served-zone list and build the localized area-selector options.

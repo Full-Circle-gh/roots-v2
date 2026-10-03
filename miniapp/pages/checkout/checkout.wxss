@@ -92,6 +92,36 @@
   padding: 2rpx 12rpx;
 }
 .line-supplier-glyph { font-weight: 700; }
+/* The product's own warning (§422) — the product page's care note in
+   miniature (forest rule, forest badge), so the customer recognises the words
+   they met there. A full-width box under the name, not a pill: it is the one
+   thing on the receipt that is meant to be tapped. */
+.line-notice {
+  white-space: normal;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8rpx 12rpx;
+  margin-top: 10rpx;
+  padding: 12rpx 16rpx;
+  background: #F2E7DF;
+  border-left: 6rpx solid var(--forest);
+  border-radius: 12rpx;
+}
+.line-notice-badge {
+  flex-shrink: 0;
+  width: calc(32rpx * var(--font-scale));
+  height: calc(32rpx * var(--font-scale));
+  line-height: calc(32rpx * var(--font-scale));
+  border-radius: 999rpx;
+  background: var(--forest);
+  color: var(--lime);
+  font-size: calc(20rpx * var(--font-scale));
+  font-weight: 700;
+  text-align: center;
+}
+.line-notice-title { flex: 1; min-width: 0; font-size: calc(23rpx * var(--font-scale)); color: var(--ink); line-height: 1.25; }
+.line-notice-more { flex-shrink: 0; font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.03em; color: var(--forest); text-decoration: underline; }
 .line-total { font-size: calc(28rpx * var(--font-scale)); display: flex; flex-direction: column; align-items: flex-end; }
 /* Flash-sale line: struck-through original price + a green "save ¥X" tag. */
 .line-was { color: var(--olive); text-decoration: line-through; margin-right: 10rpx; font-size: calc(24rpx * var(--font-scale)); }

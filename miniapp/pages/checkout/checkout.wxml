@@ -28,6 +28,13 @@
             <view wx:if="{{item.ship_from_supplier}}" class="line-supplier f-toni">
               <text class="line-supplier-glyph">↗</text>{{lang === 'cn' ? '供应商直发 · 单独送达' : 'Ships from supplier · separately'}}
             </view>
+            <!-- The product's own warning, on every checkout (§422). Tap opens
+                 the full card; the add-to-cart card showed only once. -->
+            <view wx:if="{{lineNotices[item.product_id]}}" class="line-notice" data-pid="{{item.product_id}}" catchtap="openLineNotice">
+              <text class="line-notice-badge">!</text>
+              <text class="line-notice-title f-bear">{{lineNotices[item.product_id]}}</text>
+              <text class="line-notice-more f-toni">{{lang === 'cn' ? '查看详情' : 'Read full notice'}} ›</text>
+            </view>
           </view>
         </view>
         <view class="line-total f-bear">
@@ -948,6 +955,11 @@
   </view>
 
   <popup-manager page="checkout"></popup-manager>
+
+  <!-- Opens only on a tap of a receipt line's notice (§422). Passive: it never
+       drains the add-to-cart queue here, so it cannot land on top of one of
+       the checkout's own delivery notices. -->
+  <cart-notice id="line-notice" passive="{{true}}"></cart-notice>
 
   <!-- Custom in-page fallback-confirmation modal (legacy simple yes/no).
        Replaces wx.showModal so typography (Bear / Toni) and palette match

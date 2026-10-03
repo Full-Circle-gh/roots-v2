@@ -3,6 +3,7 @@
   "backgroundColor": "#F2E7DF",
   "usingComponents": {
     "cs-button": "/components/cs-button/cs-button",
-    "popup-manager": "/components/popup-manager/popup-manager"
+    "popup-manager": "/components/popup-manager/popup-manager",
+    "cart-notice": "/components/cart-notice/cart-notice"
   }
 }
