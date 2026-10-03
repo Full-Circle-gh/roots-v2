@@ -658,32 +658,90 @@ it('§421: the label route stores the product with the waybill it was booked for
     /waybill_product = \?, waybill_product_no = \?,[\s\S]{0,200}\.run\(waybill, derived, packageCount, product, waybill, shipment\.id\)/);
 });
 
-it('§421: the backfill reads the label log and matches on the waybill number', () => {
-  const upd = DB_SRC.match(/(UPDATE retail_shipments\s+SET waybill_product = \([\s\S]*?)`\)\.run\(\)/);
-  assert.ok(upd, 'backfill UPDATE not found in database.js');
+// The backfill and its correction, lifted out of database.js with the shared
+// condition filled in, so the test runs the SQL that ships.
+const BOOKED_FOR = (DB_SRC.match(/const BOOKED_FOR_THIS_PARCEL = `([\s\S]*?)`;/) || [])[1];
+const liftUpdate = (re) => {
+  const mm = DB_SRC.match(re);
+  return mm && mm[1].split('${BOOKED_FOR_THIS_PARCEL}').join(BOOKED_FOR);
+};
+const BACKFILL = liftUpdate(/(UPDATE retail_shipments\s+SET waybill_product = \([\s\S]*?)`\)\.run\(\)/);
+const CORRECTION = liftUpdate(/(UPDATE retail_shipments\s+SET waybill_product = NULL[\s\S]*?)`\)\.run\(\)/);
+function backfillFixture() {
   const db = new Database(':memory:');
   db.exec(`CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY, order_id INTEGER, tracking_carrier TEXT,
              tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT);
            CREATE TABLE activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, entity_type TEXT,
              entity_id INTEGER, details TEXT, tenant_id INTEGER);`);
+  return db;
+}
+const logLabel = (db, order, details, tenant = null) => db.prepare(
+  `INSERT INTO activity_log (action, entity_type, entity_id, details, tenant_id)
+   VALUES ('jd_waybill_created', 'retail_order', ?, ?, ?)`).run(order, JSON.stringify(details), tenant);
+const booked = (db) => db.prepare('SELECT id, waybill_product, waybill_product_no FROM retail_shipments ORDER BY id').all();
+
+it('§421: the backfill reads the label log and matches on the waybill number', () => {
+  assert.ok(BOOKED_FOR && BACKFILL, 'backfill SQL not found in database.js');
+  const db = backfillFixture();
   db.prepare(`INSERT INTO retail_shipments (id, order_id, tracking_carrier, tracking_number) VALUES
     (1, 899, 'jd', 'JD-NEW'), (2, 900, 'jd', 'JD-X'), (3, 901, 'sf', 'SF1'), (4, 902, 'jd', 'JD-T2')`).run();
-  const log = db.prepare(`INSERT INTO activity_log (action, entity_type, entity_id, details, tenant_id) VALUES (?, 'retail_order', ?, ?, ?)`);
   // 899 was cancelled and re-booked: the old waybill was air, the live one ground.
-  log.run('jd_waybill_created', 899, JSON.stringify({ waybill: 'JD-OLD', product: 'LL-SD-M' }), null);
-  log.run('jd_waybill_created', 899, JSON.stringify({ waybill: 'JD-NEW', product: 'LL-HD-M' }), null);
+  logLabel(db, 899, { waybill: 'JD-OLD', product: 'LL-SD-M' });
+  logLabel(db, 899, { waybill: 'JD-NEW', product: 'LL-HD-M' });
   // 900's log names a different number — nothing to match, left alone.
-  log.run('jd_waybill_created', 900, JSON.stringify({ waybill: 'JD-Y', product: 'LL-HD-M' }), 1);
+  logLabel(db, 900, { waybill: 'JD-Y', product: 'LL-HD-M' }, 1);
   // 902's only matching row belongs to another account.
-  log.run('jd_waybill_created', 902, JSON.stringify({ waybill: 'JD-T2', product: 'LL-HD-M' }), 2);
-  db.exec(upd[1]);
-  const rows = db.prepare('SELECT id, waybill_product, waybill_product_no FROM retail_shipments ORDER BY id').all();
-  assert.deepStrictEqual(rows, [
+  logLabel(db, 902, { waybill: 'JD-T2', product: 'LL-HD-M' }, 2);
+  db.exec(BACKFILL);
+  assert.deepStrictEqual(booked(db), [
     { id: 1, waybill_product: 'LL-HD-M', waybill_product_no: 'JD-NEW' },
     { id: 2, waybill_product: null, waybill_product_no: null },
     { id: 3, waybill_product: null, waybill_product_no: null },
     { id: 4, waybill_product: null, waybill_product_no: null },
   ]);
+});
+
+it('§421: TC000809 — two parcels on one waybill, only the one the label was booked for takes it', () => {
+  // Air half 1871 and land half 1872 went out in one box under one air label,
+  // booked for 1871. Matched on the number alone, 1872 took the air booking and
+  // raised a fresh "delivery delayed" on an order already handled.
+  const db = backfillFixture();
+  db.prepare(`INSERT INTO retail_shipments (id, order_id, tracking_carrier, tracking_number) VALUES
+    (1871, 809, 'jd', 'JDVC38312412188'), (1872, 809, 'jd', 'JDVC38312412188')`).run();
+  logLabel(db, 809, { waybill: 'JDVC38312412188', product: 'LL-SD-M', shipment_id: 1871 });
+  db.exec(BACKFILL);
+  assert.deepStrictEqual(booked(db), [
+    { id: 1871, waybill_product: 'LL-SD-M', waybill_product_no: 'JDVC38312412188' },
+    { id: 1872, waybill_product: null, waybill_product_no: null },
+  ]);
+  // A log row from before the route recorded shipment_id still matches on the number.
+  const old = backfillFixture();
+  old.prepare(`INSERT INTO retail_shipments (id, order_id, tracking_carrier, tracking_number) VALUES (5, 50, 'jd', 'JD5')`).run();
+  logLabel(old, 50, { waybill: 'JD5', product: 'LL-HD-M' });
+  old.exec(BACKFILL);
+  assert.strictEqual(booked(old)[0].waybill_product, 'LL-HD-M');
+});
+
+it('§421: the correction takes the booking off a parcel the log never booked it for, and only that', () => {
+  assert.ok(CORRECTION, 'correction SQL not found in database.js');
+  const db = backfillFixture();
+  // The live database after v1 as first shipped: both halves carry the air booking.
+  db.prepare(`INSERT INTO retail_shipments (id, order_id, tracking_carrier, tracking_number, waybill_product, waybill_product_no) VALUES
+    (1871, 809, 'jd', 'JDVC38312412188', 'LL-SD-M', 'JDVC38312412188'),
+    (1872, 809, 'jd', 'JDVC38312412188', 'LL-SD-M', 'JDVC38312412188'),
+    (5,    50,  'jd', 'JD5',             'LL-HD-M', 'JD5')`).run();
+  logLabel(db, 809, { waybill: 'JDVC38312412188', product: 'LL-SD-M', shipment_id: 1871 });
+  logLabel(db, 50, { waybill: 'JD5', product: 'LL-HD-M' });
+  db.exec(CORRECTION);
+  assert.deepStrictEqual(booked(db), [
+    { id: 5, waybill_product: 'LL-HD-M', waybill_product_no: 'JD5' },
+    { id: 1871, waybill_product: 'LL-SD-M', waybill_product_no: 'JDVC38312412188' },
+    { id: 1872, waybill_product: null, waybill_product_no: null },
+  ]);
+  // And the land half is judged by its own mode again: landed 09-22 from 09-20, inside land's three days.
+  assert.strictEqual(dc.lateDays({ mode: 'land', tracking_number: 'JDVC38312412188',
+    dispatched_at: '2026-09-20 12:04:20', tracking_status: 'delivered', tracking_synced_at: '2026-09-22 06:45:28',
+    delay_case: null }), 0);
 });
 
 console.log('\n  driver: better-sqlite3\n');
