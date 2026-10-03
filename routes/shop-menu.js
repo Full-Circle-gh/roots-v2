@@ -2056,8 +2056,16 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
    both cards to the taller one; this makes the name absorb that difference
    instead of the price. */
 .it{min-width:0;display:flex;flex-direction:column}
-.ph{position:relative;aspect-ratio:4/5;background:var(--oat);overflow:hidden}
-.ph img{width:100%;height:100%;object-fit:cover}
+/* SQUARE, AND THE WHOLE PHOTO — THE SECOND DEPARTURE, on Ash's direction. The
+   website's .sl-ci is 4/5 and fills it, which cut the left and right off every
+   square product photo (Ash, on the Ramada menu: "the square picture are
+   getting cropped in the menu"). The catalogue's photos are square — §289 found
+   the same thing at the till — and this page's own product view already frames
+   them 1/1. contain rather than cover so a photo that is not square shows whole
+   on the oat ground instead of losing an edge; a square one fills the frame
+   exactly as before. */
+.ph{position:relative;aspect-ratio:1/1;background:var(--oat);overflow:hidden}
+.ph img{width:100%;height:100%;object-fit:contain}
 /* .sl-coos — the veil is rgba(0,0,0,.75) there, not .78, and the type is 10px. */
 .sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.75);color:#fff;
   font-family:var(--f-bear);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
