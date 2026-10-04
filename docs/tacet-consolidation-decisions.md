@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.464
+# Tacet shared-core consolidation — decisions record, v4.465
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-04 · v4.465 — **§424 · A PARCEL THAT ARRIVED ON TIME BUT DAMAGED GETS THE SAME CASE AS A LATE ONE — DECIDED BY ASH:** asked from the phone how a replacement for a damaged order should be done so it syncs with accounting, then *"fix it"*, then *"as you recommend"* on the one open question. The case panel, with its **Send replacement** button, drew only for a parcel delivered LATE, so an on-time damaged parcel had no proper path and staff made a hand-typed no-charge order that nothing marks as a replacement — it counted in order totals and average order value and was linked to nothing. A delivered parcel that is not late now has **Report damage**, which opens the same four-step case, marked `reason = 'damaged'`. **The case is NOT added to the "Delivery needs a call" list; no alert query changes.** See §424.
 
 2026-10-03 · v4.464 — **§423 · WASTE IS RECORDED AS A LIST, NOT ONE PRODUCT AT A TIME — DECIDED BY ASH:** *"Staff asking to create to input the waste as a list, not as a one by one product because it takes too much time and it's not efficient"*, then, on phone and PC, *"reasons should be able to change … most of the time the response is expired"*. The Record sheet (phone) and Record dialog (desktop) gain **Add to list**: pick a product, set a quantity, add it, repeat, then record the whole list with one button. Each line carries its own reason and note, and the reason **starts at Expired**. The list is written by one new call, `POST /waste/bulk`, **all or nothing**: one line the shelf cannot cover refuses the lot, names the line, and writes nothing. **AMENDS the phone sheet's "reason left unset" rule** (the reason it gave still stands; §423 point 2 says what replaces the guard). The single entry is unchanged and returns whenever the list is empty. See §423.
 
@@ -28165,3 +28167,105 @@ Tests: `scripts/test_waste_bulk.js` (server, in-memory SQLite),
 `scripts/test_mobile_waste.js`.
 
 See the v4.464 changelog entry.
+
+
+## §424 — A PARCEL THAT ARRIVED ON TIME BUT DAMAGED GETS THE SAME CASE AS A LATE ONE
+
+**Decided 2026-10-04 by Ash.** Ash asked, from the phone against TC000916 (a
+no-charge replacement for TC000902), whether sending replacement goods for a
+damaged order was being done the right way and how to do it so it syncs with
+accounting. The answer was that §98's case is the right way and does not reach
+this situation; Ash said *"fix it"*, and on the one open question (whether the
+new case should join the "Delivery needs a call" list) said *"as you recommend"*,
+which was **no, not yet**.
+
+### The gap, measured against main at `d569257`
+
+- The case panel is drawn only when `late_days > 0`
+  (`public/retail-admin/04-orders.js`, `renderDelayCase` is called under
+  `delayDays > 0`; the phone's `delayCaseCard` is gated the same way). A parcel
+  that arrives on time and broken has no panel and no **Send replacement**.
+- The replacement route (`POST /orders/:id/delay-case/replacement`) never checks
+  lateness. It works on any parcel of any order; only the screens withhold it.
+- So staff raised a no-charge order by hand. Such an order is a real order: it is
+  not stamped `replacement_for_order_id`, so `paidWhere()` (§98 addendum 4) does
+  not exclude it, it adds one to the order count and drags average order value
+  down, and it is linked to neither the original order nor a carrier claim.
+
+### What is decided
+
+1. **No second mechanism.** A damaged parcel uses the same case, the same four
+   steps, the same replacement route, the same evidence and the same carrier
+   claim as a late one. §98 already refused a second way to track the same work,
+   and the machinery needed no change to serve it; what was missing is a way in.
+2. **One new column: `retail_delay_cases.reason`.** NULL means late, which is
+   every row that exists today and needs no backfill. `'damaged'` is the new
+   value. The table name keeps `delay` for the reason `air_delay_cleared_at`
+   keeps `air`: renaming it is a migration for nothing an operator can see.
+3. **The way in is a button on the parcel: Report damage.** It appears on a
+   parcel that is delivered, is not late, and has no case. It opens the case and
+   changes nothing else: no stock moves, no money is booked, no order is created.
+   Opening a case is therefore harmless and has no confirm. It is on both the
+   desktop drawer and the phone, because §98's two halves have drifted apart
+   before.
+4. **The server refuses what the screens should never offer.**
+   `POST /orders/:id/delay-case/report-damage` refuses a parcel that is not
+   delivered, and refuses a parcel that is late (that one already has its panel
+   and its case, and a parcel has exactly one case — `shipment_id` is UNIQUE). It
+   is idempotent on a parcel that already has a damage case.
+5. **Closing a damage case is its own route and touches no alert.**
+   `POST /orders/:id/delay-case/close` applies `closeCase` / `reopenCase` to a
+   case whose reason is `damaged` and to nothing else. It does **not** stamp
+   `air_delay_cleared_at`, because that stamp is the single flag every worklist
+   reads (§98 addendum 1) and a damage case is deliberately not on one. The
+   close rule is unchanged: customer told, replacement/refund/nothing answered,
+   no claim left open with the carrier.
+6. **The money is §98's, unchanged.** The damaged goods book nothing and are not
+   waste (§98 Rejected: the food is at the customer's house, and a carrier that
+   pays makes it not the tenant's loss). The replacement goods book nothing: they
+   were expensed when bought, and stock comes off through the ordinary order
+   path. The carrier's payment is the only ledger entry, one `income_entries`
+   row, posted only when the claim is `paid`. `postDelayCase` keys on the case
+   and needed no change. The replacement's cost is recorded on the case.
+7. **The wording stops saying *delay* on a damage case.** The header, the two
+   claim labels and the handled line are damage wordings, and the line telling
+   the operator to warn the customer off the food is not shown — a broken jar is
+   not a food-safety event, and that sentence is §98's, for spoiled fresh goods.
+   Chinese is declared in `docs/tacet-delivery-vocabulary.md` v1.308.
+
+### Rejected
+
+- **Rejected: widening `LATE_AFTER_DAYS` or `lateDays` so a damaged parcel counts
+  as late.** Damage and lateness are different facts about a parcel. Treating one
+  as the other would put damage cases on the alert card with a lateness number
+  that is not true, and §98 addendum 6 is the record of what widening that
+  predicate did to the card the last time.
+- **Rejected: Report damage creating the replacement order directly.** Whether to
+  replace, refund or send nothing is step three of the case and the operator's
+  call; one tap that moves stock is the wrong first tap.
+- **Rejected: a manual no-charge order flagged by hand.** It is the defect.
+- **Rejected: recording the damage as waste.** §98, and for the same reason.
+
+### Open, and deliberately not decided
+
+- **Whether a damage case should appear on "Delivery needs a call".** Ash chose
+  not yet. It would need a flag the alert queries read (they key on the late
+  predicate and `air_delay_cleared_at`), and it should be its own change once
+  this one has run for a while. Until then a damage case is found on the order,
+  not on a worklist, so a claim with the carrier is only chased by someone who
+  remembers it.
+- **A parcel that is both late and damaged.** It has one case and that case is
+  the late one. Its reason cannot be changed afterwards.
+- **An order that arrives on time with damage on one of several parcels** reports
+  per parcel, as §98 does.
+
+### What was NOT touched, and a test says so
+
+`lateShipmentSql`, `lateDays`, `orderHasDelayedParcel`, the `delayed`
+pseudo-status, `air_delay_cleared_at` and the `/air-delay/ack` route are
+unchanged. `scripts/test_damage_case.js` asserts the reason column, the two
+refusals, the idempotence, the close rule, that closing a damage case writes no
+`air_delay_cleared_at`, and that none of the alert definitions mention the new
+reason.
+
+Tests: `scripts/test_damage_case.js`. See the v4.465 changelog entry.

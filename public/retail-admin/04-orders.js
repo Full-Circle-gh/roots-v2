@@ -8020,6 +8020,10 @@ function renderDelayCase(o, s, delayDays) {
   const ds     = (dc && dc.dispute_state) || 'none';
   const remedy = (dc && dc.remedy) || null;
   const canClose = !!(dc && dc.can_close);
+  // §424 — a parcel that arrived on time but damaged runs the same four steps.
+  // Only the words change: nothing here says "delay", and the late case's
+  // food-safety line is not shown (a broken jar is not a food-safety event).
+  const damaged = !!(dc && dc.reason === 'damaged');
 
   // The four steps, DESCRIBED rather than drawn — what each is called, whether
   // it is finished, and what may be pressed on it. Which one carries the
@@ -8032,18 +8036,19 @@ function renderDelayCase(o, s, delayDays) {
     ? { done: true, label: cuT('Customer told', '已联系客户'),
         meta: `${escapeHtml(dc.customer_told_by || '')} · ${escapeHtml(String(dc.customer_told_at || '').slice(0, 16))}` }
     : { label: cuT('Tell the customer', '联系客户'),
-        detail: cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。'),
+        detail: damaged ? '' : cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。'),
         acts: [{ on: `delayStep(${oid},${sid},'customer_told',{},event)`, text: cuT('Customer told', '已联系客户') }] });
 
   // 2 — the claim. NOT CLAIMING IS A REAL ANSWER and finishes the track: on a
   // small spoil nobody files anything, and the case still has to be closeable.
   if (ds === 'none') {
     steps.push({
-      label: cuT('Claim the delay off the carrier', '向承运商申请延误赔偿'),
+      label: damaged ? cuT('Claim the damage off the carrier', '向承运商申请赔偿')
+                     : cuT('Claim the delay off the carrier', '向承运商申请延误赔偿'),
       fields: `${delayInput(`dcref-${sid}`, cuT('Claim number', '赔偿单号'))}
                ${delayInput(`dcamt-${sid}`, cuT('Amount claimed', '申请金额'), 'inputmode="decimal"')}
                ${delayInput(`dcwhy-${sid}`, cuT('Why not claiming', '不申请的原因'))}`,
-      acts: [{ on: `delayFileClaim(${oid},${sid},'${escapeHtml(String(s.tracking_carrier || ''))}',event)`, text: cuT('Claim filed', '已申请延误赔偿') }],
+      acts: [{ on: `delayFileClaim(${oid},${sid},'${escapeHtml(String(s.tracking_carrier || ''))}',event)`, text: damaged ? cuT('Claim filed', '已申请赔偿') : cuT('Claim filed', '已申请延误赔偿') }],
       link: { on: `delayNoClaim(${oid},${sid},event)`, text: cuT('Not claiming', '不申请赔偿') },
     });
   } else if (ds === 'no_claim') {
@@ -8052,7 +8057,10 @@ function renderDelayCase(o, s, delayDays) {
     const bits = [];
     if (dc.dispute_ref)             bits.push(escapeHtml(dc.dispute_ref));
     if (dc.dispute_claimed != null) bits.push(ordMoney(dc.dispute_claimed));
-    steps.push({ done: true, label: cuT('Claim filed with the carrier', '已申请延误赔偿'), meta: bits.join(' · ') });
+    steps.push({ done: true,
+      label: damaged ? cuT('Claim filed with the carrier', '已申请赔偿')
+                     : cuT('Claim filed with the carrier', '已申请延误赔偿'),
+      meta: bits.join(' · ') });
   }
 
   // 3 — the customer is made whole. A branch, taken once. The refund arm is a
@@ -8178,7 +8186,8 @@ function renderDelayCase(o, s, delayDays) {
   // and the refusal now says which steps it is waiting on.
   const blockers = ((dc && dc.blockers) || []).map(k => DELAY_BLOCKER[k]).filter(Boolean);
   const foot = canClose
-    ? delayBtn(`clearAirDelay(${oid}, event)`, cuT('Mark handled', '标记已处理'), 'cta')
+    ? delayBtn(damaged ? `delayCloseDamage(${oid}, ${sid}, true, event)` : `clearAirDelay(${oid}, event)`,
+               cuT('Mark handled', '标记已处理'), 'cta')
     : blockers.length
       ? `<span style="font-size:11.5px; color:var(--text-3);">${cuT('to do', '待办')}: ${blockers.join(' · ')}</span>`
       : `<span style="font-size:11.5px; color:var(--text-3); font-style:italic;">${
@@ -8191,13 +8200,43 @@ function renderDelayCase(o, s, delayDays) {
                   background:var(--danger-soft, rgba(180,83,62,.12)); color:var(--danger, #B4533E);">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
         <div style="font-weight:700; font-size:12.5px; letter-spacing:.02em;">
-          ${cuT(`Delivery delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `配送延误 — 晚到 ${delayDays} 天`)}
+          ${damaged ? cuT('Parcel damaged', '包裹破损')
+                    : cuT(`Delivery delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `配送延误 — 晚到 ${delayDays} 天`)}
         </div>
         <div style="margin-left:auto; flex:none; font-size:11.5px;">✓ ${doneN}/${total}</div>
       </div>
       <div style="padding:2px 12px 10px;">${body}</div>
       <div style="padding:9px 12px; border-top:1px solid var(--line-soft);">${foot}</div>
     </div>`;
+}
+
+// §424 — open a case for a parcel that arrived on time but damaged. It writes
+// one row and nothing else: no stock, no money, no order. What to do about it —
+// replace, refund, or nothing — is step three, and the operator's call.
+async function delayReportDamage(orderId, shipmentId, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/delay-case/report-damage`,
+      method: 'POST', body: { shipment_id: shipmentId },
+      errLabelEn: 'Could not save', errLabelCn: '保存失败',
+    });
+    openOrder(orderId, { instant: true });
+  } catch { /* adminWrite already showed the failure; the drawer stays as it was */ }
+}
+
+// Close (or, with `closed` false, reopen) a DAMAGE case. Its own route: the late
+// case closes through /air-delay/ack, which stamps the flag every worklist reads.
+async function delayCloseDamage(orderId, shipmentId, closed, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/delay-case/close`,
+      method: 'POST', body: { shipment_id: shipmentId, closed: !!closed },
+      errLabelEn: 'Could not save', errLabelCn: '保存失败',
+    });
+    openOrder(orderId, { instant: true });
+  } catch { /* adminWrite already showed the failure; the drawer stays as it was */ }
 }
 
 async function delayStep(orderId, shipmentId, step, payload, ev) {
@@ -8639,6 +8678,33 @@ function renderShipmentTrackingCard(o, s, hoisted) {
                background: transparent; color: var(--text-3); text-decoration: underline;">
         ${cuT('Undo', '撤销')}
       </button>
+    </div>`;
+  }
+
+  // §424 — A PARCEL THAT LANDED ON TIME BUT BROKEN. It has no late flag, so the
+  // panel above never draws for it; this is the way in, and then the same panel.
+  // Nothing here touches the late-parcel alert: a damage case is on no worklist
+  // (§424), so it is found on the order, and it closes through its own route.
+  const dmgCase = (s.delay_case && s.delay_case.reason === 'damaged') ? s.delay_case : null;
+  if (delayDays === 0 && dmgCase) {
+    delayBanner = dmgCase.closed_at
+      ? `
+    <div style="display:flex; gap:8px; align-items:center; padding:8px 12px; margin-bottom:12px;
+                background: var(--surface-2, #f4f2ec); border:1px solid var(--line-soft);
+                border-radius: var(--r-md, 6px); font-size:12px; line-height:1.4; color: var(--text-2);">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color: var(--sage, #5a7d5a);"><path d="M20 6 9 17l-5-5"/></svg>
+      <span style="flex:1;">${cuT(`Damage handled${dmgCase.closed_by ? ' · ' + escapeHtml(dmgCase.closed_by) : ''}`, `破损已处理${dmgCase.closed_by ? ' · ' + escapeHtml(dmgCase.closed_by) : ''}`)}</span>
+      <button type="button" onclick="delayCloseDamage(${Number(o.id)}, ${Number(s.id)}, false, event)"
+        style="font: inherit; font-size:11.5px; cursor:pointer; padding:2px 4px; border:none;
+               background: transparent; color: var(--text-3); text-decoration: underline;">
+        ${cuT('Undo', '撤销')}
+      </button>
+    </div>`
+      : renderDelayCase(o, s, 0);
+  } else if (delayDays === 0 && !s.delay_case && (s.delivered_at || s.tracking_status === 'delivered')) {
+    delayBanner = `
+    <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+      ${delayBtn(`delayReportDamage(${Number(o.id)}, ${Number(s.id)}, event)`, cuT('Report damage', '登记破损'), 'link')}
     </div>`;
   }
 

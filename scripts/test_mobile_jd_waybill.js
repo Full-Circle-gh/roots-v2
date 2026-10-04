@@ -71,7 +71,7 @@ function mk(opts = {}) {
     ic: (n) => `<i data-ic="${n}"></i>`, money: (c, n) => c + Number(n || 0).toFixed(2), pill: (k, t) => `<span class="pill">${t}</span>`,
     tdWhen: (v) => 'W(' + v + ')', _tdL: () => 'x', fmtDay: (v) => 'D(' + v + ')', evTime: (v) => v,
     mCan: (k) => (opts.caps ? opts.caps.includes(k) : true),
-    noContactCard: () => '', delayCaseCard: () => '', DELIV_TONE: {}, TRK_STATE_TONE: {}, countLabel: () => '',
+    noContactCard: () => '', delayCaseCard: () => '', damageBlock: () => '', DELIV_TONE: {}, TRK_STATE_TONE: {}, countLabel: () => '',
     state: { orderBusy: null, orderErr: null, ask: null, askErr: null, jd: null, detailId: 'TC7', liveDetail: null, parcelBusy: null, splitPick: null, splitDismissed: [] },
     render: () => {}, reg: (k, f) => { CMD[k] = f; },
     currentOrder: () => order, findOrder: () => order,
