@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.308 · 2026-10-04 · §424 A DAMAGED PARCEL'S CASE — 5 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *A damaged parcel's case (§424)*.
+
 **v1.307 · 2026-10-03 · §423 THE WASTE LIST, PHONE AND DESKTOP — 10 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *The waste list (§423)*.
 
 **v1.306 · 2026-10-03 · §422 THE CHECKOUT RECEIPT'S NOTICE LINE — NOTHING COMPOSED; ONE LABEL COPIED WHOLE.** See *The checkout receipt's notice line (§422)*.
@@ -13220,3 +13222,45 @@ the only fragment with no live source anywhere.
 
 The desktop says *in stock* (`库存`) where the phone says *on hand*, each
 following its own surface's existing English; the Chinese is the same.
+
+
+## A damaged parcel's case (§424)
+
+**Operator register, 2026-10-04.** The same four-step case §98 built for a late
+parcel, opened for a parcel that arrived on time and damaged. The phone
+(`public/m.html`, `delayCaseCard`) and the desktop drawer
+(`public/retail-admin/04-orders.js`, `renderDelayCase`). Nothing on this surface
+names a carrier.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Tell the customer · 联系客户`, `Customer told · 已联系客户` | step one of the late case |
+| `Not claiming · 不申请赔偿` | step two's opt-out |
+| `Replacement or refund · 补发或退款`, `Send replacement · 补发`, `Refunded · 已退款`, `Nothing needed · 无需补发退款`, `Replacement sent · 已补发` | step three |
+| `Carrier settled · 承运商赔偿`, `Carrier paid · 已赔偿`, `Rejected · 已拒绝`, `Withdrawn · 已撤销`, `Carrier rejected the claim · 承运商已拒绝`, `Claim withdrawn · 已撤销申请` | step four |
+| `Mark handled · 标记已处理`, `Undo · 撤销`, `Evidence · 凭证`, `Add photo · 添加照片` | the late case's footer and evidence line |
+
+### Composed — five, by Claude (2026-09-06 amendment)
+
+Each is a live string with one live fragment swapped for another, so no
+character on this list is new to the product.
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `登记破损` | Report damage | `登记` (`登记此包裹未收回?`, `已登记`) + `破损` (`Damaged · 破损`, the receiving screens) | `报损` — not live anywhere on the operator surface; `上报破损` — `上报` is not live; `标记破损` — `标记` marks a state already true (`标记已处理`, `标记包裹已送达`), and this opens a case |
+| `包裹破损` | Parcel damaged | `包裹` (`包裹已收回`, `标记包裹已送达?`) + `破损` | `货物破损` — `货物` is not live on this surface; `到货破损` — `到货` is not live |
+| `向承运商申请赔偿` | Claim the damage off the carrier | the live `向承运商申请延误赔偿` with `延误` (delay) removed | `申请破损赔偿` — reads as a claim for a thing called a damage compensation, and repeats `破损` already in the header |
+| `已申请赔偿` | Claim filed | the live `已申请延误赔偿` with `延误` removed | — |
+| `破损已处理` | Damage handled | `破损` + the live `已处理` (`空运延误已处理`) | `已处理破损` — `已处理` leads in the live line only when it is a verb of the operator, here it is the state |
+
+`Claim filed with the carrier` on the desktop reuses `已申请赔偿`, as the late
+case reuses `已申请延误赔偿` for both.
+
+### Deliberately not shown on a damage case
+
+The late case's instruction to the operator to tell the customer not to eat the
+perishables is **not** drawn, in either language. It is §98's, written for
+spoiled fresh goods, and a broken jar is not a food-safety event. Nothing was
+composed to replace it, because nothing replaces it.

@@ -107,7 +107,7 @@ function mk(caps, opts = {}) {
     prodFamily: () => [], prodStoreRows: (pid) => (opts.stores || {})[pid] || [], stockKey: (p, s) => 'st_' + p + '_' + s,
     revKey: (r) => (r.stream === 'feedback' ? 'fb:' : 'rv:') + r.id, markInboxSeen: () => {}, loadInbox: () => {}, loadOps: () => {},
     threadBody: () => '<div>thread</div>', recapNoMoney: () => false, fmtDay: (s) => s, evTime: (s) => s,
-    delayCaseCard: () => '', DELIV_TONE: {}, TRK_STATE_TONE: {},
+    delayCaseCard: () => '', damageBlock: () => '', DELIV_TONE: {}, TRK_STATE_TONE: {},
     api: async () => ({ messages: [] }),
     apiWrite: (p, body, method) => { calls.writes.push({ p, body: JSON.parse(JSON.stringify(body || {})), method: method || 'POST' }); return Promise.resolve({ success: true, data: {} }); },
     document: { getElementById: () => null, createElement: () => { calls.files++; return { click() {} }; } },

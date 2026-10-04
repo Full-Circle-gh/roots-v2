@@ -4396,6 +4396,15 @@ addColumn('retail_delay_cases', 'remedy_cost',     'REAL');
 // COST US, and cost belongs on the case (§98's own rule).
 addColumn('retail_delay_cases', 'remedy_shipping_cost', 'REAL');
 
+// Why this case exists (§424). NULL is a LATE parcel — every row written before
+// this column — and 'damaged' is a parcel that arrived on time but broken. One
+// case, one table, one set of steps: a damaged parcel needed a way in, not a
+// second mechanism. Not a CHECK constraint, for the reason `remedy` has none:
+// lib/delay-case.js owns the list. The table keeps its `delay` name the way
+// `air_delay_cleared_at` keeps its `air`, because renaming is a migration for
+// nothing an operator can see.
+addColumn('retail_delay_cases', 'reason', 'TEXT');
+
 // ── The evidence sent to the carrier (§98) ──────────────────────────────────
 // Photographs of the spoiled goods, the tracking record, whatever was attached
 // to the claim. §98 left this open: the claim reference and the amounts were in

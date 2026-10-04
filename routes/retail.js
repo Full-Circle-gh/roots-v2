@@ -30024,6 +30024,64 @@ router.post('/api/retail-admin/orders/:id/delay-case/step',
   res.json({ success: true, data: delayCase.forScreen(tdb(), updated) });
 });
 
+// ── A parcel that arrived on time but damaged (§424) ────────────────────────
+// The case panel only ever drew for a LATE parcel, so a damaged one that landed
+// on time had no Send replacement and staff raised a hand-typed no-charge order
+// that nothing marks as a replacement — it counted in order totals and average
+// order value, and it was linked to nothing. This opens the same case for it.
+//
+// IT OPENS A ROW AND NOTHING ELSE: no stock, no money, no order. Replacing,
+// refunding or sending nothing is step three, the operator's call. The refusals
+// live in lib/delay-case.js so a test can run them without booting the app.
+router.post('/api/retail-admin/orders/:id/delay-case/report-damage',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.body?.shipment_id, 10);
+  if (!Number.isInteger(id) || !Number.isInteger(sid)) {
+    return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  const parcel = tdb().prepare(
+    'SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!parcel) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const actor = { id: req.user.id, label: req.user.username || null };
+  const r = delayCase.reportDamage(tdb(), { orderId: id, shipment: parcel, actor });
+  if (r.error) return res.status(400).json({ success: false, error: r.error });
+
+  logActivity(req.user.id, req.user.username, 'damage_case_opened', 'retail_order', id,
+    { shipment_id: sid }, req.ip);
+  res.json({ success: true, data: delayCase.forScreen(tdb(), r.case) });
+});
+
+// Close or reopen a DAMAGE case. Its own route because the late case closes
+// through /air-delay/ack, which stamps air_delay_cleared_at — the single flag
+// every worklist reads — and a damage case is deliberately on no worklist
+// (§424). The close rule is the same one: customer told, the make-whole step
+// answered, no claim left open with the carrier.
+router.post('/api/retail-admin/orders/:id/delay-case/close',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.body?.shipment_id, 10);
+  if (!Number.isInteger(id) || !Number.isInteger(sid)) {
+    return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  const parcel = tdb().prepare(
+    'SELECT id FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!parcel) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const closed = req.body?.closed !== false;      // only an explicit false reopens
+  const actor = { id: req.user.id, label: req.user.username || null };
+  const r = delayCase.setDamageCaseClosed(tdb(), { orderId: id, shipmentId: sid, closed, actor });
+  if (r.error) return res.status(400).json({ success: false, error: r.error });
+  if (!r.ok) {
+    return res.status(400).json({ success: false, error: 'case_not_closeable', blockers: r.blockers });
+  }
+  logActivity(req.user.id, req.user.username,
+    closed ? 'damage_case_closed' : 'damage_case_reopened', 'retail_order', id,
+    { shipment_id: sid }, req.ip);
+  res.json({ success: true, data: delayCase.forScreen(tdb(), r.case) });
+});
+
 // ── Evidence on a late-parcel case (§98) ────────────────────────────────────
 // The photographs sent to the carrier. §98 left these open on the condition
 // that the phase "must not make adding them harder"; this is the addition.

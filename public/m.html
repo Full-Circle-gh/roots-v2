@@ -2908,6 +2908,18 @@ reg('dphDel', key=>{
   render();
 });
 reg('dcTold', sid=>{ dcStep(sid,'customer_told',{}); });
+/* §424 — open a case for a parcel that arrived on time but damaged. It writes one
+   row and nothing else: no stock, no money, no order, which is why it asks
+   nothing first. What to do about it is step three. */
+reg('dcReportDamage', sid=>{
+  parcelWrite('dmg'+sid,'/delay-case/report-damage',{shipment_id:sid},T('Recorded','已登记'));
+});
+/* Close (1) or reopen (0) a DAMAGE case. Its own route: the late case closes
+   through /air-delay/ack, which stamps the flag every worklist reads. */
+reg('dcCloseDamage', (sid,closed)=>{
+  parcelWrite('air'+sid,'/delay-case/close',{shipment_id:sid,closed:!!Number(closed)},
+    Number(closed)?T('Marked handled','已标记处理'):T('Saved','已保存'));
+});
 reg('dcRemedy', (sid,kind)=>{ dcStep(sid,'remedy',{kind}); });
 /* Unfold one later step's controls. ONE AT A TIME: opening the second closes
    the first, because two open folds is the flat panel this came from. Nothing
@@ -39152,6 +39164,10 @@ function delayCaseCard(o,sp){
   const told=!!(dc&&dc.customer_told_at);
   const ds=(dc&&dc.dispute_state)||'none';
   const remedy=(dc&&dc.remedy)||null;
+  /* §424 — a parcel that arrived on time but damaged runs the same four steps.
+     Only the words change: nothing here says "delay", and the late case's
+     food-safety line is not shown (a broken jar is not a food-safety event). */
+  const damaged=!!(dc&&dc.reason==='damaged');
 
   /* The four steps, described rather than drawn — what each one is called,
      whether it is finished, and what may be pressed on it. Which of them gets
@@ -39161,19 +39177,19 @@ function delayCaseCard(o,sp){
     ? {done:true,label:T('Customer told','已联系客户'),
        meta:escAttr((dc.customer_told_by||'')+' · '+String(dc.customer_told_at||'').slice(5,16))}
     : {label:T('Tell the customer','联系客户'),
-       detail:T('Perishable / fresh items may no longer be safe — advise them not to consume.','生鲜/易腐产品可能已不安全，请告知客户勿食用。'),
+       detail:damaged?'':T('Perishable / fresh items may no longer be safe — advise them not to consume.','生鲜/易腐产品可能已不安全，请告知客户勿食用。'),
        acts:[{cmd:'dcTold',arg:sid,text:T('Customer told','已联系客户')}]});
 
   if(ds==='none'){
-    steps.push({label:T('Claim the delay off the carrier','向承运商申请延误赔偿'),
-      acts:[{cmd:'dcClaim',arg:sid,text:T('Claim filed','已申请延误赔偿')}],
+    steps.push({label:damaged?T('Claim the damage off the carrier','向承运商申请赔偿'):T('Claim the delay off the carrier','向承运商申请延误赔偿'),
+      acts:[{cmd:'dcClaim',arg:sid,text:damaged?T('Claim filed','已申请赔偿'):T('Claim filed','已申请延误赔偿')}],
       link:{cmd:'dcNoClaim',arg:sid,text:T('Not claiming','不申请赔偿')}});
   } else if(ds==='no_claim'){
     steps.push({done:true,label:T('Not claiming','不申请赔偿'),note:escAttr(dc.dispute_note||'')});
   } else {
     const bits=[]; if(dc.dispute_ref) bits.push(escAttr(dc.dispute_ref));
     if(dc.dispute_claimed!=null) bits.push(money(CUR,dc.dispute_claimed));
-    steps.push({done:true,label:T('Claim filed with the carrier','已申请延误赔偿'),meta:bits.join(' · ')});
+    steps.push({done:true,label:damaged?T('Claim filed with the carrier','已申请赔偿'):T('Claim filed with the carrier','已申请延误赔偿'),meta:bits.join(' · ')});
   }
 
   /* When it was done and what it cost are the stamp; why is a sentence, and
@@ -39267,7 +39283,7 @@ function delayCaseCard(o,sp){
   const blk=((dc&&dc.blockers)||[]).map(k=>M_DC_BLOCKER[k]).filter(Boolean);
   const busy=state.parcelBusy===('air'+sid);
   const foot=(canClose&&canEditDc)
-    ? `<button class="cta" ${busy?'disabled':''} onclick="APP.cmd('clearAirDelay',${sid})">${busy?T('Saving…','处理中…'):T('Mark handled','标记已处理')}</button>`
+    ? `<button class="cta" ${busy?'disabled':''} onclick="${damaged?`APP.cmd('dcCloseDamage',${sid},1)`:`APP.cmd('clearAirDelay',${sid})`}">${busy?T('Saving…','处理中…'):T('Mark handled','标记已处理')}</button>`
     : blk.length
       ? `<span style="font-size:12.5px;color:var(--text-secondary)">${T('to do','待办')}: <span class="num">${blk.join(' · ')}</span></span>`
       : `<span style="font-size:12px;color:var(--text-secondary);font-style:italic">${T('Close once every step above is done.','以上步骤全部完成后方可关闭。')}</span>`;
@@ -39279,10 +39295,29 @@ function delayCaseCard(o,sp){
   return `<div style="border:1px solid var(--border-default);border-radius:12px;background:var(--surface-raised);overflow:hidden">
     <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--brick-tint);color:var(--brick-ink)">
       <span style="display:flex;flex:none">${ic('triangle-alert',16)}</span>
-      <span style="font-size:13.5px;font-weight:600">${T('Delivery delayed','配送延误')}</span>
+      <span style="font-size:13.5px;font-weight:600">${damaged?T('Parcel damaged','包裹破损'):T('Delivery delayed','配送延误')}</span>
       <span class="num" style="margin-left:auto;font-size:12px">✓ ${doneN}/${total}</span></div>
     <div style="padding:2px 12px 12px">${body}</div>
     <div style="padding:11px 12px;border-top:1px solid var(--hairline)">${foot}</div></div>`;
+}
+/* §424 — A PARCEL THAT LANDED ON TIME BUT BROKEN. It has no late flag, so the
+   late panel above never draws for it; this is the way in, and then the same
+   panel. Nothing here touches the late-parcel alert: a damage case is on no
+   worklist (§424), so it is found on the order and closes through its own
+   route. A late parcel is never offered this — it already has its panel. */
+function damageBlock(o,sp){
+  if(sp.lateDays>0) return '';
+  const dc=sp.dcase||null, sid=Number(sp.id);
+  const canEdit=!o.viewOnly&&o._id!=null&&mCan('orders:edit');
+  if(dc&&dc.reason==='damaged'){
+    if(!dc.closed_at) return delayCaseCard(o,sp);
+    return `<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}<span style="flex:1;min-width:0">${T('Damage handled'+(dc.closed_by?' · '+escAttr(dc.closed_by):''),'破损已处理'+(dc.closed_by?' · '+escAttr(dc.closed_by):''))}</span>
+      ${canEdit?`<button class="rowact" style="min-height:34px" ${state.parcelBusy?'disabled':''} onclick="APP.cmd('dcCloseDamage',${sid},0)">${state.parcelBusy==='air'+sid?T('Working…','处理中…'):T('Undo','撤销')}</button>`:''}</div>`;
+  }
+  if(!dc&&canEdit&&(sp.deliveredAt||sp.trackingStatus==='delivered')){
+    return `<div style="display:flex;justify-content:flex-end"><button class="rowact" style="min-height:34px" ${state.parcelBusy?'disabled':''} onclick="APP.cmd('dcReportDamage',${sid})">${state.parcelBusy==='dmg'+sid?T('Working…','处理中…'):T('Report damage','登记破损')}</button></div>`;
+  }
+  return '';
 }
 /* §284 — THE COURIER COULD NOT REACH THE CUSTOMER. Red with the carrier's own
    line while nobody has rung them; one quiet line with an undo once somebody
@@ -39517,6 +39552,7 @@ function trackingCard(o,sp,label){
       <div style="font-size:13.5px;font-weight:600">${T('Running late · '+rl+' day'+(rl===1?'':'s'),'配送逾期 '+rl+' 天')}</div>
       <div style="font-size:12.5px;color:var(--text-secondary)">${T('Not delivered yet · call the customer','尚未送达 · 请联系顾客')}</div></div>`:''}
     ${sp.airCleared==null&&(sp.lateDays>0)?delayCaseCard(o,sp):''}
+    ${damageBlock(o,sp)}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}<span style="flex:1;min-width:0">${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</span>
       ${/* §325 O6 — the desktop's Undo beside it: re-flags the order. */''}
       ${(sp.lateDays>0&&!o.viewOnly&&o._id!=null&&mCan('orders:edit'))?`<button class="rowact" style="min-height:34px" ${state.parcelBusy?'disabled':''} onclick="APP.cmd('reopenAirDelay')">${state.parcelBusy==='airopen'?T('Working…','处理中…'):T('Undo','撤销')}</button>`:''}</div>`:''}
@@ -49708,6 +49744,7 @@ function mapDetail(o){
     // server validates the code against lib/tracking.js.
     carrierCode:sp.tracking_carrier||null,
     dispatchedAt:sp.dispatched_at||null, deliveredAt:sp.delivered_at||null,
+    trackingStatus:sp.tracking_status||null,   // §424 — with deliveredAt, what the server calls "delivered"
     // §180 — packed and still here. A SEPARATE AXIS from state, which stays
     // 'pending' for a packed box because it has not left; every guard asking
     // whether it has gone must keep answering no.
