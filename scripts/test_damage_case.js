@@ -293,9 +293,14 @@ it('both screens print every composed string, in both languages', () => {
 });
 
 it('every composed string is declared in the vocabulary document, as composed', () => {
-  const at = VOCAB.indexOf("A damaged parcel's case (§424)");
+  // The SECTION, not the first mention: the first mention of this heading is the
+  // changelog line at the top of the file, and slicing from there to the end of
+  // the document would pass on a 'Composed' table belonging to any later section.
+  const at = VOCAB.lastIndexOf("\n## A damaged parcel's case (§424)");
   assert.ok(at > 0, 'the §424 section must exist');
-  const sec = VOCAB.slice(at);
+  const next = VOCAB.indexOf('\n## ', at + 4);
+  const sec = VOCAB.slice(at, next < 0 ? undefined : next);
+  assert.ok(sec.includes('### Composed'), 'the §424 section must have its own Composed table');
   const composed = sec.slice(sec.indexOf('### Composed'));
   for (const [, zh] of COMPOSED) {
     assert.ok(composed.includes('`' + zh + '`'), zh + ' is on a screen but not declared composed');

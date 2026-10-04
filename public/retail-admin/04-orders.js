@@ -6757,6 +6757,7 @@ function renderReadonlyOrder(o) {
             ${preOrder ? `<span class="pill" style="background:#FBF0DC; color:#8A6516;"><span class="dot" style="background:#B98B21;"></span>${cuT('Pre-order', '预订单')}</span>` : ''}
           </div>
           <div class="od-eyebrow"><span>Order placed · 下单于</span> ${formatDate(o.placed_at)}</div>
+          ${ordReplacementLine(o) ? `<div class="od-eyebrow">${ordReplacementLine(o)}</div>` : ''}
         </div>
       </div>
 
@@ -7366,6 +7367,22 @@ function orderMoreClose() {
 // glues that pair at runtime and cannot glue a string with a value in the
 // middle. Parts are separated by an empty <span class="od-mark-sep">, never a
 // " · " text node: the walker reads space-middot-space as a language pair.
+// §425 — the replacement link, in words. A replacement made through the case
+// panel is a real link (`replacement_for_order_id`) but nothing drew it, so it
+// read exactly like a no-charge order typed by hand. The number needs no label
+// of its own, which is why the sent side is the live `已补发` unchanged.
+// Text, not a link: the operator already has the number and the Orders search.
+function ordReplacementLine(o) {
+  const bits = [];
+  if (o.replacement_for && o.replacement_for.order_no) {
+    const no = escapeHtml(o.replacement_for.order_no);
+    bits.push(cuT(`Replacement for ${no}`, `补发 · 原单 ${no}`));
+  }
+  const by = (o.replaced_by || []).map(r => escapeHtml(r.order_no)).filter(Boolean);
+  if (by.length) bits.push(cuT(`Replacement sent · ${by.join(', ')}`, `已补发 · ${by.join(', ')}`));
+  return bits.length ? `<span class="od-placed">${bits.join(' &nbsp;·&nbsp; ')}</span>` : '';
+}
+
 function orderHeadMarks(o) {
   const marks = [];
   if (o.fulfillment?.rollup === 'partial') {
@@ -7388,6 +7405,7 @@ function orderHeadMarks(o) {
   return `
     <div class="od-marks">
       <span class="od-placed"><span>Order placed · 下单于</span> ${formatDate(o.placed_at)}</span>
+      ${ordReplacementLine(o)}
       ${marks.length ? '<span class="od-mark-sep"></span>' : ''}
       ${marks.join('')}
     </div>`;
