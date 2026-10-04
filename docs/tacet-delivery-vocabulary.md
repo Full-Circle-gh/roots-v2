@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.309 · 2026-10-04 · §425 THE REPLACEMENT LINK IN THE ORDER DRAWER — 1 STRING COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; ONE PAIR COPIED WHOLE.** See *The replacement link in the order drawer (§425)*.
+
 **v1.308 · 2026-10-04 · §424 A DAMAGED PARCEL'S CASE — 5 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *A damaged parcel's case (§424)*.
 
 **v1.307 · 2026-10-03 · §423 THE WASTE LIST, PHONE AND DESKTOP — 10 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *The waste list (§423)*.
@@ -13264,3 +13266,33 @@ The late case's instruction to the operator to tell the customer not to eat the
 perishables is **not** drawn, in either language. It is §98's, written for
 spoiled fresh goods, and a broken jar is not a food-safety event. Nothing was
 composed to replace it, because nothing replaces it.
+
+
+## The replacement link in the order drawer (§425)
+
+**Operator register, 2026-10-04.** One line under *Order placed* in the order
+drawer — the phone (`public/m.html`, `orderHeadMarks`) and the desktop
+(`public/retail-admin/04-orders.js`, `ordReplacementLine`). It names the other
+order of a replacement pair by number. Nothing on this surface names a carrier.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Replacement sent · 已补发` | the case panel's step-three done label (`renderDelayCase`, `delayCaseCard`); the order number is appended after it and needs no label of its own |
+
+### Composed — one, by Claude (2026-09-06 amendment)
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `补发 · 原单 TC000902` | Replacement for TC000902 | `补发` (the live **补发** button, *Send replacement*) + `原单` (the live **删除原单**, where *the original order* is `原单`) + the number | `TC000902 的补发单` — `补发单` is not live anywhere; `补发订单 TC000902` — reads as the order's own number, so the direction of the link is lost; `补发自 TC000902` — `补发自` is not live and is not how the product phrases a replacement |
+
+### A layout fact the Chinese had to respect
+
+The admin's bilingual pass splits a text node on `" · "` when the half to the
+right contains Chinese and the half to the left contains none
+(`10-extras.js`, `processNode`). Both Chinese lines here have Chinese on the
+left (`已补发`, `补发`), and the English `Replacement sent · TC000916` has none on
+the right, so neither is ever split. A reworded line that put Chinese only on the
+right of a ` · ` would lose its left half; `scripts/test_replacement_link_line.js`
+asserts this for every string on the surface.

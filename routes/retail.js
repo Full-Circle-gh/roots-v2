@@ -28353,6 +28353,19 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
 
+  // §425 — WHICH ORDER THIS REPLACES, AND WHICH ORDER REPLACED IT, BY NUMBER.
+  // `replacement_for_order_id` has been on this payload since §98, but an id is
+  // not something an operator reads, and no screen drew either direction of the
+  // link: a replacement made the proper way looked exactly like one typed by hand.
+  // Both are read here, never stored twice, so they cannot disagree with the
+  // column they come from. A replacement can be raised once per case, but an
+  // order may have been replaced more than once across its parcels, hence a list.
+  o.replacement_for = o.replacement_for_order_id
+    ? (tdb().prepare('SELECT id, order_no FROM retail_orders WHERE id = ?').get(o.replacement_for_order_id) || null)
+    : null;
+  o.replaced_by = tdb().prepare(
+    'SELECT id, order_no FROM retail_orders WHERE replacement_for_order_id = ? ORDER BY id').all(id);
+
   // Pull fresh JD trace before rendering so the backend shows live events on
   // open — without this the office only ever saw events a customer had already
   // triggered by opening the order in the mini app. Scoped by the order's own

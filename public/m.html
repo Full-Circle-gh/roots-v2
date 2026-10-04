@@ -38612,10 +38612,17 @@ function orderHeadMarks(o){
   const mirrorTag=o.viewOnly
     ? `<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${MIRROR_NAME[o.chanRaw]?MIRROR_NAME[o.chanRaw]+' · ':''}${T('View only','只读')}</span>`
     : '';
-  if(!marks.length&&!mirrorTag&&!o.placedFull) return '';
+  /* §425 — which order this replaces / which order replaced it. The number
+     needs no label of its own, so the sent side is the live `已补发` unchanged. */
+  const replLine=[
+    o.replacementFor?T('Replacement for '+escAttr(o.replacementFor),'补发 · 原单 '+escAttr(o.replacementFor)):'',
+    (o.replacedBy&&o.replacedBy.length)?T('Replacement sent · '+o.replacedBy.map(n=>escAttr(n)).join(', '),'已补发 · '+o.replacedBy.map(n=>escAttr(n)).join(', ')):'',
+  ].filter(Boolean);
+  if(!marks.length&&!mirrorTag&&!o.placedFull&&!replLine.length) return '';
   return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
     ${o.placedFull?`<span style="width:100%;display:flex;align-items:baseline;gap:6px;font-size:12.5px;color:var(--text-secondary)">
       ${T('Order placed','下单于')} <span class="num">${escAttr(tdWhen(o.placedFull,'dateTime',_tdL()))}</span></span>`:''}
+    ${replLine.map(t=>`<span class="num" style="width:100%;font-size:12.5px;color:var(--text-secondary)">${t}</span>`).join('')}
     ${mirrorTag}
     ${marks.map(m=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 9px;border-radius:999px;background:var(--${m.sev}-tint);color:var(--${m.sev}-ink)">${ic(m.icon,13)}${m.label}</span>`).join('')}
     ${o.printFailed?`<span style="width:100%;font-size:12.5px;color:var(--brick-ink)">${escAttr(o.printFailed)}</span>`:''}
@@ -49794,6 +49801,11 @@ function mapDetail(o){
      re-renders, so a time formatted at map time would keep speaking the old
      language until the next fetch — the same rule ITEM_TUPLE follows above. */
   base.placedFull=o.placed_at||null;
+  /* §425 — THE REPLACEMENT LINK, BY ORDER NUMBER. The server reads both
+     directions off `replacement_for_order_id`; they are carried raw and worded
+     at render time, for the reason placedFull is. */
+  base.replacementFor=(o.replacement_for&&o.replacement_for.order_no)||null;
+  base.replacedBy=(o.replaced_by||[]).map(r=>r&&r.order_no).filter(Boolean);
   /* Does the total agree with the lines under it? Ported from the desktop's
      ordMoneyGap, tolerance included — ¥5 or 30% of the basket, which absorbs
      packing, delivery and an ordinary promotion. An inclusive tax is already

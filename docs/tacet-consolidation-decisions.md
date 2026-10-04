@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.465
+# Tacet shared-core consolidation — decisions record, v4.466
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-04 · v4.466 — **§425 · A REPLACEMENT ORDER SAYS WHAT IT REPLACES, AND THE ORDER IT REPLACES SAYS SO — DECIDED BY ASH:** *"yes add the drawer lines"*, after a read-only look at production showed TC000916 was already linked to TC000902 (`source = 'replacement'`, `replacement_for_order_id` set, case answered 'replacement') and that **no screen ever drew the link**, so a replacement made the proper way looked exactly like one typed by hand. The order drawer, on the desktop and the phone, now carries one line under *Order placed*: **Replacement for TC000902** on the replacement, **Replacement sent · TC000916** on the original. The server's order-detail payload gains `replacement_for` and `replaced_by`, read off `replacement_for_order_id` and stored nowhere else. One Chinese string composed (`补发 · 原单 TC000902`); the other side is the live `已补发`. See §425.
 
 2026-10-04 · v4.465 — **§424 · A PARCEL THAT ARRIVED ON TIME BUT DAMAGED GETS THE SAME CASE AS A LATE ONE — DECIDED BY ASH:** asked from the phone how a replacement for a damaged order should be done so it syncs with accounting, then *"fix it"*, then *"as you recommend"* on the one open question. The case panel, with its **Send replacement** button, drew only for a parcel delivered LATE, so an on-time damaged parcel had no proper path and staff made a hand-typed no-charge order that nothing marks as a replacement — it counted in order totals and average order value and was linked to nothing. A delivered parcel that is not late now has **Report damage**, which opens the same four-step case, marked `reason = 'damaged'`. **The case is NOT added to the "Delivery needs a call" list; no alert query changes.** See §424.
 
@@ -28269,3 +28271,55 @@ refusals, the idempotence, the close rule, that closing a damage case writes no
 reason.
 
 Tests: `scripts/test_damage_case.js`. See the v4.465 changelog entry.
+
+
+## §425 — A REPLACEMENT ORDER SAYS WHAT IT REPLACES, AND THE ORDER IT REPLACES SAYS SO
+
+**Decided 2026-10-04 by Ash**, after asking for TC000916 to be linked to TC000902.
+A read-only dry run against production (the one-off workflow, nothing written)
+found there was nothing to link: TC000916 already had `source = 'replacement'`,
+`replacement_for_order_id` pointing at TC000902, `replacement_case_id` pointing at
+case #17, and that case answered *replacement* and closed. The link existed in
+the data and **in no screen** — TC000916's drawer showed only the shop note's
+text, and once a case is marked handled TC000902's drawer collapses its steps to
+one line. A replacement made the proper way was indistinguishable on screen from
+a no-charge order typed by hand, which is what Ash (and the session) took it for.
+The repair script written on that assumption was removed unmerged; merging a
+`scripts/` file triggers a production restart for a repair that would never run.
+
+### What is decided
+
+1. **One line, under *Order placed*, in the drawer's header, on both surfaces.**
+   On the replacement: `Replacement for TC000902` · `补发 · 原单 TC000902`. On the
+   original: `Replacement sent · TC000916` · `已补发 · TC000916`. Both when an
+   order is somehow both. Nothing is drawn on an order that is neither.
+2. **The numbers are read, not stored.** `GET /orders/:id` adds `replacement_for`
+   (`{id, order_no}` or null) and `replaced_by` (a list, ordered by id) from
+   `replacement_for_order_id`, which has been on the payload since §98. A list
+   because an order with several parcels may have been replaced more than once.
+   No column, no migration, and nothing that can drift from the column it reads.
+3. **Text, not a link.** The operator has the number and the Orders search; a
+   link would need the phone's order-opening path, which keys on a different
+   identifier than the desktop's, and is a separate change if it is wanted.
+4. **No new word where a live one fits.** The sent side is the live pair
+   `Replacement sent · 已补发` with the number after it, which needs no label of
+   its own. One string is composed, declared in
+   `docs/tacet-delivery-vocabulary.md` v1.309.
+
+### What it does not do
+
+It changes no data, no money, no stock and no count. It does not make a
+hand-typed no-charge order into a replacement: such an order still has no link and
+still draws no line, which is itself the signal. §424's Report damage is how an
+on-time damaged parcel gets the proper path.
+
+### The i18n walker, checked
+
+The admin's bilingual pass splits a text node on `" · "` when the right half has
+Chinese and the left half has none (`10-extras.js`, `processNode`). Every line
+here is on the safe side of that rule — `Replacement sent · TC000916` has no
+Chinese on the right, and both Chinese lines have Chinese on the left — and
+`scripts/test_replacement_link_line.js` asserts it in both languages, so a later
+rewording that tips over the rule fails a test instead of showing half a line.
+
+Tests: `scripts/test_replacement_link_line.js`. See the v4.466 changelog entry.
