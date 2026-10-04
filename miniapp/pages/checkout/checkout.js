@@ -984,8 +984,10 @@ Page({
   // the checkout total + show an "Applied automatically" banner.
   async loadAutoVoucher() {
     try {
+      const place = this.voucherPlace();
       const data = await api.get('/api/retail/vouchers/auto?subtotal=' + cart.subtotal()
-        + '&couponable_subtotal=' + cart.couponableSubtotal());
+        + '&couponable_subtotal=' + cart.couponableSubtotal()
+        + (place.pickup_store_id ? '&pickup_store_id=' + place.pickup_store_id : ''));
       // api unwraps body.data → resolves to the object (or null) directly. The
       // server returns EITHER an applied auto promo OR a `blocked` near-miss
       // (an auto promo the cart is just short of unlocking), never both.
@@ -1005,6 +1007,42 @@ Page({
       console.warn('[checkout] loadAutoVoucher failed:', e.message);
     }
     this.refreshQuote();
+  },
+
+  // §426 — WHERE THIS ORDER IS, for a voucher limited to one location. Only a
+  // pickup is in person, so only a pickup with a store chosen is described; a
+  // delivery sends nothing, which the server reads as "not at any location".
+  voucherPlace() {
+    return (this.data.fulfillment === 'pickup' && this.data.pickupStoreId)
+      ? { pickup_store_id: this.data.pickupStoreId } : {};
+  },
+
+  // §426 — the place changed (delivery ⇄ pickup, or another store). The auto
+  // promo is asked again, and a code the customer applied is checked again: a
+  // located one stops applying the moment the order is no longer a pickup
+  // there, and leaving it on screen would quote a total the server will not
+  // charge. Only a refusal clears it — a dropped connection keeps what showed.
+  async recheckVoucher() {
+    const code = this.data.voucherCode;
+    if (code) {
+      try {
+        const v = await api.post('/api/retail/vouchers/validate', {
+          code, subtotal: cart.subtotal(), couponable_subtotal: cart.couponableSubtotal(),
+          ...this.voucherPlace(),
+        });
+        const data = v?.data || v;
+        this.setData({ voucherDiscount: Number(data.discount) || 0, voucherFreeShip: !!data.free_shipping });
+      } catch (e) {
+        if (e && e.message === 'not_applicable') {
+          this.setData({ voucherCode: '', voucherDiscount: 0, voucherFreeShip: false });
+        }
+      }
+    }
+    // The coupon lists are read again, not just the auto promo: loadAutoVoucher
+    // strips the winning coupon's card from them, and a card stripped for the
+    // last place must come back when another coupon wins in this one. It ends
+    // in loadAutoVoucher, which ends in refreshQuote.
+    this.loadPublicCoupons();
   },
 
   // Build the "locked" coupon card from a near-miss auto promo (one the cart is
@@ -1165,9 +1203,12 @@ Page({
       if (!this.data.pickupName)  patch.pickupName  = a.recipient_name || '';
       if (!this.data.pickupPhone) patch.pickupPhone = a.phone || '';
       // Default the store to the only one when there's a single pickup store.
-      if (stores.length === 1 && !this.data.pickupStoreId) patch.pickupStoreId = stores[0].id;
+      const defaulted = stores.length === 1 && !this.data.pickupStoreId;
+      if (defaulted) patch.pickupStoreId = stores[0].id;
       this.setData(patch);
       this.applyDefaultPickupSlot();
+      // §426 — a store chosen for them is a place, same as one they tapped.
+      if (defaulted && this.data.fulfillment === 'pickup') this.recheckVoucher();
     } catch (e) {
       console.warn('[checkout] loadPickupStores failed:', e && e.message);
     }
@@ -1220,11 +1261,14 @@ Page({
     if (mode === 'delivery' && !this.data.deliveryEnabled) return;
     this.setData({ fulfillment: mode });
     if (mode === 'pickup') this.applyDefaultPickupSlot();
-    this.refreshQuote();
+    // §426 — the vouchers depend on where the order is; recheckVoucher ends in
+    // the coupon reads, which end in refreshQuote, so the totals still re-derive.
+    this.recheckVoucher();
   },
 
   selectPickupStore(e) {
     this.setData({ pickupStoreId: Number(e.currentTarget.dataset.id) });
+    this.recheckVoucher();   // §426 — a located voucher is one store's
   },
   openStoreMap(e) {
     const id = Number(e.currentTarget.dataset.id);
@@ -2370,6 +2414,7 @@ Page({
         code,
         subtotal: cart.subtotal(),
         couponable_subtotal: cart.couponableSubtotal(),
+        ...this.voucherPlace(),   // §426
       });
       const data = v?.data || v;
       this.setData({
@@ -3197,6 +3242,10 @@ Page({
         // someone a residual they never saw. Declaration only: the server
         // discards it after the comparison, so it can never move the price.
         client_total:   Number(this.data.total),
+        // §426 — this build previews located vouchers, so it may be charged
+        // one. A build without this line is never given one: it could not
+        // have shown it, and the points path refuses a total it did not show.
+        location_vouchers: true,
       };
       const orderPayload = isPickup
         ? {

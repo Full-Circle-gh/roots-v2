@@ -532,6 +532,10 @@ button{font:inherit;color:inherit;margin:0}
 .foot{flex:none;border-top:1px solid var(--td-border);padding:16px;background:var(--td-surface)}
 .sums{font-size:13px;color:var(--td-text2)}
 .sums div{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+/* §426 — the typed-phone check on a recalled QR order: the note and the one
+   control that answers it, on one row. */
+.sums .vck{align-items:center;gap:10px;margin-top:6px;color:var(--td-text)}
+.sums .vck span{flex:1;min-width:0}
 .tot{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 14px}
 .tot .lb{font-size:15px}
 /* The number the cashier reads aloud. Nothing else on the screen is this size. */
@@ -1077,6 +1081,16 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // GST/HST, so the merchant's own text wins — this is only the fallback, and
     // it is declared here because every Chinese string on this page is.
     taxLabel:     ['Tax', '税费'],                     // admin: 04-orders.js order subline
+    /* §426 — a voucher held by the customer, at this counter. The line is named
+       by the voucher's OWN title wherever the merchant wrote one ("Ramada staff
+       10%"); this pair is only the fallback, quoted whole from the admin. The
+       other two are COMPOSED and declared in docs/tacet-delivery-vocabulary.md
+       (§426): nothing in the product had to tell a cashier that a discount was
+       claimed with a number nobody verified, or let them take one off. */
+    voucher:      ['Voucher', '优惠券'],               // m.html: phone order sheet's voucher line
+    typedPhone:   ['Phone typed by the customer — check before taking payment',
+                   '顾客自己输入的电话,收款前请核对'],  // composed, §426
+    removeDiscount: ['Remove discount', '取消优惠'],   // composed, §426
     // Cancelling a QR order the customer no longer wants. Both halves are the
     // mini app's own, from its order screen where a customer cancels exactly
     // this — miniapp/pages/order/order.js:99 (en) and :275 (cn). The customer
@@ -2220,6 +2234,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
           opts: Array.isArray(it.options) ? it.options : []
         };
       });
+      // §426 — the voucher on the order, if any, and whether it came from a
+      // number the customer typed: that is the one the cashier has to check.
+      S.recall.voucherOff = Number(j.data.voucher_amount) || 0;
+      S.recall.voucherTitle = cuT(j.data.voucher_title_en || j.data.voucher_title_cn || '',
+                                  j.data.voucher_title_cn || j.data.voucher_title_en || '') || T('voucher');
+      S.recall.typedPhone = Number(j.data.voucher_typed_phone) === 1;
+      S.recall.total = Number(j.data.total) || S.recall.total;
       S.recall.loading = false;
       render();
     }).catch(function () {
@@ -2243,7 +2264,38 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // its own. Re-deriving a QR order's total here from lines this till never saw
   // is how the counter ends up asking for a different number than the one on
   // the customer's screen.
-  function settleDue() { return S.recall ? S.recall.total : dueNow(subtotal()); }
+  function settleDue() {
+    if (S.recall) return S.recall.total;
+    var sub = subtotal(), cv = counterVoucher(sub);
+    return dueNow(Math.round((sub - (cv ? cv.off : 0)) * 100) / 100);
+  }
+
+  /* ── §426 · the attached customer's voucher at THIS counter ────────────
+     A located voucher the customer holds comes off a till sale with no tap —
+     attaching them is the act. The terms arrive with the customer (see
+     attachCustomer) and are matched to the store they were read for, so a till
+     switched to another shop never carries the last shop's discount.
+
+     THE ARITHMETIC MIRRORS computeVoucherDiscount and is NOT the authority: the
+     server picks the best voucher again when the sale is posted and charges its
+     own figure. Best one wins, a minimum spend binds, an amount off never
+     exceeds the goods. Off the goods before tax, as the server does it. */
+  function counterVoucher(sub) {
+    var c = S.customer;
+    if (S.recall || !c || !c.cv || String(c.cvStore) !== String(S.storeId)) return null;
+    var best = null;
+    c.cv.forEach(function (v) {
+      if (!(sub >= (Number(v.min_subtotal) || 0))) return;
+      var off = v.type === 'percent'
+        ? Number((sub * Math.max(0, Math.min(100, Number(v.value) || 0)) / 100).toFixed(2))
+        : Math.min(Math.max(0, Number(v.value) || 0), sub);
+      if (off > 0 && (!best || off > best.off)) {
+        best = { off: off,
+                 title: cuT(v.title_en || v.title_cn || '', v.title_cn || v.title_en || '') || T('voucher') };
+      }
+    });
+    return best;
+  }
 
   /* ── Store credit on this sale (§93) ────────────────────────────────────
      What the attached customer's points and wallet COULD take off this bill,
@@ -2467,11 +2519,32 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // Suppressed for a recalled order: its tax was computed and stored when the
     // customer placed it, and re-deriving a split here from the lines would put
     // a second arithmetic on screen that nothing guarantees matches the first.
-    $('sums').innerHTML = !S.tax || !S.lines.length || S.recall ? ''
-      : (S.tax.mode === 'exclusive'
-          ? '<div><span>' + esc(T('subtotal')) + '</span><span>' + money(sub) + '</span></div>'
-            + '<div><span>' + esc(S.tax.label) + '</span><span>' + money(taxOn(sub)) + '</span></div>'
-          : '<div><span>' + esc(S.tax.label) + '</span><span>' + money(taxOn(sub)) + '</span></div>');
+    //
+    // §426 — A VOUCHER IS THE OTHER THING THAT MAKES THEM DIFFER. With one on,
+    // the subtotal, the voucher by its own title and the tax on what is left
+    // are each a line; with none, this draws exactly what it drew before.
+    var row = function (a, b) { return '<div><span>' + esc(a) + '</span><span>' + b + '</span></div>'; };
+    var cv = counterVoucher(sub);
+    var off = cv ? cv.off : 0;
+    var net = Math.round((sub - off) * 100) / 100;
+    var sums = '';
+    if (S.recall) {
+      // The recalled order's voucher, as the server stored it. A discount found
+      // from a typed number carries the check and the control that answers it.
+      if (!S.recall.loading && S.recall.voucherOff > 0) {
+        sums += row(S.recall.voucherTitle, '−' + money(S.recall.voucherOff));
+        if (S.recall.typedPhone) {
+          sums += '<div class="vck"><span>' + esc(T('typedPhone')) + '</span>'
+                + '<button class="cbtn" type="button" data-rm-voucher="1"' + (S.busy ? ' disabled' : '') + '>'
+                + esc(T('removeDiscount')) + '</button></div>';
+        }
+      }
+    } else if (S.lines.length && (S.tax || off > 0)) {
+      if (off > 0 || (S.tax && S.tax.mode === 'exclusive')) sums += row(T('subtotal'), money(sub));
+      if (off > 0) sums += row(cv.title, '−' + money(off));
+      if (S.tax) sums += row(S.tax.label, money(taxOn(net)));
+    }
+    $('sums').innerHTML = sums;
     $('tot-lb').textContent = T('total');
     $('tot-amt').textContent = money(due);
     // A recall is payable as soon as its lines are on screen — never while they
@@ -3123,6 +3196,44 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.custOpen = false; S.custRows = null;
     var el = $('custpick'); if (el) el.removeAttribute('data-built');
     render();
+    // §426 — the vouchers this customer holds HERE. A failed read leaves the
+    // sale at full price on screen, and the server still applies the voucher
+    // when the sale is posted — so the worst case is a total that comes back
+    // lower than the one quoted, never a discount nobody had.
+    var storeId = S.storeId;
+    api('/api/retail-admin/customers/' + encodeURIComponent(c.id) + '/counter-vouchers?store_id='
+        + encodeURIComponent(storeId)).then(function (j) {
+      if (S.customer !== c || !j || !j.success) return;
+      c.cv = j.data || []; c.cvStore = storeId;
+      render();
+    }).catch(function () { /* full price on screen; the server still decides */ });
+  }
+
+  /* §426 — TAKE THE DISCOUNT OFF A RECALLED QR ORDER. The answer to the check:
+     the person at the counter is not who the typed number says. The server
+     restates the total and unlinks the account; this screen takes its figure
+     from the reply, never from its own arithmetic. */
+  function removeVoucher() {
+    var r = S.recall;
+    if (!r || S.busy || !(r.voucherOff > 0)) return;
+    S.busy = true; S.err = ''; render();
+    api('/api/retail-admin/orders/' + r.id + '/remove-voucher', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+    }).then(function (j) {
+      S.busy = false;
+      if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
+      if (S.recall && S.recall.id === r.id) {
+        S.recall.total = Number(j.data.total) || 0;
+        S.recall.voucherOff = 0; S.recall.typedPhone = false;
+      }
+      loadPend();
+      render();
+    }).catch(function (e) {
+      S.busy = false;
+      S.err = e && e.auth ? cuT('Sign in on the backend, then reload this page.', '请先在后台登录,然后刷新此页面。')
+                          : T('didNotSave');
+      render();
+    });
   }
 
   // THE SHELL IS BUILT ONCE, on open. Re-rendering it on every keystroke would
@@ -3392,7 +3503,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // Tapping away from the questions is cancelling the line — nothing has
       // been added yet, so the safe answer a stray tap gives is "no line".
       if (S.opts && ev.target.id === 'optpick') return closeOpts();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order],[data-opt],[data-somode],[data-so]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-cancel-order],[data-opt],[data-somode],[data-so]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -3412,6 +3523,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       }
       if (t.hasAttribute('data-recall')) return recall(Number(t.getAttribute('data-recall')));
       if (t.hasAttribute('data-recall-cancel')) return cancelRecall();
+      if (t.hasAttribute('data-rm-voucher')) return removeVoucher();
       if (t.hasAttribute('data-cancel-order')) return cancelOrder();
       // THE WAY BACK. An empty till leaves on the tap; a basket with lines in it
       // is a sale in progress that nothing has saved yet, so it asks first — in

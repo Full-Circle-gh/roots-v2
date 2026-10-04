@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.310 · 2026-10-04 · §426 A VOUCHER LIMITED TO ONE LOCATION — THE TILL, THE QR MENU AND THE COUPON DRAWERS — 4 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *A voucher limited to one location (§426)*.
+
 **v1.309 · 2026-10-04 · §425 THE REPLACEMENT LINK IN THE ORDER DRAWER — 1 STRING COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; ONE PAIR COPIED WHOLE.** See *The replacement link in the order drawer (§425)*.
 
 **v1.308 · 2026-10-04 · §424 A DAMAGED PARCEL'S CASE — 5 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *A damaged parcel's case (§424)*.
@@ -13296,3 +13298,44 @@ left (`已补发`, `补发`), and the English `Replacement sent · TC000916` has
 the right, so neither is ever split. A reworded line that put Chinese only on the
 right of a ` · ` would lose its left half; `scripts/test_replacement_link_line.js`
 asserts this for every string on the surface.
+
+
+## A voucher limited to one location (§426)
+
+**Two registers, 2026-10-04.** The operator's: the counter till
+(`public/till.html`, `STRINGS`) and the coupon drawer on the desktop
+(`public/retail-admin/05-marketing.js`, `vchStoreSel`) and the phone
+(`public/m.html`, the coupon drawer's *Store* fact). The customer's: the QR
+menu's checkout (`routes/shop-menu.js`, the sheet's foot). Nothing on any of
+these names a carrier.
+
+**The discount line is named by the voucher's OWN title** wherever the merchant
+wrote one — the Ramada voucher reads *Ramada staff 10%* / whatever Chinese title
+the office types. The pairs below are only what shows when no title was written.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Voucher · 优惠券` | the phone order sheet's voucher line (`public/m.html`) — the till's fallback name for the discount line |
+| `Voucher · 优惠` | the web store's checkout voucher line (`public/shop.html`) — the QR menu's fallback, the same customer register |
+| `Pay at the counter · 收银台付款` | the QR menu's own pay choice, on the same sheet — said under a discount found from a phone, which must be paid there |
+| `Store · 门店` | the admin's store label (`04-orders.js`, the till's `store`) — the drawer fact's name |
+| `Online store · 线上商城` | the admin's channel label — the option meaning "no location", which is what every coupon before §426 is |
+| `Saved · 已保存` | the admin's save toast |
+| `Voucher no longer valid · 优惠码已失效` | the web store's error for `voucher_exhausted` (`public/shop.html`) — the New order form's slot for the same code |
+
+### Composed — four, by Claude (2026-09-06 amendment)
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `电话(选填)` | Phone (optional) | two live pairs joined whole: `Phone · 电话` (the phone app's customer form) + `(optional) · (选填)` (the same form's email field) | `手机号(选填)` — `手机号` is live in the mini app's binding flow, but the counter's own customer form says `电话`, and the cashier and the customer should be reading the same word for the same field |
+| `顾客自己输入的电话,收款前请核对` | Phone typed by the customer — check before taking payment | `顾客` (live throughout), `输入` (`无需输入或点选`), `电话` (above), `收款` (`在设置好收款前`), `核对` (`导入前核对`, `在地图上核对位置`) | `未验证手机号` — states a system fact and gives the cashier nothing to do; `请核对身份` — says *identity*, which is more than a badge glance and reads as an ID check |
+| `取消优惠` | Remove discount | `取消` (the live **Cancel**) + `优惠` (the live drawer fact **Gives · 优惠**) | `删除优惠` — `删除` is the till's *Remove a line*, and beside a voucher it reads as deleting the voucher itself; `移除优惠` — `移除` is not live on the operator surface |
+| `仅限到店:前台、二维码菜单和到店自提,不含配送。` | In person only — the counter, its QR menu and pickup there. Never delivery. | `到店` + `到店自提` (**Store pickup**), `前台` (**Counter**), `二维码菜单` (**QR menu**), `配送` (**Delivery**), `仅限` and `不含` as plain qualifiers | `仅限门店使用` — true but does not say that a delivery from that store is excluded, which is the one case an operator would get wrong |
+
+### Merchant-typed, not ours
+
+The voucher's own `title_en` / `title_cn` is the merchant's text and is shown as
+typed. Nothing here composes it.
+

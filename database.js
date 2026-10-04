@@ -2710,6 +2710,16 @@ addColumn('retail_vouchers', 'title_en',          'TEXT');               // cust
 addColumn('retail_vouchers', 'title_cn',          'TEXT');
 addColumn('retail_vouchers', 'auto_grant_signup', 'INTEGER DEFAULT 0');  // 1 = auto-granted to new customers on first /api/retail/auth
 addColumn('retail_vouchers', 'auto_apply',        'INTEGER DEFAULT 0');  // 1 = applied automatically at checkout (best one wins), no code/grant needed
+// §426 — a located voucher. NULL (every voucher before this) = online, exactly as
+// before. Set = an IN-PERSON discount at that retail_stores row only: a till
+// sale, a QR order, a mini-app pickup there — never a delivery, even one sent
+// from that store. See voucherPlaceOk in routes/retail.js.
+addColumn('retail_vouchers', 'store_id',          'INTEGER');
+// §426 — 1 = this order's voucher was found from a phone number TYPED on the QR
+// menu, which proves nothing, so the cashier checks before settling and may
+// remove the discount. 0 for every other order, including one whose voucher
+// came from a signed-in account or a customer the cashier attached.
+addColumn('retail_orders', 'voucher_typed_phone', 'INTEGER DEFAULT 0');
 
 db.exec(`CREATE TABLE IF NOT EXISTS retail_subscriptions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
