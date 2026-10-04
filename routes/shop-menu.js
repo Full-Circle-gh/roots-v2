@@ -95,6 +95,11 @@ const {
   // the storefront charge through, so a payment placed here settles through
   // the same callback into the same ledger.
   oaPayContext, wechatJsapiPrepare, buildWxPayParams, wxOutTradeNo, payDescription,
+  // §426 — a voucher found from a phone typed at checkout. Found, priced and
+  // counted by the till's own code, so the counter and its QR menu cannot give
+  // two answers about the same voucher.
+  counterHoldersByPhone, counterVouchersFor, bestCounterVoucher, counterVoucherTerms,
+  consumeCounterVoucher, reverseOrderVoucher,
 } = require('./retail');
 const crypto = require('crypto');
 const wechatOa = require('../lib/wechat-oa');
@@ -1760,6 +1765,13 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .tot.solo .dadd{flex:1}
 .nm-l{display:block;font-size:12px;line-height:1.2;letter-spacing:.04em;
   color:var(--olive);text-transform:uppercase;margin-bottom:6px}
+/* §426 — the optional phone sits under the name, a field's gap apart; the
+   discount it finds is a line in the total's own shape, with the one thing the
+   customer has to do about it under it. */
+.ph-l{margin-top:12px}
+.vch{margin-top:10px}
+.vch .tot{margin-bottom:4px;font-size:15px}
+.vch .vnote{font-size:13px;color:var(--olive)}
 .nm-i{width:100%;border:2px solid var(--ink);background:rgba(255,255,255,.72);
   padding:11px 12px;font:inherit;font-size:16px;color:var(--ink);
   border-radius:0;-webkit-appearance:none;appearance:none;
@@ -2318,6 +2330,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `oErr=document.getElementById('oErr'),nmEl=document.getElementById('sheetN'),` +
   `vEl=document.getElementById('cbarV'),tEl=document.getElementById('cTot'),` +
   `errEl=document.getElementById('cErr'),nameEl=document.getElementById('cName'),` +
+  `phEl=document.getElementById('cPhone'),vchEl=document.getElementById('cVch'),` +
   `place=document.getElementById('cPlace'),lEl=document.getElementById('cbarL');` +
   /* THE ORDER THIS PHONE ALREADY PLACED, so closing the sheet is not losing it.
      Reported 2026-09-08: a customer dismissed the sheet carrying their number
@@ -2466,6 +2479,35 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var count=function(){var n=0,k=ids();for(var i=0;i<k.length;i++)n+=cart[k[i]].qty;return n};` +
   `var total=function(){var t=0,k=ids();for(var i=0;i<k.length;i++)t+=cart[k[i]].qty*cart[k[i]].price;` +
   `return Math.round(t*100)/100};` +
+  /* §426 — WHAT THE TYPED PHONE TAKES OFF. `vt` is the list /discount answered
+     for the number in the box: terms only, never a name. The arithmetic is the
+     till's (computeVoucherDiscount): best one wins, a minimum spend binds, an
+     amount off never exceeds the goods. DISPLAY ONLY — the order route finds
+     the voucher again from the number and charges its own figure. */
+  `var vt=[],vph='',vtm=null;` +
+  `var vOff=function(t){var b=null;for(var i=0;i<vt.length;i++){var v=vt[i];` +
+  `if(!(t>=(Number(v.min_subtotal)||0)))continue;` +
+  `var o=v.type==='percent'?Number((t*Math.max(0,Math.min(100,Number(v.value)||0))/100).toFixed(2))` +
+  `:Math.min(Math.max(0,Number(v.value)||0),t);` +
+  `if(o>0&&(!b||o>b.o))b={o:o,en:v.title_en||v.title_cn||'',cn:v.title_cn||v.title_en||''}}return b};` +
+  // The total under the basket, and the discount line with what to do about it.
+  // A discount found this way is paid at the counter (the server insists), so
+  // the in-page WeChat choice is put away while one is showing.
+  `var paintVch=function(){var t=total(),d=vOff(t);` +
+  `tEl.textContent=money(d?Math.round((t-d.o)*100)/100:t);` +
+  `if(!vchEl)return;vchEl.hidden=!d;var pwx=document.getElementById('cPw');if(pwx)pwx.hidden=!!d;` +
+  `vchEl.innerHTML=d?'<div class="tot"><span>'+bi(d.en||${JSON.stringify('Voucher')},d.cn||${JSON.stringify('优惠')})+'</span>'+` +
+  `'<span>−'+money(d.o)+'</span></div>'+` +
+  `'<div class="vnote">'+bi(${JSON.stringify('Pay at the counter')},${JSON.stringify('收银台付款')})+'</div>':''};` +
+  // Asked once the box holds a whole number, and again only when it changes.
+  // A number that holds nothing gets an empty list, same as one nobody has.
+  `var vAsk=function(){var p=(phEl&&phEl.value||'').replace(/\\D/g,'');` +
+  `if(p.length<8){vph='';vt=[];paintVch();return}if(p===vph)return;vph=p;` +
+  `fetch(location.pathname.replace(/\\/$/,'')+'/discount',{method:'POST',` +
+  `headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phEl.value})})` +
+  `.then(function(r){return r.json()}).then(function(j){if(vph!==p)return;` +
+  `vt=(j&&j.success&&j.data)||[];paintVch()}).catch(function(){})};` +
+  `if(phEl)phEl.addEventListener('input',function(){clearTimeout(vtm);vtm=setTimeout(vAsk,400)},false);` +
   // ONE ROW PER ORDER THIS PHONE HAS PLACED, newest first — the number staff
   // call, what it cost, and the way into that order's own page, where the
   // status and the cancel live. Both languages in every row, like everything
@@ -2543,7 +2585,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // used to disappear. Below every stepper on purpose (see .mo in the CSS): a
   // tap here leaves the page and the basket is memory only.
   `if(mine.length)h+='<div class="mo-h">'+L_MINE+'</div>'+ordRows();` +
-  `body.innerHTML=h;tEl.textContent=money(total())};` +
+  `body.innerHTML=h;paintVch()};` +
   `var closeIfEmpty=function(){if(count()===0){shClose(sheet)}};` +
   /* ── THE QUESTIONS THE COUNTER WOULD HAVE ASKED (§120) ──────────────────
      The answers a customer picked, printed under the product's name in the
@@ -2955,8 +2997,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `for(var j=0;j<ln.ops.length;j++)one.choices.push(ln.ops[j].choice_id)}` +
   `items.push(one)}` +
   `sending=true;place.disabled=true;errEl.hidden=true;` +
+  // §426 — the phone rides along when there is one; the server decides what,
+  // if anything, it is worth. A discount showing means the counter, whatever
+  // the WeChat choice said, because the server will send it there anyway.
+  `var ph=(phEl&&phEl.value||'').trim();` +
   `fetch(location.pathname.replace(/\\/$/,'')+'/order',{method:'POST',` +
-  `headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,items:items,pay_method:pm})})` +
+  `headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,items:items,` +
+  `pay_method:vOff(total())?'counter':pm,phone:ph||undefined})})` +
   `.then(function(r){return r.json().then(function(j){return {s:r.status,j:j}})})` +
   `.then(function(o){sending=false;place.disabled=false;` +
   // A WeChat order leaves for the payment page and never draws the done screen
@@ -3945,6 +3992,14 @@ router.get('/s/:shopCode', (req, res) => {
           `<label class="nm-l" for="cName">${bi('Name', '姓名')}</label>` +
           `<input class="nm-i" id="cName" type="text" maxlength="40" autocomplete="name"` +
             ` enterkeyhint="done" inputmode="text">` +
+          // §426 — THE PHONE, OPTIONAL, AND FOR ONE THING: finding a voucher
+          // this person holds at this counter. Two live pairs joined
+          // (vocabulary §426). The discount line under it is drawn by the
+          // script, and only when the number holds one here.
+          `<label class="nm-l ph-l" for="cPhone">${bi('Phone (optional)', '电话(选填)')}</label>` +
+          `<input class="nm-i" id="cPhone" type="tel" maxlength="20" autocomplete="tel"` +
+            ` enterkeyhint="done" inputmode="tel">` +
+          `<div class="vch" id="cVch" hidden></div>` +
           `<div class="err" id="cErr" hidden></div>` +
           // Asked before the order exists, because §50's print rule turns on the
           // answer. WeChat leads: it is the path that saves the queue, and the
@@ -4095,6 +4150,35 @@ const CANCEL_LIMIT = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'too_many_requests' },
+});
+
+/* §426 — THE PHONE LOOKUP GETS ITS OWN, TIGHT BUDGET. It answers one thing —
+   does this number hold a voucher at this counter — and an answer like that is
+   worth guessing at. A person types their number once or twice; the budget is
+   generous for that and useless for walking through numbers. */
+const DISCOUNT_LIMIT = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'too_many_requests' },
+});
+
+/* §426 — WHAT A TYPED PHONE IS WORTH AT THIS COUNTER. Display only: the order
+   route finds the voucher again from the number and prices it itself.
+
+   THE ANSWER IS THE DISCOUNT AND NOTHING ELSE. No name, no account, no code —
+   §426 rule 6. A number that holds nothing gets the same empty list as a
+   number nobody has, so the page cannot be used to learn who is a customer. */
+router.post('/s/:shopCode/discount', DISCOUNT_LIMIT, express.json({ limit: '2kb' }), (req, res) => {
+  const code = String(req.params.shopCode || '');
+  if (!isShopCode(code)) return res.status(404).json({ success: false, error: 'not_found' });
+  const shop = resolveShop(code);
+  if (!shop) return res.status(404).json({ success: false, error: 'not_found' });
+  const phone = String((req.body && req.body.phone) || '').slice(0, 30);
+  const holders = counterHoldersByPhone(phone, shop.location_id);
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: counterVouchersFor(holders, shop.location_id).map(c => counterVoucherTerms(c.voucher)) });
 });
 
 const MAX_LINES = 40;         // a menu is not a wholesale order form
@@ -4303,10 +4387,31 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
 
   // Taxed by the same code as a till sale at the same counter. A shop that
   // charges tax charges it however the customer reached it.
+  //
+  // §426 — A PHONE TYPED AT CHECKOUT MAY FIND A VOUCHER held at this counter.
+  // Optional, and nothing else on this order depends on it. The discount comes
+  // off the goods before tax, as the till and the checkout take it. The order is
+  // linked to the account the number belongs to — that is what the voucher's
+  // per-customer count and the holder's order history read — and marked as
+  // found from a typed number, because nothing has proved it is theirs.
+  const typedPhone = b.phone == null ? '' : String(b.phone).slice(0, 30);
+  const cv = typedPhone
+    ? bestCounterVoucher(counterHoldersByPhone(typedPhone, shop.location_id), shop.location_id, subtotal)
+    : null;
+  const voucherOff = cv ? cv.discount : 0;
   const taxCfg = taxSettings();
-  const taxLine = tax.taxOn({ subtotalMinor: moneyLib.toMinor(subtotal) || 0 }, taxCfg);
-  let total = subtotal;
+  const taxLine = tax.taxOn({
+    subtotalMinor: moneyLib.toMinor(subtotal) || 0,
+    discountMinor: moneyLib.toMinor(voucherOff) || 0,
+  }, taxCfg);
+  let total = moneyLib.round(subtotal - voucherOff);
   if (taxLine.addedMinor) total = moneyLib.round(total + moneyLib.fromMinor(taxLine.addedMinor));
+  // AND IT IS PAID AT THE COUNTER. A typed number proves nothing, so the
+  // cashier checks before the money is taken (§426 rule 7). The in-page WeChat
+  // rail would take it first and leave nothing to check — so an order carrying
+  // such a discount goes the counter way, which is also what this page does for
+  // every order when the rail is not set up.
+  const payInPage = wantsWechat && !cv;
 
   let created;
   try {
@@ -4342,10 +4447,13 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
           recipient_name, subtotal, shipping_fee, packing_fee, total,
           channel, fulfillment_type, store_id,
           shop_entry_method, shop_order_code, shop_order_date,
-          tax_amount, tax_rate_micro, tax_mode, pay_token, placed_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+          tax_amount, tax_rate_micro, tax_mode, pay_token,
+          voucher_code, voucher_amount, voucher_typed_phone, placed_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
       `).run(
-        orderNo, null, 'pending_payment', PLACEHOLDER_TENDER,
+        // customer_id stays NULL — this door has no account — EXCEPT when a
+        // typed phone found a voucher (§426), see above.
+        orderNo, cv ? cv.customerId : null, 'pending_payment', PLACEHOLDER_TENDER,
         name, subtotal, 0, 0, total,
         // §44: till and QR share the channel `shop` and are told apart by
         // shop_entry_method, so a shop's revenue is never split across two
@@ -4366,9 +4474,13 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
         taxCfg.enabled ? moneyLib.fromMinor(taxLine.taxMinor) : null,
         taxCfg.enabled ? taxCfg.rateMicro : null,
         taxCfg.enabled ? taxCfg.mode : null,
-        payToken
+        payToken,
+        cv ? cv.voucher.code : null, voucherOff, cv ? 1 : 0
       );
       const orderId = info.lastInsertRowid;
+      // §426 — the voucher's use, counted as the till counts it. Its pool ran
+      // dry between the read and here → the whole order unwinds.
+      if (cv) consumeCounterVoucher(h, cv, orderId);
 
       // options_json IS THE COLUMN THAT ALREADY EXISTED, and using it is what
       // made §120 a day's work rather than a week's. database.js describes it
@@ -4432,6 +4544,9 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       return { orderId, orderNo, shopCode, shopDate, payToken };
     })();
   } catch (e) {
+    if (e && e.code === 'voucher_exhausted') {
+      return res.status(409).json({ success: false, error: 'voucher_exhausted' });
+    }
     console.error('[shop-menu/order]', code, e.message);
     return res.status(500).json({ success: false, error: 'order_failed' });
   }
@@ -4488,7 +4603,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       // Present only on the WeChat path. The browser reads its presence as
       // "go here next" rather than being told separately which path it is on,
       // so the two cannot disagree.
-      ...(wantsWechat ? { pay_url: `/s/${code}/pay/${created.payToken}` } : {}),
+      ...(payInPage ? { pay_url: `/s/${code}/pay/${created.payToken}` } : {}),
       // WHERE THIS ORDER LIVES FROM NOW ON. Always present, on every path.
       // Reported 2026-09-08: a customer closed the sheet carrying their number
       // and had nothing left, because the number only ever existed on that
@@ -4502,6 +4617,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       name,
       status: 'pending_payment',
       total,
+      // §426 — what the typed phone took off, 0 when nothing.
+      voucher_amount: voucherOff,
       currency: cur,
       // The done screen draws these rows, and since §120 a row that was
       // configured must say so — the customer has just paid attention to those
@@ -4755,10 +4872,11 @@ const CANCELLED_MAIN =
    until the sweep noticed. Same inventory call the admin and mini-app cancels
    already make, with its own reason so the ledger says who did it.
 
-   NO POINTS, VOUCHERS OR BALANCE TO REVERSE, and that is a property of this
-   door rather than an omission: a QR order is placed with no customer_id, so
-   there is no account any of them could have come from. The customer-cancel
-   path in routes/retail.js reverses all three because its orders have one.
+   NO POINTS OR BALANCE TO REVERSE, and that is a property of this door rather
+   than an omission: neither can be spent here. A VOUCHER CAN, since §426 — a
+   typed phone may have found one — so its use is handed back, by the same
+   reverseOrderVoucher every other cancel path calls, and only on the cancel
+   that actually flipped the order, which is its once-per-order contract.
 
    A FORM POST, so it answers with a redirect rather than JSON — the page it
    came from has no script to read a body. */
@@ -4798,6 +4916,8 @@ router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded
     } catch (e) { console.error('[shop-menu/cancel payments]', e.message); }
     try { inventory.releaseOrderReservations(order.id, { reason: 'customer_cancelled_qr' }); }
     catch (e) { console.error('[shop-menu/cancel release]', e.message); }
+    try { reverseOrderVoucher(order.id); }
+    catch (e) { console.error('[shop-menu/cancel voucher]', e.message); }
     // Ring the counter: the order has to come OFF the pending list as promptly
     // as it went on, or a cashier calls a number nobody is waiting for.
     try {

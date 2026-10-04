@@ -1093,6 +1093,9 @@ const state = {
   printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
+  // §426 — the coupon drawer asked for the store list once, so a render while
+  // the read is in flight does not ask again.
+  vdStoresAsked:false,
   reply:null, thread:null,
   poList:null, posErr:null, posTried:false, poSeg:'open', poId:null,
   /* §286 — Suppliers we owe: the list, and the one account open in its sheet. */
@@ -14234,6 +14237,9 @@ const ONW_WHERE={
      belong anyway: points and a wallet are the customer's. */
   credit_requires_customer:'who', insufficient_points:'who',
   insufficient_balance:'who', credit_did_not_settle:'who',
+  // §426 — a till's located voucher ran out mid-sale. Unreachable from this
+  // form (it is not the till), mapped for the reason the four above are.
+  voucher_exhausted:'who',
 };
 /* One sentence per code, the desktop's own (04-orders.js ordNewErrText) — two
    surfaces answering the same refusal with the same words. E(), not T(): this
@@ -14266,6 +14272,7 @@ function onwErrText(code,msg,pid){
     insufficient_points:E('There are not enough points for that.','积分不足。'),
     insufficient_balance:E('Not enough balance.','余额不足。'),
     credit_did_not_settle:E('Points or balance did not cover the whole amount. Pick a payment method for the rest.','积分或余额不足以支付全部金额,请选择剩余金额的付款方式。'),
+    voucher_exhausted:E('Voucher no longer valid','优惠码已失效'),   // §426 — the desktop's, as above
     bad_shipping_fee:E('Shipping is not a valid amount.','运费金额不正确。'),
     bad_packing_fee:E('Packing is not a valid amount.','包装费金额不正确。'),
     bad_channel:E('Pick a channel this order can be created on.','请选择可下单的渠道。'),
@@ -28814,6 +28821,9 @@ reg('vdSwitch', field=>{
   const r=vdRaw(); if(!r) return;
   vdPatch(field, {[field]:!r[field]});
 });
+reg('vdStore', value=>{   // §426
+  vdPatch('store_id', {store_id:value?Number(value):null}, T('Saved','已保存'));
+});
 reg('vdExpiry', value=>{
   const val=String(value||'');
   vdPatch('expires_at', {expires_at:val||null},
@@ -28904,6 +28914,19 @@ function screenCoupon(){
   const dateVal=r.expires_at?String(r.expires_at).slice(0,10):'';
   const endCtl=edit?`<input type="date" aria-label="${escAttr(T('Ends','截止'))}" value="${escAttr(dateVal)}" style="width:auto" ${dis} onchange="APP.cmd('vdExpiry',this.value)">`
     :(r.expires_at?fmtDay(r.expires_at):T('no end date','长期有效'));
+  /* §426 — where the coupon works, the desktop drawer's control. "Online store"
+     is every coupon before §426; a location makes it in person there only. The
+     store list is the one this app already reads; until it lands only the
+     current answer is offered, so the select never shows a wrong one. */
+  if(!state.stores&&!state.vdStoresAsked){ state.vdStoresAsked=true;
+    api('/stores').then(x=>{ state.stores=(Array.isArray(x)?x:[]).filter(s=>s.is_active==null||s.is_active); render(); }).catch(()=>{}); }
+  const vStores=(state.stores||[]).slice();
+  if(r.store_id!=null&&!vStores.some(s=>s.id===r.store_id)) vStores.push({id:r.store_id,code:'#'+r.store_id});
+  const stLabel=s=>T(s.name_en||s.name_cn||s.code||('#'+s.id),s.name_cn||s.name_en||s.code||('#'+s.id));
+  const storeCtl=edit?`<select aria-label="${escAttr(T('Store','门店'))}" style="width:auto;max-width:180px" ${dis} onchange="APP.cmd('vdStore',this.value)">
+      <option value=""${r.store_id==null?' selected':''}>${T('Online store','线上商城')}</option>${
+      vStores.map(s=>`<option value="${Number(s.id)}"${r.store_id===s.id?' selected':''}>${escAttr(stLabel(s))}</option>`).join('')}</select>`
+    :(r.store_id==null?T('Online store','线上商城'):escAttr(stLabel(vStores.find(s=>s.id===r.store_id)||{id:r.store_id})));
   const autoDesc=r.auto_grant_signup
     ? T('New signups who received it get it at checkout — no code, no tap.','收到的新顾客结账时自动抵扣,无需输入或点选。')
     : r.is_public
@@ -28954,7 +28977,9 @@ function screenCoupon(){
       ${fact(T('On orders over','最低订单金额'),Number(r.min_subtotal)>0?money(CUR,r.min_subtotal):T('Any order','无门槛'))}<div class="sep" style="margin-left:16px"></div>
       ${fact(T('Used','已使用'),Number(r.used_count||0)+(r.max_uses!=null?' / '+r.max_uses:''))}<div class="sep" style="margin-left:16px"></div>
       ${fact(T('Per customer','每人限用'),busy==='per_customer_limit'?saving('per_customer_limit'):perCtl)}<div class="sep" style="margin-left:16px"></div>
-      ${fact(T('Ends','截止'),busy==='expires_at'?saving('expires_at'):endCtl)}</div>
+      ${fact(T('Ends','截止'),busy==='expires_at'?saving('expires_at'):endCtl)}<div class="sep" style="margin-left:16px"></div>
+      ${fact(T('Store','门店'),busy==='store_id'?saving('store_id'):storeCtl)}</div>
+    ${r.store_id!=null?`<div style="padding:0 4px;font-size:13px;color:var(--text-secondary);line-height:1.5">${T('In person only — the counter, its QR menu and pickup there. Never delivery.','仅限到店:前台、二维码菜单和到店自提,不含配送。')}</div>`:''}
     ${kicker(T('How customers get it','顾客怎么获得'))}
     <div class="card" style="padding:4px 0">
       ${sw('is_public',T('Show in the app','在小程序展示'),T('Anyone can find it and tap to save — no code needed.','顾客可自行领取,无需输入编码。'))}<div class="sep" style="margin-left:16px"></div>

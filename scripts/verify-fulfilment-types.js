@@ -2343,8 +2343,10 @@ check('a recalled order still cannot be confirmed without a wallet',
 // The settle screen must state the SERVER's total for a recalled order. Deriving
 // it from lines this till never saw is how the counter asks for a different
 // number than the one on the customer's screen.
+// §426 gave settleDue a second line — a walk-in's located voucher comes off
+// before tax — and the recall branch is still its first statement, unchanged.
 check('a recalled order is settled at the total it was placed at',
-  /function settleDue\(\) \{ return S\.recall \? S\.recall\.total : dueNow\(subtotal\(\)\); \}/.test(POS_TILL_SRC), true);
+  /function settleDue\(\) \{\s*if \(S\.recall\) return S\.recall\.total;/.test(POS_TILL_SRC), true);
 // The switch is ABSENT when nothing is waiting, so a badge on screen always
 // means there is something behind it — and a shop with no QR orders sees the
 // till exactly as it shipped.

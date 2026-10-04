@@ -534,7 +534,10 @@ function liveFixture() {
   const d = openTables2(DB_SRC, ['retail_customers', 'retail_orders', 'retail_order_items',
                                  'retail_payments', 'retail_stores', 'storefront_config',
                                  'retail_points_transactions', 'retail_topup_transactions',
-                                 'retail_product_options', 'retail_product_option_choices']);
+                                 'retail_product_options', 'retail_product_option_choices',
+                                 // §426 — a till sale now asks for the customer's
+                                 // located voucher; these customers hold none.
+                                 'retail_vouchers', 'retail_customer_vouchers']);
   addForkedStoreProducts(d, SCHEMA_SRC, DB_SRC);
   d.prepare("INSERT INTO store_products (id, name_en, name_cn, sku, weight, sell_price, is_active) VALUES (1,'Tofu','豆腐','SKU1','500g',50,1)").run();
   d.prepare("INSERT INTO retail_stores (id, code, name_en) VALUES (1, 'MAIN', 'Main')").run();
@@ -579,6 +582,15 @@ function handlerFor(d) {
     ].map(extractFunction).join('\n') + '\n' + grab('manualOrderCredit'))
       + '\nreturn manualOrderCredit;')(() => d),
     tax: taxLib, money,
+    // §426 — real, with their chain, for the reason the resolver above is real:
+    // a stub would decide what these sales are charged.
+    bestCounterVoucher: new Function('tdb', [
+      'voucherPlaceOk', 'counterVouchersFor', 'bestCounterVoucher', 'computeVoucherDiscount',
+      'voucherGrantIsStanding', 'voucherRedemptionsBy', 'voucherCapReached',
+    ].map(extractFunction).join('\n') + '\nreturn bestCounterVoucher;')(() => d),
+    consumeCounterVoucher: new Function([
+      'voucherGrantIsStanding', 'consumeCounterVoucher',
+    ].map(extractFunction).join('\n') + '\nreturn consumeCounterVoucher;')(),
     geocodeOrderSnapshotAsync: () => {},
     claimMigrationCredit: () => null,
     reconcileSignupVouchers: () => 0,

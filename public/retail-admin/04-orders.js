@@ -11888,6 +11888,10 @@ const ONW_ERR_WHERE = {
      control sits in. */
   credit_requires_customer: 'cust', insufficient_points: 'cust',
   insufficient_balance: 'cust', credit_did_not_settle: 'cust',
+  /* §426 — a located voucher at the till ran out between the read and the
+     write. Unreachable from THIS form (it is not the till, so no voucher is
+     applied to it) and here for the same reason as the four above. */
+  voucher_exhausted: 'cust',
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
   shipping_fee_not_allowed_for_pickup: 'money', shipping_fee_not_allowed_for_counter: 'money',
@@ -12016,6 +12020,8 @@ function ordNewErrText(code, detail, productId) {
     credit_requires_customer: cuT('Points and balance need a customer account.',
                                   '积分和余额需要顾客账户。'),
     insufficient_points: cuT('There are not enough points for that.', '积分不足。'),
+    // §426 — the web store's own pair for this code (shop.html), quoted whole.
+    voucher_exhausted: cuT('Voucher no longer valid', '优惠码已失效'),
     insufficient_balance: cuT('Not enough balance.', '余额不足。'),
     credit_did_not_settle: cuT('Points or balance did not cover the whole amount. Pick a payment method for the rest.',
                                '积分或余额不足以支付全部金额,请选择剩余金额的付款方式。'),

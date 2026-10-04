@@ -12265,6 +12265,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // chosen, so a free-shipping voucher that loses can't leak the waived fee.
   let voucher = null, voucherDiscount = 0;
   let chosen = null;   // the customer's code, if eligible
+  // §426 — where this order is, for a located voucher. Only a PICKUP is in
+  // person, and only a client that says it understands located vouchers is
+  // described at all: an older mini-app build previewed its total without them,
+  // and must be charged the figure it showed (the points path even refuses a
+  // mismatch outright). A delivery is never described, whichever store ships it.
+  const voucherPlace = (body.location_vouchers === true && isPickup && pickupStore)
+    ? { storeId: pickupStore.id, inPerson: true } : null;
   if (voucherCode) {
     const candidate = tdb().prepare(
       'SELECT * FROM retail_vouchers WHERE UPPER(code) = ? AND is_active = 1'
@@ -12286,6 +12293,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     if (ok && (!candidate.is_public || candidate.auto_grant_signup)) {
       if (!customerHoldsVoucher(req.customer.id, candidate)) ok = false;
     }
+    if (ok && !voucherPlaceOk(candidate, voucherPlace)) ok = false;
     if (ok && voucherCapReached(req.customer.id, candidate)) ok = false;
     if (ok) {
       const result = computeVoucherDiscount(candidate, subtotal, shippingFee, couponableSubtotal);
@@ -12297,7 +12305,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // Best auto-apply promo (no code, no grant). Compare it against the customer's
   // chosen code and keep the bigger benefit; a free-shipping win is valued at the
   // live shipping fee. On a tie, the customer's explicit pick is kept.
-  const auto = bestAutoVoucher(req.customer.id, subtotal, shippingFee, couponableSubtotal);
+  const auto = bestAutoVoucher(req.customer.id, subtotal, shippingFee, couponableSubtotal, voucherPlace);
   const valueOf = (c) => c ? (c.discount + (c.free_shipping ? (Number(shippingFee) || 0) : 0)) : 0;
   const winner = valueOf(auto) > valueOf(chosen) ? auto : chosen;
   if (winner) {
@@ -14713,6 +14721,128 @@ function customerHoldsVoucher(customerId, v) {
   ).get(customerId, v.id);
 }
 
+// ── §426 · WHERE a voucher may apply ─────────────────────────────────────
+// A voucher with a location (retail_vouchers.store_id) is an IN-PERSON discount
+// at that location and nothing else. `place` describes the order being priced:
+//   null / undefined                           an online order the caller did
+//                                              not describe — every delivery,
+//                                              and every client that predates
+//                                              located vouchers;
+//   { storeId, inPerson: true }                a mini-app pickup at storeId;
+//   { storeId, inPerson: true, counter: true } a till sale or QR order there.
+// A voucher with NO location keeps its old reach exactly: online, and still not
+// at the counter — opening every existing coupon to the till was not decided.
+// A delivery sent from the located store does NOT qualify: the test is how the
+// customer receives the goods, never retail_orders.store_id.
+function voucherPlaceOk(v, place) {
+  if (!v) return false;
+  if (v.store_id == null) return !(place && place.counter);
+  return !!(place && place.inPerson && Number(place.storeId) === Number(v.store_id));
+}
+
+// A mini-app pickup, as a place. Anything that is not a positive id is "not
+// described", which is the online answer.
+function pickupPlaceFrom(raw) {
+  const id = parseInt(raw, 10);
+  return id > 0 ? { storeId: id, inPerson: true } : null;
+}
+
+// The counter's vouchers: the ones these customers HOLD (a personal grant)
+// that are located at this store and still good. Percent and amount-off only —
+// free shipping means nothing at a counter. Returns [{ voucher, customerId }].
+// Several customer ids because one phone can sit on more than one account
+// (mini app and web); the till passes the one it attached.
+function counterVouchersFor(customerIds, storeId) {
+  const ids = (customerIds || []).map(Number).filter(n => n > 0);
+  if (!ids.length || !storeId) return [];
+  const rows = tdb().prepare(
+    `SELECT v.*, g.customer_id AS _holder, g.used_at AS _used_at
+       FROM retail_customer_vouchers g
+       JOIN retail_vouchers v ON v.id = g.voucher_id
+      WHERE g.customer_id IN (${ids.map(() => '?').join(',')})
+        AND v.store_id = ? AND v.is_active = 1
+        AND v.type IN ('percent', 'fixed_amount')
+        AND (v.expires_at IS NULL OR datetime(v.expires_at) > CURRENT_TIMESTAMP)
+        AND (v.max_uses IS NULL OR v.used_count < v.max_uses)
+      ORDER BY v.id`
+  ).all(...ids, Number(storeId));
+  const out = [];
+  for (const r of rows) {
+    const { _holder, _used_at, ...v } = r;
+    if (!voucherGrantIsStanding(v) && _used_at) continue;   // a spent one-shot
+    if (voucherCapReached(_holder, v)) continue;
+    out.push({ voucher: v, customerId: _holder });
+  }
+  return out;
+}
+
+// The best of those for this subtotal. Same "best one wins" as the checkout.
+// Returns { voucher, customerId, discount } or null.
+function bestCounterVoucher(customerIds, storeId, subtotal) {
+  let best = null;
+  for (const c of counterVouchersFor(customerIds, storeId)) {
+    const r = computeVoucherDiscount(c.voucher, subtotal, 0, subtotal);
+    if (!r.applied || !(r.discount > 0)) continue;
+    if (!best || r.discount > best.discount) best = { ...c, discount: Number(r.discount) || 0 };
+  }
+  return best;
+}
+
+// Count a counter voucher's use against an order, inside the caller's
+// transaction (`h`). The same two writes the checkout makes: the pool, bumped
+// only while it has room, and a one-shot grant stamped spent. A standing grant
+// stays in the wallet. Throws code 'voucher_exhausted' when the pool ran dry
+// between the read and the write. reverseOrderVoucher undoes both.
+function consumeCounterVoucher(h, cv, orderId) {
+  const bump = h.prepare(
+    `UPDATE retail_vouchers SET used_count = used_count + 1
+      WHERE id = ? AND (max_uses IS NULL OR used_count < max_uses)`
+  ).run(cv.voucher.id);
+  if (bump.changes !== 1) {
+    const err = new Error('voucher_exhausted');
+    err.code = 'voucher_exhausted';
+    throw err;
+  }
+  if (!voucherGrantIsStanding(cv.voucher)) {
+    h.prepare(
+      `UPDATE retail_customer_vouchers SET used_at = CURRENT_TIMESTAMP, used_order_id = ?
+        WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL`
+    ).run(orderId, cv.customerId, cv.voucher.id);
+  }
+}
+
+// What a screen is told about a counter voucher: enough to show the line and
+// work out the figure, and NOT the code — the QR menu is public, and a private
+// code is a thing that can be typed somewhere else.
+function counterVoucherTerms(v) {
+  return {
+    id: v.id, type: v.type, value: Number(v.value) || 0,
+    min_subtotal: Number(v.min_subtotal) || 0,
+    title_en: v.title_en || null, title_cn: v.title_cn || null,
+  };
+}
+
+// The customers holding a voucher at this store whose phone is this number.
+// Compared in phone-cn's canonical form, so '+86 138…', '138 …' and '138…'
+// are the same number. Read off the holders, not off every customer: the set
+// is the people somebody chose to give a located voucher to, which is small.
+// A blocked account is never found.
+function counterHoldersByPhone(phone, storeId) {
+  const want = phoneCn.normalize(phone);
+  if (!want || want.replace(/\D/g, '').length < 7 || !storeId) return [];
+  return tdb().prepare(
+    `SELECT DISTINCT c.id, c.phone
+       FROM retail_customer_vouchers g
+       JOIN retail_vouchers v  ON v.id = g.voucher_id
+       JOIN retail_customers c ON c.id = g.customer_id
+      WHERE v.store_id = ? AND v.is_active = 1
+        AND c.phone IS NOT NULL AND c.phone <> ''
+        AND COALESCE(c.is_blocked, 0) = 0`
+  ).all(Number(storeId))
+    .filter(c => phoneCn.normalize(c.phone) === want)
+    .map(c => c.id);
+}
+
 // How many times this customer has already redeemed a code, off order history
 // (cancelled orders don't count — cancelling hands the use back).
 function voucherRedemptionsBy(customerId, code) {
@@ -14743,7 +14873,7 @@ function voucherCapReached(customerId, v) {
 // (and revokes) the grant for any returning OUT1N phone, and the audience gate
 // below requires a held grant for every signup voucher — public or not, matching
 // the code-entry gate at order time. So honour the flag and let it apply itself.
-function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal = subtotal) {
+function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal = subtotal, place = null) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_vouchers
       WHERE is_active = 1 AND auto_apply = 1
@@ -14760,6 +14890,8 @@ function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal =
     // customer who was never granted one — or had it revoked as returning — can
     // never have it applied for them.
     if ((!v.is_public || v.auto_grant_signup) && !customerHoldsVoucher(customerId, v)) continue;
+    // §426 — a located voucher only where the caller says the order is there.
+    if (!voucherPlaceOk(v, place)) continue;
     if (voucherCapReached(customerId, v)) continue;
     const r = computeVoucherDiscount(v, subtotal, shippingFee, couponableSubtotal);
     if (!r.applied) continue;
@@ -14777,7 +14909,7 @@ function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal =
 // threshold (subtotal < min_subtotal). Used to show a "locked" coupon at
 // checkout so the customer sees the reward for adding a little more to the cart.
 // Ranked by smallest shortfall (closest to unlocking wins). Display only.
-function nearMissAutoVoucher(customerId, subtotal, couponableSubtotal = subtotal) {
+function nearMissAutoVoucher(customerId, subtotal, couponableSubtotal = subtotal, place = null) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_vouchers
       WHERE is_active = 1 AND auto_apply = 1
@@ -14791,6 +14923,7 @@ function nearMissAutoVoucher(customerId, subtotal, couponableSubtotal = subtotal
     // coupon to a customer who doesn't hold it (that would leak both its
     // existence and its code).
     if ((!v.is_public || v.auto_grant_signup) && !customerHoldsVoucher(customerId, v)) continue;
+    if (!voucherPlaceOk(v, place)) continue;
     if (voucherCapReached(customerId, v)) continue;
     const gap = Number(v.min_subtotal) - Number(subtotal);
     if (gap > 0 && gap < bestGap) {
@@ -14886,9 +15019,13 @@ router.get('/api/retail/vouchers/auto', requireRetailAuth, (req, res) => {
   // to subtotal). Order time recomputes it authoritatively.
   const couponableSubtotal = req.query.couponable_subtotal == null
     ? subtotal : Number(req.query.couponable_subtotal) || 0;
+  // §426 — the pickup store, sent only by a build that knows located vouchers
+  // and only while the customer has chosen pickup. Absent = not described, so
+  // a located voucher is never previewed to a build that would not get it.
+  const place = pickupPlaceFrom(req.query.pickup_store_id);
   // Shipping fee isn't known here, so a pure free-shipping promo (¥0 discount)
   // won't surface in the display — it still applies at order time.
-  const best = bestAutoVoucher(req.customer.id, subtotal, 0, couponableSubtotal);
+  const best = bestAutoVoucher(req.customer.id, subtotal, 0, couponableSubtotal, place);
   if (best) {
     const v = best.voucher;
     return res.json({ success: true, data: {
@@ -14901,7 +15038,7 @@ router.get('/api/retail/vouchers/auto', requireRetailAuth, (req, res) => {
   // threshold, surface it as a "locked" coupon so the customer sees what a bit
   // more spend would unlock (nudges basket size). discount here is the teaser
   // value at the threshold, NOT a discount on the current cart.
-  const near = nearMissAutoVoucher(req.customer.id, subtotal, couponableSubtotal);
+  const near = nearMissAutoVoucher(req.customer.id, subtotal, couponableSubtotal, place);
   if (near) {
     const v = near.voucher;
     return res.json({ success: true, data: {
@@ -15037,6 +15174,12 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
       }
       return res.status(404).json({ success: false, error: 'not_found' });
     }
+  }
+  // §426 — a located voucher answers only for a pickup at its store. Refused
+  // with not_applicable rather than not_found: the customer holds it (the gate
+  // above has passed), it simply does not work for this order.
+  if (!voucherPlaceOk(v, pickupPlaceFrom(req.body?.pickup_store_id))) {
+    return res.status(409).json({ success: false, error: 'not_applicable', detail: { store_id: v.store_id } });
   }
   // Per-customer limit check
   if (v.per_customer_limit && v.per_customer_limit > 0) {
@@ -18602,6 +18745,15 @@ function normalizeVoucherExpiry(v) {
   return s;
 }
 
+// §426 — a voucher's location from a request body. null/'' = anywhere online.
+function voucherStoreFromBody(raw) {
+  if (raw == null || raw === '') return { storeId: null };
+  const id = parseInt(raw, 10);
+  if (!(id > 0)) return { error: 'bad_store_id' };
+  if (!tdb().prepare('SELECT 1 FROM retail_stores WHERE id = ?').get(id)) return { error: 'store_not_found' };
+  return { storeId: id };
+}
+
 router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (req, res) => {
   const b = req.body || {};
   const code = String(b.code || '').trim().toUpperCase();
@@ -18636,6 +18788,11 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
     auto_grant_signup: b.auto_grant_signup ? 1 : 0,
     auto_apply: b.auto_apply ? 1 : 0,
   };
+  // §426 — where it works. Absent/empty = anywhere online, as every voucher
+  // before this. An id that was sent must be a real store.
+  const where = voucherStoreFromBody(b.store_id);
+  if (where.error) return res.status(400).json({ success: false, error: where.error });
+  v.store_id = where.storeId;
   try {
     // Codes are permanently UNIQUE (soft-delete keeps the row), so a code that
     // was used by a now-expired or disabled coupon would otherwise be locked
@@ -18657,13 +18814,13 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
         `UPDATE retail_vouchers SET
             type = ?, value = ?, min_subtotal = ?, max_uses = ?, per_customer_limit = ?,
             expires_at = ?, is_active = ?, is_public = ?, title_en = ?, title_cn = ?,
-            description = ?, auto_grant_signup = ?, auto_apply = ?, used_count = 0,
+            description = ?, auto_grant_signup = ?, auto_apply = ?, store_id = ?, used_count = 0,
             created_by = ?, created_at = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(
         v.type, v.value, v.min_subtotal, v.max_uses, v.per_customer_limit,
         v.expires_at, v.is_active, v.is_public, v.title_en, v.title_cn,
-        v.description, v.auto_grant_signup, v.auto_apply, createdBy, existing.id
+        v.description, v.auto_grant_signup, v.auto_apply, v.store_id, createdBy, existing.id
       );
       logActivity(req.user.id, req.user.username, 'revive', 'voucher', existing.id, { code, type: v.type }, req.ip);
       return res.json({ success: true, reused: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(existing.id) });
@@ -18672,12 +18829,13 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
     const info = tdb().prepare(
       `INSERT INTO retail_vouchers
          (code, type, value, min_subtotal, max_uses, per_customer_limit, expires_at,
-          is_active, is_public, title_en, title_cn, description, auto_grant_signup, auto_apply, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          is_active, is_public, title_en, title_cn, description, auto_grant_signup, auto_apply,
+          store_id, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       code, v.type, v.value, v.min_subtotal, v.max_uses, v.per_customer_limit,
       v.expires_at, v.is_active, v.is_public, v.title_en, v.title_cn,
-      v.description, v.auto_grant_signup, v.auto_apply, createdBy
+      v.description, v.auto_grant_signup, v.auto_apply, v.store_id, createdBy
     );
     logActivity(req.user.id, req.user.username, 'create', 'voucher', info.lastInsertRowid, { code, type: v.type }, req.ip);
     res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(info.lastInsertRowid) });
@@ -18693,9 +18851,14 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
   const fields = ['value', 'min_subtotal', 'max_uses', 'per_customer_limit', 'expires_at',
                   'is_active', 'is_public', 'title_en', 'title_cn', 'description',
-                  'auto_grant_signup', 'auto_apply'];
+                  'auto_grant_signup', 'auto_apply', 'store_id'];
   const updates = {};
   for (const f of fields) if (f in req.body) updates[f] = req.body[f];
+  if ('store_id' in updates) {
+    const where = voucherStoreFromBody(updates.store_id);
+    if (where.error) return res.status(400).json({ success: false, error: where.error });
+    updates.store_id = where.storeId;
+  }
   if (!Object.keys(updates).length) return res.status(400).json({ success: false, error: 'no_fields' });
   if ('is_active' in updates) updates.is_active = updates.is_active ? 1 : 0;
   if ('is_public' in updates) updates.is_public = updates.is_public ? 1 : 0;
@@ -18716,6 +18879,82 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
   const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   tdb().prepare(`UPDATE retail_vouchers SET ${sets} WHERE id = ?`).run(...Object.values(updates), id);
   res.json({ success: true });
+});
+
+// §426 — the located vouchers this customer holds at this store, for the till
+// to show the moment a customer is attached. Display only: the sale itself is
+// priced by POST /api/retail-admin/orders, which picks the best one again.
+router.get('/api/retail-admin/customers/:id/counter-vouchers', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const storeId = parseInt(req.query.store_id, 10);
+  if (!(id > 0) || !(storeId > 0)) return res.status(400).json({ success: false, error: 'bad_request' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: counterVouchersFor([id], storeId).map(c => counterVoucherTerms(c.voucher)) });
+});
+
+/* §426 — TAKE A TYPED-PHONE DISCOUNT OFF A QR ORDER. The cashier's answer when
+   the person at the counter is not who the number says. Pending orders only:
+   once money has moved this is a refund, which has its own path.
+
+   ONE TRANSACTION, and the guarded UPDATE goes first: it is what makes a second
+   tap (or a second till) find nothing to do rather than hand the voucher's use
+   back twice. Everything the discount touched is restated — the total, the tax
+   on it, the pending payment row the pay page and the till read — and the order
+   is unlinked from the account, because the only thing that linked it was the
+   number. Tax is recomputed from the rate and mode stored on the order, not
+   today's settings, so the restated figure is the one the order would have had. */
+router.post('/api/retail-admin/orders/:id/remove-voucher', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!(id > 0)) return res.status(400).json({ success: false, error: 'bad_id' });
+  let out = null;
+  try {
+    tdb().transaction(() => {
+      const o = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id);
+      if (!o) { out = { status: 404, error: 'not_found' }; return; }
+      // QR orders only. An online order's pending total may already sit in a
+      // WeChat prepay at the old amount, and a till sale is created paid — so
+      // neither is this control's to restate.
+      if (o.shop_entry_method !== 'qr') { out = { status: 409, error: 'not_a_qr_order' }; return; }
+      if (o.status !== 'pending_payment' || !o.voucher_code) {
+        out = { status: 409, error: 'nothing_to_remove' }; return;
+      }
+      const sub = Number(o.subtotal) || 0, ship = Number(o.shipping_fee) || 0, pack = Number(o.packing_fee) || 0;
+      const cfg = o.tax_rate_micro != null
+        ? { ...taxSettings(), enabled: true, rateMicro: Number(o.tax_rate_micro), mode: o.tax_mode || 'exclusive' }
+        : { enabled: false };
+      const line = tax.taxOn({
+        subtotalMinor: money.toMinor(sub) || 0,
+        shippingMinor: money.toMinor(ship) || 0,
+        packingMinor: money.toMinor(pack) || 0,
+      }, cfg);
+      const total = money.round(sub + ship + pack + money.fromMinor(line.addedMinor)
+        - (Number(o.points_amount) || 0) - (Number(o.balance_used) || 0));
+      const upd = tdb().prepare(
+        `UPDATE retail_orders
+            SET voucher_code = NULL, voucher_amount = 0, voucher_typed_phone = 0,
+                customer_id = CASE WHEN voucher_typed_phone = 1 THEN NULL ELSE customer_id END,
+                total = ?, tax_amount = ?
+          WHERE id = ? AND status = 'pending_payment' AND voucher_code IS NOT NULL`
+      ).run(Math.max(0, total), cfg.enabled ? money.fromMinor(line.taxMinor) : null, id);
+      if (upd.changes !== 1) { out = { status: 409, error: 'nothing_to_remove' }; return; }
+      tdb().prepare(
+        `UPDATE retail_payments SET amount = ? WHERE order_id = ? AND status = 'pending'`
+      ).run(Math.max(0, total), id);
+      tdb().prepare(
+        'UPDATE retail_vouchers SET used_count = used_count - 1 WHERE UPPER(code) = ? AND used_count > 0'
+      ).run(String(o.voucher_code).trim().toUpperCase());
+      tdb().prepare(
+        'UPDATE retail_customer_vouchers SET used_at = NULL, used_order_id = NULL WHERE used_order_id = ? AND used_at IS NOT NULL'
+      ).run(id);
+      out = { status: 200, total: Math.max(0, total) };
+    })();
+  } catch (e) {
+    console.error('[remove-voucher]', id, e.message);
+    return res.status(500).json({ success: false, error: 'remove_failed' });
+  }
+  if (out.status !== 200) return res.status(out.status).json({ success: false, error: out.error });
+  logActivity(req.user.id, req.user.username, 'remove_voucher', 'retail_order', id, { total: out.total }, req.ip);
+  res.json({ success: true, data: { id, total: out.total } });
 });
 
 router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) => {
@@ -26985,7 +27224,24 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     if (!Number.isFinite(pf) || pf < 0) return res.status(400).json({ success: false, error: 'bad_packing_fee' });
     packingFee = Math.round(pf * 100) / 100;
   }
+  /* ── §426 · the customer's located voucher, at the till ─────────────────
+     A till sale with a customer attached takes the best voucher that customer
+     HOLDS for this store, with no tap — the cashier attaching them is the
+     check. Read off the raw body because channel, door and store are validated
+     further down; an order that fails those is refused before anything is
+     written, so a discount worked out here for it is simply never used.
+
+     The till only. The admin's New order form is not a counter in this sense
+     and keeps its hand price and total override; a typed grand total ALSO
+     turns it off, because the operator wrote the figure the customer pays. */
+  const counterVoucher = (customer && optionStoreId
+      && String(b.channel || '') === 'shop' && String(b.shop_entry_method || '') === 'till'
+      && String(b.fulfillment_type || '') === 'counter'
+      && (b.total_override == null || b.total_override === ''))
+    ? bestCounterVoucher([customer.id], optionStoreId, subtotal) : null;
+  const voucherDiscount = counterVoucher ? counterVoucher.discount : 0;
   let total = Math.round((subtotal + shippingFee + packingFee) * 100) / 100;
+  if (voucherDiscount) total = Math.round((total - voucherDiscount) * 100) / 100;
   let overridden = false;
   if (b.total_override != null && b.total_override !== '') {
     const to = Number(b.total_override);
@@ -27012,6 +27268,9 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         subtotalMinor: money.toMinor(subtotal) || 0,
         shippingMinor: money.toMinor(shippingFee) || 0,
         packingMinor: money.toMinor(packingFee) || 0,
+        // On the DISCOUNTED base, the checkout's order: tax is charged on what
+        // was actually charged.
+        discountMinor: money.toMinor(voucherDiscount) || 0,
       }, taxCfg);
   if (taxLine.addedMinor) total = money.round(total + money.fromMinor(taxLine.addedMinor));
   const taxAmount = taxCfg.enabled ? money.fromMinor(taxLine.taxMinor) : null;
@@ -27351,8 +27610,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
            subtotal, shipping_fee, packing_fee, total,
            customer_note, staff_note, channel, channel_note, source, created_by, fulfillment_type, pay_token,
            store_id, tax_amount, tax_rate_micro, tax_mode, shop_entry_method,
-           points_used, points_amount, balance_used
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           points_used, points_amount, balance_used, voucher_code, voucher_amount
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
@@ -27369,9 +27628,16 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         // folded into it, so a refund can be split back across all three
         // (orderTenders / splitRefundAcrossTenders) instead of being returned
         // entirely in cash the shop never took.
-        credit.pointsUsed, credit.pointsAmount, credit.balanceUsed
+        credit.pointsUsed, credit.pointsAmount, credit.balanceUsed,
+        counterVoucher ? counterVoucher.voucher.code : null, voucherDiscount
       );
       orderId = info.lastInsertRowid;
+      // §426 — the voucher's use, counted the way the checkout counts it, in the
+      // same transaction. A pool drained between the read above and here aborts
+      // the sale rather than settling a discount the voucher no longer has.
+      if (counterVoucher) {
+        consumeCounterVoucher(tx, counterVoucher, orderId);
+      }
       // ship_modes / needs_ice_pack / ship_from_supplier are SNAPSHOTTED here, the
       // same three the checkout snapshots (see the insertItem above at the
       // customer /orders route) with the same 'air,land' fallback. They are not
@@ -27474,6 +27740,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     // first. Nothing was created; the operator re-reads the balance and tries
     // again. Same code the checkout answers, so a client handles one case.
     if (creditError) return res.status(409).json({ success: false, error: creditError });
+    if (e && e.code === 'voucher_exhausted') return res.status(409).json({ success: false, error: 'voucher_exhausted' });
     // Rethrowing from an async handler produces a REJECTED PROMISE rather than
     // a synchronous throw. It reaches the same error handler by a different
     // road: lib/express-async-guard patches Route.prototype and does
@@ -27531,6 +27798,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
                                     // split without re-deriving it from settings it does not own.
                                     points_used: credit.pointsUsed, points_amount: credit.pointsAmount,
                                     balance_used: credit.balanceUsed,
+                                    // §426 — the voucher the server applied, if any.
+                                    voucher_amount: voucherDiscount,
                                     // What was charged, so the caller can print
                                     // it without a second read (audit I-03).
                                     tax_amount: taxAmount, tax_mode: taxMode, tax_rate_micro: taxRateMicro } });
@@ -28352,6 +28621,16 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   }
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
+
+  // §426 — the voucher's own customer-facing title, so the till can name the
+  // discount on a recalled QR order the way the customer saw it named.
+  if (o.voucher_code) {
+    const vt = tdb().prepare(
+      'SELECT title_en, title_cn FROM retail_vouchers WHERE UPPER(code) = ?'
+    ).get(String(o.voucher_code).trim().toUpperCase());
+    o.voucher_title_en = (vt && vt.title_en) || null;
+    o.voucher_title_cn = (vt && vt.title_cn) || null;
+  }
 
   // §425 — WHICH ORDER THIS REPLACES, AND WHICH ORDER REPLACED IT, BY NUMBER.
   // `replacement_for_order_id` has been on this payload since §98, but an id is
@@ -41551,3 +41830,17 @@ module.exports.saveProductOptions    = saveProductOptions;
 // one a test has to be able to reach directly.
 module.exports.productContentSnapshot = productContentSnapshot;
 module.exports.restoreProductOptionsFromSnapshot = restoreProductOptionsFromSnapshot;
+
+// §426 — located vouchers, exported for routes/shop-menu.js (the QR menu finds a
+// voucher from a typed phone and counts its use the way the till does) and for
+// scripts/test_location_vouchers.js, which holds the place rule to one answer.
+module.exports.voucherPlaceOk        = voucherPlaceOk;
+module.exports.counterVouchersFor    = counterVouchersFor;
+module.exports.bestCounterVoucher    = bestCounterVoucher;
+module.exports.counterVoucherTerms   = counterVoucherTerms;
+module.exports.counterHoldersByPhone = counterHoldersByPhone;
+module.exports.consumeCounterVoucher = consumeCounterVoucher;
+module.exports.reverseOrderVoucher   = reverseOrderVoucher;
+// The online half of the same rule, for the suite: which auto-apply voucher a
+// mini-app checkout gets for a given place.
+module.exports.bestAutoVoucher       = bestAutoVoucher;

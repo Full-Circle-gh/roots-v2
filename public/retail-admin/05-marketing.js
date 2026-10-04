@@ -83,9 +83,21 @@ function vchPillsHtml(v) {
   return pills.length ? '<div class="vch-pills">' + pills.join('') + '</div>' : '';
 }
 
+// §426 — the locations a coupon can be limited to, read once per page load.
+// null until the read lands; a failed read leaves only "Online store", which is
+// what every coupon was before §426 and stays a correct answer.
+let _vchStores = null;
+async function vchLoadStores() {
+  if (_vchStores) return;
+  try {
+    const j = await api('/api/retail-admin/stores');
+    _vchStores = (j.data || []).filter(s => s.is_active !== 0);
+  } catch { _vchStores = []; }
+}
+
 async function loadVouchers() {
   try {
-    const { data } = await api('/api/retail-admin/vouchers');
+    const [{ data }] = await Promise.all([api('/api/retail-admin/vouchers'), vchLoadStores()]);
     _vchData = data || [];
     vchRender();
     // Keep an open drawer in step with fresh data (e.g. after a grant).
@@ -240,7 +252,10 @@ function vchDrawerRender() {
     + '<div class="vch-fact"><span class="k">' + cuT('Used', '已使用') + '</span><span class="v">' + v.used_count + (v.max_uses != null ? ' / ' + v.max_uses : '') + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('Per customer', '每人限用') + '</span><span class="v">' + perSel + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('Ends', '截止') + '</span><span class="v"><input type="date" class="vch-date" value="' + dateVal + '" onchange="vchSetExpiry(' + v.id + ', this.value)"></span></div>'
+    + '<div class="vch-fact"><span class="k">' + cuT('Store', '门店') + '</span><span class="v">' + vchStoreSel(v) + '</span></div>'
     + '</div>'
+    + (v.store_id != null ? '<div class="vch-note">' + cuT('In person only — the counter, its QR menu and pickup there. Never delivery.',
+                                                          '仅限到店:前台、二维码菜单和到店自提,不含配送。') + '</div>' : '')
     + '<div class="vch-kicker">' + cuT('How customers get it', '顾客怎么获得') + '</div>'
     + sw('is_public', !!v.is_public,
         cuT('Show in the app', '在小程序展示'),
@@ -339,6 +354,29 @@ async function vchToggle(id, field, value) {
   try { await vchPatch(id, { [field]: !!value }); }
   catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
 }
+/* §426 — WHERE THE COUPON WORKS. "Online store" is every coupon before §426,
+   unchanged. A location makes it an in-person discount there and nowhere
+   else: the till, the QR menu, a mini-app pickup — never a delivery, even one
+   sent from that store. The merchant's own store names are the options, so no
+   word is added for them. A coupon limited to a location that has since been
+   switched off keeps it, and the option stays so the select does not lie. */
+function vchStoreSel(v) {
+  const stores = (_vchStores || []).slice();
+  if (v.store_id != null && !stores.some(s => s.id === v.store_id)) stores.push({ id: v.store_id, code: '#' + v.store_id });
+  const opt = (val, label, on) => '<option value="' + val + '"' + (on ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+  return '<span class="vch-perwrap"><select class="vch-per" onchange="vchSetStore(' + v.id + ', this.value)">'
+    + opt('', cuT('Online store', '线上商城'), v.store_id == null)
+    + stores.map(s => opt(s.id, cuT(s.name_en || s.code || ('#' + s.id), s.name_cn || s.name_en || s.code || ('#' + s.id)),
+                          v.store_id === s.id)).join('')
+    + '</select></span>';
+}
+async function vchSetStore(id, value) {
+  try {
+    await vchPatch(id, { store_id: value ? Number(value) : null });
+    toast(cuT('Saved', '已保存'));
+  } catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
+}
+
 async function vchSetExpiry(id, value) {
   try {
     await vchPatch(id, { expires_at: value || null });

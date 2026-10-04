@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.466
+# Tacet shared-core consolidation — decisions record, v4.467
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-04 · v4.467 — **§426 · A VOUCHER CAN BE LIMITED TO ONE LOCATION, AND THEN IT IS AN IN-PERSON DISCOUNT THERE — THE RAMADA STAFF 10% — DECIDED BY ASH:** *"in yuexiu location the Ramada hotel all the hotel employees has 10% discounts"*, then *"why neee a new feature for this ? … I think we do under vouchers"*, then the QR-checkout phone box, then *"go"*. No staff group is built: the existing voucher gains a location (`retail_vouchers.store_id`), and a voucher with one applies **only in person at that location** — a till sale, a QR order, a mini-app pickup — and never to a delivery, even one sent from that store. The till applies it when the cashier attaches the customer; the QR menu takes an optional phone number and shows the discount before ordering, and **amends §44's "no phone number"** for that one purpose. A typed phone proves nothing, so such an order must be paid at the counter, is marked for the cashier to check, and the till can remove the discount in one tap. Vouchers with no location are unchanged everywhere. See §426.
 
 2026-10-04 · v4.466 — **§425 · A REPLACEMENT ORDER SAYS WHAT IT REPLACES, AND THE ORDER IT REPLACES SAYS SO — DECIDED BY ASH:** *"yes add the drawer lines"*, after a read-only look at production showed TC000916 was already linked to TC000902 (`source = 'replacement'`, `replacement_for_order_id` set, case answered 'replacement') and that **no screen ever drew the link**, so a replacement made the proper way looked exactly like one typed by hand. The order drawer, on the desktop and the phone, now carries one line under *Order placed*: **Replacement for TC000902** on the replacement, **Replacement sent · TC000916** on the original. The server's order-detail payload gains `replacement_for` and `replaced_by`, read off `replacement_for_order_id` and stored nowhere else. One Chinese string composed (`补发 · 原单 TC000902`); the other side is the live `已补发`. See §425.
 
@@ -28323,3 +28325,96 @@ Chinese on the right, and both Chinese lines have Chinese on the left — and
 rewording that tips over the rule fails a test instead of showing half a line.
 
 Tests: `scripts/test_replacement_link_line.js`. See the v4.466 changelog entry.
+
+
+## §426 — A VOUCHER CAN BE LIMITED TO ONE LOCATION, AND THEN IT IS AN IN-PERSON DISCOUNT THERE
+
+**Decided 2026-10-04 by Ash**, from the phone, over one conversation. The ask:
+*"in yuexiu location the Ramada hotel all the hotel employees has 10% discounts.
+suggest how to do it and how to recognize an employee. maybe by phone number and
+picture?"* Ash's answers, in order: the discount is *"for Ramada staff at yuexiu
+location"*; the cashier is who checks someone works there; it covers *"all"*
+products; a six-month expiry is *"ok"*; *"why neee a new feature for this ? we
+don't have a discount we can add to an account … I think we do under vouchers"*;
+*"hotel qr menu and yuexiu counter is the same"*; the QR checkout should take a
+phone number so the customer *"will already will see the discount at checkout"*;
+*"it cover the mini app as well ?"*; then *"go"*.
+
+### What was true before this
+
+A standing personal voucher ("8% off for this one customer") already existed —
+`voucherGrantIsStanding`, a grant that stays in the wallet while
+`per_customer_limit` is not 1. It applied **only in the mini-app and web
+checkout**. The till posts `POST /api/retail-admin/orders`, which never read a
+voucher; the QR menu (§44) has no account, so nothing could be attached; and no
+voucher could be limited to a place, so one handed out worked on every delivery
+in the country. Ash was right that the voucher was the thing to use. What was
+missing was the three places it did not reach.
+
+### What is decided
+
+1. **No staff group. The voucher gains a location.** `retail_vouchers.store_id`,
+   null for every existing voucher. The admin coupon drawer (desktop and phone)
+   gets one control, *Where*, with *Anywhere* and each active location.
+2. **A located voucher is an in-person discount at that location and nothing
+   else.** It applies to a till sale there, a QR order there, and a mini-app
+   **pickup** there. It never applies to a delivery — **including a delivery
+   sent from that same store**, which is why the test is the fulfilment and the
+   chosen pickup store, never `retail_orders.store_id`.
+3. **A voucher with no location behaves exactly as before**, everywhere. In
+   particular it still does not apply at the till or on the QR menu: switching
+   every existing coupon on at the counter would be a separate decision, and
+   nobody asked for it.
+4. **At the counter only a voucher the customer HOLDS applies** — a personal
+   grant — and only a percentage or an amount off (free shipping means nothing
+   at a counter). Best one wins, the same rule the checkout uses. Discount
+   comes off the goods before tax, the same order as the checkout.
+5. **The till applies it with no tap.** Attaching the customer by phone or name
+   (the picker that already exists) shows the voucher's own title and the amount
+   off; the server recomputes the discount itself and never takes a figure from
+   the till.
+6. **The QR menu gets an optional phone box, and §44's "no phone number" is
+   amended for this one purpose.** §44 is otherwise untouched: still no login,
+   still a name, still paid at the counter. The number is used for nothing but
+   finding a voucher held at this location. The page is told only the discount,
+   **never a name or anything else about the account**, so typing numbers
+   cannot be used to learn who is a customer.
+7. **A typed phone proves nothing, so the cashier checks.** An order whose
+   discount came from a typed number is linked to that customer, carries
+   `retail_orders.voucher_typed_phone = 1`, and **must be paid at the counter**
+   — the in-page WeChat rail is refused for it, because a payment made before
+   anyone looked would skip the check. On the till the recalled order says the
+   discount came from a typed number and should be checked, and **Remove
+   discount** takes it off in one tap: the total, the tax and the pending
+   payment row are restated, the order is unlinked from the customer, and the
+   voucher's use is handed back.
+8. **The mini app covers pickup at the location.** Its checkout preview now
+   sends the chosen pickup store, and the order says it understands located
+   vouchers (`location_vouchers: true`). **An older build does not send that,
+   and gets no located voucher** — so it is never charged a figure it did not
+   show. The discount reaches the mini app when the next build clears WeChat
+   review. The web store is not changed and gets none.
+9. **Who checks, and when.** The cashier checks the hotel badge once, when the
+   voucher is given (the existing *Give to a customer*). After that a signed-in
+   mini-app account cannot be borrowed, so a pickup needs no second look; a QR
+   order with a typed number is checked every time, per 7.
+
+### How Ramada is set up with this
+
+One voucher: 10% off, private, *Apply it for them* on, no limit per customer,
+ending in six months, *Where* = the Yuexiu location (the one whose QR menu is the
+Ramada menu — Ash: they are the same counter). Each employee is given it once,
+after the badge is seen.
+
+### What it does not do
+
+- **No photos.** A face photo is sensitive personal information under PIPL and
+  needs separate consent and storage; the WeChat avatar is chosen by the customer
+  and proves nothing. The badge does the job.
+- **No per-person discount report** in this change. The voucher's own holder list
+  and `voucher_code` on every order are the record; a report is a separate ask.
+- A *public* located voucher (everyone, no grant) is not applied at the counter,
+  only in the mini app on a pickup there. Rule 4 limits the counter to held
+  grants; widening it is its own decision.
+
+Tests: `scripts/test_location_vouchers.js`.
