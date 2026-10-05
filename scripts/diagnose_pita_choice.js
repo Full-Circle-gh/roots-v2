@@ -103,3 +103,29 @@ try {
     if (++n >= 5) break;
   }
 } catch (e) { out('  (quotes table unreadable: ' + e.message + ')'); }
+
+// Round 2: re-adding did not help, and Syd's 04:29 checkout carried #255 beside
+// the pita. Several mini app paths add with NO answers (product page "Buy
+// together", home bundle block, favourites "Add all"). Is the pita in a
+// buy-together set, and what is #255?
+out('\n== #255 AND BUY-TOGETHER SETS THAT CONTAIN A PITA ==');
+try {
+  const p255 = db.prepare('SELECT id, sku, name_en, name_cn, bundle FROM store_products WHERE id = 255').get();
+  if (p255) out(`  #255 ${p255.sku || ''} ${p255.name_en} / ${p255.name_cn}  bundle=${p255.bundle || '-'}`);
+  const pitaIds = prods.map(p => p.id);
+  for (const r of db.prepare(`SELECT id, name_en, bundle FROM store_products WHERE bundle IS NOT NULL AND bundle <> ''`).all()) {
+    let ids = [];
+    try {
+      const b = JSON.parse(r.bundle);
+      const arr = Array.isArray(b) ? b : (b && (b.items || b.product_ids || b.ids)) || [];
+      ids = arr.map(x => Number(x && typeof x === 'object' ? (x.id || x.product_id) : x));
+    } catch { ids = (String(r.bundle).match(/\d+/g) || []).map(Number); }
+    if (ids.some(i => pitaIds.includes(i)) || pitaIds.includes(r.id)) {
+      out(`  product #${r.id} ${r.name_en}  bundle=${r.bundle}`);
+    }
+  }
+} catch (e) { out('  (unreadable: ' + e.message + ')'); }
+try {
+  const fav = db.prepare(`SELECT COUNT(*) AS n FROM retail_favorites WHERE customer_id = 269 AND product_id = 256`).get();
+  out(`  customer 269 has the pita in favourites: ${fav && fav.n ? 'YES' : 'no'}`);
+} catch (e) { out('  (favourites unreadable: ' + e.message + ')'); }
