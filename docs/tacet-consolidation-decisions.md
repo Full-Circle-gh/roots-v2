@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.475
+# Tacet shared-core consolidation — decisions record, v4.476
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.476 — **§431 rule 7 · ON THE QR MENU, A TAP ON A CHOICE'S PICTURE SHOWS IT BIG — DECIDED BY ASH:** *"I want customer to be able to click on product image and see it bigger with an option to close it down after"*. The picture opens the menu's existing full-screen photo viewer, the one the product sheet's photo already uses, with its ✕ button; tapping the photo, the dark ground, the ✕ or Escape closes it and the picker underneath stays as it was. The tap does not tick the choice. A choice that is sold out, or blocked because the question's maximum is reached, is a switched-off row and its picture does not open. No new word, no schema. See §431 rule 7.
 
 2026-10-05 · v4.475 — **§433 · CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, SAYS IT WHEN CHECKOUT OPENS, AND "PICK" REPLACES THE OLD LINE — DECIDED BY ASH:** a customer met "Please choose: Whole-Wheat Pita (Frozen)" at Place Order and the popup named the product they had already chosen, not the question; Ash: *"yers"* to fixing it. The refusal now carries the question (`question_en`/`question_cn`), the quote reports the same refusal as `needs_choice` so the mini app offers the picker when checkout opens, and "Pick" hands the product page the cart line to replace, so the re-pick does not sit beside the unanswered line and get refused again. No new word: the popup uses the product sheet's live 请选择 / Please choose. Mini app needs an upload. Number §432 was skipped: a parallel branch (kitchen WeCom group) had claimed it. See §433.
 
@@ -28644,6 +28646,14 @@ item when he make the choice"*; then *"go ahead"* on step 1 of the plan below).
 6. **Not built (step 2):** uploading a picture per choice, for a choice that is
    not a product (a sauce) or to use a different photo. That needs a column and
    both editors. Its own ask, if and when wanted.
+7. **QR menu: a tap on the picture shows it big** (added 2026-10-05 by Ash:
+   *"I want customer to be able to click on product image and see it bigger
+   with an option to close it down after"*). It opens the menu's existing
+   full-screen photo viewer (`#big`, the product sheet's), closed by its ✕, a
+   tap on the photo or the dark ground, or Escape; the picker stays open
+   beneath it. The tap does not tick the choice; the name and the box still
+   do. A sold-out or capped choice is a disabled row, so its picture does not
+   open. The web shop and the mini app do not have this yet.
 
 Tests: `scripts/test_option_choice_photo.js`.
 

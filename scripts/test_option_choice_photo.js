@@ -199,6 +199,22 @@ function optsOnCard(html, pid) {
     assert.ok(/\.oc-i\{/.test(menu), 'no .oc-i style');
   });
 
+  // Ash, 2026-10-05: "I want customer to be able to click on product image and
+  // see it bigger with an option to close it down after". The picker's picture
+  // opens the menu's existing full-screen viewer (#big, with its close button)
+  // and the tap does not also tick the row. The tap itself is driven in a real
+  // browser only by hand; these lock the three pieces that make it work.
+  await check('the menu picker\'s picture opens the photo viewer and does not tick the row', async () => {
+    assert.ok(menu.includes('data-big="\'+esc(c.img)+\'"'), 'the picture carries no data-big');
+    const taps = menu.split("closest('.oc-i[data-big]')").length - 1;
+    assert.strictEqual(taps, 2, `expected the viewer to open AND the picker to ignore the tap, saw ${taps}`);
+    assert.ok(/if\(ci\)\{bigImg\.src=ci\.getAttribute\('data-big'\)\+'&w=\d+';big\.hidden=false;return\}/.test(menu),
+      'the viewer is not opened from the choice picture');
+    assert.ok(menu.includes('id="bigX"'), 'the viewer has lost its close button');
+    assert.ok(menu.includes('if(!big.hidden){shut();e.stopImmediatePropagation();return}'),
+      'Escape on the picture would also close the picker under it');
+  });
+
   console.log('\n── The other pickers draw it');
   const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
