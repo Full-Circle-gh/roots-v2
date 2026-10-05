@@ -121,7 +121,7 @@ section('1 · where a voucher applies');
       method, headers: Object.assign({ 'Content-Type': 'application/json' }, op ? { 'x-op': String(op) } : {}),
       body: body ? JSON.stringify(body) : undefined, redirect: 'manual',
     });
-    let j = null; try { j = await r.json(); } catch { /* not json */ }
+    const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch { if (process.env.LV_DEBUG) console.log('NONJSON', r.status, url, txt.slice(0, 300)); }
     return { status: r.status, j };
   };
   const order = (id) => db.prepare('SELECT * FROM retail_orders WHERE id = ?').get(id);
@@ -239,7 +239,101 @@ section('1 · where a voucher applies');
     is(cx.status, 303, 'the cancel goes through');
     is(usedCount(), u2 - 1, 'and the voucher\'s use comes back');
 
-    /* ── 7. the page ───────────────────────────────────────────────────── */
+    /* ── 8. §428 — the counter gives, attaches and adds ────────────────── */
+    section('8 · §428 — a new employee\'s first visit, fixed at the counter');
+    // Five QR orders in the whole suite, inside the menu's twelve a minute.
+    const qr8 = (extra) => call('POST', `/s/${SHOP_CODE}/order`, Object.assign({
+      name: 'New', items: [{ store_product_id: PROD, qty: 2 }],
+    }, extra));
+    // A new employee: no account yet. Their first QR order, phone typed, finds nothing.
+    const n1 = await qr8({ phone: '13600136006' });
+    is(Number(n1.j && n1.j.data && n1.j.data.total), 100, 'a new employee\'s first QR order is full price — nobody has given them anything');
+    const nOrder = db.prepare('SELECT * FROM retail_orders WHERE order_no = ?').get(n1.j.data.order_no);
+    is(nOrder.customer_id, null, '…and it is linked to no one');
+
+    // The cashier adds them, as the till does when a search finds nobody.
+    const mk = await call('POST', '/api/retail-admin/customers', { nickname: 'New employee', phone: '136 0013 6006' }, OWNER);
+    const NEW = mk.j && mk.j.data && mk.j.data.id;
+    ok(NEW > 0, 'the till can add a customer by name and phone');
+
+    const before8 = await call('GET', `/api/retail-admin/customers/${NEW}/counter-vouchers?store_id=${YUEXIU}`, null, OWNER);
+    is([before8.j.data, (before8.j.givable || []).map(v => v.title_en)], [[], ['Ramada staff 10%']],
+       'they hold nothing here, and the till is offered exactly this location\'s voucher to give — not the online one');
+    const tianheGive = await call('GET', `/api/retail-admin/customers/${NEW}/counter-vouchers?store_id=${TIANHE}`, null, OWNER);
+    is(tianheGive.j.givable, [], 'another location\'s till is offered nothing to give');
+
+    // Guard 1: only this location's own vouchers.
+    const gOnline = await call('POST', `/api/retail-admin/customers/${NEW}/counter-vouchers`, { voucher_id: ONLINE, store_id: YUEXIU }, OWNER);
+    is(gOnline.status, 403, 'an online coupon cannot be given from a till, whatever is posted');
+    const gWrong = await call('POST', `/api/retail-admin/customers/${NEW}/counter-vouchers`, { voucher_id: RAMADA, store_id: TIANHE }, OWNER);
+    is(gWrong.status, 403, 'nor can the Ramada voucher be given from another location\'s till');
+    const g1 = await call('POST', `/api/retail-admin/customers/${NEW}/counter-vouchers`, { voucher_id: RAMADA, store_id: YUEXIU }, OWNER);
+    is([g1.status, g1.j.data.granted], [200, true], 'the Yuexiu till gives the Ramada voucher');
+    // Guard 2: who gave it.
+    const gRow = db.prepare('SELECT granted_by_name, granted_note FROM retail_customer_vouchers WHERE customer_id = ? AND voucher_id = ?').get(NEW, RAMADA);
+    is(gRow.granted_by_name, '__lv_owner', 'the grant records who gave it, by name');
+    const g2 = await call('POST', `/api/retail-admin/customers/${NEW}/counter-vouchers`, { voucher_id: RAMADA, store_id: YUEXIU }, OWNER);
+    is([g2.status, g2.j.data.granted], [200, false], 'a second tap is a success that changes nothing');
+    const holders = await call('GET', `/api/retail-admin/vouchers/${RAMADA}/grants`, null, OWNER);
+    ok((holders.j.data || []).some(h => h.customer_id === NEW && h.granted_by_name === '__lv_owner'),
+       'the coupon\'s holder list says who gave it');
+
+    // Attach them to the order they already placed: the 10% comes off it now.
+    const u8 = usedCount();
+    const at = await call('POST', `/api/retail-admin/orders/${nOrder.id}/counter-customer`, { customer_id: NEW }, OWNER);
+    is([at.status, Number(at.j.data.total), Number(at.j.data.voucher_amount)], [200, 90, 10],
+       'attaching them to the QR order takes the 10% off that order — no cancel, no re-ring');
+    const nAfter = order(nOrder.id);
+    is([nAfter.customer_id, nAfter.voucher_code, Number(nAfter.voucher_typed_phone)], [NEW, 'RAMADA10', 0],
+       'the order is theirs, carries the voucher, and is not a typed phone — the cashier attached them');
+    is(Number(db.prepare("SELECT amount FROM retail_payments WHERE order_id = ? AND status = 'pending'").get(nOrder.id).amount), 90,
+       'the pending payment is restated');
+    is(usedCount(), u8 + 1, 'the use is counted');
+    const at2 = await call('POST', `/api/retail-admin/orders/${nOrder.id}/counter-customer`, { customer_id: NEW }, OWNER);
+    is([at2.status, Number(order(nOrder.id).total), usedCount()], [200, 90, u8 + 1], 'attaching again changes nothing');
+    const atOther = await call('POST', `/api/retail-admin/orders/${nOrder.id}/counter-customer`, { customer_id: OTHER }, OWNER);
+    is([atOther.status, atOther.j && atOther.j.error], [409, 'order_has_customer'],
+       'an order that is someone else\'s is refused — Remove discount is the deliberate step');
+
+    // A typed phone that found the right person: attaching them is the check.
+    const t1 = await qr8({ phone: '13800138001' });
+    const tOrder = db.prepare('SELECT * FROM retail_orders WHERE order_no = ?').get(t1.j.data.order_no);
+    is(Number(tOrder.voucher_typed_phone), 1, 'a typed phone is marked for checking');
+    const tAt = await call('POST', `/api/retail-admin/orders/${tOrder.id}/counter-customer`, { customer_id: STAFF }, OWNER);
+    is([tAt.status, Number(order(tOrder.id).voucher_typed_phone), Number(order(tOrder.id).total)], [200, 0, 90],
+       'attaching the same person clears the check and leaves the money alone');
+    const tillOnly = await call('POST', `/api/retail-admin/orders/${r1.j.data.id}/counter-customer`, { customer_id: STAFF }, OWNER);
+    is(tillOnly.status, 409, 'a till sale is not attached this way — it is created with its customer');
+
+    /* ── 9. §428 — the office gives to a pasted list ─────────────────────── */
+    section('9 · §428 — a pasted staff list');
+    const gl = await call('POST', `/api/retail-admin/vouchers/${RAMADA}/grant-list`, { text: [
+      'Ramada employee +86 138 0013 8001',   // already holds it
+      '13500135005, 王芳',                   // nobody yet
+      'Somebody else 139-0013-9002',         // a customer, without the voucher
+      'Zhang San',                           // no phone
+      '',
+    ].join('\n') }, OWNER);
+    is(gl.status, 200, 'the list is accepted');
+    const d = gl.j.data || {};
+    is([d.granted, d.already, d.created, d.matched], [2, 1, 1, 2],
+       'two given, one who had it, one new customer made, two matched by phone in any format');
+    is(d.unread, ['Zhang San'], 'a line with no phone is handed back, not guessed at');
+    const wang = db.prepare("SELECT id, nickname FROM retail_customers WHERE phone = '13500135005'").get();
+    is(wang && wang.nickname, '王芳', 'the new customer carries the name from the line');
+    ok(!!db.prepare('SELECT 1 FROM retail_customer_vouchers WHERE customer_id = ? AND voucher_id = ? AND granted_by_name = ?')
+      .get(OTHER, RAMADA, '__lv_owner'), 'and every grant from the list records who gave it');
+    const gl2 = await call('POST', `/api/retail-admin/vouchers/${RAMADA}/grant-list`, { text: '13500135005 王芳' }, OWNER);
+    is([gl2.j.data.granted, gl2.j.data.already, gl2.j.data.created], [0, 1, 0], 'pasting it again gives nothing twice and makes no duplicate');
+    // The office's one-at-a-time Give to a customer, by a backend operator. Its
+    // granted_by has a FK to KITCHEN users, and an operator's id is not one, so
+    // this answered 500 before §428 unless the two ids happened to coincide.
+    const one = await call('POST', `/api/retail-admin/vouchers/${ONLINE}/grant`, { customer_ids: [OTHER] }, OWNER);
+    is([one.status, one.j && one.j.granted], [200, 1], 'Give to a customer works for a backend operator, and records who');
+    is(db.prepare('SELECT granted_by_name FROM retail_customer_vouchers WHERE customer_id = ? AND voucher_id = ?').get(OTHER, ONLINE).granted_by_name,
+       '__lv_owner', '…by name');
+
+        /* ── 7. the page ───────────────────────────────────────────────────── */
     section('7 · the page');
     const page = await fetch(`${base}/s/${SHOP_CODE}`).then(r => r.text());
     ok(/id="cPhone"[^>]*type="tel"/.test(page), 'the checkout carries the optional phone box');
@@ -263,6 +357,12 @@ section('1 · where a voucher applies');
     ok(/data-rm-voucher="1"/.test(tillSrc) && /\[data-rm-voucher\]/.test(tillSrc) && /return removeVoucher\(\)/.test(tillSrc),
        'the till draws Remove discount and the click reaches it');
     ok(/sub - \(cv \? cv\.off : 0\)/.test(tillSrc), 'the till quotes the walk-in total after the voucher, before tax');
+    ok(/\[data-give\]/.test(tillSrc) && /return giveVoucher\(/.test(tillSrc) && /data-give="/.test(tillSrc),
+       '§428 — the till draws the give button and the click reaches it');
+    ok(/if \(S\.recall\) return attachToRecall\(c\);/.test(tillSrc) && /\/counter-customer'/.test(tillSrc),
+       '§428 — attaching a customer on a recalled order goes to the order, not to a new sale');
+    ok(/if \(act === 'new'\)\s+return createCustomer\(\);/.test(tillSrc) && /id="cnew-phone"/.test(tillSrc),
+       '§428 — a search that finds nobody offers to add them');
   } catch (e) {
     fail++; console.log('  ✗ the suite threw: ' + (e && e.stack || e));
   } finally {

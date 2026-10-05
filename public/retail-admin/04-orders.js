@@ -3422,8 +3422,12 @@ function renderTrackingCell(o) {
   // §285 — still on the road past its due day. The early half of the late
   // badge below, which only appears once the parcel has landed late.
   const rlDays = Number(o.running_late_days) || 0;
+  // §427 — once every late parcel has been rung about, the days stay and the
+  // ask goes: "customer contacted", at a normal weight.
   const runningLateBadge = rlDays > 0
-    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT(`RUNNING LATE · ${rlDays} day${rlDays === 1 ? '' : 's'} · contact customer`, `配送逾期 ${rlDays} 天 · 联系客户`)}</div>`
+    ? (o.running_late_contacted
+      ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:600; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT(`RUNNING LATE · ${rlDays} day${rlDays === 1 ? '' : 's'} · customer contacted`, `配送逾期 ${rlDays} 天 · 已联系客户`)}</div>`
+      : `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--td-brick-ink); margin-top:3px;">⚠ ${cuT(`RUNNING LATE · ${rlDays} day${rlDays === 1 ? '' : 's'} · contact customer`, `配送逾期 ${rlDays} 天 · 联系客户`)}</div>`)
     : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
           <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${noContactBadge}${runningLateBadge}${airDelayBadge}`;
@@ -8730,16 +8734,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   // §285 — this parcel's due day has passed and it has not landed. Said here,
   // on the parcel, while there is still time to ring the customer first.
   const rlD = Number(s.running_late_days) || 0;
-  const runningLateBanner = rlD > 0 ? `
-    <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; margin-bottom:12px;
-                background: var(--td-brick-tint, #F6E4DF); border:1px solid var(--td-brick-ink, #B4533E);
-                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.45; color: var(--td-brick-ink, #B4533E);">
-      <span style="flex-shrink:0;">⚠</span>
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:700;">${cuT(`Running late · ${rlD} day${rlD === 1 ? '' : 's'}`, `配送逾期 ${rlD} 天`)}</div>
-        <div style="margin-top:2px; color: var(--text-2);">${cuT('Not delivered yet · contact customer', '尚未送达 · 联系客户')}</div>
-      </div>
-    </div>` : '';
+  const runningLateBanner = rlD > 0 ? renderRunningLateBanner(o, s, rlD) : '';
 
   return `
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
@@ -9563,6 +9558,69 @@ function renderNoContactBanner(o, s) {
       <button type="button" class="btn btn-sm btn-primary" style="flex-shrink:0;"
         onclick="ackNoContact(${Number(o.id)}, true, event)">${cuT('I called the customer', '已联系客户')}</button>
     </div>`;
+}
+
+// §427 — RUNNING LATE, AND WHETHER SOMEBODY HAS RUNG THE CUSTOMER. Red with
+// "I called the customer" while nobody has; once somebody has, it stays (the
+// parcel is still late, and the days keep counting) but goes quiet: a check,
+// who and when, and an undo. The server lets the call stand for 48 hours; if
+// the parcel is still on the road after that it turns red again, and says who
+// rang last time so the next call starts from there.
+function renderRunningLateBanner(o, s, rlD) {
+  const c = s.running_late_contact;
+  const title = cuT(`Running late · ${rlD} day${rlD === 1 ? '' : 's'}`, `配送逾期 ${rlD} 天`);
+  const who = c ? `${c.by ? ' · ' + escapeHtml(c.by) : ''} · ${escapeHtml(formatDate(c.at))}` : '';
+  if (c && c.current) {
+    return `
+    <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; margin-bottom:12px;
+                background: var(--bg-elev-1); border:1px solid var(--line);
+                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.45; color: var(--td-brick-ink, #B4533E);">
+      <span style="flex-shrink:0;">⚠</span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700;">${title}</div>
+        <div style="margin-top:2px; display:flex; align-items:center; gap:6px; color: var(--text-2);">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color: var(--sage, #5a7d5a);"><path d="M20 6 9 17l-5-5"/></svg>
+          <span style="flex:1;">${cuT('Customer contacted', '已联系客户')}${who}</span>
+        </div>
+      </div>
+      <button type="button" onclick="ackRunningLate(${Number(o.id)}, false, event)"
+        style="font: inherit; font-size:11.5px; cursor:pointer; padding:2px 4px; border:none; flex-shrink:0;
+               background: transparent; color: var(--text-3); text-decoration: underline;">
+        ${cuT('Undo', '撤销')}
+      </button>
+    </div>`;
+  }
+  return `
+    <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; margin-bottom:12px;
+                background: var(--td-brick-tint, #F6E4DF); border:1px solid var(--td-brick-ink, #B4533E);
+                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.45; color: var(--td-brick-ink, #B4533E);">
+      <span style="flex-shrink:0;">⚠</span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700;">${title}</div>
+        <div style="margin-top:2px; color: var(--text-2);">${cuT('Not delivered yet · contact customer', '尚未送达 · 联系客户')}</div>
+        ${c ? `<div style="margin-top:2px; color: var(--text-3);">${cuT('Customer contacted', '已联系客户')}${who}</div>` : ''}
+      </div>
+      <button type="button" class="btn btn-sm btn-primary" style="flex-shrink:0;"
+        onclick="ackRunningLate(${Number(o.id)}, true, event)">${cuT('I called the customer', '已联系客户')}</button>
+    </div>`;
+}
+
+async function ackRunningLate(orderId, clear, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/running-late/ack`,
+      method: 'POST', body: { cleared: !!clear },
+      errLabelEn: clear ? 'Could not save' : 'Could not re-open',
+      errLabelCn: clear ? '保存失败' : '撤销失败',
+    });
+    openOrder(orderId, { instant: true });
+    loadOrders();
+    if (typeof tdOpsLoad === 'function') tdOpsLoad();
+  } catch {
+    // adminWrite has already shown the failure and restored the button;
+    // nothing was written, so there is nothing to refresh.
+  }
 }
 
 async function ackNoContact(orderId, clear, ev) {

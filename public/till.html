@@ -643,6 +643,16 @@ button{font:inherit;color:inherit;margin:0}
 }
 .cmeta{font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums}
 .cempty{padding:18px 4px;text-align:center;color:var(--td-text2);font-size:14px}
+/* §428 — nobody found: the picker offers to add them. Two fields and one
+   control, in the search field's own shape so it reads as the same sheet. */
+.cnew{display:flex;flex-direction:column;gap:8px;padding:4px 0}
+.cnew input{
+  height:48px;padding:0 14px;border-radius:var(--r-control);border:1px solid var(--td-border);
+  background:var(--td-paper);font:inherit;font-size:15px;color:var(--td-text);
+  -webkit-user-select:text;user-select:text;
+}
+.cnew input:focus{outline:none;border-color:var(--td-text2)}
+.cnew .cbtn{justify-content:center}
 .ccancel{
   min-height:52px;border-radius:var(--r-control);border:1px solid var(--td-border);
   background:transparent;color:var(--td-text2);font:inherit;font-size:15px;font-weight:500;
@@ -1091,6 +1101,18 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     typedPhone:   ['Phone typed by the customer — check before taking payment',
                    '顾客自己输入的电话,收款前请核对'],  // composed, §426
     removeDiscount: ['Remove discount', '取消优惠'],   // composed, §426
+    /* §428 — adding a customer at the counter, and giving them this location's
+       voucher. The first three are the phone app's own "Add a customer" form
+       (m.html), quoted whole: the same three fields, the same act. `give` takes
+       its Chinese from the admin's Give it out · 发放 and Grant · 发放; the
+       voucher's own title follows it. One composed, declared in
+       docs/tacet-delivery-vocabulary.md (§428). */
+    addCustomer:  ['Add a customer', '添加顾客'],      // m.html: Add a customer form
+    name:         ['Name', '姓名'],                    // m.html: same form
+    phone:        ['Phone', '电话'],                   // m.html: same form
+    give:         ['Give', '发放'],                    // admin: Give it out · 发放
+    orderHasCustomer: ['This order already belongs to another customer. Remove the discount first.',
+                       '此订单已属于其他顾客,请先取消优惠。'], // composed, §428
     // Cancelling a QR order the customer no longer wants. Both halves are the
     // mini app's own, from its order screen where a customer cancels exactly
     // this — miniapp/pages/order/order.js:99 (en) and :275 (cn). The customer
@@ -2240,6 +2262,12 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       S.recall.voucherTitle = cuT(j.data.voucher_title_en || j.data.voucher_title_cn || '',
                                   j.data.voucher_title_cn || j.data.voucher_title_en || '') || T('voucher');
       S.recall.typedPhone = Number(j.data.voucher_typed_phone) === 1;
+      // §428 — already linked (a typed phone found someone): name them, and do
+      // not offer to attach a second customer over the first.
+      if (j.data.customer_id) {
+        S.recall.customer = custRow({ id: j.data.customer_id, nickname: j.data.nickname || null });
+        loadCounterVouchers(S.recall.customer);
+      }
       S.recall.total = Number(j.data.total) || S.recall.total;
       S.recall.loading = false;
       render();
@@ -2401,12 +2429,21 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // and a + Customer button here would be a control that silently does
     // nothing. Cancel is the way out, and costs nothing because nothing has
     // been charged yet.
+    //
+    // §428 — AND NOW IT IS OFFERED. A customer can be attached to a recalled
+    // order (POST /orders/:id/counter-customer writes it), so the cashier who
+    // has checked a Ramada badge can put the discount on the order the
+    // employee already placed, instead of cancelling it and ringing it again.
     if (S.recall) {
+      var rc = S.recall.customer;
       el.className = 'cust on';
       el.innerHTML = head
         + '<span class="who">' + esc(String(S.recall.code))
         + (S.recall.name ? ' · ' + esc(S.recall.name) : '')
-        + '<div class="sub">' + esc(S.recall.order_no || '') + '</div></span>'
+        + '<div class="sub">' + esc(rc ? (rc.nickname || ('#' + rc.id)) : (S.recall.order_no || '')) + '</div></span>'
+        + giveButtons(rc)
+        + (!rc && !S.recall.loading
+            ? '<button class="cbtn" type="button" data-cust="pick">' + esc(T('customer')) + '</button>' : '')
         // BACK, NOT CANCEL. This control closes the order without touching it,
         // and it said "Cancel" until 2026-09-08 — beside a real Cancel-the-order
         // action that is the same word for opposite outcomes, and the dangerous
@@ -2419,6 +2456,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       el.innerHTML = head + '<span class="who">' + esc(S.customer.nickname || ('#' + S.customer.id))
         + '<div class="sub">' + esc(T('points')) + ' ' + (Number(S.customer.points) || 0)
         + ' · ' + esc(T('wallet')) + ' ' + money(S.customer.balance) + '</div></span>'
+        + giveButtons(S.customer)
         + '<button class="cbtn" type="button" data-cust="clear">' + esc(T('remove')) + '</button>';
     } else {
       el.className = 'cust';
@@ -2427,6 +2465,32 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
         + esc(T('customer')) + '</button>';
     }
+  }
+
+  /* §428 — THIS LOCATION'S VOUCHERS THE CUSTOMER COULD BE GIVEN, one button
+     each, named by the voucher's own title ("Give Ramada Staff"). Only what the
+     server listed as givable at THIS store is drawn, and the server checks the
+     same list again on the give — the till cannot offer an online coupon. */
+  function giveButtons(c) {
+    if (!c || !c.give || !c.give.length || String(c.cvStore) !== String(S.storeId)) return '';
+    return c.give.map(function (v) {
+      var title = cuT(v.title_en || v.title_cn || '', v.title_cn || v.title_en || '') || T('voucher');
+      return '<button class="cbtn" type="button" data-give="' + esc(String(v.id)) + '"'
+        + (S.busy ? ' disabled' : '') + '>' + esc(T('give') + ' ' + title) + '</button>';
+    }).join('');
+  }
+
+  // What this customer holds here (`cv`) and could be given here (`give`), read
+  // for the store the till is on. Both stay with the customer object, so they
+  // leave with the customer.
+  function loadCounterVouchers(c) {
+    var storeId = S.storeId;
+    return api('/api/retail-admin/customers/' + encodeURIComponent(c.id) + '/counter-vouchers?store_id='
+        + encodeURIComponent(storeId)).then(function (j) {
+      if (!j || !j.success) return;
+      c.cv = j.data || []; c.give = j.givable || []; c.cvStore = storeId;
+      render();
+    }).catch(function () { /* full price on screen; the server still decides */ });
   }
 
   // The chosen answers on a recalled QR line, one per row, under the product
@@ -3189,6 +3253,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function attachCustomer(id) {
     var c = (S.custRows || []).filter(function (x) { return String(x.id) === String(id); })[0];
     if (!c) return;
+    if (S.recall) return attachToRecall(c);   // §428
     // A NEW customer starts with their credit untouched (§93). Attaching over
     // an existing one is possible from this sheet, and inheriting the previous
     // customer's toggles would spend this one's points without anybody asking.
@@ -3200,13 +3265,92 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // sale at full price on screen, and the server still applies the voucher
     // when the sale is posted — so the worst case is a total that comes back
     // lower than the one quoted, never a discount nobody had.
-    var storeId = S.storeId;
-    api('/api/retail-admin/customers/' + encodeURIComponent(c.id) + '/counter-vouchers?store_id='
-        + encodeURIComponent(storeId)).then(function (j) {
-      if (S.customer !== c || !j || !j.success) return;
-      c.cv = j.data || []; c.cvStore = storeId;
+    loadCounterVouchers(c);
+  }
+
+  /* §428 — ATTACH TO THE RECALLED QR ORDER. The server writes the customer and
+     applies the best voucher they hold here; this screen takes the total from
+     the reply. Called again after a give, which is how a voucher given a moment
+     ago reaches the order already on screen. */
+  function attachToRecall(c) {
+    var r = S.recall;
+    if (!r || S.busy) return;
+    S.custOpen = false; S.custRows = null;
+    var pk = $('custpick'); if (pk) pk.removeAttribute('data-built');
+    S.busy = true; S.err = ''; render();
+    api('/api/retail-admin/orders/' + r.id + '/counter-customer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: c.id })
+    }).then(function (j) {
+      S.busy = false;
+      if (!j || !j.success) {
+        S.err = (j && j.error === 'order_has_customer') ? T('orderHasCustomer') : T('didNotSave');
+        render(); return;
+      }
+      if (S.recall && S.recall.id === r.id) {
+        var d = j.data;
+        S.recall.customer = c;
+        S.recall.total = Number(d.total) || 0;
+        S.recall.voucherOff = Number(d.voucher_amount) || 0;
+        if (d.voucher_title_en || d.voucher_title_cn) {
+          S.recall.voucherTitle = cuT(d.voucher_title_en || d.voucher_title_cn || '',
+                                      d.voucher_title_cn || d.voucher_title_en || '') || T('voucher');
+        } else if (!S.recall.voucherTitle) S.recall.voucherTitle = T('voucher');
+        S.recall.typedPhone = false;   // a cashier attached them: that is the check
+      }
+      loadPend();
       render();
-    }).catch(function () { /* full price on screen; the server still decides */ });
+      loadCounterVouchers(c);
+    }).catch(function (e) {
+      S.busy = false;
+      S.err = e && e.auth ? cuT('Sign in on the backend, then reload this page.', '请先在后台登录,然后刷新此页面。')
+                          : T('didNotSave');
+      render();
+    });
+  }
+
+  /* §428 — GIVE THIS LOCATION'S VOUCHER to the attached customer. The badge has
+     been checked; one tap gives it, recorded under this operator's name, and
+     the discount follows at once: on a sale by re-reading what they hold, on a
+     recalled QR order by attaching again, which applies it to that order. */
+  function giveVoucher(vid) {
+    var c = S.recall ? S.recall.customer : S.customer;
+    if (!c || S.busy) return;
+    S.busy = true; S.err = ''; render();
+    api('/api/retail-admin/customers/' + encodeURIComponent(c.id) + '/counter-vouchers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voucher_id: Number(vid), store_id: S.storeId })
+    }).then(function (j) {
+      S.busy = false;
+      if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
+      if (S.recall && S.recall.customer === c) return attachToRecall(c);
+      loadCounterVouchers(c);
+    }).catch(function (e) {
+      S.busy = false;
+      S.err = e && e.auth ? cuT('Sign in on the backend, then reload this page.', '请先在后台登录,然后刷新此页面。')
+                          : T('didNotSave');
+      render();
+    });
+  }
+
+  /* §428 — NOBODY FOUND: ADD THEM. Name and phone, through the same create the
+     office uses, which reuses a customer already holding that phone rather than
+     making a second one. Then attached, exactly as if they had been found. */
+  function createCustomer() {
+    var nm = $('cnew-name'), ph = $('cnew-phone');
+    var name = nm ? nm.value.trim() : '', phone = ph ? ph.value.trim() : '';
+    if (!phone || S.busy) { if (ph) ph.focus(); return; }
+    S.busy = true;
+    api('/api/retail-admin/customers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname: name || null, phone: phone })
+    }).then(function (j) {
+      S.busy = false;
+      if (!j || !j.success || !j.data) { S.err = T('didNotSave'); closeCustPicker(); return; }
+      var c = custRow(j.data);
+      S.custRows = [c];
+      attachCustomer(c.id);
+    }).catch(function () { S.busy = false; S.err = T('didNotSave'); closeCustPicker(); });
   }
 
   /* §426 — TAKE THE DISCOUNT OFF A RECALLED QR ORDER. The answer to the check:
@@ -3451,7 +3595,20 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (!box) return;
     // Nothing typed yet is not the same as nothing found, and must not say so.
     if (S.custRows === null) { box.innerHTML = ''; return; }
-    if (!S.custRows.length) { box.innerHTML = '<div class="cempty">' + esc(T('noMatches')) + '</div>'; return; }
+    // §428 — nothing found offers to add them, the phone pre-filled when what
+    // was typed is a number (it usually is: the employee says it out loud).
+    if (!S.custRows.length) {
+      var q = String(S.custQ || '').trim(), digits = /^[+\d\s-]{7,}$/.test(q);
+      box.innerHTML = '<div class="cempty">' + esc(T('noMatches')) + '</div>'
+        + '<div class="cnew">'
+        + '<input id="cnew-name" type="text" autocomplete="off" placeholder="' + esc(T('name')) + '"'
+        + ' value="' + esc(digits ? '' : q) + '">'
+        + '<input id="cnew-phone" type="tel" autocomplete="off" placeholder="' + esc(T('phone')) + '"'
+        + ' value="' + esc(digits ? q : '') + '">'
+        + '<button class="cbtn" type="button" data-cust="new">' + esc(T('addCustomer')) + '</button>'
+        + '</div>';
+      return;
+    }
     var h = '';
     S.custRows.forEach(function (c) {
       // Name and phone are what tell two people apart; points and wallet are
@@ -3503,7 +3660,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // Tapping away from the questions is cancelling the line — nothing has
       // been added yet, so the safe answer a stray tap gives is "no line".
       if (S.opts && ev.target.id === 'optpick') return closeOpts();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-cancel-order],[data-opt],[data-somode],[data-so]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -3524,6 +3681,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (t.hasAttribute('data-recall')) return recall(Number(t.getAttribute('data-recall')));
       if (t.hasAttribute('data-recall-cancel')) return cancelRecall();
       if (t.hasAttribute('data-rm-voucher')) return removeVoucher();
+      if (t.hasAttribute('data-give')) return giveVoucher(t.getAttribute('data-give'));   // §428
       if (t.hasAttribute('data-cancel-order')) return cancelOrder();
       // THE WAY BACK. An empty till leaves on the tap; a basket with lines in it
       // is a sale in progress that nothing has saved yet, so it asks first — in
@@ -3559,6 +3717,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         // 'use' attaches a searched row; 'pick' OPENS the picker and is the
         // + Customer button's own long-standing value — do not merge the two.
         if (act === 'use')   return attachCustomer(t.getAttribute('data-id'));
+        if (act === 'new')   return createCustomer();   // §428
         return pickCustomer();
       }
       if (t.hasAttribute('data-wal'))   { S.wallet = t.getAttribute('data-wal'); S.err = ''; return render(); }

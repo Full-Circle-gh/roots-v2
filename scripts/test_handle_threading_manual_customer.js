@@ -249,9 +249,16 @@ it('source: POST /api/retail-admin/customers was NOT edited — it passes no han
   assert.ok(call.test(RETAIL), 'the unconverted caller changed shape or gained a handle');
 });
 
-it('source: there are still exactly two call sites', () => {
+// A count, so a NEW caller is seen and reviewed for its handle rather than
+// slipping in. §428 added the third, reviewed: POST /vouchers/:id/grant-list
+// calls it inside `tdb().transaction(...)`, a synchronous better-sqlite3
+// transaction on the ambient handle, so the default `h = tdb()` IS that
+// transaction's handle and the reuse-by-phone read sees its own uncommitted
+// rows. It joins the order route's in-transaction case if §24's flip makes
+// transactions async — the same list that route is already on.
+it('source: there are exactly three call sites, each reviewed', () => {
   const n = (RETAIL.match(/createOrReuseManualCustomer\(/g) || []).length - 1;   // less the definition
-  assert.strictEqual(n, 2, `expected 2 call sites, found ${n}`);
+  assert.strictEqual(n, 3, `expected 3 call sites, found ${n}`);
 });
 
 // ── Footer ─────────────────────────────────────────────────────────────────

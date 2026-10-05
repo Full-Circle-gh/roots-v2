@@ -2720,6 +2720,11 @@ addColumn('retail_vouchers', 'store_id',          'INTEGER');
 // remove the discount. 0 for every other order, including one whose voucher
 // came from a signed-in account or a customer the cashier attached.
 addColumn('retail_orders', 'voucher_typed_phone', 'INTEGER DEFAULT 0');
+// §428 — WHO GAVE A VOUCHER, by name, written at the moment of giving. The old
+// granted_by id has no realm (a kitchen user and a backend operator can share
+// an id), so it cannot be named reliably; this can. NULL on every grant made
+// before §428 and on the automatic ones (signup, self-claim).
+addColumn('retail_customer_vouchers', 'granted_by_name', 'TEXT');
 
 db.exec(`CREATE TABLE IF NOT EXISTS retail_subscriptions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4124,6 +4129,14 @@ addColumn('retail_shipments', 'prepared_at', 'DATETIME');
 
 addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
+
+// §427 — "CUSTOMER CONTACTED" ON A PARCEL STILL RUNNING LATE (§285). WHEN and
+// WHO; NULL = nobody has rung them. Takes the parcel off "Delivery needs a
+// call" for 48 hours, then it asks again if it has still not landed
+// (lib/delay-case.js, runningLateNeedsCallSql). The banner and the list badge
+// keep the days late either way — this answers the call, not the lateness.
+addColumn('retail_shipments', 'running_late_contacted_at', 'DATETIME');
+addColumn('retail_shipments', 'running_late_contacted_by', 'TEXT');
 
 // §421 — THE JD SERVICE THIS PARCEL WAS BOOKED ON, AND THE WAYBILL IT WAS
 // BOOKED FOR. The parcel's `mode` is the plan and §381 never rewrites it, so

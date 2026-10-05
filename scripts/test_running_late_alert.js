@@ -78,7 +78,8 @@ function fixture() {
     CREATE TABLE retail_delay_cases (id INTEGER PRIMARY KEY, shipment_id INTEGER);
     CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY, order_id INTEGER, mode TEXT,
       dispatched_at TEXT, delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
-      tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT);`);
+      tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT,
+      running_late_contacted_at TEXT, running_late_contacted_by TEXT);`);
   return db;
 }
 const PARCELS = [
@@ -124,6 +125,72 @@ it('the card counts the order while it is dispatched, and drops it once it lands
 it('it is one of the parts of "Delivery needs a call", so the list and the count include it', () => {
   const src = fs.readFileSync(path.join(ROOT, 'lib', 'delivery-alerts.js'), 'utf8');
   assert.match(src, /const parts = \[[^\]]*runningLateAlertSql\(alias\)/);
+});
+
+console.log('"customer contacted" (§427)');
+
+// The card's SQL reads the wall clock twice; pin both to NOW.
+const pinned = (sql) => sql.replace(/DATE\('now'\)/g, TODAY_SQL).replace(/datetime\('now'\)/g, "'2026-09-28 03:00:00'");
+
+it('a contacted order leaves the card, and comes back 48 hours later if still on the road', () => {
+  const db = fixture();
+  db.prepare("INSERT INTO retail_orders (id, status) VALUES (1, 'dispatched'), (2, 'dispatched'), (3, 'dispatched')").run();
+  db.prepare(`INSERT INTO retail_shipments (order_id, mode, dispatched_at, running_late_contacted_at, running_late_contacted_by) VALUES
+    (1, 'air', '2026-09-26 02:00:00', NULL, NULL),
+    (2, 'air', '2026-09-26 02:00:00', '2026-09-27 03:00:01', 'lily'),
+    (3, 'air', '2026-09-26 02:00:00', '2026-09-26 03:00:00', 'lily')`).run();
+  const sql = pinned(alerts.runningLateAlertSql('o'));
+  // 1: nobody rang. 2: rung 47h59m ago, still answers. 3: rung 48h ago, asks again.
+  assert.deepStrictEqual(db.prepare(`SELECT id FROM retail_orders o WHERE ${sql}`).all().map((r) => r.id), [1, 3]);
+});
+
+it('the contact stays on the parcel whether or not it is current, so the screen can say who rang last', () => {
+  assert.strictEqual(dc.runningLateContact({}, NOW), null);
+  assert.deepStrictEqual(
+    dc.runningLateContact({ running_late_contacted_at: '2026-09-27 03:00:01', running_late_contacted_by: 'lily' }, NOW),
+    { at: '2026-09-27 03:00:01', by: 'lily', current: true });
+  assert.strictEqual(dc.runningLateContact({ running_late_contacted_at: '2026-09-26 03:00:00' }, NOW).current, false);
+});
+
+it('runningLateNeedsCallSql and runningLateContact agree on where 48 hours ends', () => {
+  const db = fixture();
+  const stamps = [null, '2026-09-28 02:59:00', '2026-09-27 03:00:01', '2026-09-26 03:00:00', '2026-09-20 00:00:00'];
+  const ins = db.prepare("INSERT INTO retail_shipments (id, order_id, mode, dispatched_at, running_late_contacted_at) VALUES (?, 1, 'air', '2026-09-26 02:00:00', ?)");
+  stamps.forEach((t, i) => ins.run(i + 1, t));
+  const sqlHits = db.prepare(`SELECT id FROM retail_shipments s WHERE ${pinned(dc.runningLateNeedsCallSql('s'))} ORDER BY id`)
+    .all().map((r) => r.id);
+  const jsHits = stamps.map((t, i) => {
+    const c = dc.runningLateContact({ running_late_contacted_at: t }, NOW);
+    return c && c.current ? null : i + 1;
+  }).filter(Boolean);
+  assert.deepStrictEqual(sqlHits, jsHits);
+  assert.deepStrictEqual(sqlHits, [1, 4, 5]);
+});
+
+it('the stamp answers the call, not the lateness: the parcel is still running late', () => {
+  const s = { mode: 'air', dispatched_at: '2026-09-26 02:00:00', running_late_contacted_at: '2026-09-28 02:00:00' };
+  assert.strictEqual(dc.runningLateDays(s, NOW), 1);
+});
+
+it('the route stamps only parcels running late, and the undo is the same route', () => {
+  assert.match(RETAIL, /router\.post\('\/api\/retail-admin\/orders\/:id\/running-late\/ack'/);
+  const route = RETAIL.slice(RETAIL.indexOf("orders/:id/running-late/ack'"));
+  assert.match(route.slice(0, 2500), /const LATE = delayCase\.runningLateSql\(\);/);
+  assert.match(route.slice(0, 2500), /running_late_contacted_by = \?/);
+  assert.match(route.slice(0, 2500), /running_late_contacted_at = NULL/);
+});
+
+it('both screens have the button and the undo, and the list says "customer contacted"', () => {
+  assert.match(ORDERS, /ackRunningLate\(\$\{Number\(o\.id\)\}, true, event\)/);
+  assert.match(ORDERS, /ackRunningLate\(\$\{Number\(o\.id\)\}, false, event\)/);
+  assert.match(ORDERS, /o\.running_late_contacted/);
+  assert.match(MHTML, /APP\.cmd\('ackRunningLate',1\)/);
+  assert.match(MHTML, /APP\.cmd\('ackRunningLate',0\)/);
+  assert.match(MHTML, /\/running-late\/ack/);
+  assert.match(MHTML, /r\.running_late_contacted/);
+  assert.match(MHTML, /runningLateContact:sp\.running_late_contact/);
+  assert.match(RETAIL, /AS running_late_contacted,/);
+  assert.match(RETAIL, /running_late_contact: o\.status === 'dispatched'/);
 });
 
 console.log('the wiring');

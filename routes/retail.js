@@ -14811,6 +14811,43 @@ function consumeCounterVoucher(h, cv, orderId) {
   }
 }
 
+// §428 — the vouchers limited to THIS store that this customer could be given
+// at its counter: active, unexpired, pool not drained, percent or amount off.
+// Held ones are left out unless asked for (the give route accepts a voucher the
+// customer already holds, as a no-op). The till offers exactly this list, and
+// the give route checks against exactly this list — one rule, one place.
+function counterGivable(customerId, storeId, { includeHeld = false } = {}) {
+  if (!(Number(storeId) > 0)) return [];
+  return tdb().prepare(
+    `SELECT v.* FROM retail_vouchers v
+      WHERE v.store_id = ? AND v.is_active = 1
+        AND v.type IN ('percent', 'fixed_amount')
+        AND (v.expires_at IS NULL OR datetime(v.expires_at) > CURRENT_TIMESTAMP)
+        AND (v.max_uses IS NULL OR v.used_count < v.max_uses)
+        ${includeHeld ? '' : `AND NOT EXISTS (SELECT 1 FROM retail_customer_vouchers g
+                                              WHERE g.voucher_id = v.id AND g.customer_id = ?)`}
+      ORDER BY v.id`
+  ).all(...(includeHeld ? [Number(storeId)] : [Number(storeId), Number(customerId)]));
+}
+
+// §428 — retail_customer_vouchers.granted_by has a FK to users(id): a KITCHEN
+// user. A Mini App Backend operator's req.user.id is a tenant_users id, which
+// is not in users, so writing it tripped "FOREIGN KEY constraint failed" and
+// every grant an operator made answered 500 — the same trap voucher create
+// already steps around (see its createdBy). NULL for operators; the person is
+// named in granted_by_name instead, which is what the holder list reads.
+function grantedById(req) {
+  return req && req.backendUser ? null : ((req && req.user && req.user.id) || null);
+}
+
+// §428 — the name a grant is recorded under: the operator's display name, else
+// their username. Never empty for a person; null only when no one is signed in.
+function grantedByName(req) {
+  const u = (req && (req.backendUser || req.user)) || null;
+  if (!u) return null;
+  return String(u.display_name || u.username || '').slice(0, 80) || null;
+}
+
 // What a screen is told about a counter voucher: enough to show the line and
 // work out the figure, and NOT the code — the QR menu is public, and a private
 // code is a thing that can be typed somewhere else.
@@ -18070,8 +18107,9 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const RL_EXISTS = deliveryAlerts.runningLateAlertSql('o');
     const rlItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_synced_at,
+             -- §427 — the parcels still owed a call, the ones the EXISTS matched.
              (SELECT MIN(${delayCase.runningLateSinceSql('srl')}) FROM retail_shipments srl
-               WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl')}) AS waiting_since,
+               WHERE srl.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('srl')}) AS waiting_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -18889,7 +18927,120 @@ router.get('/api/retail-admin/customers/:id/counter-vouchers', requireRetailAdmi
   const storeId = parseInt(req.query.store_id, 10);
   if (!(id > 0) || !(storeId > 0)) return res.status(400).json({ success: false, error: 'bad_request' });
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: counterVouchersFor([id], storeId).map(c => counterVoucherTerms(c.voucher)) });
+  // §428 — `givable`: this location's own vouchers the customer does not hold
+  // yet, which the till offers to give. Beside `data`, not inside it, so a till
+  // that predates §428 reads exactly what it always read.
+  res.json({ success: true, data: counterVouchersFor([id], storeId).map(c => counterVoucherTerms(c.voucher)),
+             givable: counterGivable(id, storeId).map(counterVoucherTerms) });
+});
+
+/* §428 — GIVE THIS LOCATION'S VOUCHER FROM THE TILL. The two guards Ash took
+   when it was proposed, both enforced HERE rather than by what the till chooses
+   to draw:
+     · only a voucher limited to the till's own store — an online coupon, or
+       another location's, is refused whatever is posted;
+     · who gave it is recorded by name on the grant, and in the activity log.
+   Idempotent: giving one the customer already holds is a success that changes
+   nothing, which is what a double tap should be. */
+router.post('/api/retail-admin/customers/:id/counter-vouchers', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const storeId = parseInt(req.body && req.body.store_id, 10);
+  const voucherId = parseInt(req.body && req.body.voucher_id, 10);
+  if (!(id > 0) || !(storeId > 0) || !(voucherId > 0)) return res.status(400).json({ success: false, error: 'bad_request' });
+  const c = tdb().prepare('SELECT id, is_blocked FROM retail_customers WHERE id = ?').get(id);
+  if (!c) return res.status(404).json({ success: false, error: 'customer_not_found' });
+  if (c.is_blocked) return res.status(409).json({ success: false, error: 'customer_blocked' });
+  const v = counterGivable(id, storeId, { includeHeld: true }).find(x => x.id === voucherId);
+  if (!v) return res.status(403).json({ success: false, error: 'not_this_location' });
+  const info = tdb().prepare(
+    `INSERT OR IGNORE INTO retail_customer_vouchers
+       (customer_id, voucher_id, granted_by, granted_note, granted_by_name)
+     VALUES (?, ?, ?, 'Given at the counter', ?)`
+  ).run(id, voucherId, grantedById(req), grantedByName(req));
+  logActivity(req.user.id, req.user.username, 'grant_counter', 'voucher', voucherId,
+              { code: v.code, customer_id: id, store_id: storeId, granted: info.changes }, req.ip);
+  res.json({ success: true, data: { granted: info.changes === 1 } });
+});
+
+/* §428 — ATTACH A CUSTOMER TO A RECALLED QR ORDER. The cashier has checked who
+   is standing there; the best voucher that person holds at this location comes
+   off the order now, rather than after a cancel and a re-ring.
+
+   Pending QR orders only, as Remove discount. One transaction, the guarded
+   UPDATE first, so two tills cannot both apply it. Attached by a cashier, it is
+   NOT a typed phone: attaching the person a typed number already found is the
+   check, and clears the flag. An order linked to someone else is refused —
+   Remove discount unlinks it, which is the deliberate step. */
+router.post('/api/retail-admin/orders/:id/counter-customer', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const cid = parseInt(req.body && req.body.customer_id, 10);
+  if (!(id > 0) || !(cid > 0)) return res.status(400).json({ success: false, error: 'bad_request' });
+  const cust = tdb().prepare('SELECT id, nickname, is_blocked FROM retail_customers WHERE id = ?').get(cid);
+  if (!cust) return res.status(404).json({ success: false, error: 'customer_not_found' });
+  if (cust.is_blocked) return res.status(409).json({ success: false, error: 'customer_blocked' });
+  let out = null;
+  try {
+    tdb().transaction(() => {
+      const o = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id);
+      if (!o) { out = { status: 404, error: 'not_found' }; return; }
+      if (o.shop_entry_method !== 'qr') { out = { status: 409, error: 'not_a_qr_order' }; return; }
+      if (o.status !== 'pending_payment') { out = { status: 409, error: 'not_pending' }; return; }
+      if (o.customer_id && o.customer_id !== cid) { out = { status: 409, error: 'order_has_customer' }; return; }
+      // Already discounted (the typed number found this same person): the check
+      // is done, and nothing about the money moves.
+      if (o.voucher_code) {
+        tdb().prepare(
+          `UPDATE retail_orders SET customer_id = ?, voucher_typed_phone = 0
+            WHERE id = ? AND status = 'pending_payment'`
+        ).run(cid, id);
+        out = { status: 200, total: Number(o.total) || 0, voucher_amount: Number(o.voucher_amount) || 0, voucher_code: o.voucher_code };
+        return;
+      }
+      const sub = Number(o.subtotal) || 0;
+      const cv = bestCounterVoucher([cid], o.store_id, sub);
+      if (!cv) {
+        const upd = tdb().prepare(
+          `UPDATE retail_orders SET customer_id = ?
+            WHERE id = ? AND status = 'pending_payment' AND (customer_id IS NULL OR customer_id = ?)`
+        ).run(cid, id, cid);
+        if (upd.changes !== 1) { out = { status: 409, error: 'not_pending' }; return; }
+        out = { status: 200, total: Number(o.total) || 0, voucher_amount: 0, voucher_code: null };
+        return;
+      }
+      const cfg = o.tax_rate_micro != null
+        ? { ...taxSettings(), enabled: true, rateMicro: Number(o.tax_rate_micro), mode: o.tax_mode || 'exclusive' }
+        : { enabled: false };
+      const line = tax.taxOn({
+        subtotalMinor: money.toMinor(sub) || 0,
+        shippingMinor: money.toMinor(o.shipping_fee) || 0,
+        packingMinor: money.toMinor(o.packing_fee) || 0,
+        discountMinor: money.toMinor(cv.discount) || 0,
+      }, cfg);
+      const total = Math.max(0, money.round(sub + (Number(o.shipping_fee) || 0) + (Number(o.packing_fee) || 0)
+        - cv.discount + money.fromMinor(line.addedMinor)
+        - (Number(o.points_amount) || 0) - (Number(o.balance_used) || 0)));
+      const upd = tdb().prepare(
+        `UPDATE retail_orders
+            SET customer_id = ?, voucher_code = ?, voucher_amount = ?, voucher_typed_phone = 0,
+                total = ?, tax_amount = ?
+          WHERE id = ? AND status = 'pending_payment' AND voucher_code IS NULL`
+      ).run(cid, cv.voucher.code, cv.discount, total, cfg.enabled ? money.fromMinor(line.taxMinor) : null, id);
+      if (upd.changes !== 1) { out = { status: 409, error: 'not_pending' }; return; }
+      tdb().prepare(`UPDATE retail_payments SET amount = ? WHERE order_id = ? AND status = 'pending'`).run(total, id);
+      consumeCounterVoucher(tdb(), cv, id);
+      out = { status: 200, total, voucher_amount: cv.discount, voucher_code: cv.voucher.code,
+              voucher_title_en: cv.voucher.title_en || null, voucher_title_cn: cv.voucher.title_cn || null };
+    })();
+  } catch (e) {
+    if (e && e.code === 'voucher_exhausted') return res.status(409).json({ success: false, error: 'voucher_exhausted' });
+    console.error('[counter-customer]', id, e.message);
+    return res.status(500).json({ success: false, error: 'attach_failed' });
+  }
+  if (out.status !== 200) return res.status(out.status).json({ success: false, error: out.error });
+  logActivity(req.user.id, req.user.username, 'attach_customer', 'retail_order', id,
+              { customer_id: cid, voucher_code: out.voucher_code, total: out.total }, req.ip);
+  const { status, ...data } = out;
+  res.json({ success: true, data: { id, customer_id: cid, nickname: cust.nickname || null, ...data } });
 });
 
 /* §426 — TAKE A TYPED-PHONE DISCOUNT OFF A QR ORDER. The cashier's answer when
@@ -19575,7 +19726,7 @@ router.get('/api/retail-admin/vouchers/:id/grants', requireRetailAdmin, (req, re
   ).get(id).n;
   const rows = tdb().prepare(
     `SELECT g.id, g.customer_id, g.granted_at, g.granted_note,
-            g.used_at, g.used_order_id,
+            g.used_at, g.used_order_id, g.granted_by_name,
             c.nickname, c.phone
        FROM retail_customer_vouchers g
        LEFT JOIN retail_customers c ON c.id = g.customer_id
@@ -19607,15 +19758,15 @@ router.post('/api/retail-admin/vouchers/:id/grant', requireRetailAdmin, express.
 
   const ins = tdb().prepare(
     `INSERT OR IGNORE INTO retail_customer_vouchers
-       (customer_id, voucher_id, granted_by, granted_note)
-     VALUES (?, ?, ?, ?)`
+       (customer_id, voucher_id, granted_by, granted_note, granted_by_name)
+     VALUES (?, ?, ?, ?, ?)`
   );
   let granted = 0, skipped = 0;
   const tx = tdb().transaction(() => {
     for (const cid of ids) {
       const n = parseInt(cid, 10);
       if (!n) continue;
-      const info = ins.run(n, id, req.user.id, note);
+      const info = ins.run(n, id, grantedById(req), note, grantedByName(req));
       if (info.changes) granted++; else skipped++;
     }
   });
@@ -19623,6 +19774,77 @@ router.post('/api/retail-admin/vouchers/:id/grant', requireRetailAdmin, express.
   logActivity(req.user.id, req.user.username, 'grant', 'voucher', id,
               { code: v.code, granted, skipped, to_all: toAll }, req.ip);
   res.json({ success: true, granted, skipped, to_all: toAll });
+});
+
+/* §428 — GIVE A VOUCHER TO A PASTED LIST. One person per line, a name and a
+   phone in either order ("Li Wei 138 0013 8000", "13800138000, 李伟", or a
+   phone alone). Each phone is matched to the customer already holding it —
+   compared in phone-cn's canonical form, so '+86 138…' finds '138…' — or a
+   customer is created for it with the same helper every staff path uses. Then
+   the voucher is given, recorded under the operator's name.
+
+   A LINE WITH NO USABLE PHONE IS REPORTED, NOT GUESSED. A name alone could
+   match two people, and the voucher is for one. The reply hands the line back
+   so the office can fix it and paste it again — the whole call is idempotent,
+   since a customer already holding the voucher is simply counted as such. */
+const GRANT_LIST_MAX = 500;
+function parseGrantListLine(raw) {
+  const line = String(raw || '').trim();
+  if (!line) return null;
+  const m = line.match(/\+?\d[\d\s\-]{5,}\d/);
+  if (!m) return { line, error: 'no_phone' };
+  const phone = phoneCn.normalize(m[0]);
+  if (!/^\+?[0-9]{7,15}$/.test(phone)) return { line, error: 'no_phone' };
+  const name = (line.slice(0, m.index) + ' ' + line.slice(m.index + m[0].length))
+    .replace(/[,，;；\t|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return { line, phone, name };
+}
+router.post('/api/retail-admin/vouchers/:id/grant-list', requireRetailAdmin, express.json({ limit: '64kb' }), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const v = tdb().prepare('SELECT id, code FROM retail_vouchers WHERE id = ?').get(id);
+  if (!v) return res.status(404).json({ success: false, error: 'voucher_not_found' });
+  const lines = String((req.body && req.body.text) || '').split(/\r?\n/).map(parseGrantListLine).filter(Boolean);
+  if (!lines.length) return res.status(400).json({ success: false, error: 'no_lines' });
+  if (lines.length > GRANT_LIST_MAX) return res.status(400).json({ success: false, error: 'too_many_lines', max: GRANT_LIST_MAX });
+  // Who already has which phone, in canonical form — read once, not per line.
+  const byPhone = new Map();
+  for (const c of tdb().prepare(
+    "SELECT id, phone FROM retail_customers WHERE phone IS NOT NULL AND phone <> '' ORDER BY id").all()) {
+    const k = phoneCn.normalize(c.phone);
+    if (k && !byPhone.has(k)) byPhone.set(k, c.id);
+  }
+  const out = { granted: 0, already: 0, created: 0, matched: 0, unread: [] };
+  const createdIds = [];
+  const who = grantedByName(req);
+  const ins = tdb().prepare(
+    `INSERT OR IGNORE INTO retail_customer_vouchers
+       (customer_id, voucher_id, granted_by, granted_note, granted_by_name)
+     VALUES (?, ?, ?, 'Given from a pasted list', ?)`
+  );
+  tdb().transaction(() => {
+    for (const l of lines) {
+      if (l.error) { out.unread.push(l.line.slice(0, 120)); continue; }
+      let cid = byPhone.get(l.phone);
+      if (cid) out.matched++;
+      else {
+        const made = createOrReuseManualCustomer({ nickname: l.name || null, phone: l.phone, userId: req.user.id });
+        if (made.error) { out.unread.push(l.line.slice(0, 120)); continue; }
+        cid = made.id;
+        byPhone.set(l.phone, cid);
+        if (made.created) { out.created++; createdIds.push(cid); } else out.matched++;
+      }
+      if (ins.run(cid, id, grantedById(req), who).changes) out.granted++; else out.already++;
+    }
+  })();
+  // The same best-effort post-create hooks the single-customer route runs,
+  // after the commit: they touch money and must not hold the list hostage.
+  for (const cid of createdIds) {
+    try { claimMigrationCredit(cid); } catch (e) { console.warn('[grant-list] migration claim:', e.message); }
+    try { reconcileSignupVouchers(cid); } catch (e) { console.warn('[grant-list] voucher reconcile:', e.message); }
+  }
+  logActivity(req.user.id, req.user.username, 'grant_list', 'voucher', id,
+              { code: v.code, granted: out.granted, already: out.already, created: out.created, unread: out.unread.length }, req.ip);
+  res.json({ success: true, data: out });
 });
 
 // Take a grant back. A one-shot grant can only be pulled while it's unspent —
@@ -28302,6 +28524,15 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                       (SELECT MAX(CAST(julianday(DATE('now')) - julianday(${delayCase.lateAfterSql('srl')}) AS INTEGER))
                          FROM retail_shipments srl
                         WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl')}) END AS running_late_days,
+                    -- §427 — 1 when every running-late parcel on the order has a
+                    -- current "customer contacted": the badge keeps the days and
+                    -- stops asking for the call. Same rule as the card.
+                    CASE WHEN o.status = 'dispatched'
+                          AND EXISTS (SELECT 1 FROM retail_shipments src
+                                       WHERE src.order_id = o.id AND ${delayCase.runningLateSql('src')})
+                          AND NOT EXISTS (SELECT 1 FROM retail_shipments src
+                                           WHERE src.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('src')})
+                         THEN 1 ELSE 0 END AS running_late_contacted,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -28827,6 +29058,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     // §285 — days past its due day while still on the road; 0 once it lands
     // (late_days takes over then) or while it is on time.
     running_late_days: o.status === 'dispatched' ? delayCase.runningLateDays(s) : 0,
+    // §427 — who said "customer contacted" on it and when; `current` while that
+    // still answers the card (48 hours). null if nobody has, or it is not late.
+    running_late_contact: o.status === 'dispatched' && delayCase.runningLateDays(s) > 0
+      ? delayCase.runningLateContact(s) : null,
     // The four steps. Read only, never created: a GET that wrote a row for
     // every drawer opened would mint a case for parcels nobody had trouble
     // with. NULL means nothing done yet, which is what both screens draw a
@@ -28865,6 +29100,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   } catch (e) { o.no_contact_open = 0; }
   // §285 — the list's running-late figure, off the parcels just hydrated.
   o.running_late_days = Math.max(0, ...o.shipments.map(sh => sh.running_late_days || 0)) || null;
+  // §427 — and the list's "every late parcel has been rung about".
+  o.running_late_contacted = o.running_late_days
+    && o.shipments.every(sh => !(sh.running_late_days > 0)
+      || (sh.running_late_contact && sh.running_late_contact.current)) ? 1 : 0;
 
   o.timeline = orderTimeline(o);
   // Keep legacy `o.tracking` populated from the primary shipment so older
@@ -30270,6 +30509,43 @@ router.post('/api/retail-admin/orders/:id/no-contact/ack',
     clear ? 'no_contact_cleared' : 'no_contact_reopened', 'retail_order', id,
     { rows: changes }, req.ip);
   res.json({ success: true, data: { cleared: clear, rows: changes } });
+});
+
+// §427 — "CUSTOMER CONTACTED" ON AN ORDER STILL RUNNING LATE (§285). Order-level
+// for §284's reason: one customer, one call, however many parcels are late. It
+// stamps every running-late parcel on the order, which takes the order off
+// "Delivery needs a call" for 48 hours and turns the banner and the badge from
+// "contact customer" to "customer contacted". The days late stay on screen.
+// A second tap restamps — a fresh call restarts the 48 hours. `cleared:false`
+// is the undo, and only touches parcels that are still running late.
+router.post('/api/retail-admin/orders/:id/running-late/ack',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const clear = req.body?.cleared !== false;
+  const LATE = delayCase.runningLateSql();
+  const info = clear
+    ? tdb().prepare(
+        `UPDATE retail_shipments
+            SET running_late_contacted_at = CURRENT_TIMESTAMP,
+                running_late_contacted_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND ${LATE}`
+      ).run(req.user.username || null, id)
+    : tdb().prepare(
+        `UPDATE retail_shipments
+            SET running_late_contacted_at = NULL,
+                running_late_contacted_by = NULL,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND ${LATE} AND running_late_contacted_at IS NOT NULL`
+      ).run(id);
+  // Nothing running late any more (it landed between the screen drawing and
+  // the tap) changes nothing; the screen reloads and the banner is gone.
+  logActivity(req.user.id, req.user.username,
+    clear ? 'running_late_contacted' : 'running_late_contact_undone', 'retail_order', id,
+    { shipments: info.changes }, req.ip);
+  res.json({ success: true, data: { cleared: clear, shipments: info.changes } });
 });
 
 // One step of a late-parcel case (§98). The steps are named in lib/delay-case.js
