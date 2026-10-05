@@ -16,6 +16,19 @@ const { channelBlock } = require('../lib/channel-block');
 const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
+const businessDate = require('../lib/business-date');
+const { billingRows } = require('../lib/gzgrocery-billing');
+
+// 'YYYY-Www' for a day, the same numbering SQLite's strftime('%Y-W%W') gave the
+// Billing panel before §429: weeks start Monday, days before the year's first
+// Monday are week 00.
+function isoWeekBucket(day) {
+  const d = new Date(day + 'T00:00:00Z');
+  const yday = Math.round((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000);
+  const mon0 = (d.getUTCDay() + 6) % 7;
+  const w = Math.floor((yday + 7 - mon0) / 7);
+  return `${d.getUTCFullYear()}-W${String(w).padStart(2, '0')}`;
+}
 
 // Which Roots store mirrors to Guanyi (gzgrocery has a single 天河 warehouse).
 const GUANYI_STORE_CODE = process.env.GUANYI_STORE_CODE || 'tianhe';
@@ -402,56 +415,27 @@ router.post('/api/retail-admin/guanyi/pickups/:id/ignore', requireRetailAdmin, (
 });
 
 // ── GET /api/retail-admin/guanyi/analytics ──────────────────────────────────
-// gzgrocery order analytics derived from the pickup ledger. A "billable" unit =
-// an applied pickup (auto 'decremented', or a flagged 'capped' the operator
-// Applied); a return ('drift_up') nets OUT. Money: owed = units × sell_price ×
-// (1 − discount_pct); retail value = units × sell_price.
+// gzgrocery billing: units they took and what they owe, per period and per
+// product. Read through lib/gzgrocery-billing.js (§429): the order copies, at
+// the gzgrocery price fixed when each order was read, by the shop's business
+// day — plus the dormant drift log for history before the order reader.
 //   query: ?from=YYYY-MM-DD&to=YYYY-MM-DD&period=day|week|month
 router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) => {
   const db = tdb();
   try {
-    if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get())
-      return res.json({ success: true, summary: {}, timeSeries: [], products: [], unpriced: [] });
-
     const period = ['day', 'week', 'month'].includes(req.query.period) ? req.query.period : 'day';
-    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : null;
-    const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : null;
-    const fromClause = from || "date('now','-90 days')";
-    // Exclusive upper bound. When an explicit `to` is given it names a calendar
-    // day that must be INCLUDED, so the bound is the start of the next day —
-    // otherwise `created_at < '2026-06-28'` drops every order on 06-28 (and a
-    // single-day Day range matches nothing).
-    const toClause   = to   ? "date(?, '+1 day')" : "date('now','+1 day')";
-    const bucket = period === 'month' ? "strftime('%Y-%m', src.created_at)"
-                 : period === 'week'  ? "strftime('%Y-W%W', src.created_at)"
-                 : "date(src.created_at)";
-
-    // Source = live order-read sales (retail_stock_ledger reason=gzgrocery_order,
-    // the authoritative record; reverses subtract) UNIONed with the legacy drift
-    // pickups (guanyi_pickup_log) so pre-order-read history is preserved. One
-    // unit per -delta. No time overlap: drift is parked in shadow.
-    const rows = db.prepare(`
-      SELECT ${bucket} AS bucket, src.product_id,
-             SUM(src.units) AS units,
-             sp.name_cn, sp.name_en, sp.sku, COALESCE(sp.sell_price,0) AS price,
-             pp.discount_pct AS disc, pp.excel_retail AS xretail, pp.excel_gz_price AS xgz
-        FROM (
-          SELECT l.product_id, -l.delta AS units, l.created_at
-            FROM retail_stock_ledger l
-           WHERE l.reason IN ('gzgrocery_order','gzgrocery_order_reverse')
-          UNION ALL
-          SELECT pl.product_id,
-                 CASE WHEN pl.action='decremented' OR (pl.action='capped' AND pl.resolution='applied') THEN pl.inferred_pickup
-                      WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE 0 END AS units,
-                 pl.created_at
-            FROM guanyi_pickup_log pl
-           WHERE pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied')
-        ) src
-        LEFT JOIN store_products sp ON sp.id = src.product_id
-        LEFT JOIN guanyi_product_pricing pp ON pp.product_id = src.product_id
-       WHERE src.created_at >= ${from ? '?' : fromClause} AND src.created_at < ${toClause}
-       GROUP BY bucket, src.product_id
-    `).all(...[from, to].filter(Boolean));
+    const DAY = /^\d{4}-\d{2}-\d{2}$/;
+    const from = DAY.test(req.query.from || '') ? req.query.from : null;
+    const to   = DAY.test(req.query.to || '') ? req.query.to : null;
+    // No bounds → the trailing 90 days, counted in the shop's day.
+    const today = businessDate.businessDate(businessDate.shopTimezone(db));
+    const fromDay = from || new Date(Date.parse(today + 'T00:00:00Z') - 90 * 86400000).toISOString().slice(0, 10);
+    const toDay = to || today;
+    const bucketOf = (d) => period === 'month' ? d.slice(0, 7)
+                          : period === 'week' ? isoWeekBucket(d)
+                          : d;
+    const rows = billingRows(db, { from: fromDay, to: toDay, shift: businessDate.sqlDayShiftForShop(db) })
+      .map((r) => ({ ...r, bucket: bucketOf(r.day) }));
 
     const tsMap = new Map();      // bucket -> {units,owed,retail}
     const prodMap = new Map();    // product_id -> {...}
@@ -461,12 +445,11 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
       const units = r.units || 0;
       if (!units) continue;
       const disc = r.disc == null ? null : r.disc;
-      // Bill what gzgrocery actually pays = the sheet's price. Fall back to our
-      // sell_price (full retail, no discount) only for products the sheet omits.
-      const unitRetail = r.xretail != null ? r.xretail : (r.price || 0);
-      const unitOwed   = r.xgz != null ? r.xgz : unitRetail;
+      // Owed is what the order lines say (§429). Retail value is informational:
+      // the sheet's website price, else our sell price.
+      const unitRetail = r.xretail != null ? r.xretail : (r.sell_price || 0);
       const retail = units * unitRetail;
-      const owed = units * unitOwed;
+      const owed = r.owed || 0;
       tUnits += units; tOwed += owed; tRetail += retail;
 
       const t = tsMap.get(r.bucket) || { bucket: r.bucket, units: 0, owed: 0, retail: 0 };
@@ -474,7 +457,7 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
 
       const p = prodMap.get(r.product_id) || {
         product_id: r.product_id, sku: r.sku, name: [r.name_cn, r.name_en].filter(Boolean).join(' '),
-        units: 0, owed: 0, retail: 0, price: r.price, discount: disc,
+        units: 0, owed: 0, retail: 0, price: r.sell_price, discount: disc,
       };
       p.units += units; p.owed += owed; p.retail += retail; prodMap.set(r.product_id, p);
       if (disc == null && units > 0) unpriced.set(r.product_id, p.name);
