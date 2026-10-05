@@ -36,8 +36,10 @@ const db = h.db;
 require(path.join(ROOT, 'routes', 'backend-auth.js'));   // tenants, tenant_users, tenant #1
 const router = require(path.join(ROOT, 'routes', 'retail.js'));
 const { requiredCapFor, configKeyCap } = require(path.join(ROOT, 'lib', 'cap-routes'));
-const RETAIL = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+// Read with \n line endings whatever the checkout wrote: the slices below end
+// at '\n}\n', and a Windows checkout (core.autocrlf) puts \r\n on disk.
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+const RETAIL = read('routes/retail.js');
 const M = read('public/m.html');
 const CORE = read('public/retail-admin/01-core.js');
 

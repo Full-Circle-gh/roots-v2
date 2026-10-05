@@ -29,9 +29,12 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const M = fs.readFileSync(path.join(ROOT, 'public/m.html'), 'utf8');
-const OPS = fs.readFileSync(path.join(ROOT, 'public/retail-admin/02-settings-ops.js'), 'utf8');
-const MKT = fs.readFileSync(path.join(ROOT, 'public/retail-admin/05-marketing.js'), 'utf8');
+// Read with \n line endings whatever the checkout wrote: the anchors below
+// carry \n, and a Windows checkout (core.autocrlf) puts \r\n on disk.
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+const M = read('public/m.html');
+const OPS = read('public/retail-admin/02-settings-ops.js');
+const MKT = read('public/retail-admin/05-marketing.js');
 
 let passed = 0, failed = 0;
 const pending = [];
@@ -333,7 +336,7 @@ section('3 · Kuaidi100 and JD keys');
     await answer(h, '/integrations', Object.assign(plain(INTEG), { kd100: { enabled: false } }));
     assert.strictEqual(h.s.d['kd100.callback'], '');
     assert.ok(h.text(h.ctx.SUBS.kd100cfg.render()).includes('NOT CONFIGURED'));
-    const HTML = fs.readFileSync(path.join(ROOT, 'public/retail-admin.html'), 'utf8');
+    const HTML = read('public/retail-admin.html');
     assert.ok(/id="kd100-callback"[^>]*value=""/.test(HTML), 'the desktop field has no default either');
     assert.ok(!/rootskitchenchina\.com\/api\/retail\/tracking\/kd100/.test(HTML + M + OPS), 'the Roots address is on neither surface');
     // A tenant: the address built for it, shown read-only (the server never reads a typed one).
@@ -344,7 +347,7 @@ section('3 · Kuaidi100 and JD keys');
     assert.ok(OPS.includes("if (kCb) { kCb.value = k.callback || ''; kCb.readOnly = !!k.callback_built; }"), 'the desktop does the same');
   });
   it('§412.6 — the out-of-city printer has no Tianhe default: unset shows "each order\'s own store"', () => {
-    const R = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+    const R = read('routes/retail.js');
     assert.ok(!/天河\|tianhe/i.test(R.slice(R.indexOf("router.get('/api/retail-admin/printer'"), R.indexOf("router.get('/api/retail-admin/printer'") + 4000)), 'the server suggests no store');
     assert.ok(R.includes('const oocStore = prefs.out_of_city_store_id == null ? null : prefs.out_of_city_store_id;'));
   });
