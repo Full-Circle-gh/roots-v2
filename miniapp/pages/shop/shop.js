@@ -18,6 +18,7 @@ const cart     = require('../../utils/cart');
 const config   = require('../../utils/config');
 const delivery = require('../../utils/delivery');
 const freshEta = require('../../utils/fresh-eta');
+const pickQueue = require('../../utils/pick-queue');
 const { promoCardsToShow, chinaToday, inDateWindow } = require('../../utils/promo-cards');
 
 // §296 — tuck the promo row away only when the product list would still
@@ -1506,6 +1507,10 @@ Page({
       return;
     }
     this.setData({ vpShow: false });
+    // This size asks a question (options belong to one size — "heat up?" is on
+    // One Pita only). Same rule as a plain card's + above: open its page with
+    // the choice sheet up instead of adding it unanswered.
+    if (m.has_options) { pickQueue.start([{ id, qty: 1 }]); return; }
     // Fly from the representative card's + button (still in the DOM).
     this._addRawToCart(m, this._vpRepId, kind);
   },

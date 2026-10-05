@@ -3705,6 +3705,9 @@ router.get('/api/retail/products/:id', (req, res) => {
     // product detail load). We only need a flag for whether the row has
     // a stored image so we can emit a lazy URL; the real bytes stream
     // via /api/retail/products/:id/image, same as the main hero above.
+    // has_options: options belong to ONE size (each size is its own product
+    // row), so the size sheet needs to know which size asks a question —
+    // picking it must open that size's choice sheet, not add it unanswered.
     product.variants = tdb().prepare(
       `SELECT p.id, p.variant_label, p.variant_label_cn, p.name_en, p.name_cn, p.sku, p.weight AS size,
               p.sell_price AS price, p.compare_at_price, p.ship_from_supplier, p.supplier_paused,
@@ -3713,7 +3716,8 @@ router.get('/api/retail/products/:id', (req, res) => {
               p.flash_stock_limit, p.flash_sold,
               p.image_url, p.updated_at,
               ${hasImageFallbackSql('p')} AS has_image,
-              ${inventory.sellableStockSql('p.id', 'p.stock_qty')} AS stock
+              ${inventory.sellableStockSql('p.id', 'p.stock_qty')} AS stock,
+              EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = p.id) AS has_options
          FROM store_products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
         ORDER BY COALESCE(p.variant_sort, 0), COALESCE(p.variant_label, p.name_en), p.id`
