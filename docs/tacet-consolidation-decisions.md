@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.476
+# Tacet shared-core consolidation — decisions record, v4.477
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.477 — **§434 · EVERY PRODUCT ON A SLIP CARRIES ITS SKU, INCLUDING ONE CHOSEN AS AN ANSWER — DECIDED BY ASH:** holding receipt TC000939, *"need sku on receipt always"*, then *"yes recipe has to have sku for each product"*. The line printed its own SKU; the three bites chosen under it, products pulled off the shelf, printed as names only. Now an answer linked to a product prints that product's SKU under it, enlarged, on the receipt, the add-on slip and the packing slip (with the count to pull). Read at print time from the link, so reprints of older orders carry it too. An answer with no link prints none. No schema, no new word. See §434.
 
 2026-10-05 · v4.476 — **§431 rule 7 · ON THE QR MENU, A TAP ON A CHOICE'S PICTURE SHOWS IT BIG — DECIDED BY ASH:** *"I want customer to be able to click on product image and see it bigger with an option to close it down after"*. The picture opens the menu's existing full-screen photo viewer, the one the product sheet's photo already uses, with its ✕ button; tapping the photo, the dark ground, the ✕ or Escape closes it and the picker underneath stays as it was. The tap does not tick the choice. A choice that is sold out, or blocked because the question's maximum is reached, is a switched-off row and its picture does not open. No new word, no schema. See §431 rule 7.
 
@@ -28756,3 +28758,31 @@ and could use the question too. Its own change, if wanted.
 WeCom group) had already claimed it when this was written.
 
 Tests: `scripts/test_checkout_required_options.js` (sections A, D2, F).
+
+## §434 — EVERY PRODUCT ON A SLIP CARRIES ITS SKU, INCLUDING ONE CHOSEN AS AN ANSWER
+
+**Decided 2026-10-05 by Ash**, holding receipt TC000939 (*"need sku on receipt
+always"*; then *"yes recipe has to have sku for each product"*).
+
+1. **The gap.** A line prints its own SKU. An answer linked to a product (a paid
+   extra, §431's link: "Mango Bites" under "Small Bites Selection") is a product
+   the packer pulls, and printed as a name only.
+2. **The rule.** Each such answer prints its linked product's SKU on its own
+   enlarged line, directly under the answer:
+   - receipt and add-on slip: `SKU ‹code›`, or `x‹n›  SKU ‹code›` when the line
+     is for more than one;
+   - packing slip: `x‹n›  SKU ‹code›`, the count to pull, as the line's own.
+3. **Read at print time, not stored.** The order line's snapshot keeps the link
+   (`stock_product_id`, from `lib/product-options.js` resolveAnswers) and not
+   the code. `attachOptionSkus` in routes/retail.js reads the code from the
+   linked product on every print path (auto-print, add-on, reprint/test,
+   preview), so reprints of orders placed before this carry it too.
+4. **An answer with no link prints no SKU.** A sugar level is not a product.
+   To get a SKU on one, link it to a product in the editor.
+5. **The compact template is unchanged.** It prints no SKU for any line by
+   design; this rule does not add one there.
+6. **Seen on the same receipt, not code:** "Small Bites Selection" carries
+   `DRAFT-13S3L`, the placeholder `generateRetailSku` gives a product saved
+   without a SKU. It needs a real SKU typed on its product page.
+
+Tests: `scripts/test_receipt_option_sku.js`.
