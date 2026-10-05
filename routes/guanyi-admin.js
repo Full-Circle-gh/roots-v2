@@ -18,6 +18,20 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const businessDate = require('../lib/business-date');
 const { billingRows } = require('../lib/gzgrocery-billing');
+const multer = require('multer');
+const gzSheet = require('../lib/gzgrocery-sheet');
+
+// gzgrocery's statement upload (§430). In memory and discarded after the
+// check: nothing about the sheet is stored. .xlsx only — exceljs cannot read
+// the old .xls format, and saying so beats a parse error.
+const uploadSheet = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!/\.xlsx$/i.test(file.originalname || '')) return cb(new Error('not_xlsx'));
+    cb(null, true);
+  },
+});
 
 // 'YYYY-Www' for a day, the same numbering SQLite's strftime('%Y-W%W') gave the
 // Billing panel before §429: weeks start Monday, days before the year's first
@@ -480,6 +494,66 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// ── POST /api/retail-admin/guanyi/statement-check ───────────────────────────
+// §430: set gzgrocery's own Excel statement beside our bill for the same days
+// and return every product line, mismatches first. Reads only; the file is not
+// kept. multipart field `file`; query ?from=&to= (YYYY-MM-DD, the shop's day).
+// With no dates, the range is read off the file name ("GV9.27~9.30.xlsx").
+router.post('/api/retail-admin/guanyi/statement-check', requireRetailAdmin, (req, res) => {
+  uploadSheet.single('file')(req, res, async (upErr) => {
+    if (upErr) {
+      const code = upErr.message === 'not_xlsx' ? 'not_xlsx'
+        : upErr.code === 'LIMIT_FILE_SIZE' ? 'too_large' : 'upload_failed';
+      return res.status(400).json({ success: false, error: code });
+    }
+    if (!req.file) return res.status(400).json({ success: false, error: 'no_file' });
+    const db = tdb();
+    try {
+      const DAY = /^\d{4}-\d{2}-\d{2}$/;
+      const today = businessDate.businessDate(businessDate.shopTimezone(db));
+      let from = DAY.test(req.query.from || '') ? req.query.from : null;
+      let to = DAY.test(req.query.to || '') ? req.query.to : null;
+      let guessed = false;
+      if (!from || !to) {
+        const g = gzSheet.rangeFromFilename(req.file.originalname, today);
+        if (!g) return res.status(400).json({ success: false, error: 'need_dates' });
+        from = g.from; to = g.to; guessed = true;
+      }
+      if (from > to) return res.status(400).json({ success: false, error: 'inverted' });
+
+      let sheet;
+      try { sheet = await gzSheet.readStatement(req.file.buffer); }
+      catch (e) { return res.status(400).json({ success: false, error: 'unreadable', detail: e.code || e.message }); }
+
+      const shift = businessDate.sqlDayShiftForShop(db);
+      const ours = billingRows(db, { from, to, shift });
+      const { rows, totals } = gzSheet.compareStatement(sheet.lines, ours);
+
+      // No order numbers on their sheet, and their days are "ordered and
+      // delivered" while ours are the order date — so for a product that
+      // disagrees, show what we have on the day either side of the range too.
+      const dayShift = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+      const near = [...billingRows(db, { from: dayShift(from, -1), to: dayShift(from, -1), shift }),
+                    ...billingRows(db, { from: dayShift(to, 1), to: dayShift(to, 1), shift })];
+      const key = (sku) => String(sku || '').toUpperCase().replace(/\s+/g, '');
+      for (const r of rows) {
+        if (r.status === 'ok') continue;
+        r.nearby = near.filter((n) => n.units && key(n.sku) === key(r.sku))
+          .map((n) => ({ day: n.day, qty: n.units, orders: String(n.orders || '').split(',').filter(Boolean) }));
+      }
+
+      res.json({
+        success: true,
+        range: { from, to, guessed },
+        file: { name: req.file.originalname, lines: sheet.lines.length, ignored: sheet.skipped },
+        totals, rows,
+      });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
 });
 
 module.exports = router;

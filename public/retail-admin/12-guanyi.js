@@ -545,6 +545,9 @@
   // imported gzgrocery pricing) and renders the dashboard + Statement CSV export.
   // period '' = no preset selected (all-time default view); Day/Week/Month set it.
   const _gyAna = { period: '', from: '', to: '', data: null };
+  // The last statement check's rendered result, kept so a redraw of the panel
+  // (a period or date change) does not wipe it. Cleared by its own Close.
+  const _gySheet = { html: '' };
 
   // Local YYYY-MM-DD (not UTC) so "today" matches the viewer's calendar day.
   function gyYmd(d) {
@@ -635,7 +638,10 @@
       <span class="gy-lb">→</span>
       <input type="date" class="gy-date" id="gy-ana-to" value="${esc(_gyAna.to)}" onchange="gyAnaSetRange()">
       <button class="btn btn-sm" onclick="gyExportStatement()" ${prods.length ? '' : 'disabled'} title="Download itemized statement as CSV">⤓ Statement CSV</button>
-    </div>`;
+      <button class="btn btn-sm" onclick="gyPickSheet()">${esc(cuT('Check their sheet', '核对对方账单'))}</button>
+      <input type="file" id="gy-sheet-file" accept=".xlsx" hidden onchange="gyCheckSheet(this)">
+    </div>
+    <div id="gy-sheet-check">${_gySheet.html || ''}</div>`;
 
     html += `<div class="gy-cards">
       ${card('Units ordered', Number(s.units || 0).toLocaleString())}
@@ -699,6 +705,124 @@
     a.download = `gzgrocery-statement_${rangeLabel}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
   };
+
+  // ── §430 — check gzgrocery's own statement sheet ─────────────────────────────
+  // Upload their .xlsx; the server reads it, sets it beside our orders for the
+  // same days and answers every product line, mismatches first. Their sheet has
+  // no order numbers, so a mismatch shows the GZ-… orders behind our figure,
+  // and the day either side of the range (their days are "ordered and
+  // delivered"; ours are the order date). Nothing is saved.
+  const GY_SHEET_STATUS = {
+    qty:         () => cuT('Quantity differs', '数量不符'),
+    price:       () => cuT('Price differs', '单价不符'),
+    qty_price:   () => cuT('Quantity and price differ', '数量和单价不符'),
+    only_theirs: () => cuT('Only on their sheet', '仅在对方账单'),
+    only_ours:   () => cuT('Not on their sheet', '对方账单未列'),
+  };
+  const GY_SHEET_ERR = {
+    not_xlsx:   () => cuT('Only .xlsx files — save it as .xlsx in Excel first', '仅支持 .xlsx 文件 — 请先在 Excel 中另存为 .xlsx'),
+    too_large:  () => cuT('That file is too large', '文件过大'),
+    unreadable: () => cuT('Could not read this sheet — no Qty or SKU column found', '无法读取该表格 — 未找到数量或 SKU 列'),
+    need_dates: () => cuT('Pick the dates first — the file name does not say them', '请先选择日期 — 文件名中没有日期'),
+    inverted:   () => cuT('The start date is after the end date', '起始日期晚于结束日期'),
+  };
+
+  window.gyPickSheet = function () {
+    const f = document.getElementById('gy-sheet-file');
+    if (f) { f.value = ''; f.click(); }
+  };
+
+  window.gyCheckSheet = async function (input) {
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    const box = document.getElementById('gy-sheet-check');
+    if (box) box.innerHTML = `<div class="gy-empty">${esc(cuT('Checking the sheet…', '正在核对账单…'))}</div>`;
+    const qs = new URLSearchParams();
+    if (_gyAna.from && _gyAna.to) { qs.set('from', _gyAna.from); qs.set('to', _gyAna.to); }
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const r = await fetch('/api/retail-admin/guanyi/statement-check?' + qs.toString(),
+        { method: 'POST', credentials: 'same-origin', body: fd });
+      if (r.status === 401) { location.href = '/backend/login'; return; }
+      const j = await r.json().catch(() => ({ success: false, error: 'bad_response' }));
+      if (!j.success) {
+        const msg = GY_SHEET_ERR[j.error] ? GY_SHEET_ERR[j.error]() : cuT('Check failed', '检测失败') + ' [' + (j.error || r.status) + ']';
+        _gySheet.html = '';
+        if (box) box.innerHTML = `<div class="gy-note">${esc(msg)}</div>`;
+        return;
+      }
+      // Dates read off the file name: show them in the range fields so the
+      // panel below describes the same days the check used.
+      if (j.range && j.range.guessed && (j.range.from !== _gyAna.from || j.range.to !== _gyAna.to)) {
+        _gyAna.from = j.range.from; _gyAna.to = j.range.to; _gyAna.period = '';
+        _gySheet.html = gyRenderSheetCheck(j);
+        gyLoadAnalytics();
+        return;
+      }
+      _gySheet.html = gyRenderSheetCheck(j);
+      if (box) box.innerHTML = _gySheet.html;
+    } catch (e) {
+      _gySheet.html = '';
+      if (box) box.innerHTML = `<div class="gy-note">${esc(cuT('Check failed', '检测失败'))}: ${esc(e.message)}</div>`;
+    }
+  };
+
+  window.gyCloseSheetCheck = function () {
+    _gySheet.html = '';
+    const box = document.getElementById('gy-sheet-check');
+    if (box) box.innerHTML = '';
+  };
+
+  function gyRenderSheetCheck(j) {
+    const yuan = (n) => n == null ? '—' : acWrap(Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    const t = j.totals || {};
+    const rows = j.rows || [];
+    const bad = rows.filter((r) => r.status !== 'ok');
+    const good = rows.filter((r) => r.status === 'ok');
+    const range = j.range ? `${esc(j.range.from)} → ${esc(j.range.to)}` : '';
+    const diff = Number(t.difference || 0);
+    const head = bad.length
+      ? cuT(`${bad.length} product(s) do not match`, `${bad.length} 个商品不一致`)
+      : cuT(`All ${good.length} products match`, `全部 ${good.length} 个商品一致`);
+
+    let html = `<div class="gy-card gy-sheet ${bad.length || diff ? 'is-off' : 'is-ok'}">
+      <div class="gy-tools"><b>${bad.length ? '⚠' : '✓'} ${esc(head)}</b>
+        <span class="muted">${esc(j.file && j.file.name || '')} · ${range}</span>
+        <span class="gy-grow"></span>
+        <button class="btn btn-sm" onclick="gyCloseSheetCheck()">${esc(cuT('Close', '关闭'))}</button>
+      </div>
+      <div class="gy-cards">
+        <div class="gy-tile"><div class="k">${esc(cuT('Their sheet', '对方账单'))}</div><div class="v">${yuan(t.their_amount)}</div><div class="s">${Number(t.their_units || 0)}u</div></div>
+        <div class="gy-tile"><div class="k">${esc(cuT('Our orders', '我方订单'))}</div><div class="v">${yuan(t.our_amount)}</div><div class="s">${Number(t.our_units || 0)}u</div></div>
+        <div class="gy-tile"><div class="k">${esc(cuT('Difference', '差额'))}</div><div class="v">${diff > 0 ? '+' : ''}${yuan(diff)}</div></div>
+      </div>`;
+
+    const line = (r) => {
+      const near = (r.nearby || []).map((n) => `${esc(n.day)}: ${n.qty}u ${esc((n.orders || []).join(', '))}`).join(' · ');
+      return `<tr>
+        <td>${esc(r.name || '')} <span class="muted">${esc(r.sku || '')}</span>
+          ${r.status !== 'ok' ? `<div class="gy-sheet-why">${esc(GY_SHEET_STATUS[r.status] ? GY_SHEET_STATUS[r.status]() : r.status)}</div>` : ''}</td>
+        <td class="num qty">${r.their_qty}</td>
+        <td class="num qty">${r.our_qty}</td>
+        <td class="num">${yuan(r.their_unit)}</td>
+        <td class="num">${yuan(r.our_unit)}</td>
+        <td class="muted">${esc((r.orders || []).join(', '))}${near ? `<div>${esc(cuT('Day before / after', '前后一天'))} — ${near}</div>` : ''}</td>
+      </tr>`;
+    };
+    const table = (list) => `<table class="gy-table"><thead><tr>
+        <th style="width:30%">${esc(cuT('Product', '商品'))}</th>
+        <th class="num">${esc(cuT('Their qty', '对方数量'))}</th><th class="num">${esc(cuT('Our qty', '我方数量'))}</th>
+        <th class="num">${esc(cuT('Their price', '对方单价'))}</th><th class="num">${esc(cuT('Our price', '我方单价'))}</th>
+        <th>${esc(cuT('Orders', '订单'))}</th></tr></thead><tbody>${list.map(line).join('')}</tbody></table>`;
+
+    if (bad.length) html += table(bad);
+    if (good.length) html += `<details class="gy-fold"><summary>${esc(cuT(`Matching products (${good.length})`, `一致的商品 (${good.length})`))}</summary>${table(good)}</details>`;
+    const ign = (j.file && j.file.ignored) || [];
+    if (ign.length) {
+      html += `<div class="gy-empty">${esc(cuT(`Ignored ${ign.length} line(s) that are not our products`, `已忽略 ${ign.length} 行非本店商品`))}: ${ign.map((x) => esc(x.text)).join(', ')}</div>`;
+    }
+    return html + `</div>`;
+  }
 
   // (Billing is now a sub-nav panel; gySubTab lazy-loads analytics on first open.)
 
