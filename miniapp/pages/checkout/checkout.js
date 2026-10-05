@@ -2120,7 +2120,11 @@ Page({
     const slotMins  = Number(sch.slot_duration_minutes) || 120;
     if (!(endHour > startHour) || !(slotMins > 0)) return [];
     const pad = (n) => String(n).padStart(2, '0');
-    const hhmm = (h, mm) => `${h}:${pad(mm)}`;
+    // Both halves padded, matching the server's own hhmm. The slot_id below
+    // always padded its hour; this is the CN label beside it, which did not —
+    // so a kitchen opening before 10 rendered '8:00' here against the server's
+    // '08:00' for the same window. Label only; no id changes.
+    const hhmm = (h, mm) => `${pad(h)}:${pad(mm)}`;
     const fmtHour = (h) => {
       const mer = h < 12 ? 'am' : 'pm';
       const dh = h % 12 === 0 ? 12 : h % 12;
