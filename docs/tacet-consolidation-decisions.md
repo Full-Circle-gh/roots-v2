@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.474
+# Tacet shared-core consolidation — decisions record, v4.475
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.475 — **§433 · CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, SAYS IT WHEN CHECKOUT OPENS, AND "PICK" REPLACES THE OLD LINE — DECIDED BY ASH:** a customer met "Please choose: Whole-Wheat Pita (Frozen)" at Place Order and the popup named the product they had already chosen, not the question; Ash: *"yers"* to fixing it. The refusal now carries the question (`question_en`/`question_cn`), the quote reports the same refusal as `needs_choice` so the mini app offers the picker when checkout opens, and "Pick" hands the product page the cart line to replace, so the re-pick does not sit beside the unanswered line and get refused again. No new word: the popup uses the product sheet's live 请选择 / Please choose. Mini app needs an upload. Number §432 was skipped: a parallel branch (kitchen WeCom group) had claimed it. See §433.
 
 2026-10-05 · v4.474 — **§432 · THE EVENING BEFORE, THE KITCHEN'S WECOM GROUP IS TOLD WHAT TO MAKE — DECIDED BY ASH:** *"i need also to have a bot message in a group a day before 8:30pm with the fresh meals need to prepare the next day"*; on which group, *"wecom group but not the new orders group"*; on orders after 20:30, *"you can just push another message with the bot in the group"*; the preview line *"ok"*; on a night with nothing to make, *"stay quiet"*. At 20:30 (a setting) a WeCom group-bot posts the next morning's to-make list: the same lines §101's 06:00 slip is raised from, for the same date, marked as a preview. If the list changes before the slip prints, an update follows (the new totals and the change), no sooner than 30 minutes after the last message. Nothing to make sends nothing. Its own webhook on Settings → Push, stored privately (`kitchen.` prefix). New table `kitchen_prep_messages`. Ten Chinese strings composed by Claude, see the vocabulary's v1.314. See §432.
 
@@ -28696,3 +28698,51 @@ quiet"*). Builds on §101.
    the phone's Push panel is unchanged. Its own ask if wanted.
 
 Tests: `scripts/test_kitchen_prep_preview.js`.
+
+## §433 — CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, AND "PICK" REPLACES THE LINE
+
+**Decided 2026-10-05 by Ash** (a customer's screenshot: *"why a customer has
+this message what it even means ?"*; then *"yers"* to the fix proposed).
+
+**What the customer met.** At Place Order, a modal: "Please choose:
+Whole-Wheat Pita (Frozen)", Cancel / Pick. The server refused the order
+because a question on the pita had no answer on that cart line (§229); the
+mini app cart lives on the handset, so a line added before its product gained
+a required question carries no answer. Three things were wrong with the
+handling, and each is fixed here:
+
+1. **It named the product, not the question.** The customer had already chosen
+   the pita. `lib/product-options.js` `resolveAnswers` now returns the
+   question's `question_en` / `question_cn` with `choice_required`,
+   `too_few_answers` and the per-question `too_many_answers`, and
+   `/api/retail/orders` passes them through. The popup's title is the item's
+   name alone; under it, "Please choose: <question>" / "请选择 <question>" —
+   the product sheet's own live pair, so no string was composed. Without a
+   question (a stale or tampered choice id) it reads as before.
+2. **It came last.** The customer had filled in address, time and payment
+   first. `/api/retail/checkout/quote` now runs the same check (one helper,
+   `customerOrderAnswers`, shared with `/orders`) and REPORTS it as
+   `data.needs_choice` instead of refusing, so prices still show. The mini app
+   offers the picker once per product per visit; Place Order still refuses if
+   it is skipped. Not on the pickup path (it prices locally, no quote) or when
+   the address matches no zone — Place Order covers both.
+3. **"Pick" led back into the same refusal.** The product page added a NEW
+   line with the answer, and the unanswered line stayed beside it, so Place
+   Order refused again. Checkout now passes the line's key
+   (`/pages/product/product?id=…&replace=…`); the product page starts at that
+   line's quantity and, after the add, removes the old line (or, if the add
+   merged into it, sets it to the quantity picked). `cart.add` returns the key
+   so the two cases can be told apart. Checkout re-quotes on return, which
+   redraws the lines and asks about the next unanswered one, if any.
+
+**Mini app needs an upload.** The server half (question on the refusal,
+`needs_choice` on the quote) is live on deploy and harmless to the current
+mini app, which ignores the new fields.
+
+**Not done here:** the web shop (`public/shop.html`) has the same refusal flow
+and could use the question too. Its own change, if wanted.
+
+**Number:** §432 was skipped; branch `claude/funny-cannon-1qz60j` (kitchen
+WeCom group) had already claimed it when this was written.
+
+Tests: `scripts/test_checkout_required_options.js` (sections A, D2, F).

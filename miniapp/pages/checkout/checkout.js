@@ -510,6 +510,14 @@ Page({
       this.loadPickupStores();
     } else {
       this.reloadSavedAddresses();
+      // Back from the product page after a re-pick (offerPick): the cart
+      // changed under this screen, so redraw the lines and price them again.
+      // That quote also asks about the next unanswered line, if there is one.
+      if (this._repickPending) {
+        this._repickPending = false;
+        this._pickOfferedFor = null;
+        this.refreshQuote();
+      }
     }
   },
 
@@ -1448,6 +1456,53 @@ Page({
     });
   },
 
+  // A cart line the server will not take until a question is answered: name
+  // the item, name the question, and offer the product page. Called from the
+  // order refusal and, since §433, from the quote — so the customer hears it
+  // when checkout opens instead of after filling in everything else.
+  offerPick(refusal) {
+    const cn = this.data.lang === 'cn';
+    const badId = refusal && refusal.product_id;
+    // Two lines can carry one product (one answered, one not). The one with the
+    // fewest answers is the one short of a pick; for a stale or tampered choice
+    // either way leads to the same re-pick.
+    const line = badId ? cart.get().items
+      .filter(it => it.product_id === badId)
+      .sort((a, b) => (a.options || []).length - (b.options || []).length)[0] : null;
+    const name = line ? (cn ? line.name_cn : line.name_en) : '';
+    const question = cn
+      ? (refusal.question_cn || refusal.question_en || '')
+      : (refusal.question_en || refusal.question_cn || '');
+    // 请选择 / Please choose are the product sheet's own words for this, so
+    // the refusal at checkout reads as the same request the picker makes. With
+    // the question known the item's name stands alone as the title — a name
+    // needs no label — and the request moves under it in the sheet's exact form.
+    const title = name && question ? name
+      : name ? (cn ? '「' + name + '」请选择' : 'Please choose: ' + name)
+      : (cn ? '请选择' : 'Please choose');
+    const content = name && question ? (cn ? '请选择 ' + question : 'Please choose: ' + question) : '';
+    if (!badId) {
+      wx.showToast({ title, icon: 'none', duration: 2400 });
+      return;
+    }
+    wx.showModal({
+      title,
+      content,
+      // 选规格 is live on this screen already (the substitute-picker CTA).
+      confirmText: cn ? '选规格' : 'Pick',
+      cancelText: cn ? '取消' : 'Cancel',
+      success: (r) => {
+        if (!r.confirm) return;
+        // `replace` hands the product page this line's key, so the new pick
+        // REPLACES the unanswered line instead of sitting beside it — beside it,
+        // the old line would be refused again and the customer sent round the
+        // same loop. onShow re-quotes when they come back (_repickPending).
+        this._repickPending = true;
+        wx.navigateTo({ url: '/pages/product/product?id=' + badId + (line ? '&replace=' + encodeURIComponent(line.key) : '') });
+      },
+    });
+  },
+
   // Recomputes the displayed totals. Always renders the items + subtotal
   // immediately (so the UI doesn't blink to empty), then fires off a server
   // quote in the background and patches the fee fields when it lands. The
@@ -1543,6 +1598,15 @@ Page({
         // (a sale may have started/ended while items sat in the cart). The
         // /orders endpoint already charges this; this keeps the display honest.
         if (Array.isArray(data.lines)) cart.reprice(data.lines);
+        // §433 — a line the order would be refused on. Offered once per product
+        // per visit: the quote re-runs on every toggle and address change, and
+        // a popup on each of those would be nagging, not help. Place Order
+        // still refuses, and says so, if they skip it.
+        const nc = data.needs_choice;
+        if (nc && nc.product_id && this._pickOfferedFor !== nc.product_id) {
+          this._pickOfferedFor = nc.product_id;
+          this.offerPick(nc);
+        }
         const srvSubtotal = Number(data.subtotal != null ? data.subtotal : cart.subtotal());
         // Per-line flash treatment (strikethrough original + "save ¥X" tag)
         // and tally the flash savings for the "You saved" line below.
@@ -3486,28 +3550,7 @@ Page({
       if (['choice_required', 'too_few_answers', 'too_many_answers',
            'bad_choice', 'choice_wrong_product', 'too_many_choices'].includes(e?.message)) {
         this.setData({ placing: false });
-        const cn = this.data.lang === 'cn';
-        const badId = e?.body?.product_id;
-        const line = badId ? (this.data.items || []).find(it => it.product_id === badId) : null;
-        const name = line ? (cn ? line.name_cn : line.name_en) : '';
-        // 请选择 / Please choose are the product sheet's own words for this, so
-        // the refusal at checkout reads as the same request the picker makes.
-        const title = name
-          ? (cn ? '「' + name + '」请选择' : 'Please choose: ' + name)
-          : (cn ? '请选择' : 'Please choose');
-        if (badId) {
-          wx.showModal({
-            title,
-            // 选规格 is live on this screen already (the substitute-picker CTA).
-            confirmText: cn ? '选规格' : 'Pick',
-            cancelText: cn ? '取消' : 'Cancel',
-            success: (r) => {
-              if (r.confirm) wx.navigateTo({ url: '/pages/product/product?id=' + badId });
-            },
-          });
-        } else {
-          wx.showToast({ title, icon: 'none', duration: 2400 });
-        }
+        this.offerPick({ ...(e.body || {}), error: e.message });
         return;
       }
       // Balance changed between quote and submit (e.g. another order spent it).
