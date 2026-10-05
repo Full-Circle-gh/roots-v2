@@ -93,7 +93,9 @@ const CASES = [
   ['an ordinary product still counts per store', open(PLAIN), [
     ['both stores are there', `sheetText().includes('Tianhe') && sheetText().includes('Yuexiu')`],
     ['with steppers',         `${steppers} === 4`],
-    ['the steppers start at what the shop holds', `sheetText().includes('2') && sheetText().includes('5')`],
+    // The count is a typeable box now (Ash: "can't tap on the number and change
+    // manually"), so it is read from the boxes' values, not the sheet's text.
+    ['the steppers start at what the shop holds', `[].map.call(document.querySelectorAll('.sheet input.stnum'),function(i){return i.value}).join('|') === '2|5'`],
     ['and nothing to switch between', `${chips}.length === 0`],
   ]],
   ['a variant family offers every size', FAMILY, [
@@ -126,6 +128,23 @@ const CASES = [
     open(PLAIN) + `APP.cmd('priceTyped','21.5'); APP.cmd('stepInc','st_12_1');`, [
     ['the typed price is still there', `${priceBox} === '21.5'`],
     ['and the count went up',          `sheetStep['st_12_1'] === 3`],
+  ]],
+  // Ash: "can't tap on the number and change manually". The count between −
+  // and + is a box now, so a shelf of 40 is typed, not tapped forty times.
+  ['a count can be typed, and the steppers carry on from it',
+    open(PLAIN) + `APP.cmd('stockTyped','st_12_1','40'); APP.cmd('stepInc','st_12_2'); APP.cmd('stepInc','st_12_1');`, [
+    ['the count is a box',                     `document.querySelectorAll('.sheet input.stnum[inputmode="numeric"]').length === 2`],
+    ['+ after typing adds one, not "401"',     `sheetStep['st_12_1'] === 41`],
+    ['and the repaint shows it',               `document.getElementById('mst_12_1').value === '41'`],
+    ['the other store stepped on its own',     `document.getElementById('mst_12_2').value === '6'`],
+  ]],
+  // Number('') is 0: a box emptied to retype and left blank must not save an
+  // empty shelf. Save refuses before anything is written.
+  ['a count left blank is refused, not saved as zero',
+    open(PLAIN) + `document.getElementById('mst_12_1').value=''; APP.cmd('saveProduct');`, [
+    ['nothing was sent',      `!state.prodBusy`],
+    ['the sheet stays open',  `state.productSku != null`],
+    ['and the count was not turned into 0', `sheetStep['st_12_1'] === ''`],
   ]],
   ['a paused supplier item is not "Live" in the list',
     `DB.products=[${PAUSED}]; ${stocked} state.liveProductsLoaded=true; APP.cmd('tab','products');`, [

@@ -279,14 +279,14 @@ section('2 · the product sheet');
     h.ctx.state.productSku = 'SKU-4';
     const html = h.ctx.sheetProduct();
     assert.ok(html.includes('id="mPrice"'));
-    assert.deepStrictEqual(cmds(html), ['closeProduct', 'priceTyped', 'stepDec', 'stepInc', 'openOos', 'saveProduct']);
+    assert.deepStrictEqual(cmds(html), ['closeProduct', 'priceTyped', 'stepDec', 'stockTyped', 'stepInc', 'openOos', 'saveProduct']);
   });
   it('a stock key alone: steppers and Save, the price read-only, no policy picker', () => {
     const h = mk(['quickstock:recount'], { products: [P()], stores: { 4: [{ id: 2, name_en: 'Tianhe', name_cn: '天河', qty: 3 }] } });
     h.ctx.state.productSku = 'SKU-4';
     const html = h.ctx.sheetProduct();
     assert.ok(!html.includes('id="mPrice"') && html.includes('¥12.00'));
-    assert.deepStrictEqual(cmds(html), ['closeProduct', 'stepDec', 'stepInc', 'saveProduct']);
+    assert.deepStrictEqual(cmds(html), ['closeProduct', 'stepDec', 'stockTyped', 'stepInc', 'saveProduct']);
     assert.ok(html.includes('When it runs out') && html.includes('Sold out everywhere'));
   });
   it('neither: everything read, nothing pressed', () => {
