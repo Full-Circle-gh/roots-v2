@@ -307,7 +307,7 @@ Page({
     const old = replaceKey ? cart.get().items.find(it => it.key === replaceKey) : null;
     this._replaceKey = old ? replaceKey : null;
     if (old) this.setData({ qty: Math.max(1, Math.min(99, Number(old.qty) || 1)) });
-    // Opened by a bulk add (§434, utils/pick-queue): this product needs an
+    // Opened by a bulk add (§435, utils/pick-queue): this product needs an
     // answer before it can go in the cart, so the sheet opens by itself, at the
     // quantity the batch asked for. Opened any other way, a batch in flight ends.
     const pickMode = query.pick === '1';
@@ -382,7 +382,7 @@ Page({
   onHide()   { this.stopFlashTick(); this.stopViewingPing(true); },
   onUnload() {
     this.stopFlashTick(); this.stopViewingPing(true);
-    // Backed out of a bulk add's product without adding (§434): the customer
+    // Backed out of a bulk add's product without adding (§435): the customer
     // has said no to the rest of the batch too, so it is not reopened later.
     if (this._pickMode && !this._pickAdvancing) pickQueue.clear();
   },
@@ -1359,7 +1359,7 @@ Page({
   // The page's exit after an add — the shop the customer came from, or the home
   // tab when this page was opened from a share card and has nothing behind it.
   _leaveAfterAdd(delayMs) {
-    // A bulk add with more products still to answer (§434): the next one
+    // A bulk add with more products still to answer (§435): the next one
     // replaces this page, so "back" still lands where the batch began.
     // Only a page the queue opened moves it on — the page that STARTED a "Buy
     // together" stays alive underneath, and an ordinary add there later must
@@ -1391,7 +1391,7 @@ Page({
     const b = this._bundle;
     if (!b || !Array.isArray(b.items)) return;
     let added = 0;
-    const toPick = [];   // §434 — needs an answer; opened in turn, never added blank
+    const toPick = [];   // §435 — needs an answer; opened in turn, never added blank
     b.items.forEach(it => {
       const st = it.stock == null ? null : Number(it.stock);
       if (st != null && st <= 0) return;   // skip sold-out items

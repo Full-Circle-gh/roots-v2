@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.477
+# Tacet shared-core consolidation — decisions record, v4.478
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-05 · v4.477 — **§434 · A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED — DECIDED BY ASH:** *"build fix 3"*. Customer Syd's pita (required "heat up?") was refused at checkout, and removing it and adding it back did not help: "Buy again", favourites "Add all", the home bundle block (and its layout copy) and the product page's "Buy together" added every item with no answers. They now add what needs no answer and open each product with a question on its own page, choice sheet already up, one after another (`miniapp/utils/pick-queue.js`). The server adds `has_options` to "Buy together" items and to order lines. No new word. Mini app needs an upload. See §434.
+2026-10-05 · v4.478 — **§435 · A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED — DECIDED BY ASH:** *"build fix 3"*. Customer Syd's pita (required "heat up?") was refused at checkout, and removing it and adding it back did not help: "Buy again", favourites "Add all", the home bundle block (and its layout copy) and the product page's "Buy together" added every item with no answers. They now add what needs no answer and open each product with a question on its own page, choice sheet already up, one after another (`miniapp/utils/pick-queue.js`). The server adds `has_options` to "Buy together" items and to order lines. No new word. Mini app needs an upload. See §435.
+2026-10-05 · v4.477 — **§434 · EVERY PRODUCT ON A SLIP CARRIES ITS SKU, INCLUDING ONE CHOSEN AS AN ANSWER — DECIDED BY ASH:** holding receipt TC000939, *"need sku on receipt always"*, then *"yes recipe has to have sku for each product"*. The line printed its own SKU; the three bites chosen under it, products pulled off the shelf, printed as names only. Now an answer linked to a product prints that product's SKU under it, enlarged, on the receipt, the add-on slip and the packing slip (with the count to pull). Read at print time from the link, so reprints of older orders carry it too. An answer with no link prints none. No schema, no new word. See §434.
+
 2026-10-05 · v4.476 — **§431 rule 7 · ON THE QR MENU, A TAP ON A CHOICE'S PICTURE SHOWS IT BIG — DECIDED BY ASH:** *"I want customer to be able to click on product image and see it bigger with an option to close it down after"*. The picture opens the menu's existing full-screen photo viewer, the one the product sheet's photo already uses, with its ✕ button; tapping the photo, the dark ground, the ✕ or Escape closes it and the picker underneath stays as it was. The tap does not tick the choice. A choice that is sold out, or blocked because the question's maximum is reached, is a switched-off row and its picture does not open. No new word, no schema. See §431 rule 7.
 
 2026-10-05 · v4.475 — **§433 · CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, SAYS IT WHEN CHECKOUT OPENS, AND "PICK" REPLACES THE OLD LINE — DECIDED BY ASH:** a customer met "Please choose: Whole-Wheat Pita (Frozen)" at Place Order and the popup named the product they had already chosen, not the question; Ash: *"yers"* to fixing it. The refusal now carries the question (`question_en`/`question_cn`), the quote reports the same refusal as `needs_choice` so the mini app offers the picker when checkout opens, and "Pick" hands the product page the cart line to replace, so the re-pick does not sit beside the unanswered line and get refused again. No new word: the popup uses the product sheet's live 请选择 / Please choose. Mini app needs an upload. Number §432 was skipped: a parallel branch (kitchen WeCom group) had claimed it. See §433.
@@ -28758,8 +28760,35 @@ WeCom group) had already claimed it when this was written.
 
 Tests: `scripts/test_checkout_required_options.js` (sections A, D2, F).
 
+## §434 — EVERY PRODUCT ON A SLIP CARRIES ITS SKU, INCLUDING ONE CHOSEN AS AN ANSWER
 
-## §434 — A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED
+**Decided 2026-10-05 by Ash**, holding receipt TC000939 (*"need sku on receipt
+always"*; then *"yes recipe has to have sku for each product"*).
+
+1. **The gap.** A line prints its own SKU. An answer linked to a product (a paid
+   extra, §431's link: "Mango Bites" under "Small Bites Selection") is a product
+   the packer pulls, and printed as a name only.
+2. **The rule.** Each such answer prints its linked product's SKU on its own
+   enlarged line, directly under the answer:
+   - receipt and add-on slip: `SKU ‹code›`, or `x‹n›  SKU ‹code›` when the line
+     is for more than one;
+   - packing slip: `x‹n›  SKU ‹code›`, the count to pull, as the line's own.
+3. **Read at print time, not stored.** The order line's snapshot keeps the link
+   (`stock_product_id`, from `lib/product-options.js` resolveAnswers) and not
+   the code. `attachOptionSkus` in routes/retail.js reads the code from the
+   linked product on every print path (auto-print, add-on, reprint/test,
+   preview), so reprints of orders placed before this carry it too.
+4. **An answer with no link prints no SKU.** A sugar level is not a product.
+   To get a SKU on one, link it to a product in the editor.
+5. **The compact template is unchanged.** It prints no SKU for any line by
+   design; this rule does not add one there.
+6. **Seen on the same receipt, not code:** "Small Bites Selection" carries
+   `DRAFT-13S3L`, the placeholder `generateRetailSku` gives a product saved
+   without a SKU. It needs a real SKU typed on its product page.
+
+Tests: `scripts/test_receipt_option_sku.js`.
+
+## §435 — A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED
 
 **Decided 2026-10-05 by Ash** (*"build fix 3"*, on the plan below).
 

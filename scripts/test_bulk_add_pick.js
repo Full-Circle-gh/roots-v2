@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Bulk adds never put a product with a question into the cart unanswered (§434).
+ * Bulk adds never put a product with a question into the cart unanswered (§435).
  *
  *   node scripts/test_bulk_add_pick.js
  *

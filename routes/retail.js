@@ -1943,6 +1943,38 @@ async function saveProductOptions(productId, input, { allowClear = false } = {})
 // order. Used by the PDP "what's inside" and the backend order-detail pack list.
 // `stock` here is the SUM of per-store physical_qty (same source the shop grid
 // uses), so the caller can compute the bundle's availability = min(stock ÷ qty).
+// EVERY PRODUCT ON A SLIP CARRIES ITS SKU, including the ones chosen as an
+// answer (§434). A paid extra linked to a shelf ("Mango Bites" on a bites box)
+// is a product the packer pulls, and its order-line snapshot keeps the link
+// (stock_product_id, lib/product-options.js resolveAnswers) but not the code.
+// So the code is read here, at print time, from the linked product, and put on
+// the snapshot copy lib/feie.js prints. Reprints of older orders get it too.
+// Mutates the rows' options_json in memory only; nothing is written.
+function attachOptionSkus(items) {
+  const parsed = new Map();
+  const ids = new Set();
+  for (const it of items || []) {
+    if (!it || !it.options_json) continue;
+    let v; try { v = JSON.parse(it.options_json); } catch { continue; }
+    if (!Array.isArray(v)) continue;
+    parsed.set(it, v);
+    for (const o of v) if (o && o.stock_product_id) ids.add(Number(o.stock_product_id));
+  }
+  if (!ids.size) return;
+  const list = [...ids];
+  const skuById = new Map(tdb().prepare(
+    `SELECT id, sku FROM store_products WHERE id IN (${list.map(() => '?').join(',')})`
+  ).all(...list).map(r => [r.id, r.sku]));
+  for (const [it, v] of parsed) {
+    let hit = false;
+    for (const o of v) {
+      const sku = o && o.stock_product_id && skuById.get(Number(o.stock_product_id));
+      if (sku) { o.sku = String(sku); hit = true; }
+    }
+    if (hit) it.options_json = JSON.stringify(v);
+  }
+}
+
 function resolveBundleComponents(v) {
   const comps = parseBundleItems(v);
   if (!comps.length) return [];
@@ -13305,7 +13337,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id,
             oi.addon_id, oi.ship_from_supplier,
-            -- §434: "Buy again" opens a line with no answers on its product page
+            -- §435: "Buy again" opens a line with no answers on its product page
             -- when the product NOW asks a question, instead of copying it blank.
             EXISTS(SELECT 1 FROM retail_product_options po WHERE po.product_id = oi.product_id) AS has_options
        FROM retail_order_items oi
@@ -32924,6 +32956,7 @@ function printOrderById(orderId, prefs, pcfg) {
     }
     delete it.bundle_items;
   }
+  attachOptionSkus(items);
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
   const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
@@ -33039,6 +33072,7 @@ function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
       }
       delete it.bundle_items;
     }
+    attachOptionSkus(items);
     const content = _feie.renderAddon(order, items, pp.shop_name);
     _printers.printContent(content, printer, integ())
       .then(r => console.log('[print addon]', orderId, printer.vendor || 'feie', r.ok ? 'ok' : r.msg))
@@ -33360,6 +33394,7 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
       }
       delete it.bundle_items;
     }
+    attachOptionSkus(items);
     shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(last.id);
   } else {
     ({ order, items, shipments } = _sampleOrderForPreview());
@@ -42257,3 +42292,4 @@ module.exports.reverseOrderVoucher   = reverseOrderVoucher;
 // The online half of the same rule, for the suite: which auto-apply voucher a
 // mini-app checkout gets for a given place.
 module.exports.bestAutoVoucher       = bestAutoVoucher;
+module.exports.attachOptionSkus      = attachOptionSkus;

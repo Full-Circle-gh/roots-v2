@@ -274,7 +274,7 @@ Page({
     const { productIds = [], voucherCode = '' } = e.detail || {};
     if (!productIds.length) return;
     let added = 0;
-    const toPick = [];   // §434 — needs an answer; opened in turn, never added blank
+    const toPick = [];   // §435 — needs an answer; opened in turn, never added blank
     productIds.forEach(id => {
       const p = (this.data.products || []).find(x => x.id === id);
       if (p && p.has_options) { toPick.push({ id: p.id, qty: 1 }); return; }

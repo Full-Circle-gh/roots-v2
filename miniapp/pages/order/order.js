@@ -1160,7 +1160,7 @@ Page({
     const pickQueue = require('../../utils/pick-queue');
     const items = this.data.items || [];
     if (!items.length) return;
-    // §434 — a line bought with no answers, whose product now asks a question
+    // §435 — a line bought with no answers, whose product now asks a question
     // (the server says so per line, `has_options`), cannot be copied forward
     // as it was: checkout would refuse it. It is opened to be answered instead,
     // at the quantity bought. A line that carried answers is copied with them.

@@ -644,7 +644,7 @@ Page({
     if (bundleProductId) {
       const bp = findP(bundleProductId);
       // A bundle product with a question goes to its page to be answered
-      // (§434, utils/pick-queue) rather than into the cart blank.
+      // (§435, utils/pick-queue) rather than into the cart blank.
       if (bp && bp.has_options) { pickQueue.start([{ id: bp.id, qty: 1 }]); return; }
       if (bp) {
         cart.add(bp, 1, []);
@@ -664,7 +664,7 @@ Page({
     // Legacy loose-list path.
     if (!productIds.length) return;
     let added = 0;
-    const toPick = [];   // §434 — needs an answer; opened in turn, never added blank
+    const toPick = [];   // §435 — needs an answer; opened in turn, never added blank
     productIds.forEach(id => {
       const p = findP(id);
       if (p && p.has_options) { toPick.push({ id: p.id, qty: 1 }); return; }

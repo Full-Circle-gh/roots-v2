@@ -290,7 +290,7 @@ Page({
   onAddAll() {
     const inStock = (this.data.visible || []).filter(v => !v.soldOut && !v.preorder);
     if (!inStock.length) return;
-    // §434 — a favourite with a question is opened to be answered (the single
+    // §435 — a favourite with a question is opened to be answered (the single
     // add above already does this), never added blank.
     const toPick = [];
     let added = 0;

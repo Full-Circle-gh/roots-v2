@@ -1,5 +1,5 @@
 // Products added IN BULK that need the customer to answer a question first
-// (§434). "Buy again", favourites "Add all", the home bundle block and the
+// (§435). "Buy again", favourites "Add all", the home bundle block and the
 // product page's "Buy together" used to call cart.add(p, qty, []) for every
 // item, so a product with a required question went into the cart with no
 // answer, and checkout refused it ("Please choose: Whole-Wheat Pita"). A
