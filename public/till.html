@@ -435,6 +435,9 @@ button{font:inherit;color:inherit;margin:0}
 .cust .who{flex:1;min-width:0;font-size:14px;color:var(--td-text2)}
 .cust.on .who{color:var(--td-text)}
 .cust .sub{font-size:12px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+/* A voucher the attached customer holds at this counter — ink, not grey, so
+   it reads as a fact about them rather than more small print. */
+.cust .sub .held{color:var(--td-text);font-weight:600}
 .cbtn{
   min-height:44px;padding:0 14px;border-radius:var(--r-control);
   border:1px solid var(--td-border);background:transparent;color:var(--td-text);
@@ -2440,7 +2443,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       el.innerHTML = head
         + '<span class="who">' + esc(String(S.recall.code))
         + (S.recall.name ? ' · ' + esc(S.recall.name) : '')
-        + '<div class="sub">' + esc(rc ? (rc.nickname || ('#' + rc.id)) : (S.recall.order_no || '')) + '</div></span>'
+        + '<div class="sub">' + esc(rc ? (rc.nickname || ('#' + rc.id)) : (S.recall.order_no || '')) + heldLabels(rc) + '</div></span>'
         + giveButtons(rc)
         + (!rc && !S.recall.loading
             ? '<button class="cbtn" type="button" data-cust="pick">' + esc(T('customer')) + '</button>' : '')
@@ -2455,7 +2458,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       el.className = 'cust on';
       el.innerHTML = head + '<span class="who">' + esc(S.customer.nickname || ('#' + S.customer.id))
         + '<div class="sub">' + esc(T('points')) + ' ' + (Number(S.customer.points) || 0)
-        + ' · ' + esc(T('wallet')) + ' ' + money(S.customer.balance) + '</div></span>'
+        + ' · ' + esc(T('wallet')) + ' ' + money(S.customer.balance) + heldLabels(S.customer) + '</div></span>'
         + giveButtons(S.customer)
         + '<button class="cbtn" type="button" data-cust="clear">' + esc(T('remove')) + '</button>';
     } else {
@@ -2465,6 +2468,23 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
         + esc(T('customer')) + '</button>';
     }
+  }
+
+  /* WHAT THEY ALREADY HOLD HERE, as a tick and the voucher's own title
+     ("✓ Ramada Staff"), so the cashier sees it the moment the customer is
+     attached — before a single product is on the bill, which is when the
+     discount line itself first appears. Reported from the counter, 2026-10-05:
+     after a give the button goes (they hold it now), and with an empty bill
+     nothing on screen said so. Only what still applies HERE is listed — the
+     same `cv` list the discount is worked out from — so a voucher used up or
+     expired shows nothing, which is the truth at this counter. No new word: a
+     tick and the merchant's own title. */
+  function heldLabels(c) {
+    if (!c || !c.cv || !c.cv.length || String(c.cvStore) !== String(S.storeId)) return '';
+    return c.cv.map(function (v) {
+      var title = cuT(v.title_en || v.title_cn || '', v.title_cn || v.title_en || '') || T('voucher');
+      return ' · <b class="held">\u2713 ' + esc(title) + '</b>';
+    }).join('');
   }
 
   /* §428 — THIS LOCATION'S VOUCHERS THE CUSTOMER COULD BE GIVEN, one button
