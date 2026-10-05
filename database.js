@@ -2720,6 +2720,11 @@ addColumn('retail_vouchers', 'store_id',          'INTEGER');
 // remove the discount. 0 for every other order, including one whose voucher
 // came from a signed-in account or a customer the cashier attached.
 addColumn('retail_orders', 'voucher_typed_phone', 'INTEGER DEFAULT 0');
+// §428 — WHO GAVE A VOUCHER, by name, written at the moment of giving. The old
+// granted_by id has no realm (a kitchen user and a backend operator can share
+// an id), so it cannot be named reliably; this can. NULL on every grant made
+// before §428 and on the automatic ones (signup, self-claim).
+addColumn('retail_customer_vouchers', 'granted_by_name', 'TEXT');
 
 db.exec(`CREATE TABLE IF NOT EXISTS retail_subscriptions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

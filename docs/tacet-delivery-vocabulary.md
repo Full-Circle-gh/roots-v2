@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.312 · 2026-10-05 · §428 THE TILL GIVES A LOCATION'S VOUCHER, ATTACHES A CUSTOMER TO A QR ORDER AND ADDS A CUSTOMER; THE OFFICE GIVES TO A PASTED LIST — 6 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *Giving a location's voucher at the till, and to a list (§428)*.
+
 **v1.311 · 2026-10-05 · §427 "CUSTOMER CONTACTED" ON A PARCEL STILL RUNNING LATE — ONE BADGE ARRANGEMENT COMPOSED BY CLAUDE FROM LIVE PAIRS; THE BUTTON AND THE NOTE COPIED WHOLE.** See *Customer contacted on a running-late parcel (§427)*.
 
 **v1.310 · 2026-10-04 · §426 A VOUCHER LIMITED TO ONE LOCATION — THE TILL, THE QR MENU AND THE COUPON DRAWERS — 4 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *A voucher limited to one location (§426)*.
@@ -13361,3 +13363,32 @@ second ending.
   `已联系客户`, so the badge copies that rather than minting a variant.
 - `已处理` / `标记已处理`: **rejected.** Live for closing the §98 case. This
   does not close anything — the parcel is still late.
+
+
+## Giving a location's voucher at the till, and to a list (§428)
+
+**Operator register, 2026-10-05.** The counter till (`public/till.html`,
+`STRINGS`), the desktop's *Give to a customer* dialog
+(`public/retail-admin.html`, `grantToList` in `05-marketing.js`) and the coupon
+holder lists on both surfaces. Nothing here names a carrier. The give button is
+`Give` followed by the voucher's own title, which is the merchant's text.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Add a customer · 添加顾客`, `Name · 姓名`, `Phone · 电话` | the phone app's *Add a customer* form (`public/m.html`) — the till asks for the same two fields for the same act |
+| `Give · 发放` | the Chinese of the admin's `Give it out · 发放` and `Grant · 发放`; the English is the verb of `Give to a customer · 发放给顾客` |
+| `Saving… · 保存中…`, `Failed: · 失败:` | the admin's own |
+
+### Composed — six, by Claude (2026-09-06 amendment)
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `此订单已属于其他顾客,请先取消优惠。` | This order already belongs to another customer. Remove the discount first. | `此订单` (`取消此订单?`), `顾客`, `其他` (`Other · 其他`), `请先…` (`请先选择门店。`), `取消优惠` (§426) | `订单已有顾客` — true but does not say what to do; the second clause is the point |
+| `或粘贴名单 — 每行一人,姓名和电话` | Or paste a list — one person per line, name and phone | `或…` (`或发放给指定顾客`, the line above it in the same dialog), `粘贴` (`粘贴文字`), `名单` (`持有名单`), `姓名`, `电话` | `批量导入` — an import is a file, and this is a paste |
+| `发放给名单上的所有人` | Give to everyone on the list | `发放给` (`发放给所有顾客`, the same dialog) + `名单` | `全部发放` — already the dialog's *Grant to all*, which means every customer in the shop; reusing it here would make the two buttons read the same |
+| `已发放 N 位 · 已拥有 N 位 · 新建顾客 N 位` | Given to N · already had it: N · new customers: N | `已发放给 N 位顾客` (the dialog's own toast), `已拥有` (the holder pill *Has it*), `新建` (`新建订单`) | — |
+| `N 行没有电话 — 已留在框中,请修改。` | No phone on N line(s) — left in the box to fix. | `电话`, `请修改` as a plain request | `格式错误` — blames the format, when the one thing missing is the phone |
+| `发放人 ` | given by | `发放` + `人`, the agent noun the product already uses (`收件人姓名`, the web store's address form) | `由…发放` — wraps the name, which breaks the one-line holder row |
+

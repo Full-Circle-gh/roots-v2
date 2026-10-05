@@ -307,7 +307,8 @@ async function vchLoadHolders(id, count) {
       + '<button type="button" class="go" onclick="vchGotoCustomer(' + g.customer_id + ')"'
       +   ' title="' + escapeAttr(cuT('Open this customer', '查看该顾客')) + '">'
       +   '<span class="who">' + escapeHtml(g.nickname || cuT('(no name)', '(未填写昵称)')) + '</span>'
-      +   '<span class="ph">' + escapeHtml(g.phone || '—') + '</span>'
+      +   '<span class="ph">' + escapeHtml(g.phone || '—')
+      +     (g.granted_by_name ? ' · ' + cuT('given by ', '发放人 ') + escapeHtml(g.granted_by_name) : '') + '</span>'
       + '</button>'
       + '<button type="button" class="lnk" onclick="vchTakeBack(' + g.id + ')">' + cuT('Take it back', '收回') + '</button>'
       + '</div>').join('');
@@ -440,6 +441,8 @@ function openGrantModal(voucherId, code) {
   $('#grant-modal-sub').textContent = 'Recipients see this in their wallet & checkout, no code needed. · 收件人会在钱包和结账时看到,无需编码。';
   $('#grant-search').value = '';
   $('#grant-note').value   = '';
+  $('#grant-list').value   = '';                 // §428
+  $('#grant-list-out').textContent = '';
   $('#grant-modal-bg').classList.add('show');
   searchGrantCustomers();
   loadGrantedList();
@@ -494,6 +497,37 @@ async function grantToCustomer(customerId) {
   }
 }
 
+/* §428 — GIVE TO A PASTED LIST. The server matches each phone to the customer
+   who has it, or creates one, and gives the voucher under this operator's name.
+   What it could not read comes back and is left in the box, so the office fixes
+   those lines and presses again — giving twice is harmless. */
+async function grantToList() {
+  if (!_grantVoucherId) return;
+  const ta = $('#grant-list');
+  const text = ta.value.trim();
+  if (!text) { ta.focus(); return; }
+  const out = $('#grant-list-out');
+  out.textContent = cuT('Saving…', '保存中…');
+  try {
+    const { data } = await api('/api/retail-admin/vouchers/' + _grantVoucherId + '/grant-list', {
+      method: 'POST', body: { text },
+    });
+    const d = data || {};
+    let msg = cuT('Given to ' + d.granted + ' · already had it: ' + d.already + ' · new customers: ' + d.created,
+                  '已发放 ' + d.granted + ' 位 · 已拥有 ' + d.already + ' 位 · 新建顾客 ' + d.created + ' 位');
+    if (d.unread && d.unread.length) {
+      msg += ' · ' + cuT('No phone on ' + d.unread.length + ' line(s) — left in the box to fix.',
+                         d.unread.length + ' 行没有电话 — 已留在框中,请修改。');
+    }
+    out.textContent = msg;
+    ta.value = (d.unread || []).join('\n');
+    await loadGrantedList();
+    await loadVouchers();
+  } catch (e) {
+    out.textContent = cuT('Failed: ', '失败:') + e.message;
+  }
+}
+
 async function grantToAll() {
   if (!_grantVoucherId) return;
   if (!(await askConfirm({ title: 'Grant this coupon to every customer? · 向所有顾客发放此优惠券?', body: 'Existing grants are kept. · 已有发放记录会保留。', confirmLabel: 'Grant to all · 全部发放' }))) return;
@@ -534,7 +568,7 @@ async function loadGrantedList() {
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12px;">
         <div style="min-width: 0;">
           <span style="font-weight: 600;">${escapeHtml(g.nickname || '(no name)')}</span>
-          <span class="muted">#${g.customer_id} · ${escapeHtml(g.phone || '—')}</span>
+          <span class="muted">#${g.customer_id} · ${escapeHtml(g.phone || '—')}${g.granted_by_name ? ' · ' + cuT('given by ', '发放人 ') + escapeHtml(g.granted_by_name) : ''}</span>
           ${standing
             ? '<span class="pill pub" style="margin-left: 8px; font-size: 10px;">' + cuT('Has it', '已拥有') + '</span>'
             : g.used_at
