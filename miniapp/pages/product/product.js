@@ -298,6 +298,14 @@ Page({
     }
     const app = getApp();
     this.setData({ id, lang: app.globalData.lang });
+    // Opened from checkout's "Pick" (§433): the cart line this visit replaces.
+    // It carries its quantity over, so re-picking two pitas does not quietly
+    // become one.
+    let replaceKey = null;
+    try { replaceKey = query.replace ? decodeURIComponent(query.replace) : null; } catch (e) { replaceKey = query.replace || null; }
+    const old = replaceKey ? cart.get().items.find(it => it.key === replaceKey) : null;
+    this._replaceKey = old ? replaceKey : null;
+    if (old) this.setData({ qty: Math.max(1, Math.min(99, Number(old.qty) || 1)) });
     await this.refresh();
     this.refreshFavoriteState();
   },
@@ -1228,7 +1236,7 @@ Page({
         chosen.push({ option_id: o.id, choice_id: c.id, question: o.question, label: c.label, delta: Number(c.price_delta) || 0 });
       });
     });
-    cart.add({
+    this._lastAddKey = cart.add({
       id: p.id,
       name_en: p.name_en,
       name_cn: p.name_cn,
@@ -1294,6 +1302,7 @@ Page({
   // shopper adding one meal two ways got two different toasts, and neither
   // matched a button reading NEXT BATCH. It takes the page's own `preKind` now.
   _finishAdd(kind) {
+    this._dropReplacedLine();
     const cn = this.data.lang === 'cn';
     const title = kind === 'batch'
       ? (cn ? '已加入购物车，下批现做' : 'Added — next batch')
@@ -1315,6 +1324,18 @@ Page({
       duration: kind ? 1500 : 1200,
     });
     this._leaveAfterAdd(500);
+  },
+
+  // The re-pick from checkout (§433): the new line takes the old one's place.
+  // If the add MERGED into the old key instead, removing it would empty the
+  // very line just added to — so that line is set to the quantity picked here,
+  // not the old quantity plus it.
+  _dropReplacedLine() {
+    const k = this._replaceKey;
+    if (!k || !this._lastAddKey) return;
+    this._replaceKey = null;
+    if (this._lastAddKey === k) cart.setQty(k, this.data.qty);
+    else cart.remove(k);
   },
 
   // The page's exit after an add — the shop the customer came from, or the home
@@ -1455,7 +1476,7 @@ Page({
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
-    cart.add({
+    this._lastAddKey = cart.add({
       id: m.id,
       name_en: m.name_en,
       name_cn: m.name_cn,

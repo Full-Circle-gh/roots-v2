@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.473
+# Tacet shared-core consolidation — decisions record, v4.475
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-10-05 · v4.475 — **§433 · CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, SAYS IT WHEN CHECKOUT OPENS, AND "PICK" REPLACES THE OLD LINE — DECIDED BY ASH:** a customer met "Please choose: Whole-Wheat Pita (Frozen)" at Place Order and the popup named the product they had already chosen, not the question; Ash: *"yers"* to fixing it. The refusal now carries the question (`question_en`/`question_cn`), the quote reports the same refusal as `needs_choice` so the mini app offers the picker when checkout opens, and "Pick" hands the product page the cart line to replace, so the re-pick does not sit beside the unanswered line and get refused again. No new word: the popup uses the product sheet's live 请选择 / Please choose. Mini app needs an upload. Number §432 was skipped: a parallel branch (kitchen WeCom group) had claimed it. See §433.
 2026-10-05 · v4.473 — **§431 · A CHOICE SHOWS THE PICTURE OF THE PRODUCT IT IS LINKED TO — DECIDED BY ASH:** *"i want the customer to see a picture of each item when he make the choice"*, then *"go ahead"* on the plan: no upload, the linked product's photo. On the mini app's product page and "Forgot something?" page, the web shop and the QR menu, a choice linked to a product with a photo now shows that photo small and square beside its name. A choice with no link, or a linked product with no photo, shows none; once one choice in a group has a picture, the others keep an empty frame so the names line up. Served by choice id (`lib/choice-photo.js`), gated on the parent product, so an unpublished add-on still shows. No schema, no new word. Staff screens unchanged. See §431.
 
 2026-10-05 · v4.472 — **§430 · GZGROCERY'S OWN STATEMENT SHEET CAN BE CHECKED AGAINST OUR ORDERS — DECIDED BY ASH:** asked for *"the most efficient way to check if everything is correct in the file using our system"*; on the sheet's dates, *"ordered and delivered"*; on the block at its foot, *"the bottom part need to ignore"*; then *"merge deploy"* on §429, which this builds on. The Billing panel gains **Check their sheet**: upload the .xlsx gzgrocery emails and the panel lists every product line beside our orders for the same days, mismatches first (quantity, price, only on one side), with the GZ-… orders behind our figure and the day either side of the range. The file is read in memory and never kept; the check writes nothing and needs `guanyi:view`. Twenty Chinese strings composed by Claude, see the vocabulary's v1.313. No schema. See §430.
@@ -28642,3 +28643,52 @@ item when he make the choice"*; then *"go ahead"* on step 1 of the plan below).
    both editors. Its own ask, if and when wanted.
 
 Tests: `scripts/test_option_choice_photo.js`.
+
+
+## §433 — CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, AND "PICK" REPLACES THE LINE
+
+**Decided 2026-10-05 by Ash** (a customer's screenshot: *"why a customer has
+this message what it even means ?"*; then *"yers"* to the fix proposed).
+
+**What the customer met.** At Place Order, a modal: "Please choose:
+Whole-Wheat Pita (Frozen)", Cancel / Pick. The server refused the order
+because a question on the pita had no answer on that cart line (§229); the
+mini app cart lives on the handset, so a line added before its product gained
+a required question carries no answer. Three things were wrong with the
+handling, and each is fixed here:
+
+1. **It named the product, not the question.** The customer had already chosen
+   the pita. `lib/product-options.js` `resolveAnswers` now returns the
+   question's `question_en` / `question_cn` with `choice_required`,
+   `too_few_answers` and the per-question `too_many_answers`, and
+   `/api/retail/orders` passes them through. The popup's title is the item's
+   name alone; under it, "Please choose: <question>" / "请选择 <question>" —
+   the product sheet's own live pair, so no string was composed. Without a
+   question (a stale or tampered choice id) it reads as before.
+2. **It came last.** The customer had filled in address, time and payment
+   first. `/api/retail/checkout/quote` now runs the same check (one helper,
+   `customerOrderAnswers`, shared with `/orders`) and REPORTS it as
+   `data.needs_choice` instead of refusing, so prices still show. The mini app
+   offers the picker once per product per visit; Place Order still refuses if
+   it is skipped. Not on the pickup path (it prices locally, no quote) or when
+   the address matches no zone — Place Order covers both.
+3. **"Pick" led back into the same refusal.** The product page added a NEW
+   line with the answer, and the unanswered line stayed beside it, so Place
+   Order refused again. Checkout now passes the line's key
+   (`/pages/product/product?id=…&replace=…`); the product page starts at that
+   line's quantity and, after the add, removes the old line (or, if the add
+   merged into it, sets it to the quantity picked). `cart.add` returns the key
+   so the two cases can be told apart. Checkout re-quotes on return, which
+   redraws the lines and asks about the next unanswered one, if any.
+
+**Mini app needs an upload.** The server half (question on the refusal,
+`needs_choice` on the quote) is live on deploy and harmless to the current
+mini app, which ignores the new fields.
+
+**Not done here:** the web shop (`public/shop.html`) has the same refusal flow
+and could use the question too. Its own change, if wanted.
+
+**Number:** §432 was skipped; branch `claude/funny-cannon-1qz60j` (kitchen
+WeCom group) had already claimed it when this was written.
+
+Tests: `scripts/test_checkout_required_options.js` (sections A, D2, F).
