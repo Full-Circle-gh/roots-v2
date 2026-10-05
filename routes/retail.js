@@ -436,6 +436,11 @@ const MEDIA_INLINE_MIME = new Set([
 // into that group, and the public config is served to anyone who asks.
 const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup', 'kitchen.'];
 
+// §436 — staff group-bot URLs (WeCom webhooks, secret in `key=`). The server
+// and the admin config still read them, so they are not private; they are
+// removed from GET /api/retail/config only. The list and why: that file.
+const { omitPublicConfigKeys } = require('../lib/public-config-omit');
+
 const businessDate = require('../lib/business-date');
 // Money, exact to the cent (audit I-02). `lifetime_spend = lifetime_spend + ?`
 // is addition performed by SQLite over a floating-point column: 0.01 added a
@@ -942,6 +947,7 @@ router.get('/api/retail/config', (req, res) => {
   try {
     const cfg = loadConfig();
     delete cfg.cms;  // internal namespace — never expose drafts to the mini app
+    omitPublicConfigKeys(cfg);  // §436 — staff group-bot URLs carry their secret
     // ── CMS draft preview ─────────────────────────────────────────────
     // When a valid preview_token is in the query (minted from /cms via
     // POST /api/retail-admin/cms/preview-token), overlay draft layouts on
@@ -13341,7 +13347,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id,
             oi.addon_id, oi.ship_from_supplier,
-            -- §435: "Buy again" opens a line with no answers on its product page
+            -- §436: "Buy again" opens a line with no answers on its product page
             -- when the product NOW asks a question, instead of copying it blank.
             EXISTS(SELECT 1 FROM retail_product_options po WHERE po.product_id = oi.product_id) AS has_options
        FROM retail_order_items oi
