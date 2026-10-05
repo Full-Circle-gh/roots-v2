@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.470
+# Tacet shared-core consolidation — decisions record, v4.471
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.471 — **§429 · THE GZGROCERY BILL IS READ FROM THE ORDERS, AT THE ORDER'S PRICE, ON THE SHOP'S DAY — DECIDED BY ASH:** asked how to check the Excel sheet gzgrocery sends every few days against the system, then answered that the sheet's dates mean the days the goods were *"ordered and delivered"*. The GZ Grocery tab's Billing panel, the phone's copy of it, and the Statement CSV still read the stock ledger — the read §184/§186 took every other screen off — so a past bill moved whenever a gzgrocery price changed, and an order at 07:00 Guangzhou sat on the day before. They now read the gzgrocery order copies (`lib/gzgrocery-billing.js`, `billingRows`): the price fixed when each order was read, the shop's business day, cancelled orders out. The dormant drift log still counts for history. No new screen, no new word, no schema. This is the first of two changes; the sheet check builds on it. See §429.
 
 2026-10-05 · v4.470 — **§428 AMENDED: THE TILL NAMES A VOUCHER THE ATTACHED CUSTOMER ALREADY HOLDS — ASH:** *"add the label"*, after reporting from the counter that the *Give Ramada Staff* button was gone once given, and nothing said the customer had it until a product was on the bill. No new section. Under the attached customer's name — on a sale and on a recalled QR order — the till now shows a tick and the voucher's own title (**✓ Ramada Staff**) for each voucher that still applies at that location: the same list the discount is worked out from, so one used up or expired shows nothing. No new word; the merchant's title and a tick.
 
@@ -28531,3 +28533,32 @@ cashier could only cancel it and ring it up again.
 
 Tests: `scripts/test_location_vouchers.js`, extended.
 
+## §429 — THE GZGROCERY BILL IS READ FROM THE ORDERS, AT THE ORDER'S PRICE, ON THE SHOP'S DAY
+
+**Decided 2026-10-05 by Ash** (asked for *"the most efficient way to check if
+everything is correct"* in gzgrocery's Excel statement; on the dates in that
+sheet: *"ordered and delivered"*). Applies §184 and §186 to the one reader they
+missed.
+
+1. **The Billing panel reads the gzgrocery order copies**
+   (`retail_orders` `channel='gzgrocery'`, `GZ-…`, and their lines) through one
+   function, `billingRows` in `lib/gzgrocery-billing.js`. Desktop panel, phone
+   panel and Statement CSV all come from
+   `GET /api/retail-admin/guanyi/analytics`, which now calls it.
+2. **Owed is the line's own price**, fixed when the order reader wrote it.
+   Changing a gzgrocery price no longer re-prices past days. Retail value and
+   the discount figure stay informational, from the price sheet.
+3. **Days are the shop's business day**, the order date Finance uses
+   (`odateFor`, shop zone), not the UTC time the daemon wrote a ledger row.
+4. **A cancelled order bills nothing**: the order reader flips its copy to
+   cancelled, and the paid allow-list drops it.
+5. **The dormant drift log still counts**, so history from before the order
+   reader stays on the panel. It has no stored price, so it is still valued at
+   today's price; it is now dated by the shop's day too.
+6. **Unchanged:** the panel's layout, figures, presets, unpriced warning, CSV
+   columns, week numbering, and who may see it (§399).
+7. **Next, and separate:** uploading gzgrocery's own sheet and listing only the
+   lines that disagree. It compares against this reader, which is why this
+   came first.
+
+Tests: `scripts/test_gzgrocery_billing_basis.js`.
