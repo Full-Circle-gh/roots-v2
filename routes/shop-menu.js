@@ -1722,6 +1722,7 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .oc-i{flex:none;width:44px;height:44px;border-radius:6px;object-fit:cover;
   background:rgba(0,0,0,.06)}
 .oc-i+.oc-l{flex:1}
+.oc-i[data-big]{cursor:zoom-in}
 .oc-x{flex:none;width:21px;height:21px;border:1.5px solid currentColor;
   border-radius:4px;display:flex;align-items:center;justify-content:center;
   font-size:14px;line-height:1}
@@ -2281,6 +2282,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `catch(e){pushed=false/* file:// and some locked-down web views refuse pushState; the page then opens and closes by its own close button, which is how it worked before Back was wired up */}}` +
   `shOpen(sh);body.scrollTop=0};` +
   `document.addEventListener('click',function(e){` +
+  // A choice's picture in the option picker opens the same viewer.
+  `var ci=e.target.closest?e.target.closest('.oc-i[data-big]'):null;` +
+  `if(ci){bigImg.src=ci.getAttribute('data-big')+'&w=${HERO_W}';big.hidden=false;return}` +
   `var z=e.target.closest?e.target.closest('.dt-ph[data-big]'):null;` +
   `if(z){var pid=z.getAttribute('data-big'),v=z.getAttribute('data-v')||'';` +
   // The enlarge asks the SAME route for a wider render. It is a separate URL,
@@ -2303,7 +2307,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `document.getElementById('dsheetX').addEventListener('click',function(){close()},false);` +
   `document.getElementById('dsheetBg').addEventListener('click',function(){close()},false);` +
   `document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;` +
-  `if(!big.hidden){shut();return}close()},false);` +
+  // stopImmediatePropagation: the basket script's own Escape closes the option
+  // picker, and a customer closing a choice's picture is still choosing.
+  `if(!big.hidden){shut();e.stopImmediatePropagation();return}close()},false);` +
   // Keyboard: a card is role=button and focusable, so it answers Enter/Space.
   `document.addEventListener('keydown',function(e){` +
   `if(e.key!=='Enter'&&e.key!==' ')return;` +
@@ -2726,7 +2732,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      bare row: a box that can only ever hold one tick is a radio drawn as a
      checkbox, which is the opposite of the distinction being made here. */
   `(g.multi?'<span class=\"oc-x\">'+(on?'\\u2713':'')+'</span>':'')+` +
-  `(gi?(c.img?'<img class=\"oc-i\" src=\"'+esc(c.img)+'&w=160\" alt=\"\" loading=\"lazy\" decoding=\"async\">':'<span class=\"oc-i\"></span>'):'')+` +
+  /* A TAP ON THE PICTURE ENLARGES IT, through the same full-screen viewer the product sheet's photo opens (#big), and does NOT tick the row:
+     the customer is looking, not choosing. data-big is the choice route
+     without a width; the viewer asks it for the hero width. */
+  `(gi?(c.img?'<img class=\"oc-i\" src=\"'+esc(c.img)+'&w=160\" data-big=\"'+esc(c.img)+'\" alt=\"\" loading=\"lazy\" decoding=\"async\">':'<span class=\"oc-i\"></span>'):'')+` +
   `'<span class=\"oc-l\">'+bi(c.en,c.cn)+'</span>'+` +
   `'<span class=\"oc-d\">'+(c.out?L_OUT:(c.d?('+'+money(c.d)):''))+'</span>'+` +
   `'</button>'}` +
@@ -2880,6 +2889,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `shClose(sheet);` +
   `real.click();` +
   `return}` +
+  // A tap on a choice's picture enlarges it (the sheet script above);
+  // it must not also tick or untick the row it sits in.
+  `if(e.target.closest&&e.target.closest('.oc-i[data-big]'))return;` +
   `var oc=e.target.closest?e.target.closest('.oc'):null;` +
   `if(oc&&pk){if(oc.disabled)return;` +
   `var gid=parseInt(oc.getAttribute('data-og'),10);` +
