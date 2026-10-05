@@ -353,11 +353,15 @@ Page({
         min_choices: Number(o.min_choices) || 0,
         max_choices: Number(o.max_choices) || 0,
         lim_hint: o.type === 'multi' ? optionText.limHint(o, L) : '',
+        // A picture beside each choice (its linked product's photo); the rest
+        // of a group that has any keep an empty frame so the names line up.
+        has_img: (o.choices || []).some(c => c.image_url),
         choices: (o.choices || []).map(c => {
           const soldOut = !!c.stock_product_id && c.addon_available === false;
           const isDefault = !!c.is_default && !soldOut;
           return {
             id: c.id,
+            img: c.image_url ? absUrl(c.image_url) + '&w=160' : '',
             label: lang.pick(c.label_en, c.label_cn, L),
             delta: Number(c.price_delta) || 0,
             delta_text: deltaText(c.price_delta, cn),

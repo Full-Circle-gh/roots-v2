@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.472
+# Tacet shared-core consolidation — decisions record, v4.473
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.473 — **§431 · A CHOICE SHOWS THE PICTURE OF THE PRODUCT IT IS LINKED TO — DECIDED BY ASH:** *"i want the customer to see a picture of each item when he make the choice"*, then *"go ahead"* on the plan: no upload, the linked product's photo. On the mini app's product page and "Forgot something?" page, the web shop and the QR menu, a choice linked to a product with a photo now shows that photo small and square beside its name. A choice with no link, or a linked product with no photo, shows none; once one choice in a group has a picture, the others keep an empty frame so the names line up. Served by choice id (`lib/choice-photo.js`), gated on the parent product, so an unpublished add-on still shows. No schema, no new word. Staff screens unchanged. See §431.
 
 2026-10-05 · v4.472 — **§430 · GZGROCERY'S OWN STATEMENT SHEET CAN BE CHECKED AGAINST OUR ORDERS — DECIDED BY ASH:** asked for *"the most efficient way to check if everything is correct in the file using our system"*; on the sheet's dates, *"ordered and delivered"*; on the block at its foot, *"the bottom part need to ignore"*; then *"merge deploy"* on §429, which this builds on. The Billing panel gains **Check their sheet**: upload the .xlsx gzgrocery emails and the panel lists every product line beside our orders for the same days, mismatches first (quantity, price, only on one side), with the GZ-… orders behind our figure and the day either side of the range. The file is read in memory and never kept; the check writes nothing and needs `guanyi:view`. Twenty Chinese strings composed by Claude, see the vocabulary's v1.313. No schema. See §430.
 
@@ -28600,3 +28602,43 @@ ignore"*). Builds on §429.
    opened; the phone's Billing panel (§399) is unchanged. Its own ask if wanted.
 
 Tests: `scripts/test_gzgrocery_statement_check.js`.
+
+## §431 — A CHOICE SHOWS THE PICTURE OF THE PRODUCT IT IS LINKED TO
+
+**Decided 2026-10-05 by Ash** (*"i want the customer to see a picture of each
+item when he make the choice"*; then *"go ahead"* on step 1 of the plan below).
+
+1. **Where the picture comes from.** A choice has no photo of its own. A choice
+   linked to a product (`stock_product_id`, the 🔗 chip in the editor) shows that
+   product's photo, with the same variant-sibling fallback the product image
+   route uses. Nothing is uploaded. A choice with no link, or linked to a product
+   with no photo, shows no picture.
+2. **Served by choice id, never by the linked product's id.** The add-on behind
+   a paid extra is usually unpublished on purpose, and the public product image
+   route refuses unpublished products. Publishing it to get the photo would put
+   it in the shop as a product of its own. So:
+   - online store: `GET /api/retail/option-choices/:id/image`, gated on the
+     PARENT product being published and active. The product detail route gives
+     each such choice an `image_url`.
+   - QR menu: `GET /s/:shopCode/c/:choiceId`, gated on the parent product being
+     listed at that active shop (the same gate as the menu's product photo).
+     The menu's choices carry `img`; the linked product's id stays off the
+     public page, as `lib/product-options.js` intends.
+   - The version on the link is the linked product's `updated_at`, so a new
+     photo replaces the cached one.
+3. **How it looks.** A small square photo (44px on the web, 88rpx/80rpx in the
+   mini app) to the left of the name; price and sold-out label stay on the
+   right. Once one choice in a group has a picture, the others keep an empty
+   frame of the same size so the names line up. A sold-out choice dims with
+   its picture. Big picture tiles were advised against: a sheet of six extras
+   would become a long scroll on a phone.
+4. **Where.** Mini app product page (both sheets), mini app "Forgot
+   something?" page, web shop, QR menu. **Not** the till or the staff phone /
+   manual order screens: staff do not need it.
+5. **Mini app needs an upload.** The web shop and QR menu change on deploy; the
+   mini app shows the pictures only after its next upload and WeChat review.
+6. **Not built (step 2):** uploading a picture per choice, for a choice that is
+   not a product (a sauce) or to use a different photo. That needs a column and
+   both editors. Its own ask, if and when wanted.
+
+Tests: `scripts/test_option_choice_photo.js`.

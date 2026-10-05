@@ -520,8 +520,13 @@ Page({
       // before serving the page, so these ARE the numbers checkout applies.
       // 0 means no limit, which is every group authored before this existed.
       lim_hint: o.type === 'multi' ? optionText.limHint(o, L) : '',
+      // A picture beside each choice: its linked product's photo, served by the
+      // server per choice. Once one choice in a group has one, the rest keep an
+      // empty frame so the names line up.
+      has_img: (o.choices || []).some(c => c.image_url),
       choices: (o.choices || []).map(c => ({
         ...c,
+        img: c.image_url ? absUrl(c.image_url) + '&w=160' : '',
         label: lang.pick(c.label_en, c.label_cn, L),
         delta_text: Number(c.price_delta) ? (Number(c.price_delta) > 0 ? '+¥' + Number(c.price_delta).toFixed(2) : '−¥' + Math.abs(Number(c.price_delta)).toFixed(2)) : '',
         sold_out: !!c.stock_product_id && c.addon_available === false,

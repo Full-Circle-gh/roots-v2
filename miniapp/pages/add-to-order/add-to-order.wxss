@@ -277,6 +277,15 @@
   border-color: var(--olive);
   background: var(--olive);
 }
+/* The choice's picture — its linked product's photo. */
+.op-c-img {
+  flex: 0 0 auto;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 10rpx;
+  background: rgba(0,0,0,0.06);
+  margin-right: 20rpx;
+}
 .op-c-label {
   flex: 1 1 auto;
   font-size: calc(28rpx * var(--font-scale));
