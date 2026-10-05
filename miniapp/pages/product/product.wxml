@@ -382,8 +382,10 @@
             <view class="op-q f-toni">{{opt.question}}{{opt.is_required ? ' *' : ''}}</view>
             <view class="op-choices">
               <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
-                    class="op-choice {{choiceSel[ch.id] ? 'on' : ''}}"
+                    class="op-choice {{choiceSel[ch.id] ? 'on' : ''}} {{opt.has_img ? 'op-has-img' : ''}}"
                     data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" bindtap="pickChoice">
+                <image wx:if="{{ch.img}}" class="op-choice-img" src="{{ch.img}}" mode="aspectFill" lazy-load="{{true}}"></image>
+                <view wx:elif="{{opt.has_img}}" class="op-choice-img"></view>
                 <text class="op-choice-label f-bear">{{ch.label}}</text>
                 <text wx:if="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>
               </view>
@@ -417,6 +419,8 @@
                     class="op-choice op-extra {{choiceSel[ch.id] ? 'on' : ''}} {{ch.sold_out ? 'sold-out' : ''}} {{choiceCap[ch.id] ? 'capped' : ''}}"
                     data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" data-sold-out="{{ch.sold_out}}" bindtap="toggleExtra">
                 <view class="op-extra-box">{{choiceSel[ch.id] ? '✓' : ''}}</view>
+                <image wx:if="{{ch.img}}" class="op-choice-img" src="{{ch.img}}" mode="aspectFill" lazy-load="{{true}}"></image>
+                <view wx:elif="{{opt.has_img}}" class="op-choice-img"></view>
                 <text class="op-choice-label f-bear">{{ch.label}}</text>
                 <text wx:if="{{ch.sold_out}}" class="op-extra-oos f-toni">{{oosLabel}}</text>
                 <text wx:elif="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>

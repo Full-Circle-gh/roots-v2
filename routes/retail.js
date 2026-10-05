@@ -146,6 +146,7 @@ const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every
 // than crashing — the image endpoint just skips the resize branch when null.
 // SQL flag: does this row, or an active variant sibling, have a photo?
 const { hasImageFallbackSql } = require('../lib/product-image-sql');
+const { choicePhotoVersions } = require('../lib/choice-photo');
 let sharp = null;
 try { sharp = require('sharp'); } catch (e) { console.warn('[retail] sharp not available — image thumbnails disabled:', e.message); }
 const router = express.Router();
@@ -2850,6 +2851,36 @@ router.get('/api/retail/products/:id/image', async (req, res) => {
   return sendProductImage(res, data, w, ckey, 'public, max-age=31536000, immutable');
 });
 
+// A choice's picture — the photo of the product it is linked to
+// (lib/choice-photo.js). GATED ON THE PARENT PRODUCT, not the linked one: the
+// customer is on the parent's page, and the add-on behind an extra is often
+// unpublished on purpose. Only a choice that carries a link has a photo here.
+router.get('/api/retail/option-choices/:id/image', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).end();
+  let w = parseInt(req.query.w, 10);
+  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
+  const ver  = String(req.query.v || '');
+  const ckey = `${tenantCacheKey()}|choice${id}|w${w || 0}|${ver}`;
+  const hit = THUMB_CACHE.get(ckey);
+  if (hit) {
+    res.set('Content-Type', hit.mime);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(hit.buf);
+  }
+  const gate = tdb().prepare(
+    `SELECT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+       JOIN store_products p         ON p.id = o.product_id
+      WHERE c.id = ? AND c.stock_product_id IS NOT NULL
+        AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
+  ).get(id);
+  const data = gate && resolveProductImage(gate.stock_product_id);
+  if (!data) return res.status(404).end();
+  return sendProductImage(res, data, w, ckey, 'public, max-age=31536000, immutable');
+});
+
 // GET /api/retail/products/:productId/substitute-options?store_id=N
 // Used by the mini-app's "Replace missing item" sub-screen. Returns
 // in-stock candidates at the given store: admin-curated substitutes
@@ -3575,6 +3606,13 @@ router.get('/api/retail/products/:id', (req, res) => {
     for (const c of Object.values(choicesByOpt).flat()) {
       if (c.stock_product_id) c.addon_available = availById.get(c.stock_product_id) === true;
     }
+  }
+  // A PICTURE BESIDE EACH CHOICE (lib/choice-photo.js): the linked product's
+  // photo, served by choice id so an unpublished add-on product still shows.
+  // Absent on a choice with no link or no photo, and the clients draw no image.
+  const photoV = choicePhotoVersions(tdb(), Object.values(choicesByOpt).flat().map(c => c.id));
+  for (const c of Object.values(choicesByOpt).flat()) {
+    if (photoV.has(c.id)) c.image_url = `/api/retail/option-choices/${c.id}/image?v=${encodeURIComponent(photoV.get(c.id))}`;
   }
   product.options = options.map(o => {
     // THE FLOOR THE CUSTOMER IS SHOWN IS THE FLOOR THEY ARE HELD TO. "Choose 2

@@ -784,6 +784,14 @@
 .op-choice.on .op-choice-label { color: var(--oat); }
 .op-choice-delta { font-size: calc(24rpx * var(--font-scale)); color: var(--olive); flex-shrink: 0; }
 .op-choice.on .op-choice-delta { color: var(--oat); opacity: 0.85; }
+/* The choice's picture — its linked product's photo, small and square so a
+   sheet of six extras still fits. A choice without one keeps the empty frame. */
+.op-choice-img {
+  flex: none; width: 88rpx; height: 88rpx; border-radius: 10rpx;
+  background: rgba(0,0,0,.06); margin: -8rpx 0;
+}
+/* A row with a picture: the name takes the middle, the price stays right. */
+.op-has-img .op-choice-label { flex: 1; }
 .op-foot { margin-top: 24rpx; }
 .op-add {
   width: 100%;
