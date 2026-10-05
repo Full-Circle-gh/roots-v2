@@ -131,7 +131,8 @@ section('0 · the keys are the server\'s');
     for (const [m, p] of [['PATCH', '/orders/9/status'], ['POST', '/orders/9/undo-dispatch'], ['POST', '/orders/9/undo-preparing'],
       ['POST', '/orders/9/print'], ['PATCH', '/orders/9/note'], ['PUT', '/orders/9/tracking'], ['PUT', '/orders/9/eta'],
       ['POST', '/orders/9/shipments/3/dispatch'], ['POST', '/orders/9/shipments/combine'], ['POST', '/orders/9/delay-case/step'],
-      ['POST', '/orders/9/delivery-photo'], ['POST', '/orders/9/no-contact/ack'], ['POST', '/orders/9/air-delay/ack']]) {
+      ['POST', '/orders/9/delivery-photo'], ['POST', '/orders/9/no-contact/ack'], ['POST', '/orders/9/air-delay/ack'],
+      ['POST', '/orders/9/running-late/ack']]) {
       assert.strictEqual(cap(m, p), 'orders:edit', m + ' ' + p);
     }
   });

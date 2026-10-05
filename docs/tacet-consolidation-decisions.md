@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.467
+# Tacet shared-core consolidation — decisions record, v4.468
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.468 — **§427 · A PARCEL STILL RUNNING LATE CAN BE MARKED "CUSTOMER CONTACTED" — DECIDED BY ASH:** *"there should be a button say i contact cutsomer . so staff will know its been done"*, then *"go ahead build as recommend"*. **AMENDS §285 POINT 3** ("there is no button"): with no way to say "done", two people ring the same customer or nobody does. *I called the customer* on the parcel banner, desktop and phone, stamps every running-late parcel on the order (`retail_shipments.running_late_contacted_at` / `_by`). That takes the order off *Delivery needs a call* for 48 hours; **the warning stays** — the banner and the list badge keep counting the days and say *customer contacted* instead of *contact customer*. If the parcel is still on the road 48 hours after the call it asks again, and shows who rang last time. Undo beside it. Nothing about the late rule, the §98 case or the customer's messages changes. No new Chinese word; one badge arrangement composed by Claude, see the vocabulary's v1.311.
 
 2026-10-04 · v4.467 — **§426 · A VOUCHER CAN BE LIMITED TO ONE LOCATION, AND THEN IT IS AN IN-PERSON DISCOUNT THERE — THE RAMADA STAFF 10% — DECIDED BY ASH:** *"in yuexiu location the Ramada hotel all the hotel employees has 10% discounts"*, then *"why neee a new feature for this ? … I think we do under vouchers"*, then the QR-checkout phone box, then *"go"*. No staff group is built: the existing voucher gains a location (`retail_vouchers.store_id`), and a voucher with one applies **only in person at that location** — a till sale, a QR order, a mini-app pickup — and never to a delivery, even one sent from that store. The till applies it when the cashier attaches the customer; the QR menu takes an optional phone number and shows the discount before ordering, and **amends §44's "no phone number"** for that one purpose. A typed phone proves nothing, so such an order must be paid at the counter, is marked for the cashier to check, and the till can remove the discount in one tap. Vouchers with no location are unchanged everywhere. See §426.
 
@@ -20869,6 +20871,9 @@ yes"*).
 2. The deadline is lib/delay-case.js's, unchanged. The late rule, the §98
    case and the customer's late-delivery message still start on delivery.
 3. It clears itself when the parcel lands. There is no button.
+   **Amended 2026-10-05 by §427:** there is now a *customer contacted* button.
+   It answers the call for 48 hours; the alert itself still clears only when
+   the parcel lands.
 4. Due days before 2026-09-26 are ignored (`RUNNING_LATE_FROM`).
 
 ## §286 — A SUPPLIER WHO GIVES US CREDIT HAS AN ACCOUNT
@@ -28418,3 +28423,36 @@ after the badge is seen.
   grants; widening it is its own decision.
 
 Tests: `scripts/test_location_vouchers.js`.
+
+## §427 — A PARCEL STILL RUNNING LATE CAN BE MARKED "CUSTOMER CONTACTED"
+
+**Decided 2026-10-05 by Ash** (*"there should be a button say i contact
+cutsomer . so staff will know its been done"*, then *"go ahead build as
+recommend"*). Amends §285 point 3.
+
+1. **One button on the running-late banner, desktop and phone: *I called the
+   customer*.** One tap, no form. Order-level, for §284's reason: one customer,
+   one call, however many parcels are late. It stamps every running-late parcel
+   on the order with who and when (`retail_shipments.running_late_contacted_at`
+   / `running_late_contacted_by`), through
+   `POST /api/retail-admin/orders/:id/running-late/ack` (`orders:edit`).
+   `cleared:false` is the undo.
+2. **The warning stays; the ask goes.** The banner still says *Running late ·
+   N days*, now quiet with *Customer contacted · who · when* and *Undo*. The
+   list badge keeps the days and ends *customer contacted* instead of *contact
+   customer*. Hiding the warning would hide a parcel getting later.
+3. **The order leaves *Delivery needs a call*** — the card, its count, its list
+   and the Needs-you *N running late* line. That card is calls to make, and
+   this one is made (`lib/delay-case.js`, `runningLateNeedsCallSql`).
+4. **It asks again after 48 hours** if the parcel is still on the road: the
+   banner turns red again and says who rang last time. Elapsed hours, not
+   calendar days, so a call just after midnight Shanghai is not re-asked a day
+   later (`RUNNING_LATE_RECALL_HOURS`). A second tap restarts the 48 hours.
+5. **Who and when are always saved**, and the tap is in the activity log
+   (`running_late_contacted` / `running_late_contact_undone`).
+6. **Unchanged:** the late rule, §285's own clearing on delivery, the §98 case
+   that opens if it lands late, and every customer message.
+7. **Not built:** an optional note of what the customer said. Left out on
+   purpose so the tap stays one tap; its own ask if wanted.
+
+Tests: `scripts/test_running_late_alert.js`.

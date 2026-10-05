@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.311 · 2026-10-05 · §427 "CUSTOMER CONTACTED" ON A PARCEL STILL RUNNING LATE — ONE BADGE ARRANGEMENT COMPOSED BY CLAUDE FROM LIVE PAIRS; THE BUTTON AND THE NOTE COPIED WHOLE.** See *Customer contacted on a running-late parcel (§427)*.
+
 **v1.310 · 2026-10-04 · §426 A VOUCHER LIMITED TO ONE LOCATION — THE TILL, THE QR MENU AND THE COUPON DRAWERS — 4 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *A voucher limited to one location (§426)*.
 
 **v1.309 · 2026-10-04 · §425 THE REPLACEMENT LINK IN THE ORDER DRAWER — 1 STRING COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; ONE PAIR COPIED WHOLE.** See *The replacement link in the order drawer (§425)*.
@@ -13339,3 +13341,23 @@ the office types. The pairs below are only what shows when no title was written.
 The voucher's own `title_en` / `title_cn` is the merchant's text and is shown as
 typed. Nothing here composes it.
 
+## Customer contacted on a running-late parcel (§427)
+
+**Composed by Claude Opus 5, 2026-10-05, under the 2026-09-06 amendment.**
+Operator register only. The §285 banner gains a button; the list badge gains a
+second ending.
+
+| shipped | built from |
+|---|---|
+| `I called the customer · 已联系客户` (banner button, desktop and phone) | **copied whole** from §284's button |
+| `Customer contacted · 已联系客户` + ` · <who> · <when>` (the quiet banner, and the last call on a re-ask) | **copied whole** from §284's answered line |
+| `Undo · 撤销` | **copied whole** |
+| `RUNNING LATE · N day(s) · customer contacted · 配送逾期 N 天 · 已联系客户` (desktop list) / `Running late · N day(s) · customer contacted · 配送逾期 N 天 · 已联系客户` (phone list and order flags) | **composed — an arrangement, no new word.** Head is §285's live badge; the tail is the live pair `Customer contacted · 已联系客户` in place of `contact customer · 联系客户` |
+
+**Live candidates rejected.**
+
+- `已联系顾客`: **rejected.** The phone's badges say `顾客` (`请联系顾客`), but
+  `已联系顾客` is live nowhere; the phone's own answered line already says
+  `已联系客户`, so the badge copies that rather than minting a variant.
+- `已处理` / `标记已处理`: **rejected.** Live for closing the §98 case. This
+  does not close anything — the parcel is still late.

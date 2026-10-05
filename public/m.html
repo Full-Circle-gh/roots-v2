@@ -2754,6 +2754,24 @@ reg('ackNoContact', on=>{
     render();
   });
 });
+/* §427 — "I called the customer" (1) and its undo (0) on a parcel still running
+   late. Order-level on the server, like §284: one customer, one call. */
+reg('ackRunningLate', on=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.parcelBusy='rl'; state.orderErr=null; render();
+  apiWrite('/orders/'+o._id+'/running-late/ack',{cleared:!!Number(on)}).then(()=>{
+    state.parcelBusy=null;
+    api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+    loadOps();
+  }).catch(e=>{
+    state.parcelBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=E(orderErrorText(e),orderErrorText(e));
+    render();
+  });
+});
 /* One step of a late-parcel case (§98). Every step goes through here so the
    phone cannot grow its own idea of what the steps are; the server validates
    each one and lib/delay-case.js owns the rule about what may close. */
@@ -39369,6 +39387,27 @@ function noContactCard(sp){
     ${canEdit?`<button class="cta" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('ackNoContact',1)">${busy?T('Saving…','保存中…'):T('I called the customer','已联系客户')}</button>`:''}
   </div>`;
 }
+/* §427 — RUNNING LATE, AND WHETHER SOMEBODY HAS RUNG THE CUSTOMER. Red with
+   "I called the customer" while nobody has; quiet once somebody has, with the
+   days still counting, who and when, and an undo. After 48 hours on the road
+   it asks again, and says who rang last time. The desktop draws the same. */
+function runningLateCard(sp,rl){
+  const c=sp&&sp.runningLateContact;
+  const busy=state.parcelBusy==='rl';
+  const canEdit=mCan('orders:edit');   // POST …/running-late/ack is orders:edit
+  const title=T('Running late · '+rl+' day'+(rl===1?'':'s'),'配送逾期 '+rl+' 天');
+  const who=c?(c.by?' · '+escAttr(c.by):'')+' · '+escAttr(fmtDay(c.at)):'';
+  if(c&&c.current) return `<div style="padding:12px;border-radius:12px;background:var(--paper);border:1px solid var(--border-default);display:flex;flex-direction:column;gap:6px">
+    <div style="font-size:13.5px;font-weight:600;color:var(--brick-ink)">${title}</div>
+    <div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}<span style="flex:1">${T('Customer contacted','已联系客户')}${who}</span>
+      ${canEdit?`<button class="btn2" style="width:auto;padding:4px 10px;flex:none" ${busy?'disabled':''} onclick="APP.cmd('ackRunningLate',0)">${T('Undo','撤销')}</button>`:''}</div></div>`;
+  return `<div style="padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);display:flex;flex-direction:column;gap:6px">
+    <div style="font-size:13.5px;font-weight:600">${title}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary)">${T('Not delivered yet · call the customer','尚未送达 · 请联系顾客')}</div>
+    ${c?`<div style="font-size:12px;color:var(--text-secondary)">${T('Customer contacted','已联系客户')}${who}</div>`:''}
+    ${canEdit?`<button class="cta" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('ackRunningLate',1)">${busy?T('Saving…','保存中…'):T('I called the customer','已联系客户')}</button>`:''}
+  </div>`;
+}
 /* ── §325 O12 — A JD WAYBILL, CREATED AND CANCELLED FROM THE PHONE ─────────
    The desktop's createJdLabel / submitJdLabel / cancelJdPickup (04-orders.js):
      · CREATE: the one question the order cannot answer — which JD service —
@@ -39580,9 +39619,7 @@ function trackingCard(o,sp,label){
         ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}
         ${lateFor?`<span style="font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--brick-tint);color:var(--brick-ink)">${T(lateFor+' day'+(lateFor===1?'':'s')+' late','晚到 '+lateFor+' 天')}</span>`:''}</span>`:''}</div>
     ${noContactCard(sp)}
-    ${rl>0?`<div style="padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);display:flex;flex-direction:column;gap:4px">
-      <div style="font-size:13.5px;font-weight:600">${T('Running late · '+rl+' day'+(rl===1?'':'s'),'配送逾期 '+rl+' 天')}</div>
-      <div style="font-size:12.5px;color:var(--text-secondary)">${T('Not delivered yet · call the customer','尚未送达 · 请联系顾客')}</div></div>`:''}
+    ${rl>0?runningLateCard(sp,rl):''}
     ${sp.airCleared==null&&(sp.lateDays>0)?delayCaseCard(o,sp):''}
     ${damageBlock(o,sp)}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}<span style="flex:1;min-width:0">${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</span>
@@ -49307,6 +49344,8 @@ function deliveryLine(r){
     if(r.no_contact_open) return {text:T("Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客'),tone:'brick'};
     // §285 — past its due day and still on the road: the warning before it lands.
     if(Number(r.running_late_days)>0){ const d=Number(r.running_late_days);
+      // §427 — rung about: the days stay, the ask goes.
+      if(Number(r.running_late_contacted)) return {text:T('Running late · '+d+' day'+(d===1?'':'s')+' · customer contacted','配送逾期 '+d+' 天 · 已联系客户'),tone:'brick'};
       return {text:T('Running late · '+d+' day'+(d===1?'':'s')+' · call the customer','配送逾期 '+d+' 天 · 请联系顾客'),tone:'brick'}; }
     const live=courierLine(r); if(live) return live;
     if(r.is_local){
@@ -49419,7 +49458,9 @@ function orderNotes(r){
   if(r.air_delivery_delayed) out.push({sev:'brick',icon:'truck',label:['Delivery delayed · call the customer','配送延误 · 请联系顾客']});
   if(r.no_contact_open) out.push({sev:'brick',icon:'phone',label:["Courier can't reach them · call the customer",'快递员联系不上顾客 · 请联系顾客']});
   if(Number(r.running_late_days)>0){ const d=Number(r.running_late_days);
-    out.push({sev:'brick',icon:'truck',label:['Running late · '+d+' day'+(d===1?'':'s')+' · call the customer','配送逾期 '+d+' 天 · 请联系顾客']}); }
+    out.push(Number(r.running_late_contacted)
+      ? {sev:'muted',icon:'truck',label:['Running late · '+d+' day'+(d===1?'':'s')+' · customer contacted','配送逾期 '+d+' 天 · 已联系客户']}
+      : {sev:'brick',icon:'truck',label:['Running late · '+d+' day'+(d===1?'':'s')+' · call the customer','配送逾期 '+d+' 天 · 请联系顾客']}); }
   return out.length?out:null;
 }
 /* A note's label in the language on screen now. A plain string still passes
@@ -49771,6 +49812,8 @@ function mapDetail(o){
     lateDays:sp.late_days||0,
     // §285 — days past its due day while still on the road; 0 once it lands.
     runningLate:sp.running_late_days||0,
+    // §427 — who rang the customer about it and when; `current` for 48 hours.
+    runningLateContact:sp.running_late_contact||null,
     // The raw carrier CODE, kept beside the worded tracking view above because
     // a claim is filed against the company that carried this parcel and the
     // server validates the code against lib/tracking.js.

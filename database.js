@@ -4125,6 +4125,14 @@ addColumn('retail_shipments', 'prepared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
 
+// §427 — "CUSTOMER CONTACTED" ON A PARCEL STILL RUNNING LATE (§285). WHEN and
+// WHO; NULL = nobody has rung them. Takes the parcel off "Delivery needs a
+// call" for 48 hours, then it asks again if it has still not landed
+// (lib/delay-case.js, runningLateNeedsCallSql). The banner and the list badge
+// keep the days late either way — this answers the call, not the lateness.
+addColumn('retail_shipments', 'running_late_contacted_at', 'DATETIME');
+addColumn('retail_shipments', 'running_late_contacted_by', 'TEXT');
+
 // §421 — THE JD SERVICE THIS PARCEL WAS BOOKED ON, AND THE WAYBILL IT WAS
 // BOOKED FOR. The parcel's `mode` is the plan and §381 never rewrites it, so
 // an air parcel booked on the ground stayed 'air' everywhere — including in the
