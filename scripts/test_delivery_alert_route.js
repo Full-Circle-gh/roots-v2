@@ -103,7 +103,8 @@ function fixture() {
       delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
       local_eta TEXT, eta_source TEXT, air_delay_cleared_at TEXT,
       tracking_no_contact_event TEXT, tracking_no_contact_cleared TEXT,
-      tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT);
+      tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT,
+      running_late_contacted_at TEXT);
     CREATE TABLE retail_delay_cases (id INTEGER PRIMARY KEY, shipment_id INTEGER, order_id INTEGER);
     CREATE TABLE delivery_jobs (id INTEGER PRIMARY KEY, retail_order_id INTEGER,
       order_status INTEGER, updated_at TEXT);`);

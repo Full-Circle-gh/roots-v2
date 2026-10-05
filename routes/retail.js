@@ -18070,8 +18070,9 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const RL_EXISTS = deliveryAlerts.runningLateAlertSql('o');
     const rlItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_synced_at,
+             -- §427 — the parcels still owed a call, the ones the EXISTS matched.
              (SELECT MIN(${delayCase.runningLateSinceSql('srl')}) FROM retail_shipments srl
-               WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl')}) AS waiting_since,
+               WHERE srl.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('srl')}) AS waiting_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -28302,6 +28303,15 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                       (SELECT MAX(CAST(julianday(DATE('now')) - julianday(${delayCase.lateAfterSql('srl')}) AS INTEGER))
                          FROM retail_shipments srl
                         WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl')}) END AS running_late_days,
+                    -- §427 — 1 when every running-late parcel on the order has a
+                    -- current "customer contacted": the badge keeps the days and
+                    -- stops asking for the call. Same rule as the card.
+                    CASE WHEN o.status = 'dispatched'
+                          AND EXISTS (SELECT 1 FROM retail_shipments src
+                                       WHERE src.order_id = o.id AND ${delayCase.runningLateSql('src')})
+                          AND NOT EXISTS (SELECT 1 FROM retail_shipments src
+                                           WHERE src.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('src')})
+                         THEN 1 ELSE 0 END AS running_late_contacted,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -28827,6 +28837,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     // §285 — days past its due day while still on the road; 0 once it lands
     // (late_days takes over then) or while it is on time.
     running_late_days: o.status === 'dispatched' ? delayCase.runningLateDays(s) : 0,
+    // §427 — who said "customer contacted" on it and when; `current` while that
+    // still answers the card (48 hours). null if nobody has, or it is not late.
+    running_late_contact: o.status === 'dispatched' && delayCase.runningLateDays(s) > 0
+      ? delayCase.runningLateContact(s) : null,
     // The four steps. Read only, never created: a GET that wrote a row for
     // every drawer opened would mint a case for parcels nobody had trouble
     // with. NULL means nothing done yet, which is what both screens draw a
@@ -28865,6 +28879,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   } catch (e) { o.no_contact_open = 0; }
   // §285 — the list's running-late figure, off the parcels just hydrated.
   o.running_late_days = Math.max(0, ...o.shipments.map(sh => sh.running_late_days || 0)) || null;
+  // §427 — and the list's "every late parcel has been rung about".
+  o.running_late_contacted = o.running_late_days
+    && o.shipments.every(sh => !(sh.running_late_days > 0)
+      || (sh.running_late_contact && sh.running_late_contact.current)) ? 1 : 0;
 
   o.timeline = orderTimeline(o);
   // Keep legacy `o.tracking` populated from the primary shipment so older
@@ -30270,6 +30288,43 @@ router.post('/api/retail-admin/orders/:id/no-contact/ack',
     clear ? 'no_contact_cleared' : 'no_contact_reopened', 'retail_order', id,
     { rows: changes }, req.ip);
   res.json({ success: true, data: { cleared: clear, rows: changes } });
+});
+
+// §427 — "CUSTOMER CONTACTED" ON AN ORDER STILL RUNNING LATE (§285). Order-level
+// for §284's reason: one customer, one call, however many parcels are late. It
+// stamps every running-late parcel on the order, which takes the order off
+// "Delivery needs a call" for 48 hours and turns the banner and the badge from
+// "contact customer" to "customer contacted". The days late stay on screen.
+// A second tap restamps — a fresh call restarts the 48 hours. `cleared:false`
+// is the undo, and only touches parcels that are still running late.
+router.post('/api/retail-admin/orders/:id/running-late/ack',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const clear = req.body?.cleared !== false;
+  const LATE = delayCase.runningLateSql();
+  const info = clear
+    ? tdb().prepare(
+        `UPDATE retail_shipments
+            SET running_late_contacted_at = CURRENT_TIMESTAMP,
+                running_late_contacted_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND ${LATE}`
+      ).run(req.user.username || null, id)
+    : tdb().prepare(
+        `UPDATE retail_shipments
+            SET running_late_contacted_at = NULL,
+                running_late_contacted_by = NULL,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND ${LATE} AND running_late_contacted_at IS NOT NULL`
+      ).run(id);
+  // Nothing running late any more (it landed between the screen drawing and
+  // the tap) changes nothing; the screen reloads and the banner is gone.
+  logActivity(req.user.id, req.user.username,
+    clear ? 'running_late_contacted' : 'running_late_contact_undone', 'retail_order', id,
+    { shipments: info.changes }, req.ip);
+  res.json({ success: true, data: { cleared: clear, shipments: info.changes } });
 });
 
 // One step of a late-parcel case (§98). The steps are named in lib/delay-case.js
