@@ -1182,8 +1182,11 @@ Page({
     const p = this.data.product;
     if (!p) return;
     // Variant product → pick the size in a bottom-sheet (each sibling has its
-    // own price / stock). Same gesture as the shop grid's + button.
-    if (this.data.hasVariants) { this._openVariantPicker(); return; }
+    // own price / stock). Same gesture as the shop grid's + button. NOT in pick
+    // mode: that page was opened for THIS size to answer its question, so the
+    // size is already chosen and re-asking it would send the customer round in
+    // a circle without ever reaching the question.
+    if (this.data.hasVariants && !this._pickMode) { this._openVariantPicker(); return; }
     if (this.data.soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
@@ -1511,6 +1514,22 @@ Page({
     if (out && !vPreorder) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
+    }
+    // This size asks a question (options belong to one size — "heat up?" is on
+    // One Pita only). Adding it here would skip the question, so ask it first:
+    // the size open on this page has its options loaded already; any other size
+    // opens its own page with the choice sheet up (utils/pick-queue), and comes
+    // back here after the add.
+    if (m.has_options) {
+      this.setData({ vpShow: false });
+      const p = this.data.product;
+      if (p && Number(p.id) === id) {
+        if (this.data.optionsSingle.length) { this._openOptionPicker(); return; }
+        if (this.data.optionsExtra.length)  { this._openExtrasPicker(); return; }
+      } else {
+        pickQueue.start([{ id, qty: this.data.qty }]);
+        return;
+      }
     }
     this._lastAddKey = cart.add({
       id: m.id,
