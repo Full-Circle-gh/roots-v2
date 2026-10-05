@@ -4559,7 +4559,10 @@ function optRender() {
         typeSel(oi, o.type) +
         limBoxes(oi, o) +
         `<label class="opt-req" title="${cuT('Customer must choose before adding to cart', '加入购物车前必须选择')}"><input type="checkbox"${o.is_required ? ' checked' : ''} onchange="optReq(${oi}, this.checked)"> ${cuT('Required', '必选')}</label>` +
-        `<button type="button" class="bp-chip-x" title="${cuT('Remove this option', '移除此选项')}" onclick="optRemoveOption(${oi})">✕</button>` +
+        // A labelled button at the far end of the row, not a bare ✕: the ✕ sat
+        // flush against Required and read as part of that tick, so operators
+        // emptied a whole option choice by choice instead of finding it.
+        `<button type="button" class="btn btn-sm btn-danger opt-del" onclick="optRemoveOption(${oi})">✕ ${cuT('Remove this option', '移除此选项')}</button>` +
       `</div>` +
       (o.type === 'multi' ? `<div class="helper" style="font-size:11px;margin:2px 0 0">${cuT('Pick-any extras. Link each to a product so it draws from that product’s stock and sells out when it runs low.', '多选加项。将每项关联到商品,即可占用该商品库存,售罄时自动隐藏。')}</div>` : '') +
       (o.type === 'text' ? '' : `<div class="opt-choices">${choices}` +
