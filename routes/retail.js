@@ -13347,7 +13347,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id,
             oi.addon_id, oi.ship_from_supplier,
-            -- §436: "Buy again" opens a line with no answers on its product page
+            -- §435: "Buy again" opens a line with no answers on its product page
             -- when the product NOW asks a question, instead of copying it blank.
             EXISTS(SELECT 1 FROM retail_product_options po WHERE po.product_id = oi.product_id) AS has_options
        FROM retail_order_items oi
