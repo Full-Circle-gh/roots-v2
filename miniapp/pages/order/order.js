@@ -1157,21 +1157,34 @@ Page({
 
   reorder() {
     const cart = require('../../utils/cart');
+    const pickQueue = require('../../utils/pick-queue');
     const items = this.data.items || [];
     if (!items.length) return;
+    // §434 — a line bought with no answers, whose product now asks a question
+    // (the server says so per line, `has_options`), cannot be copied forward
+    // as it was: checkout would refuse it. It is opened to be answered instead,
+    // at the quantity bought. A line that carried answers is copied with them.
+    const toPick = [];
+    let added = 0;
     items.forEach(it => {
+      const opts = it.options || [];
+      if (!opts.length && it.has_options) { toPick.push({ id: it.product_id, qty: it.qty }); return; }
       cart.add({
         id: it.product_id,
         name_en: it.name_en, name_cn: it.name_cn,
         sku: it.sku, size: it.size,
         image_url: it.image_url || it.image,
         price: it.unit_price,
-      }, it.qty, it.options || []);
+      }, it.qty, opts);
+      added++;
     });
-    wx.showToast({
-      title: this.data.lang === 'cn' ? '已加入购物车' : 'Added to cart',
-      icon: 'success',
-    });
+    if (added) {
+      wx.showToast({
+        title: this.data.lang === 'cn' ? '已加入购物车' : 'Added to cart',
+        icon: 'success',
+      });
+    }
+    if (pickQueue.start(toPick)) return;
     setTimeout(() => wx.switchTab({ url: '/pages/cart/cart' }), 600);
   },
 

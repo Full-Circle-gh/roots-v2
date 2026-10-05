@@ -5,6 +5,7 @@
 
 const api    = require('../../utils/api');
 const cart   = require('../../utils/cart');
+const pickQueue = require('../../utils/pick-queue');
 const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
 const theme  = require('../../utils/theme');
@@ -642,6 +643,9 @@ Page({
     // New model: a single bundle product.
     if (bundleProductId) {
       const bp = findP(bundleProductId);
+      // A bundle product with a question goes to its page to be answered
+      // (§434, utils/pick-queue) rather than into the cart blank.
+      if (bp && bp.has_options) { pickQueue.start([{ id: bp.id, qty: 1 }]); return; }
       if (bp) {
         cart.add(bp, 1, []);
         wx.showToast({
@@ -660,8 +664,10 @@ Page({
     // Legacy loose-list path.
     if (!productIds.length) return;
     let added = 0;
+    const toPick = [];   // §434 — needs an answer; opened in turn, never added blank
     productIds.forEach(id => {
       const p = findP(id);
+      if (p && p.has_options) { toPick.push({ id: p.id, qty: 1 }); return; }
       if (p) { cart.add(p, 1, []); added++; }
     });
     if (voucherCode) {
@@ -675,12 +681,13 @@ Page({
         icon: 'success',
         duration: 1400,
       });
-    } else {
+    } else if (!toPick.length) {
       wx.showToast({
         title: this.data.lang === 'cn' ? '商品已下架' : 'Items unavailable',
         icon: 'none',
       });
     }
+    pickQueue.start(toPick);
   },
   routeTarget(t) {
     if (!t) return;

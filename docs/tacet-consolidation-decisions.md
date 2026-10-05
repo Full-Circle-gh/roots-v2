@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.476
+# Tacet shared-core consolidation — decisions record, v4.477
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-10-05 · v4.477 — **§434 · A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED — DECIDED BY ASH:** *"build fix 3"*. Customer Syd's pita (required "heat up?") was refused at checkout, and removing it and adding it back did not help: "Buy again", favourites "Add all", the home bundle block (and its layout copy) and the product page's "Buy together" added every item with no answers. They now add what needs no answer and open each product with a question on its own page, choice sheet already up, one after another (`miniapp/utils/pick-queue.js`). The server adds `has_options` to "Buy together" items and to order lines. No new word. Mini app needs an upload. See §434.
 2026-10-05 · v4.476 — **§431 rule 7 · ON THE QR MENU, A TAP ON A CHOICE'S PICTURE SHOWS IT BIG — DECIDED BY ASH:** *"I want customer to be able to click on product image and see it bigger with an option to close it down after"*. The picture opens the menu's existing full-screen photo viewer, the one the product sheet's photo already uses, with its ✕ button; tapping the photo, the dark ground, the ✕ or Escape closes it and the picker underneath stays as it was. The tap does not tick the choice. A choice that is sold out, or blocked because the question's maximum is reached, is a switched-off row and its picture does not open. No new word, no schema. See §431 rule 7.
 
 2026-10-05 · v4.475 — **§433 · CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, SAYS IT WHEN CHECKOUT OPENS, AND "PICK" REPLACES THE OLD LINE — DECIDED BY ASH:** a customer met "Please choose: Whole-Wheat Pita (Frozen)" at Place Order and the popup named the product they had already chosen, not the question; Ash: *"yers"* to fixing it. The refusal now carries the question (`question_en`/`question_cn`), the quote reports the same refusal as `needs_choice` so the mini app offers the picker when checkout opens, and "Pick" hands the product page the cart line to replace, so the re-pick does not sit beside the unanswered line and get refused again. No new word: the popup uses the product sheet's live 请选择 / Please choose. Mini app needs an upload. Number §432 was skipped: a parallel branch (kitchen WeCom group) had claimed it. See §433.
@@ -28756,3 +28757,59 @@ and could use the question too. Its own change, if wanted.
 WeCom group) had already claimed it when this was written.
 
 Tests: `scripts/test_checkout_required_options.js` (sections A, D2, F).
+
+
+## §434 — A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED
+
+**Decided 2026-10-05 by Ash** (*"build fix 3"*, on the plan below).
+
+**What happened.** Whole-Wheat Pita (Frozen) carries a required question,
+"heat up? (1 pita option)", added 2026-10-03. Customer Syd's order was refused
+(§433). They removed the pita and added it back, and were refused again: the
+line still had no answer. A read-only look at the live database
+(`scripts/diagnose_pita_choice.js`, via ro-query.yml) ruled out the
+other leads: no linked or sold-out choice, and the pita is in no
+"Buy together" set. Which screen Syd used is not known.
+
+**The door.** The single quick adds (shop grid +, one favourite) already open
+the product page for a product with options. Four batch paths did not, and
+called `cart.add(p, qty, [])` for every item:
+
+1. "Buy again" on an order (`pages/order/order.js`). A line bought before its
+   product gained a question is copied forward blank.
+2. Favourites "Add all" (`pages/favorites/favorites.js`).
+3. The home page bundle block (`pages/home/home.js`, both the bundle product
+   and the loose list) and its copy in `pages/layout/layout.js`.
+4. The product page's "Buy together" (`pages/product/product.js`).
+
+**The rule.** These paths add what needs no answer, as before. A product with
+a question is handed to `miniapp/utils/pick-queue.js`, which opens its product
+page with `pick=1`: the choice sheet opens by itself, at the quantity the
+batch asked for ("Buy again" keeps the quantity bought). After the add, the
+next queued product replaces the page; after the last, back to where the
+customer started. A "Buy again" line that carried answers is copied with them,
+as before; if those answers no longer fit, §433 catches it at checkout.
+
+- Only a page the queue opened moves the queue on, so the product page that
+  started a "Buy together" cannot pull the next item on an ordinary add later.
+- A product page opened any other way ends the batch, and backing out of a
+  queued page without adding drops the rest of the batch. Re-opening products
+  the customer walked away from would surprise more than it helps.
+- No new word: the sheet's own "Choose your options" / 选择选项 says what is
+  wanted, and the existing "added" toasts stay. When nothing was added but
+  something is queued, the "unavailable" toast is not shown.
+
+**Server.** `has_options` (any option on the product, the same test the shop
+list uses) is added to the "Buy together" items (`resolveBundle`) and to each
+line of a customer's order (`loadOrderForCustomer`). The home, layout and
+favourites lists already carried it.
+
+**Mini app needs an upload.** The server fields are live on deploy and ignored
+by the current app.
+
+**Not changed:** whether the pita should carry a "heat up?" question at all.
+That is a product setting, Ash's call; removing it or unticking "required"
+unblocks customers on the current app with no upload.
+
+Tests: `scripts/test_bulk_add_pick.js` (section D fails if any page adds blank
+lines without a `has_options` check).

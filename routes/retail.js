@@ -1619,7 +1619,8 @@ function resolveBundle(jsonStr) {
   const ph = ids.map(() => '?').join(',');
   const rows = tdb().prepare(
     `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.weight AS size, sp.sell_price AS price, sp.stock_qty AS stock,
-            sp.image_url, sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data
+            sp.image_url, sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data,
+            EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = sp.id) AS has_options
        FROM store_products sp
       WHERE sp.id IN (${ph}) AND sp.is_published = 1 AND COALESCE(sp.is_active, 1) = 1`
   ).all(...ids).map(r => {
@@ -13303,7 +13304,10 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id,
-            oi.addon_id, oi.ship_from_supplier
+            oi.addon_id, oi.ship_from_supplier,
+            -- §434: "Buy again" opens a line with no answers on its product page
+            -- when the product NOW asks a question, instead of copying it blank.
+            EXISTS(SELECT 1 FROM retail_product_options po WHERE po.product_id = oi.product_id) AS has_options
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
