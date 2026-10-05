@@ -11758,6 +11758,17 @@ tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2)
   padding-right: 26px; text-align: left;
 }
 .vch-per::-ms-expand { display: none; }
+/* AND THE GLOBAL ARROW IS SWITCHED OFF, because the chevron above is ours.
+   The global `select` rule paints a data-URI arrow with no-repeat, and the
+   light theme restates that arrow (css:146, `:root[data-theme="light"] select`)
+   WITHOUT no-repeat. `.vch-date, .vch-per` resets `background` by shorthand,
+   which puts background-repeat back to `repeat`, and the light rule's image
+   (0,2,1) then beats `.vch-per` (0,1,0) — so the arrow TILED the width of the
+   Per customer and Store selects in the coupon drawer, a row of chevrons
+   through the label. Reported from a phone, 2026-10-05. Same mechanism as the
+   waste screen's Store select (see #tab-waste .wst-sel). This selector ties
+   the light rule on specificity and comes later, so it wins in both themes. */
+.vch-perwrap select.vch-per { background-image: none; }
 
 /* Who holds this coupon — a short head of the grant list, in the drawer. */
 .vch-holders:not(:empty) { margin-top: 10px; border-top: 1px solid var(--line); }
