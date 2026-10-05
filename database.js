@@ -2078,6 +2078,23 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_notification_log_entity ON notification_log(entity_type, entity_id);
   CREATE INDEX IF NOT EXISTS idx_notification_log_failed ON notification_log(tenant_id, ok, created_at);
 
+  -- The evening to-make message's own record (decisions §432). One row per
+  -- send to the kitchen's WeCom group, claimed before the send (ok NULL) and
+  -- closed with its outcome. Unlike notification_log above, this IS read to
+  -- decide: lib/kitchen-prep-preview.js sends the preview once per morning and
+  -- an update only when the list differs from the last one that landed — so a
+  -- restart or a redeploy cannot send the preview twice.
+  CREATE TABLE IF NOT EXISTS kitchen_prep_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    prep_date   TEXT NOT NULL,          -- the morning whose slip this previews
+    kind        TEXT NOT NULL,          -- preview | update
+    lines_json  TEXT NOT NULL,          -- [{key,en,cn,qty}] as sent
+    ok          INTEGER,                -- NULL in flight, 1 landed, 0 failed
+    error       TEXT,
+    sent_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_kitchen_prep_messages_date ON kitchen_prep_messages(prep_date, id);
+
   -- What was deleted, kept for sixty days (audit E-07).
   --
   -- Products had proper version history and nothing else in the admin had

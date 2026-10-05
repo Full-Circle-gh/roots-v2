@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.314 · 2026-10-05 · §432 THE EVENING TO-MAKE MESSAGE TO THE KITCHEN'S WECOM GROUP, AND ITS SETTINGS CARD — 10 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *The evening to-make message (§432)*.
+
 **v1.313 · 2026-10-05 · §430 CHECKING GZGROCERY'S STATEMENT SHEET ON THE BILLING PANEL — 20 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *Checking gzgrocery's statement sheet (§430)*.
 
 **v1.312 · 2026-10-05 · §428 THE TILL GIVES A LOCATION'S VOUCHER, ATTACHES A CUSTOMER TO A QR ORDER AND ADDS A CUSTOMER; THE OFFICE GIVES TO A PASTED LIST — 6 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *Giving a location's voucher at the till, and to a list (§428)*.
@@ -13437,3 +13439,40 @@ column names whose it is.
 | `无法读取该表格 — 未找到数量或 SKU 列` | Could not read this sheet — no Qty or SKU column found | `无法读取该…` (`无法读取该照片`), `表格`, `未找到`, `数量`, `列` | `格式错误` — blames the format without saying what is missing |
 | `请先选择日期 — 文件名中没有日期` | Pick the dates first — the file name does not say them | `请先…`, `选择日期`, `文件名` | — |
 
+## The evening to-make message (§432)
+
+**Composed by Claude Opus 5, 2026-10-05, under the 2026-09-06 amendment.**
+Two registers. The WeCom message (`lib/kitchen-prep-preview.js`,
+`buildContent`) is read in a kitchen group, carries both languages on every
+line like every WeCom card in `routes/retail.js`, and is built around the
+kitchen queue's own `待制作` (To make). The settings card is operator register
+(`public/retail-admin.html` `#kprep-card`, `public/retail-admin/05-marketing.js`
+`saveKitchenPrep` / `testKitchenPrep`). Numerals, dates, times and the (+3)
+change markers carry no label.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `To make · 待制作` | the kitchen queue's tab (`'To make','待制作'`) |
+| `Group-bot webhook URL · 群机器人 Webhook 地址` | the new-order webhook card on the same page |
+| `Send time · 发送时间`, `Save · 保存`, `Send a test · 发送测试`, `Saving… · 保存中…`, `Sending… · 发送中…`, `Saved · 已保存` | live on the same page |
+| `Sent — check your WeCom · 已发送,请查看企业微信` | `testWecomWebhook`, same page |
+| `Only qyapi.weixin.qq.com URLs are accepted · 仅接受 qyapi.weixin.qq.com 地址` | the new-order webhook card's helper, less its other sentences |
+| `Test message · 测试` header | the new-order test card (`**🌿 测试 · Test message**`) |
+| `Delivery · 配送`, `Fresh batches · 新鲜现做`, `厨房制作请求时间` | live labels, named so the operator can find the morning hour |
+
+### Composed — ten, by Claude (2026-09-06 amendment)
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `待制作已更新` | To make, updated | `待制作` + `已更新` (live, `订单已更新`) | `更新清单` — loses the kitchen's own word for the list |
+| `预览,最终清单于 HH:00 打印` | Preview — the final list prints at HH:00 | `预览` (`打印预览`), `最终`, `清单` (`每日低库存清单`), `打印` | `仅供参考` — says "don't trust it" rather than when the real one comes |
+| `目前无需制作` | Nothing to make now | `无需` (`无需处理`), `制作` (`需要厨房制作`) | `清单为空` — true but tells the kitchen nothing to do |
+| `收到本条说明晚间待制作消息已接通 ✅` | Receiving this means the evening to-make message is connected ✅ | the new-order test line `收到本条说明新订单提醒已接通 ✅` with its subject swapped | — |
+| `厨房:晚间待制作消息` | Kitchen: evening to-make message | `厨房`, `晚间`, `待制作`, `消息` | `厨房备货群` — names the group, not what is sent; `备货` is the warehouse's word |
+| `前一天晚上,把次日早上的待制作清单发到企业微信群——与厨房小票打印的清单相同。之后订单若有变化,会发送更新,最多每 30 分钟一次,直到小票打印。无需制作时不发送。` | The card's description | `待制作清单`, `企业微信`, `小票` (`打印小票`), `无需` | — |
+| `请使用与新订单提醒不同的群。` | Use a different group from the new-order alerts. | `新订单提醒` (live, the test line above), `群` | — |
+| `时间留空则关闭。` | Leave the time blank to turn it off. | `留空则关闭` (live, the morning-hour row) | — |
+| `请输入 12:00–23:59 之间的时间` | Enter a time between 12:00 and 23:59 | `请输入 0–23 的小时` (live) with a time range | — |
+| `厨房制作请求时间已关闭(配送 → 新鲜现做),因此不会发送。` | The morning request hour is off (Delivery → Fresh batches), so nothing is sent. | the live label `厨房制作请求时间`, the two live tab names, `已关闭`, `不会发送` | — |
