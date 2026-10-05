@@ -4,6 +4,7 @@
 
 const api      = require('../../utils/api');
 const cart     = require('../../utils/cart');
+const pickQueue = require('../../utils/pick-queue');
 const lang     = require('../../utils/lang');
 const delivery = require('../../utils/delivery');
 const freshEta = require('../../utils/fresh-eta');
@@ -289,10 +290,21 @@ Page({
   onAddAll() {
     const inStock = (this.data.visible || []).filter(v => !v.soldOut && !v.preorder);
     if (!inStock.length) return;
-    inStock.forEach(v => cart.add(v.product, 1, []));
-    wx.showToast({
-      title: this.data.copy.toastAddedAll,
-      icon: 'success', duration: 1200,
+    // §435 — a favourite with a question is opened to be answered (the single
+    // add above already does this), never added blank.
+    const toPick = [];
+    let added = 0;
+    inStock.forEach(v => {
+      if (v.product && v.product.has_options) { toPick.push({ id: v.product.id, qty: 1 }); return; }
+      cart.add(v.product, 1, []);
+      added++;
     });
+    if (added) {
+      wx.showToast({
+        title: this.data.copy.toastAddedAll,
+        icon: 'success', duration: 1200,
+      });
+    }
+    pickQueue.start(toPick);
   },
 });

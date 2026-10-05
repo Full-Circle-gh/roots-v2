@@ -4,6 +4,7 @@
 
 const api    = require('../../utils/api');
 const cart   = require('../../utils/cart');
+const pickQueue = require('../../utils/pick-queue');
 const config = require('../../utils/config');
 
 // `about` is now hardcoded at /pages/about/about — not layout-driven.
@@ -273,19 +274,24 @@ Page({
     const { productIds = [], voucherCode = '' } = e.detail || {};
     if (!productIds.length) return;
     let added = 0;
+    const toPick = [];   // §435 — needs an answer; opened in turn, never added blank
     productIds.forEach(id => {
       const p = (this.data.products || []).find(x => x.id === id);
+      if (p && p.has_options) { toPick.push({ id: p.id, qty: 1 }); return; }
       if (p) { cart.add(p, 1, []); added++; }
     });
     if (voucherCode) {
       try { wx.setStorageSync('pending_voucher_code', voucherCode); } catch {}
     }
-    wx.showToast({
-      title: added > 0
-        ? (this.data.lang === 'cn' ? `${added} 件已加入购物车` : `${added} added to cart`)
-        : (this.data.lang === 'cn' ? '商品已下架' : 'Items unavailable'),
-      icon: added > 0 ? 'success' : 'none',
-      duration: 1400,
-    });
+    if (added > 0 || !toPick.length) {
+      wx.showToast({
+        title: added > 0
+          ? (this.data.lang === 'cn' ? `${added} 件已加入购物车` : `${added} added to cart`)
+          : (this.data.lang === 'cn' ? '商品已下架' : 'Items unavailable'),
+        icon: added > 0 ? 'success' : 'none',
+        duration: 1400,
+      });
+    }
+    pickQueue.start(toPick);
   },
 });

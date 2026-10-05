@@ -9846,6 +9846,44 @@
             </div>
           </div>
 
+          <!-- §432. The evening to-make message: the next morning's kitchen list,
+               posted to its OWN WeCom group (not the new-order one above). Saved
+               by its own button through its own endpoint — the webhook is under
+               the private `kitchen.` prefix, which the main Save cannot read
+               back. 05-marketing.js loadKitchenPrep / saveKitchenPrep. Chinese —
+               docs/tacet-delivery-vocabulary.md v1.314. -->
+          <div class="group-card" id="kprep-card">
+            <div class="group-card-head">
+              <h3>Kitchen: evening to-make message · 厨房:晚间待制作消息</h3>
+              <div class="muted">The evening before, posts the next morning's to-make list to a WeCom group — the same list the kitchen slip prints. If orders change it afterwards, an update follows, at most every 30 minutes, until the slip prints. Nothing is sent when there is nothing to make. · 前一天晚上,把次日早上的待制作清单发到企业微信群——与厨房小票打印的清单相同。之后订单若有变化,会发送更新,最多每 30 分钟一次,直到小票打印。无需制作时不发送。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl">
+                <div class="field" style="margin: 0 0 8px;">
+                  <label for="kprep-webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <input type="text" id="kprep-webhook"
+                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label for="kprep-time" class="stacked">Send time · 发送时间</label>
+                  <input type="time" id="kprep-time" min="12:00" max="23:59" step="60" style="width: 140px;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="saveKitchenPrep()">Save · 保存</button>
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testKitchenPrep()">Send a test · 发送测试</button>
+                  <span id="kprep-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  Use a different group from the new-order alerts. Only qyapi.weixin.qq.com URLs are accepted. Leave the time blank to turn it off. · 请使用与新订单提醒不同的群。仅接受 qyapi.weixin.qq.com 地址。时间留空则关闭。
+                </div>
+                <div class="helper" id="kprep-morning-off" style="margin-top: 6px; color: var(--danger, #b91c1c); display: none;">
+                  The morning request hour is off (Delivery → Fresh batches), so nothing is sent. · 厨房制作请求时间已关闭(配送 → 新鲜现做),因此不会发送。
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>What customers receive · 顾客收到的内容</h3>

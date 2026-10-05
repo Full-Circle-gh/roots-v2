@@ -126,6 +126,8 @@ let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const _kprint = require('../lib/kitchen-print');  // the kitchen queue's own slip — same rail, its own SN
+const _kmorning = require('../lib/kitchen-morning-request'); // §101 — the morning hour the kitchen slip prints at
+const _kprep = require('../lib/kitchen-prep-preview');       // §432 — the evening to-make message to the kitchen's WeCom group
 const _tprint = require('../lib/transfer-print'); // the supplier's stock-request slip — same rail, the shops' own map
 const _printers = require('../lib/printers');  // which BRAND of cloud printer a row points at (§171)
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
@@ -146,6 +148,7 @@ const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every
 // than crashing — the image endpoint just skips the resize branch when null.
 // SQL flag: does this row, or an active variant sibling, have a photo?
 const { hasImageFallbackSql } = require('../lib/product-image-sql');
+const { choicePhotoVersions } = require('../lib/choice-photo');
 let sharp = null;
 try { sharp = require('sharp'); } catch (e) { console.warn('[retail] sharp not available — image thumbnails disabled:', e.message); }
 const router = express.Router();
@@ -429,7 +432,9 @@ const MEDIA_INLINE_MIME = new Set([
 // who opens /api/retail/config, that the store seeds its own reviews.
 // 'reviews.reward' is deliberately NOT private — it is an offer to the
 // customer, and the mini app reads the amount straight from here.
-const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup'];
+// `kitchen.` — §432: the kitchen group's WeCom webhook is a licence to post
+// into that group, and the public config is served to anyone who asks.
+const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup', 'kitchen.'];
 
 const businessDate = require('../lib/business-date');
 // Money, exact to the cent (audit I-02). `lifetime_spend = lifetime_spend + ?`
@@ -1614,7 +1619,8 @@ function resolveBundle(jsonStr) {
   const ph = ids.map(() => '?').join(',');
   const rows = tdb().prepare(
     `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.weight AS size, sp.sell_price AS price, sp.stock_qty AS stock,
-            sp.image_url, sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data
+            sp.image_url, sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data,
+            EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = sp.id) AS has_options
        FROM store_products sp
       WHERE sp.id IN (${ph}) AND sp.is_published = 1 AND COALESCE(sp.is_active, 1) = 1`
   ).all(...ids).map(r => {
@@ -1708,6 +1714,39 @@ function addonAvailabilityById(addonIds) {
       : r.ship_from_supplier ? !r.supplier_paused
         : Number(r.stock) > 0
   )]));
+}
+
+// The customer checkout's answer check, stated once for the two routes that ask
+// it: /orders refuses on it, /checkout/quote REPORTS it (§433) so the mini app
+// can say which item needs a pick as soon as checkout opens, rather than after
+// the customer has filled in the address, the time and the payment. The shelf
+// is the storefront's company-wide answer, as the comment in /orders records.
+function customerOrderAnswers(items) {
+  const orderedPids = [...new Set(items.map(it => parseInt(it.product_id, 10)))];
+  const optAddonIds = [...new Set(tdb().prepare(
+    `SELECT DISTINCT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+      WHERE o.product_id IN (${orderedPids.map(() => '?').join(',')})
+        AND c.stock_product_id IS NOT NULL`
+  ).all(...orderedPids).map(r => r.stock_product_id))];
+  const optAddonAvail = addonAvailabilityById(optAddonIds);
+  return productOptions.resolveAnswers(
+    tdb(),
+    items.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty), choices: it.choices })),
+    { isChoiceSoldOut: (c) => optAddonAvail.get(c.stock_product_id) !== true }
+  );
+}
+
+// The refusal as the customer clients read it: the code, the line, and the
+// question when the module named one.
+function answersRefusal(answers) {
+  return {
+    error: answers.error,
+    product_id: answers.product_id || null,
+    question_en: answers.question_en || null,
+    question_cn: answers.question_cn || null,
+  };
 }
 
 
@@ -1904,6 +1943,38 @@ async function saveProductOptions(productId, input, { allowClear = false } = {})
 // order. Used by the PDP "what's inside" and the backend order-detail pack list.
 // `stock` here is the SUM of per-store physical_qty (same source the shop grid
 // uses), so the caller can compute the bundle's availability = min(stock ÷ qty).
+// EVERY PRODUCT ON A SLIP CARRIES ITS SKU, including the ones chosen as an
+// answer (§434). A paid extra linked to a shelf ("Mango Bites" on a bites box)
+// is a product the packer pulls, and its order-line snapshot keeps the link
+// (stock_product_id, lib/product-options.js resolveAnswers) but not the code.
+// So the code is read here, at print time, from the linked product, and put on
+// the snapshot copy lib/feie.js prints. Reprints of older orders get it too.
+// Mutates the rows' options_json in memory only; nothing is written.
+function attachOptionSkus(items) {
+  const parsed = new Map();
+  const ids = new Set();
+  for (const it of items || []) {
+    if (!it || !it.options_json) continue;
+    let v; try { v = JSON.parse(it.options_json); } catch { continue; }
+    if (!Array.isArray(v)) continue;
+    parsed.set(it, v);
+    for (const o of v) if (o && o.stock_product_id) ids.add(Number(o.stock_product_id));
+  }
+  if (!ids.size) return;
+  const list = [...ids];
+  const skuById = new Map(tdb().prepare(
+    `SELECT id, sku FROM store_products WHERE id IN (${list.map(() => '?').join(',')})`
+  ).all(...list).map(r => [r.id, r.sku]));
+  for (const [it, v] of parsed) {
+    let hit = false;
+    for (const o of v) {
+      const sku = o && o.stock_product_id && skuById.get(Number(o.stock_product_id));
+      if (sku) { o.sku = String(sku); hit = true; }
+    }
+    if (hit) it.options_json = JSON.stringify(v);
+  }
+}
+
 function resolveBundleComponents(v) {
   const comps = parseBundleItems(v);
   if (!comps.length) return [];
@@ -2850,6 +2921,36 @@ router.get('/api/retail/products/:id/image', async (req, res) => {
   return sendProductImage(res, data, w, ckey, 'public, max-age=31536000, immutable');
 });
 
+// A choice's picture — the photo of the product it is linked to
+// (lib/choice-photo.js). GATED ON THE PARENT PRODUCT, not the linked one: the
+// customer is on the parent's page, and the add-on behind an extra is often
+// unpublished on purpose. Only a choice that carries a link has a photo here.
+router.get('/api/retail/option-choices/:id/image', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).end();
+  let w = parseInt(req.query.w, 10);
+  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
+  const ver  = String(req.query.v || '');
+  const ckey = `${tenantCacheKey()}|choice${id}|w${w || 0}|${ver}`;
+  const hit = THUMB_CACHE.get(ckey);
+  if (hit) {
+    res.set('Content-Type', hit.mime);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(hit.buf);
+  }
+  const gate = tdb().prepare(
+    `SELECT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+       JOIN store_products p         ON p.id = o.product_id
+      WHERE c.id = ? AND c.stock_product_id IS NOT NULL
+        AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
+  ).get(id);
+  const data = gate && resolveProductImage(gate.stock_product_id);
+  if (!data) return res.status(404).end();
+  return sendProductImage(res, data, w, ckey, 'public, max-age=31536000, immutable');
+});
+
 // GET /api/retail/products/:productId/substitute-options?store_id=N
 // Used by the mini-app's "Replace missing item" sub-screen. Returns
 // in-stock candidates at the given store: admin-curated substitutes
@@ -3575,6 +3676,13 @@ router.get('/api/retail/products/:id', (req, res) => {
     for (const c of Object.values(choicesByOpt).flat()) {
       if (c.stock_product_id) c.addon_available = availById.get(c.stock_product_id) === true;
     }
+  }
+  // A PICTURE BESIDE EACH CHOICE (lib/choice-photo.js): the linked product's
+  // photo, served by choice id so an unpublished add-on product still shows.
+  // Absent on a choice with no link or no photo, and the clients draw no image.
+  const photoV = choicePhotoVersions(tdb(), Object.values(choicesByOpt).flat().map(c => c.id));
+  for (const c of Object.values(choicesByOpt).flat()) {
+    if (photoV.has(c.id)) c.image_url = `/api/retail/option-choices/${c.id}/image?v=${encodeURIComponent(photoV.get(c.id))}`;
   }
   product.options = options.map(o => {
     // THE FLOOR THE CUSTOMER IS SHOWN IS THE FLOOR THEY ARE HELD TO. "Choose 2
@@ -11301,26 +11409,14 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       return res.status(400).json({ success: false, error: 'invalid_item' });
     }
   }
-  const orderedPids = [...new Set(items.map(it => parseInt(it.product_id, 10)))];
-  const optAddonIds = [...new Set(tdb().prepare(
-    `SELECT DISTINCT c.stock_product_id
-       FROM retail_product_option_choices c
-       JOIN retail_product_options o ON o.id = c.option_id
-      WHERE o.product_id IN (${orderedPids.map(() => '?').join(',')})
-        AND c.stock_product_id IS NOT NULL`
-  ).all(...orderedPids).map(r => r.stock_product_id))];
-  const optAddonAvail = addonAvailabilityById(optAddonIds);
-  const answers = productOptions.resolveAnswers(
-    tdb(),
-    items.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty), choices: it.choices })),
-    { isChoiceSoldOut: (c) => optAddonAvail.get(c.stock_product_id) !== true }
-  );
+  const answers = customerOrderAnswers(items);
   // product_id is carried so the client can NAME the item rather than showing a
-  // bare code. A customer holding a cart line added before its question existed
-  // meets this refusal, and "Beet Salad — please choose" with a tap through to
+  // bare code, and the question so it can say what is missing (§433). A
+  // customer holding a cart line added before its question existed meets this
+  // refusal, and "Beet Salad — please choose: Dressing" with a tap through to
   // the picker is the difference between one extra tap and an abandoned basket.
   if (answers.error) {
-    return res.status(400).json({ success: false, error: answers.error, product_id: answers.product_id || null });
+    return res.status(400).json({ success: false, ...answersRefusal(answers) });
   }
 
   for (let i = 0; i < items.length; i++) {
@@ -13240,7 +13336,10 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id,
-            oi.addon_id, oi.ship_from_supplier
+            oi.addon_id, oi.ship_from_supplier,
+            -- §435: "Buy again" opens a line with no answers on its product page
+            -- when the product NOW asks a question, instead of copying it blank.
+            EXISTS(SELECT 1 FROM retail_product_options po WHERE po.product_id = oi.product_id) AS has_options
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
@@ -32525,6 +32624,67 @@ router.post('/api/retail-admin/wecom/test', requireRetailAdmin, express.json(), 
   res.json({ success: r.ok, channel: 'webhook', error: r.ok ? undefined : r.msg });
 });
 
+/* §432 — THE EVENING TO-MAKE MESSAGE: its group, its time, and a test.
+   Its own endpoint rather than PUT /config, because the webhook lives under
+   the private `kitchen.` prefix (PRIVATE_CONFIG_PREFIXES), which loadConfig()
+   never returns — the screen could not read back what it saved. The sweeper
+   that sends it is started just below these three routes. */
+router.get('/api/retail-admin/kitchen-prep-message', requireRetailAdmin, (req, res) => {
+  const s = _kprep.loadSettings(tdb());
+  const morningHour = _kmorning.configuredHour(tdb());
+  res.json({ success: true, data: { ...s, default_time: _kprep.DEFAULT_TIME, morning_hour: morningHour } });
+});
+
+router.put('/api/retail-admin/kitchen-prep-message', requireRetailAdmin, express.json(), async (req, res) => {
+  const b = req.body || {};
+  const rawHook = String(b.webhook == null ? '' : b.webhook).trim();
+  const rawTime = String(b.time == null ? '' : b.time).trim();
+  // Refused, never coerced — the same rule as every hour on the Fresh batches
+  // card: an operator who typed a wrong URL is told, not silently switched off.
+  if (rawHook && !_kprep.validWebhook(rawHook)) return res.status(400).json({ error: 'invalid_webhook' });
+  if (rawTime && _kprep.parseTime(rawTime) == null) return res.status(400).json({ error: 'invalid_time' });
+  await withTransaction(tdb(), (tx) => {
+    const upsert = tx.prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+    );
+    upsert.run(_kprep.KEY_WEBHOOK, JSON.stringify(rawHook), req.user.id);
+    // Blank is saved as blank — that is "off", and distinct from never set.
+    upsert.run(_kprep.KEY_TIME, JSON.stringify(rawTime), req.user.id);
+  });
+  res.json({ success: true });
+});
+
+router.post('/api/retail-admin/kitchen-prep-message/test', requireRetailAdmin, express.json(), async (req, res) => {
+  // The URL in the box, so it can be tried before Save; else the saved one.
+  const url = _kprep.validWebhook(req.body?.webhook) || _kprep.validWebhook(_kprep.loadSettings(tdb()).webhook);
+  if (!url) return res.json({ success: false, error: 'no_valid_webhook' });
+  const content = [
+    '**🌿 测试 · Test message**',
+    '> 收到本条说明晚间待制作消息已接通 ✅',
+    '> Receiving this means the evening to-make message is connected ✅',
+  ].join('\n');
+  const r = await postWecomMarkdown(url, content);
+  res.json({ success: r.ok, error: r.ok ? undefined : r.msg });
+});
+
+// §432 — the sender. postWecomMarkdown is injected rather than copied, and
+// every send is logged where the other WeCom sends are looked for.
+_kprep.startPrepMessageSweeper({
+  post: postWecomMarkdown,
+  onSent: (r) => {
+    try {
+      require('../lib/notify-log').logNotification({
+        channel: 'wecom', kind: 'kitchen_prep_' + r.kind,
+        subject: `To make — ${r.date} (${r.lines.length})`,
+        ok: r.ok, error: r.ok ? null : r.error,
+      });
+    } catch (e) { /* the log must never be able to fail a send */ }
+  },
+});
+
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {
   const body = req.body || {};
   /* §325 — EACH SERVICE ON ITS OWN PANEL'S KEYS. The choke point let the union
@@ -32796,6 +32956,7 @@ function printOrderById(orderId, prefs, pcfg) {
     }
     delete it.bundle_items;
   }
+  attachOptionSkus(items);
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
   const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
@@ -32911,6 +33072,7 @@ function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
       }
       delete it.bundle_items;
     }
+    attachOptionSkus(items);
     const content = _feie.renderAddon(order, items, pp.shop_name);
     _printers.printContent(content, printer, integ())
       .then(r => console.log('[print addon]', orderId, printer.vendor || 'feie', r.ok ? 'ok' : r.msg))
@@ -33232,6 +33394,7 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
       }
       delete it.bundle_items;
     }
+    attachOptionSkus(items);
     shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(last.id);
   } else {
     ({ order, items, shipments } = _sampleOrderForPreview());
@@ -39353,6 +39516,12 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   const priced = priceCart(items, req.customer.id);
   if (priced.error) return res.status(400).json({ success: false, error: priced.error });
 
+  // §433 — the answer check /orders will refuse on, asked NOW and reported
+  // rather than refused: the customer still sees their prices, and the client
+  // names the line that needs a pick before they reach Place Order.
+  const quoteAnswers = customerOrderAnswers(items);
+  const needsChoice = quoteAnswers.error ? answersRefusal(quoteAnswers) : null;
+
   // Best-effort checkout-abandonment log. Every reach of this point means the
   // customer opened checkout and got a valid price; if they never place a paid
   // order in the same window the dashboard flags it as an abandoned checkout.
@@ -39677,6 +39846,9 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     data: {
       subtotal: priced.subtotal,
       lines: priced.lines || [],
+      // NULL when every line is answered; otherwise the refusal /orders would
+      // give, so the mini app can offer the picker before the customer pays.
+      needs_choice: needsChoice,
       total_qty: priced.totalQty,
       delivery_fee: fees.deliveryFee,
       packing_fee:  fees.packingFee,
@@ -42120,3 +42292,4 @@ module.exports.reverseOrderVoucher   = reverseOrderVoucher;
 // The online half of the same rule, for the suite: which auto-apply voucher a
 // mini-app checkout gets for a given place.
 module.exports.bestAutoVoucher       = bestAutoVoucher;
+module.exports.attachOptionSkus      = attachOptionSkus;

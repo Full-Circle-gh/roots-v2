@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.472
+# Tacet shared-core consolidation — decisions record, v4.478
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,17 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.478 — **§435 · A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED — DECIDED BY ASH:** *"build fix 3"*. Customer Syd's pita (required "heat up?") was refused at checkout, and removing it and adding it back did not help: "Buy again", favourites "Add all", the home bundle block (and its layout copy) and the product page's "Buy together" added every item with no answers. They now add what needs no answer and open each product with a question on its own page, choice sheet already up, one after another (`miniapp/utils/pick-queue.js`). The server adds `has_options` to "Buy together" items and to order lines. No new word. Mini app needs an upload. See §435.
+2026-10-05 · v4.477 — **§434 · EVERY PRODUCT ON A SLIP CARRIES ITS SKU, INCLUDING ONE CHOSEN AS AN ANSWER — DECIDED BY ASH:** holding receipt TC000939, *"need sku on receipt always"*, then *"yes recipe has to have sku for each product"*. The line printed its own SKU; the three bites chosen under it, products pulled off the shelf, printed as names only. Now an answer linked to a product prints that product's SKU under it, enlarged, on the receipt, the add-on slip and the packing slip (with the count to pull). Read at print time from the link, so reprints of older orders carry it too. An answer with no link prints none. No schema, no new word. See §434.
+
+2026-10-05 · v4.476 — **§431 rule 7 · ON THE QR MENU, A TAP ON A CHOICE'S PICTURE SHOWS IT BIG — DECIDED BY ASH:** *"I want customer to be able to click on product image and see it bigger with an option to close it down after"*. The picture opens the menu's existing full-screen photo viewer, the one the product sheet's photo already uses, with its ✕ button; tapping the photo, the dark ground, the ✕ or Escape closes it and the picker underneath stays as it was. The tap does not tick the choice. A choice that is sold out, or blocked because the question's maximum is reached, is a switched-off row and its picture does not open. No new word, no schema. See §431 rule 7.
+
+2026-10-05 · v4.475 — **§433 · CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, SAYS IT WHEN CHECKOUT OPENS, AND "PICK" REPLACES THE OLD LINE — DECIDED BY ASH:** a customer met "Please choose: Whole-Wheat Pita (Frozen)" at Place Order and the popup named the product they had already chosen, not the question; Ash: *"yers"* to fixing it. The refusal now carries the question (`question_en`/`question_cn`), the quote reports the same refusal as `needs_choice` so the mini app offers the picker when checkout opens, and "Pick" hands the product page the cart line to replace, so the re-pick does not sit beside the unanswered line and get refused again. No new word: the popup uses the product sheet's live 请选择 / Please choose. Mini app needs an upload. Number §432 was skipped: a parallel branch (kitchen WeCom group) had claimed it. See §433.
+
+2026-10-05 · v4.474 — **§432 · THE EVENING BEFORE, THE KITCHEN'S WECOM GROUP IS TOLD WHAT TO MAKE — DECIDED BY ASH:** *"i need also to have a bot message in a group a day before 8:30pm with the fresh meals need to prepare the next day"*; on which group, *"wecom group but not the new orders group"*; on orders after 20:30, *"you can just push another message with the bot in the group"*; the preview line *"ok"*; on a night with nothing to make, *"stay quiet"*. At 20:30 (a setting) a WeCom group-bot posts the next morning's to-make list: the same lines §101's 06:00 slip is raised from, for the same date, marked as a preview. If the list changes before the slip prints, an update follows (the new totals and the change), no sooner than 30 minutes after the last message. Nothing to make sends nothing. Its own webhook on Settings → Push, stored privately (`kitchen.` prefix). New table `kitchen_prep_messages`. Ten Chinese strings composed by Claude, see the vocabulary's v1.314. See §432.
+
+2026-10-05 · v4.473 — **§431 · A CHOICE SHOWS THE PICTURE OF THE PRODUCT IT IS LINKED TO — DECIDED BY ASH:** *"i want the customer to see a picture of each item when he make the choice"*, then *"go ahead"* on the plan: no upload, the linked product's photo. On the mini app's product page and "Forgot something?" page, the web shop and the QR menu, a choice linked to a product with a photo now shows that photo small and square beside its name. A choice with no link, or a linked product with no photo, shows none; once one choice in a group has a picture, the others keep an empty frame so the names line up. Served by choice id (`lib/choice-photo.js`), gated on the parent product, so an unpublished add-on still shows. No schema, no new word. Staff screens unchanged. See §431.
 
 2026-10-05 · v4.472 — **§430 · GZGROCERY'S OWN STATEMENT SHEET CAN BE CHECKED AGAINST OUR ORDERS — DECIDED BY ASH:** asked for *"the most efficient way to check if everything is correct in the file using our system"*; on the sheet's dates, *"ordered and delivered"*; on the block at its foot, *"the bottom part need to ignore"*; then *"merge deploy"* on §429, which this builds on. The Billing panel gains **Check their sheet**: upload the .xlsx gzgrocery emails and the panel lists every product line beside our orders for the same days, mismatches first (quantity, price, only on one side), with the GZ-… orders behind our figure and the day either side of the range. The file is read in memory and never kept; the check writes nothing and needs `guanyi:view`. Twenty Chinese strings composed by Claude, see the vocabulary's v1.313. No schema. See §430.
 
@@ -28600,3 +28611,234 @@ ignore"*). Builds on §429.
    opened; the phone's Billing panel (§399) is unchanged. Its own ask if wanted.
 
 Tests: `scripts/test_gzgrocery_statement_check.js`.
+
+## §431 — A CHOICE SHOWS THE PICTURE OF THE PRODUCT IT IS LINKED TO
+
+**Decided 2026-10-05 by Ash** (*"i want the customer to see a picture of each
+item when he make the choice"*; then *"go ahead"* on step 1 of the plan below).
+
+1. **Where the picture comes from.** A choice has no photo of its own. A choice
+   linked to a product (`stock_product_id`, the 🔗 chip in the editor) shows that
+   product's photo, with the same variant-sibling fallback the product image
+   route uses. Nothing is uploaded. A choice with no link, or linked to a product
+   with no photo, shows no picture.
+2. **Served by choice id, never by the linked product's id.** The add-on behind
+   a paid extra is usually unpublished on purpose, and the public product image
+   route refuses unpublished products. Publishing it to get the photo would put
+   it in the shop as a product of its own. So:
+   - online store: `GET /api/retail/option-choices/:id/image`, gated on the
+     PARENT product being published and active. The product detail route gives
+     each such choice an `image_url`.
+   - QR menu: `GET /s/:shopCode/c/:choiceId`, gated on the parent product being
+     listed at that active shop (the same gate as the menu's product photo).
+     The menu's choices carry `img`; the linked product's id stays off the
+     public page, as `lib/product-options.js` intends.
+   - The version on the link is the linked product's `updated_at`, so a new
+     photo replaces the cached one.
+3. **How it looks.** A small square photo (44px on the web, 88rpx/80rpx in the
+   mini app) to the left of the name; price and sold-out label stay on the
+   right. Once one choice in a group has a picture, the others keep an empty
+   frame of the same size so the names line up. A sold-out choice dims with
+   its picture. Big picture tiles were advised against: a sheet of six extras
+   would become a long scroll on a phone.
+4. **Where.** Mini app product page (both sheets), mini app "Forgot
+   something?" page, web shop, QR menu. **Not** the till or the staff phone /
+   manual order screens: staff do not need it.
+5. **Mini app needs an upload.** The web shop and QR menu change on deploy; the
+   mini app shows the pictures only after its next upload and WeChat review.
+6. **Not built (step 2):** uploading a picture per choice, for a choice that is
+   not a product (a sauce) or to use a different photo. That needs a column and
+   both editors. Its own ask, if and when wanted.
+7. **QR menu: a tap on the picture shows it big** (added 2026-10-05 by Ash:
+   *"I want customer to be able to click on product image and see it bigger
+   with an option to close it down after"*). It opens the menu's existing
+   full-screen photo viewer (`#big`, the product sheet's), closed by its ✕, a
+   tap on the photo or the dark ground, or Escape; the picker stays open
+   beneath it. The tap does not tick the choice; the name and the box still
+   do. A sold-out or capped choice is a disabled row, so its picture does not
+   open. The web shop and the mini app do not have this yet.
+
+Tests: `scripts/test_option_choice_photo.js`.
+
+## §432 — THE EVENING BEFORE, THE KITCHEN'S WECOM GROUP IS TOLD WHAT TO MAKE
+
+**Decided 2026-10-05 by Ash** (*"i need also to have a bot message in a group a
+day before 8:30pm with the fresh meals need to prepare the next day"*; *"wecom
+group but not the new orders group ill have a differnet group for that"*; *"if
+after 8:30pm there are more orders cominig in you can just push another message
+with the bot in the group"*; the preview line, *"ok"*; nothing to make, *"stay
+quiet"*). Builds on §101.
+
+1. **The list is the slip's list.** The message's lines come from
+   `owedLines` in `lib/kitchen-morning-request.js`, the function §101's
+   morning request is raised from, called with the date that request will be
+   raised for. The evening message and the 06:00 slip can therefore differ
+   only in WHEN they looked, never in what counts. No cadence, for §101's
+   reason.
+2. **When.** From the send time (`kitchen.prep_time`, "HH:MM", 12:00–23:59;
+   never saved means 20:30, blank means off) until the morning hour the slip
+   prints at. The message names a date, not "tomorrow": before midnight it is
+   tomorrow's, after midnight today's — always the morning the next slip
+   prints.
+3. **Preview, then updates only on change.** The first message is the
+   preview; it says the final list prints at the morning hour. After it the
+   list is re-read every minute and an update is sent only when it differs
+   from the last message that landed, showing every line with its change
+   (+3, or a line gone shown at × 0). **No sooner than 30 minutes** after the
+   previous message: a run of orders becomes one update, not a ping per
+   order in a group at night. A failed send is retried after 10 minutes.
+4. **Nothing to make sends nothing**, per Ash. The one exception: a list that
+   empties after a preview went out says so, because silence would leave the
+   kitchen making the earlier list.
+5. **No morning request, no message.** With `fresh.morningRequestHour` blank
+   there is no slip to preview and the message's own text would be false.
+   The settings card says so in red.
+6. **Where.** Its own WeCom group-bot webhook, `kitchen.prep_webhook`, not
+   the new-order alert's. `kitchen.` is added to `PRIVATE_CONFIG_PREFIXES` so
+   the public `/api/retail/config` never serves it: a webhook key is a
+   licence to post into that group. Saved, read and tested through its own
+   endpoints (`/api/retail-admin/kitchen-prep-message`, `…/test`), gated on
+   Settings → Push's keys like the WeCom test beside it. Same host allowlist
+   (`qyapi.weixin.qq.com`, https). The group-bot path works only in mainland
+   企业微信 internal groups, as the new-order card already says.
+7. **Sent once, across restarts.** Each send is a `kitchen_prep_messages`
+   row, claimed before the send and closed with its outcome — the database
+   guard §101 uses, for §101's reason. Every send is also logged to
+   `notification_log` (kind `kitchen_prep_preview` / `kitchen_prep_update`).
+8. **Both languages on every line**, as every WeCom card is: a group is a
+   room, not a person with a language setting.
+9. **Not built:** the phone. Pasting a webhook is a one-time desktop job;
+   the phone's Push panel is unchanged. Its own ask if wanted.
+
+Tests: `scripts/test_kitchen_prep_preview.js`.
+
+## §433 — CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, AND "PICK" REPLACES THE LINE
+
+**Decided 2026-10-05 by Ash** (a customer's screenshot: *"why a customer has
+this message what it even means ?"*; then *"yers"* to the fix proposed).
+
+**What the customer met.** At Place Order, a modal: "Please choose:
+Whole-Wheat Pita (Frozen)", Cancel / Pick. The server refused the order
+because a question on the pita had no answer on that cart line (§229); the
+mini app cart lives on the handset, so a line added before its product gained
+a required question carries no answer. Three things were wrong with the
+handling, and each is fixed here:
+
+1. **It named the product, not the question.** The customer had already chosen
+   the pita. `lib/product-options.js` `resolveAnswers` now returns the
+   question's `question_en` / `question_cn` with `choice_required`,
+   `too_few_answers` and the per-question `too_many_answers`, and
+   `/api/retail/orders` passes them through. The popup's title is the item's
+   name alone; under it, "Please choose: <question>" / "请选择 <question>" —
+   the product sheet's own live pair, so no string was composed. Without a
+   question (a stale or tampered choice id) it reads as before.
+2. **It came last.** The customer had filled in address, time and payment
+   first. `/api/retail/checkout/quote` now runs the same check (one helper,
+   `customerOrderAnswers`, shared with `/orders`) and REPORTS it as
+   `data.needs_choice` instead of refusing, so prices still show. The mini app
+   offers the picker once per product per visit; Place Order still refuses if
+   it is skipped. Not on the pickup path (it prices locally, no quote) or when
+   the address matches no zone — Place Order covers both.
+3. **"Pick" led back into the same refusal.** The product page added a NEW
+   line with the answer, and the unanswered line stayed beside it, so Place
+   Order refused again. Checkout now passes the line's key
+   (`/pages/product/product?id=…&replace=…`); the product page starts at that
+   line's quantity and, after the add, removes the old line (or, if the add
+   merged into it, sets it to the quantity picked). `cart.add` returns the key
+   so the two cases can be told apart. Checkout re-quotes on return, which
+   redraws the lines and asks about the next unanswered one, if any.
+
+**Mini app needs an upload.** The server half (question on the refusal,
+`needs_choice` on the quote) is live on deploy and harmless to the current
+mini app, which ignores the new fields.
+
+**Not done here:** the web shop (`public/shop.html`) has the same refusal flow
+and could use the question too. Its own change, if wanted.
+
+**Number:** §432 was skipped; branch `claude/funny-cannon-1qz60j` (kitchen
+WeCom group) had already claimed it when this was written.
+
+Tests: `scripts/test_checkout_required_options.js` (sections A, D2, F).
+
+## §434 — EVERY PRODUCT ON A SLIP CARRIES ITS SKU, INCLUDING ONE CHOSEN AS AN ANSWER
+
+**Decided 2026-10-05 by Ash**, holding receipt TC000939 (*"need sku on receipt
+always"*; then *"yes recipe has to have sku for each product"*).
+
+1. **The gap.** A line prints its own SKU. An answer linked to a product (a paid
+   extra, §431's link: "Mango Bites" under "Small Bites Selection") is a product
+   the packer pulls, and printed as a name only.
+2. **The rule.** Each such answer prints its linked product's SKU on its own
+   enlarged line, directly under the answer:
+   - receipt and add-on slip: `SKU ‹code›`, or `x‹n›  SKU ‹code›` when the line
+     is for more than one;
+   - packing slip: `x‹n›  SKU ‹code›`, the count to pull, as the line's own.
+3. **Read at print time, not stored.** The order line's snapshot keeps the link
+   (`stock_product_id`, from `lib/product-options.js` resolveAnswers) and not
+   the code. `attachOptionSkus` in routes/retail.js reads the code from the
+   linked product on every print path (auto-print, add-on, reprint/test,
+   preview), so reprints of orders placed before this carry it too.
+4. **An answer with no link prints no SKU.** A sugar level is not a product.
+   To get a SKU on one, link it to a product in the editor.
+5. **The compact template is unchanged.** It prints no SKU for any line by
+   design; this rule does not add one there.
+6. **Seen on the same receipt, not code:** "Small Bites Selection" carries
+   `DRAFT-13S3L`, the placeholder `generateRetailSku` gives a product saved
+   without a SKU. It needs a real SKU typed on its product page.
+
+Tests: `scripts/test_receipt_option_sku.js`.
+
+## §435 — A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED
+
+**Decided 2026-10-05 by Ash** (*"build fix 3"*, on the plan below).
+
+**What happened.** Whole-Wheat Pita (Frozen) carries a required question,
+"heat up? (1 pita option)", added 2026-10-03. Customer Syd's order was refused
+(§433). They removed the pita and added it back, and were refused again: the
+line still had no answer. A read-only look at the live database
+(`scripts/diagnose_pita_choice.js`, via ro-query.yml) ruled out the
+other leads: no linked or sold-out choice, and the pita is in no
+"Buy together" set. Which screen Syd used is not known.
+
+**The door.** The single quick adds (shop grid +, one favourite) already open
+the product page for a product with options. Four batch paths did not, and
+called `cart.add(p, qty, [])` for every item:
+
+1. "Buy again" on an order (`pages/order/order.js`). A line bought before its
+   product gained a question is copied forward blank.
+2. Favourites "Add all" (`pages/favorites/favorites.js`).
+3. The home page bundle block (`pages/home/home.js`, both the bundle product
+   and the loose list) and its copy in `pages/layout/layout.js`.
+4. The product page's "Buy together" (`pages/product/product.js`).
+
+**The rule.** These paths add what needs no answer, as before. A product with
+a question is handed to `miniapp/utils/pick-queue.js`, which opens its product
+page with `pick=1`: the choice sheet opens by itself, at the quantity the
+batch asked for ("Buy again" keeps the quantity bought). After the add, the
+next queued product replaces the page; after the last, back to where the
+customer started. A "Buy again" line that carried answers is copied with them,
+as before; if those answers no longer fit, §433 catches it at checkout.
+
+- Only a page the queue opened moves the queue on, so the product page that
+  started a "Buy together" cannot pull the next item on an ordinary add later.
+- A product page opened any other way ends the batch, and backing out of a
+  queued page without adding drops the rest of the batch. Re-opening products
+  the customer walked away from would surprise more than it helps.
+- No new word: the sheet's own "Choose your options" / 选择选项 says what is
+  wanted, and the existing "added" toasts stay. When nothing was added but
+  something is queued, the "unavailable" toast is not shown.
+
+**Server.** `has_options` (any option on the product, the same test the shop
+list uses) is added to the "Buy together" items (`resolveBundle`) and to each
+line of a customer's order (`loadOrderForCustomer`). The home, layout and
+favourites lists already carried it.
+
+**Mini app needs an upload.** The server fields are live on deploy and ignored
+by the current app.
+
+**Not changed:** whether the pita should carry a "heat up?" question at all.
+That is a product setting, Ash's call; removing it or unticking "required"
+unblocks customers on the current app with no upload.
+
+Tests: `scripts/test_bulk_add_pick.js` (section D fails if any page adds blank
+lines without a `has_options` check).

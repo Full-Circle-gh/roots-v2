@@ -75,6 +75,7 @@ const inventory = require('../lib/inventory');
 // rather than being copied; the module header says why. lib/option-limits is
 // no longer required here because the one caller that used it went with them.
 const productOptions = require('../lib/product-options');
+const { choicePhotoVersions } = require('../lib/choice-photo');
 // resolveProductImage and normalizeCurrency are retail.js's, exported for this
 // file so the photo fallback and the money format cannot drift from the
 // storefront's. routes/retail-shops.js requires retail.js the same way; both
@@ -396,6 +397,19 @@ function attachOptions(shop, listings) {
 
   const byProduct = productOptions.questionsForProducts(tdb(), pids, { isChoiceSoldOut });
   if (!byProduct.size) return;
+
+  // A PICTURE BESIDE EACH CHOICE (lib/choice-photo.js) — the linked product's
+  // photo, served through this menu's own choice route below so the page never
+  // carries the linked product's id. A choice with none keeps the bare row.
+  const photoV = choicePhotoVersions(tdb(),
+    [...byProduct.values()].flat().flatMap(q => q.choices.map(c => c.id)));
+  if (photoV.size) {
+    for (const q of [...byProduct.values()].flat()) {
+      for (const c of q.choices) {
+        if (photoV.has(c.id)) c.img = `/s/${shop.public_code}/c/${c.id}?v=${encodeURIComponent(photoV.get(c.id))}`;
+      }
+    }
+  }
 
   for (const r of listings) {
     const opts = byProduct.get(r.store_product_id);
@@ -1702,6 +1716,13 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
    invisible and the tick floating; this reads the same and stays legible. */
 .oc.multi{justify-content:flex-start;gap:12px}
 .oc.multi .oc-l{flex:1}
+/* THE PICTURE OF AN ANSWER — its linked product's photo, small and square so
+   six extras still fit a phone screen. An answer without one keeps the empty
+   frame, so the names in the group line up. Dims with the row when sold out. */
+.oc-i{flex:none;width:44px;height:44px;border-radius:6px;object-fit:cover;
+  background:rgba(0,0,0,.06)}
+.oc-i+.oc-l{flex:1}
+.oc-i[data-big]{cursor:zoom-in}
 .oc-x{flex:none;width:21px;height:21px;border:1.5px solid currentColor;
   border-radius:4px;display:flex;align-items:center;justify-content:center;
   font-size:14px;line-height:1}
@@ -2261,6 +2282,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `catch(e){pushed=false/* file:// and some locked-down web views refuse pushState; the page then opens and closes by its own close button, which is how it worked before Back was wired up */}}` +
   `shOpen(sh);body.scrollTop=0};` +
   `document.addEventListener('click',function(e){` +
+  // A choice's picture in the option picker opens the same viewer.
+  `var ci=e.target.closest?e.target.closest('.oc-i[data-big]'):null;` +
+  `if(ci){bigImg.src=ci.getAttribute('data-big')+'&w=${HERO_W}';big.hidden=false;return}` +
   `var z=e.target.closest?e.target.closest('.dt-ph[data-big]'):null;` +
   `if(z){var pid=z.getAttribute('data-big'),v=z.getAttribute('data-v')||'';` +
   // The enlarge asks the SAME route for a wider render. It is a separate URL,
@@ -2283,7 +2307,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `document.getElementById('dsheetX').addEventListener('click',function(){close()},false);` +
   `document.getElementById('dsheetBg').addEventListener('click',function(){close()},false);` +
   `document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;` +
-  `if(!big.hidden){shut();return}close()},false);` +
+  // stopImmediatePropagation: the basket script's own Escape closes the option
+  // picker, and a customer closing a choice's picture is still choosing.
+  `if(!big.hidden){shut();e.stopImmediatePropagation();return}close()},false);` +
   // Keyboard: a card is role=button and focusable, so it answers Enter/Space.
   `document.addEventListener('keydown',function(e){` +
   `if(e.key!=='Enter'&&e.key!==' ')return;` +
@@ -2688,6 +2714,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      once for the whole group rather than per row — it is a fact about the
      question, not about any one answer. */
   `var full=(g.max&&pkLive(g,sel)>=g.max)?1:0;` +
+  /* A PICTURE BESIDE EACH ANSWER, when its linked product has one
+     (lib/choice-photo.js). Once one answer in a group has a picture, the
+     others keep an empty frame of the same size, so the names line up. */
+  `var gi=0;for(var k=0;k<g.choices.length;k++)if(g.choices[k].img)gi=1;` +
   `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
   `var on=(sel.indexOf(c.id)>=0&&!c.out);` +
   /* A TICKED ROW IS NEVER CAPPED. Unticking is the only way back under the
@@ -2702,6 +2732,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      bare row: a box that can only ever hold one tick is a radio drawn as a
      checkbox, which is the opposite of the distinction being made here. */
   `(g.multi?'<span class=\"oc-x\">'+(on?'\\u2713':'')+'</span>':'')+` +
+  /* A TAP ON THE PICTURE ENLARGES IT, through the same full-screen viewer the product sheet's photo opens (#big), and does NOT tick the row:
+     the customer is looking, not choosing. data-big is the choice route
+     without a width; the viewer asks it for the hero width. */
+  `(gi?(c.img?'<img class=\"oc-i\" src=\"'+esc(c.img)+'&w=160\" data-big=\"'+esc(c.img)+'\" alt=\"\" loading=\"lazy\" decoding=\"async\">':'<span class=\"oc-i\"></span>'):'')+` +
   `'<span class=\"oc-l\">'+bi(c.en,c.cn)+'</span>'+` +
   `'<span class=\"oc-d\">'+(c.out?L_OUT:(c.d?('+'+money(c.d)):''))+'</span>'+` +
   `'</button>'}` +
@@ -2855,6 +2889,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `shClose(sheet);` +
   `real.click();` +
   `return}` +
+  // A tap on a choice's picture enlarges it (the sheet script above);
+  // it must not also tick or untick the row it sits in.
+  `if(e.target.closest&&e.target.closest('.oc-i[data-big]'))return;` +
   `var oc=e.target.closest?e.target.closest('.oc'):null;` +
   `if(oc&&pk){if(oc.disabled)return;` +
   `var gid=parseInt(oc.getAttribute('data-og'),10);` +
@@ -4091,7 +4128,51 @@ router.get('/s/:shopCode/i/:productId', async (req, res) => {
   `).get(code, id);
   const data = gate && resolveProductImage(id);
   if (!data) return res.status(404).end();
+  return sendMenuPhoto(res, data, w, ckey);
+});
 
+// A choice's picture on the menu — the photo of the product the choice is
+// linked to (lib/choice-photo.js). Same gate as the product photo above, asked
+// of the PARENT product: the choice must belong to a product listed at this
+// active shop. The linked product itself need not be listed anywhere — the
+// add-on behind a paid extra usually is not.
+router.get('/s/:shopCode/c/:choiceId', async (req, res) => {
+  const code = String(req.params.shopCode || '');
+  const id = parseInt(req.params.choiceId, 10);
+  if (!isShopCode(code) || !Number.isFinite(id) || id <= 0) return res.status(404).end();
+
+  let w = parseInt(req.query.w, 10);
+  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
+  const ver = String(req.query.v || '');
+
+  let tkey = 'default';
+  try { tkey = tdb().name || 'default'; } catch (e) { /* no tenant scope on this request; the default key is correct, not a fallback */ }
+  const ckey = `${tkey}|${code}|c${id}|w${w || 0}|${ver}`;
+  const hit = PHOTO_CACHE.get(ckey);
+  if (hit) {
+    res.set('Content-Type', hit.mime);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(hit.buf);
+  }
+
+  const gate = tdb().prepare(`
+    SELECT c.stock_product_id FROM retail_product_option_choices c
+      JOIN retail_product_options o ON o.id = c.option_id
+      JOIN shop_listings sl ON sl.store_product_id = o.product_id
+      JOIN shops s          ON s.id = sl.shop_id
+      JOIN retail_stores l  ON l.id = s.location_id
+     WHERE s.public_code = ? AND c.id = ? AND c.stock_product_id IS NOT NULL
+       AND s.is_active = 1 AND COALESCE(l.is_active, 1) = 1
+     LIMIT 1
+  `).get(code, id);
+  const data = gate && resolveProductImage(gate.stock_product_id);
+  if (!data) return res.status(404).end();
+  return sendMenuPhoto(res, data, w, ckey);
+});
+
+// The bytes of a menu photo, resized when asked, cached under ckey. Shared by
+// the product photo and the choice photo routes.
+async function sendMenuPhoto(res, data, w, ckey) {
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
   const mime = m[1] || 'application/octet-stream';
@@ -4112,7 +4193,7 @@ router.get('/s/:shopCode/i/:productId', async (req, res) => {
   res.set('Content-Type', outMime);
   res.set('Cache-Control', 'public, max-age=31536000, immutable');
   res.send(buf);
-});
+}
 
 // ─── Submitting an order — §44, §45 ─────────────────────────────────────
 

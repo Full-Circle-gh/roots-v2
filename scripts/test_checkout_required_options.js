@@ -81,6 +81,7 @@ const CH_S1 = 9793, CH_S2 = 9794, CH_S3 = 9795;
 const CUSTOMER  = 9776;
 const ADDRESS   = 9777;
 const TOKEN     = 'checkoutrequiredoptions9776';
+const ZONE      = 9778;   // the quote prices against a zone; the order refusals never reach one
 
 // Every refusal below fires inside item resolution, which runs AFTER the address
 // and slot presence checks and BEFORE the slot is actually resolved. So a real
@@ -117,6 +118,7 @@ function cleanup() {
   db.prepare('DELETE FROM retail_customers          WHERE id = ?').run(CUSTOMER);
   try { db.prepare(`DELETE FROM retail_store_stock WHERE product_id IN (${pph})`).run(...pids); } catch { /* optional */ }
   db.prepare(`DELETE FROM store_products WHERE id IN (${pph})`).run(...pids);
+  db.prepare('DELETE FROM retail_delivery_zones WHERE id = ?').run(ZONE);
 }
 
 function seed() {
@@ -160,11 +162,24 @@ function seed() {
      VALUES (?,?,?,?,?,?,?,?,?,1)`
   ).run(ADDRESS, CUSTOMER, '测试收货人', '13900000077',
         '广东省', '广州市', '天河区', '天河路 1 号', '101');
+  // A plain courier zone for the quote, shaped like test_preorder_park's.
+  db.prepare(
+    `INSERT INTO retail_delivery_zones
+       (id, zone_type, name_en, name_cn, match_city, base_fee, is_active, same_day_allowed, day_only, min_lead_days)
+     VALUES (?, 'city', 'Suzhou', '苏州', ?, 12, 1, 0, 1, 0)`
+  ).run(ZONE, '苏州市');
 }
 
 const app = express();
 app.use(router);
 let PORT = 0;
+
+const quote = (items) => fetch(`http://127.0.0.1:${PORT}/api/retail/checkout/quote`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+  body: JSON.stringify({ address: { province: '江苏省', city: '苏州市', district: '姑苏区' },
+                         delivery_mode: 'standard', payment_method: 'wechat', items }),
+}).then(async r => ({ status: r.status, body: await r.json().catch(() => null) }));
 
 const order = (items) => fetch(`http://127.0.0.1:${PORT}/api/retail/orders`, {
   method: 'POST',
@@ -190,6 +205,13 @@ const order = (items) => fetch(`http://127.0.0.1:${PORT}/api/retail/orders`, {
     it('the refusal names the product, so the client can say WHICH item', () => {
       assert.strictEqual(unanswered.body.product_id, P_SALAD,
         'no product_id on the refusal — the customer would get a bare code');
+    });
+
+    it('and NAMES THE QUESTION, in both languages (§433)', () => {
+      // "Please choose: Required Options Salad" told a customer who had already
+      // chosen the salad nothing; the question is what is missing.
+      assert.strictEqual(unanswered.body.question_en, 'Choose Dressing');
+      assert.strictEqual(unanswered.body.question_cn, '选择酱料');
     });
 
     const answered = await order([{ product_id: P_SALAD, qty: 1, choices: [CH_GINGER] }]);
@@ -254,6 +276,27 @@ const order = (items) => fetch(`http://127.0.0.1:${PORT}/api/retail/orders`, {
         'the per-line answers are misaligned with the posted items');
     });
 
+    console.log('\nD2 · the quote says it before Place Order does (§433)');
+
+    const qShort = await quote([{ product_id: P_SALAD, qty: 1 }]);
+    const qData = (qShort.body && qShort.body.data) || {};
+    it('the quote still prices the basket (it reports, it does not refuse)', () => {
+      assert.strictEqual(qShort.body && qShort.body.success, true,
+        `the quote refused instead of reporting: ${JSON.stringify(qShort.body)}`);
+    });
+    it('and carries the refusal /orders would give, question included', () => {
+      assert.ok(qData.needs_choice, 'no needs_choice on a quote whose line is unanswered');
+      assert.strictEqual(qData.needs_choice.error, 'choice_required');
+      assert.strictEqual(qData.needs_choice.product_id, P_SALAD);
+      assert.strictEqual(qData.needs_choice.question_en, 'Choose Dressing');
+      assert.strictEqual(qData.needs_choice.question_cn, '选择酱料');
+    });
+    const qOk = await quote([{ product_id: P_SALAD, qty: 1, choices: [CH_GINGER] }]);
+    it('an answered basket quotes with needs_choice null', () => {
+      assert.strictEqual(qOk.body && qOk.body.success, true, JSON.stringify(qOk.body));
+      assert.strictEqual(qOk.body.data.needs_choice, null);
+    });
+
     console.log('\nE · the second opinion is gone');
 
     const routeSrc = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
@@ -275,9 +318,37 @@ const order = (items) => fetch(`http://127.0.0.1:${PORT}/api/retail/orders`, {
           `the mini-app checkout does not handle ${code} — the customer sees "出错：${code}"`);
       }
     });
-    it('the mini app offers a way to the product page', () => {
-      assert.ok(/wx\.navigateTo\(\{ url: '\/pages\/product\/product\?id=' \+ badId \}\)/.test(miniSrc),
-        'the refusal names the item but strands the customer on checkout');
+    it('the mini app offers a way to the product page, carrying the line to replace', () => {
+      assert.ok(/wx\.navigateTo\(\{ url: '\/pages\/product\/product\?id=' \+ badId \+ \(line \? '&replace=' \+ encodeURIComponent\(line\.key\) : ''\) \}\)/.test(miniSrc),
+        'the refusal names the item but strands the customer on checkout, or the re-pick lands beside the old line');
+    });
+    it('the mini app names the question, in the product sheet\'s own words', () => {
+      assert.ok(miniSrc.includes("'请选择 ' + question : 'Please choose: ' + question"),
+        'the checkout popup does not say which question is unanswered');
+    });
+    it('the mini app reads needs_choice off the quote', () => {
+      assert.ok(/data\.needs_choice/.test(miniSrc) && /this\.offerPick\(nc\)/.test(miniSrc),
+        'checkout waits for Place Order to say a line needs a pick');
+    });
+    it('and re-quotes when the customer comes back from the re-pick', () => {
+      assert.ok(/if \(this\._repickPending\) \{[\s\S]{0,120}this\.refreshQuote\(\)/.test(miniSrc),
+        'checkout keeps showing the old line after the re-pick');
+    });
+
+    // THE LOOP THIS CLOSES. Pick opened the product page, the customer answered
+    // and added — and the unanswered line stayed in the cart beside the new one,
+    // so Place Order refused again with the same popup.
+    const prodSrc = fs.readFileSync(path.join(ROOT, 'miniapp', 'pages', 'product', 'product.js'), 'utf8');
+    const cartSrc = fs.readFileSync(path.join(ROOT, 'miniapp', 'utils', 'cart.js'), 'utf8');
+    it('cart.add returns the line key', () => {
+      assert.ok(/cartNotice\.queue\(product\);\s*\/\/[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*return key;/.test(cartSrc),
+        'cart.add no longer returns its key — the product page cannot tell a merge from a new line');
+    });
+    it('the product page takes the replace key and drops the old line after the add', () => {
+      assert.ok(/query\.replace/.test(prodSrc), 'the product page ignores the replace key');
+      assert.ok(/_finishAdd\(kind\) \{\s*this\._dropReplacedLine\(\);/.test(prodSrc),
+        'the add does not drop the line it replaces');
+      assert.ok(/cart\.remove\(k\)/.test(prodSrc), 'the replaced line is never removed');
     });
 
     const shopSrc = fs.readFileSync(path.join(ROOT, 'public', 'shop.html'), 'utf8');

@@ -12,6 +12,7 @@ const delivery = require('../../utils/delivery');
 const config   = require('../../utils/config');
 const freshEta = require('../../utils/fresh-eta');
 const cartNotice = require('../../utils/cart-notice');
+const pickQueue = require('../../utils/pick-queue');
 
 // ONE PRICE FORMAT FOR THIS PAGE. Three copies of this line already sat in
 // three builders here, and a fourth site — the buy button — had its own rule
@@ -298,8 +299,28 @@ Page({
     }
     const app = getApp();
     this.setData({ id, lang: app.globalData.lang });
+    // Opened from checkout's "Pick" (§433): the cart line this visit replaces.
+    // It carries its quantity over, so re-picking two pitas does not quietly
+    // become one.
+    let replaceKey = null;
+    try { replaceKey = query.replace ? decodeURIComponent(query.replace) : null; } catch (e) { replaceKey = query.replace || null; }
+    const old = replaceKey ? cart.get().items.find(it => it.key === replaceKey) : null;
+    this._replaceKey = old ? replaceKey : null;
+    if (old) this.setData({ qty: Math.max(1, Math.min(99, Number(old.qty) || 1)) });
+    // Opened by a bulk add (§435, utils/pick-queue): this product needs an
+    // answer before it can go in the cart, so the sheet opens by itself, at the
+    // quantity the batch asked for. Opened any other way, a batch in flight ends.
+    const pickMode = query.pick === '1';
+    this._pickMode = pickMode;
+    if (pickMode) {
+      const q = parseInt(query.qty, 10);
+      if (q > 1) this.setData({ qty: Math.min(99, q) });
+    } else {
+      pickQueue.clear();
+    }
     await this.refresh();
     this.refreshFavoriteState();
+    if (pickMode && this.data.product) this.addToCart();
   },
 
   onShow() {
@@ -359,7 +380,12 @@ Page({
   },
 
   onHide()   { this.stopFlashTick(); this.stopViewingPing(true); },
-  onUnload() { this.stopFlashTick(); this.stopViewingPing(true); },
+  onUnload() {
+    this.stopFlashTick(); this.stopViewingPing(true);
+    // Backed out of a bulk add's product without adding (§435): the customer
+    // has said no to the rest of the batch too, so it is not reopened later.
+    if (this._pickMode && !this._pickAdvancing) pickQueue.clear();
+  },
 
   // ─── "N viewing now" presence heartbeat ────────────────────────────
   // Ping while the page is open so the server keeps us in its live-viewer
@@ -520,8 +546,13 @@ Page({
       // before serving the page, so these ARE the numbers checkout applies.
       // 0 means no limit, which is every group authored before this existed.
       lim_hint: o.type === 'multi' ? optionText.limHint(o, L) : '',
+      // A picture beside each choice: its linked product's photo, served by the
+      // server per choice. Once one choice in a group has one, the rest keep an
+      // empty frame so the names line up.
+      has_img: (o.choices || []).some(c => c.image_url),
       choices: (o.choices || []).map(c => ({
         ...c,
+        img: c.image_url ? absUrl(c.image_url) + '&w=160' : '',
         label: lang.pick(c.label_en, c.label_cn, L),
         delta_text: Number(c.price_delta) ? (Number(c.price_delta) > 0 ? '+¥' + Number(c.price_delta).toFixed(2) : '−¥' + Math.abs(Number(c.price_delta)).toFixed(2)) : '',
         sold_out: !!c.stock_product_id && c.addon_available === false,
@@ -1223,7 +1254,7 @@ Page({
         chosen.push({ option_id: o.id, choice_id: c.id, question: o.question, label: c.label, delta: Number(c.price_delta) || 0 });
       });
     });
-    cart.add({
+    this._lastAddKey = cart.add({
       id: p.id,
       name_en: p.name_en,
       name_cn: p.name_cn,
@@ -1289,6 +1320,7 @@ Page({
   // shopper adding one meal two ways got two different toasts, and neither
   // matched a button reading NEXT BATCH. It takes the page's own `preKind` now.
   _finishAdd(kind) {
+    this._dropReplacedLine();
     const cn = this.data.lang === 'cn';
     const title = kind === 'batch'
       ? (cn ? '已加入购物车，下批现做' : 'Added — next batch')
@@ -1312,9 +1344,32 @@ Page({
     this._leaveAfterAdd(500);
   },
 
+  // The re-pick from checkout (§433): the new line takes the old one's place.
+  // If the add MERGED into the old key instead, removing it would empty the
+  // very line just added to — so that line is set to the quantity picked here,
+  // not the old quantity plus it.
+  _dropReplacedLine() {
+    const k = this._replaceKey;
+    if (!k || !this._lastAddKey) return;
+    this._replaceKey = null;
+    if (this._lastAddKey === k) cart.setQty(k, this.data.qty);
+    else cart.remove(k);
+  },
+
   // The page's exit after an add — the shop the customer came from, or the home
   // tab when this page was opened from a share card and has nothing behind it.
   _leaveAfterAdd(delayMs) {
+    // A bulk add with more products still to answer (§435): the next one
+    // replaces this page, so "back" still lands where the batch began.
+    // Only a page the queue opened moves it on — the page that STARTED a "Buy
+    // together" stays alive underneath, and an ordinary add there later must
+    // not pull the batch's next product.
+    const nxt = this._pickMode ? pickQueue.next() : null;
+    if (nxt) {
+      this._pickAdvancing = true;
+      setTimeout(() => wx.redirectTo({ url: pickQueue.url(nxt) }), delayMs);
+      return;
+    }
     setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), delayMs);
   },
 
@@ -1336,9 +1391,11 @@ Page({
     const b = this._bundle;
     if (!b || !Array.isArray(b.items)) return;
     let added = 0;
+    const toPick = [];   // §435 — needs an answer; opened in turn, never added blank
     b.items.forEach(it => {
       const st = it.stock == null ? null : Number(it.stock);
       if (st != null && st <= 0) return;   // skip sold-out items
+      if (it.has_options) { toPick.push({ id: it.id, qty: 1 }); return; }
       cart.add({
         id: it.id, name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
         size: it.size, image_url: it.image_url, image_data: it.image_data,
@@ -1347,14 +1404,19 @@ Page({
       }, 1, []);
       added++;
     });
-    if (added && b.voucher) { try { wx.setStorageSync('pending_voucher_code', b.voucher); } catch (e) {} }
-    wx.showToast({
-      title: added
-        ? (this.data.lang === 'cn' ? `${added} 件已加入购物车` : `${added} added to cart`)
-        : (this.data.lang === 'cn' ? '商品已售罄' : 'Items unavailable'),
-      icon: added ? 'success' : 'none',
-      duration: 1400,
-    });
+    if ((added || toPick.length) && b.voucher) { try { wx.setStorageSync('pending_voucher_code', b.voucher); } catch (e) {} }
+    // Nothing added but something to pick is not "unavailable": the sheet that
+    // opens next says what is wanted.
+    if (added || !toPick.length) {
+      wx.showToast({
+        title: added
+          ? (this.data.lang === 'cn' ? `${added} 件已加入购物车` : `${added} added to cart`)
+          : (this.data.lang === 'cn' ? '商品已售罄' : 'Items unavailable'),
+        icon: added ? 'success' : 'none',
+        duration: 1400,
+      });
+    }
+    pickQueue.start(toPick);
   },
 
   // Tap a "what's inside" component → open its own product page. Only fires
@@ -1450,7 +1512,7 @@ Page({
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
-    cart.add({
+    this._lastAddKey = cart.add({
       id: m.id,
       name_en: m.name_en,
       name_cn: m.name_cn,

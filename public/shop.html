@@ -1067,6 +1067,9 @@
     .op-box{flex:none;width:20px;height:20px;border:2px solid var(--ink);border-radius:5px;display:flex;
       align-items:center;justify-content:center;font-size:13px;color:var(--oat);line-height:1;}
     .op-extra.on .op-box{background:var(--oat);color:var(--ink);}
+    /* The answer's picture: its linked product's photo, small and square. */
+    .op-ci{flex:none;width:44px;height:44px;border-radius:6px;object-fit:cover;background:rgba(0,0,0,.06);margin:-4px 0;}
+    .op-ci+.op-cl{flex:1;}
     .op-foot{padding:14px 18px calc(16px + env(safe-area-inset-bottom,0px));}
     .op-add{width:100%;background:var(--ink);color:var(--oat);border:0;border-radius:8px;padding:15px 0;cursor:pointer;
       font-family:var(--bf-toni);font-size:15px;font-weight:700;letter-spacing:.06em;}
@@ -6168,14 +6171,18 @@ async function renderProduct(id){
       const mask=document.createElement('div'); mask.className='sl-vpmask';
       const rows=groups.map(g=>{const gl=limOf(g),gh=o.multi?limHint(gl):'';
         const atCap=()=>!!(gl.max&&selIds(g).length>=gl.max);
+        const gImg=(g.choices||[]).some(c=>c.image_url);
         return `<div class="op-group">
         <div class="op-q">${esc(pick(g.question_en,g.question_cn))}${g.is_required?' <span class="op-req">*</span>':''}</div>
         ${gh?`<div class="op-lim">${esc(gh)}</div>`:''}
         <div class="op-choices">${(g.choices||[]).map(c=>{
           const on=selIds(g).indexOf(c.id)>=0, d=Number(c.price_delta)||0, out=choiceOut(c);
+          // The linked product's photo beside the answer (lib/choice-photo.js);
+          // the others in a group that has any keep an empty frame so names line up.
+          const img=gImg?(c.image_url?`<img class="op-ci" src="${esc(c.image_url)}&w=160" alt="" loading="lazy" decoding="async">`:'<span class="op-ci"></span>'):'';
           return `<button type="button" class="op-choice${o.multi?' op-extra':''}${on?' on':''}${out?' sold-out':''}" data-oid="${g.id}" data-cid="${c.id}"${out?' data-oos="1"':''}${(out||(!on&&atCap()))?' disabled':''}>
             ${o.multi?'<span class="op-box">'+(on?'✓':'')+'</span>':''}
-            <span class="op-cl">${esc(pick(c.label_en,c.label_cn))}</span>
+            ${img}<span class="op-cl">${esc(pick(c.label_en,c.label_cn))}</span>
             ${out?`<span class="op-oos">${state.lang==='cn'?'售罄':'Sold out'}</span>`:d?`<span class="op-cd">+${money(d)}</span>`:''}</button>`;
         }).join('')}</div></div>`;}).join('');
       mask.innerHTML=`<div class="sl-vp"><div class="sl-vp-h"><div>
