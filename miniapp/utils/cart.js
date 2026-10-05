@@ -98,6 +98,9 @@ function add(product, qty = 1, options = []) {
   // itself is drawn by components/cart-notice on whatever screen is carrying
   // it, so an add made from a screen without one is late rather than lost.
   cartNotice.queue(product);
+  // The line's key, so a caller replacing an older line (the product page's
+  // re-pick from checkout) can tell whether the add merged into it.
+  return key;
 }
 
 function setQty(key, qty) {

@@ -1711,6 +1711,39 @@ function addonAvailabilityById(addonIds) {
   )]));
 }
 
+// The customer checkout's answer check, stated once for the two routes that ask
+// it: /orders refuses on it, /checkout/quote REPORTS it (§433) so the mini app
+// can say which item needs a pick as soon as checkout opens, rather than after
+// the customer has filled in the address, the time and the payment. The shelf
+// is the storefront's company-wide answer, as the comment in /orders records.
+function customerOrderAnswers(items) {
+  const orderedPids = [...new Set(items.map(it => parseInt(it.product_id, 10)))];
+  const optAddonIds = [...new Set(tdb().prepare(
+    `SELECT DISTINCT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+      WHERE o.product_id IN (${orderedPids.map(() => '?').join(',')})
+        AND c.stock_product_id IS NOT NULL`
+  ).all(...orderedPids).map(r => r.stock_product_id))];
+  const optAddonAvail = addonAvailabilityById(optAddonIds);
+  return productOptions.resolveAnswers(
+    tdb(),
+    items.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty), choices: it.choices })),
+    { isChoiceSoldOut: (c) => optAddonAvail.get(c.stock_product_id) !== true }
+  );
+}
+
+// The refusal as the customer clients read it: the code, the line, and the
+// question when the module named one.
+function answersRefusal(answers) {
+  return {
+    error: answers.error,
+    product_id: answers.product_id || null,
+    question_en: answers.question_en || null,
+    question_cn: answers.question_cn || null,
+  };
+}
+
 
 // ── Per-product options (customer choices: dressing, spice level, cutlery…) ──
 // Stored in retail_product_options + retail_product_option_choices, keyed by the
@@ -11339,26 +11372,14 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       return res.status(400).json({ success: false, error: 'invalid_item' });
     }
   }
-  const orderedPids = [...new Set(items.map(it => parseInt(it.product_id, 10)))];
-  const optAddonIds = [...new Set(tdb().prepare(
-    `SELECT DISTINCT c.stock_product_id
-       FROM retail_product_option_choices c
-       JOIN retail_product_options o ON o.id = c.option_id
-      WHERE o.product_id IN (${orderedPids.map(() => '?').join(',')})
-        AND c.stock_product_id IS NOT NULL`
-  ).all(...orderedPids).map(r => r.stock_product_id))];
-  const optAddonAvail = addonAvailabilityById(optAddonIds);
-  const answers = productOptions.resolveAnswers(
-    tdb(),
-    items.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty), choices: it.choices })),
-    { isChoiceSoldOut: (c) => optAddonAvail.get(c.stock_product_id) !== true }
-  );
+  const answers = customerOrderAnswers(items);
   // product_id is carried so the client can NAME the item rather than showing a
-  // bare code. A customer holding a cart line added before its question existed
-  // meets this refusal, and "Beet Salad — please choose" with a tap through to
+  // bare code, and the question so it can say what is missing (§433). A
+  // customer holding a cart line added before its question existed meets this
+  // refusal, and "Beet Salad — please choose: Dressing" with a tap through to
   // the picker is the difference between one extra tap and an abandoned basket.
   if (answers.error) {
-    return res.status(400).json({ success: false, error: answers.error, product_id: answers.product_id || null });
+    return res.status(400).json({ success: false, ...answersRefusal(answers) });
   }
 
   for (let i = 0; i < items.length; i++) {
@@ -39391,6 +39412,12 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   const priced = priceCart(items, req.customer.id);
   if (priced.error) return res.status(400).json({ success: false, error: priced.error });
 
+  // §433 — the answer check /orders will refuse on, asked NOW and reported
+  // rather than refused: the customer still sees their prices, and the client
+  // names the line that needs a pick before they reach Place Order.
+  const quoteAnswers = customerOrderAnswers(items);
+  const needsChoice = quoteAnswers.error ? answersRefusal(quoteAnswers) : null;
+
   // Best-effort checkout-abandonment log. Every reach of this point means the
   // customer opened checkout and got a valid price; if they never place a paid
   // order in the same window the dashboard flags it as an abandoned checkout.
@@ -39715,6 +39742,9 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     data: {
       subtotal: priced.subtotal,
       lines: priced.lines || [],
+      // NULL when every line is answered; otherwise the refusal /orders would
+      // give, so the mini app can offer the picker before the customer pays.
+      needs_choice: needsChoice,
       total_qty: priced.totalQty,
       delivery_fee: fees.deliveryFee,
       packing_fee:  fees.packingFee,
