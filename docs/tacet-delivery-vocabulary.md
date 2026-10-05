@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.313 · 2026-10-05 · §430 CHECKING GZGROCERY'S STATEMENT SHEET ON THE BILLING PANEL — 20 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *Checking gzgrocery's statement sheet (§430)*.
+
 **v1.312 · 2026-10-05 · §428 THE TILL GIVES A LOCATION'S VOUCHER, ATTACHES A CUSTOMER TO A QR ORDER AND ADDS A CUSTOMER; THE OFFICE GIVES TO A PASTED LIST — 6 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *Giving a location's voucher at the till, and to a list (§428)*.
 
 **v1.311 · 2026-10-05 · §427 "CUSTOMER CONTACTED" ON A PARCEL STILL RUNNING LATE — ONE BADGE ARRANGEMENT COMPOSED BY CLAUDE FROM LIVE PAIRS; THE BUTTON AND THE NOTE COPIED WHOLE.** See *Customer contacted on a running-late parcel (§427)*.
@@ -13391,4 +13393,47 @@ holder lists on both surfaces. Nothing here names a carrier. The give button is
 | `已发放 N 位 · 已拥有 N 位 · 新建顾客 N 位` | Given to N · already had it: N · new customers: N | `已发放给 N 位顾客` (the dialog's own toast), `已拥有` (the holder pill *Has it*), `新建` (`新建订单`) | — |
 | `N 行没有电话 — 已留在框中,请修改。` | No phone on N line(s) — left in the box to fix. | `电话`, `请修改` as a plain request | `格式错误` — blames the format, when the one thing missing is the phone |
 | `发放人 ` | given by | `发放` + `人`, the agent noun the product already uses (`收件人姓名`, the web store's address form) | `由…发放` — wraps the name, which breaks the one-line holder row |
+
+
+## Checking gzgrocery's statement sheet (§430)
+
+**Composed by Claude Opus 5, 2026-10-05, under the 2026-09-06 amendment.**
+Operator register only: the GZ Grocery tab's Billing panel
+(`public/retail-admin/12-guanyi.js`, `gyRenderSheetCheck`). Desktop only.
+`gzgrocery` is the partner's name and is not translated. "Their" is gzgrocery,
+"our" is the shop: the panel sets two parties' figures side by side, so every
+column names whose it is.
+
+### Copied whole
+
+| String | From |
+|---|---|
+| `Close · 关闭`, `Product · 商品`, `Orders · 订单`, `Check failed · 检测失败` | live in the admin, `Check failed` on this same tab |
+| `The start date is after the end date · 起始日期晚于结束日期` | Finance's own refusal for the same mistake |
+| `That file is too large · 文件过大` | `文件过大。` (01-core.js), less the full stop to match the other notes here |
+
+### Composed — twenty, by Claude (2026-09-06 amendment)
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `核对对方账单` | Check their sheet | `核对` (`请核对中文地址`, `付款已核对`), `对方` + `账单` as below | `上传账单` — says what you do to the file, not what you get; `对账` — accounting jargon for a bank reconciliation, which §36 says Finance is not |
+| `正在核对账单…` | Checking the sheet… | `正在…` (`正在向微信验证…`), `核对`, `账单` | `核对中…` — fine, but every other progress line on this tab names its object |
+| `对方账单` | Their sheet | `对方` (the other party; the plain word for a counterparty), `账单` (a bill/statement) | `供应商账单` — gzgrocery is a customer of the shop here, not a supplier |
+| `我方订单` | Our orders | `我方` (the pair of `对方`), `订单` (live) | `本店订单` — reads fine alone but does not pair with `对方` in a two-column table |
+| `差额` | Difference | the standard word for a money difference | `差异` — any difference, not an amount |
+| `对方数量`, `我方数量` | Their qty, Our qty | `数量` (live, `Quantity · 数量`) with the two parties above | — |
+| `对方单价`, `我方单价` | Their price, Our price | `单价` (live, `Price · 单价`) with the two parties | `价格` — the sheet's figure is per unit, and `单价` says so |
+| `数量不符` | Quantity differs | `数量` + `不符` (does not match) | `数量错误` — says one side is wrong before anyone knows which |
+| `单价不符` | Price differs | `单价` + `不符` | `价格错误` — same reason |
+| `数量和单价不符` | Quantity and price differ | the two above joined by `和` | — |
+| `仅在对方账单` | Only on their sheet | `仅` (`仅陆运`, `仅广州`), `在`, `对方账单` | `我方无记录` — the line exists on their side; name where it is |
+| `对方账单未列` | Not on their sheet | `对方账单` + `未列` (not listed) | `对方漏记` — accuses before anyone has looked |
+| `N 个商品不一致` | N product(s) do not match | `个`, `商品`, `不一致` (live, `已识别 · 不一致`) | — |
+| `全部 N 个商品一致` | All N products match | `全部`, `商品`, `一致` (live, `核对金额一致后`) | — |
+| `一致的商品 (N)` | Matching products (N) | `一致`, `商品` | — |
+| `已忽略 N 行非本店商品` | Ignored N line(s) that are not our products | `已忽略`, `行`, `本店` (live), `商品` | `已跳过` — reads as postponed; these are never read |
+| `前后一天` | Day before / after | `前后` + `一天` | `相邻日期` — correct but stiff on a one-line hint |
+| `仅支持 .xlsx 文件 — 请先在 Excel 中另存为 .xlsx` | Only .xlsx files — save it as .xlsx in Excel first | `仅支持`, `请先…` (`请先选择门店。`), `另存为` (Excel's own menu word) | — |
+| `无法读取该表格 — 未找到数量或 SKU 列` | Could not read this sheet — no Qty or SKU column found | `无法读取该…` (`无法读取该照片`), `表格`, `未找到`, `数量`, `列` | `格式错误` — blames the format without saying what is missing |
+| `请先选择日期 — 文件名中没有日期` | Pick the dates first — the file name does not say them | `请先…`, `选择日期`, `文件名` | — |
 

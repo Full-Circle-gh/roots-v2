@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.471
+# Tacet shared-core consolidation — decisions record, v4.472
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.472 — **§430 · GZGROCERY'S OWN STATEMENT SHEET CAN BE CHECKED AGAINST OUR ORDERS — DECIDED BY ASH:** asked for *"the most efficient way to check if everything is correct in the file using our system"*; on the sheet's dates, *"ordered and delivered"*; on the block at its foot, *"the bottom part need to ignore"*; then *"merge deploy"* on §429, which this builds on. The Billing panel gains **Check their sheet**: upload the .xlsx gzgrocery emails and the panel lists every product line beside our orders for the same days, mismatches first (quantity, price, only on one side), with the GZ-… orders behind our figure and the day either side of the range. The file is read in memory and never kept; the check writes nothing and needs `guanyi:view`. Twenty Chinese strings composed by Claude, see the vocabulary's v1.313. No schema. See §430.
 
 2026-10-05 · v4.471 — **§429 · THE GZGROCERY BILL IS READ FROM THE ORDERS, AT THE ORDER'S PRICE, ON THE SHOP'S DAY — DECIDED BY ASH:** asked how to check the Excel sheet gzgrocery sends every few days against the system, then answered that the sheet's dates mean the days the goods were *"ordered and delivered"*. The GZ Grocery tab's Billing panel, the phone's copy of it, and the Statement CSV still read the stock ledger — the read §184/§186 took every other screen off — so a past bill moved whenever a gzgrocery price changed, and an order at 07:00 Guangzhou sat on the day before. They now read the gzgrocery order copies (`lib/gzgrocery-billing.js`, `billingRows`): the price fixed when each order was read, the shop's business day, cancelled orders out. The dormant drift log still counts for history. No new screen, no new word, no schema. This is the first of two changes; the sheet check builds on it. See §429.
 
@@ -28562,3 +28564,39 @@ missed.
    came first.
 
 Tests: `scripts/test_gzgrocery_billing_basis.js`.
+
+## §430 — GZGROCERY'S OWN STATEMENT SHEET CAN BE CHECKED AGAINST OUR ORDERS
+
+**Decided 2026-10-05 by Ash** (*"what will be the most efficient way to check
+if everything is correct in the file using our system"*; on the dates,
+*"ordered and delivered"*; on the bottom block, *"the bottom part need to
+ignore"*). Builds on §429.
+
+1. **What their sheet is.** One .xlsx every few days, several days of orders
+   combined: our whole catalogue, Qty filled in only for what they took, price
+   = website price × (1 − discount). No order numbers. Below it, a block of
+   what the shop owes gzgrocery (fruit, dry ice, delivery) and a net total.
+2. **Check their sheet** on the GZ Grocery tab's Billing panel
+   (`POST /api/retail-admin/guanyi/statement-check`). It reads the sheet
+   (`lib/gzgrocery-sheet.js`) and compares it per product code with
+   `billingRows` (§429) over the same days.
+3. **Only rows carrying one of our GV/GVF codes are read.** That is what
+   ignores the bottom block, and the packaging lines with no code. Codes are
+   matched the way the order reader matches them (`extractSku`), so their
+   hand-typed variants ("GVF-1-90", "GVF1-120", "GV3-252") all match.
+4. **Every line is answered; mismatches come first**: quantity differs, price
+   differs, both, only on their sheet, not on their sheet. Matches fold away.
+   Totals: theirs, ours, the difference.
+5. **Their days are "ordered and delivered"; ours are the order date.** The
+   two can differ at the edges, so a mismatched product also shows what we
+   have on the day before and the day after the range, with order numbers.
+6. **The dates** are the panel's own range when set; otherwise they are read
+   from the file name ("GV9.27~9.30.xlsx"), put into the range fields, and the
+   panel redraws for those days. A name with no readable dates asks for them.
+7. **Nothing is stored.** The file is read in memory and discarded; the check
+   writes nothing. So it asks for `guanyi:view` (§399's read key), not the
+   `guanyi:sync` every other gzgrocery POST needs.
+8. **Not built:** the phone. The desktop is where the email's attachment is
+   opened; the phone's Billing panel (§399) is unchanged. Its own ask if wanted.
+
+Tests: `scripts/test_gzgrocery_statement_check.js`.

@@ -15638,6 +15638,11 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 /* An amber notice — the one shape the admin already uses for this (.onw-note
    .amber on Orders): tinted ground, amber ink, no border shouting round it. */
 #tab-guanyi .gy-note { background: var(--td-amber-tint); color: var(--td-amber-ink); border-radius: 14px; padding: 16px 24px; font: 400 13px/1.6 var(--f-sans); margin: 0 0 24px; }
+/* §430 — the statement check. A card like the table's; the reason a line
+   disagrees sits under its name in the amber the page's own warning uses. */
+#tab-guanyi .gy-sheet { margin: 0 0 24px; }
+#tab-guanyi .gy-sheet.is-off { box-shadow: inset 4px 0 0 var(--td-amber-ink); }
+#tab-guanyi .gy-sheet-why { color: var(--td-amber-ink); font: 500 13px/1.4 var(--f-sans); margin-top: 2px; }
 
 /* A fold. Its summary is a 13px secondary line, like every other one here. */
 #tab-guanyi .gy-fold { margin: 0 0 32px; }
