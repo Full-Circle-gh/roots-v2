@@ -126,6 +126,8 @@ let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const _kprint = require('../lib/kitchen-print');  // the kitchen queue's own slip — same rail, its own SN
+const _kmorning = require('../lib/kitchen-morning-request'); // §101 — the morning hour the kitchen slip prints at
+const _kprep = require('../lib/kitchen-prep-preview');       // §432 — the evening to-make message to the kitchen's WeCom group
 const _tprint = require('../lib/transfer-print'); // the supplier's stock-request slip — same rail, the shops' own map
 const _printers = require('../lib/printers');  // which BRAND of cloud printer a row points at (§171)
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
@@ -430,7 +432,9 @@ const MEDIA_INLINE_MIME = new Set([
 // who opens /api/retail/config, that the store seeds its own reviews.
 // 'reviews.reward' is deliberately NOT private — it is an offer to the
 // customer, and the mini app reads the amount straight from here.
-const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup'];
+// `kitchen.` — §432: the kitchen group's WeCom webhook is a licence to post
+// into that group, and the public config is served to anyone who asks.
+const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup', 'kitchen.'];
 
 const businessDate = require('../lib/business-date');
 // Money, exact to the cent (audit I-02). `lifetime_spend = lifetime_spend + ?`
@@ -32582,6 +32586,67 @@ router.post('/api/retail-admin/wecom/test', requireRetailAdmin, express.json(), 
   if (!url) return res.json({ success: false, error: 'no_valid_webhook' });
   const r = await postWecomMarkdown(url, content);
   res.json({ success: r.ok, channel: 'webhook', error: r.ok ? undefined : r.msg });
+});
+
+/* §432 — THE EVENING TO-MAKE MESSAGE: its group, its time, and a test.
+   Its own endpoint rather than PUT /config, because the webhook lives under
+   the private `kitchen.` prefix (PRIVATE_CONFIG_PREFIXES), which loadConfig()
+   never returns — the screen could not read back what it saved. The sweeper
+   that sends it is started just below these three routes. */
+router.get('/api/retail-admin/kitchen-prep-message', requireRetailAdmin, (req, res) => {
+  const s = _kprep.loadSettings(tdb());
+  const morningHour = _kmorning.configuredHour(tdb());
+  res.json({ success: true, data: { ...s, default_time: _kprep.DEFAULT_TIME, morning_hour: morningHour } });
+});
+
+router.put('/api/retail-admin/kitchen-prep-message', requireRetailAdmin, express.json(), async (req, res) => {
+  const b = req.body || {};
+  const rawHook = String(b.webhook == null ? '' : b.webhook).trim();
+  const rawTime = String(b.time == null ? '' : b.time).trim();
+  // Refused, never coerced — the same rule as every hour on the Fresh batches
+  // card: an operator who typed a wrong URL is told, not silently switched off.
+  if (rawHook && !_kprep.validWebhook(rawHook)) return res.status(400).json({ error: 'invalid_webhook' });
+  if (rawTime && _kprep.parseTime(rawTime) == null) return res.status(400).json({ error: 'invalid_time' });
+  await withTransaction(tdb(), (tx) => {
+    const upsert = tx.prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+    );
+    upsert.run(_kprep.KEY_WEBHOOK, JSON.stringify(rawHook), req.user.id);
+    // Blank is saved as blank — that is "off", and distinct from never set.
+    upsert.run(_kprep.KEY_TIME, JSON.stringify(rawTime), req.user.id);
+  });
+  res.json({ success: true });
+});
+
+router.post('/api/retail-admin/kitchen-prep-message/test', requireRetailAdmin, express.json(), async (req, res) => {
+  // The URL in the box, so it can be tried before Save; else the saved one.
+  const url = _kprep.validWebhook(req.body?.webhook) || _kprep.validWebhook(_kprep.loadSettings(tdb()).webhook);
+  if (!url) return res.json({ success: false, error: 'no_valid_webhook' });
+  const content = [
+    '**🌿 测试 · Test message**',
+    '> 收到本条说明晚间待制作消息已接通 ✅',
+    '> Receiving this means the evening to-make message is connected ✅',
+  ].join('\n');
+  const r = await postWecomMarkdown(url, content);
+  res.json({ success: r.ok, error: r.ok ? undefined : r.msg });
+});
+
+// §432 — the sender. postWecomMarkdown is injected rather than copied, and
+// every send is logged where the other WeCom sends are looked for.
+_kprep.startPrepMessageSweeper({
+  post: postWecomMarkdown,
+  onSent: (r) => {
+    try {
+      require('../lib/notify-log').logNotification({
+        channel: 'wecom', kind: 'kitchen_prep_' + r.kind,
+        subject: `To make — ${r.date} (${r.lines.length})`,
+        ok: r.ok, error: r.ok ? null : r.error,
+      });
+    } catch (e) { /* the log must never be able to fail a send */ }
+  },
 });
 
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {

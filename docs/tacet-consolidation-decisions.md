@@ -23,6 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 2026-10-05 · v4.475 — **§433 · CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, SAYS IT WHEN CHECKOUT OPENS, AND "PICK" REPLACES THE OLD LINE — DECIDED BY ASH:** a customer met "Please choose: Whole-Wheat Pita (Frozen)" at Place Order and the popup named the product they had already chosen, not the question; Ash: *"yers"* to fixing it. The refusal now carries the question (`question_en`/`question_cn`), the quote reports the same refusal as `needs_choice` so the mini app offers the picker when checkout opens, and "Pick" hands the product page the cart line to replace, so the re-pick does not sit beside the unanswered line and get refused again. No new word: the popup uses the product sheet's live 请选择 / Please choose. Mini app needs an upload. Number §432 was skipped: a parallel branch (kitchen WeCom group) had claimed it. See §433.
+
+2026-10-05 · v4.474 — **§432 · THE EVENING BEFORE, THE KITCHEN'S WECOM GROUP IS TOLD WHAT TO MAKE — DECIDED BY ASH:** *"i need also to have a bot message in a group a day before 8:30pm with the fresh meals need to prepare the next day"*; on which group, *"wecom group but not the new orders group"*; on orders after 20:30, *"you can just push another message with the bot in the group"*; the preview line *"ok"*; on a night with nothing to make, *"stay quiet"*. At 20:30 (a setting) a WeCom group-bot posts the next morning's to-make list: the same lines §101's 06:00 slip is raised from, for the same date, marked as a preview. If the list changes before the slip prints, an update follows (the new totals and the change), no sooner than 30 minutes after the last message. Nothing to make sends nothing. Its own webhook on Settings → Push, stored privately (`kitchen.` prefix). New table `kitchen_prep_messages`. Ten Chinese strings composed by Claude, see the vocabulary's v1.314. See §432.
+
 2026-10-05 · v4.473 — **§431 · A CHOICE SHOWS THE PICTURE OF THE PRODUCT IT IS LINKED TO — DECIDED BY ASH:** *"i want the customer to see a picture of each item when he make the choice"*, then *"go ahead"* on the plan: no upload, the linked product's photo. On the mini app's product page and "Forgot something?" page, the web shop and the QR menu, a choice linked to a product with a photo now shows that photo small and square beside its name. A choice with no link, or a linked product with no photo, shows none; once one choice in a group has a picture, the others keep an empty frame so the names line up. Served by choice id (`lib/choice-photo.js`), gated on the parent product, so an unpublished add-on still shows. No schema, no new word. Staff screens unchanged. See §431.
 
 2026-10-05 · v4.472 — **§430 · GZGROCERY'S OWN STATEMENT SHEET CAN BE CHECKED AGAINST OUR ORDERS — DECIDED BY ASH:** asked for *"the most efficient way to check if everything is correct in the file using our system"*; on the sheet's dates, *"ordered and delivered"*; on the block at its foot, *"the bottom part need to ignore"*; then *"merge deploy"* on §429, which this builds on. The Billing panel gains **Check their sheet**: upload the .xlsx gzgrocery emails and the panel lists every product line beside our orders for the same days, mismatches first (quantity, price, only on one side), with the GZ-… orders behind our figure and the day either side of the range. The file is read in memory and never kept; the check writes nothing and needs `guanyi:view`. Twenty Chinese strings composed by Claude, see the vocabulary's v1.313. No schema. See §430.
@@ -28644,6 +28647,57 @@ item when he make the choice"*; then *"go ahead"* on step 1 of the plan below).
 
 Tests: `scripts/test_option_choice_photo.js`.
 
+## §432 — THE EVENING BEFORE, THE KITCHEN'S WECOM GROUP IS TOLD WHAT TO MAKE
+
+**Decided 2026-10-05 by Ash** (*"i need also to have a bot message in a group a
+day before 8:30pm with the fresh meals need to prepare the next day"*; *"wecom
+group but not the new orders group ill have a differnet group for that"*; *"if
+after 8:30pm there are more orders cominig in you can just push another message
+with the bot in the group"*; the preview line, *"ok"*; nothing to make, *"stay
+quiet"*). Builds on §101.
+
+1. **The list is the slip's list.** The message's lines come from
+   `owedLines` in `lib/kitchen-morning-request.js`, the function §101's
+   morning request is raised from, called with the date that request will be
+   raised for. The evening message and the 06:00 slip can therefore differ
+   only in WHEN they looked, never in what counts. No cadence, for §101's
+   reason.
+2. **When.** From the send time (`kitchen.prep_time`, "HH:MM", 12:00–23:59;
+   never saved means 20:30, blank means off) until the morning hour the slip
+   prints at. The message names a date, not "tomorrow": before midnight it is
+   tomorrow's, after midnight today's — always the morning the next slip
+   prints.
+3. **Preview, then updates only on change.** The first message is the
+   preview; it says the final list prints at the morning hour. After it the
+   list is re-read every minute and an update is sent only when it differs
+   from the last message that landed, showing every line with its change
+   (+3, or a line gone shown at × 0). **No sooner than 30 minutes** after the
+   previous message: a run of orders becomes one update, not a ping per
+   order in a group at night. A failed send is retried after 10 minutes.
+4. **Nothing to make sends nothing**, per Ash. The one exception: a list that
+   empties after a preview went out says so, because silence would leave the
+   kitchen making the earlier list.
+5. **No morning request, no message.** With `fresh.morningRequestHour` blank
+   there is no slip to preview and the message's own text would be false.
+   The settings card says so in red.
+6. **Where.** Its own WeCom group-bot webhook, `kitchen.prep_webhook`, not
+   the new-order alert's. `kitchen.` is added to `PRIVATE_CONFIG_PREFIXES` so
+   the public `/api/retail/config` never serves it: a webhook key is a
+   licence to post into that group. Saved, read and tested through its own
+   endpoints (`/api/retail-admin/kitchen-prep-message`, `…/test`), gated on
+   Settings → Push's keys like the WeCom test beside it. Same host allowlist
+   (`qyapi.weixin.qq.com`, https). The group-bot path works only in mainland
+   企业微信 internal groups, as the new-order card already says.
+7. **Sent once, across restarts.** Each send is a `kitchen_prep_messages`
+   row, claimed before the send and closed with its outcome — the database
+   guard §101 uses, for §101's reason. Every send is also logged to
+   `notification_log` (kind `kitchen_prep_preview` / `kitchen_prep_update`).
+8. **Both languages on every line**, as every WeCom card is: a group is a
+   room, not a person with a language setting.
+9. **Not built:** the phone. Pasting a webhook is a one-time desktop job;
+   the phone's Push panel is unchanged. Its own ask if wanted.
+
+Tests: `scripts/test_kitchen_prep_preview.js`.
 
 ## §433 — CHECKOUT SAYS WHICH QUESTION IS UNANSWERED, AND "PICK" REPLACES THE LINE
 

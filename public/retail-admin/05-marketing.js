@@ -1770,6 +1770,7 @@ async function loadConfig() {
     $('#cfg-system_alerts-enabled').checked = !!c.system_alerts?.enabled;
     $('#cfg-system_alerts-wecom_webhook').value = c.system_alerts?.wecom_webhook || '';
     loadWecomApp();
+    loadKitchenPrep();
     loadAliyunSms();
     // Customer service
     const cs = c.customer_service || {};
@@ -1879,6 +1880,54 @@ async function testWecomWebhook() {
   } catch (e) {
     status.textContent = '⚠ ' + (e.code === 'no_valid_webhook'
       ? 'Set up the app above, or paste a qyapi.weixin.qq.com URL · 请先配置上方 App 或填入正确地址'
+      : (e.message || 'failed'));
+  }
+}
+
+// ── §432 The evening to-make message (the kitchen's own WeCom group) ───────
+// Its own endpoint, not the main Save: the webhook is stored under a private
+// prefix that /config never returns. A time never saved paints the server's
+// default (20:30); a saved blank stays blank, which is off.
+async function loadKitchenPrep() {
+  const hook = $('#kprep-webhook'), time = $('#kprep-time'), off = $('#kprep-morning-off');
+  if (!hook || !time) return;
+  try {
+    const { data } = await api('/api/retail-admin/kitchen-prep-message');
+    hook.value = data?.webhook || '';
+    time.value = data?.time || '';
+    if (off) off.style.display = data?.morning_hour == null ? '' : 'none';
+  } catch (e) { console.warn('[kitchen prep] load failed', e.message); }
+}
+
+async function saveKitchenPrep() {
+  const status = $('#kprep-status');
+  status.textContent = cuT('Saving…', '保存中…');
+  try {
+    await api('/api/retail-admin/kitchen-prep-message', { method: 'PUT', body: {
+      webhook: $('#kprep-webhook').value.trim(),
+      time: $('#kprep-time').value.trim(),
+    } });
+    status.textContent = '✅ ' + cuT('Saved', '已保存');
+    loadKitchenPrep();
+  } catch (e) {
+    status.textContent = '⚠ ' + (e.code === 'invalid_webhook'
+      ? cuT('Only qyapi.weixin.qq.com URLs are accepted', '仅接受 qyapi.weixin.qq.com 地址')
+      : e.code === 'invalid_time'
+        ? cuT('Enter a time between 12:00 and 23:59', '请输入 12:00–23:59 之间的时间')
+        : (e.message || 'save failed'));
+  }
+}
+
+// Tries the URL in the box, so it can be tested before Save.
+async function testKitchenPrep() {
+  const status = $('#kprep-status');
+  status.textContent = cuT('Sending…', '发送中…');
+  try {
+    await api('/api/retail-admin/kitchen-prep-message/test', { method: 'POST', body: { webhook: $('#kprep-webhook').value.trim() } });
+    status.textContent = '✅ ' + cuT('Sent — check your WeCom', '已发送,请查看企业微信');
+  } catch (e) {
+    status.textContent = '⚠ ' + (e.code === 'no_valid_webhook'
+      ? cuT('Only qyapi.weixin.qq.com URLs are accepted', '仅接受 qyapi.weixin.qq.com 地址')
       : (e.message || 'failed'));
   }
 }
