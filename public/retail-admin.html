@@ -5678,6 +5678,17 @@
             <div class="muted" style="font-size: 11px; margin-bottom: 6px;">Matching customers — click to grant. · 匹配的顾客 — 点击发放。</div>
             <div id="grant-results" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-md);"></div>
           </div>
+          <!-- §428 — a whole list at once: the hotel's staff list, pasted. One
+               person per line, a name and a phone in either order. Lines with
+               no phone are handed back in the box, not guessed at. -->
+          <div class="field" style="margin-top: 18px;">
+            <label for="grant-list" class="stacked">Or paste a list — one person per line, name and phone · 或粘贴名单 — 每行一人,姓名和电话</label>
+            <textarea id="grant-list" rows="5" placeholder="Li Wei 13800138000" style="width: 100%; font: inherit; font-size: 13px;"></textarea>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px;">
+              <div id="grant-list-out" class="muted" style="font-size: 11px; min-width: 0;" data-no-i18n></div>
+              <button class="btn btn-primary" onclick="grantToList()">Give to everyone on the list · 发放给名单上的所有人</button>
+            </div>
+          </div>
           <div style="margin-top: 18px;">
             <div class="muted" style="font-size: 11px; margin-bottom: 6px;">Already granted · 已发放</div>
             <div id="grant-existing" style="max-height: 180px; overflow-y: auto;"></div>

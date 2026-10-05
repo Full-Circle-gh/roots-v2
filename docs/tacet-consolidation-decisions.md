@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.468
+# Tacet shared-core consolidation — decisions record, v4.469
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.469 — **§428 · THE TILL CAN GIVE A LOCATION'S OWN VOUCHER, ATTACH A CUSTOMER TO A QR ORDER, AND ADD A CUSTOMER; THE OFFICE CAN GIVE A VOUCHER TO A PASTED LIST — DECIDED BY ASH:** *"al this build"*, on three proposals made after §426 went live: a new Ramada employee's first QR order found no discount, because nobody had given them the voucher yet, and nothing at the counter could fix that order. The till now attaches a customer to a recalled QR order (the voucher applies there and then), creates a customer by name and phone, and gives a voucher **limited to that till's own location** — never any other — recording which operator gave it. The office's *Give to a customer* takes a pasted list of names and phones, and stops failing for backend operators (a foreign key to kitchen users). See §428.
 
 2026-10-05 · v4.468 — **§427 · A PARCEL STILL RUNNING LATE CAN BE MARKED "CUSTOMER CONTACTED" — DECIDED BY ASH:** *"there should be a button say i contact cutsomer . so staff will know its been done"*, then *"go ahead build as recommend"*. **AMENDS §285 POINT 3** ("there is no button"): with no way to say "done", two people ring the same customer or nobody does. *I called the customer* on the parcel banner, desktop and phone, stamps every running-late parcel on the order (`retail_shipments.running_late_contacted_at` / `_by`). That takes the order off *Delivery needs a call* for 48 hours; **the warning stays** — the banner and the list badge keep counting the days and say *customer contacted* instead of *contact customer*. If the parcel is still on the road 48 hours after the call it asks again, and shows who rang last time. Undo beside it. Nothing about the late rule, the §98 case or the customer's messages changes. No new Chinese word; one badge arrangement composed by Claude, see the vocabulary's v1.311.
 
@@ -28456,3 +28458,74 @@ recommend"*). Amends §285 point 3.
    purpose so the tap stays one tap; its own ask if wanted.
 
 Tests: `scripts/test_running_late_alert.js`.
+
+
+## §428 — THE TILL CAN GIVE A LOCATION'S OWN VOUCHER, ATTACH A CUSTOMER TO A QR ORDER, AND ADD A CUSTOMER
+
+**Decided 2026-10-05 by Ash**, from the phone: *"al this build"*, on three
+proposals made the same night §426 went live. The case that raised them: a new
+Ramada employee scans the QR menu, types their phone, and sees no discount —
+correctly, because nobody has given them the voucher yet — and then nothing at
+the counter can put the discount on the order they have just placed. The
+cashier could only cancel it and ring it up again.
+
+### What is decided
+
+1. **Attach a customer to a recalled QR order.** The till's customer control,
+   withheld on a recall since §44 (*"the settle path does not write
+   customer_id"*), is offered there now, and the server writes it:
+   `POST /api/retail-admin/orders/:id/counter-customer`. Pending QR orders
+   only, the same scope as §426's Remove discount. Attaching applies the best
+   voucher that customer holds at that location, restating the total, the tax
+   and the pending payment, and counts its use. **Attached by the cashier, it is
+   not a typed phone** (`voucher_typed_phone = 0`); attaching the same person a
+   typed number already found is the cashier's check, and clears the flag. An
+   order already linked to someone else is refused — Remove discount unlinks it
+   first, which is the deliberate step.
+2. **Add a customer at the till.** When a search finds nobody, the picker offers
+   name and phone and creates the customer through the same
+   `createOrReuseManualCustomer` every other staff path uses — a phone already
+   on file is reused, never duplicated.
+3. **Give a voucher at the till, under two guards Ash accepted when it was
+   proposed.** Next to the attached customer, the till offers each voucher
+   **limited to that till's own location** that the customer does not yet hold.
+   - **Only that location's vouchers.** The server refuses any voucher whose
+     `store_id` is not the till's store, so an online coupon can never be handed
+     out from a counter, whatever is posted.
+   - **Who gave it is recorded.** `retail_customer_vouchers.granted_by_name`
+     carries the operator's name, written by every grant path from now on (the
+     till, the office's *Give to a customer*, the pasted list). The holder list
+     on the coupon shows *given by …*. Grants made before this show nothing:
+     the old `granted_by` id has no realm and cannot be named reliably.
+   The risk is named rather than hidden: any cashier can now give the location's
+   discount, including to friends. The record is the answer, and the coupon's
+   holder list is where the owner reads it.
+4. **The office gives a voucher to a pasted list.** *Give to a customer* on the
+   desktop gains a box: one person per line, a name and a phone in either
+   order. Each line is matched to the customer with that phone, or creates one
+   (same helper as 2), and is given the voucher. Lines with no usable phone are
+   reported back, not guessed at. This is the clean route for Ramada: load the
+   hotel's staff list once, and most employees get the discount on their first
+   scan.
+
+5. **A defect found on the way, fixed because the record above depends on it.**
+   `retail_customer_vouchers.granted_by` has a foreign key to the KITCHEN
+   `users` table, and every grant wrote `req.user.id` into it. For a Mini App
+   Backend operator that is a `tenant_users` id, so *Give to a customer* answered
+   500 for any operator whose id is not also a kitchen user's — working only by
+   coincidence of numbers. Proven on main before the fix (a probe granting as
+   operator 7801: 500). Voucher create already stepped around the same trap
+   (`createdBy`, null for operators); every grant path now does the same, and
+   the person is named in `granted_by_name`.
+
+### What it does not do
+
+- It does not let the till give an online coupon, change a coupon, or take one
+  back. Taking back stays in the office.
+- It does not put the paste box on the phone app. The list will come as a file
+  or a chat message, which is pasted on a computer; the phone keeps *Give to a
+  customer* one at a time.
+- It does not change what a typed phone on the QR menu does (§426 rule 7).
+
+Tests: `scripts/test_location_vouchers.js`, extended.
+
