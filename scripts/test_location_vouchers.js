@@ -363,6 +363,8 @@ section('1 · where a voucher applies');
        '§428 — attaching a customer on a recalled order goes to the order, not to a new sale');
     ok(/if \(act === 'new'\)\s+return createCustomer\(\);/.test(tillSrc) && /id="cnew-phone"/.test(tillSrc),
        '§428 — a search that finds nobody offers to add them');
+    ok(/function heldLabels\(c\)/.test(tillSrc) && /heldLabels\(S\.customer\)/.test(tillSrc) && /heldLabels\(rc\)/.test(tillSrc),
+       'a voucher the customer already holds here is named under them, on a sale and on a recalled order');
   } catch (e) {
     fail++; console.log('  ✗ the suite threw: ' + (e && e.stack || e));
   } finally {

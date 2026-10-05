@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.469
+# Tacet shared-core consolidation — decisions record, v4.470
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-05 · v4.470 — **§428 AMENDED: THE TILL NAMES A VOUCHER THE ATTACHED CUSTOMER ALREADY HOLDS — ASH:** *"add the label"*, after reporting from the counter that the *Give Ramada Staff* button was gone once given, and nothing said the customer had it until a product was on the bill. No new section. Under the attached customer's name — on a sale and on a recalled QR order — the till now shows a tick and the voucher's own title (**✓ Ramada Staff**) for each voucher that still applies at that location: the same list the discount is worked out from, so one used up or expired shows nothing. No new word; the merchant's title and a tick.
 
 2026-10-05 · v4.469 — **§428 · THE TILL CAN GIVE A LOCATION'S OWN VOUCHER, ATTACH A CUSTOMER TO A QR ORDER, AND ADD A CUSTOMER; THE OFFICE CAN GIVE A VOUCHER TO A PASTED LIST — DECIDED BY ASH:** *"al this build"*, on three proposals made after §426 went live: a new Ramada employee's first QR order found no discount, because nobody had given them the voucher yet, and nothing at the counter could fix that order. The till now attaches a customer to a recalled QR order (the voucher applies there and then), creates a customer by name and phone, and gives a voucher **limited to that till's own location** — never any other — recording which operator gave it. The office's *Give to a customer* takes a pasted list of names and phones, and stops failing for backend operators (a foreign key to kitchen users). See §428.
 
