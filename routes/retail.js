@@ -436,6 +436,11 @@ const MEDIA_INLINE_MIME = new Set([
 // into that group, and the public config is served to anyone who asks.
 const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup', 'kitchen.'];
 
+// §436 — staff group-bot URLs (WeCom webhooks, secret in `key=`). The server
+// and the admin config still read them, so they are not private; they are
+// removed from GET /api/retail/config only. The list and why: that file.
+const { omitPublicConfigKeys } = require('../lib/public-config-omit');
+
 const businessDate = require('../lib/business-date');
 // Money, exact to the cent (audit I-02). `lifetime_spend = lifetime_spend + ?`
 // is addition performed by SQLite over a floating-point column: 0.01 added a
@@ -942,6 +947,7 @@ router.get('/api/retail/config', (req, res) => {
   try {
     const cfg = loadConfig();
     delete cfg.cms;  // internal namespace — never expose drafts to the mini app
+    omitPublicConfigKeys(cfg);  // §436 — staff group-bot URLs carry their secret
     // ── CMS draft preview ─────────────────────────────────────────────
     // When a valid preview_token is in the query (minted from /cms via
     // POST /api/retail-admin/cms/preview-token), overlay draft layouts on

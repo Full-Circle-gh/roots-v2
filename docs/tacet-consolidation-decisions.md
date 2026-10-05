@@ -28842,3 +28842,49 @@ unblocks customers on the current app with no upload.
 
 Tests: `scripts/test_bulk_add_pick.js` (section D fails if any page adds blank
 lines without a `has_options` check).
+
+## §436 — THE PUBLIC CONFIG NO LONGER SERVES THE STAFF GROUP-BOT URLS
+
+**Decided 2026-10-05 by Ash** (the brief: keep these keys out of the public
+response without breaking the admin screens).
+
+**What was wrong.** `GET /api/retail/config` needs no sign-in, because the mini
+app and the web shop read it. It served `notifications.wecom_order_webhook`
+(new-order alerts) and `system_alerts.wecom_webhook` (system alerts) to
+anyone. A WeCom group-bot URL holds its secret in `key=`, so anyone with it
+can post into that staff group, fake "new order" cards included. Checked live
+on 2026-10-05: both URLs were in the public response. The new-order bot's key
+was also committed in `public/shop/_gallery.fixtures.js`, a capture of the
+public config. That file is not served on any live host (checked), but it is
+in git history.
+
+**The rule.**
+1. Keys a server job still reads are not made private. `loadConfig()` is
+   where the bots get their URL from, and it is what the admin
+   `GET /api/retail-admin/config` returns. A private prefix would blind both.
+   These keys are removed from the public response only, by
+   `lib/public-config-omit.js`.
+2. The list: `notifications.wecom_order_webhook`,
+   `system_alerts.wecom_webhook`, `gzgrocery_orders.wecom_webhook`. The last
+   one is unset on Roots today but would leak the same way the day it is set.
+   `kitchen.prep_webhook` (§432) is already private under `kitchen.`.
+3. Any new config key with "webhook" in its name is either under a private
+   prefix or added to that list. `scripts/test_public_config_secrets.js`
+   fails otherwise.
+4. Both settings screens already load from the admin endpoint (desktop
+   `05-marketing.js` `loadConfig()`, phone `m.html` `api('/config')`), so
+   nothing changes for them.
+5. The gallery fixture is scrubbed, and `scripts/build_gallery_fixtures.js`
+   applies the same list, so a later rebuild from an old capture stays clean.
+
+**Not done here, Ash's hands.** Both keys have been public. Removing them
+from the response does not un-leak them. Rotate both bots in WeCom (remove
+and re-add the group robot, or reset its URL), then paste the new URLs into
+Settings → Push notifications.
+
+Every other secret-like key in `storefront_config` on the live database sits
+under `integrations.` and was already filtered. Tenant credentials live in
+`tenant_secrets`, not here.
+
+Tests: `scripts/test_public_config_secrets.js`. It fails five checks with the
+route call removed.

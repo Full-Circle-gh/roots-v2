@@ -13,8 +13,12 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const data = rel => JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8')).data;
 
+// §436 — a capture taken before the public config stopped serving the staff
+// group-bot URLs still holds them; this file is committed, so drop them here.
+const { omitPublicConfigKeys } = require('../lib/public-config-omit');
+
 const bundle = {
-  config:   data('_wsf_fixtures/config.json'),
+  config:   omitPublicConfigKeys(data('_wsf_fixtures/config.json')),
   products: data('_wsf_fixtures/products.json'),
   cats:     data('_wsf_fixtures/cats.json'),
   flash:    data('_wsf_fixtures/flash.json'),
