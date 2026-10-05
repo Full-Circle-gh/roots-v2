@@ -1056,6 +1056,10 @@
        taps. The ones that are on stay live — untick is how you change your mind,
        and a customer stuck at the cap with nothing clickable is a dead sheet. */
     .op-choice[disabled]{opacity:.38;cursor:default;}
+    /* A stock-backed extra whose shelf is empty (addon_available:false) —
+       the mini app's op-extra-oos pill, in the size picker's words. */
+    .op-oos{flex:none;font-family:var(--bf-toni);font-size:11px;letter-spacing:.06em;color:var(--olive);
+      background:rgba(0,0,0,.08);padding:1px 8px;border-radius:999px;}
     .op-choice.on{background:var(--ink);}
     .op-choice.on .op-cl,.op-choice.on .op-cd{color:var(--oat);}
     .op-extra{justify-content:flex-start;}
@@ -6097,8 +6101,12 @@ async function renderProduct(id){
     const single=popts.filter(o=>o.type!=='multi');
     const extra =popts.filter(o=>o.type==='multi');
     const sel={};   // option.id -> [chosen choice id, …]
-    // radios start with their first choice picked (mini-app parity)
-    single.forEach(o=>{ if((o.choices||[]).length) sel[o.id]=[o.choices[0].id]; });
+    // A stock-backed extra whose shelf is empty — the mini app's own expression
+    // (product.js `sold_out`). The server refuses it at checkout
+    // (resolveAnswers), so the sheet must never let it be picked.
+    const choiceOut=c=>!!(c&&c.stock_product_id)&&c.addon_available===false;
+    // radios start with their first pickable choice (mini-app parity)
+    single.forEach(o=>{ const c=(o.choices||[]).find(x=>!choiceOut(x)); if(c) sel[o.id]=[c.id]; });
     extra.forEach(o=>{ sel[o.id]=sel[o.id]||[]; });
 
     const selIds=o=>sel[o.id]||[];
@@ -6121,7 +6129,7 @@ async function renderProduct(id){
     const findChoice=(o,cid)=>(o.choices||[]).find(c=>c.id===cid);
     function unit(){
       let d=0;
-      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) d+=Number(c.price_delta)||0;}));
+      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c&&!choiceOut(c)) d+=Number(c.price_delta)||0;}));
       return base+d;
     }
     const priceLabel=()=>(state.lang==='cn'?'加入购物车 · ':'Add to basket · ')+money(unit()*qty);
@@ -6147,7 +6155,7 @@ async function renderProduct(id){
       // Keep the group's QUESTION beside each picked answer so the cart + checkout
       // receipt read "Heat up?: Yes", not a bare, ambiguous "Yes". Spread onto the
       // choice so `c.id` below still resolves.
-      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) chosen.push({...c,question:pick(o.question_en,o.question_cn)});}));
+      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c&&!choiceOut(c)) chosen.push({...c,question:pick(o.question_en,o.question_cn)});}));
       cartAdd({product_id:p.id,qty,choices:chosen.map(c=>Number(c.id)),
         name:pick(p.name_en,p.name_cn),price:unit(),image:thumb(p),
         optLabel:chosen.map(c=>{const v=pick(c.label_en,c.label_cn); if(!v)return''; return c.question?c.question+': '+v:v;}).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier,
@@ -6168,14 +6176,14 @@ async function renderProduct(id){
         <div class="op-q">${esc(pick(g.question_en,g.question_cn))}${g.is_required?' <span class="op-req">*</span>':''}</div>
         ${gh?`<div class="op-lim">${esc(gh)}</div>`:''}
         <div class="op-choices">${(g.choices||[]).map(c=>{
-          const on=selIds(g).indexOf(c.id)>=0, d=Number(c.price_delta)||0;
+          const on=selIds(g).indexOf(c.id)>=0, d=Number(c.price_delta)||0, out=choiceOut(c);
           // The linked product's photo beside the answer (lib/choice-photo.js);
           // the others in a group that has any keep an empty frame so names line up.
           const img=gImg?(c.image_url?`<img class="op-ci" src="${esc(c.image_url)}&w=160" alt="" loading="lazy" decoding="async">`:'<span class="op-ci"></span>'):'';
-          return `<button type="button" class="op-choice${o.multi?' op-extra':''}${on?' on':''}" data-oid="${g.id}" data-cid="${c.id}"${(!on&&atCap())?' disabled':''}>
+          return `<button type="button" class="op-choice${o.multi?' op-extra':''}${on?' on':''}${out?' sold-out':''}" data-oid="${g.id}" data-cid="${c.id}"${out?' data-oos="1"':''}${(out||(!on&&atCap()))?' disabled':''}>
             ${o.multi?'<span class="op-box">'+(on?'✓':'')+'</span>':''}
             ${img}<span class="op-cl">${esc(pick(c.label_en,c.label_cn))}</span>
-            ${d?`<span class="op-cd">+${money(d)}</span>`:''}</button>`;
+            ${out?`<span class="op-oos">${state.lang==='cn'?'售罄':'Sold out'}</span>`:d?`<span class="op-cd">+${money(d)}</span>`:''}</button>`;
         }).join('')}</div></div>`;}).join('');
       mask.innerHTML=`<div class="sl-vp"><div class="sl-vp-h"><div>
         <div class="sl-vp-t">${esc(o.title)}</div><div class="sl-vp-n">${esc(pick(p.name_en,p.name_cn))}</div>
@@ -6188,6 +6196,9 @@ async function renderProduct(id){
       mask.addEventListener('click',e=>{
         if(e.target===mask||e.target.closest('[data-x]')){ close(); return; }
         const ch=e.target.closest('.op-choice');
+        // A disabled row takes no tap. A browser usually drops the click itself;
+        // this is for the one that gets through, and for a sold-out row above all.
+        if(ch&&(ch.disabled||ch.dataset.oos)) return;
         if(ch){ const oid=ch.dataset.oid, cid=Number(ch.dataset.cid);
           if(o.multi){ const arr=sel[oid]||(sel[oid]=[]); const i=arr.indexOf(cid);
             const g=groups.find(x=>String(x.id)===String(oid)), max=limOf(g).max;
@@ -6197,9 +6208,10 @@ async function renderProduct(id){
             if(i>=0)arr.splice(i,1); else { if(max&&arr.length>=max) return; arr.push(cid); }
             ch.classList.toggle('on'); const bx=ch.querySelector('.op-box'); if(bx)bx.textContent=ch.classList.contains('on')?'✓':'';
             // Close or re-open the rest of THIS group as the count crosses the cap.
+            // Re-opening never revives a sold-out row.
             if(max){ const full=arr.length>=max;
               ch.closest('.op-group').querySelectorAll('.op-choice').forEach(b=>{
-                b.disabled=full&&!b.classList.contains('on'); }); }
+                b.disabled=!!b.dataset.oos||(full&&!b.classList.contains('on')); }); }
           } else { sel[oid]=[cid];
             ch.parentElement.querySelectorAll('.op-choice').forEach(x=>x.classList.toggle('on',x===ch)); }
           updFoot(); refreshBar(); return; }
