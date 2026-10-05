@@ -488,6 +488,16 @@ input.qsnum{width:100%;min-width:0;text-align:center;padding:0;font-size:30px;
   box-shadow:0 0 0 3px rgba(110,103,175,.18);
   font-variant-numeric:tabular-nums;}
 input.qsnum:focus{outline:none;border-color:var(--accent);}
+/* THE PRODUCT SHEET'S PER-STORE COUNT, TYPEABLE. Reported by Ash: "can't tap
+   on the number and change manually" — the count between − and + was a bare
+   <span>, so a shelf of 40 was forty taps. Same look as .qsnum (a raised field,
+   wide rather than square, so it never reads as a third key), but always an
+   <input> like the Price box above it: nothing to open first, and typing never
+   repaints, so the keyboard stays up. */
+input.stnum{flex:1;min-width:0;height:56px;margin:0 12px;border-radius:8px;padding:0;text-align:center;
+  background:var(--surface-raised);border:1.5px solid var(--edge);color:var(--text-primary);
+  font-family:inherit;font-size:26px;font-weight:500;font-variant-numeric:tabular-nums}
+input.stnum:focus{outline:none;background:var(--surface-card);border-color:var(--accent);box-shadow:0 0 0 3px rgba(110,103,175,.18)}
 .chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
   cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid var(--edge);
   background:var(--surface-card);color:var(--text-secondary)}
@@ -7277,8 +7287,16 @@ reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
    already open (both lists number from 0), and closing one closed the other. */
 reg('legalToggle', i=>{ state.legalOpen=state.legalOpen===i?null:i; render(); });
 reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
-reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
-reg('stepDec', k=>{ sheetStep[k]=Math.max(0,(sheetStep[k]||0)-1); render(); });
+/* A per-store count can now be TYPED (stockCard's box), so sheetStep may hold
+   the string the operator left in it. Stepping reads it as a whole number
+   first: `"5"+1` is "51", and a box left on something unreadable steps from 0
+   rather than from NaN. */
+function stepBase(v){ const n=Math.floor(Number(String(v==null?'':v).trim())); return Number.isFinite(n)&&n>0?n:0; }
+reg('stepInc', k=>{ sheetStep[k]=stepBase(sheetStep[k])+1; render(); });
+reg('stepDec', k=>{ sheetStep[k]=Math.max(0,stepBase(sheetStep[k])-1); render(); });
+/* Stored and nothing else, as priceTyped: a render would rebuild the box under
+   the caret and drop the keyboard. Save checks what is here. */
+reg('stockTyped', (k,v)=>{ if(String(k).indexOf('st_')===0) sheetStep[k]=String(v==null?'':v); });
 /* `noop` is gone. It was the mechanism by which this app shipped controls
    that did nothing: a chevron, a tap target, a call to APP.cmd('noop'), and
    an operator who assumed the screen behind it was still loading. Every
@@ -36926,6 +36944,12 @@ async function saveProductEdits(answers){
      the old figure back over it. */
   const box=document.getElementById('mPrice');
   if(box) sheetPrice[p._id]=box.value;
+  // The typed per-store counts, for the same reason. Only the size on screen
+  // has boxes; a sibling's typed counts are already in sheetStep.
+  for(const st of prodStoreRows(p._id)){
+    const k=stockKey(p._id,st.id), el=document.getElementById('m'+k);
+    if(el) sheetStep[k]=el.value;
+  }
   /* Save writes THE FAMILY, not the size in front of you. The sheet moves
      between sizes without writing anything, so by the time this runs the
      operator may have set a price on one size and a count on another, and a
@@ -36961,8 +36985,18 @@ async function saveProductEdits(answers){
     // product's sheet.
     const stock=[];
     for(const st of (m.supplier||m.bundle||!canStock?[]:prodStoreRows(m._id))){
-      const now=Number(sheetStep[stockKey(m._id,st.id)]);
-      if(!isNaN(now)&&now!==st.qty) stock.push([st,now]);
+      const raw=sheetStep[stockKey(m._id,st.id)];
+      if(raw==null) continue;
+      /* A TYPED COUNT THAT CANNOT BE READ IS NOT ZERO — the price's rule, for
+         the same reason. `Number('')` is 0, so a box emptied to retype and left
+         blank would have written an empty shelf. physical_qty is an INTEGER. */
+      const txt=String(raw).trim(), now=Number(txt);
+      if(txt===''||!Number.isInteger(now)||now<0){
+        if(m._id!==p._id){ state.productSku=m.sku; render(); loadProductStock(m._id); }
+        showToast(T('Enter a whole number for each store, 0 or more.','每家门店请输入 0 或以上的整数。'));
+        return;
+      }
+      if(now!==st.qty) stock.push([st,now]);
     }
     if(price!=null||stock.length) jobs.push({m,price,stock});
   }
@@ -40584,7 +40618,10 @@ function stockCard(p){
         <div style="font-size:15px">${name}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
           <button class="stepbtn" onclick="APP.cmd('stepDec','${key}')">${ic('minus',18,2.25)}</button>
-          <span class="num" style="font-size:26px;font-weight:500">${sheetStep[key]}</span>
+          <input id="m${key}" class="num stnum" inputmode="numeric" enterkeyhint="done" autocomplete="off"
+            value="${escAttr(sheetStep[key])}" aria-label="${escAttr(name)}"
+            onfocus="this.select()" oninput="APP.cmd('stockTyped','${key}',this.value)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
           <button class="stepbtn" onclick="APP.cmd('stepInc','${key}')">${ic('plus',18,2.25)}</button></div></div>`;
     }).join('')}</div>`;
 }
