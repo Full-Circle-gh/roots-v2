@@ -521,12 +521,20 @@
      ═══════════════════════════════════════════════════════════════════ */
   .tabs {
     display: flex; flex-direction: column; gap: 2px; align-items: stretch;
-    padding: 10px 10px 14px;
+    /* Bottom padding is 4px, not 14px: on a ~960px-tall window the full rail
+       (19 rows) overran by ~3px — all of it this padding — and drew a
+       full-height scrollbar to scroll nothing. */
+    padding: 10px 10px 4px;
     background: var(--bg-pane);
     border-right: 1px solid var(--line-soft);
     position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-w); z-index: 11;
     overflow-y: auto; overflow-x: hidden;
+    /* Where the rail genuinely overflows (short windows), its scrollbar stays
+       hidden until the pointer is on the rail or a key focuses into it — it
+       still scrolls by wheel/trackpad either way. */
+    scrollbar-width: thin; scrollbar-color: transparent transparent;
   }
+  .tabs:hover, .tabs:has(:focus-visible) { scrollbar-color: var(--line) transparent; }
   /* Rail brand head — RETIRED to a 56px spacer (2026-07-24). The brand (the
      wordmark, or a tenant's co-brand logo) now lives in the full-width topbar
      (.topbar .brand). This box is kept only so the rail's nav clears the fixed
