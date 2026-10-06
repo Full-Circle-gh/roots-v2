@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.483
+# Tacet shared-core consolidation — decisions record, v4.484
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-06 · v4.484 — **§432 rule 10 · THE EVENING "TO MAKE" MESSAGE CARRIES EACH PRODUCT'S SKU — ASKED BY ASH:** holding the 2026-10-07 preview in the kitchen group, *"should include sku"*. Each line now leads with the product's SKU in bold (`**SKU 9-531** 青酱卷 Pesto Wrap × 18`), the §434 rule carried from the slip to the message. A product with no SKU prints its name alone. No schema, no new word. See §432.
 
 2026-10-06 · v4.483 — **§439 ON THE WEB SHOP TOO — ASKED BY ASH:** *"do the web shop too"*. The phone-width web shop list draws the same berry dot on its + (`slPlusQty`, the web copy of `miniapp/utils/plus-qty.js`), repainted from `cartBadge()` on every cart change. The desktop grid has no + and is unchanged. No new word. See §439.
 
@@ -28719,6 +28721,13 @@ quiet"*). Builds on §101.
    room, not a person with a language setting.
 9. **Not built:** the phone. Pasting a webhook is a one-time desktop job;
    the phone's Push panel is unchanged. Its own ask if wanted.
+10. **Every line leads with its SKU** (added 2026-10-06, v4.484; Ash,
+   *"should include sku"* on the first live preview). Bold, before the
+   names, as the slip enlarges it (§434): the kitchen pulls by it. The SKU
+   is kept in the snapshot `lines_json` stores; a line with no SKU, or a
+   line read back from a row saved before this, prints its name alone.
+   "SKU" is the bare token the bilingual receipt already prints, so no
+   Chinese string.
 
 Tests: `scripts/test_kitchen_prep_preview.js`.
 

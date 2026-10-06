@@ -150,7 +150,7 @@ section('1 · the evening preview');
     assert.strictEqual(p.url, HOOK);
     assert.ok(p.content.includes(`**🍳 待制作 · To make — ${NEXT}**`), p.content);
     assert.ok(p.content.includes('> 预览,最终清单于 06:00 打印 · Preview — the final list prints at 06:00'));
-    assert.ok(p.content.includes('> 青酱卷 Pesto Wrap × 18'), p.content);
+    assert.ok(p.content.includes('> **SKU 9-531** 青酱卷 Pesto Wrap × 18'), p.content);
     const r = rows();
     assert.strictEqual(r.length, 1, 'the row is claimed before the send');
     assert.strictEqual(r[0].ok, null, 'in flight until the send answers');
@@ -172,6 +172,18 @@ section('1 · the evening preview');
   it('the same list, later, sends nothing', () => {
     assert.deepStrictEqual(plan(DAY, '21:30'), { skipped: 'unchanged' });
   });
+
+  it('every line leads with its SKU; one without a SKU prints the name alone (§434)', () => {
+    const c = prep.buildContent({
+      kind: 'preview', date: NEXT, morningHour: 6,
+      lines: prep.snapshot([
+        { sku: '9-531', product_name: 'Pesto Wrap', product_cn: '青酱卷', qty_requested: 2 },
+        { sku: null, product_name: 'Soup', product_cn: '汤', qty_requested: 1 },
+      ]),
+    });
+    assert.ok(c.includes('> **SKU 9-531** 青酱卷 Pesto Wrap × 2'), c);
+    assert.ok(c.includes('> 汤 Soup × 1'), c);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -189,7 +201,7 @@ section('2 · orders after the preview');
     const p = plan(DAY, '21:00');
     assert.strictEqual(p.kind, 'update');
     assert.ok(p.content.includes(`**🔄 待制作已更新 · To make, updated — ${NEXT}**`), p.content);
-    assert.ok(p.content.includes('> 青酱卷 Pesto Wrap × 21 <font color="warning">(+3)</font>'), p.content);
+    assert.ok(p.content.includes('> **SKU 9-531** 青酱卷 Pesto Wrap × 21 <font color="warning">(+3)</font>'), p.content);
     landed(p);
   });
 
@@ -198,8 +210,8 @@ section('2 · orders after the preview');
     const p = plan(NEXT, '01:00');
     assert.strictEqual(p.kind, 'update');
     assert.strictEqual(p.date, NEXT);
-    assert.ok(p.content.includes('> 牛肉饭 Beef Bowl × 4 <font color="warning">(+4)</font>'), p.content);
-    assert.ok(p.content.includes('> 青酱卷 Pesto Wrap × 21'), 'unchanged lines are still listed');
+    assert.ok(p.content.includes('> **SKU 9-532** 牛肉饭 Beef Bowl × 4 <font color="warning">(+4)</font>'), p.content);
+    assert.ok(p.content.includes('> **SKU 9-531** 青酱卷 Pesto Wrap × 21'), 'unchanged lines are still listed');
     assert.ok(!/Pesto Wrap × 21 <font/.test(p.content), 'and carry no change marker');
     landed(p);
   });
@@ -227,7 +239,7 @@ section('3 · nothing to make');
     const p = plan(DAY, '21:00');
     assert.strictEqual(p.kind, 'update');
     assert.ok(p.content.includes('> 目前无需制作 · Nothing to make now'), p.content);
-    assert.ok(p.content.includes('> 青酱卷 Pesto Wrap × 0 <font color="comment">(−5)</font>'), p.content);
+    assert.ok(p.content.includes('> **SKU 9-531** 青酱卷 Pesto Wrap × 0 <font color="comment">(−5)</font>'), p.content);
     landed(p);
   });
 
