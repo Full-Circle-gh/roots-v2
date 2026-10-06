@@ -89,7 +89,8 @@ function shipFixture() {
   db.exec(`CREATE TABLE retail_shipments (
              id INTEGER PRIMARY KEY, mode TEXT, dispatched_at TEXT,
              delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
-             tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT);
+             tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT,
+             tracking_no_contact_first_event TEXT);
            CREATE TABLE retail_delay_cases (
              id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, shipment_id INTEGER);`);
   return db;
