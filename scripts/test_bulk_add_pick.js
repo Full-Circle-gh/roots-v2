@@ -15,6 +15,9 @@
  *
  * NOW: those paths add what needs no answer and hand the rest to
  * utils/pick-queue, which opens each product page with its choice sheet up.
+ * The single quick adds use the queue too (a batch of one): their + used to
+ * open the product page bare, so the customer had to find "Add to basket"
+ * again before the extras sheet appeared.
  *
  * WHAT IS RUN FOR REAL: the two server answers the clients need and did not
  * have — `has_options` on a product page's "Buy together" items, and on each
@@ -156,6 +159,15 @@ const get = (url, auth) => fetch(`http://127.0.0.1:${PORT}${url}`, {
     it('home bundle PRODUCT with a question goes to its page', () => {
       assert.ok(/bp && bp\.has_options\) \{ pickQueue\.start\(/.test(src('pages/home/home.js')));
     });
+    // A single + opens the page with the sheet already up, not the bare page.
+    for (const [rel, label, re] of [
+      ['pages/shop/shop.js',           'shop grid +',  /if \(raw\.has_options\) \{\s*pickQueue\.start\(\[\{ id, qty: 1 \}\]\);/],
+      ['pages/favorites/favorites.js', 'one favourite +', /if \(p\.has_options\) \{\s*pickQueue\.start\(\[\{ id, qty: 1 \}\]\);/],
+    ]) {
+      it(`${label} (${rel}) opens the choice sheet, not the bare page`, () => {
+        assert.ok(re.test(src(rel)), `${label} opens the product page without its choice sheet`);
+      });
+    }
 
     console.log('\nC · the product page answers the queue');
 

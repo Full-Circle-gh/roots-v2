@@ -1338,10 +1338,12 @@ Page({
     }
     const raw = (this.data._raw || []).find(p => Number(p.id) === id);
     if (!raw) return;
-    // Has customer choices (e.g. a dressing) → can't quick-add; open the product
-    // page so the pick gets made (the PDP enforces required options).
+    // Has customer choices (a dressing, paid extras) → can't quick-add. Open
+    // the product page with its choice sheet already up (pick mode), so the +
+    // asks the question straight away and the page goes back to the shop after
+    // the add — the customer never has to find "Add to basket" a second time.
     if (raw.has_options) {
-      wx.navigateTo({ url: '/pages/product/product?id=' + id });
+      pickQueue.start([{ id, qty: 1 }]);
       return;
     }
     // Same-city shoppers never see the + on a sold-out reservable row (the card

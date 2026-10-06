@@ -10,8 +10,9 @@
 // already up (`pick=1`); after the add, the product page moves on to the next
 // one, and back to where the customer started after the last.
 //
-// The single-product quick adds (shop grid +, one favourite) already open the
-// product page for a product with options; this is the same rule for a batch.
+// The single-product quick adds (shop grid +, one favourite) use it too, with
+// a batch of one: the + opens the product page with the sheet already up,
+// rather than leaving the customer to tap "Add to basket" a second time.
 
 const queue = [];
 
