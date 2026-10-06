@@ -84,7 +84,7 @@ function fixture() {
   const cols = `tracking_status TEXT, tracking_scenario TEXT, tracking_events_json TEXT,
       tracking_no_contact_event TEXT, tracking_no_contact_seen_at TEXT,
       tracking_no_contact_cleared TEXT, tracking_no_contact_cleared_by TEXT,
-      tracking_no_contact_cleared_at TEXT`;
+      tracking_no_contact_cleared_at TEXT, tracking_no_contact_first_event TEXT`;
   db.exec(`
     CREATE TABLE retail_orders (id INTEGER PRIMARY KEY, status TEXT, ${cols});
     CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY, order_id INTEGER,

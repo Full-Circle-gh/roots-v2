@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.478
+# Tacet shared-core consolidation — decisions record, v4.479
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-06 · v4.479 — **§437 · A PARCEL IS LATE ON THE SHOP'S CALENDAR, AND NOT AT ALL IF THE COURIER TRIED ON TIME — DECIDED BY ASH:** *"the air shipment is not delayed"* against TC000919, then *"fix both"*. The late rule took the UTC date of UTC timestamps, so a parcel handed over before 08:00 Guangzhou was dated a day early; it now counts on the shop's calendar. A parcel whose courier rang on or before the due day and got no answer is not late, and not running late. A case already opened keeps the old answer. See §437.
 
 2026-10-05 · v4.478 — **§435 · A BULK ADD NEVER PUTS A PRODUCT WITH A QUESTION IN THE CART UNANSWERED — DECIDED BY ASH:** *"build fix 3"*. Customer Syd's pita (required "heat up?") was refused at checkout, and removing it and adding it back did not help: "Buy again", favourites "Add all", the home bundle block (and its layout copy) and the product page's "Buy together" added every item with no answers. They now add what needs no answer and open each product with a question on its own page, choice sheet already up, one after another (`miniapp/utils/pick-queue.js`). The server adds `has_options` to "Buy together" items and to order lines. No new word. Mini app needs an upload. See §435.
 2026-10-05 · v4.477 — **§434 · EVERY PRODUCT ON A SLIP CARRIES ITS SKU, INCLUDING ONE CHOSEN AS AN ANSWER — DECIDED BY ASH:** holding receipt TC000939, *"need sku on receipt always"*, then *"yes recipe has to have sku for each product"*. The line printed its own SKU; the three bites chosen under it, products pulled off the shelf, printed as names only. Now an answer linked to a product prints that product's SKU under it, enlarged, on the receipt, the add-on slip and the packing slip (with the count to pull). Read at print time from the link, so reprints of older orders carry it too. An answer with no link prints none. No schema, no new word. See §434.
@@ -28888,3 +28890,59 @@ under `integrations.` and was already filtered. Tenant credentials live in
 
 Tests: `scripts/test_public_config_secrets.js`. It fails five checks with the
 route call removed.
+
+## §437 — A PARCEL IS LATE ON THE SHOP'S CALENDAR, AND NOT AT ALL IF THE COURIER TRIED ON TIME
+
+**Decided 2026-10-06 by Ash.** Reported against TC000919, an air parcel shown
+"Delivered · 1 day late" with a delay case: *"the air shipment is not
+delayed"*. Claude named two causes in the rule, either enough on its own, and
+recommended fixing both; Ash: *"fix both"*.
+
+**What was wrong.**
+1. The rule (`lib/delay-case.js`, `lateShipmentSql` / `lateDays` and the
+   running-late pair) took the UTC date of timestamps stored in UTC.
+   Guangzhou's day starts eight hours before UTC's. A parcel handed over at
+   07:00 on the 4th was "sent on the 3rd", due on the 4th, and a delivery at
+   10:00 on the 5th, the next day, read as a day late.
+2. The rule saw only the landing. TC000919's courier rang at 17:30 on its due
+   day and got no answer (§284). A courier who tried on time was not late;
+   a claim against the carrier would be rejected, and the customer was told
+   not to eat food that came on time.
+
+**The rule.**
+1. Days are counted on the shop's calendar: the zone `shopTimezone()` gives,
+   the same one every other day boundary uses (§82, `lib/business-date.js`).
+   SQL takes `shopSqlShift()`, the drawer takes `deliveryTz()`. With no zone
+   on file, the house default, as everywhere.
+2. A parcel whose FIRST "could not reach the customer" line is dated on or
+   before its due day is not late, and is not running late. The first, not
+   the newest: a second failed call two days later must not undo the first.
+   It is held in a new column, `tracking_no_contact_first_event`, stamped
+   alongside §284's `tracking_no_contact_event` and only ever moving back.
+   A one-shot migration (`no_contact_first_event_v1`) fills it from traces
+   already stored, because a delivered JD parcel is never synced again.
+3. Only a failed call counts. A courier who scanned "out for delivery" and
+   never rang has not proved the parcel was at the door in time.
+4. **A parcel somebody already opened a case on keeps the answer it was
+   opened under** (UTC days, no call exception). A chase in progress never
+   vanishes off the card because the rule moved under it, which is the
+   failure §98 exists to prevent. Only untouched parcels get the new answer.
+   TC000919 shows "0/4" with nothing done, so it has no case row and clears.
+5. Everything that reads the rule moves together: the Needs-you card, the
+   orders list badge, the drawer and phone panel, the customer's
+   "配送延误送达" message, the running-late banner and its "since".
+
+**What it costs, stated.** A parcel whose courier tried on time and then sat
+undelivered for days raises no delay case. The §284 no-answer alert is what
+covers it, and it re-raises on every new failed call. A courier who rang on
+time is not the carrier's delay, and food that sat because nobody answered is
+not the carrier's claim.
+
+**The carrier's clock.** The failed-call time is the carrier's own Beijing
+wall clock, compared with the shop's due day. Exact for every account this
+ships to; a shop in another zone using a Chinese carrier would be out by the
+difference near midnight.
+
+Tests: `scripts/test_late_shop_day.js` (new), plus the fixture columns and
+source-text checks in `test_delay_case.js`, `test_running_late_alert.js`,
+`test_no_contact_alert.js`, `test_delivery_alert_route.js`.

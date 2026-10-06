@@ -4248,7 +4248,34 @@ for (const t of ['retail_orders', 'retail_shipments']) {
   addColumn(t, 'tracking_no_contact_cleared',    'TEXT');
   addColumn(t, 'tracking_no_contact_cleared_by', 'TEXT');
   addColumn(t, 'tracking_no_contact_cleared_at', 'DATETIME');
+  // §437 — the EARLIEST such line, same shape as _event. Only moves backward.
+  // The late rule reads it: a courier who rang on or before the due day and
+  // got no answer did not deliver late (lib/delay-case.js attemptedOnTimeSql).
+  addColumn(t, 'tracking_no_contact_first_event', 'TEXT');
 }
+// One-shot backfill from the trace already stored, so a parcel that has landed
+// (and is never synced again) is judged by its first failed call too — the
+// report that raised §437, TC000919, is one of those.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('no_contact_first_event_v1');
+  if (!ran) {
+    const { stampFirstNoContact } = require('./lib/delivery-alerts');
+    let n = 0;
+    for (const t of ['retail_orders', 'retail_shipments']) {
+      const rows = db.prepare(
+        `SELECT id, tracking_events_json FROM ${t}
+          WHERE tracking_no_contact_event IS NOT NULL AND tracking_events_json IS NOT NULL`
+      ).all();
+      for (const r of rows) {
+        let evs = [];
+        try { evs = JSON.parse(r.tracking_events_json) || []; } catch { evs = []; }
+        if (stampFirstNoContact(db, t, r.id, evs)) n++;
+      }
+    }
+    console.log(`[migration no_contact_first_event_v1] stamped the first failed call on ${n} rows`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('no_contact_first_event_v1');
+  }
+} catch (e) { console.error('[migration no_contact_first_event_v1]', e); }
 
 /* §189 — A BOX THAT WENT OUT ON AN ORDER THAT WAS THEN CANCELLED.
  *

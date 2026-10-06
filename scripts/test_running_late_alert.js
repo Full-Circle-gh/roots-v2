@@ -79,7 +79,8 @@ function fixture() {
     CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY, order_id INTEGER, mode TEXT,
       dispatched_at TEXT, delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
       tracking_number TEXT, waybill_product TEXT, waybill_product_no TEXT,
-      running_late_contacted_at TEXT, running_late_contacted_by TEXT);`);
+      running_late_contacted_at TEXT, running_late_contacted_by TEXT,
+      tracking_no_contact_first_event TEXT);`);
   return db;
 }
 const PARCELS = [
@@ -124,7 +125,7 @@ it('the card counts the order while it is dispatched, and drops it once it lands
 
 it('it is one of the parts of "Delivery needs a call", so the list and the count include it', () => {
   const src = fs.readFileSync(path.join(ROOT, 'lib', 'delivery-alerts.js'), 'utf8');
-  assert.match(src, /const parts = \[[^\]]*runningLateAlertSql\(alias\)/);
+  assert.match(src, /const parts = \[[^\]]*runningLateAlertSql\(alias, shift\)/);
 });
 
 console.log('"customer contacted" (§427)');
@@ -175,7 +176,7 @@ it('the stamp answers the call, not the lateness: the parcel is still running la
 it('the route stamps only parcels running late, and the undo is the same route', () => {
   assert.match(RETAIL, /router\.post\('\/api\/retail-admin\/orders\/:id\/running-late\/ack'/);
   const route = RETAIL.slice(RETAIL.indexOf("orders/:id/running-late/ack'"));
-  assert.match(route.slice(0, 2500), /const LATE = delayCase\.runningLateSql\(\);/);
+  assert.match(route.slice(0, 2500), /const LATE = delayCase\.runningLateSql\(null, null, shopSqlShift\(\)\);/);
   assert.match(route.slice(0, 2500), /running_late_contacted_by = \?/);
   assert.match(route.slice(0, 2500), /running_late_contacted_at = NULL/);
 });
@@ -199,7 +200,7 @@ it('the server sends it to the card, the list and the parcel', () => {
   assert.match(RETAIL, /running_late:\s*1,/);
   assert.match(RETAIL, /running_late: tdb\(\)\.prepare/);
   assert.match(RETAIL, /AS running_late_days,/);
-  assert.match(RETAIL, /running_late_days: o\.status === 'dispatched' \? delayCase\.runningLateDays\(s\) : 0/);
+  assert.match(RETAIL, /running_late_days: o\.status === 'dispatched' \? delayCase\.runningLateDays\(s, new Date\(\), deliveryTz\(\)\) : 0/);
 });
 
 it('both screens show it on Needs-you, the list and the parcel', () => {

@@ -7603,7 +7603,7 @@ function orderHasDelayedParcel(orderId) {
     const row = tdb().prepare(
       `SELECT 1 FROM retail_shipments sha
          WHERE sha.order_id = ?
-           AND ${delayCase.lateShipmentSql('sha')}
+           AND ${delayCase.lateShipmentSql('sha', shopSqlShift())}
          LIMIT 1`
     ).get(orderId);
     return !!row;
@@ -18180,7 +18180,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // it handled (air_delay_cleared_at) — set from the drawer once they've
     // contacted the customer. Same clear drops the list badge, keeping the two
     // views in lock-step.
-    const AIR_DELAY_EXISTS = deliveryAlerts.airAlertSql('o');
+    const AIR_DELAY_EXISTS = deliveryAlerts.airAlertSql('o', shopSqlShift());
     // The age this row states is how long the CUSTOMER has been living with a
     // late cold-chain parcel, so it counts from the air leg's dispatched_at —
     // not tracking_synced_at, which only says when we last heard from the
@@ -18198,7 +18198,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
              -- card described some older air parcel instead of them.
              (SELECT MIN(sha.dispatched_at) FROM retail_shipments sha
                WHERE sha.order_id = o.id
-                 AND ${delayCase.lateShipmentSql('sha')}
+                 AND ${delayCase.lateShipmentSql('sha', shopSqlShift())}
                  AND sha.air_delay_cleared_at IS NULL) AS waiting_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
@@ -18213,12 +18213,12 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // misses its day (UTC midnight, 08:00 Shanghai), while there is still time
     // to ring them. The age counts from that moment, the start of the first
     // late day — the same instant lib/delay-case.js's runningLateSql tips over.
-    const RL_EXISTS = deliveryAlerts.runningLateAlertSql('o');
+    const RL_EXISTS = deliveryAlerts.runningLateAlertSql('o', shopSqlShift());
     const rlItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_synced_at,
              -- §427 — the parcels still owed a call, the ones the EXISTS matched.
-             (SELECT MIN(${delayCase.runningLateSinceSql('srl')}) FROM retail_shipments srl
-               WHERE srl.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('srl')}) AS waiting_since,
+             (SELECT MIN(${delayCase.runningLateSinceSql('srl', shopSqlShift())}) FROM retail_shipments srl
+               WHERE srl.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('srl', null, undefined, shopSqlShift())}) AS waiting_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -28620,7 +28620,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                        WHERE sh2.order_id = o.id AND sh2.mode = 'local' LIMIT 1) AS is_local,
                     (SELECT 1 FROM retail_shipments sha
                        WHERE sha.order_id = o.id
-                         AND ${delayCase.lateShipmentSql('sha')}
+                         AND ${delayCase.lateShipmentSql('sha', shopSqlShift())}
                          AND sha.air_delay_cleared_at IS NULL
                        LIMIT 1) AS air_delivery_delayed,
                     -- §284 — the courier could not reach the customer and nobody
@@ -28630,17 +28630,17 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     -- §285 — days the most-overdue parcel still on the road is
                     -- past its due day; NULL when none is. Same rule as the card.
                     CASE WHEN o.status = 'dispatched' THEN
-                      (SELECT MAX(CAST(julianday(DATE('now')) - julianday(${delayCase.lateAfterSql('srl')}) AS INTEGER))
+                      (SELECT MAX(CAST(julianday(DATE('now', '${shopSqlShift()}')) - julianday(${delayCase.lateAfterSql('srl', shopSqlShift())}) AS INTEGER))
                          FROM retail_shipments srl
-                        WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl')}) END AS running_late_days,
+                        WHERE srl.order_id = o.id AND ${delayCase.runningLateSql('srl', null, shopSqlShift())}) END AS running_late_days,
                     -- §427 — 1 when every running-late parcel on the order has a
                     -- current "customer contacted": the badge keeps the days and
                     -- stops asking for the call. Same rule as the card.
                     CASE WHEN o.status = 'dispatched'
                           AND EXISTS (SELECT 1 FROM retail_shipments src
-                                       WHERE src.order_id = o.id AND ${delayCase.runningLateSql('src')})
+                                       WHERE src.order_id = o.id AND ${delayCase.runningLateSql('src', null, shopSqlShift())})
                           AND NOT EXISTS (SELECT 1 FROM retail_shipments src
-                                           WHERE src.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('src')})
+                                           WHERE src.order_id = o.id AND ${delayCase.runningLateNeedsCallSql('src', null, undefined, shopSqlShift())})
                          THEN 1 ELSE 0 END AS running_late_contacted,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
@@ -29163,13 +29163,15 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     // used to do this arithmetic themselves against their own copy of the
     // one-day rule — two more places for the threshold in lib/delay-case.js to
     // drift from. 0 means on time.
-    late_days: delayCase.lateDays(s),
+    // §437 — on the shop's calendar, and a started case keeps the answer it was
+    // started under, as the list's query does (lib/delay-case.js).
+    late_days: delayCase.lateDays({ ...s, delay_case: delayCase.readCase(tdb(), s.id) }, deliveryTz()),
     // §285 — days past its due day while still on the road; 0 once it lands
     // (late_days takes over then) or while it is on time.
-    running_late_days: o.status === 'dispatched' ? delayCase.runningLateDays(s) : 0,
+    running_late_days: o.status === 'dispatched' ? delayCase.runningLateDays(s, new Date(), deliveryTz()) : 0,
     // §427 — who said "customer contacted" on it and when; `current` while that
     // still answers the card (48 hours). null if nobody has, or it is not late.
-    running_late_contact: o.status === 'dispatched' && delayCase.runningLateDays(s) > 0
+    running_late_contact: o.status === 'dispatched' && delayCase.runningLateDays(s, new Date(), deliveryTz()) > 0
       ? delayCase.runningLateContact(s) : null,
     // The four steps. Read only, never created: a GET that wrote a row for
     // every drawer opened would mint a case for parcels nobody had trouble
@@ -30497,7 +30499,7 @@ router.post('/api/retail-admin/orders/:id/air-delay/ack',
   const clear = req.body?.cleared !== false;
   // Scope to the actually-delayed air parcels so re-opening doesn't touch an
   // on-time air leg, and clearing only marks the ones that raised the alert.
-  const DELAYED = delayCase.lateShipmentSql();
+  const DELAYED = delayCase.lateShipmentSql(null, shopSqlShift());
   // §98 — THE BUTTON THAT USED TO MEAN "I PHONED THE CUSTOMER" NOW MEANS "THIS
   // IS FINISHED", AND IT CAN BE REFUSED. Every delayed parcel on the order must
   // have a case that is allowed to close: the customer told, the customer made
@@ -30633,7 +30635,7 @@ router.post('/api/retail-admin/orders/:id/running-late/ack',
   const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   const clear = req.body?.cleared !== false;
-  const LATE = delayCase.runningLateSql();
+  const LATE = delayCase.runningLateSql(null, null, shopSqlShift());
   const info = clear
     ? tdb().prepare(
         `UPDATE retail_shipments
