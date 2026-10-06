@@ -270,10 +270,10 @@ Page({
       wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
       return;
     }
-    // Has customer choices (e.g. a dressing) → open the product page to choose
-    // instead of quick-adding without them.
+    // Has customer choices (e.g. a dressing) → open the product page with its
+    // choice sheet already up (pick mode) instead of quick-adding without them.
     if (p.has_options) {
-      wx.navigateTo({ url: '/pages/product/product?id=' + id });
+      pickQueue.start([{ id, qty: 1 }]);
       return;
     }
     cart.add(p, 1, []);
