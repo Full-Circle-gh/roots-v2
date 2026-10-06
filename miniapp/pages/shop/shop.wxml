@@ -250,11 +250,13 @@
                       <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
                       <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
                     </view>
+                    <!-- The number on the + is how many of this product are already in
+                         the cart (utils/plus-qty). Same badge on .card-plus and .gal-plus. -->
                     <view wx:if="{{!item.outOfStock}}"
                           class="row-plus"
                           id="plus-{{item.id}}"
                           data-id="{{item.id}}"
-                          catchtap="addToCart"></view>
+                          catchtap="addToCart"><view wx:if="{{plusQty[item.id]}}" class="plus-qty">{{plusQty[item.id]}}</view></view>
                   </view>
                   <!-- §80 follow-up — AN EMPTY preText IS A VALUE, NOT A MISSING ONE.
                          A row made TODAY is orderable and says nothing, so shop.js
@@ -316,7 +318,7 @@
                       <text class="price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                     </view>
                     <view wx:if="{{!item.outOfStock}}" class="card-plus"
-                          id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
+                          id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"><view wx:if="{{plusQty[item.id]}}" class="plus-qty">{{plusQty[item.id]}}</view></view>
                   </view>
                 </view>
               </view>
@@ -380,7 +382,7 @@
                   <text class="gal-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                 </view>
                 <view wx:if="{{!item.outOfStock}}" class="gal-plus"
-                      id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
+                      id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"><view wx:if="{{plusQty[item.id]}}" class="plus-qty">{{plusQty[item.id]}}</view></view>
               </view>
             </view>
           </view>

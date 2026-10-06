@@ -19,6 +19,7 @@ const config   = require('../../utils/config');
 const delivery = require('../../utils/delivery');
 const freshEta = require('../../utils/fresh-eta');
 const pickQueue = require('../../utils/pick-queue');
+const { plusQty, sameQty } = require('../../utils/plus-qty');
 const { promoCardsToShow, chinaToday, inDateWindow } = require('../../utils/promo-cards');
 
 // §296 — tuck the promo row away only when the product list would still
@@ -277,6 +278,11 @@ Page({
     vpName: '',
     vpTitle: 'Choose a size',
     vpOptions: [],
+
+    // How many of each card's product are already in the cart, drawn as a
+    // small number on its + (utils/plus-qty). Keyed by card id; a card with
+    // nothing in the cart has no entry, so no badge.
+    plusQty: {},
   },
 
   onLoad() {
@@ -285,6 +291,13 @@ Page({
     this._syncConfig();
     this._syncDelivery();
     this.refresh();
+    // Any add or removal, from any screen (cart tab, product page, checkout),
+    // moves the number on the + without waiting for the shop to be shown.
+    this._unsubCart = cart.subscribe(() => this._syncPlusQty());
+  },
+
+  onUnload() {
+    if (this._unsubCart) this._unsubCart();
   },
 
   onShow() {
@@ -303,6 +316,14 @@ Page({
     // category tile). If sections are already loaded we apply it now;
     // otherwise refresh() applies it once they're built.
     this._applyPendingCategory();
+    this._syncPlusQty();
+  },
+
+  // Recount the numbers on the + chips from the cart. Cheap (one pass over the
+  // cart lines) and a no-op when nothing changed.
+  _syncPlusQty() {
+    const next = plusQty(cart.get().items, this._repOf);
+    if (!sameQty(next, this.data.plusQty)) this.setData({ plusQty: next });
   },
 
   // Is the shopper delivering inside Guangzhou? Drives whether a sold-out
@@ -596,7 +617,14 @@ Page({
     // _memberMap lets addToCart find a card's siblings for the size picker.
     const display = this._collapseVariants(raw);
     this._memberMap = {};
-    for (const p of display) if (p._members) this._memberMap[p.id] = p._members;
+    // _repOf: every size's id → its card's id, so the + on a variant card
+    // counts all its sizes in the cart (utils/plus-qty).
+    this._repOf = {};
+    for (const p of display) {
+      if (!p._members) continue;
+      this._memberMap[p.id] = p._members;
+      for (const m of p._members) this._repOf[Number(m.id)] = p.id;
+    }
 
     const sections = this._buildSections(display, tree, L);
     const categories = sections.map(s => ({ id: s.id, name: s.name, label: s.label }));
@@ -629,6 +657,7 @@ Page({
       loadError,
       ...this._emptyCopy(L, loadError, this._isNarrowed()),
       loading: false,
+      plusQty: plusQty(cart.get().items, this._repOf),
     });
     // Measure offsets for the active mode (sub anchors when drilled, top
     // sections otherwise) so onScroll can find the active one, then honour
