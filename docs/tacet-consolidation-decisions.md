@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.480
+# Tacet shared-core consolidation — decisions record, v4.481
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-06 · v4.481 — **§438 · THE SHOP GRID + OPENS THE CHOICE SHEET STRAIGHT AWAY — ASKED BY ASH:** *"the extras window should pop up when clicking add to basket also outside the product page"*. The shop grid + and a single favourite + now open the product page with its choice sheet already up (`pick=1`, the §435 queue with a batch of one), and the page returns to the shop after the add. No new word. Mini app needs an upload. See §438.
 
 2026-10-06 · v4.480 — **§284 HONOURED IN THE DRAWER: A DELIVERED PARCEL ASKS FOR NO CALL — REPORTED BY ASH:** TC000919 again, the red "Courier can't reach the customer" box still up after JD delivered at 17:31, one minute after the missed call: *"the package was delivered on time so there was no need to call"*. §284's rule already said the line stays open until "I called the customer" is tapped "or that parcel lands"; the card and list badge honoured the second half, the parcel view (`noContactView`, `lib/delivery-alerts.js`) did not. It now returns nothing for a landed parcel nobody answered, and keeps the quiet "Customer contacted" line for one somebody did. No new decision, no new string. Ash also asked for an "Ignore" button; Claude recommended against it, since a delivered parcel no longer shows the box and on a parcel still on the road an ignore skips the call §284 exists to make. Left to Ash.
 
@@ -28948,3 +28950,30 @@ difference near midnight.
 Tests: `scripts/test_late_shop_day.js` (new), plus the fixture columns and
 source-text checks in `test_delay_case.js`, `test_running_late_alert.js`,
 `test_no_contact_alert.js`, `test_delivery_alert_route.js`.
+
+## §438 — THE SHOP GRID + OPENS THE CHOICE SHEET STRAIGHT AWAY
+
+**Asked 2026-10-06 by Ash** (*"the extras window should pop up when clicking
+add to basket also outside the product page"*, with screenshots of the shop
+grid and the Za'atar Labneh "Add extras?" sheet).
+
+**What happened.** On the shop grid, + on a product with choices (a dressing,
+paid extras) opened the product page bare. The customer had to find "Add to
+basket" a second time before the "Add extras?" sheet appeared. The single
+favourite + did the same.
+
+**The rule.** Both now call `pickQueue.start([{ id, qty: 1 }])` (§435): the
+product page opens with `pick=1`, the sheet comes up by itself (dressing sheet
+first, or straight to extras when the product has only extras), and after the
+add the page goes back to where the customer was.
+
+**Not done, on purpose.** The sheet still opens over the product page, not
+over the shop grid. Drawing it on the grid means a second copy of the sheet
+(sold-out greying, pick limits, required questions) or pulling it into a
+shared component. A second copy is the wrong move; a shared component is its
+own piece of work. The web shop's + (`public/shop.html`) is unchanged.
+
+**Mini app needs an upload.** Nothing changes on the server.
+
+Tests: `scripts/test_bulk_add_pick.js` gains two source checks (shop grid +,
+one favourite +), both failing on the old code.
