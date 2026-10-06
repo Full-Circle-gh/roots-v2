@@ -723,6 +723,23 @@
 .grid-3 .card-plus::before { width: 20rpx; }
 .grid-3 .card-plus::after  { height: 20rpx; }
 
+/* How many are already in the cart — a berry dot on the + chip's top-right
+   corner (utils/plus-qty). Number only, by Ash's choice (2026-10-06): no
+   "in cart" label on the card. The chip sets font-size:0 for its drawn "+",
+   so the dot sets its own size; it is not scaled with --font-scale because
+   it must stay inside the chip's corner at every setting. Overhangs the chip
+   by 14rpx, which every layout's gutter (≥18rpx) has room for. The white ring
+   keeps it legible where it crosses the ink chip. */
+.plus-qty {
+  position: absolute; top: -14rpx; right: -14rpx; z-index: 1;
+  min-width: 32rpx; height: 32rpx; padding: 0 8rpx; box-sizing: border-box;
+  border-radius: 999rpx;
+  background: var(--berry); color: #fff;
+  font-size: 20rpx; font-weight: 700; line-height: 32rpx; text-align: center;
+  box-shadow: 0 0 0 3rpx #fff;
+  pointer-events: none;
+}
+
 .loading-list { padding: 16rpx 32rpx; }
 .list-row-skel { height: 240rpx; margin-bottom: 16rpx; }
 .empty-inline { padding: 120rpx 32rpx 0; }

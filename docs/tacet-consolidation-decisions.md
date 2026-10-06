@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.481
+# Tacet shared-core consolidation — decisions record, v4.482
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-06 · v4.482 — **§439 · THE SHOP + SHOWS HOW MANY ARE IN THE CART — DECIDED BY ASH:** *"I want number only on the +"*, chosen from a three-way mockup (nothing / a − n + counter / a number on the +). A berry dot on each shop card's + carries the cart quantity in all five layouts; choices and sizes sum onto one card. No new word. Mini app needs an upload. See §439.
 
 2026-10-06 · v4.481 — **§438 · THE SHOP GRID + OPENS THE CHOICE SHEET STRAIGHT AWAY — ASKED BY ASH:** *"the extras window should pop up when clicking add to basket also outside the product page"*. The shop grid + and a single favourite + now open the product page with its choice sheet already up (`pick=1`, the §435 queue with a batch of one), and the page returns to the shop after the add. No new word. Mini app needs an upload. See §438.
 
@@ -28977,3 +28979,35 @@ own piece of work. The web shop's + (`public/shop.html`) is unchanged.
 
 Tests: `scripts/test_bulk_add_pick.js` gains two source checks (shop grid +,
 one favourite +), both failing on the old code.
+
+## §439 — THE SHOP + SHOWS HOW MANY ARE IN THE CART
+
+**Decided 2026-10-06 by Ash** (*"I want number only on the +"*), picking
+from a mockup of three versions: the card as it was, a `− n +` counter in
+place of the +, and a number on the + with an "In cart ×n" label. Ash took
+the number and dropped the label.
+
+**What happened.** Tapping + on the mini app shop flew the item to the cart
+and left the card unchanged, so a shopper scrolling back could not see what
+they had already picked.
+
+**The rule.** Each shop card's + carries a small berry dot with the quantity
+of that product in the cart, in every layout (list, compact list, two- and
+three-column grid, gallery). Lines of one product with different choices
+are summed; on a variant card every size counts. Above 99 it reads `99+`.
+No dot when the product is not in the cart. The count is
+`miniapp/utils/plus-qty.js`; the shop page follows the cart through
+`cart.subscribe`, so a removal on the cart tab or checkout moves the number
+too.
+
+**Not done, on purpose.** No way to remove from the card: that was the
+counter version, which Ash did not pick. The favourites page +, the size
+picker sheet and the web shop's + (`public/shop.html`) are unchanged.
+
+**No new word.** The dot is a numeral only, so no Chinese string.
+
+**Mini app needs an upload.** Nothing changes on the server.
+
+Tests: `scripts/test_shop_plus_qty.js` (new) runs the count for real and
+reads the three + chips, the cart subscription and the dot's style from
+source.
