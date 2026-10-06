@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.482
+# Tacet shared-core consolidation — decisions record, v4.483
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-06 · v4.483 — **§439 ON THE WEB SHOP TOO — ASKED BY ASH:** *"do the web shop too"*. The phone-width web shop list draws the same berry dot on its + (`slPlusQty`, the web copy of `miniapp/utils/plus-qty.js`), repainted from `cartBadge()` on every cart change. The desktop grid has no + and is unchanged. No new word. See §439.
 
 2026-10-06 · v4.482 — **§439 · THE SHOP + SHOWS HOW MANY ARE IN THE CART — DECIDED BY ASH:** *"I want number only on the +"*, chosen from a three-way mockup (nothing / a − n + counter / a number on the +). A berry dot on each shop card's + carries the cart quantity in all five layouts; choices and sizes sum onto one card. No new word. Mini app needs an upload. See §439.
 
@@ -29011,3 +29013,13 @@ picker sheet and the web shop's + (`public/shop.html`) are unchanged.
 Tests: `scripts/test_shop_plus_qty.js` (new) runs the count for real and
 reads the three + chips, the cart subscription and the dot's style from
 source.
+
+**Web shop, same day (v4.483).** Asked by Ash (*"do the web shop too"*).
+The phone-width shop list in `public/shop.html` (the one that mirrors the
+mini app) carries the same dot on its +, list and grid. `slPlusQty` is the
+web copy of the count, rule for rule; `scripts/test_shop_plus_qty.js` runs
+both against the same cases so they cannot drift. The dot is repainted from
+`cartBadge()`, which every cart change already calls, so a removal or a
+cart cleared by an order moves it without redrawing the list. The desktop
+grid has no + (its cards open the product page) and is unchanged. Live on
+deploy; no upload needed for this half.

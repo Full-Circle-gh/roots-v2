@@ -9,9 +9,10 @@
  * had already picked. Ash chose a number on the + and nothing else
  * (2026-10-06).
  *
- * WHAT IS RUN FOR REAL: utils/plus-qty, the counting. WHAT IS READ FROM
- * SOURCE: the shop page, which has no runtime here; each check names what it
- * holds.
+ * WHAT IS RUN FOR REAL: utils/plus-qty, the counting, and the web shop's
+ * own copy of it (slPlusQty in public/shop.html) against the same cases. WHAT
+ * IS READ FROM SOURCE: the two shop pages, which have no runtime here; each
+ * check names what it holds.
  */
 'use strict';
 
@@ -100,6 +101,57 @@ check('the dot sets its own font size (the chip is font-size:0)', () => {
   const rule = (wxss.match(/\.plus-qty\s*\{[^}]*\}/) || [''])[0];
   assert.ok(/font-size:\s*20rpx/.test(rule), rule);
   assert.ok(/position:\s*absolute/.test(rule), rule);
+});
+
+console.log('web shop: the same count, rule for rule');
+
+// The web shop keeps its own copy (public/shop.html has no module loader).
+// Run it for real against the same cases, so the two cannot drift.
+const SHOP = fs.readFileSync(path.join(ROOT, 'public', 'shop.html'), 'utf8');
+function grab(src, name) {
+  const at = src.indexOf(`function ${name}(`);
+  assert.ok(at > -1, `${name} not found`);
+  const rest = src.slice(at);
+  const end = rest.indexOf('\n}');
+  assert.ok(end > -1, `${name} has no top-level close`);
+  return rest.slice(0, end + 2);
+}
+const vm = require('vm');
+const sandbox = {};
+vm.createContext(sandbox);
+vm.runInContext(grab(SHOP, 'slPlusQty') + '\nthis.slPlusQty = slPlusQty;', sandbox);
+// The web takes the members map (card id → sizes) rather than a size → card map.
+const webQty = (items, repOf) => {
+  const members = {};
+  for (const [m, card] of Object.entries(repOf || {})) (members[card] = members[card] || []).push({ id: Number(m) });
+  return JSON.parse(JSON.stringify(sandbox.slPlusQty(items, members)));
+};
+const CASES = [
+  [[], {}],
+  [[{ product_id: 7, qty: 2 }], {}],
+  [[{ product_id: 7, qty: 1, choices: [3] }, { product_id: 7, qty: 2, choices: [4] }], {}],
+  [[{ product_id: 11, qty: 1 }, { product_id: 12, qty: 2 }, { product_id: 30, qty: 1 }], { 10: 10, 11: 10, 12: 10 }],
+  [[{ product_id: 1, qty: 120 }], {}],
+  [[{ product_id: 1, qty: 0 }, { product_id: 2, qty: -1 }, { qty: 3 }, null], {}],
+  [[{ product_id: '5', qty: 1 }], { 5: 4 }],
+];
+check('web and mini app give the same numbers on every case', () => {
+  for (const [items, repOf] of CASES) assert.deepStrictEqual(webQty(items, repOf), plusQty(items, repOf));
+});
+
+check('every cart change repaints the numbers, and cannot break a cart write', () => {
+  const badge = grab(SHOP, 'cartBadge');
+  assert.ok(/try\s*\{\s*slPaintPlusQty\(\);?\s*\}\s*catch/.test(badge), badge);
+});
+
+check('the shop list paints the numbers when it draws', () => {
+  assert.ok(/slPaintPlusQty\(\)/.test(grab(SHOP, 'slRenderMain')));
+});
+
+check('the web dot sets its own font size (the + is font-size:0)', () => {
+  const rule = (SHOP.match(/\.sl-pq\{[^}]*\}/) || [''])[0];
+  assert.ok(/font-size:10px/.test(rule), rule);
+  assert.ok(/position:absolute/.test(rule), rule);
 });
 
 console.log(`\n${passed} passed`);

@@ -1001,6 +1001,10 @@
     .sl-plus::before,.sl-plus::after{content:"";position:absolute;top:50%;left:50%;background:currentColor;transform:translate(-50%,-50%);}
     .sl-plus::before{width:13px;height:2.5px;}
     .sl-plus::after{width:2.5px;height:13px;}
+    /* §439 — how many are already in the cart, a berry dot on the +'s corner.
+       Sets its own font: the + is font-size:0 for its drawn cross. The white
+       ring keeps it legible where it crosses the ink square. */
+    .sl-pq{position:absolute;top:-7px;right:-7px;z-index:1;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:var(--berry);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;font-family:var(--bf-toni),sans-serif;box-shadow:0 0 0 1.5px #fff;pointer-events:none;}
     /* grid + compact-grid modes inside the right pane */
     .sl-grid{display:grid;gap:16px;padding:12px 16px;}
     .sl-grid.g2{grid-template-columns:1fr 1fr;}
@@ -1717,7 +1721,11 @@ function cartCount(){return cartGet().reduce((n,l)=>n+(l.qty||0),0);}
 function cartSubtotal(){return cartGet().reduce((s,l)=>s+(Number(l.price)||0)*(l.qty||0),0);}
 function cartBadge(){const n=cartCount();const lbl=n>99?'99+':String(n);
   const b=$('#cartBadge');if(b){b.textContent=lbl;b.hidden=n<=0;}
-  const t=$('#tabCartBadge');if(t){t.textContent=lbl;t.hidden=n<=0;}}
+  const t=$('#tabCartBadge');if(t){t.textContent=lbl;t.hidden=n<=0;}
+  // §439 — and the number on each shop card's +. Every cart change comes
+  // through here, so a removal in the cart or a cart cleared by an order moves
+  // it too. Never allowed to break a cart write.
+  try{slPaintPlusQty();}catch{}}
 function lineKey(pid,choices){return pid+':'+(choices||[]).slice().sort((a,b)=>a-b).join(',');}
 function cartAdd(line){const c=cartGet();const k=lineKey(line.product_id,line.choices);
   const ex=c.find(l=>l.key===k);if(ex)ex.qty+=line.qty;else c.push({...line,key:k});cartSave(c);
@@ -5591,6 +5599,7 @@ function slRenderMain(){
     const node=e.target.closest('[data-id]');
     if(node)location.hash='#/product/'+node.dataset.id;
   };
+  slPaintPlusQty();
   // measure section offsets for scroll-sync
   setTimeout(slMeasure,60);
 }
@@ -5676,6 +5685,39 @@ function slMarkSub(gid){
 }
 
 // ── Quick-add + variant size-picker ─────────────────────────────────
+// §439 — the number on a shop card's +: how many of that product are already
+// in the cart. Number only, by Ash's choice (2026-10-06). The web half of
+// miniapp/utils/plus-qty.js, rule for rule: lines of one product with
+// different choices sum onto one card, every size counts on its variant card
+// (members: card id → its sizes), and past 99 it reads 99+. Returns
+// { [cardId]: '3' } for cards with something in the cart only.
+function slPlusQty(lines,members){
+  const repOf={};
+  for(const id of Object.keys(members||{}))for(const m of members[id]||[])repOf[Number(m.id)]=Number(id);
+  const sums={};
+  for(const l of lines||[]){
+    const pid=Number(l&&l.product_id),qty=Number(l&&l.qty)||0;
+    if(!pid||qty<=0)continue;
+    const card=repOf[pid]||pid;
+    sums[card]=(sums[card]||0)+qty;
+  }
+  const out={};
+  for(const id of Object.keys(sums))out[id]=sums[id]>99?'99+':String(sums[id]);
+  return out;
+}
+// Draw those numbers onto every + in the shop list, adding, updating or
+// removing the dot in place (no re-render, so the list keeps its scroll).
+function slPaintPlusQty(){
+  const main=document.getElementById('slMain');if(!main)return;
+  const q=slPlusQty(cartGet(),SL.members);
+  main.querySelectorAll('[data-add]').forEach(el=>{
+    const n=q[el.dataset.add]||'';
+    let dot=el.querySelector('.sl-pq');
+    if(!n){if(dot)dot.remove();return;}
+    if(!dot){dot=document.createElement('span');dot.className='sl-pq';el.appendChild(dot);}
+    dot.textContent=n;
+  });
+}
 function slAdd(id,srcEl){
   const members=SL.members&&SL.members[id];
   if(members&&members.length>1){slOpenVp(id,members);return;}
