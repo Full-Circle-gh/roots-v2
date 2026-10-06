@@ -176,6 +176,21 @@ it('the parcel view quotes the line and says whether it is still open', () => {
   assert.strictEqual(alerts.noContactView({}, FAILED), null);
 });
 
+it('a landed parcel asks for no call — the drawer agrees with the card (TC000919)', () => {
+  const row = { tracking_no_contact_event: '2026-09-27 10:00:00', tracking_no_contact_cleared: null };
+  assert.strictEqual(alerts.noContactView({ ...row, tracking_status: 'delivered' }, FAILED), null,
+    'JD delivered: no delivered_at, status only');
+  assert.strictEqual(alerts.noContactView({ ...row, delivered_at: '2026-09-27 03:00:00' }, FAILED), null);
+});
+
+it('a landed parcel somebody DID call keeps its quiet line', () => {
+  const v = alerts.noContactView({ tracking_no_contact_event: '2026-09-27 10:00:00',
+    tracking_no_contact_cleared: '2026-09-27 10:00:00', tracking_no_contact_cleared_by: 'mei',
+    tracking_status: 'delivered' }, FAILED);
+  assert.strictEqual(v.open, false);
+  assert.strictEqual(v.cleared_by, 'mei');
+});
+
 console.log('the wiring');
 
 it('both tracking writers stamp the line (JD pull and kd100 push)', () => {

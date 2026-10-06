@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.479
+# Tacet shared-core consolidation — decisions record, v4.480
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-06 · v4.480 — **§284 HONOURED IN THE DRAWER: A DELIVERED PARCEL ASKS FOR NO CALL — REPORTED BY ASH:** TC000919 again, the red "Courier can't reach the customer" box still up after JD delivered at 17:31, one minute after the missed call: *"the package was delivered on time so there was no need to call"*. §284's rule already said the line stays open until "I called the customer" is tapped "or that parcel lands"; the card and list badge honoured the second half, the parcel view (`noContactView`, `lib/delivery-alerts.js`) did not. It now returns nothing for a landed parcel nobody answered, and keeps the quiet "Customer contacted" line for one somebody did. No new decision, no new string. Ash also asked for an "Ignore" button; Claude recommended against it, since a delivered parcel no longer shows the box and on a parcel still on the road an ignore skips the call §284 exists to make. Left to Ash.
 
 2026-10-06 · v4.479 — **§437 · A PARCEL IS LATE ON THE SHOP'S CALENDAR, AND NOT AT ALL IF THE COURIER TRIED ON TIME — DECIDED BY ASH:** *"the air shipment is not delayed"* against TC000919, then *"fix both"*. The late rule took the UTC date of UTC timestamps, so a parcel handed over before 08:00 Guangzhou was dated a day early; it now counts on the shop's calendar. A parcel whose courier rang on or before the due day and got no answer is not late, and not running late. A case already opened keeps the old answer. See §437.
 
