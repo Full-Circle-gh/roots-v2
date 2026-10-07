@@ -66,6 +66,14 @@ const COUNTING = CLERK + `
   ];
   state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();`;
 
+/* AN OPERATOR WHO HOLDS TWO STORES — the owner, counting (the mode the report
+   came from), and the same shelf in add mode. Derived from the one-store
+   fixtures so they differ in the store list and nothing else. */
+const TWO = "stores:[{id:1,name_en:'Tianhe',name_cn:'天河'},{id:2,name_en:'Yuexiu',name_cn:'越秀'}]";
+const ONE = "stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]";
+const TWO_STORES = COUNTING.replace(ONE, TWO);
+const TWO_STORES_ADD = SHELF.replace(ONE, TWO);
+
 const CATCH = `window.__sent=[];
   window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body});
     return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
@@ -487,6 +495,63 @@ run('add stock', [
       state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();`, [
       ['named for the counting', `${body}.indexOf('Quick stock is off')>-1`],
       ['and not for the other job', `${body}.indexOf('Add stock is off')===-1`],
+    ]],
+
+  /* ── SWITCHING STORE ──────────────────────────────────────────────────
+     An operator who holds several stores used to be put on the first and left
+     there: the server sent them all and the screen offered no way to change.
+     The row is names only, it is absent for one store, and it is locked while
+     anything is unsaved — because every write reads the store when it is SENT,
+     so a +1 still in its pause would land on the store switched to. */
+  ['one store draws no store row', SHELF, [
+    ['no store chips', "!document.querySelector('[onclick*=qsStore]')"],
+  ]],
+  ['two stores draw both, the one in use lit', TWO_STORES, [
+    ['both names', `${body}.indexOf('Tianhe')>-1 && ${body}.indexOf('Yuexiu')>-1`],
+    ['two chips', "document.querySelectorAll('[onclick*=qsStore]').length===2"],
+    ['Tianhe is lit', "document.querySelector('.chip.on').textContent.indexOf('Tianhe')>-1"],
+    ['nothing locked', "!document.querySelector('[onclick*=qsStore][disabled]')"],
+  ]],
+  ['picking Yuexiu reads Yuexiu’s shelf and drops Tianhe’s',
+    TWO_STORES + CATCH + "APP.cmd('qsStore','2');", [
+      ['the store moved', "state.qs.storeId===2"],
+      ['the status line says so', `${body}.indexOf('Yuexiu')>-1 && document.querySelector('.chip.on').textContent.indexOf('Yuexiu')>-1`],
+      ['Tianhe’s list is gone, not shown under Yuexiu’s name', "state.qs.items===null"],
+      ['Yuexiu’s shelf is asked for', "window.__sent.some(function(x){return x.u.indexOf('/stores/2/stock')>-1})"],
+    ]],
+  ['a count saved after the switch goes to the new store',
+    TWO_STORES + CATCH + `APP.cmd('qsStore','2');
+      state.qs.items=[{product_id:7,name_en:'Hummus Asli',sku:'1-10',physical_qty:4}];
+      window.__sent=[]; APP.cmd('qsBump',7,1); qsSetCommit(7);`, [
+      ['one write', "window.__sent.length===1"],
+      ['to Yuexiu', "window.__sent[0].u.indexOf('/stores/2/stock/7')>-1"],
+    ]],
+  ['a tap still waiting to save locks the other store',
+    TWO_STORES + CATCH + "APP.cmd('qsBump',7,1); APP.cmd('qsStore','2');", [
+      ['the store did not move', "state.qs.storeId===1"],
+      ['Yuexiu is greyed', "!!document.querySelector('[onclick*=qsStore][disabled]')"],
+      ['and nothing was written to it', "!window.__sent.some(function(x){return x.u.indexOf('/stores/2/')>-1})"],
+    ]],
+  ['a write in flight locks it too', TWO_STORES + "state.qs.fixing[7]=12; render(); APP.cmd('qsStore','2');", [
+    ['still Tianhe', "state.qs.storeId===1"],
+  ]],
+  ['an add handed back by a failed write locks it until settled',
+    TWO_STORES_ADD + "qsWriteFailed(7,3,'Server said no'); APP.cmd('qsStore','2');", [
+      ['still Tianhe', "state.qs.storeId===1"],
+      ['the +3 is still on the card', "state.qs.add[7]===3"],
+    ]],
+  ['a figure being typed locks it', TWO_STORES_ADD + "APP.cmd('qsType',7); APP.cmd('qsStore','2');", [
+    ['still Tianhe', "state.qs.storeId===1"],
+  ]],
+  ['taps that come back to where they started unlock it when the pause ends',
+    TWO_STORES + "APP.cmd('qsBump',7,1); APP.cmd('qsBump',7,-1); qsSetCommit(7);", [
+      ['nothing pending', "!qsStoreBusy()"],
+      ['and it is drawn open', "!document.querySelector('[onclick*=qsStore][disabled]')"],
+    ]],
+  ['add mode: +1 then −1 unlocks it when the pause ends',
+    TWO_STORES_ADD + "APP.cmd('qsBump',7,1); APP.cmd('qsBump',7,-1); qsFlush(7);", [
+      ['nothing pending', "!qsStoreBusy()"],
+      ['and it is drawn open', "!document.querySelector('[onclick*=qsStore][disabled]')"],
     ]],
 
   ['a role without the permission cannot reach it at all',
