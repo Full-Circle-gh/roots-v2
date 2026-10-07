@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.484
+# Tacet shared-core consolidation — decisions record, v4.485
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-07 · v4.485 — **§440 · THE TILL KNOCKS WHEN A QR ORDER COMES IN UNPAID — ASKED BY ASH:** *"we need to have a sound of a new order that came in even though it wasn't paid sound should be different compare to new paid order"*, then *"go ahead, build all three"*. The till plays a short falling two-note knock for each read that brings a QR order it has not seen; the paid-order ding (back office, phone) is unchanged. The knock rings behind the settle screen too. A strip says when the browser is still blocking sound, and the till asks the screen to stay on at a counter with a QR menu. One string composed. See §440.
 
 2026-10-06 · v4.484 — **§432 rule 10 · THE EVENING "TO MAKE" MESSAGE CARRIES EACH PRODUCT'S SKU — ASKED BY ASH:** holding the 2026-10-07 preview in the kitchen group, *"should include sku"*. Each line now leads with the product's SKU in bold (`**SKU 9-531** 青酱卷 Pesto Wrap × 18`), the §434 rule carried from the slip to the message. A product with no SKU prints its name alone. No schema, no new word. See §432.
 
@@ -29032,3 +29034,71 @@ both against the same cases so they cannot drift. The dot is repainted from
 cart cleared by an order moves it without redrawing the list. The desktop
 grid has no + (its cards open the product page) and is unchanged. Live on
 deploy; no upload needed for this half.
+
+## §440 — THE TILL KNOCKS WHEN A QR ORDER COMES IN UNPAID
+
+**Asked by Ash, 2026-10-07:** *"when customer place an order on qr code
+menu it shows in the till but without sound. we need to have a sound of a
+new order that came in even though it wasn't paid sound should be
+different compare to new paid order"*. Then, after asking whether an
+untouched tablet would stay silent and whether a screen on all day harms
+it: *"go ahead, build all three"* — the sound, keeping the screen on, and
+a notice when sound is blocked.
+
+**What happened.** QR orders reached the till's Pending list within
+seconds (the 15-second poll plus the shop-events doorbell), but `till.html`
+had no sound code at all. The only order sound in the product is the
+paid-order ding in `retail-admin/04-orders.js` and `m.html`, which counts
+paid orders only. While WeChat Pay on the QR menu stays off (ICP filing),
+every QR order is an unpaid counter order, so none of them made a sound
+anywhere.
+
+**The rules.**
+
+1. **Two sounds, two meanings.** The paid-order ding stays as it is: G5 up
+   to C6, soft sine. The till's knock is E5 down to B4, triangle wave,
+   shorter and a little louder. Ding means "make it"; knock means
+   "somebody is coming to pay". They share no note.
+2. **A knock is an arrival.** An order id the till has not seen before. The
+   first read after the page opens, or after a store switch, only
+   remembers: yesterday's leftovers do not ring. One knock per read however
+   many arrived in it. An id seen once never knocks again in that page's
+   life, even if it leaves the list and comes back.
+3. **It rings behind the settle screen.** The poll and the doorbell used to
+   stop while the cashier was taking money. They now still read, quietly:
+   the knock plays, the list underneath is not repainted. They still stop
+   while the page is hidden.
+4. **A read from the shop the till just left is dropped**, so it cannot
+   paint the wrong queue or make the new shop's backlog ring.
+5. **No mute on the till.** The back office's mute lives in that page's
+   localStorage; a till obeying a switch it does not draw would be silent
+   with nothing on screen saying why. The tablet's volume is the control.
+6. **The strip.** Browsers refuse sound until the page has been tapped once
+   per load, and iOS again after the app has been in the background. While
+   the audio is still blocked, a strip under the header reads
+   `Tap to turn on the new-order sound · 点击开启新订单提示音`; any tap
+   anywhere clears it. A late knock is never played: a blocked context
+   plays nothing rather than queuing a sound for the next tap.
+7. **Keeping the screen on.** A sleeping tablet freezes the page, so
+   nothing is read and nothing knocks. The till holds a Screen Wake Lock
+   while it is open and visible, re-asking on return and on every tap. The
+   device's own "never sleep while charging" setting is still the real
+   answer; Ash was told so, and to turn on battery protection.
+8. **Only at a counter with a QR menu.** The strip and the wake lock depend
+   on the store having a shop row (`shop_id` on the counter catalogue). A
+   counter with no QR menu sees the till exactly as before.
+
+**Not done, on purpose.** No repeating knock until the order is handled —
+recommended against, because a nagging sound at a busy counter gets muted
+and a muted till is worse than one ring. If orders are still missed, a
+single reminder is the next step. Paid QR orders (once WeChat Pay returns)
+leave the Pending list and are announced by the existing ding, so the
+till needs nothing for them.
+
+**One string composed**, declared in `docs/tacet-delivery-vocabulary.md`
+(§440).
+
+Tests: `scripts/test_till_knock.js` (new, fast shard, no browser) cuts the
+functions out of `public/till.html` and runs them against stubs: arrivals,
+quiet reads, the store-switch race, a suspended context, the notes, the
+strip, and the wake lock.
