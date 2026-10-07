@@ -94,8 +94,16 @@ const P_MADE_OFF   = 9957;  // made_here, switch off        → sold out
 const P_LOOSE      = 9958;  // no top_category              → unlabelled group
 const P_UNPUB      = 9959;  // listed but NOT published     → photo must serve
 const P_NONAME     = 9960;  // no name_cn                   → the checker's red
+// Two sizes in one group, the OWNER the dearer one — the Passion Fruit
+// Kombucha shape (2026-10-07): the card must read the cheap size, not the
+// owner's. And a pair at one price, which must not say "from".
+const P_SZ_BIG     = 9961;  // group owner, ¥87
+const P_SZ_SMALL   = 9962;  // its sibling, ¥29
+const P_EVEN_A     = 9963;  // group owner, ¥20
+const P_EVEN_B     = 9964;  // its sibling, ¥20
 const PRODS = [P_STOCK_OK, P_STOCK_ZERO, P_STOCK_NONE, P_STOCK_OFF, P_MADE_ON,
-               P_MADE_ZERO, P_MADE_OFF, P_LOOSE, P_UNPUB, P_NONAME];
+               P_MADE_ZERO, P_MADE_OFF, P_LOOSE, P_UNPUB, P_NONAME,
+               P_SZ_BIG, P_SZ_SMALL, P_EVEN_A, P_EVEN_B];
 
 // A 1x1 gif as a data URI — real bytes, so the photo route is exercised end to
 // end rather than short-circuited by an empty column.
@@ -219,6 +227,14 @@ function seed() {
   prod.run(P_LOOSE,      'Fixture unfiled',    '测试未分类', '__M-58', 12,   1, null,           null);
   prod.run(P_UNPUB,      'Fixture unpublished', '测试未上架', '__M-59', 19,  0, 'Drinks',       PIXEL);
   prod.run(P_NONAME,     'Fixture nameless',   null,         '__M-60', 15,   1, 'Drinks',       null);
+  const sized = db.prepare(`INSERT INTO store_products
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category,
+     variant_group_id, variant_label, variant_label_cn, variant_sort)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Ready to Eat', ?, ?, ?, ?)`);
+  sized.run(P_SZ_BIG,   'Fixture sized soda', '测试规格汽水', '__M-61', 87, P_SZ_BIG, '750ml', '750毫升', 0);
+  sized.run(P_SZ_SMALL, 'Fixture sized soda', '测试规格汽水', '__M-62', 29, P_SZ_BIG, '330ml', '330毫升', 1);
+  sized.run(P_EVEN_A,   'Fixture even jar',   '测试同价罐',   '__M-63', 20, P_EVEN_A, 'Mint', '薄荷', 0);
+  sized.run(P_EVEN_B,   'Fixture even jar',   '测试同价罐',   '__M-64', 20, P_EVEN_A, 'Lime', '青柠', 1);
 
   const mkShop = db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, ?)');
   const codes = { [LOC_LIVE]: 'MENUAAA2', [LOC_EMPTY]: 'MENUBBB3', [LOC_OFF]: 'MENUCCC4', [LOC_DEAD]: 'MENUDDD5' };
@@ -244,6 +260,10 @@ function seed() {
   add.run(liveShop, P_MADE_ZERO,  30,   'made_here', 1, 6);
   add.run(liveShop, P_MADE_OFF,   31,   'made_here', 0, 7);
   add.run(liveShop, P_LOOSE,      12,   'stocked',   1, 8);
+  add.run(liveShop, P_SZ_BIG,     87,   'made_here', 1, 9);
+  add.run(liveShop, P_SZ_SMALL,   29,   'made_here', 1, 10);
+  add.run(liveShop, P_EVEN_A,     20,   'made_here', 1, 11);
+  add.run(liveShop, P_EVEN_B,     20,   'made_here', 1, 12);
   // P_LOOSE is stocked and must have a shelf row, or §47 would make it sold
   // out and the grouping assertion would be reading a greyed row.
   const shelf = db.prepare(`INSERT INTO retail_store_stock (store_id, product_id, physical_qty, safety_buffer)
@@ -437,6 +457,30 @@ const soldOut = (row) => /class="sold"/.test(row);
       const { body } = await get(`/s/${LIVE}`);
       assert.ok(/<nav class="rail">/.test(body), 'no category rail');
       assert.ok(/class="cnt">0\d</.test(body), 'the section count is not zero-padded to two digits');
+    });
+
+    console.log('\nSizes — a card holding several sizes shows the cheapest');
+    await checkAsync('the card reads the cheapest size, not the group owner\'s', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const row = rowFor(body, 'Fixture sized soda');
+      const pr = (row.match(/<div class="pr">([\s\S]*?)<\/div>/) || [])[1] || '';
+      assert.ok(/29/.test(pr), `the card price is not the ¥29 size: ${pr}`);
+      assert.ok(!/87/.test(pr), `the card still shows the owner's ¥87: ${pr}`);
+      // Both sizes still reach the picker at their own prices.
+      assert.ok(row.includes(`data-add="${P_SZ_BIG}" data-p="87"`), 'the big size lost its own price');
+      assert.ok(row.includes(`data-add="${P_SZ_SMALL}" data-p="29"`), 'the small size lost its own price');
+    });
+    await checkAsync('sizes at different prices say "from" / "起", the mini app\'s live pair', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const pr = (rowFor(body, 'Fixture sized soda').match(/<div class="pr">([\s\S]*?)<\/div>/) || [])[1] || '';
+      assert.ok(/class="pfx l-en">from /.test(pr), 'no "from" before the English price');
+      assert.ok(/class="pfx l-cn">起</.test(pr), 'no 起 after the Chinese price');
+    });
+    await checkAsync('sizes at one price say neither', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const pr = (rowFor(body, 'Fixture even jar').match(/<div class="pr">([\s\S]*?)<\/div>/) || [])[1] || '';
+      assert.ok(/20/.test(pr), `the even pair lost its price: ${pr}`);
+      assert.ok(!/pfx/.test(pr), `one price for every size still said "from": ${pr}`);
     });
 
     console.log('\nLanguage — both sides present, CSS chooses, detection never re-runs');
