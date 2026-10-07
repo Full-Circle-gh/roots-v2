@@ -208,6 +208,11 @@ button{font:inherit;color:inherit;margin:0}
   flex:none;width:36px;height:36px;display:flex;align-items:center;justify-content:center;
   background:transparent;border:0;color:var(--td-text2);font-size:20px;line-height:1;
 }
+/* §440 — THE SOUND STRIP. Same place and look as the install ask, because it
+   is the same kind of thing: a one-tap fix the browser needs from a person.
+   The whole strip is the button; any tap anywhere on the till clears it too. */
+.t-sound{width:100%;border:0;font-family:inherit;text-align:left;cursor:pointer}
+.t-sound .msg{font-weight:500}
 .t-body{flex:1;display:flex;min-height:0}
 
 /* ---- left: entry ---- */
@@ -964,6 +969,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     <button class="go" id="inst-go" type="button"></button>
     <button class="off" id="inst-off" type="button">&times;</button>
   </div>
+  <!-- §440 — up only while this browser is still refusing to play sound. -->
+  <button class="t-install t-sound" id="snd-bar" type="button" hidden>
+    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg></span>
+    <span class="msg" id="snd-msg"></span>
+  </button>
   <div class="t-body">
     <div class="t-entry">
       <!-- The two faces of the entry side. The switch is EMPTY, and the pane
@@ -1179,6 +1189,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     installAdd:   ['Add', '添加'],                     // m.html:19223
     installOff:   ['Dismiss', '忽略'],                 // m.html:19224
     installHere:  ['Add to home screen', '添加到主屏幕'],  // m.html:12808
+    /* §440 — the strip that says the knock cannot play yet. Composed from live
+       parts, declared in docs/tacet-delivery-vocabulary.md (§440): "New-order
+       sound · 新订单提示音" is backend-account.html's own name for the ding,
+       点击 and 开启 are live in m.html. */
+    soundTap:     ['Tap to turn on the new-order sound', '点击开启新订单提示音'], // composed, §440
     /* §183 — THE QUESTIONS THE COUNTER CAN NOW ASK. Every pair below is COPIED
        from a live one and NOT ONE CHARACTER IS COMPOSED, so the vocabulary
        document is not touched: §120 and §129 established the same thing for the
@@ -1284,6 +1299,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     lines: [], sel: null,
     customer: null, custBusy: false,
     view: 'till',              // till | settle | done
+    /* §440 — QR order ids this till has already seen, so the knock rings for
+       an arrival and never for the list it opened onto. null until the first
+       read; reset with `pend` on a store switch. */
+    pendSeen: null,
     /* The QR orders waiting to be paid at THIS shop, and which face of the
        entry side is up.
 
@@ -1572,6 +1591,120 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // third thing telling a cashier the same news.
   });
 
+  /* ====================================================================
+     §440 — THE KNOCK: A QR ORDER HAS COME IN AND NOBODY HAS PAID YET.
+
+     WHY A DIFFERENT SOUND. The back office and the phone already ding for a
+     PAID order (G5 up to C6, a soft sine pair — retail-admin/04-orders.js,
+     m.html). A QR order at the counter is the other kind of news: somebody is
+     walking to the till to pay. Two notes going DOWN, shorter and a little
+     louder, in a brighter wave — so "ding-dong" means make it and "knock-knock"
+     means someone is coming to pay, without anyone having to look.
+
+     NO MUTE ON THE TILL, deliberately. The back office's mute lives in
+     localStorage, and a till honouring a switch drawn on another page would be
+     silent with nothing on its own screen saying why. The tablet's volume is
+     the control.
+
+     THE BROWSER WILL NOT PLAY SOUND UNTIL SOMEBODY TAPS THE PAGE, once per page
+     load, and iOS asks again after the app has been in the background. The
+     context is built at boot (allowed; it starts suspended) and woken by every
+     tap. While it is still suspended the strip under the header says so, so a
+     till never looks ready while it is in fact silent.
+     ==================================================================== */
+  var _knockCtx = null;
+  function knockCtx() {
+    if (_knockCtx) return _knockCtx;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      _knockCtx = new AC();
+      _knockCtx.onstatechange = function () { renderSound(); };
+    } catch (e) { _knockCtx = null; }
+    return _knockCtx;
+  }
+  function wakeKnock() {
+    var c = knockCtx();
+    if (!c || c.state === 'running') return;
+    try {
+      var p = c.resume();
+      if (p && p.then) p.then(renderSound, function () {});
+    } catch (e) {}
+  }
+  // A suspended context would hold the notes and play them late, on the next
+  // tap — a knock for an order already on screen. Better silent than late; the
+  // strip is up in exactly this state.
+  function playKnock() {
+    var c = knockCtx();
+    if (!c || c.state !== 'running') return;
+    try {
+      var now = c.currentTime;
+      // E5 down to B4.
+      [[659.25, 0], [493.88, 0.15]].forEach(function (n) {
+        var osc = c.createOscillator(), gain = c.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = n[0];
+        var t = now + n[1];
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.3, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(t);
+        osc.stop(t + 0.25);
+      });
+    } catch (e) {}
+  }
+  // Only a till that can receive QR orders asks: a counter with no shop
+  // listing has no QR menu, so nothing would ever knock there.
+  function renderSound() {
+    var bar = $('snd-bar');
+    if (!bar) return;
+    var c = _knockCtx;
+    var show = !!S.shopId && !!c && c.state !== 'running';
+    bar.hidden = !show;
+    if (show) $('snd-msg').textContent = T('soundTap');
+  }
+
+  /* §440 — KEEP THE SCREEN ON. A sleeping tablet freezes the page: no reads,
+     no knock. The device's own "never sleep while charging" setting is the
+     real answer and this is the backup — the Screen Wake Lock API, current
+     Chrome and Safari, secure pages only. The browser drops the lock whenever
+     the page is hidden, so it is asked for again on the way back and on every
+     tap (Safari can want a tap first). Only for a counter that takes QR
+     orders: one that cannot be knocked has no reason to keep a screen lit.
+     Released by closing the till, which is what lets the screen sleep at
+     night. */
+  var _wake = null, _wakeAsking = false;
+  function syncAwake() {
+    var want = !!S.shopId && !document.hidden;
+    if (!want) {
+      if (_wake) { try { _wake.release(); } catch (e) {} _wake = null; }
+      return;
+    }
+    if (_wake || _wakeAsking) return;
+    if (!navigator.wakeLock || !navigator.wakeLock.request) return;
+    _wakeAsking = true;
+    try {
+      navigator.wakeLock.request('screen').then(function (w) {
+        _wakeAsking = false;
+        _wake = w;
+        w.addEventListener('release', function () { if (_wake === w) _wake = null; });
+        // The shop may have changed while the browser was answering.
+        if (!S.shopId) syncAwake();
+      }, function () { _wakeAsking = false; });
+    } catch (e) { _wakeAsking = false; }
+  }
+
+  ['pointerdown', 'touchstart', 'keydown', 'click'].forEach(function (ev) {
+    window.addEventListener(ev, function () { wakeKnock(); syncAwake(); },
+      { capture: true, passive: true });
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    wakeKnock(); syncAwake(); renderSound();
+  });
+
   function start() {
     document.documentElement.setAttribute('data-theme', 'light');
     document.documentElement.lang = _lang === 'cn' ? 'zh-CN' : 'en';
@@ -1691,6 +1824,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       .then(function () {
         if (!S.storeId) return;
         $('boot').hidden = true; $('app').hidden = false;
+        knockCtx();   // §440 — built suspended; the first tap wakes it
         wire();
         render();
         startPendPoll();
@@ -1796,18 +1930,19 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      customer beats their own order to the counter; faster buys nothing, because
      the order was placed before they stood up.
 
-     PAUSED WHILE THE TILL IS NOT THE VIEW. Repainting a list underneath the
+     QUIET WHILE THE TILL IS NOT THE VIEW. Repainting a list underneath the
      settle takeover cannot help anyone and can only renumber the badge behind a
-     screen whose whole point is that nothing of the till stays readable. The
-     tab being hidden stops it too: a till left asleep on a counter overnight
-     should not spend the night polling. */
+     screen whose whole point is that nothing of the till stays readable. But
+     the read still runs (§440): the cashier is busiest exactly while they are
+     taking money, and an order arriving then must still knock. The tab being
+     hidden stops it: a till left asleep on a counter overnight should not
+     spend the night polling. */
   function startPendPoll() {
     loadPend();
     if (S.pendTimer) clearInterval(S.pendTimer);
     S.pendTimer = setInterval(function () {
-      if (S.view !== 'till') return;
       if (document.hidden) return;
-      loadPend();
+      loadPend(S.view !== 'till');
     }, 15000);
     openPendStream();
   }
@@ -1837,10 +1972,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     try {
       var es = new EventSource('/api/retail-admin/shop-events?store_id=' + encodeURIComponent(S.storeId));
       es.addEventListener('shop-order', function () {
-        // Not while a takeover is up: repainting the list under the settle
+        // Quiet while a takeover is up: repainting the list under the settle
         // screen cannot help anyone, and the poll catches up on the way back.
-        if (S.view !== 'till') return;
-        loadPend();
+        // The knock still rings (§440).
+        loadPend(S.view !== 'till');
       });
       // No onerror handler that closes: EventSource retries by itself, and
       // closing here would turn one bad minute into a socket that never
@@ -1861,6 +1996,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.shopId = null; S.soMode = false; S.soBusy = {};   // §287 — another shop's menu
     // Another shop's queue, and its numbers restart at 1 just the same.
     S.pend = null; S.pane = 'menu'; S.paneTouched = false; S.recall = null;
+    S.pendSeen = null;   // §440 — the new shop's backlog is not an arrival
     render();
     loadPend();
     openPendStream();
@@ -1974,6 +2110,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     renderLeave();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
     renderInstall();
+    renderSound();
+    syncAwake();
     var qi = $('q');
     qi.placeholder = T('searchAdd');
     $('q-clr').hidden = !S.q;
@@ -2136,18 +2274,47 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // the screen where they were about to take money. Saying it here as well would
   // put an error in a pane behind a switch that may not even be drawn, and would
   // need a sentence for "the list could not be read" that no locked pair covers.
-  function loadPend() {
+  //
+  // `quiet` (§440) reads for the knock only and leaves the list on screen
+  // alone — used while the settle takeover is up.
+  function loadPend(quiet) {
     if (!S.storeId) return;
+    // A read that lands after a store switch is the OLD shop's list. Dropped:
+    // painting it would show the wrong queue, and seeding the knock with it
+    // would make the new shop's whole backlog ring as though it had just come in.
+    var sid = S.storeId;
     api(pendUrl()).then(function (j) {
       if (!j || !j.success) return;
+      if (String(sid) !== String(S.storeId)) return;
       // shop_order_code is null on anything that did not arrive by QR. The
       // server filter already excludes those; this is the belt to its braces,
       // because a row with no number cannot be found by the one thing the
       // customer knows.
-      S.pend = (j.data || []).filter(function (o) { return o.shop_order_code != null; });
+      var rows = (j.data || []).filter(function (o) { return o.shop_order_code != null; });
+      noteArrivals(rows);
+      if (quiet) return;
+      S.pend = rows;
       autoPane();
       render();
     }).catch(function () { /* keep the last good list; the next tick retries */ });
+  }
+
+  /* §440 — AN ARRIVAL IS AN ID THIS TILL HAS NOT SEEN BEFORE. The first read
+     only remembers: a till switched on in the morning onto three orders from
+     before it opened has nothing arriving, and must not ring for them. After
+     that, any new id knocks once — one knock for a read that brought three,
+     because three knocks in a row reads as an alarm.
+
+     The set only grows. An order that leaves the list (paid, cancelled) and
+     comes back into the window — the list is capped at 50 — is not new. */
+  function noteArrivals(rows) {
+    var first = !S.pendSeen;
+    if (first) S.pendSeen = {};
+    var fresh = false;
+    rows.forEach(function (o) {
+      if (!S.pendSeen[o.id]) { S.pendSeen[o.id] = 1; fresh = true; }
+    });
+    if (fresh && !first) playKnock();
   }
 
   // "Default to Pending when something is waiting, Menu when nothing is."

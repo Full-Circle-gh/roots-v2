@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.315 · 2026-10-07 · §440 THE TILL'S "TAP TO TURN ON THE NEW-ORDER SOUND" STRIP — 1 STRING COMPOSED BY CLAUDE FROM LIVE PARTS.** See *The till's sound strip (§440)*.
+
 **v1.314 · 2026-10-05 · §432 THE EVENING TO-MAKE MESSAGE TO THE KITCHEN'S WECOM GROUP, AND ITS SETTINGS CARD — 10 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *The evening to-make message (§432)*.
 
 **v1.313 · 2026-10-05 · §430 CHECKING GZGROCERY'S STATEMENT SHEET ON THE BILLING PANEL — 20 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *Checking gzgrocery's statement sheet (§430)*.
@@ -13476,3 +13478,13 @@ change markers carry no label.
 | `时间留空则关闭。` | Leave the time blank to turn it off. | `留空则关闭` (live, the morning-hour row) | — |
 | `请输入 12:00–23:59 之间的时间` | Enter a time between 12:00 and 23:59 | `请输入 0–23 的小时` (live) with a time range | — |
 | `厨房制作请求时间已关闭(配送 → 新鲜现做),因此不会发送。` | The morning request hour is off (Delivery → Fresh batches), so nothing is sent. | the live label `厨房制作请求时间`, the two live tab names, `已关闭`, `不会发送` | — |
+
+## The till's sound strip (§440)
+
+**Composed by Claude, 2026-10-07, under the 2026-09-06 amendment.**
+Operator register. `public/till.html`, `STRINGS.soundTap`, shown in the
+strip under the till's header while the browser is still blocking sound.
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `点击开启新订单提示音` | Tap to turn on the new-order sound | `新订单提示音` (live, `public/backend-account.html`, "New-order sound"), `点击` (live, `m.html` `点击跳转`), `开启` (live, `m.html` toggles) | `点击开启提示音` (`提示音` alone is the phone's Settings row, `m.html`) — does not say which sound; `轻触` — not live anywhere in the product |

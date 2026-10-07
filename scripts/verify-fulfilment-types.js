@@ -2403,12 +2403,14 @@ check('both pay buttons are wired, the phone bar included',
 check('the till opens a live channel for its own shop',
   /new EventSource\('\/api\/retail-admin\/shop-events\?store_id=' \+ encodeURIComponent\(S\.storeId\)\)/.test(POS_TILL_SRC), true);
 check('...and re-reads the list when one lands',
-  /addEventListener\('shop-order'[\s\S]{0,300}loadPend\(\)/.test(POS_TILL_SRC), true);
+  // §440: the call carries `quiet` (S.view !== 'till') so the knock still rings
+  // behind the settle screen; it is still a re-read on every event.
+  /addEventListener\('shop-order'[\s\S]{0,300}loadPend\([^)]*\)/.test(POS_TILL_SRC), true);
 // THE POLL IS THE FLOOR AND MUST NOT BE REMOVED. A dropped socket behind a
 // hotel's proxy is silent, and a counter that has quietly stopped seeing orders
 // is a worse failure than one running fifteen seconds behind.
 check('the poll survives beside the live channel',
-  /setInterval\(function \(\) \{[\s\S]{0,220}loadPend\(\);\n    \}, 15000\)/.test(POS_TILL_SRC), true);
+  /setInterval\(function \(\) \{[\s\S]{0,220}loadPend\([^)]*\);\n    \}, 15000\)/.test(POS_TILL_SRC), true);
 // EventSource retries on its own (~3s). An onerror that closed the stream would
 // turn one bad minute into a socket that never comes back for the rest of the
 // shift.
