@@ -559,9 +559,21 @@ function buildMenu(shop) {
       String(a.variant_label || '').localeCompare(String(b.variant_label || '')) ||
       (a.store_product_id - b.store_product_id));
     const rep = sorted.find(m => m.store_product_id === gid) || sorted[0];
+    /* THE CARD SHOWS THE CHEAPEST SIZE, NOT THE REPRESENTATIVE'S. The
+       representative is the group owner, and nothing makes the owner the small
+       size: reported from a phone, 2026-10-07, Passion Fruit Kombucha's card
+       read 87 (the big bottle) while a 29 bottle sat inside the picker. The
+       mini app's grid already shows the lowest price with a "from" / "起"
+       caption (miniapp/pages/shop/shop.js _toRows); this is the same rule —
+       every listed size counts, sold out or not, and the caption only when
+       the sizes actually differ. */
+    const prices = sorted.map(m => Number(m.price) || 0).filter(v => v > 0);
+    const minP = prices.length ? Math.min(...prices) : 0;
     collapsed.push(Object.assign({}, rep, {
       variants: sorted,
       sold_out: sorted.every(m => m.sold_out),
+      price: minP > 0 ? minP : rep.price,
+      price_from: minP > 0 && prices.some(v => v !== minP),
     }));
   }
   listings = collapsed;
@@ -2122,6 +2134,10 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
    than the website's. */
 .pr{font-family:var(--f-bear);font-size:13.5px;line-height:1;letter-spacing:.04em;
   color:var(--ink);font-variant-numeric:tabular-nums}
+/* "from" on a card holding several sizes: the caption, smaller than the number
+   it qualifies, as the mini app's .price-prefix is. No display rule here, so
+   the language toggle's own .l-en / .l-cn hiding still decides which shows. */
+.pfx{font-size:10px;letter-spacing:.06em}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
 
@@ -3907,7 +3923,13 @@ router.get('/s/:shopCode', (req, res) => {
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
       `</div>` +
       `<div class="t">${bi(it.name_en, it.name_cn)}</div>` +
-      `<div class="pf"><div class="pr">${esc(money(it.price, cur))}</div>${add}</div>` +
+      // "from 29" / "29起" — the mini app's own live pair (shop.js _toRows),
+      // word order as each language reads it.
+      `<div class="pf"><div class="pr">` +
+      (it.price_from ? `<span class="pfx l-en">from </span>` : '') +
+      esc(money(it.price, cur)) +
+      (it.price_from ? `<span class="pfx l-cn">起</span>` : '') +
+      `</div>${add}</div>` +
       `</div>`;
   };
 
