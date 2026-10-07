@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.484
+# Tacet shared-core consolidation — decisions record, v4.485
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-07 · v4.485 — **§440 · A PRODUCT WHOSE ONLY QUESTION IS OPTIONAL EXTRAS ADDS STRAIGHT IN — DECIDED BY ASH:** with a screenshot of the Guacamole "Add extras?" sheet, *"everytime customer choose a dip or spread he need to see the extras"*, then *"start step 1"*. `has_options`, the flag every quick add reads, now means "must ask before adding": optional pick-any groups alone no longer set it, so + on a dip adds it with no sheet. A pick-one (so the soups' "heat up?"), a required or minimum pick-any, or a pre-ticked choice still asks. Narrows §438 for extras-only products. Server only: live on deploy, no mini app upload. No new word. See §440.
 
 2026-10-06 · v4.484 — **§432 rule 10 · THE EVENING "TO MAKE" MESSAGE CARRIES EACH PRODUCT'S SKU — ASKED BY ASH:** holding the 2026-10-07 preview in the kitchen group, *"should include sku"*. Each line now leads with the product's SKU in bold (`**SKU 9-531** 青酱卷 Pesto Wrap × 18`), the §434 rule carried from the slip to the message. A product with no SKU prints its name alone. No schema, no new word. See §432.
 
@@ -29032,3 +29034,56 @@ both against the same cases so they cannot drift. The dot is repainted from
 cart cleared by an order moves it without redrawing the list. The desktop
 grid has no + (its cards open the product page) and is unchanged. Live on
 deploy; no upload needed for this half.
+
+## §440 — A PRODUCT WHOSE ONLY QUESTION IS OPTIONAL EXTRAS ADDS STRAIGHT IN
+
+**Decided 2026-10-07 by Ash**, with a screenshot of the Guacamole "Add
+extras?" sheet: *"many products has extras options … the problem is that for
+example all duos had it so everytime customer choose a dip or spread he need
+to see the extras"*. Of two steps put to Ash, Ash took step 1 (*"start step
+1"*): this section.
+
+**What happened.** Since §438 the shop grid + opens the product page with its
+choice sheet already up. The dips and spreads ask nothing but the optional
+"Add extras?", so every + on one of them stopped on the extras sheet.
+
+**The rule.** `has_options` — the flag the shop grid, favourites, the size
+sheet, "Buy together", "Buy again", the home bundle block, add-to-order, the
+checkout offer cards and the web shop all read before a quick add — now means
+"must ask before adding", not "has any options". A product asks first when any
+of its askable groups is:
+
+1. a pick-one, required or not (a dressing, "heat up?");
+2. a pick-any that is required or has a minimum;
+3. a pick-any with a pre-ticked choice (a quick add would leave it out).
+
+Optional pick-any groups alone — the "Add extras?" preset — do not count, so
+the dip goes straight into the cart. Its extras stay on its own product page:
+"Add to basket" there still opens the sheet. The rule is stated once,
+`asksFirstSql` / `ASKS_FIRST_WHERE` in `lib/product-options.js`, and every
+read that ships the flag uses it.
+
+**The soups are unchanged, by rule rather than by name.** Ash: *"soup stay the
+same"*. Each soup asks "heat up?", a pick-one, so it still asks first. A soup
+whose "heat up?" were deleted would start adding straight in like a dip.
+
+**Narrows §438, does not reverse it.** A product with a real question still
+opens with its sheet up from the +. Only extras-only products skip it.
+
+**Side effect on the web shop.** Its grid + adds an extras-only product
+directly (it used to go to the product page), and the "Options/多规格" cue no
+longer shows on those cards. Both read the same flag; nothing in
+`public/shop.html` changed.
+
+**Not done, on purpose — step 2.** A checkout "Add extras?" list covering the
+basket, decided in outline only: soups keep their extras on the soup page, and
+an extra moved to checkout sells at its add-on price, not its product price
+(Ash: *"yes add-on price"*). Not built. Before building it, list every extra
+whose add-on price differs from its linked product's price for Ash.
+
+**Server only.** Live on deploy; the mini app reads the flag from the server,
+so no upload. No schema change. No new word.
+
+Tests: `scripts/test_extras_only_quick_add.js` (new) runs the rule against six
+shapes and checks the shop list (full, slim, lean), "Buy together", size rows
+and order lines; it fails on the old code (*"extras-only dip flagged true"*).

@@ -1494,11 +1494,11 @@ const RETAIL_PRODUCT_COLS_LIST = RETAIL_PRODUCT_COLS
   .replace('p.nutrition,', '')
   .replace('p.description_blocks, p.use_block_design, p.page_template,', '')
   .replace('p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,', '')
-  // has_options: 0/1 flag so a card grid knows the product needs a customer
-  // choice (e.g. dressing). The shop's quick-add reads it to route to the PDP
-  // (where the choice is made + required-validated) instead of adding straight
-  // to cart. Indexed lookup (idx_retail_opts_product) → cheap per row.
-  + ', EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = p.id) AS has_options';
+  // has_options: 0/1 flag so a card grid knows the product must ASK before a
+  // quick add (a dressing, "heat up?") — not merely that it has options: a
+  // product whose only questions are optional extras adds straight in (§440,
+  // productOptions.asksFirstSql). Indexed lookup (idx_retail_opts_product).
+  + `, ${productOptions.asksFirstSql('p.id')} AS has_options`;
 
 // Leanest set for the shop's full-catalogue grid pull (slim=1). The card renders
 // only name / price / image / badge / stock / variant — never the long
@@ -1626,7 +1626,7 @@ function resolveBundle(jsonStr) {
   const rows = tdb().prepare(
     `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.weight AS size, sp.sell_price AS price, sp.stock_qty AS stock,
             sp.image_url, sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data,
-            EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = sp.id) AS has_options
+            ${productOptions.asksFirstSql('sp.id')} AS has_options
        FROM store_products sp
       WHERE sp.id IN (${ph}) AND sp.is_published = 1 AND COALESCE(sp.is_active, 1) = 1`
   ).all(...ids).map(r => {
@@ -2777,14 +2777,16 @@ router.get('/api/retail/products', (req, res) => {
   // hundreds of rows and doesn't need the extra per-bundle component query.
   const withBundleComps = req.query.bundle_components === '1' || req.query.bundle_components === 'true';
   for (const r of rows) decorateBundleRow(r, { withComponents: withBundleComps });   // flag bundles + real (component-derived) stock
-  // Flag which rows carry customer-choice options (dressing / paid extras), so a
+  // Flag which rows must ask before a quick add (a dressing, "heat up?"), so a
   // card grid can show an "Options" cue and the add-to-order picker knows to open
-  // a chooser instead of a bare qty stepper. One cheap set-membership query.
+  // a chooser instead of a bare qty stepper. Optional extras alone don't count
+  // (§440). One cheap set-membership query.
   if (rows.length) {
     const ph = rows.map(() => '?').join(',');
     const optSet = new Set(
       tdb().prepare(
-        `SELECT DISTINCT product_id FROM retail_product_options WHERE product_id IN (${ph})`
+        `SELECT DISTINCT o.product_id FROM retail_product_options o
+          WHERE o.product_id IN (${ph}) AND ${productOptions.ASKS_FIRST_WHERE('o')}`
       ).all(...rows.map(r => r.id)).map(x => x.product_id)
     );
     for (const r of rows) r.has_options = optSet.has(r.id);
@@ -3723,7 +3725,7 @@ router.get('/api/retail/products/:id', (req, res) => {
               p.image_url, p.updated_at,
               ${hasImageFallbackSql('p')} AS has_image,
               ${inventory.sellableStockSql('p.id', 'p.stock_qty')} AS stock,
-              EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = p.id) AS has_options
+              ${productOptions.asksFirstSql('p.id')} AS has_options
          FROM store_products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
         ORDER BY COALESCE(p.variant_sort, 0), COALESCE(p.variant_label, p.name_en), p.id`
@@ -13349,7 +13351,8 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
             oi.addon_id, oi.ship_from_supplier,
             -- §435: "Buy again" opens a line with no answers on its product page
             -- when the product NOW asks a question, instead of copying it blank.
-            EXISTS(SELECT 1 FROM retail_product_options po WHERE po.product_id = oi.product_id) AS has_options
+            -- Optional extras alone are not a question (§440).
+            ${productOptions.asksFirstSql('oi.product_id')} AS has_options
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
