@@ -56,8 +56,17 @@ const PLAIN = `{sku:'OM-1L',_id:12,name:['Oat milk 1L','燕麦奶 1L'],price:'¥
   status:['Live','在售'],kind:'on',stock:12,stockLabel:['12 in stock','库存 12']}`;
 
 const steppers = "document.querySelectorAll('.sheet .stepbtn').length";
-const chips = "document.querySelectorAll('.sheet .chip')";
-const onChip = "(document.querySelector('.sheet .chip.on')||{innerText:''}).innerText";
+/* Scoped to the size switcher. '.sheet .chip' was every chip on the sheet, and
+   the Sales card's 7 / 30 / 90 days / All row is chips too — so a plain product
+   counted four "sizes" and a family of three counted seven. */
+const chips = "document.querySelectorAll('#mSizes .chip')";
+const onChip = "(document.querySelector('#mSizes .chip.on')||{innerText:''}).innerText";
+/* ON SCREEN, NOT MERELY IN THE DOCUMENT. The switcher is a horizontal scroll
+   strip in the sheet's flex column, and a scroll container's automatic minimum
+   height there is zero: on a sheet taller than the screen it was squashed to
+   0px with both chips still in the DOM. Every count above passed while the
+   operator saw nothing (reported 2026-10-07, Lemongrass Kombucha). */
+const sizesShown = "(function(){var r=document.getElementById('mSizes');return !!r&&r.getBoundingClientRect().height>=30;})()";
 const priceBox = "(document.getElementById('mPrice')||{}).value";
 
 /* A VARIANT FAMILY. Three sizes of one sorbet are three rows here and one card
@@ -100,6 +109,7 @@ const CASES = [
   ]],
   ['a variant family offers every size', FAMILY, [
     ['all three are on the sheet', `${chips}.length === 3`],
+    ['and the row can actually be seen — not squashed to nothing', sizesShown],
     ['in size order',              `[].map.call(${chips},function(c){return c.innerText}).join('|') === 'X1|X5|X10'`],
     ['the open one is marked',     `${onChip}.trim() === 'X1'`],
     ['and it is the one being edited', `${priceBox} === '40'`],

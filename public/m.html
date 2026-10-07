@@ -391,7 +391,17 @@ button,a,.row,.chip,.stepbtn{touch-action:manipulation}
    above-the-fold render in loadLive — see there) turns it off once that first
    paint has landed, so later renders paint their final state directly. */
 html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
-.hscroll{scrollbar-width:none;-ms-overflow-style:none;overflow-x:auto}
+/* NEVER SHORTER THAN ITS OWN CHIPS. overflow-x:auto makes the strip a scroll
+   container, and a scroll container's automatic minimum height in a flex
+   column is ZERO, not its content. So a strip sitting in a column that
+   overflows — the product sheet, every long screen — shrinks with the rest,
+   and being the only child allowed to go to nothing, it does: reported from a
+   phone, 2026-10-07, Lemongrass Kombucha's Small | Big switcher was on the
+   sheet at 0px tall, and the second size's stock could not be reached. The
+   floor is height only: in a ROW the main axis is width, so a strip beside a
+   button still gives way sideways exactly as before. */
+.hscroll{scrollbar-width:none;-ms-overflow-style:none;overflow-x:auto;
+  min-height:-webkit-fit-content;min-height:fit-content}
 .hscroll::-webkit-scrollbar{display:none}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important}}
 
@@ -40693,7 +40703,7 @@ function stockCard(p){
    switching. */
 function sheetVariants(p){
   const fam=prodFamily(p); if(!fam.length) return '';
-  return `<div class="hscroll" style="display:flex;gap:8px;margin:-4px 0 -2px">${fam.map(m=>{
+  return `<div id="mSizes" class="hscroll" style="display:flex;gap:8px;margin:-4px 0 -2px">${fam.map(m=>{
     const on=m._id===p._id;
     return `<button class="chip ${on?'on':''}" style="flex:none" onclick="APP.cmd('pickVariant','${m._id}')"
       ><span>${escAttr(m.vLabel||String(m.sku).replace(/^SKU /,''))}</span></button>`;
