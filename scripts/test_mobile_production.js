@@ -92,6 +92,12 @@ const ORDER_OWED = `{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',i
 const ORDER_RECORDED = ORDER_OWED.replace('recorded_at:null', "recorded_at:'2026-09-07 10:14:00'");
 
 // The record screen, entered the way the queue enters it.
+/* AN OPERATOR WHO HOLDS TWO STORES and has switched Add stock to the second. */
+const TWO_STORES = SHELF
+  .replace("stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]",
+           "stores:[{id:1,name_en:'Tianhe',name_cn:'天河'},{id:2,name_en:'Yuexiu',name_cn:'越秀'}]")
+  .replace('state.qs.storeId=1;', 'state.qs.storeId=2;');
+
 const MADE = SHELF + `
   state.kq.order=${ORDER};
   hdOpen(hdResolve(state.kq.order),'RS-44',44); render();`;
@@ -707,6 +713,22 @@ run('production', [
     SHELF + "state.bat.qty={7:5}; state.bat.q='hum'; push('logbatch');", [
       ['nothing counted', "batUnits()===0"],
       ['and the search is clear', "state.bat.q===''"],
+    ]],
+
+  /* WHICH STORE IT GOES TO. Both screens write to the store Add stock last
+     showed, and an operator holding several can switch it there — so each
+     names it under its title, exactly as Add stock does. */
+  ['Log a batch names the store it records into',
+    TWO_STORES + "state.stack=[{route:'logbatch',title:SUBS.logbatch.title}];render();", [
+      ['Yuexiu, the store in use', `${body}.indexOf('Yuexiu')>-1`],
+      ['and not the first in the list', `${body}.indexOf('Tianhe')===-1`],
+    ]],
+  ['the record screen names it too, and writes to it',
+    TWO_STORES + "state.stack=[{route:'logbatch',title:SUBS.logbatch.title}];render();" +
+      "APP.cmd('batBump',7,2);APP.cmd('batNext');" + CATCH + "render();", [
+      ['it is the record screen', "state.stack[state.stack.length-1].route==='whatmade'"],
+      ['naming Yuexiu', `${body}.indexOf('Yuexiu')>-1`],
+      ['and the batch goes there', "APP.cmd('hdCommit'),/\"store_id\":2/.test(window.__sent[0].b)"],
     ]],
 
   ['none of it is offered to somebody who cannot log production',

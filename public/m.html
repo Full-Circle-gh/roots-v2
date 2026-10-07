@@ -23475,8 +23475,12 @@ SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],
    line, for the four reasons a push clears; the three that need a catalogue
    picker still name the desktop tab, on the card that needs it. */
 SUBS.channelsync={title:['Channel sync','渠道同步'],render:()=>screenChannelSync()};
-SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
-SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
+/* THE STORE IS THE STATUS LINE on both, as it is on Add stock. Both write to
+   `state.qs.storeId` — the store Add stock last showed — and an operator who
+   holds several can now switch that there. Without the name here, a batch
+   logged after switching went to a store this screen never mentioned. */
+SUBS.whatmade={title:['What you made','登记制作'],status:()=>escAttr(qsStoreName()),render:()=>screenWhatMade()};
+SUBS.logbatch={title:['Log a batch','登记批次'],status:()=>escAttr(qsStoreName()),render:()=>screenLogBatch()};
 
 /* ==========================================================================
    Recipes (§164, §167, §300). What a thing is made from, and in what order.
