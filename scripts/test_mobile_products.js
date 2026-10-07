@@ -131,6 +131,17 @@ const CASES = [
     ['the sibling kept its own price',      `sheetPrice[22] === undefined`],
     ['and its own count',                   `sheetStep['st_22_1'] === 2`],
   ]],
+  // Every + and − repaints the sheet, and the steppers sit below the photo and
+  // the price. Without its scroll kept, each tap threw the sheet back to the top
+  // and the count being stepped went off screen (reported 2026-10-07).
+  ['a tap on a stepper keeps the sheet where it was',
+    open(PLAIN) + `var b=document.getElementById('mProdSheetBody'); b.scrollTop=200; window.__top=b.scrollTop;
+              APP.cmd('stepInc','st_12_1'); APP.cmd('stepDec','st_12_2');`, [
+    ['the sheet was scrolled to begin with', `window.__top > 0`],
+    ['and it is still there after two taps',
+     `document.getElementById('mProdSheetBody').scrollTop === window.__top`],
+    ['and the taps landed',                  `sheetStep['st_12_1'] === 3 && sheetStep['st_12_2'] === 4`],
+  ]],
   // The price box is repainted from scratch on every render, and a stock
   // stepper renders. Typed, then stepped, the price used to be painted back to
   // what the product cost before.
