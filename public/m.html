@@ -503,6 +503,7 @@ input.stnum:focus{outline:none;background:var(--surface-card);border-color:var(-
   background:var(--surface-card);color:var(--text-secondary)}
 .chip.on{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)}
 .chip .c{font-size:11px;font-variant-numeric:tabular-nums;opacity:.8}
+.chip:disabled{opacity:.55;cursor:default}
 .i svg,svg.i{display:block;flex:none}
 .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:112px;z-index:60;background:var(--text-primary);
   color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;white-space:nowrap;
@@ -2286,6 +2287,7 @@ reg('xfrTick', id=>{
 });
 reg('xfrAllArrived', ()=>xfrAllArrived());
 reg('qsFlush', id=>qsFlush(Number(id)));
+reg('qsStore', id=>qsSwitchStore(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
   /* Opening Orders IS reading them — the same rule the inbox already follows.
@@ -7314,7 +7316,7 @@ reg('stockTyped', (k,v)=>{ if(String(k).indexOf('st_')===0) sheetStep[k]=String(
    before, which is every other caller in this file. */
 function chipRow(items, current, cmd){
   return `<div class="hscroll" style="display:flex;gap:8px;padding:0 16px">${items.map(c=>
-    `<button class="chip ${(c.on!=null?c.on:c.key===current)?'on':''}" onclick="APP.cmd('${c.cmd||cmd}','${c.key}')"><span>${T(c.en,c.zh)}</span>${c.count!=null?`<span class="c">${c.count}</span>`:''}${c.ic?ic(c.ic,15):''}</button>`).join('')}</div>`;
+    `<button class="chip ${(c.on!=null?c.on:c.key===current)?'on':''}"${c.disabled?' disabled':''} onclick="APP.cmd('${c.cmd||cmd}','${c.key}')"><span>${T(c.en,c.zh)}</span>${c.count!=null?`<span class="c">${c.count}</span>`:''}${c.ic?ic(c.ic,15):''}</button>`).join('')}</div>`;
 }
 /* The same row, for a filter that takes several answers at once. 'all' lights
    when nothing is chosen — it is the row's clear, not a fourth choice — and
@@ -21862,11 +21864,46 @@ function loadQsCtx(){
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.qs.ctxErr=E('Could not open Add stock.','无法打开“加库存”。'); render(); });
 }
+/* WHICH STORE THIS SCREEN IS WORKING ON, for an operator who holds more than
+   one. The server has always sent every store such an operator may edit, and
+   said they "can switch between them" — but the screen took the first and
+   offered no way to change it, so an owner standing in Yuexiu was counting
+   Tianhe's shelf with no way out.
+
+   LOCKED WHILE ANYTHING IS UNSAVED. Every write on this screen reads
+   `state.qs.storeId` when it is SENT, not when the operator tapped: a +3 still
+   waiting out its 700ms pause would land on the store switched TO. A typed
+   figure not yet committed, a write in flight and an amount handed back by a
+   failed write are the same hazard, so the other stores' chips are disabled
+   until the card is settled — Retry, or − back to +0, releases them. */
+function qsStoreBusy(){
+  const qs=state.qs, any=o=>Object.keys(o||{}).length>0;
+  return any(qs.timers)||any(qs.inflight)||any(qs.fixing)||any(qs.typing)
+    || Object.keys(qs.add||{}).some(k=>(qs.add[k]||0)>0);
+}
+function qsSwitchStore(id){
+  const qs=state.qs;
+  if(id===qs.storeId||qsStoreBusy()) return;
+  if(!((qs.ctx&&qs.ctx.stores)||[]).some(s=>s.id===id)) return;
+  qs.storeId=id;
+  // Everything keyed by product belongs to the shelf being left. The search
+  // stays: looking the same product up in the next store is the usual reason
+  // for switching.
+  qs.items=null; qs.itemsTried=false; qs.itemsErr=null;
+  qs.add={}; qs.inflight={}; qs.rowErr={}; qs.timers={};
+  qs.addedToday={}; qs.addedTried=false; qs.fixing={}; qs.setBase={};
+  qs.typing={}; qs.typeErr={};
+  render();
+  loadQsItems(); loadQsAdded();
+}
 function loadQsItems(force){
   if(state.qs.storeId==null) return;
   if(state.qs.itemsTried&&!force) return;
   state.qs.itemsTried=true;
-  api('/stores/'+state.qs.storeId+'/stock').then(rows=>{
+  const forStore=state.qs.storeId;
+  api('/stores/'+forStore+'/stock').then(rows=>{
+    // A shelf that answers after the operator switched away is the wrong shelf.
+    if(state.qs.storeId!==forStore) return;
     state.qs.items=Array.isArray(rows)?rows:((rows&&rows.rows)||[]);
     state.qs.itemsErr=null;
     // A record screen opened before the shelf existed is waiting on exactly
@@ -21882,7 +21919,7 @@ function loadQsItems(force){
       state.hd.awaiting=null; state.hd.awaitingItemId=null;
     }
     render();
-  }).catch(e=>{ if(String(e.message)==='auth') return;
+  }).catch(e=>{ if(String(e.message)==='auth'||state.qs.storeId!==forStore) return;
     state.qs.itemsErr=E('The shelf didn’t load.','货架加载失败。'); render(); });
 }
 /* WHAT HAS ALREADY GONE ON THE SHELF TODAY.
@@ -22113,7 +22150,7 @@ function qsSetCommit(id,reason){
   if(!p) return;
   const was=state.qs.setBase[id];
   const n=qsShelf(p)||0;
-  if(was!=null&&n===was){ delete state.qs.setBase[id]; return; }   // back where it started
+  if(was!=null&&n===was){ delete state.qs.setBase[id]; return render(); }   // back where it started; reopens the store chips
   state.qs.fixing[id]=n;
   render();
   const body={physical_qty:n, reason:'adjust', note:'quick-stock'};
@@ -22151,7 +22188,9 @@ function qsSetFailed(id,was,msg){
 function qsFlush(id){
   clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
   const n=state.qs.add[id]||0;
-  if(n<=0) return;
+  // Nothing to write — but the pause just ended, and the store chips it was
+  // holding shut (qsStoreBusy) have to be drawn open again.
+  if(n<=0) return render();
   const p=(state.qs.items||[]).find(x=>x.product_id===id||x.id===id);
   state.qs.add[id]=0;
   state.qs.inflight[id]=n;
@@ -22390,6 +22429,17 @@ function screenStockAdd(){
   if(!(qs.ctx.stores||[]).length) return nothingYet(T('No store assigned','未分配门店'),
     T('You need a store before you can add stock to one. Whoever manages your team can set it.','需要先分配门店才能加库存，可请团队管理员设置。'));
 
+  /* THE STORE, for an operator who holds several (see qsSwitchStore). Names
+     only and no heading: a store's name says what the chip is in both
+     languages, so this adds no string. One store, no row — a picker that can
+     pick one thing is not a choice. The status line above keeps naming the
+     store in use, so it stays said even while the row is scrolled. */
+  const stores=qs.ctx.stores, locked=stores.length>1&&qsStoreBusy();
+  const storeRow = stores.length>1 ? `<div style="padding-top:12px">${chipRow(stores.map(s=>{
+      const en=escAttr(s.name_en||s.name_cn||('#'+s.id)), zh=escAttr(s.name_cn||s.name_en||('#'+s.id));
+      return {key:String(s.id),en,zh,disabled:locked&&s.id!==qs.storeId};
+    }),String(qs.storeId),'qsStore')}</div>` : '';
+
   const search=`<div style="padding:12px 16px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
@@ -22401,7 +22451,7 @@ function screenStockAdd(){
      destroyed the very field the keystroke came from — and a rebuilt field opens
      a fresh soft keyboard on its letter page, which is why typing a SKU here
      gave one digit and then the alphabet. */
-  return search+`<div id="mQsBody">${qsBodyHtml()}</div>`;
+  return storeRow+search+`<div id="mQsBody">${qsBodyHtml()}</div>`;
 }
 /* The whole of the Add Stock list, apart from the search box above it. Split out
    of screenStockAdd so that typing can repaint it alone; the split is mechanical
