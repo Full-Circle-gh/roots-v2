@@ -114,6 +114,17 @@ const CASES = [
     ['the open one is marked',     `${onChip}.trim() === 'X1'`],
     ['and it is the one being edited', `${priceBox} === '40'`],
   ]],
+  // Tapping the CARD opens the first size in the operator's order, not the
+  // group owner. Here the owner (gid 23, created first) is the LAST size, which
+  // is the Lemongrass Kombucha shape: owner Big, Small listed first.
+  ['the card opens the first size, not the group owner',
+    `DB.products=[${size(21, 'X1', 0, 40).replace('gid:101','gid:23')},${size(22, 'X5', 1, 132).replace('gid:101','gid:23')},${size(23, 'X10', 2, 240).replace('gid:101','gid:23')}];
+     ${stocked} state.liveProductsLoaded=true; APP.cmd('tab','products');
+     var card=[].slice.call(document.querySelectorAll('#content .card button')).filter(function(b){return b.innerText.indexOf('Raspberry Mango Sorbet')>=0})[0];
+     card.click();`, [
+    ['the sheet opened on the first size', `${onChip}.trim() === 'X1'`],
+    ['and is editing it',                  `${priceBox} === '40'`],
+  ]],
   ['tapping a size moves the sheet to it', FAMILY + `APP.cmd('pickVariant','23');`, [
     ['the mark moves',   `${onChip}.trim() === 'X10'`],
     ['the SKU follows',  `sheetText().includes('RM-X10')`],
