@@ -46670,7 +46670,14 @@ function productCard(u){
   /* §325 PD14 — while selecting, the card ticks (the whole family) instead of opening. */
   const selecting=Array.isArray(state.prodSel);
   const ticked=selecting&&members.every(m=>state.prodSel.indexOf(Number(m._id))>=0);
-  const tap=selecting?`APP.cmd('prodSelToggle','${ids}')`:`APP.cmd('openProduct','${escAttr(p.sku)}')`;
+  /* A family opens on its FIRST size in the operator's order — the size the
+     switcher lists first and the shop shows first — not on `p`, the group
+     owner, which is only whichever size was created first. Opening the owner
+     put the sheet on the second chip: Lemongrass Kombucha opened on Big with
+     Small to its left (reported from a phone, 2026-10-07). The card itself
+     still shows the owner's photo and name; only where the tap lands moved. */
+  const opens=u.group?members[0]:p;
+  const tap=selecting?`APP.cmd('prodSelToggle','${ids}')`:`APP.cmd('openProduct','${escAttr(opens.sku)}')`;
   return `<div class="card" style="display:flex;gap:12px;padding:12px;align-items:flex-start${ticked?';box-shadow:inset 0 0 0 2px var(--text-primary)':''}">
     <button onclick="${tap}" ${selecting?`aria-pressed="${ticked}"`:''} style="display:flex;gap:12px;flex:1;min-width:0;text-align:left;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;color:var(--text-primary)">
       <span style="width:56px;height:56px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('shopping-bag',22)}</span>
