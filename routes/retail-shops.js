@@ -555,6 +555,10 @@ router.put('/api/retail-admin/shops/:id/listings/:lid/sold-out', requireRetailAd
     .run(avail, id, lid);
   logActivity(req.user.id, req.user.username, 'update', 'shop_listing', lid,
     { shop_id: id, is_available: avail, via: 'till_sold_out' }, req.ip);
+  // Not a shelf write, so lib/inventory.js never sees it — ring the tills at
+  // this shop directly, or a second till keeps selling what cannot be made.
+  try { require('./shop-events').shopStockChanged(currentTenantId(), shop.location_id); }
+  catch (e) { /* no till stream; the till's own poll catches up */ }
   ok(res, { listing_id: lid, sold_out: b.sold_out });
 });
 
