@@ -2135,6 +2135,7 @@ reg('mCustClr', ()=>{ searchClearRun('mCustQ','mCustClr','custSearch'); loadCust
 reg('orderSheetQ', v=>{ searchClearShow('mSearchClr', !!String(v||'')); });
 reg('rqBump', (id,d)=>rqBump(Number(id),Number(d)));
 reg('rqPurpose', k=>{ state.rq.purpose=String(k); render(); });
+reg('rqKind', k=>{ k=String(k); state.rq.kind=(k==='product'||k==='material')?k:'all'; render(); });
 reg('rqTo', id=>{ state.rq.to=Number(id);
   // The supplier list is everywhere except the asker, so a destination change
   // can leave a supplier that is now the destination itself.
@@ -19969,7 +19970,7 @@ reg('shmAddAll', ()=>{
    cook reads off the row, so the name is what is sent. */
 function rqReset(){
   const r=state.rq;
-  r.purpose=null; r.from=null; r.qty={}; r.q=''; r.err=''; r.sent=null; r.busy=false;
+  r.purpose=null; r.from=null; r.qty={}; r.q=''; r.kind='all'; r.err=''; r.sent=null; r.busy=false;
   // One store is not a choice; more than one is a question this app has to ask
   // and the old screen never did, because it ran pinned to a single shelf.
   const st=state.stores||[];
@@ -19985,17 +19986,27 @@ function loadRqProducts(){
   r.tried=true;
   api('/products').then(j=>{
     const rows=Array.isArray(j)?j:((j&&j.products)||[]);
-    r.products=rows.map(p=>({id:p.id,name_en:p.name_en,name_cn:p.name_cn,sku:p.sku}));
+    r.products=rows.map(p=>({id:p.id,name_en:p.name_en,name_cn:p.name_cn,sku:p.sku,
+      material:Number(p.is_restock_only)===1}));
     r.fromShelf=false; render();
   }).catch(()=>{
     r.products=(state.qs.items||[]).map(p=>({id:p.product_id!=null?p.product_id:p.id,
-      name_en:p.name_en,name_cn:p.name_cn,sku:p.sku}));
+      name_en:p.name_en,name_cn:p.name_cn,sku:p.sku,material:Number(p.is_restock_only)===1}));
     r.fromShelf=true; render();
   });
 }
 function rqName(p){ return LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.name_en||''); }
+/* MATERIALS AND WHAT IS SOLD, APART. Ash, restocking Yuexiu: the cups and the
+   things on the shelf came up as one list. The line between them is the
+   product's own "Restock-only, internal" flag (is_restock_only) — the same
+   flag that already keeps an item off the till, the mini-app and Meituan — so
+   a material is whatever the catalogue already says is not for sale. The
+   filter only narrows what is DRAWN: quantities live on state.rq.qty by id, so
+   one request can still carry both kinds, and the foot still counts them all. */
+function rqKindOf(p){ return p.material?'material':'product'; }
 function rqLines(){
-  const all=state.rq.products||[];
+  const k=state.rq.kind||'all';
+  const all=(state.rq.products||[]).filter(p=>k==='all'||rqKindOf(p)===k);
   const q=state.rq.q.trim().toLowerCase();
   if(!q) return all;
   return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
@@ -22553,7 +22564,22 @@ function rqPicker(){
      deliberately outside it. rqSearch repaints this box and nothing else, so the
      input element survives a whole search — a re-render would rebuild it, and a
      rebuilt field opens a fresh soft keyboard on its letter page. */
-  return search+`<div id="mRqBody">${rqBodyHtml()}</div>`;
+  return search+rqKindSeg()+`<div id="mRqBody">${rqBodyHtml()}</div>`;
+}
+/* The All · Products · Materials switch. Drawn ONLY when the catalogue holds
+   both kinds — with nothing flagged restock-only there is nothing to split,
+   and a switch whose other side is always empty is a control that does
+   nothing. The counts are the whole catalogue's, not the search's, so they do
+   not jump while somebody types. Same segmented look as the PO list's tabs. */
+function rqKindSeg(){
+  const r=state.rq, all=r.products||[];
+  const nMat=all.filter(p=>rqKindOf(p)==='material').length;
+  if(!nMat||nMat===all.length) return '';
+  const k=r.kind||'all';
+  const segBtn=(key,label,n)=>`<button onclick="APP.cmd('rqKind','${key}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${k===key?'var(--surface-card)':'transparent'};color:${k===key?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${k===key?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
+  return `<div style="padding:0 16px 12px"><div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+      ${segBtn('all',T('All','全部'),all.length)}${segBtn('product',T('Products','商品'),all.length-nMat)}${segBtn('material',T('Materials','物料'),nMat)}</div></div>`;
 }
 /* What rqSearch repaints: the note plus the rows, exactly what the query can
    change. Kept beside rqPicker so the two cannot drift on what a filtered list
