@@ -25,9 +25,14 @@
  *     order reads 'paid' — flipping first would pay the referrer nothing;
  *   • the till's QR settle really does go through this route.
  *
+ * §442 (same day): markOrderPaid made the same flip BEFORE its referral
+ * credits, so a till sale by a referred customer paid the referrer nothing.
+ * The flip now follows them; the last section runs the real markOrderPaid
+ * with recorders and checks what status each step saw.
+ *
  * TO PROVE THE SUITE CAN FAIL:  CMP_MUTANT=1 node scripts/test_counter_mark_paid_completes.js
- * The mutant makes the block think nothing is a counter sale — the route as it
- * was — and the suite must go RED. It asserts it modified the source first.
+ * The mutant restores both old behaviours — the route making no flip, and
+ * markOrderPaid flipping before the credits — and the suite must go RED. It asserts it modified the source first.
  */
 'use strict';
 
@@ -168,6 +173,83 @@ it("the till settles a QR order through this route with status 'paid'", () => {
 it('a QR order is a counter sale, so the flip applies to it', () => {
   const ins = read('routes/shop-menu.js');
   assert.ok(/'shop', 'counter', shop\.location_id,\s*\n\s*'qr'/.test(ins), "the QR menu no longer writes fulfillment_type 'counter'");
+});
+
+// ── §442 · markOrderPaid: the till's own sale pays the referrer ─────────────
+// The REAL function, run against the same in-memory table with every side
+// effect replaced by a recorder that notes the order's status at the moment it
+// is called. creditReferralReward and creditLifetimeCommission return early
+// unless the order reads 'paid', so what they SEE is the whole question.
+console.log('\nmarkOrderPaid — a till sale by a referred customer (§442)');
+
+const mopAt = RETAIL_SRC.search(/^function markOrderPaid\(/m);
+assert.ok(mopAt >= 0, 'markOrderPaid not found');
+let mopSrc = RETAIL_SRC.slice(mopAt, braceSlice(RETAIL_SRC, RETAIL_SRC.indexOf(')', mopAt)).end);
+if (MUTANT) {
+  // The pre-§442 order: flip to delivered before anything else runs.
+  const anchor = "      if (isTerminalOnPaid(ft)) {\n        counterTerminal = true;\n";
+  const mutated = mopSrc.replace(anchor, anchor +
+    "        tdb().prepare(\"UPDATE retail_orders SET status = 'delivered' WHERE id = ? AND status = 'paid'\").run(orderId);\n");
+  assert.notStrictEqual(mutated, mopSrc, 'markOrderPaid mutation anchor not found — a red run would prove nothing');
+  mopSrc = mutated;
+}
+const seen = {};
+const statusNow = (id) => db.prepare('SELECT status FROM retail_orders WHERE id = ?').get(id).status;
+const rec = (name) => (id) => { seen[name] = statusNow(id); };
+const STUBS = {
+  tdb, isTerminalOnPaid,
+  prepareCommitUnreservedOrder: rec('prepareCommitUnreservedOrder'),
+  inventory: { commitOrderReservations: () => {} },
+  expressEarliestIso: () => '2026-10-08',
+  awardOrderPoints: rec('awardOrderPoints'),
+  creditReferralReward: rec('creditReferralReward'),
+  creditLifetimeCommission: rec('creditLifetimeCommission'),
+  _push: null,
+  currentTenantId: () => 1,
+  sendWecomOrderAlert: rec('sendWecomOrderAlert'),
+  autoPrintOrder: rec('autoPrintOrder'),
+  maybeAutoIssueInvoice: () => Promise.resolve(),
+  notifySupplierDirectItems: () => {},
+  maybeEnqueueQingyunPush: () => {},
+  notifyOrderStatusChange: () => { throw new Error('a counter sale must not notify a hand-over'); },
+  checkAwaitingRestockForRestock: () => {},
+};
+const names = Object.keys(STUBS);
+const markOrderPaid = new Function(...names, `${mopSrc}\nreturn markOrderPaid;`)(...names.map((n) => STUBS[n]));
+
+// retail_payments is touched by markOrderPaid; give it the real table too.
+for (const t of ['retail_payments']) {
+  const one = openTablesDb(DB_SRC, [t]);
+  const ddl = one.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(t).sql;
+  db.exec(ddl);
+}
+
+it('the referral credits see "paid", and the sale still ends at delivered', () => {
+  const id = order('counter');
+  for (const k of Object.keys(seen)) delete seen[k];
+  markOrderPaid(id);
+  assert.strictEqual(seen.creditReferralReward, 'paid', 'creditReferralReward saw ' + seen.creditReferralReward);
+  assert.strictEqual(seen.creditLifetimeCommission, 'paid', 'creditLifetimeCommission saw ' + seen.creditLifetimeCommission);
+  assert.strictEqual(statusNow(id), 'delivered');
+  assert.ok(row(id).delivered_at, 'delivered_at not stamped');
+  assert.strictEqual(row(id).delivered_at, row(id).paid_at, 'delivered_at is not the moment of payment');
+});
+
+it('the stock still moves for it, and the print and the alert still see delivered, as before', () => {
+  const id = order('counter');
+  for (const k of Object.keys(seen)) delete seen[k];
+  markOrderPaid(id);
+  assert.ok('prepareCommitUnreservedOrder' in seen, 'the counter sale\'s stock was not committed');
+  assert.strictEqual(seen.autoPrintOrder, 'delivered');
+  assert.strictEqual(seen.sendWecomOrderAlert, 'delivered');
+});
+
+it('a delivery order paid the same way stays at paid', () => {
+  const id = order('delivery');
+  for (const k of Object.keys(seen)) delete seen[k];
+  markOrderPaid(id);
+  assert.strictEqual(statusNow(id), 'paid');
+  assert.strictEqual(seen.creditReferralReward, 'paid');
 });
 
 console.log(`\n${pass} passed, ${fail} failed${MUTANT ? ' (MUTANT run — must be red)' : ''}\n`);
