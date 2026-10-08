@@ -183,6 +183,17 @@
         if (!_open) return;
         if (e.target.closest && e.target.closest('.tabs [data-tab]')) teardown(false);
       }, true);
+      // THE KEYBOARD THAT CAME BACK BY ITSELF (Ash, 2026-10-08, a photo of the
+      // counter tablet). Android's ⌄ key hides the keyboard but leaves the
+      // caret in the box, and when the tablet wakes or the browser comes back
+      // to the front, Android hands the box its keyboard again — nobody
+      // touched anything. Letting go of the search box as the page goes out
+      // of sight means there is nothing focused for it to come back to. Touch
+      // screens only: on a desk, keeping the caret across a tab switch is what
+      // people expect, and there is no keyboard to pop.
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && _open) dropSearchFocus();
+      });
     }
     _loc = null; _shop = null; _rows = []; _err = ''; _pickerOpen = false; _pickQ = ''; _pick = [];
     if (!_open) {
@@ -198,6 +209,14 @@
   };
 
   function onPop() { teardown(true); goTab('sales'); }
+
+  const SEARCH_IDS = ['shp-menu-q', 'shp-pick-q'];
+  const touchScreen = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  function dropSearchFocus() {
+    if (!touchScreen()) return;
+    const a = document.activeElement;
+    if (a && SEARCH_IDS.includes(a.id) && typeof a.blur === 'function') a.blur();
+  }
 
   function teardown(viaPop) {
     if (!_open) return;
@@ -424,6 +443,7 @@
       <input class="shp-in" id="shp-menu-q" type="search" autocomplete="off" value="${esc(_menuQ)}"
              placeholder="${esc(T('Search by name or SKU…', '按名称或货号搜索…'))}"
              aria-label="${esc(T('Search by name or SKU…', '按名称或货号搜索…'))}"
+             enterkeyhint="search" onkeydown="shpSearchKey(event)"
              oninput="shpMenuFilter(this.value, event)">
       <span class="shp-filter-n" id="shp-filter-n">${filterCount()}</span>
     </div>`;
@@ -484,7 +504,8 @@
         ${/* The event goes to shpPickSearch() beside the value: an IME's
               half-typed pinyin arrives as input events too, and searching on
               it is searching for something the operator has not typed yet. */''}
-        <input class="shp-in" id="shp-pick-q" value="${esc(_pickQ)}" placeholder="${esc(T('Search a product to add…', '搜索商品以添加…'))}" oninput="shpPickSearch(this.value, event)">
+        <input class="shp-in" id="shp-pick-q" value="${esc(_pickQ)}" placeholder="${esc(T('Search a product to add…', '搜索商品以添加…'))}"
+               enterkeyhint="search" onkeydown="shpSearchKey(event)" oninput="shpPickSearch(this.value, event)">
         <button type="button" class="shp-btn ghost sm" onclick="shpPickerToggle()">${esc(T('Cancel', '取消'))}</button>
       </div>
       <div id="shp-pick-list">${pickList()}</div>
@@ -766,6 +787,19 @@
   // of order. Nothing is fetched here, so there is no request to race and no
   // stale answer to guard against; the keystroke and the redraw are the same
   // frame, and a delay would only make the table lag the box.
+  // THE SEARCH KEY CLOSES THE KEYBOARD. Both boxes search as you type, so the
+  // blue 搜索 key on a tablet had nothing left to do — it did nothing, and the
+  // keyboard stayed up over the rows the operator wanted to look at. Now it
+  // lets go of the box: the term stays, the matches stay, the keyboard goes.
+  // An Enter that commits a pinyin candidate is NOT this key — it belongs to
+  // the IME (isComposing, or keyCode 229 on Android keyboards that do not set
+  // it), and blurring there would drop the characters being chosen.
+  window.shpSearchKey = function (ev) {
+    if (!ev || ev.key !== 'Enter' || ev.isComposing || ev.keyCode === 229) return;
+    if (typeof ev.preventDefault === 'function') ev.preventDefault();
+    if (ev.target && typeof ev.target.blur === 'function') ev.target.blur();
+  };
+
   window.shpMenuFilter = function (v, ev) {
     if (ev && ev.isComposing) return;
     _menuQ = v;
