@@ -152,9 +152,30 @@ function refusal(r) {
   return end(S.down, 'bad', true);
 }
 
+// noVNC's first load tests the browser's H.264 decoder and waits on the answer
+// with no time limit (a top-level await in core/util/browser.js). Some Android
+// phones never answer, so the import never settled and the page sat on "Log in
+// on the screen below" over an empty page, with nothing to press. The sign-in
+// display is x11vnc, which never sends H.264, so the test buys nothing here: the
+// decoder is hidden while noVNC loads and put back after. The time limit is the
+// belt for anything else that stalls the load: it ends on Try again, not silence.
+const LOAD_MS = 20000;
+async function loadRfb() {
+  const decoder = Object.getOwnPropertyDescriptor(window, 'VideoDecoder');
+  if (decoder) { try { delete window.VideoDecoder; } catch (_) {} }
+  try {
+    return (await Promise.race([
+      import('/novnc/core/rfb.js'),
+      new Promise((_, no) => setTimeout(no, LOAD_MS, new Error('timeout'))),
+    ])).default;
+  } finally {
+    if (decoder && !('VideoDecoder' in window)) Object.defineProperty(window, 'VideoDecoder', decoder);
+  }
+}
+
 async function showScreen() {
   let RFB;
-  try { RFB = (await import('/novnc/core/rfb.js')).default; }
+  try { RFB = await loadRfb(); }
   catch (_) { return end(S.lost, 'bad', true); }
   if (finished) return;
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
