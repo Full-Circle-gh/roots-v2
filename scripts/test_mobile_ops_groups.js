@@ -242,8 +242,10 @@ it('§121 — every heading and pill was lifted, and its source is still live', 
   live(/无法发起采购申请/, '发起 (Ask someone else)');
 
   /* Four headings are two live ROW LABELS joined by 与, so the rows are the
-     source and a rename of either one must fail this. */
-  live(/'Pick','拣货'/, '拣货 (Send it out)');
+     source and a rename of either one must fail this. Send it out's 拣货 is
+     the exception since §443 renamed its row: it now lifts from the same
+     screen's empty state, Nothing to pick · 暂无拣货. */
+  live(/T\('Nothing to pick','暂无拣货'\)/, '拣货 (Send it out)');
   live(/'Delivery settings','配送设置'/, '配送设置 (Send it out)');
   live(/'Inbox','消息'/, '消息 (Messages and channels)');
   live(/'Channel sync','渠道同步'/, '渠道同步 (Messages and channels)');
@@ -259,6 +261,19 @@ it('§121 — every heading and pill was lifted, and its source is still live', 
      mentioning it must not count, so this looks for a T() pair only. */
   assert.ok(!/T\('[^']*','[^']*出货[^']*'\)/.test(MHTML),
     '出货 is now live as a UI string; v1.77 rejected it for Send it out on the grounds that it was not');
+});
+
+it('§443 — the shop-to-shop sending row mirrors its receiving twin, and its parts are live', () => {
+  /* Composed by Claude, declared in docs/tacet-delivery-vocabulary.md v1.317.
+     Each part is lifted from a live pair; a rename of any source fails here. */
+  const live = (re, what) => assert.ok(re.test(MHTML), `${what} is no longer live where it was lifted from`);
+  assert.ok(/\['pick','route','Send to another shop','调拨发货'\]/.test(OPS), 'the pick row is not named Send to another shop · 调拨发货');
+  assert.ok(/SUBS\.pick=\{title:\['Send to another shop','调拨发货'\]/.test(MHTML), 'the pick screen title does not match its row');
+  assert.ok(/\['receivexfer','truck','Receive from another shop','调拨收货'\]/.test(OPS), 'the receiving twin was renamed; the pair no longer mirrors');
+  assert.ok(/T\('Sending from which shop\?','从哪个门店发货？'\)/.test(MHTML), 'the pick screen no longer asks which shop is sending');
+  assert.ok(!/Picking at which location/.test(MHTML), 'the old receiving-sounding question is back');
+  live(/T\('Send again','重新发货'\)/, '发货 (Send to another shop)');
+  live(/T\('Print at which store\?','在哪个门店打印？'\)/, '哪个门店 (Sending from which shop?)');
 });
 
 console.log(`\nok — ${n} §121 grouping checks.`);

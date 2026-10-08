@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.317 · 2026-10-08 · §443 THE PHONE'S PICK SCREEN IS RENAMED "SEND TO ANOTHER SHOP" AND ASKS WHICH SHOP IS SENDING — 2 STRINGS COMPOSED BY CLAUDE FROM LIVE PARTS; `Pick · 拣货` AND `Picking at which location? · 在哪个地点拣货？` RETIRED.** See *Sending to another shop (§443)*.
+
 **v1.316 · 2026-10-08 · §252 THE SIGN-IN PAGE'S KEYBOARD BUTTON, FOR PHONES — 1 STRING COMPOSED BY CLAUDE FROM A LIVE PART.** See *Signing a channel back in (§252)*.
 
 **v1.315 · 2026-10-07 · §440 THE TILL'S "TAP TO TURN ON THE NEW-ORDER SOUND" STRIP — 1 STRING COMPOSED BY CLAUDE FROM LIVE PARTS.** See *The till's sound strip (§440)*.
@@ -13491,3 +13493,32 @@ strip under the till's header while the browser is still blocking sound.
 | Chinese | English | Built from | Rejected |
 |---|---|---|---|
 | `点击开启新订单提示音` | Tap to turn on the new-order sound | `新订单提示音` (live, `public/backend-account.html`, "New-order sound"), `点击` (live, `m.html` `点击跳转`), `开启` (live, `m.html` toggles) | `点击开启提示音` (`提示音` alone is the phone's Settings row, `m.html`) — does not say which sound; `轻触` — not live anywhere in the product |
+
+## Sending to another shop (§443)
+
+**Composed by Claude, 2026-10-08, under the 2026-09-06 amendment.**
+Operator register. `public/m.html`: the More menu row `pick` (group *Send it
+out*), the screen title `SUBS.pick`, and the location question in
+`screenPick`. Asked by Ash: the old question *"feels like the shop that gonna
+receive the goods not the one that gonna send it"*.
+
+### Retired
+
+| Was | Why |
+|---|---|
+| `Pick · 拣货` (row and title) | Names the shelf task, not the direction. Its twin under *Stock coming in* already says the direction (`Receive from another shop · 调拨收货`), so this one now mirrors it. |
+| `Picking at which location? · 在哪个地点拣货？` | Read as the shop the goods go TO. The screen lists requests the chosen shop must SEND. |
+
+`拣货` stays live in the same screen's `Nothing to pick · 暂无拣货` and
+`picked · 已拣`, and the *Send it out · 拣货与配送* heading now lifts its
+`拣货` from that empty state instead of the renamed row.
+
+### Composed — two, by Claude
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `调拨发货` | Send to another shop | `调拨` (live, the twin row `调拨收货`), `发货` (live, the same screen's `Send again · 重新发货`) | `发货` alone — reads as sending to customers; this screen is shop-to-shop only. `出货` — not live in any UI pair (v1.77). `拣货发货` — keeps the shelf word and still names no destination |
+| `从哪个门店发货？` | Sending from which shop? | `哪个门店` (live, `Print at which store? · 在哪个门店打印？`), `发货` (as above) | `在哪个地点发货？` — keeps `地点` while the row and its twin say shop; `从哪个地点` — same |
+
+`scripts/test_mobile_ops_groups.js` fails if any of these sources stops being
+live, if the row and title drift apart, or if the receiving twin is renamed.

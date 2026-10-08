@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.487
+# Tacet shared-core consolidation — decisions record, v4.488
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-08 · v4.488 — **§443 · THE PHONE'S PICK SCREEN IS "SEND TO ANOTHER SHOP", AND IT ASKS WHICH SHOP IS SENDING — DECIDED BY ASH:** of "Picking at which location?", *"feels like the shop that gonna recieve the goods not the one that gonna send it"*, then *"also The "Pick" page name. we need to change"* and *"yes go ahead, build it"*. The row and title become `Send to another shop · 调拨发货`, mirroring `Receive from another shop · 调拨收货`; the question becomes `Sending from which shop? · 从哪个门店发货？`. Two strings composed, declared in vocabulary v1.317. Labels only; the screen's behaviour is unchanged. See §443.
 
 2026-10-08 · v4.487 — **§442 · A TILL SALE BY A REFERRED CUSTOMER PAYS THE REFERRER — ASKED BY ASH:** *"do both"*, of the two follow-ups §441 named. `markOrderPaid` flipped a counter sale to `delivered` before `creditReferralReward` and `creditLifetimeCommission`, which both return early unless the order reads `paid`, so the referrer got nothing for a till sale. The flip now runs straight after them. Also recorded: §441's backfill found nothing to move, because the four stuck QR orders had been completed by hand minutes before. See §442.
 
@@ -29187,3 +29189,28 @@ Tests: `scripts/test_counter_mark_paid_completes.js` gains a section that
 runs the real `markOrderPaid` with recorders and checks the credits see
 `paid`, the sale still ends at `delivered`, and the print and alert still
 see `delivered`. It fails on the old code. `CMP_MUTANT=1` makes it red.
+
+## §443 — THE PHONE'S PICK SCREEN SAYS WHICH WAY THE GOODS GO
+
+**Decided by Ash, 2026-10-08:** of the location question, *"feels like the
+shop that gonna recieve the goods not the one that gonna send it"*; then
+*"also The "Pick" page name. we need to change"*, choosing the name
+recommended; then *"yes go ahead, build it"*.
+
+**What was wrong.** The screen lists the transfer requests a shop has to
+SEND, filtered on `from_store_id`. Its name, *Pick*, named the shelf task,
+and its first question, *Picking at which location?*, read as the shop the
+goods arrive at, which is the opposite.
+
+**The ruling.**
+1. The More row `pick` and the screen title are `Send to another shop ·
+   调拨发货`. They mirror the receiving twin, `Receive from another shop ·
+   调拨收货`, which §119 named and §121 grouped apart from it.
+2. The location question is `Sending from which shop? · 从哪个门店发货？`.
+3. The group heading *Send it out · 拣货与配送* is unchanged.
+
+**Not changed.** The route key stays `pick`, so nothing that links to it
+moves. The screen's behaviour, the desktop and the mini app are untouched.
+
+Strings: `docs/tacet-delivery-vocabulary.md` v1.317. Test:
+`scripts/test_mobile_ops_groups.js`.

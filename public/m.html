@@ -9252,7 +9252,11 @@ const MORE_GROUPS=[
        going away is churn. */
     ['invoices','receipt','Invoices','发票']]},
   {h:['Send it out','拣货与配送'],rows:[
-    ['pick','route','Pick','拣货'],
+    /* §443 renamed this from `Pick · 拣货`. Pick named the shelf task, not where
+       the goods go, and its question was read as naming the shop RECEIVING.
+       It now mirrors its twin under Stock coming in, `Receive from another shop ·
+       调拨收货`, so the pair says the direction in one glance. */
+    ['pick','route','Send to another shop','调拨发货'],
     /* §119 renamed this. It is zones, holiday mode and the printer — the one
        configuration screen in a list of tasks — so it wears the Settings pill
        as well, because a group can say WHERE a row belongs and only the pill
@@ -22985,10 +22989,12 @@ function screenPick(){
 
   /* WHICH FREEZER IS BEING WALKED. The old screen never asked — it ran pinned
      to one location. Merging two locations' runs into one list would be a walk
-     of two freezers drawn as one, so it is asked wherever there is a choice. */
+     of two freezers drawn as one, so it is asked wherever there is a choice.
+     §443: the question says SENDING. The old "picking at" wording was read as
+     the shop the goods go to, which is the opposite. */
   if(k.at==null){
     if(stores.length===1){ k.at=stores[0].id; }
-    else return `<div style="margin-top:12px;padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Picking at which location?','在哪个地点拣货？')}</div>
+    else return `<div style="margin-top:12px;padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Sending from which shop?','从哪个门店发货？')}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 16px">${
         stores.map(st=>chip(rqStoreName(st.id),false,'pikAt',st.id)).join('')}</div>`;
   }
@@ -26833,7 +26839,7 @@ reg('pcUnlinkAsk', ()=>{
   render();
 });
 
-SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
+SUBS.pick={title:['Send to another shop','调拨发货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive from another shop','调拨收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
