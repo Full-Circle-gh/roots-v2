@@ -58,6 +58,17 @@ const STEPS = `
       var btn=[].slice.call(document.querySelectorAll('button'))
         .filter(function(b){ return /View customer|查看顾客/.test(b.innerText); })[0];
       if(!btn){ window.__NOBTN=1; return; }
+      // Call sits beside View customer as a tel: link. The fixture's number is
+      // masked (138****2841), which cannot be dialled, so no Call is drawn for
+      // it; a real number then gets one that dials exactly that number.
+      var tel=function(){ var a=btn.parentNode.querySelector('a[href^="tel:"]');
+        return a?{href:a.getAttribute('href'),text:a.innerText.trim()}:null; };
+      window.__CALL_MASKED=tel();
+      state.liveDetail.phone='138 0013 8000';
+      render();
+      btn=[].slice.call(document.querySelectorAll('button'))
+        .filter(function(b){ return /View customer|查看顾客/.test(b.innerText); })[0];
+      window.__CALL=tel();
       window.__ORDER=state.detailId;
       btn.click();
       // Every render the sheet's own reads will cause, and then some. If the
@@ -71,6 +82,8 @@ const PROBE = `
  (function(){
   var out={};
   out.noBtn=!!window.__NOBTN;
+  out.callMasked=window.__CALL_MASKED||null;
+  out.call=window.__CALL||null;
   out.orderStillOpen = state.detailId!=null && state.detailId===window.__ORDER;
   out.custId = state.custId;
   out.tab = state.tab;
@@ -127,6 +140,12 @@ function main() {
 
   const fails = [];
   if (g.noBtn) fails.push('the order sheet drew no button to the customer record');
+  if (g.callMasked) fails.push(`a masked number drew a Call link (${g.callMasked.href}) — it would dial a broken number`);
+  if (!g.call) fails.push('no Call link beside View customer on the Ship to card');
+  else {
+    if (g.call.href !== 'tel:13800138000') fails.push(`Call dials ${g.call.href}, not the order's number (tel:13800138000)`);
+    if (!/^(Call|拨打)$/.test(g.call.text)) fails.push(`Call reads "${g.call.text}", not Call · 拨打`);
+  }
   if (!g.orderStillOpen) fails.push('the order closed — the record is meant to open OVER it, so closing the record gives the order back');
   if (g.tab !== 'orders') fails.push(`the app left the Orders tab (now "${g.tab}") — one tap should not move the whole app`);
   if (g.custId == null) fails.push('no customer record opened');
@@ -145,7 +164,7 @@ function main() {
   if (!g.afterClose.orderSheet) fails.push('closing the record did not put the order back');
 
   if (fails.length) { console.log('FAIL\n  • ' + fails.join('\n  • ')); process.exit(1); }
-  console.log(`ok — the record opens over the order at ${g.cust.top}px (z ${g.cust.z} over ${g.orderZ}), `
+  console.log(`ok — Call dials ${g.call.href} from the Ship to card (none for a masked number). The record opens over the order at ${g.cust.top}px (z ${g.cust.z} over ${g.orderZ}), `
     + 'holds still through its reads, and closes back onto the order. The page does not scroll.');
 }
 
