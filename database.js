@@ -3514,6 +3514,17 @@ db.exec(`
 // shipping_fee); `amount` stays the gateway charge = addon_subtotal − freed_shipping.
 addColumn('retail_order_addons', 'addon_subtotal', 'REAL');
 addColumn('retail_order_addons', 'freed_shipping', 'REAL DEFAULT 0');
+// A wallet top-up ('FCTU…') and a "Forgot something?" add-on ('FCAO…') are WeChat
+// charges of their own, each with its own 支付单, so each owes its own shipping
+// upload exactly like an order does. Same four columns, same meaning. Without
+// them every top-up sat on 待发货 in the merchant back office and went to
+// 发货超时 — nothing ever shipped them.
+for (const t of ['retail_topup_transactions', 'retail_order_addons']) {
+  addColumn(t, 'wx_shipping_uploaded_at', 'DATETIME');
+  addColumn(t, 'wx_shipping_status',      'TEXT');
+  addColumn(t, 'wx_shipping_attempts',    'INTEGER DEFAULT 0');
+  addColumn(t, 'wx_shipping_locked_at',   'DATETIME');
+}
 
 // ─── Customer migration credits (OUT1N → roots) ───────────────────────────
 // Staging table for the one-time migration of wallet balance + points from
