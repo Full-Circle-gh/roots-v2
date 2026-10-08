@@ -380,6 +380,17 @@ check('the page draws states only; every check is on the server', () => {
   ok(!/password|credentials:\s*\{\s*password/i.test(page), 'a VNC password in the page');
 });
 
+check('a phone whose video decoder never answers still gets the screen, or Try again', () => {
+  // noVNC 1.7 awaits an H.264 decoder test at load with no time limit; on some
+  // Android phones it never settles, and the page sat on an empty screen with
+  // nothing to press (2026-10-08, Eleme · Tianhe).
+  const page = read('public/channel-signin.html');
+  ok(/delete window\.VideoDecoder/.test(page), 'the decoder is not hidden while noVNC loads');
+  ok(/Object\.defineProperty\(window, 'VideoDecoder', decoder\)/.test(page), 'the decoder is not put back');
+  ok(/Promise\.race\(\[\s*import\('\/novnc\/core\/rfb\.js'\),/.test(page), 'the noVNC load has no time limit');
+  ok(/try \{ RFB = await loadRfb\(\); \}\s*catch \(_\) \{ return end\(S\.lost, 'bad', true\); \}/.test(page), 'a stalled load does not end on Try again');
+});
+
 (async () => {
   for (const run of pending) await run();
   console.log(`\n${passed} passed, ${failures.length} failed`);
