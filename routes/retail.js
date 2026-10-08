@@ -5941,22 +5941,23 @@ function markOrderPaid(orderId) {
   // carry. Nothing was wrong with either rule; the walk-in simply fell between
   // them, silently, and the shelf count drifted by one sale every time.
   //
-  // PAID, NOT CREATED, is the moment — for the same reason the status flip above
-  // is here rather than at the INSERT. A counter sale keyed in as pending and
+  // PAID, NOT CREATED, is the moment — for the same reason the status flip
+  // (below) is in this function rather than at the INSERT. A counter sale keyed in as pending and
   // settled by QR seconds later is a normal till flow, and decrementing at
   // creation would take stock for a sale that may never be paid, with no
   // reversal hook on the cancel-before-payment path.
+  //
+  // §442 — THE STATUS FLIP ITSELF IS FURTHER DOWN, after the referral credits.
+  // It stood here until 2026-10-08, and creditReferralReward and
+  // creditLifetimeCommission both return early unless the order reads 'paid',
+  // so a till sale by a referred customer paid the referrer nothing. This block
+  // now only decides the sale is a counter one and moves its stock.
+  let counterTerminal = false;
   if (r.changes > 0 && !isWait) {
     try {
       const ft = tdb().prepare('SELECT fulfillment_type FROM retail_orders WHERE id = ?').get(orderId);
       if (isTerminalOnPaid(ft)) {
-        tdb().prepare(
-          `UPDATE retail_orders
-              SET status = 'delivered',
-                  delivered_at = COALESCE(paid_at, CURRENT_TIMESTAMP),
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND status = 'paid'`
-        ).run(orderId);
+        counterTerminal = true;
         // Through prepareCommitUnreservedOrder, NOT adjustStock. adjustStock
         // writes its ledger row against retail_store_stock with a NULL ref_id,
         // so nothing would link the decrement to this order — and the
@@ -6057,6 +6058,21 @@ function markOrderPaid(orderId) {
     // invitee's 2nd+ paid order. Self-guarded (off unless a % is set) and
     // idempotent via UNIQUE(order_id), so re-fires on retry callbacks are safe.
     try { creditLifetimeCommission(orderId); } catch (e) { console.error('[creditLifetimeCommission]', e); }
+    // §442 — the counter sale's flip to its terminal state (see the block
+    // above the stock commit for why it is not there). Straight after the
+    // referral credits, so everything below — the pushes, the WeCom alert, the
+    // print — still sees 'delivered' exactly as it did before.
+    if (counterTerminal) {
+      try {
+        tdb().prepare(
+          `UPDATE retail_orders
+              SET status = 'delivered',
+                  delivered_at = COALESCE(paid_at, CURRENT_TIMESTAMP),
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND status = 'paid'`
+        ).run(orderId);
+      } catch (e) { console.warn('[markOrderPaid counter-terminal]', orderId, e.message); }
+    }
     // Notify retail operators of the new order via Web Push — reaches their
     // device even when the backend isn't open. Fires once per genuine
     // transition (r.changes>0 guards against wechat retry callbacks).
