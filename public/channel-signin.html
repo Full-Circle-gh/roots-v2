@@ -34,6 +34,13 @@
   #msg.ok { color:var(--sage-ink); } #msg.bad { color:var(--brick); }
   #done { margin-top:8px; display:none; }
   #done.on { display:inline-block; }
+  #kbd-btn { margin-top:8px; display:none; }
+  #kbd-btn.on { display:inline-block; }
+  /* The text box a phone types into (see kbdInput). Kept on screen and focusable,
+     because a hidden or display:none field raises no keyboard; 16px stops iOS
+     zooming the page when it takes focus. */
+  #kbd { position:fixed; top:0; left:0; width:1px; height:1px; opacity:0; border:0; padding:0;
+         margin:0; resize:none; overflow:hidden; font-size:16px; }
   #screen { flex:1; min-height:0; background:#000; display:none; }
   #screen.on { display:block; }
   .actions { padding:16px; display:none; gap:8px; }
@@ -51,7 +58,9 @@
   <h1 id="title"></h1>
   <p id="msg"></p>
   <button id="done"></button>
+  <button id="kbd-btn"></button>
 </header>
+<textarea id="kbd" tabindex="-1" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 <div class="actions" id="actions">
   <button id="retry"></button>
   <button class="ghost" id="close"></button>
@@ -96,6 +105,7 @@ const S = {
   timeout:  T('Time ran out. Try again.', '已超时，请重试。'),
   retry:    T('Try again', '重试'),
   close:    T('Close', '关闭'),
+  keyboard: T('Keyboard', '键盘'),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -105,6 +115,7 @@ $('retry').textContent = S.retry;
 $('close').textContent = S.close;
 $('done').textContent = S.doneBtn;
 $('done').onclick = finish;
+$('kbd-btn').textContent = S.keyboard;
 function leave() {
   if (window.opener) return window.close();
   if (history.length > 1) return history.back();
@@ -125,6 +136,7 @@ function end(text, cls, canRetry) {
   stopPolling();
   if (rfb) { try { rfb.disconnect(); } catch (_) {} rfb = null; }
   $('screen').classList.remove('on');
+  kbdOff();
 }
 
 let rfb = null;
@@ -160,14 +172,18 @@ function refusal(r) {
 // decoder is hidden while noVNC loads and put back after. The time limit is the
 // belt for anything else that stalls the load: it ends on Try again, not silence.
 const LOAD_MS = 20000;
+let KEYS = null; // noVNC's key names and its character → key table, loaded with it
 async function loadRfb() {
   const decoder = Object.getOwnPropertyDescriptor(window, 'VideoDecoder');
   if (decoder) { try { delete window.VideoDecoder; } catch (_) {} }
   try {
-    return (await Promise.race([
-      import('/novnc/core/rfb.js'),
+    const [rfbMod, names, table] = await Promise.race([
+      Promise.all([import('/novnc/core/rfb.js'), import('/novnc/core/input/keysym.js'),
+        import('/novnc/core/input/keysymdef.js')]),
       new Promise((_, no) => setTimeout(no, LOAD_MS, new Error('timeout'))),
-    ])).default;
+    ]);
+    KEYS = { names: names.default, table: table.default };
+    return rfbMod.default;
   } finally {
     if (decoder && !('VideoDecoder' in window)) Object.defineProperty(window, 'VideoDecoder', decoder);
   }
@@ -184,8 +200,49 @@ async function showScreen() {
     { wsProtocols: ['binary'] });
   rfb.scaleViewport = true;
   rfb.resizeSession = false;
+  // On a phone, tapping the screen must not take focus from the typing box,
+  // or the keyboard drops every time a field is tapped.
+  rfb.focusOnClick = !TOUCH;
   rfb.addEventListener('disconnect', () => { if (!finished && !verifying) end(S.lost, 'bad', true); });
+  if (TOUCH) $('kbd-btn').classList.add('on');
 }
+
+// A phone raises no keyboard for the screen: noVNC listens on a canvas, and a
+// canvas cannot ask for one (2026-10-08, the Eleme login on Android). A text box
+// can. Keyboard focuses it, and what is typed there goes to the screen key by
+// key. Android sends no usable key event for most keys, only the text that
+// changed, so the box is compared with what it held before: characters gone
+// are Backspaces, characters added are typed. It keeps a run of filler so
+// Backspace always has something to delete.
+const TOUCH = matchMedia('(pointer: coarse)').matches;
+const KBD_FILL = '_'.repeat(40);
+let kbdLast = KBD_FILL;
+function kbdReset() {
+  const box = $('kbd');
+  box.value = kbdLast = KBD_FILL;
+  box.setSelectionRange(KBD_FILL.length, KBD_FILL.length);
+}
+function kbdInput() {
+  const now = $('kbd').value;
+  if (rfb && KEYS) {
+    let same = 0;
+    while (same < now.length && same < kbdLast.length && now[same] === kbdLast[same]) same++;
+    for (let i = same; i < kbdLast.length; i++) rfb.sendKey(KEYS.names.XK_BackSpace, 'Backspace');
+    for (const ch of now.slice(same)) {
+      if (ch === '\n') rfb.sendKey(KEYS.names.XK_Return, 'Enter');
+      else rfb.sendKey(KEYS.table.lookup(ch.codePointAt(0)), null);
+    }
+  }
+  kbdLast = now;
+  // An Enter, or a box run low or long, starts over; nothing is sent for that.
+  if (now.includes('\n') || now.length < KBD_FILL.length / 2 || now.length > KBD_FILL.length * 2) kbdReset();
+}
+function kbdOff() {
+  $('kbd-btn').classList.remove('on');
+  $('kbd').blur();
+}
+$('kbd').addEventListener('input', kbdInput);
+$('kbd-btn').onclick = () => { kbdReset(); $('kbd').focus({ preventScroll: true }); };
 
 async function check() {
   const r = await api('GET', `/api/retail-admin/channel-signin/status?channel=${encodeURIComponent(channel)}&store=${encodeURIComponent(store)}`);
@@ -228,6 +285,7 @@ function beginVerify() {
   $('done').classList.remove('on');
   if (rfb) { try { rfb.disconnect(); } catch (_) {} rfb = null; }
   $('screen').classList.remove('on');
+  kbdOff();
   say(S.checking);
 }
 async function finish() {
