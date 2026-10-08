@@ -152,6 +152,7 @@
     "test:restock-parcel": "node scripts/test_restock_parcel_dispatch.js",
     "test:parked-notice": "node scripts/test_parked_parcel_notice.js",
     "test:parcel-recovery": "node scripts/test_parcel_recovery.js",
+    "test:wx-shipping-charges": "node scripts/test_wx_shipping_charges.js",
     "test:cost-incomplete": "node scripts/test_cost_incomplete_flag.js",
     "test:product-duplicate": "node scripts/test_product_duplicate_fields.js",
     "test:sync-start": "node scripts/test_sync_start_time.js",

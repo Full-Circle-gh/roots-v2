@@ -6591,7 +6591,9 @@ function handleWechatPayCallback(req, res, tid) {
             tdb().prepare(
               'UPDATE retail_topup_transactions SET transaction_id = ?, raw_callback_json = ? WHERE id = ?'
             ).run(txn.transaction_id || null, plain, tu.id);
-            finalizeTopup(tu.id);
+            // A top-up is its own 支付单 and owes its own virtual delivery, or
+            // it sits on 待发货 in the merchant back office until it times out.
+            if (finalizeTopup(tu.id)) shipWeChatChargeSoon('topup', tu.id);
           }
           return;
         }
@@ -6615,7 +6617,8 @@ function handleWechatPayCallback(req, res, tid) {
             tdb().prepare(
               'UPDATE retail_order_addons SET transaction_id = ?, raw_callback_json = ? WHERE id = ?'
             ).run(txn.transaction_id || null, plain, ad.id);
-            finalizeOrderAddon(ad.id);
+            // Same for an add-on: the order's own upload does not cover it.
+            if (finalizeOrderAddon(ad.id)) shipWeChatChargeSoon('addon', ad.id);
           }
           return;
         }
@@ -7751,10 +7754,14 @@ function rfc3339Shanghai() {
 // short, human-readable string. WeChat caps item_desc at 128 chars — we cap
 // well under and append an ellipsis when truncated.
 function buildShippingItemDesc(orderId) {
-  const items = tdb().prepare(
+  return shippingItemDescFromLines(tdb().prepare(
     'SELECT name_cn, name_en, qty FROM retail_order_items WHERE order_id = ? ORDER BY id ASC'
-  ).all(orderId);
-  const parts = items
+  ).all(orderId));
+}
+// The joiner on its own, so an add-on can describe its staged lines (they live
+// in retail_order_addons.items_json, not retail_order_items) the same way.
+function shippingItemDescFromLines(items) {
+  const parts = (Array.isArray(items) ? items : [])
     .map(it => {
       const name = (it.name_cn || it.name_en || '').trim();
       if (!name) return null;
@@ -7831,6 +7838,72 @@ async function uploadWeChatVirtualShipping(orderId, opts = {}) {
   ).get(orderId);
   if (!pay || !pay.transaction_id) return;        // no WeChat txn id → nothing to attach to
 
+  await claimAndSendShippingUpload('retail_orders', orderId, {
+    ref: o.order_no, openid: o.openid, transactionId: pay.transaction_id,
+    itemDesc: () => buildShippingItemDesc(orderId),
+  }, opts);
+}
+
+// The same obligation for a WeChat charge that is NOT an order: a wallet top-up
+// ('FCTU…', retail_topup_transactions) or a "Forgot something?" add-on ('FCAO…',
+// retail_order_addons). Each is its own 支付单 with its own transaction_id, so
+// shipping the parent order does nothing for it — WeChat lists it separately
+// and times it out separately. Nothing waits on a parcel here (a top-up is
+// credited the instant it settles; an add-on rides a parcel the order's own
+// upload already covers), so it ships as soon as the charge settles.
+const WX_SHIPPING_CHARGE_TABLES = {
+  topup: 'retail_topup_transactions',
+  addon: 'retail_order_addons',
+};
+
+// Settle-time call. The FIRST attempt runs fromSweep so a hiccup pages nobody:
+// the sweeper retries within minutes, and its give-up alert still pages if it
+// never comes good. Fire-and-forget — the pay callback must answer WeChat now.
+function shipWeChatChargeSoon(kind, id) {
+  uploadWeChatVirtualShippingForCharge(kind, id, { fromSweep: true }).catch(e =>
+    console.warn('[wx-shipping]', kind, id, e && e.message));
+}
+
+async function uploadWeChatVirtualShippingForCharge(kind, id, opts = {}) {
+  if (cfgValue('wechat.autoVirtualShipping', true) !== true) return;
+  const table = WX_SHIPPING_CHARGE_TABLES[kind];
+  if (!table) return;
+  let r;
+  try {
+    r = tdb().prepare(
+      `SELECT x.out_trade_no, x.payment_method, x.status, x.transaction_id, x.amount,
+              ${kind === 'addon' ? 'x.items_json' : 'NULL AS items_json'},
+              x.wx_shipping_uploaded_at, c.openid
+         FROM ${table} x
+         JOIN retail_customers c ON c.id = x.customer_id
+        WHERE x.id = ?`
+    ).get(id);
+  } catch (e) {
+    if (/no such column|no such table/i.test(e.message)) return;   // tenant not migrated yet
+    throw e;
+  }
+  if (!r) return;
+  if (r.wx_shipping_uploaded_at) return;          // already uploaded — idempotent
+  if (r.status !== 'success') return;             // only a settled charge has a 支付单 to ship
+  if (r.payment_method !== 'wechat') return;
+  if (!r.transaction_id) return;                  // ¥0 add-on / dev / manual finalize: no 支付单
+  if (!r.openid || r.openid.includes(':')) return;   // same openid rule as an order
+
+  await claimAndSendShippingUpload(table, id, {
+    // out_trade_no is what the merchant back office lists as 商户订单号, so it
+    // is the number the "ship it by hand" alert must name.
+    ref: r.out_trade_no, openid: r.openid, transactionId: r.transaction_id,
+    itemDesc: () => kind === 'topup'
+      // The live wallet label, then the figure. '钱包充值' is the Sales
+      // summary's own name for this money; a numeral needs no label of its own.
+      ? `钱包充值 ¥${Number.isInteger(Number(r.amount)) ? Number(r.amount) : Number(r.amount).toFixed(2)}`
+      : shippingItemDescFromLines((() => { try { return JSON.parse(r.items_json || '[]'); } catch { return []; } })()),
+  }, opts);
+}
+
+// Single-flight claim + upload, shared by orders, top-ups and add-ons. `table`
+// is only ever one of the three fixed names above — never caller input.
+async function claimAndSendShippingUpload(table, rowId, target, opts = {}) {
   // Single-flight claim. WeChat serialises writes per 支付单 and rejects the loser
   // with 10060019 写冲突, so only one attempt per order may be in flight — the
   // uploaded_at guard above can't do that job, it isn't stamped until the round
@@ -7839,13 +7912,13 @@ async function uploadWeChatVirtualShipping(orderId, opts = {}) {
   let claimed;
   try {
     claimed = tdb().prepare(
-      `UPDATE retail_orders
+      `UPDATE ${table}
           SET wx_shipping_locked_at = CURRENT_TIMESTAMP
         WHERE id = ?
           AND wx_shipping_uploaded_at IS NULL
           AND (wx_shipping_locked_at IS NULL
                OR wx_shipping_locked_at < datetime('now', '-${WX_SHIPPING_LOCK_STALE_MIN} minutes'))`
-    ).run(orderId);
+    ).run(rowId);
   } catch (e) {
     if (/no such column/i.test(e.message)) return;   // tenant not migrated yet
     throw e;
@@ -7853,17 +7926,17 @@ async function uploadWeChatVirtualShipping(orderId, opts = {}) {
   if (claimed.changes !== 1) return;                 // another attempt is already in flight
 
   try {
-    await sendWeChatShippingUpload(orderId, o, pay, opts);
+    await sendWeChatShippingUpload(table, rowId, target, opts);
   } finally {
-    try { tdb().prepare('UPDATE retail_orders SET wx_shipping_locked_at = NULL WHERE id = ?').run(orderId); } catch (_) {}
+    try { tdb().prepare(`UPDATE ${table} SET wx_shipping_locked_at = NULL WHERE id = ?`).run(rowId); } catch (_) {}
   }
 }
 
 // The network half of the upload, split out so the claim above can wrap it in a
-// finally. Assumes its caller already vetted the order and holds the claim.
-async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
+// finally. Assumes its caller already vetted the row and holds the claim.
+async function sendWeChatShippingUpload(table, rowId, target, opts = {}) {
   // Count this attempt so the retry sweeper can cap runaway loops.
-  try { tdb().prepare('UPDATE retail_orders SET wx_shipping_attempts = COALESCE(wx_shipping_attempts,0) + 1 WHERE id = ?').run(orderId); } catch (_) {}
+  try { tdb().prepare(`UPDATE ${table} SET wx_shipping_attempts = COALESCE(wx_shipping_attempts,0) + 1 WHERE id = ?`).run(rowId); } catch (_) {}
 
   let token;
   try { token = await getWeChatAccessToken(); }
@@ -7871,19 +7944,19 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
     // Transient network/token blip. Record it (blank status used to hide this,
     // stranding the order forever) but DON'T stamp uploaded_at, so the sweeper
     // retries. This is the exact failure that stranded delivered orders before.
-    console.warn('[wx-shipping] token', orderId, e.message);
-    try { tdb().prepare("UPDATE retail_orders SET wx_shipping_status = ? WHERE id = ?").run(`retry:token ${e.message || ''}`.trim().slice(0, 200), orderId); } catch (_) {}
+    console.warn('[wx-shipping] token', target.ref, e.message);
+    try { tdb().prepare(`UPDATE ${table} SET wx_shipping_status = ? WHERE id = ?`).run(`retry:token ${e.message || ''}`.trim().slice(0, 200), rowId); } catch (_) {}
     return;
   }
   if (!token) return;                             // dev / unconfigured tenant
 
   const body = {
-    order_key:      { order_number_type: 2, transaction_id: pay.transaction_id },
+    order_key:      { order_number_type: 2, transaction_id: target.transactionId },
     logistics_type: 3,                            // 虚拟商品 = virtual delivery
     delivery_mode:  1,                            // 统一发货
-    shipping_list:  [{ item_desc: buildShippingItemDesc(orderId) }],
+    shipping_list:  [{ item_desc: target.itemDesc() }],
     upload_time:    rfc3339Shanghai(),
-    payer:          { openid: o.openid },
+    payer:          { openid: target.openid },
   };
 
   let j;
@@ -7893,8 +7966,8 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
     j = (await wxApiPost('/wxa/sec/order/upload_shipping_info', body)).json || {};
   } catch (e) {
     // Transient network error. Record + leave uploaded_at NULL so the sweeper retries.
-    console.warn('[wx-shipping] fetch', orderId, e.message);
-    try { tdb().prepare("UPDATE retail_orders SET wx_shipping_status = ? WHERE id = ?").run(`retry:fetch ${e.message || ''}`.trim().slice(0, 200), orderId); } catch (_) {}
+    console.warn('[wx-shipping] fetch', target.ref, e.message);
+    try { tdb().prepare(`UPDATE ${table} SET wx_shipping_status = ? WHERE id = ?`).run(`retry:fetch ${e.message || ''}`.trim().slice(0, 200), rowId); } catch (_) {}
     return;
   }
 
@@ -7903,8 +7976,8 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
   const ALREADY = new Set([268480001 /* order already shipped */]);
   if (j.errcode === 0 || ALREADY.has(j.errcode)) {
     tdb().prepare(
-      "UPDATE retail_orders SET wx_shipping_uploaded_at = CURRENT_TIMESTAMP, wx_shipping_status = 'ok' WHERE id = ?"
-    ).run(orderId);
+      `UPDATE ${table} SET wx_shipping_uploaded_at = CURRENT_TIMESTAMP, wx_shipping_status = 'ok' WHERE id = ?`
+    ).run(rowId);
     return;
   }
 
@@ -7915,9 +7988,9 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
   const transient = !permanent && WX_SHIPPING_TRANSIENT_CODES.has(j.errcode);
   const kind = permanent ? 'perm' : transient ? 'retry' : 'err';
   const status = `${kind}:${j.errcode || '?'} ${j.errmsg || ''}`.trim().slice(0, 200);
-  tdb().prepare('UPDATE retail_orders SET wx_shipping_status = ? WHERE id = ?').run(status, orderId);
-  if (transient) console.warn('[wx-shipping] upload deferred', o.order_no, status);
-  else console.error('[wx-shipping] upload failed', o.order_no, status);
+  tdb().prepare(`UPDATE ${table} SET wx_shipping_status = ? WHERE id = ?`).run(status, rowId);
+  if (transient) console.warn('[wx-shipping] upload deferred', target.ref, status);
+  else console.error('[wx-shipping] upload failed', target.ref, status);
   // Page ops on the event-driven path; the sweeper (fromSweep) does its own
   // single rolled-up alert so a stuck order can't spam the group each tick.
   // A transient code pages nobody — the sweeper retries it within minutes, and
@@ -7927,7 +8000,7 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
       // The MERCHANT's: the message ends "go to the mini-program back office and
       // ship it by hand", which is their back office and nobody else's.
       await sendTenantAlert(currentTenantId(),
-        `微信自动发货失败 订单 ${o.order_no}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
+        `微信自动发货失败 订单 ${target.ref}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
     } catch (_) { /* alerting never blocks */ }
   }
 }
@@ -8907,22 +8980,33 @@ const WX_SHIPPING_SWEEP_BATCH = 50;      // orders per tenant per tick
 
 async function retryWeChatShippingForTenant() {
   if (cfgValue('wechat.autoVirtualShipping', true) !== true) return 0;
-  let rows;
-  try {
-    rows = tdb().prepare(
-      `SELECT id, order_no, COALESCE(wx_shipping_attempts, 0) AS attempts
+  // Shared by all three queries: not uploaded, not given up, under the retry
+  // cap, and no upload already in flight (the event-driven path fires the
+  // instant a row qualifies, which is exactly when this sweep first sees it;
+  // the upload re-checks the claim atomically, this just keeps them out of
+  // the batch). Alias-free on purpose so it reads the same on every table.
+  const pending =
+    `wx_shipping_uploaded_at IS NULL
+     AND (wx_shipping_status IS NULL OR wx_shipping_status NOT LIKE 'perm:%')
+     AND COALESCE(wx_shipping_attempts, 0) < ${WX_SHIPPING_MAX_ATTEMPTS}
+     AND (wx_shipping_locked_at IS NULL
+          OR wx_shipping_locked_at < datetime('now', '-${WX_SHIPPING_LOCK_STALE_MIN} minutes'))`;
+  // Each source on its own: a tenant that has not migrated one table yet must
+  // not stop the other two from shipping.
+  const pick = (sql) => {
+    try { return tdb().prepare(sql).all(); }
+    catch (e) {
+      if (/no such column|no such table/i.test(e.message)) return [];   // tenant not migrated yet
+      throw e;
+    }
+  };
+  const rows = [
+    ...pick(
+      `SELECT 'order' AS kind, 'retail_orders' AS tbl, id, order_no AS ref
          FROM retail_orders
         WHERE status = 'delivered'
           AND payment_method = 'wechat'
-          AND wx_shipping_uploaded_at IS NULL
-          AND (wx_shipping_status IS NULL OR wx_shipping_status NOT LIKE 'perm:%')
-          AND COALESCE(wx_shipping_attempts, 0) < ${WX_SHIPPING_MAX_ATTEMPTS}
-          -- Skip orders with an upload already in flight (the event-driven path
-          -- fires the instant an order is delivered, which is exactly when this
-          -- sweep first sees it). uploadWeChatVirtualShipping re-checks the claim
-          -- atomically; this just keeps them out of the batch.
-          AND (wx_shipping_locked_at IS NULL
-               OR wx_shipping_locked_at < datetime('now', '-${WX_SHIPPING_LOCK_STALE_MIN} minutes'))
+          AND ${pending}
           AND COALESCE(delivered_at, updated_at) >= datetime('now', '-${WX_SHIPPING_SWEEP_LOOKBACK_DAYS} days')
           -- Must have a real WeChat 支付订单号 to attach shipping to; orders with a
           -- blank transaction_id (balance/comp-paid, or txn never captured) can't
@@ -8932,32 +9016,43 @@ async function retryWeChatShippingForTenant() {
                          AND p.status = 'success'
                          AND p.transaction_id IS NOT NULL AND p.transaction_id != '')
         ORDER BY delivered_at DESC
-        LIMIT ${WX_SHIPPING_SWEEP_BATCH}`
-    ).all();
-  } catch (e) {
-    if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
-    throw e;
-  }
+        LIMIT ${WX_SHIPPING_SWEEP_BATCH}`),
+    // Top-ups and add-ons: settled WeChat charges carrying their own 支付单.
+    // This is also what drains the backlog — every top-up paid before this
+    // shipped sits here until it uploads or WeChat refuses it for good.
+    ...Object.entries(WX_SHIPPING_CHARGE_TABLES).flatMap(([kind, tbl]) => pick(
+      `SELECT '${kind}' AS kind, '${tbl}' AS tbl, id, out_trade_no AS ref
+         FROM ${tbl}
+        WHERE status = 'success'
+          AND payment_method = 'wechat'
+          AND transaction_id IS NOT NULL AND transaction_id != ''
+          AND ${pending}
+          AND COALESCE(paid_at, created_at) >= datetime('now', '-${WX_SHIPPING_SWEEP_LOOKBACK_DAYS} days')
+        ORDER BY paid_at DESC
+        LIMIT ${WX_SHIPPING_SWEEP_BATCH}`)),
+  ];
   if (!rows.length) return 0;
 
   let uploaded = 0;
   const gaveUp = [];
   for (const o of rows) {
-    try { await uploadWeChatVirtualShipping(o.id, { fromSweep: true }); }
-    catch (e) { console.warn('[wx-shipping-sweep] upload', o.id, e.message); }
+    try {
+      if (o.kind === 'order') await uploadWeChatVirtualShipping(o.id, { fromSweep: true });
+      else await uploadWeChatVirtualShippingForCharge(o.kind, o.id, { fromSweep: true });
+    } catch (e) { console.warn('[wx-shipping-sweep] upload', o.kind, o.id, e.message); }
     // Re-read the outcome this attempt produced.
     const after = tdb().prepare(
-      'SELECT wx_shipping_uploaded_at AS up, COALESCE(wx_shipping_attempts,0) AS attempts, wx_shipping_status AS st FROM retail_orders WHERE id = ?'
+      `SELECT wx_shipping_uploaded_at AS up, COALESCE(wx_shipping_attempts,0) AS attempts, wx_shipping_status AS st FROM ${o.tbl} WHERE id = ?`
     ).get(o.id) || {};
     if (after.up) { uploaded++; continue; }
     // Exhausted the retry budget without success and not already permanent →
     // stop retrying and collect it for one rolled-up ops alert.
     if (after.attempts >= WX_SHIPPING_MAX_ATTEMPTS && !String(after.st || '').startsWith('perm:')) {
       try {
-        tdb().prepare("UPDATE retail_orders SET wx_shipping_status = ? WHERE id = ?")
+        tdb().prepare(`UPDATE ${o.tbl} SET wx_shipping_status = ? WHERE id = ?`)
           .run(`perm:givenup after ${after.attempts} tries — ${String(after.st || '').slice(0, 120)}`.slice(0, 200), o.id);
       } catch (_) {}
-      gaveUp.push(o.order_no);
+      gaveUp.push(o.ref);
     }
   }
   if (gaveUp.length) {
