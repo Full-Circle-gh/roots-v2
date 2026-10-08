@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.486
+# Tacet shared-core consolidation — decisions record, v4.487
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-08 · v4.487 — **§442 · A TILL SALE BY A REFERRED CUSTOMER PAYS THE REFERRER — ASKED BY ASH:** *"do both"*, of the two follow-ups §441 named. `markOrderPaid` flipped a counter sale to `delivered` before `creditReferralReward` and `creditLifetimeCommission`, which both return early unless the order reads `paid`, so the referrer got nothing for a till sale. The flip now runs straight after them. Also recorded: §441's backfill found nothing to move, because the four stuck QR orders had been completed by hand minutes before. See §442.
 
 2026-10-08 · v4.486 — **§441 · A QR ORDER PAID AT THE TILL ENDS AT COMPLETED — ASKED BY ASH:** *"all orders from till stay under [paid] status and not complete. orders from till shouldn't have all the process like online order"*. The till's own sale already went straight to Completed; a QR order settled at the till, and any counter sale marked paid from the order drawer, went through the status route, which never made that step, so it sat at Paid. It now does, last in the paid block. The pos-counter survey's §6 "adjacent bug", filed 2026-08-20. See §441.
 
@@ -29149,3 +29151,39 @@ Tests: `scripts/test_counter_mark_paid_completes.js` (new, fast shard) runs
 the real block from the route against an in-memory `retail_orders`, checks it
 sits after the referral credits, and checks the till still settles through
 this route. `CMP_MUTANT=1` makes it red.
+
+## §442 — A TILL SALE BY A REFERRED CUSTOMER PAYS THE REFERRER
+
+**Asked by Ash, 2026-10-08:** *"do both"*, of the two follow-ups §441 named.
+
+**What was wrong.** `markOrderPaid` moved a counter sale to `delivered` first
+and ran the referral credits after. `creditReferralReward` (the first-order
+bounty, and the invited friend's welcome credit) and
+`creditLifetimeCommission` (the share of later orders) both return early
+unless the order reads `paid`. So a till sale by a referred customer paid
+neither the referrer nor the friend. Points were never affected:
+`awardOrderPoints` does not read the status.
+
+**The ruling.** The flip stays in `markOrderPaid`. It now runs straight after
+the two credits, and before the pushes, the WeCom alert and the print, so
+those still see `delivered` as they did. The stock commit is unchanged and
+stays where it was. §441's flip in the status route was already placed after
+the credits.
+
+**Not done, on purpose.** No backfill of past till sales that should have
+paid a referral. A first till sale that was skipped also means a later order
+by the same customer voided the referral as "not first order". Paying those
+now would be a money decision about past orders, so it is left to Ash.
+
+**§441's backfill, for the record.** `scripts/oneoff_complete_stuck_counter_sales.js`
+dry-ran on 2026-10-08 and found nothing at `paid`. A read-only check
+(`scripts/diagnose_till_order_status.js`) showed why: the four QR orders
+settled at the till (TC000960, TC000978, TC000981, TC000986) had been
+completed by hand at 13:26–13:27, minutes before §441 deployed. Every sale
+rung up on the till had reached `delivered` at the moment of payment, as the
+code said.
+
+Tests: `scripts/test_counter_mark_paid_completes.js` gains a section that
+runs the real `markOrderPaid` with recorders and checks the credits see
+`paid`, the sale still ends at `delivered`, and the print and alert still
+see `delivered`. It fails on the old code. `CMP_MUTANT=1` makes it red.
