@@ -143,6 +143,19 @@
 
   let activeClose = null;
 
+  // HANDING FOCUS BACK MUST NOT OPEN A KEYBOARD (Ash, 2026-10-08). Closing a
+  // dialog returns focus to whatever held it before, which is right for a
+  // keyboard user. On a tablet, when that was a text box, the return is a
+  // tap nobody made: the on-screen keyboard springs up over the page the
+  // moment the dialog goes. So on a touch screen a text field is left alone.
+  // A button or a row still gets its focus back; neither brings a keyboard.
+  const NO_KEYBOARD = new Set(['button', 'checkbox', 'radio', 'submit', 'reset', 'file', 'color', 'range', 'image']);
+  function popsKeyboard(el) {
+    if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) return false;
+    if (el.isContentEditable || el.tagName === 'TEXTAREA') return true;
+    return el.tagName === 'INPUT' && !NO_KEYBOARD.has(String(el.type || 'text').toLowerCase());
+  }
+
   function openScrim(kindClass, bodyHtml, footHtml, focusSel) {
     injectStyle();
     const scrim = document.createElement('div');
@@ -161,7 +174,7 @@
       document.removeEventListener('keydown', onKey);
       scrim.classList.remove('on');
       setTimeout(() => scrim.remove(), 260);
-      if (lastFocus && lastFocus.focus) lastFocus.focus();
+      if (lastFocus && lastFocus.focus && !popsKeyboard(lastFocus)) lastFocus.focus();
       activeClose = null;
       resolve(result);
     }
