@@ -432,6 +432,8 @@ Observations about the code as it stands, not a work plan.
 
 **Filed 2026-08-20 alongside the counter-sale stock fix. NOT fixed in that change — recorded here so it is not rediscovered.**
 
+> **FIXED 2026-10-08 — decisions §441.** The status route now flips a counter sale to `delivered` on pending→paid, last in its paid block. The collapse onto one function (§6.5) is still not done.
+
 > Line numbers in this section are from the working tree **after** the stock fix, not from `f2241022` like the rest of this document. `routes/retail.js` gained ~160 lines in that change, so every `routes/retail.js` pin above §6 is offset from the current tree.
 
 ### 6.1 What is wrong

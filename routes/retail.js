@@ -35161,12 +35161,10 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // on its first preparing/dispatch click for a decrement — the same wait,
     // one route over, that markOrderPaid no longer makes an order serve.
     //
-    // NOTE: this path does NOT flip the order to 'delivered' the way
-    // markOrderPaid does — it never calls isTerminalOnPaid, so a counter sale
-    // marked paid from the drawer sits at 'paid'. That is a real and separate
-    // bug, recorded in docs/tacet-pos-counter-survey.md under "ADJACENT BUG",
-    // and deliberately NOT fixed here. The stock decrement is correct either
-    // way: it is keyed on the sale being paid, not on the status it lands in.
+    // The flip of a counter sale to 'delivered' is NOT here: it sits at the end
+    // of this block (§441), after the referral credits that need 'paid'. The
+    // stock decrement does not depend on it: it is keyed on the sale being
+    // paid, not on the status it lands in.
     //
     // `atPayment` for the same reason markOrderPaid passes it (§58): money
     // arriving off-app is the same moment as money arriving through the gateway,
@@ -35223,6 +35221,35 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
           });
         }
       } catch (e) { console.warn('[admin mark-paid operator push]', e.message); }
+    }
+    /* §441 — A COUNTER SALE MARKED PAID HERE IS COMPLETE, AS IT IS ON THE TILL.
+       markOrderPaid flips a counter sale to 'delivered' (read "Completed · 已完成")
+       the moment it is paid, because the customer is standing there and walks
+       out with the goods. This route never did, so a QR order settled at the
+       till — PATCHed paid by confirmRecall in public/till.html — and a counter
+       sale marked paid from the order drawer both sat at 'Paid' forever, with
+       'delivered' unreachable from 'paid' except by marking a walk-in
+       dispatched. docs/tacet-pos-counter-survey.md §6 recorded it on 2026-08-20.
+
+       LAST IN THE BLOCK ON PURPOSE. creditReferralReward and
+       creditLifetimeCommission above both return early unless the order reads
+       'paid', so flipping before them would quietly pay the referrer nothing.
+       Same UPDATE as markOrderPaid's, guarded on 'paid' so it moves nothing
+       that any of the above has already moved on. No notification for the
+       hand-over, for markOrderPaid's reason: the customer watched it happen. */
+    if (o.status !== 'paid') {
+      try {
+        const ft = tdb().prepare('SELECT fulfillment_type FROM retail_orders WHERE id = ?').get(id);
+        if (isTerminalOnPaid(ft)) {
+          tdb().prepare(
+            `UPDATE retail_orders
+                SET status = 'delivered',
+                    delivered_at = COALESCE(paid_at, CURRENT_TIMESTAMP),
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND status = 'paid'`
+          ).run(id);
+        }
+      } catch (e) { console.warn('[admin mark-paid counter-terminal]', id, e.message); }
     }
   }
   // Stock side-effects of cancel / refund. cancelled before payment just
