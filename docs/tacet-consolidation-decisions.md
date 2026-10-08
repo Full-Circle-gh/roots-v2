@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.485
+# Tacet shared-core consolidation — decisions record, v4.486
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-08 · v4.486 — **§441 · A QR ORDER PAID AT THE TILL ENDS AT COMPLETED — ASKED BY ASH:** *"all orders from till stay under [paid] status and not complete. orders from till shouldn't have all the process like online order"*. The till's own sale already went straight to Completed; a QR order settled at the till, and any counter sale marked paid from the order drawer, went through the status route, which never made that step, so it sat at Paid. It now does, last in the paid block. The pos-counter survey's §6 "adjacent bug", filed 2026-08-20. See §441.
 
 2026-10-07 · v4.485 — **§440 · THE TILL KNOCKS WHEN A QR ORDER COMES IN UNPAID — ASKED BY ASH:** *"we need to have a sound of a new order that came in even though it wasn't paid sound should be different compare to new paid order"*, then *"go ahead, build all three"*. The till plays a short falling two-note knock for each read that brings a QR order it has not seen; the paid-order ding (back office, phone) is unchanged. The knock rings behind the settle screen too. A strip says when the browser is still blocking sound, and the till asks the screen to stay on at a counter with a QR menu. One string composed. See §440.
 
@@ -29102,3 +29104,48 @@ Tests: `scripts/test_till_knock.js` (new, fast shard, no browser) cuts the
 functions out of `public/till.html` and runs them against stubs: arrivals,
 quiet reads, the store-switch race, a suspended context, the notes, the
 strip, and the wake lock.
+
+## §441 — A COUNTER SALE MARKED PAID IS COMPLETE, WHICHEVER BUTTON PAID IT
+
+**Asked by Ash, 2026-10-08:** *"all orders from till stay under [paid] status
+and not complete. orders from till shouldn't have all the process like online
+order"*.
+
+**What was wrong.** A counter sale (`fulfillment_type = 'counter'`) is done
+the moment it is paid: the customer is at the counter and leaves with the
+goods. `markOrderPaid` already knew this and moves such an order straight to
+`delivered`, which the order list shows as `Completed · 已完成`. A sale rung
+up on the till goes through `markOrderPaid`, so it was fine.
+
+A QR order paid at the till does not. The till settles it with
+`PATCH /api/retail-admin/orders/:id/status` (`confirmRecall` in
+`public/till.html`), the same route as the order drawer's Mark paid, and
+that route never took the step. Every QR order paid at the counter stayed
+at `Paid`, and the only way to move it on was to mark a walk-in "dispatched".
+`docs/tacet-pos-counter-survey.md` §6 recorded this on 2026-08-20 and left it.
+
+**The ruling.**
+1. **The status route takes the same step.** When it moves a counter sale
+   from `pending_payment` to `paid`, it then moves it to `delivered`, stamps
+   `delivered_at` with the payment time, and sends no hand-over message.
+   Same rule and same UPDATE as `markOrderPaid`. Delivery and pickup orders
+   are untouched; they still have work to do.
+2. **It runs last in the paid block.** `creditReferralReward` and
+   `creditLifetimeCommission` return early unless the order reads `paid`.
+   Flipping first would pay the referrer nothing.
+3. **Not merged into `markOrderPaid`.** The survey's §6.5 named that as the
+   larger and better change. It is still open: this is the smallest fix that
+   ends the stuck orders, and it is one more inline copy of a `markOrderPaid`
+   step on a route that already carries several.
+4. **Nothing is backfilled.** Orders already stuck at `Paid` stay there until
+   someone decides otherwise. They are easy to find: `status = 'paid'` and
+   `fulfillment_type = 'counter'`.
+
+**Found on the way, not fixed here.** `markOrderPaid` makes the counter flip
+*before* its own referral credits, so a till sale by a referred customer never
+pays the referrer. Separate change, if wanted.
+
+Tests: `scripts/test_counter_mark_paid_completes.js` (new, fast shard) runs
+the real block from the route against an in-memory `retail_orders`, checks it
+sits after the referral credits, and checks the till still settles through
+this route. `CMP_MUTANT=1` makes it red.

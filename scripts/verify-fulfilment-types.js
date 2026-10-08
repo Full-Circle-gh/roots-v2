@@ -1534,9 +1534,16 @@ check('markOrderPaid decrements every paid order, with no address test in front 
   && !/isGuangzhouAddress/.test(MARK_PAID_SRC), true);
 check('the admin Mark paid route defers the kitchen lines on the same terms',
   /atPayment: true,\n\s*\}\);\n\s*\} catch \(e\) \{ console\.error\('\[inventory\.commit \(admin paid\)\]'/.test(SERVER_SRC), true);
+// No isTerminalOnPaid test anywhere in front of the decrement inside the
+// route's paid block. The route DOES call it since §441 (2026-10-08) — to flip
+// a counter sale to Completed, AFTER the decrement — so this used to count
+// calls file-wide (exactly one, markOrderPaid's) and can no longer.
+const ADMIN_PAID_AT = SERVER_SRC.indexOf("if (status === 'paid') {",
+  SERVER_SRC.indexOf("router.patch('/api/retail-admin/orders/:id/status'"));
+const ADMIN_COMMIT_AT = SERVER_SRC.indexOf('[inventory.commit (admin paid)]', ADMIN_PAID_AT);
 check('the admin Mark paid route decrements every order, not counter sales alone',
-  /\[inventory\.commit \(admin paid\)\]/.test(SERVER_SRC)
-  && (SERVER_SRC.match(/isTerminalOnPaid\(/g) || []).length === 1, true);
+  ADMIN_PAID_AT > 0 && ADMIN_COMMIT_AT > ADMIN_PAID_AT
+  && !/isTerminalOnPaid\(/.test(SERVER_SRC.slice(ADMIN_PAID_AT, ADMIN_COMMIT_AT)), true);
 
 
 // ═══ 12. The counter till's manual settle ═══════════════════════════════════
