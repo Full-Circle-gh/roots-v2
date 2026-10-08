@@ -39060,7 +39060,18 @@ function sheetOrderDetail(){
            :o.addr?T(...o.addr):T('No address on file','没有收货地址')}</div>
          ${(!o.counter&&!o.pickup)?addrMovedNote(o):''}
          ${shipToBtns(o)}
-         ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('View customer','查看顾客')}</button>`:''}</div>
+         ${(()=>{ /* Call sits beside View customer: a tel: link, so the phone's
+            own dialer does the calling. Shown only for a number that can be
+            dialled: custLines() hands back '—' when the order has none, and a
+            masked one (138****2841) would dial seven digits of nothing. The
+            words are the rider card's live pair (Call · 拨打). */
+           const raw=String(o.phone||'');
+           const tel=raw.includes('*')?'':raw.replace(/[^\d+]/g,'');
+           const pill='display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;text-decoration:none';
+           const call=tel?`<a href="tel:${escAttr(tel)}" style="${pill}">${ic('phone',14)} ${T('Call','拨打')}</a>`:'';
+           const view=o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="${pill}">${ic('user',14)} ${T('View customer','查看顾客')}</button>`:'';
+           return (call||view)?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${call}${view}</div>`:'';
+         })()}</div>
        <!-- Payment reads as the tender and nothing else: the WeChat mark plus the
             word. The status word is dropped when it agrees with the pill in the
             sheet's own title bar (Paid, three centimetres above) and kept only
