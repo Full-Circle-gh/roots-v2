@@ -16353,8 +16353,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // image_url snapshotted on the order item is usually NULL, so resolve the
   // photo from the live product (same fallback chain as the funnel/order-item
   // endpoints): order-item snapshot -> product.image_url -> byte-stream URL
-  // when only base64 exists. Relative URL is fine — the admin renders on-host
-  // and /api/retail/products/:id/image is public.
+  // when only base64 exists. Relative URL is fine — the admin renders on-host.
+  // The staff image route, not the public one: a till-only product is never
+  // published and the public route refuses it, so a best-seller rung up at the
+  // counter ranked here with a blank picture.
   const topProducts = tdb().prepare(`
     SELECT i.product_id, i.name_en, i.name_cn, i.image_url AS oi_image_url, i.sku,
            p.image_url AS p_image_url, p.updated_at AS p_updated_at,
@@ -16369,7 +16371,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to).map(r => {
     let image_url = r.oi_image_url || r.p_image_url || '';
     if (!image_url && r.has_image) {
-      image_url = `/api/retail/products/${r.product_id}/image?v=${encodeURIComponent(r.p_updated_at || '')}`;
+      image_url = `/api/retail-admin/products/${r.product_id}/image?v=${encodeURIComponent(r.p_updated_at || '')}`;
     }
     return {
       product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn,
@@ -29153,8 +29155,13 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     // data: URI → keep the drawer payload small; EMPTY → a size variant keeps
     // its photo on a sibling, so resolve it through the variant-aware
     // byte-stream endpoint (resolveProductImage) instead of showing a blank.
+    // The STAFF route, not the public one: a till-only product (an Americano
+    // rung up at the counter) is never published, and the public route refuses
+    // unpublished products, so its line showed an empty square. This drawer is
+    // staff-only, the operator's cookie rides on the <img>, and the till's own
+    // tiles already read the same route for the same reason (§150).
     if (it.product_id && (!it.image_url || /^data:/i.test(it.image_url))) {
-      it.image_url = `/api/retail/products/${it.product_id}/image`;
+      it.image_url = `/api/retail-admin/products/${it.product_id}/image`;
     }
     // Bundle line → attach the component pack list so fulfilment knows what to
     // box. `pack_qty` is the per-bundle qty × this line's qty (total to pack).
