@@ -387,8 +387,20 @@ check('a phone whose video decoder never answers still gets the screen, or Try a
   const page = read('public/channel-signin.html');
   ok(/delete window\.VideoDecoder/.test(page), 'the decoder is not hidden while noVNC loads');
   ok(/Object\.defineProperty\(window, 'VideoDecoder', decoder\)/.test(page), 'the decoder is not put back');
-  ok(/Promise\.race\(\[\s*import\('\/novnc\/core\/rfb\.js'\),/.test(page), 'the noVNC load has no time limit');
+  ok(/Promise\.race\(\[\s*Promise\.all\(\[import\('\/novnc\/core\/rfb\.js'\),[\s\S]*?setTimeout\(no, LOAD_MS/.test(page), 'the noVNC load has no time limit');
   ok(/try \{ RFB = await loadRfb\(\); \}\s*catch \(_\) \{ return end\(S\.lost, 'bad', true\); \}/.test(page), 'a stalled load does not end on Try again');
+});
+
+check('a phone can type into the screen', () => {
+  // A canvas raises no phone keyboard (2026-10-08, the Eleme login on Android).
+  // The Keyboard button focuses a text box whose changes go to the screen.
+  const page = read('public/channel-signin.html');
+  ok(/<textarea id="kbd"/.test(page), 'no text box for the phone keyboard');
+  ok(/keyboard: T\('Keyboard', '键盘'\)/.test(page), 'the Keyboard button pair');
+  ok(/\$\('kbd'\)\.addEventListener\('input', kbdInput\)/.test(page), 'what is typed is not sent');
+  ok(/rfb\.sendKey\(KEYS\.names\.XK_BackSpace, 'Backspace'\)/.test(page), 'a deleted character is not a Backspace');
+  ok(/rfb\.focusOnClick = !TOUCH;/.test(page), 'tapping the screen drops the phone keyboard');
+  ok(/kbdOff\(\);\s*\}\s*\n\s*let rfb = null;/.test(page), 'the button outlives the screen');
 });
 
 (async () => {

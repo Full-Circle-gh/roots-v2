@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.316 · 2026-10-08 · §252 THE SIGN-IN PAGE'S KEYBOARD BUTTON, FOR PHONES — 1 STRING COMPOSED BY CLAUDE FROM A LIVE PART.** See *Signing a channel back in (§252)*.
+
 **v1.315 · 2026-10-07 · §440 THE TILL'S "TAP TO TURN ON THE NEW-ORDER SOUND" STRIP — 1 STRING COMPOSED BY CLAUDE FROM LIVE PARTS.** See *The till's sound strip (§440)*.
 
 **v1.314 · 2026-10-05 · §432 THE EVENING TO-MAKE MESSAGE TO THE KITCHEN'S WECOM GROUP, AND ITS SETTINGS CARD — 10 STRINGS COMPOSED BY CLAUDE FROM LIVE FRAGMENTS; THE REST COPIED WHOLE.** See *The evening to-make message (§432)*.
@@ -8881,6 +8883,7 @@ buttons are built by `chSignInBtn` (`public/retail-admin/01-core.js`) and
 | `You don’t have permission for this · 你没有此操作的权限` | **copied**: `lib/require-cap.js`'s own 403 |
 | `Try again · 重试`, `Close · 关闭` | **copied**: both live many times |
 | `Sign in again · … · 重新登录 · …` (the page title, with channel and store names) | the button's pair, plus names that are data |
+| `Keyboard · 键盘` (the page's button on a phone, v1.316: it raises the phone's keyboard to type into the sign-in screen) | **composed by Claude, 2026-10-08**: `键盘` lifted from the live `Keyboard shortcuts · 键盘快捷键` (`27-keyboard.js`), with *shortcuts* dropped because this button is the keyboard itself. Rejected: `键盘快捷键` (live, names the shortcut sheet, not a keyboard); `输入` (*input*, live as a verb in field prompts), because the button opens the keyboard and types nothing itself |
 | `Sign in to Eleme · 重新登录饿了么` (the desktop Home row's button, v1.169) | **composed**: `重新登录` (the button's pair above) + the channel's own name, joined with no space, the way the locked sentence joins them (`同步服务已退出登录美团`). Rejected: `Sign in again` alone, because the row it sits on can name two channels; `前往登录`, which is not live and says where you go rather than what you do |
 | `Signed out since 9:39 AM · 自 9:39 AM 起已退出登录` (a channel card's headline, desktop, v1.169) | **composed** on the card's own live frame, `Not syncing since … · 自 … 起未同步`, with the state swapped for the locked `已退出登录` |
 | `Waiting for a captcha since … · 自 … 起需要人工验证` (the same headline for a captcha) | **composed** on the same frame; `需要人工验证` is the Meituan daemon's own alert, verbatim |
