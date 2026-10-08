@@ -1703,6 +1703,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
     wakeKnock(); syncAwake(); renderSound();
+    // Asleep, the poll and possibly the socket were down; the shelf may have
+    // moved in the meantime.
+    refreshCatalogue();
   });
 
   function start() {
@@ -1858,8 +1861,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      when it is ordered and can never be short. stockOf() already reads null as
      "no gate", so it needs no change. */
   function loadCatalogue() {
-    return api('/api/retail-admin/stores/' + S.storeId + '/counter-catalogue')
+    var sid = S.storeId;
+    return api('/api/retail-admin/stores/' + sid + '/counter-catalogue')
       .then(function (r) {
+      // A reply for a shelf this till has since left must not land on the new
+      // one. Possible now that the catalogue is re-read in the background.
+      if (String(sid) !== String(S.storeId)) return false;
+      S.catAt = Date.now();
       var rows = (r && r.data && r.data.rows) || [];
       S.shopId = (r && r.data && r.data.shop_id) || null;
       S.stock = {};
@@ -1937,12 +1945,40 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      taking money, and an order arriving then must still knock. The tab being
      hidden stops it: a till left asleep on a counter overnight should not
      spend the night polling. */
+  /* THE SHELF HAS TO ARRIVE BY ITSELF TOO. The catalogue used to be read once,
+     at open and on a store switch, so a count changed anywhere else — a recount
+     on a phone, a sale on the other till, a QR order — never reached these
+     tiles. Reported from Yuexiu: Carrot-Ginger Juice still "Out of stock" after
+     it was restocked, until the cashier left the till and came back.
+
+     Same shape as the order list: the server rings (`shop-stock` below) and the
+     till re-reads; a slower poll is the floor under a dropped socket. A MINUTE,
+     not fifteen seconds — the full catalogue is a heavier read than the pending
+     list, and the ring covers the common case at once.
+
+     One read in flight at a time: a burst of rings must not stack requests.
+     The basket is untouched — lines carry their own name and price, and the
+     shelf gate in addAnswered reads S.stock fresh on every tap. */
+  var CAT_FLOOR_MS = 60000;
+  function refreshCatalogue() {
+    if (!S.storeId || S.catBusy) return;
+    S.catBusy = true;
+    loadCatalogue().then(function (landed) {
+      S.catBusy = false;
+      // Quiet while a takeover is up, as the order list is; the next render on
+      // the way back draws the fresh shelf. Nothing to draw if the reply was
+      // for a shop this till has since left.
+      if (landed !== false && S.view === 'till') render();
+    }, function () { S.catBusy = false; });
+  }
+
   function startPendPoll() {
     loadPend();
     if (S.pendTimer) clearInterval(S.pendTimer);
     S.pendTimer = setInterval(function () {
       if (document.hidden) return;
       loadPend(S.view !== 'till');
+      if (!S.catAt || Date.now() - S.catAt >= CAT_FLOOR_MS) refreshCatalogue();
     }, 15000);
     openPendStream();
   }
@@ -1977,6 +2013,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         // The knock still rings (§440).
         loadPend(S.view !== 'till');
       });
+      // A shelf count or a made-here switch changed somewhere — re-read it.
+      es.addEventListener('shop-stock', function () { refreshCatalogue(); });
       // No onerror handler that closes: EventSource retries by itself, and
       // closing here would turn one bad minute into a socket that never
       // returns for the rest of the shift.

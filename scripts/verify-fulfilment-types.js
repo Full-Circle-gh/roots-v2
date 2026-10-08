@@ -2409,8 +2409,18 @@ check('...and re-reads the list when one lands',
 // THE POLL IS THE FLOOR AND MUST NOT BE REMOVED. A dropped socket behind a
 // hotel's proxy is silent, and a counter that has quietly stopped seeing orders
 // is a worse failure than one running fifteen seconds behind.
+// The same tick also carries the catalogue's slower floor (below), so the
+// pattern allows one more statement after the order re-read — and no more.
 check('the poll survives beside the live channel',
-  /setInterval\(function \(\) \{[\s\S]{0,220}loadPend\([^)]*\);\n    \}, 15000\)/.test(POS_TILL_SRC), true);
+  /setInterval\(function \(\) \{[\s\S]{0,220}loadPend\([^)]*\);(\n      [^\n]*refreshCatalogue\(\);)?\n    \}, 15000\)/.test(POS_TILL_SRC), true);
+// The shelf has the same two halves: a ring that re-reads it at once, and a
+// floor under a dropped socket. Without them a count changed on another device
+// never reached the till's tiles until it was reopened (Yuexiu, 2026-10-08).
+// The behaviour is held in scripts/test_till_stock_live.js; these hold the text.
+check('the till re-reads its shelf when a stock ring lands',
+  /addEventListener\('shop-stock', function \(\) \{ refreshCatalogue\(\); \}\)/.test(POS_TILL_SRC), true);
+check('...and the poll re-reads a stale shelf',
+  /setInterval\(function \(\) \{[\s\S]{0,300}CAT_FLOOR_MS\) refreshCatalogue\(\);/.test(POS_TILL_SRC), true);
 // EventSource retries on its own (~3s). An onerror that closed the stream would
 // turn one bad minute into a socket that never comes back for the rest of the
 // shift.

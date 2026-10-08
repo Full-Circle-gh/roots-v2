@@ -106,6 +106,30 @@ function shopOrderPlaced(tenantId, storeId) {
   }
 }
 
+// Fired when a shelf count or a made-here switch changes — a recount on a
+// phone, a sale on another till, a QR or delivery order taking stock, a batch
+// logged in the kitchen. Without it the till's tiles kept the figure from the
+// moment the till was opened: reported from Yuexiu as Carrot-Ginger Juice
+// still "Out of stock" after it was restocked on another device, until the
+// cashier left the till and came back.
+//
+// Same doorbell rules as above: tenant-scoped, no stock data on the wire, the
+// till re-reads its catalogue through the ordinary authenticated route.
+// `storeId` null means "somewhere on this tenant" — lib/inventory.js coalesces
+// many writes into one ring and does not track which shelves they touched, so
+// every till on the tenant re-reads. One catalogue read per till per burst is
+// cheap; a till left showing the wrong shelf is not.
+function shopStockChanged(tenantId, storeId) {
+  if (tenantId == null) return;
+  const data = `event: shop-stock\ndata: ${JSON.stringify({ store_id: storeId == null ? null : Number(storeId) })}\n\n`;
+  for (const s of subs) {
+    if (s.tenantId !== tenantId) continue;
+    if (s.storeId != null && storeId != null && s.storeId !== Number(storeId)) continue;
+    try { s.res.write(data); } catch { /* socket dead — close handler will clean up */ }
+  }
+}
+
 module.exports = router;
 module.exports.shopOrderPlaced = shopOrderPlaced;
+module.exports.shopStockChanged = shopStockChanged;
 module.exports.subscriberCount = () => subs.size;

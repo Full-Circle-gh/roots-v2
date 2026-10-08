@@ -81,6 +81,8 @@ function subscribe(port, tenant, storeId) {
 }
 const events = (sub) => sub.chunks.join('').split('\n\n')
   .filter((b) => b.indexOf('event: shop-order') >= 0);
+const stockEvents = (sub) => sub.chunks.join('').split('\n\n')
+  .filter((b) => b.indexOf('event: shop-stock') >= 0);
 
 (async () => {
   const app = express();
@@ -117,6 +119,31 @@ const events = (sub) => sub.chunks.join('').split('\n\n')
   yes(!/order_no|total|recipient|items|shop_order_code/i.test(body),
     'no order data crosses the socket',
     'the till re-reads through the endpoint that enforces tenant + capability');
+
+  // 5. THE STOCK RING — a shelf changed somewhere. lib/inventory.js does not
+  // know which shelf, so it rings with no store: every till on the tenant
+  // re-reads, and still no other tenant hears it.
+  shopEvents.shopStockChanged(1, null);
+  await new Promise((r) => setTimeout(r, 60));
+  yes([t1s7, t1s9, t1any].every((s) => stockEvents(s).length === 1),
+    'a stock ring with no shop reaches every till on the tenant',
+    'a till left showing the page-load shelf sold "Out of stock" juice that was back');
+  yes(stockEvents(t2s7).length === 0, 'ANOTHER TENANT HEARS NO STOCK RING');
+  yes(events(t1s7).length === 1, 'a stock ring is not an order ring',
+    'the till must not re-read its order queue, or knock, for a recount');
+
+  // A made-here switch names its shop, and only that shop's tills re-read.
+  shopEvents.shopStockChanged(1, 7);
+  await new Promise((r) => setTimeout(r, 60));
+  yes(stockEvents(t1s7).length === 2, 'a stock ring for a shop reaches the till at it');
+  yes(stockEvents(t1s9).length === 1, 'and not a till at another shop');
+  yes(stockEvents(t2s7).length === 0, 'and never another tenant');
+  const sbody = stockEvents(t1s7)[1] || '';
+  yes(/data: \{"store_id":7\}/.test(sbody) && !/qty|stock"|price|product/i.test(sbody),
+    'the stock ring carries the shop id and no stock data');
+  shopEvents.shopStockChanged(null, 7);
+  await new Promise((r) => setTimeout(r, 60));
+  yes(stockEvents(t1s7).length === 2, 'a stock ring with no tenant reaches nobody');
 
   // 4. A dropped socket is forgotten.
   const before = shopEvents.subscriberCount();
