@@ -1382,6 +1382,10 @@ const state = {
           results repaint and the input must not. */
        pick:false,q:'',
        amount:'',cat:'',paid:EXP_PAID_DEFAULT,note:'',storeId:null,date:null,photo:null,
+       /* §114 amended 2026-10-09: NOT ARRIVED YET STARTS ON — asked by Ash.
+          Goods bought for the shop are mostly still on their way when the claim
+          is made, so the form opens on the answer that raises an order. */
+       coming:true,
        busy:false,err:'',sent:null,
        mine:null,mineTried:false,owed:0,waiting:0},
   /* THE APPROVAL QUEUE (§87 step three). A DIFFERENT SCREEN WITH A DIFFERENT
@@ -27682,10 +27686,11 @@ function screenExpense(){
         <button class="chip ${x.paid==='employee'?'on':''}" onclick="APP.cmd('expPaid','employee')">${T('My own money','个人支付')}</button>
         <button class="chip ${x.paid==='company'?'on':''}" onclick="APP.cmd('expPaid','company')">${T('Company','公司')}</button>
       </div>
-      ${/* §114 — HAS IT ARRIVED? A SINGLE OPT-IN, NOT A PAIR OF CHIPS.
-           The overwhelming case is goods already in hand, and unticked is exactly
-           what this form has always meant — so an opt-in cannot make an existing
-           claim say something new, which a pair of chips with a default would.
+      ${/* §114 — HAS IT ARRIVED? A SINGLE TOGGLE, NOT A PAIR OF CHIPS.
+           Unticked is exactly what this form has always meant, so no claim
+           already sent changes meaning. It STARTS TICKED (amended 2026-10-09,
+           asked by Ash): a taxi or ginger has to be unticked by hand, and the
+           two refusals in expSend are what stop one going through unnoticed.
 
            Ticking it makes the claim into an ORDER on approval: the shop can
            then see it is coming, and whoever it arrives to ticks it in. That is
@@ -27729,7 +27734,9 @@ function screenExpense(){
     </div>
 
     <div style="display:flex;flex-direction:column;gap:8px">
-      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Note','备注')} · ${T('optional','可选')}</span>
+      ${/* Optional only while the claim is not raising an order — §114 refuses
+           an order line with no name, so the label must not say otherwise. */''}
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Note','备注')}${x.coming?'':' · '+T('optional','可选')}</span>
       ${/* NO PLACEHOLDER. The example that wanted to go here — an airport run for
            a Tianhe order — needed two Chinese words this product does not ship,
            and Rule 4 prefers restructuring a label over minting a pair. The row
@@ -27808,8 +27815,8 @@ reg('expAgain', ()=>{ const x=state.exp;
      photo are about ONE thing that was bought and must never carry over — that
      is how the same taxi gets claimed twice. Who paid and which shop are facts
      about the person, and asking again for every claim in a row is friction for
-     nothing. */
-  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat=''; x.coming=false;
+     nothing. Not arrived yet goes back to its default, never the last answer. */
+  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat=''; x.coming=true;
   x.mineTried=false; render(); });
 
 /* THE PHOTO IS DOWNSCALED ON THE PHONE, and this is the whole of why: a modern

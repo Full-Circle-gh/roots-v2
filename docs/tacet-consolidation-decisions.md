@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.492
+# Tacet shared-core consolidation — decisions record, v4.493
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-09 · v4.493 — **§114 AMENDED · NOT ARRIVED YET STARTS ON — ASKED BY ASH** from the phone's Expense form: *"not arrived yet should be defult"*. The toggle on `public/m.html`'s claim form now opens ticked, and *Record another* puts it back to ticked rather than to the last claim's answer. **What does not change:** it is still one toggle, unticked still means what it always meant (so no claim already sent changes meaning), and the server rule is untouched. **The cost, said when it was built:** a claim for something already in hand (a taxi, ginger) now has to be unticked by hand, or it raises a purchase order on approval, and the approver cannot untick it — only reject it. What stops one slipping through is §114's own refusal: a ticked claim with no note is refused on Submit, so a bare taxi claim is caught at the phone. **One label fixed with it:** *Note · optional* dropped the *optional* while the toggle is on, since the note is required then and the label had been saying otherwise. No new Chinese, no route, no migration, and no change to `.gitignore` or CI. `scripts/test_staff_expenses.js` updated for the new default (142 cases).
 
 2026-10-09 · v4.492 — **QUICK ACTIONS HOLD SEVEN, NOT SIX — ASKED BY ASH** from the phone with the picker open on five rows: *"add one more to quick action"*. `QUICK_MAX` in `public/m.html` goes from 6 to 7; nothing else about the list changes (same picker, same order, same keys kept when a screen is lost). The two messages that said the number in words now read it from `QUICK_MAX` — *"7 shortcuts is the most that fits · 最多只能放 7 个快捷方式"* and *"That is all 7. … · 已满 7 个。…"* — so the next change to the cap is one number. No Chinese was composed: the live strings are unchanged except for the numeral. `scripts/test_mobile_home.js` moves its three ceiling cases to seven and they were checked to fail with the cap put back to six.
 

@@ -339,13 +339,16 @@ it('§114 — the two things an order cannot do without are refused on the phone
   assert.match(CLAIM, /awaitingDelivery && !note/, 'both of them');
 });
 
-it('§114 — the flag does not survive onto the next claim', () => {
-  // "Record another" keeps who paid and which shop — facts about the person —
-  // and clears what the claim was. Whether the LAST thing was still coming says
-  // nothing about the next one, and a sticky flag would silently raise an order
-  // for a taxi.
-  assert.match(PHONE_CODE, /x\.cat=''; x\.coming=false;/,
-    'the reset clears it with the amount and the note');
+it('§114 — the flag starts on, and goes back to on for the next claim', () => {
+  // Amended 2026-10-09 (Ash): Not arrived yet is the DEFAULT. "Record another"
+  // keeps who paid and which shop — facts about the person — and puts the flag
+  // back to that default rather than carrying the last claim's answer.
+  assert.match(PHONE_CODE, /\bcoming:true,/, 'a fresh form opens with it on');
+  assert.match(PHONE_CODE, /x\.cat=''; x\.coming=true;/,
+    'the reset puts it back to the default with the amount and the note');
+  // On by default makes the note required by default; the label must say so.
+  assert.match(PHONE_CODE, /T\('Note','备注'\)\}\$\{x\.coming\?'':' · '\+T\('optional','可选'\)\}/,
+    'the note is not called optional while it is required');
 });
 
 it('§114 — the approver is told before deciding, and can reach the order after', () => {
