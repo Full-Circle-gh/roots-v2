@@ -460,6 +460,17 @@ function _resolveDestStoreId(order, warehouseStoreId) {
 // A SKU is the operator's own code for a thing, so two rows sharing an id and
 // disagreeing on the SKU are definitely not the same thing. Returns a list of
 // plain-English problems; empty means every line is safe to move.
+//
+// THE LINE'S OWN SKU DECIDES FIRST (§445). A line raised on the phone carries
+// a store_products.id AND the SKU of the product the shop tapped, saved on the
+// line when it was asked for. Comparing that id against `products` compares it
+// with an unrelated row: RS-261008-002/-003 were refused because one integer
+// is Passion Fruit Kombucha 300ml (2-80) in the store list and the 1L (2-90) in
+// the old one. The line said 2-80, so the store row WAS the bottle asked for.
+// So: where the line and the store row both carry a SKU, they must agree, and
+// when they do the line is safe whatever the old list says; when they do not,
+// it is refused. Only a line with no SKU of its own, or a store row with none,
+// falls back to the old-list comparison below.
 function _checkTransferIds(items, conn = tdb()) {
   const kitchenRow = conn.prepare('SELECT sku, name_en FROM products WHERE id = ?');
   const storeRow   = conn.prepare('SELECT sku, name_en FROM store_products WHERE id = ?');
@@ -472,10 +483,17 @@ function _checkTransferIds(items, conn = tdb()) {
       problems.push(`${name} is not in the store catalogue, so there is no shelf to move it to.`);
       continue;
     }
+    const lSku = it.sku     == null ? '' : String(it.sku).trim();
     const kSku = kitchen?.sku == null ? '' : String(kitchen.sku).trim();
     const sSku = store.sku   == null ? '' : String(store.sku).trim();
+    if (lSku && sSku) {
+      if (lSku !== sSku) {
+        problems.push(`${name} does not match the store catalogue: the request was for ${lSku} but that reference is ${sSku} in the store list. Moving it would change the wrong product's stock.`);
+      }
+      continue;
+    }
     if (kSku && sSku && kSku !== sSku) {
-      problems.push(`${name} does not match the store catalogue: the kitchen has ${kSku} and the store has ${sSku} under the same reference. Moving it would change the wrong product's stock.`);
+      problems.push(`${name} does not match the store catalogue: the old product list has ${kSku} and the store has ${sSku} under the same reference. Moving it would change the wrong product's stock.`);
     }
   }
   return problems;
@@ -592,7 +610,7 @@ function _applyDispatch(orderId, actorUser) {
   if (o.stock_applied_at) return { ok: true, skipped: 'already_applied_old_model' };
 
   const lines = conn.prepare(`
-    SELECT product_id, product_name, qty_requested, qty_sent
+    SELECT product_id, product_name, sku, qty_requested, qty_sent
       FROM restock_items
      WHERE restock_id = ?
        AND product_id IS NOT NULL
@@ -722,7 +740,7 @@ function _applyReceipt(orderId, actorUser) {
   }
 
   const all = conn.prepare(`
-    SELECT id, product_id, product_name, qty_requested, qty_sent, qty_received
+    SELECT id, product_id, product_name, sku, qty_requested, qty_sent, qty_received
       FROM restock_items
      WHERE restock_id = ? AND product_id IS NOT NULL AND COALESCE(qty_sent, qty_requested, 0) > 0
   `).all(o.id);
