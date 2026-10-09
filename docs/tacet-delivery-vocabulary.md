@@ -13522,3 +13522,10 @@ receive the goods not the one that gonna send it"*.
 
 `scripts/test_mobile_ops_groups.js` fails if any of these sources stops being
 live, if the row and title drift apart, or if the receiving twin is renamed.
+
+### The permission, the same day
+
+`Pick and dispatch a run · 拣货与发货` (the `restock:pick` permission's label in
+`lib/capabilities.js`, shown in team settings) is RETIRED and becomes `Send to
+another shop · 调拨发货`, **copied whole** from the row above. Nothing new is
+composed. Asked by Ash: *"rename"*.

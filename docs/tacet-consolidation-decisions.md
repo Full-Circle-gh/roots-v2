@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.488
+# Tacet shared-core consolidation — decisions record, v4.489
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-09 · v4.489 — **§443 rule 4 · THE PERMISSION IS NAMED FOR ITS SCREEN — ASKED BY ASH:** *"rename"*. `restock:pick`'s label in team settings, *Pick and dispatch a run · 拣货与发货*, becomes `Send to another shop · 调拨发货`, copied from the row §443 named. Label only; the key is unchanged. See §443.
 
 2026-10-08 · v4.488 — **§443 · THE PHONE'S PICK SCREEN IS "SEND TO ANOTHER SHOP", AND IT ASKS WHICH SHOP IS SENDING — DECIDED BY ASH:** of "Picking at which location?", *"feels like the shop that gonna recieve the goods not the one that gonna send it"*, then *"also The "Pick" page name. we need to change"* and *"yes go ahead, build it"*. The row and title become `Send to another shop · 调拨发货`, mirroring `Receive from another shop · 调拨收货`; the question becomes `Sending from which shop? · 从哪个门店发货？`. Two strings composed, declared in vocabulary v1.317. Labels only; the screen's behaviour is unchanged. See §443.
 
@@ -29214,3 +29216,9 @@ moves. The screen's behaviour, the desktop and the mini app are untouched.
 
 Strings: `docs/tacet-delivery-vocabulary.md` v1.317. Test:
 `scripts/test_mobile_ops_groups.js`.
+
+**Rule 4, asked by Ash the same day (*"rename"*).** The `restock:pick`
+permission, shown in team settings as *Pick and dispatch a run · 拣货与发货*,
+is labelled `Send to another shop · 调拨发货`, the name of the screen it
+opens. Only the label changes; the key `restock:pick` and every check on it
+stay as they are.
