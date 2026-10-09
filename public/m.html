@@ -11698,8 +11698,8 @@ function screenSetup(){
       something inside wants you. NO COUNT OF ITS TOOLS: on this screen a number
       on a row means that many are waiting (§293's Inbox badge), so "5" beside
       Money and numbers would read as five things to do. A tap opens it in
-      place; the phone remembers which are open, the way it remembers the
-      questions strip. ALL CLOSED IS THE DEFAULT, for every role alike: §121
+      place, and it stays open only while you stay on More: §447, leaving More
+      closes them all again (see render()). ALL CLOSED IS THE DEFAULT, for every role alike: §121
       rejected a rule that changes the screen's shape with the row count, and
       folding only some lists would be that rule. The headless group (Settings)
       has nothing to fold under and stays a plain row.
@@ -11707,23 +11707,20 @@ function screenSetup(){
       screen, and its tools are the whole app: folding them would put a picker's
       one screen behind a heading. That is keyed to the mode, not to a count, so
       it is as predictable as the bar itself. */
-const M_MORE_OPEN_KEY='tacet-m-more-open';
+/* §447 — in memory only. §446 kept the open set on the phone; Ash asked for
+   it to fold again on every visit, so nothing is stored, and the key §446
+   wrote is cleared once so a group left open then does not come back. */
+try{ localStorage.removeItem('tacet-m-more-open'); }catch(e){}
 function moreOpenSet(){
-  if(!state.moreOpen){
-    let v=[];
-    try{ const raw=JSON.parse(localStorage.getItem(M_MORE_OPEN_KEY)||'[]'); if(Array.isArray(raw)) v=raw.map(String); }catch(e){}
-    state.moreOpen=new Set(v);
-  }
+  if(!state.moreOpen) state.moreOpen=new Set();
   return state.moreOpen;
 }
 /* A group is known by its English heading: stable across languages, and the
-   same words §121 chose, so an opened group stays open across a release that
-   only reorders the rows inside it. */
+   same words §121 chose. */
 const moreGroupKey=g=>g.h?g.h[0]:'';
 reg('toggleMoreGroup', k=>{
   const o=moreOpenSet(); if(o.has(k)) o.delete(k); else o.add(k);
   render();
-  try{ localStorage.setItem(M_MORE_OPEN_KEY, JSON.stringify([...o])); }catch(e){}
 });
 const moreRowWants=r=>moreRowDot(r.key) || moreRowCount(r.key)>0;
 /* ONE ROW, drawn the same in the Needs-you card and inside a group, so the
@@ -47994,6 +47991,11 @@ function render(){
   if(_sc&&_scrollKey) _scrollMem[_scrollKey]=_sc.scrollTop;
   if(_forget.length){ _forget.forEach(k=>{ delete _scrollMem[k]; }); _forget=[]; }
   const _skey=screenKey();
+  /* §447 — LEAVING MORE FOLDS IT. The screen is changing away from More (a tab,
+     or a tool pushed from it), so every group closes and the next arrival,
+     by Back or by the tab, finds the short list. A repaint of More itself
+     keeps the same key, so a poll never snaps a group shut mid-read. */
+  if(_scrollKey==='more|'&&_skey!=='more|') state.moreOpen=null;
   _scrollKey=_skey;
   let _keep=_scrollMem[_skey]||0;
   if(_bootScroll){
