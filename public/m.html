@@ -1055,7 +1055,7 @@ const state = {
      picker needs it more than most, since every add, remove and move repaints
      while .sheet carries `animation:tSheetUp .4s`. */
   quick:null, quickSheet:false, quickMounted:false,
-  askOpen:null,
+  askOpen:null, moreOpen:null,
   /* quickFab is the floating button's dial — the pills, open or shut. It is
      NOT a sheet and deliberately not one: the whole point of the button is
      that it sits over the screen the operator is already on rather than
@@ -11680,6 +11680,99 @@ function screenSetup(){
           brand (X4) are on the phone now; what is left is said. */''}
     ${noteBar(T('Payment methods and WeChat sign-in are set up on desktop.','收款方式与微信登录在电脑端设置。'))}</div>`;
 }
+/* ══ §446 — THE MORE LIST, SHORTENED ═════════════════════════════════════════
+   Asked by Ash off the live phone: "scrolling too long. also once there is a
+   green dot on more I need to look for what it is by scrolling endlessly".
+   An owner's More held about fifty-four rows, and the three rows the More dot
+   can mean (Send to another shop, Ready from the kitchen, Inbox) sat around
+   rows 15, 30 and 35. Two changes, chosen together:
+
+   A. NEEDS YOU, FIRST. Every row that is lighting the More dot right now is
+      drawn at the very top, above the questions, under Home's own heading
+      `Needs you · 需要处理` (copied whole; nothing composed). It reads the SAME
+      moreRowDot / moreRowCount the rows and tabDot read, so the card and the
+      dot cannot disagree: no dot, no card. The rows stay in their groups too —
+      this is a shortcut, not a move.
+
+   B. GROUPS FOLD. Each headed group is one row: its heading, and the dot when
+      something inside wants you. NO COUNT OF ITS TOOLS: on this screen a number
+      on a row means that many are waiting (§293's Inbox badge), so "5" beside
+      Money and numbers would read as five things to do. A tap opens it in
+      place; the phone remembers which are open, the way it remembers the
+      questions strip. ALL CLOSED IS THE DEFAULT, for every role alike: §121
+      rejected a rule that changes the screen's shape with the row count, and
+      folding only some lists would be that rule. The headless group (Settings)
+      has nothing to fold under and stays a plain row.
+      NOT ON A ROLE WITH NO TAB BAR (flatNav). There this list IS the home
+      screen, and its tools are the whole app: folding them would put a picker's
+      one screen behind a heading. That is keyed to the mode, not to a count, so
+      it is as predictable as the bar itself. */
+const M_MORE_OPEN_KEY='tacet-m-more-open';
+function moreOpenSet(){
+  if(!state.moreOpen){
+    let v=[];
+    try{ const raw=JSON.parse(localStorage.getItem(M_MORE_OPEN_KEY)||'[]'); if(Array.isArray(raw)) v=raw.map(String); }catch(e){}
+    state.moreOpen=new Set(v);
+  }
+  return state.moreOpen;
+}
+/* A group is known by its English heading: stable across languages, and the
+   same words §121 chose, so an opened group stays open across a release that
+   only reorders the rows inside it. */
+const moreGroupKey=g=>g.h?g.h[0]:'';
+reg('toggleMoreGroup', k=>{
+  const o=moreOpenSet(); if(o.has(k)) o.delete(k); else o.add(k);
+  render();
+  try{ localStorage.setItem(M_MORE_OPEN_KEY, JSON.stringify([...o])); }catch(e){}
+});
+const moreRowWants=r=>moreRowDot(r.key) || moreRowCount(r.key)>0;
+/* ONE ROW, drawn the same in the Needs-you card and inside a group, so the
+   dot, the Inbox count and the pill can never differ between the two. */
+function moreRowHtml(r){
+  return `<button class="row" onclick="${r.cmd}"><span class="rowico">${ic(r.icon)}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${T(r.en,r.zh)}</span>
+        ${/* §121. Before the dot, so an arriving-work marker is never pushed off
+             the edge by a pill that says the same thing every time. */''}
+        ${r.pill?`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary);margin-right:8px">${T(...r.pill)}</span>`:''}
+        ${/* §293. The Inbox row says HOW MANY arrived since it was last opened,
+             in a round Sage-ink badge. A row, not the chrome: the More tab
+             keeps its plain dot, so the count is only read by someone who
+             came here to look. 99+ keeps it one short word wide. */''}
+        ${moreRowCount(r.key)>0?`<span class="num" style="min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:999px;background:var(--sage-ink);color:var(--surface-card);font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;margin-right:8px">${moreRowCount(r.key)>99?'99+':moreRowCount(r.key)}</span>`:''}
+        ${/* Same 6px Sage dot as the tab bar's, on the row that opens the work.
+             Never a count on the other rows: the number lives on the screen it
+             points at. */''}
+        ${moreRowDot(r.key)?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none;margin-right:8px"></span>`:''}
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`;
+}
+function moreRowsList(rows){
+  return rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}${moreRowHtml(r)}`).join('');
+}
+function moreNeedsHtml(){
+  const rows=moreRowsFlat().filter(moreRowWants);
+  if(!rows.length) return '';
+  return `<div style="margin-top:14px" id="mMoreNeeds">
+    <div class="eyebrow" style="padding:6px 20px">${T('Needs you','需要处理')}</div>
+    <div style="margin:0 16px" class="list">${moreRowsList(rows)}</div></div>`;
+}
+function moreFoldHtml(groups){
+  if(flatNav()) return groups.map(g=>`<div style="margin-top:14px">
+      ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
+      <div style="margin:0 16px" class="list">${moreRowsList(g.rows)}</div></div>`).join('');
+  const open=moreOpenSet();
+  const headed=groups.filter(g=>g.h), loose=groups.filter(g=>!g.h);
+  const fold=headed.length?`<div style="margin:14px 16px 0" class="list" id="mMoreGroups">${headed.map((g,i)=>{
+    const k=moreGroupKey(g), isOpen=open.has(k), wants=g.rows.some(moreRowWants);
+    return `${i?'<div class="sep"></div>':''}
+      <button class="row" data-group="${escAttr(k)}" aria-expanded="${isOpen}" onclick="APP.cmd('toggleMoreGroup',${escAttr(JSON.stringify(k))})">
+        <span style="flex:1;min-width:0;font-size:15px;font-weight:500">${T(...g.h)}</span>
+        ${/* The dot only while closed: open, the row that wants you is right there with its own. */''}
+        ${wants&&!isOpen?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none;margin-right:8px"></span>`:''}
+        <span style="color:var(--text-secondary);display:flex">${ic(isOpen?'chevron-up':'chevron-down')}</span></button>
+      ${isOpen?`<div class="sep"></div>${moreRowsList(g.rows)}`:''}`;
+  }).join('')}</div>`:'';
+  return fold+loose.map(g=>`<div style="margin:14px 16px 0" class="list">${moreRowsList(g.rows)}</div>`).join('');
+}
 function screenMore(){
   const su=setupState();
   // "Open your store" is the owner's onboarding checklist, not a tool. It is
@@ -11710,6 +11803,7 @@ function screenMore(){
         '您的角色尚未开通本应用中的任何页面,可请团队管理员调整权限。'));
   }
   return `<div style="padding:16px 0 8px">
+    ${moreNeedsHtml()}
     ${setupCard?`<div style="padding:0 16px 6px"><div class="card" style="padding:16px">
       <button onclick="APP.cmd('push','setup')" style="display:flex;align-items:center;gap:14px;width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0;font-family:inherit">
         <span style="width:38px;height:38px;border-radius:10px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none">${ic('compass',22)}</span>
@@ -11722,24 +11816,7 @@ function screenMore(){
           <span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${su.pct}%;border-radius:999px;background:var(--text-primary)"></span></span></span>
         <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>`:''}
     ${askStripHtml()}
-    ${groups.map(g=>`<div style="margin-top:14px">
-      ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
-      <div style="margin:0 16px" class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
-        <button class="row" onclick="${r.cmd}"><span class="rowico">${ic(r.icon)}</span>
-        <span style="flex:1;min-width:0;font-size:15px">${T(r.en,r.zh)}</span>
-        ${/* §121. Before the dot, so an arriving-work marker is never pushed off
-             the edge by a pill that says the same thing every time. */''}
-        ${r.pill?`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary);margin-right:8px">${T(...r.pill)}</span>`:''}
-        ${/* §293. The Inbox row says HOW MANY arrived since it was last opened,
-             in a round Sage-ink badge. A row, not the chrome: the More tab
-             keeps its plain dot, so the count is only read by someone who
-             came here to look. 99+ keeps it one short word wide. */''}
-        ${moreRowCount(r.key)>0?`<span class="num" style="min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:999px;background:var(--sage-ink);color:var(--surface-card);font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;margin-right:8px">${moreRowCount(r.key)>99?'99+':moreRowCount(r.key)}</span>`:''}
-        ${/* Same 6px Sage dot as the tab bar's, on the row that opens the work.
-             Never a count on the other rows: the number lives on the screen it
-             points at. */''}
-        ${moreRowDot(r.key)?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none;margin-right:8px"></span>`:''}
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
+    ${moreFoldHtml(groups)}
     <div style="padding:24px 20px 8px;text-align:center;font-size:12px;color:var(--text-secondary)">tacet · ${T('runs in silence','静默运行')}</div>
   </div>`;
 }
@@ -43176,7 +43253,9 @@ function sheetReply(){
    default metric, because a tile that shows money for half a second before
    hiding it has already shown it.
    ========================================================================== */
-const TREND_RANGES=[['7','7 days','7 天'],['30','30 days','30 天'],['90','90 days','90 天']];
+/* Yesterday is a one-day window, and /dashboard answers a one-day window with
+   24 HOURLY buckets ('09:00'), not days — see trendHourly. */
+const TREND_RANGES=[['yesterday','Yesterday','昨天'],['7','7 days','7 天'],['30','30 days','30 天'],['90','90 days','90 天']];
 const TREND_METRICS=[['revenue','Revenue','营收'],['orders','Orders','订单'],['visits','Visits','访问']];
 function trendMetric(){
   const m=state.trendMetric;
@@ -43533,6 +43612,7 @@ function statusTrend(){
     + ' ' + T(lbl[1],lbl[2]).toLowerCase()
     + ' · ' + (state.trendRange==='custom'
         ? (()=>{ const w=trendWindow(), f=x=>tdWhen(x,'date',_tdL())||x; return w.from===w.to?f(w.from):f(w.from)+' – '+f(w.to); })()
+        : state.trendRange==='yesterday' ? T('yesterday','昨天')
         : T('last '+state.trendRange+' days','近 '+state.trendRange+' 天'))
     + (trendStoreName()?' · '+escAttr(trendStoreName()):'');
 }
@@ -43541,7 +43621,9 @@ function screenTrend(){
   const m=trendMetric();
   const metrics=TREND_METRICS.filter(x=>!(x[0]==='revenue'&&recapNoMoney()));
   const chips=(list,cur,cmd)=>`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
-    ${list.map(([k,en,zh])=>`<button onclick="APP.cmd('${cmd}','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    ${/* Five ranges since Yesterday joined: at 360px "7 days" broke onto two
+          lines. One line each, and the side padding gives the room back. */''}
+    ${list.map(([k,en,zh])=>`<button onclick="APP.cmd('${cmd}','${k}')" style="flex:1;padding:8px 4px;white-space:nowrap;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
       background:${cur===k?'var(--surface-card)':'transparent'};color:${cur===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${cur===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${T(en,zh)}</button>`).join('')}</div>`;
   /* §300 F5 — the stores for the picker, read once if the board has not. */
   if(state.stores==null&&!state.trendStoresTried){ state.trendStoresTried=true;
@@ -43565,6 +43647,7 @@ function screenTrend(){
   const vals=t.map(p=>Number(p[m])||0);
   const total=vals.reduce((a,v)=>a+v,0);
   const days=vals.length;
+  const hourly=trendHourly();
   const fmt=v=>m==='revenue'?money0(CUR,v):Math.round(v).toLocaleString();
   // The best day is worth naming — it is the one a shop remembers, and it is
   // the only point on the line the eye asks about. The quietest is worth naming
@@ -43592,7 +43675,8 @@ function screenTrend(){
       <span style="display:flex;transform:rotate(${up?0:180}deg)">${ic('arrow-up',13,2.5)}</span>
       ${(up?'+':'−')+Math.abs(Number(dl))+'%'}</span>
     <span style="font-size:13px;color:var(--text-secondary)">${
-      T('vs prior '+trendSpan()+' days','对比前 '+trendSpan()+' 天')}</span></div>`;
+      trendSpan()===1 ? T('vs the day before','对比前 1 天')
+        : T('vs prior '+trendSpan()+' days','对比前 '+trendSpan()+' 天')}</span></div>`;
 
   /* VISITS ARE ONE CHANNEL'S, SITTING IN A CHIP ROW BESIDE TWO THAT ARE EVERY
      CHANNEL'S. retail_visits has exactly one writer — the mini app's tracker via
@@ -43644,15 +43728,20 @@ function screenTrend(){
   return `${head}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div class="card" style="padding:16px 14px 12px">${sparkline(vals,tone)}
       <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding:8px 2px 0">
-        <span>${escAttr(fmtDateOnly(t[0].bucket))}</span><span>${escAttr(fmtDateOnly(t[days-1].bucket))}</span></div>
+        <span>${escAttr(hourly?t[0].bucket:fmtDateOnly(t[0].bucket))}</span><span>${escAttr(hourly?t[days-1].bucket:fmtDateOnly(t[days-1].bucket))}</span></div>
       ${deltaRow}${metricNote}</div>
     <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
       ${fact(T('Total','合计'),fmt(total))}
+      ${/* ONE DAY IS 24 HOURS, NOT 24 DAYS. The quietest hour of any day is the
+            middle of the night and says nothing; "a typical day" would be the
+            total over 24 and "days counted" would read 24. The busiest hour is
+            the one fact an hour curve adds, and only when something happened. */''}
+      ${hourly ? (vals[bi]>0?fact(T('Busiest hour','最忙时段'),fmt(vals[bi]),escAttr(t[bi].bucket)):'') : `
       ${fact(T('Busiest day','最高的一天'),fmt(vals[bi]),escAttr(fmtDateOnly(t[bi].bucket)))}
       ${fact(T('Quietest day','最低的一天'),fmt(vals[wi]),escAttr(fmtDateOnly(t[wi].bucket)))}
       ${fact(T('A typical day','日均'),fmt(total/days))}
       ${bestDow?fact(T('Best day of the week','一周中最旺的一天'),bestDow,T('on average','平均')):''}
-      ${fact(T('Days counted','统计天数'),String(days))}
+      ${fact(T('Days counted','统计天数'),String(days))}`}
     </div>
     ${trendReadCard()}
     ${sections.map(section).join('')}
@@ -43692,10 +43781,13 @@ function screenTrend(){
 /* The window Trend reads: a preset counted back from the store's today (the
    arithmetic loadTrend has always done), or the two custom days. */
 function trendPresetWindow(k){
-  const to=shopToday().slice(0,10);
-  const d=new Date(to+'T00:00:00'); d.setDate(d.getDate()-(Number(k)-1));
+  const today=shopToday().slice(0,10);
   const p=n=>String(n).padStart(2,'0');
-  return {from:d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()),to};
+  const back=n=>{ const d=new Date(today+'T00:00:00'); d.setDate(d.getDate()-n);
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); };
+  // Yesterday is one whole day, both ends on it — today is not in it.
+  if(k==='yesterday'){ const y=back(1); return {from:y,to:y}; }
+  return {from:back(Number(k)-1),to:today};
 }
 function trendWindow(){
   if(state.trendRange==='custom'&&state.trendFrom&&state.trendTo) return {from:state.trendFrom,to:state.trendTo};
@@ -43719,6 +43811,10 @@ function trendStoreName(){
   const s=(state.stores||[]).find(x=>String(x.id)===sid);
   return s?mStoreName(s):'';
 }
+/* A one-day window comes back as 24 hourly buckets ('09:00') — routes/retail.js
+   /dashboard, `hourly = from === to`. Read off the buckets themselves, so it
+   holds for a one-day Custom window too, which drew the same 24 points as days. */
+const trendHourly=()=>{ const t=state.trend||[]; return t.length>0&&/^\d\d:00$/.test(String(t[0].bucket)); };
 /* The span a preset or custom window covers, for the "vs prior N days" line. */
 function trendSpan(){
   const w=trendWindow();

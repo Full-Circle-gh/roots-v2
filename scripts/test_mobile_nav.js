@@ -41,6 +41,10 @@ const OWNER = "state.caps=Object.keys(ROUTE_CAP).reduce(function(a,k){var v=ROUT
 
 const bar = "document.querySelector('.tabbar').innerText.replace(/\\s+/g,' ')";
 const body = "txt('content').replace(/\\s+/g,' ')";
+// §446: on a phone with a tab bar More's groups start folded. The cases below
+// ask which ROWS a role is given, so they open every group first; what folding
+// itself does is pinned in scripts/test_mobile_more_fold.js.
+const OPEN_ALL = "state.moreOpen=new Set(MORE_GROUPS.filter(function(g){return g.h}).map(function(g){return g.h[0]}));";
 // The bar is the operator's whole navigation, so its BUTTON COUNT is the claim,
 // not just which words appear in it.
 const bars = "document.querySelectorAll('.tabbar button').length";
@@ -232,7 +236,7 @@ run('mobile nav', [
 
   // ── the More list and the search index read the same filter ───────────
   ['More holds only what the role reaches',
-    "state.caps=['orders:view','delivery:view'];state.tab='more';state.stack=[];render();", [
+    "state.caps=['orders:view','delivery:view'];state.tab='more';state.stack=[];" + OPEN_ALL + "render();", [
       ['Delivery is there', `${body}.indexOf('Delivery')>-1`],
       ['Coupons is not', `${body}.indexOf('Coupons')===-1`],
       ['nor the owner’s setup checklist', `${body}.indexOf('Open your store')===-1`],
@@ -255,7 +259,7 @@ run('mobile nav', [
     ]],
   ['a store that is open is not', 
     OWNER + "state.setup={percent:100,requiredDone:5,requiredTotal:5,allDone:true};"
-    + "state.tab='more';state.stack=[];render();", [
+    + "state.tab='more';state.stack=[];" + OPEN_ALL + "render();", [
       ['no card', `${body}.indexOf('Open your store')===-1`],
       ['and not the line it used to end on', `${body}.indexOf('Everything is set up')===-1`],
       ['the rest of More is untouched', `${body}.indexOf('Delivery')>-1 && ${body}.indexOf('Invoices')>-1`],
@@ -264,7 +268,7 @@ run('mobile nav', [
   // common case, so paint nothing rather than a "Checking…" card that then
   // disappears — the same choice the desktop makes with `hide = !SETUP || ...`.
   ['and neither is a store whose status has not come back yet',
-    OWNER + "state.setup=null;state.tab='more';state.stack=[];render();", [
+    OWNER + "state.setup=null;state.tab='more';state.stack=[];" + OPEN_ALL + "render();", [
       ['nothing is claimed', `${body}.indexOf('Open your store')===-1`],
       ['and no placeholder either', `${body}.indexOf('Checking')===-1`],
       ['More itself still paints', `${body}.indexOf('Delivery')>-1`],
@@ -282,7 +286,7 @@ run('mobile nav', [
   // different label: a screen whose only action 403s — except this one 403s
   // with a customer standing at the counter and a basket already rung up.
   ['a cashier holding the pair gets the till',
-    "state.caps=['till:use','orders:edit','orders:view'];state.tab='more';state.stack=[];render();", [
+    "state.caps=['till:use','orders:edit','orders:view'];state.tab='more';state.stack=[];" + OPEN_ALL + "render();", [
       ['the row is there', `${body}.indexOf('Counter till')>-1`],
       ['and the jump list offers it', "searchIndex().some(function(x){return x.p[0]==='Counter till'})"],
       ['it leaves this app rather than pushing a screen',

@@ -221,9 +221,13 @@ const CASES = [
     ['Ready from the kitchen carries the dot', rowDot('Ready from the kitchen')],
     // Counted rather than spot-checked: "Purchasing has no dot" would also be
     // true of a More list that failed to render a single row.
-    ['and it is the only row that does',
-     `[].slice.call(document.querySelectorAll('#content .row'))` +
-     `.filter(function(b){return b.querySelector('span[style*="border-radius:50%"]')}).length === 1`],
+    /* §446: the lit row is drawn first, under Needs you, and the folded group
+       that holds it carries the same dot on its heading. Those two and nothing
+       else: a dot anywhere further down would be a false summons. */
+    ['and only it, and the group that holds it, do',
+     `JSON.stringify([].slice.call(document.querySelectorAll('#content .row'))` +
+     `.filter(function(b){return b.querySelector('span[style*="border-radius:50%"]')})` +
+     `.map(function(b){return b.innerText.trim()})) === JSON.stringify(['Ready from the kitchen','Ask someone else'])`],
     ['on a list that really has other rows',
      `document.querySelectorAll('#content .row').length > 5`],
   ]],

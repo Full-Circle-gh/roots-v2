@@ -220,7 +220,8 @@ it('moreRow carries the pill, so all three consumers see the same one', () => {
 });
 
 it('it renders before the unseen dot, which must never be pushed off the edge', () => {
-  const row = MHTML.slice(MHTML.indexOf('${groups.map(g=>`<div style="margin-top:14px">'));
+  // §446: one row helper draws every More row, in the groups and in Needs you.
+  const row = MHTML.slice(MHTML.indexOf('function moreRowHtml(r){'));
   const pill = row.indexOf('${r.pill?');
   const dot = row.indexOf('moreRowDot(r.key)');
   assert.ok(pill > 0 && dot > 0, 'the row no longer renders both a pill and the unseen dot');
@@ -274,6 +275,23 @@ it('§443 — the shop-to-shop sending row mirrors its receiving twin, and its p
   assert.ok(!/Picking at which location/.test(MHTML), 'the old receiving-sounding question is back');
   live(/T\('Send again','重新发货'\)/, '发货 (Send to another shop)');
   live(/T\('Print at which store\?','在哪个门店打印？'\)/, '哪个门店 (Sending from which shop?)');
+});
+
+it('§446 — Needs you comes first, its heading is Home\u2019s own pair, and a role with no bar never folds', () => {
+  /* The browser half is scripts/test_mobile_more_fold.js. These are the three
+     facts a later edit could break without painting anything wrong on a quiet
+     day, so they are held in the fast gate too. */
+  const more = MHTML.slice(MHTML.indexOf('function screenMore(){'));
+  const needs = more.indexOf('${moreNeedsHtml()}');
+  assert.ok(needs > 0 && needs < more.indexOf('${setupCard?') && needs < more.indexOf('${askStripHtml()}'),
+    'Needs you is no longer the first thing on More');
+  assert.ok(/<div style="padding:2px 4px 8px;font-size:18px;font-weight:500">\$\{T\('Needs you','需要处理'\)\}/.test(MHTML),
+    'Home\u2019s Needs you · 需要处理 heading is gone; More copied it whole and is now the only user');
+  const fn = MHTML.slice(MHTML.indexOf('function moreNeedsHtml(){'), MHTML.indexOf('function moreFoldHtml('));
+  assert.ok(/moreRowsFlat\(\)\.filter\(moreRowWants\)/.test(fn), 'the card no longer reads the rows the dot reads');
+  const fold = MHTML.slice(MHTML.indexOf('function moreFoldHtml('), MHTML.indexOf('function screenMore(){'));
+  assert.ok(/^function moreFoldHtml\(groups\)\{\s*if\(flatNav\(\)\)/.test(fold),
+    'a role with no tab bar would have its home screen folded');
 });
 
 console.log(`\nok — ${n} §121 grouping checks.`);

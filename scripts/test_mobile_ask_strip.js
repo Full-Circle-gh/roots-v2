@@ -155,7 +155,8 @@ it('a question row carries no icon — two layers must not read as one list', ()
 
 it('it mounts above the groups and below the setup card', () => {
   const strip = MORE.indexOf('${askStripHtml()}');
-  const groups = MORE.indexOf('${groups.map(');
+  // §446: the groups are drawn by moreFoldHtml now, folded on a phone with a tab bar.
+  const groups = MORE.indexOf('${moreFoldHtml(groups)}');
   const setup = MORE.indexOf('Open your store');
   assert.ok(strip > 0, 'screenMore no longer renders the strip');
   assert.ok(strip < groups, 'the questions must come before the twenty-two rows');
