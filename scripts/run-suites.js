@@ -136,6 +136,9 @@ const SLOW = new Set([
      isSlow() cannot see the browser — named here for the reason every entry in
      this block is. */
   'test_mobile_footbar.js',
+  /* §446's More fold and Needs-you card. m-probe again, no findChrome() of its
+     own, so isSlow() cannot see the browser; named here for the same reason. */
+  'test_mobile_more_fold.js',
   'test_finance_presentation.js',
   // Drives Chromium for its render pass, so it belongs in the shard where
   // REQUIRE_BROWSER=1 — in the fast shard the render half would skip and report
