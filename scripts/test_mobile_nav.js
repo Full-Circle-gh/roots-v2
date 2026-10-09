@@ -156,9 +156,10 @@ run('mobile nav', [
      held the door open is gone with the door. What must NOT have gone with it
      is any of the four — a picker who lost the launcher and gained no row
      would have no way to pick. */
+  // §443: the Pick row is named Send to another shop; the key is still `pick`.
   ['a picker gets Pick itself, not a launcher',
     "state.caps=['restock:pick'];landOnSomethingReachable();render();", [
-      ['the row is there', `${body}.indexOf('Pick')>-1`],
+      ['the row is there', `${body}.indexOf('Send to another shop')>-1`],
       ['no launcher row survives', `${body}.indexOf('Transfers')===-1`],
       ['and it is a push',
        "!moreRowsFlat().find(function(r){return r.key==='pick'}).href"],
@@ -185,7 +186,7 @@ run('mobile nav', [
   ['a kitchen account is offered the queue and none of the transfer rows',
     "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
       ['the queue row is there', `${body}.indexOf('Kitchen queue')>-1`],
-      ['no Pick', `${body}.indexOf('Pick')===-1`],
+      ['no Pick', `${body}.indexOf('Send to another shop')===-1`],
       ['no Receive delivery', `${body}.indexOf('Receive delivery')===-1`],
     ]],
 

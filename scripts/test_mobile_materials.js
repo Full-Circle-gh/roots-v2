@@ -174,7 +174,7 @@ function mkMoney(opts = {}) {
 // ── What this suite adds: the materials block, its state and push resets ───
 const DMAT = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '18-materials.js'), 'utf8');
 const IngredientCost = require('../lib/ingredient-cost.js');
-const MAT_SRC = between(M, '/* ==========================================================================\n   Materials (§300 step R5)', "SUBS.pick={title:['Pick'");
+const MAT_SRC = between(M, '/* ==========================================================================\n   Materials (§300 step R5)', "SUBS.pick={");
 const MAT_LIT = between(M, '  mat:{rows:null', "skuRule:null,skuHint:'',skuNote:''}") + "skuRule:null,skuHint:'',skuNote:''}";
 const MAT_RESETS = ['materials', 'materialone'].map((r) => {
   const mm = PUSH.match(new RegExp("  if\\(route==='" + r + "'\\)\\{[^\\n]*\\}\\n"));

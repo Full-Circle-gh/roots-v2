@@ -65,7 +65,7 @@ const HELPERS = [
   between(M, 'function recapNoMoney(){', '\n') + '\n',
 ].join('\n');
 const GATES = between(M, 'const ROUTE_CAP={', '/* NAMED FOR THE JOB THEY HOLD');
-const BLOCK = between(M, "/* ==========================================================================\n   A product's Cost & Pricing (§300 step R6)", "SUBS.pick={title:['Pick'");
+const BLOCK = between(M, "/* ==========================================================================\n   A product's Cost & Pricing (§300 step R6)", "SUBS.pick={");
 const PC_LIT = between(M, '  pc:{pid:null', 'stale:false}') + 'stale:false}';
 const PUSH = between(M, 'function push(route){', 'function pop(){');
 const PC_RESET = (PUSH.match(/  if\(route==='productcost'\) pcFresh\(\);\n/) || [])[0];
