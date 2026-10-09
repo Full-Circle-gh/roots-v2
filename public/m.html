@@ -27522,6 +27522,24 @@ function mStoreName(st){
   return (LANG==='en'?(en||cn):(cn||en))||('#'+st.id);
 }
 
+/* A PAINT THAT ARRIVES WHILE SOMEBODY IS TYPING KEEPS THEIR CARET. The two
+   reads below answer after the screen is up, and each answer repaints the whole
+   app — which throws away the field under the person's thumb, so the keyboard
+   dropped as they started on the amount ("keyboard going down automatically
+   sometimes when I click on amount", from a phone, 2026-10-09). Sometimes,
+   because it only happens when the tap beats the network: on a first visit,
+   and again after Record another, when the list is read afresh. The caret goes
+   back through state.focus, the same request the search boxes arm; a request
+   somebody else already armed is left as it is. */
+function expRepaint(){
+  const a=document.activeElement, id=a&&a.id;
+  if(!state.focus&&(id==='mExpAmt'||id==='mExpNote')){
+    let pos=null; try{ pos=a.selectionStart; }catch(e){}
+    state.focus={id,pos};
+  }
+  render();
+}
+
 function expLoadMeta(){
   const x=state.exp;
   if(x.tried) return; x.tried=true;
@@ -27531,10 +27549,10 @@ function expLoadMeta(){
        claim still carries it, because the column is what makes a per-shop
        expense figure possible at all (§87 part three). */
     if(x.stores.length===1) x.storeId=x.stores[0].id;
-    render();
+    expRepaint();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    x.cats=[]; x.stores=[]; x.metaErr=E('Could not load your shop\u2019s categories.','无法加载本店分类。'); render();
+    x.cats=[]; x.stores=[]; x.metaErr=E('Could not load your shop\u2019s categories.','无法加载本店分类。'); expRepaint();
   });
 }
 
@@ -27542,8 +27560,8 @@ function expLoadMine(){
   const x=state.exp;
   if(x.mineTried) return; x.mineTried=true;
   api('/staff-expenses/mine').then(d=>{
-    x.mine=(d&&d.rows)||[]; x.owed=(d&&d.owed)||0; x.waiting=(d&&d.waiting)||0; render();
-  }).catch(e=>{ if(String(e.message)!=='auth'){ x.mine=[]; render(); } });
+    x.mine=(d&&d.rows)||[]; x.owed=(d&&d.owed)||0; x.waiting=(d&&d.waiting)||0; expRepaint();
+  }).catch(e=>{ if(String(e.message)!=='auth'){ x.mine=[]; expRepaint(); } });
 }
 
 /* WHAT A CLAIM IS WORTH, read from the string the person is typing rather than
