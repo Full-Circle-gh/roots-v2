@@ -421,4 +421,39 @@ CASES.push(
   ]],
 );
 
+/* ── Yesterday ─────────────────────────────────────────────────────────────
+ * A one-day window. /dashboard answers from===to with 24 HOURLY buckets
+ * ('09:00'), so the screen must read hours as hours: "Days counted 24" and a
+ * "typical day" of the total over 24 are what it printed for a one-day Custom
+ * window before this, and Yesterday would have printed them every time.
+ */
+const DAY = `state.trendRange='yesterday'; state.trendKey='yesterday';
+  state.trend=Array.from({length:24},function(_,h){ return {bucket:String(h).padStart(2,'0')+':00',
+    orders:h===18?9:(h>=9&&h<22?2:0), revenue:h===18?900:(h>=9&&h<22?200:0), visits:0}; });
+  state.trendFull={deltas:{revenue:5,orders:0,visits:0},window:{span_days:1,granularity:'hour'}};`;
+
+CASES.push(
+  ['Yesterday sits beside 7 days', `state.trendKey='7'; state.trend=[]; APP.cmd('push','trend');`, [
+    ['the chip is offered', `[].slice.call(document.querySelectorAll('#content button')).some(function(b){return b.innerText.trim()==='Yesterday'})`],
+    ['first, right before 7 days', `(function(){ var b=[].slice.call(document.querySelectorAll('#content button')).map(function(x){return x.innerText.trim()});
+       var i=b.indexOf('Yesterday'); return i>=0 && b[i+1]==='7 days'; })()`],
+  ]],
+  ['tapping it asks for yesterday alone', STUB + `APP.cmd('push','trend'); APP.cmd('trendRange','yesterday');`, [
+    // One day, and the day before the shop's today — not today, not two days.
+    ['from and to are the same day, the day before today', `window.__sent.some(function(r){ var m=r.u.match(/from=(\\d{4}-\\d{2}-\\d{2})&to=(\\d{4}-\\d{2}-\\d{2})/);
+       return !!m && m[1]===m[2] && m[1]===shopDayAdd(shopToday().slice(0,10),-1); })`],
+  ]],
+  ['a day is read as hours', DAY + `APP.cmd('push','trend');`, [
+    ['the total is the day\'s', `txt('content').includes('¥3,300')`],
+    ['the head says yesterday', `txt('content').includes('¥3,300 revenue · yesterday')`],
+    ['the busiest hour is named', `txt('content').includes('Busiest hour') && txt('content').includes('18:00')`],
+    ['the line runs midnight to midnight', `txt('content').includes('00:00') && txt('content').includes('23:00')`],
+    ['no day facts on an hour curve', `!txt('content').includes('Days counted') && !txt('content').includes('A typical day') && !txt('content').includes('Quietest day')`],
+    ['compared with the day before', `txt('content').includes('vs the day before') && !txt('content').includes('vs prior 1 days')`],
+  ]],
+  ['a day with nothing in it names no busiest hour', DAY + `state.trend.forEach(function(p){p.revenue=0;p.orders=0;}); APP.cmd('push','trend');`, [
+    ['no busiest hour of ¥0', `!txt('content').includes('Busiest hour')`],
+  ]],
+);
+
 run('trend', CASES);
