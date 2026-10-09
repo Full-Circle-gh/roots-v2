@@ -22900,10 +22900,17 @@ function screenReceiveTransfer(){
        it for them, and §39 — what the store counts is what the store holds —
        is worth more than the taps it costs. */
     const allTicked=items.length>0&&items.every(it=>xfrCount(it)===xfrSent(it));
+    /* THE SHELF MOVES AT THE CONFIRM, AND THE COUNT SCREEN SAYS SO. Ash ticked
+       one line, saw a green 5, and reported *"stock didn't update after I mark
+       it 5"* — the tick saves the count, but nothing goes on the shelf until
+       every line is counted and the receipt is confirmed, and this screen never
+       said that. The sentence is the confirm screen's own, word for word, so
+       nothing is composed. */
     return backRow(T('Receive from another shop','调拨收货'))+err+`
       <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
-      <div style="padding:0 16px 12px;font-size:13px;color:var(--text-secondary)">${
-        T('Count what actually arrived.','清点实际到货数量。')}</div>
+      <div style="padding:0 16px 12px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+        T('Count what actually arrived.','清点实际到货数量。')}<span style="display:block">${
+        T('Confirming puts these counts on the shelf.','确认后将按此数量入库。')}</span></div>
       ${items.length?`<div style="padding:0 16px 14px">
         <button class="btn2" style="width:100%;padding:13px 18px;display:flex;align-items:center;justify-content:center;gap:9px"${
             x.busy||allTicked?' disabled':''} onclick="APP.cmd('xfrAllArrived')">
