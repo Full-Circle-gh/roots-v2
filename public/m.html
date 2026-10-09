@@ -21419,15 +21419,17 @@ function pikShortCommit(){
   const raw=p=>String(k.short.vals[String(p.itemId)]==null?'':k.short.vals[String(p.itemId)]).trim();
   if(L.parts.every(p=>raw(p)==='')) { pikShortClose(); return; }   // nothing typed: never mind
   if(L.parts.some(p=>raw(p)==='')) { render(); return; }           // still answering
-  let sum=0;
   for(const p of L.parts){
     const r=raw(p);
     if(!/^\d+$/.test(r)){ k.shortErr=T('Enter a whole number for each store, 0 or more.','每家门店请输入 0 或以上的整数。'); render(); return; }
     const n=parseInt(r,10);
     if(n>p.asked){ k.shortErr=T('More than was asked for.','超过申请数量。'); render(); return; }
-    sum+=n;
   }
-  if(sum<=0){ k.shortErr=T('Nothing to send.','没有可发出的数量。'); render(); return; }
+  /* 0 IS AN ANSWER. Ash: out of stock, and the field would not take 0 — it
+     said "Nothing to send" and left the line open, so a product the shelf did
+     not have could never be ticked and the whole run could never dispatch. A
+     line picked as 0 is skipped by the dispatch and reads "0 sent" to the shop
+     that asked; an order picked as 0 throughout closes with nothing moved. */
   const per={};
   L.parts.forEach(p=>{ per[p.itemId]=parseInt(raw(p),10); });
   k.short=null; k.shortErr='';

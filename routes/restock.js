@@ -627,6 +627,24 @@ function _applyDispatch(orderId, actorUser) {
              + 'from the product list, and tell whoever looks after the system.',
       };
     }
+    /* EVERY LINE WAS PICKED AS 0 — the supplier had none of any of it. That is
+     * an answer, not a fault: the picker checked the shelf and said so. Left
+     * at goods_state 'none' it would sit under "Did not leave the shelf" for
+     * ever, with a Send again that can only reply "nothing to send". So it
+     * closes here: nothing leaves, nothing is in transit, there is nothing for
+     * the far end to count, and the asking shop reads "0 sent" on each line.
+     * received_confirmed_at stays empty because nobody counted anything. */
+    const zeroed = conn.prepare(`
+      SELECT COUNT(*) AS c FROM restock_items
+       WHERE restock_id = ? AND qty_sent = 0 AND COALESCE(qty_requested, 0) > 0
+    `).get(o.id).c;
+    if (zeroed > 0) {
+      conn.prepare(`UPDATE restock_orders
+                       SET goods_state = 'settled', dispatched_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`).run(o.id);
+      console.log(`[restock-dispatch] ${label}: every line picked as 0, nothing left store ${warehouseStoreId}`);
+      return { ok: true, skipped: 'nothing_sent' };
+    }
     return { ok: true, skipped: 'no_lines' };
   }
 
@@ -2036,6 +2054,12 @@ router.post('/api/restock/:id/retry-dispatch', requireRestockAccess, tacetOnly, 
     return res.json({
       success: true, retried: false, stock_moved: false,
       message: 'This is a kitchen order, which does not move store stock.',
+    });
+  }
+  if (result.ok && result.skipped === 'nothing_sent') {
+    return res.json({
+      success: true, retried: true, stock_moved: false,
+      message: 'Every line was picked as 0, so nothing was sent. The order is closed.',
     });
   }
   if (result.ok && result.skipped === 'no_lines') {

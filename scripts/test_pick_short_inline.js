@@ -75,13 +75,13 @@ ok(/pikWriteLine\(L,per\)/.test(COMMIT), 'and a complete answer goes through the
 ok(COMMIT.indexOf('k.short=null') < COMMIT.indexOf('pikWriteLine'),
    'the field closes before the write, so a slow save cannot be typed into');
 
-section('4. the three refusals are the sheet\'s own, both halves');
+section('4. two refusals are the sheet\'s own, both halves; 0 is an answer (§444)');
 ok(/Enter a whole number for each store, 0 or more\./.test(COMMIT)
    && /每家门店请输入 0 或以上的整数。/.test(COMMIT), 'not a whole number');
 ok(/More than was asked for\./.test(COMMIT) && /超过申请数量。/.test(COMMIT), 'more than was asked');
-ok(/Nothing to send\./.test(COMMIT) && /没有可发出的数量。/.test(COMMIT), 'nothing to send');
-ok(/n>p\.asked/.test(COMMIT) && /sum<=0/.test(COMMIT),
-   'and each is still reached by the condition it was written for');
+ok(/n>p\.asked/.test(COMMIT), 'and each is still reached by the condition it was written for');
+ok(!/Nothing to send\./.test(COMMIT) && !/没有可发出的数量。/.test(COMMIT) && !/sum<=0/.test(COMMIT),
+   'a line picked as 0 is not refused — out of stock is an answer (§444)');
 
 section('5. drawn so a picker can tell the two shapes apart');
 ok(/const solo=L\.parts\.length===1;/.test(M), 'a one-shop line knows it is one');
