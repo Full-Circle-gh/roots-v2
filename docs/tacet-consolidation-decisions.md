@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.489
+# Tacet shared-core consolidation — decisions record, v4.490
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-09 · v4.490 — **§444 · OUT OF STOCK IS PICKED AS 0 — ASKED BY ASH:** *"如果缺货，无法选择0"*. The Short field on Send to another shop refused a line totalling 0 with §213's *Nothing to send · 没有可发出的数量。*, so a product the shelf did not have could never be ticked and the run could never dispatch. That refusal is removed; the other two stay. An order picked as 0 on every line now closes at dispatch with nothing moved instead of sitting under *Did not leave the shelf*. See §444.
 
 2026-10-09 · v4.489 — **§443 rule 4 · THE PERMISSION IS NAMED FOR ITS SCREEN — ASKED BY ASH:** *"rename"*. `restock:pick`'s label in team settings, *Pick and dispatch a run · 拣货与发货*, becomes `Send to another shop · 调拨发货`, copied from the row §443 named. Label only; the key is unchanged. See §443.
 
@@ -29222,3 +29224,35 @@ permission, shown in team settings as *Pick and dispatch a run · 拣货与发�
 is labelled `Send to another shop · 调拨发货`, the name of the screen it
 opens. Only the label changes; the key `restock:pick` and every check on it
 stay as they are.
+
+## §444 — OUT OF STOCK IS PICKED AS 0
+
+**Asked by Ash, 2026-10-09:** *"补货清单，如果缺货，无法选择0"* — on the
+send list, when something is out of stock, 0 cannot be chosen.
+
+**What was wrong.** §213 lifted three refusals from the old Short sheet.
+One of them, *Nothing to send · 没有可发出的数量。*, fired when a line added
+up to 0. So the one answer a picker gives most often when a shelf is empty
+was refused, the line stayed un-ticked, and Dispatch stayed shut for the
+whole run.
+
+**The ruling.**
+1. A line can be picked as 0. The *Nothing to send* refusal is removed. The
+   other two stay: a number must be whole and 0 or more, and no more than
+   was asked for.
+2. A line picked as 0 moves no stock. The dispatch already skipped any line
+   whose sent figure is 0, so this needed no server change, and the asking
+   shop's *Your stock requests* already reads *0 sent* on that line.
+3. An order picked as 0 on EVERY line closes at dispatch: `goods_state`
+   becomes `settled` and `dispatched_at` is stamped, nothing leaves the
+   shelf, and there is nothing for the far end to count.
+   `received_confirmed_at` stays empty, because nobody counted anything.
+   Without this it would sit under *Did not leave the shelf* for ever, with
+   a *Send again* that could only answer "nothing to send". The retry door
+   answers such an order with "nothing was sent, the order is closed"
+   rather than claiming stock moved.
+
+**Not changed.** Undo, the multi-shop fields, and the catalogue check.
+
+Strings: none added. The removed pair is §213's. Tests:
+`scripts/test_pick_short_inline.js`, `scripts/test_restock_pick_zero.js`.
