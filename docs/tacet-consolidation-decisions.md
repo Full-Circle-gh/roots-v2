@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.490
+# Tacet shared-core consolidation — decisions record, v4.491
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-09 · v4.491 — **§445 · A TRANSFER LINE'S OWN SKU SAYS WHICH BOTTLE MOVES — RAISED BY ASH** off RS-261008-002/-003, Yuexiu's kombucha refused at *Send again*. The catalogue check compared a phone line's store id with an unrelated row in the old product list (Passion Fruit Kombucha 300ml 2-80 in one, the 1L 2-90 in the other). It now trusts the SKU saved on the line when it matches the store row, and refuses when it does not. The refusal no longer says "kitchen". See §445.
 
 2026-10-09 · v4.490 — **§444 · OUT OF STOCK IS PICKED AS 0 — ASKED BY ASH:** *"如果缺货，无法选择0"*. The Short field on Send to another shop refused a line totalling 0 with §213's *Nothing to send · 没有可发出的数量。*, so a product the shelf did not have could never be ticked and the run could never dispatch. That refusal is removed; the other two stay. An order picked as 0 on every line now closes at dispatch with nothing moved instead of sitting under *Did not leave the shelf*. See §444.
 
@@ -29256,3 +29258,37 @@ whole run.
 
 Strings: none added. The removed pair is §213's. Tests:
 `scripts/test_pick_short_inline.js`, `scripts/test_restock_pick_zero.js`.
+
+## §445 — A TRANSFER LINE'S OWN SKU SAYS WHICH BOTTLE MOVES
+
+**Raised by Ash, 2026-10-09,** off the *Send to another shop* screen:
+RS-261008-002 and RS-261008-003 (Yuexiu) sat under *Did not leave the shelf*,
+and *Send again* answered "Passion Fruit Kombucha does not match the store
+catalogue: the kitchen has 2-90 and the store has 2-80 under the same
+reference", and the same for Mix Berries (2-110 against 2-100). Of the word
+used: *"it's not kitchen products . it's kombucha"*. Asked which size Yuexiu
+had wanted: *"I don't know now"*. The line knows, which is the point of this
+section.
+
+**What was wrong.** `_checkTransferIds` read every line's `product_id` as an
+id in the old `products` list and compared that row's SKU with the
+`store_products` row of the same number. A request raised on the phone
+carries a `store_products` id (§200), so the comparison was against an
+unrelated row. The numbers had come apart: 2-80 is Passion Fruit 300ml and
+2-90 the 1L; 2-100 is Mix Berries 300ml and 2-110 the 1L.
+
+**The ruling.**
+1. Where the line carries its own SKU (saved when the shop tapped the
+   product) and the store row carries one, those two decide. Equal: the line
+   is safe, whatever the old list holds under that number. Different: it is
+   refused, naming both.
+2. Only a line with no SKU, or a store row with none, falls back to the old
+   comparison. Nothing that was refused for a real reason is let through.
+3. Dispatch and receipt both apply it: the check runs at both ends, as before.
+4. The refusal says "the old product list", not "the kitchen".
+
+**Not changed.** What moves (the store row's stock, as before), and the
+all-or-nothing rule.
+
+Strings: none in the UI; the server's English refusal is reworded. Test:
+`scripts/test_transfer_line_sku.js` (9 of its 12 checks fail on the old code).
