@@ -36,11 +36,11 @@
   #done.on { display:inline-block; }
   #kbd-btn { margin-top:8px; display:none; }
   #kbd-btn.on { display:inline-block; }
-  /* The text box a phone types into (see kbdInput). Kept on screen and focusable,
+  /* The box a phone types into (see kbdInput). Kept on screen and focusable,
      because a hidden or display:none field raises no keyboard; 16px stops iOS
      zooming the page when it takes focus. */
   #kbd { position:fixed; top:0; left:0; width:1px; height:1px; opacity:0; border:0; padding:0;
-         margin:0; resize:none; overflow:hidden; font-size:16px; }
+         margin:0; font-size:16px; }
   #screen { flex:1; min-height:0; background:#000; display:none; }
   #screen.on { display:block; }
   .actions { padding:16px; display:none; gap:8px; }
@@ -60,7 +60,7 @@
   <button id="done"></button>
   <button id="kbd-btn"></button>
 </header>
-<textarea id="kbd" tabindex="-1" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+<input id="kbd" type="password" tabindex="-1" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
 <div class="actions" id="actions">
   <button id="retry"></button>
   <button class="ghost" id="close"></button>
@@ -214,6 +214,14 @@ async function showScreen() {
 // changed, so the box is compared with what it held before: characters gone
 // are Backspaces, characters added are typed. It keeps a run of filler so
 // Backspace always has something to delete.
+//
+// It is a password box, not a text box: a phone keyboard always opens a plain
+// Latin layout for one. In a text box a Chinese keyboard in pinyin mode typed
+// lower case only, its Shift switching 中/英 rather than making a capital, so a
+// mixed-case login could not be typed (2026-10-09). A password box also gets no
+// autocorrect, no pinyin composing and no word memory, and what is typed into
+// it is a channel password. Enter adds no character to it, so it is sent from
+// the key itself.
 const TOUCH = matchMedia('(pointer: coarse)').matches;
 const KBD_FILL = '_'.repeat(40);
 let kbdLast = KBD_FILL;
@@ -228,20 +236,22 @@ function kbdInput() {
     let same = 0;
     while (same < now.length && same < kbdLast.length && now[same] === kbdLast[same]) same++;
     for (let i = same; i < kbdLast.length; i++) rfb.sendKey(KEYS.names.XK_BackSpace, 'Backspace');
-    for (const ch of now.slice(same)) {
-      if (ch === '\n') rfb.sendKey(KEYS.names.XK_Return, 'Enter');
-      else rfb.sendKey(KEYS.table.lookup(ch.codePointAt(0)), null);
-    }
+    for (const ch of now.slice(same)) rfb.sendKey(KEYS.table.lookup(ch.codePointAt(0)), null);
   }
   kbdLast = now;
-  // An Enter, or a box run low or long, starts over; nothing is sent for that.
-  if (now.includes('\n') || now.length < KBD_FILL.length / 2 || now.length > KBD_FILL.length * 2) kbdReset();
+  // A box run low or long starts over; nothing is sent for that.
+  if (now.length < KBD_FILL.length / 2 || now.length > KBD_FILL.length * 2) kbdReset();
 }
 function kbdOff() {
   $('kbd-btn').classList.remove('on');
   $('kbd').blur();
 }
 $('kbd').addEventListener('input', kbdInput);
+$('kbd').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (rfb && KEYS) rfb.sendKey(KEYS.names.XK_Return, 'Enter');
+});
 $('kbd-btn').onclick = () => { kbdReset(); $('kbd').focus({ preventScroll: true }); };
 
 async function check() {

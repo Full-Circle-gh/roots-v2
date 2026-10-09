@@ -377,7 +377,10 @@ check('the page draws states only; every check is on the server', () => {
     [path.join(__dirname, 'check-html-js.js'), path.join(__dirname, '..', 'public', 'channel-signin.html')], { encoding: 'utf8' });
   eq(r.status, 0, `the deploy's inline-script gate rejects the page: ${r.stdout}${r.stderr}`);
   ok(/\/api\/retail-admin\/channel-signin\/screen/.test(page), 'the page does not use the relay');
-  ok(!/password|credentials:\s*\{\s*password/i.test(page), 'a VNC password in the page');
+  // No VNC password in the page: noVNC takes one through `credentials` or
+  // sendCredentials(). The phone keyboard's box is type="password" (it types a
+  // channel's login into the screen), so the bare word is no longer the test.
+  ok(!/credentials:\s*\{|sendCredentials|password\s*[:=]\s*['"`\w]/i.test(page), 'a VNC password in the page');
 });
 
 check('a phone whose video decoder never answers still gets the screen, or Try again', () => {
@@ -395,7 +398,10 @@ check('a phone can type into the screen', () => {
   // A canvas raises no phone keyboard (2026-10-08, the Eleme login on Android).
   // The Keyboard button focuses a text box whose changes go to the screen.
   const page = read('public/channel-signin.html');
-  ok(/<textarea id="kbd"/.test(page), 'no text box for the phone keyboard');
+  // A password box: a phone keyboard opens plain Latin for one. In a text box a
+  // Chinese keyboard in pinyin mode typed lower case only (2026-10-09).
+  ok(/<input id="kbd" type="password"/.test(page), 'the phone keyboard box is not a password box');
+  ok(/if \(e\.key !== 'Enter'\) return;[\s\S]*?rfb\.sendKey\(KEYS\.names\.XK_Return, 'Enter'\)/.test(page), 'Enter is not sent from the key');
   ok(/keyboard: T\('Keyboard', '键盘'\)/.test(page), 'the Keyboard button pair');
   ok(/\$\('kbd'\)\.addEventListener\('input', kbdInput\)/.test(page), 'what is typed is not sent');
   ok(/rfb\.sendKey\(KEYS\.names\.XK_BackSpace, 'Backspace'\)/.test(page), 'a deleted character is not a Backspace');
