@@ -22855,7 +22855,7 @@ function screenReceiveTransfer(){
           return `<div style="border-top:1px solid var(--border-default);padding:12px 16px;display:flex;align-items:center;gap:12px">
             <span style="flex:1;min-width:0">
               <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
-              <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
+              <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span>${it.sku?` · <span class="num">${escAttr(it.sku)}</span>`:''}</span>
             </span>
             <span class="num" style="font-size:20px;font-weight:500;color:${full?'var(--text-primary)':'var(--amber-ink)'}">${got==null?'—':got}</span>
           </div>`;}).join('')}</div>`:''}`;
@@ -22933,7 +22933,7 @@ function screenReceiveTransfer(){
         return `<div style="width:100%;border-top:1px solid var(--border-default);padding:8px 16px;display:flex;align-items:center;gap:10px">
           <span style="flex:1;min-width:0">
             <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
-            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
+            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span>${it.sku?` · <span class="num">${escAttr(it.sku)}</span>`:''}</span>
             ${terr?`<span style="display:block;font-size:13px;color:var(--brick-ink);margin-top:3px">${escAttr(terr)}</span>`:''}
           </span>
           ${numCell}
