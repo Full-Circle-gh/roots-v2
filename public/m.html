@@ -7865,14 +7865,14 @@ function todaySection(kpis){
    shop, and no default knows it.
 
    So the list is theirs. Everything this app can reach and their role allows
-   is offered; up to six ride Home, in the order they put them in, remembered
+   is offered; up to seven ride Home, in the order they put them in, remembered
    on this phone the way the theme and the language are — an operator who set
    their shortcuts has set them, not set them until the next launch.
 
    The three we picked are still the DEFAULT. Somebody who never opens the
    picker keeps exactly the Home they had.
    ========================================================================== */
-const M_QUICK_KEY='tacet-m-quick', QUICK_MAX=6;
+const M_QUICK_KEY='tacet-m-quick', QUICK_MAX=7;
 /* THE DELIVERY DEFAULT POINTS AT RECEIVING, NOT AT PURCHASING. "Tick a delivery
    in" was written when Purchasing was the only place a phone could book goods
    in, and it stayed on `purchasing` after Receiving was split out onto its own
@@ -7938,14 +7938,14 @@ function quickSave(){ try{ localStorage.setItem(M_QUICK_KEY,JSON.stringify(state
    because nothing erased it. */
 function quickRows(){
   const by={}; quickCatalogue().forEach(c=>{ by[c.key]=c; });
-  /* THE CAP IS COUNTED HERE, over the rows that resolve — the six Home draws.
+  /* THE CAP IS COUNTED HERE, over the rows that resolve — the seven Home draws.
      It used to be counted over the stored keys, which are not the same list the
      moment one of them stops resolving: an operator whose kitchenpending row
      was folded into the Ready screen's tabs kept the key, lost the row, and was
      told six was the most that fits while looking at four. The keys eating the
      other two slots were invisible, so there was nothing to remove and no way
      back but the reset button.
-     A key beyond the sixth LIVE one is not erased either. It sits in storage
+     A key beyond the seventh LIVE one is not erased either. It sits in storage
      and draws again as soon as a slot ahead of it frees up. */
   return quickKeys().map(k=>by[k]).filter(Boolean).slice(0,QUICK_MAX);
 }
@@ -7955,9 +7955,9 @@ reg('quickToggle', key=>{
   const k=String(key), list=quickKeys().slice(), i=list.indexOf(k);
   if(i>=0) list.splice(i,1);
   else if(quickRows().length>=QUICK_MAX){
-    // The cap is the phone's, not a rule: past six the list is a second screen
+    // The cap is the phone's, not a rule: past seven the list is a second screen
     // to scroll, which is the thing a shortcut exists to avoid.
-    showToast(T('Six shortcuts is the most that fits','最多只能放 6 个快捷方式')); return;
+    showToast(T(QUICK_MAX+' shortcuts is the most that fits','最多只能放 '+QUICK_MAX+' 个快捷方式')); return;
   } else list.push(k);
   state.quick=list; quickSave(); render();
 });
@@ -8092,7 +8092,7 @@ function sheetQuick(){
              T('Nothing yet. Home leaves the section out until you add one.','还没有选择。在您添加之前，首页不会显示这一栏。')}</div>`}
        </div>
        ${full?`<div style="font-size:13px;color:var(--amber-ink);padding:0 4px">${
-         T('That is all six. Remove one to add another.','已满 6 个。要添加请先移除一个。')}</div>`:''}
+         T('That is all '+QUICK_MAX+'. Remove one to add another.','已满 '+QUICK_MAX+' 个。要添加请先移除一个。')}</div>`:''}
        ${groups.map(g=>`<div>
          <div class="eyebrow" style="padding:2px 4px 8px">${T(...g.h)}</div>
          <div class="list">${g.rows.map((c,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
@@ -8115,7 +8115,7 @@ function screenHome(){
      at the bottom of the longest screen in the app was the wrong place for
      them. They float over every tab screen now, this one included, and Home
      ends where its figures end. Nothing about the LIST changed: same rows,
-     same order, same picker, same six. */
+     same order, same picker, same cap. */
   /* The shop's day, not the handset's — this line sits under the greeting and
      names the day every other number on the screen is counted over. */
   const obs = greetObservation();

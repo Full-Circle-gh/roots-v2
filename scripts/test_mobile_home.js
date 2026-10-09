@@ -158,7 +158,7 @@ CASES.push(['nothing waiting, nothing said', `state.ops={unhandled:{count:0,item
 // ── Quick actions belong to the operator ──────────────────────────────────
 // The three defaults are ours; the list is theirs. These cases hold the whole
 // contract: what the picker offers is capability-filtered, a change lands on
-// Home, the order is the operator's, six is the ceiling, an empty list stays
+// Home, the order is the operator's, seven is the ceiling, an empty list stays
 // empty (rather than helpfully restoring the defaults at the next launch), and
 // the choice survives this phone being put down.
 CASES.push(['the picker offers what this role can reach', `APP.cmd('tab','home'); APP.cmd('quickEdit');`, [
@@ -201,12 +201,12 @@ CASES.push(['the delivery row is not two rows', `APP.cmd('tab','home');
   ['and the verb opens the receiving list',
    `(function(){ APP.cmd('push','receiving'); return state.stack[state.stack.length-1].route==='receiving'; })()`],
 ]]);
-CASES.push(['six is the ceiling', `APP.cmd('tab','home');
-  state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices']; render();
-  APP.cmd('quickToggle','coupons'); APP.cmd('fabToggle');`, [
-  ['the seventh is refused',  `state.quick.length===6`],
+CASES.push(['seven is the ceiling', `APP.cmd('tab','home');
+  state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices','coupons']; render();
+  APP.cmd('quickToggle','finance'); APP.cmd('fabToggle');`, [
+  ['the eighth is refused',   `state.quick.length===7`],
   ['and it says why',         `!!state.toast`],
-  ['the six still render',    `dialText().includes('Invoices') && dialText().includes('Delivery')`],
+  ['the seven still render',  `dialText().includes('Invoices') && dialText().includes('Coupons')`],
 ]]);
 // A KEY THAT NO LONGER RESOLVES MUST NOT HOLD A SLOT ON HOME. The stored list
 // is KEYS, and one whose screen has been retired (kitchenpending, folded into
@@ -226,22 +226,22 @@ CASES.push(['a retired shortcut does not hold a slot in the dial', `APP.cmd('tab
 ]]);
 // The cap still bites — it is counted over what Home draws, so dead ballast
 // neither fills it nor lifts it.
-CASES.push(['six drawn rows is still the ceiling', `APP.cmd('tab','home');
-  state.quick=['inbox','kitchenpending','purchasing','tab:products','waste','delivery','invoices'];
-  render(); APP.cmd('quickToggle','coupons'); APP.cmd('fabToggle');`, [
-  ['the seventh is refused',  `quickRows().length===6 && state.quick.indexOf('coupons')<0`],
+CASES.push(['seven drawn rows is still the ceiling', `APP.cmd('tab','home');
+  state.quick=['inbox','kitchenpending','purchasing','tab:products','waste','delivery','invoices','coupons'];
+  render(); APP.cmd('quickToggle','finance'); APP.cmd('fabToggle');`, [
+  ['the eighth is refused',   `quickRows().length===7 && state.quick.indexOf('finance')<0`],
   ['and it says why',         `!!state.toast`],
-  ['the six still render',    `dialText().includes('Invoices') && dialText().includes('Delivery')`],
+  ['the seven still render',  `dialText().includes('Invoices') && dialText().includes('Coupons')`],
 ]]);
-// Whatever is in storage, Home draws at most six. A list that grew past the cap
+// Whatever is in storage, Home draws at most seven. A list that grew past the cap
 // on another build is trimmed at the point the rows are resolved, not by
 // deleting keys off the phone.
-CASES.push(['the dial draws no more than six however many are stored', `APP.cmd('tab','home');
-  state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices','coupons'];
+CASES.push(['the dial draws no more than seven however many are stored', `APP.cmd('tab','home');
+  state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices','coupons','finance'];
   render(); APP.cmd('fabToggle');`, [
-  ['six rows',                `quickRows().length===6`],
-  ['the seventh is not drawn', `!dialText().includes('Coupons')`],
-  ['and it is not erased',    `state.quick.indexOf('coupons')>=0`],
+  ['seven rows',              `quickRows().length===7`],
+  ['the eighth is not drawn', `!dialText().includes('Finance')`],
+  ['and it is not erased',    `state.quick.indexOf('finance')>=0`],
 ]]);
 // Move works on the rows the operator can SEE. Stepping a row over a stored key
 // that draws nothing used to look like a dead button: the key moved one place

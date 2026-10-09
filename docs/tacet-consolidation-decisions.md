@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.491
+# Tacet shared-core consolidation — decisions record, v4.492
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-09 · v4.492 — **QUICK ACTIONS HOLD SEVEN, NOT SIX — ASKED BY ASH** from the phone with the picker open on five rows: *"add one more to quick action"*. `QUICK_MAX` in `public/m.html` goes from 6 to 7; nothing else about the list changes (same picker, same order, same keys kept when a screen is lost). The two messages that said the number in words now read it from `QUICK_MAX` — *"7 shortcuts is the most that fits · 最多只能放 7 个快捷方式"* and *"That is all 7. … · 已满 7 个。…"* — so the next change to the cap is one number. No Chinese was composed: the live strings are unchanged except for the numeral. `scripts/test_mobile_home.js` moves its three ceiling cases to seven and they were checked to fail with the cap put back to six.
 
 2026-10-09 · v4.491 — **§445 · A TRANSFER LINE'S OWN SKU SAYS WHICH BOTTLE MOVES — RAISED BY ASH** off RS-261008-002/-003, Yuexiu's kombucha refused at *Send again*. The catalogue check compared a phone line's store id with an unrelated row in the old product list (Passion Fruit Kombucha 300ml 2-80 in one, the 1L 2-90 in the other). It now trusts the SKU saved on the line when it matches the store row, and refuses when it does not. The refusal no longer says "kitchen". See §445.
 
