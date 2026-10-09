@@ -864,6 +864,19 @@ async function paSaveStoreStock(productId, storeId, raw, el, recountReason) {
   }
 }
 
+// The category a product files under on this page: its storefront top category,
+// falling back to the legacy kitchen category string. Blank means it has none.
+function _paCatOf(p) {
+  return (p.top_category || p.category || '').trim();
+}
+// The category filter's value for "no category at all" — products that would
+// otherwise only be reachable from All. Not a string a category can be named
+// (a real name never starts with two underscores and the editor trims them).
+const PA_NO_CAT = '__none__';
+function _paCatMatch(p, val) {
+  return val === PA_NO_CAT ? !_paCatOf(p) : _paCatOf(p) === val;
+}
+
 // Populate the toolbar category filter from the distinct storefront top
 // categories present in the catalogue (falling back to the legacy kitchen
 // category string). Bilingual labels come from the canonical category tree
@@ -875,13 +888,14 @@ function paFillCatFilter() {
   const cnOf = {};
   (PA_CAT_TREE || []).forEach(t => { if (t && t.name) cnOf[t.name] = t.name_cn || ''; });
   const cats = [...new Set(PA_PRODUCTS
-    .map(p => (p.top_category || p.category || '').trim())
+    .map(_paCatOf)
     .filter(Boolean))].sort((a, b) => a.localeCompare(b));
   sel.innerHTML = '<option value="all">All categories · 全部分类</option>' +
     cats.map(c => {
       const cn = cnOf[c] ? ' · ' + escapeHtml(cnOf[c]) : '';
       return `<option value="${escapeAttr(c)}">${escapeHtml(c)}${cn}</option>`;
-    }).join('');
+    }).join('') +
+    `<option value="${PA_NO_CAT}">No category yet · 尚未分类</option>`;
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
   paRenderCatChips(cats, cnOf);
   paFillSubFilter();   // keep the dependent subcategory select in sync
@@ -897,12 +911,15 @@ function paRenderCatChips(cats, cnOf) {
   const cur = (document.getElementById('pa-filter') || {}).value || 'all';
   const count = c => _paUnits(c === 'all'
     ? PA_PRODUCTS
-    : PA_PRODUCTS.filter(p => (p.top_category || p.category || '').trim() === c)).length;
+    : PA_PRODUCTS.filter(p => _paCatMatch(p, c))).length;
   const chip = (val, label) =>
     `<button type="button" class="pa-chip${cur === val ? ' is-on' : ''}" onclick="paPickCat('${escapeAttr(val)}')">`
     + `${escapeHtml(label)}<span class="pa-chip-n">${count(val)}</span></button>`;
+  // "No category yet" sits last and shows even at 0: a zero there is the
+  // answer to "has everything been filed?", not an empty control.
   box.innerHTML = chip('all', cuT('All', '全部'))
-    + cats.map(c => chip(c, cuT(c, cnOf[c] || c))).join('');
+    + cats.map(c => chip(c, cuT(c, cnOf[c] || c))).join('')
+    + chip(PA_NO_CAT, cuT('No category yet', '尚未分类'));
 }
 function paPickCat(val) {
   const sel = document.getElementById('pa-filter');
@@ -923,7 +940,8 @@ function paFillSubFilter() {
   const sub = document.getElementById('pa-subfilter');
   if (!top || !sub) return;
   const cat = top.value;
-  if (!cat || cat === 'all') {
+  // No category means no subcategory to narrow by either.
+  if (!cat || cat === 'all' || cat === PA_NO_CAT) {
     sub.innerHTML = '<option value="all">All subcategories · 全部子分类</option>';
     sub.value = 'all';
     sub.style.display = 'none';
@@ -937,7 +955,7 @@ function paFillSubFilter() {
   const treeOrder = treeSubs.map(s => s.name).filter(Boolean);
   // Subcategories actually present on this category's products.
   const present = new Set(PA_PRODUCTS
-    .filter(p => (p.top_category || p.category || '').trim() === cat)
+    .filter(p => _paCatOf(p) === cat)
     .map(p => (p.subcategory || '').trim())
     .filter(Boolean));
   const extras = [...present].filter(s => !treeOrder.includes(s)).sort((a, b) => a.localeCompare(b));
@@ -2421,10 +2439,10 @@ function paRender() {
     );
   }
   if (filter && filter !== 'all') {
-    rows = rows.filter(p => (p.top_category || p.category || '').trim() === filter);
+    rows = rows.filter(p => _paCatMatch(p, filter));
   }
   const subEl = document.getElementById('pa-subfilter');
-  const subFilter = (filter && filter !== 'all' && subEl) ? subEl.value : 'all';
+  const subFilter = (filter && filter !== 'all' && filter !== PA_NO_CAT && subEl) ? subEl.value : 'all';
   if (subFilter && subFilter !== 'all') {
     rows = rows.filter(p => (p.subcategory || '').trim() === subFilter);
   }
