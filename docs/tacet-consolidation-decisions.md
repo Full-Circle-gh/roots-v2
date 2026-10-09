@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.492
+# Tacet shared-core consolidation — decisions record, v4.493
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-09 · v4.493 — **§446 · THE PHONE'S MORE LIST IS SHORT, AND WHAT LIT ITS DOT IS AT THE TOP — DECIDED BY ASH:** *"more section mobile . scrolling too long .also once there is a green dot on more o need to look for what it is by scrolling endlessly"*, then, of three mockups, *"build A and B"*. A: the rows lighting the More dot are drawn first, under Home's `Needs you · 需要处理`. B: on a phone with a tab bar, each headed group folds to one row, closed by default, remembered per phone. A role with no tab bar is not folded. No Chinese composed. Amends §121's layout, not its grouping. See §446.
 
 2026-10-09 · v4.492 — **QUICK ACTIONS HOLD SEVEN, NOT SIX — ASKED BY ASH** from the phone with the picker open on five rows: *"add one more to quick action"*. `QUICK_MAX` in `public/m.html` goes from 6 to 7; nothing else about the list changes (same picker, same order, same keys kept when a screen is lost). The two messages that said the number in words now read it from `QUICK_MAX` — *"7 shortcuts is the most that fits · 最多只能放 7 个快捷方式"* and *"That is all 7. … · 已满 7 个。…"* — so the next change to the cap is one number. No Chinese was composed: the live strings are unchanged except for the numeral. `scripts/test_mobile_home.js` moves its three ceiling cases to seven and they were checked to fail with the cap put back to six.
 
@@ -29294,3 +29296,58 @@ all-or-nothing rule.
 
 Strings: none in the UI; the server's English refusal is reworded. Test:
 `scripts/test_transfer_line_sku.js` (9 of its 12 checks fail on the old code).
+
+## §446 — THE PHONE'S MORE LIST IS SHORT, AND WHAT LIT ITS DOT IS AT THE TOP
+
+**Decided by Ash, 2026-10-09:** off a screenshot of More, *"scrolling too
+long .also once there is a green dot on more o need to look for what it is by
+scrolling endlessly. give solutions mock up"*; then, of the three mockups
+drawn (A: Needs you on top, B: groups fold, C: search plus most used, which
+was recommended against), *"build A and B"*.
+
+**What was wrong.** An owner's More held about fifty-four rows: §118's seven
+questions, then forty-seven tools in §121's eleven groups. The More dot can
+mean only three rows (`tabDot`): *Send to another shop* when shops are
+asking (`waitingToPick`), *Ready from the kitchen* (`readyFromKitchen`) and
+*Inbox* with new reviews (`unseenReviews`). They sat around rows 15, 30 and
+35, so finding what the dot meant was a scroll through the whole list.
+
+**The ruling.**
+1. **Needs you, first.** Every More row that is lighting the dot right now is
+   drawn at the very top of More, above the setup card and the questions,
+   under the heading `Needs you · 需要处理`, copied whole from Home's section
+   of the same name. It reads the same `moreRowDot` / `moreRowCount` the
+   rows and `tabDot` read, so the card and the dot cannot disagree: no dot,
+   no card. The rows also stay in their groups; the card is a shortcut, not
+   a move.
+2. **Groups fold.** On a phone with a tab bar, each headed group is one row:
+   its heading and, while closed, the Sage dot when a row inside wants you.
+   A tap opens it in place. Which groups are open is remembered on the phone
+   (`tacet-m-more-open`), as the questions strip already is. **All closed is
+   the default, for every role alike**, because §121 rejected a rule that
+   changes the screen's shape with the row count. The headless group
+   (Settings) stays a plain row.
+3. **No count of tools on a folded group.** The mockup showed one. It was
+   dropped in the building: on this screen a number on a row means that many
+   are waiting (§293's Inbox badge), so "5" beside *Money and numbers* would
+   read as five things to do.
+4. **Not on a role with no tab bar (`flatNav`).** There More is the home
+   screen and its tools are the whole app, so folding would put a picker's
+   one screen behind a heading. That is keyed to the mode, not to a count.
+
+**Not changed.** §121's groups, their order and their rows; §118's question
+strip and its remembered Hide; the search index and the Quick actions picker,
+which read `moreRowsFlat()` and never the drawn list; the desktop.
+
+**Rejected: C, search and "most used" on More.** Search is already in the
+header of every top-level screen, and Quick actions on Home already hold the
+operator's own shortcuts. A third way to reach every screen is the drift this
+file keeps out, and a "most used" list moves as habits change, so staff
+cannot learn where anything is.
+
+Strings: none composed; `Needs you · 需要处理` is copied whole from Home.
+Tests: `scripts/test_mobile_more_fold.js` (11 of its 14 cases fail on the old
+code; the three that pass are absence checks that held before too), a source
+check in `scripts/test_mobile_ops_groups.js`, and the More cases in
+`test_mobile_dots.js`, `test_mobile_nav.js` and `test_mobile_ask_strip.js`
+updated to the folded list.
