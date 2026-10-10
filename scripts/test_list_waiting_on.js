@@ -18,6 +18,10 @@
  *      the column outlives the park as an audit trail.
  *   3. A pid whose line was removed still reaches the row, as its id.
  *   4. The phone row reads it, in both languages.
+ *   6. 🔴 A parked row does not ALSO draw the "shipping store is short" chip —
+ *      a checkout-time count of only the transferable lines, which beside the
+ *      waiting line read as a second, smaller shortage (TC001023, 2026-10-09).
+ *      A released row still draws it.
  */
 'use strict';
 
@@ -104,12 +108,17 @@ const M = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
 const start = M.indexOf('\nfunction listWaitingOn(');
 const phone = vm.createContext({});
 vm.runInContext(M.slice(start, M.indexOf('\n}\n', start) + 3), phone);
+const ns = M.indexOf('\nfunction orderNotes(');
+vm.runInContext(M.slice(ns, M.indexOf('\n}\n', ns) + 3), phone);
 
 (async () => {
   seed();
   const parked   = makeOrder('awaiting_restock', [P_NUTS, P_RICE], [MILK, NUTS, RICE]);
   const released = makeOrder('paid',             [P_NUTS],         [MILK, NUTS]);
   const orphan   = makeOrder('awaiting_restock', [P_NUTS, P_GONE], [NUTS]);
+  // Both carry a checkout-time shortage of one transferable line.
+  db.prepare('UPDATE retail_orders SET fulfillment_short_pids = ? WHERE id IN (?, ?)')
+    .run(JSON.stringify([P_NUTS]), parked, released);
 
   const app = express();
   op.add();
@@ -201,6 +210,28 @@ vm.runInContext(M.slice(start, M.indexOf('\n}\n', start) + 3), phone);
     await it('it wraps instead of stretching the status column', () => {
       const css = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
       assert.ok(/\.ord-note-line\.is-wait\s*\{[^}]*white-space:\s*normal/.test(css), 'no .is-wait wrap rule');
+    });
+
+    console.log('\n6. 🔴 a parked row draws one shortage, not two');
+    const shortChip = (r) => (phone.orderNotes(r) || []).filter((nt) => /short/.test(nt.label[0]));
+    await it('the list carries the checkout-time column for both rows', () => {
+      assert.strictEqual(row(parked).fulfillment_short_pids, JSON.stringify([P_NUTS]));
+      assert.strictEqual(row(released).fulfillment_short_pids, JSON.stringify([P_NUTS]));
+    });
+    await it('phone: parked → no "Shipping store is short" chip', () => {
+      assert.deepStrictEqual(shortChip(row(parked)), []);
+    });
+    await it('phone: released → the chip is still there', () => {
+      assert.strictEqual(shortChip(row(released)).length, 1);
+      assert.strictEqual(shortChip(row(released))[0].label[0], 'Shipping store is short 1 item');
+    });
+    const bs = D.indexOf('\nfunction fulfillmentShortBadge(');
+    vm.runInContext(D.slice(bs, D.indexOf('\n}\n', bs) + 3), pc);
+    await it('PC: parked → no "needs restock" badge', () => {
+      assert.strictEqual(pc.fulfillmentShortBadge(row(parked)), '');
+    });
+    await it('PC: released → the badge is still there', () => {
+      assert.ok(pc.fulfillmentShortBadge(row(released)).includes('needs restock'));
     });
   } finally {
     server.close();
