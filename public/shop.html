@@ -3297,7 +3297,11 @@ async function coStartPayment(order){
   const channel = co.payment==='wechat' ? wxChannel() : aliChannel();
   let j;
   try{ j=await postJson('/api/retail/payment/create',{order_id:order.id,channel}); }
-  catch(e){ return coOrderPlaced(order); }   // payment not available → order stands
+  // §452: "we'll contact you" only where this rail cannot charge from here at
+  // all. A gateway that refused or never answered is a failure the customer can
+  // retry — TC001049 was told to wait for a call that nobody had been asked to
+  // make. Either way the server has now told the shop (alertPaymentStartFailed).
+  catch(e){ return CO_PAY_UNAVAILABLE.indexOf(e.code)>=0 ? coOrderPlaced(order) : coPayFailed(order); }
   if(j&&j.status==='paid') return coPaid(order);
   // Redirect-style: WeChat H5 (mobile) / Alipay wap+page → hand off to the app
   // or login page; on return the browser lands on the order screen which polls.
@@ -3435,6 +3439,25 @@ function coOrderCancelled(order){
     <div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'未在时限内完成付款，订单已自动取消。':'It wasn’t paid in time, so the order was cancelled.'}</div>
     <a class="more" href="#/shop">${state.lang==='cn'?'重新购物 →':'Back to shop →'}</a>
   </div></div></div>`;
+}
+// The /payment/create errors that mean "this rail can't charge from here", not
+// "it tried and failed": no WeChat openid on a web page, Alipay not set up for
+// this shop, a tender with no online rail. Everything else is coPayFailed.
+const CO_PAY_UNAVAILABLE=['no_real_openid','alipay_not_configured','unsupported_payment_method'];
+// The gateway refused or never answered. The order stands, unpaid; the button
+// asks again, which is the same call the order page's Pay button makes.
+function coPayFailed(order){
+  clearInterval(co.pollTimer);
+  const cn=state.lang==='cn';
+  $('#view').innerHTML=`<div class="wrap"><div class="co"><div class="co-ok">
+    <div class="big">${cn?'支付失败':'Payment didn’t go through'}</div>
+    <div>${cn?'订单号':'Order'} <b>${esc(order.order_no||('#'+order.id))}</b></div>
+    <div class="co-msg" style="color:var(--muted)">${cn?'订单已保留，请重试。':'Your order is saved — please try again.'}</div>
+    <button class="co-place" id="coPayRetry">${cn?'重试':'Try again'}</button>
+    <a class="more" href="#/shop">${cn?'继续购物 →':'Continue shopping →'}</a>
+  </div></div></div>`;
+  document.title=(cn?'支付失败':'Payment didn’t go through')+' · '+state.brand;
+  $('#coPayRetry').addEventListener('click',()=>coStartPayment(order));
 }
 // Order created but online payment isn't available (gateway off / not configured):
 // keep the order and tell the customer staff will follow up.

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.322 · 2026-10-10 · §452 A PAYMENT THAT COULD NOT START — 3 STRINGS COMPOSED BY CLAUDE (`支付失败`, `订单已保留，请重试。`, `待付款 · 请联系顾客`), EACH FROM LIVE PARTS; THE REST COPIED WHOLE.** See *A payment that could not start (§452)*.
+
 **v1.321 · 2026-10-10 · §451 WECHAT AND ALIPAY AS ONE CHOICE — 1 STRING ASSEMBLED BY CLAUDE FROM TWO LIVE LABELS; NO NEW WORD.** See *WeChat and Alipay as one choice (§451)*.
 
 **v1.320 · 2026-10-10 · §450 THE INTERNATIONAL CARD AND ITS 4% — 3 STRINGS COMPOSED BY CLAUDE (`外卡`, `外卡 +4%`, `外卡手续费 4%`); NOTHING LIVE NAMES A CARD OR A CARD FEE.** See *The international card and its 4% (§450)*.
@@ -13652,3 +13654,36 @@ Operator register. `public/till.html` (`WALLETS`),
 No new word. **Rejected:** `扫码支付` (scan to pay) — accurate for the
 terminal but a new phrase, and the two wallet names are what the cashier and
 the customer both say.
+
+## A payment that could not start (§452)
+
+**Composed by Claude, 2026-10-10, under the 2026-09-06 amendment.**
+Two registers. Customer: `public/shop.html` (`coPayFailed`). Operator:
+`routes/retail.js` (`alertPaymentStartFailed` — the push title and the WeCom
+card). Asked by Ash, after TC001049 showed *"We'll contact you shortly to
+arrange payment"* and nobody did: *"ok do it"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Payment didn’t go through · 支付失败` | the shopper's retry screen (heading and tab title); the operator push title; the WeCom card's first line | The negation of `支付成功！`, live on the very next screen of the same checkout (`coPaid`), with `失败` from `上传失败，请重试` on the Alipay screen beside it. The customer and the shop read the same two words for the same event. Pre-existing occurrences were checked and are not UI: `lib/gzgrocery-admin.js` matches it as a status word on a supplier's backend, and `public/shop/_gallery.fixtures.js` carries it in sample FAQ copy. |
+| `Your order is saved — please try again. · 订单已保留，请重试。` | the retry screen, under the order number | `订单已保留` from `稍后支付（订单已保留）` on the payment screen; `请重试` from `上传失败，请重试`. Both live in `public/shop.html`; the full-width comma is that file's. |
+| `Unpaid · call the customer` / `待付款 · 请联系顾客` | the WeCom card's last line, the two languages on their own lines (§1.11) | `待付款` is the shopper's own status word for this state (`orderStatusLabel`); `请联系顾客` is the phone's live instruction, used four times with `call the customer` (`public/m.html`, the late-delivery rows). Joined with ` · ` as those rows join theirs. |
+
+### Copied whole
+
+`Try again · 重试` (`public/m.html`, three retry buttons), `Order · 订单号` and
+`Continue shopping → · 继续购物 →` (`public/shop.html`), and the WeCom rows
+`订单号 Order`, `金额 Amount`, `收货人 To` (the new-order and address-change
+cards).
+
+### Rejected
+
+`付款失败`: `付款` is just as live on these screens (`支付宝付款`, `完成付款`),
+but the heading is the other side of `支付成功！`, and the pair should match.
+`支付未成功`: longer and softer, and it does not pair with `支付成功！`.
+`请稍后重试`: live, but *later* is the wrong advice when the button that works
+is under it now. `请联系顾客付款`: says the right thing but is not a live
+sentence, and `待付款 · 请联系顾客` says it in two that are.
+
