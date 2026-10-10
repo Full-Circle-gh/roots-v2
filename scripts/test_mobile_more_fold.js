@@ -11,9 +11,11 @@
  *
  *   A. NEEDS YOU, FIRST. Whatever is lighting the More dot is drawn at the top,
  *      above the questions, under Home's own heading. No dot, no card.
- *   B. GROUPS FOLD. Each headed group is one row; a tap opens it in place and
- *      the phone remembers. All closed by default. Not on a role with no tab
- *      bar, where this list is the home screen.
+ *   B. GROUPS FOLD. Each headed group is one row; a tap opens it in place.
+ *      All closed by default. Not on a role with no tab bar, where this list
+ *      is the home screen.
+ *   §447: "once go out from more fold again all automatic don't leave it
+ *      open". Leaving More closes every group; nothing is stored.
  *
  * Needs a Chromium. Set CHROME_BIN, or let it find Playwright's.
  */
@@ -34,7 +36,9 @@ const needs = "(function(){var el=document.getElementById('mMoreNeeds');return e
 const header = (h) => `document.querySelector('#mMoreGroups [data-group=${JSON.stringify(h)}]')`;
 const headerDot = (h) => `!!${header(h)}.querySelector('span[style*="border-radius:50%"]')`;
 const toggle = (h) => `APP.cmd('toggleMoreGroup',${JSON.stringify(h)});`;
-const stored = "JSON.parse(localStorage.getItem('tacet-m-more-open')||'[]')";
+const stored = "localStorage.getItem('tacet-m-more-open')";
+const allClosed = "[].slice.call(document.querySelectorAll('#mMoreGroups [data-group]'))"
+  + ".every(function(b){return b.getAttribute('aria-expanded')==='false'})";
 
 const CASES = [
   /* ── B: folded by default ───────────────────────────────────────────────── */
@@ -49,27 +53,41 @@ const CASES = [
     ['Settings has no heading to fold under, so it stays a row', `${body}.indexOf('Settings')>-1`],
     ['the list is short now', "document.querySelectorAll('#content .row').length < 20"],
    ]],
-  ['a tap opens one group in place, and the phone remembers',
+  ['a tap opens one group in place',
    OWNER + QUIET + MORE + toggle('Marketing'), [
     ['its tools are drawn', `${body}.indexOf('Coupons')>-1 && ${body}.indexOf('Flash sales')>-1`],
     ['it says it is open', `${header('Marketing')}.getAttribute('aria-expanded')==='true'`],
     ['no other group opened with it', `${body}.indexOf('Purchasing')===-1`],
-    ['and it is stored on this phone', `${stored}.indexOf('Marketing')>-1`],
+    ['and nothing is stored on the phone (§447)', `${stored}===null`],
    ]],
   ['a second tap closes it again',
    OWNER + QUIET + MORE + toggle('Marketing') + toggle('Marketing'), [
     ['its tools are gone', `${body}.indexOf('Coupons')===-1`],
-    ['and the phone forgets it', `${stored}.indexOf('Marketing')===-1`],
    ]],
-  ['a group left open is open next time',
+
+  /* ── §447: leaving More folds it again ─────────────────────────────────── */
+  ['a repaint of More keeps an open group open',
+   OWNER + QUIET + MORE + toggle('Marketing') + "render();render();", [
+    ['still open', `${header('Marketing')}.getAttribute('aria-expanded')==='true'`],
+   ]],
+  ['another tab and back: all closed',
+   OWNER + QUIET + MORE + toggle('Marketing') + toggle('Stock coming in')
+     + "APP.cmd('tab','home');APP.cmd('tab','more');", [
+    ['every group says closed', allClosed],
+    ['no tool row is drawn', `${body}.indexOf('Coupons')===-1 && ${body}.indexOf('Purchasing')===-1`],
+   ]],
+  ['a tool opened from a group, then Back: all closed',
+   OWNER + QUIET + MORE + toggle('Marketing')
+     + "push('coupons');window.__onCoupons=state.stack.length===1;"
+     + "APP.cmd('back');", [
+    ['Coupons really opened, or this case proves nothing', "window.__onCoupons===true"],
+    ['back on More', "state.tab==='more' && !state.stack.length"],
+    ['every group says closed', allClosed],
+    ['its tools are folded away', `${body}.indexOf('Coupons')===-1`],
+   ]],
+  ['a group stored by §446 does not come back',
    OWNER + QUIET + "localStorage.setItem('tacet-m-more-open',JSON.stringify(['Stock coming in']));state.moreOpen=null;" + MORE, [
-    ['its tools are drawn', `${body}.indexOf('Purchasing')>-1`],
-    ['and only its', `${body}.indexOf('Coupons')===-1`],
-   ]],
-  ['a broken stored value is a closed list, not a blank screen',
-   OWNER + QUIET + "localStorage.setItem('tacet-m-more-open','{not json');state.moreOpen=null;" + MORE, [
-    ['the groups still paint', `!!document.getElementById('mMoreGroups')`],
-    ['all closed', `${body}.indexOf('Coupons')===-1`],
+    ['all closed', `${body}.indexOf('Purchasing')===-1`],
    ]],
 
   /* ── A: Needs you, first ───────────────────────────────────────────────── */
