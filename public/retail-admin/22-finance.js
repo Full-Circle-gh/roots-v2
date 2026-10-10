@@ -2217,6 +2217,11 @@ function finCatsRender() {
       + `<input type="checkbox" ${c.is_operating ? 'checked' : ''} onchange="finCatFlag(${c.id}, this.checked)">`
       + `<span>${escapeHtml(cuT('Operating expense', '营业费用'))}</span>`
       + '</label>'
+      // §114 amended: a claim filed here starts as Not arrived yet on the phone.
+      + `<label class="fin-cat-flag" title="${escapeAttr(cuT('Not arrived yet', '尚未到货'))}">`
+      + `<input type="checkbox" ${c.is_goods ? 'checked' : ''} onchange="finCatGoods(${c.id}, this.checked)">`
+      + `<span>${escapeHtml(cuT('Goods', '货品'))}</span>`
+      + '</label>'
       + `<span class="fin-cat-use">${escapeHtml(finCatsUsage(c.usage_count))}</span>`
       + (off
         ? `<button type="button" class="fin-btn-sec" onclick="finCatActive(${c.id}, true)">${escapeHtml(cuT('Restore', '启用'))}</button>`
@@ -2271,6 +2276,14 @@ window.finCatRename = function finCatRename(id, input) {
 window.finCatFlag = function finCatFlag(id, checked) {
   return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
     { method: 'PATCH', body: { is_operating: !!checked } }));
+};
+
+/* §114 amended 2026-10-09 (Ash): GOODS pre-ticks "Not arrived yet" when this
+   category is picked on the phone's claim form. A starting answer only — the
+   person can untick it, and nothing in the books reads it. */
+window.finCatGoods = function finCatGoods(id, checked) {
+  return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
+    { method: 'PATCH', body: { is_goods: !!checked } }));
 };
 
 window.finCatActive = function finCatActive(id, active) {

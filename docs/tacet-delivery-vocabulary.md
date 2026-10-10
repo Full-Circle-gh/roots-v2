@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.318 · 2026-10-09 · §114 AMENDED — A CATEGORY CAN BE TICKED AS GOODS, AND A CLAIM FILED UNDER IT STARTS AS NOT ARRIVED YET — 1 STRING COMPOSED BY CLAUDE (`Goods · 货品`), LIFTED FROM A LIVE PAIR.** See *Goods categories (§114 amended)*.
+
 **v1.317 · 2026-10-08 · §443 THE PHONE'S PICK SCREEN IS RENAMED "SEND TO ANOTHER SHOP" AND ASKS WHICH SHOP IS SENDING — 2 STRINGS COMPOSED BY CLAUDE FROM LIVE PARTS; `Pick · 拣货` AND `Picking at which location? · 在哪个地点拣货？` RETIRED.** See *Sending to another shop (§443)*.
 
 **v1.316 · 2026-10-08 · §252 THE SIGN-IN PAGE'S KEYBOARD BUTTON, FOR PHONES — 1 STRING COMPOSED BY CLAUDE FROM A LIVE PART.** See *Signing a channel back in (§252)*.
@@ -13529,3 +13531,22 @@ live, if the row and title drift apart, or if the receiving twin is renamed.
 `lib/capabilities.js`, shown in team settings) is RETIRED and becomes `Send to
 another shop · 调拨发货`, **copied whole** from the row above. Nothing new is
 composed. Asked by Ash: *"rename"*.
+
+## Goods categories (§114 amended)
+
+Asked by Ash, 2026-10-09: *"tick it by default for goods category"*. Each
+expense category gets a second tick beside *Operating expense · 营业费用*, on
+the desktop Finance › Categories table and on the phone's Categories screen.
+A claim on the phone whose category carries it starts with *Not arrived yet ·
+尚未到货* ticked.
+
+### Composed — one, by Claude
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `货品` | Goods | `货品` (live, `Some of these goods are no longer in stock… · 部分货品已不在库存中…`, `public/m.html` and `16-purchasing.js`) | `货款` — live as `Goods · 货款`, but it means payment for goods, not the goods. `商品` — live, but it is the word for products the shop SELLS, and most goods claimed this way (a food processor, packaging) are never sold. `物品` — not live in any pair. |
+
+No other string is new: the tick's tooltip on the desktop is the live `Not
+arrived yet · 尚未到货`, copied whole. `scripts/test_finance_categories.js`
+fails if `货品` is not declared here.
+
