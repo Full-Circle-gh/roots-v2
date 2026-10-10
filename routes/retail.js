@@ -2195,6 +2195,54 @@ function orderWaitingPids(order) {
   return new Set(pids.map((n) => parseInt(n, 10)).filter(Boolean));
 }
 
+/* THE "SHIPPING STORE IS SHORT" WARNING, AS IT STANDS NOW. `fulfillment_short_pids`
+   is written once, at checkout, and nothing ever rewrote it — so the chip on the
+   list, the PC badge and the drawer strip kept warning after the shop restocked,
+   and on orders long since delivered. The column stays as the checkout record
+   (the WeCom new-order card reads it, correctly, as a one-off message); what the
+   screens are sent is that list narrowed to what is still true:
+
+     - only while the order's stock has not come off the shelf (`stock_pending`,
+       which the caller sets first). Packed, shipped, delivered or cancelled, the
+       warning has nothing left to warn about;
+     - only the lines not already accounted for this order — a live or committed
+       hold, or an order_* ledger row, is the same per-product test
+       commitUnreservedOrder uses;
+     - only while the shipping store still cannot cover this order's quantity,
+       measured the way checkout measured it (getAvailable, 'wechat').
+
+   It narrows the checkout list; it never adds to it. A line that was fine at
+   checkout and went short later is not picked up here — that would mean testing
+   every order on every list load, and was left out on purpose (2026-10-10). */
+function liveFulfillmentShortPids(o) {
+  let pids = [];
+  try { pids = JSON.parse((o && o.fulfillment_short_pids) || '[]') || []; } catch { pids = []; }
+  if (!Array.isArray(pids) || !pids.length || !o.store_id || !o.stock_pending) return [];
+  const resolved = [];
+  for (const it of tdb().prepare(
+    'SELECT product_id, qty, options_json FROM retail_order_items WHERE order_id = ?').all(o.id)) {
+    if (!it.product_id) continue;
+    const prod = tdb().prepare(
+      'SELECT id, bundle_items, ship_from_supplier FROM store_products WHERE id = ?').get(it.product_id);
+    if (!prod) continue;
+    let options = [];
+    try { const oj = JSON.parse(it.options_json || '[]'); if (Array.isArray(oj)) options = oj; } catch { /* unreadable options: the line counts without its add-ons */ }
+    resolved.push({ product: prod, qty: Number(it.qty) || 0, options });
+  }
+  const need = new Map(expandStockLines(resolved).map((l) => [l.product_id, l.qty]));
+  const taken = new Set([
+    ...tdb().prepare("SELECT DISTINCT product_id FROM retail_stock_reservations WHERE order_id = ? AND status IN ('active', 'committed')")
+      .all(o.id).map((r) => r.product_id),
+    ...tdb().prepare("SELECT DISTINCT product_id FROM retail_stock_ledger WHERE ref_table = 'retail_orders' AND ref_id = ? AND reason LIKE 'order%'")
+      .all(o.id).map((r) => r.product_id),
+  ]);
+  return [...new Set(pids.map((n) => parseInt(n, 10)).filter(Boolean))].filter((pid) => {
+    const qty = need.get(pid) || 0;
+    if (!qty || taken.has(pid)) return false;
+    return inventory.getAvailable(o.store_id, pid, 'wechat').available < qty;
+  });
+}
+
 // How many of THIS parcel's lines are waiting on stock. 0 is the licence to send
 // it: a box holding none of the short products is a box the shortage has nothing
 // to say about, and the land leg going days ahead of the air leg is how a split
@@ -28805,6 +28853,8 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     // can sit with its real stock not yet decremented until staff move it into
     // Preparing — surface that so the number on Products doesn't look wrong.
     r.stock_pending = inventory.isStockPending(r.id, r.status, r.channel);
+    const liveShort = liveFulfillmentShortPids(r);
+    r.fulfillment_short_pids = liveShort.length ? JSON.stringify(liveShort) : null;
     annotateShipBy(r);   // adds ship_by_mode + dispatch_deadline for out-of-GZ ASAP orders
     annotateShipTo(r);   // adds ship_city + ship_district (or ship_pickup) for the list "Ship to" column
     /* WHAT A PARKED ORDER IS WAITING ON, by name, so the list row can say it.
@@ -29209,6 +29259,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
       WHERE r.order_id = ? ORDER BY r.id ASC`
   ).all(id);
   o.stock_pending = inventory.isStockPending(o.id, o.status, o.channel);
+  const liveShort = liveFulfillmentShortPids(o);
+  o.fulfillment_short_pids = liveShort.length ? JSON.stringify(liveShort) : null;
 
   // "Forgot something?" add-ons the customer paid for after placing the order.
   // The added lines already live in o.items / their parcel; this just lets the
