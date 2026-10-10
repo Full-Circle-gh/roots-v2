@@ -198,6 +198,24 @@ it('the migration adds both columns, defaulting to the behaviour that exists tod
   assert.match(DB_JS, /addColumn\('categories',\s*'is_active',\s*'INTEGER DEFAULT 1'\)/);
 });
 
+it('§114 amended — the goods flag is a column defaulting OFF, listed and patchable', () => {
+  assert.match(DB_JS, /addColumn\('categories',\s*'is_goods',\s*'INTEGER DEFAULT 0'\)/,
+    'no category changes behaviour until somebody ticks it');
+  assert.match(ROUTE, /COALESCE\(c\.is_goods, 0\)\s+AS is_goods/, 'the list carries it');
+  assert.match(ROUTE, /body\.is_goods === undefined\s*\? \(cur\.is_goods \? 1 : 0\)/,
+    'an absent field leaves it alone, so a rename cannot clear it');
+  assert.match(ROUTE, /is_active = \?, is_goods = \? WHERE id = \?/, 'and the update writes it');
+});
+
+it('§114 amended — both screens offer the Goods tick', () => {
+  const FIN = read('public', 'retail-admin', '22-finance.js');
+  assert.match(FIN, /onchange="finCatGoods\(\$\{c\.id\}, this\.checked\)"/, 'desktop');
+  assert.match(FIN, /body: \{ is_goods: !!checked \}/, 'desktop writes it');
+  const PHONE = read('public', 'm.html');
+  assert.match(PHONE, /APP\.cmd\('finCatGoods',\$\{Number\(c\.id\)\}\)/, 'phone');
+  assert.match(PHONE, /\{is_goods:!c\.is_goods\},'PATCH'/, 'phone writes it');
+});
+
 it('the route is mounted', () => {
   assert.match(SERVER, /require\('\.\/routes\/finance-categories'\)/);
 });
@@ -390,7 +408,7 @@ it('every pair the new surface renders is DECLARED in the vocabulary', () => {
     '记录支出时不再显示该分类。已使用该分类的支出保持不变，其设置也保留。',
     '尚无支出使用该分类。此操作无法撤销。',
     '本店自己的分类列表。记录支出时只会显示这些分类。',
-    '未使用', '已停用',
+    '未使用', '已停用', '货品',
   ];
   for (const cn of pairs) {
     assert.ok(VOCAB.includes(cn), `composed and not declared: ${cn}`);

@@ -339,13 +339,35 @@ it('§114 — the two things an order cannot do without are refused on the phone
   assert.match(CLAIM, /awaitingDelivery && !note/, 'both of them');
 });
 
-it('§114 — the flag does not survive onto the next claim', () => {
+it('§114 — the flag does not survive onto the next claim, or a reopened form', () => {
   // "Record another" keeps who paid and which shop — facts about the person —
   // and clears what the claim was. Whether the LAST thing was still coming says
   // nothing about the next one, and a sticky flag would silently raise an order
   // for a taxi.
+  assert.match(PHONE_CODE, /\bcoming:false,goods:\[\],/, 'a fresh form opens with it off');
   assert.match(PHONE_CODE, /x\.cat=''; x\.coming=false;/,
     'the reset clears it with the amount and the note');
+  const entry = PHONE_CODE.match(/if\(route==='expense'\)\{[\s\S]*?\}/);
+  assert.ok(entry && /x\.coming=false;/.test(entry[0]), 'and so does entering the screen');
+  // Ticked makes the note required; the label must not call it optional then.
+  assert.match(PHONE_CODE, /T\('Note','备注'\)\}\$\{x\.coming\?'':' · '\+T\('optional','可选'\)\}/,
+    'the note is not called optional while it is required');
+});
+
+it('§114 amended — a GOODS category ticks Not arrived yet, any other unticks it', () => {
+  // Ash, 2026-10-09: "tick it by default for goods category". The shop marks
+  // which categories are goods; the form reads that list from its own meta.
+  assert.match(ROUTE_CODE, /COALESCE\(is_goods, 0\) = 1/, 'the server lists the goods categories');
+  assert.match(ROUTE_CODE, /data: \{ categories, goods: goodsCategories\(db\), stores, recent \}/,
+    'and hands them to the form');
+  assert.match(PHONE_CODE, /x\.goods=\(d&&d\.goods\)\|\|\[\];/, 'the form keeps them');
+  const pick = PHONE_CODE.match(/reg\('expCat'[\s\S]*?render\(\); \}\);/);
+  assert.ok(pick, 'the category command must be readable');
+  assert.match(pick[0], /x\.coming=!!x\.cat&&\(x\.goods\|\|\[\]\)\.indexOf\(x\.cat\)>=0;/,
+    'picking sets the box from the list, and clearing the category unticks it');
+  // A STARTING ANSWER, NOT A RULE: the validator and the submit path never read
+  // the goods flag — the claim's own awaiting_delivery is still what decides.
+  assert.ok(!/is_goods|goodsCategories/.test(CLAIM), 'lib/expense-claim.js does not read it');
 });
 
 it('§114 — the approver is told before deciding, and can reach the order after', () => {
