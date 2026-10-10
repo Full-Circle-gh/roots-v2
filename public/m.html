@@ -49078,6 +49078,24 @@ function mUnsavedWork(){
        a second or so in which rcvToSend has emptied on nothing. A reload landing
        in it would take the screen out from under a delivery mid-write. */
     if(state.recvPo&&(rcvToSend().length||state.recvBusy)) return true;
+    /* A REQUEST BEING FILLED IN. Ask for stock and Ask the kitchen share one
+       basket (state.rq), Ask the buyer has its own (state.mb), and all three
+       live in memory alone. Ash, 2026-10-10: a restock filled in on Ask for
+       stock, the phone put down before Send, and every quantity gone on
+       return — this list did not name these screens, so the first
+       backgrounding after a deploy reloaded straight through them. A basket
+       already sent is a receipt, not work; one mid-send is work (a reload then
+       would leave the operator not knowing whether it went). A figure still in
+       an open field on Ask the buyer counts too: mbSend takes it as part of the
+       request. */
+    const onRoute=r=>(state.stack||[]).some(f=>f&&f.route===r);
+    const rq=state.rq;
+    if(rq&&!rq.sent&&(onRoute('askstock')||onRoute('askkitchen'))
+       &&(rq.busy||Object.keys(rq.qty||{}).some(k=>rq.qty[k]>0))) return true;
+    const mb=state.mb;
+    if(mb&&!mb.sent&&onRoute('askbuy')
+       &&(mb.busy||Object.keys(mb.qty||{}).some(k=>mb.qty[k]>0)
+          ||Object.keys(mb.typing||{}).some(k=>String(mb.typing[k]).trim()!==''))) return true;
     /* A role edit waiting on its pause or on the wire (§279). */
     if(tmAuto&&tmAuto.busy()) return true;
     /* A recipe edit waiting on its pause or on the wire (§300 R2). */
