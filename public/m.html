@@ -2041,6 +2041,67 @@ if(window.visualViewport) window.visualViewport.addEventListener('resize',()=>kb
 // A turned phone has a different full height; measure again on the next field.
 window.addEventListener('orientationchange',()=>{ kbBase=null; kbUp=false; kbMark(); });
 
+/* 6. A PAINT NOBODY ASKED FOR KEEPS THE CARET IT FINDS.
+
+   THE COMPLAINT, from a phone on 2026-10-09: "keyboard going down
+   automatically sometimes when I click on amount", on the expense form. render()
+   rebuilds the whole app, so the field somebody is typing in is thrown away
+   and the keyboard goes with it. A paint the person caused is fine — they
+   tapped something else, and the keyboard going down is what a tap away does
+   (rule 3). The defect is the paint NOBODY caused: a read answering, a timer
+   firing, while the person is mid-word. There were 733 of those in this file
+   when it was counted, every one a way for the keyboard to drop, and the
+   expense form was only the one that got reported. Fixing them where they stand
+   would be 400 functions, and the next screen would bring the defect back.
+
+   WHICH PAINTS: those that run outside any event. window.event is the event
+   being dispatched, and it is empty in a fetch's answer or a timer — which is
+   exactly the set above, and nothing a tap or a keystroke runs. A request
+   already armed (state.focus) is the handler's own decision and is left alone.
+
+   WHICH FIELD: by id when it has one. A third of the typed fields here have
+   none, so those are found again by what they do — their handlers, their label
+   and their placeholder — and which of the identical ones it was. A field with
+   none of those cannot be told from its neighbours and is not guessed at:
+   putting the caret into the wrong row is worse than dropping it.
+
+   AND ITS TEXT, but only for a field that keeps its text nowhere else. Most
+   fields store each keystroke (oninput) and are painted back from it; a field
+   with no handler at all (the reply box) is read when its button is pressed,
+   so the paint would have emptied it. A field that commits on change is left
+   alone: putting text back into it would stop that change from ever firing. */
+function kbSig(el){
+  return [el.tagName, el.getAttribute('oninput')||'', el.getAttribute('onchange')||'',
+    el.getAttribute('aria-label')||'', el.getAttribute('placeholder')||''].join('\u0001');
+}
+function kbSame(tag,sig){
+  const out=[], els=app.querySelectorAll(tag);
+  for(let i=0;i<els.length;i++){ if(kbSig(els[i])===sig) out.push(els[i]); }
+  return out;
+}
+function kbHold(){
+  const a=kbField(document.activeElement);
+  if(!a||!app.contains(a)) return null;
+  let pos=null; try{ pos=a.selectionStart; }catch(e){}
+  const t={ id:a.id||'', pos, value:a.value,
+    bare:!a.getAttribute('oninput')&&!a.getAttribute('onchange')&&!a.getAttribute('onkeyup') };
+  if(!t.id){
+    const sig=kbSig(a);
+    if(sig===a.tagName+'\u0001\u0001\u0001\u0001') return null;   // nothing to know it by
+    t.tag=a.tagName; t.sig=sig; t.nth=kbSame(a.tagName,sig).indexOf(a);
+    if(t.nth<0) return null;
+  }
+  return t;
+}
+function kbRestore(t){
+  if(!t) return;
+  const el=t.id?document.getElementById(t.id):(kbSame(t.tag,t.sig)[t.nth]||null);
+  if(!el||!kbField(el)||el.disabled||el===document.activeElement) return;
+  if(t.bare&&el.value!==t.value) el.value=t.value;
+  el.focus();
+  if(t.pos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(t.pos,t.pos); }catch(e){} }
+}
+
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
 /* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch for the defect this
    removes. The armed state.focus goes with the render it existed to survive:
@@ -48358,6 +48419,8 @@ function render(){
   if(state.search) html += layer('search', sheetSearch());
   if(state.imgZoom) html += layer('zoom:'+state.imgZoom, sheetImgZoom());
   if(state.toast) html += layer('toast:'+state.toast, `<div class="toast">${state.toast}</div>`);
+  // Rule 6 under PUTTING THE KEYBOARD AWAY: a paint no event caused keeps the caret.
+  const _kbHeld=(state.focus||window.event)?null:kbHold();
   // Flagged so kbFocusOut does not cancel the caret request this paint keeps.
   kbPainting=true;
   app.innerHTML = html;
@@ -48403,6 +48466,7 @@ function render(){
     if(el){ el.focus();
       if(state.focus.pos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(state.focus.pos,state.focus.pos); }catch(e){} } }
     state.focus=null; }
+  kbRestore(_kbHeld);
 }
 function wireDrag(){
   const h=document.getElementById('dragHandle'); if(!h) return;
