@@ -4498,6 +4498,22 @@ function dashReadKey() {
   return `${$('#db-from').value}|${$('#db-to').value}|${dashStoreId() || 'all'}`;
 }
 
+// The digest's buyers block. Shop buyers are customer accounts (mini app and
+// members at the till); Meituan's are its own user ids; wholesale's are phones.
+// Three identity spaces, so they are listed and never summed.
+function dashDigestBuyers(D) {
+  const nvr = D.new_vs_returning || {};
+  const bbc = D.buyers_by_channel || null;
+  const mt = bbc && bbc.meituan;
+  return {
+    note: 'Each channel counts its buyers its own way; these are not added together and are not the people behind kpis.orders.',
+    shop_accounts: { buyers: nvr.buyers || 0, new_buyers: nvr.new_buyers || 0, returning_buyers: nvr.returning_buyers || 0 },
+    meituan: mt ? { buyers: mt.buyers, new_buyers: mt.new_buyers, counted_since: mt.since } : null,
+    wholesale: bbc && bbc.wholesale ? { buyers: bbc.wholesale.buyers } : null,
+    eleme: 'not reported by the platform',
+  };
+}
+
 // Compact digest of the EXACT data on screen. Top-N lists only, rounded —
 // the model may cite these numbers and nothing else.
 function dashAiDigest() {
@@ -4513,7 +4529,7 @@ function dashAiDigest() {
     currency: dashCurrencySym(),
     window: D.window,
     kpis: {
-      revenue: r2(k.revenue), orders: k.orders, average_order: r2(k.aov), buyers: k.buyers,
+      revenue: r2(k.revenue), orders: k.orders, average_order: r2(k.aov),
       new_customers: k.new_customers, visits: k.visits, sessions: k.sessions, unique_visitors: k.visitors,
       // `orders` above is every channel; these two are the mini app's, and they
       // travel together so the model reading this digest can see that
@@ -4537,7 +4553,15 @@ function dashAiDigest() {
       .map(h => ({ weekday: DASH_DOW_EN[h.dow], hour: h.hour, orders: h.orders })),
     top_products: (D.topProducts || []).slice(0, 8).map(p => ({ name: p.name_en || p.name_cn, units: p.units, revenue: r2(p.revenue) })),
     top_customers: (D.topCustomers || []).slice(0, 5).map(c => ({ name: c.nickname || ('#' + c.customer_id), orders: c.orders, revenue: r2(c.revenue) })),
-    buyers_new_vs_returning: D.new_vs_returning,
+    // WHO BOUGHT, BY CHANNEL (§169), and never a single buyer count. `orders`
+    // in kpis is every channel, but a buyer can only be counted where the
+    // order names a person, and each channel names them differently. A bare
+    // `buyers` beside `orders` read as one population: "48 orders across 11
+    // buyers" when the 11 were the shop's own account holders and most of the
+    // 48 were Meituan and Ele.me. Each count travels under its channel's name,
+    // and Ele.me says outright that it cannot be counted, so the model has
+    // nothing it could divide `orders` by.
+    buyers_by_channel: dashDigestBuyers(D),
     top_cities: (D.geoCities || []).slice(0, 6).map(g => ({ city: g.city_en || g.city, city_cn: g.city, orders: g.orders, revenue: r2(g.revenue) })),
     vouchers: {
       orders_with_voucher: vouchers.reduce((s, v) => s + Number(v.uses || 0), 0),
