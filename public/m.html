@@ -49834,9 +49834,14 @@ function listWaitingOn(r){
 function orderNotes(r){
   const out=[];
   if(Number(r.addon_count)) out.push({sev:'amber',icon:'plus',label:['Items added after paying','下单后加购']});
+  /* Not on an order parked on stock right now: its "Waiting on stock" line is
+     the live answer and names every short line. This chip is a checkout-time
+     snapshot that counts only the lines another shop could cover, so beside
+     that line it read as a second, smaller shortage (TC001023: "short 1 item"
+     over a line naming two). The drawer keeps its strip, which names them. */
   let shortPids=[];
   try{ shortPids=JSON.parse(r.fulfillment_short_pids||'[]')||[]; }catch(e){}
-  if(shortPids.length) out.push({sev:'amber',icon:'triangle-alert',
+  if(shortPids.length&&!listWaitingOn(r)) out.push({sev:'amber',icon:'triangle-alert',
     label:[shortPids.length===1?'Shipping store is short 1 item':'Shipping store is short '+shortPids.length+' items',
             '出货门店缺 '+shortPids.length+' 件']});
   if(r.stock_pending) out.push({sev:'amber',icon:'box',label:['Stock not deducted yet','库存待扣']});
