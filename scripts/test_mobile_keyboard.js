@@ -433,5 +433,50 @@ console.log('\n══ 10 · §325 K1 · the touch-down the SHIPPED listeners cal
   eq(inside.blurs, 0, 'a tap INSIDE it does not');
 }
 
+console.log('\n══ 11 · the expense form keeps its caret when its own reads answer ══');
+/* "keyboard going down automatically sometimes when I click on amount"
+   (2026-10-09). The form reads its categories and the person's past claims
+   AFTER it is on screen, and each answer repainted the whole app — so a tap on
+   the amount that beat the network had its field rebuilt under it and the
+   keyboard dropped. Both reads now repaint through expRepaint, which asks for
+   the caret back when one of the form's typed fields holds it. */
+{
+  const st = { focus: null };
+  let paints = 0;
+  const box = { document: doc, state: st, render: () => { paints++; } };
+  vm.createContext(box);
+  vm.runInContext(sliceFn('expRepaint'), box, { filename: 'm.html#expRepaint' });
+
+  const amt = input({ id: 'mExpAmt' }); amt.selectionStart = 4;
+  doc.activeElement = amt;
+  box.expRepaint();
+  eq(paints, 1, 'it paints');
+  eq(JSON.stringify(st.focus), JSON.stringify({ id: 'mExpAmt', pos: 4 }),
+     'typing in the amount: the caret is asked back, where it was');
+
+  st.focus = null;
+  const note = input({ id: 'mExpNote' }); note.selectionStart = 2;
+  doc.activeElement = note;
+  box.expRepaint();
+  eq(st.focus && st.focus.id, 'mExpNote', 'the note keeps its caret the same way');
+
+  st.focus = null; doc.activeElement = body;
+  box.expRepaint();
+  eq(st.focus, null, 'nobody typing: no caret is asked for, so no keyboard opens by itself');
+
+  st.focus = null; doc.activeElement = input({ id: 'mExpQ' });
+  box.expRepaint();
+  eq(st.focus, null, 'a field that is not the form\'s is left to its own rules');
+
+  const armed = { id: 'mExpAmt', pos: 1 };
+  st.focus = armed; amt.selectionStart = 3; doc.activeElement = amt;
+  box.expRepaint();
+  ok(st.focus === armed, 'a caret request already armed is not overwritten');
+
+  const loaders = sliceFn('expLoadMeta') + sliceFn('expLoadMine');
+  ok(!/\brender\(\)/.test(loaders) && (loaders.match(/expRepaint\(\)/g) || []).length === 4,
+     'both reads, answer and failure alike, repaint through expRepaint and never bare render()');
+}
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

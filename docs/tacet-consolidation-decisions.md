@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.493
+# Tacet shared-core consolidation — decisions record, v4.494
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-09 · v4.493 — **§114 AMENDED · A GOODS CATEGORY STARTS A CLAIM AS NOT ARRIVED YET — DECIDED BY ASH.** First ask, from the phone's Expense form: *"not arrived yet should be defult"*. Built that way, then flagged: most claims are things already in hand (a taxi, ginger), the approver cannot untick the box, and every one left ticked would raise a purchase order nobody receives. Offered a narrower rule; Ash: *"tick it by default for goods category"*, and chose a tick per category over a list in code. **THE CHANGE.** `categories.is_goods` (`INTEGER DEFAULT 0`, so nothing changes until somebody ticks one) with a **Goods · 货品** tick beside *Operating expense* on the desktop Finance › Categories table and the phone's Categories screen, both through the existing `PATCH /finance/categories/:id` (absent field left alone, so a rename cannot clear it). `GET /staff-expenses/meta` adds `goods`: the active categories ticked. On the phone's claim form, **picking a category sets the box from that list** — a goods category ticks it, any other unticks it — and the person can still change it after. The form still opens unticked, *Record another* and reopening the screen both untick it (reopening did not before: a ticked box survived leaving and coming back). **A STARTING ANSWER, NOT A RULE:** nothing on the server or in `lib/expense-claim.js` reads `is_goods`; the claim's own `awaiting_delivery` decides exactly as before, so no claim already sent changes meaning. **One label fixed with it:** *Note · optional* drops *optional* while the box is ticked, since §114 requires the note then. A goods category's list is read when the form first loads, so a tick made on Categories reaches an open phone on its next reload. **One string composed**, `Goods · 货品`, declared in `docs/tacet-delivery-vocabulary.md` v1.318. One migration, no new route, no capability change, and no change to `.gitignore` or CI.
+2026-10-09 · v4.494 — **§114 AMENDED · A GOODS CATEGORY STARTS A CLAIM AS NOT ARRIVED YET — DECIDED BY ASH.** First ask, from the phone's Expense form: *"not arrived yet should be defult"*. Built that way, then flagged: most claims are things already in hand (a taxi, ginger), the approver cannot untick the box, and every one left ticked would raise a purchase order nobody receives. Offered a narrower rule; Ash: *"tick it by default for goods category"*, and chose a tick per category over a list in code. **THE CHANGE.** `categories.is_goods` (`INTEGER DEFAULT 0`, so nothing changes until somebody ticks one) with a **Goods · 货品** tick beside *Operating expense* on the desktop Finance › Categories table and the phone's Categories screen, both through the existing `PATCH /finance/categories/:id` (absent field left alone, so a rename cannot clear it). `GET /staff-expenses/meta` adds `goods`: the active categories ticked. On the phone's claim form, **picking a category sets the box from that list** — a goods category ticks it, any other unticks it — and the person can still change it after. The form still opens unticked, *Record another* and reopening the screen both untick it (reopening did not before: a ticked box survived leaving and coming back). **A STARTING ANSWER, NOT A RULE:** nothing on the server or in `lib/expense-claim.js` reads `is_goods`; the claim's own `awaiting_delivery` decides exactly as before, so no claim already sent changes meaning. **One label fixed with it:** *Note · optional* drops *optional* while the box is ticked, since §114 requires the note then. A goods category's list is read when the form first loads, so a tick made on Categories reaches an open phone on its next reload. **One string composed**, `Goods · 货品`, declared in `docs/tacet-delivery-vocabulary.md` v1.318. One migration, no new route, no capability change, and no change to `.gitignore` or CI.
+
+2026-10-09 · v4.493 — **§446 · THE PHONE'S MORE LIST IS SHORT, AND WHAT LIT ITS DOT IS AT THE TOP — DECIDED BY ASH:** *"more section mobile . scrolling too long .also once there is a green dot on more o need to look for what it is by scrolling endlessly"*, then, of three mockups, *"build A and B"*. A: the rows lighting the More dot are drawn first, under Home's `Needs you · 需要处理`. B: on a phone with a tab bar, each headed group folds to one row, closed by default, remembered per phone. A role with no tab bar is not folded. No Chinese composed. Amends §121's layout, not its grouping. See §446.
 
 2026-10-09 · v4.492 — **QUICK ACTIONS HOLD SEVEN, NOT SIX — ASKED BY ASH** from the phone with the picker open on five rows: *"add one more to quick action"*. `QUICK_MAX` in `public/m.html` goes from 6 to 7; nothing else about the list changes (same picker, same order, same keys kept when a screen is lost). The two messages that said the number in words now read it from `QUICK_MAX` — *"7 shortcuts is the most that fits · 最多只能放 7 个快捷方式"* and *"That is all 7. … · 已满 7 个。…"* — so the next change to the cap is one number. No Chinese was composed: the live strings are unchanged except for the numeral. `scripts/test_mobile_home.js` moves its three ceiling cases to seven and they were checked to fail with the cap put back to six.
 
@@ -29296,3 +29298,87 @@ all-or-nothing rule.
 
 Strings: none in the UI; the server's English refusal is reworded. Test:
 `scripts/test_transfer_line_sku.js` (9 of its 12 checks fail on the old code).
+
+## §446 — THE PHONE'S MORE LIST IS SHORT, AND WHAT LIT ITS DOT IS AT THE TOP
+
+**Decided by Ash, 2026-10-09:** off a screenshot of More, *"scrolling too
+long .also once there is a green dot on more o need to look for what it is by
+scrolling endlessly. give solutions mock up"*; then, of the three mockups
+drawn (A: Needs you on top, B: groups fold, C: search plus most used, which
+was recommended against), *"build A and B"*.
+
+**What was wrong.** An owner's More held about fifty-four rows: §118's seven
+questions, then forty-seven tools in §121's eleven groups. The More dot can
+mean only three rows (`tabDot`): *Send to another shop* when shops are
+asking (`waitingToPick`), *Ready from the kitchen* (`readyFromKitchen`) and
+*Inbox* with new reviews (`unseenReviews`). They sat around rows 15, 30 and
+35, so finding what the dot meant was a scroll through the whole list.
+
+**The ruling.**
+1. **Needs you, first.** Every More row that is lighting the dot right now is
+   drawn at the very top of More, above the setup card and the questions,
+   under the heading `Needs you · 需要处理`, copied whole from Home's section
+   of the same name. It reads the same `moreRowDot` / `moreRowCount` the
+   rows and `tabDot` read, so the card and the dot cannot disagree: no dot,
+   no card. The rows also stay in their groups; the card is a shortcut, not
+   a move.
+2. **Groups fold.** On a phone with a tab bar, each headed group is one row:
+   its heading and, while closed, the Sage dot when a row inside wants you.
+   A tap opens it in place. Which groups are open is remembered on the phone
+   (`tacet-m-more-open`), as the questions strip already is. **All closed is
+   the default, for every role alike**, because §121 rejected a rule that
+   changes the screen's shape with the row count. The headless group
+   (Settings) stays a plain row.
+3. **No count of tools on a folded group.** The mockup showed one. It was
+   dropped in the building: on this screen a number on a row means that many
+   are waiting (§293's Inbox badge), so "5" beside *Money and numbers* would
+   read as five things to do.
+4. **Not on a role with no tab bar (`flatNav`).** There More is the home
+   screen and its tools are the whole app, so folding would put a picker's
+   one screen behind a heading. That is keyed to the mode, not to a count.
+
+**Not changed.** §121's groups, their order and their rows; §118's question
+strip and its remembered Hide; the search index and the Quick actions picker,
+which read `moreRowsFlat()` and never the drawn list; the desktop.
+
+**Rejected: C, search and "most used" on More.** Search is already in the
+header of every top-level screen, and Quick actions on Home already hold the
+operator's own shortcuts. A third way to reach every screen is the drift this
+file keeps out, and a "most used" list moves as habits change, so staff
+cannot learn where anything is.
+
+Strings: none composed; `Needs you · 需要处理` is copied whole from Home.
+Tests: `scripts/test_mobile_more_fold.js` (11 of its 14 cases fail on the old
+code; the three that pass are absence checks that held before too), a source
+check in `scripts/test_mobile_ops_groups.js`, and the More cases in
+`test_mobile_dots.js`, `test_mobile_nav.js` and `test_mobile_ask_strip.js`
+updated to the folded list.
+
+## §447 — MORE'S GROUPS CLOSE AGAIN WHEN YOU LEAVE MORE
+
+**Decided by Ash, 2026-10-09:** off a screenshot of More with *Money and
+numbers* left open, *"once go our from more fold again all automatic don't
+leave it open"*.
+
+**Amends §446 rule 2.** The phone no longer remembers which groups are open.
+A group opens on a tap and stays open while you stay on More; the moment the
+screen changes to anything else (another tab, or a tool pushed from More,
+such as *Sales*), every group is closed again. Coming back to More, by Back
+or by the tab, always finds the short folded list.
+
+1. **"Leaving More" is a change of screen**, read off the same `screenKey()`
+   the scroll memory uses, in `render()`. A repaint of More itself (a poll,
+   a dot arriving, a sheet opening over it) is not leaving, so an open group
+   does not snap shut while you are reading it.
+2. **Nothing is stored.** The open set lives in memory only, and the old
+   `tacet-m-more-open` key is removed from the phone on load, so a group left
+   open under §446 does not come back.
+3. **The trade-off, accepted:** Back from a tool opened inside a group lands
+   on the folded list, and the group is one tap away again. That is what was
+   asked: the list is short every time More is arrived at.
+
+**Not changed.** Everything else in §446: Needs you first, the dot on a
+closed group, all closed by default, no folding on a role with no tab bar.
+
+Strings: none. Test: `scripts/test_mobile_more_fold.js`, its remembering
+cases replaced by leaving-and-returning cases.
