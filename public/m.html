@@ -1562,7 +1562,7 @@ const state = {
   rf:null,
   /* §325 O6 — "Ship part later": the parcel being split and the lines ticked;
      and the orders whose split suggestion was dismissed this session. */
-  splitPick:null, splitDismissed:[], shipTo:null, qy:null, jd:null,
+  splitPick:null, splitDismissed:[], shipTo:null, qy:null, qyPlace:null, jd:null,
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
@@ -2702,7 +2702,7 @@ reg('ordViewDel', id=>{
 /* reg('openOrder') is registered ONCE, with the live orders (§325 T1). A
    one-line copy here from the mock-data days was overwritten by that later
    registration before anybody could tap, so it never ran and is gone. */
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null;
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null; if(state.qyPlace) clearTimeout(state.qyPlace.timer); state.qyPlace=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
   state.ordNoteOpen=null;
@@ -4024,7 +4024,7 @@ function qyCarrierPanel(o){
   const list=(d.carriers||[]).filter(x=>x&&x.enabled);
   if(!list.length) return qyNote(T('No couriers available right now.','当前暂无可用运力。'));
   const dis=state.orderBusy?' disabled':'';
-  return `<div style="display:flex;flex-direction:column">${list.map(x=>{
+  return `${qyDestBlock(o)}<div style="display:flex;flex-direction:column">${list.map(x=>{
       const k=x.carrierId+'|'+x.serviceCode, on=!!q.pick[k];
       return `<button role="checkbox" aria-checked="${on?'true':'false'}"${dis} onclick="APP.cmd('qyCarrierT','${escAttr(k)}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border:none;border-top:1px solid var(--hairline);background:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
         <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};background:${on?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${on?ic('check',15,2.5):''}</span>
@@ -4252,6 +4252,230 @@ reg('qyDispatch', ()=>{
     }};
   render();
 });
+/* ── §448 — WHERE THE RIDER GOES, AND CHANGING IT BY TYPING ─────────────────
+   Asked by Ash: the address on a Qingyun order is "almost always wrong", and
+   fixing it by tapping a map is too hard on a tablet. So the courier list
+   opens with the address the rider will be sent to and a small map of the
+   point, and "Search a place" lets staff type a name, pick it from the list
+   and type the building and room. The map is only for LOOKING; nothing here
+   asks anyone to tap it.
+
+   A pick goes to POST …/qingyun/set-place, which stamps 'poi_picked' (the
+   source confirm-place writes for a name chosen off a list) and, when a copy
+   already waits in Qingyun, swaps it for one built from the new address
+   before answering. The courier prices are then read again, so a Dispatch
+   pressed after a change can only reach the new copy. A refusal writes
+   nothing (the route builds the new copy before it touches the order), so
+   "Save failed" is true as it stands: the old address and copy remain. */
+function qyPlaceBtn(o){
+  if(!qyCanEdit(o)||!o.shipTo) return '';
+  return qyBtn(T('Search a place','搜索地点'),"APP.cmd('qyPlaceOpen')");
+}
+const qyAddrLine=a=>[a.district,a.address,a.detail].filter(Boolean).join(' ');
+function qyDestBlock(o){
+  if(!o.shipTo) return '';
+  const p=o.shipFrom&&o.shipFrom.dropoff;
+  const map=(p&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lng)))
+    ?`<div id="qyDestMap" data-lat="${Number(p.lat)}" data-lng="${Number(p.lng)}" style="position:relative;height:150px;border-radius:12px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary)">${T('Loading map…','正在加载地图…')}</div></div>`
+    :qyNote(T('No point placed yet','尚未标记配送点'));
+  return `<div style="display:flex;flex-direction:column;gap:8px;padding-bottom:10px">
+    <span class="eyebrow">${T('Ship to','收货地址')}</span>
+    <div style="font-size:14.5px;font-weight:500;line-height:1.5;overflow-wrap:anywhere">${escAttr(qyAddrLine(o.shipTo))}</div>
+    ${map}
+    ${qyCanEdit(o)?`<div style="display:flex;gap:8px;flex-wrap:wrap">${qyPlaceBtn(o)}</div>`:''}</div>`;
+}
+/* The results are painted IN PLACE, never by render(): the whole page is one
+   innerHTML, and a repaint while staff are typing pinyin would throw away the
+   word the input method is still composing. */
+function qyPlaceListHtml(){
+  const s=state.qyPlace; if(!s) return '';
+  if(s.err) return qyNote(s.err,'brick-ink');
+  if(s.loading&&!s.results) return qyNote(T('Loading…','加载中…'));
+  if(!s.results) return '';
+  if(!s.results.length) return qyNote(T('No places found','未找到地点'));
+  return s.results.map((c,i)=>`<button onclick="APP.cmd('qyPlacePick',${i})" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:11px 0;border:none;border-top:1px solid var(--hairline);background:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+      <span style="font-size:14.5px;font-weight:500;overflow-wrap:anywhere">${escAttr(c.name||'')}</span>
+      <span style="font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(c.address||'')}</span></button>`).join('');
+}
+function qyPlacePaint(){
+  const el=document.getElementById('mQyPlaceList');
+  if(el) el.innerHTML=qyPlaceListHtml();
+}
+function sheetQyPlace(){
+  const s=state.qyPlace; if(!s) return '';
+  const o=currentOrder(); if(!o||o.id!==s.oid||!o.shipTo) return '';
+  const head=`<div style="flex:none;padding:8px 12px 12px 20px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:8px">
+         <span style="flex:1;font-size:18px;font-weight:500">${T('Search a place','搜索地点')}</span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('qyPlaceClose')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button></div>
+       <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;line-height:1.5;padding-right:8px">${T('This changes the address on this order only.','仅修改此订单的收货地址。')}</div></div>`;
+  const was=`<div style="padding:10px 12px;border-radius:10px;background:var(--surface-raised)">
+      <span class="eyebrow">${T('As entered','原始地址')}</span>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-top:4px;overflow-wrap:anywhere">${escAttr(qyAddrLine(o.shipTo))}</div></div>`;
+  let body, foot='';
+  if(!s.pick){
+    body=`${was}
+      <input id="mQyPlaceKw" type="search" autocomplete="off" value="${escAttr(s.kw)}" placeholder="${escAttr(T('Search a place or road','搜索地点或道路'))}"
+        oninput="APP.cmd('qyPlaceKw',this.value,!!(event&&event.isComposing))" oncompositionend="APP.cmd('qyPlaceKw',this.value,false)">
+      <div id="mQyPlaceList">${qyPlaceListHtml()}</div>`;
+  } else {
+    const p=s.pick;
+    body=`${was}
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500;overflow-wrap:anywhere">${escAttr(p.name||'')}</span>
+          <span style="display:block;font-size:12.5px;color:var(--text-secondary);overflow-wrap:anywhere">${escAttr(p.address||'')}</span></span>
+        <button class="btn2" style="width:auto;flex:none;padding:7px 12px;font-size:13px"${s.saving?' disabled':''} onclick="APP.cmd('qyPlaceBack')">${T('Back','返回')}</button></div>
+      <div id="qyPlaceMap" data-lat="${Number(p.lat)}" data-lng="${Number(p.lng)}" style="position:relative;height:170px;border-radius:12px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary)">${T('Loading map…','正在加载地图…')}</div></div>
+      <label style="display:block"><span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Unit / floor (optional)','单元 / 楼层(可选)')}</span>
+        <input id="mQyPlaceDetail" value="${escAttr(s.detail)}" maxlength="200"${s.saving?' disabled':''} oninput="APP.cmd('qyPlaceDetail',this.value)"></label>`;
+    foot=`<div style="flex:none;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default)">
+       ${s.saveErr?`<div style="margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${s.saveErr}</div>`:''}
+       <div style="display:flex;gap:8px">
+         <button class="btn2" style="flex:1"${s.saving?' disabled':''} onclick="APP.cmd('qyPlaceClose')">${T('Cancel','取消')}</button>
+         <button class="cta" style="flex:1"${s.saving?' disabled':''} onclick="APP.cmd('qyPlaceSave')">${s.saving?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
+  }
+  return `<div class="scrim" style="z-index:47" onclick="APP.scrimClose('qyPlaceClose')"></div>
+   <div class="sheet" style="z-index:48;top:46px;overflow:hidden;padding:0">${head}
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px">${body}</div>${foot}
+   </div>`;
+}
+reg('qyPlaceOpen', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!qyCanEdit(o)||!o.shipTo||state.qyPlace) return;
+  state.qyPlace={oid:o.id, kw:'', results:null, loading:false, err:null, seq:0, timer:null,
+    pick:null, detail:o.shipTo.detail||'', saving:false, saveErr:null,
+    carriersOpen:qyPanelOpen(o,'carriers')};
+  state.focus={id:'mQyPlaceKw'};
+  render();
+});
+reg('qyPlaceClose', ()=>{
+  const s=state.qyPlace; if(!s||s.saving) return;
+  clearTimeout(s.timer); state.qyPlace=null; render();
+});
+/* Searched on a pause, two characters or more, and never while an input
+   method is still composing — the letters of a half-typed pinyin word are not
+   a search. The latest answer wins (seq). */
+reg('qyPlaceKw', (v,composing)=>{
+  const s=state.qyPlace; if(!s||s.pick) return;
+  s.kw=String(v==null?'':v);
+  clearTimeout(s.timer);
+  if(composing) return;
+  const kw=s.kw.trim();
+  if(kw.length<2){ s.seq++; s.results=null; s.loading=false; s.err=null; qyPlacePaint(); return; }
+  s.timer=setTimeout(()=>{
+    const t=state.qyPlace; if(t!==s) return;
+    const o=currentOrder(); if(!o||o.id!==s.oid||!o.shipTo) return;
+    const my=++s.seq, p=(o.shipFrom&&(o.shipFrom.dropoff||o.shipFrom.guess))||null;
+    s.loading=true; s.err=null; qyPlacePaint();
+    apiWrite('/poi-search',{keyword:kw, city:o.shipTo.city||'', lat:p?p.lat:null, lng:p?p.lng:null}).then(j=>{
+      if(state.qyPlace!==s||my!==s.seq) return;
+      s.loading=false;
+      // no_result is an answer; a missing key or a failed lookup is not, and
+      // must not read as "nothing is called that".
+      if(j&&j.success===false&&j.error!=='no_result'){ s.results=null; s.err=T('Load failed','加载失败'); qyPlacePaint(); return; }
+      s.results=(j&&j.success&&Array.isArray(j.data))?j.data.filter(x=>x&&x.name&&Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lng))):[];
+      qyPlacePaint();
+    }).catch(e=>{
+      if(state.qyPlace!==s||my!==s.seq||String(e.message)==='auth') return;
+      s.loading=false; s.results=null; s.err=e.refused?T(...e.words):T('Load failed','加载失败'); qyPlacePaint();
+    });
+  },350);
+});
+reg('qyPlacePick', i=>{
+  const s=state.qyPlace; if(!s||s.saving||!Array.isArray(s.results)) return;
+  const c=s.results[Number(i)]; if(!c) return;
+  clearTimeout(s.timer); s.pick=c; s.saveErr=null;
+  render();
+});
+reg('qyPlaceBack', ()=>{
+  const s=state.qyPlace; if(!s||s.saving) return;
+  s.pick=null; s.saveErr=null; state.focus={id:'mQyPlaceKw'}; render();
+});
+// Typing never repaints; the box keeps its caret. The value waits for Save.
+reg('qyPlaceDetail', v=>{ const s=state.qyPlace; if(s) s.detail=String(v==null?'':v); });
+const QY_PLACE_ERR={
+  courier_already_called:['A courier is already on it — cancel it in the Qingyun app first','已呼叫运力 — 请先在青云 App 取消'],
+  order_closed:QY_CLOSED, row_moved:QY_MOVED_ON,
+  row_busy:['Being sent right now — try again in a moment','正在发单，请稍后重试'],
+  push_retired:QY_MOVED_ON,
+  store_unavailable:["That location's Qingyun account isn't wired up yet — ask ops to set it up",'该门店的青云账号尚未接通 — 请联系运维配置'],
+  pickup_order:['Pickup order — no shipping address','自提订单 — 无收货地址'],
+};
+reg('qyPlaceSave', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const s=state.qyPlace, o=currentOrder();
+  if(!s||!s.pick||s.saving||!o||o.id!==s.oid||!qyCanEdit(o)) return;
+  const p=s.pick;
+  s.saving=true; s.saveErr=null; render();
+  const fail=j=>{
+    const t=state.qyPlace; if(t!==s) return;
+    s.saving=false;
+    const code=j&&j.error;
+    s.saveErr=code==='too_far'&&j.drop_km!=null
+      ?T('That place is '+j.drop_km+' km from the store — too far for a same-city rider','该地点距门店 '+j.drop_km+' 公里 — 超出同城配送范围')
+      :QY_PLACE_ERR[code]?T(...QY_PLACE_ERR[code])
+      :T('Save failed','保存失败')+((j&&j.detail)?': '+escAttr(j.detail):'');
+    render();
+  };
+  apiWrite('/orders/'+o._id+'/qingyun/set-place',{name:p.name, district:p.district||'', lat:Number(p.lat), lng:Number(p.lng), detail:s.detail})
+    .then(j=>{
+      if(!j||j.success===false) return fail(j||{});
+      const reopen=s.carriersOpen;
+      state.qyPlace=null;
+      if(state.qy&&state.qy.oid===o.id) state.qy=null;
+      render();
+      showToast(j.recreated?T('Address updated','地址已更新')
+        :T('Picked '+(j.name||p.name)+' — sending it to the channel, about a minute','已选择 '+(j.name||p.name)+' — 约一分钟内发单'));
+      // The old prices were quoted for the old copy. Read them again, against
+      // the copy that now carries the address staff just picked.
+      return rereadOrder(o).then(()=>{ if(reopen&&j.recreated&&state.detailId===o.id) APP.cmd('qyCarriers'); });
+    })
+    .catch(e=>{
+      if(String(e.message)==='auth') return;
+      if(e.refused){ const t=state.qyPlace; if(t===s){ s.saving=false; s.saveErr=T(...e.words); render(); } return; }
+      fail(e.body||{error:e.code});
+    });
+});
+/* The small "look, not tap" map. One instance, moved between the sheet's
+   host and the courier block's host after each repaint (the rider map's
+   reason: rebuilding an AMap on every toast would flash it). */
+let _ptMap=null;
+function ptMapTeardown(){
+  if(!_ptMap) return;
+  try{ _ptMap.map&&_ptMap.map.destroy(); }catch(e){ /* already torn down with its node — nothing left to free */ }
+  _ptMap=null;
+}
+function ptMapSync(){
+  const host=document.getElementById('qyPlaceMap')||document.getElementById('qyDestMap');
+  const lat=host?Number(host.dataset.lat):NaN, lng=host?Number(host.dataset.lng):NaN;
+  if(!host||!Number.isFinite(lat)||!Number.isFinite(lng)){ ptMapTeardown(); return; }
+  if(!_ptMap){
+    const st={node:document.createElement('div'),map:null,marker:null,pos:{lat,lng}};
+    st.node.style.cssText='position:absolute;inset:0';
+    _ptMap=st;
+    mAmapLoad().then(()=>{
+      if(_ptMap!==st||!window.AMap) return;
+      const ll=[st.pos.lng,st.pos.lat];
+      st.map=new AMap.Map(st.node,{zoom:16,resizeEnable:true,jogEnable:false,center:ll});
+      st.marker=new AMap.Marker({position:ll,content:riderMarkerHtml(T('Customer','收货'),{color:'var(--text-primary)',size:13,ring:true}),anchor:'center',zIndex:100});
+      st.marker.setMap(st.map);
+    }).catch(()=>{
+      if(_ptMap!==st) return;
+      st.node.innerHTML=`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary);background:var(--surface-raised)">${T('Map unavailable','地图暂不可用')}</div>`;
+    });
+  }
+  const st=_ptMap;
+  if(st.node.parentNode!==host){
+    host.innerHTML=''; host.appendChild(st.node);
+    if(st.map){ try{ st.map.resize(); }catch(e){ /* a resize on a map mid-load; the next repaint sizes it */ } }
+  }
+  if(st.pos.lat!==lat||st.pos.lng!==lng){
+    st.pos={lat,lng};
+    if(st.map){ try{ st.map.setZoomAndCenter(16,[lng,lat]); st.marker&&st.marker.setPosition([lng,lat]); }catch(e){ /* the map is look-only; a missed move is redrawn on the next repaint */ } }
+  }
+}
 /* The printer can succeed as a request and fail as a print — the endpoint says
    so with ok:false, and so does this.
 
@@ -38742,7 +38966,7 @@ function shipFromCard(o){
           +((g.en||g.cn)?sub(escAttr(T(g.en||g.cn,g.cn||g.en))):'')
           +urgent
           +sub(T('The point is placed on the desktop map.','配送点请在电脑端地图上标记。'))
-          +btns([editShipTo]),true);
+          +btns([qyPlaceBtn(o),editShipTo]),true);
       }
       /* Each place is its own button and choosing IS the confirm — nothing is
          pre-selected (the desktop's qpPickPlace). Only the index travels. */
@@ -38758,7 +38982,7 @@ function shipFromCard(o){
               :`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--hairline)">${inner}</div>`;
           }).join('')}</div>`
         +sub(busy?T('Working…','处理中…'):T('Distances are from the store the rider collects from.','距离为骑手取货门店到该地点的距离。'))
-        +urgent+btns([editShipTo]),true);
+        +urgent+btns([qyPlaceBtn(o),editShipTo]),true);
     }
     const refused=!!sf.needs_attention, held=!refused&&!!sf.push_held,
           booked=!refused&&!held&&!!sf.awaiting_dispatch;
@@ -38771,7 +38995,7 @@ function shipFromCard(o){
       +(held?sub(T('Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.','地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')):'')
       +((booked&&qyCompareShown(o))?sub(T('The address is checked. Compare couriers below when you want a rider — nothing is charged until you dispatch.','地址已核对。需要骑手时点击下方“查看运力比价” — 发起配送前不产生费用。')):'')
       +((refused&&can)?sub(T('Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.','修正收货地址(修改收货地址或转为中文地址)后会自动重试,也可点击重新发单。'))
-          +btns([qyBtn(state.orderBusy==='qyretry'?T('Queuing…','排队中…'):T('Retry push','重新发单'),"APP.cmd('qyRetryPush')")]):'')
+          +btns([qyBtn(state.orderBusy==='qyretry'?T('Queuing…','排队中…'):T('Retry push','重新发单'),"APP.cmd('qyRetryPush')"),qyPlaceBtn(o)]):'')
       +qyCourierOps(o),
       refused||held);
   }
@@ -48095,6 +48319,7 @@ function render(){
   if(state.detailActions) html += layer('actions', sheetActions());
   if(state.rf&&state.detailId) html += layer('rf:'+state.rf.kind, sheetRefundForm());
   if(state.shipTo&&state.detailId===state.shipTo.oid) html += layer('shipto:'+state.shipTo.mode, sheetShipTo());
+  if(state.qyPlace&&state.detailId===state.qyPlace.oid) html += layer('qyplace', sheetQyPlace());   // one key: picking must not slide the sheet in again
   if(state.jd&&state.detailId===state.jd.oid) html += layer('jd:'+state.jd.sid, sheetJd());
   if(state.productSku) html += layer('prod:'+state.productSku, sheetProduct());
   // §325 PD4 — a shop menu's row sheet and its Add product picker.
@@ -48172,6 +48397,7 @@ function render(){
      the freshly written DOM rather than rebuilt, and torn down when the sheet
      it belongs to is no longer on screen. */
   riderMapSync();
+  ptMapSync();   // §448 — the delivery point's "look, not tap" map
   syncHistory();
   if(state.focus){ const el=document.getElementById(state.focus.id);
     if(el){ el.focus();

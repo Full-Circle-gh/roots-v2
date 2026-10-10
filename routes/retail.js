@@ -31947,6 +31947,36 @@ function _orderDatePosture(retailOrderId) {
   };
 }
 
+// Where a rider would be sent, for the map in the tablet's Ship to block (§448).
+// Qingyun's own copy first — delivery_jobs holds the drop-off it read back
+// from the platform, so that IS the point a rider sees. Before the daemon has
+// read a fresh copy, the order's own point, but only from a source the payload
+// builder would take as it stands (lib/qingyun-payload pinIsTrusted): an
+// unverified pin is re-resolved at push time, so drawing it would show a spot
+// nobody is going to. Null when neither is known; the screen says so.
+const _DROPOFF_SOURCES = new Set(['customer_pin', 'staff_pin', 'poi_picked', 'poi_auto']);
+function _qingyunDropoff(retailOrderId, q) {
+  if (q && q.qingyun_order_id) {
+    try {
+      const j = tdb().prepare('SELECT recipient_lat, recipient_lng FROM delivery_jobs WHERE qingyun_order_id = ?')
+        .get(String(q.qingyun_order_id));
+      if (j && j.recipient_lat && j.recipient_lng) {
+        return { lat: j.recipient_lat / 1e6, lng: j.recipient_lng / 1e6, from: 'qingyun' };
+      }
+    } catch (_) { /* table absent pre-migration — fall back to the order */ }
+  }
+  try {
+    const o = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(retailOrderId);
+    const a = JSON.parse((o && o.address_json) || '{}') || {};
+    const lat = Number(a.lat), lng = Number(a.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+    const src = String(a.geo_source || '');
+    const ok = _DROPOFF_SOURCES.has(src)
+      || (/^geocode:/.test(src) && (a.geo_precision === 'rooftop' || a.geo_precision === 'street'));
+    return ok ? { lat, lng, from: 'order', source: src } : null;
+  } catch (_) { return null; }
+}
+
 // Where this order is set to be collected, and whether that can still be changed.
 // Attached to the drawer payload (o.qingyun_ship_from) — see the order detail route.
 function qingyunShipFromState(retailOrderId) {
@@ -32038,6 +32068,8 @@ function qingyunShipFromState(retailOrderId) {
       // The grade in words. Never a code, and never a dash: an unrecorded
       // grade is a fact about what we know, so it gets said in words too.
       guess_grade: _pointGradeWords(q.guessed_precision),
+      // Where the rider would go, for the tablet's Ship to map (§448).
+      dropoff: _qingyunDropoff(retailOrderId, q),
       // Expiry (spec §5.2). A same-day slot never expires; a date-scheduled
       // order dies at midnight and cannot be retried back to life.
       ..._orderDatePosture(retailOrderId),
@@ -32052,6 +32084,7 @@ function qingyunShipFromState(retailOrderId) {
     push_error: null,
     needs_attention: false,
     blocked_by: _qingyunMoveBlockedBy(q.qingyun_order_id),   // null = still movable
+    dropoff: _qingyunDropoff(retailOrderId, q),               // §448 — the Ship to map
     // An old copy we failed to delete after a move — still dispatchable by whoever
     // is standing at that store, so the drawer surfaces it until it's gone.
     stale: q.stale_qingyun_order_id
@@ -32502,6 +32535,215 @@ router.post('/api/retail-admin/orders/:id/qingyun/reject-places', requireRetailA
   logActivity(req.user.id, req.user.username, 'qingyun_reject_places', 'retail_order', id,
     { candidates: qingyunQueue.readCandidates(q).map(c => c.name || '') }, req.ip);
   res.json({ success: true, push_status: 'needs_point' });
+});
+
+// ── Change the address by searching for it — §448 ─────────────────────────
+// Staff typed a place name, picked it from the search list, and typed the
+// building and room. This puts that address on the order and, when a copy is
+// already waiting in Qingyun, swaps the copy for one built from it BEFORE
+// answering — so the courier list the tablet reloads next is priced against
+// the new address, and a Dispatch pressed straight after can only reach it.
+//
+// Why it is not the Edit ship-to route. That route clears the pin and leaves
+// the resolver to guess again, and its Qingyun resync runs detached: a
+// Dispatch pressed in the gap goes to the old copy, at the old address. This
+// one carries the point the person picked, and does the swap inline.
+//
+// Provenance is 'poi_picked', the source confirm-place writes, for the same
+// reason: a person chose a NAME off a list. They did not tap a building, so
+// it is not 'staff_pin' and does not get that source's exemption from
+// MAX_DROP_KM. A picked place 30km out is refused here, before anything is
+// written, rather than discovered by a rider.
+//
+// The coordinates come from the client, as confirm-point's do; a search
+// result is no more a server-held value than a map tap is. They go through
+// the same China bounds check, and the weaker source keeps the distance rule.
+//
+// Order of the copy swap is the ship-from move's: create the new copy, then
+// repoint the queue row (guarded on the old id, so a dispatch or another swap
+// that landed during the awaits wins), then delete the old copy. A failure
+// anywhere before the repoint writes nothing at all, and the new copy is
+// deleted again.
+router.post('/api/retail-admin/orders/:id/qingyun/set-place', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const b = req.body || {};
+  const name = String(b.name == null ? '' : b.name).replace(/\s+/g, ' ').trim().slice(0, 100);
+  if (!name) return res.status(400).json({ success: false, error: 'bad_place' });
+  const pin = addressPin.readClientPin(b);
+  if (!pin) return res.status(400).json({ success: false, error: 'bad_point' });
+  const district = String(b.district == null ? '' : b.district).trim().slice(0, 40);
+  const detail = String(b.detail == null ? '' : b.detail).replace(/\s+/g, ' ').trim().slice(0, 200);
+
+  const q = _qingyunPushRow(id);
+  if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+  // Retired rows (not same-day, or the order closed) are not brought back by an
+  // address — the same reasoning REQUEUE_SQL gives for leaving them out.
+  if (q.status === 'skipped') return res.status(409).json({ success: false, error: 'push_retired' });
+  // The drain or the price list is building a copy from the OLD address right
+  // now. Writing under it would leave that copy carrying the address this
+  // request is replacing, so say "a moment" rather than race it.
+  if (!q.qingyun_order_id && q.status === 'processing') {
+    return res.status(409).json({ success: false, error: 'row_busy' });
+  }
+
+  const o = tdb().prepare(
+    `SELECT id, order_no, status, recipient_name, recipient_phone, address_json, address_full,
+            scheduled_for, delivery_slot_label
+       FROM retail_orders WHERE id = ?`
+  ).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (qingyunQueue.isClosedOrderStatus(o.status)) {
+    return res.status(409).json({ success: false, error: 'order_closed', status: o.status });
+  }
+  let addr = {};
+  try { addr = JSON.parse(o.address_json || '{}') || {}; } catch { addr = {}; }
+  if (addr.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+
+  // Province and city stay: a same-city rider's search is biased to the city
+  // already on the order, and the search result's own region is a display
+  // string, not a field this order's region names were resolved from.
+  const next = {
+    ...addr,
+    address: name,
+    district: district || addr.district || null,
+    detail: detail || null,
+    lat: pin.lat, lng: pin.lng, geo_source: 'poi_picked', geo_precision: null,
+  };
+  const nextFull = [next.province, next.city, next.district, next.address, next.detail].filter(Boolean).join(' ');
+  const before = {
+    address_full: o.address_full || null,
+    lat: addr.lat != null ? addr.lat : null, lng: addr.lng != null ? addr.lng : null,
+    geo_source: addr.geo_source || null,
+  };
+  const writeOrder = (tx) => tx.prepare(
+    'UPDATE retail_orders SET address_json = ?, address_full = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(JSON.stringify(next), nextFull, id);
+
+  // ── No copy in Qingyun yet ────────────────────────────────────────────────
+  // Write the address and hand the row back to the drain, exactly as
+  // confirm-place does. A 'pending' row needs nothing more: the drain reads the
+  // order when it claims the row.
+  if (!q.qingyun_order_id) {
+    let requeued = false;
+    try {
+      requeued = await withTransaction(tdb(), (tx) => {
+        writeOrder(tx);
+        return tx.prepare(qingyunQueue.REQUEUE_SQL).run('requeued after address picked from search', id).changes > 0;
+      });
+    } catch (e) {
+      console.error('[qingyun set-place]', e.message);
+      return res.status(500).json({ success: false, error: 'save_failed' });
+    }
+    logActivity(req.user.id, req.user.username, 'qingyun_set_place', 'retail_order', id,
+      { name, detail, lat: pin.lat, lng: pin.lng, source: 'poi_picked', before, recreated: false }, req.ip);
+    const fresh = _qingyunPushRow(id) || {};
+    return res.json({ success: true, recreated: false, requeued, push_status: fresh.status || q.status, name });
+  }
+
+  // ── A copy is waiting in Qingyun ──────────────────────────────────────────
+  const oldQyId = String(q.qingyun_order_id);
+  // Same test the ship-from move and the Edit ship-to resync use: once a
+  // courier holds the old copy, swapping it out would send that rider to a
+  // door nobody gave them. Staff cancel it in the Qingyun app first.
+  const blocked = _qingyunMoveBlockedBy(oldQyId);
+  if (blocked) return res.status(409).json({ success: false, error: 'courier_already_called', stage: blocked });
+
+  const { getQingyunBrowser } = require('../lib/qingyun-browser');
+  const { buildCreatePayload } = require('../lib/qingyun-payload');
+  let br, created;
+  try {
+    br = await getQingyunBrowser(q.store_code);
+    const shop = await br.getShop();
+    if (!shop || !shop.shopId) return res.json({ success: false, error: 'store_unavailable' });
+    let payload;
+    try {
+      payload = await buildCreatePayload({ ...o, address_json: JSON.stringify(next) }, shop, br, {
+        geocode,
+        translateCn: addressCn.translateToChinese,
+        goodsPicUrl: cfgValue('delivery.qingyunGoodsPicUrl', QY_GOODS_PIC_DEFAULT),
+        onWarn: (m) => console.warn('[qingyun set-place]', m),
+      });
+    } catch (e) {
+      // The payload builder's refusals. With a picked point on the order the
+      // one that can bite is distance, and it is the one worth naming.
+      const g = e && e._geo;
+      if (g && g.dropKm != null) return res.status(422).json({ success: false, error: 'too_far', drop_km: g.dropKm });
+      return res.status(422).json({ success: false, error: 'place_refused', detail: String((e && e.message) || '').slice(0, 300) });
+    }
+    created = await br.createOrder(payload);
+    if (!created || !created.ok || !created.orderId) {
+      return res.json({ success: false, error: 'create_failed', detail: String((created && created.msg) || '').slice(0, 300) });
+    }
+  } catch (e) {
+    console.error('[qingyun set-place]', e.message);
+    return res.json({ success: false, error: 'create_failed' });
+  }
+
+  // Everything below runs after two network awaits. A dispatch, a cancel or
+  // another swap may have landed in that time; each guard below gives way to
+  // it, and the copy just made is deleted rather than left for someone to
+  // dispatch by mistake.
+  const newQyId = String(created.orderId);
+  // _qingyunDeleteCopy never throws (it reports through its return value); the
+  // catch is only a guard on that contract, and the refusal below is the answer.
+  const discardNew = () => _qingyunDeleteCopy(q.store_code, newQyId).catch(() => { /* contract guard only, see above */ });
+  const lateBlock = _qingyunMoveBlockedBy(oldQyId);
+  if (lateBlock) {
+    await discardNew();
+    return res.status(409).json({ success: false, error: 'courier_already_called', stage: lateBlock });
+  }
+  try {
+    await withTransaction(tdb(), (tx) => {
+      const cur = tx.prepare('SELECT status FROM retail_orders WHERE id = ?').get(id);
+      if (!cur || qingyunQueue.isClosedOrderStatus(cur.status)) throw new Error('order_closed');
+      writeOrder(tx);
+      const r = tx.prepare(
+        `UPDATE qingyun_push_queue
+            SET qingyun_order_id = ?, status = 'done', last_error = NULL, updated_at = CURRENT_TIMESTAMP
+          WHERE retail_order_id = ? AND qingyun_order_id = ?`
+      ).run(newQyId, id, oldQyId);
+      if (!r.changes) throw new Error('row_moved');
+      // Marked superseded so the daemon never re-links the old copy by the
+      // order number both carry in their 备注 (the ship-from move's reason).
+      tx.prepare(
+        `INSERT INTO delivery_jobs (qingyun_order_id, store_code, retail_order_id, superseded)
+         VALUES (?, ?, NULL, 1)
+         ON CONFLICT(qingyun_order_id) DO UPDATE SET
+           superseded = 1, retail_order_id = NULL, updated_at = CURRENT_TIMESTAMP`
+      ).run(oldQyId, q.store_code);
+    });
+  } catch (e) {
+    await discardNew();
+    if (e.message === 'order_closed') return res.status(409).json({ success: false, error: 'order_closed' });
+    if (e.message === 'row_moved') return res.status(409).json({ success: false, error: 'row_moved' });
+    console.error('[qingyun set-place]', e.message);
+    return res.status(500).json({ success: false, error: 'save_failed' });
+  }
+
+  const removed = await _qingyunDeleteCopy(q.store_code, oldQyId);
+  if (!removed.ok) {
+    // Still dispatchable by whoever stands at that store. Recorded the way the
+    // ship-from move records it, so the drawer's "still in Qingyun" line and
+    // its Remove button pick it up.
+    try {
+      tdb().prepare(
+        `UPDATE qingyun_push_queue SET stale_qingyun_order_id = ?, stale_store_code = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE retail_order_id = ?`
+      ).run(oldQyId, q.store_code, id);
+    } catch (_) { /* column absent on an old DB — the log line below still says it */ }
+  }
+  try {
+    tdb().prepare(
+      `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail, error_msg)
+       VALUES (?, 'set_place', ?, ?, ?)`
+    ).run(q.store_code, removed.ok ? 'ok' : 'error', JSON.stringify({
+      order_no: o.order_no, old: oldQyId, new: newQyId, name, old_removed: removed.ok,
+    }), removed.ok ? null : String(removed.msg || '').slice(0, 300));
+  } catch (_) { /* logging must never sink the change */ }
+  logActivity(req.user.id, req.user.username, 'qingyun_set_place', 'retail_order', id,
+    { name, detail, lat: pin.lat, lng: pin.lng, source: 'poi_picked', before, recreated: true,
+      old: oldQyId, new: newQyId, old_removed: removed.ok }, req.ip);
+  res.json({ success: true, recreated: true, qingyun_order_id: newQyId, old_removed: removed.ok, name });
 });
 
 // ── Reschedule an expired delivery ────────────────────────────────────────

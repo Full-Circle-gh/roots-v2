@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.494
+# Tacet shared-core consolidation — decisions record, v4.495
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-10 · v4.495 — **§448 · THE TABLET SHOWS WHERE THE RIDER GOES, AND THE ADDRESS IS CHANGED BY TYPING — DECIDED BY ASH:** *"I want that the tenant will be able to see the address before confirming to call delivery guy … maybe a search bar"*, then *"fixing on the map is very hard , need a way to type the address"*, then *"build"*. The phone's courier list opens with the order's address and a look-only map of the drop-off point; *Search a place · 搜索地点* lets staff type a name, pick it, and type the room. A new route, `POST …/qingyun/set-place`, stamps `poi_picked` and swaps the waiting Qingyun copy before it answers. Amends the delivery-point spec's D1 and §5.4 for the phone only. 3 strings composed. See §448.
 
 2026-10-09 · v4.494 — **§114 AMENDED · A GOODS CATEGORY STARTS A CLAIM AS NOT ARRIVED YET — DECIDED BY ASH.** First ask, from the phone's Expense form: *"not arrived yet should be defult"*. Built that way, then flagged: most claims are things already in hand (a taxi, ginger), the approver cannot untick the box, and every one left ticked would raise a purchase order nobody receives. Offered a narrower rule; Ash: *"tick it by default for goods category"*, and chose a tick per category over a list in code. **THE CHANGE.** `categories.is_goods` (`INTEGER DEFAULT 0`, so nothing changes until somebody ticks one) with a **Goods · 货品** tick beside *Operating expense* on the desktop Finance › Categories table and the phone's Categories screen, both through the existing `PATCH /finance/categories/:id` (absent field left alone, so a rename cannot clear it). `GET /staff-expenses/meta` adds `goods`: the active categories ticked. On the phone's claim form, **picking a category sets the box from that list** — a goods category ticks it, any other unticks it — and the person can still change it after. The form still opens unticked, *Record another* and reopening the screen both untick it (reopening did not before: a ticked box survived leaving and coming back). **A STARTING ANSWER, NOT A RULE:** nothing on the server or in `lib/expense-claim.js` reads `is_goods`; the claim's own `awaiting_delivery` decides exactly as before, so no claim already sent changes meaning. **One label fixed with it:** *Note · optional* drops *optional* while the box is ticked, since §114 requires the note then. A goods category's list is read when the form first loads, so a tick made on Categories reaches an open phone on its next reload. **One string composed**, `Goods · 货品`, declared in `docs/tacet-delivery-vocabulary.md` v1.318. One migration, no new route, no capability change, and no change to `.gitignore` or CI.
 
@@ -29382,3 +29384,88 @@ closed group, all closed by default, no folding on a role with no tab bar.
 
 Strings: none. Test: `scripts/test_mobile_more_fold.js`, its remembering
 cases replaced by leaving-and-returning cases.
+
+## §448 — THE TABLET SHOWS WHERE THE RIDER GOES, AND THE ADDRESS IS CHANGED BY TYPING
+
+**Decided by Ash, 2026-10-10:** *"once delivery arrive I nguangxhou and need
+to pick a rider for delivery we call qingyun however the address is almost
+always wrong . I want that the tenant will be able to see the address before
+confirming to call delivery guy. if address is not correct , tenent can change
+it , maybe a search bar that connect with qingyun address archive"*; then, of a
+map-only fix, *"fixing on the map is very hard , need a way to type the
+address.aybe search bar for the map ?"*; then *"build"*.
+
+**What was wrong.** On the phone, *Compare couriers* → tick → *Dispatch* never
+showed the address. A wrong address was found by the rider. And the one fix the
+phone could not do at all was the delivery point: the parked card said
+*"The point is placed on the desktop map."*
+
+**The ruling.**
+1. **The courier list opens with the address.** Above the couriers, headed
+   `Ship to · 收货地址` (copied whole from the order sheet's own heading): the
+   district, street and room the waybill reads, and a small map of the point
+   the rider is sent to. The point is Qingyun's own copy of the drop-off
+   (`delivery_jobs.recipient_lat/lng`) when the daemon has read it back, else
+   the order's point **only from a source the payload builder takes as it
+   stands** (`customer_pin`, `staff_pin`, `poi_picked`, `poi_auto`, or a
+   geocode graded rooftop/street). An unverified point is re-resolved at push
+   time, so it is not drawn; no point says `No point placed yet · 尚未标记配送点`.
+   It adds no tap: the block sits inside the step staff already take.
+2. **The map is for looking.** Nothing on the phone asks anyone to tap a map.
+3. **Search a place.** A sheet with one box: staff type a name (two characters,
+   on a pause, never while the input method is still composing pinyin), the
+   map provider's places drop down, they tap one, check it on the map, and type
+   the building and room. What the customer wrote stays on the sheet under
+   `As entered · 原始地址`, so the room number can be copied across. The
+   search runs through the existing staff route `POST /poi-search` (the
+   server's map key), **not through Qingyun's logged-in browser**, which is the
+   same window that dispatches riders: a search on every keystroke there is
+   slow and risks the account being flagged, which would stop dispatch at
+   every store. Qingyun's own place search proxies the same map data.
+4. **`POST /api/retail-admin/orders/:id/qingyun/set-place`.** Writes the picked
+   name as the street line, the typed room as `detail`, the picked district,
+   and the point as **`poi_picked`** (the source confirm-place writes): a
+   person chose a NAME off a list, so it keeps `MAX_DROP_KM`, and a picked
+   place 30km out is refused (`too_far`, with the distance) before anything is
+   written. Province and city stay. The customer's saved address is never
+   written (D5).
+   - **With a copy waiting in Qingyun**, the route builds and creates the new
+     copy FIRST, then in one transaction writes the order and repoints the
+     queue row (guarded on the old copy's id), marks the old copy superseded,
+     and deletes it. Any refusal before the repoint writes nothing and deletes
+     the new copy. So a Dispatch pressed straight after can only reach the new
+     address. This is why it is not Edit ship-to, whose Qingyun resync is
+     detached and whose Dispatch could land on the old copy in the gap.
+   - A courier already holding the old copy refuses it
+     (`courier_already_called`), the ship-from move's test, checked again
+     after the slow calls.
+   - **With no copy yet**, the order is written and the row goes back to the
+     drain through `REQUEUE_SQL`, as confirm-place does. A row the drain is
+     building right now is refused (`row_busy`) rather than raced.
+5. **Where it is offered.** On the courier list, and on the three parked
+   cards: *Confirm delivery point* (which the phone can now answer), *Pick the
+   delivery point* (when none of the list is right) and *Push refused*.
+   `orders:edit`, like every other `/orders` write.
+6. **After a change the courier prices are read again**, because the old ones
+   were quoted for the old copy.
+
+**What this amends.** The delivery-point spec's D1 (*"Trustworthy points
+dispatch untouched. No map, no confirm, no extra tap"*) and §5.4 (*search
+recenters only*) — **on the phone only**. D1's "no extra tap" still holds: the
+address is shown, not asked about. §5.4's rule was against a search result
+becoming a `staff_pin`; this writes `poi_picked`, the weaker source §11.5
+already allows for a picked name, and the distance rule still applies.
+
+**Not changed.** The desktop drawer (its map surface and recenter-only search
+are untouched — a follow-up if wanted); the drain; Edit ship-to; the point
+memory (§204) — a searched address is not remembered against the customer's
+original text, which would silently re-route the next order to that text.
+
+Strings: 2 lifted from the head of a live pair (`Search a place · 搜索地点`,
+`Map unavailable · 地图暂不可用`) and 3 composed (`No places found · 未找到地点`,
+`Being sent right now — try again in a moment · 正在发单，请稍后重试`, and the
+too-far line); everything else copied whole. Recorded in
+`docs/tacet-delivery-vocabulary.md` v1.319.
+Tests: `scripts/test_qingyun_set_place.js` runs the route against an in-memory
+SQLite built from database.js with the real payload builder, and the phone's
+block and sheet; changing the source to `staff_pin` fails six of its cases.
