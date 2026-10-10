@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.500
+# Tacet shared-core consolidation — decisions record, v4.501
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-10 · v4.501 — **§452 · A PAYMENT THAT COULD NOT START TELLS THE SHOP, AND THE SHOPPER GETS A TRY AGAIN — DECIDED BY ASH:** *"this test order form web wasn't printed in yuexiu ,why"*, then *"there was no option to pay . it say that someone will contact for payment"*, then *"ok do it"*. TC001049's WeChat Native request was refused by the gateway; the web checkout turned every refusal into *We'll contact you shortly to arrange payment*, and every staff signal fires on paid, so nobody was told. Now each unpayable `/payment/create` exit calls `alertPaymentStartFailed` (push + WeCom, once per order, every attempt on the order's activity log), and a gateway failure shows the shopper *Payment didn't go through* with *Try again*. Three Chinese strings composed (vocabulary v1.322).
 
 2026-10-10 · v4.500 — **§451 · WECHAT AND ALIPAY ARE ONE CHOICE WHEN PAID ON THE SHOP'S TERMINAL — DECIDED BY ASH:** *"no need wechat alipay seperate. it can be the same option because our machine charge it the same"*. One off-app tender, `wechat_alipay_offline`, replaces the two on the till and on both Mark-paid pickers; the old two values stay valid for past orders. New sales no longer split WeChat from Alipay in the payment report. One label assembled from two live ones (vocabulary v1.321).
 
@@ -29622,3 +29624,59 @@ joined with ` / ` — declared in `docs/tacet-delivery-vocabulary.md` v1.321.
 Tests: `verify-fulfilment-types.js` (till list = office list, both accepted by
 the create route) passes unchanged. No schema, no migration, no change to
 `.gitignore` or CI.
+
+## §452 — A PAYMENT THAT COULD NOT START TELLS THE SHOP
+
+**Decided by Ash, 2026-10-10:** *"this test order form web wasn't printed in
+yuexiu ,why"*, then *"there was no option to pay . it say that someone will
+contact for payment"*, then *"ok do it"*, answering a recommendation to show
+the shopper the failure with a retry and alert staff.
+
+**What happened.** TC001049, a web order to Yuexiu paid by WeChat from a
+desktop browser. The checkout asked `/api/retail/payment/create` for a Native
+QR; the gateway refused it (502 `wechat_pay_failed`). `coStartPayment` in
+`public/shop.html` sent every error to `coOrderPlaced`, the screen written for
+a shop with no online payment at all: *We'll contact you shortly to arrange
+payment*. The slip, the operator push and the WeCom card all fire on paid
+(`markOrderPaid`, `autoPrintOrder`), so an order that never started paying
+reached nobody. The promise on the screen had nobody behind it.
+
+**The rule.**
+1. **The shop is told.** Every `/payment/create` exit that leaves the order
+   pending with no way to pay calls `alertPaymentStartFailed`: the gateway
+   failures (502, WeChat H5 / Native / JSAPI, Alipay redirect / precreate /
+   no QR) and the rails that cannot charge from here (409 `no_real_openid`,
+   501 `alipay_not_configured`). Request errors (400, 404) do not.
+2. **Once per order.** Each attempt is written to `activity_log` as
+   `payment_start_failed` with the method and the gateway's reason, so the
+   order's history shows every try; only the first sends. The check is on
+   `tenant_id`, because `activity_log` is shared by every account.
+3. **Push and WeCom.** The push carries `event: 'payment_failed'`, which is
+   deliberately not in `lib/push-events.js`: an event missing from that list is
+   never muted, and an order nobody can pay is not one to switch off. The WeCom
+   card gives order, amount, recipient and phone, and *Unpaid · call the
+   customer*.
+4. **QR orders are left out** — the till already knocks for them (§440).
+5. **The shopper gets the truth.** A gateway failure now shows *Payment didn't
+   go through · 支付失败*, *Your order is saved — please try again*, and a
+   *Try again* button that makes the same call as the order page's Pay button.
+   *We'll contact you* stays only for `CO_PAY_UNAVAILABLE` — the codes that mean
+   this rail cannot charge from here — and is now true, because rule 1 told
+   somebody.
+
+**Not changed.** Printing still happens on paid, not on placed: a slip for an
+order that may never be paid sends the kitchen to make food nobody bought.
+The reason TC001049's gateway call was refused is not fixed here; it is in the
+server log under `[wechat-pay/create native]`, and the likeliest cause is that
+Native payment is not enabled for the merchant account. The mini-app's own
+error handling is unchanged; a mini-app JSAPI failure now also pages the shop
+once.
+
+Strings: three composed — `支付失败`, `订单已保留，请重试。`, `待付款 · 请联系顾客`
+— declared in `docs/tacet-delivery-vocabulary.md` v1.322 with the candidates
+rejected.
+Tests: new `scripts/test_payment_start_failed.js` (the alert run against the
+real `retail_orders` and `activity_log`; every unpayable exit of the route
+checked; the checkout's two screens checked against the server's codes;
+`PSF_MUTANT=1` goes red).
+Schema: none. No change to `.gitignore` or CI.

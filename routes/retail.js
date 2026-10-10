@@ -5743,6 +5743,74 @@ function sendWecomAddressChangeAlert(orderId, fromAddress) {
   } catch (e) { console.warn('[wecom addr change setup]', e.message); }
 }
 
+// §452 — A SHOPPER'S PAYMENT COULD NOT BE STARTED, SO TELL THE SHOP.
+//
+// Every staff signal for an order — the slip, the push, the WeCom card — fires
+// on PAID. An order whose payment never started is never paid, so before this
+// it reached nobody: TC001049 told the customer "we'll contact you" while no
+// one at Yuexiu knew it existed, and it sat unpaid until it was cancelled.
+//
+// Called from every /payment/create exit that leaves the order pending with no
+// way for the customer to pay: the gateway refused or failed (502), or this
+// rail cannot charge from here (409 no openid, 501 Alipay not configured).
+//
+// ONE ALERT PER ORDER. Every attempt is written to activity_log, so the order's
+// history shows each try and its reason; only the first sends. A customer
+// pressing Try again five times is one problem, not five.
+//
+// QR orders are left out: the till already knocks for an unpaid QR order
+// (§440), and a second signal for the same table would be noise.
+function alertPaymentStartFailed(orderId, method, reason) {
+  try {
+    const o = tdb().prepare(
+      `SELECT order_no, total, status, shop_entry_method, recipient_name, recipient_phone
+         FROM retail_orders WHERE id = ?`
+    ).get(orderId);
+    if (!o || o.status !== 'pending_payment' || o.shop_entry_method === 'qr') return;
+    const seen = db.prepare(
+      `SELECT 1 FROM activity_log
+        WHERE entity_type = 'retail_order' AND entity_id = ? AND action = 'payment_start_failed'
+          AND tenant_id IS ? LIMIT 1`
+    ).get(orderId, currentTenantId());
+    logActivity(null, 'system', 'payment_start_failed', 'retail_order', orderId,
+      { method: method || null, reason: String(reason || '').slice(0, 200) }, null);
+    if (seen) return;
+    const amount = '¥' + Number(o.total || 0).toFixed(2);
+
+    // Not in lib/push-events.js on purpose: an event missing from that list is
+    // never muted, and an order nobody can pay is not one to switch off.
+    try {
+      if (_push && _push.sendPushToTenantOperators) {
+        _push.sendPushToTenantOperators(currentTenantId(), {
+          title: '⚠️ Payment didn’t go through · 支付失败',
+          body: `${o.order_no} · ${amount}`,
+          url: '/?tab=orders',
+          tag: 'retail-payfail-' + orderId,
+          event: 'payment_failed',
+        });
+      }
+    } catch (e) { console.warn('[pay-start alert push]', orderId, e.message); }
+
+    const hasApp = !!wecomAppCreds();
+    const webhook = wecomWebhookUrl();
+    if (!hasApp && !webhook) return;
+    // Languages on their own lines (§1.11), as the counter card does; the
+    // `标签 Label:` rows are that card's existing idiom.
+    const content = [
+      '**⚠️ 支付失败**',
+      '**Payment didn’t go through**',
+      `> 订单号 Order: \`${o.order_no}\``,
+      `> 金额 Amount: <font color="warning">${amount}</font>`,
+      o.recipient_name ? `> 收货人 To: ${o.recipient_name} ${o.recipient_phone || ''}`.trim() : null,
+      '> 待付款 · 请联系顾客',
+      '> Unpaid · call the customer',
+    ].filter(Boolean).join('\n');
+    const send = hasApp ? sendWecomAppMessage(content) : postWecomMarkdown(webhook, content);
+    send.then(r => { if (!r.ok) console.warn('[wecom pay-start]', orderId, r.msg); })
+        .catch(e => console.warn('[wecom pay-start]', orderId, e.message));
+  } catch (e) { console.warn('[pay-start alert]', orderId, e.message); }
+}
+
 // ── Nuonuo auto-issue (dormant until creds + fapiao.autoIssue) ──────────────
 // Seller (销方) details for the fapiao come from config; the tax NUMBER comes
 // from the saved Nuonuo credential (saler_tax). taxRate/taxCode default here but
@@ -6255,6 +6323,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
         return res.json({ success: true, data: { method: 'wechat', mode: 'h5', h5_url: h5Url, order_no: order.order_no, total: order.total } });
       } catch (e) {
         console.error('[wechat-pay/create h5]', e);
+        alertPaymentStartFailed(orderId, 'wechat', e.message);
         return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' });
       }
     }
@@ -6276,6 +6345,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
         return res.json({ success: true, data: { method: 'wechat', mode: 'native', code_url: codeUrl, qr_png: qrPng, order_no: order.order_no, total: order.total } });
       } catch (e) {
         console.error('[wechat-pay/create native]', e);
+        alertPaymentStartFailed(orderId, 'wechat', e.message);
         return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' });
       }
     }
@@ -6293,6 +6363,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
       // Pull the customer's openid for the JSAPI call
       const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(order.customer_id);
       if (!cust?.openid || cust.openid.startsWith('dev:')) {
+        alertPaymentStartFailed(orderId, 'wechat', 'no_real_openid');
         return res.status(409).json({ success: false, error: 'no_real_openid' });
       }
       const prepayId = await wechatPayCreate(order, cust.openid, payCtx);
@@ -6302,6 +6373,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
       return res.json({ success: true, data: { method: 'wechat', ...params } });
     } catch (e) {
       console.error('[wechat-pay/create]', e);
+      alertPaymentStartFailed(orderId, 'wechat', e.message);
       return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' });
     }
   }
@@ -6339,6 +6411,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
     // built (Platform readiness ③ decision 2026-05-29). WeChat Pay is the mini-app's
     // primary rail and is fully per-tenant above.
     if (currentTenantId() !== ROOTS_TENANT_ID || ALIPAY_DEV_MODE) {
+      alertPaymentStartFailed(orderId, 'alipay', 'alipay_not_configured');
       return res.status(501).json({ success: false, error: 'alipay_not_configured' });
     }
     // Web storefront — Alipay redirects (mobile wap → hands off to the Alipay
@@ -6354,12 +6427,16 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
         return res.json({ success: true, data: { method: 'alipay', mode: 'redirect', pay_url: payUrl, order_no: order.order_no, total: order.total } });
       } catch (e) {
         console.error('[alipay/create redirect]', e);
+        alertPaymentStartFailed(orderId, 'alipay', e.message);
         return res.status(502).json({ success: false, error: e.code || 'alipay_failed' });
       }
     }
     try {
       const qrCode = await alipayPrecreate(order);
-      if (!qrCode) return res.status(502).json({ success: false, error: 'alipay_no_qr' });
+      if (!qrCode) {
+        alertPaymentStartFailed(orderId, 'alipay', 'alipay_no_qr');
+        return res.status(502).json({ success: false, error: 'alipay_no_qr' });
+      }
       // Render the qr_code string to a PNG here so the mini-app only has to
       // show an <image> — no QR encoder needs to ship inside the WeChat bundle.
       let qrPng = null;
@@ -6374,6 +6451,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
       });
     } catch (e) {
       console.error('[alipay/create]', e);
+      alertPaymentStartFailed(orderId, 'alipay', e.message);
       return res.status(502).json({ success: false, error: e.code || 'alipay_failed' });
     }
   }
