@@ -1232,12 +1232,15 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      OFFLINE_PAY_METHODS server-side, so what the till writes is what the
      admin's own Mark-paid control has always written.
 
-     WeChat and Alipay lead because they are what a counter actually takes; the
-     other three are real tenders that must stay reachable, folded behind one
-     tap so they do not compete with the two. */
+     WeChat / Alipay leads because it is what a counter actually takes; the
+     others are real tenders that must stay reachable, folded behind one tap
+     so they do not compete with it. */
   var WALLETS = [
-    { v: 'wechat_offline', en: 'WeChat (off-app)',  cn: '微信(线下)',  lead: true },
-    { v: 'alipay_offline', en: 'Alipay (off-app)',  cn: '支付宝(线下)', lead: true },
+    /* §451 — ONE choice for WeChat and Alipay (Ash: the shop's terminal takes
+       both and charges them the same, so asking which is a question nobody
+       needs answered). The halves are the two old live labels joined; the
+       old two values stay valid server-side for every past row. */
+    { v: 'wechat_alipay_offline', en: 'WeChat / Alipay (off-app)', cn: '微信 / 支付宝(线下)', lead: true },
     { v: 'cash',           en: 'Cash',              cn: '现金' },
     { v: 'bank_transfer',  en: 'Bank transfer',     cn: '银行转账' },
     { v: 'other',          en: 'Other',             cn: '其他' },

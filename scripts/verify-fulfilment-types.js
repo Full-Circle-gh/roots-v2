@@ -1592,6 +1592,19 @@ check('the till offers exactly the admin\'s own tender list — no private vocab
 check('the till\'s tenders are all values the create route will accept',
   allowedPay && tillWallets ? tillWallets.filter(w => !allowedPay.includes(w)) : 'EXTRACTION FAILED',
   []);
+// §451 — WeChat and Alipay are ONE choice on the shop's terminal, and it leads;
+// the two old values are no longer offered but must stay readable server-side,
+// or every order written before §451 would lose its tender.
+check('the till leads with one WeChat / Alipay choice and nothing else',
+  (TILL_SRC.match(/\{ v: '([a-z_]+)'[^}]*lead: true/g) || []).map(s => s.replace(/.*'([a-z_]+)'.*/, '$1')),
+  ['wechat_alipay_offline']);
+check('the separate WeChat and Alipay values are no longer offered',
+  tillWallets.filter(w => w === 'wechat_offline' || w === 'alipay_offline'), []);
+check('…but stay accepted for past orders',
+  offlineSet && allowedPay
+    ? ['wechat_offline', 'alipay_offline'].filter(v => !offlineSet.includes(v) || !allowedPay.includes(v))
+    : 'EXTRACTION FAILED',
+  []);
 
 // ── The wallet is NOT nullable on a counter sale ──────────────────────────
 // The rule has to read what ARRIVED, not the resolved value: `paymentMethod`

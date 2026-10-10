@@ -7240,8 +7240,9 @@ function renderOpenOrder(o) {
 const PAY_METHOD_CHOICES = [
   ['cash',           'Cash · 现金'],
   ['bank_transfer',  'Bank transfer · 银行转账'],
-  ['wechat_offline', 'WeChat (off-app) · 微信(线下)'],
-  ['alipay_offline', 'Alipay (off-app) · 支付宝(线下)'],
+  // §451 — one choice for both; the terminal charges them the same. The two
+  // separate values stay readable for past orders (payLabel and friends).
+  ['wechat_alipay_offline', 'WeChat / Alipay (off-app) · 微信 / 支付宝(线下)'],
   ['other',          'Other · 其他'],
   // §450 — adds 4% to the bill server-side; the label says so before the tap.
   ['intl_card',      'International card +4% · 外卡 +4%'],

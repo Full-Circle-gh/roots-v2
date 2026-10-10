@@ -1262,7 +1262,7 @@ function paymentBrandHTML(method, size) {
   }
   // Off-app tender confirmed via "Mark paid" — friendly bilingual label, no
   // gateway badge (the operator didn't use the in-app gateway).
-  const offline = { cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他', intl_card: 'International card · 外卡' }[m];
+  const offline = { cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他', intl_card: 'International card · 外卡', wechat_alipay_offline: 'WeChat / Alipay off-app · 微信 / 支付宝(线下)' }[m];
   if (offline) return `<b>${offline}</b>`;
   // Unknown method. Render the RAW KEY, unstyled — no <b>, no badge.
   //

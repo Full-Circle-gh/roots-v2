@@ -27851,13 +27851,14 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // the one fact the reconciliation needs and the one this route used to throw
   // away.
   //
-  // These six are NOT a new vocabulary. They are exactly OFFLINE_PAY_METHODS,
+  // These seven are NOT a new vocabulary. They are exactly OFFLINE_PAY_METHODS,
   // the set the admin's own Mark-paid control has always written through
   // PATCH /orders/:id/status, and the labels are the locked pairs in
   // PAY_METHOD_CHOICES (04-orders.js). The two lists were the same idea under
   // two spellings; this route simply stops being the narrower of the two.
   const ALLOWED_PAY = ['offline', 'wechat', 'alipay', 'points', 'balance', 'other',
-                       'cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'intl_card'];
+                       'cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'intl_card',
+                       'wechat_alipay_offline'];
   const paymentMethod = ALLOWED_PAY.includes(String(b.payment_method)) ? String(b.payment_method) : 'offline';
   /* ── A CREDIT TENDER HAS TO BE TRUE (§93) ────────────────────────────────
      'points' and 'balance' have sat in ALLOWED_PAY since the off-app tenders
@@ -35072,8 +35073,12 @@ const STATUS_TRANSITIONS = {
 // transfer vs a WeChat/Alipay transfer received outside the mini app) instead
 // of all manual payments collapsing into "unknown".
 // 'intl_card' (§450) is off-app too: keyed into the shop's own terminal and
-// refunded by hand.
-const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other', 'intl_card']);
+// refunded by hand. 'wechat_alipay_offline' (§451) is the ONE choice the
+// pickers now offer for a WeChat or Alipay payment on the shop's terminal,
+// which charges both the same; the two separate values stay accepted so
+// every row written before it still reads and refunds as it did.
+const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other', 'intl_card',
+                                     'wechat_alipay_offline']);
 
 // Evidence that a settled payment row's money actually reached the gateway.
 // Either mark is conclusive on its own:
