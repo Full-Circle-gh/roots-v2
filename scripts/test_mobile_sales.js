@@ -84,6 +84,22 @@ const CASES = [
     ['every selling channel dates its figure',
      `(txt('content').match(/\\btoday\\b/g)||[]).length >= 6`],
   ]],
+  // Ash's board: no shop shut, no channel shut everywhere, but channels closed
+  // at ONE shop. The head line fell through to "Every channel is open" above
+  // three cards saying "Closed at Yuexiu".
+  ['closed at one shop is not "every channel is open"', GRID + `
+    var pos=state.chan.channels.find(function(c){return c.channel==='pos'});
+    pos.cardOpen=true; pos.cells.forEach(function(x){x.open=true});
+    render();`, [
+    ['web is still shut at Panyu',  `txt('content').includes('Closed at Panyu')`],
+    ['the head line does not say all open', `!txt('content').includes('Every channel is open')`],
+    ['it says some are closed',     `txt('content').includes('Some channels are closed')`],
+  ]],
+  ['everything open everywhere still says so', GRID + `
+    state.chan.channels.forEach(function(c){c.cardOpen=true;(c.cells||[]).forEach(function(x){x.open=true})});
+    render();`, [
+    ['the head line says all open', `txt('content').includes('Every channel is open')`],
+  ]],
   ['a shop with no channels', `state.chanTried=true; state.chan={channels:[]}; APP.cmd('push','sales');`, [
     ['says so',        `txt('content').includes('No channels yet')`],
     ['and invents none', `!txt('content').includes('Mini app')`],

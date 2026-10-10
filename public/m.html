@@ -9390,6 +9390,14 @@ function screenSales(){
         ? CHAN_META[closed[0].channel].en+' is closed everywhere'
         : closed.length+' channels are closed everywhere',
         closed.length===1 ? CHAN_META[closed[0].channel].zh+' 已全部关闭' : closed.length+' 个渠道已全部关闭')}
+    // CLOSED AT SOME SHOPS IS NOT OPEN. The two lines above only catch a shop
+    // shut whole and a channel shut everywhere, so a channel closed at one
+    // shop of two fell through to the sage line: Ash's board said "Every
+    // channel is open" above a card saying "Some channels are closed" and three
+    // cards saying "Closed at Yuexiu". The card names the shop; this line only
+    // has to stop contradicting it, so it uses that card's own words.
+    : chans.some(c=>c.integrated!==false&&(c.cells||[]).some(x=>!x.open))
+    ? {sev:'amber', text:T('Some channels are closed','部分渠道已关闭')}
     : {sev:'sage', text:T('Every channel is open','所有渠道均已开启')};
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
