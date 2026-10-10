@@ -123,8 +123,8 @@ try {
       'the reaper selected nothing at all, so this suite proves nothing');
   });
 
-  console.log('\nThe counter clock — twenty minutes, or staff, whichever comes first');
-  check('a counter order older than twenty minutes IS cancelled, and its stock released', () => {
+  console.log('\nThe counter clock — two hours, or staff, whichever comes first');
+  check('a counter order older than two hours IS cancelled, and its stock released', () => {
     const id = makeOrder('counter');
     inventory.sweepExpiredReservations();
     assert.strictEqual(statusOf(id), 'cancelled',
@@ -147,6 +147,29 @@ try {
       'an order placed seconds ago was cancelled — this is the §45 failure the clock must not reintroduce');
     assert.strictEqual(resOf(id), 'active',
       'its reservation expired on the fifteen-minute clock, which §45 exempts it from');
+  });
+  check('...and an hour-old counter order is left alone — people at a table pay at the end', () => {
+    // §49 amended 2026-10-10: the clock is two hours, not twenty minutes.
+    // TC001037 was cancelled at twenty minutes while its customers were still
+    // eating. An order an hour old must survive the sweep.
+    const id = ++seq; ORDERS.push(id);
+    h.prepare(`INSERT INTO retail_orders (id, order_no, customer_id, status, fulfillment_type,
+               store_id, channel, total, placed_at)
+               VALUES (?, ?, NULL, 'pending_payment', 'counter', ?, 'shop', 10, datetime('now','-60 minutes'))`)
+      .run(id, '__SWEEP-' + id, STORE);
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(statusOf(id), 'pending_payment',
+      'an hour-old counter order was cancelled — the clock is still on twenty minutes');
+  });
+  check('...and one just past two hours IS cancelled', () => {
+    const id = ++seq; ORDERS.push(id);
+    h.prepare(`INSERT INTO retail_orders (id, order_no, customer_id, status, fulfillment_type,
+               store_id, channel, total, placed_at)
+               VALUES (?, ?, NULL, 'pending_payment', 'counter', ?, 'shop', 10, datetime('now','-121 minutes'))`)
+      .run(id, '__SWEEP-' + id, STORE);
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(statusOf(id), 'cancelled',
+      'a counter order past two hours was left unpaid — the clock is longer than ruled');
   });
   check('a MADE-HERE counter order with NO reservation is still cancelled', () => {
     // The case that makes this a second pass rather than a filter: §43 defers

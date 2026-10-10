@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.497
+# Tacet shared-core consolidation — decisions record, v4.498
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-10 · v4.498 — **§49 AMENDED · AN UNPAID COUNTER ORDER NOW LIVES TWO HOURS, NOT TWENTY MINUTES — DECIDED BY ASH:** *"2 hours"*, answering a recommendation of 60–90 minutes. **WHAT RAISED IT:** TC001037, a QR order from a table at Yuexiu (¥87, pick-up number 4), was cancelled by the counter clock at 20.8 minutes (`counter_unpaid_timeout`) while its customers were still at the table; nobody cancelled it by hand. Ash asked for it back as unpaid. At a table people pay at the end, so twenty minutes cancels real orders. **THE ORDER WAS RESTORED FIRST,** through `oneoff.yml` (dry run, then apply, backup verified and kept): `scripts/oneoff_restore_order_TC001037.js` put it back to `pending_payment`, reopened its offline payment row, re-activated the four stock holds the clock had released, and **moved `placed_at` to the repair time**, because the sweeper runs every minute and keys on `placed_at`, so the order would otherwise have been cancelled again on the next tick. The old `placed_at` is kept in the activity_log row it wrote. `scripts/diagnose_order_TC001037.js` is the read-only survey behind it. **THE CHANGE:** `COUNTER_CANCEL_MIN_DEFAULT` in `lib/inventory.js` goes from 20 to 120. It is the code default rather than a per-tenant `orders.counterAutoCancelMinutes` row, because no tenant had set one and a ruling for every shop belongs in the default; the setting still overrides it per tenant and `0` still switches the clock off. Nothing else about the clock changes: it still keys on `placed_at`, and staff can still cancel at any moment. No screen or message names the interval, so no string changes. `scripts/test_counter_sweep_exempt.js` gains two checks (an hour-old counter order survives the sweep; one at 121 minutes does not), proved by putting the old value back. No Chinese string, no schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-10-10 · v4.497 — **§449 · WHAT THE KITCHEN ASKED THE BUYER FOR IS ON NEEDS YOU — DECIDED BY ASH:** *"from the kitchen request should be for buying department in the " need you " dashboard"*, sent with a screenshot of the phone's Purchasing › Orders screen showing the *From the kitchen* card. A **From the kitchen · 厨房申请** row on Home's Needs you (phone) and the dashboard's Needs you (desktop), for whoever can buy — purchasing:edit with Production on, the card's own gate — opening the same picker the card opens. The card stays. No Chinese composed; no schema, migration or new route; no change to `.gitignore` or CI. See §449.
 
@@ -6281,6 +6283,8 @@ Ruling (Ash, 2026-09-06): **there is no second app.** `/stock` — the Quick Sto
 **It keys on the order's age, not on a reservation.** A made-here order reserves nothing (§43 defers material stock), so a sweep that walks reservations would never see it and such an order would live forever. The clock therefore reads `placed_at` on the order itself.
 
 **Configurable, and switchable off.** `orders.counterAutoCancelMinutes` sets the interval per tenant; `0` turns the clock off entirely and restores staff-only cancellation. Twenty is the default rather than the rule.
+
+**AMENDED 2026-10-10 by Ash (v4.498): the default is TWO HOURS, not twenty minutes.** Twenty minutes cancelled TC001037, a QR table order, while its customers were still eating. Everything else in this section stands.
 
 *Recorded 2026-09-06, after the code that implements the clock shipped. That is the wrong order and is noted rather than tidied away: the ruling was given, the code was written against it, and the section that should have preceded both is this one.*
 
