@@ -84,7 +84,23 @@ const CASES = [
     ['every selling channel dates its figure',
      `(txt('content').match(/\\btoday\\b/g)||[]).length >= 6`],
   ]],
-  ['a shop with no channels', `state.chanTried=true; state.chan={channels:[]}; APP.cmd('push','sales');`, [
+  // The header is the server's seven buckets plus top-up cash; the board drew
+  // six, so the cards fell short of the total with nothing saying why. Same
+  // grid, plus one staff-keyed order and a top-up: the header moves by both,
+  // and the board now shows where each one went.
+  ['what no channel card carries is still on the board', GRID + `
+    state.sales.direct={connected:true,intrinsic:true,revenue:150,orders:1};
+    state.salesSummary={revenue:7513.5,orders:28,aov:161.3,active:5,total:6,topups_received:3000};
+    render();`, [
+    ['the header counts both',        `txt('content').includes('¥7,514 today · 28 orders')`],
+    ['the staff-keyed order has a card', `txt('content').includes('Direct orders') && txt('content').includes('1 today · ¥150')`],
+    ['and the top-up is named',       `txt('content').includes('Wallet top-ups (¥3,000) are in the total above')`],
+  ]],
+  ['nothing extra when there is nothing to explain', GRID, [
+    ['no direct card at zero',  `!txt('content').includes('Direct orders')`],
+    ['no top-up line at zero',  `!txt('content').includes('Wallet top-ups')`],
+  ]],
+  ['a shop with no channels',`state.chanTried=true; state.chan={channels:[]}; APP.cmd('push','sales');`, [
     ['says so',        `txt('content').includes('No channels yet')`],
     ['and invents none', `!txt('content').includes('Mini app')`],
   ]],
