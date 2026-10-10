@@ -45,6 +45,8 @@ const { normaliseLimits } = optionLimits;
 // reports and the answer the cascade acts on can never disagree.
 const { computeRecipeCost, unitsReconcilable } = require('../lib/recipe-cost');
 const { productionEnabled } = require('../lib/features');
+// §449 — kitchen-request lines still waiting on the buyer (Needs you row).
+const { PENDING_FROM: MR_PENDING_FROM, PENDING_WHERE: MR_PENDING_WHERE } = require('../lib/material-requests-pending');
 const inventory = require('../lib/inventory');
 /* Module scope on purpose. The RBAC choke point below requires this lazily
    inside its own block, which is fine there; the order-status handler needs
@@ -18109,6 +18111,10 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // §84 — units already ordered and not on the shelf. Same never-null shape as
   // every other fire here, so a client can read it without a guard.
   let batch_owed = { count: 0, items: [] };
+  // §449 — lines the kitchen has asked the buyer to buy, not yet drafted or
+  // struck off. Never-null like its siblings; NOT store-scoped, because a
+  // material request names no store.
+  let kitchen_asks = { count: 0, urgent: 0, items: [] };
   /* §189 — boxes that were already out when their order was cancelled, and
      that nobody has said what became of yet. Same never-null shape as every
      other fire here, so a client can read it without a guard, and the same
@@ -19008,6 +19014,40 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
       }
     } catch (e) { console.warn('[dashboard/ops batch_owed]', e.message); }
 
+    /* ── From the kitchen (§449) ─────────────────────────────────────────
+       What the kitchen has asked the buyer to buy. Until this row the ask
+       lived on one card inside Purchasing, found only by a buyer who already
+       went there to look. Ash: "from the kitchen request should be for buying
+       department in the need you dashboard".
+
+       THE SAME LINES the Purchasing card counts — lib/material-requests-pending
+       holds the one clause both read, so the row and the list it opens cannot
+       disagree.
+
+       GATED ON THE BUYER'S PAIR, the same one the Purchasing button carries:
+       the Production switch and purchasing:edit. A fire must never promise
+       work behind a door this operator cannot open. Caps fail OPEN when
+       unresolved, as canSeeKitchenReady does.
+
+       `waiting_since` is when the request was SENT — how long the kitchen has
+       been waiting on the buyer. Own try/catch: a failure costs this row only. */
+    try {
+      const canBuy = !req.caps || req.caps.has('purchasing:edit');
+      if (canBuy && productionEnabled(tdb())) {
+        const ka = tdb().prepare(
+          `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN COALESCE(i.urgent, 0) <> 0 THEN 1 ELSE 0 END), 0) AS u
+             FROM ${MR_PENDING_FROM} WHERE ${MR_PENDING_WHERE}`
+        ).get();
+        const kaItems = tdb().prepare(`
+          SELECT i.id, i.name_en, i.name_cn, COALESCE(i.urgent, 0) AS urgent,
+                 COALESCE(r.sent_at, r.date) AS waiting_since
+            FROM ${MR_PENDING_FROM} WHERE ${MR_PENDING_WHERE}
+           ORDER BY COALESCE(i.urgent, 0) DESC, waiting_since ASC, i.id ASC LIMIT @preview
+        `).all({ preview: previewLimit });
+        kitchen_asks = { count: ka.n, urgent: ka.u, items: kaItems };
+      }
+    } catch (e) { console.warn('[dashboard/ops kitchen_asks]', e.message); }
+
     // ── Channel stock-sync stall ─────────────────────────────────────────
     // channelSyncStale() already isolates one channel's failure from the
     // others (a bad table drops just that entry), so no extra try/catch here.
@@ -19023,7 +19063,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, parcel_recovery, channel_sync_stale, channel_items_attention, channel_blocked, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, parcel_recovery, kitchen_asks, channel_sync_stale, channel_items_attention, channel_blocked, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.

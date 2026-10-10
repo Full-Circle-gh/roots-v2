@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.496
+# Tacet shared-core consolidation — decisions record, v4.497
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-10 · v4.497 — **§449 · WHAT THE KITCHEN ASKED THE BUYER FOR IS ON NEEDS YOU — DECIDED BY ASH:** *"from the kitchen request should be for buying department in the " need you " dashboard"*, sent with a screenshot of the phone's Purchasing › Orders screen showing the *From the kitchen* card. A **From the kitchen · 厨房申请** row on Home's Needs you (phone) and the dashboard's Needs you (desktop), for whoever can buy — purchasing:edit with Production on, the card's own gate — opening the same picker the card opens. The card stays. No Chinese composed; no schema, migration or new route; no change to `.gitignore` or CI. See §449.
 
 2026-10-10 · v4.496 — **§44 AND §50 AMENDED · A QR ORDER'S SLIP PRINTS ON SUBMIT AGAIN, BEFORE PAYMENT — DECIDED BY ASH.** Asked: *"if a customer place an order I want the receipt to print automatic before even paying . order still stay in the till bar . the only thing changes that it print the receipt before paying"*. This reverses v4.150 (2026-09-08), so the reason v4.150 gave was put back first: submitting costs the customer nothing, so a slip can print for an order nobody pays for, and an order the customer cancels from their phone or that dies unpaid leaves its slip behind. Ash: *"go"*. Asked whether the early slip should say UNPAID: *"i don't want to have unpaid and paid slip . slip before payment us ok"*. **THE CHANGE.** `POST /s/:shopCode/order` (`routes/shop-menu.js`) calls `autoPrintOrder` after the order commits, fire-and-forget, so a dead printer never fails the order. **One slip per order, the same slip as before, no paid/unpaid wording.** **Nothing else moves:** the order is still created `pending_payment`, stays on the till's Pending list until it is settled, and leaves it once paid, because that list reads `status=pending_payment`. **No second slip at the till:** `autoPrintOrder`'s existing skip guard (`shop_entry_method='qr' AND print_status='printed'`) stops the paid transition printing it again, and a submit print that FAILED still lets the paid transition print it, so a slip is never lost. **The in-page WeChat rail keeps printing on paid (§50 not reopened);** that rail is switched off (`SHOP_QR_WECHAT_PAY`), so in practice every QR order prints on submit. Tests: `scripts/test_shop_menu.js` flips its five submit-print checks back. No schema, no migration, no new route, no Chinese composed, and no change to `.gitignore` or CI.
 
@@ -29473,3 +29475,43 @@ too-far line); everything else copied whole. Recorded in
 Tests: `scripts/test_qingyun_set_place.js` runs the route against an in-memory
 SQLite built from database.js with the real payload builder, and the phone's
 block and sheet; changing the source to `staff_pin` fails six of its cases.
+
+## §449 — WHAT THE KITCHEN ASKED THE BUYER FOR IS ON NEEDS YOU
+
+**Decided by Ash, 2026-10-10:** *"from the kitchen request should be for buying
+department in the " need you " dashboard"*, sent with a screenshot of the
+phone's Purchasing › Orders screen and its *From the kitchen* card.
+
+**What was wrong.** A cook's request to buy (§86) reached the buyer as one card
+inside Purchasing, drawn only while something waits. A buyer who did not open
+Purchasing did not find out. Home's Needs you is where the day starts and it
+said nothing.
+
+**The rule.**
+1. **A Needs-you row, *From the kitchen · 厨房申请*,** on the phone's Home and on
+   the desktop dashboard. The card's own words, so the row and the list it opens
+   share one name. The card stays where it was.
+2. **It counts lines**, the same lines the Purchasing list shows: sent, not
+   archived, not on an order, not struck off (§174). One clause,
+   `lib/material-requests-pending.js`, read by both the list route and
+   `/dashboard/ops` (`kitchen_asks`), so they cannot disagree.
+3. **Brick when any line is urgent, amber otherwise.** The colour carries it, so
+   no new string. The line under the label names two products and a tail
+   counted off the total, as the kitchen rows beside it do. Its clock is when
+   the request was sent.
+4. **Only for buyers:** purchasing:edit with the Production switch on — the
+   card's own gate (`pkOn()` on the phone, the button's `data-cap`/`data-feat`
+   on the desktop). The server checks the same pair and sends a zero to anyone
+   else.
+5. **It opens the same picker the card opens** — the phone's sheet from Home,
+   the desktop's Purchasing tab with the picker up. On the phone a fresh read of
+   the list updates the Home count at once, so drafting or striking off lines
+   clears the row without waiting for the next poll.
+
+**Not changed.** The card, the picker, the draft it makes, the More dot and the
+desktop rail dot.
+
+Strings: none composed — `From the kitchen · 厨房申请`, `View · 查看` and
+`more · 更多` are copied whole from live pairs.
+Tests: `scripts/test_kitchen_asks_dashboard.js` runs the shipped SQL against a
+schema database.js built, and checks the gate, words and door on both clients.

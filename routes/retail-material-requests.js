@@ -56,6 +56,9 @@ const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
+// §449 — the one clause for "still waiting on the buyer", shared with Home's
+// Needs you row on /dashboard/ops.
+const { PENDING_FROM, PENDING_WHERE } = require('../lib/material-requests-pending');
 
 const router = express.Router();
 
@@ -221,12 +224,8 @@ router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdm
            i.qty, i.unit, i.notes,
            COALESCE(i.urgent, 0) AS urgent, i.needed_by,
            r.mr_number, r.date, r.created_by_name, r.notes AS request_notes
-      FROM material_request_items i
-      JOIN material_requests r ON r.id = i.request_id
-     WHERE r.status IN ('sent', 'sourced')
-       AND r.archived_at IS NULL
-       AND i.sourced_po_id IS NULL
-       AND i.declined_at IS NULL
+      FROM ${PENDING_FROM}
+     WHERE ${PENDING_WHERE}
      ORDER BY COALESCE(i.urgent, 0) DESC,
               (i.needed_by IS NULL), i.needed_by,
               r.sent_at DESC, r.id DESC, i.sort_order, i.id`).all();
