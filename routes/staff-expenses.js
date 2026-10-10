@@ -267,6 +267,18 @@ function activeCategories(db) {
   } catch (e) { return []; }
 }
 
+/* §114 amended — the active categories ticked as GOODS, which the phone's claim
+   form uses to tick "Not arrived yet" when one is picked. A starting answer,
+   not a rule: nothing here or in lib/expense-claim.js reads it, and a read
+   failure is an empty list, which only means the box starts unticked. */
+function goodsCategories(db) {
+  try {
+    return db.prepare(
+      "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 AND COALESCE(is_goods, 0) = 1 ORDER BY sort_order, name"
+    ).all().map(r => r.name);
+  } catch (e) { return []; }
+}
+
 // ── POST /api/retail-admin/staff-expenses ──────────────────────────────────
 router.post('/api/retail-admin/staff-expenses', requireRetailAdmin, express.json({ limit: '4mb' }), (req, res) => {
   try {
@@ -395,7 +407,7 @@ router.get('/api/retail-admin/staff-expenses/meta', requireRetailAdmin, (req, re
         .slice(0, 5);
     } catch (e) { recent = []; }
 
-    res.json({ success: true, data: { categories, stores, recent } });
+    res.json({ success: true, data: { categories, goods: goodsCategories(db), stores, recent } });
   } catch (e) {
     console.error('[staff-expenses meta]', e.message);
     res.status(500).json({ error: e.message });
