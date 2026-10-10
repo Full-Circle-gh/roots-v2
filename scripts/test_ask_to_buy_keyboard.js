@@ -124,6 +124,9 @@ const sandbox = {
   state: { mb: { materials: null, tried: false, q: '', qty: {}, busy: false, err: '', sent: null } },
   document: { getElementById: id => (missingNode ? null : node(id)) },
   render: () => { renderCalls++; },
+  // §453: mbPatch saves the unsent basket to the phone. That is
+  // test_ask_draft_kept.js's subject; here it is a dependency, stubbed like render.
+  askDraftSync: () => {},
   T: (en) => en,
   escAttr: (s) => String(s == null ? '' : s),
   ic: () => '',
