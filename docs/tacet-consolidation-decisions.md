@@ -29351,3 +29351,32 @@ code; the three that pass are absence checks that held before too), a source
 check in `scripts/test_mobile_ops_groups.js`, and the More cases in
 `test_mobile_dots.js`, `test_mobile_nav.js` and `test_mobile_ask_strip.js`
 updated to the folded list.
+
+## §447 — MORE'S GROUPS CLOSE AGAIN WHEN YOU LEAVE MORE
+
+**Decided by Ash, 2026-10-09:** off a screenshot of More with *Money and
+numbers* left open, *"once go our from more fold again all automatic don't
+leave it open"*.
+
+**Amends §446 rule 2.** The phone no longer remembers which groups are open.
+A group opens on a tap and stays open while you stay on More; the moment the
+screen changes to anything else (another tab, or a tool pushed from More,
+such as *Sales*), every group is closed again. Coming back to More, by Back
+or by the tab, always finds the short folded list.
+
+1. **"Leaving More" is a change of screen**, read off the same `screenKey()`
+   the scroll memory uses, in `render()`. A repaint of More itself (a poll,
+   a dot arriving, a sheet opening over it) is not leaving, so an open group
+   does not snap shut while you are reading it.
+2. **Nothing is stored.** The open set lives in memory only, and the old
+   `tacet-m-more-open` key is removed from the phone on load, so a group left
+   open under §446 does not come back.
+3. **The trade-off, accepted:** Back from a tool opened inside a group lands
+   on the folded list, and the group is one tap away again. That is what was
+   asked: the list is short every time More is arrived at.
+
+**Not changed.** Everything else in §446: Needs you first, the dot on a
+closed group, all closed by default, no folding on a role with no tab bar.
+
+Strings: none. Test: `scripts/test_mobile_more_fold.js`, its remembering
+cases replaced by leaving-and-returning cases.

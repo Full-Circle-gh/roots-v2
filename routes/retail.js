@@ -24373,6 +24373,10 @@ router.post('/api/retail-admin/ai/extract-facts', requireRetailAdmin, express.js
 // costs at most ~2 billed read calls a day per range; asks are capped/day.
 // ═══════════════════════════════════════════════════════════════════════
 const AI_READ_TTL_HOURS = 12;
+// Bumped when the digest or the voice rules change what a read may say, so a
+// read written under the old ones is not served for the rest of its TTL.
+// 'b2': buyers by channel, never one count beside orders.
+const AI_READ_CACHE_VER = 'b2';
 const AI_ASK_DAILY_CAP  = 20;
 
 // Shared voice rules — the static (prompt-cached) system chunk.
@@ -24381,6 +24385,7 @@ Rules:
 - Plain everyday words. Short sentences. No jargon, no exclamation marks, no emoji, no greetings, no apologies.
 - Cite ONLY numbers present in the digest, or simple arithmetic on them (shares, differences, per-order averages). Never estimate, never invent. If the data cannot show a cause, do not guess one — you may name what to check instead.
 - Write money with the currency symbol used in the digest.
+- kpis.orders counts every sales channel. Buyers are only counted per channel in buyers_by_channel, and those counts cover different people from different channels. Never pair a buyer count with kpis.orders ("48 orders from 11 buyers"), never divide one by the other, and never add the channels' buyers together. When you cite a buyer figure, name its channel (for example "11 shop customers").
 - Never mention AI, language models, providers, or yourself.
 - English and Chinese versions are written natively in each language with the same substance — never a stiff word-for-word translation, never mixed language in one field.`;
 
@@ -24462,7 +24467,7 @@ router.post('/api/retail-admin/reports/read', requireRetailAdmin, express.json({
   const cached = tdb().prepare(
     `SELECT payload_json, created_at FROM ai_report_reads
       WHERE cache_key = ? AND created_at > datetime('now', '-${AI_READ_TTL_HOURS} hours')
-      ORDER BY id DESC LIMIT 1`).get(key);
+      ORDER BY id DESC LIMIT 1`).get(`${AI_READ_CACHE_VER}|${key}`);
   if (cached) {
     let payload = null;
     try { payload = JSON.parse(cached.payload_json); } catch (e) { /* regenerate below */ }
@@ -24496,7 +24501,7 @@ router.post('/api/retail-admin/reports/read', requireRetailAdmin, express.json({
       note_products_en: trimField(raw.note_products_en), note_products_cn: trimField(raw.note_products_cn),
     };
     if (!read.read_en || !read.read_cn) return res.status(502).json({ success: false, error: 'read_failed' });
-    tdb().prepare('INSERT INTO ai_report_reads (cache_key, payload_json) VALUES (?, ?)').run(key, JSON.stringify(read));
+    tdb().prepare('INSERT INTO ai_report_reads (cache_key, payload_json) VALUES (?, ?)').run(`${AI_READ_CACHE_VER}|${key}`, JSON.stringify(read));
     tdb().prepare("DELETE FROM ai_report_reads WHERE created_at < datetime('now', '-14 days')").run();
     res.json({ success: true, data: { available: true, cached: false, generated_at: new Date().toISOString().slice(0, 19).replace('T', ' '), read } });
   } catch (e) {
