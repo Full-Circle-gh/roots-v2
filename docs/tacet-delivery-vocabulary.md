@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.320 · 2026-10-10 · §450 THE INTERNATIONAL CARD AND ITS 4% — 3 STRINGS COMPOSED BY CLAUDE (`外卡`, `外卡 +4%`, `外卡手续费 4%`); NOTHING LIVE NAMES A CARD OR A CARD FEE.** See *The international card and its 4% (§450)*.
+
 **v1.319 · 2026-10-10 · §448 THE TABLET'S "SHIP TO" BLOCK ON THE COURIER LIST AND ITS SEARCH A PLACE SHEET — 3 STRINGS COMPOSED BY CLAUDE FROM LIVE PARTS, 2 LIFTED FROM THE HEAD OF A LIVE PAIR; THE REST COPIED WHOLE.** See *Changing a Qingyun order's address by typing (§448)*.
 
 **v1.318 · 2026-10-09 · §114 AMENDED — A CATEGORY CAN BE TICKED AS GOODS, AND A CLAIM FILED UNDER IT STARTS AS NOT ARRIVED YET — 1 STRING COMPOSED BY CLAUDE (`Goods · 货品`), LIFTED FROM A LIVE PAIR.** See *Goods categories (§114 amended)*.
@@ -13597,3 +13599,38 @@ were looking — reopen the order · 状态已变更，请重新打开订单`.
 the operator register already calls this address `收货地址` (Ship to, Edit
 ship-to), and §414 is one word per thing. The heading now copies the order
 sheet's.
+
+## The international card and its 4% (§450)
+
+**Composed by Claude, 2026-10-10, under the 2026-09-06 amendment.**
+Operator register. `public/till.html` (`WALLETS`, `STRINGS.cardFee`),
+`public/retail-admin/04-orders.js` (`PAY_METHOD_CHOICES`, `orderTotalSubline`),
+`public/retail-admin/01-core.js` (`paymentBrandHTML`),
+`public/retail-admin/03-dashboard.js` (`PAY_LBL`, `DASH_PAY_NAMES`),
+`public/m.html` (`PAY_METHODS`, `TREND_PAY`, `PAY_LABEL`, `orderBreakdown`).
+Asked by Ash: *"when selecting payment method, there should be an option for
+international card, if it selected a 4% extra should be add automatic to the
+bill"*.
+
+**Nothing live fits.** No pair anywhere names a bank card, a foreign card or a
+card fee — `银行卡`, `信用卡`, `外卡`, `手续费` and `附加费` were each searched
+across `public/`, `routes/`, `lib/` and `miniapp/` and none is live. The
+tender is new, so its name had to be composed.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `International card +4% · 外卡 +4%` | the three pickers: till, office Mark paid, phone Mark paid | `外卡` is the trade's own word for a card issued abroad — what an acquirer's terminal and a shop's sign say (受理外卡). The `+4%` is a numeral and needs no translation; it is on the button so the cashier knows the cost **before** the tap. |
+| `International card · 外卡` | lists, dashboard splits, order drawer | The same word without the `+4%`: once paid, the fee is its own line and the tender is just a tender. |
+| `Card fee 4% · 外卡手续费 4%` | till settle and done screens, office subline, phone breakdown | `外卡` as above plus `手续费`, the ordinary word for a processing fee. |
+
+**Rejected.** `国际信用卡`: not every foreign card is a credit card, and a
+Visa debit card is still surcharged. `境外银行卡`: correct but twice as long on
+a 44px till button, and nobody at a counter says it. `国际卡`: understood,
+but not the term the trade uses. `附加费` for the fee: it reads as a general
+add-on charge rather than what the bank takes, and the customer asking "what
+is this?" deserves the true answer.
+
+The receipt stays English-only, as its own note requires: `Card fee 4%` and
+`Paid by Intl card`, no Chinese half.

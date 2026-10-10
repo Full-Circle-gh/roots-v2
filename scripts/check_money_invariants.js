@@ -168,7 +168,11 @@ function openSqlite(file) {
  * currently proven only by the fixture — which is the point of having one.
  *
  * The surcharge stays out: shipping_fee already contains it. See the note on
- * the check itself. */
+ * the check itself.
+ *
+ * The international-card fee (§450) is the opposite case: it is added to the
+ * cash figure AFTER credit, so it sits outside the credit MAX and is added last.
+ * It is 0 on every order not settled on an international card. */
 const EXPECTED_TOTAL = `
   CASE WHEN COALESCE(NULLIF(TRIM(channel), ''), 'wechat') IN ('meituan', 'eleme')
        THEN COALESCE(subtotal,0) + COALESCE(packing_fee,0) + COALESCE(shipping_fee,0)
@@ -178,6 +182,7 @@ const EXPECTED_TOTAL = `
                      - COALESCE(voucher_amount,0))
               + CASE WHEN tax_mode = 'exclusive' THEN COALESCE(tax_amount,0) ELSE 0 END
               - COALESCE(points_amount,0) - COALESCE(balance_used,0))
+            + COALESCE(card_surcharge_fee,0)
   END`;
 
 const CHECKS = [
@@ -353,16 +358,18 @@ const CHECKS = [
                AND COALESCE(source,'') = 'manual'
                AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
                         - COALESCE(voucher_amount,0)
-                        - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
+                        - COALESCE(points_amount,0) - COALESCE(balance_used,0)
+                        + COALESCE(card_surcharge_fee,0)) * 100)
                  <> ROUND(COALESCE(total,0) * 100)`,
     detail: `SELECT id, order_no, subtotal, shipping_fee, packing_fee, voucher_amount,
-                    points_amount, balance_used, total, created_by, placed_at
+                    points_amount, balance_used, card_surcharge_fee, total, created_by, placed_at
                FROM retail_orders
               WHERE subtotal IS NOT NULL AND total IS NOT NULL
                 AND COALESCE(source,'') = 'manual'
                 AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
                          - COALESCE(voucher_amount,0)
-                         - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
+                         - COALESCE(points_amount,0) - COALESCE(balance_used,0)
+                         + COALESCE(card_surcharge_fee,0)) * 100)
                   <> ROUND(COALESCE(total,0) * 100)
               ORDER BY id DESC LIMIT ?`,
   },

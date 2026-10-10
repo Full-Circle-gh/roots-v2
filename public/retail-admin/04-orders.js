@@ -6505,7 +6505,9 @@ function ordMoneyGap(o) {
   // read. An inclusive tax is already inside the line totals and must not be
   // added a second time.
   const taxAdded = (o.tax_mode === 'exclusive' && o.tax_amount != null) ? Number(o.tax_amount) || 0 : 0;
-  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0) + taxAdded;
+  // §450 — the international-card 4% is inside `total` too.
+  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0) + taxAdded
+                   + Number(o.card_surcharge_fee || 0);
   const deductions = Number(o.voucher_amount || 0) + Number(o.points_amount || 0) + Number(o.balance_used || 0);
   const expected = Math.round((items + surcharges - deductions) * 100) / 100;
   const gap = Math.round((expected - total) * 100) / 100;
@@ -6554,6 +6556,8 @@ function orderTotalSubline(o) {
   if (Number(o.voucher_amount) > 0) s += ` · ${cuT('voucher','优惠券')} −${acMoney(o.voucher_amount)}`;
   if (Number(o.points_amount) > 0)  s += ` · ${cuT('points','积分')} −${acMoney(o.points_amount)}`;
   if (Number(o.balance_used) > 0)   s += ` · ${cuT('wallet','钱包')} −${acMoney(o.balance_used)}`;
+  // §450 — after the credit, because it is worked on what the card took.
+  if (Number(o.card_surcharge_fee) > 0) s += ` · ${cuT('Card fee 4%','外卡手续费 4%')} ${acMoney(o.card_surcharge_fee)}`;
   return s;
 }
 function renderOrderTotalBanner(o) {
@@ -7239,6 +7243,8 @@ const PAY_METHOD_CHOICES = [
   ['wechat_offline', 'WeChat (off-app) · 微信(线下)'],
   ['alipay_offline', 'Alipay (off-app) · 支付宝(线下)'],
   ['other',          'Other · 其他'],
+  // §450 — adds 4% to the bill server-side; the label says so before the tap.
+  ['intl_card',      'International card +4% · 外卡 +4%'],
 ];
 // Styled in-app picker (not the native prompt) so confirming an off-app
 // payment looks like part of the backend. Resolves the chosen method value,

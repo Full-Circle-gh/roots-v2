@@ -238,6 +238,8 @@ function handlerFor(db) {
     // The real reader, over the fixture's own storefront_config rows.
     taxSettings: new Function('tdb', 'tax', `${extractFunction(RETAIL_SRC, 'taxSettings')}\nreturn taxSettings;`)(() => db, tax),
     tax, money,
+    // §450 — the real intl-card surcharge rule, not a stub: it decides the total.
+    cardSurcharge: require(path.join(ROOT, 'lib', 'card-surcharge')).cardSurcharge,
     geocodeOrderSnapshotAsync: () => {},
     claimMigrationCredit: () => null,
     reconcileSignupVouchers: () => 0,
