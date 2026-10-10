@@ -232,6 +232,8 @@ function makeHandler(db, spies) {
     )(() => db, require(path.join(ROOT, 'lib', 'tax'))),
     tax: require(path.join(ROOT, 'lib', 'tax')),
     money: require(path.join(ROOT, 'lib', 'money')),
+    // §450 — the real intl-card surcharge rule, not a stub: it decides the total.
+    cardSurcharge: require(path.join(ROOT, 'lib', 'card-surcharge')).cardSurcharge,
     /* Store credit (§93), real and whole for the same reason tax above is. This
        file's subject is WHAT COMMITS TOGETHER, and the credit deduction is now
        part of the transaction the cases below count rows in — a stub returning

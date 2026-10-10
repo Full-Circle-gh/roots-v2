@@ -449,6 +449,7 @@ const businessDate = require('../lib/business-date');
 // thousand times is 9.999999999999831, not 10. The running totals below are
 // computed here instead, in whole cents.
 const money = require('../lib/money');
+const { cardSurcharge } = require('../lib/card-surcharge');
 // What was deleted, kept so it can be put back (audit E-07).
 const recycle = require('../lib/recycle');
 // Sales tax and VAT (audit I-03). Off unless a shop has set a rate.
@@ -27850,13 +27851,13 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // the one fact the reconciliation needs and the one this route used to throw
   // away.
   //
-  // These five are NOT a new vocabulary. They are exactly OFFLINE_PAY_METHODS,
+  // These six are NOT a new vocabulary. They are exactly OFFLINE_PAY_METHODS,
   // the set the admin's own Mark-paid control has always written through
   // PATCH /orders/:id/status, and the labels are the locked pairs in
   // PAY_METHOD_CHOICES (04-orders.js). The two lists were the same idea under
   // two spellings; this route simply stops being the narrower of the two.
   const ALLOWED_PAY = ['offline', 'wechat', 'alipay', 'points', 'balance', 'other',
-                       'cash', 'bank_transfer', 'wechat_offline', 'alipay_offline'];
+                       'cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'intl_card'];
   const paymentMethod = ALLOWED_PAY.includes(String(b.payment_method)) ? String(b.payment_method) : 'offline';
   /* ── A CREDIT TENDER HAS TO BE TRUE (§93) ────────────────────────────────
      'points' and 'balance' have sat in ALLOWED_PAY since the off-app tenders
@@ -27878,6 +27879,16 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       points_amount: credit.pointsAmount, balance_used: credit.balanceUsed, due: total,
     });
   }
+  /* ── §450 · AN INTERNATIONAL CARD CARRIES ITS 4% ─────────────────────────
+     Added to the CASH figure, after credit, because that is what the card is
+     charged and what the acquirer takes its fee on; points and wallet are not
+     card money. `total` stays the one figure the terminal is keyed with, the
+     payment row records and a refund caps against, so the 4% is refunded with
+     the order (Ash's decision). card_surcharge_fee says how much of it is the
+     fee, for the receipt line and the money checks. The server computes it;
+     the till only previews the same lib/card-surcharge.js arithmetic. */
+  const cardFee = cardSurcharge(paymentMethod, total);
+  if (cardFee > 0) total = money.round(total + cardFee);
   const staffNote    = b.staff_note    == null ? null : String(b.staff_note).slice(0, 2000);
   const customerNote = b.customer_note == null ? null : String(b.customer_note).slice(0, 2000);
 
@@ -28147,8 +28158,9 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
            subtotal, shipping_fee, packing_fee, total,
            customer_note, staff_note, channel, channel_note, source, created_by, fulfillment_type, pay_token,
            store_id, tax_amount, tax_rate_micro, tax_mode, shop_entry_method,
-           points_used, points_amount, balance_used, voucher_code, voucher_amount
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           points_used, points_amount, balance_used, voucher_code, voucher_amount,
+           card_surcharge_fee
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
@@ -28166,7 +28178,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         // (orderTenders / splitRefundAcrossTenders) instead of being returned
         // entirely in cash the shop never took.
         credit.pointsUsed, credit.pointsAmount, credit.balanceUsed,
-        counterVoucher ? counterVoucher.voucher.code : null, voucherDiscount
+        counterVoucher ? counterVoucher.voucher.code : null, voucherDiscount,
+        cardFee
       );
       orderId = info.lastInsertRowid;
       // §426 — the voucher's use, counted the way the checkout counts it, in the
@@ -28337,6 +28350,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
                                     balance_used: credit.balanceUsed,
                                     // §426 — the voucher the server applied, if any.
                                     voucher_amount: voucherDiscount,
+                                    // §450 — the intl-card 4%, already inside `total`.
+                                    card_surcharge_fee: cardFee,
                                     // What was charged, so the caller can print
                                     // it without a second read (audit I-03).
                                     tax_amount: taxAmount, tax_mode: taxMode, tax_rate_micro: taxRateMicro } });
@@ -35056,7 +35071,9 @@ const STATUS_TRANSITIONS = {
 // button. Recorded so revenue can be split by real tender (cash vs bank
 // transfer vs a WeChat/Alipay transfer received outside the mini app) instead
 // of all manual payments collapsing into "unknown".
-const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other']);
+// 'intl_card' (§450) is off-app too: keyed into the shop's own terminal and
+// refunded by hand.
+const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other', 'intl_card']);
 
 // Evidence that a settled payment row's money actually reached the gateway.
 // Either mark is conclusive on its own:
@@ -35425,6 +35442,23 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   // money actually arrived. Ignored for any other transition.
   const offlinePay = status === 'paid' && OFFLINE_PAY_METHODS.has(pay_method) ? pay_method : null;
   if (offlinePay) { sets.push('payment_method = ?'); params.push(offlinePay); }
+  /* §450 — the international-card 4%, on THIS path too (Ash: a QR order paid at
+     the counter, or one marked paid in the office, pays what a till sale pays).
+     Worked from the cash figure with any earlier fee taken out first, so the
+     tender named NOW decides it: an order created on the card and settled in
+     cash loses the fee, and one that already carries it is never charged twice.
+     Only reachable from pending_payment (STATUS_TRANSITIONS.paid), so a paid
+     order's total never moves here. */
+  if (offlinePay) {
+    const m = tdb().prepare('SELECT total, card_surcharge_fee FROM retail_orders WHERE id = ?').get(id);
+    const oldFee = Number(m.card_surcharge_fee) || 0;
+    const base = money.round((Number(m.total) || 0) - oldFee);
+    const fee = cardSurcharge(offlinePay, base);
+    if (fee !== oldFee) {
+      sets.push('total = ?', 'card_surcharge_fee = ?');
+      params.push(money.round(base + fee), fee);
+    }
+  }
   if (status === 'cancelled' && reason) { sets.push('cancelled_reason = ?'); params.push(reason); }
   if (staff_note != null) { sets.push('staff_note = ?'); params.push(staff_note); }
   // The status shortcut completes the refund in one shot (money moved above,

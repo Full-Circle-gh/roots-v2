@@ -72,7 +72,8 @@
 
    LANGUAGE: one at a time, never glued. cuT(en, cn) picks one, and every CN
    half is COPIED from a locked source — the live admin's own pairs or
-   docs/tacet-delivery-vocabulary.md. Nothing here is composed. See STRINGS.
+   docs/tacet-delivery-vocabulary.md. The one exception is §450's international
+   card pair, composed and declared there (v1.320). See STRINGS.
    ========================================================================== */
 
 :root {
@@ -1219,7 +1220,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     optUpTo:      ['Up to ', '最多 '],                 // shop-menu.js:2176
     optAtLeast:   ['At least ', '至少 '],              // shop-menu.js:2177
     optCount:     ['', ' 项'],                         // shop-menu.js:2175 (L_N_CN)
-    optAdd:       ['Add', '添加']                      // m.html:19223, as installAdd above
+    optAdd:       ['Add', '添加'],                     // m.html:19223, as installAdd above
+    // §450 — the 4% an international card adds, named beside the amount it
+    // moved. Composed by Claude, declared in the vocabulary doc v1.320.
+    cardFee:      ['Card fee 4%', '外卡手续费 4%']       // vocab: composed §450
   };
   function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
 
@@ -1236,7 +1240,12 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     { v: 'alipay_offline', en: 'Alipay (off-app)',  cn: '支付宝(线下)', lead: true },
     { v: 'cash',           en: 'Cash',              cn: '现金' },
     { v: 'bank_transfer',  en: 'Bank transfer',     cn: '银行转账' },
-    { v: 'other',          en: 'Other',             cn: '其他' }
+    { v: 'other',          en: 'Other',             cn: '其他' },
+    // §450 — adds 4% to what the card takes (lib/card-surcharge.js), and the
+    // label says so BEFORE the tap. Folded with the other three rather than
+    // led: a mis-tap here charges a local customer 4% for nothing, so it is one
+    // deliberate tap away. Composed pair, declared in the vocabulary doc v1.320.
+    { v: 'intl_card',      en: 'International card +4%', cn: '外卡 +4%' }
   ];
 
   /* ====================================================================
@@ -2590,6 +2599,18 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     return Math.max(0, Math.round((settleDue() - creditOffer().applied) * 100) / 100);
   }
   function creditApplied() { return creditOffer().applied; }
+  /* §450 — the international card's 4%, on what the CARD takes: the residual
+     after credit, never the gross. The same arithmetic as lib/card-surcharge.js
+     (whole fen, rounded) — a preview only; the server computes the figure it
+     charges and the done screen reads that one back. */
+  var CARD_FEE_PCT = 4;
+  function cardFee() {
+    if (S.wallet !== 'intl_card') return 0;
+    var fen = Math.round(cashDue() * 100);
+    return fen > 0 ? Math.round(fen * CARD_FEE_PCT / 100) / 100 : 0;
+  }
+  // What the terminal is keyed with: the residual plus the card's 4%.
+  function chargeDue() { return Math.round((cashDue() + cardFee()) * 100) / 100; }
   /* The tender to record when CREDIT settled the whole bill and no wallet took
      anything. Points lead because they apply first and are the larger half of
      any sale they cover; 'balance' is named only when the wallet did it alone.
@@ -2954,6 +2975,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // included, and a character that never renders is still one nobody checked
     // against a source.)
     if (cr.applied > 0) subline += ' · ' + esc(T('total')) + ' ' + money(settleDue());
+    // §450 — the big number moves by the card's 4% the moment it is picked, and
+    // the subline names the part that moved it, so "why is it more?" is
+    // answered on the screen the customer is looking at.
+    var fee = cardFee();
+    if (fee > 0) subline += ' · ' + esc(T('cardFee')) + ' ' + money(fee);
     var lead = WALLETS.filter(function (w) { return w.lead; });
     var rest = WALLETS.filter(function (w) { return !w.lead; });
     var walletBtn = function (w) {
@@ -2966,7 +2992,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       + esc(T('back')) + '</button></div>'
       + '<div class="smain">'
       +   '<div class="samt"><div class="lb">' + esc(T('amount')) + '</div>'
-      +     '<div class="amt">' + money(due) + '</div>'
+      +     '<div class="amt">' + money(chargeDue()) + '</div>'
       // The subline is the cashier's check that they opened the right row: for
       // a recalled QR order it repeats the number the customer is holding up
       // and the name they gave, which are the only two things the customer can
@@ -3057,6 +3083,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       +     (d.pointsAmount > 0 ? esc(T('points')) + ' -' + money(d.pointsAmount) + ' · ' : '')
       +     (d.balanceUsed  > 0 ? esc(T('wallet')) + ' -' + money(d.balanceUsed)  + ' · ' : '')
       +     (w ? esc(cuT(w.en, w.cn)) + ' · ' : '')
+      +     (d.cardFee > 0 ? esc(T('cardFee')) + ' ' + money(d.cardFee) + ' · ' : '')
       +     esc(d.order_no || '') + '</div>'
       +   '<div class="drow">'
       +     '<button class="dsec" type="button" data-print="1"' + (S.printState === 'busy' ? ' disabled' : '') + '>' + esc(printLabel) + '</button>'
@@ -3248,7 +3275,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       S.done = { id: j.data.id, order_no: j.data.order_no, total: j.data.total,
                  wallet: S.wallet, tender: body.payment_method,
                  pointsAmount: Number(j.data.points_amount) || 0,
-                 balanceUsed: Number(j.data.balance_used) || 0 };
+                 balanceUsed: Number(j.data.balance_used) || 0,
+                 cardFee: Number(j.data.card_surcharge_fee) || 0 };
       S.view = 'done'; S.printState = 'idle';
       // The shelf moved server-side; mirror it locally so the next sale's
       // tiles are honest without a full reload.
@@ -3296,7 +3324,12 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     }).then(function (j) {
       S.busy = false;
       if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
-      S.done = { id: r.id, order_no: r.order_no, total: r.total, wallet: S.wallet };
+      // The server's row comes back whole; its total carries the card's 4%
+      // when that was the tender (§450), so it is read rather than r.total.
+      var row = j.data || {};
+      S.done = { id: r.id, order_no: r.order_no, wallet: S.wallet,
+                 total: row.total != null ? Number(row.total) : r.total,
+                 cardFee: Number(row.card_surcharge_fee) || 0 };
       S.view = 'done'; S.printState = 'idle';
       // It is not waiting any more. Dropped locally so the count is right the
       // instant the screen changes rather than up to fifteen seconds later —

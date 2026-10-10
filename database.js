@@ -4949,6 +4949,12 @@ addColumn('retail_orders', 'balance_used', 'REAL DEFAULT 0');
 // is the gateway/payout ceiling. NULL on legacy/credit-free orders → callers
 // fall back to refund_amount_approved (where cash == value).
 addColumn('retail_orders', 'refund_cash_amount', 'REAL');
+// §450 — the international-card surcharge (lib/card-surcharge.js), ¥. ALREADY
+// INSIDE `total`, like same_day_surcharge_fee is inside shipping_fee: this
+// column says how much of the cash figure is the 4%, so the receipt can print
+// it as its own line and the money checks can account for it. 0 on every
+// order not settled on an international card.
+addColumn('retail_orders', 'card_surcharge_fee', 'REAL DEFAULT 0');
 
 // ── Unfinished "New order" forms ───────────────────────────────────────────────
 // A SEPARATE TABLE, deliberately NOT a 'draft' value on retail_orders.status.

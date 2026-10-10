@@ -70,7 +70,8 @@ function fixture() {
            ALTER TABLE retail_orders ADD COLUMN tax_mode TEXT;
            ALTER TABLE retail_orders ADD COLUMN source TEXT;
            ALTER TABLE retail_orders ADD COLUMN created_by INTEGER;
-           ALTER TABLE retail_orders ADD COLUMN placed_at TEXT;`);
+           ALTER TABLE retail_orders ADD COLUMN placed_at TEXT;
+           ALTER TABLE retail_orders ADD COLUMN card_surcharge_fee REAL DEFAULT 0;`);
   // One customer, eight clean orders. Every relationship holds exactly.
   // lifetime_spend is the sum of every order subtotal
   // (100 + 60 + 50 + 228.50 + 266 + 100 + 100 + 994), so the reconciliation starts
@@ -154,6 +155,18 @@ function fixture() {
      almost nothing and keeps the one row readable. */
   ord.run(8, 'A-8', 1, 'completed', 994, 0, 0, 0, 0, 0, 0, 994.00, 0, 0);
   db.prepare("UPDATE retail_orders SET source = 'manual', created_by = 6, placed_at = '2026-08-14 11:11:09' WHERE id = 8").run();
+
+  /* A-9 / A-10 · THE INTERNATIONAL-CARD 4% (§450), inside `total` and named in
+     card_surcharge_fee. A-9 is a till sale (manual, so reconciliation I reads
+     it): ¥100 of goods, ¥30 of it in points, 4% of the ¥70 the card took is
+     ¥2.80, total ¥72.80. A-10 is a QR order marked paid on the card (not
+     manual, so invariant A reads it): ¥50 → ¥52. Both clean only because the
+     fee is counted; §7 drops it and requires both to show. No customer, so the
+     lifetime reconciliation G is not asked about orders it never saw. */
+  ord.run(9,  'A-9',  null, 'completed', 100, 0, 0, 0, 0, 30, 0, 72.80, 0, 0);
+  ord.run(10, 'A-10', null, 'completed',  50, 0, 0, 0, 0,  0, 0, 52.00, 0, 0);
+  db.prepare("UPDATE retail_orders SET source = 'manual', card_surcharge_fee = 2.80 WHERE id = 9").run();
+  db.prepare("UPDATE retail_orders SET card_surcharge_fee = 2.00 WHERE id = 10").run();
 
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
     .run(1, 1, 'S-1', 4, 25, 100, 0.042);
@@ -369,6 +382,26 @@ section('6 · the classifications that would have been catastrophic');
     'a wallet balance is the record itself, and nothing can prove it back');
   yes(M.columnsOfUnit('unresolved').length > 0,
     'and the unresolved ones are counted, not quietly treated as amounts');
+}
+
+// ── §7 · the international-card 4% is counted, not tolerated (§450) ───────
+section('7 · an order carrying the intl-card fee adds up only because the fee is read');
+{
+  const db = fixture();
+  db.prepare('UPDATE retail_orders SET card_surcharge_fee = 0 WHERE id IN (9, 10)').run();
+  const c = counts(db);
+  is(c.I, 1, 'I — the till sale (A-9) stops adding up without its ¥2.80');
+  is(c.A, 1, 'A — and so does the QR order marked paid on the card (A-10)');
+}
+{
+  // The fee sits OUTSIDE the credit MAX: a bill points cover in full has no
+  // card fee, and one they cover in part is surcharged on the remainder only.
+  const { cardSurcharge, CARD_SURCHARGE_PCT } = require('../lib/card-surcharge');
+  is(CARD_SURCHARGE_PCT, 4, 'the rate is 4%');
+  is(cardSurcharge('intl_card', 70), 2.8, '¥70 on the card → ¥2.80');
+  is(cardSurcharge('intl_card', 12.34), 0.49, 'rounded to the fen: ¥12.34 → ¥0.49');
+  is(cardSurcharge('intl_card', 0), 0, 'nothing left for the card → no fee');
+  is(cardSurcharge('wechat_offline', 70), 0, 'every other tender → no fee');
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

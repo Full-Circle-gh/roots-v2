@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.498
+# Tacet shared-core consolidation — decisions record, v4.499
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-10 · v4.499 — **§450 · AN INTERNATIONAL CARD ADDS 4% TO THE BILL — DECIDED BY ASH:** *"till - when selecting payment method, there should be an option for international card, if it selected a 4% extra should be add automatic to the bill"*. A sixth off-app tender, `intl_card`; 4% of what the card takes after credit, inside `total` and named in a new `card_surcharge_fee` column; charged on the till's create and on Mark paid; refunded with the order; printed on the receipt. Flagged to Ash first: PBOC acquiring rules bar charging a cardholder extra, so check with the terminal provider. Three Chinese strings composed (vocabulary v1.320).
 
 2026-10-10 · v4.498 — **§49 AMENDED · AN UNPAID COUNTER ORDER NOW LIVES TWO HOURS, NOT TWENTY MINUTES — DECIDED BY ASH:** *"2 hours"*, answering a recommendation of 60–90 minutes. **WHAT RAISED IT:** TC001037, a QR order from a table at Yuexiu (¥87, pick-up number 4), was cancelled by the counter clock at 20.8 minutes (`counter_unpaid_timeout`) while its customers were still at the table; nobody cancelled it by hand. Ash asked for it back as unpaid. At a table people pay at the end, so twenty minutes cancels real orders. **THE ORDER WAS RESTORED FIRST,** through `oneoff.yml` (dry run, then apply, backup verified and kept): `scripts/oneoff_restore_order_TC001037.js` put it back to `pending_payment`, reopened its offline payment row, re-activated the four stock holds the clock had released, and **moved `placed_at` to the repair time**, because the sweeper runs every minute and keys on `placed_at`, so the order would otherwise have been cancelled again on the next tick. The old `placed_at` is kept in the activity_log row it wrote. `scripts/diagnose_order_TC001037.js` is the read-only survey behind it. **THE CHANGE:** `COUNTER_CANCEL_MIN_DEFAULT` in `lib/inventory.js` goes from 20 to 120. It is the code default rather than a per-tenant `orders.counterAutoCancelMinutes` row, because no tenant had set one and a ruling for every shop belongs in the default; the setting still overrides it per tenant and `0` still switches the clock off. Nothing else about the clock changes: it still keys on `placed_at`, and staff can still cancel at any moment. No screen or message names the interval, so no string changes. `scripts/test_counter_sweep_exempt.js` gains two checks (an hour-old counter order survives the sweep; one at 121 minutes does not), proved by putting the old value back. No Chinese string, no schema change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -29519,3 +29521,66 @@ Strings: none composed — `From the kitchen · 厨房申请`, `View · 查看` 
 `more · 更多` are copied whole from live pairs.
 Tests: `scripts/test_kitchen_asks_dashboard.js` runs the shipped SQL against a
 schema database.js built, and checks the gate, words and door on both clients.
+
+## §450 — AN INTERNATIONAL CARD ADDS 4% TO THE BILL
+
+**Decided by Ash, 2026-10-10:** *"till - when selecting payment method, there
+should be an option for international card, if it selected a 4% extra should
+be add automatic to the bill"*. The five choices below were put to Ash with a
+recommendation each and Ash answered *"go"*.
+
+**Flagged before it was built.** The PBOC's card-acquiring rules
+(《银行卡收单业务管理办法》) bar a merchant from charging a cardholder extra for
+paying by card, and acquirer contracts usually carry the same clause. Ash was
+told this, and advised to check with the terminal provider before using it.
+The build goes ahead on Ash's word; this note is here so the next reader knows
+the question was asked.
+
+**The rule.**
+1. **A sixth off-app tender, `intl_card`,** *International card +4% · 外卡 +4%*
+   on the pickers. On the till it sits with Cash, Bank transfer and Other behind
+   the one tap, not beside WeChat and Alipay, because a mis-tap charges a local
+   customer 4% for nothing. It is in `OFFLINE_PAY_METHODS`, so a refund is paid
+   by hand and never pushed to the gateway.
+2. **4% of what the CARD takes:** the cash figure after points and wallet,
+   never the gross. Whole fen, rounded. Not taxed. `lib/card-surcharge.js`
+   holds it once, as a constant (`CARD_SURCHARGE_PCT = 4`), not a setting —
+   §130's reason.
+3. **Inside `total`, named in `card_surcharge_fee`** (new column, `REAL DEFAULT
+   0`, `addColumn`). `total` stays the one figure the terminal is keyed with,
+   the payment row records and a refund caps at. The column says how much of it
+   is the fee, as `same_day_surcharge_fee` does for shipping.
+4. **Both paths charge it.** The create route (a till sale) adds it after
+   credit. The status route (a QR order settled at the till, and the office's
+   and phone's Mark paid) adds it on the pending → paid flip, taking any earlier
+   fee out first: the tender named at payment decides, and nothing is charged
+   twice. Paid is only reachable from `pending_payment`, so a paid total never
+   moves.
+5. **Refunded with the order.** It is inside `total`, so the existing refund
+   ceiling (`orderTenders`) already returns it.
+6. **The till shows it before the tap is confirmed.** Picking the card moves the
+   big amount by 4% at once and the subline names *Card fee 4%*. The preview is
+   the server's arithmetic, proven equal over every amount to ¥300; the done
+   screen reads the server's figure back, on a recalled order too.
+7. **It is named wherever money is shown.** The receipt prints *Card fee 4%*
+   after the credit lines so the column still adds up to TOTAL. The office
+   subline, the phone breakdown, both money-gap checks and
+   `check_money_invariants` (A and I) count it; `lib/money-columns.js` registers
+   the column.
+
+**Not changed.** The QR menu cannot choose it (a QR order picks its tender on
+the phone, and the fee is added when it is settled). The office New-order
+wizard's tender select. The refund payout default (`other`). The two
+pending-QR recompute routes (§426, §428): they only touch unpaid QR orders,
+which never carry the fee.
+
+Strings: three composed — `外卡`, `外卡 +4%`, `外卡手续费 4%` — declared in
+`docs/tacet-delivery-vocabulary.md` v1.320 with the candidates rejected.
+Tests: new `scripts/test_intl_card_surcharge.js` (the status-route block run
+against a real `retail_orders`, the till preview against the server rule, the
+wiring; `ICS_MUTANT=1` goes red). `test_till_credit.js` gains four cases
+through the real create route. `test_money_invariants.js` gains §7.
+`test_tax.js`, `test_till_credit.js` and `test_tx_conversion_manual_order.js`
+hand the sliced route the real `cardSurcharge`.
+Schema: one new column, `retail_orders.card_surcharge_fee`. No change to
+`.gitignore` or CI.

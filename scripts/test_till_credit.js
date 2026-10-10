@@ -582,6 +582,8 @@ function handlerFor(d) {
     ].map(extractFunction).join('\n') + '\n' + grab('manualOrderCredit'))
       + '\nreturn manualOrderCredit;')(() => d),
     tax: taxLib, money,
+    // §450 — the real intl-card surcharge rule, not a stub: it decides the total.
+    cardSurcharge: require(path.join(ROOT, 'lib', 'card-surcharge')).cardSurcharge,
     // §426 — real, with their chain, for the reason the resolver above is real:
     // a stub would decide what these sales are charged.
     bestCounterVoucher: new Function('tdb', [
@@ -745,6 +747,47 @@ const liveCustomer = (d, { points = 0, balance = 0 }) => {
       const c = d.prepare('SELECT points_balance, balance FROM retail_customers WHERE id = 1').get();
       assert.deepStrictEqual([c.points_balance, c.balance], [500, 500]);
       assert.strictEqual(d.prepare('SELECT COUNT(*) AS n FROM retail_points_transactions').get().n, 0);
+    });
+  })();
+
+  /* §450 — THE INTERNATIONAL CARD CARRIES ITS 4%, on what the card takes.
+     Through the real route, because the fee moves `total` — the figure the
+     terminal is keyed with, the payment row records and a refund caps at. */
+  await (async () => {
+    const d = liveFixture();
+    const { res, row } = await sell(d, { payment_method: 'intl_card' });
+    it('§450 an international-card sale is charged the bill plus 4%', () => {
+      assert.strictEqual(res.code, 200);
+      assert.strictEqual(row.total, 104);
+      assert.strictEqual(row.card_surcharge_fee, 4);
+      assert.strictEqual(row.payment_method, 'intl_card');
+      assert.strictEqual(res.body.data.total, 104);
+      assert.strictEqual(res.body.data.card_surcharge_fee, 4);
+    });
+    it('§450 and the payment row asks the terminal for the same ¥104', () => {
+      const pay = d.prepare('SELECT method, amount FROM retail_payments ORDER BY id DESC LIMIT 1').get();
+      assert.deepStrictEqual([pay.method, pay.amount], ['intl_card', 104]);
+    });
+  })();
+
+  await (async () => {
+    const d = liveFixture();
+    const id = liveCustomer(d, { points: 30 });
+    const { row } = await sell(d, { customer_id: id, points_to_use: 30, payment_method: 'intl_card' });
+    it('§450 the 4% is on what the CARD takes, never on the points', () => {
+      // ¥100 − ¥30 points = ¥70 on the card; 4% of that is ¥2.80.
+      assert.strictEqual(row.points_amount, 30);
+      assert.strictEqual(row.card_surcharge_fee, 2.8);
+      assert.strictEqual(row.total, 72.8);
+    });
+  })();
+
+  await (async () => {
+    const d = liveFixture();
+    const { row } = await sell(d, { payment_method: 'wechat_offline' });
+    it('§450 every other tender pays the bill and nothing more', () => {
+      assert.strictEqual(row.total, 100);
+      assert.strictEqual(row.card_surcharge_fee, 0);
     });
   })();
 
