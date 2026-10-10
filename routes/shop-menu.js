@@ -7,10 +7,11 @@
 // counter order. No login, no session, no cookie and no account: a name and a
 // short number are the whole of the customer's identity here (§44).
 //
-// THE TICKET PRINTS ON SUBMIT, not on paid (§44) — the kitchen starts making
-// the drink while the customer is still walking to the till. It reuses the paid
-// path's own printer, and routes/retail.js declines to print a QR order a
-// second time when the cashier settles it.
+// THE TICKET PRINTS ON SUBMIT, not on paid (§44; off from 2026-09-08, back on
+// 2026-10-10) — the kitchen starts making the drink while the customer is
+// still walking to the till. The in-page WeChat rail is the exception (§50).
+// It reuses the paid path's own printer, and routes/retail.js declines to
+// print a QR order a second time when the cashier settles it.
 //
 // THE PAGE ITSELF STILL CARRIES NO CART. The submit surface is the next piece
 // of Step 5b; the endpoint is built and proved first so the page has something
@@ -86,11 +87,10 @@ const {
   // costed by the same code. A second answer to any of the three would show up
   // as a margin report nobody can reconcile.
   nextOrderNo, taxSettings, costAtSale, optionsCostAtSale,
-  // autoPrintOrder is NO LONGER IMPORTED, and its absence is the change rather
-  // than an oversight: §44's print-on-submit was narrowed away on 2026-09-08 and
-  // every QR ticket now comes from markOrderPaid() on the paid transition. See
-  // the note at the end of the submit handler for why nothing was needed inside
-  // autoPrintOrder itself for that to work.
+  // The paid path's own printer, so a QR ticket printed on submit is the same
+  // slip, to the same shop's printer, recorded the same way. It was dropped on
+  // 2026-09-08 and comes back on 2026-10-10 with print-on-submit (§44, §50).
+  autoPrintOrder,
   // §50, the in-page WeChat rail. Composed, never copied: the prepare, the
   // signing and the out_trade_no namespace are the same ones the mini app and
   // the storefront charge through, so a payment placed here settles through
@@ -4654,42 +4654,40 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     return res.status(500).json({ success: false, error: 'order_failed' });
   }
 
-  // NOTHING PRINTS HERE ANY MORE — Ash, 2026-09-08. §44 ruled the ticket prints
-  // on submit and §50 kept that for every path but in-page WeChat; this narrows
-  // it the rest of the way, so EVERY QR order prints when the money lands and
-  // none prints on submit.
+  // THE TICKET PRINTS NOW, ON SUBMIT — Ash, 2026-10-10. This reverses the
+  // 2026-09-08 change that had every QR order print only when paid. In Ash's
+  // words: the receipt prints automatically before paying, the order stays in
+  // the till's pending list until the customer pays, and it leaves the list
+  // once they have. One slip per order; it does not say paid or unpaid.
   //
-  // WHAT CHANGED UNDERNEATH THE OLD RULE. §44's reasoning was that the customer
-  // is walking to a till with staff watching them, so the ticket may as well be
-  // ahead of them. That held while the counter had no way to see the order
-  // before the customer arrived. It now does: the till lists today's unpaid QR
-  // orders and the cashier opens the one whose number the customer is holding
-  // up. The kitchen's signal is that list, not a slip that printed minutes
-  // earlier for someone who may still be deciding.
+  // THE COST IS KNOWN AND ACCEPTED. Submitting costs the customer nothing, so a
+  // slip can print for an order nobody pays for. That was the reason for the
+  // 2026-09-08 change; it was put to Ash before this one, and Ash chose the
+  // kitchen starting early over it.
   //
-  // THE COST IS NAMED RATHER THAN DISCOVERED, because it is the same trade §50
-  // recorded and it now falls on every order: the drink is started when the
-  // customer reaches the counter instead of while they walk. Bought against a
-  // ticket printed for food nobody pays for — which on this page is not
-  // hypothetical, since submitting costs the customer nothing and closing the
-  // tab costs them nothing either.
+  // THE IN-PAGE WECHAT RAIL STILL PRINTS ON PAID (§50, not reopened). It is
+  // switched off today, so in practice every QR order prints here.
   //
-  // NOTHING IS NEEDED IN autoPrintOrder FOR THIS TO WORK, and the reason is
-  // worth keeping because it looks like an omission. Its skip guard is
-  // `shop_entry_method='qr' AND print_status='printed'` (it read `source='qr'`
-  // until §44's 2026-09-07 amendment) — deliberately narrow, per its own
-  // comment. A QR order now reaches the paid transition having never printed,
-  // so print_status is null, the guard does not fire, and the paid path prints
-  // it exactly once, whether the money arrived through the till or through the
-  // in-page rail when that is switched back on.
+  // IT DOES NOT PRINT TWICE. autoPrintOrder's skip guard is
+  // `shop_entry_method='qr' AND print_status='printed'`, so when the cashier
+  // settles the order the paid path sees the slip already went and stays
+  // quiet. A print that FAILED here leaves print_status 'failed', the guard does
+  // not fire, and the paid path gets its chance — no lost ticket.
+  //
+  // AFTER the commit and fire-and-forget: a dead printer must not roll back an
+  // order that is otherwise good. autoPrintOrder records the outcome itself.
+  if (!payInPage) {
+    try { autoPrintOrder(created.orderId); }
+    catch (e) { console.warn('[shop-menu/print]', created.orderNo, e.message); }
+  }
 
   // RING THE COUNTER. The till polls every fifteen seconds as its floor, which
   // means a customer can reach the counter before their own order does. This
   // is the doorbell: the till re-reads its pending list the moment the socket
   // says something landed.
   //
-  // AFTER the commit and fire-and-forget, on exactly the reasoning the print
-  // used to carry here — a dead socket must not roll back an order that is
+  // AFTER the commit and fire-and-forget, on the same reasoning as the print
+  // above — a dead socket must not roll back an order that is
   // otherwise good. And it carries no order data, only the shop: the till
   // re-reads through /api/retail-admin/orders, which enforces the tenant scope
   // and the capability that this channel deliberately does not try to.

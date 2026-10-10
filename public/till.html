@@ -3278,11 +3278,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      second order here would charge one customer twice, print two tickets and
      leave a phantom on the shop's day.
 
-     THE KITCHEN TICKET COMES FROM THIS TRANSITION. markOrderPaid fires
-     autoPrintOrder on the paid transition, and a QR order now reaches it having
-     never printed — routes/shop-menu.js stopped printing on submit on
-     2026-09-08 — so the slip appears when the money lands, which is the whole
-     point of settling here rather than in the admin.
+     THE KITCHEN TICKET HAS ALREADY PRINTED. routes/shop-menu.js prints a QR
+     order the moment the customer submits it (back on since 2026-10-10), and
+     markOrderPaid's autoPrintOrder skips a QR order whose slip already went,
+     so settling here prints nothing new. A submit print that FAILED is the
+     exception: the guard lets this transition print it instead.
 
      ONE REQUEST, and the wallet rides on it: the same tap that says "paid" says
      which wallet took it, so an order cannot reach 'paid' with no tender and
