@@ -290,6 +290,10 @@ const DASH_CARD_CAP = {
   // applies the identical gate (lib/kitchen-ready.js canSeeKitchenReady) — this
   // one keeps the row off the screen, that one keeps the data off the wire.
   kitchen_ready: ['restock:request', 'restock:pick'],
+  // §449 — what the kitchen asked the buyer to buy. The Purchasing button's
+  // own key; the Production switch is checked beside it (dashFeatOn). The
+  // server applies the same pair and sends a zero to anyone else.
+  kitchen_asks: 'purchasing:edit',
 };
 function dashCardWants(kind) {
   const cap = DASH_CARD_CAP[kind];
@@ -1566,6 +1570,13 @@ function dashOpenFeedback() { dashOpenInbox('feedback'); }
 // Programmatic tab-switch — clicks the tab button so the global switcher
 // runs (closes drawers, updates active classes, etc.). Returns true if the
 // tab exists, false otherwise — lets callers fall back to a sibling tab.
+// §449 — the "From the kitchen" row opens the Purchasing picker it counts.
+// Same two lines as finTxOpenPO: the section first, then the open.
+function dashOpenKitchenAsks(ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  if (!dashJumpTab('purchasing')) return;
+  if (typeof window.puMrOpen === 'function') window.puMrOpen();
+}
 function dashJumpTab(name) {
   const btn = document.querySelector(`.tabs [data-tab="${name}"]`);
   if (!btn) return false;
@@ -3071,6 +3082,31 @@ function tdAttnRender() {
         ? krShown.join(cuT(', ', '，')) + (krRest > 0 ? ` +${krRest} ${cuT('more', '更多')}` : '')
         : null,
       cta: cuT('View', '查看'), go: 'dashOpenKitchenReady(event)',
+    });
+  }
+
+  /* §449 — FROM THE KITCHEN: lines the kitchen has asked the buyer to buy.
+     Ash: "from the kitchen request should be for buying department in the need
+     you dashboard". Until now the ask was a button inside Purchasing, found only
+     by a buyer already there. The button's own words and its own mark (box),
+     and the row opens the same picker it does.
+     BRICK WHEN ANY LINE IS URGENT, amber otherwise — the colour is the message,
+     so no new string. Names two and a tail off the total, as the row above. */
+  const ka = DASH_OPS.kitchen_asks || { count: 0, urgent: 0, items: [] };
+  if (ka.count && dashCardWants('kitchen_asks') && dashFeatOn('production')) {
+    const kaCn = window.cuLang && cuLang() === 'cn';
+    const kaShown = (ka.items || [])
+      .map(it => (kaCn ? (it.name_cn || it.name_en) : (it.name_en || it.name_cn)) || '')
+      .filter(Boolean).slice(0, 2);
+    const kaRest = Math.max(0, Number(ka.count || 0) - kaShown.length);
+    fires.push({
+      sev: Number(ka.urgent) > 0 ? 'brick' : 'amber', icon: 'box',
+      label: cuT('From the kitchen', '厨房申请'),
+      n: ka.count, mins: tdOldestMins(ka.items),
+      state: kaShown.length
+        ? kaShown.join(cuT(', ', '，')) + (kaRest > 0 ? ` +${kaRest} ${cuT('more', '更多')}` : '')
+        : null,
+      cta: cuT('View', '查看'), go: 'dashOpenKitchenAsks(event)',
     });
   }
 

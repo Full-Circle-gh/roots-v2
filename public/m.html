@@ -16980,9 +16980,23 @@ function loadPkLines(force){
   api('/material-requests/pending-lines').then(rows=>{
     state.pkLines=Array.isArray(rows)?rows:[]; state.pkErr=null;
     if(state.pk){ const ids=new Set(state.pkLines.map(l=>l.id)); state.pk.pick=state.pk.pick.filter(id=>ids.has(id)); }
+    pkSyncOps();
     pkRepaint();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.pkErr=E('Could not load this.','无法加载。'); pkRepaint(); });
+}
+/* §449 — Home's "From the kitchen" row reads the ops snapshot, which only
+   refreshes on its own poll. A fresh read of the list is the newer answer, so
+   it is copied over: drafting or striking off lines clears Home at once
+   instead of a poll later. loadPkLines only runs behind pkOn(), the row's
+   own gate, so this never fills the row for someone it is not shown to. */
+function pkSyncOps(){
+  const ka=state.ops&&state.ops.kitchen_asks, rows=state.pkLines;
+  if(!ka||!Array.isArray(rows)) return;
+  ka.count=rows.length;
+  ka.urgent=rows.filter(l=>Number(l.urgent)).length;
+  const ids=new Set(rows.map(l=>l.id));
+  ka.items=(ka.items||[]).filter(x=>ids.has(x.id));
 }
 /* While the search box has the keyboard, only the list under it is patched. */
 function pkRepaint(){
@@ -17084,7 +17098,7 @@ reg('pkOpen', ()=>{
   // have drafted or struck off lines since the count on the card.
   state.pkErr=null;
   api('/material-requests/pending-lines').then(rows=>{
-    state.pkLines=Array.isArray(rows)?rows:[]; if(state.pk) state.pk.loading=false; render();
+    state.pkLines=Array.isArray(rows)?rows:[]; if(state.pk) state.pk.loading=false; pkSyncOps(); render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     if(state.pk) state.pk.loading=false; state.pkLines=null; state.pkErr=E('Could not load this.','无法加载。'); render(); });
 });
@@ -38185,6 +38199,26 @@ function opsFires(){
       c('batch_owed'),boIt,
       boNm.length?boNm.join(T(', ','，'))+(boRest>0?' +'+boRest+' '+T('more','更多'):''):'',
       "APP.cmd('push','kitchenqueue')");
+  }
+  /* §449 — THE KITCHEN HAS ASKED THE BUYER FOR SOMETHING. Ash, off the
+     Purchasing screen's "From the kitchen" card: "from the kitchen request
+     should be for buying department in the need you dashboard". The card stays
+     where it was; this is the same count where the day starts.
+     The list's own name and its own door — the row opens the sheet the card
+     opens, and it says the card's words, so a buyer meets one name twice.
+     BRICK WHEN ANY LINE IS URGENT, amber otherwise: the colour is the whole
+     message, so no new string is minted for it. The line names what was
+     asked for, two and a tail off the TOTAL, as the kitchen rows above do.
+     Gated on pkOn() — the card's own gate — and the server sends no key to
+     anyone else. */
+  if(c('kitchen_asks')&&pkOn()){
+    const kaIt=items('kitchen_asks');
+    const kaNm=kaIt.map(x=>(LANG==='en'?(x.name_en||x.name_cn):(x.name_cn||x.name_en))||'').filter(Boolean).slice(0,2);
+    const kaRest=Math.max(0,c('kitchen_asks')-kaNm.length);
+    add(true,Number(o.kitchen_asks.urgent)>0?'brick':'amber','chef-hat',T('From the kitchen','厨房申请'),
+      c('kitchen_asks'),kaIt,
+      kaNm.length?kaNm.join(T(', ','，'))+(kaRest>0?' +'+kaRest+' '+T('more','更多'):''):'',
+      "APP.cmd('pkOpen')");
   }
   /* §215 — A SHOP HAS ASKED THIS ONE FOR STOCK. Reported by Ash off the live
      Home, pointing at the "Needs you" list: "if shop has asked for stock it
