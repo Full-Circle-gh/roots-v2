@@ -58,6 +58,9 @@
  *     order that already printed still prints at paid, and a QR order whose
  *     submit print FAILED still gets its chance — losing the ticket entirely
  *     is the worse failure of the two.
+ *
+ *     Print-on-submit was off from 2026-09-08 and is back on 2026-10-10 (Ash);
+ *     the in-page WeChat rail still prints on paid (§50).
  */
 'use strict';
 
@@ -895,29 +898,18 @@ const soldOut = (row) => /class="sold"/.test(row);
     // send resolves. Wait for the promise chain rather than for a clock.
     const settle = () => new Promise(r => setImmediate(() => setImmediate(r)));
 
-    // SUBMIT PRINTS NOTHING; SETTLING PRINTS ONE — 2026-09-08. §44 put the
-    // ticket on submit and §50 kept that for every path but in-page WeChat;
-    // this is the rest of the way. The counter can now see the order before the
-    // customer reaches it (the till's pending list), so the slip no longer has
-    // to run ahead of them — and a ticket for an order nobody pays for is food
-    // already made for nobody, which on this page costs the customer nothing to
-    // cause. Everything the slip must CARRY is unchanged and still asserted
-    // here; only the moment it appears moved.
-    await checkAsync('submitting prints nothing, and settling prints ONE ticket to that shop\'s own printer', async () => {
+    // SUBMIT PRINTS ONE; SETTLING PRINTS NOTHING — Ash, 2026-10-10. From
+    // 2026-09-08 the ticket waited for the money; it is back on submit so the
+    // kitchen starts before the customer pays. The order stays unpaid in the
+    // till's pending list until it is settled. Everything the slip must CARRY
+    // is unchanged and still asserted here; only the moment it appears moved.
+    await checkAsync('submitting prints ONE ticket to that shop\'s own printer, and settling prints nothing', async () => {
       await resetOrderLimit();
       slips.length = 0;
       const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 2 }] });
       assert.strictEqual(r.status, 201, JSON.stringify(r.json));
       await settle();
-      assert.strictEqual(slips.length, 0, `printed ${slips.length} slips on submit; the ticket belongs to the paid transition`);
-      const submitted = db.prepare('SELECT id, print_status FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no);
-      assert.strictEqual(submitted.print_status, null, 'print_status was stamped without a print');
-
-      // The paid transition is where it comes from now — the same function, and
-      // the same slip contents the kitchen has always needed to act.
-      retail.autoPrintOrder(submitted.id);
-      await settle();
-      assert.strictEqual(slips.length, 1, `printed ${slips.length} slips on one settle`);
+      assert.strictEqual(slips.length, 1, `printed ${slips.length} slips on one submit`);
       assert.strictEqual(slips[0].sn, 'TEST-SN-9861', 'the ticket went to the wrong counter');
       // The slip has to carry what the kitchen needs to act: the name that gets
       // called and the thing to make. If either is missing the print is useless
@@ -972,20 +964,17 @@ const soldOut = (row) => /class="sold"/.test(row);
       db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
     });
 
-    await checkAsync('a settle-print that FAILS still gets its chance at the counter', async () => {
-      // Losing the ticket altogether is the worse failure, and moving the print
-      // to the paid transition did not make the printer any more reliable — it
-      // moved WHEN the shop finds out. A failed print must not look like a
-      // successful one to the guard, or Reprint has nothing to offer and the
-      // kitchen is left with a paid order it never saw.
+    await checkAsync('a submit-print that FAILS still gets its chance at the counter', async () => {
+      // Losing the ticket altogether is the worse failure. A failed print must
+      // not look like a successful one to the guard, or the paid path stays
+      // quiet, Reprint has nothing to offer and the kitchen is left with a paid
+      // order it never saw.
       await resetOrderLimit();
+      feieMod.printContent = () => Promise.resolve({ ok: false, msg: 'printer_offline' });
       const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
       assert.strictEqual(r.status, 201, 'an offline printer must not fail the order');
-      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
-
-      feieMod.printContent = () => Promise.resolve({ ok: false, msg: 'printer_offline' });
-      retail.autoPrintOrder(oid);
       await settle();
+      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
       const o = db.prepare('SELECT print_status, print_error FROM retail_orders WHERE id = ?').get(oid);
       assert.strictEqual(o.print_status, 'failed');
       assert.strictEqual(o.print_error, 'printer_offline');
@@ -1215,7 +1204,7 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(!/class="pw"/.test(r.body), 'the payment row rendered with nothing behind it');
       });
 
-      await checkAsync('...and a submit CLAIMING wechat gets no pay url and no ticket', async () => {
+      await checkAsync('...and a submit CLAIMING wechat gets no pay url, and prints as a counter order', async () => {
         await resetOrderLimit();
         paySlips.length = 0;
         const r = await post(`/s/${LIVE}/order`, {
@@ -1224,7 +1213,8 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.strictEqual(r.status, 201, JSON.stringify(r.json));
         assert.strictEqual(r.json.data.pay_url, undefined, 'handed out a payment page with no Official Account');
         await settle();
-        assert.strictEqual(paySlips.length, 0, 'a ticket printed on submit');
+        // No rail, so it is a counter order — and counter orders print now.
+        assert.strictEqual(paySlips.length, 1, 'a counter-routed order did not print on submit');
       });
 
       // THE PRODUCTION STATE, and the one this suite would otherwise never see:
@@ -1299,13 +1289,12 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(paySlips[0].content.includes('Wei'), 'the name to call is not on the slip');
       });
 
-      // BOTH PATHS NOW BEHAVE THE SAME WAY ON SUBMIT — 2026-09-08. §50 made the
-      // WeChat path the exception to §44's print-on-submit; the counter path
-      // has since joined it, so "does not print on submit" is no longer a
-      // property of one rail but of the page. These two keep the counter half
-      // honest: a counter order still gets no payment page, and no longer gets
-      // a slip either.
-      await checkAsync('a counter order gets no payment page, and no ticket until it is paid', async () => {
+      // THE TWO PATHS PART AGAIN ON SUBMIT — Ash, 2026-10-10. §50 made the
+      // WeChat path the exception to §44's print-on-submit; from 2026-09-08 the
+      // counter path joined it, and it is now back. These two keep the counter
+      // half honest: a counter order gets no payment page, prints ONE slip on
+      // submit, and settling it prints nothing more.
+      await checkAsync('a counter order gets no payment page, prints on submit, and not again when paid', async () => {
         await resetOrderLimit();
         paySlips.length = 0;
         const r = await post(`/s/${LIVE}/order`, {
@@ -1314,13 +1303,13 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.strictEqual(r.status, 201, JSON.stringify(r.json));
         assert.strictEqual(r.json.data.pay_url, undefined, 'a counter order was sent to a payment page');
         await settle();
-        assert.strictEqual(paySlips.length, 0, 'the counter path still prints on submit');
-        // …and the till settling it is what produces the slip.
+        assert.strictEqual(paySlips.length, 1, 'a counter order did not print on submit');
+        assert.ok(paySlips[0].content.includes('Lin'), 'the name to call is not on the slip');
+        // …and the till settling it does not print a second slip.
         const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
         retail.autoPrintOrder(oid);
         await settle();
-        assert.strictEqual(paySlips.length, 1, 'settling a counter order never reached the kitchen');
-        assert.ok(paySlips[0].content.includes('Lin'), 'the name to call is not on the slip');
+        assert.strictEqual(paySlips.length, 1, 'settling a counter order printed a second slip');
       });
 
       await checkAsync('...and so does an order that names no payment method at all', async () => {
@@ -1330,7 +1319,7 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.strictEqual(r.status, 201, JSON.stringify(r.json));
         assert.strictEqual(r.json.data.pay_url, undefined);
         await settle();
-        assert.strictEqual(paySlips.length, 0, 'the default stopped being the counter');
+        assert.strictEqual(paySlips.length, 1, 'the default stopped being the counter');
       });
 
       const payUrl = `/s/${LIVE}/pay/${wxOrder.pay_token}`;
