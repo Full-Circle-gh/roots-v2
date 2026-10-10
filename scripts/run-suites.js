@@ -139,6 +139,9 @@ const SLOW = new Set([
   /* §446's More fold and Needs-you card. m-probe again, no findChrome() of its
      own, so isSlow() cannot see the browser; named here for the same reason. */
   'test_mobile_more_fold.js',
+  /* Rule 6 of PUTTING THE KEYBOARD AWAY: a paint nobody asked for keeps the
+     caret. m-probe again, no findChrome() of its own; named for the same reason. */
+  'test_mobile_keep_caret.js',
   'test_finance_presentation.js',
   // Drives Chromium for its render pass, so it belongs in the shard where
   // REQUIRE_BROWSER=1 — in the fast shard the render half would skip and report
