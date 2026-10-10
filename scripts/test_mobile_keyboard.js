@@ -478,5 +478,26 @@ console.log('\n══ 11 · the expense form keeps its caret when its own reads 
      'both reads, answer and failure alike, repaint through expRepaint and never bare render()');
 }
 
+console.log('\n══ 12 · rule 6 · a paint nobody asked for keeps the caret ══');
+/* The behaviour is proven in a real Chromium by scripts/test_mobile_keep_caret.js
+   (slow shard). What this gate holds is the wiring, so that suite cannot be
+   right about a rule render() has stopped calling: the caret is read BEFORE the
+   app is replaced, only when no event is being dispatched and no request is
+   armed, and put back AFTER the armed request has had its turn. */
+{
+  const r = sliceFn('render');
+  const held = r.indexOf('const _kbHeld=(state.focus||window.event)?null:kbHold();');
+  const paint = r.indexOf('app.innerHTML = html;');
+  const armed = r.indexOf('if(state.focus){ const el=document.getElementById(state.focus.id);');
+  const back = r.indexOf('kbRestore(_kbHeld);');
+  ok(held > 0 && held < paint, 'the caret is read before the paint, and only for a paint no event caused');
+  ok(armed > paint && back > armed, '...and put back after it, after any request a handler armed');
+  const hold = sliceFn('kbHold'), restore = sliceFn('kbRestore');
+  ok(/return null;\s*\/\/ nothing to know it by/.test(hold), 'a field with nothing to know it by is not guessed at');
+  ok(/bare:!a\.getAttribute\('oninput'\)&&!a\.getAttribute\('onchange'\)/.test(hold)
+     && /if\(t\.bare&&el\.value!==t\.value\) el\.value=t\.value;/.test(restore),
+     'text is carried over only for a field that keeps it nowhere else');
+}
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
