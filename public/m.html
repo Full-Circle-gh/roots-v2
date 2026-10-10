@@ -11698,8 +11698,8 @@ function screenSetup(){
       something inside wants you. NO COUNT OF ITS TOOLS: on this screen a number
       on a row means that many are waiting (§293's Inbox badge), so "5" beside
       Money and numbers would read as five things to do. A tap opens it in
-      place; the phone remembers which are open, the way it remembers the
-      questions strip. ALL CLOSED IS THE DEFAULT, for every role alike: §121
+      place, and it stays open only while you stay on More: §447, leaving More
+      closes them all again (see render()). ALL CLOSED IS THE DEFAULT, for every role alike: §121
       rejected a rule that changes the screen's shape with the row count, and
       folding only some lists would be that rule. The headless group (Settings)
       has nothing to fold under and stays a plain row.
@@ -11707,23 +11707,20 @@ function screenSetup(){
       screen, and its tools are the whole app: folding them would put a picker's
       one screen behind a heading. That is keyed to the mode, not to a count, so
       it is as predictable as the bar itself. */
-const M_MORE_OPEN_KEY='tacet-m-more-open';
+/* §447 — in memory only. §446 kept the open set on the phone; Ash asked for
+   it to fold again on every visit, so nothing is stored, and the key §446
+   wrote is cleared once so a group left open then does not come back. */
+try{ localStorage.removeItem('tacet-m-more-open'); }catch(e){}
 function moreOpenSet(){
-  if(!state.moreOpen){
-    let v=[];
-    try{ const raw=JSON.parse(localStorage.getItem(M_MORE_OPEN_KEY)||'[]'); if(Array.isArray(raw)) v=raw.map(String); }catch(e){}
-    state.moreOpen=new Set(v);
-  }
+  if(!state.moreOpen) state.moreOpen=new Set();
   return state.moreOpen;
 }
 /* A group is known by its English heading: stable across languages, and the
-   same words §121 chose, so an opened group stays open across a release that
-   only reorders the rows inside it. */
+   same words §121 chose. */
 const moreGroupKey=g=>g.h?g.h[0]:'';
 reg('toggleMoreGroup', k=>{
   const o=moreOpenSet(); if(o.has(k)) o.delete(k); else o.add(k);
   render();
-  try{ localStorage.setItem(M_MORE_OPEN_KEY, JSON.stringify([...o])); }catch(e){}
 });
 const moreRowWants=r=>moreRowDot(r.key) || moreRowCount(r.key)>0;
 /* ONE ROW, drawn the same in the Needs-you card and inside a group, so the
@@ -43921,6 +43918,21 @@ const TREND_SCENE_EN={1001:'Mini-program list',1005:'Search',1006:'Search result
   1038:'Back from mini-program',1047:'Scan code (Discover)',1048:'Long-press code',1058:'Official article',1065:'URL link',
   1074:'Official-account card',1089:'Chat tools',1101:'Dev preview',1106:'Chat pull-down search',1107:'Subscription msg',
   1131:'Floating window',1271:'Chat pull-down favourites'};
+/* dashDigestBuyers, field for field: buyers by channel and never one count,
+   because `orders` is every channel and a buyer is only countable where the
+   order names a person. The desktop's comment carries the why. */
+function trendDigestBuyers(D){
+  const nvr=D.new_vs_returning||{};
+  const bbc=D.buyers_by_channel||null;
+  const mt=bbc&&bbc.meituan;
+  return {
+    note:'Each channel counts its buyers its own way; these are not added together and are not the people behind kpis.orders.',
+    shop_accounts:{buyers:nvr.buyers||0,new_buyers:nvr.new_buyers||0,returning_buyers:nvr.returning_buyers||0},
+    meituan:mt?{buyers:mt.buyers,new_buyers:mt.new_buyers,counted_since:mt.since}:null,
+    wholesale:bbc&&bbc.wholesale?{buyers:bbc.wholesale.buyers}:null,
+    eleme:'not reported by the platform',
+  };
+}
 function trendDigest(){
   const D=state.trendFull; if(!D) return null;
   const r2=n=>Math.round(Number(n||0)*100)/100;
@@ -43932,7 +43944,7 @@ function trendDigest(){
   return {
     currency:CUR||'¥',
     window:D.window,
-    kpis:{revenue:r2(k.revenue),orders:k.orders,average_order:r2(k.aov),buyers:k.buyers,
+    kpis:{revenue:r2(k.revenue),orders:k.orders,average_order:r2(k.aov),
       new_customers:k.new_customers,visits:k.visits,sessions:k.sessions,unique_visitors:k.visitors,
       mini_app_orders:k.mini_app_orders,
       conversion_rate_pct:r2(k.conversion_rate),refund_rate_pct:r2(k.refund_rate),
@@ -43949,7 +43961,7 @@ function trendDigest(){
       .map(h=>({weekday:TREND_DOW_EN[h.dow],hour:h.hour,orders:h.orders})),
     top_products:(D.topProducts||[]).slice(0,8).map(p=>({name:p.name_en||p.name_cn,units:p.units,revenue:r2(p.revenue)})),
     top_customers:(D.topCustomers||[]).slice(0,5).map(c=>({name:c.nickname||('#'+c.customer_id),orders:c.orders,revenue:r2(c.revenue)})),
-    buyers_new_vs_returning:D.new_vs_returning,
+    buyers_by_channel:trendDigestBuyers(D),
     top_cities:(D.geoCities||[]).slice(0,6).map(g=>({city:g.city_en||g.city,city_cn:g.city,orders:g.orders,revenue:r2(g.revenue)})),
     vouchers:{orders_with_voucher:vouchers.reduce((s,v)=>s+Number(v.uses||0),0),
       discount_given:r2(vouchers.reduce((s,v)=>s+Number(v.discount||0),0))},
@@ -47994,6 +48006,11 @@ function render(){
   if(_sc&&_scrollKey) _scrollMem[_scrollKey]=_sc.scrollTop;
   if(_forget.length){ _forget.forEach(k=>{ delete _scrollMem[k]; }); _forget=[]; }
   const _skey=screenKey();
+  /* §447 — LEAVING MORE FOLDS IT. The screen is changing away from More (a tab,
+     or a tool pushed from it), so every group closes and the next arrival,
+     by Back or by the tab, finds the short list. A repaint of More itself
+     keeps the same key, so a poll never snaps a group shut mid-read. */
+  if(_scrollKey==='more|'&&_skey!=='more|') state.moreOpen=null;
   _scrollKey=_skey;
   let _keep=_scrollMem[_skey]||0;
   if(_bootScroll){

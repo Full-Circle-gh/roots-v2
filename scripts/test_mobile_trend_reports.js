@@ -274,7 +274,7 @@ section('4 · the read and Ask');
     h.screen();
     const d = h.calls.writes[0].body.digest;
     assert.deepStrictEqual(Object.keys(d), ['currency', 'window', 'kpis', 'change_vs_prior_window_pct', 'order_status', 'payments',
-      'delivery_modes', 'revenue_composition', 'wallet', 'busiest_hours', 'top_products', 'top_customers', 'buyers_new_vs_returning',
+      'delivery_modes', 'revenue_composition', 'wallet', 'busiest_hours', 'top_products', 'top_customers', 'buyers_by_channel',
       'top_cities', 'vouchers', 'points', 'checkout', 'retention_pct_by_months_since_first_order', 'traffic_scenes', 'article_views']);
     const body = DASH.slice(DASH.indexOf('function dashAiDigest()'), DASH.indexOf('async function dashReadMaybeLoad'));
     const deskKeys = [...body.matchAll(/^ {4}([a-z_]+):/gm)].map((m) => m[1]);
@@ -287,6 +287,34 @@ section('4 · the read and Ask');
     const phone = vm.runInContext('TREND_SCENE_EN', h.ctx);
     for (const [k, en] of scenes) assert.strictEqual(phone[k], en, 'scene ' + k);
     assert.strictEqual(Object.keys(phone).length, scenes.length);
+  });
+  it('buyers go by channel and never as one count beside orders', async () => {
+    // "48 orders across 11 buyers": the 11 were shop accounts, most of the 48
+    // were marketplace orders. The digest must not hand the model a bare count.
+    const h = await loaded();
+    h.screen();
+    const d = h.calls.writes[0].body.digest;
+    assert.ok(!('buyers' in d.kpis), 'no buyer count sits beside kpis.orders');
+    const D = {
+      new_vs_returning: { buyers: 11, new_buyers: 2, returning_buyers: 9 },
+      buyers_by_channel: { storefront: { buyers: 11, new_buyers: 2 }, meituan: { buyers: 20, new_buyers: 5, since: '2026-09-15' },
+        wholesale: { buyers: 3 }, eleme: null },
+    };
+    const phone = JSON.parse(JSON.stringify(h.ctx.trendDigestBuyers(D)));
+    assert.deepStrictEqual(phone, {
+      note: 'Each channel counts its buyers its own way; these are not added together and are not the people behind kpis.orders.',
+      shop_accounts: { buyers: 11, new_buyers: 2, returning_buyers: 9 },
+      meituan: { buyers: 20, new_buyers: 5, counted_since: '2026-09-15' },
+      wholesale: { buyers: 3 },
+      eleme: 'not reported by the platform',
+    });
+    const fn = DASH.slice(DASH.indexOf('function dashDigestBuyers('), DASH.indexOf('// Compact digest of the EXACT data on screen.'));
+    const desk = vm.runInNewContext(`(${fn})`)(D);
+    assert.deepStrictEqual(phone, JSON.parse(JSON.stringify(desk)), 'the desktop\'s block, field for field');
+    // An older server without buyers_by_channel: the shop figure alone, the rest unknown.
+    const old = JSON.parse(JSON.stringify(h.ctx.trendDigestBuyers({ new_vs_returning: D.new_vs_returning })));
+    assert.strictEqual(old.meituan, null); assert.strictEqual(old.wholesale, null);
+    assert.strictEqual(old.shop_accounts.buyers, 11);
   });
   it('the read, in this language, with the desktop\'s head and foot', async () => {
     const h = await loaded();
