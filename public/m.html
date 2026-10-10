@@ -9360,6 +9360,30 @@ function statusSales(){
   const n=Number(su.orders||0);
   return money0(CUR,su.revenue||0)+' '+T('today','今日')+' · '+n+' '+T(n===1?'order':'orders','单');
 }
+/* WHAT THE HEADER COUNTS THAT NO CHANNEL CARD DOES. /sales/summary sums seven
+   buckets into its total — the six channels, plus `direct` (orders keyed by
+   staff on the New order form, which belong to no channel) — and then folds in
+   the day's wallet top-up cash. The board drew only the six channels, so the
+   cards fell short of the header by exactly those two, with nothing saying
+   why: Ash, adding them up, "the total doesn't add up". The desktop Sales page
+   has always carried a Direct orders card and an "incl. top-ups" note; this is
+   those two, on the phone, and only when there is something to say. */
+function salesRemainder(){
+  const dr=state.sales&&state.sales.direct;
+  const tu=Number((state.salesSummary||{}).topups_received||0);
+  const out=[];
+  if(dr&&(Number(dr.orders)||Number(dr.revenue))) out.push(`<div class="card" style="display:flex;flex-direction:column;gap:12px;padding:16px;color:var(--text-primary);width:100%">
+      <span style="display:flex;align-items:center;gap:10px;min-width:0">
+        <span style="width:36px;height:36px;border-radius:9px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic('clipboard-list')}</span>
+        <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:16px;font-weight:500">${T('Direct orders','直接下单')}</span>
+          <span style="font-size:13px;color:var(--text-secondary)">${T('Keyed by staff','手工录入')}</span></span></span>
+      <span class="num" style="font-size:13px;color:var(--text-secondary)">${T(dr.orders+' today · '+money0(CUR,dr.revenue), '今日 '+dr.orders+' 单 · '+money0(CUR,dr.revenue))}</span>
+    </div>`);
+  if(tu>0) out.push(`<div style="padding:0 4px;font-size:13px;color:var(--text-secondary);line-height:1.45">${
+    T('Wallet top-ups ('+money0(CUR,tu)+') are in the total above but belong to no channel.',
+      '钱包充值（'+money0(CUR,tu)+'）计入上方合计，但不属于任何渠道。')}</div>`);
+  return out.join('');
+}
 function screenSales(){
   loadChannels();
   const d=state.chan;
@@ -9479,6 +9503,7 @@ function screenSales(){
             (!notIntegrated&&cells.length)?T('Open or close','开关门店'):T('View','查看')
             }<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>`:''}</div>`:''}
       </${Tag}>`;}).join('')}
+    ${salesRemainder()}
     ${/* This used to read "Opening and closing a channel is on desktop", and
          then "Closing a whole channel everywhere is on desktop". Neither is true
          now: the rows open and close per shop, and since §325 X12 the sheet's
