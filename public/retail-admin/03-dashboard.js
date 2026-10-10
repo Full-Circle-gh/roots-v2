@@ -3989,7 +3989,7 @@ function dashRenderSplits() {
   // platform, never touching our own gateways. offline: the pre-existing
   // generic tender (routes/retail.js ALLOWED_PAY) predating the five specific
   // off-app methods below it, for a counter payment not tied to a wallet.
-  const PAY_LBL = { wechat: ['WeChat Pay', '微信支付'], alipay: ['Alipay', '支付宝'], points: ['Points', '积分'], cash: ['Cash', '现金'], bank_transfer: ['Bank transfer', '银行转账'], wechat_offline: ['WeChat off-app', '微信(线下)'], alipay_offline: ['Alipay off-app', '支付宝(线下)'], intl_card: ['International card', '外卡'], meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], offline: ['Offline', '线下'], other: ['Other', '其他'], unknown: ['Unknown', '未知'] };
+  const PAY_LBL = { wechat: ['WeChat Pay', '微信支付'], alipay: ['Alipay', '支付宝'], points: ['Points', '积分'], cash: ['Cash', '现金'], bank_transfer: ['Bank transfer', '银行转账'], wechat_offline: ['WeChat off-app', '微信(线下)'], alipay_offline: ['Alipay off-app', '支付宝(线下)'], intl_card: ['International card', '外卡'], wechat_alipay_offline: ['WeChat / Alipay off-app', '微信 / 支付宝(线下)'], meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], offline: ['Offline', '线下'], other: ['Other', '其他'], unknown: ['Unknown', '未知'] };
   const DEL_LBL = { standard: ['Standard', '标准'], max: ['Max speed', '极速'], fixed: ['Same-city', '同城'], sameday: ['Same-day', '当日'], pickup: ['Pickup', '自提'], unknown: ['Unknown', '未知'] };
   const lbl = (map, k) => (map[k] ? cuT(map[k][0], map[k][1]) : String(k));
   /* Three bar groups, each under its own small heading. The mockup had none,
@@ -4370,6 +4370,7 @@ const DASH_PAY_NAMES = {
   points: ['Points', '积分'], cash: ['Cash', '现金'], bank_transfer: ['Bank transfer', '银行转账'],
   wechat_offline: ['WeChat off-app', '微信(线下)'], alipay_offline: ['Alipay off-app', '支付宝(线下)'],
   intl_card: ['International card', '外卡'],
+  wechat_alipay_offline: ['WeChat / Alipay off-app', '微信 / 支付宝(线下)'],
   other: ['Other', '其他'], unknown: ['Unknown', '未知'],
 };
 function dashPayName(m, cn) { const p = DASH_PAY_NAMES[m]; return p ? (cn ? p[1] : p[0]) : String(m || ''); }

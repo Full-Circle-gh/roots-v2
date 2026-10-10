@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.499
+# Tacet shared-core consolidation — decisions record, v4.500
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-10 · v4.500 — **§451 · WECHAT AND ALIPAY ARE ONE CHOICE WHEN PAID ON THE SHOP'S TERMINAL — DECIDED BY ASH:** *"no need wechat alipay seperate. it can be the same option because our machine charge it the same"*. One off-app tender, `wechat_alipay_offline`, replaces the two on the till and on both Mark-paid pickers; the old two values stay valid for past orders. New sales no longer split WeChat from Alipay in the payment report. One label assembled from two live ones (vocabulary v1.321).
 
 2026-10-10 · v4.499 — **§450 · AN INTERNATIONAL CARD ADDS 4% TO THE BILL — DECIDED BY ASH:** *"till - when selecting payment method, there should be an option for international card, if it selected a 4% extra should be add automatic to the bill"*. A sixth off-app tender, `intl_card`; 4% of what the card takes after credit, inside `total` and named in a new `card_surcharge_fee` column; charged on the till's create and on Mark paid; refunded with the order; printed on the receipt. Flagged to Ash first: PBOC acquiring rules bar charging a cardholder extra, so check with the terminal provider. Three Chinese strings composed (vocabulary v1.320).
 
@@ -29583,4 +29585,40 @@ through the real create route. `test_money_invariants.js` gains §7.
 `test_tax.js`, `test_till_credit.js` and `test_tx_conversion_manual_order.js`
 hand the sliced route the real `cardSurcharge`.
 Schema: one new column, `retail_orders.card_surcharge_fee`. No change to
+`.gitignore` or CI.
+
+## §451 — WECHAT AND ALIPAY ARE ONE CHOICE WHEN PAID ON THE SHOP'S TERMINAL
+
+**Decided by Ash, 2026-10-10:** *"no need wechat alipay seperate. it can be the
+same option because our machine charge it the same . so combine we hat alipay
+to one option"*.
+
+**What was wrong.** The till asked which of the two wallets took the money,
+because the old reasoning was that each wallet's daily statement had to be
+matched separately. On this shop's terminal that's not true: one machine takes
+both and charges both the same, so the question cost a tap on every sale and
+told nobody anything.
+
+**The rule.**
+1. **One off-app tender, `wechat_alipay_offline`**, *WeChat / Alipay (off-app)
+   · 微信 / 支付宝(线下)*. It is the till's only leading choice, and it replaces
+   the two separate ones on the office's and the phone's Mark paid as well,
+   since `verify-fulfilment-types.js` holds the till and the office to one list.
+2. **The two old values stay valid.** `wechat_offline` and `alipay_offline`
+   remain in `OFFLINE_PAY_METHODS` and `ALLOWED_PAY` and keep their labels, so
+   every past order reads, reports and refunds exactly as before. Nothing is
+   rewritten.
+3. **Off-app like its parents.** A refund is paid by hand; the refund payout
+   default for it is `other`.
+
+**What is lost, said plainly:** new sales no longer split WeChat from Alipay in
+the payment report. Ash chose that knowing the machine treats them alike.
+
+**Not changed.** The online WeChat Pay and Alipay gateways, the QR menu, and
+§450's international card.
+
+Strings: one assembled from two live labels — `微信(线下)` and `支付宝(线下)`
+joined with ` / ` — declared in `docs/tacet-delivery-vocabulary.md` v1.321.
+Tests: `verify-fulfilment-types.js` (till list = office list, both accepted by
+the create route) passes unchanged. No schema, no migration, no change to
 `.gitignore` or CI.

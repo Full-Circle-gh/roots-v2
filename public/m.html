@@ -3472,7 +3472,8 @@ function askRefundAmount(o){
 /* Off-app payment records WHICH tender it was — that is the whole reason this
    was desktop-only. The phone can ask, so now it can do it. */
 const PAY_METHODS=[['cash','Cash','现金'],['bank_transfer','Bank transfer','银行转账'],
-  ['wechat_offline','WeChat (off app)','微信（线下）'],['alipay_offline','Alipay (off app)','支付宝（线下）'],['other','Other','其他'],
+  // §451 — one choice for WeChat and Alipay; the terminal charges them the same.
+  ['wechat_alipay_offline','WeChat / Alipay (off app)','微信 / 支付宝（线下）'],['other','Other','其他'],
   ['intl_card','International card +4%','外卡 +4%']];
 reg('markPaid', ()=>{
   if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
@@ -43678,7 +43679,7 @@ function sparkline(vals,tone){
 const TREND_PAY={wechat:['WeChat Pay','微信支付'],alipay:['Alipay','支付宝'],meituan:['Meituan','美团'],
   points:['Points','积分'],cash:['Cash','现金'],bank_transfer:['Bank transfer','银行转账'],
   wechat_offline:['WeChat off-app','微信(线下)'],alipay_offline:['Alipay off-app','支付宝(线下)'],
-  intl_card:['International card','外卡'],
+  intl_card:['International card','外卡'],wechat_alipay_offline:['WeChat / Alipay off-app','微信 / 支付宝(线下)'],
   other:['Other','其他'],unknown:['Unknown','未知']};
 const TREND_DOW=[['Sunday','周日'],['Monday','周一'],['Tuesday','周二'],['Wednesday','周三'],
   ['Thursday','周四'],['Friday','周五'],['Saturday','周六']];
@@ -50148,7 +50149,7 @@ const PAY_LABEL={
   alipay:['Alipay','支付宝'], zhifubao:['Alipay','支付宝'],
   cash:['Cash','现金'], bank_transfer:['Bank transfer','银行转账'],
   wechat_offline:['WeChat off-app','微信（线下）'], alipay_offline:['Alipay off-app','支付宝（线下）'],
-  intl_card:['International card','外卡'],
+  intl_card:['International card','外卡'], wechat_alipay_offline:['WeChat / Alipay off-app','微信 / 支付宝（线下）'],
   other:['Other','其他'],
 };
 const payIsKnown=m=>!!PAY_LABEL[String(m||'').toLowerCase().trim()];

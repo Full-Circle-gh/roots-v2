@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.321 · 2026-10-10 · §451 WECHAT AND ALIPAY AS ONE CHOICE — 1 STRING ASSEMBLED BY CLAUDE FROM TWO LIVE LABELS; NO NEW WORD.** See *WeChat and Alipay as one choice (§451)*.
+
 **v1.320 · 2026-10-10 · §450 THE INTERNATIONAL CARD AND ITS 4% — 3 STRINGS COMPOSED BY CLAUDE (`外卡`, `外卡 +4%`, `外卡手续费 4%`); NOTHING LIVE NAMES A CARD OR A CARD FEE.** See *The international card and its 4% (§450)*.
 
 **v1.319 · 2026-10-10 · §448 THE TABLET'S "SHIP TO" BLOCK ON THE COURIER LIST AND ITS SEARCH A PLACE SHEET — 3 STRINGS COMPOSED BY CLAUDE FROM LIVE PARTS, 2 LIFTED FROM THE HEAD OF A LIVE PAIR; THE REST COPIED WHOLE.** See *Changing a Qingyun order's address by typing (§448)*.
@@ -13634,3 +13636,19 @@ is this?" deserves the true answer.
 
 The receipt stays English-only, as its own note requires: `Card fee 4%` and
 `Paid by Intl card`, no Chinese half.
+
+## WeChat and Alipay as one choice (§451)
+
+**Assembled by Claude, 2026-10-10, under the 2026-09-06 amendment.**
+Operator register. `public/till.html` (`WALLETS`),
+`public/retail-admin/04-orders.js` (`PAY_METHOD_CHOICES`),
+`public/retail-admin/01-core.js`, `public/retail-admin/03-dashboard.js`,
+`public/m.html` (`PAY_METHODS`, `TREND_PAY`, `PAY_LABEL`).
+
+| String | Built from |
+|---|---|
+| `WeChat / Alipay (off-app) · 微信 / 支付宝(线下)` | the live `WeChat (off-app) · 微信(线下)` and `Alipay (off-app) · 支付宝(线下)`, joined with ` / ` and the shared `(线下)` said once. The phone keeps its own full-width brackets, `微信 / 支付宝（线下）`, as its two sources do. |
+
+No new word. **Rejected:** `扫码支付` (scan to pay) — accurate for the
+terminal but a new phrase, and the two wallet names are what the cashier and
+the customer both say.
