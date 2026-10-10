@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.319 · 2026-10-10 · §448 THE TABLET'S "SHIP TO" BLOCK ON THE COURIER LIST AND ITS SEARCH A PLACE SHEET — 3 STRINGS COMPOSED BY CLAUDE FROM LIVE PARTS, 2 LIFTED FROM THE HEAD OF A LIVE PAIR; THE REST COPIED WHOLE.** See *Changing a Qingyun order's address by typing (§448)*.
+
 **v1.318 · 2026-10-09 · §114 AMENDED — A CATEGORY CAN BE TICKED AS GOODS, AND A CLAIM FILED UNDER IT STARTS AS NOT ARRIVED YET — 1 STRING COMPOSED BY CLAUDE (`Goods · 货品`), LIFTED FROM A LIVE PAIR.** See *Goods categories (§114 amended)*.
 
 **v1.317 · 2026-10-08 · §443 THE PHONE'S PICK SCREEN IS RENAMED "SEND TO ANOTHER SHOP" AND ASKS WHICH SHOP IS SENDING — 2 STRINGS COMPOSED BY CLAUDE FROM LIVE PARTS; `Pick · 拣货` AND `Picking at which location? · 在哪个地点拣货？` RETIRED.** See *Sending to another shop (§443)*.
@@ -13550,3 +13552,48 @@ No other string is new: the tick's tooltip on the desktop is the live `Not
 arrived yet · 尚未到货`, copied whole. `scripts/test_finance_categories.js`
 fails if `货品` is not declared here.
 
+## Changing a Qingyun order's address by typing (§448)
+
+**Composed by Claude, 2026-10-10, under the 2026-09-06 amendment.**
+Operator register. `public/m.html`: `qyDestBlock` (above the courier list),
+`sheetQyPlace` (the Search a place sheet), `QY_PLACE_ERR` and `qyPlaceSave`.
+Asked by Ash: see the address before calling a rider, and change it by typing.
+
+### Copied whole — live pairs, unchanged
+
+`Ship to · 收货地址` (the phone's own order sheet heading), `No point placed yet ·
+尚未标记配送点` (desktop drawer), `Search a place or road · 搜索地点或道路` (the
+desktop drawer's search box, as the placeholder), `This changes the address on
+this order only. · 仅修改此订单的收货地址。`, `As entered · 原始地址`,
+`Unit / floor (optional) · 单元 / 楼层(可选)`, `Loading map… · 正在加载地图…`,
+`Loading… · 加载中…`, `Load failed · 加载失败`, `Back · 返回`, `Cancel · 取消`,
+`Save · 保存`, `Saving… · 保存中…`, `Save failed · 保存失败`, `Address updated ·
+地址已更新`, `Customer · 收货` (the rider map's marker), `Picked … — sending it
+to the channel, about a minute · 已选择 … — 约一分钟内发单`, `A courier is already
+on it — cancel it in the Qingyun app first · 已呼叫运力 — 请先在青云 App 取消`,
+`That location's Qingyun account isn't wired up yet — ask ops to set it up ·
+该门店的青云账号尚未接通 — 请联系运维配置`, `Pickup order — no shipping address ·
+自提订单 — 无收货地址`, `This order is closed · 该订单已关闭`, `It moved on while you
+were looking — reopen the order · 状态已变更，请重新打开订单`.
+
+### Lifted — the head of a live pair, nothing added
+
+| Chinese | English | Lifted from |
+|---|---|---|
+| `搜索地点` | Search a place | `Search a place or road · 搜索地点或道路` (desktop drawer) |
+| `地图暂不可用` | Map unavailable | `Map unavailable — the rider details are below. · 地图暂不可用 — 骑手信息见下方` (phone rider map) |
+
+### Composed — three, by Claude
+
+| Chinese | English | Built from | Rejected |
+|---|---|---|---|
+| `未找到地点` | No places found | `未找到` (live, `Photo not found · 未找到照片`), `地点` (live, `搜索地点或道路`) | `无结果` — not live anywhere; `没有找到` — not live |
+| `正在发单，请稍后重试` | Being sent right now — try again in a moment | `正在` (live, `正在加载地图…`), `发单` (live, `发单中…`, `约一分钟内发单`), `请稍后重试` (live, `渠道没有响应，请稍后重试。`) | `正在发往青云，请稍后重试` — `发往` is not live |
+| `该地点距门店 N 公里 — 超出同城配送范围` | That place is N km from the store — too far for a same-city rider | `该地点`, `门店` (live, `距离为骑手取货门店到该地点的距离。`), `公里` (live, rider distance), `超出` (live), `同城配送` (live, `Same-city courier · 同城配送`), `范围` (live) | `太远了` — not live, and says nothing about why |
+
+### Considered and not used
+
+`Delivery address · 配送地址` for the block's heading. `配送地址` is live, but
+the operator register already calls this address `收货地址` (Ship to, Edit
+ship-to), and §414 is one word per thing. The heading now copies the order
+sheet's.

@@ -33,7 +33,7 @@ Precise is not the same as correct. A rooftop-grade match can still be the wrong
 
 | # | Decision |
 |---|---|
-| D1 | Trustworthy points dispatch untouched. No map, no confirm, no extra tap. |
+| D1 | Trustworthy points dispatch untouched. No map, no confirm, no extra tap. **Amended 2026-10-10 (decisions §448), phone only: the courier list now SHOWS the address and a look-only map of the drop-off before Dispatch, and staff can change it by typing (Search a place, `poi_picked`). Still no confirm and no extra tap — shown, not asked.** |
 | D2 | "Trustworthy" is exactly what the gate already accepts: `geo_source = customer_pin`, or `geocode:*` at rooftop or street grade. |
 | D3 | Coarse points enter a new state, `needs_point`. It is not an error state. **Narrowed 2026-08-11: only coarse points we cannot vouch for. A coarse point close to the collecting store dispatches. See §4.3.** |
 | D4 | Operator confirms the point on a map inside the order drawer. |
@@ -182,6 +182,8 @@ With auto-push off, `maybeEnqueueQingyunPush` never inserts a row (`routes/retai
 This means D9 — hanging the hold-or-fallback choice off the auto-push setting — rests on a distinction that does not currently exist in the code. It does not bite until stage 6, and it is recorded here so it is not rediscovered then. Stage 6 must either give the manual path its own route into the queue, or D6 and D9 need rewriting.
 
 ### 5.4 Address search — recenter only. Added 2026-08-08
+
+**Phone, 2026-10-10 (decisions §448):** the phone's Search a place does set the address and point, as `poi_picked` (§11.5's source for a picked name, which keeps `MAX_DROP_KM`), never `staff_pin`. The rule below still holds for the desktop drawer, unchanged.
 
 A search box above the map. Staff type a place or a road, pick a result, and the
 map flies there. **The result drops no pin.** The operator still taps the door.
