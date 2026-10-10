@@ -214,12 +214,16 @@ vm.runInContext(M.slice(ns, M.indexOf('\n}\n', ns) + 3), phone);
 
     console.log('\n6. 🔴 a parked row draws one shortage, not two');
     const shortChip = (r) => (phone.orderNotes(r) || []).filter((nt) => /short/.test(nt.label[0]));
-    await it('the list carries the checkout-time column for both rows', () => {
-      assert.strictEqual(row(parked).fulfillment_short_pids, JSON.stringify([P_NUTS]));
+    // Since the warning went live (test_live_fulfillment_short.js) the server
+    // sends nothing for a parked order — its stock is not pending a shipment.
+    // The screens' own guard is still tested, on the row as it used to arrive.
+    const parkedAsBefore = () => ({ ...row(parked), fulfillment_short_pids: JSON.stringify([P_NUTS]) });
+    await it('the list sends the live warning: none when parked, kept when released', () => {
+      assert.strictEqual(row(parked).fulfillment_short_pids, null);
       assert.strictEqual(row(released).fulfillment_short_pids, JSON.stringify([P_NUTS]));
     });
     await it('phone: parked → no "Shipping store is short" chip', () => {
-      assert.deepStrictEqual(shortChip(row(parked)), []);
+      assert.deepStrictEqual(shortChip(parkedAsBefore()), []);
     });
     await it('phone: released → the chip is still there', () => {
       assert.strictEqual(shortChip(row(released)).length, 1);
@@ -228,7 +232,7 @@ vm.runInContext(M.slice(ns, M.indexOf('\n}\n', ns) + 3), phone);
     const bs = D.indexOf('\nfunction fulfillmentShortBadge(');
     vm.runInContext(D.slice(bs, D.indexOf('\n}\n', bs) + 3), pc);
     await it('PC: parked → no "needs restock" badge', () => {
-      assert.strictEqual(pc.fulfillmentShortBadge(row(parked)), '');
+      assert.strictEqual(pc.fulfillmentShortBadge(parkedAsBefore()), '');
     });
     await it('PC: released → the badge is still there', () => {
       assert.ok(pc.fulfillmentShortBadge(row(released)).includes('needs restock'));
