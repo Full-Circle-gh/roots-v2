@@ -2619,10 +2619,15 @@ function movedFromNote(o) {
 // accepted normally; this is purely a heads-up, never a block.
 // Compact list-row counterpart to fulfillmentShortStrip — a small amber chip so
 // the office can spot "shipping store is short" orders without opening each one.
+// Not drawn on an order parked on stock right now: awaitingRestockLine is the
+// live answer there and names every short line, while this is a checkout-time
+// snapshot of only the lines another shop could cover — side by side they read
+// as two different shortages. The drawer keeps fulfillmentShortStrip.
 function fulfillmentShortBadge(o) {
   let pids = [];
   try { pids = JSON.parse(o.fulfillment_short_pids || '[]') || []; } catch {}
   if (!pids.length) return '';
+  if (Array.isArray(o.awaiting_restock_items) && o.awaiting_restock_items.length) return '';
   return `<div style="font-size: 11px; margin-top: 2px; color: var(--st-awaiting_restock); font-weight:700;" `
     + `title="${cuT('Shipping store is short on ' + pids.length + ' item(s) — restock or transfer before shipping',
                     '出货门店缺 ' + pids.length + ' 件商品 — 发货前请补货或调货')}">`
