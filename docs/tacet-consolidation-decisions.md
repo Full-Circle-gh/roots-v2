@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.501
+# Tacet shared-core consolidation — decisions record, v4.502
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-10 · v4.502 — **§453 · AN UNSENT REQUEST IS KEPT ON THE PHONE — DECIDED BY ASH:** *"I fill up the stock , didn't send it yet . left the phone for a while , when I came back , all is gone"*, then *"yes"* to keeping the list on the phone. Ask for stock, Ask the kitchen and Ask the buyer write their basket to localStorage as it changes, one key per screen, per operator, per tenant, and read it back on the way in under *Restored · 已恢复* with *Clear · 清除*. A draft ends on a send that went through, an emptied basket, Clear, or twelve hours. Covers Android closing a backgrounded browser, which #1104's reload guard cannot. Both labels are live pairs; nothing composed. No schema, no route, no change to `.gitignore` or CI. See §453.
 
 2026-10-10 · v4.501 — **§452 · A PAYMENT THAT COULD NOT START TELLS THE SHOP, AND THE SHOPPER GETS A TRY AGAIN — DECIDED BY ASH:** *"this test order form web wasn't printed in yuexiu ,why"*, then *"there was no option to pay . it say that someone will contact for payment"*, then *"ok do it"*. TC001049's WeChat Native request was refused by the gateway; the web checkout turned every refusal into *We'll contact you shortly to arrange payment*, and every staff signal fires on paid, so nobody was told. Now each unpayable `/payment/create` exit calls `alertPaymentStartFailed` (push + WeCom, once per order, every attempt on the order's activity log), and a gateway failure shows the shopper *Payment didn't go through* with *Try again*. Three Chinese strings composed (vocabulary v1.322).
 
@@ -29680,3 +29682,62 @@ real `retail_orders` and `activity_log`; every unpayable exit of the route
 checked; the checkout's two screens checked against the server's codes;
 `PSF_MUTANT=1` goes red).
 Schema: none. No change to `.gitignore` or CI.
+
+## §453 — AN UNSENT REQUEST IS KEPT ON THE PHONE
+
+**Decided by Ash, 2026-10-10:** *"I fill up the stock , didn't send it yet .
+left the phone for a while , when I came back , all is gone"*, sent with a
+photo of Ask for stock (申请补货), then *"yes"* to a recommendation to keep the
+list on the phone so it survives the browser being closed.
+
+**What happened, and the half #1104 fixed.** After a deploy the phone app
+reloads itself onto the new build the first time it is backgrounded, held back
+only by `mUnsavedWork()`, which did not name the request screens. Three deploys
+landed that evening; the first put-down after one wiped the basket. #1104 added
+the three screens to that guard. **What it cannot cover** is Android closing a
+backgrounded browser to free memory: nothing in the page runs, and everything
+held in memory goes with it. The baskets lived in memory alone.
+
+**The rule.**
+1. **Each request screen keeps its basket on the phone.** `askDraftSync` writes
+   it to localStorage after every paint (`render()`, and `mbPatch()` for Ask the
+   buyer, which repaints without one), and again on `pagehide` and on going
+   hidden. It writes only when the basket changed, so the once-a-minute polls
+   cost a comparison.
+2. **One key per screen, per operator, per tenant** —
+   `tacet-m-ask:<tenant>:<user>:<route>`. Ask for stock and Ask the kitchen share
+   `state.rq` in memory because they are never open at once; a list saved from
+   one must never reopen on the other, which would send a restock to the
+   kitchen. A shared phone must not hand one person's list to the next. Without
+   both ids (`/api/backend/me` not yet answered) nothing is read or written.
+3. **It comes back on the way in**, after the basket is cleared (`push`), with
+   *Restored · 已恢复* and *Clear · 清除* at the top of the screen, away from Send.
+   What is kept is the request: quantities; both stores on Ask for stock; the
+   purpose on Ask the kitchen; urgency and needed-by on Ask the buyer, and a
+   figure still in an open field, because `mbSend` takes it as part of the
+   request. Not the search word, the Products/Materials filter or an error,
+   which are about the moment. A store the operator can no longer see, or a
+   purpose the server would refuse, is dropped and the list kept.
+4. **What ends a draft:** a send that went through (it is a receipt now), an
+   emptied basket, Clear, or **twelve hours** — a list from last night's close
+   reopening under this morning's thumb is a request nobody meant to send today.
+5. **The draft can never break a paint.** Storage that throws (quota, private
+   window) and a paint before the code has loaded both cost the draft only.
+
+**This changes one standing behaviour on purpose.** A request screen used to
+open empty every time. It now opens on whatever this operator left unsent
+there, including after backing out on purpose; Clear is the way to start over.
+
+**Not changed.** The app still opens on Home after the browser was closed;
+the list waits on its screen rather than the app jumping there. #1104's reload
+guard stays: it keeps the operator on the screen they were using.
+
+Strings: none composed. *Restored · 已恢复* is live on a review and a recipe,
+*Clear · 清除* on the orders selection bar; both reused as they stand.
+Tests: new `scripts/test_ask_draft_kept.js` (45 checks over the sliced shipped
+functions against a fake storage and clock: survival across a fresh page, the
+two shared-basket screens kept apart, Ask the buyer's marks and open field,
+each way a draft ends, the twelve-hour limit, a shared phone, a vanished store,
+no identity, throwing storage, and the wiring). Also seen working in Chromium
+against the real page: filled, reloaded, reopened, cleared.
+Schema: none. No new route. No change to `.gitignore` or CI.

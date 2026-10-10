@@ -1672,10 +1672,12 @@ function copyText(t){
 }
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
 function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
-  /* A REQUEST SCREEN OPENS EMPTY. The two directions share one basket — they
-     are never open at once — so entering either clears what the other left,
-     and a screen reopened after a send does not reappear on its receipt. */
-  if(route==='askkitchen'||route==='askstock') rqReset();
+  /* A REQUEST SCREEN OPENS ON ITS OWN BASKET. The two directions share one
+     basket in memory — they are never open at once — so entering either clears
+     what the other left, and a screen reopened after a send does not reappear
+     on its receipt. What it then gets back is only what THIS screen left
+     unsent (§453), from the phone's own copy. */
+  if(route==='askkitchen'||route==='askstock'){ rqReset(); askDraftLoad(route); }
   /* Same rule, own basket (§86): a purchase request reopened after a send must
      not reappear on its own receipt. The MATERIAL LIST is deliberately kept —
      it is the catalogue, not the basket, and re-reading it on every entry is a
@@ -1685,7 +1687,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     /* THE MARKS ARE PART OF THE BASKET AND DIE WITH IT. A quantity cleared on
        the way in while an urgency survived would put yesterday's emergency on
        today's ask, silently. */
-    m.urg={}; m.by={}; m.dating={}; }
+    m.urg={}; m.by={}; m.dating={}; m.restored=false;
+    askDraftLoad('askbuy'); }
   /* The list is re-read on every entry and the seen-stamp re-armed: it is a
      record of what the kitchen finished, and one taken at boot would be stale
      by the time somebody opened it. */
@@ -2244,6 +2247,7 @@ reg('mbDateSet', (id,v)=>mbDateSet(Number(id),v));
 reg('mbSend', ()=>mbSend());
 reg('rqSendKitchen', ()=>rqSendKitchen());
 reg('rqSendStock', ()=>rqSendStock());
+reg('askDraftClear', ()=>askDraftClear());
 reg('krOpen', id=>krOpen(id));
 reg('krList', ()=>{ state.kr.order=null; state.kr.orderId=null; state.kr.err=''; render(); });
 reg('krTab', t=>{ const k=state.kr; if(k.tab===String(t)) return; k.tab=String(t); k.order=null; k.orderId=null; k.err=''; render(); });
@@ -20358,6 +20362,129 @@ function rqReset(){
   // and the old screen never did, because it ran pinned to a single shelf.
   const st=state.stores||[];
   r.to = st.length===1 ? st[0].id : null;
+  r.restored=false;
+}
+/* AN UNSENT REQUEST IS KEPT ON THE PHONE (§453). Ash, 2026-10-10: a restock
+   filled in on Ask for stock, the phone put down before Send, every quantity
+   gone on return. #1104 stopped OUR update reload doing that; this covers the
+   one nothing in the page can stop — Android closing a backgrounded browser to
+   free memory, which takes everything held in memory with it.
+
+   So each of the three request screens writes its basket to localStorage as it
+   changes (render() and mbPatch() both call askDraftSync) and reads it back on
+   the way in (push). ONE KEY PER SCREEN, PER OPERATOR, PER TENANT: Ask for
+   stock and Ask the kitchen share `state.rq` in memory precisely because they
+   are never open at once, but a list saved from one must not reopen on the
+   other — that would send a restock to the kitchen. And a shared phone must not
+   hand one person's list to the next.
+
+   WHAT ENDS A DRAFT: a send that went through (it is a receipt now), a basket
+   emptied, Clear, or twelve hours — a list from yesterday's close reopening
+   under this morning's thumb is a request nobody meant to send today. Only the
+   basket is kept: the search word, the Products/Materials filter and an error
+   are about the moment, not the request. */
+const ASK_DRAFT_ROUTES=['askstock','askkitchen','askbuy'];
+const ASK_DRAFT_MAX_MS=12*3600*1000;
+let _askDraftLast={};
+function askDraftKey(route){
+  const me=state.me||{};
+  if(me.id==null||me.tid==null) return null;
+  return 'tacet-m-ask:'+me.tid+':'+me.id+':'+route;
+}
+/* What is worth keeping, or null when nothing is. A figure still in an open
+   field on Ask the buyer is kept as a quantity: mbSend takes it as part of the
+   request, so a phone closed mid-keystroke must not lose it either. */
+function askDraftSnapshot(route){
+  const pos=o=>{ const q={}; for(const k in (o||{})){ const n=Number(o[k]); if(n>0) q[k]=n; } return q; };
+  if(route==='askbuy'){
+    const m=state.mb;
+    if(!m||m.sent) return null;
+    const qty=pos(m.qty);
+    for(const k in (m.typing||{})){ const raw=String(m.typing[k]).trim();
+      if(/^\d+(\.\d+)?$/.test(raw)&&parseFloat(raw)>0) qty[k]=parseFloat(raw); }
+    if(!Object.keys(qty).length) return null;
+    const urg={}, by={};
+    for(const k in qty){ if(m.urg&&m.urg[k]) urg[k]=1; if(m.by&&m.by[k]) by[k]=m.by[k]; }
+    return {qty:qty, urg:urg, by:by};
+  }
+  const r=state.rq;
+  if(!r||r.sent) return null;
+  const qty=pos(r.qty);
+  if(!Object.keys(qty).length) return null;
+  return route==='askkitchen' ? {qty:qty, purpose:r.purpose||null}
+                              : {qty:qty, to:r.to, from:r.from};
+}
+/* Called after every paint. Writes only when the top screen is a request screen
+   and only when the basket actually changed since the last write, so the polls
+   that repaint the app once a minute cost a string comparison and nothing more. */
+function askDraftSync(){ try{ askDraftWrite(); }catch(e){} }
+/* Split so a paint can never be broken by it: render() runs from the first
+   lines of boot, and a storage quota, a private window or a half-made state
+   must cost the draft, never the screen. */
+function askDraftWrite(){
+  const top=(state.stack||[])[(state.stack||[]).length-1];
+  const route=top&&top.route;
+  if(ASK_DRAFT_ROUTES.indexOf(route)===-1) return;
+  const key=askDraftKey(route); if(!key) return;
+  const snap=askDraftSnapshot(route);
+  const body=snap?JSON.stringify(snap):'';
+  if(_askDraftLast[key]===body) return;
+  _askDraftLast[key]=body;
+  try{
+    if(snap) localStorage.setItem(key, JSON.stringify({at:Date.now(), d:snap}));
+    else localStorage.removeItem(key);
+  }catch(e){}
+}
+/* On the way in, after the basket has been cleared. A stored store that this
+   operator can no longer see is dropped rather than trusted: it was a choice
+   about a list of locations that has since changed. */
+function askDraftLoad(route){
+  const key=askDraftKey(route); if(!key) return;
+  let v=null;
+  try{ const raw=localStorage.getItem(key); v=raw?JSON.parse(raw):null; }catch(e){ v=null; }
+  if(!v||!v.d||!v.d.qty||!(Date.now()-Number(v.at||0)<ASK_DRAFT_MAX_MS)){
+    try{ localStorage.removeItem(key); }catch(e){}
+    _askDraftLast[key]='';
+    return;
+  }
+  const d=v.d;
+  _askDraftLast[key]=JSON.stringify(d);
+  if(route==='askbuy'){
+    const m=state.mb;
+    m.qty=Object.assign({},d.qty); m.urg=Object.assign({},d.urg||{}); m.by=Object.assign({},d.by||{});
+    m.restored=true;
+    return;
+  }
+  const r=state.rq;
+  r.qty=Object.assign({},d.qty);
+  if(route==='askkitchen'){
+    if(['order','shelf','urgent'].indexOf(d.purpose)!==-1) r.purpose=d.purpose;
+  } else {
+    const ids=(state.stores||[]).map(s=>s.id);
+    if(d.to!=null&&ids.indexOf(d.to)!==-1) r.to=d.to;
+    if(d.from!=null&&ids.indexOf(d.from)!==-1&&d.from!==r.to) r.from=d.from;
+  }
+  r.restored=true;
+}
+/* Clear drops the basket and the stored copy together. The stores and the
+   purpose stay: they are which request this is, not what is on it. */
+function askDraftClear(){
+  const top=(state.stack||[])[(state.stack||[]).length-1];
+  const route=top&&top.route;
+  if(route==='askbuy'){ const m=state.mb; m.qty={}; m.typing={}; m.typeErr={}; m.urg={}; m.by={}; m.dating={}; m.restored=false; }
+  else if(route==='askstock'||route==='askkitchen'){ state.rq.qty={}; state.rq.restored=false; }
+  render();
+}
+/* The line a returning operator sees above a list the phone kept for them —
+   both pairs live already ('Restored · 已恢复' on a review and a recipe,
+   'Clear · 清除' on the orders selection bar), so nothing is composed. Drawn
+   only while there is still something on the list to have restored. */
+function askRestoredHtml(on){
+  if(!on) return '';
+  return `<div style="display:flex;align-items:center;gap:14px;padding:0 16px 12px;font-size:13px;color:var(--text-secondary)">
+    <span>${T('Restored','已恢复')}</span>
+    <button style="background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-primary);font-weight:500"
+      onclick="APP.cmd('askDraftClear')">${T('Clear','清除')}</button></div>`;
 }
 /* THE CATALOGUE TACET OWNS. /api/retail-admin/products is the sellable list and
    is reachable by exactly the operator who can raise one of these. The shelf
@@ -20646,6 +20773,7 @@ function mbTypeCommit(id){
 }
 /* Repaint the list and the tally, never the whole app — see mbSearch. */
 function mbPatch(){
+  askDraftSync();   // §453 — this screen repaints without render()
   const body=document.getElementById('mMbBody');
   const foot=document.getElementById('mMbFoot');
   if(body&&foot){ body.innerHTML=mbBodyHtml(); foot.innerHTML=mbFootHtml(); }
@@ -20829,7 +20957,7 @@ function screenAskBuy(){
   const foot=`${(m.err&&m.materials.length)?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(m.err)}</div>`:''}
     <div id="mMbFoot" style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
       padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">${mbFootHtml()}</div>`;
-  return intro+search+body+foot;
+  return intro+askRestoredHtml(m.restored&&mbChosen().length>0)+search+body+foot;
 }
 
 /* ══ WHAT BECAME OF WHAT YOU ASKED FOR (§175) ══════════════════════════════
@@ -23051,6 +23179,7 @@ function screenAskKitchen(){
   };
   return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('They make it — nothing moves until it is made.','由厨房制作 — 制作完成前库存不变。')}</div>
+    ${askRestoredHtml(r.restored&&rqChosen().length>0)}
     <div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('What is it for?','用途')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 14px">
       ${opt('order','For an order','用于发货','A customer is waiting on it','有客户订单等待')}
@@ -23085,6 +23214,7 @@ function screenAskStock(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 14px">${suppliers.map(st=>chip(st.id,r.from===st.id,'rqFrom')).join('')}</div>`;
   return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('Have another location send it','请其他地点发货')}</div>
+    ${askRestoredHtml(r.restored&&rqChosen().length>0)}
     ${askedBy}${from}
     ${r.to!=null?rqPicker():''}
     ${r.to!=null?rqFoot('rqSendStock', !!r.from && rqChosen().length>0):''}`;
@@ -48311,6 +48441,11 @@ function saveScrollForReturn(){
   }catch(e){}
 }
 window.addEventListener('pagehide',saveScrollForReturn);
+/* §453 — and the unsent request, on the same two signals recvFlush uses below.
+   render() already wrote it on the last change; this is the belt to that braces
+   for a phone about to be swapped out. */
+window.addEventListener('pagehide',askDraftSync);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) askDraftSync(); });
 /* AND THE DELIVERY GOES WITH IT. The receive screen writes on a pause; an
    operator who answers a product and then locks the phone, or takes a call, has
    given an answer the pause never spent. pagehide and hidden both, because the
@@ -48349,6 +48484,8 @@ function render(){
      after it under the key of the screen about to be: a pushed screen that
      inherited the last screen's scroll would open halfway down itself, and a
      screen returned to that inherited nothing would open at the top. */
+  /* §453 — an unsent request is written to the phone as it changes. */
+  askDraftSync();
   const _sc=document.getElementById('content');
   if(_sc&&_scrollKey) _scrollMem[_scrollKey]=_sc.scrollTop;
   if(_forget.length){ _forget.forEach(k=>{ delete _scrollMem[k]; }); _forget=[]; }
@@ -51258,7 +51395,9 @@ async function loadMe(){
        re-renders template strings into #content, so what it does with them is
        FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */
     state.caps=Array.isArray(u.caps)?u.caps:null;
-    state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null};
+    state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null, avatarUrl:u.avatarUrl||null,
+      /* §453 — who, at which tenant: the key an unsent request is kept under on this phone. */
+      id:u.id!=null?u.id:null, tid:(u.tenant&&u.tenant.id!=null)?u.tenant.id:null};
     // §300 F5 — RA_STORE_LOCK's rule: the first of the operator's scoped stores.
     state.storeLock=(Array.isArray(u.scopeStores)&&u.scopeStores.length)?String(u.scopeStores[0]):null;
     // §412.5 — the whole scope: stock staff are managed only at these stores.
