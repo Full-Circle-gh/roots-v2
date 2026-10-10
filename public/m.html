@@ -1382,6 +1382,10 @@ const state = {
           results repaint and the input must not. */
        pick:false,q:'',
        amount:'',cat:'',paid:EXP_PAID_DEFAULT,note:'',storeId:null,date:null,photo:null,
+       /* §114 amended 2026-10-09 (Ash): `goods` is the categories the shop has
+          ticked as goods. Picking one ticks Not arrived yet; anything else
+          leaves it off. A starting answer the person can still change. */
+       coming:false,goods:[],
        busy:false,err:'',sent:null,
        mine:null,mineTried:false,owed:0,waiting:0},
   /* THE APPROVAL QUEUE (§87 step three). A DIFFERENT SCREEN WITH A DIFFERENT
@@ -1783,7 +1787,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     f.catsTried=false; f.catsErr=''; f.catsMsg=''; f.catsBusy=''; f.catsNew=''; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid=EXP_PAID_DEFAULT; x.note=''; x.photo=null; x.date=null;
-    x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
+    x.coming=false; x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
     x.pick=false; x.q=''; }
   /* A broadcast is written from an empty screen every time. What was left in
      the form after one was sent is the LAST one sent, and re-opening on it is
@@ -27603,6 +27607,7 @@ function expLoadMeta(){
   if(x.tried) return; x.tried=true;
   api('/staff-expenses/meta').then(d=>{
     x.cats=(d&&d.categories)||[]; x.stores=(d&&d.stores)||[]; x.recent=(d&&d.recent)||[];
+    x.goods=(d&&d.goods)||[];
     /* ONE STORE IS NOT A CHOICE (§1.9), so the field never renders — but the
        claim still carries it, because the column is what makes a per-shop
        expense figure possible at all (§87 part three). */
@@ -27836,9 +27841,10 @@ function screenExpense(){
         <button class="chip ${x.paid==='company'?'on':''}" onclick="APP.cmd('expPaid','company')">${T('Company','公司')}</button>
       </div>
       ${/* §114 — HAS IT ARRIVED? A SINGLE OPT-IN, NOT A PAIR OF CHIPS.
-           The overwhelming case is goods already in hand, and unticked is exactly
-           what this form has always meant — so an opt-in cannot make an existing
-           claim say something new, which a pair of chips with a default would.
+           Unticked is exactly what this form has always meant, so no claim
+           already sent changes meaning. Amended 2026-10-09 (Ash): picking a
+           category the shop has ticked as Goods ticks it for the person
+           (expCat); a taxi or ginger still starts unticked.
 
            Ticking it makes the claim into an ORDER on approval: the shop can
            then see it is coming, and whoever it arrives to ticks it in. That is
@@ -27882,7 +27888,9 @@ function screenExpense(){
     </div>
 
     <div style="display:flex;flex-direction:column;gap:8px">
-      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Note','备注')} · ${T('optional','可选')}</span>
+      ${/* Optional only while the claim is not raising an order — §114 refuses
+           an order line with no name, so the label must not say otherwise. */''}
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Note','备注')}${x.coming?'':' · '+T('optional','可选')}</span>
       ${/* NO PLACEHOLDER. The example that wanted to go here — an airport run for
            a Tianhe order — needed two Chinese words this product does not ship,
            and Rule 4 prefers restructuring a label over minting a pair. The row
@@ -27940,7 +27948,12 @@ reg('expNote', v=>{ state.exp.note=String(v==null?'':v); });
    chip behaviour this replaced, kept: a category chosen by mistake has to be
    removable without a second control for it. */
 reg('expCat', c=>{ const x=state.exp;
-  x.cat=(x.cat===c)?'':String(c); x.pick=false; x.q=''; render(); });
+  x.cat=(x.cat===c)?'':String(c); x.pick=false; x.q='';
+  /* §114 amended — A GOODS CATEGORY TICKS NOT ARRIVED YET, any other unticks
+     it. Picking a category is a fresh answer to what was bought, so it sets
+     the box either way; the person can still change it after. */
+  x.coming=!!x.cat&&(x.goods||[]).indexOf(x.cat)>=0;
+  render(); });
 reg('expPickOpen', ()=>{ const x=state.exp; x.pick=true; x.q=''; render(); });
 reg('expPickClose', ()=>{ const x=state.exp; x.pick=false; x.q=''; render(); });
 /* STORES THE QUERY AND REPAINTS THE RESULTS BOX — never the app. See
@@ -28858,6 +28871,7 @@ reg('finTxOpenPO', ()=>{
      Add        POST   /finance/categories {name}
      Rename     PATCH  /finance/categories/:id {name}     (the rows follow it)
      Operating  PATCH  /finance/categories/:id {is_operating}
+     Goods      PATCH  /finance/categories/:id {is_goods}  (§114 amended)
      Hide       PATCH  /finance/categories/:id {is_active:false}, after its confirm
      Restore    PATCH  /finance/categories/:id {is_active:true}
      Delete     DELETE /finance/categories/:id, after its confirm, and only for
@@ -28891,14 +28905,21 @@ function finCatRowHtml(c){
   const busy=!!state.fin.catsBusy;
   const off=c.is_active===0;
   const sub=[finCatsUsage(c.usage_count)].concat(off?[T('Hidden','已停用')]:[])
-    .concat(pen?[]:[c.is_operating?T('Operating expense','营业费用'):T('Not an operating expense','不计入营业费用')]);
+    .concat(pen?[]:[c.is_operating?T('Operating expense','营业费用'):T('Not an operating expense','不计入营业费用')])
+    .concat(!pen&&c.is_goods?[T('Goods','货品')]:[]);
+  /* Two labelled toggles, stacked, so the row keeps its width on a phone. GOODS
+     (§114 amended) ticks Not arrived yet when this category is picked on a claim. */
+  const flag=(on,label,cmd)=>`<span style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+      <span style="font-size:12px;color:var(--text-secondary)">${label}</span>
+      ${busy?`<span style="opacity:.5;pointer-events:none">${toggle(on,'')}</span>`:toggle(on,cmd)}</span>`;
   return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px 10px 14px;${off?'opacity:.62':''}">
     <span style="display:flex;flex-direction:column;min-width:0;flex:1">
       <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis">${escAttr(c.name)}</span>
       <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${escAttr(sub.join(' · '))}</span></span>
     ${pen?`<span style="display:flex;align-items:center;gap:8px;flex:none">
-      <span style="font-size:12px;color:var(--text-secondary)">${T('Operating expense','营业费用')}</span>
-      ${busy?`<span style="opacity:.5;pointer-events:none">${toggle(!!c.is_operating,'')}</span>`:toggle(!!c.is_operating,`APP.cmd('finCatFlag',${Number(c.id)})`)}
+      <span style="display:flex;flex-direction:column;gap:6px">
+        ${flag(!!c.is_operating,T('Operating expense','营业费用'),`APP.cmd('finCatFlag',${Number(c.id)})`)}
+        ${flag(!!c.is_goods,T('Goods','货品'),`APP.cmd('finCatGoods',${Number(c.id)})`)}</span>
       <button class="iconbtn" style="width:36px;height:36px" ${busy?'disabled':''} aria-label="${T('More','更多')}" onclick="APP.cmd('finCatMore',${Number(c.id)})">${ic('ellipsis',20)}</button></span>`:''}
   </div>`;
 }
@@ -28950,6 +28971,10 @@ reg('finCatAdd', ()=>{
 reg('finCatFlag', id=>{
   const c=finCatById(id); if(!c||!mCan('finance:record')) return;
   finCatsWrite('flag:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_operating:!c.is_operating},'PATCH'));
+});
+reg('finCatGoods', id=>{
+  const c=finCatById(id); if(!c||!mCan('finance:record')) return;
+  finCatsWrite('goods:'+c.id,()=>apiWrite('/finance/categories/'+Number(c.id),{is_goods:!c.is_goods},'PATCH'));
 });
 reg('finCatMore', id=>{
   const c=finCatById(id); if(!c||!mCan('finance:record')||state.fin.catsBusy) return;

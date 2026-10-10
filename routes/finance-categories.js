@@ -77,6 +77,7 @@ function listCategories(db) {
     SELECT c.id, c.name, c.sort_order,
            COALESCE(c.is_operating, 1) AS is_operating,
            COALESCE(c.is_active, 1)    AS is_active,
+           COALESCE(c.is_goods, 0)     AS is_goods,
            (SELECT COUNT(*) FROM expense_entries e WHERE e.category = c.name) AS usage_count
       FROM categories c
      WHERE c.kind = ?
@@ -154,7 +155,7 @@ router.post('/api/retail-admin/finance/categories', requireRetailAdmin, express.
       info.lastInsertRowid, { name: v.name, is_operating: isOperating }, req.ip);
     res.json({
       success: true,
-      data: { id: info.lastInsertRowid, name: v.name, sort_order: sort, is_operating: isOperating, is_active: 1, usage_count: 0 },
+      data: { id: info.lastInsertRowid, name: v.name, sort_order: sort, is_operating: isOperating, is_active: 1, is_goods: 0, usage_count: 0 },
     });
   } catch (e) {
     console.error('[finance/categories POST]', e.message);
@@ -163,7 +164,7 @@ router.post('/api/retail-admin/finance/categories', requireRetailAdmin, express.
 });
 
 // ── PATCH /api/retail-admin/finance/categories/:id ─────────────────────────
-// Name, operating flag and active flag, in any combination. Absent fields are
+// Name, operating flag, active flag and goods flag, in any combination. Absent fields are
 // left alone rather than defaulted, so a screen that sends only the flag cannot
 // blank the name.
 router.patch('/api/retail-admin/finance/categories/:id', requireRetailAdmin, express.json(), async (req, res) => {
@@ -187,6 +188,10 @@ router.patch('/api/retail-admin/finance/categories/:id', requireRetailAdmin, exp
     const isActive = body.is_active === undefined
       ? (cur.is_active == null ? 1 : (cur.is_active ? 1 : 0))
       : (body.is_active === false ? 0 : 1);
+    // Goods defaults the other way round: unticked unless somebody ticks it.
+    const isGoods = body.is_goods === undefined
+      ? (cur.is_goods ? 1 : 0)
+      : (body.is_goods === true ? 1 : 0);
 
     // THE RENAME CARRIES THE ROWS WITH IT, IN ONE TRANSACTION. The expense row
     // stores the category as text, so a rename that did not propagate would
@@ -203,16 +208,16 @@ router.patch('/api/retail-admin/finance/categories/:id', requireRetailAdmin, exp
     // says a line was for, on a screen this one does not serve. §87 does not
     // decide that, and it is not decided by a side effect here.
     await withTransaction(db, (tx) => {
-      tx.prepare('UPDATE categories SET name = ?, is_operating = ?, is_active = ? WHERE id = ?')
-        .run(name, isOperating, isActive, cur.id);
+      tx.prepare('UPDATE categories SET name = ?, is_operating = ?, is_active = ?, is_goods = ? WHERE id = ?')
+        .run(name, isOperating, isActive, isGoods, cur.id);
       if (name !== cur.name) {
         tx.prepare('UPDATE expense_entries SET category = ? WHERE category = ?').run(name, cur.name);
       }
     });
 
     logActivity(req.user?.id || null, req.user?.username || null, 'update', 'finance_category', cur.id,
-      { from: cur.name, to: name, is_operating: isOperating, is_active: isActive }, req.ip);
-    res.json({ success: true, data: { id: cur.id, name, is_operating: isOperating, is_active: isActive } });
+      { from: cur.name, to: name, is_operating: isOperating, is_active: isActive, is_goods: isGoods }, req.ip);
+    res.json({ success: true, data: { id: cur.id, name, is_operating: isOperating, is_active: isActive, is_goods: isGoods } });
   } catch (e) {
     console.error('[finance/categories PATCH]', e.message);
     res.status(500).json({ error: e.message });
