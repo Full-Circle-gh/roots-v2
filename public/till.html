@@ -3819,11 +3819,21 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var box = document.getElementById('cust-rows');
     if (!box) return;
     // Nothing typed yet is not the same as nothing found, and must not say so.
-    if (S.custRows === null) { box.innerHTML = ''; return; }
+    if (S.custRows === null) { box.removeAttribute('data-new-for'); box.innerHTML = ''; return; }
     // §428 — nothing found offers to add them, the phone pre-filled when what
     // was typed is a number (it usually is: the employee says it out loud).
     if (!S.custRows.length) {
       var q = String(S.custQ || '').trim(), digits = /^[+\d\s-]{7,}$/.test(q);
+      /* DRAWN ONCE PER SEARCH, and left alone after that. render() runs on the
+         order poll every fifteen seconds and on every QR order that lands, and
+         each run came through here — so a cashier halfway through a new
+         customer's name had both fields rebuilt under them: the keyboard went
+         down and the name and phone went back to what the search said. The
+         fields only need drawing again when the search itself changes — or the
+         language, which their placeholders are written in. */
+      var drawnFor = _lang + '|' + q;
+      if (box.getAttribute('data-new-for') === drawnFor) return;
+      box.setAttribute('data-new-for', drawnFor);
       box.innerHTML = '<div class="cempty">' + esc(T('noMatches')) + '</div>'
         + '<div class="cnew">'
         + '<input id="cnew-name" type="text" autocomplete="off" placeholder="' + esc(T('name')) + '"'
@@ -3834,6 +3844,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         + '</div>';
       return;
     }
+    box.removeAttribute('data-new-for');
     var h = '';
     S.custRows.forEach(function (c) {
       // Name and phone are what tell two people apart; points and wallet are
