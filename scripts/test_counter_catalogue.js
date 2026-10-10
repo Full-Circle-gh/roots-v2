@@ -395,6 +395,33 @@ const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
       assert.match(till, /if \(!p\.image \|\| S\.imgBad\[p\.id\]\) return '';/);
     });
 
+    console.log('\nThe category pills in Chinese (Ash, 2026-10-10)');
+    const { getCategoryTree } = require(path.join(ROOT, 'lib', 'category-tree.js'));
+    const tree = getCategoryTree(db);
+    check('the reply maps each top category to the operator\'s Chinese name', () => {
+      const cn = a.json.data.category_cn;
+      assert.ok(cn && typeof cn === 'object', 'no category_cn on the reply');
+      for (const t of tree) {
+        if (t.name_cn) assert.strictEqual(cn[t.name], t.name_cn, t.name);
+        else assert.ok(!(t.name in cn), `${t.name} has no Chinese name and must be left out`);
+      }
+      // The fixtures are filed under these names; each one a pill on the glass.
+      for (const name of ['Fresh & Deli', 'Dry & Pantry']) {
+        const node = tree.find(t => t.name === name);
+        if (node && node.name_cn) assert.strictEqual(cn[name], node.name_cn);
+      }
+    });
+    check('a location with no shop gets the same map', () => {
+      assert.deepStrictEqual(b.json.data.category_cn, a.json.data.category_cn);
+    });
+    check('the till keeps the map and prints the pill through cuT, English as the fallback', () => {
+      assert.match(till, /S\.catCn = \(r && r\.data && r\.data\.category_cn\) \|\| \{\};/);
+      assert.match(till, /esc\(cuT\(c, S\.catCn\[c\] \|\| c\)\)/);
+      // The filter still compares the English name, which is what products are filed under.
+      assert.match(till, /data-cat="' \+ esc\(c\) \+ '"/);
+      assert.match(till, /\(p\.top_category \|\| ''\) !== S\.cat/);
+    });
+
     console.log('\nContainment — the till still never names the table');
     check('public/till.html does not read shop_listings', () => {
       assert.doesNotMatch(till, /shop_listings/,

@@ -40,6 +40,7 @@ const productOptions = require('../lib/product-options');
 const { requireRetailAdmin } = require('./retail');
 // §289 — which rows have a photo, the same test the shop lists use.
 const { hasImageFallbackSql } = require('../lib/product-image-sql');
+const { getCategoryTree } = require('../lib/category-tree');
 const { logActivity } = require('../middleware/auth');
 
 const router = express.Router();
@@ -944,7 +945,19 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     }
   }
 
-  ok(res, { has_shop: !!shop, shop_id: shop ? shop.id : null, rows });
+  // THE CATEGORY PILLS IN CHINESE. A row carries top_category as the tree's
+  // English `name`, which is also the key products are filed under, so the
+  // till cannot translate it from the row alone and drew English pills on a
+  // Chinese screen. This is the operator's own tree (the Categories tab), the
+  // same name_cn the mini app's rail prints. A top with no Chinese name, or a
+  // product filed under a name the tree no longer has, is left out and the
+  // till falls back to the English name it already had.
+  const category_cn = {};
+  for (const t of getCategoryTree(tdb())) {
+    if (t.name && t.name_cn) category_cn[t.name] = t.name_cn;
+  }
+
+  ok(res, { has_shop: !!shop, shop_id: shop ? shop.id : null, rows, category_cn });
 });
 
 module.exports = router;

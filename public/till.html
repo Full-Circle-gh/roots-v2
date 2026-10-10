@@ -1287,7 +1287,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        the question a blocked Add is waiting on. */
     opts: null,
     sheetOpen: false,          // phone only: is the order sheet up?
-    products: [], stock: {}, cats: [], cat: '', q: '',
+    products: [], stock: {}, cats: [], catCn: {}, cat: '', q: '',
     /* §287 — marking made-here items sold out. shopId is the listing's shop
        (the write names it); soMode is the grid showing only made-here menu
        items, where a tap flips the switch instead of adding a line; soBusy
@@ -1907,6 +1907,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         if (c && !seen[c]) { seen[c] = 1; cats.push(c); }
       });
       S.cats = cats;
+      // English name → the operator's Chinese name, for the pills. Absent
+      // means none was set; the pill keeps the English name.
+      S.catCn = (r && r.data && r.data.category_cn) || {};
     });
   }
 
@@ -2030,7 +2033,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (st && !storeOpen(st)) return render();
     if (!st || String(st.id) === String(S.storeId)) return render();
     setStore(st);
-    S.stock = {}; S.products = []; S.cats = []; S.cat = ''; S.q = '';
+    S.stock = {}; S.products = []; S.cats = []; S.catCn = {}; S.cat = ''; S.q = '';
     S.shopId = null; S.soMode = false; S.soBusy = {};   // §287 — another shop's menu
     // Another shop's queue, and its numbers restart at 1 just the same.
     S.pend = null; S.pane = 'menu'; S.paneTouched = false; S.recall = null;
@@ -2178,7 +2181,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   function renderCats() {
     var h = '<button class="cat' + (S.cat ? '' : ' on') + '" type="button" data-cat="">' + esc(T('all')) + '</button>';
     S.cats.forEach(function (c) {
-      h += '<button class="cat' + (S.cat === c ? ' on' : '') + '" type="button" data-cat="' + esc(c) + '">' + esc(c) + '</button>';
+      h += '<button class="cat' + (S.cat === c ? ' on' : '') + '" type="button" data-cat="' + esc(c) + '">' + esc(cuT(c, S.catCn[c] || c)) + '</button>';
     });
     $('cats').innerHTML = h;
     // §287 — only where there is something it could switch: a made-here item
