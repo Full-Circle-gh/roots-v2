@@ -1515,7 +1515,7 @@ const state = {
        from:null,to:null,
        /* §325 PD3 — the row whose void is in flight, and a refused void's
           sentence, which stays above the list until the next void or filter. */
-       voidBusy:null,voidErr:null,
+       voidBusy:null,voidErr:null,eatenBusy:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
           tap. render() rebuilds the whole app with innerHTML, so the .sheet
           node is DESTROYED AND RECREATED on each keystroke and each chip —
@@ -5390,6 +5390,40 @@ reg('wstVoid', id=>{
         if(String(e&&e.message)==='auth') return;
         w.voidErr = e&&e.refused ? T(...e.words)
           : (e&&(e.code==='already_voided'||e.code==='cannot_void_a_reversal')) ? e.message
+          : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+        loadWaste(true); render();
+      });
+    }};
+  render();
+});
+/* §455 — EATEN BY STAFF, the desktop's doEaten: how many of an expired entry
+   the staff ate, 0 to its qty. One number field; what was said before is listed
+   above it, oldest first, because a correction is a new figure and the old one
+   stays. The title is the product and its quantity, which need no label. A
+   refusal stays above the list in words, as Void's does. */
+reg('wstEaten', id=>{
+  const w=state.wst;
+  if(w.eatenBusy!=null||!mCan('waste:record')) return;
+  const r=(w.rows||[]).find(x=>Number(x.id)===Number(id));
+  if(!r||r.reason_code!=='expired'||r.voided_by_waste_id!=null||r.reverses_waste_id!=null) return;
+  const qty=r.qty, what=wstProductName(r);
+  const hist=(r.eaten_by_staff_history||[]).map(h=>escAttr(T('Eaten by staff','员工取用')+' · '+h.qty+' · '+(h.by||'—')+' · '+fmtDateOnly(String(h.at||'').slice(0,10))));
+  state.ask={title:escAttr(T(qty+' × '+what, what+' × '+qty)),
+    body:hist.length?hist.join('<br>'):'',
+    fields:[{id:'qty',label:T('Eaten by staff','员工取用'),type:'number',value:r.eaten_by_staff_qty!=null?String(r.eaten_by_staff_qty):''}],
+    confirmLabel:T('Save','保存'),
+    validate:x=>{ const n=x.qty===''?NaN:Number(x.qty);
+      return (!Number.isFinite(n)||n<0||n>Number(qty)) ? T('Enter a number from 0 to '+qty+'.','请输入 0 到 '+qty+' 之间的数字。') : null; },
+    run:x=>{
+      w.eatenBusy=r.id; w.voidErr=null; render();
+      apiWrite('/waste/'+r.id+'/eaten',{qty:Number(x.qty)},'POST').then(()=>{
+        w.eatenBusy=null;
+        showToast(T('Saved','已保存'));
+        loadWaste(true); render();
+      }).catch(e=>{
+        w.eatenBusy=null;
+        if(String(e&&e.message)==='auth') return;
+        w.voidErr = e&&e.refused ? T(...e.words)
           : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
         loadWaste(true); render();
       });
@@ -14250,6 +14284,8 @@ function wstPulse(){
   }
   // A void is a correction, not an amount — it is stated to both audiences.
   if(Number(t.voided_entries||0)) bits.push(`<span class="num">${t.voided_entries} ${T('voided','已作废')}</span>`);
+  // §455 — what the staff ate of the expired food, when they ate any.
+  if(Number(t.eaten_by_staff_qty||0)>0) bits.push(`<span class="num">${T(t.eaten_by_staff_qty+' eaten by staff','员工取用 '+t.eaten_by_staff_qty)}</span>`);
   return `<div style="padding:0 16px;font-size:13px;color:var(--text-secondary)">${bits.join(' · ')}</div>`;
 }
 /* Three row kinds, and each says which it is. A REVERSAL is not a loss and
@@ -14277,6 +14313,7 @@ function wstRow(r){
         ${mark?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${mark}</span>`:''}</span>
       <span class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.qty} × · ${escAttr(wstReasonName(r.reason_code))} · ${escAttr(wstStoreName(r))}</span>
       ${r.note?`<span style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.note)}</span>`:''}
+      ${Number(r.eaten_by_staff_qty||0)>0?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${T(r.eaten_by_staff_qty+' eaten by staff','员工取用 '+r.eaten_by_staff_qty)}</span>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none">
       ${cost?`<span style="font-size:15px;font-weight:500">${cost}</span>`:''}
@@ -14286,7 +14323,16 @@ function wstRow(r){
            every phone this ships to, and a traveller sees a date rather than a
            wrong word. Same helper and same trade as the PO arrival dates. */''}
       <span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDateOnly(r.business_date)}</span>
-      ${wstVoidBtn(r)}</span></div>`;
+      ${wstEatenBtn(r)}${wstVoidBtn(r)}</span></div>`;
+}
+/* §455 — Eaten by staff, on a live EXPIRED entry, for whoever may record waste
+   (the server gates it as waste:record). A follow-up on the entry, never an
+   edit of it: it moves no stock and no money. */
+function wstEatenBtn(r){
+  if(r.reason_code!=='expired'||r.voided_by_waste_id!=null||r.reverses_waste_id!=null||!mCan('waste:record')) return '';
+  const w=state.wst;
+  return `<button class="btn2" style="width:auto;min-height:0;padding:5px 12px;font-size:13px;margin-top:4px" ${w.eatenBusy!=null?'disabled':''}
+    onclick="APP.cmd('wstEaten',${Number(r.id)})">${w.eatenBusy===r.id?T('Saving…','保存中…'):T('Eaten by staff','员工取用')}</button>`;
 }
 /* §325 PD3 — Void, the desktop's row action: a live loss only, never a
    reversal and never twice, and only for an account holding waste:void (the

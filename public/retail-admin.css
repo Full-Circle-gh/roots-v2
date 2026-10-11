@@ -14086,6 +14086,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   text-align: right; font-variant-numeric: tabular-nums;
 }
 #tab-waste .wst-table td.act { text-align: right; }
+/* §455 — "Eaten by staff" under an Expired reason: its own line in the
+   Reason cell, so the action column keeps its 8% and Void stays alone in it. */
+#tab-waste .wst-eaten { display: block; margin-top: 4px; }
 #tab-waste .wst-ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tab-waste .wst-prod { margin-right: 8px; }
 /* A voided row stays fully legible — it is not struck through and not dimmed
