@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.503
+# Tacet shared-core consolidation — decisions record, v4.504
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-11 · v4.504 — **§455 · EXPIRED FOOD THE STAFF ATE STAYS EXPIRED, AND SAYS SO — DECIDED BY ASH:** asked whether a waste entry recorded as Expired could be changed to Staff consumption when the team later eats the food, then chose *"Keep Expired and add a 'what happened to it' note"* over a Change-reason action. The entry is not edited (§32 rule 11): a follow-up row in a new append-only table, `waste_staff_eaten`, says how many of it the staff ate, 0 to its qty; the latest row is the figure and the earlier ones stay as history. Expired entries only. No stock, no cost, no reason changes. New route `POST /api/retail-admin/waste/:id/eaten`, gated `waste:record` by the existing `/waste` rule in `lib/cap-routes.js`. One table added; no change to `.gitignore` or CI. 3 strings composed (vocabulary v1.323). See §455.
 
 2026-10-11 · v4.503 — **§454 · THE QR MENU ASKS FOR NO NAME — DECIDED BY ASH:** *"lets cancel this requirment . phone number ( optional , for discount if apply ) name there is no need ."* The name field leaves the basket and the server stops refusing an order without one (`name_required` is gone). The customer is called by the order number, which every slip, till row and screen already carries. The optional phone stays exactly as §426 left it. Amends §44's "supplies a name". No string composed; none added. No schema (`recipient_name` was already nullable), no new route, no change to `.gitignore` or CI. See §454.
 
@@ -29782,3 +29784,57 @@ to the phone field. That suite's other 22 failures are the same on main before
 this change and are not touched here.
 Schema: none (`recipient_name` was already nullable). No new route. No change
 to `.gitignore` or CI.
+
+## §455 — EXPIRED FOOD THE STAFF ATE STAYS EXPIRED, AND SAYS SO
+
+**Decided by Ash, 2026-10-11.** Asked: *"sometimes we have expired food that we
+record as waste ( expired ) however later on staff might consume it , so the
+idea is to be able to change the reason of waste reason from expired to staff
+consumption of an item . your advice and thoughts"*. Two ways were put: keep
+the entry Expired and add what happened to the food, or a Change-reason action.
+Chosen: *"Keep Expired and add a 'what happened to it' note"*, then *"go"* on
+the design below.
+
+**Why not change the reason.** §32 rule 8 keeps `expired` and
+`staff_consumption` apart because they drive different decisions: expiry says
+too much was ordered or made; staff consumption says how much the team takes.
+Food that expired was over-ordered whether or not someone ate it afterwards, so
+moving it to Staff consumption would shrink the expiry figure and swell the
+staff one, and both would mislead. A Change-reason done as void + re-record
+would also briefly return stock that is physically gone (a waiting order can
+take it), would change the cost (Expired keeps packed-separately lines, §281;
+Staff consumption charges in full), and is all-or-nothing on the quantity.
+
+**The rule.**
+1. **The entry is never edited** (§32 rule 11). What the staff ate is a
+   follow-up row in `waste_staff_eaten` (`waste_id`, `eaten_qty`, who, when).
+2. **Append-only.** Sending a figure again writes a new row; the latest row is
+   the current figure, and every earlier row stays and is shown, oldest first,
+   in the dialog that sets it. `0` is a valid figure and is how a wrong one is
+   taken back.
+3. **0 to the entry's qty**, both ends included; a part of a unit is allowed.
+4. **Expired entries only**, and only a live one: not voided, not a reversal.
+   Spoiled or damaged food is not food anyone should eat.
+5. **Moves nothing.** No stock movement, no cost change, no reason change. The
+   loss was the expiry.
+6. **Who:** `waste:record` — the person who records waste. The existing `/waste`
+   rule in `lib/cap-routes.js` already maps the new path there; `/void` stays
+   `waste:void`.
+7. **Where it shows.** The list sends `eaten_by_staff_qty` and
+   `eaten_by_staff_history` per row, and `totals.eaten_by_staff_qty` — the
+   latest figure of every LIVE entry in the filter, so a voided entry's figure
+   drops out with its loss. Desktop: an *Eaten by staff* button under the
+   Expired reason (a plain line for someone without `waste:record`), and an
+   *Eaten by staff* figure in the pulse line when it is above zero. Phone: the
+   same button beside Void, a line on the row, and a part of the pulse line.
+
+**Not changed.** The reason list, the cost rules, void, stock, every report's
+loss figure.
+
+Strings: 3 composed (vocabulary v1.323, *Eaten by staff on an expired entry
+(§455)*); the rest copied whole. Tests: `scripts/test_waste_staff_eaten.js`
+(fast shard) — the real route on an in-memory SQLite with the table's DDL read
+from `database.js`. `scripts/test_mobile_waste_void.js` adds `wstEatenBtn` to
+the functions it lifts from `m.html`, because `wstRow` now calls it.
+Schema: one table, `waste_staff_eaten`, created in `database.js`. One new route.
+No change to `.gitignore` or CI.

@@ -117,7 +117,7 @@ function liftReg(name) {
 
 const FNS = ['E', 'pill', 'mCan', 'chipRow', 'nothingYet', 'actRangeLine', 'wstPreset', 'wstWindow',
   'loadWasteReasons', 'wstReasonName', 'loadWaste', 'wstStoreName', 'wstProductName', 'wstPulse', 'wstRow',
-  'wstVoidBtn', 'screenWaste', 'wstRefilter', 'layers', 'prodRecordsDrop'];
+  'wstVoidBtn', 'wstEatenBtn', 'screenWaste', 'wstRefilter', 'layers', 'prodRecordsDrop'];
 const CONSTS = ['PILL', 'KIND2PILL', 'MCAN_MONEY_ONLY', 'money', 'wstMoney', 'wstShowMoney'];
 const REGS = ['askRun', 'wstVoid', 'wstRange', 'wstRetry'];
 const SRC = [...CONSTS.map(liftConst), ...FNS.map(liftFn), ...REGS.map(liftReg)].join('\n');

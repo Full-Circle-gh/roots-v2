@@ -7425,6 +7425,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_waste_records_reverses ON waste_records(reverses_waste_id);
 `);
 
+// §455 — how much of an EXPIRED loss the staff ate instead of binning.
+//
+// A follow-up fact about a waste entry, never an edit of it: §32 rule 11 keeps
+// every waste row exactly as it was written, so this is its own table and the
+// entry is untouched. APPEND-ONLY: a correction is a new row and the latest row
+// for an entry is its current figure; the earlier rows stay as the history.
+// eaten_qty is how many of the entry's qty, 0 to qty — 0 is a real answer
+// ("none after all"), which is how a wrong figure is taken back. Moves no stock
+// and no money: the loss was the expiry, and what happened to the food after it
+// does not change it.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS waste_staff_eaten (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    waste_id         INTEGER NOT NULL,
+    eaten_qty        REAL    NOT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by       INTEGER,                        -- no FK: two id spaces, as waste_records
+    created_by_label TEXT,
+    CHECK (eaten_qty >= 0),
+    FOREIGN KEY (waste_id) REFERENCES waste_records(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_waste_staff_eaten_waste ON waste_staff_eaten(waste_id);
+`);
+
 // Automatic recipe materialization (§29's third addendum, decided
 // 2026-08-27) records here whenever it CANNOT write — a recipe's name (or,
 // on the create path, its SKU) collides with an existing ingredients row and
