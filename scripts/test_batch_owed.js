@@ -555,8 +555,10 @@ section('9c · the debt is said out loud, not only written down');
   it('both commits collect the lines that crossed zero', () => {
     assert.strictEqual((inv.match(/if \(bal < 0\) belowZero\.push\(/g) || []).length, 2,
       'commitOrderReservations and commitUnreservedOrder both watch the balance');
-    assert.strictEqual((inv.match(/_reportBelowZero\(/g) || []).length, 3,
-      'defined once, called from both');
+    // §458 adds a third caller: moving an order to a short shop can take that
+    // shop below zero, and it is said out loud the same way.
+    assert.strictEqual((inv.match(/_reportBelowZero\(/g) || []).length, 4,
+      'defined once, called from both commits and from moveOrderStock');
   });
   it('…and neither gained a floor doing it', () => {
     assert.ok(!/physical_qty = MAX\(0/i.test(inv), 'no clamp crept into the decrement');
@@ -572,6 +574,13 @@ section('9c · the debt is said out loud, not only written down');
     const commit = inv.indexOf('_reportBelowZero(o, belowZero);');
     const bump = inv.lastIndexOf('_bumpStockLive();', commit);
     assert.ok(bump > -1 && bump < commit, 'it runs after the transaction, not within it');
+    // The move's call too: after its own tx() has returned, and the caller's
+    // order write rides INSIDE that tx (alsoInTx) rather than wrapping it.
+    const mv = inv.indexOf('function moveOrderStock');
+    const mvTx = inv.indexOf('const result = tx();', mv);
+    const mvRep = inv.indexOf('_reportBelowZero(', mv);
+    assert.ok(mv > -1 && mvTx > mv && mvRep > mvTx, 'the move reports after its transaction');
+    assert.ok(/if \(alsoInTx\) alsoInTx\(\);/.test(inv.slice(mv, mvTx)), "the caller's write is inside it");
   });
   it('a walk-in is named as the till rather than as whatever channel the row carries', () => {
     assert.ok(/fulfillment_type FROM retail_orders/.test(inv),

@@ -2541,6 +2541,10 @@ function routingNote(reason) {
 // instead of an opaque "改派(缺货)". Empty for non-rerouted orders. The pids are
 // this order's own cart items, so o.items resolves their names.
 function rerouteShortNote(o) {
+  // §458: describes the shop checkout routed to. Once staff move the order by
+  // hand it is about a shop the order is no longer at; reroutedNote says what
+  // happened instead. The column is kept (§138) — only the drawing stops.
+  if (o.rerouted_at) return '';
   let pids = [];
   try { pids = JSON.parse(o.reroute_short_pids || '[]') || []; } catch {}
   if (!pids.length) return '';
@@ -2606,11 +2610,144 @@ function preorderSoldNote(o) {
 // only when it differs from the store that took the order — so the presence of
 // the value IS the fact, and there is nothing to compare here.
 function movedFromNote(o) {
+  if (o.rerouted_at) return '';   // §458 — same reason as rerouteShortNote
   const code = String(o.moved_from_store || '').trim();
   if (!code) return '';
   return `<div style="margin-top:10px; font-size:12px; color: var(--text-2);">`
     + `${cuT('Rerouted, shop was closed', '改派 · 门店已关闭')} · `
     + `<b>${escapeHtml(code)}</b></div>`;
+}
+
+/* §458 — MOVED TO ANOTHER SHOP BY HAND. The note says where from, who and when;
+   "short when moved" marks a move somebody made over the alert, so a count
+   below zero at this shop has its explanation on the order that caused it. */
+function reroutedNote(o) {
+  if (!o.rerouted_at) return '';
+  const fromName = cuT(o.rerouted_from_name_en || o.rerouted_from_code || '—',
+                       o.rerouted_from_name_cn || o.rerouted_from_code || '—');
+  let forced = false;
+  try { forced = (JSON.parse(o.rerouted_forced_pids || '[]') || []).length > 0; } catch (e) { forced = false; }
+  const when = typeof tdWhen === 'function' ? tdWhen(o.rerouted_at, 'dateTime') : String(o.rerouted_at);
+  return `<div style="margin-top:10px; font-size:12px; color: var(--text-2);">`
+    + `${cuT(`Moved here by hand from ${escapeHtml(fromName)}`, `手动改派自 ${escapeHtml(fromName)}`)}`
+    + `${o.rerouted_by ? ' · ' + escapeHtml(o.rerouted_by) : ''}${when ? ' · ' + escapeHtml(when) : ''}`
+    + `${forced ? ` · <b style="color: var(--warn);">${cuT('short when moved', '改派时缺货')}</b>` : ''}`
+    + `</div>`;
+}
+// The Change control. Drawn on the orders that can move at all; the server's
+// GET answers everything else (packed, courier called, refund) in the picker.
+function rerouteControl(o) {
+  const ch = o.channel == null ? 'wechat' : String(o.channel).toLowerCase();
+  if (!['paid', 'awaiting_restock'].includes(o.status)) return '';
+  if (o.fulfillment_type === 'pickup' || o.fulfillment_type === 'counter') return '';
+  if (ch !== 'wechat' && ch !== 'web') return '';
+  return `<div style="margin-top:8px;">`
+    + `<button class="btn btn-sm" id="rr-btn-${o.id}" onclick="rrLoad(${o.id}, this)">${cuT('Change', '更改')}</button>`
+    + `<div id="rr-box-${o.id}" style="margin-top:6px;"></div></div>`;
+}
+const RR_REASON = {
+  status:          () => cuT('Only a paid order, or one waiting for restock, can move shop.', '仅已付款或待补货的订单可改派。'),
+  packed:          () => cuT('A parcel is already packed or sent, so it stays at this shop.', '已有包裹打包或发出，无法改派。'),
+  courier_called:  () => cuT('A courier is already on it — cancel it in the Qingyun app first', '已呼叫运力 — 请先在青云 App 取消'),
+  courier_booking: () => cuT('The courier job is being created — try again in a minute.', '配送单创建中 — 请稍后再试。'),
+};
+const rrReason = (r) => (RR_REASON[r] ? RR_REASON[r]() : cuT("This order can't move shop.", '该订单无法改派。'));
+const rrShortNames = (short) => (short || []).map((x) => escapeHtml(cuT(x.name_en || ('#' + x.product_id), x.name_cn || x.name_en || ('#' + x.product_id)))).join(cuT(', ', '、'));
+
+async function rrLoad(orderId, btn) {
+  const box = document.getElementById('rr-box-' + orderId);
+  if (!box) return;
+  if (box.innerHTML) { box.innerHTML = ''; return; }   // second click closes it
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Loading…', '加载中…'); }
+  const reset = () => { if (btn) { btn.disabled = false; btn.textContent = cuT('Change', '更改'); } };
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/reroute`);
+    const j = await r.json();
+    reset();
+    if (!j.success || !j.data) throw new Error('load');
+    if (!j.data.eligible) {
+      box.innerHTML = `<div class="muted" style="font-size:12px">${rrReason(j.data.reason)}</div>`;
+      return;
+    }
+    const stores = j.data.stores || [];
+    if (!stores.length) {
+      box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('No other shop to move it to.', '没有其他可改派的门店。')}</div>`;
+      return;
+    }
+    box.innerHTML = stores.map((s) => {
+      const meta = [];
+      if (s.closed) meta.push(cuT('Closed', '已关闭'));
+      if (s.short && s.short.length) meta.push(`${cuT('Out of stock', '缺货')}: ${rrShortNames(s.short)}`);
+      return `<label class="qy-row">
+        <input type="radio" name="rr-${orderId}" value="${escapeAttr(s.code)}">
+        <span style="flex:1; min-width:0;">
+          <span class="qy-name"><b>${escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.code))}</b></span>
+          ${meta.length ? `<span class="qy-meta" style="color: var(--warn);">${meta.join(' · ')}</span>` : ''}
+        </span>
+      </label>`;
+    }).join('')
+      + `<button class="btn btn-primary btn-sm" onclick="rrMove(${orderId}, this)" style="margin-top:6px;">${cuT('Move here', '改派到此门店')}</button>`;
+  } catch (e) {
+    reset();
+    box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--td-brick-ink)">${cuT('Load failed', '加载失败')}</div>`;
+  }
+}
+
+// Move it. Asked once; if the new shop is short or closed the server says so
+// and nothing has changed, and the person is asked again with what is short.
+async function rrMove(orderId, btn) {
+  const sel = document.querySelector(`input[name="rr-${orderId}"]:checked`);
+  if (!sel) { toast(cuT('Pick a location', '请选择门店'), 'err'); return; }
+  const code = sel.value;
+  const to = escapeHtml(sel.closest('label')?.querySelector('b')?.textContent || code);
+  const o = _OPEN_ORDER || {};
+  const from = escapeHtml(cuT(o.store_name_en || o.store_code || '', o.store_name_cn || o.store_code || ''));
+  if (!(await askConfirm({
+    title: cuT(`Move this order to ${to}?`, `将此订单改派到 ${to}?`),
+    body: cuT(`Its stock goes back to ${from} and comes off ${to}. ${to}'s printer prints the slip.`,
+              `库存退回 ${from}，从 ${to} 扣减；${to} 的打印机将打印小票。`),
+    confirmLabel: cuT('Move it', '确认更改'),
+  }))) return;
+  const send = (force) => fetch(`/api/retail-admin/orders/${orderId}/reroute`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(force ? { store_code: code, force: true } : { store_code: code }),
+  }).then((r) => r.json());
+  const busy = (on) => { if (btn) { btn.disabled = on; btn.textContent = on ? cuT('Moving…', '更改中…') : cuT('Move here', '改派到此门店'); } };
+  busy(true);
+  try {
+    let j = await send(false);
+    if (!j.success && j.error === 'needs_confirm') {
+      busy(false);
+      const lines = (j.short || []).map((x) => {
+        const nm = escapeHtml(cuT(x.name_en || ('#' + x.product_id), x.name_cn || x.name_en || ('#' + x.product_id)));
+        return cuT(`${nm} — needs ${x.need}, has ${x.available}`, `${nm} — 需要 ${x.need}，现有 ${x.available}`);
+      });
+      if (j.closed) lines.unshift(cuT(`${to} is closed for online orders.`, `${to} 线上订单已关闭。`));
+      const ok = await askConfirm({
+        title: cuT(`${to} is short for this order`, `${to} 缺货`),
+        body: lines.join('<br>') + '<br><br>' + cuT('Moving anyway takes its count below zero.', '仍要改派，库存将变为负数。'),
+        confirmLabel: cuT('Move anyway', '仍要改派'),
+        danger: true,
+      });
+      if (!ok) return;
+      busy(true);
+      j = await send(true);
+    }
+    if (j.success) {
+      toast(cuT(`Moved to ${to}`, `已改派到 ${to}`), 'success');
+      openOrder(orderId, { instant: true });
+      loadOrders();
+      return;
+    }
+    busy(false);
+    if (j.error === 'store_not_connected') toast(cuT("That location isn't connected to Qingyun", '该门店未连接青云'), 'err');
+    else if (j.error === 'store_not_reachable') toast(cuT("That location's Qingyun account isn't wired up yet — ask ops to set it up", '该门店的青云账号尚未接通 — 请联系运维配置'), 'err');
+    else if (RR_REASON[j.error]) toast(rrReason(j.error), 'err');
+    else toast(cuT('Could not move it', '更改失败'), 'err');
+  } catch (e) {
+    busy(false);
+    toast(cuT('Could not move it', '更改失败'), 'err');
+  }
 }
 // Warning line for orders whose shipping store can't currently cover every item
 // (set at checkout on out-of-city / scheduled-later orders that skipped the
@@ -7116,7 +7253,9 @@ function renderOpenOrder(o) {
               ${rerouteShortNote(o)}
               ${preorderSoldNote(o)}
               ${movedFromNote(o)}
+              ${reroutedNote(o)}
               ${o.routed_by_distance === 0 ? `<div class="sub" style="color: var(--warn); font-weight: 600;">⚠ ${cuT('routed by area — address not locatable, verify store','按区域派单 · 地址无法定位,请核对门店')}</div>` : ''}
+              ${rerouteControl(o)}
             </div>` : ''}
           </div>
           ${fulfillmentShortStrip(o)}

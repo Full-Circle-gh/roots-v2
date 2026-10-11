@@ -1564,6 +1564,7 @@ const state = {
   /* §325 O6 — "Ship part later": the parcel being split and the lines ticked;
      and the orders whose split suggestion was dismissed this session. */
   splitPick:null, splitDismissed:[], shipTo:null, qy:null, qyPlace:null, jd:null,
+  rr:null,   // §458 the Change shop panel on the order card: {oid, loading, err, data, pick}
   /* §325 O2 — saved views on Orders. rows: undefined = not read yet, null =
      the read failed, [] = none saved. busy names the write in flight; err is
      a refusal, kept on the sheet until the next write. */
@@ -2772,7 +2773,7 @@ reg('ordViewDel', id=>{
 /* reg('openOrder') is registered ONCE, with the live orders (§325 T1). A
    one-line copy here from the mock-data days was overwritten by that later
    registration before anybody could tap, so it never ran and is gone. */
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null; if(state.qyPlace) clearTimeout(state.qyPlace.timer); state.qyPlace=null;
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; state.rf=null; state.shipTo=null; state.qy=null; state.jd=null; if(state.qyPlace) clearTimeout(state.qyPlace.timer); state.qyPlace=null; state.rr=null;
   /* An editor opened and left empty is not a note. Clearing it here is what
      stops a drawer reopened later from showing a box nobody asked for twice. */
   state.ordNoteOpen=null;
@@ -4262,6 +4263,109 @@ reg('qyShipGo', ()=>{
       j=>j.old_removed===false
         ?T('Now collected at '+to[0]+" — but the old job couldn't be deleted, remove it below",'已改为 '+to[1]+' 取货 — 但原配送单未能删除,请在下方删除')
         :T('Now collected at '+to[0],'已改为 '+to[1]+' 取货'))};
+  render();
+});
+/* §458 — MOVE THE ORDER TO ANOTHER SHOP (desktop rrLoad / rrMove). Not the
+   courier's Ships from above: this moves the order, its stock and its courier
+   job together. Drawn on the orders that can move at all; the server's GET
+   says why any other one cannot. */
+const rrShown=o=>qyCanEdit(o)&&!o.pickup&&!o.counter
+  &&['paid','awaiting_restock'].includes(o.rawStatus)
+  &&['wechat','web',''].includes(o.chanRaw||'');
+const rrOf=o=>(state.rr&&o&&state.rr.oid===o.id)?state.rr:null;
+const rrIsOpen=o=>!!rrOf(o);
+const RR_REASON={
+  status:['Only a paid order, or one waiting for restock, can move shop.','仅已付款或待补货的订单可改派。'],
+  packed:['A parcel is already packed or sent, so it stays at this shop.','已有包裹打包或发出，无法改派。'],
+  courier_called:['A courier is already on it — cancel it in the Qingyun app first','已呼叫运力 — 请先在青云 App 取消'],
+  courier_booking:['The courier job is being created — try again in a minute.','配送单创建中 — 请稍后再试。'],
+  store_not_connected:["That location isn't connected to Qingyun",'该门店未连接青云'],
+  store_not_reachable:["That location's Qingyun account isn't wired up yet — ask ops to set it up",'该门店的青云账号尚未接通 — 请联系运维配置'],
+  _:['Could not move it','更改失败'],
+};
+const rrName=x=>[x.name_en||('#'+x.product_id), x.name_cn||x.name_en||('#'+x.product_id)];
+function rrPanel(o){
+  const q=rrOf(o);
+  const wrap=h=>`<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">${h}</div>`;
+  if(q.loading) return wrap(qyNote(T('Loading…','加载中…')));
+  if(q.err) return wrap(qyNote(q.err,'brick-ink'));
+  const d=q.data||{};
+  if(!d.eligible) return wrap(qyNote(T(...(RR_REASON[d.reason]||["This order can't move shop.",'该订单无法改派。']))));
+  const stores=d.stores||[];
+  if(!stores.length) return wrap(qyNote(T('No other shop to move it to.','没有其他可改派的门店。')));
+  const dis=state.orderBusy?' disabled':'';
+  return wrap(`<div style="display:flex;flex-direction:column">${stores.map(s=>{
+      const on=q.pick===s.code;
+      const meta=[];
+      if(s.closed) meta.push(T('Closed','已关闭'));
+      if(s.short&&s.short.length) meta.push(T('Out of stock','缺货')+': '+s.short.map(x=>escAttr(T(...rrName(x)))).join(T(', ','、')));
+      return `<button role="radio" aria-checked="${on?'true':'false'}"${dis} onclick="APP.cmd('rrPick','${escAttr(s.code)}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border:none;border-top:1px solid var(--hairline);background:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+        <span style="flex:none;width:20px;height:20px;border-radius:50%;border:1.75px solid ${on?'var(--text-primary)':'var(--border-strong)'};display:flex;align-items:center;justify-content:center">${on?'<span style="width:10px;height:10px;border-radius:50%;background:var(--text-primary)"></span>':''}</span>
+        <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500">${escAttr(T(s.name_en||s.code,s.name_cn||s.code))}</span>
+          ${meta.length?`<span style="display:block;font-size:12.5px;color:var(--amber-ink)">${meta.join(' · ')}</span>`:''}</span></button>`;
+    }).join('')}</div>
+    <button class="cta" style="width:100%"${dis} onclick="APP.cmd('rrGo')">${state.orderBusy==='reroute'?T('Moving…','更改中…'):T('Move here','改派到此门店')}</button>`);
+}
+reg('rrOpen', ()=>{
+  if(!mCan('orders:edit')) return;   // §325: every /orders write is orders:edit on the server
+  const o=currentOrder(); if(!rrShown(o)) return;
+  if(rrIsOpen(o)){ state.rr=null; render(); return; }
+  const q=state.rr={oid:o.id, loading:true, err:null, data:null, pick:null}; render();
+  api('/orders/'+o._id+'/reroute').then(d=>{
+    if(state.rr!==q) return;
+    q.loading=false; q.data=d||{}; render();
+  }).catch(e=>{
+    if(state.rr!==q||String(e.message)==='auth') return;
+    q.loading=false; q.err=e.refused?T(...e.words):T('Load failed','加载失败'); render();
+  });
+});
+reg('rrPick', code=>{
+  const o=currentOrder(), q=rrOf(o); if(!q||!q.data||!q.data.stores) return;
+  if(!q.data.stores.some(x=>x&&x.code===code)) return;
+  q.pick=code; render();
+});
+/* Asked once. A short or closed shop answers needs_confirm and nothing has
+   changed; the person is asked again, with what is short, and Move anyway
+   sends the same request with force. */
+function rrSend(o,s,force){
+  const to=[s.name_en||s.code, s.name_cn||s.code];
+  const plain=w=>{ const x=new Error(T(w[0],w[1])); x.code='__plain'; return x; };
+  return orderWrite('reroute', async()=>{
+    let j;
+    try{ j=await apiWrite('/orders/'+o._id+'/reroute', force?{store_code:s.code, force:true}:{store_code:s.code}); }
+    catch(e){
+      if(e&&e.code==='needs_confirm'){
+        const b=e.body||{}, toE=escAttr(to[0]), toZ=escAttr(to[1]);
+        const lines=(b.short||[]).map(x=>{ const n=rrName(x);
+          return T(escAttr(n[0])+' — needs '+x.need+', has '+x.available, escAttr(n[1])+' — 需要 '+x.need+'，现有 '+x.available); });
+        if(b.closed) lines.unshift(T(toE+' is closed for online orders.',toZ+' 线上订单已关闭。'));
+        state.ask={title:T(toE+' is short for this order',toZ+' 缺货'),
+          body:lines.join('<br>')+'<br><br>'+T('Moving anyway takes its count below zero.','仍要改派，库存将变为负数。'),
+          confirmLabel:T('Move anyway','仍要改派'), danger:true,
+          run:()=>rrSend(o,s,true)};
+        return null;
+      }
+      if(e&&!e.refused&&String(e.message)!=='auth') throw plain(RR_REASON[e.code]||RR_REASON._);
+      throw e;
+    }
+    if(j&&j.success===false) throw plain(RR_REASON[j.error]||RR_REASON._);
+    state.rr=null;
+    await rereadOrder(o);
+    return T('Moved to '+to[0],'已改派到 '+to[1]);
+  });
+}
+reg('rrGo', ()=>{
+  if(!mCan('orders:edit')) return;
+  const o=currentOrder(), q=rrOf(o); if(!rrShown(o)||!q||!q.data) return;
+  if(!q.pick){ state.orderErr=T('Pick a location','请选择门店'); render(); return; }
+  const s=(q.data.stores||[]).find(x=>x&&x.code===q.pick); if(!s) return;
+  const to=[escAttr(s.name_en||s.code), escAttr(s.name_cn||s.code)];
+  const fr=[escAttr((o.fulfil||[])[0]||''), escAttr((o.fulfil||[])[1]||'')];
+  state.ask={title:T('Move this order to '+to[0]+'?','将此订单改派到 '+to[1]+'?'),
+    body:T('Its stock goes back to '+fr[0]+' and comes off '+to[0]+'. '+to[0]+"'s printer prints the slip.",
+           '库存退回 '+fr[1]+'，从 '+to[1]+' 扣减；'+to[1]+' 的打印机将打印小票。'),
+    confirmLabel:T('Move it','确认更改'),
+    run:()=>rrSend(o,s,false)};
   render();
 });
 reg('qyCarriers', ()=>{
@@ -39902,6 +40006,8 @@ function sheetOrderDetail(){
          ${o.routedByArea?`<div style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;color:var(--amber-ink);font-size:12.5px;line-height:1.5">
            ${ic('triangle-alert',14)}<span>${T('Routed by area — the address could not be located, so check the store is right.','按区域派单 — 地址无法定位，请核对门店是否正确。')}</span></div>`:''}
          ${o.movedFrom?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('Rerouted, shop was closed','改派 · 门店已关闭')} · <span class="num" style="font-weight:500;color:var(--text-primary)">${escAttr(o.movedFrom)}</span></div>`:''}
+         ${o.rerouted?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T('Moved here by hand from '+escAttr(o.rerouted.from[0]),'手动改派自 '+escAttr(o.rerouted.from[1]))}${o.rerouted.by?' · '+escAttr(o.rerouted.by):''}${o.rerouted.at?' · '+tdWhen(o.rerouted.at,'dateTime',_tdL()):''}${o.rerouted.forced?` · <span style="color:var(--amber-ink);font-weight:500">${T('short when moved','改派时缺货')}</span>`:''}</div>`:''}
+         ${rrShown(o)?`<div style="margin-top:10px">${qyBtn(rrIsOpen(o)?T('Close','关闭'):T('Change','更改'),"APP.cmd('rrOpen')")}</div>${rrIsOpen(o)?rrPanel(o):''}`:''}
          ${o.preorderSold?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
            <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--text-secondary)">
              <span style="width:6px;height:6px;border-radius:50%;background:var(--text-secondary);flex:none"></span>${T('Pre-order','预订')}</span>
@@ -51034,6 +51140,15 @@ function mapDetail(o){
   // The shop this address would have gone to had nothing been closed
   // (movedFromNote). Its presence IS the fact.
   base.movedFrom=String(o.moved_from_store||'').trim()||null;
+  /* §458 — moved to another shop by hand (reroutedNote on the desktop). The two
+     checkout-time notes above describe the shop checkout chose, which this
+     order has now left, so they stand down — the columns are kept (§138). */
+  base.rerouted=o.rerouted_at?{
+    from:[o.rerouted_from_name_en||o.rerouted_from_code||'—', o.rerouted_from_name_cn||o.rerouted_from_code||'—'],
+    by:o.rerouted_by||'', at:o.rerouted_at,
+    forced:(()=>{ try{ return (JSON.parse(o.rerouted_forced_pids||'[]')||[]).length>0; }catch(e){ return false; } })(),
+  }:null;
+  if(base.rerouted){ base.movedFrom=null; base.shortItems=null; }
   // Was the customer told (wasCustomerToldBlock): the latest attempt per kind.
   base.told=(Array.isArray(o.notifications)&&o.notifications.length)
     ?o.notifications.map(r=>({kind:r.kind||'', channel:r.channel||'', at:r.created_at||null, ok:!!r.ok, error:r.error||null}))

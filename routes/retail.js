@@ -29252,11 +29252,16 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     `SELECT o.*, c.nickname, c.avatar_url, c.phone AS customer_phone,
             c.note AS customer_standing_note, c.tags AS customer_standing_tags,
             s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn,
+            -- §458: the shop a hand move took this order from (o.* carries the
+            -- id, the time and the operator).
+            rf.code AS rerouted_from_code, rf.name_en AS rerouted_from_name_en,
+            rf.name_cn AS rerouted_from_name_cn,
             z.zone_type AS zone_type,
             z.day_only AS zone_day_only, z.same_day_surcharge AS zone_same_day_surcharge
        FROM retail_orders o
        LEFT JOIN retail_customers c ON c.id = o.customer_id
        LEFT JOIN retail_stores    s ON s.id = o.store_id
+       LEFT JOIN retail_stores    rf ON rf.id = o.rerouted_from_store_id
        LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
       WHERE o.id = ?`
   ).get(id);
@@ -32306,13 +32311,15 @@ router.get('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin,
 
 // Do the move: create the same delivery under the target store's Qingyun account,
 // then point the order's queue row at the new copy and retire the old one.
-router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin, express.json(), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const target = String(req.body?.store_code || '').trim();
-  if (!target) return res.status(400).json({ success: false, error: 'store_code required' });
+//
+// A FUNCTION, NOT ONLY A ROUTE, since §458: moving an order to another shop moves
+// its courier job with it, through this same code, so the two can never disagree
+// about what a move involves. Returns { status, body } for the caller to send.
+async function _qingyunShipFrom(id, target, who) {
+  if (!target) return { status: 400, body: { success: false, error: 'store_code required' } };
 
   const q = _qingyunPushRow(id);
-  if (!q) return res.status(400).json({ success: false, error: 'order_not_in_qingyun' });
+  if (!q) return { status: 400, body: { success: false, error: 'order_not_in_qingyun' } };
   // Moving the collection point means re-creating an existing copy elsewhere.
   // A row that never produced one (still pending, or refused) has nothing to
   // move — the fix there is to correct the address and retry the push.
@@ -32324,35 +32331,35 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
     // quietly broken "collect at the other store" for the whole window before dispatch,
     // which is exactly when staff use it.
     if (qingyunQueue.awaitingDispatch(q)) {
-      if (q.store_code === target) return res.json({ success: true, unchanged: true, store_code: target });
+      if (q.store_code === target) return { status: 200, body: { success: true, unchanged: true, store_code: target } };
       const s = _qingyunStoreStatus().find(x => x.code === target);
-      if (!s) return res.status(400).json({ success: false, error: 'unknown_store' });
-      if (!s.connected) return res.status(409).json({ success: false, error: 'store_not_connected' });
+      if (!s) return { status: 400, body: { success: false, error: 'unknown_store' } };
+      if (!s.connected) return { status: 409, body: { success: false, error: 'store_not_connected' } };
       tdb().prepare(
         `UPDATE qingyun_push_queue SET store_code = ?, updated_at = CURRENT_TIMESTAMP
           WHERE retail_order_id = ? AND qingyun_order_id IS NULL AND status = 'ready'`
       ).run(target, id);
-      return res.json({ success: true, store_code: target, old_removed: true });
+      return { status: 200, body: { success: true, store_code: target, old_removed: true } };
     }
-    return res.status(409).json({ success: false, error: 'push_not_completed', push_status: q.status });
+    return { status: 409, body: { success: false, error: 'push_not_completed', push_status: q.status } };
   }
-  if (q.store_code === target) return res.json({ success: true, unchanged: true, store_code: target });
+  if (q.store_code === target) return { status: 200, body: { success: true, unchanged: true, store_code: target } };
 
   const store = _qingyunStoreStatus().find(s => s.code === target);
-  if (!store) return res.status(400).json({ success: false, error: 'unknown_store' });
-  if (!store.connected) return res.status(409).json({ success: false, error: 'store_not_connected' });
+  if (!store) return { status: 400, body: { success: false, error: 'unknown_store' } };
+  if (!store.connected) return { status: 409, body: { success: false, error: 'store_not_connected' } };
 
   const order = tdb().prepare(
     `SELECT id, order_no, status, recipient_name, recipient_phone, address_json,
             scheduled_for, delivery_slot_label
        FROM retail_orders WHERE id = ?`
   ).get(id);
-  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!order) return { status: 404, body: { success: false, error: 'not_found' } };
   if (['cancelled', 'refunded', 'delivered'].includes(order.status)) {
-    return res.status(409).json({ success: false, error: 'order_closed' });
+    return { status: 409, body: { success: false, error: 'order_closed' } };
   }
   const blocked = _qingyunMoveBlockedBy(q.qingyun_order_id);
-  if (blocked) return res.status(409).json({ success: false, error: 'courier_already_called', stage: blocked });
+  if (blocked) return { status: 409, body: { success: false, error: 'courier_already_called', stage: blocked } };
 
   try {
     const { getQingyunBrowser, resolveCdpUrl } = require('../lib/qingyun-browser');
@@ -32362,11 +32369,11 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
     // Without this check a store nobody wired up would create the order in the
     // CURRENT store's account — a duplicate in the same shop, reported as "moved".
     if (resolveCdpUrl(target) === resolveCdpUrl(q.store_code)) {
-      return res.status(409).json({ success: false, error: 'store_not_reachable' });
+      return { status: 409, body: { success: false, error: 'store_not_reachable' } };
     }
     const br = await getQingyunBrowser(target);
     const shop = await br.getShop();
-    if (!shop || !shop.shopId) return res.json({ success: false, error: 'store_unavailable' });
+    if (!shop || !shop.shopId) return { status: 200, body: { success: false, error: 'store_unavailable' } };
     const payload = await buildCreatePayload(order, shop, br, {
       geocode,
       translateCn: addressCn.translateToChinese,
@@ -32384,7 +32391,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
         ).run(target, JSON.stringify({ order_no: order.order_no, from: q.store_code, to: target }),
           String(created.msg || 'create failed').slice(0, 300));
       } catch (_) { /* logging must never sink the response */ }
-      return res.json({ success: false, error: created.msg || 'create_failed' });
+      return { status: 200, body: { success: false, error: created.msg || 'create_failed' } };
     }
 
     // Retire the old copy BEFORE repointing, so no poll in between can re-link it.
@@ -32419,7 +32426,6 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
       ).run(String(q.qingyun_order_id), q.store_code, id);
     }
 
-    const who = (req.backendUser && (req.backendUser.name || req.backendUser.username)) || 'admin';
     try {
       tdb().prepare(
         `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail)
@@ -32430,17 +32436,261 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
       }));
     } catch (_) { /* logging must never sink the move */ }
 
-    res.json({
+    return { status: 200, body: {
       success: true,
       store_code: target, name_en: store.name_en, name_cn: store.name_cn,
       qingyun_order_id: String(created.orderId),
       old_removed: removed.ok,          // false → the drawer shows the Remove button
       previous: { store_code: q.store_code, qingyun_order_id: String(q.qingyun_order_id) },
-    });
+    } };
   } catch (e) {
     console.error('[qingyun ship-from]', e.message);
-    res.json({ success: false, error: 'move_failed' });
+    return { status: 200, body: { success: false, error: 'move_failed' } };
   }
+}
+
+router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const target = String(req.body?.store_code || '').trim();
+  if (!target) return res.status(400).json({ success: false, error: 'store_code required' });
+  const who = (req.backendUser && (req.backendUser.name || req.backendUser.username)) || 'admin';
+  const r = await _qingyunShipFrom(id, target, who);
+  res.status(r.status).json(r.body);
+});
+
+/* ── §458 — MOVE A PAID ORDER TO ANOTHER SHOP ─────────────────────────────────
+   "Ships from" above moves only where the rider collects; the order still counts
+   against its first shop for stock and reports, and the drawer says so. This is
+   the whole move: the order's shop, the stock it has taken, its holds, and its
+   courier job, together. Decided by Ash 2026-10-11 (§458): paid or awaiting
+   restock only, nothing packed, no rider called; a short or closed new shop is
+   an alert the person may override; anyone with orders:edit (mapped by the
+   /orders prefix in lib/cap-routes.js). */
+
+// Which orders may move. Each refusal is its own word so the client can say
+// which it is. The same answer feeds the picker (GET) and guards the move (POST).
+const REROUTE_CHANNELS = ['wechat', 'web'];
+function rerouteEligibility(o) {
+  const block = (reason) => ({ allowed: false, reason });
+  if (!o) return block('not_found');
+  if (isCounter(o)) return block('counter');
+  // A pickup's shop is where the customer was told to go. Moving it would send
+  // them to a counter that does not have their bag.
+  if (o.fulfillment_type === 'pickup') return block('pickup');
+  // Meituan, Eleme and gzgrocery orders belong to the platform account's shop.
+  if (!REROUTE_CHANNELS.includes(o.channel == null ? 'wechat' : String(o.channel))) return block('channel');
+  if (!['paid', 'awaiting_restock'].includes(o.status)) return block('status');
+  if (!o.store_id) return block('no_store');
+  if (['pending', 'reviewing', 'approved'].includes(o.refund_status || '')) return block('refund');
+  if (o.dispatched_at || o.tracking_number) return block('packed');
+  // Packing is the moment a parcel's stock leaves the shelf (§180); a packed box
+  // is at the old shop and stays there.
+  try {
+    const packed = tdb().prepare(
+      `SELECT 1 FROM retail_shipments
+        WHERE order_id = ?
+          AND (prepared_at IS NOT NULL OR dispatched_at IS NOT NULL OR delivered_at IS NOT NULL
+               OR tracking_number IS NOT NULL)
+        LIMIT 1`
+    ).get(o.id);
+    if (packed) return block('packed');
+  } catch (_) { /* shipments table optional on older DBs */ }
+  const q = _qingyunPushRow(o.id);
+  if (q) {
+    if (q.qingyun_order_id && _qingyunMoveBlockedBy(q.qingyun_order_id)) return block('courier_called');
+    // The daemon is creating the courier copy right now. Moving under it would
+    // leave a copy at the old shop that nobody knows about.
+    if (!q.qingyun_order_id && q.status === 'processing') return block('courier_booking');
+  }
+  return { allowed: true, reason: null };
+}
+
+// What the new shop would be short of for this order: the expanded stock lines
+// (bundles resolved, stock-backed add-ons folded in, as the checkout reserves
+// them) against what that shop has free. Supplier-direct lines carry no stock
+// of ours and are never short. `stocked: false` means the shop has no row for it.
+function rerouteShortAt(orderId, storeId) {
+  const lines = orderStockLinesForReversal(orderId, null);
+  if (!lines.length) return [];
+  const ids = lines.map((l) => l.product_id);
+  const ph = ids.map(() => '?').join(',');
+  const prods = new Map(tdb().prepare(
+    `SELECT id, name_en, name_cn, ship_from_supplier FROM store_products WHERE id IN (${ph})`
+  ).all(...ids).map((p) => [p.id, p]));
+  const short = [];
+  for (const l of lines) {
+    const p = prods.get(l.product_id);
+    if (p && Number(p.ship_from_supplier) === 1) continue;
+    const av = inventory.getAvailable(storeId, l.product_id, 'wechat');
+    if (av.exists && av.available >= l.qty) continue;
+    short.push({
+      product_id: l.product_id,
+      name_en: p ? p.name_en : null, name_cn: p ? p.name_cn : null,
+      need: l.qty, available: av.exists ? av.available : 0, stocked: !!av.exists,
+    });
+  }
+  return short;
+}
+
+function _rerouteOrderRow(id) {
+  return tdb().prepare(
+    `SELECT id, order_no, status, channel, store_id, fulfillment_type, source,
+            dispatched_at, tracking_number, refund_status, routing_reason
+       FROM retail_orders WHERE id = ?`
+  ).get(id);
+}
+
+// The courier job follows the order. A copy already on the platform moves
+// through _qingyunShipFrom, exactly as "Ships from" moves it. A row with no copy
+// yet is repointed, guarded on the status we read so a drain that started in
+// between is refused rather than overwritten. Returns { ok, error?, moved? }.
+async function _rerouteCourier(id, targetCode, who) {
+  const q = _qingyunPushRow(id);
+  if (!q || q.store_code === targetCode) return { ok: true, moved: false };
+  if (q.qingyun_order_id || qingyunQueue.awaitingDispatch(q)) {
+    const r = await _qingyunShipFrom(id, targetCode, who);
+    if (r.body && r.body.success) return { ok: true, moved: true, old_removed: r.body.old_removed !== false };
+    return { ok: false, error: (r.body && r.body.error) || 'courier_move_failed' };
+  }
+  if (q.status === 'processing') return { ok: false, error: 'courier_booking' };
+  if (q.status === 'pending') {
+    const s = _qingyunStoreStatus().find((x) => x.code === targetCode);
+    if (!s || !s.connected) return { ok: false, error: 'store_not_connected' };
+  }
+  const ch = tdb().prepare(
+    `UPDATE qingyun_push_queue SET store_code = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE retail_order_id = ? AND qingyun_order_id IS NULL AND status = ?`
+  ).run(targetCode, id, q.status).changes;
+  return ch === 1 ? { ok: true, moved: true } : { ok: false, error: 'courier_booking' };
+}
+
+// The picker: every other active shop, with whether it is closed for this
+// order's channel and what it would be short of. Read-only.
+router.get('/api/retail-admin/orders/:id/reroute', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = _rerouteOrderRow(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const elig = rerouteEligibility(o);
+  if (!elig.allowed) return res.json({ success: true, data: { eligible: false, reason: elig.reason } });
+  const closed = inventory.channelClosedStores(inventory.orderChannelKey(o.channel === 'web' ? 'web' : 'wechat'));
+  const scope = Array.isArray(req.scopeStores) ? req.scopeStores : null;
+  const stores = inventory.listStores({ activeOnly: true })
+    .filter((s) => s.id !== o.store_id && (!scope || scope.includes(s.id)))
+    .map((s) => ({
+      id: s.id, code: s.code, name_en: s.name_en, name_cn: s.name_cn,
+      closed: closed.has(s.code),
+      short: rerouteShortAt(id, s.id),
+    }));
+  res.json({ success: true, data: { eligible: true, current_store_id: o.store_id, stores } });
+});
+
+// The move. Body: { store_code, force }. Without `force`, a short or closed
+// new shop answers 409 `needs_confirm` with what is wrong and changes nothing;
+// the client shows it and sends the same request again with force: true.
+router.post('/api/retail-admin/orders/:id/reroute', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const targetCode = String(req.body?.store_code || '').trim();
+  const force = req.body?.force === true;
+  if (!targetCode) return res.status(400).json({ success: false, error: 'store_code required' });
+  const o = _rerouteOrderRow(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const elig = rerouteEligibility(o);
+  if (!elig.allowed) return res.status(409).json({ success: false, error: elig.reason });
+  const target = tdb().prepare(
+    'SELECT id, code, name_en, name_cn FROM retail_stores WHERE code = ? AND is_active = 1'
+  ).get(targetCode);
+  if (!target) return res.status(400).json({ success: false, error: 'unknown_store' });
+  if (target.id === o.store_id) return res.json({ success: true, unchanged: true });
+  // A store-scoped operator moves orders between their own shops only.
+  const scope = Array.isArray(req.scopeStores) ? req.scopeStores : null;
+  if (scope && (!scope.includes(target.id) || !scope.includes(o.store_id))) {
+    return res.status(403).json({ success: false, error: 'forbidden_store' });
+  }
+
+  const short = rerouteShortAt(id, target.id);
+  const closed = inventory.channelClosedStores(inventory.orderChannelKey(o.channel === 'web' ? 'web' : 'wechat'))
+    .has(target.code);
+  if ((short.length || closed) && !force) {
+    return res.status(409).json({ success: false, error: 'needs_confirm', short, closed });
+  }
+
+  const from = tdb().prepare('SELECT id, code, name_en, name_cn FROM retail_stores WHERE id = ?').get(o.store_id);
+  const who = (req.backendUser && (req.backendUser.name || req.backendUser.username))
+    || (req.user && req.user.username) || 'admin';
+
+  // Courier first: it is the one step that can fail on someone else's system.
+  // If it fails, nothing here has changed.
+  const courier = await _rerouteCourier(id, target.code, who);
+  if (!courier.ok) return res.status(409).json({ success: false, error: courier.error });
+
+  // Re-read after the await: a status change in between (a cancel, a pack)
+  // must not be moved over.
+  const now = _rerouteOrderRow(id);
+  const again = rerouteEligibility(now);
+  if (!again.allowed || now.store_id !== o.store_id) {
+    return res.status(409).json({ success: false, error: again.allowed ? 'moved_meanwhile' : again.reason, courier_moved: !!courier.moved });
+  }
+
+  let stock;
+  try {
+    // The order's own row is written INSIDE the stock move's transaction, so the
+    // two commit or roll back together and the below-zero alert waits for both.
+    const alsoInTx = () => {
+      const upd = tdb().prepare(
+        `UPDATE retail_orders
+            SET store_id = ?, routing_reason = 'manual', routed_by_distance = NULL,
+                rerouted_from_store_id = ?, rerouted_at = CURRENT_TIMESTAMP, rerouted_by = ?,
+                rerouted_forced_pids = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND store_id = ?`
+      ).run(target.id, o.store_id, who,
+        short.length ? JSON.stringify(short.map((s) => s.product_id)) : null, id, o.store_id);
+      // The order left that shop between the re-read and here: undo the stock
+      // half too, rather than leave units moved for an order that did not move.
+      if (upd.changes !== 1) throw new Error('moved_meanwhile');
+    };
+    stock = inventory.moveOrderStock(id, o.store_id, target.id, {
+      actorUserId: (req.user && req.user.id) || null, actorLabel: who, note: o.order_no, alsoInTx,
+    });
+  } catch (e) {
+    console.error('[reroute]', id, e.message);
+    const raced = e.message === 'moved_meanwhile';
+    return res.status(raced ? 409 : 500).json({ success: false, error: raced ? 'moved_meanwhile' : 'move_failed', courier_moved: !!courier.moved });
+  }
+
+  try {
+    logActivity((req.user && req.user.id) || null, who, 'reroute', 'retail_order', id, {
+      from: from ? from.code : o.store_id, to: target.code,
+      previous_routing_reason: o.routing_reason || null,
+      forced: short.length || closed ? { short: short.map((s) => s.product_id), closed } : null,
+      units_moved: stock.moved, courier_moved: !!courier.moved,
+    }, req.ip);
+  } catch (e) { console.warn('[reroute log]', e.message); }
+
+  // The new shop is told: its printer prints the slip, and its operators get a
+  // push. Both best-effort — the move has happened either way.
+  try { autoPrintOrder(id); } catch (e) { console.warn('[reroute print]', e.message); }
+  try {
+    if (_push && _push.sendPushToOperatorsWithCaps) {
+      Promise.resolve(_push.sendPushToOperatorsWithCaps(currentTenantId(), ['orders:view', 'orders:edit'], {
+        title: '🌿 Order moved here · 订单改派至本店',
+        body: `${o.order_no} · ${from ? (from.name_cn || from.code) : ''} → ${target.name_cn || target.code}`,
+        url: '/?tab=orders',
+        tag: 'retail-order-' + id,
+        event: 'new_order',
+      }, { storeId: target.id }))
+        .catch((e) => console.warn('[reroute push]', e.message));
+    }
+  } catch (e) { console.warn('[reroute push]', e.message); }
+
+  res.json({
+    success: true,
+    store: { id: target.id, code: target.code, name_en: target.name_en, name_cn: target.name_cn },
+    from: from ? { id: from.id, code: from.code, name_en: from.name_en, name_cn: from.name_cn } : null,
+    units_moved: stock.moved,
+    forced: short.length > 0 || closed,
+    courier_moved: !!courier.moved,
+    courier_old_removed: courier.old_removed !== false,
+  });
 });
 
 // Push a refused order again, now that its address has been fixed. The drawer

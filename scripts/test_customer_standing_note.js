@@ -65,7 +65,8 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roots-standing-note-'));
 const db  = new Database(path.join(dir, 't.db'));
 db.exec(`
   CREATE TABLE retail_orders (id INTEGER PRIMARY KEY, customer_id INTEGER,
-                              store_id INTEGER, delivery_zone_id INTEGER);
+                              store_id INTEGER, delivery_zone_id INTEGER,
+                              rerouted_from_store_id INTEGER);   -- §458's join
   CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, nickname TEXT,
                                  avatar_url TEXT, phone TEXT, note TEXT, tags TEXT);
   CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT,

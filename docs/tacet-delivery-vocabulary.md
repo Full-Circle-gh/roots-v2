@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.325 · 2026-10-11 · §458 MOVING A PAID ORDER TO ANOTHER SHOP — 17 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON THE LIVE 改派; THE COURIER CONTROL'S OWN STRINGS COPIED WHOLE.** See *Moving a paid order to another shop (§458)*.
+
 **v1.324 · 2026-10-11 · §457 HOLDING A BILL AT THE TILL — 2 STRINGS COMPOSED BY CLAUDE (`Hold · 挂单`, `Held · 已挂单`), THE WORDS ASH AGREED TO; THE NOTE'S LABEL COPIED WHOLE.** See *Holding a bill at the till (§457)*.
 
 **v1.323 · 2026-10-11 · §455 EATEN BY STAFF ON AN EXPIRED WASTE ENTRY — 3 STRINGS COMPOSED BY CLAUDE (`Eaten by staff · 员工取用`, `员工取用 {n}`, `请输入 0 到 {N} 之间的数字。`), EACH FROM LIVE PARTS; THE REST COPIED WHOLE.** See *Eaten by staff on an expired entry (§455)*.
@@ -13753,3 +13755,64 @@ word per thing), and the two can sit on the same order lists. `暂存` reads as
 *stash a draft*, which is closer to §453's kept request than to a bill a
 customer will pay. `保留` is the general *keep*, live in a hundred places with
 no tie to orders.
+
+## Moving a paid order to another shop (§458)
+
+**Composed by Claude, 2026-10-11, under the 2026-09-06 amendment**, for the
+feature Ash asked for (*"also need an option to reroute manually"*) and shaped
+(*"give an alert but still let it swap if the user insist"*). Operator
+register. The order drawer's *Fulfilled by* block
+(`public/retail-admin/04-orders.js`: `reroutedNote`, `rerouteControl`,
+`RR_REASON`, `rrLoad`, `rrMove`) and the phone's *Fulfilled by* card
+(`public/m.html`: `RR_REASON`, `rrPanel`, `rrSend`, `rrGo`), plus one push
+title in `routes/retail.js`.
+
+**改派 is the word, because it is already the word.** The drawer has printed
+*rerouted · 改派(缺货)*, *manually routed · 手动改派* and *Rerouted, shop was
+closed · 改派 · 门店已关闭* for months. Every composed string below builds on
+it rather than introduce a second word for the same act.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Move here · 改派到此门店` | the button under the shop list | 改派 + 到 + 此门店, the last from the live *Ship from here · 改为此门店取货* button that sits one card away. The two buttons differ in the verb on purpose: one moves the rider (改为…取货), this moves the order (改派). |
+| `Move this order to {B}? · 将此订单改派到 {B}?` | the confirm's title | The same verb with the order as its object; 此订单 is live (*该订单* / *此订单* both appear; 此 matches the button). |
+| `Its stock goes back to {A} and comes off {B}. {B}'s printer prints the slip. · 库存退回 {A}，从 {B} 扣减；{B} 的打印机将打印小票。` | the confirm's body | 库存, 扣减, 打印机 and 小票 are each live in the stock and printer screens. 退回 for stock returning is the refund dialogs' word. |
+| `{B} is short for this order · {B} 缺货` | the second confirm's title, when the shop is short | 缺货 is the live word (*Out of stock · 缺货*); the Chinese drops *for this order*, which the list beneath it says. |
+| `{name} — needs {n}, has {m} · {name} — 需要 {n}，现有 {m}` | one line per short product | Plain numbers; 需要 and 现有 are ordinary words with no product-specific meaning to collide with. |
+| `{B} is closed for online orders. · {B} 线上订单已关闭。` | the second confirm, when the shop is closed | 线上 from the live *Online store is closed · 线上商城已关闭*; 已关闭 is the live *Closed*. |
+| `Moving anyway takes its count below zero. · 仍要改派，库存将变为负数。` | the second confirm's warning | 仍要 is the live *anyway* pattern (*Mark dispatched anyway · 仍要标记已发货*). 负数 is what the shelf will read. |
+| `Move anyway · 仍要改派` | the second confirm's button | The same 仍要 + verb pattern, verbatim in shape. |
+| `Moved to {B} · 已改派到 {B}` | the toast after a move | 已 + the button's own phrase. |
+| `Moved here by hand from {A} · 手动改派自 {A}` | the note on a moved order | *手动改派* is live, the decoder's own pair for `routing_reason = 'manual'`; 自 for *from* is live (*since · 自*). |
+| `short when moved · 改派时缺货` | appended to that note when Move anyway was pressed | 改派 + 时 + 缺货, both halves live. |
+| `Only a paid order, or one waiting for restock, can move shop. · 仅已付款或待补货的订单可改派。` | picker, when the status rules it out | 已付款 and 待补货 are the status words themselves. |
+| `A parcel is already packed or sent, so it stays at this shop. · 已有包裹打包或发出，无法改派。` | picker, when a parcel has left the shelf | 包裹 and 发出 are the parcel screens' words; 打包 is live (*Packing · 打包中*). |
+| `The courier job is being created — try again in a minute. · 配送单创建中 — 请稍后再试。` | picker, while the courier copy is being made | 配送单 is the courier panel's word; 请稍后再试 is live. |
+| `This order can't move shop. · 该订单无法改派。` | picker, any other refusal | 该订单 is live (*This order is closed · 该订单已关闭*). |
+| `No other shop to move it to. · 没有其他可改派的门店。` | picker, a business with one active shop | Built on 改派 and 门店; the live *暂无其他门店开通同城配送* is about the courier and would be false here. |
+| `🌿 Order moved here · 订单改派至本店` | push title to the new shop's operators | Same shape as the live *🌿 New paid order · 新订单已付款*; 本店 because it is read by that shop's staff. |
+
+### Copied whole
+
+`Change · 更改`, `Loading… · 加载中…`, `Load failed · 加载失败`,
+`Pick a location · 请选择门店`, `Move it · 确认更改`, `Moving… · 更改中…`,
+`Could not move it · 更改失败`, `Close · 关闭` — the courier *Ships from*
+control's own strings, one card away, so the two controls read alike.
+`Closed · 已关闭` and `Out of stock · 缺货` — the live status words.
+The three courier refusals (*A courier is already on it…*, *That location isn't
+connected to Qingyun*, *That location's Qingyun account isn't wired up yet…*)
+are lifted verbatim from the same control, because the move hits the same
+wall.
+
+### Rejected
+
+`调拨` is live for moving STOCK between shops (*Receive from another shop ·
+调拨收货*), and an order move is not a stock transfer. `转移` is live for moving
+the courier JOB (*该订单在青云没有可转移的配送单*), which is the other control;
+taking it here would blur the two controls this feature was built to keep
+apart. `换店` is colloquial and
+not used anywhere in the product. `改期失败` is live beside *Could not move it*
+in one place, but it means *rescheduling failed*; the correct live pair is
+`更改失败`, and that is the one used.
