@@ -428,6 +428,9 @@ button{font:inherit;color:inherit;margin:0}
    14s could otherwise sit together. */
 .wrow .who i{font-style:normal;font-size:12px;color:var(--td-text2);font-variant-numeric:tabular-nums}
 .wrow .amt{flex:none;font-size:16px;font-variant-numeric:tabular-nums}
+/* §457 — a held bill from an earlier day. Its date is the warning: nothing
+   deletes a held bill by itself, so a forgotten one has to stand out. */
+.wrow .who i.old{color:var(--td-amber-ink)}
 
 /* ---- right: the order ---- */
 .t-order{
@@ -582,6 +585,17 @@ button{font:inherit;color:inherit;margin:0}
   color:var(--td-brick-ink);
 }
 .cxq[hidden]{display:none}
+/* §457 — Hold. Quiet like .cxo and for the same reason: it is not the act the
+   rail is for, and a second full-weight button under Mark paid would compete
+   with it. Neutral ink, not Brick: nothing is lost by holding. */
+.hold{
+  width:100%;height:44px;margin-top:8px;border:1px solid var(--td-border);
+  background:transparent;color:var(--td-text);border-radius:var(--r-control);
+  font-size:14px;font-weight:500;
+}
+.hold[hidden]{display:none}
+.hold:active{background:var(--td-raised)}
+.hold[disabled]{color:var(--td-text2)}
 /* WHAT WENT WRONG, ON THE SCREEN IT WENT WRONG ON. Same ink as the settle
    screen's .serr — a failure should not look like a different kind of thing
    depending on which half of the till raised it. */
@@ -994,6 +1008,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         <div class="grid" id="grid"></div>
       </div>
       <div class="pane" id="pane-pend" hidden></div>
+      <div class="pane" id="pane-held" hidden></div>
     </div>
     <div class="t-order">
       <div class="sheet-grab"></div>
@@ -1004,6 +1019,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         <div class="tot"><span class="lb" id="tot-lb"></span><span class="amt" id="tot-amt">&yen;0.00</span></div>
         <div class="terr" id="till-err" hidden></div>
         <button class="pay" id="pay" type="button" disabled></button>
+        <button class="hold" id="hold" type="button" data-hold="ask" hidden></button>
         <div class="cxq" id="cancel-ask" hidden></div>
         <button class="cxo" id="cancel-order" type="button" data-cancel-order="1" hidden></button>
       </div>
@@ -1023,6 +1039,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   <div class="sscrim" id="storepick" hidden></div>
   <div class="sscrim" id="custpick" hidden></div>
   <div class="sscrim" id="leavepick" hidden></div>
+  <div class="sscrim" id="holdpick" hidden></div>
   <div class="sscrim" id="optpick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
@@ -1223,7 +1240,14 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     optAdd:       ['Add', '添加'],                     // m.html:19223, as installAdd above
     // §450 — the 4% an international card adds, named beside the amount it
     // moved. Composed by Claude, declared in the vocabulary doc v1.320.
-    cardFee:      ['Card fee 4%', '外卡手续费 4%']       // vocab: composed §450
+    cardFee:      ['Card fee 4%', '外卡手续费 4%'],      // vocab: composed §450
+    /* §457 — holding a bill and the list of held bills. 挂单 is the word
+       Chinese counter systems use for exactly this act; nothing live in the
+       product named it. Both composed by Claude, declared in the vocabulary
+       doc v1.324. The note's label is the New order form's own, copied whole. */
+    hold:         ['Hold', '挂单'],                    // vocab: composed §457
+    held:         ['Held', '已挂单'],                  // vocab: composed §457
+    noteOpt:      ['Note (optional)', '备注(可选)']    // admin: 04-orders.js New order note
   };
   function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
 
@@ -1342,6 +1366,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        till never saw is how the counter ends up asking for a different number
        than the customer's screen showed. */
     recall: null,
+    /* §457 — bills set aside on this tablet. `tid` is the business, from
+       /api/backend/me; null means Hold is not offered and nothing is read or
+       written. `held` mirrors this shop's stored list. `heldId` is the held
+       bill now on screen, which stays stored until it is paid or emptied;
+       `heldLast` is what was last written for it, so a repaint that changed
+       nothing writes nothing. `holdOpen` is the note sheet. */
+    tid: null, held: [], heldId: null, heldLast: '', holdOpen: false,
     home: null, homeLabel: null,  // where Back goes, and what it says — /api/backend/me
     leaveOpen: false,          // is the "leave without saving?" question up?
     mode: 'manual',
@@ -1787,6 +1818,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         if (curCfg && typeof curCfg === 'object' && curCfg.symbol) S.cur = curCfg;
         else if (typeof curCfg === 'string' && curCfg) S.cur = { symbol: curCfg, decimals: 2, position: 'before' };
         var caps = me && me.user && Array.isArray(me.user.caps) ? me.user.caps : null;
+        // §457 — whose held bills these are. Read before setStore, which loads them.
+        var tn = me && me.user && me.user.tenant;
+        S.tid = (tn && tn.id != null) ? tn.id : null;
         // The way back, from the same read as the permission above. Null on any
         // hiccup, which simply means no control is drawn — the till itself is
         // unaffected either way.
@@ -1935,6 +1969,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.storeName = cuT(st.name_en || st.code || ('#' + st.id),
                       st.name_cn || st.name_en || st.code || ('#' + st.id));
     try { localStorage.setItem('tacet-till-store', String(st.id)); } catch (e) {}
+    heldLoad();   // §457 — each shop has its own held bills
   }
 
   // Switching shelf means switching stock, so the catalogue is re-read rather
@@ -2136,6 +2171,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   /* ---- render ---------------------------------------------------------- */
   function render() {
     if (!S.storeId) return;
+    heldSync();   // §457 — before anything is drawn from it
     $('hd-title').textContent = T('counterSale');
     // The label names the destination — the operator's own home screen, titled
     // with their role's name, exactly as the phone titles it. 'Back' alone when
@@ -2161,6 +2197,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     renderCustPicker();
     renderOpts();
     renderLeave();
+    renderHoldAsk();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
     renderInstall();
     renderSound();
@@ -2169,12 +2206,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     qi.placeholder = T('searchAdd');
     $('q-clr').hidden = !S.q;
     normalisePane();
-    renderSeg(); renderPend();
+    renderSeg(); renderPend(); renderHeld();
     // One pane at a time, both full height. `hidden` rather than a class so the
     // pane that is down is out of the tab order too — a cashier tabbing through
     // the till must not land in a product grid nobody can see.
     $('pane-menu').hidden = S.pane !== 'menu';
     $('pane-pend').hidden = S.pane !== 'pend';
+    $('pane-held').hidden = S.pane !== 'held';
     renderCats(); renderGrid(); renderCust(); renderLines(); renderFoot();
     // The sheet belongs to the till view only. Leaving it open behind the
     // settle takeover would put a scrim and a second pay button under a screen
@@ -2385,18 +2423,22 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // switch and the body can never disagree about which face is up.
   function normalisePane() {
     if (S.pane === 'pend' && !(S.pend && S.pend.length)) S.pane = 'menu';
+    if (S.pane === 'held' && !heldShown().length) S.pane = 'menu';   // §457
   }
 
   function renderSeg() {
     var n = (S.pend && S.pend.length) || 0;
+    var hn = heldShown().length;   // §457
     var el = $('seg');
-    el.hidden = n === 0;
-    if (!n) { el.innerHTML = ''; return; }
+    el.hidden = !n && !hn;
+    if (!n && !hn) { el.innerHTML = ''; return; }
     el.innerHTML =
       '<button class="sbtn' + (S.pane === 'menu' ? ' on' : '') + '" type="button" data-pane="menu">'
     +   esc(T('counterSale')) + '</button>'
-    + '<button class="sbtn' + (S.pane === 'pend' ? ' on' : '') + '" type="button" data-pane="pend">'
-    +   esc(T('pending')) + '<span class="b">' + n + '</span></button>';
+    + (n ? '<button class="sbtn' + (S.pane === 'pend' ? ' on' : '') + '" type="button" data-pane="pend">'
+    +   esc(T('pending')) + '<span class="b">' + n + '</span></button>' : '')
+    + (hn ? '<button class="sbtn' + (S.pane === 'held' ? ' on' : '') + '" type="button" data-pane="held">'
+    +   esc(T('held')) + '<span class="b">' + hn + '</span></button>' : '');
   }
 
   function renderPend() {
@@ -2448,6 +2490,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var o = null, i;
     for (i = 0; i < (S.pend || []).length; i++) if (S.pend[i].id === id) o = S.pend[i];
     if (!o) return;
+    // §457 — the till's own bill is held, not dropped. It used to be wiped
+    // here without a word.
+    if (!holdNow()) return render();
     S.lines = []; S.sel = null; S.customer = null;
     S.recall = {
       id: o.id, order_no: o.order_no, code: o.shop_order_code,
@@ -2508,6 +2553,239 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
     S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
     render();
+  }
+
+  /* ---- §457 held bills ------------------------------------------------
+     A CUSTOMER EATING NOW AND PAYING LATER, and the next one already at the
+     counter. Hold sets the bill aside ON THIS TABLET and clears the rail; the
+     Held face lists what is set aside; a tap brings one back to be added to
+     and paid.
+
+     ON THE TABLET, NOT THE SERVER, and that is the decision (§457). An unpaid
+     counter order on the server is cancelled by the counter clock after two
+     hours, cannot have a line added, spends the customer's credit when it is
+     made, and is kept off Pending on purpose. A held bill here is not an order
+     at all: nothing is reserved, spent or counted until Mark paid, exactly as
+     before, and §93's "every sale it writes is already paid" stays true.
+
+     ONE LIST PER BUSINESS AND SHOP, not per operator as §453's drafts are: a
+     held bill belongs to the counter, and the cashier taking over the shift has
+     to find the table's bill. No business id, no Hold.
+
+     A HELD BILL ENDS ONLY BY BEING PAID OR EMPTIED. Nothing deletes one by
+     age; one from an earlier day carries its date in amber instead, so a
+     forgotten bill stays in sight. While one is back on screen every change to
+     it is written back (heldSync), so a tablet that dies mid-bill loses
+     nothing. */
+  var HELD_PREFIX = 'tacet-till-held';
+  function heldKey() {
+    if (S.tid == null || S.storeId == null) return null;
+    return HELD_PREFIX + ':' + S.tid + ':' + S.storeId;
+  }
+  // Storage that throws, or holds something this code did not write, reads as
+  // nothing held rather than breaking the paint.
+  function heldRead() {
+    var k = heldKey();
+    if (!k) return [];
+    try {
+      var v = JSON.parse(localStorage.getItem(k) || '[]');
+      if (!Array.isArray(v)) return [];
+      return v.filter(function (b) {
+        return b && typeof b.id === 'string' && /^h[a-z0-9]+$/.test(b.id)
+          && Array.isArray(b.lines) && b.lines.length > 0;
+      });
+    } catch (e) { return []; }
+  }
+  // False when the write did not land — the caller must then keep the bill on
+  // screen, because a bill cleared after a failed write is a bill lost.
+  function heldWrite(list) {
+    var k = heldKey();
+    if (!k) return false;
+    try {
+      if (list.length) localStorage.setItem(k, JSON.stringify(list));
+      else localStorage.removeItem(k);
+    } catch (e) { return false; }
+    S.held = list;
+    return true;
+  }
+  function heldLoad() { S.held = heldRead(); S.heldLast = ''; }
+  function heldFind(id) { return S.held.filter(function (b) { return b.id === id; })[0] || null; }
+  // What the list shows: everything held except the bill already on screen.
+  function heldShown() { return S.held.filter(function (b) { return b.id !== S.heldId; }); }
+  function canHold() {
+    return S.tid != null && S.view === 'till' && !S.recall && S.lines.length > 0;
+  }
+  /* What a held bill keeps. The lines whole — the answers and the menu flag
+     are what Mark paid posts — and the customer by id with what the rail
+     shows. Not the wallet or the credit toggles: those are chosen at payment,
+     and §93 keeps both off until tapped. */
+  function heldSnap(id, note, at) {
+    return {
+      id: id, at: at, note: note || '',
+      lines: S.lines.map(function (l) {
+        return { key: l.key, id: l.id, name: l.name, sku: l.sku || '',
+                 base: l.base, price: l.price, qty: l.qty, menu: !!l.menu,
+                 choices: (l.choices || []).slice(), opts: (l.opts || []).slice() };
+      }),
+      customer: S.customer ? { id: S.customer.id, nickname: S.customer.nickname || null,
+                               points: S.customer.points, balance: S.customer.balance } : null
+    };
+  }
+  // Newest first, as Pending lists; a bill already in the list keeps its place.
+  function heldPut(bill) {
+    var list = heldRead(), at = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].id === bill.id) at = i;
+    if (at > -1) list[at] = bill; else list.unshift(bill);
+    return heldWrite(list);
+  }
+  function heldDrop(id) {
+    return heldWrite(heldRead().filter(function (b) { return b.id !== id; }));
+  }
+
+  /* Set the bill on screen aside and clear the rail. `note` undefined keeps
+     the note a held bill already had. True when there is nothing left on
+     screen to lose; false when the write failed and the bill is still up. */
+  function holdNow(note) {
+    if (S.recall || !S.lines.length) return true;
+    var prev = S.heldId ? heldFind(S.heldId) : null;
+    var id = S.heldId || ('h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+    var bill = heldSnap(id, note !== undefined ? note : (prev ? prev.note : ''),
+                        prev ? prev.at : Date.now());
+    if (!heldPut(bill)) { S.err = T('didNotSave'); return false; }
+    S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
+    return true;
+  }
+
+  function openHoldAsk() {
+    if (!canHold() || S.busy) return;
+    S.holdOpen = true; render();
+  }
+  function closeHoldAsk() { S.holdOpen = false; render(); }
+  function commitHold() {
+    if (!S.holdOpen) return;
+    var inp = $('hold-note');
+    var note = inp ? String(inp.value || '').trim().slice(0, 40) : undefined;
+    S.holdOpen = false;
+    holdNow(note);
+    render();
+  }
+
+  /* Bring a held bill back. ANYTHING ALREADY ON SCREEN IS HELD FIRST: the
+     till's own bill goes into the list (no note), and a recalled QR order is
+     simply put back — it is still on Pending, untouched. Lines are re-priced
+     from today's shelf, base plus the answers' deltas, because the server
+     prices shelf lines from the catalogue at Mark paid anyway and the button
+     must say what will be charged. A product this shop no longer lists keeps
+     its saved line; the server decides. */
+  function openHeld(id) {
+    var bill = heldRead().filter(function (b) { return b.id === id; })[0];
+    if (!bill) { heldLoad(); return render(); }
+    if (S.recall) { S.recall = null; S.lines = []; S.sel = null; S.cxArm = false; }
+    if (S.lines.length && !holdNow()) return render();
+    S.lines = bill.lines.map(function (l) {
+      var line = { key: l.key || lineKey(l.id, l.choices), id: l.id, name: l.name, sku: l.sku || '',
+                   base: Number(l.base) || 0, price: Number(l.price) || 0,
+                   qty: Number(l.qty) || 1, menu: !!l.menu,
+                   choices: (l.choices || []).slice(), opts: (l.opts || []).slice() };
+      var p = S.products.filter(function (x) { return x.id === l.id; })[0];
+      if (p) {
+        line.name = fullName(p); line.sku = p.sku || line.sku; line.menu = !!p.on_menu;
+        line.base = Number(p.price) || 0;
+        line.price = Math.round(line.base * 100 + optsDelta(line.opts) * 100) / 100;
+      }
+      return line;
+    });
+    S.heldId = bill.id; S.heldLast = '';
+    S.sel = null;
+    S.customer = bill.customer ? custRow({ id: bill.customer.id, nickname: bill.customer.nickname,
+                                           points: bill.customer.points, balance: bill.customer.balance }) : null;
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
+    // Back to the menu, so the coffee they just ordered is one tap away; and
+    // on a phone the sheet opens, as it does for a recall.
+    S.pane = 'menu'; S.paneTouched = true; S.sheetOpen = true;
+    render();
+    if (S.customer) loadCounterVouchers(S.customer);
+  }
+
+  /* Every change to a held bill on screen is written back, and a bill emptied
+     line by line is over. Runs at the top of every paint; writes only when the
+     bill changed. Quiet once paid: the success path has already removed it. */
+  function heldSync() {
+    if (!S.heldId || S.done || S.recall) return;
+    if (!S.lines.length) { heldDrop(S.heldId); S.heldId = null; S.heldLast = ''; return; }
+    var prev = heldFind(S.heldId);
+    var bill = heldSnap(S.heldId, prev ? prev.note : '', prev ? prev.at : Date.now());
+    var snap = JSON.stringify(bill);
+    if (snap === S.heldLast) return;
+    if (heldPut(bill)) S.heldLast = snap;
+  }
+
+  function twoDigit(n) { return (n < 10 ? '0' : '') + n; }
+  // The tablet's own day and clock: a held bill never leaves this device, so
+  // its time is this device's — unlike a QR order's placed_at (see renderPend).
+  function heldDay(ms) {
+    var d = new Date(ms);
+    return d.getFullYear() + '-' + twoDigit(d.getMonth() + 1) + '-' + twoDigit(d.getDate());
+  }
+  function heldTime(ms) {
+    var d = new Date(ms);
+    return twoDigit(d.getHours()) + ':' + twoDigit(d.getMinutes());
+  }
+
+  /* The list. The row says what the cashier looks for: when it was held, the
+     note they wrote ("window table"), or the customer, or what is on it. The
+     amount is the bill before any voucher — the voucher is worked out again
+     when it is opened. No new word anywhere on the row. */
+  function renderHeld() {
+    var el = $('pane-held');
+    var list = heldShown();
+    if (!list.length) { el.innerHTML = ''; return; }
+    var today = heldDay(Date.now());
+    var h = '<div class="plist">';
+    list.forEach(function (b) {
+      var names = b.lines.map(function (l) {
+        return (Number(l.qty) > 1 ? l.name + ' ×' + l.qty : l.name);
+      }).join(', ');
+      var title = b.note || (b.customer && b.customer.nickname) || names;
+      var day = heldDay(b.at);
+      var old = day !== today;
+      var meta = [];
+      if (old) meta.push(day);
+      if (title !== names) meta.push(names);
+      var sub = 0;
+      b.lines.forEach(function (l) { sub += (Number(l.qty) || 0) * (Number(l.price) || 0); });
+      h += '<button class="wrow" type="button" data-held="' + esc(b.id) + '">'
+         + '<span class="n">' + esc(heldTime(b.at)) + '</span>'
+         + '<span class="who"><b>' + esc(title) + '</b>'
+         + (meta.length ? '<i' + (old ? ' class="old"' : '') + '>' + esc(meta.join(' · ')) + '</i>' : '')
+         + '</span>'
+         + '<span class="amt">' + money(dueNow(Math.round(sub * 100) / 100)) + '</span>'
+         + '</button>';
+    });
+    el.innerHTML = h + '</div>';
+  }
+
+  /* The note sheet. BUILT ONCE PER OPENING, never on a repaint: the order poll
+     repaints every fifteen seconds, and a rebuild would throw away a half-typed
+     note and drop the keyboard — the bug §428's new-customer fields had. The
+     note goes in through the property, never the markup. */
+  function renderHoldAsk() {
+    var el = $('holdpick');
+    el.hidden = !S.holdOpen;
+    if (!S.holdOpen) { el.innerHTML = ''; el.removeAttribute('data-built'); return; }
+    if (el.getAttribute('data-built') === _lang) return;
+    var typed = $('hold-note');
+    var prev = S.heldId ? heldFind(S.heldId) : null;
+    var keep = typed ? typed.value : (prev ? prev.note : '');
+    el.innerHTML = '<div class="ssheet"><div class="hd">' + esc(T('hold')) + '</div>'
+      + '<div class="cnew"><input id="hold-note" type="text" maxlength="40" autocomplete="off"'
+      + ' placeholder="' + esc(T('noteOpt')) + '"></div>'
+      + '<button class="srow" type="button" data-hold="go"><span>' + esc(T('hold')) + '</span></button>'
+      + '<button class="srow" type="button" data-hold="close"><span>' + esc(T('cancel')) + '</span></button>'
+      + '</div>';
+    $('hold-note').value = keep || '';
+    el.setAttribute('data-built', _lang);
   }
 
   // What the settle screen owes. A recalled order states the SERVER's total —
@@ -2870,6 +3148,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var b = $('pay');
     b.disabled = !ready;
     b.textContent = ready ? T('markPaid') + '  ' + money(due) : T('markPaid');
+    // §457 — Hold, under Mark paid, for the till's own bill only.
+    var hb = $('hold');
+    if (hb) {
+      hb.hidden = !canHold();
+      hb.textContent = T('hold');
+      hb.disabled = !!S.busy;
+    }
 
     /* CANCELLING A RECALLED ORDER — Ash, 2026-09-08: "if a customer eventually
        doesn't want the order there should be an option to cancel it from his
@@ -3281,6 +3566,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
                  balanceUsed: Number(j.data.balance_used) || 0,
                  cardFee: Number(j.data.card_surcharge_fee) || 0 };
       S.view = 'done'; S.printState = 'idle';
+      // §457 — a held bill that has just been paid is over.
+      if (S.heldId) { heldDrop(S.heldId); S.heldId = null; S.heldLast = ''; }
       // The shelf moved server-side; mirror it locally so the next sale's
       // tiles are honest without a full reload.
       S.lines.forEach(function (l) {
@@ -3415,7 +3702,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   }
 
   function reset() {
-    S.lines = []; S.sel = null; S.customer = null;
+    S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
     S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.done = null;
     S.view = 'till'; S.printState = 'idle';
     S.q = ''; $('q').value = '';
@@ -3935,7 +4222,9 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // Tapping away from the questions is cancelling the line — nothing has
       // been added yet, so the safe answer a stray tap gives is "no line".
       if (S.opts && ev.target.id === 'optpick') return closeOpts();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so]');
+      // §457 — tapping away from the note sheet is not holding.
+      if (S.holdOpen && ev.target.id === 'holdpick') return closeHoldAsk();
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-rm-voucher],[data-give],[data-cancel-order],[data-opt],[data-somode],[data-so],[data-hold],[data-held]');
       if (!t) return;
       // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
@@ -3954,6 +4243,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         S.pane = t.getAttribute('data-pane'); S.paneTouched = true; return render();
       }
       if (t.hasAttribute('data-recall')) return recall(Number(t.getAttribute('data-recall')));
+      if (t.hasAttribute('data-hold')) {   // §457
+        var ha = t.getAttribute('data-hold');
+        if (ha === 'go') return commitHold();
+        if (ha === 'close') return closeHoldAsk();
+        return openHoldAsk();
+      }
+      if (t.hasAttribute('data-held')) return openHeld(t.getAttribute('data-held'));
       if (t.hasAttribute('data-recall-cancel')) return cancelRecall();
       if (t.hasAttribute('data-rm-voucher')) return removeVoucher();
       if (t.hasAttribute('data-give')) return giveVoucher(t.getAttribute('data-give'));   // §428
@@ -3963,7 +4259,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // the page, the way every other decision on this screen is made.
       if (t.hasAttribute('data-back')) {
         if (!S.home) return;
-        if (S.lines.length) { S.leaveOpen = true; return render(); }
+        // §457 — a held bill back on screen is saved; only an unsaved one asks.
+        if (S.lines.length && !S.heldId) { S.leaveOpen = true; return render(); }
         window.location.href = S.home; return;
       }
       if (t.hasAttribute('data-leave')) {
@@ -4040,6 +4337,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     $('hd-install').addEventListener('click', installAsk);
     $('inst-go').addEventListener('click', installAsk);
     $('inst-off').addEventListener('click', installDismiss);
+    // §457 — Enter in the note field holds, as the sheet's own button does.
+    $('holdpick').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.id === 'hold-note') { e.preventDefault(); commitHold(); }
+    });
     $('q').addEventListener('input', function (e) { S.q = e.target.value || ''; $('q-clr').hidden = !S.q; renderGrid(); });
     $('q-clr').addEventListener('click', function () { S.q = ''; $('q').value = ''; $('q-clr').hidden = true; renderGrid(); });
   }

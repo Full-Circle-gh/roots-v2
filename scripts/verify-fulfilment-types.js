@@ -2370,8 +2370,10 @@ check('a recalled order is settled at the total it was placed at',
 // The switch is ABSENT when nothing is waiting, so a badge on screen always
 // means there is something behind it — and a shop with no QR orders sees the
 // till exactly as it shipped.
-check('the switch is not drawn when nothing is waiting',
-  /el\.hidden = n === 0;/.test(POS_TILL_SRC), true);
+// §457 — held bills are the switch's third face, so "nothing behind it" now
+// means nothing waiting AND nothing held.
+check('the switch is not drawn when nothing is waiting or held',
+  /el\.hidden = !n && !hn;/.test(POS_TILL_SRC), true);
 check('and a pane with nothing in it cannot stay up',
   /function normalisePane[\s\S]{0,200}S\.pane = 'menu'/.test(POS_TILL_SRC), true);
 // Ash, 2026-09-08: default to the pending list when something is waiting, the

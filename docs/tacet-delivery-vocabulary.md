@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.324 · 2026-10-11 · §457 HOLDING A BILL AT THE TILL — 2 STRINGS COMPOSED BY CLAUDE (`Hold · 挂单`, `Held · 已挂单`), THE WORDS ASH AGREED TO; THE NOTE'S LABEL COPIED WHOLE.** See *Holding a bill at the till (§457)*.
+
 **v1.323 · 2026-10-11 · §455 EATEN BY STAFF ON AN EXPIRED WASTE ENTRY — 3 STRINGS COMPOSED BY CLAUDE (`Eaten by staff · 员工取用`, `员工取用 {n}`, `请输入 0 到 {N} 之间的数字。`), EACH FROM LIVE PARTS; THE REST COPIED WHOLE.** See *Eaten by staff on an expired entry (§455)*.
 
 **v1.322 · 2026-10-10 · §452 A PAYMENT THAT COULD NOT START — 3 STRINGS COMPOSED BY CLAUDE (`支付失败`, `订单已保留，请重试。`, `待付款 · 请联系顾客`), EACH FROM LIVE PARTS; THE REST COPIED WHOLE.** See *A payment that could not start (§452)*.
@@ -13719,3 +13721,35 @@ taking stock a second Chinese word (§414). `员工吃掉`: colloquial for this
 register. `已被员工食用`: a sentence where a label is wanted. `员工取用 {n} 件`:
 a waste entry is not always pieces, and the Void sentence leaves the measure
 word out for that reason.
+
+## Holding a bill at the till (§457)
+
+**Composed by Claude, 2026-10-11, under the 2026-09-06 amendment**, and put
+to Ash before the build, in the recommendation Ash answered *"go"* to.
+Operator register. The counter till (`public/till.html`: STRINGS `hold`,
+`held`, `noteOpt`; the Hold control under Mark paid, the note sheet, the Held
+face of the entry switch).
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Hold · 挂单` | the quiet control under Mark paid; the note sheet's title and its button | 挂单 is the word Chinese counter systems use for setting a bill aside to settle later — the act itself, not a status. Nothing live in the product named this act. The English is the bare verb, the shape the till's other controls take (*Add*, *Give*). |
+| `Held · 已挂单` | the third face of the entry switch, beside *Counter sale* and *Pending*, with its count | The pair above as a state, 已 + the verb, the way *Paid · 已付款* sits beside its act. It names the list of bills set aside. |
+
+### Copied whole
+
+`Note (optional) · 备注(可选)` — the New order form's own note label
+(`public/retail-admin/04-orders.js`), the placeholder of the note field.
+`Cancel · 取消` — the till's own `cancel` row, the sheet's way out.
+
+### Rejected
+
+`已挂起` (*Parked*, *Held — map service unavailable*) is live, on the
+dashboard and the phone, for an order the system has parked: awaiting restock,
+or a courier push waiting on the map service. Taking it for a bill the cashier
+set aside would give 挂起 two meanings on the order screens (§414: one Chinese
+word per thing), and the two can sit on the same order lists. `暂存` reads as
+*stash a draft*, which is closer to §453's kept request than to a bill a
+customer will pay. `保留` is the general *keep*, live in a hundred places with
+no tie to orders.
