@@ -483,8 +483,14 @@ it('the toggles clear with the customer they belong to', () => {
             'removing the customer leaves their credit selected');
   assert.ok(/S\.customer = c; S\.useP = false; S\.useB = false;/.test(TILL_SRC),
             'attaching a customer inherits the previous one\'s selection');
-  assert.strictEqual((TILL_SRC.match(/S\.wallet = null; S\.useP = false; S\.useB = false;/g) || []).length, 3,
-    'a reset path clears the wallet but leaves the credit toggles set');
+  // EVERY path that clears the wallet clears the toggles with it — asked of
+  // each one rather than counted, so a new reset path that does it right
+  // passes and one that forgets fails. §457 added two (holding a bill, and
+  // bringing a held one back) to the three this used to count.
+  const walletResets = TILL_SRC.match(/S\.wallet = null;[^\n]*/g) || [];
+  assert.ok(walletResets.length >= 3, 'the reset paths are gone');
+  walletResets.forEach((l) => assert.ok(/^S\.wallet = null; S\.useP = false; S\.useB = false;/.test(l),
+    'a reset path clears the wallet but leaves the credit toggles set: ' + l));
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
