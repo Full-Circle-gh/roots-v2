@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.504
+# Tacet shared-core consolidation — decisions record, v4.505
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-11 · v4.505 — **§456 · THE QR MENU RENDER SUITE CATCHES UP WITH §241, §243 AND §292, AND ITS ONE REAL FINDING IS FIXED.** `scripts/test_shop_menu_render.js` (slow shard, not run) had 22 checks failing on main. Each was traced: 20 opened the wrong product, one expected the office's own may-contain text that §241 replaced, and one was a real page bug — a sold-out card's price sat 2.5px off its neighbour's, present since 2026-09-06. The page bug is fixed; the suite now names the product it means. No check skipped, relaxed or moved. No string composed; no schema, no route, no change to `.gitignore` or CI. See §456.
 
 2026-10-11 · v4.504 — **§455 · EXPIRED FOOD THE STAFF ATE STAYS EXPIRED, AND SAYS SO — DECIDED BY ASH:** asked whether a waste entry recorded as Expired could be changed to Staff consumption when the team later eats the food, then chose *"Keep Expired and add a 'what happened to it' note"* over a Change-reason action. The entry is not edited (§32 rule 11): a follow-up row in a new append-only table, `waste_staff_eaten`, says how many of it the staff ate, 0 to its qty; the latest row is the figure and the earlier ones stay as history. Expired entries only. No stock, no cost, no reason changes. New route `POST /api/retail-admin/waste/:id/eaten`, gated `waste:record` by the existing `/waste` rule in `lib/cap-routes.js`. One table added; no change to `.gitignore` or CI. 3 strings composed (vocabulary v1.323). See §455.
 
@@ -29838,3 +29840,62 @@ from `database.js`. `scripts/test_mobile_waste_void.js` adds `wstEatenBtn` to
 the functions it lifts from `m.html`, because `wstRow` now calls it.
 Schema: one table, `waste_staff_eaten`, created in `database.js`. One new route.
 No change to `.gitignore` or CI.
+
+## §456 — THE QR MENU RENDER SUITE CATCHES UP WITH §241, §243 AND §292
+
+**Briefed by Ash, 2026-10-11:** 22 checks in `scripts/test_shop_menu_render.js`
+failing on main at a471de9, the suite unseen because the slow shard is not run.
+Find, for each, whether the page broke or the test went stale against a
+decision; fix the real cause; never skip, relax or quarantine. Re-pinned to
+26258585 (#1107, §454, touched the same files) with Ash's go-ahead; the 22 were
+the same there.
+
+**Three causes, all but one decided.**
+
+1. **§243 + §292 — the checks opened the wrong product (20 checks).** They
+   tapped "the first tappable card". §243 opens every FOOD product, and food is
+   read off `store_products.category`, which the fixture never set — so the
+   eight filler rows and the asker all became tappable. §292 orders the menu by
+   the mini app's order and no longer reads `shop_listings.sort_position`; on
+   this fixture that is name order, so "asker" sorts before "latte". The first
+   tappable card became a filler whose sheet holds only the shared-facility
+   line, and every sheet check measured that. **Fixed in the test**: the checks
+   open the latte by id (`OK_CARD`), and the basket checks tap the latte's +,
+   because the asker's + asks a question (§120) and left its sheet over every
+   check after it.
+   **The fillers are now category `Home & Body`** (non-food by §243) while
+   their `top_category` stays `Fresh & Deli`, so the rail's "&" check is
+   untouched and "a product with nothing to say is not tappable" still has a
+   case to stand on — the same move §243 made for the colophon fixture.
+   **The tappable count is 4, not 3**: the asker is a drink, drinks are food,
+   and §243 opens it. Recorded here because an expected value changed; it moved
+   to what §243 rules, not to whatever the page happened to do.
+
+2. **§241 — the may-contain line (1 check).** The card's may-contain row is the
+   shop-wide facility line, not the office's own field. The fixture still
+   carries `Soy, Nuts, Gluten` in that field; the check now expects
+   `Nuts, Soy, Gluten (shared facility)` / `坚果、大豆、麸质（共用生产环境）`, the
+   strings §241 already uses. A run at cc808e32 (just before §243) shows this
+   check was already red from §241 alone.
+
+3. **A REAL PAGE BUG — the sold-out price wobble (1 check).** `.pf` had
+   `min-height:26px` and `padding-top:5px` on a border-box page, so the row
+   left 21px for content: 31px tall with a +, 26px without one. Both rows sit
+   on the card's floor, so a sold-out card's price rode 2.5px off its live
+   neighbour's — the exact wobble the min-height comment says it prevents. In
+   place since 2026-09-06, when padding-top joined the rule. The suite never
+   saw it because the sold-out bun was paired with a name of equal height,
+   which its price check skips; §292's name order paired it with one that
+   wraps. **Fixed in the page**: `min-height:31px` in `routes/shop-menu.js`.
+
+**The chip-centring check on Windows.** "A chip's text sits in the middle of
+its box" reads 1.125px (limit 0.75) on a Windows machine, both on this branch
+and at cc808e32, where the chip's styling is identical — so it is the platform's
+font rendering, the same CI-versus-developer split that check's own comment
+records, and not a change in the page.
+
+Tests: the suite at 26258585 on Windows — 22 failed; on this branch — 83 pass,
+the one failure being the Windows-only chip reading above.
+`scripts/test_shop_menu.js` (90) and `scripts/test_shop_menu_colophon.js`
+(13) green. Strings: none composed. Schema: none. No new route. No change to
+`.gitignore` or CI.
