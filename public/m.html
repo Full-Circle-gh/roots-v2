@@ -22660,8 +22660,13 @@ function qsTypeBlur(id){
   const less=row.querySelector('.stepbtn');
   if(less){ if((state.qs.add[id]||0)<=0) less.setAttribute('disabled',''); else less.removeAttribute('disabled'); }
 }
+/* IN SKU ORDER, the order the shelf is walked — Ash, from the floor: the list
+   came in name order, so two Almond Butters stood 2-410 above 2-400 and the
+   operator had to hunt. Same comparator as Receiving (rcvSkuCmp): both halves
+   numeric, no-SKU lines last. The server's name order survives only as the
+   tie-break, because the sort is stable. */
 function qsRows(){
-  const all=state.qs.items||[];
+  const all=(state.qs.items||[]).slice().sort(rcvSkuCmp);
   const q=state.qs.q.trim().toLowerCase();
   if(!q) return all;
   return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))

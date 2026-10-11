@@ -142,7 +142,9 @@ function makeSandbox(state) {
    to one of these screens is exactly what turns it red.
    The × itself is covered by scripts/test_search_clear.js, which holds the
    rules this suite's handler half and that one share. */
-const SHARED = ['qsRows', 'rqKindOf', 'rqLines', 'rqKindSeg', 'batLines', 'searchBox'];
+/* rcvSkuKey / rcvSkuCmp are here because qsRows sorts by them: Add stock runs
+   in SKU order, on Receiving's comparator. Real, for the reason above. */
+const SHARED = ['rcvSkuKey', 'rcvSkuCmp', 'qsRows', 'rqKindOf', 'rqLines', 'rqKindSeg', 'batLines', 'searchBox'];
 
 function load(sb, src, names) {
   for (const n of SHARED) vm.runInContext(sliceFn(NEW_SRC, n), sb, { filename: `shared#${n}` });
