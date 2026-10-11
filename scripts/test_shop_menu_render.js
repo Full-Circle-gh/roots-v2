@@ -90,6 +90,19 @@ const FILLER = [9973, 9974, 9975, 9976, 9977, 9978, 9979, 9980];
 const CODE = 'RENDERAB';
 const EN_OK = 'Render fixture latte', CN_OK = '测试渲染拿铁';
 const EN_OUT = 'Render fixture bun',  CN_OUT = '测试渲染面包';
+/* THE PRODUCT THE SHEET CHECKS OPEN, NAMED BY ITS ID. They used to take the
+   first tappable card, which was the latte only while two things held: the
+   menu followed shop_listings.sort_position, and nothing else in front of the
+   latte opened. Both stopped holding, by decision, not by accident:
+     §243 (2026-09-23) opens every FOOD product, so the asker and every filler
+                       row grew a sheet — the shared-facility line, at least;
+     §292 (2026-09-29) orders the menu by the mini app's order and no longer
+                       reads sort_position, which on this fixture is name
+                       order, and "asker" sorts before "latte".
+   On a471de9 the first tappable card was a filler with nothing on its sheet
+   but that line, and twenty checks measured it instead of the latte. Naming
+   the product is what every one of them meant. */
+const OK_CARD = `.it[data-open="${P_OK}"]`;
 
 let failures = 0;
 async function check(label, fn) {
@@ -368,9 +381,17 @@ function seed() {
   // 'Fresh & Deli' ON PURPOSE, not 'Ready to Eat': its SEED_TREE name_cn is
   // '鲜食 & 熟食' — a category with "&" in the Chinese half, which is what the
   // noOrphanAmp() check below needs on the rail.
+  //
+  // AND category 'Home & Body', which is NOT the rail. §243 opens every FOOD
+  // product — food read off store_products.category, not top_category — and a
+  // row with no category is food. Without this the filler rows each open a
+  // sheet carrying the shared-facility line, and the check that a product with
+  // nothing to say does not open has nothing left to stand on. Non-food is
+  // exactly where §243 says that rule still holds; scripts/test_shop_menu_colophon.js
+  // moved its own bare fixture there for the same reason.
   const filler = db.prepare(`INSERT INTO store_products
-    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category)
-    VALUES (?, ?, ?, ?, ?, 1, 1, 'Fresh & Deli')`);
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category, category)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Fresh & Deli', 'Home & Body')`);
   // DELIBERATELY UNEVEN NAMES. The alignment check below needs two cards side
   // by side whose names differ in height — one line against two — which is the
   // ordinary case on a real menu ("Almond Butter" beside "Maple Cinnamon Almond
@@ -694,7 +715,7 @@ function boxOf(text) {
       const before = await page.evaluate(() => window.scrollY);
       assert.ok(before > 100, `the fixture page does not scroll, so this check proves nothing: ${before}`);
       try {
-        await page.evaluate(() => document.querySelector('.it:not(.out)[data-open]').click());
+        await page.evaluate((q) => document.querySelector(q).click(), OK_CARD);
         const onOpen = await page.evaluate(() => window.scrollY);
         assert.strictEqual(onOpen, before,
           `opening the sheet moved the menu under it: ${before} -> ${onOpen}`);
@@ -737,7 +758,7 @@ function boxOf(text) {
 
     await check('tapping a card opens its ingredients, allergens and nutrition', async () => {
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.click(`.it:not(.out)[data-open]`);
+      await page.click(OK_CARD);
       const m = await page.evaluate(() => {
         const b = document.getElementById('dsheetB');
         return {
@@ -843,14 +864,18 @@ function boxOf(text) {
       assert.strictEqual(m.rows.length, 2, `contains and may-contain are two rows: ${JSON.stringify(m.rows)}`);
       assert.deepStrictEqual(m.rows[0].chips, ['Gluten (oats)']);
       assert.deepStrictEqual(m.rows[0].kinds, ['has'], 'the contains row is not marked as contains');
-      assert.strictEqual(m.rows[1].line, 'Soy, Nuts, Gluten',
+      /* §241 — ONE MAY-CONTAIN LINE FOR THE WHOLE SHOP, ruled by Ash: every
+         product is made in one facility, so the row is the facility's line and
+         no longer the office's own field. The fixture's field still reads
+         'Soy, Nuts, Gluten' and must NOT come through: what reaches the page
+         is the base three in their fixed order, then the facility note. */
+      assert.strictEqual(m.rows[1].line, 'Nuts, Soy, Gluten (shared facility)',
         'the may-contain row is not the sentence it should be');
-      // And the Chinese half is really there, split on its own separators —
-      // the office types 大豆、坚果、麸质 with CJK commas, not ASCII ones — and
-      // rejoined with the CJK comma rather than an ASCII one.
+      // And the Chinese half is really there, joined with the CJK comma rather
+      // than an ASCII one, and the facility note in full-width brackets.
       assert.deepStrictEqual(m.rows[0].cn, ['麸质（燕麦）']);
-      assert.strictEqual(m.rows[1].lineCn, '大豆、坚果、麸质',
-        'the Chinese list was not split, or was rejoined with the wrong comma');
+      assert.strictEqual(m.rows[1].lineCn, '坚果、大豆、麸质（共用生产环境）',
+        'the Chinese line is not the one §241 rules, or was joined with the wrong comma');
       // §236 — ONE SHAPE, AND THE FILL IS THE DIFFERENCE. A square box, and
       // what is in the food is filled where what is not is the outline.
       assert.strictEqual(m.hasRadius, '0px', 'the chip is a pill again');
@@ -941,7 +966,7 @@ function boxOf(text) {
           const hi = await ctx.newPage();
           await hi.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
           if (lang === 'cn') await hi.click('[data-lang="cn"]');
-          await hi.click('.it:not(.out)[data-open]');
+          await hi.click(OK_CARD);
           const sel = `#dsheetB .l-${lang} .achip.has`;
           // The ground behind the chip is repainted to a value that is
           // neither the ink nor the oat before anything is counted. §236 made
@@ -1138,7 +1163,7 @@ function boxOf(text) {
        empty panel and failed saying the blocks had been re-ordered to nothing. */
     await page.evaluate(() => { const x = document.getElementById('dsheetX'); if (x) x.click(); });
     await page.waitForTimeout(260);
-    await page.evaluate(() => document.querySelector('.it:not(.out)[data-open]').click());
+    await page.evaluate((q) => document.querySelector(q).click(), OK_CARD);
     await page.waitForTimeout(300);
 
     await check('§132 the blocks are drawn IN THE OFFICE\'S ORDER, not a fixed one', async () => {
@@ -1444,7 +1469,12 @@ function boxOf(text) {
       // regardless, because a collapsed card whose picker could not be reached
       // is a size nobody can buy. The eight filler rows still carry nothing and
       // still do not respond, which is what this check is for.
-      assert.strictEqual(m.withDt, 3, `only the products with something to say: ${JSON.stringify(m)}`);
+      //
+      // FOUR since §243: the asker is a drink, drinks are food, and every food
+      // product now opens — its sheet is the photo, the name and the allergen
+      // card's shared-facility line. The fillers are non-food (see seed()), so
+      // they are still the case this check exists for.
+      assert.strictEqual(m.withDt, 4, `only the products with something to say: ${JSON.stringify(m)}`);
     });
 
     await check('IN ENGLISH, NOTHING CHINESE IS ON SCREEN — anywhere in the sheet', async () => {
@@ -1454,7 +1484,7 @@ function boxOf(text) {
       // so it won. Measured as VISIBILITY rather than presence — both languages
       // are in the DOM by design, and a check that only counted them passed
       // over the bug for a whole release.
-      await page.click('.it:not(.out)[data-open]');
+      await page.click(OK_CARD);
       const m = await page.evaluate(() => {
         const b = document.getElementById('dsheetB');
         const shown = [];
@@ -1481,7 +1511,7 @@ function boxOf(text) {
       // hung waiting for it to become clickable.
       await page.click('#dsheetX');
       await page.click('[data-lang="cn"]');
-      await page.click('.it:not(.out)[data-open]');
+      await page.click(OK_CARD);
       const shown = await page.evaluate(() => {
         const out = [];
         document.getElementById('dsheetB').querySelectorAll('.l-en').forEach(el => {
@@ -1501,7 +1531,7 @@ function boxOf(text) {
       // Reported from a phone: no way out of the full-screen photo but leaving
       // the menu. It closed on a document-level tap, which passed here and did
       // not work in the WeChat web view. The button is bound directly.
-      await page.click('.it:not(.out)[data-open]');
+      await page.click(OK_CARD);
       await page.click('#dsheetB .dt-ph[data-big]');
       const open = await page.evaluate(() => !document.getElementById('big').hidden);
       assert.strictEqual(open, true, 'the enlarge did not open');
@@ -1569,7 +1599,7 @@ function boxOf(text) {
       // the page having jumped. Both directions are measured, because the
       // closing keyframes shipped once with no script to add the class that
       // drives them — dead CSS that no check would have noticed.
-      await page.click('.it:not(.out)[data-open]');
+      await page.click(OK_CARD);
       const anim = await page.evaluate(() => {
         const p = document.querySelector('#dsheet .sheet-p');
         return getComputedStyle(p).animationName;
@@ -1593,7 +1623,7 @@ function boxOf(text) {
       // see the second half. Measured against the duration the browser reports,
       // so slowing the animation cannot silently outrun the timer.
       await page.evaluate(async () => { await new Promise(r => setTimeout(r, 300)); });
-      await page.click('.it:not(.out)[data-open]');
+      await page.click(OK_CARD);
       const paced = await page.evaluate(async () => {
         const sh = document.getElementById('dsheet');
         const t0 = Date.now();
@@ -1617,7 +1647,7 @@ function boxOf(text) {
       const reduced = await page.context().newPage();
       await reduced.emulateMedia({ reducedMotion: 'reduce' });
       await reduced.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
-      await reduced.click('.it:not(.out)[data-open]');
+      await reduced.click(OK_CARD);
       const off = await reduced.evaluate(() => {
         const p = document.querySelector('#dsheet .sheet-p');
         return { anim: getComputedStyle(p).animationName, open: !document.getElementById('dsheet').hidden };
@@ -1694,7 +1724,7 @@ function boxOf(text) {
       await page.evaluate(() => window.scrollTo(0, 0));
       const before = await page.evaluate(() => document.getElementById('cbar').hidden);
       assert.strictEqual(before, true, 'the basket bar is showing before anything is in it');
-      await page.click('.it:not(.out) .add');
+      await page.click(`${OK_CARD} .add`);
       const one = await page.evaluate(() => ({
         hidden: document.getElementById('cbar').hidden,
         n: document.getElementById('cbarN').textContent,
@@ -1703,7 +1733,7 @@ function boxOf(text) {
       assert.strictEqual(one.hidden, false, 'the bar did not appear');
       assert.strictEqual(one.n, '1');
       assert.ok(/\d/.test(one.v), `the bar shows no money: ${JSON.stringify(one)}`);
-      await page.click('.it:not(.out) .add');
+      await page.click(`${OK_CARD} .add`);
       const two = await page.evaluate(() => document.getElementById('cbarN').textContent);
       assert.strictEqual(two, '2', 'a second tap did not count');
     });
@@ -2001,7 +2031,7 @@ function boxOf(text) {
       // markup into the header. Measured on screen, because the page still
       // parsed and the server-side check alone would not show what a customer
       // actually saw.
-      await page.click('.it:not(.out) .add');
+      await page.click(`${OK_CARD} .add`);
       await page.click('#cbarOpen');
       const head = await page.evaluate(() => {
         const h = document.querySelector('.sheet-h');
@@ -2043,7 +2073,7 @@ function boxOf(text) {
     // §454 — this used to prove a nameless order was refused. The name is no
     // longer asked for, so it now proves there is nothing to fill in.
     await check('the basket asks for no name', async () => {
-      await page.click('.it:not(.out) .add');
+      await page.click(`${OK_CARD} .add`);
       await page.click('#cbarOpen');
       const f = await page.evaluate(() => ({
         name: !!document.getElementById('cName'),
@@ -2238,7 +2268,7 @@ function boxOf(text) {
       // It did until 2026-09-08: one order was remembered, so a customer who
       // came back for a cake could no longer reach the coffee — or cancel it.
       const KEY = 'tacet-shop-order:' + CODE;
-      await page.click('.it:not(.out) .add');
+      await page.click(`${OK_CARD} .add`);
       await page.click('#cbarOpen');
       await page.click('#cPlace');
       await page.waitForSelector('.done-n', { timeout: 8000 });
@@ -2305,7 +2335,7 @@ function boxOf(text) {
       // the basket is memory only and a tap that leaves the page loses it.
       await page.click('#sheetX');
       await page.evaluate(() => new Promise(r => setTimeout(r, 260)));
-      await page.click('.it:not(.out) .add');
+      await page.click(`${OK_CARD} .add`);
       await page.click('#cbarOpen');
       const m = await page.evaluate(async () => {
         await new Promise(r => setTimeout(r, 260));
@@ -2347,7 +2377,7 @@ function boxOf(text) {
       // would silently break that for everything added after load — and it is
       // drawn by script, so nothing else would catch it.
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.click('.it:not(.out) .add');
+      await page.click(`${OK_CARD} .add`);
       await page.click('#cbarOpen');
       const m = await page.evaluate(() => {
         const ln = document.querySelector('#sheetB .ln .ln-t');
@@ -2976,7 +3006,7 @@ function boxOf(text) {
         const c2 = await browser.newContext({ viewport: { width: w, height: 844 } });
         const pg = await c2.newPage();
         await pg.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
-        await pg.evaluate(() => document.querySelector('.it:not(.out)[data-open]').click());
+        await pg.evaluate((q) => document.querySelector(q).click(), OK_CARD);
         await pg.waitForTimeout(320);
         const m = await pg.evaluate(() => {
           const fs = (q) => { const e = document.querySelector(q);

@@ -1439,9 +1439,18 @@ img{display:block;max-width:100%}
 /* .sl-cfoot, plus one deliberate DEPARTURE: min-height. The website's foot has
    none, so a card with no + — a sold-out one — collapses to the height of its
    price and that price rides high beside its neighbour's. Reported from a phone
-   and fixed here rather than copied faithfully. */
+   and fixed here rather than copied faithfully.
+   31px IS THE BUTTON PLUS THE PADDING, and 26px never matched it. This page is
+   border-box throughout, so min-height counts padding-top: 26px left the row
+   21px for its content, a card with a + was 26 + 5 = 31px tall, and a sold-out
+   one 26px. Both rows sit on the card's floor (margin-top:auto), so the
+   sold-out price rode 2.5px high: the wobble this rule was written to stop,
+   present from the day padding-top joined it (2026-09-06). It went unseen
+   because the render suite paired the sold-out card only with a name of equal
+   height, which its price check skips; §292's name order put it beside one
+   that wraps. */
 .pf{display:flex;align-items:center;justify-content:space-between;gap:8px;
-  margin-top:auto;padding-top:5px;min-height:26px}
+  margin-top:auto;padding-top:5px;min-height:31px}
 /* THE MINI APP'S OWN ADD CHIP, AT ITS OWN SIZE. Taken from .card-plus in
    miniapp/pages/shop/shop.wxss — 52rpx square with a 26x5rpx bar — converted at
    the same 390px phone the rest of this file's values were converted at
