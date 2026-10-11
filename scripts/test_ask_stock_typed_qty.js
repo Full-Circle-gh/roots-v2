@@ -115,7 +115,7 @@ function sandbox(rqOver, withDom) {
     console, Number, String, Array, Object, JSON, Math, parseInt,
   };
   vm.createContext(sb);
-  for (const n of ['rqKindOf', 'rqLines', 'rqChosen', 'rqUnits', 'rqTypeOk', 'rqTypeBad', 'rqCountCell',
+  for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqChosen', 'rqUnits', 'rqTypeOk', 'rqTypeBad', 'rqCountCell',
                    'rqBodyHtml', 'rqTypeOpen', 'rqTyped', 'rqTypeCommit', 'rqSync', 'rqBump',
                    'rqFootReady', 'rqFoot', 'rqSendStock', 'rqSendKitchen', 'rqReset', 'askDraftClear']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });

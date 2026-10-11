@@ -24,6 +24,7 @@
  *   8. a new request starts on All
  *   9. the command accepts only the three keys, anything else is All
  *  10. the labels are the live pairs, not composed ones
+ *  11. the list runs in SKU order, numerically, no-SKU last; search keeps it
  */
 
 'use strict';
@@ -76,7 +77,7 @@ function sandbox(over, products) {
     console, Number, String, Array, Object, JSON, Math,
   };
   vm.createContext(sb);
-  for (const n of ['rqKindOf', 'rqLines', 'rqKindSeg', 'rqCountCell', 'rqBodyHtml', 'rqPicker', 'rqChosen', 'rqUnits']) {
+  for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqKindSeg', 'rqCountCell', 'rqBodyHtml', 'rqPicker', 'rqChosen', 'rqUnits']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });
   }
   vm.runInContext(`var rqKindCmd = ${handler('rqKind')};`, sb, { filename: 'reg#rqKind' });
@@ -116,7 +117,7 @@ console.log('\n══ when the switch is drawn ══');
 console.log('\n══ what each side lists ══');
 {
   const sb = sandbox({});
-  ok(names(sb).join() === 'Oat Milk,Rye Loaf,Paper Cup 12oz', 'All lists everything');
+  ok(names(sb).join() === 'Paper Cup 12oz,Oat Milk,Rye Loaf', 'All lists everything, in SKU order');
   sb.state.rq.kind = 'product';
   ok(names(sb).join() === 'Oat Milk,Rye Loaf', 'Products lists only what is sold');
   sb.state.rq.kind = 'material';
@@ -125,6 +126,32 @@ console.log('\n══ what each side lists ══');
   ok(names(sb).join() === 'Rye Loaf', 'the search works inside the chosen side');
   sb.state.rq.kind = 'material'; sb.state.rq.q = 'rye';
   ok(names(sb).length === 0, 'and finds nothing that is on the other side');
+}
+
+console.log('\n══ SKU order ══');
+{
+  /* Ash, on a screenshot of Ask for stock: "not organized by sku". The list
+     came in the server's order — 3-270 above 1-225 above 4-545. It now runs on
+     Receiving's comparator, as Add stock does: both halves numeric, so 1-50
+     comes before 1-225, and a draft with no SKU sinks. */
+  const shelf = [
+    { id: 11, name_en: 'Whole-Wheat Wraps',     sku: '3-270', material: false },
+    { id: 12, name_en: 'Zhoug',                 sku: '1-225', material: false },
+    { id: 13, name_en: 'BioCurcumin+',          sku: '4-545', material: false },
+    { id: 14, name_en: 'Misfit Medjool Dates',  sku: '',      material: false },
+    { id: 15, name_en: 'Powerhouse Greens',     sku: '4-500', material: false },
+    { id: 16, name_en: 'Basil',                 sku: '1-50',  material: false },
+    { id: 17, name_en: 'Kraft Bag',             sku: '9-10',  material: true  },
+  ];
+  const sb = sandbox({}, shelf);
+  const ids = () => vm.runInContext('rqLines()', sb).map(p => p.id).join();
+  ok(ids() === '16,12,11,15,13,17,14', 'All runs by SKU, numerically, no-SKU last');
+  sb.state.rq.kind = 'product';
+  ok(ids() === '16,12,11,15,13,14', 'and so does each side');
+  sb.state.rq.q = 'w';
+  ok(ids() === '11,15', 'a search keeps the order');
+  ok(sb.state.rq.products.map(p => p.id).join() === '11,12,13,14,15,16,17',
+     'and the list as loaded is left as it was');
 }
 
 console.log('\n══ quantities survive switching ══');

@@ -142,7 +142,7 @@ function painted(over) {
     console, Number, String, Array, Object, JSON, Math,
   };
   vm.createContext(sb);
-  for (const n of ['rqKindOf', 'rqLines', 'rqKindSeg', 'searchBox', 'rqCountCell', 'rqBodyHtml', 'rqPicker']) {
+  for (const n of ['rcvSkuKey', 'rcvSkuCmp', 'rqKindOf', 'rqLines', 'rqKindSeg', 'searchBox', 'rqCountCell', 'rqBodyHtml', 'rqPicker']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });
   }
   return vm.runInContext('rqPicker()', sb);
