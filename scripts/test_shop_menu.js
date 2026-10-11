@@ -768,9 +768,23 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.strictEqual(r.status, 400);
       assert.strictEqual(r.json.error, 'not_on_this_menu');
     });
-    await checkAsync('a name is required, and junk quantities are refused', async () => {
+    // §454 — the menu no longer asks for a name. An order without one goes
+    // through, stores NULL, and the number is what comes back to be called.
+    await checkAsync('an order with NO name goes through, and stores no name', async () => {
       await resetOrderLimit();
-      assert.strictEqual((await post(`/s/${LIVE}/order`, { items: [{ store_product_id: P_STOCK_OK, qty: 1 }] })).json.error, 'name_required');
+      const r = await post(`/s/${LIVE}/order`, { items: [{ store_product_id: P_STOCK_OK, qty: 1 }] });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+      assert.strictEqual(r.json.data.name, null, 'a nameless order came back with a name');
+      assert.ok(r.json.data.order_code, 'a nameless order came back with no number to call');
+      const o = db.prepare('SELECT id, recipient_name FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no);
+      assert.strictEqual(o.recipient_name, null, 'an empty name was stored as something');
+      db.prepare('DELETE FROM retail_stock_reservations WHERE order_id = ?').run(o.id);
+      db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(o.id);
+      db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(o.id);
+      db.prepare('DELETE FROM retail_orders WHERE id = ?').run(o.id);
+    });
+    await checkAsync('junk quantities are refused', async () => {
+      await resetOrderLimit();
       assert.strictEqual((await post(`/s/${LIVE}/order`, { name: 'Mei', items: [] })).json.error, 'no_items');
       for (const qty of [0, -1, 999, 'x']) {
         const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty }] });
@@ -1020,9 +1034,11 @@ const soldOut = (row) => /class="sold"/.test(row);
     console.log('\nThe cart is on the page now (§44, step 5b part 4)');
     await checkAsync('the menu carries a basket, and it posts to THIS shop only', async () => {
       const { body } = await get(`/s/${LIVE}`);
-      for (const s of ['id="cbar"', 'id="sheet"', 'id="cName"', 'id="cPlace"', 'data-add=']) {
+      for (const s of ['id="cbar"', 'id="sheet"', 'id="cPhone"', 'id="cPlace"', 'data-add=']) {
         assert.ok(body.includes(s), `the cart is missing its ${s}`);
       }
+      // §454 — no name is asked for.
+      assert.ok(!body.includes('id="cName"'), 'the cart still asks for a name');
       // The submit path is built from location.pathname, so it can only ever be
       // this shop's own order endpoint. A hardcoded /s/CODE/order would be a
       // second place the shop code lives.
