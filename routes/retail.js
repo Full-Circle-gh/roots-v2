@@ -13237,12 +13237,21 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
      the store that actually took the order.
 
      Guangzhou-only, matching the notice's own gate: outside it, routing is not
-     a nearest-shop decision and "would have been" names nothing. */
+     a nearest-shop decision and "would have been" names nothing.
+
+     ONLY WHEN THAT SHOP WAS ACTUALLY SHUT — the notice's own last gate. An
+     order also lands somewhere farther when the nearer shop is open but short
+     (routing_reason 'fallback_no_stock'). Without this check that order was
+     stamped too, and the drawer read "Rerouted, shop was closed · yuexiu"
+     directly under "Nearer store was short on" — two causes for one move, one
+     of them false. */
   if (!isPickup && fulfillingStore) {
     try {
       if (inventory.isGuangzhouAddress(address) && !inventory.isOptInSameDayDistrict(address)) {
         const wouldBe = await inventory.routeIgnoringClosures(address);
-        if (wouldBe && wouldBe.code && wouldBe.code !== fulfillingStore.code) {
+        const closedNow = inventory.channelClosedStores(inventory.orderChannelKey(orderChannel));
+        if (wouldBe && wouldBe.code && wouldBe.code !== fulfillingStore.code
+            && closedNow.has(wouldBe.code)) {
           tdb().prepare('UPDATE retail_orders SET moved_from_store = ? WHERE id = ?')
             .run(wouldBe.code, orderId);
         }
