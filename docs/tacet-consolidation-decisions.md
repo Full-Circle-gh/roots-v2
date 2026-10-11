@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.505
+# Tacet shared-core consolidation — decisions record, v4.506
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-11 · v4.506 — **§457 · THE TILL CAN HOLD A BILL AND OPEN THE NEXT ONE — DECIDED BY ASH:** *"I manually enter this order , customer eating now didn't pay. another customer come , how do I save this order and open a new order"*, then *"survey a hold order button"*, then *"go"* to four recommendations: kept on the tablet, an optional note, kept until paid with a date on anything from an earlier day, and the words *Hold · 挂单* / *Held · 已挂单*. **Hold** under Mark paid saves the bill on this tablet and clears the rail; a **Held** face beside Counter sale and Pending lists them; a tap brings one back, editable, re-priced from today's menu, and it stays saved until it is paid or emptied. Opening a held bill or a QR order while a bill is on screen holds that bill first instead of dropping it. Nothing reaches the server until Mark paid, so §93 stands. Two strings composed (vocabulary v1.324). No schema, no route, no change to `.gitignore` or CI. See §457.
 
 2026-10-11 · v4.505 — **§456 · THE QR MENU RENDER SUITE CATCHES UP WITH §241, §243 AND §292, AND ITS ONE REAL FINDING IS FIXED.** `scripts/test_shop_menu_render.js` (slow shard, not run) had 22 checks failing on main. Each was traced: 20 opened the wrong product, one expected the office's own may-contain text that §241 replaced, and one was a real page bug — a sold-out card's price sat 2.5px off its neighbour's, present since 2026-09-06. The page bug is fixed; the suite now names the product it means. No check skipped, relaxed or moved. No string composed; no schema, no route, no change to `.gitignore` or CI. See §456.
 
@@ -29899,3 +29901,86 @@ the one failure being the Windows-only chip reading above.
 `scripts/test_shop_menu.js` (90) and `scripts/test_shop_menu_colophon.js`
 (13) green. Strings: none composed. Schema: none. No new route. No change to
 `.gitignore` or CI.
+
+## §457 — THE TILL CAN HOLD A BILL AND OPEN THE NEXT ONE
+
+**Decided by Ash, 2026-10-11:** *"I manually enter this order , customer
+eating now didn't pay. another customer come , how do I save this order and
+open a new order"*, sent with a photo of the Yuexiu till holding one Hummus &
+Roasted Red Bell Pepper Toast. Then *"survey a hold order button"*, then
+*"go"* to four recommendations: keep a held bill on the tablet rather than the
+server, let the cashier add an optional note, keep it until it is paid and mark
+anything from an earlier day rather than delete it, and label it
+*Hold · 挂单* / *Held · 已挂单*.
+
+**What the survey found.** The till had no way to set a bill aside. A bill
+existed only on screen until Mark paid, which creates the order already paid
+(§93: *"every sale it writes is already paid"*). The server would accept an
+unpaid counter order — a QR order is exactly that — but one held there would
+be cancelled by the counter clock after two hours (§49, v4.498), could not
+have a line added (no route edits an unpaid order's lines, and a recalled
+order is read-only on the till), would spend the customer's points, balance
+and voucher at hold time, and would not show on the till's Pending list,
+which reads `shop_entry_method=qr` on purpose. Keeping it on the tablet has
+none of those costs. §453 is the precedent: an unsent request kept in
+localStorage.
+
+**The rule.**
+
+1. **Hold saves the bill on this tablet and clears the rail.** A quiet control
+   under Mark paid, shown only while the till's own bill has lines (never on a
+   recalled QR order, which already lives on the server). It asks for an
+   optional note in a small sheet — *Note (optional) · 备注(可选)*, copied from
+   the New order form — and Hold in that sheet saves. The bill keeps its lines
+   (with their answers and the menu flag), the attached customer, the note and
+   the time it was first held. Credit toggles and the wallet are not kept: they
+   are chosen at payment, and §93 has both off until tapped.
+2. **One list per business and per shop**, under
+   `tacet-till-held:<tenant>:<store>`. Not per operator, unlike §453: a held
+   bill belongs to the counter, and a cashier taking over the shift has to find
+   the table's bill. Switching shop shows that shop's list. Without the tenant
+   id (`/api/backend/me` failed) Hold is not offered and nothing is read or
+   written.
+3. **Held is a third face of the entry side**, after Counter sale and Pending,
+   drawn only when something is held. Each row shows the time it was held in
+   the number block, the note (or the customer, or the items when neither is
+   there), the items, and the bill's total before any voucher. **A bill held on
+   an earlier day shows its date in amber.** Nothing deletes a held bill by
+   itself; a forgotten one stays in sight until somebody deals with it.
+4. **A tap brings it back into the rail, editable** — the customer who is
+   eating orders a coffee, and it goes on the same bill. Unlike a recalled QR
+   order, this bill was built at this counter and is still the till's to
+   change. Each line is re-priced from today's catalogue (base plus the
+   answers' deltas), because the server prices shelf lines from the catalogue
+   at Mark paid anyway and the button must show what will be charged. A product
+   no longer listed here keeps its saved line; the server decides. The customer
+   comes back and their vouchers are read again.
+5. **It stays saved until it is paid or emptied.** While a held bill is on
+   screen, every change to it is written back, so a tablet that dies mid-bill
+   loses nothing. Mark paid succeeding removes it; removing its last line
+   removes it. Hold again puts it back in the list, its note offered for
+   editing. Leaving the till with a held bill on screen does not ask
+   *Leave without saving?*, because it is saved.
+6. **The bill on screen is never thrown away to open another.** Tapping a held
+   bill, or a QR order on Pending, while the till's own bill has lines holds
+   that bill first (no note). Before this, opening a QR order dropped a bill
+   being built without a word. A recalled QR order on screen is simply put
+   back: it is still on Pending, untouched.
+
+**Not changed.** The server, the order route, stock and the money: a held bill
+is not an order, reserves no stock and spends no credit, and everything happens
+at Mark paid exactly as before. §93 stands — the till still writes only paid
+sales.
+
+**Known limits, accepted with the choice.** Only the tablet that held a bill
+can see it; another device, and the back office, cannot. Clearing the
+browser's site data loses held bills. The shelf count does not drop while a
+bill is held, so a shelf item already on a customer's plate can still be sold
+from the grid until the held bill is paid.
+
+Strings: two composed, declared in `docs/tacet-delivery-vocabulary.md` v1.324
+(*Hold · 挂单*, *Held · 已挂单*). *Note (optional) · 备注(可选)* and
+*Cancel · 取消* are copied whole.
+Tests: new `scripts/test_till_hold.js`, over the sliced shipped functions
+against a fake storage.
+Schema: none. No new route. No change to `.gitignore` or CI.
