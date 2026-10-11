@@ -83,6 +83,17 @@ check('…and only when it actually differs from the shop that took the order', 
   return /wouldBe\.code !== fulfillingStore\.code/.test(win);
 });
 
+// An order also moves when the nearer shop is OPEN but short (fallback_no_stock).
+// Stamping that one wrote "shop was closed" about an open shop, under the drawer's
+// own "Nearer store was short on" — order #883, 2026-10-11. The record asks the
+// notice's last question too: was the would-be shop actually closed?
+check('…and only when the shop it would have gone to was actually closed', () => {
+  const at = routeSrc.indexOf('UPDATE retail_orders SET moved_from_store = ?');
+  const win = routeSrc.slice(Math.max(0, at - 600), at);
+  return /inventory\.channelClosedStores\(inventory\.orderChannelKey\(orderChannel\)\)/.test(win)
+    && /closedNow\.has\(wouldBe\.code\)/.test(win);
+});
+
 // routeOrder drops closed stores BEFORE ranking, so its own reason can never
 // say what the closure changed. This is why a new column was needed at all.
 check('routing_reason could not have answered it, and the helper says why', () => {
