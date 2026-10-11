@@ -1328,7 +1328,8 @@ const state = {
       purpose:null,          // kitchen only: 'order' | 'shelf' | 'urgent', no default (§39)
       from:null,             // ask-for-stock: the location being asked to supply
       to:null,               // ...and the one asking, where there is a choice
-      qty:{},busy:false,err:'',sent:null},
+      qty:{},busy:false,err:'',sent:null,
+      typing:{},typeErr:{}},  // a quantity being typed, and why it was refused
   /* ASKING THE BUYER TO BUY A MATERIAL (§86). Its own basket, NOT `rq` above,
      and the reason is the subject rather than tidiness: `rq` holds PRODUCTS —
      things the business sells, counted in pieces — and this holds MATERIALS,
@@ -2202,6 +2203,10 @@ reg('mCustClr', ()=>{ searchClearRun('mCustQ','mCustClr','custSearch'); loadCust
    what lets that box use the same control as the other fourteen. */
 reg('orderSheetQ', v=>{ searchClearShow('mSearchClr', !!String(v||'')); });
 reg('rqBump', (id,d)=>rqBump(Number(id),Number(d)));
+reg('rqType', id=>rqTypeOpen(Number(id)));
+/* Patches in place, never renders — see rqTyped. */
+reg('rqTyped', (id,v)=>rqTyped(Number(id),v));
+reg('rqTypeCommit', id=>rqTypeCommit(Number(id)));
 reg('rqPurpose', k=>{ state.rq.purpose=String(k); render(); });
 reg('rqKind', k=>{ k=String(k); state.rq.kind=(k==='product'||k==='material')?k:'all'; render(); });
 reg('rqTo', id=>{ state.rq.to=Number(id);
@@ -20436,7 +20441,7 @@ reg('shmAddAll', ()=>{
    cook reads off the row, so the name is what is sent. */
 function rqReset(){
   const r=state.rq;
-  r.purpose=null; r.from=null; r.qty={}; r.q=''; r.kind='all'; r.err=''; r.sent=null; r.busy=false;
+  r.purpose=null; r.from=null; r.qty={}; r.typing={}; r.typeErr={}; r.q=''; r.kind='all'; r.err=''; r.sent=null; r.busy=false;
   // One store is not a choice; more than one is a question this app has to ask
   // and the old screen never did, because it ran pinned to a single shelf.
   const st=state.stores||[];
@@ -20551,7 +20556,7 @@ function askDraftClear(){
   const top=(state.stack||[])[(state.stack||[]).length-1];
   const route=top&&top.route;
   if(route==='askbuy'){ const m=state.mb; m.qty={}; m.typing={}; m.typeErr={}; m.urg={}; m.by={}; m.dating={}; m.restored=false; }
-  else if(route==='askstock'||route==='askkitchen'){ state.rq.qty={}; state.rq.restored=false; }
+  else if(route==='askstock'||route==='askkitchen'){ state.rq.qty={}; state.rq.typing={}; state.rq.typeErr={}; state.rq.restored=false; }
   render();
 }
 /* The line a returning operator sees above a list the phone kept for them —
@@ -20604,9 +20609,109 @@ function rqLines(){
 function rqChosen(){ return (state.rq.products||[]).filter(p=>(state.rq.qty[p.id]||0)>0); }
 function rqUnits(){ return rqChosen().reduce((a,p)=>a+(state.rq.qty[p.id]||0),0); }
 function rqBump(id,d){
-  const n=(state.rq.qty[id]||0)+d;
-  state.rq.qty[id]=n>0?n:0;
+  // A STEP ON A ROW BEING TYPED INTO TAKES WHAT WAS TYPED FIRST — typing 24 and
+  // tapping + is 25. Junk is not folded in: it keeps the field and says why.
+  const r=state.rq;
+  if(r.typing&&r.typing[id]!=null){
+    if(!rqTypeOk(r.typing[id])) return rqTypeCommit(id);
+    delete r.typing[id]; delete r.typeErr[id];
+  }
+  const n=(r.qty[id]||0)+d;
+  r.qty[id]=n>0?n:0;
   render();
+}
+/* ── TYPING THE QUANTITY ON ASK FOR STOCK AND ASK THE KITCHEN ──────────────
+ *
+ * Ash, on a screenshot of Ask for stock with a pita at 2: "can't manually enter
+ * a number". The row had − and + and a number that was only text, so forty
+ * pitas was forty taps. Ask to buy fixed the same complaint (mbCountCell) and
+ * this is that control, copied rather than reinvented — tap the number, type,
+ * done — so the three request screens work one way.
+ *
+ * WHERE IT PARTS FROM ASK TO BUY, and why:
+ *   • WHOLE NUMBERS ONLY. A restock line is pieces (unit 'pcs', and the server
+ *     rounds qty_requested wherever it prints one); a material bought by the
+ *     kilo is the only reason Ask to buy takes a decimal.
+ *   • THE AMOUNT FOLLOWS THE KEYS AS THEY ARE PRESSED. These screens repaint
+ *     through render(), and a render on blur would rebuild the list under the
+ *     very tap that caused the blur — Send, most often, which would then never
+ *     fire. So each valid keystroke moves the quantity and the foot's tally in
+ *     place (no node is replaced), and the blur only swaps this one field back
+ *     to its button. Send is the same element throughout and is already right
+ *     by the time the thumb lands on it.
+ *   • A NON-NUMBER BLOCKS SEND until it is fixed, rather than being stripped to
+ *     its digits: "13o" silently becoming 13 asks for a quantity nobody
+ *     entered. AN EMPTY FIELD IS ZERO, which is how a line comes off the list. */
+function rqTypeOk(raw){ return /^\d*$/.test(String(raw==null?'':raw).trim()); }
+function rqTypeBad(){ const e=state.rq.typeErr||{}; return Object.keys(e).length>0; }
+function rqCountCell(p){
+  const id=p.id, r=state.rq, typing=(r.typing||{})[id];
+  if(typing!=null)
+    return `<input id="rqnum-${id}" class="num" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done"
+      style="width:58px;height:44px;flex:none;text-align:center;font-size:18px;font-weight:500;padding:0 4px;
+        border-radius:8px;border:1.5px solid var(--border-focus);background:var(--surface-card);color:var(--text-primary);font-family:inherit"
+      value="${escAttr(typing)}" aria-label="${escAttr(T('How many?','数量'))}"
+      oninput="APP.cmd('rqTyped',${id},this.value)"
+      onblur="APP.cmd('rqTypeCommit',${id})"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`;
+  // The count looks like a field, not a label — the lesson mbCountCell records.
+  return `<button id="rqnum-${id}" class="num" style="width:58px;height:44px;border-radius:8px;
+    background:var(--surface-raised);border:1.5px solid var(--edge);padding:0;
+    text-align:center;font-size:18px;font-weight:500;font-family:inherit;color:var(--text-primary);flex:none"
+    onclick="APP.cmd('rqType',${id})"
+    aria-label="${escAttr(T('How many?','数量'))}">${r.qty[id]||0}</button>`;
+}
+/* Opening seeds the field with what the row holds; a row at zero opens EMPTY,
+   because a "0" would have to be deleted before a digit could go in. Only this
+   cell is swapped, and it is focused inside the tap so the phone opens its
+   keypad. With nothing painted to swap, render() draws it open. */
+function rqTypeOpen(id){
+  const r=state.rq, n=r.qty[id]||0;
+  r.typing[id]=n>0?String(n):''; delete r.typeErr[id];
+  const p=(r.products||[]).find(x=>x.id===id);
+  const cell=document.getElementById('rqnum-'+id);
+  if(!p||!cell){ state.focus={id:'rqnum-'+id,pos:r.typing[id].length}; return render(); }
+  cell.outerHTML=rqCountCell(p);
+  const inp=document.getElementById('rqnum-'+id);
+  if(inp){ inp.focus(); try{ inp.setSelectionRange(inp.value.length,inp.value.length); }catch(e){} }
+}
+/* Each keystroke: store it, and when it is a number move the quantity with it.
+   Never a repaint of the field — see the note above. */
+function rqTyped(id,v){
+  const r=state.rq, raw=String(v==null?'':v);
+  r.typing[id]=raw;
+  if(rqTypeOk(raw)){ const t=raw.trim(); r.qty[id]=t===''?0:parseInt(t,10); delete r.typeErr[id]; }
+  rqSync(id);
+}
+/* Blur and Enter both land here, so it is safe to reach twice. */
+function rqTypeCommit(id){
+  const r=state.rq;
+  if(r.typing[id]==null) return;
+  if(!rqTypeOk(r.typing[id])){
+    r.typeErr[id]=T('Enter a whole number, 0 or more','请输入 0 或以上的整数');
+    return rqSync(id);
+  }
+  rqTyped(id,r.typing[id]);
+  delete r.typing[id]; delete r.typeErr[id];
+  const p=(r.products||[]).find(x=>x.id===id);
+  const inp=document.getElementById('rqnum-'+id);
+  if(p&&inp) inp.outerHTML=rqCountCell(p);
+  rqSync(id);
+}
+/* Bring this row's − key, its error line and the foot up to date IN PLACE.
+   Attributes and text only: replacing the Send button here would eat the tap
+   that is on its way to it. */
+function rqSync(id){
+  askDraftSync();   // §453 — typing moves the basket without a render()
+  const r=state.rq;
+  const less=document.getElementById('rqless-'+id);
+  if(less){ if((r.qty[id]||0)<=0) less.setAttribute('disabled',''); else less.removeAttribute('disabled'); }
+  const err=document.getElementById('rqerr-'+id);
+  if(err){ const m=r.typeErr[id]||''; err.textContent=m; err.style.display=m?'block':'none'; }
+  const chosen=document.getElementById('mRqChosen'); if(chosen) chosen.textContent=rqChosen().length;
+  const units=document.getElementById('mRqUnits'); if(units) units.textContent=rqUnits();
+  const send=document.getElementById('mRqSend');
+  if(send){ if(rqFootReady(send.getAttribute('data-base')==='1')) send.removeAttribute('disabled'); else send.setAttribute('disabled',''); }
 }
 // Everywhere except the location doing the asking.
 function rqSuppliers(){ return (state.stores||[]).filter(s=>s.id!==state.rq.to); }
@@ -21226,13 +21331,13 @@ function rqSendKitchen(){
   // The purpose is mandatory and the server refuses a request without it by
   // name, so the screen asks first and the button stays shut until it is
   // answered — §39's no-prefill rule means it cannot be chosen for them.
-  if(!r.purpose||!rqChosen().length) return;
+  if(!r.purpose||!rqChosen().length||rqTypeBad()) return;
   rqSend({to_role:'kitchen', purpose:r.purpose, status:'sent', items:rqItems()},
          T('This account cannot raise kitchen requests.','此账号无法向厨房下单。'));
 }
 function rqSendStock(){
   const r=state.rq;
-  if(!r.from||!r.to||!rqChosen().length) return;
+  if(!r.from||!r.to||!rqChosen().length||rqTypeBad()) return;
   // BOTH ENDS NAMED OUTRIGHT. The server still derives the roles for its
   // notification routing, but the locations are the order's own — which is what
   // makes a request TO a shop as ordinary as one to the warehouse.
@@ -23189,15 +23294,16 @@ function rqBodyHtml(){
   if(!rows.length) return note+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
     T('No products match','没有匹配的商品')}</div>`;
   return note+`<div>${rows.map(p=>{
-    const n=r.qty[p.id]||0;
+    const n=r.qty[p.id]||0, typing=(r.typing||{})[p.id], terr=(r.typeErr||{})[p.id]||'';
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
       <span style="flex:1;min-width:0">
         <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
         ${p.sku?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(p.sku)}</span>`:''}
+        <span id="rqerr-${p.id}" style="display:${terr?'block':'none'};font-size:13px;color:var(--brick-ink);margin-top:3px">${escAttr(terr)}</span>
       </span>
-      <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},-1)"${n<=0?' disabled':''}
+      <button id="rqless-${p.id}" class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},-1)"${n<=0?' disabled':''}
         aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
-      <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+      ${rqCountCell(p)}
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},1)"
         aria-label="${T('More','增加')}">${ic('plus',18)}</button>
     </div>`;
@@ -23206,16 +23312,20 @@ function rqBodyHtml(){
 /* The bar that sends. It carries the tally because the list above it scrolls —
    an operator who has picked eleven things cannot see all eleven, and "11 items
    · 40 units" is the only place the total exists. */
-function rqFoot(cmd,ready){
+/* `base` is the screen's own question answered — which location, or what it is
+   for. The rest of readiness is the basket's, so rqSync can recompute it in
+   place while a quantity is typed. */
+function rqFootReady(base){ return !!base && rqChosen().length>0 && !rqTypeBad(); }
+function rqFoot(cmd,base){
   const r=state.rq;
-  const chosen=rqChosen().length;
+  const chosen=rqChosen().length, ready=rqFootReady(base);
   return `${r.err?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(r.err)}</div>`:''}
     <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
       padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
       <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
-        <b class="num" style="color:var(--text-primary)">${chosen}</b> ${T('items','项')}
-        · <span class="num">${rqUnits()}</span> ${T('units','件')}</span>
-      <button class="btn2" style="width:auto;padding:11px 26px"${(ready&&!r.busy)?'':' disabled'}
+        <b id="mRqChosen" class="num" style="color:var(--text-primary)">${chosen}</b> ${T('items','项')}
+        · <span id="mRqUnits" class="num">${rqUnits()}</span> ${T('units','件')}</span>
+      <button id="mRqSend" data-base="${base?1:0}" class="btn2" style="width:auto;padding:11px 26px"${(ready&&!r.busy)?'':' disabled'}
         onclick="APP.cmd('${cmd}')">${r.busy?T('Sending…','发送中…'):T('Send','发送')}</button>
     </div>`;
 }
@@ -23271,7 +23381,7 @@ function screenAskKitchen(){
       ${opt('urgent','Urgent order','加急订单','Make it first — someone is waiting on it now','请优先制作 — 现在就有人在等',true)}
     </div>
     ${rqPicker()}
-    ${rqFoot('rqSendKitchen', !!r.purpose && rqChosen().length>0)}`;
+    ${rqFoot('rqSendKitchen', !!r.purpose)}`;
 }
 function screenAskStock(){
   loadRqProducts();
@@ -23301,7 +23411,7 @@ function screenAskStock(){
     ${askRestoredHtml(r.restored&&rqChosen().length>0)}
     ${askedBy}${from}
     ${r.to!=null?rqPicker():''}
-    ${r.to!=null?rqFoot('rqSendStock', !!r.from && rqChosen().length>0):''}`;
+    ${r.to!=null?rqFoot('rqSendStock', !!r.from):''}`;
 }
 /* THE SAME DETAIL EITHER TAB OPENS. A request tapped from the Ready tab and
    one tapped from the Waiting tab are the same row at two different moments
