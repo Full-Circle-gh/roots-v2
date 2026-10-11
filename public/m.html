@@ -20598,9 +20598,12 @@ function rqName(p){ return LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.
    filter only narrows what is DRAWN: quantities live on state.rq.qty by id, so
    one request can still carry both kinds, and the foot still counts them all. */
 function rqKindOf(p){ return p.material?'material':'product'; }
+/* IN SKU ORDER, like Add stock (qsRows) — Ash, on a screenshot of Ask for
+   stock: "not organized by sku". Receiving's comparator, no-SKU lines last;
+   filter() already returns a copy, so the loaded list is not reordered. */
 function rqLines(){
   const k=state.rq.kind||'all';
-  const all=(state.rq.products||[]).filter(p=>k==='all'||rqKindOf(p)===k);
+  const all=(state.rq.products||[]).filter(p=>k==='all'||rqKindOf(p)===k).sort(rcvSkuCmp);
   const q=state.rq.q.trim().toLowerCase();
   if(!q) return all;
   return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
@@ -21922,7 +21925,7 @@ function hdCommit(){
    why. */
 function batLines(){
   const q=state.bat.q.trim().toLowerCase();
-  const all=state.qs.items||[];
+  const all=(state.qs.items||[]).slice().sort(rcvSkuCmp);   // SKU order, as qsRows
   if(!q) return all;
   return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
     .toLowerCase().indexOf(q)!==-1);
