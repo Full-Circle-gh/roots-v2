@@ -554,6 +554,29 @@ run('add stock', [
       ['and it is drawn open', "!document.querySelector('[onclick*=qsStore][disabled]')"],
     ]],
 
+  /* SKU ORDER, the order the shelf is walked. The fixture is the one Ash
+     photographed — the server's name order put 2-410 above 2-400 — plus a
+     2-50 that only a numeric compare puts first and a line with no SKU, which
+     sinks rather than sorting as the smallest. */
+  ['the list runs in SKU order, not name order',
+    KITCHEN + `
+      state.qs.ctx={enabled:true,mode:'add',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]};
+      state.qs.ctxTried=true; state.qs.storeId=1; state.qs.itemsTried=true;
+      state.qs.items=[
+        {product_id:1,name_en:'Almond Butter',sku:'2-410'},
+        {product_id:2,name_en:'Almond Butter',sku:'2-400'},
+        {product_id:3,name_en:'Almonds (Raw)',sku:'2-350'},
+        {product_id:4,name_en:'Apricots',sku:''},
+        {product_id:5,name_en:'Basil',sku:'2-50'},
+        {product_id:6,name_en:'Cashews',sku:'1-200'}
+      ];
+      state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();`, [
+      ['by SKU, numerically, no-SKU last', "qsRows().map(function(p){return p.product_id}).join()==='6,5,3,2,1,4'"],
+      ['and the cards are drawn in that order', "(function(){var t=" + body + ";return t.indexOf('2-50')<t.indexOf('2-350')&&t.indexOf('2-350')<t.indexOf('2-400')&&t.indexOf('2-400')<t.indexOf('2-410')})()"],
+      ['a search keeps the order', "(state.qs.q='almond', qsRows().map(function(p){return p.product_id}).join()==='3,2,1')"],
+      ['and the shelf as loaded is left as it was', "state.qs.items[0].product_id===1"],
+    ]],
+
   ['a role without the permission cannot reach it at all',
     "state.caps=['purchasing:receive'];push('stockadd');render();", [
       ['push refuses it', "state.stack.length===0"],
