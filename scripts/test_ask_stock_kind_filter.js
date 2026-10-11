@@ -76,7 +76,7 @@ function sandbox(over, products) {
     console, Number, String, Array, Object, JSON, Math,
   };
   vm.createContext(sb);
-  for (const n of ['rqKindOf', 'rqLines', 'rqKindSeg', 'rqBodyHtml', 'rqPicker', 'rqChosen', 'rqUnits']) {
+  for (const n of ['rqKindOf', 'rqLines', 'rqKindSeg', 'rqCountCell', 'rqBodyHtml', 'rqPicker', 'rqChosen', 'rqUnits']) {
     vm.runInContext(sliceFn(n), sb, { filename: `slice#${n}` });
   }
   vm.runInContext(`var rqKindCmd = ${handler('rqKind')};`, sb, { filename: 'reg#rqKind' });

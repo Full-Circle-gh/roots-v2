@@ -210,11 +210,11 @@ console.log('\n══ rqPicker · Ask for stock / Ask the kitchen ══');
     if (!OLD_SRC) continue;
     const o = makeSandbox(mk(over)), n = makeSandbox(mk(over));
     load(o, OLD_SRC, ['rqPicker']);
-    load(n, NEW_SRC, ['rqPicker', 'rqBodyHtml']);
+    load(n, NEW_SRC, ['rqPicker', 'rqCountCell', 'rqBodyHtml']);
     compare(label, o, n, sb => sb.rqPicker());
   }
   const n = makeSandbox(mk({}));
-  load(n, NEW_SRC, ['rqPicker', 'rqBodyHtml']);
+  load(n, NEW_SRC, ['rqPicker', 'rqCountCell', 'rqBodyHtml']);
   ok(n.rqPicker().includes('id="mRqBody"'), 'and the new output carries the container the repaint needs');
 }
 
