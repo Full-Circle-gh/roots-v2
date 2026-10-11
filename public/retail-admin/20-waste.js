@@ -248,6 +248,11 @@
       figs.push({ label: T('Entries', '记录'), value: String(t.entries || 0), tone: '' });
     }
     figs.push({ label: T('Voided', '已作废'), value: String(t.voided_entries || 0), tone: '' });
+    // §455 — how much of the expired food the staff ate. Only when there is
+    // some: a zero here would be a figure about nothing anyone did.
+    if (Number(t.eaten_by_staff_qty || 0) > 0) {
+      figs.push({ label: T('Eaten by staff', '员工取用'), value: String(t.eaten_by_staff_qty), tone: '' });
+    }
     return `<div class="wst-pulse">${figs.map(f => `
       <span class="wst-fig ${f.tone}">
         <span class="wst-fig-l">${esc(f.label)}</span>
@@ -383,10 +388,25 @@
           ${r.note ? `<span class="wst-note-inline" data-no-i18n title="${esc(r.note)}">${esc(r.note)}</span>` : ''}
         </td>
         <td class="num">${esc(String(r.qty))}</td>
-        <td class="wst-ell">${esc(reasonLabel(r.reason_code))}</td>
+        <td class="wst-ell">${esc(reasonLabel(r.reason_code))}${eatenCell(r, voided || reversal)}</td>
         ${showCost ? `<td class="num">${cost}</td>` : ''}
         <td class="act">${act}</td>
       </tr>`;
+  }
+
+  // §455 — under an Expired reason: what the staff ate of it. The entry stays
+  // Expired; this line is the follow-up. Someone who may record waste gets it as
+  // a button (it opens the dialog that sets or corrects it); anyone else reads
+  // the figure when there is one. A voided entry keeps showing what was said,
+  // but offers nothing — it is no longer a loss to say anything about.
+  function eatenCell(r, dead) {
+    if (r.reason_code !== 'expired') return '';
+    const n = Number(r.eaten_by_staff_qty || 0);
+    const label = n > 0 ? T('Eaten by staff', '员工取用') + ' · ' + r.eaten_by_staff_qty : T('Eaten by staff', '员工取用');
+    if (!dead && typeof can === 'function' && can('waste:record')) {
+      return `<button type="button" class="wst-btn ghost sm wst-eaten" data-eaten="${r.id}">${esc(label)}</button>`;
+    }
+    return n > 0 ? `<span class="wst-note-inline">${esc(label)}</span>` : '';
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -405,6 +425,8 @@
     on('wst-f-to', 'change', e => { _to = e.target.value; load(); });
     el.querySelectorAll('[data-void]').forEach(b =>
       b.addEventListener('click', ev => doVoid(Number(b.dataset.void), ev)));
+    el.querySelectorAll('[data-eaten]').forEach(b =>
+      b.addEventListener('click', ev => doEaten(Number(b.dataset.eaten), ev)));
   }
 
   function clearFilters() { _from = _to = _loc = _reason = ''; load(); }
@@ -808,6 +830,49 @@
       load();
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = T('Void', '作废'); }
+      toast(((e && e.message) ? e.message : T('Failed', '操作失败')), 'err');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  EATEN BY STAFF — a follow-up on an expired entry, never an edit (§455).
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Asks how many of the entry the staff ate, 0 to its qty. Moves no stock and
+  // no money, so no confirm step: the dialog IS the question. What was said
+  // before is listed above the field, oldest first, because a correction is a
+  // new figure and the old one stays — that is how a changed answer is seen.
+  // The title is the product and its quantity and nothing else: a name and a
+  // numeral need no label in either language.
+  async function doEaten(id, ev) {
+    const btn = ev && ev.currentTarget;
+    const r = _rows.find(x => x.id === id);
+    if (!r) return;
+    const qty = r.qty;
+    const what = productLabel(r);
+    const hist = (r.eaten_by_staff_history || []).map(h =>
+      esc(T('Eaten by staff', '员工取用') + ' · ' + h.qty + ' · ' + (h.by || '—') + ' · ' + when(h.at, 'dateTime')));
+    const v = await askPrompt({
+      title: esc(T(qty + ' × ' + what, what + ' × ' + qty)),
+      sub: hist.join('<br>'),
+      label: esc(T('Eaten by staff', '员工取用')),
+      value: r.eaten_by_staff_qty != null ? String(r.eaten_by_staff_qty) : '',
+      placeholder: '0',
+      submitLabel: T('Save', '保存'),
+      cancelLabel: T('Cancel', '取消'),
+    });
+    if (v == null) return;
+    const n = String(v).trim() === '' ? NaN : Number(v);
+    if (!Number.isFinite(n) || n < 0 || n > Number(qty)) {
+      toast(T('Enter a number from 0 to ' + qty + '.', '请输入 0 到 ' + qty + ' 之间的数字。'), 'err');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      await api('/api/retail-admin/waste/' + id + '/eaten', { method: 'POST', body: { qty: n } });
+      toast(T('Saved', '已保存'));
+      load();
+    } catch (e) {
+      if (btn) btn.disabled = false;
       toast(((e && e.message) ? e.message : T('Failed', '操作失败')), 'err');
     }
   }

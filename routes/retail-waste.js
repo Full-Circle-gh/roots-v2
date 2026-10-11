@@ -82,6 +82,31 @@ const ROW_COLS = `
   reverses_waste_id, voided_at, voided_by, voided_by_label, voided_by_waste_id
 `;
 
+// §455 — what the staff ate of an expired loss. The figures live in their own
+// append-only table (database.js, waste_staff_eaten) because the entry itself is
+// never edited (§32 rule 11). The LATEST row is the current figure; every row,
+// oldest first, is the history a screen shows so a correction stays visible.
+const EATEN_LATEST_SQL =
+  '(SELECT e.eaten_qty FROM waste_staff_eaten e WHERE e.waste_id = w.id ORDER BY e.id DESC LIMIT 1)';
+const EATEN_HISTORY_COL = `
+  (SELECT json_group_array(json_object('qty', h.eaten_qty, 'at', h.created_at, 'by', h.created_by_label))
+     FROM (SELECT eaten_qty, created_at, created_by_label FROM waste_staff_eaten
+            WHERE waste_id = w.id ORDER BY id) h) AS eaten_history_json`;
+
+// The JSON column becomes two fields a client can read without parsing:
+// `eaten_by_staff_qty` (the current figure, null when nobody has said) and
+// `eaten_by_staff_history`. A row without the column — any caller that did not
+// select it — comes back with neither changed.
+function withEaten(row) {
+  if (!row || !('eaten_history_json' in row)) return row;
+  const { eaten_history_json, ...out } = row;
+  let hist = [];
+  try { hist = JSON.parse(eaten_history_json || '[]') || []; } catch (e) { hist = []; }
+  out.eaten_by_staff_history = hist;
+  out.eaten_by_staff_qty = hist.length ? hist[hist.length - 1].qty : null;
+  return out;
+}
+
 // A live loss: not itself a reversal, and not voided by one. BOTH halves are
 // needed and neither implies the other — the original stays in the table after
 // it is voided, and the reversal is a row in its own right. Summing without
@@ -318,14 +343,15 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
   const rows = db.prepare(`
     SELECT ${W_COLS},
            p.name_en AS product_name_en, p.name_cn AS product_name_cn, p.sku AS product_sku,
-           s.code    AS location_code,   s.name_en AS location_name_en, s.name_cn AS location_name_cn
+           s.code    AS location_code,   s.name_en AS location_name_en, s.name_cn AS location_name_cn,
+           ${EATEN_HISTORY_COL}
       FROM waste_records w
       LEFT JOIN store_products p ON p.id = w.store_product_id
       LEFT JOIN retail_stores  s ON s.id = w.location_id
      WHERE ${listWhere}
      ORDER BY w.business_date DESC, w.id DESC
      LIMIT 500
-  `).all(...params);
+  `).all(...params).map(withEaten);
 
   // The uncosted COUNT travels with the total, always (§32 rule 10) — a total
   // presented alone reads as complete, and the whole point of the flag is that
@@ -334,7 +360,8 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
     SELECT COALESCE(SUM(w.cost_total_cents), 0) AS cost_total_cents,
            COALESCE(SUM(w.qty), 0)              AS qty_total,
            COUNT(*)                             AS entries,
-           COALESCE(SUM(w.is_uncosted), 0)      AS uncosted_entries
+           COALESCE(SUM(w.is_uncosted), 0)      AS uncosted_entries,
+           COALESCE(SUM(${EATEN_LATEST_SQL}), 0) AS eaten_by_staff_qty
       FROM waste_records w
      WHERE ${filter} AND ${live}
   `).get(...params);
@@ -554,6 +581,51 @@ router.post('/api/retail-admin/waste/bulk', requireRetailAdmin, requireWasteEnab
 // statement can have appended a matching row in between. `last_insert_rowid()`
 // is NOT usable here — enqueueChannelSync writes to the channel queue tables
 // after the ledger insert and moves it.
+
+// ── POST /:id/eaten — how much of an expired loss the staff ate (§455) ───────
+//
+// Expired food is recorded as waste; later the team may eat some of it rather
+// than bin it. Ash, 2026-10-11: keep the entry as Expired — the over-ordering is
+// the fact the expiry figure exists to show — and say what happened to the food
+// beside it. So this writes a follow-up row and touches nothing else: not the
+// entry (§32 rule 11), not stock (the food left stock when it was recorded),
+// not the cost (the loss was the expiry).
+//
+// Body: { qty } — how many of the entry's qty were eaten, 0 to qty. Sending it
+// again is a correction: a NEW row, the latest wins, the old one stays listed.
+// Gated as waste:record by lib/cap-routes.js (every /waste path but /void).
+router.post('/api/retail-admin/waste/:id/eaten', requireRetailAdmin, requireWasteEnabled, (req, res) => {
+  const db = tdb();
+  const id = Number(req.params.id);
+  const original = db.prepare('SELECT * FROM waste_records WHERE id = ?').get(id);
+  if (!original) return res.status(404).json({ error: 'not_found' });
+  if (original.voided_by_waste_id != null || original.reverses_waste_id != null) {
+    return res.status(409).json({ error: 'not_a_live_entry', message: 'This entry has been voided or is a reversal.' });
+  }
+  // Expired only. Spoiled or damaged food is not food anyone should eat, and a
+  // control that accepts it invites the record that says they did.
+  if (original.reason_code !== 'expired') {
+    return res.status(400).json({ error: 'not_expired', message: 'Only an expired entry can say the staff ate it.' });
+  }
+  const raw = req.body?.qty;
+  const qty = (raw === '' || raw == null) ? NaN : Number(raw);
+  if (!Number.isFinite(qty) || qty < 0 || qty > Number(original.qty)) {
+    return res.status(400).json({ error: 'qty_out_of_range', max: Number(original.qty),
+      message: `Enter a number from 0 to ${original.qty}.` });
+  }
+
+  const actor = actorOf(req);
+  db.prepare(`
+    INSERT INTO waste_staff_eaten (waste_id, eaten_qty, created_by, created_by_label)
+    VALUES (?, ?, ?, ?)
+  `).run(id, qty, actor.id, actor.label);
+  logActivity(actor.id, actor.label, 'eaten_by_staff', 'waste_record', id,
+    { eaten_qty: qty, of_qty: original.qty }, req.ip);
+
+  const row = withEaten(db.prepare(`SELECT ${W_COLS}, ${EATEN_HISTORY_COL} FROM waste_records w WHERE w.id = ?`).get(id));
+  if (!canSeeCosts(req)) return res.json({ success: true, costs_hidden: true, data: stripCost(row) });
+  res.json({ success: true, data: row });
+});
 
 // ── POST /:id/void — undo by reversal, never by edit ─────────────────────────
 //

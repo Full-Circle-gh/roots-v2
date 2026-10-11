@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.323 · 2026-10-11 · §455 EATEN BY STAFF ON AN EXPIRED WASTE ENTRY — 3 STRINGS COMPOSED BY CLAUDE (`Eaten by staff · 员工取用`, `员工取用 {n}`, `请输入 0 到 {N} 之间的数字。`), EACH FROM LIVE PARTS; THE REST COPIED WHOLE.** See *Eaten by staff on an expired entry (§455)*.
+
 **v1.322 · 2026-10-10 · §452 A PAYMENT THAT COULD NOT START — 3 STRINGS COMPOSED BY CLAUDE (`支付失败`, `订单已保留，请重试。`, `待付款 · 请联系顾客`), EACH FROM LIVE PARTS; THE REST COPIED WHOLE.** See *A payment that could not start (§452)*.
 
 **v1.321 · 2026-10-10 · §451 WECHAT AND ALIPAY AS ONE CHOICE — 1 STRING ASSEMBLED BY CLAUDE FROM TWO LIVE LABELS; NO NEW WORD.** See *WeChat and Alipay as one choice (§451)*.
@@ -13687,3 +13689,33 @@ but the heading is the other side of `支付成功！`, and the pair should matc
 is under it now. `请联系顾客付款`: says the right thing but is not a live
 sentence, and `待付款 · 请联系顾客` says it in two that are.
 
+## Eaten by staff on an expired entry (§455)
+
+**Composed by Claude, 2026-10-11, under the 2026-09-06 amendment.** Operator
+register. The desktop waste list (`public/retail-admin/20-waste.js`,
+`eatenCell`, `doEaten`, the pulse line) and the phone's (`public/m.html`,
+`wstEatenBtn`, `wstEaten`, `wstRow`, `wstPulse`).
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Eaten by staff · 员工取用` | the button, the dialog's field label, the desktop pulse label, each history line | The Chinese is the live reason name `Staff consumption · 员工取用` (`routes/retail-waste.js` `REASONS`), taken whole: §414 is one Chinese word per thing, and staff taking stock already has its word. The English is new because *Staff consumption* under an *Expired* reason reads as a second reason; *Eaten by staff* reads as what happened to it. |
+| `{n} eaten by staff` / `员工取用 {n}` | the phone's row line and pulse line; the desktop's button and line read `Eaten by staff · {n}` / `员工取用 · {n}` | The pair above with the figure. The English puts the number first as the phone's `{n} voided · {n} 已作废` does; the Chinese puts the label first as `清单 · N` does, because `{n} 员工取用` reads as n staff. |
+| `Enter a number from 0 to {N}. · 请输入 0 到 {N} 之间的数字。` | the dialog's refusal, both screens | `0 到 100 之间的数字` from the live `税率需为 0 到 100 之间的数字。` with the opening `请输入` of the live `请输入 12:00–23:59 之间的时间`. |
+
+### Copied whole
+
+`Save · 保存`, `Saving… · 保存中…`, `Saved · 已保存`, `Cancel · 取消`,
+`Failed · 操作失败` and `That did not go through. Nothing has changed — try
+again. · 没有成功。数据没有变化 — 请重试。` (the phone's Void, beside it). The
+dialog's title is the product and its quantity with ` × `, in the order the
+Void sentence already uses for each language, and carries no word.
+
+### Rejected
+
+`员工食用`: says *ate* more exactly, but it is not live and would give staff
+taking stock a second Chinese word (§414). `员工吃掉`: colloquial for this
+register. `已被员工食用`: a sentence where a label is wanted. `员工取用 {n} 件`:
+a waste entry is not always pieces, and the Void sentence leaves the measure
+word out for that reason.
