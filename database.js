@@ -4794,6 +4794,17 @@ addColumn('retail_orders', 'reroute_short_pids',  'TEXT');
 //                     store that took the order, i.e. only when it moved
 addColumn('retail_orders', 'preorder_pids',      'TEXT');
 addColumn('retail_orders', 'moved_from_store',   'TEXT');
+// §458 — a paid order moved to another shop BY HAND (POST /orders/:id/reroute).
+// All four NULL on an order nobody moved. routing_reason becomes 'manual' on the
+// same write; the reason it had before goes into that move's activity_log row.
+//   rerouted_from_store_id  the shop it was taken from (the latest move's)
+//   rerouted_at / _by       when, and the operator's name
+//   rerouted_forced_pids    JSON product ids the new shop was short of when the
+//                           person pressed Move anyway; NULL when nothing was
+addColumn('retail_orders', 'rerouted_from_store_id', 'INTEGER');
+addColumn('retail_orders', 'rerouted_at',            'DATETIME');
+addColumn('retail_orders', 'rerouted_by',            'TEXT');
+addColumn('retail_orders', 'rerouted_forced_pids',   'TEXT');
 // Fulfillment path: 'delivery' (default — ship to customer address) or
 // 'pickup' (customer collects from a chosen store, no address/shipping fee).
 // For pickup orders store_id holds the customer-chosen store, scheduled_for +

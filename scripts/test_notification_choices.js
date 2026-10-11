@@ -175,7 +175,9 @@ const fanout = (event) => push.sendPushToTenantOperators(TENANT, {
     // Both new-order sites, not just the first: the admin "Mark paid" path
     // bypasses markOrderPaid entirely and had to be tagged separately.
     const retail = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
-    eq(retail.split("event: 'new_order'").length - 1, 2, 'both new-order senders are tagged');
+    // §458 adds a third: "Order moved here" to the shop an order was moved to —
+    // new work arriving at that shop, under the same switch.
+    eq(retail.split("event: 'new_order'").length - 1, 3, 'all three new-order senders are tagged');
   }
 
   section('8 · the pane is served and can be changed');

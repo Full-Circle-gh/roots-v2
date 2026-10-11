@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.506
+# Tacet shared-core consolidation — decisions record, v4.507
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-11 · v4.507 — **§458 · STAFF CAN MOVE A PAID ORDER TO ANOTHER SHOP — DECIDED BY ASH:** *"reroute because store is closed ? also need an option to reroute manually"*, then *"2. give an alert but still let it swap if the user insist evetything else as you recommend"*. A **Change** control on the order's Fulfilled by block moves a paid or awaiting-restock delivery order (mini app or web, nothing packed, no rider called) to another shop. Its stock moves with it in one transaction (`reroute_return` at the old shop, `reroute_take` at the new; holds repointed), the courier job moves with it, the slip prints at the new shop. Short or closed at the new shop: an alert naming what is short, then **Move anyway** if the person insists. `routing_reason` becomes `manual`; four new columns record from where, when, who and what was forced. See §458.
 
 2026-10-11 · v4.506 — **§457 · THE TILL CAN HOLD A BILL AND OPEN THE NEXT ONE — DECIDED BY ASH:** *"I manually enter this order , customer eating now didn't pay. another customer come , how do I save this order and open a new order"*, then *"survey a hold order button"*, then *"go"* to four recommendations: kept on the tablet, an optional note, kept until paid with a date on anything from an earlier day, and the words *Hold · 挂单* / *Held · 已挂单*. **Hold** under Mark paid saves the bill on this tablet and clears the rail; a **Held** face beside Counter sale and Pending lists them; a tap brings one back, editable, re-priced from today's menu, and it stays saved until it is paid or emptied. Opening a held bill or a QR order while a bill is on screen holds that bill first instead of dropping it. Nothing reaches the server until Mark paid, so §93 stands. Two strings composed (vocabulary v1.324). No schema, no route, no change to `.gitignore` or CI. See §457.
 
@@ -29984,3 +29986,102 @@ Strings: two composed, declared in `docs/tacet-delivery-vocabulary.md` v1.324
 Tests: new `scripts/test_till_hold.js`, over the sliced shipped functions
 against a fake storage.
 Schema: none. No new route. No change to `.gitignore` or CI.
+
+## §458 — STAFF CAN MOVE A PAID ORDER TO ANOTHER SHOP
+
+**Decided by Ash, 2026-10-11:** *"reroute because store is closed ? also need
+an option to reroute manually"*, sent with a photo of order #883's drawer
+reading both "Nearer store was short on Apple Pie" and "Rerouted, shop was
+closed · yuexiu". The first half was a false label, fixed in PR #1113 (the
+order moved for stock, not a closure). On the second half Ash was given three
+questions and answered *"2. give an alert but still let it swap if the user
+insist evetything else as you recommend"*:
+
+1. **When** — only while the order is paid or waiting for restock, before
+   anything is packed, and never once a rider has been called.
+2. **When the new shop is short** — say so and list what it is short of, then
+   let the person move it anyway if they insist. (The recommendation had been
+   to refuse; Ash chose the override. A shelf can go below zero because of it.)
+3. **Who** — anyone who may edit orders (`orders:edit`).
+
+**What the survey found.** Nothing moved an order's shop.
+`routing_reason = 'manual'` was decoded by both clients and written by nobody
+(`docs/tacet-order-routing.md` §8.3). The courier "Ships from" control moves
+only the rider's collection point and says so in the drawer ("the order still
+counts against X for stock and reports"). The one script that ever rewrote
+`retail_orders.store_id` (`scripts/fix_shipdistrict_orders.js`) moved paid
+orders without moving their stock, which is the thing not to copy: a paid
+order has already taken its units off the first shop's shelf, either through
+a committed hold (`order_commit`) or straight to the ledger (`order_prepare`),
+and every refund path returns them by the hold's store or the order's store.
+Change the store without moving the stock and the first shop stays short for
+good while the second is never charged.
+
+**The rule.**
+
+1. **Where.** A **Change · 更改** control on the order's *Fulfilled by* block,
+   desktop drawer and phone alike. It lists the other active shops, each
+   saying whether it is closed and what it would be short of for this order.
+2. **Which orders.** A delivery order from the mini app or the web shop, paid
+   or awaiting restock, with no parcel packed, labelled or sent, no refund in
+   flight, and no rider called. Counter sales and pickups are refused (a
+   pickup's shop is where the customer was told to go); Meituan, Eleme and
+   gzgrocery orders are refused (the platform fixes their shop).
+3. **The stock moves with the order, in one transaction.** For each product,
+   whatever this order still has out of the old shop — read from the ledger,
+   every row this order wrote at that shop netted — goes back on the old shop
+   (`reroute_return`) and comes off the new one (`reroute_take`). Neither
+   reason starts with `order`, so every reader that counts an order's own
+   decrements (`commitUnreservedOrder`'s guard, `isStockPending`, batch-owed,
+   `reverseCommittedLedger`'s cap) still sees exactly what it saw before.
+   The order's holds, active and committed, are repointed to the new shop, so
+   a later refund or cancel puts the units back where they now are. Lines not
+   yet deducted (batch-made lines waiting for the fulfilment step) need no
+   move: they deduct at the order's current shop when they come due.
+4. **Short or closed at the new shop: an alert, then the person decides.** The
+   move stops and names the products the new shop is short of, and says if it
+   is closed for online orders. **Move anyway** goes ahead. A shelf that goes
+   below zero is recorded as it is everywhere else (§84) and raises the
+   existing below-zero alert. The override, and what was short, is kept on the
+   order.
+5. **The courier moves with it.** A same-city job with no rider yet moves to
+   the new shop through the same code as *Ships from*; a job still being
+   created refuses the move until it settles. If the courier move fails,
+   nothing moves.
+6. **The order says what happened.** `routing_reason` becomes `manual`, which
+   both clients already print as *manually routed · 手动改派*. New columns
+   `rerouted_from_store_id`, `rerouted_at`, `rerouted_by` and
+   `rerouted_forced_pids` record where it came from, when, who, and what was
+   short when it was forced. One `activity_log` row per move carries the
+   previous routing reason. The checkout-time notes (`reroute_short_pids`,
+   `moved_from_store`) are §138 records and are kept, but the drawer stops
+   drawing them on a hand-moved order: they describe a shop the order is no
+   longer at.
+7. **The new shop is told.** The order slip prints at the new shop's printer
+   (when auto-print is on), and operators who can see that shop get a push.
+
+**Not changed.** The money, the customer's promised dates, and what the
+customer sees: the customer is not notified. Reports read `store_id` live, so
+the sale counts under the new shop from now on, including in past periods.
+
+**Known limits, accepted with the choice.** A forced move can leave the new
+shop's count below zero until someone counts it. An order already waiting for
+restock keeps waiting after a move; the automatic release fires on the new
+shop's next restock, or staff release it by hand.
+A forced move of a product the new shop has never stocked gives that shop a
+stock row for it, at zero, then charged; the product then reads as stocked
+there (below zero) until someone counts it.
+
+Strings: 17 composed, all built on the live 改派, declared in
+`docs/tacet-delivery-vocabulary.md` v1.325. The courier *Ships from* control's
+own strings are copied whole.
+Tests: new `scripts/test_order_reroute.js` (fast shard), against a real
+database and the real routes over HTTP: shelf counts before and after a move,
+after a second move, after a refund and a cancel that follow it, the hold
+repointed, the short and closed alerts, the forced move, and every refusal.
+Mutation-checked: with the stock move disabled, seven of its checks fail.
+Schema: four nullable columns on `retail_orders` (above). New routes
+`GET`/`POST /api/retail-admin/orders/:id/reroute`, gated `orders:edit` by the
+existing `/orders` prefix rule in `lib/cap-routes.js`. The *Ships from* POST's
+body became `_qingyunShipFrom()` so both routes run the same courier code; its
+behaviour is unchanged. No change to `.gitignore` or CI.
