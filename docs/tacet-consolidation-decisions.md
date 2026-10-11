@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.502
+# Tacet shared-core consolidation — decisions record, v4.503
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-11 · v4.503 — **§454 · THE QR MENU ASKS FOR NO NAME — DECIDED BY ASH:** *"lets cancel this requirment . phone number ( optional , for discount if apply ) name there is no need ."* The name field leaves the basket and the server stops refusing an order without one (`name_required` is gone). The customer is called by the order number, which every slip, till row and screen already carries. The optional phone stays exactly as §426 left it. Amends §44's "supplies a name". No string composed; none added. No schema (`recipient_name` was already nullable), no new route, no change to `.gitignore` or CI. See §454.
 
 2026-10-10 · v4.502 — **§453 · AN UNSENT REQUEST IS KEPT ON THE PHONE — DECIDED BY ASH:** *"I fill up the stock , didn't send it yet . left the phone for a while , when I came back , all is gone"*, then *"yes"* to keeping the list on the phone. Ask for stock, Ask the kitchen and Ask the buyer write their basket to localStorage as it changes, one key per screen, per operator, per tenant, and read it back on the way in under *Restored · 已恢复* with *Clear · 清除*. A draft ends on a send that went through, an emptied basket, Clear, or twelve hours. Covers Android closing a backgrounded browser, which #1104's reload guard cannot. Both labels are live pairs; nothing composed. No schema, no route, no change to `.gitignore` or CI. See §453.
 
@@ -6131,13 +6133,13 @@ Established by the Step 3 survey. Each cost real time to find, and none of the t
 
 The in-location ordering surface is a public web page served per shop, opened by scanning a QR code that carries an opaque shop code which resolves to the shop — not the shop id, and not derivable from it. It is designed for the WeChat in-app browser and requires no app install and no login.
 
-The customer selects from that shop's listings, supplies a name, and submits. The order is created unpaid at `pending_payment`. ~~The kitchen ticket prints on submit.~~ **SUPERSEDED 2026-09-08 (v4.150): the kitchen ticket prints on PAID, for every QR order.** The struck sentence is left standing rather than deleted, per this file's own precedent at v4.149 — a reader who meets the rule quoted elsewhere needs to find it here with its correction beside it, not to find nothing. §50 had already carved the in-page WeChat path out of it; the counter path has now joined them, so the rule has no remaining cases and is retired rather than narrowed again. See §50's ruling and the v4.150 entry. **REVERSED 2026-10-10 (v4.496) — decided by Ash: the kitchen ticket prints on SUBMIT again, before payment, for every QR order except the in-page WeChat rail (§50).** One slip, no paid/unpaid wording; the order stays on the till's Pending list until it is paid. See the v4.496 entry. The customer is called by name; a short order code is also issued and is what staff use to retrieve the order.
+The customer selects from that shop's listings, ~~supplies a name,~~ **AMENDED 2026-10-11 (v4.503): no name is asked for; the order number is what is called — see §454** and submits. The order is created unpaid at `pending_payment`. ~~The kitchen ticket prints on submit.~~ **SUPERSEDED 2026-09-08 (v4.150): the kitchen ticket prints on PAID, for every QR order.** The struck sentence is left standing rather than deleted, per this file's own precedent at v4.149 — a reader who meets the rule quoted elsewhere needs to find it here with its correction beside it, not to find nothing. §50 had already carved the in-page WeChat path out of it; the counter path has now joined them, so the rule has no remaining cases and is retired rather than narrowed again. See §50's ruling and the v4.150 entry. **REVERSED 2026-10-10 (v4.496) — decided by Ash: the kitchen ticket prints on SUBMIT again, before payment, for every QR order except the in-page WeChat rail (§50).** One slip, no paid/unpaid wording; the order stays on the till's Pending list until it is paid. See the v4.496 entry. The customer is called by name; a short order code is also issued and is what staff use to retrieve the order.
 
 Payment is taken at the counter on the existing terminal and the order is then marked paid, as counter sales work today. In-page payment is deferred (see below).
 
 > **NARROWED 2026-09-08 (v4.154) — decided by Ash.** Two of this section's properties are qualified, and neither is reversed. **"No login, no session, no cookie and no account" is narrowed to IDENTITY**, which is what it was always about: the menu now writes the ADDRESSES of the orders placed from it — each with its number and amount — to the phone that placed them, under a per-shop key, newest first, at most five, each expiring twelve hours after it was placed (**v4.157**: it held one order until then, so a second order erased the first and the cancel that lives on its page went with it). It says nothing about who anybody is, and the unguessable `pay_token` was already the authority it hands back. The basket is still never persisted, for the reason this section gives. **And the customer can now CANCEL while the order is unpaid**, from the order's own page (§50's `/s/:shopCode/pay/:token`, which is no longer a payment screen but the customer's order page — **v4.160**: it carries the LINES of the order as well, read back from `retail_order_items`, which no customer-facing surface had ever done) or at the till. Reserved stock is released on either path per §45. See the v4.154 entry.
 
-Phone number is not collected. Name is sufficient for calling an order in a space where the customer is present, and the short code identifies the order for staff. Collecting a phone number would add friction at the point of highest abandonment and bring personal-information obligations for no operational gain.
+Phone number is not collected. ~~Name is sufficient for calling an order in a space where the customer is present,~~ **(Amended twice since: §426 adds an optional phone for a location voucher; §454 drops the name, and the number alone is what is called.)** and the short code identifies the order for staff. Collecting a phone number would add friction at the point of highest abandonment and bring personal-information obligations for no operational gain.
 
 A staff-accept step between submit and print is to be supported in the design but left switched off. It is the remedy if phantom orders prove to be a problem in practice.
 
@@ -29741,3 +29743,42 @@ each way a draft ends, the twelve-hour limit, a shared phone, a vanished store,
 no identity, throwing storage, and the wiring). Also seen working in Chromium
 against the real page: filled, reloaded, reopened, cleared.
 Schema: none. No new route. No change to `.gitignore` or CI.
+
+## §454 — THE QR MENU ASKS FOR NO NAME
+
+**Decided by Ash, 2026-10-11:** *"when customer order from qrcode menu right
+now he has to input at least his name . lets cancel this requirment . phone
+number ( optional , for discount if apply ) name there is no need ."*
+
+**What it was.** §44 had the customer "supply a name" and the menu enforced it
+twice: the basket refused to send without one, and `POST /s/:shopCode/order`
+answered `400 name_required`. It was the one thing a customer had to type.
+
+**The rule.**
+1. **The basket has no name field.** Under the total sits the optional phone
+   (§426, unchanged), then the tender choice, then Place order. A customer who
+   types nothing can order.
+2. **The server does not require a name.** One that still arrives — a menu page
+   cached on a phone from before this change — is cleaned and kept as before;
+   an order without one stores `recipient_name` as NULL.
+3. **The order number is what is called.** It was already the larger line on
+   the done screen, the order page, the kitchen slip and the till's pending
+   list. Where a name used to sit beside it, nothing is drawn when there is
+   none: the done screen and the order page skip the line, and the slip, till
+   and admin screens already printed an empty name as nothing.
+
+**Not changed.** The phone and what it does (§426: a location voucher, nothing
+stored). Orders placed before this keep their names and still show them. The
+admin "Edit ship-to" box still asks for a recipient, but it edits delivery
+addresses, which a QR order does not have.
+
+Strings: none composed, none added; *Name · 姓名* simply leaves this page.
+Tests: `scripts/test_shop_menu.js` — the `name_required` check is replaced by
+an order with no name that goes through and stores NULL, and the page is
+checked to carry no name field. `scripts/test_shop_menu_render.js` — the
+"nameless order is refused" check becomes "the basket asks for no name", the
+placed order is placed without typing anything, and the focus-ring check moves
+to the phone field. That suite's other 22 failures are the same on main before
+this change and are not touched here.
+Schema: none (`recipient_name` was already nullable). No new route. No change
+to `.gitignore` or CI.

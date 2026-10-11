@@ -2015,12 +2015,13 @@ function boxOf(text) {
         `the close button's label is being drawn, not just read: ${JSON.stringify(head.text)}`);
     });
 
-    await check('the name field wears the shop\'s focus ring, not the browser\'s', async () => {
+    await check('the phone field wears the shop\'s focus ring, not the browser\'s', async () => {
       // Reported from a phone as an orange frame. Left alone the WeChat/Android
       // web view paints its own; this asserts the page draws one, so the
       // default can never be what the customer sees.
       const ring = await page.evaluate(() => {
-        const el = document.getElementById('cName');
+        // §454 — the phone is the basket's only field now that no name is asked.
+        const el = document.getElementById('cPhone');
         el.focus();
         const cs = getComputedStyle(el);
         return { style: cs.outlineStyle, width: cs.outlineWidth, colour: cs.outlineColor,
@@ -2039,25 +2040,28 @@ function boxOf(text) {
       await page.reload({ waitUntil: 'domcontentloaded' });
     });
 
-    await check('a nameless order is refused BEFORE it reaches the counter', async () => {
+    // §454 — this used to prove a nameless order was refused. The name is no
+    // longer asked for, so it now proves there is nothing to fill in.
+    await check('the basket asks for no name', async () => {
       await page.click('.it:not(.out) .add');
       await page.click('#cbarOpen');
-      await page.click('#cPlace');
-      const err = await page.evaluate(() => ({
-        hidden: document.getElementById('cErr').hidden,
-        placed: !!document.querySelector('.done'),
+      const f = await page.evaluate(() => ({
+        name: !!document.getElementById('cName'),
+        phone: !!document.getElementById('cPhone'),
+        foot: document.getElementById('sheetF').innerText,
       }));
-      assert.strictEqual(err.hidden, false, 'no name and no complaint');
-      assert.strictEqual(err.placed, false, 'a nameless order went through');
+      assert.strictEqual(f.name, false, 'the basket still has a name field');
+      assert.ok(!/Name|姓名/.test(f.foot), `the basket still says "name": ${JSON.stringify(f.foot)}`);
+      assert.strictEqual(f.phone, true, 'the optional phone went with the name');
     });
 
     await check('PLACING IT REALLY PLACES IT — a number comes back and a row is written', async () => {
-      await page.fill('#cName', 'Mei');
+      // Nothing typed: §454 makes the number alone enough.
       await page.click('#cPlace');
       await page.waitForSelector('.done-n', { timeout: 8000 });
       const shown = await page.evaluate(() => ({
         code: document.querySelector('.done-n').textContent.trim(),
-        name: document.querySelector('.done-nm').textContent.trim(),
+        name: !!document.querySelector('.done-nm'),
         bar: document.getElementById('cbar').hidden,
         barL: document.getElementById('cbarL').innerText.replace(/\s+/g, ' ').trim(),
         barN: document.getElementById('cbarN').textContent.trim(),
@@ -2065,7 +2069,7 @@ function boxOf(text) {
         doneH: document.querySelector('.done-h').innerText.replace(/\s+/g, ' ').trim(),
       }));
       assert.ok(/^\d+$/.test(shown.code), `the number is not a plain number: ${shown.code}`);
-      assert.strictEqual(shown.name, 'Mei', 'the name the customer will be called by is not shown');
+      assert.strictEqual(shown.name, false, 'a nameless order drew an empty name line');
       // THIS ASSERTION WAS INVERTED ON 2026-09-08 AND IS CORRECTED, NOT
       // RELAXED. It read `bar.hidden === true` — a hidden bar was how this
       // suite proved the basket had been emptied by the order. Since the order
@@ -2104,7 +2108,7 @@ function boxOf(text) {
                 fulfillment_type, shop_order_code
            FROM retail_orders WHERE store_id = ? ORDER BY id DESC LIMIT 1`).get(LOC);
       assert.ok(row, 'the page said an order was placed and no order was written');
-      assert.strictEqual(row.recipient_name, 'Mei');
+      assert.strictEqual(row.recipient_name, null, 'a nameless order stored a name (§454)');
       assert.strictEqual(row.status, 'pending_payment');
       assert.strictEqual(row.channel, 'shop');
       // The door is shop_entry_method (§44, amended 2026-09-07). `source` says
@@ -2236,7 +2240,6 @@ function boxOf(text) {
       const KEY = 'tacet-shop-order:' + CODE;
       await page.click('.it:not(.out) .add');
       await page.click('#cbarOpen');
-      await page.fill('#cName', 'Yu');
       await page.click('#cPlace');
       await page.waitForSelector('.done-n', { timeout: 8000 });
       const second = await page.evaluate(() => document.querySelector('.done-n').textContent.trim());
@@ -2613,7 +2616,6 @@ function boxOf(text) {
     });
 
     await check('§120 and the order it places really carries them', async () => {
-      await page.fill('#cName', 'Mei');
       await page.click('#cPlace');
       await page.waitForFunction(() => /\d/.test(
         (document.querySelector('.done-n') || document.querySelector('#sheetB') || {}).textContent || ''

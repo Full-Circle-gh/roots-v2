@@ -1798,10 +1798,9 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .tot.solo .dadd{flex:1}
 .nm-l{display:block;font-size:12px;line-height:1.2;letter-spacing:.04em;
   color:var(--olive);text-transform:uppercase;margin-bottom:6px}
-/* §426 — the optional phone sits under the name, a field's gap apart; the
-   discount it finds is a line in the total's own shape, with the one thing the
-   customer has to do about it under it. */
-.ph-l{margin-top:12px}
+/* §426 — the optional phone sits straight under the total, where the name
+   used to (§454); the discount it finds is a line in the total's own shape,
+   with the one thing the customer has to do about it under it. */
 .vch{margin-top:10px}
 .vch .tot{margin-bottom:4px;font-size:15px}
 .vch .vnote{font-size:13px;color:var(--olive)}
@@ -2371,7 +2370,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `optFoot=document.getElementById('sheetO'),oAdd=document.getElementById('oAdd'),` +
   `oErr=document.getElementById('oErr'),nmEl=document.getElementById('sheetN'),` +
   `vEl=document.getElementById('cbarV'),tEl=document.getElementById('cTot'),` +
-  `errEl=document.getElementById('cErr'),nameEl=document.getElementById('cName'),` +
+  `errEl=document.getElementById('cErr'),` +
   `phEl=document.getElementById('cPhone'),vchEl=document.getElementById('cVch'),` +
   `place=document.getElementById('cPlace'),lEl=document.getElementById('cbarL');` +
   /* THE ORDER THIS PHONE ALREADY PLACED, so closing the sheet is not losing it.
@@ -3036,9 +3035,9 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `},false)}` +
   // Submitting. The button locks for the round trip: a customer who taps twice
   // on a slow connection must not put two orders through the counter.
+  // §454 — no name is asked for: the number on the done screen is what the
+  // counter calls.
   `place.addEventListener('click',function(){if(sending)return;` +
-  `var name=(nameEl.value||'').trim();` +
-  `if(!name){fail(bi(${JSON.stringify('Name')},${JSON.stringify('姓名')}));nameEl.focus();return}` +
   `var k=ids();if(!k.length)return;` +
   /* THE LINE CARRIES ITS ANSWERS. `choices` is the chosen choice ids and
      nothing else — the labels, the questions and the deltas on the cart line
@@ -3055,7 +3054,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // the WeChat choice said, because the server will send it there anyway.
   `var ph=(phEl&&phEl.value||'').trim();` +
   `fetch(location.pathname.replace(/\\/$/,'')+'/order',{method:'POST',` +
-  `headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,items:items,` +
+  `headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items,` +
   `pay_method:vOff(total())?'counter':pm,phone:ph||undefined})})` +
   `.then(function(r){return r.json().then(function(j){return {s:r.status,j:j}})})` +
   `.then(function(o){sending=false;place.disabled=false;` +
@@ -3119,12 +3118,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `try{localStorage.setItem(OKEY,JSON.stringify(mine))}catch(e){/* a phone that cannot remember still shows the bar for this visit; mine is set in memory above */}}` +
   `paintBar();` +
   // ONE BLOCK WITH ONE LEFT EDGE, the same one the order page draws: the number
-  // that will be called, the name it will be called with, and the reference
-  // that identifies the order, rather than three centred lines and the
-  // reference stranded at the bottom under the money.
+  // that will be called, the name when the order carries one (§454 — older
+  // orders do), and the reference that identifies the order, rather than three
+  // centred lines and the reference stranded at the bottom under the money.
   `body.innerHTML='<div class="done"><div class="done-hd">'+` +
   `'<div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
-  `'<div class="done-who"><div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
+  `'<div class="done-who">'+(d.name?'<div class="done-nm">'+esc(String(d.name))+'</div>':'')+` +
   `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
   `'</div></div>'+` +
   `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
@@ -4048,14 +4047,12 @@ router.get('/s/:shopCode', (req, res) => {
         `<div class="sheet-b" id="sheetB"></div>` +
         `<div class="sheet-f" id="sheetF">` +
           `<div class="tot"><span>${bi('Total', '合计')}</span><span id="cTot"></span></div>` +
-          `<label class="nm-l" for="cName">${bi('Name', '姓名')}</label>` +
-          `<input class="nm-i" id="cName" type="text" maxlength="40" autocomplete="name"` +
-            ` enterkeyhint="done" inputmode="text">` +
+          // §454 — NO NAME FIELD. The customer is called by the number.
           // §426 — THE PHONE, OPTIONAL, AND FOR ONE THING: finding a voucher
           // this person holds at this counter. Two live pairs joined
           // (vocabulary §426). The discount line under it is drawn by the
           // script, and only when the number holds one here.
-          `<label class="nm-l ph-l" for="cPhone">${bi('Phone (optional)', '电话(选填)')}</label>` +
+          `<label class="nm-l" for="cPhone">${bi('Phone (optional)', '电话(选填)')}</label>` +
           `<input class="nm-i" id="cPhone" type="tel" maxlength="20" autocomplete="tel"` +
             ` enterkeyhint="done" inputmode="tel">` +
           `<div class="vch" id="cVch" hidden></div>` +
@@ -4072,9 +4069,9 @@ router.get('/s/:shopCode', (req, res) => {
             : '') +
           `<button type="button" class="place" id="cPlace">${bi('Place order →', '提交订单 →')}</button>` +
         `</div>` +
-        // THE PICKER'S OWN FOOT, because the basket's foot asks for a name and
+        // THE PICKER'S OWN FOOT, because the basket's foot asks for a phone and
         // a tender and the picker asks for neither. One foot serving both would
-        // be a name field over a sugar level.
+        // be a phone field over a sugar level.
         //
         // THE BUTTON CARRIES THE RUNNING PRICE, base plus whatever is ticked,
         // so the customer sees what the extra costs before they commit to it
@@ -4298,14 +4295,14 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   if (!shop) return res.status(404).json({ success: false, error: 'not_found' });
 
   const b = req.body || {};
-  // §44: "The customer selects from that shop's listings, supplies a name, and
-  // submits." A name and nothing else — it is what gets called across a room.
+  // §454: NO NAME IS REQUIRED. The menu no longer asks for one; the short
+  // order code is what the counter calls. A name that still arrives — a menu
+  // page cached from before — is kept, and an order without one stores NULL,
+  // which every slip and screen already prints as nothing.
   // The angle brackets go the same way they go out of the injected CSS above:
   // this name is printed into lib/feie.js's slip markup, whose <CB>/<BOLD> tags
-  // are the same shape. A name is a name — nobody loses one to this — and it is
-  // the only customer-supplied string on this whole path.
-  const name = String(b.name == null ? '' : b.name).replace(/[<>]/g, '').trim().slice(0, 40);
-  if (!name) return res.status(400).json({ success: false, error: 'name_required' });
+  // are the same shape.
+  const name = String(b.name == null ? '' : b.name).replace(/[<>]/g, '').trim().slice(0, 40) || null;
 
   // HOW THEY MEAN TO PAY — and it is asked here, before the order exists,
   // because §50 hangs the kitchen ticket on the answer: an in-page WeChat order
@@ -4894,14 +4891,14 @@ function payScreen(req, res, { status, order, main, extra, shop }) {
       `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>` +
       `<div class="done">` +
         // WHO THE ORDER IS FOR, in one block with one left edge: the number
-        // that will be called, the name it will be called with, and the
+        // that will be called, the name when the order carries one (§454), and the
         // reference that identifies it if anything has to be looked up. The
         // order code used to sit below the total, between the amount and a
         // button, which is the one place on the screen it explains nothing.
         `<div class="done-hd">` +
           `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
           `<div class="done-who">` +
-            `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+            (order.recipient_name ? `<div class="done-nm">${esc(String(order.recipient_name))}</div>` : '') +
             `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
           `</div>` +
         `</div>` +
@@ -5203,7 +5200,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
   const head = `<div class="done-hd">` +
     `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
     `<div class="done-who">` +
-      `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+      (order.recipient_name ? `<div class="done-nm">${esc(String(order.recipient_name))}</div>` : '') +
       `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
     `</div>` +
   `</div>`;
