@@ -2512,6 +2512,18 @@ function catQrToggleHide(ti) {
   if (ti === catSel) catRenderPane();
   catQrScheduleSave();
 }
+// The mini app's own eye: hides a top category from the mini app and the web
+// shop. Unlike the QR menu's list, this flag lives ON the tree node, so it
+// rides the tree's autosave like a rename does — and a category never saved
+// can be hidden too.
+function catAppToggleHide(ti) {
+  const t = catModel[ti];
+  if (!t) return;
+  if (t.hidden) delete t.hidden; else t.hidden = true;
+  catRenderRail();
+  if (ti === catSel) catRenderPane();
+  catUpdateDirty();
+}
 function catQrReset() {
   catQr.tops = null;
   catQr.subs = {};
@@ -2578,10 +2590,12 @@ function catRenderStatus() {
   } else {
     shelfFact = `<span class="cat2-fact warn"><span class="cat2-fact-dot"></span><span class="k">${escapeHtml(cuT(`${hidden.length} shelves hidden — nothing published on them`, `${hidden.length} 个分类已隐藏 — 无上架产品`))}</span></span>`;
   }
+  const nAppHidden = catModel.filter(t => t && t.hidden).length;
   facts.innerHTML =
     `<span class="cat2-fact"><b>${fcNum(catModel.length)}</b>&nbsp;<span class="k">${escapeHtml(cuT('top categories', '主分类'))}</span></span>${sep}` +
     `<span class="cat2-fact"><b>${fcNum(subs)}</b>&nbsp;<span class="k">${escapeHtml(cuT('subcategories', '子分类'))}</span></span>${sep}` +
-    shelfFact;
+    shelfFact +
+    (nAppHidden ? sep + `<span class="cat2-fact warn"><span class="cat2-fact-dot"></span><b>${fcNum(nAppHidden)}</b>&nbsp;<span class="k">${escapeHtml(cuT('hidden on the mini app', '小程序已隐藏'))}</span></span>` : '');
   if (save) {
     const dirty = catIsDirty();
     let txt = '', wait = false;
@@ -2609,12 +2623,19 @@ function catRenderRail() {
   host.innerHTML = catRailList().map(({ t, ti }, p) => {
     const c = catCount(t);
     const dark = c && !c.published;
-    const off = qr && catQrHidden(t);
-    const eye = qr && t.id
+    // One eye per row in either mode. In the QR menu's rail it hides the row
+    // there only (§288); in the mini app's rail it hides it from the mini app
+    // and the web shop. Neither touches the other.
+    const off = qr ? catQrHidden(t) : !!t.hidden;
+    const toggle = qr ? `catQrToggleHide(${ti})` : `catAppToggleHide(${ti})`;
+    const eyeTitle = qr
+      ? (off ? cuT('Hidden on the QR menu — click to show', '二维码菜单已隐藏,点击显示') : cuT('Shows on the QR menu — click to hide', '在二维码菜单显示,点击隐藏'))
+      : (off ? cuT('Hidden on the mini app — click to show', '小程序已隐藏,点击显示') : cuT('Shows on the mini app — click to hide', '在小程序显示,点击隐藏'));
+    const eye = (!qr || t.id)
       ? `<span class="cat2-icon cat2-eye" role="button" tabindex="0" aria-pressed="${off ? 'true' : 'false'}"
-            title="${escapeAttr(off ? cuT('Hidden on the QR menu — click to show', '二维码菜单已隐藏,点击显示') : cuT('Shows on the QR menu — click to hide', '在二维码菜单显示,点击隐藏'))}"
-            onclick="event.stopPropagation();catQrToggleHide(${ti})"
-            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();catQrToggleHide(${ti})}">${off ? CAT_ICON.eyeOff : CAT_ICON.eye}</span>`
+            title="${escapeAttr(eyeTitle)}"
+            onclick="event.stopPropagation();${toggle}"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();${toggle}}">${off ? CAT_ICON.eyeOff : CAT_ICON.eye}</span>`
       : '';
     return `<button type="button" class="cat2-railrow cat2-row${ti === catSel ? ' on' : ''}${off ? ' qr-off' : ''}" data-fk="t${catFk(t)}"
         onclick="catSelect(${ti})">
@@ -2642,6 +2663,7 @@ function catRenderPane() {
   const subs = t.subs || [];
   _catBannerRows = [];      // this shelf's products are loaded below (catLoadProducts)
   const pill = !c ? `<span class="cat2-pill cat2-pill-new">${escapeHtml(cuT('new — not saved yet', '新建 — 尚未保存'))}</span>`
+    : t.hidden ? `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('Hidden on the mini app', '小程序已隐藏'))}</span>`
     : c.published ? `<span class="cat2-pill cat2-pill-live">${escapeHtml(cuT('visible in the shop', '显示在店面'))}</span>`
     : `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('hidden — nothing published', '已隐藏 — 无上架产品'))}</span>`;
   const qrPill = catMode === 'qr' && catQrHidden(t)

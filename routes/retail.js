@@ -87,7 +87,7 @@ const financeWindow = require('../lib/finance-window');
 const flashsales = require('../lib/flashsales');
 const reviewTopup = require('../lib/review-topup');
 const { imageAspect } = require('../lib/image-dims');
-const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
+const { getCategoryTree, sanitizeTree, normalizeCategoryPair, publicTree, hiddenTopNames } = require('../lib/category-tree');
 const qrCatOrder = require('../lib/qr-menu-category-order');
 // What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
@@ -569,7 +569,10 @@ router.get('/api/retail/categories', (req, res) => {
 // hard-coded SEED_TREE as fallback. The shop only renders tops/subs with products.
 router.get('/api/retail/category-tree', (req, res) => {
   res.set('Cache-Control', 'public, max-age=60');
-  const tree = getCategoryTree(tdb());
+  // A top hidden from the mini app is not sent at all — the rail, the home
+  // category tiles and the web shop all build from this. Admin screens read
+  // the whole tree from /api/retail-admin/category-tree.
+  const tree = publicTree(getCategoryTree(tdb()));
   // counts=1 (the home category_tabs block): enrich each top node with an
   // accurate published-product count + a cover-image URL computed across the
   // WHOLE catalogue. Without this the block derived both from the home's capped
@@ -2801,6 +2804,14 @@ router.get('/api/retail/products', (req, res) => {
   // its tile count and the shop section. Only caller is the home category grid.
   if (category) { sql += ' AND p.top_category = ?'; params.push(category); }
   if (idList.length) { sql += ` AND p.id IN (${idList.map(() => '?').join(',')})`; params.push(...idList); }
+  // A category hidden from the mini app takes its products out of browsing —
+  // the shop grid, search, a category grid. NOT out of a by-id read: checkout
+  // re-reads the cart's lines by id, and a hand-picked home block named its
+  // products on purpose. Hiding is what the shop shows, not what it accepts.
+  const hiddenTops = idList.length ? [] : hiddenTopNames(getCategoryTree(tdb()));
+  const hiddenClause = hiddenTops.length
+    ? ` AND COALESCE(p.top_category, '') NOT IN (${hiddenTops.map(() => '?').join(',')})` : '';
+  sql += hiddenClause; params.push(...hiddenTops);
 
   // Sort: 'price_asc' | 'price_desc' | 'newest' | 'popular' | 'featured' (default → curated sort_order)
   // 'popular' has no sales metric yet, so it maps to featured for now.
@@ -2874,8 +2885,9 @@ router.get('/api/retail/products', (req, res) => {
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
                             ${termClause}
                             ${category ? 'AND p.top_category = ?' : ''}
-                            ${idsClause}`)
-    .get(...termParams, ...(category ? [category] : []), ...idList).n;
+                            ${idsClause}
+                            ${hiddenClause}`)
+    .get(...termParams, ...(category ? [category] : []), ...idList, ...hiddenTops).n;
 
   // Short cache — flash-sale windows mean the response goes stale in
   // minutes, not the prior 30s used for static catalogue data.
@@ -3122,11 +3134,16 @@ router.get('/api/retail/products/top', (req, res) => {
   let products = [];
   if (candidateIds.length) {
     const placeholders = candidateIds.map(() => '?').join(',');
+    // A best seller in a category hidden from the mini app is still hidden —
+    // the same browse rule as GET /api/retail/products.
+    const hiddenTops = hiddenTopNames(getCategoryTree(tdb()));
+    const hiddenClause = hiddenTops.length
+      ? ` AND COALESCE(p.top_category, '') NOT IN (${hiddenTops.map(() => '?').join(',')})` : '';
     products = tdb().prepare(
       `SELECT ${RETAIL_PRODUCT_COLS_LIST}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
         WHERE p.id IN (${placeholders})
-          AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
-    ).all(...candidateIds);
+          AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1${hiddenClause}`
+    ).all(...candidateIds, ...hiddenTops);
   }
   // Heavy base64 photos were already collapsed to a 'data:' marker by
   // RETAIL_PRODUCT_COLS_LIST; lazifyProductImage swaps it for a streamed-image

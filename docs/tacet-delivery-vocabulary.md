@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.328 · 2026-10-12 · §465 HIDING A CATEGORY FROM THE MINI APP — 4 STRINGS COMPOSED BY CLAUDE, EACH THE LIVE §288 QR-MENU STRING WITH `二维码菜单` SWAPPED FOR THE LIVE `小程序`; THE MINI-APP HINT EXTENDED WITH THE QR HINT'S OWN LIVE CLAUSE.** See *Hiding a category from the mini app (§465)*.
+
 **v1.327 · 2026-10-12 · §462 USED FOR MAKING ON THE WASTE SCREEN — 1 STRING COMPOSED BY CLAUDE (`Used for making · 制作取用`), FROM THE LIVE 制作 AND 取用; `Not counted as waste · 不计损耗` LIFTED FROM THE LIVE `不计损耗：`; `Record · 登记` COPIED WHOLE.** See *Used for making on the waste screen (§462)*.
 
 **v1.326 · 2026-10-12 · §459 BOOKED DELIVERIES IN THE NEW-ORDER GROUP — 1 STRING COMPOSED BY CLAUDE (`今天的顾客预约`), FROM THE LIVE 今天 AND 顾客预约; `Booked · 顾客预约` COPIED WHOLE ONTO THE NEW-ORDER CARD.** See *Booked deliveries in the new-order group (§459)*.
@@ -13881,3 +13883,25 @@ use. `自用`: reads as personal use, which is Staff consumption. `领用`: the
 formal word for a requisition, which is the *Ask the kitchen* flow, a
 different thing. `制作用料`: names the material, not the act, and does not fit
 a reason list where every other entry says what happened.
+
+## Hiding a category from the mini app (§465)
+
+**Composed by Claude, 2026-10-12, under the 2026-09-06 amendment.** Operator
+register. Products → Categories on the desktop (`public/retail-admin/01-core.js`
+`catRenderRail`, `catRenderPane`, `catRenderStatus`; the rail hint in
+`public/retail-admin.html`). The mini app's twin of §288's QR-menu eye.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Hidden on the mini app` / `小程序已隐藏` | the pane's pill; the status line as `{n} hidden on the mini app` / `{n} 小程序已隐藏` | The live `Hidden on the QR menu · 二维码菜单已隐藏` (§288) with `二维码菜单` swapped for the live `小程序` (`Mini app · 小程序`, the switch's own label). Same shape, so the two eyes read as a pair. |
+| `Hidden on the mini app — click to show` / `小程序已隐藏,点击显示` | the eye's tooltip, hidden | The live `二维码菜单已隐藏,点击显示`, same swap. |
+| `Shows on the mini app — click to hide` / `在小程序显示,点击隐藏` | the eye's tooltip, shown | The live `在二维码菜单显示,点击隐藏`, same swap. |
+| `…Drag a row to reorder it, or tap the eye to hide it.` / `…拖动行即可排序,点眼睛可隐藏。` | the Mini app mode hint | The live mini-app hint `这就是顾客看到的左栏。拖动行即可排序。` with the QR hint's live clause `点眼睛可隐藏` added. No new word. |
+
+### Rejected
+
+`在小程序隐藏` for the pill: a verb, where the QR pill is a state
+(`已隐藏`). `下架`: means unpublished, which is a product's state and a
+different act — a hidden category's products stay published.
