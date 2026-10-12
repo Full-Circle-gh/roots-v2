@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.515
+# Tacet shared-core consolidation — decisions record, v4.516
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-12 · v4.516 — **§468 · A PRODUCT TICKED RESTOCK-ONLY, INTERNAL IS NOT SHOWN ON THE MINI APP — ASKED BY ASH:** *"do it"*, to the item §466 flagged and left open. The till has dropped `is_restock_only` products since it moved server-side; the mini app's product list never read the flag, so a product ticked *Restock-only, internal* still showed to customers in any visible category. It now leaves browsing by §466's rule: the product list (grid, search, a category grid, `meta.total`), the best sellers, and the home category tiles' count and cover photo. A by-id read (`?ids=`, checkout's) still returns it, so no cart breaks. No string, no schema, no change to `.gitignore` or CI. Held by `scripts/test_miniapp_category_hide.js`. See §468.
 
 2026-10-12 · v4.515 — **§467 · LOCAL DAILY BACKUPS KEEP 4 DAYS, NOT 14 — DECIDED BY ASH:** *"the reason it goes to 85% is because we save too much orders . need to cut that to 3-4 days backup"*, then *"go"* to 4 days. Measured first (`scripts/diagnose_disk_usage.js`, read-only): `/root/backups` was 20G of the 32G used on a 40G disk; the database itself is 1G. `daily/` drops from 14 copies to 4 (~6.3G back), and two uncompressed files left in `hourly/` by the 2026-09-23 outage (1.4G), which the hourly prune could never reach, are removed and swept from now on. Hourly stays at 12. **No history is lost:** the off-site OSS copy (`scripts/db-backup.sh`) still keeps 14 days and was verified OK every night checked. Applied with `scripts/oneoff_backup_retention_4d.js` through `oneoff.yml`, the only CI path to `/root/scripts/`. `scripts/install-backup-cron.sh` brought in line so re-running it cannot undo this. No string, no schema, no change to `.gitignore` or CI. See §467.
 
@@ -30604,3 +30606,33 @@ same sweep.
 **Not changed.** Hourly retention, the off-site tier, the deploy-backup prune,
 the database, the application. No string, no schema, no change to `.gitignore`
 or CI.
+
+## §468 — A PRODUCT TICKED RESTOCK-ONLY, INTERNAL IS NOT SHOWN ON THE MINI APP
+
+**Asked by Ash, 2026-10-12:** *"do it"*, to the follow-up §466 flagged under
+*Not done here*.
+
+**Before.** A product's *Restock-only, internal · 仅内部补货* box
+(`store_products.is_restock_only`) was read by the till, which leaves those
+products off the glass: *"a receiving record, never a thing to sell"*
+(`routes/retail-shops.js`). The mini app's product list never read it. A
+product with the box ticked showed to customers whenever its category was on
+show.
+
+**The rule.** A restock-only product leaves the mini app's browsing by the same
+rule §466 set for a hidden category:
+
+1. **Out of:** the product list (shop grid, search, a category grid, and the
+   list's `meta.total`), the best sellers, and the home category tiles' count
+   and cover photo, so a tile never counts a product the shopper cannot find.
+   The web shop reads the same feed and follows.
+2. **Not out of:** a by-id read (`?ids=`). Checkout re-reads the cart that way,
+   so a product ticked after a customer added it does not break their order.
+   The product page, the order endpoint and flash sales are unchanged.
+
+**Open, not decided here:** whether the order endpoint should also refuse a
+restock-only product, as the till does by never offering it. Today a shopper
+holding an old link could still order one.
+
+No string, no schema, no change to `.gitignore` or CI. Held by
+`scripts/test_miniapp_category_hide.js`.
