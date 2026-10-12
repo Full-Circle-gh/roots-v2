@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.513
+# Tacet shared-core consolidation — decisions record, v4.514
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-12 · v4.514 — **§466 · LOCAL DAILY BACKUPS KEEP 4 DAYS, NOT 14 — DECIDED BY ASH:** *"the reason it goes to 85% is because we save too much orders . need to cut that to 3-4 days backup"*, then *"go"* to 4 days. Measured first (`scripts/diagnose_disk_usage.js`, read-only): `/root/backups` was 20G of the 32G used on a 40G disk; the database itself is 1G. `daily/` drops from 14 copies to 4 (~6.3G back), and two uncompressed files left in `hourly/` by the 2026-09-23 outage (1.4G), which the hourly prune could never reach, are removed and swept from now on. Hourly stays at 12. **No history is lost:** the off-site OSS copy (`scripts/db-backup.sh`) still keeps 14 days and was verified OK every night checked. Applied with `scripts/oneoff_backup_retention_4d.js` through `oneoff.yml`, the only CI path to `/root/scripts/`. `scripts/install-backup-cron.sh` brought in line so re-running it cannot undo this. No string, no schema, no change to `.gitignore` or CI. See §466.
 
 2026-10-12 · v4.513 — **§465 · §32 RULE 9 AMENDED · AN OWNER CAN RE-PRICE PAST WASTE ENTRIES WHEN A PRODUCT'S COST WAS CALCULATED WRONG — DECIDED BY ASH:** *"all waste list need to be update according to the new settings"*, then *"the cost was always right, calaxulation in the system of the product was wrong"*. A **Recalculate costs** button on the phone's waste list, for owners only (`waste:void` + `waste:costs`). It lists every live entry under the current filter whose figure would change, old → new, priced exactly as a new entry would be, and writes nothing until **Save**. Save writes only if nothing moved in between (409 otherwise). Voided entries are never touched, and a known figure is never turned into "no cost". Every change keeps its old figure in the new table `waste_cost_corrections`. Ordinary writes still snapshot cost at entry. The desktop screen is a follow-up. 1 string composed (vocabulary v1.328). No change to `.gitignore` or CI. See §465.
 
@@ -30491,3 +30493,60 @@ in the fast shard against the real route on an in-memory SQLite.
 `scripts/test_mobile_waste_void.js` now also lifts `wstRecalcBtn`, which the
 screen it renders calls. Schema: one new table, `waste_cost_corrections`, in
 `database.js`. No change to `.gitignore` or CI.
+
+## §466 — LOCAL DAILY BACKUPS KEEP 4 DAYS, NOT 14
+
+**Decided by Ash, 2026-10-12.** *"the reason it goes to 85% is because we save
+too much orders . need to cut that to 3-4 days backup"*, then *"go"* to the
+recommendation of 4 days.
+
+**What was filling the disk, measured** (`scripts/diagnose_disk_usage.js`, run
+read-only through `ro-query.yml`). `/` is 40G with 32G used (84%).
+`/root/backups` held 20G of it:
+
+- `daily/`: 14 copies of `roots.db`, ~630MB each, 8.8G.
+- `hourly/`: 12 copies, ~641MB each, 7.7G, plus two UNCOMPRESSED files from
+  the 2026-09-23 disk-full outage (`roots-20260923-120001.db`, 898MB, and
+  `roots-20260923-130001.db`, 485MB and truncated). The hourly prune lists only
+  `roots-*.db.gz`, so it could never remove them.
+- two `oneoff-*.db` safety copies from 2026-10-10 (2G), which §249's prune
+  removes on 2026-10-24.
+
+The database is 1G. It is the thirty copies of it, not the orders, that fill
+the disk. No order data is touched by this decision.
+
+**The change.** `daily/` keeps the newest 4. Stray uncompressed
+`roots-*.db`, `-wal` and `-shm` files in `hourly/` are swept once they are over
+two hours old (a run in progress is never touched). `hourly/` stays at 12, the
+same-day recovery window. Expected result: about 84% → 61%.
+
+**Why 4 days loses no history.** The 2026-08-11 retention entry kept the local
+`daily/` tier long because it was the only copy reaching further back than the
+off-site tier. That has stopped being the trade: the local tier was already cut
+to 14, the same as `scripts/db-backup.sh`'s OSS tier, which uploads a verified
+copy every night at 03:30 and keeps 14 days. Its log read OK on every night
+checked (2026-10-09 to 10-13). So the deepest recovery point is still 14 days,
+now held off the box only, and the local tier is for fast restores of the last
+few days. **The cost is named:** a restore from 5 to 14 days back now means
+downloading from OSS rather than reading a local file.
+
+**How it was applied.** `/root/scripts/roots-backup.sh` is outside git and the
+deploy, so the only way to change it from CI is `oneoff.yml`.
+`scripts/oneoff_backup_retention_4d.js` edits the two retention lines, keeps
+the old script beside it as `roots-backup.sh.bak-<timestamp>`, checks the new
+one with `bash -n` before swapping it in, and deletes what the new retention
+would. It is a dry run unless `--apply`, opens no database, and **refuses to
+run if the last off-site backup is not OK or is over 48 hours old**, or if the
+newest local daily copy is over 48 hours old: a short local tier is only safe
+while the long one is alive. `oneoff.yml` was built for database repairs; using
+it for a box-config change is a stretch of its purpose, recorded here. Its
+apply path takes a 1G database copy first, which §249 removes after 14 days.
+
+**The installer is brought in line.** `scripts/install-backup-cron.sh` still
+wrote 48 hourly and 30 daily. Re-running it would have undone this and the
+2026-08-11 decision, and filled the disk. It now writes 12 and 4 and carries the
+same sweep.
+
+**Not changed.** Hourly retention, the off-site tier, the deploy-backup prune,
+the database, the application. No string, no schema, no change to `.gitignore`
+or CI.
