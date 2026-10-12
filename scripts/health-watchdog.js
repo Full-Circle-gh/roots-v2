@@ -53,7 +53,12 @@ try { ({ sendOpsAlert } = require(path.join(ROOT, 'lib', 'ops-alert'))); } catch
 const APP_URL = envVal('HEALTH_APP_URL', 'http://127.0.0.1:4000/');
 const FAIL_THRESHOLD = parseInt(envVal('HEALTH_FAILS', '2'), 10);
 const FD_WARN = parseInt(envVal('HEALTH_FD_WARN', '50000'), 10);
-const DISK_WARN_PCT = parseInt(envVal('HEALTH_DISK_WARN_PCT', '85'), 10);
+// 95, not 85: at 85 the box sat on the line and paged the ops group every few
+// minutes with nothing anyone needed to act on that hour. Ash, 2026-10-12: page
+// only at 95. The latch re-arms only once usage falls DISK_REARM_GAP points
+// below the line, so usage hovering at 94/95 pages once, not on every wobble.
+const DISK_WARN_PCT = parseInt(envVal('HEALTH_DISK_WARN_PCT', '95'), 10);
+const DISK_REARM_GAP = 5;
 const MEM_WARN_MB = parseInt(envVal('HEALTH_MEM_WARN_MB', '200'), 10);
 // Above this 1-min load-per-core, a probe timeout is treated as box overload
 // (thrashing) rather than a dead app, and the auto-restart is suppressed.
@@ -150,12 +155,14 @@ async function probeApp() {
   console.log(`[health] ${stamp} fd=${fdAlloc} procs=${procs} threads=${threads} load=${load} memAvailMB=${memMb} disk%=${diskPct}`);
 
   // --- pre-emptive resource warnings (page once per crossing) ---
-  const warn = async (key, cond, msg) => {
+  // `clear` (optional) is when the latch re-arms; it defaults to !cond.
+  const warn = async (key, cond, msg, clear = !cond) => {
     if (cond && !state.warned[key]) { state.warned[key] = true; await sendOpsAlert(msg); }
-    else if (!cond && state.warned[key]) { state.warned[key] = false; }
+    else if (clear && state.warned[key]) { state.warned[key] = false; }
   };
   await warn('fd', fdAlloc > FD_WARN, `⚠️ roots-v2-hk file descriptors high: ${fdAlloc} (>${FD_WARN}). Possible leak — the 2026-06-28 wedge pattern. Check before it stalls services.`);
-  await warn('disk', diskPct >= DISK_WARN_PCT, `⚠️ roots-v2-hk disk ${diskPct}% used (>=${DISK_WARN_PCT}%). Free space before writes stall.`);
+  await warn('disk', diskPct >= DISK_WARN_PCT, `⚠️ roots-v2-hk disk ${diskPct}% used (>=${DISK_WARN_PCT}%). Free space before writes stall.`,
+    diskPct >= 0 && diskPct < DISK_WARN_PCT - DISK_REARM_GAP);
   await warn('mem', memMb >= 0 && memMb < MEM_WARN_MB, `⚠️ roots-v2-hk memory low: ${memMb}MB available (<${MEM_WARN_MB}MB).`);
 
   // --- app liveness + self-heal ---
