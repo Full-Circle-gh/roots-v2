@@ -85,3 +85,22 @@ console.log(run('sh', ['-c', "crontab -l 2>/dev/null | grep -i -E 'backup|health
 
 console.log('\n=== last 3 lines of /var/log/roots-backup.log ===');
 console.log(run('tail', ['-n', '3', '/var/log/roots-backup.log']));
+
+// The off-site tier (scripts/db-backup.sh -> OSS, RETAIN_DAYS=14) is what makes a
+// short LOCAL retention safe. Whether it is actually succeeding is the question.
+console.log('\n=== off-site backup (db-backup.sh): last 5 runs ===');
+console.log(run('tail', ['-n', '5', '/root/roots-v2/logs/db-backup.log']));
+console.log('--- /var/log/tacet-db-backup.log (last 5) ---');
+console.log(run('tail', ['-n', '5', '/var/log/tacet-db-backup.log']));
+
+console.log('\n=== every file in hourly/ and daily/, with size ===');
+for (const tier of ['hourly', 'daily']) {
+  const dir = path.join(BK, tier);
+  if (!fs.existsSync(dir)) continue;
+  for (const f of fs.readdirSync(dir).sort()) {
+    console.log(`  ${tier}/${f.padEnd(34)} ${mb(fs.statSync(path.join(dir, f)).size).padStart(8)}`);
+  }
+}
+
+console.log('\n=== /root/backups/oneoff-*.db ===');
+console.log(run('sh', ['-c', 'ls -la /root/backups/oneoff-*.db 2>/dev/null || echo none']));
