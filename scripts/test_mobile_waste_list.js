@@ -386,6 +386,15 @@ it('the refused line is outlined', () => {
   const html = h.ctx.wstListHtml();
   assert.strictEqual((html.match(/outline:2px solid/g) || []).length, 1);
 });
+it('a line with 1 on hand switches both keys off, and they look it', () => {
+  const h = mk();
+  addItem(h, Object.assign({}, LOAF, { on_hand: 1 }), 1, 'expired');
+  const html = h.ctx.wstListHtml();
+  assert.strictEqual((html.match(/class="stepbtn"[^>]*disabled/g) || []).length, 2, 'both keys disabled at 1 of 1');
+  /* Disabled with no look of its own is what was reported as "+ and − don't
+     work": the keys were right to refuse, and looked live while doing it. */
+  assert.ok(/\.stepbtn:disabled\{[^}]*opacity/.test(M), '.stepbtn:disabled is styled');
+});
 it('an empty list draws nothing', () => {
   assert.strictEqual(mk().ctx.wstListHtml(), '');
 });

@@ -474,6 +474,11 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 .pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
 .stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
   display:flex;align-items:center;justify-content:center;color:var(--text-primary);cursor:pointer;flex:none}
+/* A STEP KEY THAT CANNOT MOVE MUST LOOK IT. Every stepper already sets
+   `disabled` at its limit (1 at the bottom, on-hand at the top on waste), but the
+   key looked exactly as it did when live, so a waste line with 1 on hand showed
+   two keys that did nothing and read as broken. Same fade as .btn2 and .chip. */
+.stepbtn:disabled{opacity:.55;cursor:default}
 /* THE COUNT ON A QUICK STOCK CARD IS A CONTROL, and it has to look like one.
    Typing is the only way to reach a big number without fifty taps, and the count
    sat between the two keys with no edge of its own — indistinguishable from the
