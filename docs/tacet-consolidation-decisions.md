@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.517
+# Tacet shared-core consolidation — decisions record, v4.518
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.518 — **§470 · `routes/retail.js` IS SPLIT BY AREA, ONE AREA PER PR, WITH NO CHANGE IN BEHAVIOUR — DECIDED BY ASH:** *"Split retail.js up"*, then *"start"* to the plan put to him. The file is 43,320 lines and 402 endpoints. Each area moves into its own file under `routes/retail/`, mounted inside `retail.js` at the spot the area left, so no request is answered by a different handler. Polls and voting go first, as the pilot. Held by `scripts/test_retail_split_routes.js`, which fails if a moved endpoint and one left behind could answer the same request. No string, no schema, no change to `.gitignore` or CI. See §470.
 
 2026-10-13 · v4.517 — **§469 · A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY — ASKED BY ASH:** *"is it possible now to change category of expense that was choose by a user ?"*, then *"ok do it"*, with a screenshot of the phone's Finance → *Other* sheet holding a ¥5,000 transfer to the construction company. **It was already possible** (§146) from Transactions and Approvals, but not from this list, where a wrong category is actually seen. **NOW:** on the phone, a staff-claim row in a category's sheet is tappable for whoever may re-file (`expenses:approve` or `expenses:cancel`, the server's own gate); it opens a category picker under the row, the same native select as Transactions. A pick posts the existing `/staff-expenses/:id/category`, the row leaves the list, and the sheet stays open so the next claim can be fixed; the figures, the ledger and the approvals queue re-read. The sheet is re-found by its category text after the refresh (the breakdown is sorted by amount, so the index moves), and closes if the line was emptied; its layer key is now one constant instead of the index. `GET /finance/summary/category` also returns `expense_categories` (active accounting list, same read as Transactions). Purchase-order rows are unchanged: their category is set on the order. **Not changed:** the re-file route, the schema, the desktop drill-down (a follow-up if wanted), `.gitignore`, CI. No new string; every pair is live. Held by `scripts/test_mobile_finance_summary.js` §4b and `scripts/test_finance_summary.js`. See §469.
 
@@ -30692,3 +30694,72 @@ No new string: *Category · 分类*, *— pick a category — · — 选择分�
 *Saving… · 保存中…* and *Saved · 已保存* are all live pairs on the same
 screen. Held by `scripts/test_mobile_finance_summary.js` §4b and
 `scripts/test_finance_summary.js`.
+
+## §470 — `routes/retail.js` IS SPLIT BY AREA, ONE AREA PER PR
+
+**Decided by Ash, 2026-10-13:** *"Split retail.js up"*, then *"start"* to the
+plan put to him in the same session.
+
+**Why.** On 2026-10-13 the file is 43,320 lines, 402 endpoints and 525
+top-level functions. 19 of the 147 commits to `main` in the week before
+touched it. A change anywhere in it can reach anywhere else in it, and no
+reviewer can hold it in their head.
+
+**The rules.**
+
+1. **One area per PR, and the PR only moves code.** No behaviour changes, no
+   renames and no tidying ride along. A fix found during a move is its own PR.
+2. **Parts live in `routes/retail/<area>.js`.** Each one builds and returns an
+   express router. `retail.js` mounts it with `router.use(...)` **at the spot
+   the area's first endpoint used to be**. Express answers a request with the
+   first endpoint that matches, so the spot is what keeps every request on the
+   same handler. `require('./retail')` still resolves to the file, not the
+   folder, because Node tries `retail.js` first.
+3. **What a part needs from `retail.js` is handed to it.** For example, the
+   admin login check `requireRetailAdmin`, the customer token check
+   `requireRetailAuth` and `withConfigHistory` are passed in when it is
+   mounted. Anything that comes from `lib/` or `middleware/` is required
+   directly. A part never `require`s `./retail` itself, because `retail.js` is
+   still loading at that moment and the import would come back empty.
+4. **Moving the shared helpers themselves into a file of their own is a
+   separate, later PR.** `requireRetailAdmin` is the access choke point, and
+   checks read it where it is written (`scripts/check-tenant-als.js`,
+   `scripts/test_settings_write_gates.js`). It is not moved as a side effect of
+   moving anything else.
+5. **Tests that read `retail.js` as text follow the code they check.** About
+   45 suites slice the source of `retail.js`. A move points each affected check
+   at the part's file, via `scripts/test-support/retail-source.js`, which reads
+   `retail.js` and every part as one text. A check is never deleted or loosened
+   to make a move pass.
+6. **Orders goes last.** It has 72 admin endpoints and 18 customer ones and
+   carries money. When it moves, the deploy gate that runs
+   `verify-fulfilment-types.js` only when `routes/retail.js` changes
+   (`.github/workflows/deploy.yml`) must be widened to the orders part in the
+   same PR. That is a CI change, and it is called out as one.
+7. **No two sessions move or edit the same area at once.** While a move PR is
+   open, other work on that area waits for it to merge.
+
+**The guard.** `scripts/test_retail_split_routes.js` loads the real router and
+lists every endpoint in the order express tries them. It fails if:
+
+- a part is not mounted, or is mounted twice;
+- an endpoint in one file and an endpoint in another could answer the same
+  request. Within one file a move keeps the order. Only a pair split across
+  files can change which handler answers.
+
+It also holds each part to the exact list of endpoints it took.
+
+**The pilot: polls and voting.** 12 endpoints: 5 customer (`/api/retail/polls`,
+`/polls/public`, `/polls/:id`, `/polls/:id/vote`, `/voting/config`) and 7 admin
+(`/api/retail-admin/voting/config` GET and PUT, `/polls` list, read, create,
+update, delete), with their helpers. Favorites sat between them in the file and
+stays behind. It leans on about ten product-listing helpers and moves with
+products.
+
+**Found while planning, not fixed here.** `scripts/test_tx_conversion_batch2.js`
+counts the old-style transactions left in `retail.js` by running
+`scripts/diagnose_async_conversion_scope.js`. That script is no longer in the
+repo, so the check has been reporting itself as skipped. The vote handler's
+transaction is one of the 30 it would count, and it now lives in the polls part.
+
+No string, no schema, no change to `.gitignore` or CI.

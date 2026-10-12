@@ -73,7 +73,10 @@ const SABOTAGE = process.env.TX_CONV2_SABOTAGE === '1';
 const ROOT = path.join(__dirname, '..');
 const DB_SRC = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
 const SCHEMA_SRC = fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8');
-const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+// routes/retail.js and the parts split out of it (§470), read as one text, so a
+// handler is found wherever it now lives. The poll handlers are in
+// routes/retail/polls.js.
+const RETAIL_SRC = require('./test-support/retail-source').retailSource();
 
 const DB_TABLES = ['retail_media', 'retail_media_folders', 'retail_polls',
   'retail_poll_options', 'storefront_config'];
