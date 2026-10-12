@@ -589,6 +589,7 @@ router.get('/api/retail/category-tree', (req, res) => {
     const countRows = tdb().prepare(
       `SELECT ${topExpr} AS topname, COUNT(*) AS n FROM store_products p
         WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+          AND COALESCE(p.is_restock_only, 0) = 0
         GROUP BY topname`
     ).all();
     const countByName = {};
@@ -596,6 +597,7 @@ router.get('/api/retail/category-tree', (req, res) => {
     const coverStmt = tdb().prepare(
       `SELECT id, updated_at FROM store_products p
         WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+          AND COALESCE(p.is_restock_only, 0) = 0
           AND ${topExpr} = ?
           AND ((p.image_data IS NOT NULL AND p.image_data != '')
             OR (p.image_url IS NOT NULL AND p.image_url != ''))
@@ -2808,9 +2810,12 @@ router.get('/api/retail/products', (req, res) => {
   // the shop grid, search, a category grid. NOT out of a by-id read: checkout
   // re-reads the cart's lines by id, and a hand-picked home block named its
   // products on purpose. Hiding is what the shop shows, not what it accepts.
+  // A product ticked "Restock-only, internal" leaves browsing the same way:
+  // it is a receiving record, never a thing to sell — the till already drops
+  // it (routes/retail-shops.js). Same by-id exception, same reason.
   const hiddenTops = idList.length ? [] : hiddenTopNames(getCategoryTree(tdb()));
-  const hiddenClause = hiddenTops.length
-    ? ` AND COALESCE(p.top_category, '') NOT IN (${hiddenTops.map(() => '?').join(',')})` : '';
+  const hiddenClause = (idList.length ? '' : ' AND COALESCE(p.is_restock_only, 0) = 0') + (hiddenTops.length
+    ? ` AND COALESCE(p.top_category, '') NOT IN (${hiddenTops.map(() => '?').join(',')})` : '');
   sql += hiddenClause; params.push(...hiddenTops);
 
   // Sort: 'price_asc' | 'price_desc' | 'newest' | 'popular' | 'featured' (default → curated sort_order)
@@ -3134,15 +3139,17 @@ router.get('/api/retail/products/top', (req, res) => {
   let products = [];
   if (candidateIds.length) {
     const placeholders = candidateIds.map(() => '?').join(',');
-    // A best seller in a category hidden from the mini app is still hidden —
-    // the same browse rule as GET /api/retail/products.
+    // A best seller in a category hidden from the mini app, or ticked
+    // restock-only, is still hidden — the same browse rule as
+    // GET /api/retail/products.
     const hiddenTops = hiddenTopNames(getCategoryTree(tdb()));
     const hiddenClause = hiddenTops.length
       ? ` AND COALESCE(p.top_category, '') NOT IN (${hiddenTops.map(() => '?').join(',')})` : '';
     products = tdb().prepare(
       `SELECT ${RETAIL_PRODUCT_COLS_LIST}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
         WHERE p.id IN (${placeholders})
-          AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1${hiddenClause}`
+          AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+          AND COALESCE(p.is_restock_only, 0) = 0${hiddenClause}`
     ).all(...candidateIds, ...hiddenTops);
   }
   // Heavy base64 photos were already collapsed to a 'data:' marker by
