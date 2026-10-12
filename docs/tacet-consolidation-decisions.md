@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.511
+# Tacet shared-core consolidation — decisions record, v4.512
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-12 · v4.512 — **§464 · EVERY LIST SCREEN ON THE PHONE KEEPS ITS SEARCH ON SCREEN — ASKED BY ASH:** *"do for all"*, after §463 pinned Add stock's. Twenty-nine searches now stay at the top while their list scrolls under them, through one shared `.stick-top` style. Pop-up sheets and pickers, the New order form and the Meituan bundle editor are left as they are. The test runner names the new browser suite in its slow list, which is a build-config change and is called out. No string, no schema, no change to `.gitignore` or CI workflows. See §464.
 
 2026-10-12 · v4.511 — **§463 · ADD STOCK KEEPS ITS SEARCH ON SCREEN — ASKED BY ASH:** *"search bar should stay stick on top when scrolling"*, with a screenshot of the phone's Add stock list at Yuexiu. The search field now stays pinned under the header while the product list scrolls beneath it. Only this screen; the store chips above it still scroll away, and the status line keeps naming the store. No string, no schema, no change to `.gitignore` or CI. (v4.510 / §462 are held by PR #1122.) See §463.
 
@@ -30354,3 +30356,72 @@ sticky line, which turns it red. The same suite's *search narrows the shelf
 without losing the caret* was red on main: the case never put the caret in the
 field before checking it stayed there. The setup now focuses the field first.
 Schema: none. No string. No change to `.gitignore` or CI.
+
+## §464 — EVERY LIST SCREEN ON THE PHONE KEEPS ITS SEARCH ON SCREEN
+
+**Asked by Ash, 2026-10-12:** *"do for all"*, the same day §463 pinned Add
+stock's search. This was offered for Ask for stock, Waste and Log a batch, and
+taken as every list screen.
+
+**The rule.** On a phone screen that opens on a list with a search above it,
+the search stays at the top while the list scrolls beneath it. One shared
+class, `.stick-top` in `public/m.html`, does it: sticky at the top of the
+scroller, above the cards, on the page colour. A sheet passes its own colour.
+It goes on the block that holds the search, and only where that block's
+parent holds the list too, because sticky only sticks inside its parent. Where
+the search sat bare in the list's column, it gets a wrapper of its own. Where
+the search shares a row with tools (Products, Finance, Media, Invoices), the
+whole row is pinned and the tools come with it.
+
+**Pinned (29):**
+- Add stock and Log a batch.
+- Ask the kitchen and Ask for stock, which share one picker.
+- Ask to buy.
+- Receive (suppliers, and transfers).
+- Purchasing, Invoices and Suppliers.
+- Products.
+- Customers.
+- Materials and Recipes.
+- The expense category picker.
+- Activity.
+- Delivery zones.
+- Reviews.
+- Referrals and Who earns referrals.
+- Shop menu.
+- Finance transactions.
+- Channel sync, Channel match and Eleme categories.
+- Change history and What was sent.
+- Media.
+- Waste's product field and the purchase-order *Add products* step.
+
+The last two are searches inside a form. Their parent is the field, so they
+stay pinned while their own matches scroll past, then leave with the form.
+
+**Not pinned, on purpose.** Searches in pop-up sheets and pickers have their
+own short scroller, so there is nothing to pin over. That covers the zone city
+picker, product and photo pickers, recipe pickers and the global search sheet.
+The New order form's three searches and the coupon grant's customer search sit
+in the middle of a form, where a pinned field would cover the form. The Meituan
+bundle editor carries two searches, and two pinned fields would fight over the
+top. Product cost's edit list is a picker inside an editor.
+
+**What made it safe.** Most of these blocks were written
+`position:relative` to anchor the search icon. An inline position beats the
+class and kills the pin, so it was removed wherever the class went. A sticky
+box is itself a containing block, so the icon stays put.
+
+Tests: new `scripts/test_mobile_sticky_search_static.js` runs in the fast
+shard. It checks that every pin is present and that no inline position
+overrides one. It was mutation-checked: an inline position put back turns it
+red.
+
+New `scripts/test_mobile_sticky_search.js` is the browser half. It covers
+twelve screens. On each, it checks that the pinned block is sticky, that its
+parent holds the screen's list, and that with the list made long and scrolled
+to the end the search is still at the top. It goes in the slow shard: it drives
+Chromium through m-probe, so `scripts/run-suites.js` names it in its SLOW
+list, as every m-probe suite is named. That is the build-config change, and it
+is called out in the commit and the PR. The suite was run on its own for this
+change, and the slow shard was not.
+
+Schema: none. No string. No change to `.gitignore` or CI workflows.

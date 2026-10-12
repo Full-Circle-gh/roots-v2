@@ -406,6 +406,15 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important}}
 
 .content{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg)}
+/* §464 — A LIST SCREEN'S SEARCH STAYS ON SCREEN while the list scrolls under
+   it (Ash: "search bar should stay stick on top when scrolling", then "do for
+   all"). Put on the block that holds the search, and only where that block's
+   parent holds the rest of the screen, or sticky has nowhere to stick.
+   scripts/test_mobile_sticky_search_static.js checks every pin for an inline
+   position that would beat this rule; test_mobile_sticky_search.js scrolls
+   twelve of the screens in a browser. The page colour hides the cards going under; a sticky box is
+   also a containing block, so an absolute search icon still sits in its field. */
+.stick-top{position:sticky;top:0;z-index:3;background:var(--bg)}
 .tabbar{flex:none;display:flex;background:var(--surface-card);border-top:1px solid var(--border-default);
   padding:8px 4px calc(env(safe-area-inset-bottom,0px) + 12px)}
 .iconbtn{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
@@ -7429,7 +7438,7 @@ function screenZones(){
   const z=state.zn;
   if(state.zones===null&&!z.loading&&!z.readErr) loadZones();
   return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-    ${searchBox(`<input id="mZnQ" inputmode="search" enterkeyhint="search" value="${escAttr(z.q)}" placeholder="${T('Search zone','搜索配送区…')}" style="width:100%" oninput="APP.cmd('znQ',this.value)">`,'mZnClr',!!z.q)}
+    <div class="stick-top">${searchBox(`<input id="mZnQ" inputmode="search" enterkeyhint="search" value="${escAttr(z.q)}" placeholder="${T('Search zone','搜索配送区…')}" style="width:100%" oninput="APP.cmd('znQ',this.value)">`,'mZnClr',!!z.q)}</div>
     ${z.err?`<div style="padding:10px 14px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:14px">${z.err}</div>`:''}
     <div id="mZnList" style="display:flex;flex-direction:column;gap:14px">${znListHtml()}</div></div>`;
 }
@@ -9405,7 +9414,7 @@ function screenReviews(){
         ${rvwMod()?`<button class="btn2" style="flex:none;min-height:36px;padding:0 12px;font-size:13px" ${RVW.busy?'disabled':''} onclick="APP.cmd('rvwDismissAll')">${RVW.busy==='bulk'?T('Saving…','保存中…'):T('Mark all '+open+' as handled','将全部 '+open+' 条标记为已处理')}</button>`:''}</div></div>`:''}
     ${s.seeded?`<div style="padding:0 20px;font-size:12.5px;color:var(--text-secondary)">${T(s.seeded+' seeded reviews','种子评价 '+s.seeded+' 条')}</div>`:''}
     ${chipRow(chips,RVW.filter,'rvwFilter')}
-    <div style="padding:0 16px;display:flex;gap:8px;align-items:center">
+    <div class="stick-top" style="padding:0 16px;display:flex;gap:8px;align-items:center">
       ${searchBox(`<input id="mRvwQ" inputmode="search" enterkeyhint="search" value="${escAttr(RVW.q)}" placeholder="${escAttr(T('Search reviews and products…','搜索评价与商品…'))}" style="width:100%" oninput="APP.cmd('rvwQ',this.value)">`,'mRvwClr',!!RVW.q,'flex:1;min-width:0')}
       <select aria-label="${escAttr(T('Filter reviews by rating','按评分筛选评价'))}" style="flex:none;width:auto" onchange="APP.cmd('rvwRating',this.value)">${ratings.map(([v,l])=>`<option value="${v}"${RVW.rating===v?' selected':''}>${l}</option>`).join('')}</select></div>
     ${RVW.rowErr?`<div style="margin:0 16px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${escAttr(RVW.rowErr)}</div>`:''}
@@ -11536,7 +11545,7 @@ function affEligPaint(){ const b=document.getElementById('mAffElList'); if(b) b.
 function screenAffEligible(){
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">${T('Only these customers earn a share of their friends’ later orders. Everyone else still earns the one-time referral reward. Each change takes effect straight away.','仅以下客户可从好友之后的订单中获得分成。其他客户仍可获得一次性推荐奖励。每项更改立即生效。')}</div>
-    ${searchBox(`<input id="mAffElQ" inputmode="search" enterkeyhint="search" value="${escAttr(AF.elig.q)}" placeholder="${escAttr(T('Find a customer by name, phone or code','按姓名、手机号或推荐码查找客户'))}" style="width:100%" oninput="APP.cmd('affEligQ',this.value)">`,'mAffElClr',!!AF.elig.q)}
+    <div class="stick-top">${searchBox(`<input id="mAffElQ" inputmode="search" enterkeyhint="search" value="${escAttr(AF.elig.q)}" placeholder="${escAttr(T('Find a customer by name, phone or code','按姓名、手机号或推荐码查找客户'))}" style="width:100%" oninput="APP.cmd('affEligQ',this.value)">`,'mAffElClr',!!AF.elig.q)}</div>
     <div id="mAffElList">${affEligListHtml()}</div></div>`;
 }
 /* ── The ledger ─────────────────────────────────────────────────────────── */
@@ -11742,7 +11751,7 @@ function screenAffiliate(){
     <div style="padding:0 16px">${offer}</div>
     <div class="eyebrow" style="padding:0 20px">${T('Referrals','推荐记录')}</div>
     ${chipRow(chips,seg,'affSeg')}
-    <div style="padding:0 16px">${searchBox(`<input id="mAffQ" inputmode="search" enterkeyhint="search" value="${escAttr(AF.q)}" placeholder="${escAttr(T('Name, phone or code','姓名、电话或邀请码'))}" style="width:100%" oninput="APP.cmd('affQ',this.value)">`,'mAffClr',!!AF.q)}</div>
+    <div class="stick-top" style="padding:0 16px">${searchBox(`<input id="mAffQ" inputmode="search" enterkeyhint="search" value="${escAttr(AF.q)}" placeholder="${escAttr(T('Name, phone or code','姓名、电话或邀请码'))}" style="width:100%" oninput="APP.cmd('affQ',this.value)">`,'mAffClr',!!AF.q)}</div>
     <div id="mAffLedger" style="padding:0 16px">${affLedgerHtml()}</div>
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
@@ -14174,7 +14183,7 @@ function screenActivity(){
      while typing. Export sits beside it, the desktop's order, on its own
      capability: activity:export is the key the Stockroom preset holds and the
      Shop floor one does not. */
-  const search=`<div style="padding:0 16px;display:flex;gap:8px;align-items:center">
+  const search=`<div class="stick-top" style="padding:0 16px;display:flex;gap:8px;align-items:center">
     <div style="flex:1;min-width:0">${searchBox(`<input id="mActQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.actQ)}"
       placeholder="${T('SKU / name / order','货号 / 名称 / 订单')}" style="width:100%"
       oninput="APP.cmd('actQ',this.value)" onchange="APP.cmd('actSearchGo')"
@@ -14679,8 +14688,8 @@ function sheetWaste(){
     </div>` : `
     <div style="display:flex;flex-direction:column;gap:6px">
       <span class="eyebrow">${T('Product','产品')}</span>
-      ${searchBox(`<input id="mWstQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}"
-        placeholder="${T('Search products','搜索商品')}" style="width:100%" oninput="APP.cmd('wstSearch',this.value)">`,'mWstClr',!!w.q)}
+      <div class="stick-top" style="background:var(--surface-card)">${searchBox(`<input id="mWstQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}"
+        placeholder="${T('Search products','搜索商品')}" style="width:100%" oninput="APP.cmd('wstSearch',this.value)">`,'mWstClr',!!w.q)}</div>
       <div id="mWstPicksBox">${wstPicksHtml()}</div>
     </div>`;
   /* Whole units, so a stepper and never a number field: the API refuses a
@@ -16065,7 +16074,7 @@ function screenPurchasing(){
     T('An order is a list of what you’re buying from one supplier for one store. Tacet does the bookkeeping for you.',
       '一张采购单就是你向某个供应商、为某家门店采购的清单。记账的事交给 Tacet。'))
     +(canRoute('newpo')?`<div style="display:flex;justify-content:center;padding:0 24px 24px"><button class="cta" style="width:auto" onclick="APP.cmd('pwNew')">${T('Start your first order','创建第一张采购单')}</button></div>`:'');
-  const search=`<div style="position:relative">
+  const search=`<div class="stick-top">
     <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
     ${searchBox(`<input id="mPoQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.poQ)}" style="padding-left:42px"
       placeholder="${T('Find an order, supplier or product','搜索采购单、供应商或商品')}" oninput="APP.cmd('poQuery',this.value)">`,'mPoClr',!!state.poQ)}</div>`;
@@ -17029,7 +17038,7 @@ function pwStep2(){
     <button class="btn2" style="width:auto;padding:0 14px;flex:none" onclick="APP.cmd('pwStep',1)">${T('Change','修改')}</button></div>`;
   const prod=featOn('production');
   const search=pwField(prod?T('Add products & materials','添加商品或物料'):T('Add products','添加商品'),
-    searchBox(`<input id="mPwQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}" placeholder="${T('Search by name or SKU','按名称或货号搜索')}" oninput="APP.cmd('pwQ',this.value)">`,'mPwClr',!!w.q)
+    '<div class="stick-top">'+searchBox(`<input id="mPwQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}" placeholder="${T('Search by name or SKU','按名称或货号搜索')}" oninput="APP.cmd('pwQ',this.value)">`,'mPwClr',!!w.q)+'</div>'
     +`<div id="mPwPicks">${pwPicksHtml()}</div>`);
   const low=featOn('lowStockHints');
   const empty=low?(prod?T('Nothing yet — search or pick a suggestion above.','还没有内容——在上方搜索或选择推荐。'):T('No products yet — search or pick a suggestion above.','还没有商品——在上方搜索或选择推荐。'))
@@ -17589,7 +17598,7 @@ function screenPoInvoices(){
   const v=state.pinv;
   const months=pinvMonths();
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;gap:8px">
+    <div class="stick-top" style="display:flex;gap:8px">
       <select onchange="APP.cmd('pinvMonth',this.value)" style="flex:none;width:42%;font-size:13.5px;height:40px;padding-top:0;padding-bottom:0">
         <option value="">${T('All months','全部月份')}</option>${months.map(m=>`<option value="${m}"${v.month===m?' selected':''}>${escAttr(tdWhen(m+'-01','month',_tdL()))}</option>`).join('')}</select>
       ${searchBox(`<input id="mPinvQ" inputmode="search" enterkeyhint="search" value="${escAttr(v.q)}" placeholder="${T('Supplier, item or SKU','供应商、产品或货号')}" oninput="APP.cmd('pinvQ',this.value)">`,'mPinvClr',!!v.q,'flex:1;min-width:0')}</div>
@@ -18106,7 +18115,7 @@ function screenPoSuppliers(){
     ${psupOwedCard()}
     <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
       ${segBtn('active',T('Active','启用'),act)}${segBtn('disabled',T('Disabled','停用'),v.all?dis:'·')}</div>
-    ${searchBox(`<input id="mPsupQ" inputmode="search" enterkeyhint="search" value="${escAttr(v.q)}" placeholder="${T('Find a supplier or contact','搜索供应商或联系人')}" oninput="APP.cmd('psupQ',this.value)">`,'mPsupClr',!!v.q)}
+    <div class="stick-top">${searchBox(`<input id="mPsupQ" inputmode="search" enterkeyhint="search" value="${escAttr(v.q)}" placeholder="${T('Find a supplier or contact','搜索供应商或联系人')}" oninput="APP.cmd('psupQ',this.value)">`,'mPsupClr',!!v.q)}</div>
     <div id="mPsupBody">${psupDirBody()}</div></div>`;
 }
 reg('psupSeg', k=>{ const v=state.psupDir; v.seg=k==='disabled'?'disabled':'active';
@@ -19492,7 +19501,7 @@ function screenReceiving(){
      BOTH ends had to stop calling render(): the keystroke, and the answer that
      lands 320ms later. Either one alone would still rebuild the field. */
   if(state.rcvSeg==='toreceive'){
-    const toSearch=`<div style="padding:0 16px 12px;position:relative">
+    const toSearch=`<div class="stick-top" style="padding:0 16px 12px">
       <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
       ${searchBox(`<input id="mRcvToQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvToQ)}" style="padding-left:42px"
         placeholder="${T('Product, SKU, order or supplier','商品、SKU、单号或供应商')}" oninput="APP.cmd('rcvToQuery',this.value)">`,'mRcvToClr',!!state.rcvToQ)}</div>`;
@@ -19500,7 +19509,7 @@ function screenReceiving(){
   }
   const chips=`<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">${
     RCV_FLAGS.map(f=>`<button class="chip${state.rcvFlag===f.key?' on':''}" onclick="APP.cmd('rcvFlag','${f.key}')">${T(f.en,f.zh)}</button>`).join('')}</div>`;
-  const search=`<div style="padding:0 16px 12px;position:relative">
+  const search=`<div class="stick-top" style="padding:0 16px 12px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
     ${searchBox(`<input id="mRcvQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvQ)}" style="padding-left:42px"
       placeholder="${T('Product, SKU, supplier or person','商品、SKU、供应商或收货人')}" oninput="APP.cmd('rcvQuery',this.value)">`,'mRcvClr',!!state.rcvQ)}</div>`;
@@ -19659,7 +19668,7 @@ function screenProductCatalogue(){
        line whatever the language and however many buttons a role is given. */
     const tools=sel+exp+countButton();
     return `<div>
-      <div style="padding:12px 16px 4px;display:flex;flex-direction:column;gap:8px">
+      <div class="stick-top" style="padding:12px 16px 4px;display:flex;flex-direction:column;gap:8px">
         <div>${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
           oninput="APP.cmd('prodSearch',this.value)"
@@ -20266,7 +20275,7 @@ function screenShopMenu(){
       ${s.qr?`<div class="num" style="font-size:12.5px;text-align:center;word-break:break-all;color:${qrDead?'var(--amber-ink)':'var(--text-secondary)'}">${qrDead?T('QR unavailable','二维码不可用'):escAttr(s.qr.url)}</div>`:''}
       ${qrDead?'':`<a class="btn2" style="width:auto;padding:0 20px;gap:6px;text-decoration:none" href="${escAttr(API+'/shops/'+id+'/qr.png?download=1&scale=20')}" download="shop-${escAttr(sh.public_code)}.png">${ic('download',16)}${T('Download','下载')}</a>`}
     </div>`:'';
-  const filter=(s.rows||[]).length?`<div style="padding:0 0 10px">${searchBox(`<input id="mShmQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}"
+  const filter=(s.rows||[]).length?`<div class="stick-top" style="padding:0 0 10px">${searchBox(`<input id="mShmQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}"
       placeholder="${T('Search by name or SKU…','按名称或货号搜索…')}" style="width:100%"
       oninput="APP.cmd('shmQ',this.value)"
       onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mShmClr',!!s.q)}</div>`:'';
@@ -21243,7 +21252,7 @@ function screenAskBuy(){
   </div>`;
   if(!m.materials) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const rows=mbLines();
-  const search=`<div style="padding:4px 16px 12px;position:relative">
+  const search=`<div class="stick-top" style="padding:4px 16px 12px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mMbQ" inputmode="search" enterkeyhint="search" value="${escAttr(m.q)}" style="padding-left:42px"
       placeholder="${T('Search materials','搜索物料')}" oninput="APP.cmd('mbSearch',this.value)">`,'mMbClr',!!m.q)}</div>`;
@@ -23292,7 +23301,7 @@ function screenStockAdd(){
      removes. Sticky inside .content, the screen's one scroller, so it pins under
      the header. The page colour behind it hides the cards going under; sticky
      is also a containing block, so the absolute icon still sits in the field. */
-  const search=`<div style="padding:12px 16px;position:sticky;top:0;z-index:3;background:var(--bg)">
+  const search=`<div class="stick-top" style="padding:12px 16px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('qsSearch',this.value)">`,'mQsClr',!!qs.q)}</div>`;
@@ -23387,7 +23396,7 @@ function qsBodyHtml(){
 function rqPicker(){
   const r=state.rq;
   if(!r.products) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  const search=`<div style="padding:4px 16px 12px;position:relative">
+  const search=`<div class="stick-top" style="padding:4px 16px 12px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)">`,'mRqClr',!!r.q)}</div>`;
@@ -24267,7 +24276,7 @@ function screenWhatMade(){
 }
 function screenLogBatch(){
   loadQsCtx();
-  const search=`<div style="padding:12px 16px;position:relative">
+  const search=`<div class="stick-top" style="padding:12px 16px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)">`,'mBatClr',!!state.bat.q)}</div>`;
@@ -24589,7 +24598,7 @@ function screenRecipes(){
   loadRecipes();
   const r=state.rcp;
   if(r.arch) loadRecipesArch();
-  const search=`<div style="padding:12px 16px;position:relative">
+  const search=`<div class="stick-top" style="padding:12px 16px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mRcpQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
       placeholder="${T('Search recipes','搜索食谱')}" oninput="APP.cmd('rcpSearch',this.value)">`,'mRcpClr',!!r.q)}</div>`;
@@ -26455,7 +26464,7 @@ function screenMaterials(){
   if(!featOn('production')) return flagGate('production');
   loadMaterials();
   const m=state.mat;
-  return `<div style="padding:12px 16px;position:relative">
+  return `<div class="stick-top" style="padding:12px 16px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mMatQ" inputmode="search" enterkeyhint="search" value="${escAttr(m.q)}" style="padding-left:42px"
       placeholder="${T('Search name or SKU','搜索名称或货号')}" oninput="APP.cmd('matSearch',this.value)">`,'mMatClr',!!m.q)}</div>
@@ -28418,7 +28427,7 @@ function expPickBodyHtml(){
 
 function screenExpensePicker(){
   const x=state.exp;
-  const search=`<div style="padding:4px 16px 10px;position:relative">
+  const search=`<div class="stick-top" style="padding:4px 16px 10px">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mExpQ" inputmode="search" enterkeyhint="search" value="${escAttr(x.q)}" style="padding-left:42px"
       placeholder="${T('Search categories','搜索分类')}" oninput="APP.cmd('expQ',this.value)">`,'mExpClr',!!x.q)}</div>`;
@@ -29259,7 +29268,7 @@ function screenFinTx(head){
     <div style="font-size:12.5px;color:var(--text-secondary);margin-top:-4px">${T('Sales revenue is on Summary','营收见汇总')}</div>
     <div style="margin:0 -16px">${chipRow([{key:'all',en:'All',zh:'全部',count:c.all||0},{key:'in',en:'Money in',zh:'进账',count:c.in||0},
       {key:'out',en:'Money out',zh:'支出',count:c.out||0}],f.txDir,'finTxDir')}</div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div class="stick-top" style="display:flex;gap:8px;align-items:center">
       <div style="flex:1;min-width:0;position:relative">
         <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
         ${searchBox(`<input id="mFinTxQ" inputmode="search" enterkeyhint="search" value="${escAttr(f.txQ)}" style="padding-left:42px"
@@ -31436,7 +31445,7 @@ function csVisible(d,filter){
 }
 function csTools(d){
   const chs=(d&&d.channels)||[];
-  return `<div style="display:flex;flex-direction:column;gap:8px;margin:0 16px">
+  return `<div class="stick-top" style="display:flex;flex-direction:column;gap:8px;margin:0 16px">
     ${chs.length>1?`<select aria-label="${escAttr(T('Channel','渠道'))}" style="width:100%" onchange="APP.cmd('csCh',this.value)">
       <option value=""${state.csCh?'':' selected'}>${T('All channels','全部渠道')}</option>
       ${chs.map(ch=>`<option value="${escAttr(ch.key)}"${state.csCh===ch.key?' selected':''}>${escAttr(csChName(ch.key))}</option>`).join('')}</select>`:''}
@@ -32486,7 +32495,7 @@ function chlBody(){
 function screenChanges(){
   const c=state.chl; if(!c.tried) chlLoad(false);
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${searchBox(`<input id="mChlQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chlQ',this.value)">`,'mChlClr',!!c.q)}
+    <div class="stick-top">${searchBox(`<input id="mChlQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chlQ',this.value)">`,'mChlClr',!!c.q)}</div>
     <div id="mChlBody" style="display:flex;flex-direction:column;gap:12px">${chlBody()}</div></div>`;
 }
 SUBS.changes={title:['Change history','修改记录'],render:()=>screenChanges()};
@@ -32614,7 +32623,7 @@ function nlgBody(){
 function screenSent(){
   const c=state.nlg; if(!c.tried) nlgLoad(false);
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${searchBox(`<input id="mNlgQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('nlgQ',this.value)">`,'mNlgClr',!!c.q)}
+    <div class="stick-top">${searchBox(`<input id="mNlgQ" inputmode="search" enterkeyhint="search" value="${escAttr(c.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('nlgQ',this.value)">`,'mNlgClr',!!c.q)}</div>
     <div id="mNlgBody" style="display:flex;flex-direction:column;gap:12px">${nlgBody()}</div></div>`;
 }
 SUBS.sent={title:['What was sent','发送记录'],render:()=>screenSent()};
@@ -32797,7 +32806,7 @@ function elmCatBody(){
 function screenElemeCat(){
   const e=state.elm;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${searchBox(`<input id="mElmCatQ" inputmode="search" enterkeyhint="search" value="${escAttr(e.catQ)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('elmCatQ',this.value)">`,'mElmCatClr',!!e.catQ)}
+    <div class="stick-top">${searchBox(`<input id="mElmCatQ" inputmode="search" enterkeyhint="search" value="${escAttr(e.catQ)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('elmCatQ',this.value)">`,'mElmCatClr',!!e.catQ)}</div>
     <div id="mElmCatBody" style="display:flex;flex-direction:column;gap:12px">${elmCatBody()}</div></div>`;
 }
 SUBS.elemecat={title:['Eleme','饿了么'],
@@ -35285,7 +35294,7 @@ function screenChMatch(){
     <div style="display:flex;flex-direction:column;gap:3px;padding:0 4px">
       <span style="font-size:16px;font-weight:500">${escAttr(nm)}</span>
       ${sku?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">SKU ${escAttr(sku)}</span>`:''}</div>
-    ${s.ch!=='guanyi'&&mCan(s.ch+':map')?searchBox(`<input id="mChmQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chmQ',this.value)">`,'mChmClr',!!s.q):''}
+    ${s.ch!=='guanyi'&&mCan(s.ch+':map')?'<div class="stick-top">'+searchBox(`<input id="mChmQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.q)}" placeholder="${T('Search','搜索')}" oninput="APP.cmd('chmQ',this.value)">`,'mChmClr',!!s.q)+'</div>':''}
     ${s.ch==='meituan'?chmMeituan(p):s.ch==='eleme'?chmEleme(p):chmGuanyi(p)}</div>`;
 }
 SUBS.chmatch={title:['Channel sync','渠道同步'],
@@ -39108,7 +39117,7 @@ function screenMedia(){
   const folderChips=chipRow([{key:'all',en:'All media',zh:'全部',count:ML.total},{key:'unsorted',en:'Unsorted',zh:'未分组',count:ML.unsorted}]
     .concat((ML.folders||[]).map(f=>({key:String(f.id),en:f.name,zh:f.name,count:f.count}))), ML.folder||'all', 'mlFolder');
   const tagChips=(ML.tags&&ML.tags.length)?chipRow([{key:'__all',en:'All',zh:'全部'}].concat(ML.tags.map(t=>({key:t.tag,en:t.tag,zh:t.tag,count:t.n}))), ML.tag||'__all', 'mlTag'):'';
-  const head=`<div style="padding:12px 16px 0;display:flex;gap:8px;align-items:center"><div style="flex:1;min-width:0">${search}</div>
+  const head=`<div class="stick-top" style="padding:12px 16px 0;display:flex;gap:8px;align-items:center"><div style="flex:1;min-width:0">${search}</div>
       <button class="btn2" style="width:auto;flex:none;padding:0 14px" onclick="APP.cmd('mlFolders')">${T('Folder','文件夹')}</button></div>
     <div style="padding-top:10px">${folderChips}</div>${tagChips?`<div style="padding-top:8px">${tagChips}</div>`:''}`;
   if(!state.media){ if(!state.mediaTried) loadMedia();
@@ -46516,7 +46525,7 @@ function screenCustomers(){
       <span style="flex:1"></span>
       ${mCan('customers:export')?`<button onclick="APP.cmd('custExport')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${ic('download',14,2)} ${T('Export','导出')}</button>`:''}
     </div>
-    <div style="padding:0 16px 12px">${searchBox(`<input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
+    <div class="stick-top" style="padding:0 16px 12px">${searchBox(`<input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
       placeholder="${T('Search name or phone','搜索姓名或手机')}" style="width:100%"
       oninput="APP.cmd('custSearch',this.value)"
       onchange="APP.cmd('custSearchGo')"
