@@ -33507,6 +33507,28 @@ _kprep.startPrepMessageSweeper({
   },
 });
 
+// The booked-day morning reminder (lib/booked-day-reminder.js) goes to the
+// new-order alert's own channel: app preferred, group-bot webhook fallback —
+// the same choice sendWecomOrderAlert makes, read at send time inside the
+// tenant's scope.
+require('../lib/booked-day-reminder').startBookedDayReminderSweeper({
+  ready: () => !!wecomAppCreds() || !!wecomWebhookUrl(),
+  send: async (content) => {
+    const webhook = wecomWebhookUrl();
+    const r = wecomAppCreds() ? await sendWecomAppMessage(content)
+      : webhook ? await postWecomMarkdown(webhook, content)
+      : { ok: false, msg: 'not_configured' };
+    try {
+      require('../lib/notify-log').logNotification({
+        channel: 'wecom', kind: 'booked_day_reminder',
+        subject: (String(content).split('\n')[1] || 'Booked for today').replace(/\*/g, ''),
+        ok: r.ok, error: r.ok ? null : r.msg,
+      });
+    } catch (e) { /* the log must never be able to fail a send */ }
+    return r;
+  },
+});
+
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {
   const body = req.body || {};
   /* §325 — EACH SERVICE ON ITS OWN PANEL'S KEYS. The choke point let the union

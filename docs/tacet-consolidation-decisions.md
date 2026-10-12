@@ -30085,3 +30085,54 @@ Schema: four nullable columns on `retail_orders` (above). New routes
 existing `/orders` prefix rule in `lib/cap-routes.js`. The *Ships from* POST's
 body became `_qingyunShipFrom()` so both routes run the same courier code; its
 behaviour is unchanged. No change to `.gitignore` or CI.
+
+## §459 — BOOKED DELIVERIES ARE ANNOUNCED IN THE NEW-ORDER GROUP
+
+**Decided by Ash, 2026-10-12:** *"when there is an order that schedule for
+later there should be an alert in wecom in the same bot of the new order
+group"*, sent with TC001090's drawer. Offered three readings, Ash picked two:
+**A** — the new-order card says the booked day; **B** — a reminder on the
+morning of that day. (C, a message when the day is changed, was not chosen.)
+
+**What the survey found.** The new-order card (`buildWecomOrderCard`) carried
+no day for a delivery — only a pickup printed its slot — so an order booked
+for Thursday read exactly like one to send now. Nothing told the group when a
+booked day arrived. `lib/delivery-reminders.js` does remind on the day, but by
+Web Push to operators' phones only, one notification per order (10:00 for a
+day-only pick, 30 minutes before a window), and for any dated order including
+Express. B is NOT built on it: hooking WeCom into that sweeper would post one
+group message per order, some of them half an hour before the rider is due,
+which is too late to plan from and noisy in a group that also carries every
+new order. One list at the start of the day is what the group can act on. The
+push reminders are unchanged.
+
+**The rule.**
+
+1. **Booked for a later day** means a delivery whose `delivery_slot_kind` is
+   `schedule` (the checkout's future pick) or NULL (what the operator's
+   *Change delivery day* writes for a later date), whose booked day is after
+   the day it was paid. `express` is NOT a booking: its date is the system's
+   earliest day, not the customer's choice. Pickup, counter, today, right away
+   and restock are excluded.
+2. **A (PR #1116).** The new-order card adds
+   `> 顾客预约 Booked: <day> [window]`, highlighted. Live words, nothing composed.
+3. **B (this entry's code).** At 08:00 shop time (catching up until 11:00),
+   one message to the SAME channel as the new-order card — the WeCom app when
+   configured, else the group-bot webhook — listing the open booked deliveries
+   (paid, awaiting restock, preparing) due today that were paid on an earlier
+   day. One line per order: number, window, recipient; past 20, a count.
+   Nothing due, or no WeCom channel → nothing sent. The hour is fixed, not a
+   setting: nobody has asked for another, and a setting with no screen is one
+   nobody can find.
+4. **Once per order per day, guarded in the database.** New nullable column
+   `retail_orders.booked_reminder_day` ('YYYY-MM-DD'), claimed by
+   compare-and-set before the send and released if the send fails. A rebuilt
+   container or a second app server does not send twice; an order moved to
+   another day is listed again on that day.
+
+Strings: B composes one, `今天的顾客预约`, declared in
+`docs/tacet-delivery-vocabulary.md` v1.326.
+Tests: `scripts/test_wecom_booked_card.js` (A) and
+`scripts/test_booked_day_reminder.js` (B), both fast shard, both
+mutation-checked. Schema: one nullable column (above). No change to
+`.gitignore` or CI.
