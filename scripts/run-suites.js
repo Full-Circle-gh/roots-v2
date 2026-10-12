@@ -148,6 +148,11 @@ const SLOW = new Set([
   // a tick, which is the failure this list exists to stop.
   'test_kitchen_stock_visibility.js',
   'test_till_back.js', 'test_restock_direction_default.js',
+  /* §464's pinned searches, the browser half. m-probe again, no findChrome() of
+     its own, so isSlow() cannot see the browser; named for the same reason. The
+     static half, which needs no browser, is test_mobile_sticky_search_static.js
+     and stays in the fast shard. */
+  'test_mobile_sticky_search.js',
 ]);
 
 /* Not suites: tools that sit in scripts/ under a test-shaped name and take an
