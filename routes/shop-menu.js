@@ -4626,8 +4626,10 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
         "INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no) VALUES (?,?,?,'pending',?)"
       ).run(orderId, PLACEHOLDER_TENDER, total, orderNo);
 
-      // §45: a QR order RESERVES on submit and decrements on paid. Stocked
-      // lines only — a made-here item has no shelf to hold (§43).
+      // §45: a QR order RESERVES on submit. Stocked lines only — a made-here
+      // item has no shelf to hold (§43). Since §460 the hold is committed the
+      // moment this transaction closes (below), so the shelf drops on submit
+      // rather than on paid.
       //
       // AND A STOCK-BACKED EXTRA HOLDS ITS OWN (§120). An oat milk that was
       // chosen is a real thing coming off a real shelf, so it is reserved
@@ -4659,6 +4661,22 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     console.error('[shop-menu/order]', code, e.message);
     return res.status(500).json({ success: false, error: 'order_failed' });
   }
+
+  // §460 — THE SHELF DROPS NOW, ON SUBMIT, NOT AT PAYMENT. Ash, 2026-10-12:
+  // "customer at the till might eat and pay later. that's why till orders
+  // should immediately deduct from stock." The bottle is on the table the
+  // moment it is served, so a count that waits for the money says it is still
+  // on the shelf. The hold taken inside the transaction above becomes a real
+  // decrement here; the paid path then finds nothing left to commit (its
+  // per-product guard reads a 'committed' row as already accounted), and every
+  // unpaid cancel puts the units back through returnUnpaidOrderStock.
+  //
+  // AFTER the commit, on the same reasoning as the print below. If this throws,
+  // the order still stands with its hold, which is exactly the §45 behaviour,
+  // and the paid transition commits it as it always did.
+  try {
+    inventory.commitOrderReservations(created.orderId, { actorLabel: 'Auto · QR order placed' });
+  } catch (e) { console.error('[shop-menu/commit]', created.orderNo, e.message); }
 
   // THE TICKET PRINTS NOW, ON SUBMIT — Ash, 2026-10-10. This reverses the
   // 2026-09-08 change that had every QR order print only when paid. In Ash's
@@ -5021,7 +5039,7 @@ router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded
         "UPDATE retail_payments SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'"
       ).run(order.id);
     } catch (e) { console.error('[shop-menu/cancel payments]', e.message); }
-    try { inventory.releaseOrderReservations(order.id, { reason: 'customer_cancelled_qr' }); }
+    try { inventory.returnUnpaidOrderStock(order.id, { reason: 'customer_cancelled_qr' }); }
     catch (e) { console.error('[shop-menu/cancel release]', e.message); }
     try { reverseOrderVoucher(order.id); }
     catch (e) { console.error('[shop-menu/cancel voucher]', e.message); }
