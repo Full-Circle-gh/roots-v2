@@ -81,6 +81,7 @@ function setup() {
       lines: [], sel: null, customer: null, wallet: 'cash', useP: true, useB: true,
       moreOpen: true, err: '', busy: false, held: [], heldId: null, heldLast: '',
       holdOpen: false, pane: 'menu', paneTouched: false, sheetOpen: false,
+      heldSent: {}, heldBusy: {}, stock: {},
       pend: [], cxArm: false, tax: null,
       products: [
         { id: 11, name_en: 'Hummus Toast', name_cn: 'Hummus Toast', sku: 'TS-80', price: 30, on_menu: true },
@@ -89,19 +90,28 @@ function setup() {
     },
     T: (k) => k, cuT: (en) => en, esc: (s) => String(s), money: (n) => 'Y' + Number(n).toFixed(2),
     $: (id) => els[id] || null,
-    loaded: [], recallCalls: 0,
+    loaded: [], recallCalls: 0, holdCalls: [], holdReply: null,
     loadCounterVouchers(c) { ctx.loaded.push(c.id); },
-    api() { ctx.recallCalls++; return { then() { return { catch() {} }; } }; },
+    // §461 — the held-bill stock call answers like the server (a real promise,
+    // because heldStockPush chains on it); everything else is the recall fake.
+    api(path, opts) {
+      if (String(path).indexOf('/api/retail-admin/orders/till-held/') === 0) {
+        ctx.holdCalls.push({ path, body: JSON.parse(opts.body) });
+        return Promise.resolve(ctx.holdReply || { success: true, data: { taken: {} } });
+      }
+      ctx.recallCalls++; return { then() { return { catch() {} }; } };
+    },
     render() { ctx.renders = (ctx.renders || 0) + 1; vm.runInContext('heldSync()', ctx); },
   };
   vm.createContext(ctx);
   vm.runInContext(line(/\n  var HELD_PREFIX = [^\n]*/), ctx);
   vm.runInContext(line(/\n  var TAX_MAX_MICRO = [^\n]*/), ctx);
+  vm.runInContext(line(/\n  var HELD_PAID = [^\n]*/), ctx);
   ['heldKey', 'heldRead', 'heldWrite', 'heldLoad', 'heldFind', 'heldShown', 'canHold',
    'heldSnap', 'heldPut', 'heldDrop', 'holdNow', 'openHeld', 'heldSync', 'twoDigit',
    'heldDay', 'heldTime', 'renderHeld', 'renderHoldAsk', 'renderSeg', 'normalisePane',
    'lineKey', 'optsDelta', 'fullName', 'pname', 'vlabel', 'custRow', 'dueNow', 'taxOn',
-   'recall', 'commitHold']
+   'recall', 'commitHold', 'heldStockKey', 'heldStockPush', 'heldTook', 'heldOwn', 'stockOf']
     .forEach((n) => vm.runInContext(fn(n), ctx));
   ctx.els = els;
   return ctx;
@@ -314,7 +324,7 @@ function bill(ctx) {
 {
   const confirmSrc = fn('confirm');
   ok('Mark paid succeeding removes the held bill',
-     /S\.view = 'done';[\s\S]{0,200}heldDrop\(S\.heldId\)/.test(confirmSrc));
+     /S\.view = 'done';[\s\S]{0,900}heldDrop\(S\.heldId\)/.test(confirmSrc));
   ok('every paint syncs the held bill first', /function render\(\) \{\n    if \(!S\.storeId\) return;\n    heldSync\(\);/.test(src));
   ok('the store change loads that shop\'s bills', /function setStore[\s\S]{0,600}heldLoad\(\);/.test(src));
   ok('the business id is read from /api/backend/me', /S\.tid = \(tn && tn\.id != null\)/.test(src));
@@ -325,9 +335,99 @@ function bill(ctx) {
   ok('taps reach Hold and the held rows', /\[data-hold\],\[data-held\]'\)/.test(src));
 }
 
-if (problems.length) {
-  console.error(`${problems.length} of ${checks} failed:`);
-  for (const p of problems) console.error('  ✗ ' + p);
-  process.exit(1);
+// ---- 16. §461 — a held bill takes its shelf lines on the server while it is held
+(async () => {
+  const tick = () => new Promise((r) => setImmediate(r));
+  {
+    const c = setup(); bill(c);
+    c.S.stock = { 12: 5 };
+    c.holdReply = { success: true, data: { taken: { 12: 2, 77: 2 } } };
+    run(c, "holdNow('window table')");
+    ok('§461: holding sends the bill to the server once', c.holdCalls.length === 1);
+    const call = c.holdCalls[0];
+    const id = c.S.held[0].id;
+    ok('§461: ...addressed by the bill\'s own id', call.path === '/api/retail-admin/orders/till-held/' + id);
+    ok('§461: ...with the shop and every line, answers as ids',
+       call.body.store_id === 3 && call.body.lines.length === 2
+       && call.body.lines[1].product_id === 12 && call.body.lines[1].qty === 2
+       && call.body.lines[1].choices[0] === 5 && call.body.lines[0].choices === undefined);
+    await tick();
+    ok('§461: what the server took is kept on the bill', stored(c)[0].taken && stored(c)[0].taken[12] === 2);
+    ok('§461: the grid drops by what was taken', c.S.stock[12] === 3);
+
+    run(c, 'render()');
+    ok('§461: a paint with nothing changed sends nothing', c.holdCalls.length === 1);
+
+    // Brought back: the bill counts its own two lattes as still there for it.
+    run(c, `openHeld('${id}')`);
+    ok('§461: the bill on screen sees its own held units', run(c, 'stockOf(12)') === 5);
+    ok('§461: ...and nothing it does not hold', run(c, 'stockOf(99)') === null);
+
+    // One more latte goes on the same bill: the whole bill is sent again.
+    c.holdReply = { success: true, data: { taken: { 12: 3, 77: 3 } } };
+    c.S.lines[1].qty = 3;
+    run(c, 'render()');
+    ok('§461: adding to a held bill sends it again', c.holdCalls.length === 2
+       && c.holdCalls[1].body.lines[1].qty === 3);
+    await tick();
+    ok('§461: ...and the grid moves by the difference only', c.S.stock[12] === 2);
+    ok('§461: ...while the bill still sees all of its own', run(c, 'stockOf(12)') === 5);
+
+    // Emptied line by line: the bill is over and gives everything back.
+    c.holdReply = { success: true, data: { taken: {} } };
+    c.S.lines = [];
+    run(c, 'render()');
+    ok('§461: an emptied bill sends no lines', c.holdCalls.length === 3 && c.holdCalls[2].body.lines.length === 0);
+    await tick();
+    ok('§461: ...and the grid gets its lattes back', c.S.stock[12] === 5);
+  }
+  {
+    // A change made while a send is out waits for it, then goes.
+    const c = setup(); bill(c);
+    let release;
+    c.api = (path, opts) => {
+      c.holdCalls.push({ path, body: JSON.parse(opts.body) });
+      return new Promise((r) => { release = () => r({ success: true, data: { taken: {} } }); });
+    };
+    run(c, "holdNow('a')");
+    const id = c.S.held[0].id;
+    run(c, `openHeld('${id}')`);
+    c.S.lines[1].qty = 4;
+    run(c, 'render()');
+    ok('§461: a second send waits while the first is out', c.holdCalls.length === 1);
+    release(); await tick(); await tick();
+    ok('§461: ...and goes when it is back', c.holdCalls.length === 2 && c.holdCalls[1].body.lines[1].qty === 4);
+    release(); await tick(); await tick();
+    run(c, `S.heldSent['${id}'] = HELD_PAID; heldStockPush('${id}', [])`);
+    ok('§461: a paid bill sends nothing more', c.holdCalls.length === 2);
+  }
+  {
+    // A failed send is quiet: the bill stays held, and the next load sends again.
+    const c = setup(); bill(c);
+    c.holdReply = { success: false };
+    run(c, "holdNow('a')");
+    await tick();
+    ok('§461: a refused send leaves the bill held', c.S.held.length === 1 && !stored(c)[0].taken);
+    c.holdReply = null;
+    run(c, 'heldLoad()');
+    ok('§461: loading the shop\'s bills sends it again', c.holdCalls.length === 2);
+  }
+  {
+    const confirmSrc = fn('confirm');
+    ok('§461: Mark paid names the held bill', /body\.held_bill_id = S\.heldId/.test(confirmSrc));
+    ok('§461: Mark paid waits for a send that is out',
+       /S\.heldBusy\[S\.heldId\]\.after = confirm/.test(confirmSrc));
+    ok('§461: a paid bill is marked so nothing is sent after it',
+       /S\.heldSent\[S\.heldId\] = HELD_PAID/.test(confirmSrc));
+  }
+  finish();
+})();
+
+function finish() {
+  if (problems.length) {
+    console.error(`${problems.length} of ${checks} failed:`);
+    for (const p of problems) console.error('  ✗ ' + p);
+    process.exit(1);
+  }
+  console.log(`test_till_hold: ${checks} checks passed`);
 }
-console.log(`test_till_hold: ${checks} checks passed`);

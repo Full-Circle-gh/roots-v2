@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.508
+# Tacet shared-core consolidation — decisions record, v4.509
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-12 · v4.509 — **§461 · §457 AMENDED · A HELD TILL BILL TAKES ITS SHELF LINES WHILE IT IS HELD — DECIDED BY ASH**, the second half of the ruling §460 records (*"customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*). Every time a held bill changes (held, added to, a line removed, emptied) the till sends the whole bill to the new `PUT /api/retail-admin/orders/till-held/:billId`, and the server moves the shelf by the difference (`inventory.setTillHoldStock`, ledger reasons `till_hold` / `till_hold_return`, keyed by the bill's own id). Mark paid sends `held_bill_id`; the server gives the held units back the instant before the sale takes them, so the sale's own ledger is unchanged. The bill on screen counts its own held units as still there, at the till's tiles and at the add-on sold-out gate. A hold never takes a shelf below zero. No schema, no new string, no change to `.gitignore` or CI. See §461.
 
 2026-10-12 · v4.508 — **§460 · §45 AMENDED · A QR ORDER TAKES ITS SHELF LINES WHEN IT IS PLACED, NOT WHEN IT IS PAID — DECIDED BY ASH:** *"till , pending order , stock need to be deducted because customers already ordered it"*, then *"for mini app, yes, do not deduct before pay. but customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*. A QR order's stocked lines (and stock-backed extras) are committed — `physical_qty` drops, ledger `order_commit` — the moment the order is placed, instead of only being held until the cashier settles it. Every unpaid-cancel path (till/admin cancel, the customer's own cancel, the two-hour counter clock, and the three mini-app paths for safety) now calls `inventory.returnUnpaidOrderStock`, which releases holds AND reverses what was taken. Paying takes nothing more. Made-here items still take nothing (§43). The mini app and web are unchanged: they deduct at payment. Held till bills (§457) are the second half of the same ruling and follow as their own PR. No schema, no new route, no string, no change to `.gitignore` or CI. See §460.
 
@@ -29910,6 +29912,8 @@ the one failure being the Windows-only chip reading above.
 
 ## §457 — THE TILL CAN HOLD A BILL AND OPEN THE NEXT ONE
 
+> **AMENDED 2026-10-12 by §461 (Ash):** a held bill now TAKES its shelf lines while it is held, and gives them back when emptied or paid. "Not changed … stock" and the known limit about the shelf count below no longer hold. Read §461.
+
 **Decided by Ash, 2026-10-11:** *"I manually enter this order , customer
 eating now didn't pay. another customer come , how do I save this order and
 open a new order"*, sent with a photo of the Yuexiu till holding one Hummus &
@@ -30196,3 +30200,67 @@ returns it once, payment takes nothing more), `scripts/test_shop_menu_options.js
 (an extra is taken on submit), `scripts/test_counter_sweep_exempt.js` (the
 clock returns a taken bottle once). All fast shard.
 Schema: none. No new route. No string. No change to `.gitignore` or CI.
+
+## §461 — A HELD TILL BILL TAKES ITS SHELF LINES WHILE IT IS HELD (§457 AMENDED)
+
+**Decided by Ash, 2026-10-12**, as the second half of the ruling recorded in
+§460: *"for mini app, yes, do not deduct before pay. but customer at the till
+might eat and pay later. that's why till orders should immediately deduct from
+stock"*, then *"go"* to two PRs, QR orders first.
+
+**What was wrong.** §457 recorded it as an accepted limit: *"The shelf count
+does not drop while a bill is held, so a shelf item already on a customer's
+plate can still be sold from the grid until the held bill is paid."* A held
+bill is a customer eating now, so the count was wrong for as long as they sat
+there, and the last bottle could be sold twice.
+
+**The rule.**
+
+1. **The till tells the server what each held bill holds, whenever that
+   changes**: when the bill is held, added to, has a line taken off, or is
+   emptied. `PUT /api/retail-admin/orders/till-held/:billId` with the shop and
+   the whole bill. The server moves the shelf by the difference and answers
+   with what the bill now holds. Sending the same bill twice moves nothing.
+2. **The bill is expanded exactly as its sale will be.** The same resolver
+   prices it and names its stock-backed extras, with the same bundle expansion
+   as the paid-time commit. What the hold takes is what Mark paid would take,
+   only earlier.
+3. **The ledger is the record.** Every move is a `retail_stock_ledger` row
+   under `ref_table = 'till_held_bill'`, with the bill's own id in `note`.
+   `till_hold` takes; `till_hold_return` gives back. What a bill holds is the
+   net of its rows. No new table.
+4. **Mark paid gives back, then the sale takes.** The till sends
+   `held_bill_id`. After the order exists and before `markOrderPaid`, the
+   server returns everything the bill holds, and the counter sale then commits
+   as it always did. It has to be in that order: the other way round, the sale
+   would meet a shelf the hold had emptied and §137 would "correct" it to zero.
+   A Mark paid that waits on a send still out goes when that send is answered,
+   and a paid bill sends nothing more.
+5. **The bill on screen counts its own units as there.** Two lattes on a held
+   bill do not stop a third from being added when there are three on the
+   shelf. This applies at the till's tiles and at the server's add-on
+   sold-out gate.
+6. **A hold never takes a shelf below zero.** It takes what is there, up to
+   what is wanted, and returns exactly that. A made-here product with no shelf
+   row is not taken (§43). The sale at Mark paid remains the one door allowed
+   to meet a short shelf.
+7. **Failures are quiet and safe.** A send that fails leaves the bill held on
+   the tablet with its stock untaken. The next change, or the next time the
+   shop's bills load, sends it again, and Mark paid settles the count as it
+   did before §461. Bills held before §461 are sent when the till next loads
+   them.
+8. **Under `/orders`, on purpose.** `cap-routes` maps every write there to
+   `orders:edit`, which a cashier already holds to ring the sale up. A path
+   under `/stores` would have needed `stores:edit`.
+
+**Known limits, accepted.** A held bill whose tablet loses its storage keeps
+its stock taken, with no bill to pay. That is the true state, since the food
+was served, and the ledger rows carry the bill's id for anyone tracing it. On
+Stock activity the moves list under *Manual*, the bucket for every staff-keyed
+move. No new label was made for them.
+
+Tests: new `scripts/test_till_held_stock.js` covers the inventory moves, the
+real endpoint handler, the pay sequence with no §137 miscount, and the route
+order; it was mutation-checked. `scripts/test_till_hold.js` gains the till
+half: sends, waits, and the bill's own units. Both are in the fast shard.
+Schema: none. One new route. No string. No change to `.gitignore` or CI.
