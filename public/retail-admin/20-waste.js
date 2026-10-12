@@ -125,6 +125,9 @@
   let _reason = '';
 
   const root = () => document.getElementById('wst-root');
+  // §462 — the server marks a reason that is not a loss (`not_loss`); the
+  // screen never names the code itself.
+  const isNotLoss = code => _reasons.some(r => r.code === code && r.not_loss);
   const reasonLabel = code => {
     const r = _reasons.find(x => x.code === code);
     return r ? T(r.en, r.cn) : (code || '');
@@ -252,6 +255,18 @@
     // some: a zero here would be a figure about nothing anyone did.
     if (Number(t.eaten_by_staff_qty || 0) > 0) {
       figs.push({ label: T('Eaten by staff', '员工取用'), value: String(t.eaten_by_staff_qty), tone: '' });
+    }
+    // §462 — stock taken to make something on the spot. Not in Total: it went
+    // into something sold, not into the bin. The cost when this operator may
+    // read one, else how many units; and only when there is some. An uncosted
+    // entry turns it amber, the same signal No cost gives the loss.
+    if (Number(t.used_for_making_entries || 0) > 0) {
+      const withMoney = showMoney() && t.used_for_making_cents != null;
+      figs.push({
+        label: T('Used for making', '制作取用'),
+        value: withMoney ? money(t.used_for_making_cents) : String(t.used_for_making_qty),
+        tone: withMoney && Number(t.used_for_making_uncosted || 0) > 0 ? 'warn' : '',
+      });
     }
     return `<div class="wst-pulse">${figs.map(f => `
       <span class="wst-fig ${f.tone}">
@@ -673,7 +688,10 @@
         hint.className = 'wst-hint' + (lb ? ' warn' : '');
         return;
       }
-      if (!busy) submit.textContent = T('Record waste', '记录损耗');
+      // §462 — a reason that is not a loss is not recorded as waste, so the
+      // button stops saying so, and the hint says where it will be counted.
+      const notLoss = isNotLoss(reasonSel.value);
+      if (!busy) submit.textContent = notLoss ? T('Record', '登记') : T('Record waste', '记录损耗');
       submit.disabled = !!reason;
       let text = reason || '';
       // `preview` is null for a cost-blind operator (loadPreview returns early),
@@ -689,6 +707,7 @@
                 + preview.kept_lines.map(k => T(k.name_en, k.name_cn || k.name_en)).join(', ')
               : '');
       }
+      if (!reason && notLoss) text = (text ? text + ' · ' : '') + T('Not counted as waste', '不计损耗');
       hint.textContent = text;
       hint.className = 'wst-hint' + (reason ? ' warn' : '');
     }

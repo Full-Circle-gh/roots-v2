@@ -24,6 +24,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-10-12 · v4.511 — **§463 · ADD STOCK KEEPS ITS SEARCH ON SCREEN — ASKED BY ASH:** *"search bar should stay stick on top when scrolling"*, with a screenshot of the phone's Add stock list at Yuexiu. The search field now stays pinned under the header while the product list scrolls beneath it. Only this screen; the store chips above it still scroll away, and the status line keeps naming the store. No string, no schema, no change to `.gitignore` or CI. (v4.510 / §462 are held by PR #1122.) See §463.
 
+2026-10-12 · v4.510 — **§462 · §32 RULE 7 AMENDED · STOCK TAKEN TO MAKE SOMETHING ON THE SPOT IS RECORDED ON THE WASTE SCREEN, AND IS NOT WASTE — DECIDED BY ASH:** *"in waste we should have another option which is if location is taking somethnig form stock to use for product that made on the spot. its not waste but it should be recored . for example . tom ake cashew chocolate milk, if there is no cashew butter in the fridge staff will pick up cashew butter form the stock firdge and should record it"*, then *"Yes, go"* to keeping it out of the waste loss total. An eighth reason, `used_for_making` (**Used for making · 制作取用**), marked `not_loss` in the served list. It moves stock and keeps its cost like any entry, can be voided, and is left out of every waste-loss figure; the list's totals carry it in four fields of its own. Both screens show it as its own figure and say *Not counted as waste* on the form. One Chinese string composed; schema none, no new route, no change to `.gitignore` or CI. See §462.
+
 2026-10-12 · v4.509 — **§461 · §457 AMENDED · A HELD TILL BILL TAKES ITS SHELF LINES WHILE IT IS HELD — DECIDED BY ASH**, the second half of the ruling §460 records (*"customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*). Every time a held bill changes (held, added to, a line removed, emptied) the till sends the whole bill to the new `PUT /api/retail-admin/orders/till-held/:billId`, and the server moves the shelf by the difference (`inventory.setTillHoldStock`, ledger reasons `till_hold` / `till_hold_return`, keyed by the bill's own id). Mark paid sends `held_bill_id`; the server gives the held units back the instant before the sale takes them, so the sale's own ledger is unchanged. The bill on screen counts its own held units as still there, at the till's tiles and at the add-on sold-out gate. A hold never takes a shelf below zero. No schema, no new string, no change to `.gitignore` or CI. See §461.
 
 2026-10-12 · v4.508 — **§460 · §45 AMENDED · A QR ORDER TAKES ITS SHELF LINES WHEN IT IS PLACED, NOT WHEN IT IS PAID — DECIDED BY ASH:** *"till , pending order , stock need to be deducted because customers already ordered it"*, then *"for mini app, yes, do not deduct before pay. but customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*. A QR order's stocked lines (and stock-backed extras) are committed — `physical_qty` drops, ledger `order_commit` — the moment the order is placed, instead of only being held until the cashier settles it. Every unpaid-cancel path (till/admin cancel, the customer's own cancel, the two-hour counter clock, and the three mini-app paths for safety) now calls `inventory.returnUnpaidOrderStock`, which releases holds AND reverses what was taken. Paying takes nothing more. Made-here items still take nothing (§43). The mini app and web are unchanged: they deduct at payment. Held till bills (§457) are the second half of the same ruling and follow as their own PR. No schema, no new route, no string, no change to `.gitignore` or CI. See §460.
@@ -30266,6 +30268,67 @@ real endpoint handler, the pay sequence with no §137 miscount, and the route
 order; it was mutation-checked. `scripts/test_till_hold.js` gains the till
 half: sends, waits, and the bill's own units. Both are in the fast shard.
 Schema: none. One new route. No string. No change to `.gitignore` or CI.
+
+## §462 — STOCK TAKEN TO MAKE SOMETHING ON THE SPOT IS RECORDED, AND IS NOT WASTE (§32 RULE 7 AMENDED)
+
+**Decided by Ash, 2026-10-12.** Asked: *"in waste we should have another
+option which is if location is taking somethnig form stock to use for product
+that made on the spot. its not waste but it should be recored . for example .
+tom ake cashew chocolate milk, if there is no cashew butter in the fridge staff
+will pick up cashew butter form the stock firdge and should record it"*. Put
+to Ash: adding it as one more waste reason would put a jar that went into a
+sold drink into the waste loss total. Chosen: *"Yes, go"* to a reason that is
+recorded on the waste screen and kept out of that total.
+
+**Why on the waste screen at all.** §32 rule 1: stock going down for any cause
+that is not a sale is ONE mechanism, and waste is one reason it records. A jar
+leaving the stock fridge is exactly that: the shelf count has to drop, the
+channels have to stop offering it, and its cost should be kept. Building a
+second screen for it would be the parallel system rule 1 forbids.
+
+**Why not a loss.** The jar went into a drink that was sold. Counting it as a
+loss would overstate waste and send someone looking for a problem that is not
+there — the same two-errors-hiding-each-other §32 rule 8 names for a
+discounted sale.
+
+**The rule.**
+1. **§32 rule 7 is amended:** the seeded list gains `used_for_making`, *Used
+   for making · 制作取用*. It is still fixed and not account-editable.
+2. **It is marked `not_loss` on the served list** (`GET /waste/reasons`), and
+   both screens read that flag; neither names the code.
+3. **It is recorded exactly like a loss:** stock goes down through the same
+   movement (ledger reason `waste`, note `waste #id · used_for_making`), the
+   cost is snapshot in full at entry (it is not one of §281's kept-line
+   reasons — the whole jar was used), *Other*'s note rule does not apply and a
+   note is optional, and it is voided by reversal like any entry.
+4. **Every waste-loss figure leaves it out.** The list's `totals`
+   (`cost_total_cents`, `qty_total`, `entries`, `uncosted_entries`) count loss
+   reasons only. Four fields carry it beside them: `used_for_making_cents`,
+   `used_for_making_qty`, `used_for_making_entries`,
+   `used_for_making_uncosted`. The two money fields are withheld from a caller
+   without `waste:costs`, as the loss figures are.
+5. **Where it shows.** Its rows are listed with the rest, under their reason.
+   Desktop pulse line: a *Used for making* figure (cost, or units for someone
+   who may not read a cost), amber when an entry has no cost. Phone pulse
+   line: the same. On both forms, choosing it turns *Record waste* into
+   *Record* and adds *Not counted as waste* under the figure.
+6. **Production inherits it.** Production's gap reasons are the waste list
+   plus `made_fewer`, so a short batch can now say two jars went straight to
+   the bar. Its waste row is counted as Used for making, not as a loss, by the
+   same rule.
+
+**Not changed.** The other seven reasons, the cost rules, void, Eaten by staff
+(§455, expired only), the ledger reason, every other screen.
+
+**Open, and said so.** The bar's own cashew butter is a material, and
+materials still have no stock (§32 addendum point 1). This record fixes the
+SHELF count of the jar taken; it does not track what the bar holds.
+
+Strings: 1 composed (vocabulary v1.327, *Used for making on the waste screen
+(§462)*); the rest copied whole or lifted. Tests:
+`scripts/test_waste_used_for_making.js` (fast shard) — the real route on an
+in-memory SQLite. Schema: none (`reason_code` carries no CHECK). No new route.
+No change to `.gitignore` or CI.
 
 ## §463 — ADD STOCK KEEPS ITS SEARCH ON SCREEN
 
