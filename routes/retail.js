@@ -27615,7 +27615,7 @@ function manualOrderFees({ fulfillmentType, address, subtotal, totalQty, lines, 
 // route and the fee preview below, so a fee quoted for a cart is a fee quoted
 // for the SAME cart the order would be priced from. Returns { error } instead of
 // throwing; every caller answers 400 with it.
-function resolveManualOrderLines(items, { storeId = null } = {}) {
+function resolveManualOrderLines(items, { storeId = null, heldTaken = null } = {}) {
   const list = Array.isArray(items) ? items : [];
 
   /* §183 — THE ANSWERS, WHICH THIS FUNCTION USED TO DROP ON THE FLOOR.
@@ -27637,7 +27637,12 @@ function resolveManualOrderLines(items, { storeId = null } = {}) {
      which counter is selling and passes it, so a sold-out extra is refused
      rather than sold twice. The fee-preview endpoint that shares this helper
      knows no store and passes none, which leaves the pick-any floor unclamped —
-     correct for a preview that writes nothing and refuses nobody. */
+     correct for a preview that writes nothing and refuses nobody.
+
+     §461 — `heldTaken` is what a held till bill already took off this shelf
+     (inventory.tillHoldTaken). Those units are the bill's own, so they count
+     as there for it: the last oat milk a held bill took is not sold out to the
+     same bill when it is paid or added to. */
 
   // THE SHAPE CHECK COMES FIRST, and its position is load-bearing. `invalid_item`
   // is this resolver's oldest refusal and the loop below still owns it; asking
@@ -27653,7 +27658,7 @@ function resolveManualOrderLines(items, { storeId = null } = {}) {
     tdb(),
     list.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty),
                       choices: it.choices })),
-    storeId ? { isChoiceSoldOut: manualOrderAddonSoldOut(storeId) } : {}
+    storeId ? { isChoiceSoldOut: manualOrderAddonSoldOut(storeId, heldTaken) } : {}
   );
   if (answers.error) return { error: answers.error, product_id: answers.product_id || null };
 
@@ -27724,7 +27729,7 @@ function resolveManualOrderLines(items, { storeId = null } = {}) {
 // shelf that goes quietly negative and a margin report nobody can reconcile.
 // The till greys these out in its sheet, so a refusal here means the count
 // moved between the catalogue read and the sale.
-function manualOrderAddonSoldOut(storeId) {
+function manualOrderAddonSoldOut(storeId, heldTaken = null) {
   let map = null;
   return (c) => {
     if (map === null) {
@@ -27736,7 +27741,8 @@ function manualOrderAddonSoldOut(storeId) {
     // counter that cannot sell because a read failed is the worse failure.
     if (map === false) return false;
     const a = map.get(c.stock_product_id);
-    return !a || a.available <= 0;
+    const own = heldTaken ? (heldTaken.get(c.stock_product_id) || 0) : 0;
+    return !a || a.available + own <= 0;
   };
 }
 
@@ -27817,6 +27823,53 @@ function posClosedForStore(storeId) {
   } catch (e) { return false; }
 }
 
+/* §461 — A HELD TILL BILL TAKES ITS SHELF LINES WHILE IT IS HELD.
+
+   Ash, 2026-10-12: "customer at the till might eat and pay later. that's why
+   till orders should immediately deduct from stock." §457 keeps a held bill on
+   the tablet and nothing reached the server until Mark paid, so the bottle on
+   the customer's table still read as on the shelf, and the grid could sell it
+   again. The tablet now tells the server what each held bill holds, every time
+   that changes, and the server moves the shelf by the difference.
+
+   THE BILL IS THE TABLET'S, so it is addressed by the tablet's own id (`h` and
+   base-36, §457) and lives nowhere but the ledger: inventory.setTillHoldStock
+   says how. SET, NOT ADD — the body is the whole bill as it stands, and an
+   empty `lines` gives everything back (a bill emptied line by line is over).
+
+   THE BILL IS EXPANDED EXACTLY AS ITS SALE WILL BE: the same resolver the
+   order route prices it with (so an answer's stock-backed extra is named the
+   same way), the same product read and the same expansion as
+   prepareCommitUnreservedOrder. What the hold takes is what Mark paid would
+   take, earlier. A line the resolver refuses fails the whole call and moves
+   nothing; the bill stays held on the tablet and Mark paid settles the count.
+
+   UNDER /orders ON PURPOSE: cap-routes maps every write there to orders:edit,
+   the key a cashier already holds to ring the sale up. A path under /stores
+   would have needed stores:edit, which a cashier does not have. */
+const TILL_BILL_ID = /^h[a-z0-9]{4,40}$/;
+router.put('/api/retail-admin/orders/till-held/:billId', requireRetailAdmin, express.json(), (req, res) => {
+  const billId = String(req.params.billId || '');
+  if (!TILL_BILL_ID.test(billId)) return res.status(400).json({ success: false, error: 'bad_bill_id' });
+  const b = req.body || {};
+  const storeId = parseInt(b.store_id, 10);
+  if (!storeId || !tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(storeId)) {
+    return res.status(404).json({ success: false, error: 'store_not_found' });
+  }
+  if (!Array.isArray(b.lines)) return res.status(400).json({ success: false, error: 'no_lines' });
+  let expanded = [];
+  if (b.lines.length) {
+    const r = resolveManualOrderLines(b.lines, { storeId, heldTaken: inventory.tillHoldTaken(storeId, billId) });
+    if (r.error) return res.status(400).json({ success: false, error: r.error, product_id: r.product_id || null });
+    const prod = tdb().prepare('SELECT id, bundle_items FROM store_products WHERE id = ?');
+    expanded = expandStockLines(r.resolved.map((x) => ({ product: prod.get(x.p.id), qty: x.qty, options: x.options })));
+  }
+  const out = inventory.setTillHoldStock(storeId, billId, expanded, {
+    actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null,
+  });
+  res.json({ success: true, data: { taken: out.taken } });
+});
+
 router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
 
@@ -27850,9 +27903,16 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // garbage id simply leaves the shelf unread, and the block below still
   // refuses the order.
   const optionStoreId = parseInt(b.store_id, 10) || null;
+  // §461 — a held till bill being paid. Its id is the tablet's own (§457) and
+  // it is only ever honoured on a paid counter sale with a store; anything else
+  // carrying one is treated as not carrying one.
+  const heldBillId = (TILL_BILL_ID.test(String(b.held_bill_id || '')) && optionStoreId
+                      && b.status === 'paid' && String(b.fulfillment_type || '').toLowerCase() === 'counter')
+    ? String(b.held_bill_id) : null;
+  const heldTaken = heldBillId ? inventory.tillHoldTaken(optionStoreId, heldBillId) : null;
   // Shared with the fee preview above, so the cart a fee was quoted for and the
   // cart the order is priced from are resolved by one piece of code.
-  const lineResult = resolveManualOrderLines(items, { storeId: optionStoreId });
+  const lineResult = resolveManualOrderLines(items, { storeId: optionStoreId, heldTaken });
   if (lineResult.error) {
     const out = { success: false, error: lineResult.error };
     if (lineResult.product_id) out.product_id = lineResult.product_id;
@@ -28440,6 +28500,21 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     logActivity(req.user.id, req.user.username,
                 customerReused ? 'link_manual' : 'create_manual', 'retail_customer', customerId,
                 { phone: recipientPhone, nickname: recipientName, via: 'order_create' }, req.ip);
+  }
+
+  // §461 — A HELD BILL GIVES BACK WHAT IT TOOK, THEN THE SALE TAKES IT. Net
+  // nothing for the units the hold already had, and the order's own ledger rows
+  // carry the sale exactly as an unheld one's do. In this order and not the
+  // other: taken first, the counter commit would meet a shelf the hold had
+  // already emptied and §137 would "correct" it to zero, after which the return
+  // would put back units that were sold. After the order exists, never before,
+  // so a refused sale leaves the bill holding its stock on the tablet.
+  if (heldBillId && status === 'paid' && fulfillmentType === 'counter' && storeId === optionStoreId) {
+    try {
+      inventory.setTillHoldStock(storeId, heldBillId, [], {
+        actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null,
+      });
+    } catch (e) { console.error('[retail-admin/order create till-hold return]', e.message); }
   }
 
   // Money already collected offline → settle through the shared path (flips to
