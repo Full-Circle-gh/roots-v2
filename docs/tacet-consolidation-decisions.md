@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.513
+# Tacet shared-core consolidation — decisions record, v4.514
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-12 · v4.514 — **§466 · A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP — ASKED BY ASH:** *"rearock only internal and coffee and milks categories shows on the mini app . why and also hide them from there now"*, with a screenshot of the Shop tab. **WHY THEY SHOWED:** the shop draws every top category that has a published product in it, and §288 gave only the QR menu an eye — the mini app had no way to hide a category. **NOW:** a top node in `category.tree` may carry `hidden: true`, stored only when true so every existing tree keeps its bytes and its §325 version. The public tree (`GET /api/retail/category-tree`, with or without counts) leaves it out, and the product list (shop grid, search, a category grid, the list's total) and the best sellers leave its products out. The web shop reads the same feed, so it follows. **NOT HIDDEN:** a by-id read (`?ids=`) — checkout re-reads the cart that way and a hand-picked home block named its products on purpose — the product page, flash sales, the till, the QR menu (its own §288 list) and every admin screen. Hiding is what the shop shows, not what it accepts. Desktop: Products → Categories, *Mini app* mode, the same eye the QR mode has. The product editor now reads the ADMIN tree, because the wizard's *Add category* PUTs the whole list back and the public one would have deleted every hidden category. The phone keeps the flag on save (it sends nodes whole) but shows no eye. Four Chinese strings composed by Claude; see the vocabulary's v1.329. No schema change; no change to `.gitignore` or CI. Held by `scripts/test_miniapp_category_hide.js`. See §466.
 
 2026-10-12 · v4.513 — **§465 · §32 RULE 9 AMENDED · AN OWNER CAN RE-PRICE PAST WASTE ENTRIES WHEN A PRODUCT'S COST WAS CALCULATED WRONG — DECIDED BY ASH:** *"all waste list need to be update according to the new settings"*, then *"the cost was always right, calaxulation in the system of the product was wrong"*. A **Recalculate costs** button on the phone's waste list, for owners only (`waste:void` + `waste:costs`). It lists every live entry under the current filter whose figure would change, old → new, priced exactly as a new entry would be, and writes nothing until **Save**. Save writes only if nothing moved in between (409 otherwise). Voided entries are never touched, and a known figure is never turned into "no cost". Every change keeps its old figure in the new table `waste_cost_corrections`. Ordinary writes still snapshot cost at entry. The desktop screen is a follow-up. 1 string composed (vocabulary v1.328). No change to `.gitignore` or CI. See §465.
 
@@ -30491,3 +30493,55 @@ in the fast shard against the real route on an in-memory SQLite.
 `scripts/test_mobile_waste_void.js` now also lifts `wstRecalcBtn`, which the
 screen it renders calls. Schema: one new table, `waste_cost_corrections`, in
 `database.js`. No change to `.gitignore` or CI.
+
+## §466 — A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP
+
+**Asked by Ash, 2026-10-12:** *"rearock only internal and coffee and milks
+categories shows on the mini app . why and also hide them from there now"*,
+with a screenshot of the Shop tab showing both in the left rail.
+
+**Why they showed.** The Shop tab draws every top category in the tree that
+has at least one published product. §288 gave the QR menu an eye to hide a
+category and said, in its own words, the mini app was not changed. So the
+mini app had no hide at all: a category was either empty or on show.
+
+**The rule.**
+
+1. **The flag lives on the tree node**, `hidden: true` on a top category in
+   `storefront_config['category.tree']`. Only tops; a subcategory is a heading
+   inside a section. Stored only when true, so a tree that hides nothing keeps
+   its exact bytes, and the §325 version every open editor holds stays valid.
+   A separate list, like §288's, was not used: the mini app already reads the
+   tree, and every editor already sends nodes whole because of §297's banner.
+2. **Hidden means out of browsing.** The public tree leaves the top out, with
+   or without counts, so the rail, the home category tiles and the web shop
+   lose it. The product list leaves its products out: the shop grid, search,
+   a category grid and the list's total. The best sellers do too. They do not
+   fall into OTHER.
+3. **Not out of what the shop accepts.** A by-id read still returns them:
+   checkout re-reads the cart's lines that way, and a hand-picked home block
+   named its products on purpose. The product page, flash sales, the order
+   endpoint, the till and the QR menu are untouched. The QR menu keeps its
+   own §288 list; neither eye moves the other.
+4. **Admin screens read the whole tree.** The product editor's category
+   dropdowns now read `GET /api/retail-admin/category-tree`, not the public
+   one. Two reasons: a product must still be fileable under a hidden
+   category, and the wizard's *Add category* PUTs the whole list back, so
+   reading the public tree would have deleted every hidden category the
+   moment anyone added one.
+
+**Where it is switched.** Desktop, Products → Categories, *Mini app* mode: an
+eye on each rail row, the same one QR mode has. It saves with the tree's
+autosave, like a rename. The pane says *Hidden on the mini app* and the status
+line counts them. The phone sends the flag back untouched on any tree save but
+has no eye; adding one there is a separate change if wanted.
+
+**Not changed:** the schema, the order endpoint, `.gitignore`, CI.
+
+**Not done here, and flagged:** a product's own *Restock-only, internal* flag
+(`is_restock_only`) is still not read by the mini app's product list. The till
+leaves those products out (`routes/retail-shops.js`); the mini app does not.
+That is a separate change.
+
+Held by `scripts/test_miniapp_category_hide.js`. Four Chinese strings composed
+by Claude; see `docs/tacet-delivery-vocabulary.md` v1.329.
