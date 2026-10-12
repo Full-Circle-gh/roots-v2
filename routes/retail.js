@@ -5626,6 +5626,11 @@ function buildWecomOrderCard(o, awaitingRestock) {
     `> 订单号 Order: \`${o.order_no}\``,
     `> 金额 Amount: <font color="warning">${amount}</font>`,
     time ? `> 时间 Time: ${time}` : null,
+    // Set by sendWecomOrderAlert only for a delivery the customer booked for a
+    // later day (bookedLaterDay below). Without it a Thursday order reads
+    // exactly like one that has to go out now. Words: the live `Booked ·
+    // 顾客预约` time label (docs/tacet-delivery-vocabulary.md, Time labels).
+    o.booked_day ? `> 顾客预约 Booked: <font color="warning">${o.booked_day}</font>` : null,
     shortCount ? `> <font color="warning">⚠ 需补货/调货 · needs restock/transfer before shipping (${shortCount})</font>` : null,
   ];
   if (o.fulfillment_type === 'pickup') {
@@ -5671,6 +5676,28 @@ function buildWecomCounterCard(o) {
   ].filter(Boolean).join('\n');
 }
 
+// The day a DELIVERY order is booked for, when that day is later than `asOf`'s
+// Guangzhou day — "YYYY-MM-DD", plus the window when the slot label carries one
+// ("2026-10-14 10:00–12:00"). Null for anything that is not a booking for later.
+//
+// Which kinds count: 'schedule' is the checkout's deliberate future pick, and
+// NULL is what the operator's Change delivery day writes for a later date (see
+// the reschedule handler: "A later day takes a null kind"). 'express' is
+// excluded on purpose — its scheduled_for is the system's earliest day, not a
+// day the customer chose. 'today', 'right_away', 'restock' and 'pickup' are
+// not bookings for a later delivery day. Pickup already prints its slot.
+function bookedLaterDay(o, asOf) {
+  if (!o || o.fulfillment_type === 'pickup' || isCounter(o)) return null;
+  const kind = o.delivery_slot_kind || null;
+  if (kind && kind !== 'schedule') return null;
+  const day = inventory.gzDateStr(o.scheduled_for);
+  if (!day) return null;
+  const from = inventory.gzDateStr(asOf || new Date().toISOString());
+  if (!(day > from)) return null;
+  const win = /\d{1,2}:\d{2}\s*[–—-]\s*\d{1,2}:\d{2}/.exec(String(o.delivery_slot_label || ''));
+  return win ? `${day} ${win[0]}` : day;
+}
+
 // Fire the merchant new-order alert. App channel preferred; webhook fallback.
 // Fire-and-forget from markOrderPaid: reads the row synchronously (tenant scope
 // is live now) then sends async.
@@ -5682,6 +5709,7 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
     const o = tdb().prepare(
       `SELECT o.order_no, o.total, o.paid_at, o.fulfillment_type, o.recipient_name,
               o.address_full, o.delivery_slot_label, o.fulfillment_short_pids,
+              o.scheduled_for, o.delivery_slot_kind,
               o.created_by, s.code AS store_code,
               s.name_en AS store_name_en, s.name_cn AS store_name_cn
          FROM retail_orders o
@@ -5705,6 +5733,9 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
         }
       } catch (e) { console.warn('[wecom counter cashier]', orderId, e.message); }
     }
+    // Worked out here rather than in the card so the card stays a pure function
+    // of the row (verify-fulfilment-types lifts it out and runs it alone).
+    o.booked_day = bookedLaterDay(o, o.paid_at);
     const content = isCounter(o)
       ? buildWecomCounterCard(o)
       : buildWecomOrderCard(o, awaitingRestock);
