@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.509
+# Tacet shared-core consolidation — decisions record, v4.511
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-12 · v4.511 — **§463 · ADD STOCK KEEPS ITS SEARCH ON SCREEN — ASKED BY ASH:** *"search bar should stay stick on top when scrolling"*, with a screenshot of the phone's Add stock list at Yuexiu. The search field now stays pinned under the header while the product list scrolls beneath it. Only this screen; the store chips above it still scroll away, and the status line keeps naming the store. No string, no schema, no change to `.gitignore` or CI. (v4.510 / §462 are held by PR #1122.) See §463.
 
 2026-10-12 · v4.509 — **§461 · §457 AMENDED · A HELD TILL BILL TAKES ITS SHELF LINES WHILE IT IS HELD — DECIDED BY ASH**, the second half of the ruling §460 records (*"customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*). Every time a held bill changes (held, added to, a line removed, emptied) the till sends the whole bill to the new `PUT /api/retail-admin/orders/till-held/:billId`, and the server moves the shelf by the difference (`inventory.setTillHoldStock`, ledger reasons `till_hold` / `till_hold_return`, keyed by the bill's own id). Mark paid sends `held_bill_id`; the server gives the held units back the instant before the sale takes them, so the sale's own ledger is unchanged. The bill on screen counts its own held units as still there, at the till's tiles and at the add-on sold-out gate. A hold never takes a shelf below zero. No schema, no new string, no change to `.gitignore` or CI. See §461.
 
@@ -30264,3 +30266,28 @@ real endpoint handler, the pay sequence with no §137 miscount, and the route
 order; it was mutation-checked. `scripts/test_till_hold.js` gains the till
 half: sends, waits, and the bill's own units. Both are in the fast shard.
 Schema: none. One new route. No string. No change to `.gitignore` or CI.
+
+## §463 — ADD STOCK KEEPS ITS SEARCH ON SCREEN
+
+**Asked by Ash, 2026-10-12:** *"search bar should stay stick on top when
+scrolling"*, sent with a screenshot of the phone's Add stock list at Yuexiu.
+
+**The rule.** On Add stock (`screenStockAdd`, phone), the search field is
+pinned to the top of the screen's scroller (`position: sticky`) and the cards
+scroll beneath it, behind the page colour. A count is a walk along the shelf,
+and the next product is looked up from wherever the thumb is. Scrolling back
+to the top for every product is the cost this removes.
+
+**Not changed.** The store chips above the field still scroll away. The status
+line names the store in use, and switching store is not done mid-count. Other
+screens with a product search (Ask for stock, Waste, Log a batch) are
+unchanged. None was asked for, and each can follow on request with the same
+one-line change.
+
+Tests: `scripts/test_mobile_addstock.js` (browser suite, slow shard, run on
+its own for this change) gains a case: forty rows scrolled to the bottom, with
+the field still in view at the top. It was mutation-checked by removing the
+sticky line, which turns it red. The same suite's *search narrows the shelf
+without losing the caret* was red on main: the case never put the caret in the
+field before checking it stayed there. The setup now focuses the field first.
+Schema: none. No string. No change to `.gitignore` or CI.

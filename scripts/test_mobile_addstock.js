@@ -334,10 +334,26 @@ run('add stock', [
       state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();`, [
       ['it says so', `${body}.indexOf('No store assigned')>-1`],
     ]],
+  // The caret has to BE in the field before it can be kept there: the setup
+  // focuses it, as a finger would, and the search must not take it away.
   ['search narrows the shelf without losing the caret',
-    SHELF + "APP.cmd('qsSearch','tomato');", [
+    SHELF + "document.getElementById('mQsQ').focus(); APP.cmd('qsSearch','tomato');", [
       ['only the match', `${body}.indexOf('Turkish Tomato Salad')>-1 && ${body}.indexOf('Hummus')===-1`],
       ['the field keeps focus', "document.activeElement && document.activeElement.id==='mQsQ'"],
+    ]],
+  /* THE SEARCH STAYS ON SCREEN while a long shelf scrolls under it (Ash,
+     2026-10-12: "search bar should stay stick on top when scrolling"). Forty
+     rows, scrolled to the bottom: the field must still be inside the visible
+     top of the scroller, not scrolled away with the cards. */
+  ['the search stays pinned at the top of a long shelf scrolled to the bottom',
+    SHELF + `state.qs.items=Array.from({length:40},function(_,i){
+        return {product_id:100+i,name_en:'Shelf item '+i,name_cn:'货架'+i,sku:'9-'+i,physical_qty:5}; });
+      render(); document.getElementById('content').scrollTop=1e6;`, [
+      ['the list really scrolled', "document.getElementById('content').scrollTop>200"],
+      ['the field is still in view, at the top',
+        `(function(){ var c=document.getElementById('content').getBoundingClientRect(),
+            f=document.getElementById('mQsQ').getBoundingClientRect();
+            return f.top>=c.top-1 && f.bottom<=c.top+80; })()`],
     ]],
   /* ── §46: the count, and the one correction it allows ────────────────────
      WITHOUT THE GRANT NOTHING CHANGED — asserted by the case above this block,
