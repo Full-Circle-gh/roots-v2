@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.516
+# Tacet shared-core consolidation — decisions record, v4.517
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-13 · v4.516 — **§468 · A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY — ASKED BY ASH:** *"is it possible now to change category of expense that was choose by a user ?"*, then *"ok do it"*, with a screenshot of the phone's Finance → *Other* sheet holding a ¥5,000 transfer to the construction company. **It was already possible** (§146) from Transactions and Approvals, but not from this list, where a wrong category is actually seen. **NOW:** on the phone, a staff-claim row in a category's sheet is tappable for whoever may re-file (`expenses:approve` or `expenses:cancel`, the server's own gate); it opens a category picker under the row, the same native select as Transactions. A pick posts the existing `/staff-expenses/:id/category`, the row leaves the list, and the sheet stays open so the next claim can be fixed; the figures, the ledger and the approvals queue re-read. The sheet is re-found by its category text after the refresh (the breakdown is sorted by amount, so the index moves), and closes if the line was emptied; its layer key is now one constant instead of the index. `GET /finance/summary/category` also returns `expense_categories` (active accounting list, same read as Transactions). Purchase-order rows are unchanged: their category is set on the order. **Not changed:** the re-file route, the schema, the desktop drill-down (a follow-up if wanted), `.gitignore`, CI. No new string; every pair is live. Held by `scripts/test_mobile_finance_summary.js` §4b and `scripts/test_finance_summary.js`. See §468.
+2026-10-13 · v4.517 — **§469 · A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY — ASKED BY ASH:** *"is it possible now to change category of expense that was choose by a user ?"*, then *"ok do it"*, with a screenshot of the phone's Finance → *Other* sheet holding a ¥5,000 transfer to the construction company. **It was already possible** (§146) from Transactions and Approvals, but not from this list, where a wrong category is actually seen. **NOW:** on the phone, a staff-claim row in a category's sheet is tappable for whoever may re-file (`expenses:approve` or `expenses:cancel`, the server's own gate); it opens a category picker under the row, the same native select as Transactions. A pick posts the existing `/staff-expenses/:id/category`, the row leaves the list, and the sheet stays open so the next claim can be fixed; the figures, the ledger and the approvals queue re-read. The sheet is re-found by its category text after the refresh (the breakdown is sorted by amount, so the index moves), and closes if the line was emptied; its layer key is now one constant instead of the index. `GET /finance/summary/category` also returns `expense_categories` (active accounting list, same read as Transactions). Purchase-order rows are unchanged: their category is set on the order. **Not changed:** the re-file route, the schema, the desktop drill-down (a follow-up if wanted), `.gitignore`, CI. No new string; every pair is live. Held by `scripts/test_mobile_finance_summary.js` §4b and `scripts/test_finance_summary.js`. See §469.
+
+2026-10-12 · v4.516 — **§468 · A PRODUCT TICKED RESTOCK-ONLY, INTERNAL IS NOT SHOWN ON THE MINI APP — ASKED BY ASH:** *"do it"*, to the item §466 flagged and left open. The till has dropped `is_restock_only` products since it moved server-side; the mini app's product list never read the flag, so a product ticked *Restock-only, internal* still showed to customers in any visible category. It now leaves browsing by §466's rule: the product list (grid, search, a category grid, `meta.total`), the best sellers, and the home category tiles' count and cover photo. A by-id read (`?ids=`, checkout's) still returns it, so no cart breaks. No string, no schema, no change to `.gitignore` or CI. Held by `scripts/test_miniapp_category_hide.js`. See §468.
 
 2026-10-12 · v4.515 — **§467 · LOCAL DAILY BACKUPS KEEP 4 DAYS, NOT 14 — DECIDED BY ASH:** *"the reason it goes to 85% is because we save too much orders . need to cut that to 3-4 days backup"*, then *"go"* to 4 days. Measured first (`scripts/diagnose_disk_usage.js`, read-only): `/root/backups` was 20G of the 32G used on a 40G disk; the database itself is 1G. `daily/` drops from 14 copies to 4 (~6.3G back), and two uncompressed files left in `hourly/` by the 2026-09-23 outage (1.4G), which the hourly prune could never reach, are removed and swept from now on. Hourly stays at 12. **No history is lost:** the off-site OSS copy (`scripts/db-backup.sh`) still keeps 14 days and was verified OK every night checked. Applied with `scripts/oneoff_backup_retention_4d.js` through `oneoff.yml`, the only CI path to `/root/scripts/`. `scripts/install-backup-cron.sh` brought in line so re-running it cannot undo this. No string, no schema, no change to `.gitignore` or CI. See §467.
 
@@ -30607,7 +30609,37 @@ same sweep.
 the database, the application. No string, no schema, no change to `.gitignore`
 or CI.
 
-## §468 — A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY
+## §468 — A PRODUCT TICKED RESTOCK-ONLY, INTERNAL IS NOT SHOWN ON THE MINI APP
+
+**Asked by Ash, 2026-10-12:** *"do it"*, to the follow-up §466 flagged under
+*Not done here*.
+
+**Before.** A product's *Restock-only, internal · 仅内部补货* box
+(`store_products.is_restock_only`) was read by the till, which leaves those
+products off the glass: *"a receiving record, never a thing to sell"*
+(`routes/retail-shops.js`). The mini app's product list never read it. A
+product with the box ticked showed to customers whenever its category was on
+show.
+
+**The rule.** A restock-only product leaves the mini app's browsing by the same
+rule §466 set for a hidden category:
+
+1. **Out of:** the product list (shop grid, search, a category grid, and the
+   list's `meta.total`), the best sellers, and the home category tiles' count
+   and cover photo, so a tile never counts a product the shopper cannot find.
+   The web shop reads the same feed and follows.
+2. **Not out of:** a by-id read (`?ids=`). Checkout re-reads the cart that way,
+   so a product ticked after a customer added it does not break their order.
+   The product page, the order endpoint and flash sales are unchanged.
+
+**Open, not decided here:** whether the order endpoint should also refuse a
+restock-only product, as the till does by never offering it. Today a shopper
+holding an old link could still order one.
+
+No string, no schema, no change to `.gitignore` or CI. Held by
+`scripts/test_miniapp_category_hide.js`.
+
+## §469 — A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY
 
 **Asked by Ash, 2026-10-13:** *"is it possible now to change category of
 expense that was choose by a user ?"*, with a screenshot of the phone's

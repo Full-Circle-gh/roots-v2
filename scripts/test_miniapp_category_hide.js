@@ -18,6 +18,9 @@
  *  4. A BY-ID READ STILL RETURNS THEM. Checkout re-reads the cart by id; a
  *     hidden category must not break an order already in a cart.
  *  5. THE ADMIN SAVE ROUND-TRIPS THE FLAG, so the desktop editor's eye sticks.
+ *  6. A PRODUCT TICKED "RESTOCK-ONLY, INTERNAL" (§468) leaves browsing the same
+ *     way — list, search, a category grid, the home tile's count — in a
+ *     category that is on show. A by-id read still returns it.
  */
 'use strict';
 
@@ -68,7 +71,7 @@ check('publicTree drops the hidden top; hiddenTopNames names it', () => {
 
 // ── Real database, real router ─────────────────────────────────────────────
 const OP = 8971;
-const P = { shown: 8961, hidden: 8962 };
+const P = { shown: 8961, hidden: 8962, restock: 8963 };
 const PRODS = Object.values(P);
 const saved = rawCfg('category.tree');
 
@@ -90,6 +93,8 @@ function seed() {
     VALUES (?, ?, ?, ?, 10, 1, 1, ?, 0)`);
   prod.run(P.shown,  'Fixture MAH oats',   '测试燕麦', '__MAH-1', 'MAH Pantry');
   prod.run(P.hidden, 'Fixture MAH beans',  '测试豆子', '__MAH-2', 'MAH Internal');
+  prod.run(P.restock, 'Fixture MAH jars',  '测试罐子', '__MAH-3', 'MAH Pantry');
+  db.prepare('UPDATE store_products SET is_restock_only = 1 WHERE id = ?').run(P.restock);
 }
 
 let SESSION = null;
@@ -129,8 +134,17 @@ const ids = (rows) => (rows.data || []).map(r => r.id);
       const r = await json('/api/retail/products?q=Fixture%20MAH');
       assert.strictEqual(r.meta && r.meta.total, 1);
     });
+    await checkAsync('a restock-only product leaves the list, search and a category grid', async () => {
+      assert.ok(!ids(await json('/api/retail/products?limit=500')).includes(P.restock), 'listed');
+      assert.ok(!ids(await json('/api/retail/products?q=Fixture%20MAH')).includes(P.restock), 'in search');
+      assert.deepStrictEqual(ids(await json('/api/retail/products?category=' + encodeURIComponent('MAH Pantry'))), [P.shown]);
+    });
+    await checkAsync('the home tile counts only what the shopper can see', async () => {
+      const top = (await json('/api/retail/category-tree?counts=1')).data.find(t => t.name === 'MAH Pantry');
+      assert.strictEqual(top.count, 1);
+    });
     await checkAsync('a by-id read still returns them — checkout reads the cart this way', async () => {
-      assert.deepStrictEqual(ids(await json(`/api/retail/products?ids=${P.hidden},${P.shown}`)).sort(), [P.shown, P.hidden].sort());
+      assert.deepStrictEqual(ids(await json(`/api/retail/products?ids=${P.hidden},${P.shown},${P.restock}`)).sort(), [P.shown, P.hidden, P.restock].sort());
     });
 
     console.log('\nThe admin side');

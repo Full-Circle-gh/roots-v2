@@ -165,7 +165,7 @@ section('1 · who gets the screen');
   it('Back closes the category sheet before the screen', () => {
     const L = M.slice(M.indexOf('function layers(){'), M.indexOf('function syncHistory(){'));
     assert.ok(L.includes('if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });'));
-    // §468: one key, not the index — a re-file re-sorts the breakdown and moves
+    // §469: one key, not the index — a re-file re-sorts the breakdown and moves
     // the index, and a key that moved with it would slide the open sheet in again.
     assert.ok(M.includes("if(state.fin.cat) html += layer('fincat', sheetFinCat());"));
   });
@@ -477,7 +477,7 @@ const ROWS = [
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
-section('4b · §468 — a staff claim re-filed from the rows behind its category');
+section('4b · §469 — a staff claim re-filed from the rows behind its category');
 const CATS = ['Rent 房租', 'Delivery & freight 运费', 'Marketing 市场推广'];
 const FROWS = () => [
   { id: 5, source: 'po', date: '2026-09-29', note: 'RPO-0234', po_number: 'RPO-0234', lines: 2, amount: 40 },

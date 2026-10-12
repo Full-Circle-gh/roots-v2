@@ -1352,7 +1352,7 @@ it('the drill-down endpoint is admin-gated and multi-tenant, like the summary', 
   assert.ok(!/require\('\.\.\/database'\)/.test(handler), 'never the global handle');
 });
 
-it('§468 — the drill-down sends the re-file list: active accounting categories, the tenant\'s order', () => {
+it('§469 — the drill-down sends the re-file list: active accounting categories, the tenant\'s order', () => {
   // The phone opens a claim row here onto a picker; `/staff-expenses/:id/category`
   // snaps onto exactly this list, so a different read would offer names the
   // route then files somewhere else. Same SQL as Transactions' own picker.

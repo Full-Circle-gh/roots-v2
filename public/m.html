@@ -28904,7 +28904,7 @@ function finLoad(){
   if(f.tried) return; f.tried=true;
   const w=finWindow(); const seq=++f.seq;
   // The open category belongs to the window being left (finLoad on desktop).
-  // §468: EXCEPT after a re-file from inside it — same window, so the sheet
+  // §469: EXCEPT after a re-file from inside it — same window, so the sheet
   // stays and the next claim can be fixed without opening it again.
   const keep=!!(f.catKeep&&f.cat); f.catKeep=false;
   if(!keep){ f.cat=null; f.pol=null; }
@@ -29055,7 +29055,7 @@ reg('finCat', i=>{
 });
 reg('closeFinCat', ()=>{ state.fin.cat=null; state.fin.pol=null; render(); });
 
-/* ── §468 — RE-FILING A STAFF CLAIM FROM THE ROWS BEHIND A CATEGORY ────────
+/* ── §469 — RE-FILING A STAFF CLAIM FROM THE ROWS BEHIND A CATEGORY ────────
    This list is where a claim filed under the wrong line is SEEN, so it is
    where it can be fixed. The same write as Transactions and Approvals
    (§146): the claim's own endpoint, same gate (expenses:approve or :cancel),
@@ -29176,7 +29176,7 @@ function finCatEntry(r){
   return `<button onclick="${cmd}" aria-expanded="${open?'true':'false'}" style="${rowStyle};border:none;background:none;font-family:inherit;text-align:left;cursor:pointer;color:var(--text-primary)">${inner}</button>`
     + (open?`<div style="background:var(--surface-raised)">${fileable?finCatFileBody(r):finPolBody(f.pol)}</div>`:'');
 }
-/* §468 — the picker under an open claim row. The same native select as the
+/* §469 — the picker under an open claim row. The same native select as the
    Transactions sheet (§146), the line it sits on now selected; when that line
    is not on the list (blank, or text nobody keeps any more) the blank row is
    shown instead, so no category is ever pre-selected that the claim is not. */

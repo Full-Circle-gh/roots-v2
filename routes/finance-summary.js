@@ -761,7 +761,7 @@ router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (re
       }
     }
 
-    // §468 — WHAT A STAFF-CLAIM ROW HERE MAY BE RE-FILED UNDER. The phone opens
+    // §469 — WHAT A STAFF-CLAIM ROW HERE MAY BE RE-FILED UNDER. The phone opens
     // a claim row onto a picker that posts to `/staff-expenses/:id/category`,
     // and that route snaps what it is sent onto this exact list (active
     // `accounting` categories, the tenant's own order) — the same read
