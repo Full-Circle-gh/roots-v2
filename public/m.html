@@ -14330,7 +14330,7 @@ function wstReasonName(code){
   const r=(state.wst.reasons||[]).find(x=>x.code===code);
   return r?T(r.en,r.cn):(code||'—');
 }
-/* §461 — the server marks a reason that is not a loss (`not_loss`, today Used
+/* §462 — the server marks a reason that is not a loss (`not_loss`, today Used
    for making); the screen never names the code itself. */
 function wstNotLoss(code){ return (state.wst.reasons||[]).some(x=>x.code===code&&x.not_loss); }
 function loadWaste(force){
@@ -14398,7 +14398,7 @@ function wstPulse(){
   if(Number(t.voided_entries||0)) bits.push(`<span class="num">${t.voided_entries} ${T('voided','已作废')}</span>`);
   // §455 — what the staff ate of the expired food, when they ate any.
   if(Number(t.eaten_by_staff_qty||0)>0) bits.push(`<span class="num">${T(t.eaten_by_staff_qty+' eaten by staff','员工取用 '+t.eaten_by_staff_qty)}</span>`);
-  /* §461 — stock taken to make something on the spot. Not in the written-off
+  /* §462 — stock taken to make something on the spot. Not in the written-off
      figure: it went into something sold. Its cost for whoever may read one
      (amber when an entry has none), else how many units. */
   if(Number(t.used_for_making_entries||0)>0){
@@ -14739,7 +14739,7 @@ function sheetWaste(){
                 ? `<br>${T('Not counted as waste: ','不计损耗：')}${w.preview.kept_lines.map(k=>escAttr(T(k.name_en,k.name_cn||k.name_en))).join(', ')}`
                 : ''))
         : '&nbsp;';
-  /* §461 — a reason that is not a loss says so under the figure, and the
+  /* §462 — a reason that is not a loss says so under the figure, and the
      button stops calling it waste. */
   const notLoss=!listMode&&!blocked&&w.pick&&wstNotLoss(w.code);
   const costFoot=notLoss ? (costLine==='&nbsp;'?'':costLine+'<br>')+T('Not counted as waste','不计损耗') : costLine;

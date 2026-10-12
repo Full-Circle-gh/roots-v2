@@ -69,7 +69,7 @@ const REASONS = [
   { code: 'staff_consumption', en: 'Staff consumption', cn: '员工取用' },
   { code: 'sampling',          en: 'Sampling',          cn: '试吃样品' },
   { code: 'other',             en: 'Other',             cn: '其他' },
-  // §461 — NOT A LOSS. Stock taken off the shelf to make something on the spot:
+  // §462 — NOT A LOSS. Stock taken off the shelf to make something on the spot:
   // a jar of cashew butter from the stock fridge, opened for a cashew chocolate
   // milk. The jar really left the shelf, so stock goes down and the cost is
   // kept, exactly as for a loss. But the drink was sold, so the jar was not
@@ -79,7 +79,7 @@ const REASONS = [
   { code: 'used_for_making',   en: 'Used for making',   cn: '制作取用', not_loss: true },
 ];
 const REASON_CODES = new Set(REASONS.map(r => r.code));
-// §461 — the codes left out of every waste-loss figure. Their entries are still
+// §462 — the codes left out of every waste-loss figure. Their entries are still
 // listed, still move stock and can still be voided; they are totalled apart.
 const NOT_LOSS_CODES = REASONS.filter(r => r.not_loss).map(r => r.code);
 const NOT_LOSS_SQL = `(${NOT_LOSS_CODES.map(c => `'${c}'`).join(', ')})`;
@@ -369,7 +369,7 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
   // presented alone reads as complete, and the whole point of the flag is that
   // sometimes it is not.
   //
-  // §461 — the loss figures leave out Used for making: that stock went into
+  // §462 — the loss figures leave out Used for making: that stock went into
   // something that was sold, not into the bin. It is totalled beside them, in
   // its own fields, so the cost is still on the screen and never in the loss.
   const totals = db.prepare(`

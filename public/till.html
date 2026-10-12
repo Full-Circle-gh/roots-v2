@@ -1373,6 +1373,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        `heldLast` is what was last written for it, so a repaint that changed
        nothing writes nothing. `holdOpen` is the note sheet. */
     tid: null, held: [], heldId: null, heldLast: '', holdOpen: false,
+    heldSent: {}, heldBusy: {},
     home: null, homeLabel: null,  // where Back goes, and what it says — /api/backend/me
     leaveOpen: false,          // is the "leave without saving?" question up?
     mode: 'manual',
@@ -1501,7 +1502,20 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
 
   // ---- stock. Per STORE, not the catalogue's cross-store sum: a till may only
   // sell what is on ITS shelf, and effective_stock adds up every store's.
-  function stockOf(id) { var v = S.stock[id]; return v == null ? null : v; }
+  /* §461 — THE BILL ON SCREEN COUNTS ITS OWN HELD UNITS AS THERE. A held bill
+     has already taken its bottles off the shelf, so the catalogue's figure is
+     net of them; without this the bill brought back for a second coffee would
+     be refused the third bottle that is still on the shelf. Only the bill on
+     screen: every other held bill's units are gone, for the grid and for it. */
+  function stockOf(id) {
+    var v = S.stock[id];
+    if (v == null) return null;
+    return v + heldOwn(id);
+  }
+  function heldOwn(id) {
+    var b = S.heldId ? heldFind(S.heldId) : null;
+    return (b && b.taken && Number(b.taken[id])) || 0;
+  }
   /* §183 — A PRODUCT MAY NOW HOLD SEVERAL LINES, and both of these changed
      shape for it. One latte hot and one latte iced are two lines and ONE shelf,
      so what is "in the cart" for the purpose of gating a tile is the sum across
@@ -2608,7 +2622,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     S.held = list;
     return true;
   }
-  function heldLoad() { S.held = heldRead(); S.heldLast = ''; }
+  function heldLoad() {
+    S.held = heldRead(); S.heldLast = '';
+    // §461 — every bill this shop has held tells the server what it holds. A
+    // bill held before §461, or whose last send failed, is put right here; one
+    // already in step moves nothing.
+    S.held.forEach(function (b) { heldStockPush(b.id, b.lines); });
+  }
   function heldFind(id) { return S.held.filter(function (b) { return b.id === id; })[0] || null; }
   // What the list shows: everything held except the bill already on screen.
   function heldShown() { return S.held.filter(function (b) { return b.id !== S.heldId; }); }
@@ -2620,6 +2640,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      shows. Not the wallet or the credit toggles: those are chosen at payment,
      and §93 keeps both off until tapped. */
   function heldSnap(id, note, at) {
+    var prev = heldFind(id);
     return {
       id: id, at: at, note: note || '',
       lines: S.lines.map(function (l) {
@@ -2628,7 +2649,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
                  choices: (l.choices || []).slice(), opts: (l.opts || []).slice() };
       }),
       customer: S.customer ? { id: S.customer.id, nickname: S.customer.nickname || null,
-                               points: S.customer.points, balance: S.customer.balance } : null
+                               points: S.customer.points, balance: S.customer.balance } : null,
+      // §461 — what the server says this bill has taken off the shelf. Kept on
+      // the bill, not beside it, so a reload still knows (see stockOf).
+      taken: (prev && prev.taken) || null
     };
   }
   // Newest first, as Pending lists; a bill already in the list keeps its place.
@@ -2652,6 +2676,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var bill = heldSnap(id, note !== undefined ? note : (prev ? prev.note : ''),
                         prev ? prev.at : Date.now());
     if (!heldPut(bill)) { S.err = T('didNotSave'); return false; }
+    heldStockPush(id, bill.lines);
     S.lines = []; S.sel = null; S.customer = null; S.heldId = null; S.heldLast = '';
     S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
     return true;
@@ -2713,12 +2738,85 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
      bill changed. Quiet once paid: the success path has already removed it. */
   function heldSync() {
     if (!S.heldId || S.done || S.recall) return;
-    if (!S.lines.length) { heldDrop(S.heldId); S.heldId = null; S.heldLast = ''; return; }
+    if (!S.lines.length) {
+      heldStockPush(S.heldId, []);     // §461 — an emptied bill gives its stock back
+      heldDrop(S.heldId); S.heldId = null; S.heldLast = ''; return;
+    }
     var prev = heldFind(S.heldId);
     var bill = heldSnap(S.heldId, prev ? prev.note : '', prev ? prev.at : Date.now());
     var snap = JSON.stringify(bill);
     if (snap === S.heldLast) return;
-    if (heldPut(bill)) S.heldLast = snap;
+    if (heldPut(bill)) { S.heldLast = snap; heldStockPush(S.heldId, bill.lines); }
+  }
+
+  /* §461 — A HELD BILL TAKES ITS SHELF LINES WHILE IT IS HELD. Ash, 2026-10-12:
+     "customer at the till might eat and pay later. that's why till orders
+     should immediately deduct from stock." Every time what a held bill holds
+     changes — held, added to, a line taken off, emptied — the whole bill goes
+     to the server, which moves the shelf by the difference and answers with
+     what the bill now holds. Mark paid sends the bill's id, and the server
+     gives the units back the instant before the sale takes them.
+
+     QUIET ON FAILURE, and that is safe rather than lazy: a bill whose stock did
+     not reach the server is still held here, and Mark paid settles the count
+     exactly as it did before §461. The next change, or the next time this
+     shop's bills are loaded, sends it again.
+
+     ONE REQUEST PER BILL AT A TIME. A change made while one is out waits and
+     goes after it, so two answers cannot arrive in the wrong order; a bill
+     paid in that time sends nothing more. */
+  var HELD_PAID = '\u0000paid';
+  function heldStockKey(lines) {
+    return JSON.stringify((lines || []).map(function (l) {
+      return [l.id, l.qty, (l.choices || []).slice().sort(function (a, b) { return a - b; })];
+    }));
+  }
+  function heldStockPush(id, lines) {
+    if (!id || S.storeId == null || S.heldSent[id] === HELD_PAID) return;
+    var key = heldStockKey(lines);
+    if (S.heldBusy[id]) { S.heldBusy[id].next = lines; return; }
+    if (S.heldSent[id] === key) return;
+    var storeId = S.storeId;
+    S.heldBusy[id] = { next: null, after: null };
+    api('/api/retail-admin/orders/till-held/' + encodeURIComponent(id), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_id: storeId, lines: (lines || []).map(function (l) {
+        var it = { product_id: l.id, qty: l.qty };
+        if (l.choices && l.choices.length) it.choices = l.choices;
+        return it;
+      }) })
+    }).then(function (j) {
+      if (j && j.success && j.data && S.heldSent[id] !== HELD_PAID) {
+        S.heldSent[id] = key;
+        heldTook(id, j.data.taken || {}, storeId);
+      }
+    }).catch(function () { /* see above: Mark paid settles it */ }).then(function () {
+      var busy = S.heldBusy[id] || {};
+      delete S.heldBusy[id];
+      if (busy.next) heldStockPush(id, busy.next);
+      if (busy.after) busy.after();
+    });
+  }
+  /* What the server says a bill now holds. The grid's figures move by the
+     difference so the next sale's tiles are honest before the catalogue is
+     read again. If that read has already landed, this takes the units off a
+     second time until the next one: the tile reads LOW for a moment, never
+     high, which is the direction that cannot sell a bottle twice. */
+  function heldTook(id, taken, storeId) {
+    var b = heldFind(id);
+    var was = (S.heldTaken && S.heldTaken[id]) || (b && b.taken) || {};
+    if (storeId === S.storeId) {
+      var seen = {};
+      Object.keys(was).concat(Object.keys(taken)).forEach(function (k) {
+        if (seen[k]) return; seen[k] = true;
+        var d = (Number(taken[k]) || 0) - (Number(was[k]) || 0);
+        if (d && S.stock[k] != null) S.stock[k] = Math.max(0, S.stock[k] - d);
+      });
+    }
+    S.heldTaken = S.heldTaken || {};
+    S.heldTaken[id] = taken;
+    if (b) { b.taken = taken; heldPut(b); }
+    render();
   }
 
   function twoDigit(n) { return (n < 10 ? '0' : '') + n; }
@@ -3506,6 +3604,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (!canConfirm()) return;
     var mode = SETTLE_MODES[S.mode];
     if (S.recall) return confirmRecall(mode);
+    // §461 — a held bill whose stock is on its way to the server is paid the
+    // moment that answer is back, never beside it: the sale gives the hold's
+    // units back, and a hold landing after it would take them again.
+    if (S.heldId && S.heldBusy[S.heldId]) { S.heldBusy[S.heldId].after = confirm; return; }
     S.busy = true; S.err = ''; render();
     var body = Object.assign({
       fulfillment_type: 'counter',
@@ -3551,6 +3653,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
        counter-sale rule that insists a walk-in names its tender. Naming the
        credit satisfies that rule with the truth rather than around it. */
     if (cashDue() <= 0 && creditApplied() > 0) body.payment_method = creditTender();
+    // §461 — the server gives this bill's held units back, then the sale takes them.
+    if (S.heldId) body.held_bill_id = S.heldId;
 
     api('/api/retail-admin/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -3566,8 +3670,18 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
                  balanceUsed: Number(j.data.balance_used) || 0,
                  cardFee: Number(j.data.card_surcharge_fee) || 0 };
       S.view = 'done'; S.printState = 'idle';
-      // §457 — a held bill that has just been paid is over.
-      if (S.heldId) { heldDrop(S.heldId); S.heldId = null; S.heldLast = ''; }
+      // §457 — a held bill that has just been paid is over. §461: its held
+      // units went back to the shelf and the sale took them again, so they are
+      // put back here before the loop below takes the whole bill off.
+      if (S.heldId) {
+        var own = heldFind(S.heldId);
+        var took = (S.heldTaken && S.heldTaken[S.heldId]) || (own && own.taken) || {};
+        Object.keys(took).forEach(function (k) {
+          if (S.stock[k] != null) S.stock[k] += Number(took[k]) || 0;
+        });
+        S.heldSent[S.heldId] = HELD_PAID;
+        heldDrop(S.heldId); S.heldId = null; S.heldLast = '';
+      }
       // The shelf moved server-side; mirror it locally so the next sale's
       // tiles are honest without a full reload.
       S.lines.forEach(function (l) {

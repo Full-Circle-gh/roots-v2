@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.327 · 2026-10-12 · §461 USED FOR MAKING ON THE WASTE SCREEN — 1 STRING COMPOSED BY CLAUDE (`Used for making · 制作取用`), FROM THE LIVE 制作 AND 取用; `Not counted as waste · 不计损耗` LIFTED FROM THE LIVE `不计损耗：`; `Record · 登记` COPIED WHOLE.** See *Used for making on the waste screen (§461)*.
+**v1.327 · 2026-10-12 · §462 USED FOR MAKING ON THE WASTE SCREEN — 1 STRING COMPOSED BY CLAUDE (`Used for making · 制作取用`), FROM THE LIVE 制作 AND 取用; `Not counted as waste · 不计损耗` LIFTED FROM THE LIVE `不计损耗：`; `Record · 登记` COPIED WHOLE.** See *Used for making on the waste screen (§462)*.
 
 **v1.326 · 2026-10-12 · §459 BOOKED DELIVERIES IN THE NEW-ORDER GROUP — 1 STRING COMPOSED BY CLAUDE (`今天的顾客预约`), FROM THE LIVE 今天 AND 顾客预约; `Booked · 顾客预约` COPIED WHOLE ONTO THE NEW-ORDER CARD.** See *Booked deliveries in the new-order group (§459)*.
 
@@ -13850,7 +13850,7 @@ and `预约配送`: `预约配送` is not live anywhere in the product, and `顾
 already says *booked by the customer*. `今天顾客预约` without `的`: two live
 words side by side, but it reads as a run-on.
 
-## Used for making on the waste screen (§461)
+## Used for making on the waste screen (§462)
 
 **Composed by Claude, 2026-10-12, under the 2026-09-06 amendment.** Operator
 register. The reason list (`routes/retail-waste.js` `REASONS`), the desktop

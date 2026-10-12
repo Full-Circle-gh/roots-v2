@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * test_waste_used_for_making.js — §461: stock taken to make something on the
+ * test_waste_used_for_making.js — §462: stock taken to make something on the
  * spot is recorded on the waste screen, and is NOT counted as waste.
  *
  *   node scripts/test_waste_used_for_making.js

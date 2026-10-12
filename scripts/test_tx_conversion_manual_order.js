@@ -247,6 +247,11 @@ function makeHandler(db, spies) {
       'walletSpendForOrder', 'sweepExpiredPoints', 'manualOrderCredit',
     ].map((f) => extractFunction(RETAIL_SRC, f)).join('\n') + '\nreturn manualOrderCredit;')(() => db),
     ...spies,
+    // §461 — a held till bill paid: the bill-id shape, read from the source so
+    // it cannot drift, and the inventory module the route hands the hold back
+    // through. No case here sends a held_bill_id, so neither is reached.
+    TILL_BILL_ID: new Function(`${(RETAIL_SRC.match(/\nconst TILL_BILL_ID = [^\n]*/) || [''])[0]}\nreturn TILL_BILL_ID;`)(),
+    inventory: require(path.join(ROOT, 'lib', 'inventory')),
   };
   const keys = Object.keys(scope);
   return new Function(...keys, `return async (req, res) => {${BODY}};`)(...keys.map((k) => scope[k]));

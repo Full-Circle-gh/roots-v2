@@ -125,7 +125,7 @@
   let _reason = '';
 
   const root = () => document.getElementById('wst-root');
-  // §461 — the server marks a reason that is not a loss (`not_loss`); the
+  // §462 — the server marks a reason that is not a loss (`not_loss`); the
   // screen never names the code itself.
   const isNotLoss = code => _reasons.some(r => r.code === code && r.not_loss);
   const reasonLabel = code => {
@@ -256,7 +256,7 @@
     if (Number(t.eaten_by_staff_qty || 0) > 0) {
       figs.push({ label: T('Eaten by staff', '员工取用'), value: String(t.eaten_by_staff_qty), tone: '' });
     }
-    // §461 — stock taken to make something on the spot. Not in Total: it went
+    // §462 — stock taken to make something on the spot. Not in Total: it went
     // into something sold, not into the bin. The cost when this operator may
     // read one, else how many units; and only when there is some. An uncosted
     // entry turns it amber, the same signal No cost gives the loss.
@@ -688,7 +688,7 @@
         hint.className = 'wst-hint' + (lb ? ' warn' : '');
         return;
       }
-      // §461 — a reason that is not a loss is not recorded as waste, so the
+      // §462 — a reason that is not a loss is not recorded as waste, so the
       // button stops saying so, and the hint says where it will be counted.
       const notLoss = isNotLoss(reasonSel.value);
       if (!busy) submit.textContent = notLoss ? T('Record', '登记') : T('Record waste', '记录损耗');
