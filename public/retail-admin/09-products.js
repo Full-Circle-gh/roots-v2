@@ -2725,15 +2725,19 @@ function pdBadgeOf(tags) {
   return '';
 }
 // ── Storefront 2-level category (top → subcategory) ──────────────────
-// Canonical tree from lib/category-tree.js, served at /api/retail/category-tree.
+// Canonical tree from lib/category-tree.js, read from the ADMIN endpoint.
 // Fetched once and cached; the two selects in the editor's Organization card
 // drive products.top_category / products.subcategory (the shop's left rail +
 // scroll-pane section headings).
+// NOT the public /api/retail/category-tree: that one leaves out the categories
+// hidden from the mini app, so a product could not be filed under one — and
+// the wizard's "Add category" PUTs this whole list back, which would delete
+// every hidden category the moment anyone added a new one.
 let PA_CAT_TREE = [];
 async function pdLoadCatTree() {
   if (PA_CAT_TREE.length) return PA_CAT_TREE;
   try {
-    const r = await fetch('/api/retail/category-tree', { credentials: 'same-origin' });
+    const r = await fetch('/api/retail-admin/category-tree', { credentials: 'same-origin' });
     const j = await r.json();
     if (j && j.success && Array.isArray(j.data)) PA_CAT_TREE = j.data;
   } catch {}

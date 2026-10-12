@@ -8,7 +8,7 @@
 #   • Cron at the top of every hour
 #   • /root/backups/hourly/  — last 12 hourly snapshots (half a day, fast restore)
 #   • /root/backups/daily/   — last 4 daily snapshots; the 14-day history is
-#     off-site, in scripts/db-backup.sh's OSS tier (§466)
+#     off-site, in scripts/db-backup.sh's OSS tier (§467)
 #   • Optional OSS upload of the *daily* copy (cheap; hourly stays local)
 #
 # Idempotent — safe to re-run after edits.
@@ -72,10 +72,10 @@ if [ ! -f "$DAILY_DEST" ]; then
   DAILY_STATUS="promoted -> $(basename "$DAILY_DEST")"
 fi
 
-# Retention: keep most recent 12 hourly + 4 daily (§466)
+# Retention: keep most recent 12 hourly + 4 daily (§467)
 ls -1t "$BASE/hourly"/roots-*.db.gz 2>/dev/null | tail -n +13 | xargs -r rm -f
 ls -1t "$BASE/daily"/roots-*.db.gz  2>/dev/null | tail -n +5 | xargs -r rm -f
-find "$BASE/hourly" -maxdepth 1 \( -name 'roots-*.db' -o -name 'roots-*.db-wal' -o -name 'roots-*.db-shm' \) -mmin +120 -delete  # stray uncompressed leftovers (§466)
+find "$BASE/hourly" -maxdepth 1 \( -name 'roots-*.db' -o -name 'roots-*.db-wal' -o -name 'roots-*.db-shm' \) -mmin +120 -delete  # stray uncompressed leftovers (§467)
 
 # Optional off-site push of the daily copy
 OSS_STATUS="local-only"

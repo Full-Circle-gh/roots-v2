@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// oneoff_backup_retention_4d.js — local daily backups keep 4 days, not 14 (§466).
+// oneoff_backup_retention_4d.js — local daily backups keep 4 days, not 14 (§467).
 //
 // Ash, 2026-10-12: the box sits at 84% and the alerts are about backups, not
 // orders — "need to cut that to 3-4 days backup". Measured the same day with
@@ -72,11 +72,11 @@ const src = fs.readFileSync(SCRIPT, 'utf8');
 const DAILY_RE = /^(\s*ls -1t "\$BASE\/daily"\/roots-\*\.db\.gz\s+2>\/dev\/null \| tail -n \+)(\d+)( \| xargs -r rm -f)$/m;
 const hits = src.match(new RegExp(DAILY_RE.source, 'gm')) || [];
 if (hits.length !== 1) die(`expected exactly one daily prune line in ${SCRIPT}, found ${hits.length}`);
-const SWEEP = `find "$BASE/hourly" -maxdepth 1 \\( -name 'roots-*.db' -o -name 'roots-*.db-wal' -o -name 'roots-*.db-shm' \\) -mmin +120 -delete  # stray uncompressed leftovers (§466)`;
+const SWEEP = `find "$BASE/hourly" -maxdepth 1 \\( -name 'roots-*.db' -o -name 'roots-*.db-wal' -o -name 'roots-*.db-shm' \\) -mmin +120 -delete  # stray uncompressed leftovers (§467)`;
 
 let out = src.replace(DAILY_RE, `$1${KEEP_DAILY + 1}$3`);
 out = out.replace(/retains the most recent \d+ days/, `retains the most recent ${KEEP_DAILY} days`);
-if (!out.includes('# stray uncompressed leftovers (§466)')) {
+if (!out.includes('# stray uncompressed leftovers (§467)')) {
   out = out.replace(DAILY_RE, (line) => `${line}\n${SWEEP}`);
 }
 if (!out.includes(SWEEP)) die('could not place the stray-file sweep line');
