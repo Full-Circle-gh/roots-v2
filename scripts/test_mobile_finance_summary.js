@@ -68,7 +68,7 @@ const SRC = [
 const TODAY = '2026-09-30';
 
 function mk(opts = {}) {
-  const calls = { api: [], renders: 0 };
+  const calls = { api: [], write: [], toast: [], renders: 0 };
   const CMD = {};
   const ctx = {
     LANG: opts.lang || 'en', CUR: '¥',
@@ -91,6 +91,9 @@ function mk(opts = {}) {
     screenApprovals: () => '<div>APPROVALS-SCREEN</div>',
     nothingYet: (t) => `<div>${t}</div>`,
     api: (p) => new Promise((res, rej) => { calls.api.push({ p, res, rej }); }),
+    apiWrite: (p, body) => new Promise((res, rej) => { calls.write.push({ p, body, res, rej }); }),
+    showToast: (m) => { calls.toast.push(m); },
+    tmOneLang: (m) => { const s = String(m || ''); const i = s.indexOf(' · '); return i === -1 ? s : ctx.T(s.slice(0, i), s.slice(i + 3)); },
     Object, Promise, Math, Number, String, Array, JSON, Error, Set, Map, Date, encodeURIComponent,
   };
   ctx.T = (en, zh) => (ctx.LANG === 'en' ? en : (zh || en));
@@ -162,7 +165,9 @@ section('1 · who gets the screen');
   it('Back closes the category sheet before the screen', () => {
     const L = M.slice(M.indexOf('function layers(){'), M.indexOf('function syncHistory(){'));
     assert.ok(L.includes('if(state.fin.cat) L.push(()=>{ state.fin.cat=null; state.fin.pol=null; });'));
-    assert.ok(M.includes("if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());"));
+    // §468: one key, not the index — a re-file re-sorts the breakdown and moves
+    // the index, and a key that moved with it would slide the open sheet in again.
+    assert.ok(M.includes("if(state.fin.cat) html += layer('fincat', sheetFinCat());"));
   });
 }
 
@@ -468,6 +473,149 @@ const ROWS = [
     h.CMD.finCat(2); h.CMD.finPol(5); h.CMD.closeFinCat();
     assert.strictEqual(h.f.cat, null); assert.strictEqual(h.f.pol, null);
     assert.strictEqual(h.ctx.sheetFinCat(), '');
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+section('4b · §468 — a staff claim re-filed from the rows behind its category');
+const CATS = ['Rent 房租', 'Delivery & freight 运费', 'Marketing 市场推广'];
+const FROWS = () => [
+  { id: 5, source: 'po', date: '2026-09-29', note: 'RPO-0234', po_number: 'RPO-0234', lines: 2, amount: 40 },
+  { id: 7, source: 'claim', claim_id: 70, paid_by: 'employee', date: '2026-09-27', note: 'Stickers', amount: 430 },
+  { id: 8, source: 'claim', claim_id: 80, paid_by: 'company', date: '2026-09-26', note: 'Van', amount: 260 },
+];
+async function fileSheet(opts, i, cats) {
+  const h = await loaded(opts);
+  h.CMD.finCat(i == null ? 2 : i);
+  await answer(h, 1, { rows: FROWS(), expense_categories: cats === undefined ? CATS : cats });
+  return h;
+}
+const writeOk = async (h, k, category) => { h.calls.write[k].res({ success: true, data: { id: 1, category } }); await tick(); };
+{
+  it('a claim row opens onto a category picker, the line it sits on selected', async () => {
+    const h = await fileSheet();
+    let html = h.ctx.sheetFinCat();
+    assert.ok(/onclick="APP\.cmd\('finCatClaim',70\)"/.test(html), 'the claim row is a control');
+    assert.ok(!/<select/.test(html), 'shut until tapped');
+    h.CMD.finCatClaim(70);
+    html = h.ctx.sheetFinCat();
+    assert.ok(/onchange="APP\.cmd\('finCatFile',70,this\.value\)"/.test(html));
+    assert.ok(/<option value="Delivery &amp; freight 运费" selected>/.test(html), 'the current line is selected');
+    assert.ok(!/— pick a category —/.test(html), 'no blank row when the line is on the list');
+    assert.strictEqual((html.match(/<option /g) || []).length, 3);
+    assert.ok(h.text(html).includes('Category'));
+    h.CMD.finCatClaim(70);
+    assert.ok(!/<select/.test(h.ctx.sheetFinCat()), 'a second tap shuts it');
+  });
+  it('on the uncategorised line the blank row is what is selected', async () => {
+    const h = await fileSheet({}, 1);
+    h.CMD.finCatClaim(80);
+    const html = h.ctx.sheetFinCat();
+    assert.ok(/<option value="" selected>— pick a category —<\/option>/.test(html));
+    assert.ok(!/<option value="[^"]+" selected>/.test(html), 'nothing else pre-selected');
+  });
+  it('opening a claim shuts an open order, and the other way round', async () => {
+    const h = await fileSheet();
+    h.CMD.finPol(5); h.CMD.finCatClaim(70);
+    assert.strictEqual(h.f.pol, null);
+    h.CMD.finPol(5);
+    assert.strictEqual(h.f.cat.file, 0);
+  });
+  it('no picker without the gate, without a list, or on a row that is not a claim', async () => {
+    const a = await fileSheet({ caps: ['finance:view'] });
+    assert.ok(!/finCatClaim/.test(a.ctx.sheetFinCat()), 'finance:view alone may not re-file');
+    const b = await fileSheet({ caps: ['finance:view', 'expenses:cancel'] });
+    assert.ok(/finCatClaim',70/.test(b.ctx.sheetFinCat()), 'expenses:cancel may, as on the server');
+    const c = await fileSheet({}, 2, []);
+    assert.ok(!/finCatClaim/.test(c.ctx.sheetFinCat()), 'no list, no picker');
+    const d = await fileSheet();
+    d.f.cat.rows = ROWS;   // claims with no claim_id
+    assert.ok(!/finCatClaim/.test(d.ctx.sheetFinCat()));
+    assert.ok(/finPol',5/.test(d.ctx.sheetFinCat()), 'the order row still opens its items');
+  });
+  it('a pick posts the claim\'s own endpoint, and the row leaves this list', async () => {
+    const h = await fileSheet();
+    h.CMD.finCatClaim(70);
+    h.CMD.finCatFile(70, 'Marketing 市场推广');
+    assert.strictEqual(h.calls.write.length, 1);
+    assert.strictEqual(h.calls.write[0].p, '/staff-expenses/70/category');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(h.calls.write[0].body)), { category: 'Marketing 市场推广' });
+    const busy = h.ctx.sheetFinCat();
+    assert.ok(h.text(busy).includes('Saving…') && /<select style="width:100%" disabled/.test(busy));
+    h.CMD.finCatFile(70, 'Rent 房租');
+    assert.strictEqual(h.calls.write.length, 1, 'no second write while one is out');
+    await writeOk(h, 0, 'Marketing 市场推广');
+    assert.deepStrictEqual(h.calls.toast, ['Saved']);
+    const t = h.text(h.ctx.sheetFinCat());
+    assert.ok(!t.includes('Stickers'), 'the claim is no longer on this line');
+    assert.ok(t.includes('Van') && t.includes('RPO-0234'), 'the rest stay');
+    assert.strictEqual(h.ctx.state.apr.rows, null, 'the approvals queue re-reads');
+    assert.strictEqual(h.f.txTried, false, 'the ledger re-reads');
+  });
+  it('the figures re-read and the sheet STAYS, re-found by its text', async () => {
+    const h = await fileSheet();
+    h.CMD.finCatFile(70, 'Marketing 市场推广');
+    await writeOk(h, 0, 'Marketing 市场推广');
+    h.screen();
+    assert.strictEqual(h.calls.api.length, 3, 'the summary re-reads');
+    assert.ok(h.calls.api[2].p.startsWith('/finance/summary?'));
+    assert.ok(h.f.cat, 'the sheet is not closed by the refresh');
+    const d = SUMMARY();
+    d.expense_breakdown = [
+      { category: 'Rent 房租', amount: 24000, is_operating: 1 },
+      { category: 'Delivery & freight 运费', amount: 2430 },
+      { category: 'Marketing 市场推广', amount: 430, is_operating: 1 },
+    ];
+    await answer(h, 2, d);
+    assert.strictEqual(h.f.cat.i, 1, 'the index follows the line, not the old position');
+    assert.ok(h.text(h.ctx.sheetFinCat()).startsWith('Delivery & freight'));
+    assert.ok(h.text(h.ctx.sheetFinCat()).includes('¥2,430'));
+  });
+  it('a line the re-file emptied is gone, and so is its sheet', async () => {
+    const h = await fileSheet();
+    h.CMD.finCatFile(70, 'Rent 房租');
+    await writeOk(h, 0, 'Rent 房租');
+    h.screen();
+    const d = SUMMARY(); d.expense_breakdown = [{ category: 'Rent 房租', amount: 26860, is_operating: 1 }];
+    await answer(h, 2, d);
+    assert.strictEqual(h.f.cat, null);
+    assert.strictEqual(h.ctx.sheetFinCat(), '');
+  });
+  it('an ordinary refresh still closes the sheet', async () => {
+    const h = await fileSheet();
+    h.f.tried = false; h.screen();
+    assert.strictEqual(h.f.cat, null);
+  });
+  it('the line it is already on, or a blank pick, writes nothing', async () => {
+    const h = await fileSheet();
+    h.CMD.finCatFile(70, 'Delivery & freight 运费');
+    h.CMD.finCatFile(70, '');
+    h.CMD.finCatFile(99, 'Rent 房租');
+    assert.strictEqual(h.calls.write.length, 0);
+  });
+  it('filed straight back onto this line by the server: the row stays', async () => {
+    const h = await fileSheet();
+    h.CMD.finCatFile(70, 'Marketing 市场推广');
+    await writeOk(h, 0, 'Delivery & freight 运费');
+    assert.ok(h.text(h.ctx.sheetFinCat()).includes('Stickers'));
+  });
+  it('a refusal is shown under the picker in this operator\'s half, and the row stays', async () => {
+    const h = await fileSheet({ lang: 'zh' });
+    h.CMD.finCatClaim(70);
+    h.CMD.finCatFile(70, 'Marketing 市场推广');
+    h.calls.write[0].rej(new Error('this account cannot change an expense category · 此账号无法修改费用分类'));
+    await tick();
+    const t = h.text(h.ctx.sheetFinCat());
+    assert.ok(t.includes('此账号无法修改费用分类') && !t.includes('this account'));
+    assert.ok(t.includes('Stickers'));
+    assert.strictEqual(h.calls.toast.length, 0, 'a toast only confirms');
+    h.CMD.finCatClaim(70); h.CMD.finCatClaim(70);
+    assert.ok(!h.text(h.ctx.sheetFinCat()).includes('此账号无法修改费用分类'), 'cleared on reopen');
+  });
+  it('every string on it is a live pair', () => {
+    for (const [en, zh] of [['Category', '分类'], ['— pick a category —', '— 选择分类 —'], ['Saving…', '保存中…'], ['Saved', '已保存']]) {
+      assert.ok(M.includes(`T('${en}','${zh}')`), `${en} · ${zh}`);
+    }
   });
 }
 

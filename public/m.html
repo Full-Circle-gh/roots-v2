@@ -28904,10 +28904,15 @@ function finLoad(){
   if(f.tried) return; f.tried=true;
   const w=finWindow(); const seq=++f.seq;
   // The open category belongs to the window being left (finLoad on desktop).
-  f.cat=null; f.pol=null;
+  // §468: EXCEPT after a re-file from inside it — same window, so the sheet
+  // stays and the next claim can be fixed without opening it again.
+  const keep=!!(f.catKeep&&f.cat); f.catKeep=false;
+  if(!keep){ f.cat=null; f.pol=null; }
   api('/finance/summary?from='+encodeURIComponent(w.from)+'&to='+encodeURIComponent(w.to)).then(d=>{
     if(seq!==f.seq) return;
-    f.data=d||null; f.err=''; render();
+    f.data=d||null; f.err='';
+    if(keep&&f.cat) finCatReindex();
+    render();
   }).catch(e=>{
     if(seq!==f.seq||String(e.message)==='auth') return;
     // §1.12: said where the operator is looking, never a toast; on a refresh
@@ -29037,24 +29042,86 @@ reg('finCat', i=>{
   const f=state.fin; const all=(f.data&&f.data.expense_breakdown)||[];
   const row=all[Number(i)]; if(!row) return;
   const w=(f.data&&f.data.window)||finWindow();
-  f.pol=null; f.cat={i:Number(i),rows:null,err:''}; render();
+  f.pol=null; f.cat={i:Number(i),key:finCatKey(row),rows:null,err:'',cats:[],file:0,busy:0,fileErr:''}; render();
   const q='from='+encodeURIComponent(w.from||'')+'&to='+encodeURIComponent(w.to||'')
     +'&category='+encodeURIComponent(row.category||'');
   api('/finance/summary/category?'+q).then(d=>{
     if(!f.cat||f.cat.i!==Number(i)) return;
-    f.cat.rows=(d&&d.rows)||[]; render();
+    f.cat.rows=(d&&d.rows)||[]; f.cat.cats=(d&&d.expense_categories)||[]; render();
   }).catch(e=>{
     if(!f.cat||f.cat.i!==Number(i)||String(e.message)==='auth') return;
     f.cat.err=T('Could not load Finance.','财务数据加载失败。'); render();
   });
 });
 reg('closeFinCat', ()=>{ state.fin.cat=null; state.fin.pol=null; render(); });
+
+/* ── §468 — RE-FILING A STAFF CLAIM FROM THE ROWS BEHIND A CATEGORY ────────
+   This list is where a claim filed under the wrong line is SEEN, so it is
+   where it can be fixed. The same write as Transactions and Approvals
+   (§146): the claim's own endpoint, same gate (expenses:approve or :cancel),
+   no confirm — no money moves, it is undone by the same change, and the
+   server logs the value it replaced.
+
+   A breakdown line is free text and may be null, so the sheet is keyed by an
+   INDEX into the breakdown, and a re-file reorders the breakdown (it is sorted
+   by amount). So the text is held beside the index and the index re-found on
+   the refresh; a line the re-file emptied is gone, and the sheet with it. */
+const finCatKey=row=>(row&&row.category!=null&&row.category!=='')?row.category:null;
+function finCatReindex(){
+  const f=state.fin; const c=f.cat; if(!c) return;
+  const all=(f.data&&f.data.expense_breakdown)||[];
+  const j=all.findIndex(r=>finCatKey(r)===c.key);
+  if(j<0){ f.cat=null; f.pol=null; return; }
+  c.i=j;
+}
+/* A claim row that may be re-filed: a claim's ledger row (so an approved
+   claim not on an order — the only kind that posts one), this operator on the
+   route's gate, and a list to pick from. NO LIST, NO PICKER (§1.12). */
+function finCatFileable(r){
+  const c=state.fin.cat;
+  return !!(c&&r&&r.source==='claim'&&r.claim_id&&(c.cats||[]).length
+    &&(mCan('expenses:approve')||mCan('expenses:cancel')));
+}
+reg('finCatClaim', id=>{
+  const f=state.fin; const c=f.cat; const claim=Number(id); if(!c||!claim||c.busy) return;
+  c.fileErr='';
+  if(c.file===claim){ c.file=0; render(); return; }
+  f.pol=null; c.file=claim; render();
+});
+reg('finCatFile', (id,value)=>{
+  const f=state.fin; const c=f.cat; const claim=Number(id);
+  const cat=String(value==null?'':value);
+  if(!c||c.busy) return;
+  const r=(c.rows||[]).find(x=>Number(x.claim_id)===claim);
+  // An empty pick, or the line it already sits on, changes nothing.
+  if(!r||!finCatFileable(r)||!cat||cat===c.key){ render(); return; }
+  c.busy=claim; c.fileErr=''; render();
+  apiWrite('/staff-expenses/'+claim+'/category',{category:cat}).then(j=>{
+    c.busy=0;
+    const now=j&&j.data&&j.data.category;
+    // It leaves THIS list unless the server filed it right back where it was
+    // (the pick snapped onto this line's own spelling) — the server's answer,
+    // not the pick, says which.
+    if(now!==c.key) c.rows=(c.rows||[]).filter(x=>Number(x.claim_id)!==claim);
+    c.file=0;
+    // The figures behind the sheet, the ledger and the approvals queue all
+    // show this claim's category; each re-reads when next looked at.
+    if(f.cat===c) f.catKeep=true;
+    f.tried=false; f.txTried=false; aprFresh();
+    render(); showToast(T('Saved','已保存'));
+  }).catch(e=>{
+    c.busy=0;
+    if(String(e.message)==='auth') return;
+    c.fileErr=finTxWords(e); render();
+  });
+});
 /* The third level: the items on one purchase order, by the LEDGER ROW's id —
    the server resolves the order and the category from it. One open at a time;
    a tap on the open one shuts it. */
 reg('finPol', id=>{
   const f=state.fin; const entry=Number(id); if(!entry) return;
   if(f.pol&&f.pol.id===entry){ f.pol=null; render(); return; }
+  if(f.cat){ f.cat.file=0; f.cat.fileErr=''; }
   f.pol={id:entry,rows:null,err:''}; render();
   api('/finance/summary/po-lines?entry_id='+encodeURIComponent(entry)).then(d=>{
     if(!f.pol||f.pol.id!==entry) return;
@@ -29095,8 +29162,9 @@ function finCatEntry(r){
     : r.source==='return'?T('Return','退货') : '';
   const name=r.note||(po?(r.po_number||''):'')||'';
   const day=tdWhen(r.date,'date',_tdL())||String(r.date||'');
-  const openable=po&&Number(r.lines)>0;
-  const open=openable&&f.pol&&f.pol.id===r.id;
+  const fileable=!po&&finCatFileable(r);
+  const openable=(po&&Number(r.lines)>0)||fileable;
+  const open=fileable?(f.cat&&f.cat.file===Number(r.claim_id)):(openable&&f.pol&&f.pol.id===r.id);
   const inner=`<span style="display:flex;flex-direction:column;min-width:0;flex:1">
       ${name?`<span style="font-size:14.5px">${escAttr(name)}</span>`:''}
       <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(day)}${mark?' · '+mark:''}</span></span>
@@ -29104,8 +29172,24 @@ function finCatEntry(r){
       openable?`<span style="display:flex;color:var(--text-secondary);transform:rotate(${open?90:0}deg)">${ic('chevron-right',16)}</span>`:''}</span>`;
   const rowStyle='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;width:100%';
   if(!openable) return `<div style="${rowStyle}">${inner}</div>`;
-  return `<button onclick="APP.cmd('finPol',${Number(r.id)})" aria-expanded="${open?'true':'false'}" style="${rowStyle};border:none;background:none;font-family:inherit;text-align:left;cursor:pointer;color:var(--text-primary)">${inner}</button>`
-    + (open?`<div style="background:var(--surface-raised)">${finPolBody(f.pol)}</div>`:'');
+  const cmd=fileable?`APP.cmd('finCatClaim',${Number(r.claim_id)})`:`APP.cmd('finPol',${Number(r.id)})`;
+  return `<button onclick="${cmd}" aria-expanded="${open?'true':'false'}" style="${rowStyle};border:none;background:none;font-family:inherit;text-align:left;cursor:pointer;color:var(--text-primary)">${inner}</button>`
+    + (open?`<div style="background:var(--surface-raised)">${fileable?finCatFileBody(r):finPolBody(f.pol)}</div>`:'');
+}
+/* §468 — the picker under an open claim row. The same native select as the
+   Transactions sheet (§146), the line it sits on now selected; when that line
+   is not on the list (blank, or text nobody keeps any more) the blank row is
+   shown instead, so no category is ever pre-selected that the claim is not. */
+function finCatFileBody(r){
+  const c=state.fin.cat; const list=c.cats||[]; const lab=catLabels(list);
+  const busy=!!c.busy;
+  const on=list.includes(c.key);
+  return `<label style="display:block;padding:12px 14px">
+      <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${busy?T('Saving…','保存中…'):T('Category','分类')}</span>
+      <select style="width:100%" ${busy?'disabled':''} onchange="APP.cmd('finCatFile',${Number(r.claim_id)},this.value)">
+        ${on?'':`<option value="" selected>${T('— pick a category —','— 选择分类 —')}</option>`}
+        ${list.map(x=>`<option value="${escAttr(x)}"${x===c.key?' selected':''}>${escAttr(lab.get(x)||catLabel(x))}</option>`).join('')}
+      </select></label>${c.fileErr?`<div style="padding:0 14px 12px;font-size:13.5px;color:var(--brick-ink)">${escAttr(c.fileErr)}</div>`:''}`;
 }
 function sheetFinCat(){
   const f=state.fin, c=f.cat; if(!c) return '';
@@ -48967,7 +49051,7 @@ function render(){
   if(state.pk) html += layer('pk', sheetPK());
   if(state.pinv.sheet) html += layer('pinv:'+state.pinv.sheet.kind, sheetPinv());
   if(state.pph) html += layer('pph:'+state.pph.spid, sheetPPH());
-  if(state.fin.cat) html += layer('fincat:'+state.fin.cat.i, sheetFinCat());
+  if(state.fin.cat) html += layer('fincat', sheetFinCat());
   if(state.fin.txRow) html += layer('fintx:'+state.fin.txRow, sheetFinTxRow());
   if(state.fin.form) html += layer('fintxform', sheetFinTxForm());
   if(state.fin.ret) html += layer('fintxret', sheetFinTxRet());

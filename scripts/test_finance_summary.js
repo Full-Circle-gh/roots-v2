@@ -1352,6 +1352,21 @@ it('the drill-down endpoint is admin-gated and multi-tenant, like the summary', 
   assert.ok(!/require\('\.\.\/database'\)/.test(handler), 'never the global handle');
 });
 
+it('§468 — the drill-down sends the re-file list: active accounting categories, the tenant\'s order', () => {
+  // The phone opens a claim row here onto a picker; `/staff-expenses/:id/category`
+  // snaps onto exactly this list, so a different read would offer names the
+  // route then files somewhere else. Same SQL as Transactions' own picker.
+  const at = ROUTE.indexOf("router.get('/api/retail-admin/finance/summary/category'");
+  const handler = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
+  const SQL = "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name";
+  assert.ok(handler.includes(SQL), 'the list must be the active accounting list');
+  const TX = fs.readFileSync(path.join(__dirname, '..', 'routes', 'finance-transactions.js'), 'utf8');
+  assert.ok(TX.includes(SQL), 'and the same read Transactions hands its picker');
+  assert.ok(/expense_categories: expenseCategories/.test(handler), 'sent with the rows');
+  // A failed list read must not take the rows down with it.
+  assert.ok(/try \{\s*expenseCategories = db\.prepare/.test(handler), 'the list read fails soft');
+});
+
 console.log('\n6 · the drill-down on screen');
 
 it('each breakdown line is a control that opens its own rows', () => {

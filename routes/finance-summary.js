@@ -761,10 +761,26 @@ router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (re
       }
     }
 
+    // §468 — WHAT A STAFF-CLAIM ROW HERE MAY BE RE-FILED UNDER. The phone opens
+    // a claim row onto a picker that posts to `/staff-expenses/:id/category`,
+    // and that route snaps what it is sent onto this exact list (active
+    // `accounting` categories, the tenant's own order) — the same read
+    // `routes/finance-transactions.js` hands its own picker. Sent with the rows
+    // so the sheet needs no second request; an empty list means no picker,
+    // never a free-text field. A failed read is that empty list too: the rows
+    // are the point of this endpoint and must not fail with it.
+    let expenseCategories = [];
+    try {
+      expenseCategories = db.prepare(
+        "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
+      ).all().map(r => r.name);
+    } catch (e) { expenseCategories = []; }
+
     res.json({
       success: true,
       data: {
         window: { from, to, span_days: win.span_days },
+        expense_categories: expenseCategories,
         // Echoed back exactly as asked, so a caller can tell which line it holds
         // — and null for the uncategorised bucket, matching the breakdown row's
         // own null rather than an invented label. §36: Finance stores category

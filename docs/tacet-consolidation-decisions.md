@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.515
+# Tacet shared-core consolidation — decisions record, v4.516
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.516 — **§468 · A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY — ASKED BY ASH:** *"is it possible now to change category of expense that was choose by a user ?"*, then *"ok do it"*, with a screenshot of the phone's Finance → *Other* sheet holding a ¥5,000 transfer to the construction company. **It was already possible** (§146) from Transactions and Approvals, but not from this list, where a wrong category is actually seen. **NOW:** on the phone, a staff-claim row in a category's sheet is tappable for whoever may re-file (`expenses:approve` or `expenses:cancel`, the server's own gate); it opens a category picker under the row, the same native select as Transactions. A pick posts the existing `/staff-expenses/:id/category`, the row leaves the list, and the sheet stays open so the next claim can be fixed; the figures, the ledger and the approvals queue re-read. The sheet is re-found by its category text after the refresh (the breakdown is sorted by amount, so the index moves), and closes if the line was emptied; its layer key is now one constant instead of the index. `GET /finance/summary/category` also returns `expense_categories` (active accounting list, same read as Transactions). Purchase-order rows are unchanged: their category is set on the order. **Not changed:** the re-file route, the schema, the desktop drill-down (a follow-up if wanted), `.gitignore`, CI. No new string; every pair is live. Held by `scripts/test_mobile_finance_summary.js` §4b and `scripts/test_finance_summary.js`. See §468.
 
 2026-10-12 · v4.515 — **§467 · LOCAL DAILY BACKUPS KEEP 4 DAYS, NOT 14 — DECIDED BY ASH:** *"the reason it goes to 85% is because we save too much orders . need to cut that to 3-4 days backup"*, then *"go"* to 4 days. Measured first (`scripts/diagnose_disk_usage.js`, read-only): `/root/backups` was 20G of the 32G used on a 40G disk; the database itself is 1G. `daily/` drops from 14 copies to 4 (~6.3G back), and two uncompressed files left in `hourly/` by the 2026-09-23 outage (1.4G), which the hourly prune could never reach, are removed and swept from now on. Hourly stays at 12. **No history is lost:** the off-site OSS copy (`scripts/db-backup.sh`) still keeps 14 days and was verified OK every night checked. Applied with `scripts/oneoff_backup_retention_4d.js` through `oneoff.yml`, the only CI path to `/root/scripts/`. `scripts/install-backup-cron.sh` brought in line so re-running it cannot undo this. No string, no schema, no change to `.gitignore` or CI. See §467.
 
@@ -30604,3 +30606,57 @@ same sweep.
 **Not changed.** Hourly retention, the off-site tier, the deploy-backup prune,
 the database, the application. No string, no schema, no change to `.gitignore`
 or CI.
+
+## §468 — A STAFF CLAIM CAN BE RE-FILED FROM THE ROWS BEHIND A CATEGORY
+
+**Asked by Ash, 2026-10-13:** *"is it possible now to change category of
+expense that was choose by a user ?"*, with a screenshot of the phone's
+Finance → *Other* sheet, then *"ok do it"* to the recommendation of making the
+rows on that sheet tappable.
+
+**What was already true.** §146 made an approved claim re-fileable: the
+route `POST /api/retail-admin/staff-expenses/:id/category`, reached from
+Finance → Transactions and from Approvals, on phone and desktop. Nothing
+about the money changes; the ledger row is re-posted under the new category
+and the old one is logged.
+
+**What was missing.** The rows behind a breakdown line (§36's drill-down) are
+where a cost filed under the wrong line is SEEN, and there the claim rows were
+display-only. Fixing one meant remembering it, going to Transactions and
+finding it again.
+
+**The rule.**
+
+1. **On the phone, a staff-claim row in a category's sheet opens a category
+   picker** when the operator holds `expenses:approve` or `expenses:cancel` (the
+   route's own `requireFiler` gate) and the tenant has an active accounting
+   list. No list, no picker (§1.12). Only one thing is open at a time: a claim's
+   picker or an order's items.
+2. **The write is §146's**, unchanged: same endpoint, no confirm, a blank pick
+   or the line it already sits on writes nothing. A refusal is shown under the
+   picker in the operator's language; a toast only confirms.
+3. **The sheet stays open after a save**, so several claims on one line can be
+   fixed in a row. The claim leaves the list unless the server filed it back
+   onto the same line. The figures, the Transactions ledger and the approvals
+   queue re-read. The sheet is keyed by an index into the breakdown, which is
+   sorted by amount and so reorders on a re-file; the category's text is kept
+   beside the index and the index re-found when the figures arrive. A line the
+   re-file emptied no longer exists, and the sheet closes. Any other refresh
+   still closes the sheet, as before. The sheet's layer key is now the constant
+   `fincat` rather than the index, so a moved index does not slide it in again.
+4. **The list comes with the rows.** `GET /finance/summary/category` now also
+   returns `expense_categories`: the active `accounting` categories in the
+   tenant's order, the same read Transactions hands its picker, which is the
+   list the route snaps onto. A failed read of it is an empty list and does not
+   fail the rows.
+
+**Not changed.** Purchase-order rows: a claim on an order, and every PO row,
+take their category from the order line (§146's `onOrderCat`). The re-file
+route, the schema, `.gitignore`, CI. The desktop's drill-down
+(`public/retail-admin/22-finance.js`) is not given the picker here; that is a
+separate change if wanted.
+
+No new string: *Category · 分类*, *— pick a category — · — 选择分类 —*,
+*Saving… · 保存中…* and *Saved · 已保存* are all live pairs on the same
+screen. Held by `scripts/test_mobile_finance_summary.js` §4b and
+`scripts/test_finance_summary.js`.
