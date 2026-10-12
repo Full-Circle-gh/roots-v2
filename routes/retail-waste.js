@@ -69,8 +69,20 @@ const REASONS = [
   { code: 'staff_consumption', en: 'Staff consumption', cn: '员工取用' },
   { code: 'sampling',          en: 'Sampling',          cn: '试吃样品' },
   { code: 'other',             en: 'Other',             cn: '其他' },
+  // §461 — NOT A LOSS. Stock taken off the shelf to make something on the spot:
+  // a jar of cashew butter from the stock fridge, opened for a cashew chocolate
+  // milk. The jar really left the shelf, so stock goes down and the cost is
+  // kept, exactly as for a loss. But the drink was sold, so the jar was not
+  // thrown away, and counting it in the waste total would overstate what was
+  // lost. `not_loss` is what keeps it out of that total; every screen reads it
+  // from here rather than knowing the code.
+  { code: 'used_for_making',   en: 'Used for making',   cn: '制作取用', not_loss: true },
 ];
 const REASON_CODES = new Set(REASONS.map(r => r.code));
+// §461 — the codes left out of every waste-loss figure. Their entries are still
+// listed, still move stock and can still be voided; they are totalled apart.
+const NOT_LOSS_CODES = REASONS.filter(r => r.not_loss).map(r => r.code);
+const NOT_LOSS_SQL = `(${NOT_LOSS_CODES.map(c => `'${c}'`).join(', ')})`;
 
 // The row shape every endpoint returns, so a caller never has to know which one
 // it came from.
@@ -356,6 +368,10 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
   // The uncosted COUNT travels with the total, always (§32 rule 10) — a total
   // presented alone reads as complete, and the whole point of the flag is that
   // sometimes it is not.
+  //
+  // §461 — the loss figures leave out Used for making: that stock went into
+  // something that was sold, not into the bin. It is totalled beside them, in
+  // its own fields, so the cost is still on the screen and never in the loss.
   const totals = db.prepare(`
     SELECT COALESCE(SUM(w.cost_total_cents), 0) AS cost_total_cents,
            COALESCE(SUM(w.qty), 0)              AS qty_total,
@@ -363,8 +379,20 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
            COALESCE(SUM(w.is_uncosted), 0)      AS uncosted_entries,
            COALESCE(SUM(${EATEN_LATEST_SQL}), 0) AS eaten_by_staff_qty
       FROM waste_records w
-     WHERE ${filter} AND ${live}
+     WHERE ${filter} AND ${live} AND w.reason_code NOT IN ${NOT_LOSS_SQL}
   `).get(...params);
+  const used = db.prepare(`
+    SELECT COALESCE(SUM(w.cost_total_cents), 0) AS cents,
+           COALESCE(SUM(w.qty), 0)              AS qty,
+           COUNT(*)                             AS entries,
+           COALESCE(SUM(w.is_uncosted), 0)      AS uncosted
+      FROM waste_records w
+     WHERE ${filter} AND ${live} AND w.reason_code IN ${NOT_LOSS_SQL}
+  `).get(...params);
+  totals.used_for_making_cents    = used.cents;
+  totals.used_for_making_qty      = used.qty;
+  totals.used_for_making_entries  = used.entries;
+  totals.used_for_making_uncosted = used.uncosted;
   const voided = db.prepare(
     `SELECT COUNT(*) AS n FROM waste_records w WHERE ${filter} AND w.voided_by_waste_id IS NOT NULL`
   ).get(...params);
@@ -376,6 +404,8 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
   if (!canSeeCosts(req)) {
     delete totals.cost_total_cents;
     delete totals.uncosted_entries;
+    delete totals.used_for_making_cents;
+    delete totals.used_for_making_uncosted;
     return res.json({ success: true, data: rows.map(stripCost), totals, costs_hidden: true });
   }
   res.json({ success: true, data: rows, totals });
@@ -728,3 +758,4 @@ router.post('/api/retail-admin/waste/:id/void', requireRetailAdmin, requireWaste
 
 module.exports = router;
 module.exports.REASONS = REASONS;
+module.exports.NOT_LOSS_CODES = NOT_LOSS_CODES;

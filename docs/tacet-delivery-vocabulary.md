@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.327 · 2026-10-12 · §461 USED FOR MAKING ON THE WASTE SCREEN — 1 STRING COMPOSED BY CLAUDE (`Used for making · 制作取用`), FROM THE LIVE 制作 AND 取用; `Not counted as waste · 不计损耗` LIFTED FROM THE LIVE `不计损耗：`; `Record · 登记` COPIED WHOLE.** See *Used for making on the waste screen (§461)*.
+
 **v1.326 · 2026-10-12 · §459 BOOKED DELIVERIES IN THE NEW-ORDER GROUP — 1 STRING COMPOSED BY CLAUDE (`今天的顾客预约`), FROM THE LIVE 今天 AND 顾客预约; `Booked · 顾客预约` COPIED WHOLE ONTO THE NEW-ORDER CARD.** See *Booked deliveries in the new-order group (§459)*.
 
 **v1.325 · 2026-10-11 · §458 MOVING A PAID ORDER TO ANOTHER SHOP — 17 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON THE LIVE 改派; THE COURIER CONTROL'S OWN STRINGS COPIED WHOLE.** See *Moving a paid order to another shop (§458)*.
@@ -13847,3 +13849,35 @@ today · 今日配送`), and a booked order is the opposite of one. `今日预�
 and `预约配送`: `预约配送` is not live anywhere in the product, and `顾客预约`
 already says *booked by the customer*. `今天顾客预约` without `的`: two live
 words side by side, but it reads as a run-on.
+
+## Used for making on the waste screen (§461)
+
+**Composed by Claude, 2026-10-12, under the 2026-09-06 amendment.** Operator
+register. The reason list (`routes/retail-waste.js` `REASONS`), the desktop
+waste screen (`public/retail-admin/20-waste.js`, the pulse line and the record
+form) and the phone's (`public/m.html`, `wstPulse` and the record sheet). Asked
+by Ash: stock taken from the stock fridge to make something on the spot, *"its
+not waste but it should be recored"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Used for making` / `制作取用` | the reason, everywhere it is listed or picked; the desktop pulse label; the phone pulse line as `Used for making {¥X}` / `制作取用 {¥X}` | `制作` from the live reason `Preparation error · 制作失误`, `取用` from the live `Staff consumption · 员工取用`. The pair reads *taken for making*, and sits beside *员工取用* as the other way stock is taken without being lost. The phone puts the label before the figure in both languages, as `员工取用 {n}` does. |
+
+### Lifted
+
+`Not counted as waste` / `不计损耗` — the live `Not counted as waste: ·
+不计损耗：` (§281), without the colon, because nothing follows it here.
+
+### Copied whole
+
+`Record · 登记` (live), on the button when this reason is chosen.
+
+### Rejected
+
+`店内使用` (in-store use): not live, and staff eating stock is also in-store
+use. `自用`: reads as personal use, which is Staff consumption. `领用`: the
+formal word for a requisition, which is the *Ask the kitchen* flow, a
+different thing. `制作用料`: names the material, not the act, and does not fit
+a reason list where every other entry says what happened.
