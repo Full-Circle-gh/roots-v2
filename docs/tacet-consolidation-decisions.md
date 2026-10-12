@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.510
+# Tacet shared-core consolidation — decisions record, v4.511
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-10-12 · v4.511 — **§463 · ADD STOCK KEEPS ITS SEARCH ON SCREEN — ASKED BY ASH:** *"search bar should stay stick on top when scrolling"*, with a screenshot of the phone's Add stock list at Yuexiu. The search field now stays pinned under the header while the product list scrolls beneath it. Only this screen; the store chips above it still scroll away, and the status line keeps naming the store. No string, no schema, no change to `.gitignore` or CI. (v4.510 / §462 are held by PR #1122.) See §463.
+
 2026-10-12 · v4.510 — **§462 · §32 RULE 7 AMENDED · STOCK TAKEN TO MAKE SOMETHING ON THE SPOT IS RECORDED ON THE WASTE SCREEN, AND IS NOT WASTE — DECIDED BY ASH:** *"in waste we should have another option which is if location is taking somethnig form stock to use for product that made on the spot. its not waste but it should be recored . for example . tom ake cashew chocolate milk, if there is no cashew butter in the fridge staff will pick up cashew butter form the stock firdge and should record it"*, then *"Yes, go"* to keeping it out of the waste loss total. An eighth reason, `used_for_making` (**Used for making · 制作取用**), marked `not_loss` in the served list. It moves stock and keeps its cost like any entry, can be voided, and is left out of every waste-loss figure; the list's totals carry it in four fields of its own. Both screens show it as its own figure and say *Not counted as waste* on the form. One Chinese string composed; schema none, no new route, no change to `.gitignore` or CI. See §462.
+
 2026-10-12 · v4.509 — **§461 · §457 AMENDED · A HELD TILL BILL TAKES ITS SHELF LINES WHILE IT IS HELD — DECIDED BY ASH**, the second half of the ruling §460 records (*"customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*). Every time a held bill changes (held, added to, a line removed, emptied) the till sends the whole bill to the new `PUT /api/retail-admin/orders/till-held/:billId`, and the server moves the shelf by the difference (`inventory.setTillHoldStock`, ledger reasons `till_hold` / `till_hold_return`, keyed by the bill's own id). Mark paid sends `held_bill_id`; the server gives the held units back the instant before the sale takes them, so the sale's own ledger is unchanged. The bill on screen counts its own held units as still there, at the till's tiles and at the add-on sold-out gate. A hold never takes a shelf below zero. No schema, no new string, no change to `.gitignore` or CI. See §461.
 
 2026-10-12 · v4.508 — **§460 · §45 AMENDED · A QR ORDER TAKES ITS SHELF LINES WHEN IT IS PLACED, NOT WHEN IT IS PAID — DECIDED BY ASH:** *"till , pending order , stock need to be deducted because customers already ordered it"*, then *"for mini app, yes, do not deduct before pay. but customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*. A QR order's stocked lines (and stock-backed extras) are committed — `physical_qty` drops, ledger `order_commit` — the moment the order is placed, instead of only being held until the cashier settles it. Every unpaid-cancel path (till/admin cancel, the customer's own cancel, the two-hour counter clock, and the three mini-app paths for safety) now calls `inventory.returnUnpaidOrderStock`, which releases holds AND reverses what was taken. Paying takes nothing more. Made-here items still take nothing (§43). The mini app and web are unchanged: they deduct at payment. Held till bills (§457) are the second half of the same ruling and follow as their own PR. No schema, no new route, no string, no change to `.gitignore` or CI. See §460.
@@ -30326,3 +30329,28 @@ Strings: 1 composed (vocabulary v1.327, *Used for making on the waste screen
 `scripts/test_waste_used_for_making.js` (fast shard) — the real route on an
 in-memory SQLite. Schema: none (`reason_code` carries no CHECK). No new route.
 No change to `.gitignore` or CI.
+
+## §463 — ADD STOCK KEEPS ITS SEARCH ON SCREEN
+
+**Asked by Ash, 2026-10-12:** *"search bar should stay stick on top when
+scrolling"*, sent with a screenshot of the phone's Add stock list at Yuexiu.
+
+**The rule.** On Add stock (`screenStockAdd`, phone), the search field is
+pinned to the top of the screen's scroller (`position: sticky`) and the cards
+scroll beneath it, behind the page colour. A count is a walk along the shelf,
+and the next product is looked up from wherever the thumb is. Scrolling back
+to the top for every product is the cost this removes.
+
+**Not changed.** The store chips above the field still scroll away. The status
+line names the store in use, and switching store is not done mid-count. Other
+screens with a product search (Ask for stock, Waste, Log a batch) are
+unchanged. None was asked for, and each can follow on request with the same
+one-line change.
+
+Tests: `scripts/test_mobile_addstock.js` (browser suite, slow shard, run on
+its own for this change) gains a case: forty rows scrolled to the bottom, with
+the field still in view at the top. It was mutation-checked by removing the
+sticky line, which turns it red. The same suite's *search narrows the shelf
+without losing the caret* was red on main: the case never put the caret in the
+field before checking it stayed there. The setup now focuses the field first.
+Schema: none. No string. No change to `.gitignore` or CI.

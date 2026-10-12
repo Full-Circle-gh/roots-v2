@@ -23285,7 +23285,14 @@ function screenStockAdd(){
       return {key:String(s.id),en,zh,disabled:locked&&s.id!==qs.storeId};
     }),String(qs.storeId),'qsStore')}</div>` : '';
 
-  const search=`<div style="padding:12px 16px;position:relative">
+  /* THE SEARCH STAYS ON SCREEN while the list scrolls under it — Ash,
+     2026-10-12: "search bar should stay stick on top when scrolling". A count
+     is a walk along the shelf, and the next product is looked up from wherever
+     the thumb is; scrolling back to the top for every one is the cost this
+     removes. Sticky inside .content, the screen's one scroller, so it pins under
+     the header. The page colour behind it hides the cards going under; sticky
+     is also a containing block, so the absolute icon still sits in the field. */
+  const search=`<div style="padding:12px 16px;position:sticky;top:0;z-index:3;background:var(--bg)">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     ${searchBox(`<input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('qsSearch',this.value)">`,'mQsClr',!!qs.q)}</div>`;
