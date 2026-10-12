@@ -7390,7 +7390,9 @@ db.exec(`
 // the id alone.
 //
 // cost_total_cents is the RESOLVED TOTAL in whole cents (§32 addendum point 3) —
-// unit cost times quantity, rounded once at entry, never recomputed (§32 rule 9).
+// unit cost times quantity, rounded once at entry, never recomputed (§32 rule 9)
+// except by an owner's explicit recalculation, logged in waste_cost_corrections
+// (§465).
 // NULL means the cost could not be established and `is_uncosted` says so out
 // loud; the two are held in step by a CHECK. A zero is never stored (§32 rule
 // 10) — the route resolves a real-but-sub-cent loss up to one cent rather than
@@ -7464,6 +7466,31 @@ db.exec(`
     FOREIGN KEY (waste_id) REFERENCES waste_records(id)
   );
   CREATE INDEX IF NOT EXISTS idx_waste_staff_eaten_waste ON waste_staff_eaten(waste_id);
+`);
+
+// §465 — every time an owner re-prices a past waste entry, one row here.
+//
+// §32 rule 9 still holds for every ordinary write: cost is snapshot at entry.
+// §465 adds one deliberate exception, for a product whose cost was CALCULATED
+// wrong (a build line not ticked packed separately, a wrong material price): an
+// owner asks for a range to be re-priced with today's figures, sees each change
+// first, and confirms. The entry's cost_total_cents is then rewritten, and this
+// table keeps what it said before, so the old figure is never lost. Append-only.
+// from_cents NULL means the entry had no cost before; to_cents is never NULL,
+// because a recalculation never turns a known figure into "no cost".
+db.exec(`
+  CREATE TABLE IF NOT EXISTS waste_cost_corrections (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    waste_id         INTEGER NOT NULL,
+    from_cents       INTEGER,                        -- NULL = the entry had no cost
+    to_cents         INTEGER NOT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by       INTEGER,                        -- no FK: two id spaces, as waste_records
+    created_by_label TEXT,
+    CHECK (to_cents > 0),
+    FOREIGN KEY (waste_id) REFERENCES waste_records(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_waste_cost_corrections_waste ON waste_cost_corrections(waste_id);
 `);
 
 // Automatic recipe materialization (§29's third addendum, decided

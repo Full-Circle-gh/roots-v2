@@ -5519,6 +5519,50 @@ reg('wstVoid', id=>{
     }};
   render();
 });
+/* §465 — RECALCULATE COSTS. Asks the server what the entries under the
+   current chips would cost priced today, and shows each one that would change,
+   old → new, with the total. Nothing is written until Save; Save sends that
+   same list back, and the server writes it only if nothing moved in between
+   (a 409 otherwise, and nothing saved). Nothing to change says Up to date. */
+reg('wstRecalc', ()=>{
+  const w=state.wst;
+  if(w.recalcBusy||!wstShowMoney()||!mCan('waste:void')) return;
+  const {from,to}=wstWindow();
+  const q=new URLSearchParams({from,to});
+  if(w.reason) q.set('reason',w.reason);
+  if(w.store) q.set('location_id',String(w.store));
+  const failed=e=>{
+    w.recalcBusy=false;
+    if(String(e&&e.message)==='auth') return;
+    w.voidErr = e&&e.refused ? T(...e.words)
+      : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+    loadWaste(true); render();
+  };
+  w.recalcBusy=true; w.voidErr=null; render();
+  apiRaw('/waste/recalculate?'+q).then(j=>{
+    w.recalcBusy=false;
+    const ch=Array.isArray(j&&j.data)?j.data:[], t=(j&&j.totals)||{};
+    if(!ch.length){ showToast(T('Up to date','已是最新')); render(); return; }
+    const fig=c=>c==null?T('No cost','暂无成本'):wstMoney(c);
+    const lines=ch.map(c=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0">
+      <span style="min-width:0">${escAttr(wstProductName(c))}<br><span class="num" style="font-size:12.5px">${c.qty} × · ${escAttr(fmtDateOnly(c.business_date))}</span></span>
+      <span class="num" style="flex:none;text-align:right">${fig(c.from_cents)} → <span style="color:var(--text-primary)">${wstMoney(c.to_cents)}</span></span></div>`);
+    state.ask={title:T('Recalculate costs','重新计算成本'),
+      body:`<div style="max-height:46vh;overflow:auto">${lines.join('')}</div>
+        <div style="display:flex;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--hairline);color:var(--text-primary)">
+          <span>${T('Total','合计')}</span><span class="num">${wstMoney(t.from_cents)} → ${wstMoney(t.to_cents)}</span></div>`,
+      confirmLabel:T('Save','保存'),
+      run:()=>{
+        w.recalcBusy=true; w.voidErr=null; render();
+        apiWrite('/waste/recalculate',{changes:ch.map(c=>({id:c.id,from_cents:c.from_cents,to_cents:c.to_cents}))},'POST').then(()=>{
+          w.recalcBusy=false;
+          showToast(T('Saved','已保存'));
+          loadWaste(true); render();
+        }).catch(failed);
+      }};
+    render();
+  }).catch(failed);
+});
 /* §455 — EATEN BY STAFF, the desktop's doEaten: how many of an expired entry
    the staff ate, 0 to its qty. One number field; what was said before is listed
    above it, oldest first, because a correction is a new figure and the old one
@@ -14477,6 +14521,15 @@ function wstVoidBtn(r){
   return `<button class="btn2" style="width:auto;min-height:0;padding:5px 12px;font-size:13px;margin-top:4px" ${w.voidBusy!=null?'disabled':''}
     onclick="APP.cmd('wstVoid',${Number(r.id)})">${busy?T('Voiding…','作废中…'):T('Void','作废')}</button>`;
 }
+/* §465 — Recalculate costs, under the pulse line, for an owner: somebody who
+   may read the money AND void (the server checks both, failing closed). It
+   re-prices what the chips above are showing; see the wstRecalc command. */
+function wstRecalcBtn(){
+  if(!wstShowMoney()||!mCan('waste:void')) return '';
+  const w=state.wst;
+  return `<div style="padding:0 16px"><button class="btn2" style="width:auto;min-height:0;padding:5px 12px;font-size:13px" ${w.recalcBusy?'disabled':''}
+    onclick="APP.cmd('wstRecalc')">${w.recalcBusy?T('Loading…','加载中…'):T('Recalculate costs','重新计算成本')}</button></div>`;
+}
 function screenWaste(){
   loadWasteReasons(); loadWaste();
   const w=state.wst;
@@ -14517,6 +14570,7 @@ function screenWaste(){
         T('Long may it last. Anything written off here comes straight off the shelf count.','希望一直如此。在此登记的损耗会直接从库存中扣减。'))+'</div>');
   return head+`
     ${wstPulse()}
+    ${wstRecalcBtn()}
     ${w.voidErr?`<div style="margin:0 16px;display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${escAttr(w.voidErr)}</span></div>`:''}
