@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.328 · 2026-10-12 · §465 RECALCULATING WASTE COSTS — 1 STRING COMPOSED BY CLAUDE (`Recalculate costs · 重新计算成本`), FROM THE LIVE 计算成本; THE REST COPIED WHOLE.** See *Recalculating waste costs (§465)*.
+
 **v1.327 · 2026-10-12 · §462 USED FOR MAKING ON THE WASTE SCREEN — 1 STRING COMPOSED BY CLAUDE (`Used for making · 制作取用`), FROM THE LIVE 制作 AND 取用; `Not counted as waste · 不计损耗` LIFTED FROM THE LIVE `不计损耗：`; `Record · 登记` COPIED WHOLE.** See *Used for making on the waste screen (§462)*.
 
 **v1.326 · 2026-10-12 · §459 BOOKED DELIVERIES IN THE NEW-ORDER GROUP — 1 STRING COMPOSED BY CLAUDE (`今天的顾客预约`), FROM THE LIVE 今天 AND 顾客预约; `Booked · 顾客预约` COPIED WHOLE ONTO THE NEW-ORDER CARD.** See *Booked deliveries in the new-order group (§459)*.
@@ -13881,3 +13883,37 @@ use. `自用`: reads as personal use, which is Staff consumption. `领用`: the
 formal word for a requisition, which is the *Ask the kitchen* flow, a
 different thing. `制作用料`: names the material, not the act, and does not fit
 a reason list where every other entry says what happened.
+
+## Recalculating waste costs (§465)
+
+**Composed by Claude, 2026-10-12, under the 2026-09-06 amendment.** This is
+operator register, on the phone's waste screen (`public/m.html`, `wstRecalcBtn`
+and the `wstRecalc` sheet). Asked by Ash: *"all waste list need to be update
+according to the new settings"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Recalculate costs` / `重新计算成本` | the button under the pulse line, and the sheet's title | `计算成本` comes from the live `not yet costed · 尚未计算成本`. `重新` is the ordinary *again* prefix, and it says the figure already exists and is being worked out a second time. |
+
+### Copied whole
+
+The following are all live pairs:
+- `Up to date · 已是最新`, when nothing would change
+- `Total · 合计`, on the sheet's foot line
+- `No cost · 暂无成本`, an old figure that had none
+- `Save · 保存`
+- `Saved · 已保存`
+- `Loading… · 加载中…`
+- `That did not go through. Nothing has changed — try again. · 没有成功。数据没有变化 — 请重试。`
+
+### Rejected
+
+- `更新成本` (*update costs*): `更新` is live, but on this phone it means a
+  saved change to a record (`订单已更新`, `地址已更新`). It does not say that
+  the figure is being worked out again from the product.
+- `重算成本`: shorter, but `重算` is not live anywhere in the product, and it
+  reads as clipped.
+- `成本重新核算`: `核算` is accounting language. `核销` is already on this
+  screen as *written off*, and the two would sit side by side.
