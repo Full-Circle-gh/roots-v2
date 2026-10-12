@@ -574,7 +574,10 @@
      it. Verified against both frames: 95px pinned either way. */
   #order-drawer .odh-btn { padding:4px 8px; }
   #order-drawer .odh-btn svg { width:16px; height:16px; }
-  .odh-pop { width:230px; gap:6px; }
+  /* `.ovp.odh-pop`, not `.odh-pop`: this block loads BEFORE the generic .ovp
+     rule (300px, 12px gap), so at equal weight .ovp won and the menu shipped
+     300px wide — wide enough to run off a tablet drawer's left edge. */
+  .ovp.odh-pop { width:230px; gap:6px; }
   .odh-item {
     display:block; width:100%; text-align:left;
     padding:9px 12px; border:1px solid var(--line-soft); border-radius:var(--r-md);

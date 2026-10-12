@@ -6556,6 +6556,24 @@ document.addEventListener('keydown', (e) => {
   if (id) openOrder(Number(id));
 });
 
+// WHICH WAY A HEADER MENU OPENS. .ovp hangs off its button's RIGHT edge and
+// grows leftward — right for the desktop header, where the ⋯ is pushed to the
+// drawer's right edge. Below 1200px that push is off (.od-head-push), the row
+// packs to the left, and a menu opened from Refund / Cancel or the ⋯ ran past
+// the drawer's left edge, where the drawer's overflow:hidden cropped it
+// ("…E ACTIONS", "…op note" on the till tablet). When the leftward box would
+// cross that edge, open it rightward from the button's left edge instead.
+// Measured from the wrap and offsetWidth, not the popover's own rect, because
+// zen-pop-in is still moving the popover when this runs.
+function orderPopFit(pop) {
+  pop.style.left = ''; pop.style.right = '';
+  const wrap = pop.parentElement, box = pop.closest('.side-drawer');
+  if (!wrap || !box) return;
+  if (wrap.getBoundingClientRect().right - pop.offsetWidth < box.getBoundingClientRect().left + 8) {
+    pop.style.left = '0'; pop.style.right = 'auto';
+  }
+}
+
 // Refund / Cancel actions collapse into ONE button that opens a small menu.
 // Before, "Refund" and "Cancel + refund" sat side by side as two red buttons
 // in the drawer header — the operator asked for a single button with the
@@ -6586,7 +6604,7 @@ function renderRefundMenu(o, dangerTx) {
 }
 function orderDangerToggle() {
   _ODM_OPEN = !_ODM_OPEN;
-  const pop = document.getElementById('odm-pop'); if (pop) pop.hidden = !_ODM_OPEN;
+  const pop = document.getElementById('odm-pop'); if (pop) { pop.hidden = !_ODM_OPEN; if (_ODM_OPEN) orderPopFit(pop); }
   if (_ODM_OPEN) setTimeout(() => document.addEventListener('mousedown', orderDangerOutside), 0);
   else document.removeEventListener('mousedown', orderDangerOutside);
 }
@@ -7497,7 +7515,7 @@ function orderHeadMore(o) {
 let _ODH_OPEN = false;
 function orderMoreToggle() {
   _ODH_OPEN = !_ODH_OPEN;
-  const pop = document.getElementById('odh-pop'); if (pop) pop.hidden = !_ODH_OPEN;
+  const pop = document.getElementById('odh-pop'); if (pop) { pop.hidden = !_ODH_OPEN; if (_ODH_OPEN) orderPopFit(pop); }
   if (_ODH_OPEN) setTimeout(() => document.addEventListener('mousedown', orderMoreOutside), 0);
   else document.removeEventListener('mousedown', orderMoreOutside);
 }
