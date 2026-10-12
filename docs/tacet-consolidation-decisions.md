@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.507
+# Tacet shared-core consolidation — decisions record, v4.508
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-12 · v4.508 — **§460 · §45 AMENDED · A QR ORDER TAKES ITS SHELF LINES WHEN IT IS PLACED, NOT WHEN IT IS PAID — DECIDED BY ASH:** *"till , pending order , stock need to be deducted because customers already ordered it"*, then *"for mini app, yes, do not deduct before pay. but customer at the till might eat and pay later. that's why till orders should immediately deduct from stock"*, then *"go"*. A QR order's stocked lines (and stock-backed extras) are committed — `physical_qty` drops, ledger `order_commit` — the moment the order is placed, instead of only being held until the cashier settles it. Every unpaid-cancel path (till/admin cancel, the customer's own cancel, the two-hour counter clock, and the three mini-app paths for safety) now calls `inventory.returnUnpaidOrderStock`, which releases holds AND reverses what was taken. Paying takes nothing more. Made-here items still take nothing (§43). The mini app and web are unchanged: they deduct at payment. Held till bills (§457) are the second half of the same ruling and follow as their own PR. No schema, no new route, no string, no change to `.gitignore` or CI. See §460.
 
 2026-10-11 · v4.507 — **§458 · STAFF CAN MOVE A PAID ORDER TO ANOTHER SHOP — DECIDED BY ASH:** *"reroute because store is closed ? also need an option to reroute manually"*, then *"2. give an alert but still let it swap if the user insist evetything else as you recommend"*. A **Change** control on the order's Fulfilled by block moves a paid or awaiting-restock delivery order (mini app or web, nothing packed, no rider called) to another shop. Its stock moves with it in one transaction (`reroute_return` at the old shop, `reroute_take` at the new; holds repointed), the courier job moves with it, the slip prints at the new shop. Short or closed at the new shop: an alert naming what is short, then **Move anyway** if the person insists. `routing_reason` becomes `manual`; four new columns record from where, when, who and what was forced. See §458.
 
@@ -6178,6 +6180,8 @@ This corrects an existing defect rather than inheriting it: counter ledger rows 
 Consequently every product listed at a shop requires both a Chinese and an English name. This is a launch prerequisite, not a later enhancement. Per §30, Chinese strings are copied from the database or from a locked source, or supplied by Ash — never composed. Products created for a new location have no existing Chinese name and cannot be launched until one is supplied.
 
 ## 45. Stock timing for counter and QR orders
+
+> **AMENDED 2026-10-12 by §460 (Ash):** a QR order now TAKES its stocked lines when it is placed, not when it is paid, and every unpaid cancel gives them back. The ruling below on holding until payment no longer applies to QR orders. Read §460.
 
 Existing behaviour, retained: physical stock is decremented on the paid transition, not at order creation. The reasoning recorded in the code stands — decrementing at creation takes stock for a sale that may never be paid, and the cancel-before-payment path has no reversal hook.
 
@@ -30136,3 +30140,59 @@ Tests: `scripts/test_wecom_booked_card.js` (A) and
 `scripts/test_booked_day_reminder.js` (B), both fast shard, both
 mutation-checked. Schema: one nullable column (above). No change to
 `.gitignore` or CI.
+
+## §460 — A QR ORDER TAKES ITS SHELF LINES WHEN IT IS PLACED (§45 AMENDED)
+
+**Decided by Ash, 2026-10-12:** *"till , pending order , stock need to be
+deducted because customers already ordered it"*. Shown that §45 deliberately
+held stock on submit and decremented on paid, Ash explained: *"for mini app,
+yes, do not deduct before pay. but customer at the till might eat and pay
+later. that's why till orders should immediately deduct from stock"*, then
+*"go"* to the recommendation below.
+
+**What changed in the reasoning.** §45 kept physical stock until payment for
+two reasons: a sale that may never be paid should not take stock, and the
+cancel-before-payment path had no way to give it back. The first is wrong for
+a shop with tables: the bottle is on the customer's table before they pay, so
+a count that waits for the money says it is still on the shelf when it is not.
+The second is no longer true: `reverseCommittedOrder` and the ledger reverser
+(§1.5a of the POS survey, 2026-08-20) exist and are idempotent.
+
+**The rule.**
+
+1. **A QR order takes its stocked lines when it is placed.** The hold §45 takes
+   inside the submit transaction is committed straight after it
+   (`commitOrderReservations`, actor *Auto · QR order placed*). Stock-backed
+   extras go with it (§120). Made-here items take nothing, as before (§43). If
+   the commit fails, the order still stands with its hold and the paid
+   transition commits it, which is exactly the §45 behaviour.
+2. **Paying takes nothing more.** The paid path's
+   `commitOrderReservations` finds no active hold, and
+   `commitUnreservedOrder` reads a `committed` reservation as already
+   accounted per product.
+3. **An unpaid order that ends gives back everything, held or taken.** Every
+   unpaid-cancel path calls `inventory.returnUnpaidOrderStock`: release what
+   is held, reverse what was taken (ledger `order_reverse`, once). That covers
+   the till/back-office cancel, the customer's own cancel from the order page,
+   and the two-hour counter clock (§49), which returns stock after its
+   transaction closes, never inside it. The three mini-app paths (customer
+   cancel, unpaid reaper, superseded order) call it too: for an order that
+   never committed, the reversal is a no-op, so one rule covers every unpaid
+   cancel.
+4. **The clock returns the stock too.** An order cancelled at two hours unpaid
+   gets its bottles back on the count, the same as any cancel. If the customer
+   in fact drank it and left, the count reads high until the next recount.
+   Accepted: a separate "walked out" path was offered and not wanted now.
+5. **The mini app and web are unchanged.** They hold at checkout where the
+   stock gate applies and deduct at payment, as before.
+
+**Not changed.** What the till and the QR menu show as available: it was
+`physical − holds` and is now `physical` with no hold for the same order, so
+the same number. Held till bills (§457) still take nothing until Mark paid.
+They are the second half of this ruling and get their own entry and PR.
+
+Tests: `scripts/test_shop_menu.js` (the shelf drops on submit, a cancel
+returns it once, payment takes nothing more), `scripts/test_shop_menu_options.js`
+(an extra is taken on submit), `scripts/test_counter_sweep_exempt.js` (the
+clock returns a taken bottle once). All fast shard.
+Schema: none. No new route. No string. No change to `.gitignore` or CI.

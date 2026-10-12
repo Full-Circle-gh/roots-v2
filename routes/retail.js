@@ -9364,7 +9364,7 @@ function cancelStalePendingOrdersForTenant() {
     try { reverseOrderRedeem(o.id); } catch (e) { console.error('[auto-cancel.reverseRedeem]', o.id, e.message); }
     try { reverseOrderBalance(o.id); } catch (e) { console.error('[auto-cancel.reverseBalance]', o.id, e.message); }
     try { reverseOrderVoucher(o.id); } catch (e) { console.error('[auto-cancel.reverseVoucher]', o.id, e.message); }
-    try { inventory.releaseOrderReservations(o.id, { reason: 'auto_cancelled_unpaid' }); }
+    try { inventory.returnUnpaidOrderStock(o.id, { reason: 'auto_cancelled_unpaid' }); }
     catch (e) { console.error('[auto-cancel.release]', o.id, e.message); }
     try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'cancelled', reason: 'auto_cancelled_unpaid' }, null); } catch {}
     cancelled++;
@@ -9417,7 +9417,7 @@ function supersedeUnpaidOrdersForCustomer(customerId, keepOrderId, cartPids) {
     try { reverseOrderRedeem(o.id); }  catch (e) { console.error('[supersede.reverseRedeem]',  o.id, e.message); }
     try { reverseOrderBalance(o.id); } catch (e) { console.error('[supersede.reverseBalance]', o.id, e.message); }
     try { reverseOrderVoucher(o.id); } catch (e) { console.error('[supersede.reverseVoucher]', o.id, e.message); }
-    try { inventory.releaseOrderReservations(o.id, { reason: 'superseded_by_new_order' }); }
+    try { inventory.returnUnpaidOrderStock(o.id, { reason: 'superseded_by_new_order' }); }
     catch (e) { console.error('[supersede.release]', o.id, e.message); }
     try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: 'pending_payment', to: 'cancelled', reason: 'superseded_by_new_order' }, null); } catch {}
     cancelled.push(o.id);
@@ -23653,8 +23653,9 @@ router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), 
   // return them too. Safe to call exactly once thanks to the transition guard.
   try { reverseOrderVoucher(id); }
   catch (e) { console.error('[cancel.reverseVoucher]', e); }
-  // Release soft-reservations so the stock returns to the available pool.
-  try { inventory.releaseOrderReservations(id, { reason: 'customer_cancelled' }); }
+  // Release soft-reservations so the stock returns to the available pool, and
+  // return anything the order already took (§460).
+  try { inventory.returnUnpaidOrderStock(id, { reason: 'customer_cancelled' }); }
   catch (e) { console.error('[inventory.release]', e); }
   res.json({ success: true });
 });
@@ -36043,12 +36044,19 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       } catch (e) { console.warn('[admin mark-paid counter-terminal]', id, e.message); }
     }
   }
-  // Stock side-effects of cancel / refund. cancelled before payment just
-  // releases the active reservation; refund of a paid order reverses
-  // committed stock back into the available pool.
+  // Stock side-effects of cancel / refund. Cancelled before payment releases
+  // the active reservation and, since §460, returns what a QR order already
+  // took off the shelf at submit; refund of a paid order reverses committed
+  // stock back into the available pool.
   if (status === 'cancelled') {
     if (o.status === 'pending_payment') {
-      try { inventory.releaseOrderReservations(id, { reason: 'admin_cancelled' }); }
+      try {
+        inventory.returnUnpaidOrderStock(id, {
+          reason: 'admin_cancelled',
+          actorUserId: req.user.id,
+          actorLabel: req.user.display_name || req.user.username || null,
+        });
+      }
       catch (e) { console.error('[inventory.release (admin)]', e); }
       // An unpaid order still consumed points + voucher at create time, so a
       // cancel from pending_payment must return them (no money was taken, so

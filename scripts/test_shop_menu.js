@@ -202,6 +202,9 @@ function cleanup() {
   }
   db.prepare(`DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id IN (${qs}))`).run(...LOCS);
   db.prepare(`DELETE FROM shops WHERE location_id IN (${qs})`).run(...LOCS);
+  // §460: a QR order now commits its shelf lines on submit, which writes ledger
+  // rows against these products — they go before the products do.
+  db.prepare(`DELETE FROM retail_stock_ledger WHERE store_id IN (${qs})`).run(...LOCS);
   db.prepare(`DELETE FROM retail_store_stock WHERE store_id IN (${qs})`).run(...LOCS);
   db.prepare(`DELETE FROM store_products WHERE id IN (${PRODS.map(() => '?').join(',')})`).run(...PRODS);
   db.prepare(`DELETE FROM retail_stores WHERE id IN (${qs})`).run(...LOCS);
@@ -796,8 +799,12 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.strictEqual((await post(`/s/${CODES[LOC_OFF]}/order`, { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty: 1 }] })).status, 404);
       assert.strictEqual((await post('/s/lower123/order', { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty: 1 }] })).status, 404);
     });
-    await checkAsync('a made-here line reserves nothing; a stocked line reserves', async () => {
+    await checkAsync('a made-here line takes nothing; a stocked line is taken off the shelf on submit', async () => {
       await resetOrderLimit();
+      // The checks above place stocked orders too, and since §460 each one
+      // really takes a bottle, so the shelf is set here rather than inherited.
+      db.prepare('UPDATE retail_store_stock SET physical_qty = 5 WHERE store_id = ? AND product_id = ?')
+        .run(LOC_LIVE, P_STOCK_OK);
       const r = await post(`/s/${LIVE}/order`, {
         name: 'Mei',
         items: [{ store_product_id: P_MADE_ON, qty: 1 }, { store_product_id: P_STOCK_OK, qty: 1 }],
@@ -807,6 +814,16 @@ const soldOut = (row) => /class="sold"/.test(row);
       const res = db.prepare('SELECT product_id FROM retail_stock_reservations WHERE order_id = ?').all(oid).map(x => x.product_id);
       assert.deepStrictEqual(res, [P_STOCK_OK],
         'a made-here item reserved stock it has none of, or a stocked one reserved nothing (§43, §45)');
+      // §460: and the stocked line is TAKEN at submit, not merely held — the
+      // shelf the fixture seeded at 5 reads 4 before anybody has paid.
+      assert.strictEqual(
+        db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
+          .get(LOC_LIVE, P_STOCK_OK).physical_qty,
+        4, 'the shelf did not drop when the QR order was placed (§460)');
+      // Put the fixture back the way the rest of the suite expects it.
+      db.prepare('UPDATE retail_store_stock SET physical_qty = 5 WHERE store_id = ? AND product_id = ?')
+        .run(LOC_LIVE, P_STOCK_OK);
+      db.prepare("DELETE FROM retail_stock_ledger WHERE ref_table = 'retail_orders' AND ref_id = ?").run(oid);
       db.prepare('DELETE FROM retail_stock_reservations WHERE order_id = ?').run(oid);
       db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
       db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
@@ -1460,6 +1477,54 @@ const soldOut = (row) => /class="sold"/.test(row);
         const still = db.prepare('SELECT status, cancelled_at FROM retail_orders WHERE id = ?').get(row.id);
         assert.strictEqual(still.status, 'cancelled');
         assert.strictEqual(still.cancelled_at, after.cancelled_at, 'a second cancel re-stamped the order');
+      });
+
+      /* §460 — A QR ORDER TAKES ITS SHELF LINES ON SUBMIT, so its cancel has to
+         put them back, and its payment must not take them a second time. The
+         customer is at a table eating before they pay; the count follows the
+         bottle, not the money. */
+      await checkAsync('a stocked QR order drops the shelf on submit, and its cancel puts it back once', async () => {
+        await resetOrderLimit();
+        db.prepare('UPDATE retail_store_stock SET physical_qty = 5 WHERE store_id = ? AND product_id = ?')
+          .run(LOC_LIVE, P_STOCK_OK);
+        const shelf = () => db.prepare(
+          'SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
+        ).get(LOC_LIVE, P_STOCK_OK).physical_qty;
+        const before = shelf();
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Pia', items: [{ store_product_id: P_STOCK_OK, qty: 2 }],
+        });
+        assert.strictEqual(placed.status, 201, JSON.stringify(placed.json));
+        assert.strictEqual(shelf(), before - 2, 'placing the order did not take the two bottles off the shelf');
+        const row = db.prepare('SELECT id, pay_token FROM retail_orders WHERE order_no = ?')
+          .get(placed.json.data.order_no);
+        for (let i = 0; i < 2; i++) {
+          await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}/order/${row.pay_token}/cancel`,
+            { method: 'POST', redirect: 'manual' });
+        }
+        assert.strictEqual(shelf(), before, 'cancelling the unpaid order did not put the bottles back, or put them back twice');
+      });
+
+      await checkAsync('...and paying for it takes nothing more', async () => {
+        await resetOrderLimit();
+        db.prepare('UPDATE retail_store_stock SET physical_qty = 5 WHERE store_id = ? AND product_id = ?')
+          .run(LOC_LIVE, P_STOCK_OK);
+        const inventory = require(path.join(ROOT, 'lib', 'inventory.js'));
+        const shelf = () => db.prepare(
+          'SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
+        ).get(LOC_LIVE, P_STOCK_OK).physical_qty;
+        const before = shelf();
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Qin', items: [{ store_product_id: P_STOCK_OK, qty: 1 }],
+        });
+        assert.strictEqual(placed.status, 201, JSON.stringify(placed.json));
+        const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(placed.json.data.order_no).id;
+        // The two calls every paid transition makes, in the order it makes them.
+        inventory.commitOrderReservations(oid);
+        inventory.commitUnreservedOrder(oid, [{ product_id: P_STOCK_OK, qty: 1 }]);
+        assert.strictEqual(shelf(), before - 1, 'the bottle came off the shelf twice — once on submit, again on paid');
+        inventory.returnUnpaidOrderStock(oid, { reason: 'test_cleanup' });
+        assert.strictEqual(shelf(), before, 'the fixture shelf was not restored');
       });
 
       await checkAsync('...and a PAID order is not cancellable from the phone', async () => {
