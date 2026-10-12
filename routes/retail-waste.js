@@ -13,7 +13,8 @@
 //   • Recording a loss so the on-hand number goes down and the channels hear
 //     about it, in one transaction (§32 rule 6).
 //   • Snapshotting what it cost, once, at entry, never recomputed (§32 rule 9),
-//     and saying so out loud when it could not (§32 rule 10).
+//     and saying so out loud when it could not (§32 rule 10). The one
+//     exception is an owner's explicit, logged recalculation (§465).
 //   • Voiding by REVERSAL, never by edit or delete (§32 rule 11, §20).
 //
 // PRODUCT SUBJECTS ONLY, TODAY. The table carries the material subject and its
@@ -318,6 +319,20 @@ router.get('/api/retail-admin/waste/preview', requireRetailAdmin, requireWasteEn
 // by this path rather than through a second copy of the costing that drifts.
 // This file still imports both, so nothing about a loss recorded HERE changed.
 
+// The list's filter — dates, store, reason — as SQL on `w`. One function, so
+// the list and the recalculation (§465) cannot disagree about which entries a
+// filter covers: the recalculation acts on exactly what the screen is showing.
+function listFilter(q) {
+  const parts = [];
+  const params = [];
+  if (q.from)        { parts.push('w.business_date >= ?'); params.push(q.from); }
+  if (q.to)          { parts.push('w.business_date <= ?'); params.push(q.to); }
+  if (q.location_id) { parts.push('w.location_id = ?');    params.push(Number(q.location_id)); }
+  if (q.reason)      { parts.push('w.reason_code = ?');    params.push(q.reason); }
+  return { filter: parts.length ? parts.join(' AND ') : '1=1', params };
+}
+const LIVE_W = LIVE_ONLY.replace(/(reverses_waste_id|voided_by_waste_id)/g, 'w.$1');
+
 // ── GET / — the list ───────────────────────────────────────────────
 //
 // `include_voided=1` returns the reversals and the rows they cancelled as well.
@@ -341,15 +356,9 @@ router.get('/api/retail-admin/waste/preview', requireRetailAdmin, requireWasteEn
 // screen renders as an unknown rather than as a blank.
 router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (req, res) => {
   const db = tdb();
-  const { from, to, location_id, reason, include_voided } = req.query;
-  const parts = [];
-  const params = [];
-  if (from)        { parts.push('w.business_date >= ?'); params.push(from); }
-  if (to)          { parts.push('w.business_date <= ?'); params.push(to); }
-  if (location_id) { parts.push('w.location_id = ?');    params.push(Number(location_id)); }
-  if (reason)      { parts.push('w.reason_code = ?');    params.push(reason); }
-  const filter = parts.length ? parts.join(' AND ') : '1=1';
-  const live = LIVE_ONLY.replace(/(reverses_waste_id|voided_by_waste_id)/g, 'w.$1');
+  const { include_voided } = req.query;
+  const { filter, params } = listFilter(req.query);
+  const live = LIVE_W;
   const listWhere = (include_voided === '1' || include_voided === 'true') ? filter : `${filter} AND ${live}`;
 
   const rows = db.prepare(`
@@ -409,6 +418,135 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
     return res.json({ success: true, data: rows.map(stripCost), totals, costs_hidden: true });
   }
   res.json({ success: true, data: rows, totals });
+});
+
+// ── §465 — RECALCULATE COSTS: re-price past entries with today's figures ─────
+//
+// §32 rule 9 says a loss keeps the cost it was written with, and every ordinary
+// write still does. Ash, 2026-10-12: "the cost was always right, calculation in
+// the system of the product was wrong". A salad whose dressing was not yet
+// ticked packed separately, or a bowl whose material was priced wrong, wrote a
+// wrong figure, and fixing the product does not fix the entries already made.
+// So an owner may ask for the entries a filter covers to be priced again.
+//
+// THE RULES, each one a reason the old figure is safe to replace:
+//   • Owner only: waste:void AND waste:costs, checked here and failing closed.
+//     waste:void is the one waste capability marked as moving money.
+//   • Two steps. GET lists what would change; nothing is written. POST takes
+//     that list back and writes it only if every entry still says what the
+//     list said it did and still prices to what the list said it would. One
+//     difference anywhere and nothing is written (409), so what was shown is
+//     exactly what was saved.
+//   • Live entries only. A voided entry and its reversal carry the same cost
+//     so they cancel; re-pricing one half would break the pair, and neither is
+//     in any total anyway.
+//   • Never to "no cost". A product whose cost is now missing keeps the figure
+//     it has: a known figure is not replaced by "we do not know" (§32 rule 10).
+//   • Every change is kept: waste_cost_corrections holds the old figure, the
+//     new one, who and when, and the activity log says how many.
+//
+// Priced through wasteUnitCostYuan and resolveCostCents, the same two calls a
+// new entry is priced with, so a re-priced entry is exactly what recording it
+// today would store.
+function canRecalculate(req) {
+  return canSeeCosts(req) && !!(req.caps && req.caps.has && req.caps.has('waste:void'));
+}
+
+// What each live entry in the filter would cost today, for the ones that
+// differ. A (product, reason) pair is priced once: a build list's cost walks
+// its materials, and thirty days of one salad is thirty identical walks.
+function recalcChanges(db, q) {
+  const { filter, params } = listFilter(q);
+  const rows = db.prepare(`
+    SELECT w.id, w.store_product_id, w.qty, w.reason_code, w.business_date,
+           w.cost_total_cents, w.is_uncosted,
+           p.name_en AS product_name_en, p.name_cn AS product_name_cn
+      FROM waste_records w
+      LEFT JOIN store_products p ON p.id = w.store_product_id
+     WHERE ${filter} AND ${LIVE_W} AND w.subject_type = 'product'
+     ORDER BY w.business_date DESC, w.id DESC
+  `).all(...params);
+  const unit = new Map();
+  const changes = [];
+  for (const r of rows) {
+    const key = r.store_product_id + '|' + r.reason_code;
+    if (!unit.has(key)) unit.set(key, wasteUnitCostYuan(db, r.store_product_id, r.reason_code).unitYuan);
+    const now = resolveCostCents(unit.get(key), r.qty);
+    if (now.uncosted) continue;
+    const was = r.is_uncosted ? null : r.cost_total_cents;
+    if (was === now.cents) continue;
+    changes.push({
+      id: r.id, store_product_id: r.store_product_id, qty: r.qty,
+      reason_code: r.reason_code, business_date: r.business_date,
+      product_name_en: r.product_name_en, product_name_cn: r.product_name_cn,
+      from_cents: was, to_cents: now.cents,
+    });
+  }
+  return changes;
+}
+
+router.get('/api/retail-admin/waste/recalculate', requireRetailAdmin, requireWasteEnabled, (req, res) => {
+  if (!canRecalculate(req)) return res.status(403).json({ error: 'not_allowed' });
+  const changes = recalcChanges(tdb(), req.query);
+  res.json({
+    success: true,
+    data: changes,
+    totals: {
+      entries: changes.length,
+      from_cents: changes.reduce((a, c) => a + (c.from_cents || 0), 0),
+      to_cents: changes.reduce((a, c) => a + c.to_cents, 0),
+    },
+  });
+});
+
+// Body: { changes: [{ id, from_cents, to_cents }] } — the GET's list, sent back.
+router.post('/api/retail-admin/waste/recalculate', requireRetailAdmin, requireWasteEnabled, (req, res) => {
+  if (!canRecalculate(req)) return res.status(403).json({ error: 'not_allowed' });
+  const db = tdb();
+  const list = Array.isArray(req.body?.changes) ? req.body.changes : null;
+  if (!list || !list.length) return res.status(400).json({ error: 'changes_required' });
+  if (list.length > 5000) return res.status(400).json({ error: 'too_many_changes' });
+  const ids = list.map(c => Number(c && c.id));
+  if (ids.some(id => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) {
+    return res.status(400).json({ error: 'changes_invalid' });
+  }
+
+  const actor = actorOf(req);
+  const stale = new Error('costs_changed');
+  try {
+    const out = db.transaction(() => {
+      const get = db.prepare(`SELECT ${ROW_COLS} FROM waste_records WHERE id = ?`);
+      const upd = db.prepare('UPDATE waste_records SET cost_total_cents = ?, is_uncosted = 0 WHERE id = ?');
+      const log = db.prepare(`
+        INSERT INTO waste_cost_corrections (waste_id, from_cents, to_cents, created_by, created_by_label)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      let fromSum = 0, toSum = 0;
+      for (const c of list) {
+        const r = get.get(Number(c.id));
+        if (!r || r.subject_type !== 'product' || r.reverses_waste_id != null || r.voided_by_waste_id != null) throw stale;
+        const was = r.is_uncosted ? null : r.cost_total_cents;
+        const sentFrom = c.from_cents == null ? null : Number(c.from_cents);
+        if (was !== sentFrom) throw stale;
+        const now = resolveCostCents(wasteUnitCostYuan(db, r.store_product_id, r.reason_code).unitYuan, r.qty);
+        if (now.uncosted || now.cents !== Number(c.to_cents)) throw stale;
+        if (now.cents === was) continue;
+        upd.run(now.cents, r.id);
+        log.run(r.id, was, now.cents, actor.id, actor.label);
+        fromSum += was || 0; toSum += now.cents;
+      }
+      return { entries: list.length, from_cents: fromSum, to_cents: toSum };
+    })();
+    logActivity(actor.id, actor.label, 'recalculate_costs', 'waste_record', null, out, req.ip);
+    res.json({ success: true, data: out });
+  } catch (e) {
+    if (e === stale) {
+      return res.status(409).json({ error: 'costs_changed',
+        message: 'Costs changed since the list was made. Nothing was saved — check again.' });
+    }
+    console.error('[waste] recalculate failed:', e);
+    res.status(500).json({ error: 'recalculate_failed', message: e.message });
+  }
 });
 
 // The three checks every written loss passes, in one place so the single write
