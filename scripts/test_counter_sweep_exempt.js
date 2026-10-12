@@ -50,6 +50,7 @@ function cleanup() {
   if (ORDERS.length) {
     const q = ORDERS.map(() => '?').join(',');
     h.prepare(`DELETE FROM retail_stock_reservations WHERE order_id IN (${q})`).run(...ORDERS);
+    h.prepare(`DELETE FROM retail_stock_ledger WHERE ref_table = 'retail_orders' AND ref_id IN (${q})`).run(...ORDERS);
     h.prepare(`DELETE FROM retail_orders WHERE id IN (${q})`).run(...ORDERS);
   }
   h.prepare('DELETE FROM retail_store_stock WHERE store_id = ?').run(STORE);
@@ -183,6 +184,22 @@ try {
     inventory.sweepExpiredReservations();
     assert.strictEqual(statusOf(id), 'cancelled',
       'an order of nothing but made-here items sat unpaid for ever, printed and forgotten');
+  });
+
+  check('§460: a QR order that already TOOK its bottle gets it back when the clock cancels it', () => {
+    // A QR order commits its shelf lines on submit now — the customer is at a
+    // table eating before they pay — so the clock's cancel must return them,
+    // not merely release a hold that is no longer there.
+    const shelf = () => h.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
+      .get(STORE, PROD).physical_qty;
+    const id = makeOrder('counter');
+    inventory.commitOrderReservations(id);
+    const taken = shelf();
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(statusOf(id), 'cancelled');
+    assert.strictEqual(shelf(), taken + 1, 'the clock cancelled the order and kept the bottle it had taken');
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(shelf(), taken + 1, 'a second sweep returned the bottle again');
   });
 
   console.log('\nThe guard is about fulfilment, not about the shop channel');

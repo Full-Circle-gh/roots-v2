@@ -73,6 +73,9 @@ function cleanup() {
   db.prepare(`DELETE FROM retail_product_options WHERE product_id IN (${ph})`).run(...IDS);
   db.prepare('DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id = ?)').run(LOC);
   db.prepare('DELETE FROM shops WHERE location_id = ?').run(LOC);
+  // §460: a QR order now commits its shelf lines on submit, which writes ledger
+  // rows against these products — they go before the products do.
+  db.prepare('DELETE FROM retail_stock_ledger WHERE store_id = ?').run(LOC);
   db.prepare('DELETE FROM retail_store_stock WHERE store_id = ?').run(LOC);
   db.prepare(`DELETE FROM store_products WHERE id IN (${ph})`).run(...IDS);
   db.prepare('DELETE FROM retail_stores WHERE id = ?').run(LOC);
@@ -378,19 +381,26 @@ function optsOnCard(body, pid) {
       .run(LOC, A_OAT);
   });
 
-  await check('a chosen extra RESERVES its own stock alongside the drink', async () => {
+  await check('a chosen extra TAKES its own stock alongside the drink, on submit', async () => {
     await resetLimit();
+    const shelf = () => db.prepare(
+      'SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
+    ).get(LOC, A_OAT).physical_qty;
+    const before = shelf();
     const r = await post(`/s/${CODE}/order`, {
       name: 'Mei', items: [{ store_product_id: P_LATTE, qty: 2, choices: [CH.full, CH.oat] }],
     });
     assert.strictEqual(r.status, 201, JSON.stringify(r.json));
     const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+    // §460: the hold is committed the moment the order is placed — the drink
+    // is on the table before it is paid for.
     const held = db.prepare(
-      "SELECT product_id, qty FROM retail_stock_reservations WHERE order_id = ? AND status = 'active'"
+      "SELECT product_id, qty FROM retail_stock_reservations WHERE order_id = ? AND status = 'committed'"
     ).all(oid);
     const oat = held.find(h => h.product_id === A_OAT);
-    assert.ok(oat, 'the oat milk was sold and never held');
+    assert.ok(oat, 'the oat milk was sold and never taken');
     assert.strictEqual(oat.qty, 2, 'one extra per unit bought, as expandStockLines has always counted them');
+    assert.strictEqual(shelf(), before - 2, 'the shelf did not drop when the order was placed (§460)');
     // The latte is made here, so it holds nothing of its own — §43.
     assert.ok(!held.some(h => h.product_id === P_LATTE), 'a made-here drink reserved a shelf it does not have');
   });

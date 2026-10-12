@@ -94,6 +94,9 @@ function cleanup() {
   db.prepare(`DELETE FROM retail_product_options WHERE product_id IN (${ph})`).run(...IDS);
   db.prepare('DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id = ?)').run(LOC);
   db.prepare('DELETE FROM shops WHERE location_id = ?').run(LOC);
+  // §460: a QR order now commits its shelf lines on submit, which writes ledger
+  // rows against these products — they go before the products do.
+  db.prepare('DELETE FROM retail_stock_ledger WHERE store_id = ?').run(LOC);
   db.prepare('DELETE FROM retail_store_stock WHERE store_id = ?').run(LOC);
   db.prepare(`DELETE FROM store_products WHERE id IN (${ph})`).run(...IDS);
   db.prepare('DELETE FROM retail_stores WHERE id = ?').run(LOC);
