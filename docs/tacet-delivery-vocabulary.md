@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.327 · 2026-10-12 · §460 THE DELIVERY ALARM IN THE NEW-ORDER GROUP — NOTHING COMPOSED; `今天的顾客预约` (v1.326) LOSES ITS ONLY USE.** See *The delivery alarm in the new-order group (§460)*.
+
 **v1.326 · 2026-10-12 · §459 BOOKED DELIVERIES IN THE NEW-ORDER GROUP — 1 STRING COMPOSED BY CLAUDE (`今天的顾客预约`), FROM THE LIVE 今天 AND 顾客预约; `Booked · 顾客预约` COPIED WHOLE ONTO THE NEW-ORDER CARD.** See *Booked deliveries in the new-order group (§459)*.
 
 **v1.325 · 2026-10-11 · §458 MOVING A PAID ORDER TO ANOTHER SHOP — 17 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON THE LIVE 改派; THE COURIER CONTROL'S OWN STRINGS COPIED WHOLE.** See *Moving a paid order to another shop (§458)*.
@@ -13847,3 +13849,22 @@ today · 今日配送`), and a booked order is the opposite of one. `今日预�
 and `预约配送`: `预约配送` is not live anywhere in the product, and `顾客预约`
 already says *booked by the customer*. `今天顾客预约` without `的`: two live
 words side by side, but it reads as a run-on.
+
+## The delivery alarm in the new-order group (§460)
+
+**2026-10-12.** Ash replaced the 08:00 list (§459) with an alarm 30 minutes
+before the booked window. `lib/delivery-reminders.js` (`groupAlarmCard`).
+Nothing is composed.
+
+### Copied whole
+
+The lead lines are the reminder's own push titles, `⏰ Deliver soon · 即将配送`
+and `📦 Deliver today · 今日配送`, each language on its own line (§1.11). The
+rows are the new-order card's: `订单号 Order`, `顾客预约 Booked`,
+`收货人 To`, `地址 Address`.
+
+### No longer used
+
+`今天的顾客预约` / `Booked for today` (v1.326, *Booked deliveries in the
+new-order group (§459)*): its only use, the 08:00 list, was removed. The entry
+above is left as written. If the words are needed again, they are declared.

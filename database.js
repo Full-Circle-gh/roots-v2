@@ -4057,10 +4057,12 @@ addColumn('retail_orders', 'delivery_slot_kind', 'TEXT');
 // once when the delivered-notice SMS is dispatched (out-of-GZ orders only).
 addColumn('retail_orders', 'sms_delivered_sent_at', 'DATETIME');
 
-// The booked-day morning reminder's once-guard (lib/booked-day-reminder.js):
-// the 'YYYY-MM-DD' this order was last listed for in the new-order WeCom
-// group. A day, not a timestamp, so an order moved to another day is listed
-// again on that day. NULL = never reminded.
+// RETIRED (§460). The once-guard of the 08:00 "Booked for today" WeCom list
+// (§459), which Ash had removed the day it shipped in favour of the
+// 30-minutes-before alarm (lib/delivery-reminders.js). Nothing reads or
+// writes it. The line stays because the column already exists on live
+// databases and addColumn cannot take it back; removing the line would only
+// make a fresh database differ from a live one.
 addColumn('retail_orders', 'booked_reminder_day', 'TEXT');
 
 // Manual-Alipay payment proof: when the operator can't take 当面付 yet (open-

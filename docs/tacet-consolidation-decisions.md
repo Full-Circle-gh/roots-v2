@@ -30136,3 +30136,54 @@ Tests: `scripts/test_wecom_booked_card.js` (A) and
 `scripts/test_booked_day_reminder.js` (B), both fast shard, both
 mutation-checked. Schema: one nullable column (above). No change to
 `.gitignore` or CI.
+
+## §460 — THE DELIVERY ALARM RINGS THE NEW-ORDER GROUP; THE 08:00 LIST GOES
+
+**Decided by Ash, 2026-10-12**, the same day §459 shipped: *"we need
+something like alarm clock . that was my meaning forom the begiging . for
+example there is a booking for 3-5pm. we should have a push notification at
+2:30 reminder"*. Then: the alarm goes to the WeCom group AND the admin-app
+notification; the 08:00 list is removed; a day-only booking rings at 10:00.
+
+**This supersedes §459 points 3 and 4.** Point 2 (the *Booked* line on the
+new-order card, PR #1116) stands. §459 is left as written, per this
+document's convention.
+
+**What the survey found.** The alarm already existed: `lib/delivery-reminders.js`
+pushes `⏰ Deliver soon · 即将配送` 30 minutes before a window opens and
+`📦 Deliver today · 今日配送` at 10:00 on a day-only order, once per order.
+It reached only phones with the admin app's notifications switched on, and
+never the group. Two defects sat under it:
+
+- A bare `'YYYY-MM-DD'` — what the courier panel's date change writes — was
+  read by `new Date()` as UTC midnight, i.e. 08:00 on the UTC+8 host. The order
+  counted as a window and rang "Deliver soon" at 07:30 instead of "Deliver
+  today" at 10:00.
+- Nothing cleared `reminder_ship_sent_at` when an order's time changed, so an
+  order that rang and was then moved to another day never rang again.
+
+**The rule.**
+
+1. **One alarm, two sends.** When a delivery reminder fires, the existing push
+   goes out as before and, for a BOOKING, the same moment posts a card to the
+   new-order group's channel (WeCom app, else the group-bot webhook), read for
+   that tenant explicitly (`lib/tenant-notify.js` `notifyOrderGroup`). The
+   existing claim on `reminder_ship_sent_at` covers both, so it rings once.
+2. **Booking** = the customer chose the day or the window: kind `schedule`,
+   NULL (an operator-moved day), or `today` WITH a window ("3–5pm" chosen
+   this morning). Not `express`, `restock`, `right_away`, or a same-day
+   day-only chip. Those still push phones and do not ring the group.
+3. **A bare date is local midnight**, i.e. day-only, so it rings at 10:00.
+4. **A moved time re-arms the alarm.** Both reschedule writes clear the
+   reminder stamps when `scheduled_for` actually changes. Re-saving the same
+   time does not.
+5. **The 08:00 "Booked for today" list is removed.** Its column
+   `booked_reminder_day` stays in `database.js`, marked retired: it exists on
+   live databases, and `addColumn` cannot take it back.
+
+Strings: nothing composed. The lead lines are the push titles, copied whole;
+the rows are the new-order card's. `今天的顾客预约` (§459) loses its only use,
+noted in `docs/tacet-delivery-vocabulary.md` v1.327.
+Tests: new `scripts/test_delivery_alarm_wecom.js` (fast shard), the real sweep
+on the Asia/Shanghai clock, mutation-checked. `scripts/test_booked_day_reminder.js`
+is removed with the code it tested. No change to `.gitignore` or CI.
