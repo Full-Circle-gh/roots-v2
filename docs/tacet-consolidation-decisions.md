@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.513
+# Tacet shared-core consolidation — decisions record, v4.514
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,7 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-10-12 · v4.513 — **§465 · A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP — ASKED BY ASH:** *"rearock only internal and coffee and milks categories shows on the mini app . why and also hide them from there now"*, with a screenshot of the Shop tab. **WHY THEY SHOWED:** the shop draws every top category that has a published product in it, and §288 gave only the QR menu an eye — the mini app had no way to hide a category. **NOW:** a top node in `category.tree` may carry `hidden: true`, stored only when true so every existing tree keeps its bytes and its §325 version. The public tree (`GET /api/retail/category-tree`, with or without counts) leaves it out, and the product list (shop grid, search, a category grid, the list's total) and the best sellers leave its products out. The web shop reads the same feed, so it follows. **NOT HIDDEN:** a by-id read (`?ids=`) — checkout re-reads the cart that way and a hand-picked home block named its products on purpose — the product page, flash sales, the till, the QR menu (its own §288 list) and every admin screen. Hiding is what the shop shows, not what it accepts. Desktop: Products → Categories, *Mini app* mode, the same eye the QR mode has. The product editor now reads the ADMIN tree, because the wizard's *Add category* PUTs the whole list back and the public one would have deleted every hidden category. The phone keeps the flag on save (it sends nodes whole) but shows no eye. Four Chinese strings composed by Claude; see the vocabulary's v1.328. No schema change; no change to `.gitignore` or CI. Held by `scripts/test_miniapp_category_hide.js`. See §465.
+2026-10-12 · v4.514 — **§466 · A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP — ASKED BY ASH:** *"rearock only internal and coffee and milks categories shows on the mini app . why and also hide them from there now"*, with a screenshot of the Shop tab. **WHY THEY SHOWED:** the shop draws every top category that has a published product in it, and §288 gave only the QR menu an eye — the mini app had no way to hide a category. **NOW:** a top node in `category.tree` may carry `hidden: true`, stored only when true so every existing tree keeps its bytes and its §325 version. The public tree (`GET /api/retail/category-tree`, with or without counts) leaves it out, and the product list (shop grid, search, a category grid, the list's total) and the best sellers leave its products out. The web shop reads the same feed, so it follows. **NOT HIDDEN:** a by-id read (`?ids=`) — checkout re-reads the cart that way and a hand-picked home block named its products on purpose — the product page, flash sales, the till, the QR menu (its own §288 list) and every admin screen. Hiding is what the shop shows, not what it accepts. Desktop: Products → Categories, *Mini app* mode, the same eye the QR mode has. The product editor now reads the ADMIN tree, because the wizard's *Add category* PUTs the whole list back and the public one would have deleted every hidden category. The phone keeps the flag on save (it sends nodes whole) but shows no eye. Four Chinese strings composed by Claude; see the vocabulary's v1.329. No schema change; no change to `.gitignore` or CI. Held by `scripts/test_miniapp_category_hide.js`. See §466.
+
+2026-10-12 · v4.513 — **§465 · §32 RULE 9 AMENDED · AN OWNER CAN RE-PRICE PAST WASTE ENTRIES WHEN A PRODUCT'S COST WAS CALCULATED WRONG — DECIDED BY ASH:** *"all waste list need to be update according to the new settings"*, then *"the cost was always right, calaxulation in the system of the product was wrong"*. A **Recalculate costs** button on the phone's waste list, for owners only (`waste:void` + `waste:costs`). It lists every live entry under the current filter whose figure would change, old → new, priced exactly as a new entry would be, and writes nothing until **Save**. Save writes only if nothing moved in between (409 otherwise). Voided entries are never touched, and a known figure is never turned into "no cost". Every change keeps its old figure in the new table `waste_cost_corrections`. Ordinary writes still snapshot cost at entry. The desktop screen is a follow-up. 1 string composed (vocabulary v1.328). No change to `.gitignore` or CI. See §465.
 
 2026-10-12 · v4.512 — **§464 · EVERY LIST SCREEN ON THE PHONE KEEPS ITS SEARCH ON SCREEN — ASKED BY ASH:** *"do for all"*, after §463 pinned Add stock's. Twenty-nine searches now stay at the top while their list scrolls under them, through one shared `.stick-top` style. Pop-up sheets and pickers, the New order form and the Meituan bundle editor are left as they are. The test runner names the new browser suite in its slow list, which is a build-config change and is called out. No string, no schema, no change to `.gitignore` or CI workflows. See §464.
 
@@ -30428,7 +30430,71 @@ change, and the slow shard was not.
 
 Schema: none. No string. No change to `.gitignore` or CI workflows.
 
-## §465 — A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP
+## §465 — AN OWNER CAN RE-PRICE PAST WASTE ENTRIES WHEN A PRODUCT'S COST WAS CALCULATED WRONG (§32 RULE 9 AMENDED)
+
+**Decided by Ash, 2026-10-12.** Asked, with a screenshot of the phone's waste
+list (7 days, ¥272.03 written off): *"fix all waste list , salad I update now
+that the dressing are not expired . I also update the price of tabbouleh bowl .
+all waste list need to be update according to the new settings"*. Put to Ash:
+§32 rule 9 fixes each entry's cost on the day it is written, and making the list
+follow today's price at all times would let every price change rewrite past
+losses. Ash: *"the cost was always right, calaxulation in the system of the
+product was wrong"*. That makes this a correction of a wrong figure, not a price
+change, and the session went ahead with the recommended form: an owner-only
+**Recalculate costs** action on the phone's waste list.
+
+**The rule.**
+1. **§32 rule 9 is amended, not withdrawn.** Every ordinary write still
+   snapshots its cost once, at entry. A void still copies the original's cost.
+   Nothing re-prices on its own.
+2. **The one exception is explicit.** An owner asks for the entries under the
+   current filter (dates, store, reason) to be priced again with today's
+   figures. *Owner* means `waste:void` and `waste:costs` together. The route
+   checks both itself and fails closed, and `lib/cap-routes.js` maps the POST to
+   `waste:void`.
+3. **See first, then save.** `GET /api/retail-admin/waste/recalculate` lists
+   each live entry whose figure would change, old → new, and writes nothing.
+   `POST` takes that list back and writes it only if every entry still holds the
+   figure the list showed, and still prices to the new figure the list showed.
+   If any entry differs, the server answers 409 `costs_changed` and writes
+   nothing.
+4. **Priced exactly as a new entry would be:** `wasteUnitCostYuan` then
+   `resolveCostCents`. So §281's packed-separately lines are left out of an
+   Expired or Spoiled entry, and every other reason is charged in full.
+5. **Left alone:**
+   - *Voided entries and their reversals.* The pair must keep netting to zero,
+     and neither is in any total.
+   - *An entry whose product now has no cost.* A known figure is never replaced
+     by "no cost" (§32 rule 10).
+   - *An entry with no cost* does get a figure if its product now has one.
+6. **Nothing is lost.** The new table `waste_cost_corrections` keeps one row per
+   changed entry: its old figure (`from_cents`, NULL when it had no cost), its
+   new figure, who made the change and when. It is append-only. The activity log
+   records the run as `recalculate_costs`.
+
+**Why not "always use today's price".** Some product costs move every time a
+purchase order is received. A list that followed them would change last
+month's losses week by week, no two months could be compared, and a void would
+stop cancelling its original.
+
+**Where it shows.** On the phone's waste screen, under the pulse line, only for
+someone who may see waste costs and void. The sheet lists each entry that
+changes as *product · qty × · day* with *old → new*, and the total at the foot.
+**Save** writes the list. *Up to date* is shown when nothing would change. The
+desktop waste screen does not have it yet. That is deliberately left for a
+follow-up, not an oversight.
+
+**Not changed.** Recording, the preview, void, Eaten by staff, the list and its
+totals, the stock ledger (which carries no cost), every other screen.
+
+Strings: 1 composed (vocabulary v1.328, *Recalculating waste costs (§465)*).
+The rest are copied whole. Tests: new `scripts/test_waste_recalculate.js` runs
+in the fast shard against the real route on an in-memory SQLite.
+`scripts/test_mobile_waste_void.js` now also lifts `wstRecalcBtn`, which the
+screen it renders calls. Schema: one new table, `waste_cost_corrections`, in
+`database.js`. No change to `.gitignore` or CI.
+
+## §466 — A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP
 
 **Asked by Ash, 2026-10-12:** *"rearock only internal and coffee and milks
 categories shows on the mini app . why and also hide them from there now"*,
@@ -30478,4 +30544,4 @@ leaves those products out (`routes/retail-shops.js`); the mini app does not.
 That is a separate change.
 
 Held by `scripts/test_miniapp_category_hide.js`. Four Chinese strings composed
-by Claude; see `docs/tacet-delivery-vocabulary.md` v1.328.
+by Claude; see `docs/tacet-delivery-vocabulary.md` v1.329.

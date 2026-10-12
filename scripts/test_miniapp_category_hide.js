@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * §465 — A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP.
+ * §466 — A TOP CATEGORY CAN BE HIDDEN FROM THE MINI APP.
  *
  *   node scripts/test_miniapp_category_hide.js
  *
