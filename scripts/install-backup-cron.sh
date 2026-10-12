@@ -6,8 +6,9 @@
 # What it sets up:
 #   • /root/scripts/roots-backup.sh — the backup script
 #   • Cron at the top of every hour
-#   • /root/backups/hourly/  — last 48 hourly snapshots (~2 days, fast restore)
-#   • /root/backups/daily/   — last 30 daily snapshots (longer history)
+#   • /root/backups/hourly/  — last 12 hourly snapshots (half a day, fast restore)
+#   • /root/backups/daily/   — last 4 daily snapshots; the 14-day history is
+#     off-site, in scripts/db-backup.sh's OSS tier (§467)
 #   • Optional OSS upload of the *daily* copy (cheap; hourly stays local)
 #
 # Idempotent — safe to re-run after edits.
@@ -21,9 +22,9 @@ cat > /root/scripts/roots-backup.sh <<'SCRIPT'
 # Hourly backup of the Roots v2 SQLite database.
 #
 # Tiers:
-#   • hourly/ — every run; retains the most recent 48 snapshots
+#   • hourly/ — every run; retains the most recent 12 snapshots
 #   • daily/  — first run of each calendar day promotes that hourly snapshot;
-#               retains the most recent 30 days
+#               retains the most recent 4 days
 #
 # Uses sqlite3's online .backup API for a consistent snapshot even while pm2
 # is writing (WAL-safe). Falls back to cp + WAL/SHM companion copies if the
@@ -71,9 +72,10 @@ if [ ! -f "$DAILY_DEST" ]; then
   DAILY_STATUS="promoted -> $(basename "$DAILY_DEST")"
 fi
 
-# Retention: keep most recent 48 hourly + 30 daily
-ls -1t "$BASE/hourly"/roots-*.db.gz 2>/dev/null | tail -n +49 | xargs -r rm -f
-ls -1t "$BASE/daily"/roots-*.db.gz  2>/dev/null | tail -n +31 | xargs -r rm -f
+# Retention: keep most recent 12 hourly + 4 daily (§467)
+ls -1t "$BASE/hourly"/roots-*.db.gz 2>/dev/null | tail -n +13 | xargs -r rm -f
+ls -1t "$BASE/daily"/roots-*.db.gz  2>/dev/null | tail -n +5 | xargs -r rm -f
+find "$BASE/hourly" -maxdepth 1 \( -name 'roots-*.db' -o -name 'roots-*.db-wal' -o -name 'roots-*.db-shm' \) -mmin +120 -delete  # stray uncompressed leftovers (§467)
 
 # Optional off-site push of the daily copy
 OSS_STATUS="local-only"
