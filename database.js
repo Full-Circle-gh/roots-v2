@@ -4057,6 +4057,12 @@ addColumn('retail_orders', 'delivery_slot_kind', 'TEXT');
 // once when the delivered-notice SMS is dispatched (out-of-GZ orders only).
 addColumn('retail_orders', 'sms_delivered_sent_at', 'DATETIME');
 
+// The booked-day morning reminder's once-guard (lib/booked-day-reminder.js):
+// the 'YYYY-MM-DD' this order was last listed for in the new-order WeCom
+// group. A day, not a timestamp, so an order moved to another day is listed
+// again on that day. NULL = never reminded.
+addColumn('retail_orders', 'booked_reminder_day', 'TEXT');
+
 // Manual-Alipay payment proof: when the operator can't take 当面付 yet (open-
 // platform 入驻 blocked), Alipay orders fall back to a static收款码 the customer
 // scans + pays, then uploads the payment screenshot here. Staff eyeball it and

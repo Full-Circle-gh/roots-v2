@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.326 · 2026-10-12 · §459 BOOKED DELIVERIES IN THE NEW-ORDER GROUP — 1 STRING COMPOSED BY CLAUDE (`今天的顾客预约`), FROM THE LIVE 今天 AND 顾客预约; `Booked · 顾客预约` COPIED WHOLE ONTO THE NEW-ORDER CARD.** See *Booked deliveries in the new-order group (§459)*.
+
 **v1.325 · 2026-10-11 · §458 MOVING A PAID ORDER TO ANOTHER SHOP — 17 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON THE LIVE 改派; THE COURIER CONTROL'S OWN STRINGS COPIED WHOLE.** See *Moving a paid order to another shop (§458)*.
 
 **v1.324 · 2026-10-11 · §457 HOLDING A BILL AT THE TILL — 2 STRINGS COMPOSED BY CLAUDE (`Hold · 挂单`, `Held · 已挂单`), THE WORDS ASH AGREED TO; THE NOTE'S LABEL COPIED WHOLE.** See *Holding a bill at the till (§457)*.
@@ -13816,3 +13818,32 @@ apart. `换店` is colloquial and
 not used anywhere in the product. `改期失败` is live beside *Could not move it*
 in one place, but it means *rescheduling failed*; the correct live pair is
 `更改失败`, and that is the one used.
+
+## Booked deliveries in the new-order group (§459)
+
+**Composed by Claude, 2026-10-12, under the 2026-09-06 amendment.** Operator
+register, the new-order WeCom group. `lib/booked-day-reminder.js`
+(`buildMessage`, the morning reminder) and `routes/retail.js`
+(`buildWecomOrderCard`, the booked line). Asked by Ash: *"when there is an
+order that schedule for later there should be an alert in wecom in the same
+bot of the new order group"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Booked for today` / `今天的顾客预约` | the morning reminder's lead, the two languages on their own lines (§1.11), followed by the count | `Booked for · 顾客预约` is the live kicker for a customer-chosen window (`public/retail-admin/04-orders.js`, the drawer's time block), and the group is being told about exactly those. `今天` is the live day word on the same slot lines (`lib/slot-label.js`, `dayWord`). `的` joins them so it reads as *today's bookings*, not *today, booked*. |
+
+### Copied whole
+
+`顾客预约 Booked` on the new-order card's booked line — the live `Booked ·
+顾客预约` time label (*Time labels* above), in the card's existing
+`中文 English:` row style.
+
+### Rejected
+
+`今日配送`: live, but it is the shop's SAME-DAY delivery option (`📦 Deliver
+today · 今日配送`), and a booked order is the opposite of one. `今日预约配送`
+and `预约配送`: `预约配送` is not live anywhere in the product, and `顾客预约`
+already says *booked by the customer*. `今天顾客预约` without `的`: two live
+words side by side, but it reads as a run-on.
