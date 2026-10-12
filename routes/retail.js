@@ -23813,13 +23813,19 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
   }
 
   // Apply. seen_at = NULL re-flags the order in the admin queue so staff
-  // re-notice the changed time when planning the run.
+  // re-notice the changed time when planning the run. A MOVED time re-arms the
+  // delivery/pickup alarms (lib/delivery-reminders.js, §460): their stamp
+  // means "rang for the old time", and without this an order that rang and
+  // was then moved to Friday would never ring on Friday. SET reads the OLD
+  // scheduled_for, so re-saving the same time leaves the stamp alone.
   tdb().prepare(
     `UPDATE retail_orders
         SET scheduled_for = ?, delivery_slot_label = ?, delivery_slot_kind = ?,
+            reminder_ship_sent_at   = CASE WHEN scheduled_for IS ? THEN reminder_ship_sent_at   ELSE NULL END,
+            reminder_pickup_sent_at = CASE WHEN scheduled_for IS ? THEN reminder_pickup_sent_at ELSE NULL END,
             seen_at = NULL, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(scheduledFor, slotLabel, slotKind, id);
+  ).run(scheduledFor, slotLabel, slotKind, scheduledFor, scheduledFor, id);
 
   // The receipt already in the store's pile still names the OLD day — it was cut
   // at payment and nothing refreshes it. Print a short change slip so the paper
@@ -33377,9 +33383,10 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
       tx.prepare(
         `UPDATE retail_orders
             SET scheduled_for = ?, delivery_slot_label = ?, delivery_slot_kind = ?,
+                reminder_ship_sent_at = CASE WHEN scheduled_for IS ? THEN reminder_ship_sent_at ELSE NULL END,
                 seen_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`
-      ).run(date, date, kind, id);                     // ← the date, FIRST
+      ).run(date, date, kind, date, id);               // ← the date, FIRST; a moved day re-arms the alarm (§460)
       // A cancelled copy takes the compare-and-swap that clears its dead id; every
       // other row takes the ordinary manual-retry statement, whose own guard
       // (qingyun_order_id IS NULL) is untouched. Both return 0 rows rather than
@@ -33535,28 +33542,6 @@ _kprep.startPrepMessageSweeper({
         ok: r.ok, error: r.ok ? null : r.error,
       });
     } catch (e) { /* the log must never be able to fail a send */ }
-  },
-});
-
-// The booked-day morning reminder (lib/booked-day-reminder.js) goes to the
-// new-order alert's own channel: app preferred, group-bot webhook fallback —
-// the same choice sendWecomOrderAlert makes, read at send time inside the
-// tenant's scope.
-require('../lib/booked-day-reminder').startBookedDayReminderSweeper({
-  ready: () => !!wecomAppCreds() || !!wecomWebhookUrl(),
-  send: async (content) => {
-    const webhook = wecomWebhookUrl();
-    const r = wecomAppCreds() ? await sendWecomAppMessage(content)
-      : webhook ? await postWecomMarkdown(webhook, content)
-      : { ok: false, msg: 'not_configured' };
-    try {
-      require('../lib/notify-log').logNotification({
-        channel: 'wecom', kind: 'booked_day_reminder',
-        subject: (String(content).split('\n')[1] || 'Booked for today').replace(/\*/g, ''),
-        ok: r.ok, error: r.ok ? null : r.msg,
-      });
-    } catch (e) { /* the log must never be able to fail a send */ }
-    return r;
   },
 });
 
