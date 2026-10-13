@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.526
+# Tacet shared-core consolidation — decisions record, v4.527
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-10-13 · v4.527 — **§477 · THE ADDRESS GROUP MOVES TO `lib/addresses.js`; THE ORDER-SNAPSHOT LOOKUP STAYS WITH ORDERS — DECIDED BY ASH:** *"build addresses"*, to the survey put after the voucher group landed. Ten statements, all needing only modules already in `lib/`. `geocodeOrderSnapshotAsync` stays in `routes/retail.js`: it requeues the Qingyun courier push, which is what made the group look tangled. No string, no schema, no change to `.gitignore` or CI. See §477.
 
 2026-10-13 · v4.526 — **§477 AMENDED · THE ORDER OF THE GROUPS: VOUCHERS NEXT, NOTIFICATIONS LAST AND IN PIECES — DECIDED BY ASH:** *"keep going"*, to the recommendation put after the points group landed. Measured, the remaining groups are vouchers 16 statements needing only the database, addresses and geocoding 17 tangled with the Qingyun queue, notifications 35 pulling in the WeChat shipping upload. Rule 1's "smallest first" decides, so the voucher rules go to `lib/vouchers.js` now. No string, no schema, no change to `.gitignore` or CI. See §477.
 
@@ -31170,3 +31172,17 @@ what was first proposed.
 `routes/retail.js`: they read who is signed in, not a voucher. The QR menu
 (`routes/shop-menu.js`) keeps taking the counter helpers from
 `routes/retail.js`, unchanged.
+
+**The address group. Decided by Ash, 2026-10-13:** *"build addresses"*, to
+the survey put after the voucher group landed. `lib/addresses.js`:
+`ADDRESS_PUBLIC_COLS`, `CN_PROVINCES`, `CN_PROVINCE_STEMS`,
+`normalizeChinaAddress`, `GEO_RANK`, `geocodeAddressAsync`,
+`autoTranslateAddressCn`, `addressHasLatin`, `provinceForCity` and its
+`_cityProvinceMap` cache. The group looked tangled with the Qingyun queue only
+through `geocodeOrderSnapshotAsync`, the lookup for an order typed in by
+staff; nothing in the customers area calls it, so it stays in
+`routes/retail.js` and moves with orders. The "Addresses" and "Address →
+Chinese" section headings stay in `routes/retail.js` above the routes they
+introduce. `addressHasLatin` was defined about 19,000 lines below the lookup
+that uses it, which worked only because the lookup runs later; in one module
+that ordering no longer matters.
