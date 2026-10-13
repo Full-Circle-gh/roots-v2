@@ -1,0 +1,41 @@
+// Golden area: polls. Loaded by scripts/test_retail_golden.js, which runs the
+// areas in its own fixed order over one shared database (decisions §472).
+'use strict';
+
+module.exports = {
+  seed: () => ({}),
+  requests: () => [
+    ['anon', 'GET', '/api/retail/polls'],
+    ['admin', 'GET', '/api/retail-admin/voting/config'],
+    ['admin', 'POST', '/api/retail-admin/polls', { question_en: 'Next flavour?', status: 'draft', options: [{ label_en: 'Mango' }] }],
+    ['admin', 'POST', '/api/retail-admin/polls', { question_en: 'Next flavour?', question_cn: '下一个口味?', status: 'open', reward_points: 7,
+      options: [{ label_en: 'Mango', label_cn: '芒果' }, { label_en: 'Lime', label_cn: '青柠' }] }],
+    ['admin', 'POST', '/api/retail-admin/polls', {}],
+    ['customer', 'GET', '/api/retail/polls'],
+    ['anon', 'GET', '/api/retail/polls/public'],
+    ['customer', 'GET', '/api/retail/polls/1'],
+    ['customer', 'GET', '/api/retail/polls/999'],
+    ['customer', 'POST', '/api/retail/polls/1/vote', { option_id: 1 }],
+    ['customer', 'POST', '/api/retail/polls/1/vote', { option_id: 2 }],
+    ['customer', 'POST', '/api/retail/polls/1/vote', { option_id: 99 }],
+    ['customer', 'POST', '/api/retail/polls/1/vote', {}],
+    ['anon', 'POST', '/api/retail/polls/1/vote', { option_id: 1 }],
+    ['anon', 'GET', '/api/retail/polls/public'],
+    ['customer', 'GET', '/api/retail/voting/config'],
+    ['admin', 'PUT', '/api/retail-admin/voting/config', { intro_en: 'Vote by Sunday', intro_cn: '周日前投票', show_counts: false }],
+    ['customer', 'GET', '/api/retail/voting/config'],
+    ['admin', 'PUT', '/api/retail-admin/polls/1', { display_min_total: 50, is_featured: true }],
+    ['customer', 'GET', '/api/retail/polls/1'],
+    ['admin', 'PUT', '/api/retail-admin/polls/1', { status: 'bogus' }],
+    ['admin', 'PUT', '/api/retail-admin/polls/1', { winner_option_id: 99 }],
+    ['admin', 'PUT', '/api/retail-admin/polls/1', { status: 'closed', winner_option_id: 1,
+      options: [{ id: 1, label_en: 'Mango!' }, { id: 2, label_en: 'Lime' }, { label_en: 'Yuzu' }] }],
+    ['admin', 'GET', '/api/retail-admin/polls'],
+    ['admin', 'GET', '/api/retail-admin/polls/1'],
+    ['admin', 'GET', '/api/retail-admin/polls/999'],
+    ['admin', 'DELETE', '/api/retail-admin/polls/999'],
+    ['admin', 'DELETE', '/api/retail-admin/polls/1'],
+    ['admin', 'GET', '/api/retail-admin/polls'],
+    ['anon', 'GET', '/api/retail-admin/polls'],
+  ],
+};
