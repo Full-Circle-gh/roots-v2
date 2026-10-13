@@ -1070,11 +1070,12 @@
 
   /* In-page section header — slightly larger sibling of .fc-eyebrow for the
      <h3>-level "this card is a section" labels (Delivery's group cards etc.).
-     Mono caps so section rhythm matches the dashboard. */
+     Was mono caps at 700 for an old dashboard rhythm; now the shared card
+     heading, 14px/500 Inter, sentence case, Ink (§1.6, §2; audit 2026-10-13). */
   .fc-sec {
-    font-family: var(--f-mono);
-    font-size: 11px; font-weight: 700; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--text-2);
+    font-family: var(--f-sans);
+    font-size: 14px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--td-text);
   }
 
   /* Helper lede directly beneath a page title — one consistent pull-up so the
@@ -1135,7 +1136,7 @@
     box-shadow: 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11);
     transform: translateY(-1px);
   }
-  .fc-kpi .lbl { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fc-kpi .lbl { font-family: var(--f-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--td-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fc-kpi .val { font-size: 30px; font-weight: 500; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
   .fc-kpi .sub { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fc-kpi-foot { display: flex; align-items: baseline; gap: 6px; min-height: 15px; min-width: 0; }
@@ -1491,7 +1492,7 @@
   .dlvwiz-steps i { height: 4px; border-radius: 99px; flex: 1; background: var(--line-strong, var(--line)); transition: background .2s; }
   .dlvwiz-steps i.done { background: var(--brass); }
   .dlvwiz-body { padding: 16px 20px 4px; }
-  .dlvwiz-q { font-size: 15px; font-weight: 700; color: var(--text-1); margin: 0 0 4px; }
+  .dlvwiz-q { font-size: 15px; font-weight: 500; color: var(--text-1); margin: 0 0 4px; }
   .dlvwiz-sub { font-size: 12.5px; color: var(--text-3); margin: 0 0 14px; line-height: 1.5; }
   .dlvwiz-choice {
     display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
@@ -1508,9 +1509,9 @@
   .dlvwiz-choice.sel .dlvwiz-radio { border-color: var(--brass); }
   .dlvwiz-choice.sel .dlvwiz-radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--brass); }
   .dlvwiz-cl { flex: 1; min-width: 0; }
-  .dlvwiz-ct { font-size: 14px; font-weight: 700; color: var(--text-1); }
+  .dlvwiz-ct { font-size: 14px; font-weight: 500; color: var(--text-1); }
   .dlvwiz-cs { font-size: 12px; color: var(--text-3); margin-top: 2px; line-height: 1.45; }
-  .dlvwiz-inl { display: none; margin-top: 10px; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+  .dlvwiz-inl { display: none; margin-top: 10px; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 500; color: var(--text-2); }
   .dlvwiz-choice.sel .dlvwiz-inl { display: flex; }
   .dlvwiz-in {
     border: 1px solid var(--line); border-radius: 8px; background: var(--bg-elev-1);
@@ -5602,7 +5603,7 @@
   .dz-subtab {
     border: 0; background: transparent;
     padding: 6px 14px; border-radius: 999px;
-    font-size: 12px; font-weight: 600; letter-spacing: .02em;
+    font-size: 12px; font-weight: 500; letter-spacing: 0;
     color: var(--text-3); cursor: pointer;
     transition: background var(--t-fast) ease, color var(--t-fast) ease;
   }
@@ -5613,10 +5614,11 @@
   }
   #dz-search { min-width: 220px; flex: 1; }
   #dz-table { width: 100%; }
-  #dz-table th {
+  #dz-table th {   /* the §1.13a band */
     white-space: nowrap; padding: 10px 12px;
-    font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--text-3); font-weight: 600;
+    font-size: 13px; text-transform: none; letter-spacing: 0;
+    color: var(--td-text); font-weight: 500;
+    background: var(--td-header); border-bottom: 1px solid var(--td-border);
   }
   #dz-table td {
     padding: 12px; vertical-align: middle;
@@ -8280,14 +8282,16 @@
     font-size: 14px; font-weight: 500;
     margin: 0 0 4px;
   }
-  /* Delivery page: section heads adopt the mono-caps rhythm (#sub-delivery
-     scope wins over the shared .group-card-head h3 rule above). */
+  /* Delivery's card heads are the shared card heading (the mono-caps override
+     they used to carry broke §1.6 and §2). Each Delivery view's own h2 is that
+     view's title, so it takes the §1.7 title size like any page. */
   #sub-delivery .group-card-head h3 {
-    font-family: var(--f-mono);
-    font-size: 11px; font-weight: 700; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--text-2);
+    font-family: var(--f-sans);
+    font-size: 14px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--td-text);
     margin: 0 0 4px;
   }
+  #sub-delivery .dlv-view > h2 { font-size: 24px; letter-spacing: -.01em; color: var(--td-text); }
   .group-card-head .muted {
     font-size: 12px; line-height: 1.55;
     color: var(--text-3);

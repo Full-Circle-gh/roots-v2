@@ -10568,7 +10568,7 @@
                 <button type="button" class="dz-subtab"        data-view="scheduling" onclick="setZoneView('scheduling')">Scheduling · 时间</button>
               </div>
               <input type="text" id="dz-search" data-ph-en="Search zone" data-ph-cn="搜索配送区…" placeholder="Search zone" oninput="renderZoneTable()">
-              <button class="btn btn-primary" onclick="openZoneDrawer()">
+              <button class="btn" onclick="openZoneDrawer()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add zone · 添加配送区
               </button>
@@ -10639,7 +10639,7 @@
                   <label class="stacked">Lead time · 备货天数</label>
                   <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="dlv-default-lead" aria-label="Lead time in days · 备货天数" min="0" step="1" value="3" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
                 </div>
-                <button class="btn btn-primary" onclick="saveDefaultZone()" style="align-self: flex-end;">Save · 保存</button>
+                <button class="btn" onclick="saveDefaultZone()" style="align-self: flex-end;">Save · 保存</button>
               </div>
             </div>
 
@@ -10663,7 +10663,7 @@
                    by _loadGzExcludedDistricts on init.) -->
               <div class="card" style="margin-bottom: var(--s4);">
                 <h3 class="fc-sec" style="margin-bottom: 4px;">Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3>
-                <div class="muted" style="font-size: 11px; margin-bottom: 12px; line-height: 1.6;">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback. · 仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</div>
+                <div class="muted" style="font-size: 11px; margin-bottom: 12px; line-height: 1.6;"><span data-lang-block="en">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback.</span><span data-lang-block="cn">仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</span></div>
                 <div class="muted" style="font-size: 11px; margin-bottom: 8px;">Tap a district to exclude it. · 点击区名将其加入排除列表。</div>
                 <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
                 <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
@@ -10717,7 +10717,7 @@
             </div>
 
             <div class="row" style="gap: 12px; margin-bottom: var(--s4);">
-              <button class="btn btn-primary" onclick="saveDeliveryFees()">Save fees · 保存费用</button>
+              <button class="btn" onclick="saveDeliveryFees()">Save fees · 保存费用</button>
               <span id="dlv-fees-status" style="font-size: 12px; align-self: center;"></span>
             </div>
           </div>
@@ -10783,7 +10783,7 @@
             </div>
 
             <div class="row" style="gap: 12px; margin-bottom: var(--s4);">
-              <button class="btn btn-primary" onclick="saveDeliveryFees()">Save · 保存</button>
+              <button class="btn" onclick="saveDeliveryFees()">Save · 保存</button>
             </div>
           </div>
 
@@ -10810,7 +10810,7 @@
                   <textarea id="dlv-holiday-msg-en" rows="2" style="width: 100%;" placeholder="We're closed for a short holiday — your order will ship as soon as we're back."></textarea>
                 </div>
                 <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-                  <label for="dlv-holiday-msg-cn" class="stacked">消息(中文)· Message (Chinese)</label>
+                  <label for="dlv-holiday-msg-cn" class="stacked">Message (Chinese) · 消息(中文)</label>
                   <textarea id="dlv-holiday-msg-cn" rows="2" style="width: 100%;" placeholder="我们短暂休假中 — 订单将在我们回来后第一时间发货。"></textarea>
                 </div>
                 <!-- §279: saves itself. -->
@@ -10841,7 +10841,7 @@
                   <textarea id="dlv-cutoff-msg-en" rows="2" style="width: 100%;" placeholder="Too late for same-day delivery — we stop taking today's orders 10 min before we close at 8pm. Please choose a time for tomorrow."></textarea>
                 </div>
                 <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-                  <label for="dlv-cutoff-msg-cn" class="stacked">消息(中文)· Message (Chinese) <span class="muted" style="font-weight: 400;">— 可留空,使用默认文案</span></label>
+                  <label for="dlv-cutoff-msg-cn" class="stacked">Message (Chinese) · 消息(中文) <span class="muted" style="font-weight: 400;"><span data-lang-block="en">— optional, leave blank for the default</span><span data-lang-block="cn">— 可留空,使用默认文案</span></span></label>
                   <textarea id="dlv-cutoff-msg-cn" rows="2" style="width: 100%;" placeholder="已过今日配送截单时间 — 关门前 10 分钟停止接单(今日 20:00 关门)。请选择明天的配送时段。"></textarea>
                 </div>
                 <!-- §279: saves itself. -->
@@ -11248,7 +11248,7 @@
                 </div>
               </div>
               <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="_saveIntegration('kd100')">Save · 保存</button>
+                <button class="btn" onclick="_saveIntegration('kd100')">Save · 保存</button>
                 <button class="btn" onclick="_testKd100()">Save &amp; test · 保存并测试</button>
               </div>
             </div>
@@ -11321,7 +11321,7 @@
             <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
             <h2>JD Logistics · 京东物流</h2>
             <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
-              Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. · 京东物流直连,一键推单、运单号自动回传。
+              <span data-lang-block="en">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically.</span><span data-lang-block="cn">京东物流直连,一键推单、运单号自动回传。</span>
             </div>
 
             <div class="card" style="margin-bottom: var(--s4);" id="logpanel-jd">
@@ -11333,7 +11333,7 @@
                    Same shape as the WeChat payment wizard's own credential help. -->
               <div class="helper" style="margin-bottom:14px;line-height:1.6">
                 <b>Where to find these · 在哪里找到这些</b><br>
-                <b>app_key</b> and <b>app_secret</b> — on your app's page at lop.jd.com, under 应用管理. · 在 lop.jd.com 的「应用管理」中查看你的应用。<br>
+                <span data-lang-block="en"><b>app_key</b> and <b>app_secret</b> — on your app's page at lop.jd.com, under 应用管理.</span><span data-lang-block="cn">在 lop.jd.com 的「应用管理」中查看你的应用。</span><br>
                 <b>access_token</b> — issued when you authorise the app against your merchant account; JD's account manager runs this with you once. · 授权应用绑定商家账号时签发,由京东客户经理协助完成一次。<br>
                 <b>customer_code</b> — your merchant code, in the JD Logistics merchant back office at jdl.com. · 商家编码,在 jdl.com 商家后台可见。<br>
                 Keep <b>API environment</b> on <b>production</b> unless JD has given you sandbox credentials to test with. · 除非京东给了沙箱凭证用于测试,否则保持 production。
@@ -11364,7 +11364,7 @@
                 </div>
               </div>
               <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="_saveIntegration('jd')">Save · 保存</button>
+                <button class="btn" onclick="_saveIntegration('jd')">Save · 保存</button>
                 <button class="btn" onclick="_testJd()">Save &amp; ping JD · 保存并测试 JD</button>
               </div>
               <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved. · 保存后,完整推单还需对照你的 JD 商家配置做一次性字段确认 —— 凭证保存后请告知你的开发人员。</div>
@@ -11377,14 +11377,14 @@
             <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
             <h2>Qingyun riders · 青云配送</h2>
             <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
-              Shows the live courier on a map in the customer's order page for same-city (e-bike) deliveries via 青云聚信. Each store needs a one-time login, so we connect it for you — request it below and we'll set it up. · 同城配送(电动车)在顾客端订单页显示骑手实时位置。每家门店需一次性登录,由我们协助开通 —— 点击申请,我们会为你连接。
+              <span data-lang-block="en">Shows the live courier on a map in the customer's order page for same-city (e-bike) deliveries via 青云聚信. Each store needs a one-time login, so we connect it for you — request it below and we'll set it up.</span><span data-lang-block="cn">同城配送(电动车)在顾客端订单页显示骑手实时位置。每家门店需一次性登录,由我们协助开通 —— 点击申请,我们会为你连接。</span>
             </div>
 
             <div class="card" style="margin-bottom: var(--s4);" id="logpanel-qy">
               <div id="qy-autopush-row" style="display:none;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px">
                 <div style="max-width:78%">
                   <div style="font-weight:600">Auto-send paid orders to Qingyun · 付款后自动发到青云</div>
-                  <div class="muted" style="font-size:11px;margin-top:2px">When on, every paid delivery order appears in your Qingyun 待配送 list, ready to pick a courier — no re-typing. · 开启后,已付款的配送订单自动出现在青云"待配送",直接选运力发单,无需手动录入。</div>
+                  <div class="muted" style="font-size:11px;margin-top:2px"><span data-lang-block="en">When on, every paid delivery order appears in your Qingyun 待配送 list, ready to pick a courier — no re-typing.</span><span data-lang-block="cn">开启后,已付款的配送订单自动出现在青云"待配送",直接选运力发单,无需手动录入。</span></div>
                 </div>
                 <input type="checkbox" id="qy-autopush" aria-label="Send paid delivery orders to the courier automatically · 自动将已付款配送订单推送给运力" onchange="_setQingyunAutoPush(this.checked)" style="width:20px;height:20px;flex-shrink:0;cursor:pointer">
               </div>
