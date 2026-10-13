@@ -38,7 +38,9 @@ function it(name, fn) {
 
 const ROOT = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
-const retailSrc = read('routes/retail.js');
+// routes/retail.js plus what moved out of it (normalizeChinaAddress went to
+// lib/addresses.js under §477), so the checks follow the code.
+const retailSrc = require('./test-support/retail-source').retailSource();
 const daemonSrc = read('scripts/qingyun-daemon.js');
 
 // The four shapes that actually failed in production, kept as data so the tests
