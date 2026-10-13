@@ -1,0 +1,430 @@
+[
+  {
+    "req": "POST /api/retail/feedback [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "message_required"
+    }
+  },
+  {
+    "req": "POST /api/retail/feedback [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/feedback [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 2
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/feedback [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "GET /api/retail/feedback [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "message": "The cart button does nothing",
+          "photos": [],
+          "created_at": "<T>",
+          "reply_count": 0,
+          "last_admin_msg_at": null,
+          "unread": false
+        },
+        {
+          "id": 2,
+          "message": "Photo attached",
+          "photos": [
+            "/api/retail/media/1"
+          ],
+          "created_at": "<T>",
+          "reply_count": 0,
+          "last_admin_msg_at": null,
+          "unread": false
+        }
+      ]
+    }
+  },
+  {
+    "req": "GET /api/retail/feedback/1 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "customer_id": 1,
+        "customer_name": "Golden",
+        "page_context": "cart",
+        "app_version": "1.2.3",
+        "created_at": "<T>",
+        "photos": [],
+        "kind": "bug",
+        "initiated_by": "customer",
+        "handled": false,
+        "messages": [
+          {
+            "id": 0,
+            "author": "customer",
+            "author_name": null,
+            "body": "The cart button does nothing",
+            "created_at": "<T>"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/feedback/999 [customer]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/feedback/unseen-count?since=2020-01-01 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "count": 2,
+        "latest": "<T>"
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/feedback [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "customer_id": 1,
+          "customer_name": "Golden",
+          "message": "The cart button does nothing",
+          "page_context": "cart",
+          "app_version": "1.2.3",
+          "created_at": "<T>",
+          "kind": "bug",
+          "initiated_by": "customer",
+          "root_author_name": null,
+          "last_customer_msg_at": "<T>",
+          "last_admin_msg_at": null,
+          "admin_read_at": null,
+          "handled_at": null,
+          "nickname": "Golden",
+          "customer_avatar": null,
+          "reply_count": 0,
+          "last_body": "The cart button does nothing",
+          "last_author": "customer",
+          "last_author_name": null,
+          "last_at": "<T>",
+          "needs_reply": true,
+          "photos": [],
+          "replied": false,
+          "handled": false
+        },
+        {
+          "id": 2,
+          "customer_id": 1,
+          "customer_name": "Golden",
+          "message": "Photo attached",
+          "page_context": null,
+          "app_version": null,
+          "created_at": "<T>",
+          "kind": "bug",
+          "initiated_by": "customer",
+          "root_author_name": null,
+          "last_customer_msg_at": "<T>",
+          "last_admin_msg_at": null,
+          "admin_read_at": null,
+          "handled_at": null,
+          "nickname": "Golden",
+          "customer_avatar": null,
+          "reply_count": 0,
+          "last_body": "Photo attached",
+          "last_author": "customer",
+          "last_author_name": null,
+          "last_at": "<T>",
+          "needs_reply": true,
+          "photos": [
+            "/api/retail/media/1"
+          ],
+          "replied": false,
+          "handled": false
+        }
+      ],
+      "meta": {
+        "total": 2,
+        "limit": 100,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/feedback?limit=1&offset=1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 2,
+          "customer_id": 1,
+          "customer_name": "Golden",
+          "message": "Photo attached",
+          "page_context": null,
+          "app_version": null,
+          "created_at": "<T>",
+          "kind": "bug",
+          "initiated_by": "customer",
+          "root_author_name": null,
+          "last_customer_msg_at": "<T>",
+          "last_admin_msg_at": null,
+          "admin_read_at": null,
+          "handled_at": null,
+          "nickname": "Golden",
+          "customer_avatar": null,
+          "reply_count": 0,
+          "last_body": "Photo attached",
+          "last_author": "customer",
+          "last_author_name": null,
+          "last_at": "<T>",
+          "needs_reply": true,
+          "photos": [
+            "/api/retail/media/1"
+          ],
+          "replied": false,
+          "handled": false
+        }
+      ],
+      "meta": {
+        "total": 2,
+        "limit": 1,
+        "offset": 1
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/feedback/1 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "customer_id": 1,
+        "customer_name": "Golden",
+        "page_context": "cart",
+        "app_version": "1.2.3",
+        "created_at": "<T>",
+        "photos": [],
+        "kind": "bug",
+        "initiated_by": "customer",
+        "handled": false,
+        "messages": [
+          {
+            "id": 0,
+            "author": "customer",
+            "author_name": null,
+            "body": "The cart button does nothing",
+            "created_at": "<T>"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/feedback/1/reply [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/feedback/1/reply [admin]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "message_required"
+    }
+  },
+  {
+    "req": "GET /api/retail/feedback/1 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 1,
+        "customer_id": 1,
+        "customer_name": "Golden",
+        "page_context": "cart",
+        "app_version": "1.2.3",
+        "created_at": "<T>",
+        "photos": [],
+        "kind": "bug",
+        "initiated_by": "customer",
+        "handled": false,
+        "messages": [
+          {
+            "id": 0,
+            "author": "customer",
+            "author_name": null,
+            "body": "The cart button does nothing",
+            "created_at": "<T>"
+          },
+          {
+            "id": 1,
+            "author": "admin",
+            "author_name": "golden_owner",
+            "body": "Thanks, fixed in the next build",
+            "created_at": "<T>"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/feedback/1/reply [customer]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail/feedback/999/reply [customer]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/feedback [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "customer_id": 1,
+          "customer_name": "Golden",
+          "message": "The cart button does nothing",
+          "page_context": "cart",
+          "app_version": "1.2.3",
+          "created_at": "<T>",
+          "kind": "bug",
+          "initiated_by": "customer",
+          "root_author_name": null,
+          "last_customer_msg_at": "<T>",
+          "last_admin_msg_at": "<T>",
+          "admin_read_at": "<T>",
+          "handled_at": null,
+          "nickname": "Golden",
+          "customer_avatar": null,
+          "reply_count": 2,
+          "last_body": "Still broken",
+          "last_author": "customer",
+          "last_author_name": null,
+          "last_at": "<T>",
+          "needs_reply": false,
+          "photos": [],
+          "replied": true,
+          "handled": false
+        },
+        {
+          "id": 2,
+          "customer_id": 1,
+          "customer_name": "Golden",
+          "message": "Photo attached",
+          "page_context": null,
+          "app_version": null,
+          "created_at": "<T>",
+          "kind": "bug",
+          "initiated_by": "customer",
+          "root_author_name": null,
+          "last_customer_msg_at": "<T>",
+          "last_admin_msg_at": null,
+          "admin_read_at": null,
+          "handled_at": null,
+          "nickname": "Golden",
+          "customer_avatar": null,
+          "reply_count": 0,
+          "last_body": "Photo attached",
+          "last_author": "customer",
+          "last_author_name": null,
+          "last_at": "<T>",
+          "needs_reply": true,
+          "photos": [
+            "/api/retail/media/1"
+          ],
+          "replied": false,
+          "handled": false
+        }
+      ],
+      "meta": {
+        "total": 2,
+        "limit": 100,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/feedback/2/handled [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/feedback/2/unhandle [admin]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail-admin/feedback/999/handled [admin]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/feedback/unseen-count?since=2020-01-01 [admin]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "count": 3,
+        "latest": "<T>"
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail-admin/feedback [anon]",
+    "status": 401,
+    "body": {
+      "error": "Not authenticated"
+    }
+  }
+]
