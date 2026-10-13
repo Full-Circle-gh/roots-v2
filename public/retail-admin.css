@@ -12850,8 +12850,8 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      scale does not have (§1.3) plus the §1.6 ban. Orders overrides it; this
      table never did, so its headers shipped as "ID" and "ENGLISH LABEL".
      Same treatment Orders uses: raised band, 13px, 500, sentence case. */
-  #rtags-table thead th {
-    background: var(--td-raised); color: var(--td-text2);
+  #rtags-table thead th {   /* the §1.13a band — was --td-raised/Graphite, copied from the stale rulebook line corrected 2026-10-13 */
+    background: var(--td-header); color: var(--td-text);
     font-size: 13px; font-weight: 500; letter-spacing: 0;
     text-transform: none; text-align: left;
     padding: 12px 14px; border-bottom: 1px solid var(--td-border);
@@ -14120,8 +14120,8 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-waste table.nocost col.wst-c-reason { width: 22%; }
 /* Cream header on white rows (§1.4). Single-line labels, no sub-labels — a
    header that needs a sentence to explain it is the wrong header. */
-#tab-waste .wst-table thead th {
-  background: var(--td-raised); color: var(--td-text2);
+#tab-waste .wst-table thead th {   /* the §1.13a band — was --td-raised/Graphite, copied from the stale rulebook line corrected 2026-10-13 */
+  background: var(--td-header); color: var(--td-text);
   font: 500 13px/1.4 var(--f-sans); text-align: left; white-space: nowrap;
   padding: 12px 16px; border-bottom: 1px solid var(--td-border);
 }
@@ -15521,8 +15521,8 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-shop-menu col.shp-c-mode  { width: 16%; }
 #tab-shop-menu col.shp-c-avail { width: 12%; }
 #tab-shop-menu col.shp-c-act   { width: 10%; }
-#tab-shop-menu .shp-table thead th {
-  background: var(--td-raised); color: var(--td-text2);
+#tab-shop-menu .shp-table thead th {   /* the §1.13a band — was --td-raised/Graphite, copied from the stale rulebook line corrected 2026-10-13 */
+  background: var(--td-header); color: var(--td-text);
   font: 500 13px/1.4 var(--f-sans); text-align: left; white-space: nowrap;
   text-transform: none; letter-spacing: 0;
   padding: 12px 16px; border-bottom: 1px solid var(--td-border);

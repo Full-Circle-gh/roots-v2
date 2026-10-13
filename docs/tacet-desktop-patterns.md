@@ -101,11 +101,11 @@ One rule inside `@media (min-width:721px)` hides the in-content `<h2>`. The audi
 | 3 | **KPI tiles** | The pulse (§4). Tiles where there's a real pulse; **one summary line where there isn't** — same slot, same component. Never empty tiles to fake density. |
 | 4 | **Segment chips** | One row. Live counts. Ink fill on active. Orders: `All 214 · Pending 6 · Paid 12 …`. |
 | 5 | **Filter row** | **Two dropdowns + one wide search, in that order.** Orders: `All stores ▾` · `Channel: All channels ▾` · `Filter these orders`. **No dividers. No chips.** |
-| 6 | **Table** | Header `--td-raised` (cream), rows white. **Single-line headers — no sub-labels.** |
+| 6 | **Table** | Header `--td-header` band, Ink labels (§1.13a rule 3), rows white. **Single-line headers — no sub-labels.** |
 
 **The filter row is dropdowns, not chips.** Chips are the *segment* row (#4) and nowhere else. A page that renders channel as chips has two patterns for one job.
 
-**The table header is cream on white rows.** `--td-raised` fill, single-line labels. If a column header needs a sub-label to be understood, **the header is wrong** — §1.7's logic applies to columns: if it needs a sentence explaining it, it's wrong. Rename it.
+**The table header is the `--td-header` band on white rows** (§1.13a rule 3). *(Corrected 2026-10-13: this line said `--td-raised`, contradicting §1.13a rule 3 and `tacet-design-system.md` §1, and Waste, Shop menu, Affiliate and Reviews copied it. The band is `--td-header` with Ink labels.)* Single-line labels. If a column header needs a sub-label to be understood, **the header is wrong** — §1.7's logic applies to columns: if it needs a sentence explaining it, it's wrong. Rename it.
 
 **Columns do not collapse.** Proven twice in Batch 0. At narrow widths the table **scrolls horizontally**; it never hides a column into a drawer.
 
@@ -299,7 +299,7 @@ BASE (:root — dark, the CSS default)      LIGHT ([data-theme="light"] — opt-
 
 **12px radius is not a Tacet value.** (It ships in Team's `tm-stat` today, in the same card as a correct 14px.)
 
-**The table header is `--td-raised` on white rows.** Single-line labels, no sub-labels. Stated here 2026-07-17 because it was never stated anywhere: `--td-raised` existed as a *value*, "Data table" existed as a shared component (§3), and nothing connected them — so Orders shipped a cream header and the next page built a white one. **A shared component with an unwritten treatment is two components.** Full page-shell contract: §1.1a.
+**The table header is the `--td-header` band on white rows** (§1.13a rule 3). *(Corrected 2026-10-13: this line said `--td-raised`, contradicting §1.13a rule 3 and `tacet-design-system.md` §1, and Waste, Shop menu, Affiliate and Reviews copied it. The band is `--td-header` with Ink labels.)* Single-line labels, no sub-labels. Stated here 2026-07-17 because it was never stated anywhere: `--td-raised` existed as a *value*, "Data table" existed as a shared component (§3), and nothing connected them — so Orders shipped a cream header and the next page built a white one. **A shared component with an unwritten treatment is two components.** Full page-shell contract: §1.1a.
 
 **Hairlines, not shadows.** One soft ambient shadow is permitted, on overlays only (drawer, modal, popover): `0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04)`. Never on a resting card. **Never two stacked shadows** — `.fc-spark-tip` and `.db-spark-tip` currently stack two (`css:1285, 1692`), breaking the rule twice over.
 
@@ -1696,7 +1696,7 @@ grep -n 'isHTMLRequest\|stale-while-revalidate' public/sw.js   # which branch se
 *Structure*
 - [ ] **§1.1a region order** — header · sub-view strip (if the section has one) · tiles · segment chips · filter row · table. None reordered, none skipped
 - [ ] **Filter row is two dropdowns + one wide search.** No chips outside the segment row, no dividers
-- [ ] **Table header `--td-raised` on white rows. Every header single-line** — a sub-label means the header is wrong
+- [ ] **Table header is the `--td-header` band (§1.13a rule 3) on white rows. Every header single-line** — a sub-label means the header is wrong
 - [ ] **Put it next to Orders.** Same product, same hand, same day — or it isn't done
 - [ ] **Nothing in the brief traces to a live un-rebuilt page.** That page is the backlog, not the reference (§1.1a)
 - [ ] Standard page header, standard order
