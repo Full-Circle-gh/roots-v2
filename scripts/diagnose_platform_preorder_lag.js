@@ -169,3 +169,48 @@ for (const p of preRows) {
   }
   if (!hits) console.log('   no log lines name this order (logs may have rotated)');
 }
+
+// ── Fourth pass: every status text containing 取消 / 关闭 / 退 that the
+// platforms have ever sent, with counts, so a rule that tells a delivery-leg
+// cancel (配送已取消) from an order void is written against real wording.
+console.log('');
+console.log('══ every cancel-ish channel_status on file (latest per order) ══');
+for (const r of all(`
+  SELECT channel, channel_status, status, channel_stock_restored, COUNT(*) AS n
+    FROM retail_orders
+   WHERE channel_status LIKE '%取消%' OR channel_status LIKE '%关闭%' OR channel_status LIKE '%退%'
+   GROUP BY channel, channel_status, status, channel_stock_restored
+   ORDER BY channel, n DESC`)) console.log('  ' + JSON.stringify(r));
+
+console.log('');
+console.log('══ every cancel-ish status the daemons ever logged (all history in the logs) ══');
+let allLogs = [];
+try { allLogs = fs.readdirSync(PM2_LOGS).filter(f => /meituan|eleme|shangou/i.test(f) && /out/i.test(f)).map(f => path.join(PM2_LOGS, f)); } catch (_) {}
+const seen = new Map();
+for (const f of allLogs) {
+  let txt = null;
+  try { txt = fs.readFileSync(f, 'utf8'); } catch (_) { continue; }
+  for (const line of txt.split('\n')) {
+    const m = line.match(/status → (.+)$/);
+    if (!m || !/取消|关闭|退/.test(m[1])) continue;
+    const k = path.basename(f) + ' :: ' + m[1].trim();
+    seen.set(k, (seen.get(k) || 0) + 1);
+  }
+}
+for (const [k, n] of [...seen.entries()].sort()) console.log(`  ${n}×  ${k}`);
+if (!seen.size) console.log('  none');
+
+console.log('');
+console.log('══ meituan_cancel restores in the last 60 days, by order (did the order then go on to be delivered?) ══');
+for (const r of all(`
+  SELECT substr(l.note, 9, instr(substr(l.note, 9), ' ') - 1) AS mt_no,
+         COUNT(*) AS restore_rows,
+         MIN(${SH('l.created_at')}) AS first_restore_sh
+    FROM retail_stock_ledger l
+   WHERE l.reason = 'meituan_cancel' AND l.created_at >= datetime('now', '-60 days')
+   GROUP BY mt_no ORDER BY first_restore_sh`)) {
+  const o = all(`SELECT o.order_no, o.status, o.channel_status, o.channel_stock_restored, o.channel_preorder_at
+                   FROM meituan_order_import i JOIN retail_orders o ON o.id = i.retail_order_id
+                  WHERE i.meituan_order_no = ?`, r.mt_no)[0] || {};
+  console.log('  ' + JSON.stringify({ ...r, ...o }));
+}
