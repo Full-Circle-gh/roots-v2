@@ -181,9 +181,9 @@ async function openApp() {
   };
 }
 
-// Timestamps differ between two honest runs, and so does a referral code,
-// which is minted at random (ensureReferralCode). The code is masked by field
-// name AND shape, so nothing else that happens to be called "code" is hidden.
+// Timestamps differ between two honest runs, and so do two random values: a
+// referral code (ensureReferralCode) and a manual order's pay link token. Both
+// are masked by field name AND shape, so nothing else of that name is hidden.
 const TS = /\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(\.\d+)?Z?/g;
 function normalise(text) {
   let v;
@@ -191,6 +191,7 @@ function normalise(text) {
   return JSON.parse(JSON.stringify(v, (k, x) => {
     if (typeof x !== 'string') return x;
     if ((k === 'code' || k === 'referral_code') && /^[A-Z0-9]+-[A-Z0-9]{6}$/.test(x)) return '<REFERRAL_CODE>';
+    if (k === 'pay_token' && /^[0-9a-f]{16,}$/.test(x)) return '<PAY_TOKEN>';
     return x.replace(TS, '<T>');
   }), (k, x) => (/(_ms|_time)$/.test(k) && typeof x === 'number' ? '<N>' : x));
 }
