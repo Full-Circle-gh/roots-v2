@@ -27,16 +27,31 @@ const path = require('path');
 
 const REPO = path.join(__dirname, '..', '..');
 
-// A Wednesday, 10:00 in Shanghai. See openApp() for why it is years ahead.
-const FIXED_NOW = '2030-01-02T02:00:00.000Z';
+// A Wednesday, 10:00 in Shanghai. See openApp() for why it is years ahead:
+// the suite holds until the real clock reaches SEED_AT, in late 2039.
+const FIXED_NOW = '2040-01-04T02:00:00.000Z';
 
 // One seeded app per area. Returns { call, seed, close, outbound }.
 async function openApp() {
-  // A map key in the shell would turn an address save into a lookup with an
-  // answer from outside. Tests never load .env, so these are normally unset
-  // already; blanking them keeps a developer's own shell from changing what
-  // gets recorded. Read at module load, so this has to come first.
-  for (const k of ['AMAP_MAPS_KEY', 'TENCENT_MAPS_KEY']) process.env[k] = '';
+  // Outside-service keys. A map key in the shell would turn an address save
+  // into a lookup with an answer from outside; a payment key would turn the
+  // dev-mode "paid" into an attempt at a real WeChat Pay or Alipay charge.
+  // Tests never load .env, so these are normally unset already; blanking them
+  // keeps a developer's own shell from changing what gets recorded. Most are
+  // read at module load, so this has to come first.
+  for (const k of ['AMAP_MAPS_KEY', 'TENCENT_MAPS_KEY',
+    'WECHAT_PAY_MCH_ID', 'WECHAT_PAY_PRIVATE_KEY', 'WECHAT_PAY_API_V3_KEY', 'WECHAT_PAY_SERIAL_NO',
+    'WECHAT_PAY_APP_ID', 'WECHAT_PAY_PLATFORM_PUB_KEY', 'WECHAT_PAY_PUBLIC_CERT',
+    'ALIPAY_APP_ID', 'ALIPAY_PRIVATE_KEY', 'ALIPAY_PUBLIC_KEY',
+    'WECHAT_APP_ID', 'WECHAT_APP_SECRET', 'WECHAT_OA_APP_ID', 'WECHAT_OA_APP_SECRET',
+    'WECHAT_WEB_APP_ID', 'WECHAT_WEB_APP_SECRET',
+    'ALIYUN_SMS_AK_ID', 'ALIYUN_SMS_AK_SECRET']) process.env[k] = '';
+
+  // Labels such as "Pickup Today 14:00" are written in the process's own time
+  // zone. A container on UTC and a laptop on China time would record different
+  // words for the same order, so the zone is fixed. Shanghai is what the live
+  // server (Hong Kong, UTC+8) produces.
+  process.env.TZ = 'Asia/Shanghai';
 
   // THE APP'S CLOCK IS PINNED. Delivery slots, pickup times and opening hours
   // are worked out from "now", so an unpinned run would record one answer at
@@ -104,7 +119,7 @@ async function openApp() {
   // the days since it, would otherwise change with the date the suite runs on.
   // Rows that requests create during the run keep real stamps; their
   // timestamps are masked as <T> in the answers.
-  const SEED_AT = '2029-12-20 04:00:00';
+  const SEED_AT = '2039-12-22 04:00:00';
   function ins(table, row) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all();
     for (const c of cols) {
@@ -134,17 +149,30 @@ async function openApp() {
   const base = 'http://127.0.0.1:' + server.address().port;
 
   const HEADERS = { customer: { Authorization: 'Bearer goldentoken' }, admin: { 'x-op': '9001' }, anon: {} };
-  async function call([who, method, p, body]) {
+  // GOLDEN_PACE_MS (verification only): wait this long before each request.
+  // Over a second puts every row a request writes in its own database second,
+  // so an answer that relied on two rows sharing a timestamp shows up as a
+  // difference from an unpaced run.
+  const PACE = Number(process.env.GOLDEN_PACE_MS) || 0;
+  // A request may carry { afterMs } as a fifth element: wait that long first.
+  // Used where the answer depends on two writes falling in different database
+  // seconds, the way they always do when a real person is on the other end.
+  async function call([who, method, p, body, opts]) {
+    const wait = Math.max(PACE, (opts && opts.afterMs) || 0);
+    if (wait) await new Promise((r) => setTimeout(r, wait));
     const r = await fetch(base + p, {
       method,
       headers: { 'Content-Type': 'application/json', ...HEADERS[who] },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    return { req: `${method} ${p} [${who}]`, status: r.status, body: normalise(await r.text()) };
+    // Links the app builds from the request's host (product images) carry the
+    // test server's port, which is random per run.
+    const text = (await r.text()).split(base).join('http://<HOST>');
+    return { req: `${method} ${p} [${who}]`, status: r.status, body: normalise(text) };
   }
 
   return {
-    db, ins, customer, call, outbound,
+    db, ins, customer, call, outbound, SEED_AT,
     close: () => new Promise((r) => server.close(r)).then(() => {
       global.fetch = realFetch;
       global.Date = RealDate;

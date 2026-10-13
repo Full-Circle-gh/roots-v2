@@ -1,0 +1,5503 @@
+[
+  {
+    "req": "GET /api/retail/delivery-zones [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": "gz:440103",
+          "zone_type": "gz_district",
+          "name_en": "Liwan",
+          "name_cn": "荔湾区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "荔湾区"
+        },
+        {
+          "id": "gz:440104",
+          "zone_type": "gz_district",
+          "name_en": "Yuexiu",
+          "name_cn": "越秀区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "越秀区"
+        },
+        {
+          "id": "gz:440105",
+          "zone_type": "gz_district",
+          "name_en": "Haizhu",
+          "name_cn": "海珠区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "海珠区"
+        },
+        {
+          "id": "gz:440106",
+          "zone_type": "gz_district",
+          "name_en": "Tianhe",
+          "name_cn": "天河区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "天河区"
+        },
+        {
+          "id": "gz:440111",
+          "zone_type": "gz_district",
+          "name_en": "Baiyun",
+          "name_cn": "白云区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "白云区"
+        },
+        {
+          "id": "gz:440112",
+          "zone_type": "gz_district",
+          "name_en": "Huangpu",
+          "name_cn": "黄埔区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "黄埔区"
+        },
+        {
+          "id": "gz:440113",
+          "zone_type": "gz_district",
+          "name_en": "Panyu",
+          "name_cn": "番禺区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "番禺区"
+        },
+        {
+          "id": "gz:440114",
+          "zone_type": "gz_district",
+          "name_en": "Huadu",
+          "name_cn": "花都区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "花都区"
+        },
+        {
+          "id": "gz:440115",
+          "zone_type": "gz_district",
+          "name_en": "Nansha",
+          "name_cn": "南沙区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "南沙区"
+        },
+        {
+          "id": "gz:440117",
+          "zone_type": "gz_district",
+          "name_en": "Conghua",
+          "name_cn": "从化区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "从化区"
+        },
+        {
+          "id": "gz:440118",
+          "zone_type": "gz_district",
+          "name_en": "Zengcheng",
+          "name_cn": "增城区",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": "增城区"
+        },
+        {
+          "id": "city:阿坝藏族羌族自治州",
+          "zone_type": "city",
+          "name_en": "Aba Prefecture",
+          "name_cn": "阿坝藏族羌族自治州",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "阿坝藏族羌族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:阿克苏地区",
+          "zone_type": "city",
+          "name_en": "Aksu Prefecture",
+          "name_cn": "阿克苏地区",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "阿克苏地区",
+          "match_district": null
+        },
+        {
+          "id": "city:阿勒泰地区",
+          "zone_type": "city",
+          "name_en": "Altay Prefecture",
+          "name_cn": "阿勒泰地区",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "阿勒泰地区",
+          "match_district": null
+        },
+        {
+          "id": "city:阿拉善盟",
+          "zone_type": "city",
+          "name_en": "Alxa League",
+          "name_cn": "阿拉善盟",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "阿拉善盟",
+          "match_district": null
+        },
+        {
+          "id": "city:安康市",
+          "zone_type": "city",
+          "name_en": "Ankang",
+          "name_cn": "安康市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "安康市",
+          "match_district": null
+        },
+        {
+          "id": "city:安庆市",
+          "zone_type": "city",
+          "name_en": "Anqing",
+          "name_cn": "安庆市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "安庆市",
+          "match_district": null
+        },
+        {
+          "id": "city:鞍山市",
+          "zone_type": "city",
+          "name_en": "Anshan",
+          "name_cn": "鞍山市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "鞍山市",
+          "match_district": null
+        },
+        {
+          "id": "city:安顺市",
+          "zone_type": "city",
+          "name_en": "Anshun",
+          "name_cn": "安顺市",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "安顺市",
+          "match_district": null
+        },
+        {
+          "id": "city:安阳市",
+          "zone_type": "city",
+          "name_en": "Anyang",
+          "name_cn": "安阳市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "安阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:白城市",
+          "zone_type": "city",
+          "name_en": "Baicheng",
+          "name_cn": "白城市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "白城市",
+          "match_district": null
+        },
+        {
+          "id": "city:百色市",
+          "zone_type": "city",
+          "name_en": "Baise",
+          "name_cn": "百色市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "百色市",
+          "match_district": null
+        },
+        {
+          "id": "city:白山市",
+          "zone_type": "city",
+          "name_en": "Baishan",
+          "name_cn": "白山市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "白山市",
+          "match_district": null
+        },
+        {
+          "id": "city:白银市",
+          "zone_type": "city",
+          "name_en": "Baiyin",
+          "name_cn": "白银市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "白银市",
+          "match_district": null
+        },
+        {
+          "id": "city:保定市",
+          "zone_type": "city",
+          "name_en": "Baoding",
+          "name_cn": "保定市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "保定市",
+          "match_district": null
+        },
+        {
+          "id": "city:宝鸡市",
+          "zone_type": "city",
+          "name_en": "Baoji",
+          "name_cn": "宝鸡市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "宝鸡市",
+          "match_district": null
+        },
+        {
+          "id": "city:保山市",
+          "zone_type": "city",
+          "name_en": "Baoshan",
+          "name_cn": "保山市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "保山市",
+          "match_district": null
+        },
+        {
+          "id": "city:包头市",
+          "zone_type": "city",
+          "name_en": "Baotou",
+          "name_cn": "包头市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "包头市",
+          "match_district": null
+        },
+        {
+          "id": "city:巴彦淖尔市",
+          "zone_type": "city",
+          "name_en": "Bayannur",
+          "name_cn": "巴彦淖尔市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "巴彦淖尔市",
+          "match_district": null
+        },
+        {
+          "id": "city:巴音郭楞蒙古自治州",
+          "zone_type": "city",
+          "name_en": "Bayingolin Prefecture",
+          "name_cn": "巴音郭楞蒙古自治州",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "巴音郭楞蒙古自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:巴中市",
+          "zone_type": "city",
+          "name_en": "Bazhong",
+          "name_cn": "巴中市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "巴中市",
+          "match_district": null
+        },
+        {
+          "id": "city:北海市",
+          "zone_type": "city",
+          "name_en": "Beihai",
+          "name_cn": "北海市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "北海市",
+          "match_district": null
+        },
+        {
+          "id": "city:北京市",
+          "zone_type": "city",
+          "name_en": "Beijing",
+          "name_cn": "北京市",
+          "province_cn": "北京市",
+          "province_en": "Beijing",
+          "match_city": "北京市",
+          "match_district": null
+        },
+        {
+          "id": "city:蚌埠市",
+          "zone_type": "city",
+          "name_en": "Bengbu",
+          "name_cn": "蚌埠市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "蚌埠市",
+          "match_district": null
+        },
+        {
+          "id": "city:本溪市",
+          "zone_type": "city",
+          "name_en": "Benxi",
+          "name_cn": "本溪市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "本溪市",
+          "match_district": null
+        },
+        {
+          "id": "city:毕节市",
+          "zone_type": "city",
+          "name_en": "Bijie",
+          "name_cn": "毕节市",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "毕节市",
+          "match_district": null
+        },
+        {
+          "id": "city:滨州市",
+          "zone_type": "city",
+          "name_en": "Binzhou",
+          "name_cn": "滨州市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "滨州市",
+          "match_district": null
+        },
+        {
+          "id": "city:博尔塔拉蒙古自治州",
+          "zone_type": "city",
+          "name_en": "Bortala Prefecture",
+          "name_cn": "博尔塔拉蒙古自治州",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "博尔塔拉蒙古自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:亳州市",
+          "zone_type": "city",
+          "name_en": "Bozhou",
+          "name_cn": "亳州市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "亳州市",
+          "match_district": null
+        },
+        {
+          "id": "city:沧州市",
+          "zone_type": "city",
+          "name_en": "Cangzhou",
+          "name_cn": "沧州市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "沧州市",
+          "match_district": null
+        },
+        {
+          "id": "city:昌都市",
+          "zone_type": "city",
+          "name_en": "Chamdo",
+          "name_cn": "昌都市",
+          "province_cn": "西藏自治区",
+          "province_en": "Tibet",
+          "match_city": "昌都市",
+          "match_district": null
+        },
+        {
+          "id": "city:长春市",
+          "zone_type": "city",
+          "name_en": "Changchun",
+          "name_cn": "长春市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "长春市",
+          "match_district": null
+        },
+        {
+          "id": "city:常德市",
+          "zone_type": "city",
+          "name_en": "Changde",
+          "name_cn": "常德市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "常德市",
+          "match_district": null
+        },
+        {
+          "id": "city:昌吉回族自治州",
+          "zone_type": "city",
+          "name_en": "Changji Prefecture",
+          "name_cn": "昌吉回族自治州",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "昌吉回族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:长沙市",
+          "zone_type": "city",
+          "name_en": "Changsha",
+          "name_cn": "长沙市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "长沙市",
+          "match_district": null
+        },
+        {
+          "id": "city:长治市",
+          "zone_type": "city",
+          "name_en": "Changzhi",
+          "name_cn": "长治市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "长治市",
+          "match_district": null
+        },
+        {
+          "id": "city:常州市",
+          "zone_type": "city",
+          "name_en": "Changzhou",
+          "name_cn": "常州市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "常州市",
+          "match_district": null
+        },
+        {
+          "id": "city:朝阳市",
+          "zone_type": "city",
+          "name_en": "Chaoyang",
+          "name_cn": "朝阳市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "朝阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:潮州市",
+          "zone_type": "city",
+          "name_en": "Chaozhou",
+          "name_cn": "潮州市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "潮州市",
+          "match_district": null
+        },
+        {
+          "id": "city:承德市",
+          "zone_type": "city",
+          "name_en": "Chengde",
+          "name_cn": "承德市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "承德市",
+          "match_district": null
+        },
+        {
+          "id": "city:成都市",
+          "zone_type": "city",
+          "name_en": "Chengdu",
+          "name_cn": "成都市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "成都市",
+          "match_district": null
+        },
+        {
+          "id": "city:郴州市",
+          "zone_type": "city",
+          "name_en": "Chenzhou",
+          "name_cn": "郴州市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "郴州市",
+          "match_district": null
+        },
+        {
+          "id": "city:赤峰市",
+          "zone_type": "city",
+          "name_en": "Chifeng",
+          "name_cn": "赤峰市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "赤峰市",
+          "match_district": null
+        },
+        {
+          "id": "city:池州市",
+          "zone_type": "city",
+          "name_en": "Chizhou",
+          "name_cn": "池州市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "池州市",
+          "match_district": null
+        },
+        {
+          "id": "city:重庆市",
+          "zone_type": "city",
+          "name_en": "Chongqing",
+          "name_cn": "重庆市",
+          "province_cn": "重庆市",
+          "province_en": "Chongqing",
+          "match_city": "重庆市",
+          "match_district": null
+        },
+        {
+          "id": "city:崇左市",
+          "zone_type": "city",
+          "name_en": "Chongzuo",
+          "name_cn": "崇左市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "崇左市",
+          "match_district": null
+        },
+        {
+          "id": "city:楚雄彝族自治州",
+          "zone_type": "city",
+          "name_en": "Chuxiong Prefecture",
+          "name_cn": "楚雄彝族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "楚雄彝族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:滁州市",
+          "zone_type": "city",
+          "name_en": "Chuzhou",
+          "name_cn": "滁州市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "滁州市",
+          "match_district": null
+        },
+        {
+          "id": "city:大理白族自治州",
+          "zone_type": "city",
+          "name_en": "Dali Prefecture",
+          "name_cn": "大理白族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "大理白族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:大连市",
+          "zone_type": "city",
+          "name_en": "Dalian",
+          "name_cn": "大连市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "大连市",
+          "match_district": null
+        },
+        {
+          "id": "city:丹东市",
+          "zone_type": "city",
+          "name_en": "Dandong",
+          "name_cn": "丹东市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "丹东市",
+          "match_district": null
+        },
+        {
+          "id": "city:儋州市",
+          "zone_type": "city",
+          "name_en": "Danzhou",
+          "name_cn": "儋州市",
+          "province_cn": "海南省",
+          "province_en": "Hainan",
+          "match_city": "儋州市",
+          "match_district": null
+        },
+        {
+          "id": "city:大庆市",
+          "zone_type": "city",
+          "name_en": "Daqing",
+          "name_cn": "大庆市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "大庆市",
+          "match_district": null
+        },
+        {
+          "id": "city:大同市",
+          "zone_type": "city",
+          "name_en": "Datong",
+          "name_cn": "大同市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "大同市",
+          "match_district": null
+        },
+        {
+          "id": "city:达州市",
+          "zone_type": "city",
+          "name_en": "Dazhou",
+          "name_cn": "达州市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "达州市",
+          "match_district": null
+        },
+        {
+          "id": "city:德宏傣族景颇族自治州",
+          "zone_type": "city",
+          "name_en": "Dehong Prefecture",
+          "name_cn": "德宏傣族景颇族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "德宏傣族景颇族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:德阳市",
+          "zone_type": "city",
+          "name_en": "Deyang",
+          "name_cn": "德阳市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "德阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:德州市",
+          "zone_type": "city",
+          "name_en": "Dezhou",
+          "name_cn": "德州市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "德州市",
+          "match_district": null
+        },
+        {
+          "id": "city:定西市",
+          "zone_type": "city",
+          "name_en": "Dingxi",
+          "name_cn": "定西市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "定西市",
+          "match_district": null
+        },
+        {
+          "id": "city:迪庆藏族自治州",
+          "zone_type": "city",
+          "name_en": "Diqing Prefecture",
+          "name_cn": "迪庆藏族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "迪庆藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:东莞市",
+          "zone_type": "city",
+          "name_en": "Dongguan",
+          "name_cn": "东莞市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "东莞市",
+          "match_district": null
+        },
+        {
+          "id": "city:东营市",
+          "zone_type": "city",
+          "name_en": "Dongying",
+          "name_cn": "东营市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "东营市",
+          "match_district": null
+        },
+        {
+          "id": "city:恩施土家族苗族自治州",
+          "zone_type": "city",
+          "name_en": "Enshi Prefecture",
+          "name_cn": "恩施土家族苗族自治州",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "恩施土家族苗族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:鄂州市",
+          "zone_type": "city",
+          "name_en": "Ezhou",
+          "name_cn": "鄂州市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "鄂州市",
+          "match_district": null
+        },
+        {
+          "id": "city:防城港市",
+          "zone_type": "city",
+          "name_en": "Fangchenggang",
+          "name_cn": "防城港市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "防城港市",
+          "match_district": null
+        },
+        {
+          "id": "city:佛山市",
+          "zone_type": "city",
+          "name_en": "Foshan",
+          "name_cn": "佛山市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "佛山市",
+          "match_district": null
+        },
+        {
+          "id": "city:抚顺市",
+          "zone_type": "city",
+          "name_en": "Fushun",
+          "name_cn": "抚顺市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "抚顺市",
+          "match_district": null
+        },
+        {
+          "id": "city:阜新市",
+          "zone_type": "city",
+          "name_en": "Fuxin",
+          "name_cn": "阜新市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "阜新市",
+          "match_district": null
+        },
+        {
+          "id": "city:阜阳市",
+          "zone_type": "city",
+          "name_en": "Fuyang",
+          "name_cn": "阜阳市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "阜阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:福州市",
+          "zone_type": "city",
+          "name_en": "Fuzhou",
+          "name_cn": "福州市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "福州市",
+          "match_district": null
+        },
+        {
+          "id": "city:抚州市",
+          "zone_type": "city",
+          "name_en": "Fuzhou (JX)",
+          "name_cn": "抚州市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "抚州市",
+          "match_district": null
+        },
+        {
+          "id": "city:甘南藏族自治州",
+          "zone_type": "city",
+          "name_en": "Gannan Prefecture",
+          "name_cn": "甘南藏族自治州",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "甘南藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:赣州市",
+          "zone_type": "city",
+          "name_en": "Ganzhou",
+          "name_cn": "赣州市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "赣州市",
+          "match_district": null
+        },
+        {
+          "id": "city:甘孜藏族自治州",
+          "zone_type": "city",
+          "name_en": "Garze Prefecture",
+          "name_cn": "甘孜藏族自治州",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "甘孜藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:果洛藏族自治州",
+          "zone_type": "city",
+          "name_en": "Golog Prefecture",
+          "name_cn": "果洛藏族自治州",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "果洛藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:大兴安岭地区",
+          "zone_type": "city",
+          "name_en": "Greater Khingan",
+          "name_cn": "大兴安岭地区",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "大兴安岭地区",
+          "match_district": null
+        },
+        {
+          "id": "city:广安市",
+          "zone_type": "city",
+          "name_en": "Guang'an",
+          "name_cn": "广安市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "广安市",
+          "match_district": null
+        },
+        {
+          "id": "city:广元市",
+          "zone_type": "city",
+          "name_en": "Guangyuan",
+          "name_cn": "广元市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "广元市",
+          "match_district": null
+        },
+        {
+          "id": "city:广州市",
+          "zone_type": "city",
+          "name_en": "Guangzhou",
+          "name_cn": "广州市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "广州市",
+          "match_district": null
+        },
+        {
+          "id": "city:贵港市",
+          "zone_type": "city",
+          "name_en": "Guigang",
+          "name_cn": "贵港市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "贵港市",
+          "match_district": null
+        },
+        {
+          "id": "city:桂林市",
+          "zone_type": "city",
+          "name_en": "Guilin",
+          "name_cn": "桂林市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "桂林市",
+          "match_district": null
+        },
+        {
+          "id": "city:贵阳市",
+          "zone_type": "city",
+          "name_en": "Guiyang",
+          "name_cn": "贵阳市",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "贵阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:固原市",
+          "zone_type": "city",
+          "name_en": "Guyuan",
+          "name_cn": "固原市",
+          "province_cn": "宁夏回族自治区",
+          "province_en": "Ningxia",
+          "match_city": "固原市",
+          "match_district": null
+        },
+        {
+          "id": "city:海北藏族自治州",
+          "zone_type": "city",
+          "name_en": "Haibei Prefecture",
+          "name_cn": "海北藏族自治州",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "海北藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:海东市",
+          "zone_type": "city",
+          "name_en": "Haidong",
+          "name_cn": "海东市",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "海东市",
+          "match_district": null
+        },
+        {
+          "id": "city:海口市",
+          "zone_type": "city",
+          "name_en": "Haikou",
+          "name_cn": "海口市",
+          "province_cn": "海南省",
+          "province_en": "Hainan",
+          "match_city": "海口市",
+          "match_district": null
+        },
+        {
+          "id": "city:海南藏族自治州",
+          "zone_type": "city",
+          "name_en": "Hainan Prefecture (QH)",
+          "name_cn": "海南藏族自治州",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "海南藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:海西蒙古族藏族自治州",
+          "zone_type": "city",
+          "name_en": "Haixi Prefecture",
+          "name_cn": "海西蒙古族藏族自治州",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "海西蒙古族藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:哈密市",
+          "zone_type": "city",
+          "name_en": "Hami",
+          "name_cn": "哈密市",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "哈密市",
+          "match_district": null
+        },
+        {
+          "id": "city:邯郸市",
+          "zone_type": "city",
+          "name_en": "Handan",
+          "name_cn": "邯郸市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "邯郸市",
+          "match_district": null
+        },
+        {
+          "id": "city:杭州市",
+          "zone_type": "city",
+          "name_en": "Hangzhou",
+          "name_cn": "杭州市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "杭州市",
+          "match_district": null
+        },
+        {
+          "id": "city:汉中市",
+          "zone_type": "city",
+          "name_en": "Hanzhong",
+          "name_cn": "汉中市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "汉中市",
+          "match_district": null
+        },
+        {
+          "id": "city:哈尔滨市",
+          "zone_type": "city",
+          "name_en": "Harbin",
+          "name_cn": "哈尔滨市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "哈尔滨市",
+          "match_district": null
+        },
+        {
+          "id": "city:鹤壁市",
+          "zone_type": "city",
+          "name_en": "Hebi",
+          "name_cn": "鹤壁市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "鹤壁市",
+          "match_district": null
+        },
+        {
+          "id": "city:河池市",
+          "zone_type": "city",
+          "name_en": "Hechi",
+          "name_cn": "河池市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "河池市",
+          "match_district": null
+        },
+        {
+          "id": "city:合肥市",
+          "zone_type": "city",
+          "name_en": "Hefei",
+          "name_cn": "合肥市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "合肥市",
+          "match_district": null
+        },
+        {
+          "id": "city:鹤岗市",
+          "zone_type": "city",
+          "name_en": "Hegang",
+          "name_cn": "鹤岗市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "鹤岗市",
+          "match_district": null
+        },
+        {
+          "id": "city:黑河市",
+          "zone_type": "city",
+          "name_en": "Heihe",
+          "name_cn": "黑河市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "黑河市",
+          "match_district": null
+        },
+        {
+          "id": "city:衡水市",
+          "zone_type": "city",
+          "name_en": "Hengshui",
+          "name_cn": "衡水市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "衡水市",
+          "match_district": null
+        },
+        {
+          "id": "city:衡阳市",
+          "zone_type": "city",
+          "name_en": "Hengyang",
+          "name_cn": "衡阳市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "衡阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:河源市",
+          "zone_type": "city",
+          "name_en": "Heyuan",
+          "name_cn": "河源市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "河源市",
+          "match_district": null
+        },
+        {
+          "id": "city:菏泽市",
+          "zone_type": "city",
+          "name_en": "Heze",
+          "name_cn": "菏泽市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "菏泽市",
+          "match_district": null
+        },
+        {
+          "id": "city:贺州市",
+          "zone_type": "city",
+          "name_en": "Hezhou",
+          "name_cn": "贺州市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "贺州市",
+          "match_district": null
+        },
+        {
+          "id": "city:呼和浩特市",
+          "zone_type": "city",
+          "name_en": "Hohhot",
+          "name_cn": "呼和浩特市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "呼和浩特市",
+          "match_district": null
+        },
+        {
+          "id": "city:红河哈尼族彝族自治州",
+          "zone_type": "city",
+          "name_en": "Honghe Prefecture",
+          "name_cn": "红河哈尼族彝族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "红河哈尼族彝族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:和田地区",
+          "zone_type": "city",
+          "name_en": "Hotan Prefecture",
+          "name_cn": "和田地区",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "和田地区",
+          "match_district": null
+        },
+        {
+          "id": "city:淮安市",
+          "zone_type": "city",
+          "name_en": "Huai'an",
+          "name_cn": "淮安市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "淮安市",
+          "match_district": null
+        },
+        {
+          "id": "city:淮北市",
+          "zone_type": "city",
+          "name_en": "Huaibei",
+          "name_cn": "淮北市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "淮北市",
+          "match_district": null
+        },
+        {
+          "id": "city:怀化市",
+          "zone_type": "city",
+          "name_en": "Huaihua",
+          "name_cn": "怀化市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "怀化市",
+          "match_district": null
+        },
+        {
+          "id": "city:淮南市",
+          "zone_type": "city",
+          "name_en": "Huainan",
+          "name_cn": "淮南市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "淮南市",
+          "match_district": null
+        },
+        {
+          "id": "city:黄冈市",
+          "zone_type": "city",
+          "name_en": "Huanggang",
+          "name_cn": "黄冈市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "黄冈市",
+          "match_district": null
+        },
+        {
+          "id": "city:黄南藏族自治州",
+          "zone_type": "city",
+          "name_en": "Huangnan Prefecture",
+          "name_cn": "黄南藏族自治州",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "黄南藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:黄山市",
+          "zone_type": "city",
+          "name_en": "Huangshan",
+          "name_cn": "黄山市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "黄山市",
+          "match_district": null
+        },
+        {
+          "id": "city:黄石市",
+          "zone_type": "city",
+          "name_en": "Huangshi",
+          "name_cn": "黄石市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "黄石市",
+          "match_district": null
+        },
+        {
+          "id": "city:惠州市",
+          "zone_type": "city",
+          "name_en": "Huizhou",
+          "name_cn": "惠州市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "惠州市",
+          "match_district": null
+        },
+        {
+          "id": "city:葫芦岛市",
+          "zone_type": "city",
+          "name_en": "Huludao",
+          "name_cn": "葫芦岛市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "葫芦岛市",
+          "match_district": null
+        },
+        {
+          "id": "city:呼伦贝尔市",
+          "zone_type": "city",
+          "name_en": "Hulunbuir",
+          "name_cn": "呼伦贝尔市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "呼伦贝尔市",
+          "match_district": null
+        },
+        {
+          "id": "city:湖州市",
+          "zone_type": "city",
+          "name_en": "Huzhou",
+          "name_cn": "湖州市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "湖州市",
+          "match_district": null
+        },
+        {
+          "id": "city:伊犁哈萨克自治州",
+          "zone_type": "city",
+          "name_en": "Ili Prefecture",
+          "name_cn": "伊犁哈萨克自治州",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "伊犁哈萨克自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:吉安市",
+          "zone_type": "city",
+          "name_en": "Ji'an",
+          "name_cn": "吉安市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "吉安市",
+          "match_district": null
+        },
+        {
+          "id": "city:佳木斯市",
+          "zone_type": "city",
+          "name_en": "Jiamusi",
+          "name_cn": "佳木斯市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "佳木斯市",
+          "match_district": null
+        },
+        {
+          "id": "city:江门市",
+          "zone_type": "city",
+          "name_en": "Jiangmen",
+          "name_cn": "江门市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "江门市",
+          "match_district": null
+        },
+        {
+          "id": "city:焦作市",
+          "zone_type": "city",
+          "name_en": "Jiaozuo",
+          "name_cn": "焦作市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "焦作市",
+          "match_district": null
+        },
+        {
+          "id": "city:嘉兴市",
+          "zone_type": "city",
+          "name_en": "Jiaxing",
+          "name_cn": "嘉兴市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "嘉兴市",
+          "match_district": null
+        },
+        {
+          "id": "city:嘉峪关市",
+          "zone_type": "city",
+          "name_en": "Jiayuguan",
+          "name_cn": "嘉峪关市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "嘉峪关市",
+          "match_district": null
+        },
+        {
+          "id": "city:揭阳市",
+          "zone_type": "city",
+          "name_en": "Jieyang",
+          "name_cn": "揭阳市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "揭阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:吉林市",
+          "zone_type": "city",
+          "name_en": "Jilin City",
+          "name_cn": "吉林市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "吉林市",
+          "match_district": null
+        },
+        {
+          "id": "city:济南市",
+          "zone_type": "city",
+          "name_en": "Jinan",
+          "name_cn": "济南市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "济南市",
+          "match_district": null
+        },
+        {
+          "id": "city:金昌市",
+          "zone_type": "city",
+          "name_en": "Jinchang",
+          "name_cn": "金昌市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "金昌市",
+          "match_district": null
+        },
+        {
+          "id": "city:晋城市",
+          "zone_type": "city",
+          "name_en": "Jincheng",
+          "name_cn": "晋城市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "晋城市",
+          "match_district": null
+        },
+        {
+          "id": "city:景德镇市",
+          "zone_type": "city",
+          "name_en": "Jingdezhen",
+          "name_cn": "景德镇市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "景德镇市",
+          "match_district": null
+        },
+        {
+          "id": "city:荆门市",
+          "zone_type": "city",
+          "name_en": "Jingmen",
+          "name_cn": "荆门市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "荆门市",
+          "match_district": null
+        },
+        {
+          "id": "city:荆州市",
+          "zone_type": "city",
+          "name_en": "Jingzhou",
+          "name_cn": "荆州市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "荆州市",
+          "match_district": null
+        },
+        {
+          "id": "city:金华市",
+          "zone_type": "city",
+          "name_en": "Jinhua",
+          "name_cn": "金华市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "金华市",
+          "match_district": null
+        },
+        {
+          "id": "city:济宁市",
+          "zone_type": "city",
+          "name_en": "Jining",
+          "name_cn": "济宁市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "济宁市",
+          "match_district": null
+        },
+        {
+          "id": "city:晋中市",
+          "zone_type": "city",
+          "name_en": "Jinzhong",
+          "name_cn": "晋中市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "晋中市",
+          "match_district": null
+        },
+        {
+          "id": "city:锦州市",
+          "zone_type": "city",
+          "name_en": "Jinzhou",
+          "name_cn": "锦州市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "锦州市",
+          "match_district": null
+        },
+        {
+          "id": "city:九江市",
+          "zone_type": "city",
+          "name_en": "Jiujiang",
+          "name_cn": "九江市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "九江市",
+          "match_district": null
+        },
+        {
+          "id": "city:酒泉市",
+          "zone_type": "city",
+          "name_en": "Jiuquan",
+          "name_cn": "酒泉市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "酒泉市",
+          "match_district": null
+        },
+        {
+          "id": "city:鸡西市",
+          "zone_type": "city",
+          "name_en": "Jixi",
+          "name_cn": "鸡西市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "鸡西市",
+          "match_district": null
+        },
+        {
+          "id": "city:济源市",
+          "zone_type": "city",
+          "name_en": "Jiyuan",
+          "name_cn": "济源市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "济源市",
+          "match_district": null
+        },
+        {
+          "id": "city:开封市",
+          "zone_type": "city",
+          "name_en": "Kaifeng",
+          "name_cn": "开封市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "开封市",
+          "match_district": null
+        },
+        {
+          "id": "city:克拉玛依市",
+          "zone_type": "city",
+          "name_en": "Karamay",
+          "name_cn": "克拉玛依市",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "克拉玛依市",
+          "match_district": null
+        },
+        {
+          "id": "city:喀什地区",
+          "zone_type": "city",
+          "name_en": "Kashgar Prefecture",
+          "name_cn": "喀什地区",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "喀什地区",
+          "match_district": null
+        },
+        {
+          "id": "city:克孜勒苏柯尔克孜自治州",
+          "zone_type": "city",
+          "name_en": "Kizilsu Prefecture",
+          "name_cn": "克孜勒苏柯尔克孜自治州",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "克孜勒苏柯尔克孜自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:昆明市",
+          "zone_type": "city",
+          "name_en": "Kunming",
+          "name_cn": "昆明市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "昆明市",
+          "match_district": null
+        },
+        {
+          "id": "city:来宾市",
+          "zone_type": "city",
+          "name_en": "Laibin",
+          "name_cn": "来宾市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "来宾市",
+          "match_district": null
+        },
+        {
+          "id": "city:廊坊市",
+          "zone_type": "city",
+          "name_en": "Langfang",
+          "name_cn": "廊坊市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "廊坊市",
+          "match_district": null
+        },
+        {
+          "id": "city:兰州市",
+          "zone_type": "city",
+          "name_en": "Lanzhou",
+          "name_cn": "兰州市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "兰州市",
+          "match_district": null
+        },
+        {
+          "id": "city:乐山市",
+          "zone_type": "city",
+          "name_en": "Leshan",
+          "name_cn": "乐山市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "乐山市",
+          "match_district": null
+        },
+        {
+          "id": "city:拉萨市",
+          "zone_type": "city",
+          "name_en": "Lhasa",
+          "name_cn": "拉萨市",
+          "province_cn": "西藏自治区",
+          "province_en": "Tibet",
+          "match_city": "拉萨市",
+          "match_district": null
+        },
+        {
+          "id": "city:凉山彝族自治州",
+          "zone_type": "city",
+          "name_en": "Liangshan Prefecture",
+          "name_cn": "凉山彝族自治州",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "凉山彝族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:连云港市",
+          "zone_type": "city",
+          "name_en": "Lianyungang",
+          "name_cn": "连云港市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "连云港市",
+          "match_district": null
+        },
+        {
+          "id": "city:聊城市",
+          "zone_type": "city",
+          "name_en": "Liaocheng",
+          "name_cn": "聊城市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "聊城市",
+          "match_district": null
+        },
+        {
+          "id": "city:辽阳市",
+          "zone_type": "city",
+          "name_en": "Liaoyang",
+          "name_cn": "辽阳市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "辽阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:辽源市",
+          "zone_type": "city",
+          "name_en": "Liaoyuan",
+          "name_cn": "辽源市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "辽源市",
+          "match_district": null
+        },
+        {
+          "id": "city:丽江市",
+          "zone_type": "city",
+          "name_en": "Lijiang",
+          "name_cn": "丽江市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "丽江市",
+          "match_district": null
+        },
+        {
+          "id": "city:临沧市",
+          "zone_type": "city",
+          "name_en": "Lincang",
+          "name_cn": "临沧市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "临沧市",
+          "match_district": null
+        },
+        {
+          "id": "city:临汾市",
+          "zone_type": "city",
+          "name_en": "Linfen",
+          "name_cn": "临汾市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "临汾市",
+          "match_district": null
+        },
+        {
+          "id": "city:临夏回族自治州",
+          "zone_type": "city",
+          "name_en": "Linxia Prefecture",
+          "name_cn": "临夏回族自治州",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "临夏回族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:临沂市",
+          "zone_type": "city",
+          "name_en": "Linyi",
+          "name_cn": "临沂市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "临沂市",
+          "match_district": null
+        },
+        {
+          "id": "city:丽水市",
+          "zone_type": "city",
+          "name_en": "Lishui",
+          "name_cn": "丽水市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "丽水市",
+          "match_district": null
+        },
+        {
+          "id": "city:六盘水市",
+          "zone_type": "city",
+          "name_en": "Liupanshui",
+          "name_cn": "六盘水市",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "六盘水市",
+          "match_district": null
+        },
+        {
+          "id": "city:柳州市",
+          "zone_type": "city",
+          "name_en": "Liuzhou",
+          "name_cn": "柳州市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "柳州市",
+          "match_district": null
+        },
+        {
+          "id": "city:陇南市",
+          "zone_type": "city",
+          "name_en": "Longnan",
+          "name_cn": "陇南市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "陇南市",
+          "match_district": null
+        },
+        {
+          "id": "city:龙岩市",
+          "zone_type": "city",
+          "name_en": "Longyan",
+          "name_cn": "龙岩市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "龙岩市",
+          "match_district": null
+        },
+        {
+          "id": "city:娄底市",
+          "zone_type": "city",
+          "name_en": "Loudi",
+          "name_cn": "娄底市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "娄底市",
+          "match_district": null
+        },
+        {
+          "id": "city:六安市",
+          "zone_type": "city",
+          "name_en": "Lu'an",
+          "name_cn": "六安市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "六安市",
+          "match_district": null
+        },
+        {
+          "id": "city:漯河市",
+          "zone_type": "city",
+          "name_en": "Luohe",
+          "name_cn": "漯河市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "漯河市",
+          "match_district": null
+        },
+        {
+          "id": "city:洛阳市",
+          "zone_type": "city",
+          "name_en": "Luoyang",
+          "name_cn": "洛阳市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "洛阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:泸州市",
+          "zone_type": "city",
+          "name_en": "Luzhou",
+          "name_cn": "泸州市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "泸州市",
+          "match_district": null
+        },
+        {
+          "id": "city:吕梁市",
+          "zone_type": "city",
+          "name_en": "Lvliang",
+          "name_cn": "吕梁市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "吕梁市",
+          "match_district": null
+        },
+        {
+          "id": "city:马鞍山市",
+          "zone_type": "city",
+          "name_en": "Ma'anshan",
+          "name_cn": "马鞍山市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "马鞍山市",
+          "match_district": null
+        },
+        {
+          "id": "city:茂名市",
+          "zone_type": "city",
+          "name_en": "Maoming",
+          "name_cn": "茂名市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "茂名市",
+          "match_district": null
+        },
+        {
+          "id": "city:眉山市",
+          "zone_type": "city",
+          "name_en": "Meishan",
+          "name_cn": "眉山市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "眉山市",
+          "match_district": null
+        },
+        {
+          "id": "city:梅州市",
+          "zone_type": "city",
+          "name_en": "Meizhou",
+          "name_cn": "梅州市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "梅州市",
+          "match_district": null
+        },
+        {
+          "id": "city:绵阳市",
+          "zone_type": "city",
+          "name_en": "Mianyang",
+          "name_cn": "绵阳市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "绵阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:牡丹江市",
+          "zone_type": "city",
+          "name_en": "Mudanjiang",
+          "name_cn": "牡丹江市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "牡丹江市",
+          "match_district": null
+        },
+        {
+          "id": "city:那曲市",
+          "zone_type": "city",
+          "name_en": "Nagqu",
+          "name_cn": "那曲市",
+          "province_cn": "西藏自治区",
+          "province_en": "Tibet",
+          "match_city": "那曲市",
+          "match_district": null
+        },
+        {
+          "id": "city:南昌市",
+          "zone_type": "city",
+          "name_en": "Nanchang",
+          "name_cn": "南昌市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "南昌市",
+          "match_district": null
+        },
+        {
+          "id": "city:南充市",
+          "zone_type": "city",
+          "name_en": "Nanchong",
+          "name_cn": "南充市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "南充市",
+          "match_district": null
+        },
+        {
+          "id": "city:南京市",
+          "zone_type": "city",
+          "name_en": "Nanjing",
+          "name_cn": "南京市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "南京市",
+          "match_district": null
+        },
+        {
+          "id": "city:南宁市",
+          "zone_type": "city",
+          "name_en": "Nanning",
+          "name_cn": "南宁市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "南宁市",
+          "match_district": null
+        },
+        {
+          "id": "city:南平市",
+          "zone_type": "city",
+          "name_en": "Nanping",
+          "name_cn": "南平市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "南平市",
+          "match_district": null
+        },
+        {
+          "id": "city:南通市",
+          "zone_type": "city",
+          "name_en": "Nantong",
+          "name_cn": "南通市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "南通市",
+          "match_district": null
+        },
+        {
+          "id": "city:南阳市",
+          "zone_type": "city",
+          "name_en": "Nanyang",
+          "name_cn": "南阳市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "南阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:内江市",
+          "zone_type": "city",
+          "name_en": "Neijiang",
+          "name_cn": "内江市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "内江市",
+          "match_district": null
+        },
+        {
+          "id": "city:阿里地区",
+          "zone_type": "city",
+          "name_en": "Ngari Prefecture",
+          "name_cn": "阿里地区",
+          "province_cn": "西藏自治区",
+          "province_en": "Tibet",
+          "match_city": "阿里地区",
+          "match_district": null
+        },
+        {
+          "id": "city:宁波市",
+          "zone_type": "city",
+          "name_en": "Ningbo",
+          "name_cn": "宁波市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "宁波市",
+          "match_district": null
+        },
+        {
+          "id": "city:宁德市",
+          "zone_type": "city",
+          "name_en": "Ningde",
+          "name_cn": "宁德市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "宁德市",
+          "match_district": null
+        },
+        {
+          "id": "city:怒江傈僳族自治州",
+          "zone_type": "city",
+          "name_en": "Nujiang Prefecture",
+          "name_cn": "怒江傈僳族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "怒江傈僳族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:林芝市",
+          "zone_type": "city",
+          "name_en": "Nyingchi",
+          "name_cn": "林芝市",
+          "province_cn": "西藏自治区",
+          "province_en": "Tibet",
+          "match_city": "林芝市",
+          "match_district": null
+        },
+        {
+          "id": "city:鄂尔多斯市",
+          "zone_type": "city",
+          "name_en": "Ordos",
+          "name_cn": "鄂尔多斯市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "鄂尔多斯市",
+          "match_district": null
+        },
+        {
+          "id": "city:盘锦市",
+          "zone_type": "city",
+          "name_en": "Panjin",
+          "name_cn": "盘锦市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "盘锦市",
+          "match_district": null
+        },
+        {
+          "id": "city:攀枝花市",
+          "zone_type": "city",
+          "name_en": "Panzhihua",
+          "name_cn": "攀枝花市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "攀枝花市",
+          "match_district": null
+        },
+        {
+          "id": "city:平顶山市",
+          "zone_type": "city",
+          "name_en": "Pingdingshan",
+          "name_cn": "平顶山市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "平顶山市",
+          "match_district": null
+        },
+        {
+          "id": "city:平凉市",
+          "zone_type": "city",
+          "name_en": "Pingliang",
+          "name_cn": "平凉市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "平凉市",
+          "match_district": null
+        },
+        {
+          "id": "city:萍乡市",
+          "zone_type": "city",
+          "name_en": "Pingxiang",
+          "name_cn": "萍乡市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "萍乡市",
+          "match_district": null
+        },
+        {
+          "id": "city:普洱市",
+          "zone_type": "city",
+          "name_en": "Pu'er",
+          "name_cn": "普洱市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "普洱市",
+          "match_district": null
+        },
+        {
+          "id": "city:莆田市",
+          "zone_type": "city",
+          "name_en": "Putian",
+          "name_cn": "莆田市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "莆田市",
+          "match_district": null
+        },
+        {
+          "id": "city:濮阳市",
+          "zone_type": "city",
+          "name_en": "Puyang",
+          "name_cn": "濮阳市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "濮阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:黔东南苗族侗族自治州",
+          "zone_type": "city",
+          "name_en": "Qiandongnan Prefecture",
+          "name_cn": "黔东南苗族侗族自治州",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "黔东南苗族侗族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:潜江市",
+          "zone_type": "city",
+          "name_en": "Qianjiang",
+          "name_cn": "潜江市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "潜江市",
+          "match_district": null
+        },
+        {
+          "id": "city:黔南布依族苗族自治州",
+          "zone_type": "city",
+          "name_en": "Qiannan Prefecture",
+          "name_cn": "黔南布依族苗族自治州",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "黔南布依族苗族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:黔西南布依族苗族自治州",
+          "zone_type": "city",
+          "name_en": "Qianxinan Prefecture",
+          "name_cn": "黔西南布依族苗族自治州",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "黔西南布依族苗族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:青岛市",
+          "zone_type": "city",
+          "name_en": "Qingdao",
+          "name_cn": "青岛市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "青岛市",
+          "match_district": null
+        },
+        {
+          "id": "city:庆阳市",
+          "zone_type": "city",
+          "name_en": "Qingyang",
+          "name_cn": "庆阳市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "庆阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:清远市",
+          "zone_type": "city",
+          "name_en": "Qingyuan",
+          "name_cn": "清远市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "清远市",
+          "match_district": null
+        },
+        {
+          "id": "city:秦皇岛市",
+          "zone_type": "city",
+          "name_en": "Qinhuangdao",
+          "name_cn": "秦皇岛市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "秦皇岛市",
+          "match_district": null
+        },
+        {
+          "id": "city:钦州市",
+          "zone_type": "city",
+          "name_en": "Qinzhou",
+          "name_cn": "钦州市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "钦州市",
+          "match_district": null
+        },
+        {
+          "id": "city:齐齐哈尔市",
+          "zone_type": "city",
+          "name_en": "Qiqihar",
+          "name_cn": "齐齐哈尔市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "齐齐哈尔市",
+          "match_district": null
+        },
+        {
+          "id": "city:七台河市",
+          "zone_type": "city",
+          "name_en": "Qitaihe",
+          "name_cn": "七台河市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "七台河市",
+          "match_district": null
+        },
+        {
+          "id": "city:泉州市",
+          "zone_type": "city",
+          "name_en": "Quanzhou",
+          "name_cn": "泉州市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "泉州市",
+          "match_district": null
+        },
+        {
+          "id": "city:曲靖市",
+          "zone_type": "city",
+          "name_en": "Qujing",
+          "name_cn": "曲靖市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "曲靖市",
+          "match_district": null
+        },
+        {
+          "id": "city:衢州市",
+          "zone_type": "city",
+          "name_en": "Quzhou",
+          "name_cn": "衢州市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "衢州市",
+          "match_district": null
+        },
+        {
+          "id": "city:日照市",
+          "zone_type": "city",
+          "name_en": "Rizhao",
+          "name_cn": "日照市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "日照市",
+          "match_district": null
+        },
+        {
+          "id": "city:三门峡市",
+          "zone_type": "city",
+          "name_en": "Sanmenxia",
+          "name_cn": "三门峡市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "三门峡市",
+          "match_district": null
+        },
+        {
+          "id": "city:三明市",
+          "zone_type": "city",
+          "name_en": "Sanming",
+          "name_cn": "三明市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "三明市",
+          "match_district": null
+        },
+        {
+          "id": "city:三沙市",
+          "zone_type": "city",
+          "name_en": "Sansha",
+          "name_cn": "三沙市",
+          "province_cn": "海南省",
+          "province_en": "Hainan",
+          "match_city": "三沙市",
+          "match_district": null
+        },
+        {
+          "id": "city:三亚市",
+          "zone_type": "city",
+          "name_en": "Sanya",
+          "name_cn": "三亚市",
+          "province_cn": "海南省",
+          "province_en": "Hainan",
+          "match_city": "三亚市",
+          "match_district": null
+        },
+        {
+          "id": "city:上海市",
+          "zone_type": "city",
+          "name_en": "Shanghai",
+          "name_cn": "上海市",
+          "province_cn": "上海市",
+          "province_en": "Shanghai",
+          "match_city": "上海市",
+          "match_district": null
+        },
+        {
+          "id": "city:商洛市",
+          "zone_type": "city",
+          "name_en": "Shangluo",
+          "name_cn": "商洛市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "商洛市",
+          "match_district": null
+        },
+        {
+          "id": "city:商丘市",
+          "zone_type": "city",
+          "name_en": "Shangqiu",
+          "name_cn": "商丘市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "商丘市",
+          "match_district": null
+        },
+        {
+          "id": "city:上饶市",
+          "zone_type": "city",
+          "name_en": "Shangrao",
+          "name_cn": "上饶市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "上饶市",
+          "match_district": null
+        },
+        {
+          "id": "city:山南市",
+          "zone_type": "city",
+          "name_en": "Shannan",
+          "name_cn": "山南市",
+          "province_cn": "西藏自治区",
+          "province_en": "Tibet",
+          "match_city": "山南市",
+          "match_district": null
+        },
+        {
+          "id": "city:汕头市",
+          "zone_type": "city",
+          "name_en": "Shantou",
+          "name_cn": "汕头市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "汕头市",
+          "match_district": null
+        },
+        {
+          "id": "city:汕尾市",
+          "zone_type": "city",
+          "name_en": "Shanwei",
+          "name_cn": "汕尾市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "汕尾市",
+          "match_district": null
+        },
+        {
+          "id": "city:韶关市",
+          "zone_type": "city",
+          "name_en": "Shaoguan",
+          "name_cn": "韶关市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "韶关市",
+          "match_district": null
+        },
+        {
+          "id": "city:绍兴市",
+          "zone_type": "city",
+          "name_en": "Shaoxing",
+          "name_cn": "绍兴市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "绍兴市",
+          "match_district": null
+        },
+        {
+          "id": "city:邵阳市",
+          "zone_type": "city",
+          "name_en": "Shaoyang",
+          "name_cn": "邵阳市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "邵阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:神农架林区",
+          "zone_type": "city",
+          "name_en": "Shennongjia",
+          "name_cn": "神农架林区",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "神农架林区",
+          "match_district": null
+        },
+        {
+          "id": "city:沈阳市",
+          "zone_type": "city",
+          "name_en": "Shenyang",
+          "name_cn": "沈阳市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "沈阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:深圳市",
+          "zone_type": "city",
+          "name_en": "Shenzhen",
+          "name_cn": "深圳市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "深圳市",
+          "match_district": null
+        },
+        {
+          "id": "city:日喀则市",
+          "zone_type": "city",
+          "name_en": "Shigatse",
+          "name_cn": "日喀则市",
+          "province_cn": "西藏自治区",
+          "province_en": "Tibet",
+          "match_city": "日喀则市",
+          "match_district": null
+        },
+        {
+          "id": "city:石家庄市",
+          "zone_type": "city",
+          "name_en": "Shijiazhuang",
+          "name_cn": "石家庄市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "石家庄市",
+          "match_district": null
+        },
+        {
+          "id": "city:十堰市",
+          "zone_type": "city",
+          "name_en": "Shiyan",
+          "name_cn": "十堰市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "十堰市",
+          "match_district": null
+        },
+        {
+          "id": "city:石嘴山市",
+          "zone_type": "city",
+          "name_en": "Shizuishan",
+          "name_cn": "石嘴山市",
+          "province_cn": "宁夏回族自治区",
+          "province_en": "Ningxia",
+          "match_city": "石嘴山市",
+          "match_district": null
+        },
+        {
+          "id": "city:双鸭山市",
+          "zone_type": "city",
+          "name_en": "Shuangyashan",
+          "name_cn": "双鸭山市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "双鸭山市",
+          "match_district": null
+        },
+        {
+          "id": "city:朔州市",
+          "zone_type": "city",
+          "name_en": "Shuozhou",
+          "name_cn": "朔州市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "朔州市",
+          "match_district": null
+        },
+        {
+          "id": "city:四平市",
+          "zone_type": "city",
+          "name_en": "Siping",
+          "name_cn": "四平市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "四平市",
+          "match_district": null
+        },
+        {
+          "id": "city:松原市",
+          "zone_type": "city",
+          "name_en": "Songyuan",
+          "name_cn": "松原市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "松原市",
+          "match_district": null
+        },
+        {
+          "id": "city:绥化市",
+          "zone_type": "city",
+          "name_en": "Suihua",
+          "name_cn": "绥化市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "绥化市",
+          "match_district": null
+        },
+        {
+          "id": "city:遂宁市",
+          "zone_type": "city",
+          "name_en": "Suining",
+          "name_cn": "遂宁市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "遂宁市",
+          "match_district": null
+        },
+        {
+          "id": "city:随州市",
+          "zone_type": "city",
+          "name_en": "Suizhou",
+          "name_cn": "随州市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "随州市",
+          "match_district": null
+        },
+        {
+          "id": "city:宿迁市",
+          "zone_type": "city",
+          "name_en": "Suqian",
+          "name_cn": "宿迁市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "宿迁市",
+          "match_district": null
+        },
+        {
+          "id": "city:苏州市",
+          "zone_type": "city",
+          "name_en": "Suzhou",
+          "name_cn": "苏州市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "苏州市",
+          "match_district": null
+        },
+        {
+          "id": "city:宿州市",
+          "zone_type": "city",
+          "name_en": "Suzhou (AH)",
+          "name_cn": "宿州市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "宿州市",
+          "match_district": null
+        },
+        {
+          "id": "city:塔城地区",
+          "zone_type": "city",
+          "name_en": "Tacheng Prefecture",
+          "name_cn": "塔城地区",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "塔城地区",
+          "match_district": null
+        },
+        {
+          "id": "city:泰安市",
+          "zone_type": "city",
+          "name_en": "Tai'an",
+          "name_cn": "泰安市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "泰安市",
+          "match_district": null
+        },
+        {
+          "id": "city:太原市",
+          "zone_type": "city",
+          "name_en": "Taiyuan",
+          "name_cn": "太原市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "太原市",
+          "match_district": null
+        },
+        {
+          "id": "city:泰州市",
+          "zone_type": "city",
+          "name_en": "Taizhou (JS)",
+          "name_cn": "泰州市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "泰州市",
+          "match_district": null
+        },
+        {
+          "id": "city:台州市",
+          "zone_type": "city",
+          "name_en": "Taizhou (ZJ)",
+          "name_cn": "台州市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "台州市",
+          "match_district": null
+        },
+        {
+          "id": "city:唐山市",
+          "zone_type": "city",
+          "name_en": "Tangshan",
+          "name_cn": "唐山市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "唐山市",
+          "match_district": null
+        },
+        {
+          "id": "city:天津市",
+          "zone_type": "city",
+          "name_en": "Tianjin",
+          "name_cn": "天津市",
+          "province_cn": "天津市",
+          "province_en": "Tianjin",
+          "match_city": "天津市",
+          "match_district": null
+        },
+        {
+          "id": "city:天门市",
+          "zone_type": "city",
+          "name_en": "Tianmen",
+          "name_cn": "天门市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "天门市",
+          "match_district": null
+        },
+        {
+          "id": "city:天水市",
+          "zone_type": "city",
+          "name_en": "Tianshui",
+          "name_cn": "天水市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "天水市",
+          "match_district": null
+        },
+        {
+          "id": "city:铁岭市",
+          "zone_type": "city",
+          "name_en": "Tieling",
+          "name_cn": "铁岭市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "铁岭市",
+          "match_district": null
+        },
+        {
+          "id": "city:铜川市",
+          "zone_type": "city",
+          "name_en": "Tongchuan",
+          "name_cn": "铜川市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "铜川市",
+          "match_district": null
+        },
+        {
+          "id": "city:通化市",
+          "zone_type": "city",
+          "name_en": "Tonghua",
+          "name_cn": "通化市",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "通化市",
+          "match_district": null
+        },
+        {
+          "id": "city:通辽市",
+          "zone_type": "city",
+          "name_en": "Tongliao",
+          "name_cn": "通辽市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "通辽市",
+          "match_district": null
+        },
+        {
+          "id": "city:铜陵市",
+          "zone_type": "city",
+          "name_en": "Tongling",
+          "name_cn": "铜陵市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "铜陵市",
+          "match_district": null
+        },
+        {
+          "id": "city:铜仁市",
+          "zone_type": "city",
+          "name_en": "Tongren",
+          "name_cn": "铜仁市",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "铜仁市",
+          "match_district": null
+        },
+        {
+          "id": "city:吐鲁番市",
+          "zone_type": "city",
+          "name_en": "Turpan",
+          "name_cn": "吐鲁番市",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "吐鲁番市",
+          "match_district": null
+        },
+        {
+          "id": "city:乌兰察布市",
+          "zone_type": "city",
+          "name_en": "Ulanqab",
+          "name_cn": "乌兰察布市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "乌兰察布市",
+          "match_district": null
+        },
+        {
+          "id": "city:乌鲁木齐市",
+          "zone_type": "city",
+          "name_en": "Urumqi",
+          "name_cn": "乌鲁木齐市",
+          "province_cn": "新疆维吾尔自治区",
+          "province_en": "Xinjiang",
+          "match_city": "乌鲁木齐市",
+          "match_district": null
+        },
+        {
+          "id": "city:潍坊市",
+          "zone_type": "city",
+          "name_en": "Weifang",
+          "name_cn": "潍坊市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "潍坊市",
+          "match_district": null
+        },
+        {
+          "id": "city:威海市",
+          "zone_type": "city",
+          "name_en": "Weihai",
+          "name_cn": "威海市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "威海市",
+          "match_district": null
+        },
+        {
+          "id": "city:渭南市",
+          "zone_type": "city",
+          "name_en": "Weinan",
+          "name_cn": "渭南市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "渭南市",
+          "match_district": null
+        },
+        {
+          "id": "city:文山壮族苗族自治州",
+          "zone_type": "city",
+          "name_en": "Wenshan Prefecture",
+          "name_cn": "文山壮族苗族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "文山壮族苗族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:温州市",
+          "zone_type": "city",
+          "name_en": "Wenzhou",
+          "name_cn": "温州市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "温州市",
+          "match_district": null
+        },
+        {
+          "id": "city:乌海市",
+          "zone_type": "city",
+          "name_en": "Wuhai",
+          "name_cn": "乌海市",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "乌海市",
+          "match_district": null
+        },
+        {
+          "id": "city:武汉市",
+          "zone_type": "city",
+          "name_en": "Wuhan",
+          "name_cn": "武汉市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "武汉市",
+          "match_district": null
+        },
+        {
+          "id": "city:芜湖市",
+          "zone_type": "city",
+          "name_en": "Wuhu",
+          "name_cn": "芜湖市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "芜湖市",
+          "match_district": null
+        },
+        {
+          "id": "city:武威市",
+          "zone_type": "city",
+          "name_en": "Wuwei",
+          "name_cn": "武威市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "武威市",
+          "match_district": null
+        },
+        {
+          "id": "city:无锡市",
+          "zone_type": "city",
+          "name_en": "Wuxi",
+          "name_cn": "无锡市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "无锡市",
+          "match_district": null
+        },
+        {
+          "id": "city:吴忠市",
+          "zone_type": "city",
+          "name_en": "Wuzhong",
+          "name_cn": "吴忠市",
+          "province_cn": "宁夏回族自治区",
+          "province_en": "Ningxia",
+          "match_city": "吴忠市",
+          "match_district": null
+        },
+        {
+          "id": "city:梧州市",
+          "zone_type": "city",
+          "name_en": "Wuzhou",
+          "name_cn": "梧州市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "梧州市",
+          "match_district": null
+        },
+        {
+          "id": "city:西安市",
+          "zone_type": "city",
+          "name_en": "Xi'an",
+          "name_cn": "西安市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "西安市",
+          "match_district": null
+        },
+        {
+          "id": "city:厦门市",
+          "zone_type": "city",
+          "name_en": "Xiamen",
+          "name_cn": "厦门市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "厦门市",
+          "match_district": null
+        },
+        {
+          "id": "city:湘潭市",
+          "zone_type": "city",
+          "name_en": "Xiangtan",
+          "name_cn": "湘潭市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "湘潭市",
+          "match_district": null
+        },
+        {
+          "id": "city:湘西土家族苗族自治州",
+          "zone_type": "city",
+          "name_en": "Xiangxi Prefecture",
+          "name_cn": "湘西土家族苗族自治州",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "湘西土家族苗族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:襄阳市",
+          "zone_type": "city",
+          "name_en": "Xiangyang",
+          "name_cn": "襄阳市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "襄阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:咸宁市",
+          "zone_type": "city",
+          "name_en": "Xianning",
+          "name_cn": "咸宁市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "咸宁市",
+          "match_district": null
+        },
+        {
+          "id": "city:仙桃市",
+          "zone_type": "city",
+          "name_en": "Xiantao",
+          "name_cn": "仙桃市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "仙桃市",
+          "match_district": null
+        },
+        {
+          "id": "city:咸阳市",
+          "zone_type": "city",
+          "name_en": "Xianyang",
+          "name_cn": "咸阳市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "咸阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:孝感市",
+          "zone_type": "city",
+          "name_en": "Xiaogan",
+          "name_cn": "孝感市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "孝感市",
+          "match_district": null
+        },
+        {
+          "id": "city:锡林郭勒盟",
+          "zone_type": "city",
+          "name_en": "Xilingol League",
+          "name_cn": "锡林郭勒盟",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "锡林郭勒盟",
+          "match_district": null
+        },
+        {
+          "id": "city:兴安盟",
+          "zone_type": "city",
+          "name_en": "Xing'an League",
+          "name_cn": "兴安盟",
+          "province_cn": "内蒙古自治区",
+          "province_en": "Inner Mongolia",
+          "match_city": "兴安盟",
+          "match_district": null
+        },
+        {
+          "id": "city:邢台市",
+          "zone_type": "city",
+          "name_en": "Xingtai",
+          "name_cn": "邢台市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "邢台市",
+          "match_district": null
+        },
+        {
+          "id": "city:西宁市",
+          "zone_type": "city",
+          "name_en": "Xining",
+          "name_cn": "西宁市",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "西宁市",
+          "match_district": null
+        },
+        {
+          "id": "city:新乡市",
+          "zone_type": "city",
+          "name_en": "Xinxiang",
+          "name_cn": "新乡市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "新乡市",
+          "match_district": null
+        },
+        {
+          "id": "city:信阳市",
+          "zone_type": "city",
+          "name_en": "Xinyang",
+          "name_cn": "信阳市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "信阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:新余市",
+          "zone_type": "city",
+          "name_en": "Xinyu",
+          "name_cn": "新余市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "新余市",
+          "match_district": null
+        },
+        {
+          "id": "city:忻州市",
+          "zone_type": "city",
+          "name_en": "Xinzhou",
+          "name_cn": "忻州市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "忻州市",
+          "match_district": null
+        },
+        {
+          "id": "city:西双版纳傣族自治州",
+          "zone_type": "city",
+          "name_en": "Xishuangbanna",
+          "name_cn": "西双版纳傣族自治州",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "西双版纳傣族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:宣城市",
+          "zone_type": "city",
+          "name_en": "Xuancheng",
+          "name_cn": "宣城市",
+          "province_cn": "安徽省",
+          "province_en": "Anhui",
+          "match_city": "宣城市",
+          "match_district": null
+        },
+        {
+          "id": "city:许昌市",
+          "zone_type": "city",
+          "name_en": "Xuchang",
+          "name_cn": "许昌市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "许昌市",
+          "match_district": null
+        },
+        {
+          "id": "city:徐州市",
+          "zone_type": "city",
+          "name_en": "Xuzhou",
+          "name_cn": "徐州市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "徐州市",
+          "match_district": null
+        },
+        {
+          "id": "city:雅安市",
+          "zone_type": "city",
+          "name_en": "Ya'an",
+          "name_cn": "雅安市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "雅安市",
+          "match_district": null
+        },
+        {
+          "id": "city:延安市",
+          "zone_type": "city",
+          "name_en": "Yan'an",
+          "name_cn": "延安市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "延安市",
+          "match_district": null
+        },
+        {
+          "id": "city:延边朝鲜族自治州",
+          "zone_type": "city",
+          "name_en": "Yanbian Prefecture",
+          "name_cn": "延边朝鲜族自治州",
+          "province_cn": "吉林省",
+          "province_en": "Jilin",
+          "match_city": "延边朝鲜族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:盐城市",
+          "zone_type": "city",
+          "name_en": "Yancheng",
+          "name_cn": "盐城市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "盐城市",
+          "match_district": null
+        },
+        {
+          "id": "city:阳江市",
+          "zone_type": "city",
+          "name_en": "Yangjiang",
+          "name_cn": "阳江市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "阳江市",
+          "match_district": null
+        },
+        {
+          "id": "city:阳泉市",
+          "zone_type": "city",
+          "name_en": "Yangquan",
+          "name_cn": "阳泉市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "阳泉市",
+          "match_district": null
+        },
+        {
+          "id": "city:扬州市",
+          "zone_type": "city",
+          "name_en": "Yangzhou",
+          "name_cn": "扬州市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "扬州市",
+          "match_district": null
+        },
+        {
+          "id": "city:烟台市",
+          "zone_type": "city",
+          "name_en": "Yantai",
+          "name_cn": "烟台市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "烟台市",
+          "match_district": null
+        },
+        {
+          "id": "city:宜宾市",
+          "zone_type": "city",
+          "name_en": "Yibin",
+          "name_cn": "宜宾市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "宜宾市",
+          "match_district": null
+        },
+        {
+          "id": "city:宜昌市",
+          "zone_type": "city",
+          "name_en": "Yichang",
+          "name_cn": "宜昌市",
+          "province_cn": "湖北省",
+          "province_en": "Hubei",
+          "match_city": "宜昌市",
+          "match_district": null
+        },
+        {
+          "id": "city:伊春市",
+          "zone_type": "city",
+          "name_en": "Yichun (HLJ)",
+          "name_cn": "伊春市",
+          "province_cn": "黑龙江省",
+          "province_en": "Heilongjiang",
+          "match_city": "伊春市",
+          "match_district": null
+        },
+        {
+          "id": "city:宜春市",
+          "zone_type": "city",
+          "name_en": "Yichun (JX)",
+          "name_cn": "宜春市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "宜春市",
+          "match_district": null
+        },
+        {
+          "id": "city:银川市",
+          "zone_type": "city",
+          "name_en": "Yinchuan",
+          "name_cn": "银川市",
+          "province_cn": "宁夏回族自治区",
+          "province_en": "Ningxia",
+          "match_city": "银川市",
+          "match_district": null
+        },
+        {
+          "id": "city:营口市",
+          "zone_type": "city",
+          "name_en": "Yingkou",
+          "name_cn": "营口市",
+          "province_cn": "辽宁省",
+          "province_en": "Liaoning",
+          "match_city": "营口市",
+          "match_district": null
+        },
+        {
+          "id": "city:鹰潭市",
+          "zone_type": "city",
+          "name_en": "Yingtan",
+          "name_cn": "鹰潭市",
+          "province_cn": "江西省",
+          "province_en": "Jiangxi",
+          "match_city": "鹰潭市",
+          "match_district": null
+        },
+        {
+          "id": "city:益阳市",
+          "zone_type": "city",
+          "name_en": "Yiyang",
+          "name_cn": "益阳市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "益阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:永州市",
+          "zone_type": "city",
+          "name_en": "Yongzhou",
+          "name_cn": "永州市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "永州市",
+          "match_district": null
+        },
+        {
+          "id": "city:岳阳市",
+          "zone_type": "city",
+          "name_en": "Yueyang",
+          "name_cn": "岳阳市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "岳阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:玉林市",
+          "zone_type": "city",
+          "name_en": "Yulin (GX)",
+          "name_cn": "玉林市",
+          "province_cn": "广西壮族自治区",
+          "province_en": "Guangxi",
+          "match_city": "玉林市",
+          "match_district": null
+        },
+        {
+          "id": "city:榆林市",
+          "zone_type": "city",
+          "name_en": "Yulin (SN)",
+          "name_cn": "榆林市",
+          "province_cn": "陕西省",
+          "province_en": "Shaanxi",
+          "match_city": "榆林市",
+          "match_district": null
+        },
+        {
+          "id": "city:运城市",
+          "zone_type": "city",
+          "name_en": "Yuncheng",
+          "name_cn": "运城市",
+          "province_cn": "山西省",
+          "province_en": "Shanxi",
+          "match_city": "运城市",
+          "match_district": null
+        },
+        {
+          "id": "city:云浮市",
+          "zone_type": "city",
+          "name_en": "Yunfu",
+          "name_cn": "云浮市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "云浮市",
+          "match_district": null
+        },
+        {
+          "id": "city:玉树藏族自治州",
+          "zone_type": "city",
+          "name_en": "Yushu Prefecture",
+          "name_cn": "玉树藏族自治州",
+          "province_cn": "青海省",
+          "province_en": "Qinghai",
+          "match_city": "玉树藏族自治州",
+          "match_district": null
+        },
+        {
+          "id": "city:玉溪市",
+          "zone_type": "city",
+          "name_en": "Yuxi",
+          "name_cn": "玉溪市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "玉溪市",
+          "match_district": null
+        },
+        {
+          "id": "city:枣庄市",
+          "zone_type": "city",
+          "name_en": "Zaozhuang",
+          "name_cn": "枣庄市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "枣庄市",
+          "match_district": null
+        },
+        {
+          "id": "city:张家界市",
+          "zone_type": "city",
+          "name_en": "Zhangjiajie",
+          "name_cn": "张家界市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "张家界市",
+          "match_district": null
+        },
+        {
+          "id": "city:张家口市",
+          "zone_type": "city",
+          "name_en": "Zhangjiakou",
+          "name_cn": "张家口市",
+          "province_cn": "河北省",
+          "province_en": "Hebei",
+          "match_city": "张家口市",
+          "match_district": null
+        },
+        {
+          "id": "city:张掖市",
+          "zone_type": "city",
+          "name_en": "Zhangye",
+          "name_cn": "张掖市",
+          "province_cn": "甘肃省",
+          "province_en": "Gansu",
+          "match_city": "张掖市",
+          "match_district": null
+        },
+        {
+          "id": "city:漳州市",
+          "zone_type": "city",
+          "name_en": "Zhangzhou",
+          "name_cn": "漳州市",
+          "province_cn": "福建省",
+          "province_en": "Fujian",
+          "match_city": "漳州市",
+          "match_district": null
+        },
+        {
+          "id": "city:湛江市",
+          "zone_type": "city",
+          "name_en": "Zhanjiang",
+          "name_cn": "湛江市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "湛江市",
+          "match_district": null
+        },
+        {
+          "id": "city:肇庆市",
+          "zone_type": "city",
+          "name_en": "Zhaoqing",
+          "name_cn": "肇庆市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "肇庆市",
+          "match_district": null
+        },
+        {
+          "id": "city:昭通市",
+          "zone_type": "city",
+          "name_en": "Zhaotong",
+          "name_cn": "昭通市",
+          "province_cn": "云南省",
+          "province_en": "Yunnan",
+          "match_city": "昭通市",
+          "match_district": null
+        },
+        {
+          "id": "city:郑州市",
+          "zone_type": "city",
+          "name_en": "Zhengzhou",
+          "name_cn": "郑州市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "郑州市",
+          "match_district": null
+        },
+        {
+          "id": "city:镇江市",
+          "zone_type": "city",
+          "name_en": "Zhenjiang",
+          "name_cn": "镇江市",
+          "province_cn": "江苏省",
+          "province_en": "Jiangsu",
+          "match_city": "镇江市",
+          "match_district": null
+        },
+        {
+          "id": "city:中山市",
+          "zone_type": "city",
+          "name_en": "Zhongshan",
+          "name_cn": "中山市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "中山市",
+          "match_district": null
+        },
+        {
+          "id": "city:中卫市",
+          "zone_type": "city",
+          "name_en": "Zhongwei",
+          "name_cn": "中卫市",
+          "province_cn": "宁夏回族自治区",
+          "province_en": "Ningxia",
+          "match_city": "中卫市",
+          "match_district": null
+        },
+        {
+          "id": "city:周口市",
+          "zone_type": "city",
+          "name_en": "Zhoukou",
+          "name_cn": "周口市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "周口市",
+          "match_district": null
+        },
+        {
+          "id": "city:舟山市",
+          "zone_type": "city",
+          "name_en": "Zhoushan",
+          "name_cn": "舟山市",
+          "province_cn": "浙江省",
+          "province_en": "Zhejiang",
+          "match_city": "舟山市",
+          "match_district": null
+        },
+        {
+          "id": "city:珠海市",
+          "zone_type": "city",
+          "name_en": "Zhuhai",
+          "name_cn": "珠海市",
+          "province_cn": "广东省",
+          "province_en": "Guangdong",
+          "match_city": "珠海市",
+          "match_district": null
+        },
+        {
+          "id": "city:驻马店市",
+          "zone_type": "city",
+          "name_en": "Zhumadian",
+          "name_cn": "驻马店市",
+          "province_cn": "河南省",
+          "province_en": "Henan",
+          "match_city": "驻马店市",
+          "match_district": null
+        },
+        {
+          "id": "city:株洲市",
+          "zone_type": "city",
+          "name_en": "Zhuzhou",
+          "name_cn": "株洲市",
+          "province_cn": "湖南省",
+          "province_en": "Hunan",
+          "match_city": "株洲市",
+          "match_district": null
+        },
+        {
+          "id": "city:淄博市",
+          "zone_type": "city",
+          "name_en": "Zibo",
+          "name_cn": "淄博市",
+          "province_cn": "山东省",
+          "province_en": "Shandong",
+          "match_city": "淄博市",
+          "match_district": null
+        },
+        {
+          "id": "city:自贡市",
+          "zone_type": "city",
+          "name_en": "Zigong",
+          "name_cn": "自贡市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "自贡市",
+          "match_district": null
+        },
+        {
+          "id": "city:资阳市",
+          "zone_type": "city",
+          "name_en": "Ziyang",
+          "name_cn": "资阳市",
+          "province_cn": "四川省",
+          "province_en": "Sichuan",
+          "match_city": "资阳市",
+          "match_district": null
+        },
+        {
+          "id": "city:遵义市",
+          "zone_type": "city",
+          "name_en": "Zunyi",
+          "name_cn": "遵义市",
+          "province_cn": "贵州省",
+          "province_en": "Guizhou",
+          "match_city": "遵义市",
+          "match_district": null
+        }
+      ]
+    }
+  },
+  {
+    "req": "POST /api/retail/cart/price [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "subtotal": 56,
+        "total_qty": 2,
+        "lines": [
+          {
+            "product_id": 2,
+            "choice_ids": [],
+            "unit_price": 28,
+            "is_flash": false,
+            "regular_price": null,
+            "compare_at_price": null,
+            "coupon_blocked": false,
+            "ship_from_supplier": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/checkout/quote [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "address_required"
+    }
+  },
+  {
+    "req": "POST /api/retail/checkout/quote [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "subtotal": 56,
+        "lines": [
+          {
+            "product_id": 2,
+            "choice_ids": [],
+            "unit_price": 28,
+            "is_flash": false,
+            "regular_price": null,
+            "compare_at_price": null,
+            "coupon_blocked": false,
+            "ship_from_supplier": false
+          }
+        ],
+        "needs_choice": null,
+        "total_qty": 2,
+        "delivery_fee": 8,
+        "packing_fee": 0,
+        "free_shipping": false,
+        "total": 64,
+        "gross_total": 64,
+        "tax": null,
+        "payment_method": null,
+        "points_required": 56,
+        "points_balance": 7,
+        "points_affordable": false,
+        "points_redeem_rate": 1,
+        "points_max_usable": 7,
+        "points_to_use_applied": 0,
+        "points_discount": 0,
+        "points_cover_shipping": false,
+        "balance_balance": 0,
+        "balance_max_usable": 0,
+        "balance_applied": 0,
+        "balance_discount": 0,
+        "balance_cover_shipping": false,
+        "points_earned_preview": 0,
+        "delivery_mode": "standard",
+        "zone": {
+          "id": 2,
+          "zone_type": "city",
+          "name_en": "Shanghai",
+          "name_cn": null,
+          "supports_max": false,
+          "max_fee": null,
+          "free_threshold": null
+        },
+        "scheduling": {
+          "mode": "time_slots",
+          "right_away_available": true,
+          "same_day_surcharge": 0,
+          "same_day_allowed": true,
+          "min_lead_days": 0,
+          "max_lead_days": 14,
+          "kitchen_open_now": true,
+          "same_day_cutoff_minutes": 10,
+          "same_day_cutoff_passed": false,
+          "same_day_cutoff_message": null,
+          "kitchen_reopens_today": false,
+          "kitchen_hours": {
+            "start": 0,
+            "end": 24
+          },
+          "slot_duration_minutes": 120,
+          "holiday_mode": false,
+          "holiday_message": null,
+          "today_slots": [
+            {
+              "slot_id": "2040-01-04T12:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 12,
+              "start_minute": 0,
+              "end_hour": 14,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 12PM–2PM",
+              "label_cn": "今天 12:00–14:00"
+            },
+            {
+              "slot_id": "2040-01-04T14:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 14,
+              "start_minute": 0,
+              "end_hour": 16,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 2PM–4PM",
+              "label_cn": "今天 14:00–16:00"
+            },
+            {
+              "slot_id": "2040-01-04T16:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 16,
+              "start_minute": 0,
+              "end_hour": 18,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 4PM–6PM",
+              "label_cn": "今天 16:00–18:00"
+            },
+            {
+              "slot_id": "2040-01-04T18:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 18,
+              "start_minute": 0,
+              "end_hour": 20,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 6PM–8PM",
+              "label_cn": "今天 18:00–20:00"
+            },
+            {
+              "slot_id": "2040-01-04T20:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 20,
+              "start_minute": 0,
+              "end_hour": 22,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 8PM–10PM",
+              "label_cn": "今天 20:00–22:00"
+            },
+            {
+              "slot_id": "2040-01-04T22:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 22,
+              "start_minute": 0,
+              "end_hour": 24,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 10PM–12PM",
+              "label_cn": "今天 22:00–24:00"
+            }
+          ],
+          "today_day_chip": null,
+          "express_slot": null,
+          "slot_day_kind": "today",
+          "schedule": {
+            "min_date": "2040-01-07",
+            "max_date": "2040-01-18",
+            "surcharge": 0
+          },
+          "slots": [
+            {
+              "slot_id": "2040-01-04T12:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 12,
+              "start_minute": 0,
+              "end_hour": 14,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 12PM–2PM",
+              "label_cn": "今天 12:00–14:00"
+            },
+            {
+              "slot_id": "2040-01-04T14:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 14,
+              "start_minute": 0,
+              "end_hour": 16,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 2PM–4PM",
+              "label_cn": "今天 14:00–16:00"
+            },
+            {
+              "slot_id": "2040-01-04T16:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 16,
+              "start_minute": 0,
+              "end_hour": 18,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 4PM–6PM",
+              "label_cn": "今天 16:00–18:00"
+            },
+            {
+              "slot_id": "2040-01-04T18:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 18,
+              "start_minute": 0,
+              "end_hour": 20,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 6PM–8PM",
+              "label_cn": "今天 18:00–20:00"
+            },
+            {
+              "slot_id": "2040-01-04T20:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 20,
+              "start_minute": 0,
+              "end_hour": 22,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 8PM–10PM",
+              "label_cn": "今天 20:00–22:00"
+            },
+            {
+              "slot_id": "2040-01-04T22:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 22,
+              "start_minute": 0,
+              "end_hour": 24,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 10PM–12PM",
+              "label_cn": "今天 22:00–24:00"
+            }
+          ]
+        },
+        "batch_notice": null,
+        "preorder_notice": null,
+        "local_fresh_notice": null,
+        "store_move_notice": null,
+        "routing": {
+          "ok": true,
+          "gate": "none",
+          "store_id": 1,
+          "store_code": "tianhe",
+          "store_name_en": "Roots Kitchen — Tianhe",
+          "store_name_cn": "Roots 厨房 · 天河店",
+          "store_district": "天河区",
+          "routing_reason": "only_store",
+          "distance_km": null,
+          "items": [
+            {
+              "product_id": 2,
+              "qty": 2,
+              "available": 50,
+              "ok": true,
+              "exists": true
+            }
+          ]
+        },
+        "same_city_rider": false
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/checkout/quote [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "address_required"
+    }
+  },
+  {
+    "req": "POST /api/retail/checkout/offers [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [],
+      "meta": {
+        "server_time_ms": "<N>"
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/vouchers/public [anon]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "code": "SAVE5",
+          "type": "fixed_amount",
+          "value": 5,
+          "min_subtotal": 20,
+          "max_uses": null,
+          "used_count": 0,
+          "per_customer_limit": 1,
+          "expires_at": "<T>",
+          "title_en": "Save 5",
+          "title_cn": null,
+          "description": null
+        }
+      ]
+    }
+  },
+  {
+    "req": "GET /api/retail/vouchers/auto?subtotal=56 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": null
+    }
+  },
+  {
+    "req": "POST /api/retail/vouchers/validate [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "voucher_id": 1,
+        "code": "SAVE5",
+        "type": "fixed_amount",
+        "discount": 5,
+        "free_shipping": false
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/vouchers/validate [customer]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "not_applicable",
+      "detail": {
+        "min_subtotal": 20
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/vouchers/validate [customer]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "no_items"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "invalid_payment_method"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "pickup_contact_required"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "pickup_time_past"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "pickup_time_too_far"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "delivery_slot_required"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "slot_unavailable"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "insufficient_stock",
+      "product_id": 3,
+      "available": 1
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 4,
+        "order_no": "TC000001",
+        "status": "pending_payment",
+        "payment_method": "wechat",
+        "recipient_name": "Golden",
+        "recipient_phone": "13800138000",
+        "address_full": "广州 天河区 广州市天河区 (Roots Kitchen)",
+        "subtotal": 56,
+        "shipping_fee": 0,
+        "packing_fee": 0,
+        "delivery_mode": "pickup",
+        "delivery_zone_id": null,
+        "voucher_code": "SAVE5",
+        "voucher_amount": 5,
+        "points_used": 0,
+        "points_amount": 0,
+        "points_earned": 0,
+        "total": 51,
+        "tax_amount": null,
+        "tax_rate_micro": null,
+        "tax_mode": null,
+        "customer_note": null,
+        "needs_cutlery": 0,
+        "needs_invoice": 0,
+        "invoice_title": null,
+        "invoice_tax_id": null,
+        "invoice_type": null,
+        "invoice_email": null,
+        "invoice_status": null,
+        "invoice_file_url": null,
+        "invoice_number": null,
+        "invoice_issued_at": null,
+        "staff_note": null,
+        "cancelled_reason": null,
+        "refund_requested_at": null,
+        "refund_reason": null,
+        "refund_status": null,
+        "refund_review_note": null,
+        "refund_amount_requested": null,
+        "refund_amount_approved": null,
+        "refund_amount_paid": null,
+        "refund_payout_method": null,
+        "refund_payout_ref": null,
+        "refund_reviewed_at": null,
+        "refund_approved_at": null,
+        "refund_paid_at": null,
+        "store_id": 1,
+        "routing_reason": "customer_pickup",
+        "channel": "wechat",
+        "fulfillment_type": "pickup",
+        "scheduled_for": "<T>",
+        "delivery_slot_label": "Pickup Today 14:00",
+        "delivery_slot_kind": "pickup",
+        "same_day_surcharge_fee": 0,
+        "promised_ship_date": null,
+        "promised_delivery_date": null,
+        "tracking_carrier": null,
+        "tracking_number": null,
+        "tracking_status": null,
+        "tracking_events_json": null,
+        "tracking_synced_at": null,
+        "tracking_scenario": null,
+        "tracking_scenario_data_json": null,
+        "placed_at": "<T>",
+        "paid_at": null,
+        "preparing_at": null,
+        "dispatched_at": null,
+        "delivered_at": null,
+        "cancelled_at": null,
+        "updated_at": "<T>",
+        "delivery_slot_display": "Pickup Today 2:00 PM",
+        "address": {
+          "pickup": true,
+          "store_id": 1,
+          "store_code": "tianhe",
+          "store_name_en": "Roots Kitchen — Tianhe",
+          "store_name_cn": "Roots 厨房 · 天河店",
+          "store_phone": null,
+          "city": "广州",
+          "district": "天河区",
+          "address": "广州市天河区 (Roots Kitchen)"
+        },
+        "tracking": null,
+        "air_delayed": false,
+        "items": [
+          {
+            "id": 1,
+            "product_id": 2,
+            "name_en": "Sourdough",
+            "name_cn": null,
+            "sku": null,
+            "size": null,
+            "image_url": "http://<HOST>/api/retail/products/2/image",
+            "qty": 2,
+            "unit_price": 28,
+            "line_total": 56,
+            "shipment_id": null,
+            "ship_from_supplier": false,
+            "has_options": 0,
+            "is_addon": false
+          }
+        ],
+        "fulfillment": null,
+        "timeline": [
+          {
+            "key": "placed",
+            "label": "Placed",
+            "cn": "已下单",
+            "at": "<T>"
+          },
+          {
+            "key": "paid",
+            "label": "Paid",
+            "cn": "已支付",
+            "at": null
+          },
+          {
+            "key": "pending",
+            "label": "Pending",
+            "cn": "待确认",
+            "at": null
+          },
+          {
+            "key": "preparing",
+            "label": "Preparing",
+            "cn": "准备中",
+            "at": null
+          },
+          {
+            "key": "ready",
+            "label": "Ready to collect",
+            "cn": "可取货",
+            "at": null
+          },
+          {
+            "key": "collected",
+            "label": "Collected",
+            "cn": "已取货",
+            "at": null
+          }
+        ],
+        "reschedule": {
+          "allowed": false,
+          "reason": "status",
+          "fresh": false,
+          "kind": "pickup"
+        },
+        "address_change": {
+          "allowed": false,
+          "reason": "pickup"
+        }
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 4,
+        "order_no": "TC000001",
+        "status": "pending_payment",
+        "payment_method": "wechat",
+        "recipient_name": "Golden",
+        "recipient_phone": "13800138000",
+        "address_full": "广州 天河区 广州市天河区 (Roots Kitchen)",
+        "subtotal": 56,
+        "shipping_fee": 0,
+        "packing_fee": 0,
+        "delivery_mode": "pickup",
+        "delivery_zone_id": null,
+        "voucher_code": "SAVE5",
+        "voucher_amount": 5,
+        "points_used": 0,
+        "points_amount": 0,
+        "points_earned": 0,
+        "total": 51,
+        "tax_amount": null,
+        "tax_rate_micro": null,
+        "tax_mode": null,
+        "customer_note": null,
+        "needs_cutlery": 0,
+        "needs_invoice": 0,
+        "invoice_title": null,
+        "invoice_tax_id": null,
+        "invoice_type": null,
+        "invoice_email": null,
+        "invoice_status": null,
+        "invoice_file_url": null,
+        "invoice_number": null,
+        "invoice_issued_at": null,
+        "staff_note": null,
+        "cancelled_reason": null,
+        "refund_requested_at": null,
+        "refund_reason": null,
+        "refund_status": null,
+        "refund_review_note": null,
+        "refund_amount_requested": null,
+        "refund_amount_approved": null,
+        "refund_amount_paid": null,
+        "refund_payout_method": null,
+        "refund_payout_ref": null,
+        "refund_reviewed_at": null,
+        "refund_approved_at": null,
+        "refund_paid_at": null,
+        "store_id": 1,
+        "routing_reason": "customer_pickup",
+        "channel": "wechat",
+        "fulfillment_type": "pickup",
+        "scheduled_for": "<T>",
+        "delivery_slot_label": "Pickup Today 14:00",
+        "delivery_slot_kind": "pickup",
+        "same_day_surcharge_fee": 0,
+        "promised_ship_date": null,
+        "promised_delivery_date": null,
+        "tracking_carrier": null,
+        "tracking_number": null,
+        "tracking_status": null,
+        "tracking_events_json": null,
+        "tracking_synced_at": null,
+        "tracking_scenario": null,
+        "tracking_scenario_data_json": null,
+        "placed_at": "<T>",
+        "paid_at": null,
+        "preparing_at": null,
+        "dispatched_at": null,
+        "delivered_at": null,
+        "cancelled_at": null,
+        "updated_at": "<T>",
+        "delivery_slot_display": "Pickup Today 2:00 PM",
+        "address": {
+          "pickup": true,
+          "store_id": 1,
+          "store_code": "tianhe",
+          "store_name_en": "Roots Kitchen — Tianhe",
+          "store_name_cn": "Roots 厨房 · 天河店",
+          "store_phone": null,
+          "city": "广州",
+          "district": "天河区",
+          "address": "广州市天河区 (Roots Kitchen)"
+        },
+        "tracking": null,
+        "air_delayed": false,
+        "items": [
+          {
+            "id": 1,
+            "product_id": 2,
+            "name_en": "Sourdough",
+            "name_cn": null,
+            "sku": null,
+            "size": null,
+            "image_url": "http://<HOST>/api/retail/products/2/image",
+            "qty": 2,
+            "unit_price": 28,
+            "line_total": 56,
+            "shipment_id": null,
+            "ship_from_supplier": false,
+            "has_options": 0,
+            "is_addon": false
+          }
+        ],
+        "fulfillment": null,
+        "timeline": [
+          {
+            "key": "placed",
+            "label": "Placed",
+            "cn": "已下单",
+            "at": "<T>"
+          },
+          {
+            "key": "paid",
+            "label": "Paid",
+            "cn": "已支付",
+            "at": null
+          },
+          {
+            "key": "pending",
+            "label": "Pending",
+            "cn": "待确认",
+            "at": null
+          },
+          {
+            "key": "preparing",
+            "label": "Preparing",
+            "cn": "准备中",
+            "at": null
+          },
+          {
+            "key": "ready",
+            "label": "Ready to collect",
+            "cn": "可取货",
+            "at": null
+          },
+          {
+            "key": "collected",
+            "label": "Collected",
+            "cn": "已取货",
+            "at": null
+          }
+        ],
+        "reschedule": {
+          "allowed": false,
+          "reason": "status",
+          "fresh": false,
+          "kind": "pickup"
+        },
+        "address_change": {
+          "allowed": false,
+          "reason": "pickup"
+        }
+      },
+      "idempotent_replay": true
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/stats [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "unpaid": 1,
+        "pending": 0,
+        "preparing": 0,
+        "to_ship": 0,
+        "shipped": 0,
+        "to_review": 0,
+        "after_sales": 0,
+        "total": 3
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/payment/create [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "dev": true,
+        "status": "paid",
+        "order_no": "TC000001",
+        "method": "wechat"
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/payment/status/4 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 4,
+        "order_no": "TC000001",
+        "status": "paid",
+        "paid_at": "<T>",
+        "total": 51,
+        "payment_method": "wechat",
+        "fulfillment_type": "pickup",
+        "scheduled_for": "<T>",
+        "delivery_slot_label": "Pickup Today 14:00",
+        "pickup_store_name_en": "Roots Kitchen — Tianhe",
+        "pickup_store_name_cn": "Roots 厨房 · 天河店",
+        "pickup_store_address": "广州市天河区 (Roots Kitchen)",
+        "delivery_slot_display": "Pickup Today 2:00 PM"
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/4/cancel [customer]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "not_cancellable",
+      "current": "paid"
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/4/refund-request [customer]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/4/refund-withdraw [customer]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/4/invoice-request [customer]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "GET /api/retail/orders [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "order_no": "GLD1",
+          "status": "delivered",
+          "payment_method": null,
+          "total": 0,
+          "voucher_code": null,
+          "voucher_amount": 0,
+          "store_id": null,
+          "routing_reason": null,
+          "channel": "wechat",
+          "fulfillment_type": "delivery",
+          "scheduled_for": null,
+          "delivery_slot_label": null,
+          "tracking_carrier": null,
+          "tracking_number": null,
+          "tracking_status": null,
+          "refund_status": null,
+          "refund_amount_approved": null,
+          "refund_amount_paid": null,
+          "placed_at": "<T>",
+          "paid_at": null,
+          "dispatched_at": null,
+          "delivered_at": null,
+          "delivery_slot_display": null,
+          "items_preview": [],
+          "item_count": 0
+        },
+        {
+          "id": 2,
+          "order_no": "GLD2",
+          "status": "delivered",
+          "payment_method": null,
+          "total": 0,
+          "voucher_code": null,
+          "voucher_amount": 0,
+          "store_id": null,
+          "routing_reason": null,
+          "channel": "wechat",
+          "fulfillment_type": "delivery",
+          "scheduled_for": null,
+          "delivery_slot_label": null,
+          "tracking_carrier": null,
+          "tracking_number": null,
+          "tracking_status": null,
+          "refund_status": null,
+          "refund_amount_approved": null,
+          "refund_amount_paid": null,
+          "placed_at": "<T>",
+          "paid_at": null,
+          "dispatched_at": null,
+          "delivered_at": null,
+          "delivery_slot_display": null,
+          "items_preview": [],
+          "item_count": 0
+        },
+        {
+          "id": 4,
+          "order_no": "TC000001",
+          "status": "paid",
+          "payment_method": "wechat",
+          "total": 51,
+          "voucher_code": "SAVE5",
+          "voucher_amount": 5,
+          "store_id": 1,
+          "routing_reason": "customer_pickup",
+          "channel": "wechat",
+          "fulfillment_type": "pickup",
+          "scheduled_for": "<T>",
+          "delivery_slot_label": "Pickup Today 14:00",
+          "tracking_carrier": null,
+          "tracking_number": null,
+          "tracking_status": null,
+          "refund_status": "withdrawn",
+          "refund_amount_approved": null,
+          "refund_amount_paid": null,
+          "placed_at": "<T>",
+          "paid_at": "<T>",
+          "dispatched_at": null,
+          "delivered_at": null,
+          "delivery_slot_display": "Pickup Today 2:00 PM",
+          "items_preview": [
+            {
+              "product_id": 2,
+              "name_en": "Sourdough",
+              "name_cn": null,
+              "qty": 2,
+              "image_url": null
+            }
+          ],
+          "item_count": 1
+        }
+      ],
+      "meta": {
+        "limit": 20,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/orders [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 5,
+        "order_no": "TC000002",
+        "status": "pending_payment",
+        "payment_method": "wechat",
+        "recipient_name": "Golden",
+        "recipient_phone": "13800138000",
+        "address_full": "上海 上海市 徐汇区 复兴路 12 号",
+        "subtotal": 28,
+        "shipping_fee": 8,
+        "packing_fee": 0,
+        "delivery_mode": "standard",
+        "delivery_zone_id": 2,
+        "voucher_code": null,
+        "voucher_amount": 0,
+        "points_used": 0,
+        "points_amount": 0,
+        "points_earned": 0,
+        "total": 36,
+        "tax_amount": null,
+        "tax_rate_micro": null,
+        "tax_mode": null,
+        "customer_note": "ring twice",
+        "needs_cutlery": 0,
+        "needs_invoice": 0,
+        "invoice_title": null,
+        "invoice_tax_id": null,
+        "invoice_type": null,
+        "invoice_email": null,
+        "invoice_status": null,
+        "invoice_file_url": null,
+        "invoice_number": null,
+        "invoice_issued_at": null,
+        "staff_note": null,
+        "cancelled_reason": null,
+        "refund_requested_at": null,
+        "refund_reason": null,
+        "refund_status": null,
+        "refund_review_note": null,
+        "refund_amount_requested": null,
+        "refund_amount_approved": null,
+        "refund_amount_paid": null,
+        "refund_payout_method": null,
+        "refund_payout_ref": null,
+        "refund_reviewed_at": null,
+        "refund_approved_at": null,
+        "refund_paid_at": null,
+        "store_id": 1,
+        "routing_reason": "only_store",
+        "channel": "wechat",
+        "fulfillment_type": "delivery",
+        "scheduled_for": "<T>",
+        "delivery_slot_label": "Today 2PM–4PM",
+        "delivery_slot_kind": "today",
+        "same_day_surcharge_fee": 0,
+        "promised_ship_date": null,
+        "promised_delivery_date": null,
+        "tracking_carrier": null,
+        "tracking_number": null,
+        "tracking_status": null,
+        "tracking_events_json": null,
+        "tracking_synced_at": null,
+        "tracking_scenario": null,
+        "tracking_scenario_data_json": null,
+        "placed_at": "<T>",
+        "paid_at": null,
+        "preparing_at": null,
+        "dispatched_at": null,
+        "delivered_at": null,
+        "cancelled_at": null,
+        "updated_at": "<T>",
+        "delivery_slot_display": "Today 2PM–4PM",
+        "address": {
+          "province": "上海",
+          "city": "上海市",
+          "district": "徐汇区",
+          "address": "复兴路 12 号",
+          "detail": null,
+          "postal_code": null,
+          "lat": null,
+          "lng": null,
+          "geo_source": null,
+          "geo_precision": null
+        },
+        "tracking": null,
+        "air_delayed": false,
+        "items": [
+          {
+            "id": 2,
+            "product_id": 2,
+            "name_en": "Sourdough",
+            "name_cn": null,
+            "sku": null,
+            "size": null,
+            "image_url": "http://<HOST>/api/retail/products/2/image",
+            "qty": 1,
+            "unit_price": 28,
+            "line_total": 28,
+            "shipment_id": 1,
+            "ship_from_supplier": false,
+            "has_options": 0,
+            "is_addon": false
+          }
+        ],
+        "fulfillment": null,
+        "timeline": [
+          {
+            "key": "placed",
+            "label": "Placed",
+            "cn": "已下单",
+            "at": "<T>"
+          },
+          {
+            "key": "paid",
+            "label": "Paid",
+            "cn": "已支付",
+            "at": null
+          },
+          {
+            "key": "pending",
+            "label": "Pending",
+            "cn": "待确认",
+            "at": null
+          },
+          {
+            "key": "preparing",
+            "label": "Preparing",
+            "cn": "准备中",
+            "at": null
+          },
+          {
+            "key": "dispatched",
+            "label": "Out for delivery",
+            "cn": "配送中",
+            "at": null
+          },
+          {
+            "key": "delivered",
+            "label": "Delivered",
+            "cn": "已送达",
+            "at": null
+          }
+        ],
+        "reschedule": {
+          "allowed": false,
+          "reason": "status",
+          "fresh": false,
+          "kind": "delivery"
+        },
+        "address_change": {
+          "allowed": true,
+          "reason": null
+        }
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/5/reschedule-options [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "eligibility": {
+          "allowed": false,
+          "reason": "status",
+          "fresh": false,
+          "kind": "delivery"
+        },
+        "fulfillment_type": "delivery",
+        "current": {
+          "scheduled_for": "<T>",
+          "slot_label": "Today 2PM–4PM",
+          "slot_display": "Today 2PM–4PM",
+          "slot_kind": "today"
+        },
+        "scheduling": {
+          "mode": "time_slots",
+          "right_away_available": true,
+          "same_day_surcharge": 0,
+          "same_day_allowed": true,
+          "min_lead_days": 0,
+          "max_lead_days": 14,
+          "kitchen_open_now": true,
+          "same_day_cutoff_minutes": 10,
+          "same_day_cutoff_passed": false,
+          "same_day_cutoff_message": null,
+          "kitchen_reopens_today": false,
+          "kitchen_hours": {
+            "start": 0,
+            "end": 24
+          },
+          "slot_duration_minutes": 120,
+          "holiday_mode": false,
+          "holiday_message": null,
+          "today_slots": [
+            {
+              "slot_id": "2040-01-04T12:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 12,
+              "start_minute": 0,
+              "end_hour": 14,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 12PM–2PM",
+              "label_cn": "今天 12:00–14:00"
+            },
+            {
+              "slot_id": "2040-01-04T14:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 14,
+              "start_minute": 0,
+              "end_hour": 16,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 2PM–4PM",
+              "label_cn": "今天 14:00–16:00"
+            },
+            {
+              "slot_id": "2040-01-04T16:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 16,
+              "start_minute": 0,
+              "end_hour": 18,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 4PM–6PM",
+              "label_cn": "今天 16:00–18:00"
+            },
+            {
+              "slot_id": "2040-01-04T18:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 18,
+              "start_minute": 0,
+              "end_hour": 20,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 6PM–8PM",
+              "label_cn": "今天 18:00–20:00"
+            },
+            {
+              "slot_id": "2040-01-04T20:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 20,
+              "start_minute": 0,
+              "end_hour": 22,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 8PM–10PM",
+              "label_cn": "今天 20:00–22:00"
+            },
+            {
+              "slot_id": "2040-01-04T22:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 22,
+              "start_minute": 0,
+              "end_hour": 24,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 10PM–12PM",
+              "label_cn": "今天 22:00–24:00"
+            }
+          ],
+          "today_day_chip": null,
+          "express_slot": null,
+          "slot_day_kind": "today",
+          "schedule": {
+            "min_date": "2040-01-07",
+            "max_date": "2040-01-18",
+            "surcharge": 0
+          },
+          "slots": [
+            {
+              "slot_id": "2040-01-04T12:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 12,
+              "start_minute": 0,
+              "end_hour": 14,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 12PM–2PM",
+              "label_cn": "今天 12:00–14:00"
+            },
+            {
+              "slot_id": "2040-01-04T14:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 14,
+              "start_minute": 0,
+              "end_hour": 16,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 2PM–4PM",
+              "label_cn": "今天 14:00–16:00"
+            },
+            {
+              "slot_id": "2040-01-04T16:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 16,
+              "start_minute": 0,
+              "end_hour": 18,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 4PM–6PM",
+              "label_cn": "今天 16:00–18:00"
+            },
+            {
+              "slot_id": "2040-01-04T18:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 18,
+              "start_minute": 0,
+              "end_hour": 20,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 6PM–8PM",
+              "label_cn": "今天 18:00–20:00"
+            },
+            {
+              "slot_id": "2040-01-04T20:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 20,
+              "start_minute": 0,
+              "end_hour": 22,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 8PM–10PM",
+              "label_cn": "今天 20:00–22:00"
+            },
+            {
+              "slot_id": "2040-01-04T22:00",
+              "date_iso": "2040-01-04",
+              "start_hour": 22,
+              "start_minute": 0,
+              "end_hour": 24,
+              "end_minute": 0,
+              "is_same_day": true,
+              "is_day_only": false,
+              "requires_surcharge": false,
+              "surcharge": 0,
+              "label_en": "Today 10PM–12PM",
+              "label_cn": "今天 22:00–24:00"
+            }
+          ]
+        },
+        "zone": {
+          "id": 2,
+          "zone_type": "city",
+          "name_en": "Shanghai",
+          "name_cn": null
+        }
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/5/reschedule [customer]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "not_reschedulable",
+      "reason": "status",
+      "fresh": false
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/5/reschedule [customer]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "not_reschedulable",
+      "reason": "status",
+      "fresh": false
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/5/address-options [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "eligibility": {
+          "allowed": true,
+          "reason": null
+        },
+        "current": {
+          "recipient_name": "Golden",
+          "recipient_phone": "13800138000",
+          "address_full": "上海 上海市 徐汇区 复兴路 12 号"
+        },
+        "addresses": [
+          {
+            "id": 2,
+            "recipient_name": "Golden",
+            "phone": "13800138000",
+            "province": "上海市",
+            "city": "上海市",
+            "district": "徐汇区",
+            "province_en": null,
+            "city_en": null,
+            "district_en": null,
+            "address": "复兴路 12 号",
+            "detail": null,
+            "postal_code": null,
+            "is_default": 1,
+            "created_at": "<T>",
+            "updated_at": "<T>",
+            "address_full": "上海 上海市 徐汇区 复兴路 12 号",
+            "is_current": true,
+            "eligible": true,
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/5/addon/availability [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "store_id": 1,
+        "tracks_stock": false,
+        "available": {}
+      }
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/5/cancel [customer]",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "req": "POST /api/retail/orders/5/cancel [customer]",
+    "status": 409,
+    "body": {
+      "success": false,
+      "error": "not_cancellable",
+      "current": "cancelled"
+    }
+  },
+  {
+    "req": "GET /api/retail/orders?status=paid [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 4,
+          "order_no": "TC000001",
+          "status": "paid",
+          "payment_method": "wechat",
+          "total": 51,
+          "voucher_code": "SAVE5",
+          "voucher_amount": 5,
+          "store_id": 1,
+          "routing_reason": "customer_pickup",
+          "channel": "wechat",
+          "fulfillment_type": "pickup",
+          "scheduled_for": "<T>",
+          "delivery_slot_label": "Pickup Today 14:00",
+          "tracking_carrier": null,
+          "tracking_number": null,
+          "tracking_status": null,
+          "refund_status": "withdrawn",
+          "refund_amount_approved": null,
+          "refund_amount_paid": null,
+          "placed_at": "<T>",
+          "paid_at": "<T>",
+          "dispatched_at": null,
+          "delivered_at": null,
+          "delivery_slot_display": "Pickup Today 2:00 PM",
+          "items_preview": [
+            {
+              "product_id": 2,
+              "name_en": "Sourdough",
+              "name_cn": null,
+              "qty": 2,
+              "image_url": null
+            }
+          ],
+          "item_count": 1
+        }
+      ],
+      "meta": {
+        "limit": 20,
+        "offset": 0
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/4 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 4,
+        "order_no": "TC000001",
+        "status": "paid",
+        "payment_method": "wechat",
+        "recipient_name": "Golden",
+        "recipient_phone": "13800138000",
+        "address_full": "广州 天河区 广州市天河区 (Roots Kitchen)",
+        "subtotal": 56,
+        "shipping_fee": 0,
+        "packing_fee": 0,
+        "delivery_mode": "pickup",
+        "delivery_zone_id": null,
+        "voucher_code": "SAVE5",
+        "voucher_amount": 5,
+        "points_used": 0,
+        "points_amount": 0,
+        "points_earned": 0,
+        "total": 51,
+        "tax_amount": null,
+        "tax_rate_micro": null,
+        "tax_mode": null,
+        "customer_note": null,
+        "needs_cutlery": 0,
+        "needs_invoice": 1,
+        "invoice_title": "Golden",
+        "invoice_tax_id": null,
+        "invoice_type": "personal",
+        "invoice_email": "golden@example.com",
+        "invoice_status": null,
+        "invoice_file_url": null,
+        "invoice_number": null,
+        "invoice_issued_at": null,
+        "staff_note": null,
+        "cancelled_reason": null,
+        "refund_requested_at": "<T>",
+        "refund_reason": "changed my mind",
+        "refund_status": "withdrawn",
+        "refund_review_note": null,
+        "refund_amount_requested": 10,
+        "refund_amount_approved": null,
+        "refund_amount_paid": null,
+        "refund_payout_method": null,
+        "refund_payout_ref": null,
+        "refund_reviewed_at": null,
+        "refund_approved_at": null,
+        "refund_paid_at": null,
+        "store_id": 1,
+        "routing_reason": "customer_pickup",
+        "channel": "wechat",
+        "fulfillment_type": "pickup",
+        "scheduled_for": "<T>",
+        "delivery_slot_label": "Pickup Today 14:00",
+        "delivery_slot_kind": "pickup",
+        "same_day_surcharge_fee": 0,
+        "promised_ship_date": null,
+        "promised_delivery_date": null,
+        "tracking_carrier": null,
+        "tracking_number": null,
+        "tracking_status": null,
+        "tracking_events_json": null,
+        "tracking_synced_at": null,
+        "tracking_scenario": null,
+        "tracking_scenario_data_json": null,
+        "placed_at": "<T>",
+        "paid_at": "<T>",
+        "preparing_at": null,
+        "dispatched_at": null,
+        "delivered_at": null,
+        "cancelled_at": null,
+        "updated_at": "<T>",
+        "delivery_slot_display": "Pickup Today 2:00 PM",
+        "address": {
+          "pickup": true,
+          "store_id": 1,
+          "store_code": "tianhe",
+          "store_name_en": "Roots Kitchen — Tianhe",
+          "store_name_cn": "Roots 厨房 · 天河店",
+          "store_phone": null,
+          "city": "广州",
+          "district": "天河区",
+          "address": "广州市天河区 (Roots Kitchen)"
+        },
+        "tracking": null,
+        "air_delayed": false,
+        "items": [
+          {
+            "id": 1,
+            "product_id": 2,
+            "name_en": "Sourdough",
+            "name_cn": null,
+            "sku": null,
+            "size": null,
+            "image_url": "http://<HOST>/api/retail/products/2/image",
+            "qty": 2,
+            "unit_price": 28,
+            "line_total": 56,
+            "shipment_id": null,
+            "ship_from_supplier": false,
+            "has_options": 0,
+            "is_addon": false
+          }
+        ],
+        "fulfillment": null,
+        "timeline": [
+          {
+            "key": "placed",
+            "label": "Placed",
+            "cn": "已下单",
+            "at": "<T>"
+          },
+          {
+            "key": "paid",
+            "label": "Paid",
+            "cn": "已支付",
+            "at": "<T>"
+          },
+          {
+            "key": "pending",
+            "label": "Pending",
+            "cn": "待确认",
+            "at": null
+          },
+          {
+            "key": "preparing",
+            "label": "Preparing",
+            "cn": "准备中",
+            "at": null
+          },
+          {
+            "key": "ready",
+            "label": "Ready to collect",
+            "cn": "可取货",
+            "at": null
+          },
+          {
+            "key": "collected",
+            "label": "Collected",
+            "cn": "已取货",
+            "at": null
+          }
+        ],
+        "reschedule": {
+          "allowed": true,
+          "reason": null,
+          "fresh": false,
+          "kind": "pickup"
+        },
+        "address_change": {
+          "allowed": false,
+          "reason": "pickup"
+        }
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/5 [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "id": 5,
+        "order_no": "TC000002",
+        "status": "cancelled",
+        "payment_method": "wechat",
+        "recipient_name": "Golden",
+        "recipient_phone": "13800138000",
+        "address_full": "上海 上海市 徐汇区 复兴路 12 号",
+        "subtotal": 28,
+        "shipping_fee": 8,
+        "packing_fee": 0,
+        "delivery_mode": "standard",
+        "delivery_zone_id": 2,
+        "voucher_code": null,
+        "voucher_amount": 0,
+        "points_used": 0,
+        "points_amount": 0,
+        "points_earned": 0,
+        "total": 36,
+        "tax_amount": null,
+        "tax_rate_micro": null,
+        "tax_mode": null,
+        "customer_note": "ring twice",
+        "needs_cutlery": 0,
+        "needs_invoice": 0,
+        "invoice_title": null,
+        "invoice_tax_id": null,
+        "invoice_type": null,
+        "invoice_email": null,
+        "invoice_status": null,
+        "invoice_file_url": null,
+        "invoice_number": null,
+        "invoice_issued_at": null,
+        "staff_note": null,
+        "cancelled_reason": "customer_cancelled",
+        "refund_requested_at": null,
+        "refund_reason": null,
+        "refund_status": null,
+        "refund_review_note": null,
+        "refund_amount_requested": null,
+        "refund_amount_approved": null,
+        "refund_amount_paid": null,
+        "refund_payout_method": null,
+        "refund_payout_ref": null,
+        "refund_reviewed_at": null,
+        "refund_approved_at": null,
+        "refund_paid_at": null,
+        "store_id": 1,
+        "routing_reason": "only_store",
+        "channel": "wechat",
+        "fulfillment_type": "delivery",
+        "scheduled_for": "<T>",
+        "delivery_slot_label": "Today 2PM–4PM",
+        "delivery_slot_kind": "today",
+        "same_day_surcharge_fee": 0,
+        "promised_ship_date": null,
+        "promised_delivery_date": null,
+        "tracking_carrier": null,
+        "tracking_number": null,
+        "tracking_status": null,
+        "tracking_events_json": null,
+        "tracking_synced_at": null,
+        "tracking_scenario": null,
+        "tracking_scenario_data_json": null,
+        "placed_at": "<T>",
+        "paid_at": null,
+        "preparing_at": null,
+        "dispatched_at": null,
+        "delivered_at": null,
+        "cancelled_at": "<T>",
+        "updated_at": "<T>",
+        "delivery_slot_display": "Today 2PM–4PM",
+        "address": {
+          "province": "上海",
+          "city": "上海市",
+          "district": "徐汇区",
+          "address": "复兴路 12 号",
+          "detail": null,
+          "postal_code": null,
+          "lat": null,
+          "lng": null,
+          "geo_source": null,
+          "geo_precision": null
+        },
+        "tracking": null,
+        "air_delayed": false,
+        "items": [
+          {
+            "id": 2,
+            "product_id": 2,
+            "name_en": "Sourdough",
+            "name_cn": null,
+            "sku": null,
+            "size": null,
+            "image_url": "http://<HOST>/api/retail/products/2/image",
+            "qty": 1,
+            "unit_price": 28,
+            "line_total": 28,
+            "shipment_id": 1,
+            "ship_from_supplier": false,
+            "has_options": 0,
+            "is_addon": false
+          }
+        ],
+        "fulfillment": null,
+        "timeline": [
+          {
+            "key": "placed",
+            "label": "Placed",
+            "cn": "已下单",
+            "at": "<T>"
+          },
+          {
+            "key": "cancelled",
+            "label": "Cancelled",
+            "cn": "已取消",
+            "at": "<T>"
+          }
+        ],
+        "reschedule": {
+          "allowed": false,
+          "reason": "status",
+          "fresh": false,
+          "kind": "delivery"
+        },
+        "address_change": {
+          "allowed": false,
+          "reason": "status"
+        }
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/999 [customer]",
+    "status": 404,
+    "body": {
+      "success": false,
+      "error": "not_found"
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/4/delivery-track [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "tracking": false
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/orders/stats [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "unpaid": 0,
+        "pending": 1,
+        "preparing": 0,
+        "to_ship": 1,
+        "shipped": 0,
+        "to_review": 0,
+        "after_sales": 0,
+        "total": 4
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/orders [anon]",
+    "status": 401,
+    "body": {
+      "success": false,
+      "error": "missing_token"
+    }
+  },
+  {
+    "req": "GET /api/retail/topup-packages [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "amount": 100,
+          "bonus_points": 10,
+          "title_en": "Top up 100",
+          "title_cn": null,
+          "description_en": null,
+          "description_cn": null,
+          "point_value_yuan": 1
+        }
+      ]
+    }
+  },
+  {
+    "req": "POST /api/retail/topup/create [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "dev": true,
+        "status": "success",
+        "topup_id": 2,
+        "out_trade_no": "FCTU22092552000001"
+      }
+    }
+  },
+  {
+    "req": "GET /api/retail/topup/transactions [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 2,
+          "amount": 100,
+          "bonus_points": 10,
+          "payment_method": "wechat",
+          "status": "success",
+          "out_trade_no": "FCTU22092552000001",
+          "created_at": "<T>",
+          "paid_at": "<T>"
+        }
+      ]
+    }
+  },
+  {
+    "req": "GET /api/retail/points/transactions [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "id": 4,
+          "delta": 10,
+          "balance_after": 17,
+          "source": "topup_bonus",
+          "order_id": null,
+          "topup_id": 2,
+          "note": "Top-up ¥100 bonus",
+          "created_at": "<T>",
+          "expires_at": "<T>",
+          "expired_at": null
+        },
+        {
+          "id": 3,
+          "delta": 0,
+          "balance_after": 7,
+          "source": "order_earn",
+          "order_id": 4,
+          "topup_id": null,
+          "note": "Order 4 (earn base ¥51.00, below earn threshold)",
+          "created_at": "<T>",
+          "expires_at": null,
+          "expired_at": null
+        },
+        {
+          "id": 1,
+          "delta": 7,
+          "balance_after": 7,
+          "source": "poll_vote",
+          "order_id": null,
+          "topup_id": null,
+          "note": "Poll #1",
+          "created_at": "<T>",
+          "expires_at": null,
+          "expired_at": null
+        }
+      ]
+    }
+  },
+  {
+    "req": "POST /api/retail/cart/price [customer]",
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "subtotal": 12,
+        "total_qty": 1,
+        "lines": [
+          {
+            "product_id": 3,
+            "choice_ids": [],
+            "unit_price": 12,
+            "is_flash": false,
+            "regular_price": null,
+            "compare_at_price": null,
+            "coupon_blocked": false,
+            "ship_from_supplier": false
+          }
+        ]
+      }
+    }
+  }
+]
