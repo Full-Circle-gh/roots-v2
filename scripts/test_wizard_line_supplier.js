@@ -293,7 +293,10 @@ async function main() {
   sandbox.puWizNext(2);
   await sandbox.puPick(340);
   sandbox.puWizStep(1);
-  const step1 = () => node('pu2-wizbody').innerHTML;
+  // One page now (§1.13 form over wizard): the From & to fields draw into
+  // #pu2-wiz-from and the summary that names the supplier into #pu2-wiz-review.
+  const step1 = () => node('pu2-wiz-from').innerHTML;
+  const review = () => node('pu2-wiz-review').innerHTML;
   ok(!/<select[^>]*id="pu2-w-supplier"/.test(step1()), 'it is no longer a <select>');
   ok(!step1().includes('<option value="Nut House 坚果屋"'), 'the book is not dumped into the markup');
   ok(/id="pu2-w-supplier"[\s\S]*?role="combobox"/.test(step1()), 'it is a combobox');
@@ -308,7 +311,7 @@ async function main() {
   sandbox.puSuggestPick(poOpt[1], poOpt[2]);
   ok(node('pu2-w-supplier').value === 'Nut House 坚果屋', 'a pick fills the box with the whole stored name');
   sandbox.puWizNext(2);
-  ok(node('pu2-wizbody').innerHTML.includes('<b>Nut House 坚果屋</b>'), 'and step 2 recaps the order under it');
+  ok(review().includes('<b>Nut House 坚果屋</b>'), 'and the summary puts the order under it');
 
   console.log('\n10. a name that is nobody stops there rather than being written as one');
   sandbox.puWizStep(1);
@@ -317,7 +320,7 @@ async function main() {
   sandbox.puWizNext(2);
   ok(toasts.length === 1 && toasts[0].kind === 'err' && /pick one from the list/i.test(toasts[0].msg),
      'the operator is told to pick from the list');
-  ok(step1().includes('id="pu2-w-supplier"'), 'and the wizard stays on step 1');
+  ok(step1().includes('id="pu2-w-supplier"') && node('pu2-w-supplier').value === 'Totally Made Up Co', 'and the box keeps what was typed for fixing');
   saved.length = 0;
   await sandbox.puSaveDraft();
   ok(saved.length === 0, 'saving from there is refused too — no order goes out under a supplier nobody has');
@@ -327,7 +330,7 @@ async function main() {
   toasts.length = 0;
   sandbox.puWizNext(2);
   ok(!toasts.length, 'an empty box is not an error');
-  ok(node('pu2-wizbody').innerHTML.includes('<b>none</b>'), 'the recap says the order has no supplier');
+  ok(review().includes('<b>no supplier</b>'), 'the summary says the order has no supplier');
 
   // ── searching the book in 中文 ───────────────────────────────────────────
   // THE DEFECT. Both boxes searched the stored name and the two halves a SPLIT
@@ -354,7 +357,7 @@ async function main() {
   ok(node('pu2-w-supplier').value === 'Abaxiang Whole Grains Store', 'picking fills the box with the stored name');
   toasts.length = 0;
   sandbox.puWizNext(2);
-  ok(!toasts.length && node('pu2-wizbody').innerHTML.includes('<b>Abaxiang Whole Grains Store</b>'),
+  ok(!toasts.length && review().includes('<b>Abaxiang Whole Grains Store</b>'),
      'and the order goes on under them');
   // Typed out in full rather than picked — in 中文, which names nobody the
   // order can be grouped with unless it resolves back to the stored name.
@@ -363,7 +366,7 @@ async function main() {
   toasts.length = 0;
   sandbox.puWizNext(2);
   ok(!toasts.length, 'the 中文 name typed out in full is not "a supplier nobody has"');
-  ok(node('pu2-wizbody').innerHTML.includes('<b>Abaxiang Whole Grains Store</b>'),
+  ok(review().includes('<b>Abaxiang Whole Grains Store</b>'),
      'and resolves to the stored name rather than being written as itself');
 
   console.log('\n13. the line box too — search, and save what was typed in 中文');

@@ -55,8 +55,8 @@ ok(count(HTML, /<div class="fb-save pin-foot">\s*<button class="btn" onclick="sa
 ok(/<div class="pin-foot"[^>]*>\s*<button class="btn" onclick="_savePrinter\(\)">/.test(HTML), 'Cloud printers: Save all');
 ok(HTML.includes('<div class="bx-sendbar pin-foot">'), 'Broadcasts: Send');
 ok(/<div class="pin-foot"[^>]*>\s*\$\{isEdit/.test(OPS), 'Settings → Operations: a new store');
-ok(count(PUR, /<div class="pu2-wizfoot pin-foot">/g) === 5,
-  'Purchasing: order steps 1–3, a new supplier, the supplier import');
+ok(count(PUR, /<div class="pu2-wizfoot pin-foot">/g) === 3,
+  'Purchasing: the one-page order (its three steps became one, §1.13 form over wizard), a new supplier, the supplier import');
 ok(PUR.includes('<div class="pu2-actions pin-foot">\n        ${canReceive'), 'Purchasing: Confirm delivery');
 ok(!/<div class="pu2-wizfoot">/.test(PUR), 'no purchasing footer was left unpinned');
 

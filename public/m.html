@@ -17064,7 +17064,7 @@ function pwStoreName(id){
   return s?(LANG==='en'?(s.name_en||s.name_cn||s.code||''):(s.name_cn||s.name_en||s.code||'')):'';
 }
 function pwStepsHtml(step){
-  const names=[T('From & to','来源与门店'),T('What to buy','采购内容'),T('Review & place','确认下单')];
+  const names=[T('From & to','来源与门店'),T('What to buy','采购内容'),T('Review order','确认订单')];
   return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)">${names.map((n,i)=>{
     const k=i+1, dot=k<step?'background:var(--text-primary)':k===step?'box-shadow:inset 0 0 0 2px var(--text-primary)':'background:var(--border-default)';
     return `<span style="width:8px;height:8px;border-radius:50%;flex:none;${dot}"></span><span style="flex:none;${k===step?'color:var(--text-primary);font-weight:500':''}">${n}</span>${
@@ -17193,7 +17193,7 @@ function pwFootHtml(){
     <button class="cta" style="width:auto;flex:none" onclick="APP.cmd('pwStep',3)">${T('Review order','确认订单')}</button>`;
   const empty=!w.items.length;
   return `${back}<span style="flex:1"></span>${mCan('purchasing:edit')?`<button class="cta" style="width:auto;flex:none;${empty||busy?'opacity:.55':''}" ${empty||busy?'disabled':''} onclick="APP.cmd('pwSave',1)">${
-    busy==='place'?T('Saving…','保存中…'):T('Place order','确认下单')}</button>`:''}`;
+    busy==='place'?T('Saving…','保存中…'):T('Record order','登记采购单')}</button>`:''}`;
 }
 function screenNewPO(){
   const w=state.pw;
@@ -17260,7 +17260,7 @@ reg('pwSave', mark=>{
   save.then(()=>mark?apiWrite('/purchases/'+w.id+'/status',{status:'Ordered'},'PUT'):null).then(()=>{
     const id=w.id; w.busy=null;
     if(state.pw!==w) return;
-    showToast(mark?T('Order placed','已下单'):T('Saved as draft','已存为草稿'));
+    showToast(mark?T('Order recorded','采购单已登记'):T('Saved as draft','已存为草稿'));
     pwLeave();
     if(mark&&id!=null) APP.cmd('openPO',id);
   }).catch(e=>{

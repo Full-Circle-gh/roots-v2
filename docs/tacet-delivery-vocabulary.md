@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.335 · 2026-10-13 · PURCHASING RECORD ORDER — 4 STRINGS COMPOSED BY CLAUDE, ALL BUILT ON THE LIVE `登记` (Record) AND `采购单` (purchase order): `Record order · 登记采购单`, `Order recorded · 采购单已登记`, and the summary's two lines; THE PHONE'S THIRD STEP COPIES THE LIVE `Review order · 确认订单`.** See *Purchasing — Record order*.
+
 **v1.334 · 2026-10-13 · ABOUT PAGE EDITOR — 1 STRING COMPOSED BY CLAUDE (`Every section is hidden from customers until you write it — nothing is filled in for you.`), KEPT WHEN THE PAGE'S PURPOSE LINE WAS CUT; `Body — Chinese · 中文正文` COPIES LEGAL'S LIVE `中文正文`.** See *About page editor — the one line kept*.
 
 **v1.333 · 2026-10-13 · SETTINGS → CUSTOMER SERVICE — 2 STRINGS COMPOSED BY CLAUDE (`WeCom — recommended · 企业微信 — 推荐`, `WeChat customer service — public account · 微信客服 — 公众号客服`), EACH TWO LIVE TERMS JOINED; THE MODE PICKER'S OPTIONS STOP RENDERING BOTH LANGUAGES.** See *Settings → Customer service mode picker*.
@@ -14112,4 +14114,31 @@ covered only the first two sentences — so it needed one.
 
 - `正文(中文)`, by analogy with the live `正文(英文)`: `中文正文` is already live for the same thing on Legal, and one word per thing wins.
 - `板块` for a section: nothing in this editor uses it.
+
+## Purchasing — Record order
+
+**Composed by Claude, 2026-10-13, under the 2026-09-06 amendment.** Operator
+register. Purchasing's new-order page (`public/retail-admin/16-purchasing.js`)
+and the phone's copy of the same flow (`public/m.html`). Built when the order
+wizard became the one-page form `tacet-desktop-patterns.md` §1.13 has called
+for since 2026-07-19 ("form over wizard"), whose own name for the flow is
+*Record order*. Asked by Ash: *"do all"*.
+
+### Composed
+
+| String | Where | Built from, and why |
+|---|---|---|
+| `Record order` / `登记采购单` | the commit button, desktop and phone | `登记` is live for *Record* (`Record · 登记`, `Recorded · 已登记`, `Recording… · 登记中…`); `采购单` is Purchasing's own word for an order (`Orders · 采购单`, `New order · 新建采购单`). |
+| `Order recorded` / `采购单已登记` | the toast after it | The live `已登记` with its noun. |
+| `Add at least one product before recording the order.` / `登记前请至少添加一件商品。` | the summary, empty order | The live `下单前请至少添加一件商品。` with `下单` swapped for `登记`. |
+| `When you record the order,` / `登记后,` | the summary's note | The live `下单后,` with the same swap. |
+
+### Copied whole
+
+`Review order · 确认订单` (the phone's third step name, previously its step-2 button), `Cancel · 取消`, `Save as draft · 存为草稿`, `Delete draft · 删除草稿`.
+
+### Rejected
+
+- Keeping `确认下单` under the new English: it says *confirm placing an order*, the very word the rename takes away, so the two halves would disagree.
+- `记录`: live only for waste and payments (`记录损耗`, `记录付款`); Purchasing and Invoices already say `登记`.
 

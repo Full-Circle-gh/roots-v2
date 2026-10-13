@@ -1125,28 +1125,48 @@
     } catch (e) { toast(e.message, 'err'); }
   };
 
+  // ONE PAGE, NOT THREE STEPS (tacet-desktop-patterns.md §1.13, "form over
+  // wizard", decided by Ash 2026-07-19 after an A/B on this very flow; built
+  // 2026-10-13). Recording an order is a repeat buyer logging a known thing,
+  // so everything is on one screen and the wizard's two Next clicks and its
+  // "Change" link are gone. The three functions keep their names — wizStep1
+  // draws the From & to fields, wizStep2 the lines, wizStep3 the summary and
+  // the pinned foot — each into its own part of the page. _wstep is kept only
+  // because callers still set it; nothing is drawn from it.
   function paintWizard() {
     const e = _edit;
-    const step = _wstep;
-    const dot = n => (n < step
-      ? `<span class="st done"><span class="n">${I.check}</span>${wStepName(n)}</span>`
-      : `<span class="st${n === step ? ' on' : ''}"><span class="n">${n}</span>${wStepName(n)}</span>`);
+    grabStep1Quiet();
     root().innerHTML = `
       <div class="pu2-wizhead">
         ${backBtn(T('Orders', '采购单'), 'puBackOrders()')}
         <h1>${e.id ? esc(e.po_number) : esc(T('New order', '新建采购单'))}</h1>
-        <div class="pu2-wsteps">
-          ${dot(1)}<span class="dash"></span>${dot(2)}<span class="dash"></span>${dot(3)}
-        </div>
       </div>
-      <div id="pu2-wizbody"></div>`;
+      <div id="pu2-wizbody">
+        <div id="pu2-wiz-from"></div>
+        <div id="pu2-wiz-lines"></div>
+        <div id="pu2-wiz-review"></div>
+      </div>`;
     _supLine = null; _supLineInfo = null; _supDraft = null;
-    if (step === 1) wizStep1();
-    else if (step === 2) wizStep2();
-    else wizStep3();
+    wizStep1();
+    wizStep2();
+    wizStep3();
   }
-  function wStepName(n) {
-    return esc([T('From & to', '来源与门店'), T('What to buy', '采购内容'), T('Review & place', '确认下单')][n - 1]);
+  // A repaint (a supplier created mid-order, a draft reopened) must not throw
+  // away what was typed in the From & to fields. No validation here — that is
+  // grabStep1's job at save — only the values copied back into the order.
+  function grabStep1Quiet() {
+    const g = id => document.getElementById(id);
+    if (!_edit || !g('pu2-w-store')) return;
+    const sup = g('pu2-w-supplier');
+    if (sup) {
+      const typed = String(sup.value || '').trim();
+      const hit = typed && bookSuggestRows([_edit.supplier])
+        .find(o => [o.v, o.en, o.cn].some(x => x && String(x).toLowerCase() === typed.toLowerCase()));
+      if (!typed) _edit.supplier = ''; else if (hit) _edit.supplier = hit.v;
+    }
+    _edit.store_id = parseInt(g('pu2-w-store').value, 10) || _edit.store_id;
+    if (g('pu2-w-date')) _edit.date = g('pu2-w-date').value || _edit.date || todayShop();
+    if (g('pu2-w-notes')) _edit.notes = g('pu2-w-notes').value || '';
   }
 
   // The order's own supplier. It was a <select> carrying the whole book — 80+
@@ -1172,7 +1192,7 @@
 
   function wizStep1() {
     const e = _edit;
-    document.getElementById('pu2-wizbody').innerHTML = `
+    document.getElementById('pu2-wiz-from').innerHTML = `
       <div class="pu2-card pu2-wizcard">
         <div class="pu2-fgrid">
           <label class="pu2-f">
@@ -1193,11 +1213,6 @@
             <span class="lbl">${esc(T('Note', '备注'))}</span>
             <input class="pu2-input" type="text" id="pu2-w-notes" value="${esc(e.notes || '')}" placeholder="${esc(T('Anything the receiver should know', '收货人需要知道的信息'))}">
           </label>
-        </div>
-        <div class="pu2-wizfoot pin-foot">
-          <button class="pu2-btn ghost" onclick="puBackOrders()">${esc(T('Cancel', '取消'))}</button>
-          <span class="spacer"></span>
-          <button class="pu2-btn primary" onclick="puWizNext(2)">${esc(T('Next — what to buy', '下一步 —— 采购内容'))}</button>
         </div>
       </div>`;
   }
@@ -1233,25 +1248,17 @@
     return true;
   }
 
+  // Kept as entry points — callers and tests still use them. On one page both
+  // simply repaint; puWizNext still refuses a supplier name that is nobody.
   window.puWizNext = function (n) {
-    if (_wstep === 1 && !grabStep1()) return;
+    if (!grabStep1()) return;
     _wstep = n; paintWizard();
   };
   window.puWizStep = function (n) { _wstep = n; paintWizard(); };
   window.puBackOrders = function () { _edit = null; _screen = 'orders'; paint(); };
 
   function wizStep2() {
-    const e = _edit;
-    const st = _stores.find(s => s.id === e.store_id);
-    const storeName = st ? (st.name_en || st.code) : '';
-    document.getElementById('pu2-wizbody').innerHTML = `
-      <div class="pu2-card pu2-wizcard pu2-recap">
-        <span>${esc(T('Supplier', '供应商'))}: <b>${esc(e.supplier || T('none', '不指定'))}</b></span>
-        <span>${esc(T('Deliver to', '收货'))}: <b>${esc(storeName)}</b></span>
-        <span>${esc(T('Placed', '下单'))}: <b class="pu2-num">${esc(e.date || '—')}</b></span>
-        <button class="pu2-link" onclick="puWizStep(1)">${esc(T('Change', '修改'))}</button>
-      </div>
-
+    document.getElementById('pu2-wiz-lines').innerHTML = `
       <div class="pu2-card pu2-wizcard">
         <div class="pu2-f" style="max-width:520px;position:relative">
           <span class="lbl">${esc(materialsFeatureOn() ? T('Add products & materials', '添加商品或物料') : T('Add products', '添加商品'))}</span>
@@ -1281,14 +1288,6 @@
           </tr></thead>
           <tbody id="pu2-linebody"></tbody>
         </table>
-        </div>
-
-        <div class="pu2-wizfoot pin-foot">
-          <button class="pu2-btn ghost" onclick="puWizStep(1)">${esc(T('Back', '上一步'))}</button>
-          ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
-          <span class="spacer"></span>
-          <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
-          <button class="pu2-btn primary" onclick="puWizNext(3)">${esc(T('Review order', '确认订单'))}</button>
         </div>
       </div>`;
     renderLines();
@@ -1440,6 +1439,7 @@
         <td colspan="5">${_edit.items.length} ${esc(T('products', '商品'))} · ${units} ${esc(T('units', '件'))}</td>
         <td class="right pu2-num">${money(total)}</td><td></td>
       </tr>`);
+    wizStep3();   // the summary and the Record button follow the lines live
   }
   // ── ordering the lines ───────────────────────────────────────────────────
   // Two ways to the same array, because they answer different questions. The
@@ -1989,7 +1989,9 @@
     const total = e.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), 0);
     const units = e.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
     const empty = !e.items.length;
-    document.getElementById('pu2-wizbody').innerHTML = `
+    const host = document.getElementById('pu2-wiz-review');
+    if (!host) return;
+    host.innerHTML = `
       <div class="pu2-card pu2-wizcard">
         <div class="pu2-reviewline">
           ${e.items.length} ${esc(T('products', '商品'))} · ${units} ${esc(T('units', '件'))} · <b class="pu2-num">${money(total)}</b>
@@ -1997,17 +1999,22 @@
           ${esc(T('to', '送至'))} <b>${esc(storeName)}</b>,
           ${esc(T('placed', '下单'))} <b class="pu2-num">${esc(e.date || '—')}</b>.
         </div>
-        ${empty ? `<p class="pu2-warnline">${esc(T('Add at least one product before placing the order.', '下单前请至少添加一件商品。'))}</p>` : `
+        ${empty ? `<p class="pu2-warnline">${esc(T('Add at least one product before recording the order.', '登记前请至少添加一件商品。'))}</p>` : `
         <div class="pu2-autonote">
           <span class="dot"></span>
-          <span>${esc(T('When you place the order,', '下单后,'))} <b>${money(total)} ${esc(T('posts to Finance → Expenses by itself.', '会自动记入财务 → 支出。'))}</b> ${esc(T('Nothing touches stock until the goods arrive and you tick them in.', '在到货并勾选收货之前,库存不会有任何变动。'))}</span>
+          <span>${esc(T('When you record the order,', '登记后,'))} <b>${money(total)} ${esc(T('posts to Finance → Expenses by itself.', '会自动记入财务 → 支出。'))}</b> ${esc(T('Nothing touches stock until the goods arrive and you tick them in.', '在到货并勾选收货之前,库存不会有任何变动。'))}</span>
         </div>`}
+        ${/* One foot for the page (§1.7a): Cancel is Secondary, not Ghost — it is
+              one of the two ways off the page (decided 2026-07-30, which named
+              this screen to be corrected "when Purchasing is built"). Record
+              order is the commit and takes the page's one Dusk; the list behind
+              is not drawn, so its own Dusk is not on screen. */''}
         <div class="pu2-wizfoot pin-foot">
-          <button class="pu2-btn ghost" onclick="puWizStep(2)">${esc(T('Back', '上一步'))}</button>
+          <button class="pu2-btn" onclick="puBackOrders()">${esc(T('Cancel', '取消'))}</button>
           ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
           <span class="spacer"></span>
           <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
-          <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puPlace()" ${empty ? 'disabled' : ''}>${esc(T('Place order', '确认下单'))}</button>
+          <button class="pu2-btn primary dusk" data-cap="purchasing:edit" onclick="puPlace()" ${empty ? 'disabled' : ''}>${esc(T('Record order', '登记采购单'))}</button>
         </div>
       </div>`;
   }
@@ -2033,7 +2040,7 @@
   async function saveWiz(markOrdered) {
     // Saving from step 1 obeys the same rule Next does: a supplier box holding
     // a name that is nobody stops the save rather than being written as one.
-    if (_wstep === 1 && !grabStep1()) return null;
+    if (!grabStep1()) return null;   // the From & to fields are always on the page now
     const body = wizBody();
     if (!body.items.length) { toast(T('Add at least one product', '请先添加商品'), 'err'); return null; }
     // A TYPED LINE WITH ITS NAME RUBBED OUT. The server refuses this too
@@ -2077,7 +2084,7 @@
     try {
       const id = await saveWiz(true);
       if (id == null) return;
-      toast(T('Order placed ✓', '已下单 ✓'), 'ok');
+      toast(T('Order recorded ✓', '采购单已登记 ✓'), 'ok');
       await loadPOs(); puOpenPO(id);
     } catch (e) { toast(e.message, 'err'); }
   };

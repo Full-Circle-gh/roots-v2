@@ -67,8 +67,8 @@ yes(/error: 'date_required'/.test(RTE), 'the server still refuses a PO with no d
 section('4. the recaps echo the header, not the old field');
 const step2  = PU.slice(PU.indexOf('function wizStep2()'), PU.indexOf('function wizStep3') > 0
   ? PU.indexOf('function wizStep3') : PU.indexOf('function wizStep2()') + 4000);
-yes(/T\('Placed', '下单'\)\)\}: <b class="pu2-num">\$\{esc\(e\.date/.test(step2),
-  'step 2 recap shows the order date');
+no(/pu2-recap/.test(step2),
+  'the lines no longer recap the header: on one page the date box is right above them');
 yes(/T\('placed', '下单'\)\)\} <b class="pu2-num">\$\{esc\(e\.date/.test(PU),
   'the review line shows the order date');
 no(/T\('Expected', '预计'\)\)\}: <b class="pu2-num">\$\{esc\(e\.delivery_date/.test(PU),
