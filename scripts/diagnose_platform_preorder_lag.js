@@ -142,3 +142,30 @@ for (const p of preRows) {
     if (!q.length) console.log('   push: nothing queued for these products between read and booked time (note: queue product_id may be a store_products id)');
   }
 }
+
+// ── Third pass: the exact Meituan status text behind each flip. The server
+// keeps only the latest channel_status; the daemon prints every change as
+// "order <no> status → <desc>" to its pm2 log. Read-only file reads.
+console.log('');
+console.log('══ meituan pre-orders · status text from the daemon log ══');
+const fs = require('fs');
+const path = require('path');
+const PM2_LOGS = process.env.PM2_LOG_DIR || '/root/.pm2/logs';
+let logFiles = [];
+try { logFiles = fs.readdirSync(PM2_LOGS).filter(f => /meituan/i.test(f)).map(f => path.join(PM2_LOGS, f)); }
+catch (e) { console.log('cannot list ' + PM2_LOGS + ': ' + e.message); }
+console.log('log files: ' + logFiles.map(f => path.basename(f)).join(', '));
+for (const p of preRows) {
+  if (p.ERROR) break;
+  const cur = all('SELECT status, channel_status, channel_status_at, channel_stock_restored FROM retail_orders WHERE id = ?', p.id);
+  console.log(`-- ${p.order_no} (meituan ${p.meituan_order_no}) now: ${JSON.stringify(cur[0])}`);
+  let hits = 0;
+  for (const f of logFiles) {
+    let txt = null;
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (_) { continue; }
+    for (const line of txt.split('\n')) {
+      if (line.includes(p.meituan_order_no)) { console.log('   ' + path.basename(f) + ': ' + line.slice(0, 400)); hits++; }
+    }
+  }
+  if (!hits) console.log('   no log lines name this order (logs may have rotated)');
+}
