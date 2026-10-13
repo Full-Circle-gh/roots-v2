@@ -808,6 +808,13 @@
      never loads. */
   html:not([data-ui-lang]) body { visibility: hidden; }
 
+  /* Inline emphasis is 500, never the browser's bold 700: Inter 400/500 only,
+     bold reads as shouting (tacet-design-system.md §2; audit 2026-10-13, P6).
+     Here, not in retail-admin.css, because the phone admin, the till and the
+     editors load that sheet too and keep their own type. A class or #tab rule
+     that sets a weight on a <b> still wins (this is a bare type selector). */
+  b, strong { font-weight: 500; }
+
   /* ── Boot splash ────────────────────────────────────────────────────
      The guard above blanks the page until the app JS stamps data-ui-lang,
      which on a cold cache is a second or two of nothing. This fills it: the
@@ -5610,7 +5617,6 @@
     <div class="td-head">
       <div class="td-greet-col">
         <h2 style="margin: 0">Coupons · 优惠券</h2>
-        <p class="td-greet-sub">Money off for your customers — typed as a code, picked up in the app, or applied for them. · 给顾客的优惠 — 输码使用、在小程序领取、或结账自动抵扣。</p>
       </div>
       <span class="vch-spacer"></span>
       <button class="btn vch-new" onclick="vwOpen()">
@@ -5668,7 +5674,7 @@
           </div>
           <div style="margin-top: 14px; padding: 12px; background: var(--bg-elev-1); border-radius: var(--r-md); display: flex; align-items: center; justify-content: space-between; gap: 12px;">
             <div style="min-width: 0;">
-              <div style="font-weight: 600; font-size: 13px;">Grant to every customer · 发放给所有顾客</div>
+              <div style="font-weight: 500; font-size: 13px;">Grant to every customer · 发放给所有顾客</div>
               <div class="muted" style="font-size: 11px; margin-top: 2px;">Bulk-grants to all non-blocked customers. Idempotent — customers who already have it are skipped. · 批量发放给所有未封禁顾客;幂等操作,已拥有的会自动跳过。</div>
             </div>
             <button class="btn btn-primary" onclick="grantToAll()">Grant to all · 全部发放</button>
@@ -5703,7 +5709,7 @@
          reskin: graphite icons, ink selected-states, amber only on the coupon
          ticket accent + heads-up warnings, brick for clashes. -->
     <style>
-      #vw-bg .vw-kick { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); font-weight: 500; margin-bottom: 3px; }
+      #vw-bg .vw-kick { font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--text-2); font-weight: 500; margin-bottom: 3px; }
       #vw-bg .pu-editor-head { padding: 18px 24px; }
       #vw-bg #vw-title { font-size: 18px; font-weight: 500; }
       .vw-lab { display: block; font-size: 13.5px; font-weight: 500; color: var(--text-1); margin-bottom: 7px; }
@@ -5720,7 +5726,7 @@
       /* two panes: the question on the left, the living ticket on the right */
       .vw-panes { display: grid; grid-template-columns: minmax(0,1fr) 264px; gap: 26px; align-items: start; }
       .vw-ticketpane { position: sticky; top: 0; }
-      .vw-tick-cap { font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); margin-bottom: 9px; }
+      .vw-tick-cap { font-size: 10.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-2); margin-bottom: 9px; }
       @media (max-width: 640px) { .vw-panes { grid-template-columns: 1fr; } .vw-ticketpane { position: static; } }
 
       /* the ticket — what the customer sees, torn like a real coupon */
@@ -5882,9 +5888,9 @@
          sprawling the full admin width (rows thin out, columns drift apart).
          Tacet canon = 1120px max web. */
       #tab-flash .fsm-head { display: flex; align-items: flex-start; gap: 20px; max-width: 1120px; margin-inline: auto; }
-      #tab-flash .fsm-new { margin-left: auto; flex: none; background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); font-weight: 500; padding: 8px 16px; white-space: nowrap; }
-      #tab-flash .fsm-new:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
-      [data-theme="dark"] #tab-flash .fsm-new:hover { background: #EAE7DF; border-color: #EAE7DF; color: var(--bg-app); }
+      /* The page's one Dusk: the header create action (§1.8 rule 1; marketing addendum: "Header CTA = Dusk (was Ink drift)"). */
+      #tab-flash .fsm-new { margin-left: auto; flex: none; background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; font-weight: 500; padding: 8px 16px; white-space: nowrap; }
+      #tab-flash .fsm-new:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); color: #fff; }
       #tab-flash .fsm-new svg { width: 15px; height: 15px; }
 
       /* ── centred content column ── */
@@ -5892,7 +5898,7 @@
       .fsm-sec { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
       .fsm-sec2 { margin-top: 34px; }
       .fsm-secn { font-size: 12px; color: var(--text-3); font-family: var(--f-mono); }
-      .fsm-kick { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+      .fsm-kick { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-2); }
 
       /* badges (dot breathes only where it means "automation": live + auto-revert) */
       .fsm-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 3px 11px; white-space: nowrap; }
@@ -5915,7 +5921,7 @@
       .fsm-name { font-size: 15px; font-weight: 500; line-height: 1.3; }
       .fsm-sk { color: var(--text-3); font-family: var(--f-mono); font-size: 11px; margin-left: 4px; font-weight: 400; }
       .fsm-prc { margin-top: 5px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-      .fsm-now { font-weight: 600; color: var(--text-1); font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+      .fsm-now { font-weight: 500; color: var(--text-1); font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
       .fsm-hero .fsm-now { font-size: 16px; }
       .fsm-was { font-size: 13px; color: var(--text-3); text-decoration: line-through; font-family: var(--f-mono); }
       .fsm-off { font-size: 11.5px; color: var(--tacet-sage-ink, #4A6249); background: var(--tacet-sage-tint, #EDF1EC); border-radius: 999px; padding: 1px 8px; }
@@ -5924,7 +5930,7 @@
       .fsm-cd-lab { font-size: 12px; color: var(--text-3); min-width: 0; }
       .fsm-auto { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--tacet-dusk); white-space: nowrap; }
       .fsm-sold { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-2); margin: 14px 0 7px; font-family: var(--f-mono); }
-      .fsm-sold b { color: var(--text-1); font-weight: 600; }
+      .fsm-sold b { color: var(--text-1); font-weight: 500; }
       .fsm-meter { height: 4px; border-radius: 3px; background: var(--bg-elev-1); overflow: hidden; }
       .fsm-meter i { display: block; height: 100%; background: var(--text-1); border-radius: 3px; transition: width .4s var(--ease-out, ease); }
       .fsm-meter.hot i { background: var(--tacet-amber); }
@@ -5935,7 +5941,7 @@
       /* ── scheduled + recent table ── */
       .fsm-table { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
       .fsm-thead, .fsm-trow { display: grid; grid-template-columns: minmax(0,1fr) 150px 120px 110px 108px; gap: 16px; align-items: center; padding: 12px 18px; }
-      .fsm-thead { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); border-bottom: 1px solid var(--line); background: var(--bg-elev-1); }
+      .fsm-thead { font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--text-3); border-bottom: 1px solid var(--line); background: var(--bg-elev-1); }
       .fsm-trow + .fsm-trow { border-top: 1px solid var(--line-soft); }
       .fsm-trow.dim { opacity: .62; }
       .fsm-tw { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -5977,7 +5983,7 @@
       /* live preview pane */
       .fsd-pv { background: var(--bg-elev-1); border-left: 1px solid var(--line); padding: 22px 20px; }
       @media (max-width: 760px) { .fsd-pv { border-left: none; border-top: 1px solid var(--line); } }
-      .fsd-pv .fspv-kick { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 13px; }
+      .fsd-pv .fspv-kick { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3); margin-bottom: 13px; }
       .fspv-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
       .fspv-img { aspect-ratio: 5 / 4; background: var(--bg-elev-1); position: relative; display: grid; place-items: center; color: var(--text-4); overflow: hidden; }
       .fspv-img img { width: 100%; height: 100%; object-fit: cover; }
@@ -5986,7 +5992,7 @@
       .fspv-b { padding: 14px 15px 16px; }
       .fspv-n { font-size: 14px; font-weight: 500; line-height: 1.3; color: var(--text-1); }
       .fspv-prc { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-      .fspv-now { font-size: 20px; font-weight: 600; color: var(--tacet-brick); font-variant-numeric: tabular-nums; }
+      .fspv-now { font-size: 20px; font-weight: 500; color: var(--tacet-brick); font-variant-numeric: tabular-nums; }
       .fspv-was { font-size: 13px; color: var(--text-3); text-decoration: line-through; font-variant-numeric: tabular-nums; }
       .fspv-save { font-size: 12px; color: var(--tacet-sage-ink); }
       .fspv-meta { font-size: 12px; color: var(--text-3); margin-top: 9px; font-variant-numeric: tabular-nums; }
@@ -5998,7 +6004,7 @@
       /* ════ COMPOSER (right column) — always-open stepped form, mockup C ════ */
       .fsc { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 24px; display: flex; flex-direction: column; gap: 20px; }
       .fsc-h { font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
-      .fsc-h .mode { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--tacet-dusk); font-weight: 500; }
+      .fsc-h .mode { font-size: 10.5px; letter-spacing: 0; text-transform: none; color: var(--tacet-dusk); font-weight: 500; }
 
       .fsc-step { display: flex; gap: 14px; }
       .fsc-num { width: 24px; height: 24px; border-radius: 50%; flex: none; border: 1px solid var(--line); color: var(--text-3); font: 500 12px var(--f-mono); display: grid; place-items: center; margin-top: 1px; transition: background .2s var(--ease-out), border-color .2s var(--ease-out), color .2s var(--ease-out); }
@@ -6052,7 +6058,7 @@
       .fsc-prow .pn { font-size: 13.5px; font-weight: 500; }
       .fsc-prow .ps { display: block; font-size: 11.5px; color: var(--text-3); font-family: var(--f-mono); margin-top: 2px; }
       .fsc-prow .pr { margin-left: auto; text-align: right; font-size: 11px; color: var(--text-3); font-family: var(--f-mono); flex: none; }
-      .fsc-prow .pr b { display: block; color: var(--text-1); font-weight: 600; font-size: 13px; }
+      .fsc-prow .pr b { display: block; color: var(--text-1); font-weight: 500; font-size: 13px; }
       .fsc-pempty { padding: 22px; text-align: center; color: var(--text-3); font-size: 12.5px; }
 
       /* coupon switch */
@@ -6072,11 +6078,10 @@
       .fsd-drawer .fsc-foot { position: sticky; bottom: 0; z-index: 2; background: var(--bg-pane);
         margin: 0 -28px -26px; padding: 16px 28px 20px; }
       .fsc-prev { font-size: 12.5px; color: var(--text-3); font-family: var(--f-mono); line-height: 1.5; min-width: 0; }
-      .fsc-prev .f { color: var(--text-1); font-weight: 600; }
+      .fsc-prev .f { color: var(--text-1); font-weight: 500; }
       .fsc-prev .r { text-decoration: line-through; }
       .fsc-start { margin-left: auto; background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); font-weight: 500; padding: 8px 18px; white-space: nowrap; }
-      .fsc-start:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
-      [data-theme="dark"] #tab-flash .fsc-start:hover { background: #EAE7DF; border-color: #EAE7DF; }
+      .fsc-start:hover { opacity: .88; }   /* no off-palette hover hex */
       .fsc-cancel { color: var(--danger); border-color: transparent; padding-left: 0; padding-right: 8px; }
       .fsc-cancel:hover { border-color: transparent; background: transparent; text-decoration: underline; }
     </style>
@@ -6084,7 +6089,6 @@
     <div class="td-head fsm-head">
       <div class="td-greet-col">
         <h2 style="margin: 0">Flash sales · 限时秒杀</h2>
-        <p class="td-greet-sub">A discounted price with a clock on it. Customers see the flash price in the mini app until the timer runs out or the stock cap is hit — whichever comes first. · 给产品加上倒计时的降价。顾客在小程序中看到秒杀价,直到倒计时结束或库存售罄为止——以先到者为准。</p>
       </div>
       <button class="btn fsm-new" onclick="fsNewSale()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -6140,16 +6144,15 @@
       /* header */
       .pg-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
       .pg-head .grow { flex: 1; min-width: 260px; }
-      .pg-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin: 0 0 6px; }
       #tab-popups h2.pg-title { font-family: var(--f-sans); font-weight: 500; font-size: 24px; letter-spacing: -.01em; color: var(--text-1); text-transform: none; margin: 0; }
       .pg-lede { font-size: 14px; line-height: 1.6; color: var(--text-2); margin: 10px 0 0; max-width: 620px; }
 
       /* buttons */
       .pg-btn { font: inherit; font-size: 13.5px; font-weight: 500; line-height: 1; border-radius: 8px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; transition: .2s var(--ease-pg); white-space: nowrap; }
       .pg-btn svg { width: 15px; height: 15px; }
-      .pg-btn.primary { background: var(--text-1); color: var(--bg-app); border-color: var(--text-1); font-weight: 500; }
-      .pg-btn.primary:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
-      [data-theme="dark"] .pg-btn.primary:hover { background: #EAE7DF; border-color: #EAE7DF; color: var(--bg-app); }
+      /* The page's one Dusk: the header create action (§1.8 rule 1). */
+      .pg-btn.primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; font-weight: 500; }
+      .pg-btn.primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); color: #fff; }
       .pg-btn.secondary { background: var(--bg-pane); color: var(--text-1); border-color: var(--line); }
       .pg-btn.secondary:hover { border-color: var(--text-3); }
       .pg-btn.ghost { background: transparent; color: var(--text-2); }
@@ -6173,9 +6176,9 @@
       .pg-card.is-off { opacity: .72; }
       .pg-card .pvwrap { padding: 16px 16px 0; }
       .pg-foot { padding: 13px 16px 15px; }
-      .pg-name { font-size: 14px; font-weight: 600; color: var(--text-1); letter-spacing: -.005em; }
+      .pg-name { font-size: 14px; font-weight: 500; color: var(--text-1); letter-spacing: -.005em; }
       .pg-sent { font-size: 12.5px; color: var(--text-2); margin-top: 4px; line-height: 1.45; }
-      .pg-sent b { font-weight: 600; color: var(--text-1); }
+      .pg-sent b { font-weight: 500; color: var(--text-1); }
       .pg-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
       .pg-act { margin-left: auto; display: flex; align-items: center; gap: 4px; opacity: 0; transition: .15s var(--ease-pg); }
       .pg-card:hover .pg-act { opacity: 1; }
@@ -6226,7 +6229,7 @@
       /* empty state — complimentary, never apologetic */
       .pg-empty { text-align: center; padding: 56px 24px; border: 1px dashed var(--line); border-radius: var(--pg-radius); }
       .pg-empty .em-ic { width: 46px; height: 46px; border-radius: 50%; background: var(--bg-elev-1); color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; }
-      .pg-empty h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-1); }
+      .pg-empty h3 { margin: 0; font-size: 16px; font-weight: 500; color: var(--text-1); }
       .pg-empty p { margin: 6px auto 0; font-size: 13.5px; color: var(--text-2); max-width: 420px; line-height: 1.55; }
       .pu-editor-bg {
         position: fixed; left: 0; right: 0; top: 0; bottom: 0;
@@ -6399,7 +6402,7 @@
         font-size: 16px; line-height: 26px; text-align: center;
       }
       /* ── editor: message-first fields + staged decision rows ── */
-      .pg-ed-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 0 0 12px; }
+      .pg-ed-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3); margin: 0 0 12px; }
       .pg-ed-eyebrow.gap { margin-top: 26px; }
       .pg-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-1); margin: 0 0 6px; }
       .pg-label .opt { font-weight: 400; color: var(--text-2); }
@@ -6450,9 +6453,7 @@
 
     <div class="pg-head">
       <div class="grow">
-        <div class="pg-eyebrow">WeChat · 微信</div>
         <h2 class="pg-title">Pop-ups · 弹窗</h2>
-        <p class="pg-lede">A card that greets people when they open a page — a promo, a reminder, a holiday notice. You see each one exactly as customers do. · 顾客打开页面时弹出的一张卡片——活动、提醒或歇业通知。所见即顾客所见。</p>
       </div>
       <button class="pg-btn primary" onclick="openPopupEditor()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -6679,7 +6680,6 @@
       .bx-wrap { max-width: 760px; margin: 0 auto; }
 
       /* header */
-      .bx-eyebrow { font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
       #tab-broadcasts h2.bx-title { font-family:var(--f-sans); font-weight:500; font-size:24px; letter-spacing:-.01em; color:var(--text-1); text-transform:none; margin:0; }
       .bx-lede { font-size:14px; line-height:1.6; color:var(--text-2); margin:10px 0 24px; max-width:600px; }
 
@@ -6784,7 +6784,7 @@
       .bx-tgl input:checked + .tr::after { left:17px; }
 
       /* ── feed ── */
-      .bx-month { font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin:26px 0 10px; }
+      .bx-month { font-size:11px; font-weight: 500; letter-spacing: 0; text-transform: none; color:var(--text-3); margin:26px 0 10px; }
       .bx-month:first-child { margin-top:0; }
       .bx-feed { overflow:hidden; }
       .bx-item { display:flex; gap:16px; padding:16px 18px; border-top:1px solid var(--line); align-items:flex-start; }
@@ -6820,9 +6820,7 @@
     <div class="bx-wrap">
 
       <!-- header -->
-      <div class="bx-eyebrow">WeChat · 微信</div>
       <h2 class="bx-title">Broadcasts · 广播</h2>
-      <p class="bx-lede">Everything you've said to your customers, in one place. Write at the top; the rest is what's already gone out. · 你对顾客说过的每一条消息,都在这里。在顶部撰写,下方是已经发出的记录。</p>
 
       <!-- ── compose ── -->
       <div class="bx-compose">
@@ -7392,7 +7390,6 @@
       padding: calc(var(--s6) + 56px) var(--s6) var(--s7); min-height: 100vh; }
 
     #tab-sharing .sc-head { max-width: 640px; margin-bottom: 24px; }
-    #tab-sharing .sc-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--td-text2); margin: 0 0 6px; }
     #tab-sharing .sc-h2 { font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0; }
     #tab-sharing .sc-sub { font-size: 13px; color: var(--td-text2); line-height: 1.55; margin: 8px 0 0; }
 
@@ -7402,7 +7399,7 @@
 
     /* left: page list */
     #tab-sharing .sc-plist { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-xl); overflow: hidden; }
-    #tab-sharing .sc-plist-h { padding: 14px 18px; border-bottom: 1px solid var(--td-border); font: 600 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); }
+    #tab-sharing .sc-plist-h { padding: 14px 18px; border-bottom: 1px solid var(--td-border); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; color: var(--td-text2); }
     #tab-sharing .sc-prow { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 13px 16px; border: 0; border-top: 1px solid var(--td-border); background: transparent; cursor: pointer; transition: background .15s var(--ease-out); font-family: var(--f-sans); }
     #tab-sharing .sc-prow:first-of-type { border-top: 0; }
     #tab-sharing .sc-prow:hover { background: var(--td-raised); }
@@ -7422,7 +7419,7 @@
     #tab-sharing .sc-ssub { font-size: 13px; color: var(--td-text2); margin: 3px 0 20px; line-height: 1.5; }
     #tab-sharing .sc-spreview { background: var(--td-paper); border-left: 1px solid var(--td-border); padding: 24px; display: flex; flex-direction: column; gap: 14px; }
     @media (max-width: 720px) { #tab-sharing .sc-spreview { border-left: 0; border-top: 1px solid var(--td-border); } }
-    #tab-sharing .sc-pv-capt { font: 600 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); }
+    #tab-sharing .sc-pv-capt { font: 500 11px var(--f-sans); letter-spacing: 0; text-transform: none; color: var(--td-text2); }
     #tab-sharing .sc-pv-note { font-size: 12px; color: var(--td-text2); line-height: 1.5; }
 
     /* form bits */
@@ -7487,9 +7484,7 @@
 
   <section id="tab-sharing">
     <div class="sc-head">
-      <div class="sc-eyebrow" data-no-i18n>WeChat · Sharing</div>
       <h2 class="sc-h2">Share cards · 分享卡片</h2>
-      <p class="sc-sub">When a customer forwards one of your pages into a WeChat chat, this is the card their friends see. Pick a page on the left; set its picture and title on the right and watch the preview. · 顾客把页面转发到微信聊天时,好友看到的就是这张卡片。左侧选择页面,右侧设置图片和标题,实时预览效果。</p>
     </div>
 
     <div class="sc-work">
@@ -7501,7 +7496,7 @@
     </div>
 
     <div class="sc-tip">
-      <b>Best shape</b> — wide, about 500 × 400 (5:4). A page left empty uses its own look. · <b>建议尺寸</b> — 宽幅约 500 × 400(5:4)。留空的页面使用其自带样式。
+      <span data-lang-block="en"><b>Best shape</b> — wide, about 500 × 400 (5:4). A page left empty uses its own look.</span><span data-lang-block="cn"><b>建议尺寸</b> — 宽幅约 500 × 400(5:4)。留空的页面使用其自带样式。</span>
     </div>
   </section>
 
