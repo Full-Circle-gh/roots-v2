@@ -1013,28 +1013,22 @@
   main > section > h2, .sub-panel > h2 {
     font-size: 24px; letter-spacing: -.01em; color: var(--td-text);
   }
-  h3 { font-size: 14px; font-weight: 600; margin-bottom: var(--s2); }
+  /* 500, not 600 — Inter 400/500 only; bold reads as shouting (§2). */
+  h3 { font-size: 14px; font-weight: 500; margin-bottom: var(--s2); }
 
   .row { display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; }
-  /* Base card surface for every tab. Real edge (--line, not the near-invisible
-     --line-soft) + the two-layer lift shadow already used on the dashboard KPIs,
-     order-detail and customer tiles — so the rest of the backend reads as
-     contained/elevated, not as flat rectangles floating on the page. */
+  /* Base card surface for every tab: a real edge (--line), and NO shadow. It
+     used to carry a two-layer lift plus a 1px raise on hover. Tacet allows at
+     most one soft ambient shadow and nothing that moves under the cursor
+     (tacet-design-system.md §3, §4) — a resting card is set off by its border
+     alone (audit 2026-10-13, P5). */
   .card {
     background: var(--bg-pane);
     border: 1px solid var(--line);
     border-radius: var(--r-lg);
     padding: var(--s5);
     margin-bottom: var(--s3);
-    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
-    transition: box-shadow .35s var(--ease-calm), transform .35s var(--ease-calm);
-  }
-  /* Gentle hover raise on every card — the same hand as the dashboard tiles, so
-     order/invoice/zone/setting cards all feel alive under the cursor instead of
-     reading as flat panels. (Calm 1px lift; suppressed for reduced-motion.) */
-  .card:hover {
-    box-shadow: 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11);
-    transform: translateY(-1px);
+    box-shadow: none;
   }
   /* The dashboard hero is a large live panel, not a tappable tile — keep it
      planted. (The small bento tiles + deep-dive cards still lift via their own
@@ -5388,9 +5382,8 @@
     border: 1px solid var(--line);
     border-radius: var(--r-lg);
     overflow: hidden;
-    /* Same two-layer lift as .fc-tile / .fc-kpi so tables read as elevated
-       surfaces too, not flat rectangles — one elevation across the backend. */
-    box-shadow: 0 1px 2px rgba(18,22,26,.05), 0 8px 22px rgba(18,22,26,.07);
+    /* Border only, like .card — no resting shadow (§3). */
+    box-shadow: none;
   }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td {
@@ -8271,11 +8264,11 @@
     border-radius: var(--r-lg);
     padding: var(--s5);
     margin-bottom: var(--s3);
-    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
+    box-shadow: none;   /* border only, like .card (§3) */
   }
   .group-card-head { margin-bottom: var(--s4); }
   .group-card-head h3 {
-    font-size: 14px; font-weight: 600;
+    font-size: 14px; font-weight: 500;
     margin: 0 0 4px;
   }
   /* Delivery page: section heads adopt the mono-caps rhythm (#sub-delivery
