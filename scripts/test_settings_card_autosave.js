@@ -27,6 +27,8 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+// routes/retail.js and the parts split out of it (§470), read as one text.
+const { retailSource } = require('./test-support/retail-source');
 
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -245,7 +247,7 @@ const run = (src) => vm.runInContext(src, sandbox);
   }
 
   section('5 · the server keeps each card’s history');
-  const RETAIL = read('routes/retail.js');
+  const RETAIL = retailSource();
   const put = RETAIL.slice(RETAIL.indexOf("router.put('/api/retail-admin/config'"));
   const putFn = put.slice(0, put.indexOf('\n});'));
   const iB = putFn.indexOf("editHistory.before(tdb(), historyTenantId(), 'config', histCard"),
